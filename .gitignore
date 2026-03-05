@@ -1,77 +1,131 @@
-# Miscellaneous
+# =========================
+# ΔΙΑΦΟΡΑ
+# =========================
 *.class
 *.log
 *.pyc
 *.swp
 .DS_Store
 .atom/
-.build/
-.buildlog/
 .history
 .svn/
 .swiftpm/
 migrate_working_dir/
+.build/
+.buildlog/
 
-# IntelliJ related
+# =========================
+# IDE / EDITORS
+# =========================
+
+# IntelliJ & JetBrains
 *.iml
 *.ipr
 *.iws
 .idea/
+out/
 
-# The .vscode folder contains launch configuration and tasks you configure in
-# VS Code which you may wish to be included in version control, so this line
-# is commented out by default.
-#.vscode/
+# VS Code
+.vscode/settings.json
+.vscode/tasks.json
+.vscode/launch.json
+.vscode/extensions.json
+.vscode/*.log
+.vscode/ipch/
 
-# Flutter/Dart/Pub related
+# Cursor
+.cursor/
+.cursorignore
+
+# =========================
+# FLUTTER / DART / PUB
+# =========================
+
 **/doc/api/
 **/ios/Flutter/.last_build_id
 .dart_tool/
 .flutter-plugins-dependencies
+.flutter-plugins
 .pub-cache/
 .pub/
-/build/
-/coverage/
+build/
+coverage/
+pubspec.lock
 
-# Symbolication related
-app.*.symbols
+# =========================
+# ANDROID
+# =========================
 
-# Obfuscation related
-app.*.map.json
-
-# Android Studio will place build artifacts here
 /android/app/debug
 /android/app/profile
 /android/app/release
 
-# Αγνόησε τον φάκελο της τοπικής βάσης δεδομένων
+# =========================
+# WINDOWS DESKTOP BUILDS
+# =========================
+
+/windows/
+
+# =========================
+# SYMBOLICATION / ΟΒΦΥΣΚΕΪΣΗ
+# =========================
+
+app.*.symbols
+app.*.map.json
+
+# =========================
+# ΒΑΣΗ ΔΕΔΟΜΕΝΩΝ
+# =========================
+
 Data Base/
 *.db
 *.db-wal
 *.db-shm
+*.db-journal
+*.sqlite
+*.sqlite3
 
-# ==========================================
-# ΠΡΟΣΘΗΚΕΣ WINDOWS DESKTOP & ΑΣΦΑΛΕΙΑΣ
-# ==========================================
+# =========================
+# ENVIRONMENT & SECRETS
+# =========================
 
-# Flutter Windows-specific builds
-windows/flutter/ephemeral/
-windows/flutter/generated_plugin_registrant.cc
+.env
+.env.*
+!.env.example
+.env.local
+.env.*.local
+**/secrets.json
+**/private_key.pem
+**/credentials.json
 
-# Windows OS Files
+# =========================
+# CACHE / ΠΡΟΣΩΡΙΝΑ
+# =========================
+
+*.tmp
+*.temp
+*.cache
+.cache/
+node_modules/
+.npm/
+.eslintcache
+
+# =========================
+# ΣΥΣΤΗΜΑΤΙΚΑ ΑΡΧΕΙΑ OS
+# =========================
+
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
 Thumbs.db
 ehthumbs.db
 Desktop.ini
 
-# Περιβάλλον & Μυστικά Κλειδιά (Environment variables)
-.env
-.env.*
-!.env.example
+# =========================
+# FIREBASE / CLOUD
+# =========================
 
-# Πρόσθετα προσωρινά αρχεία SQLite
-*.db-journal
-
-# VS Code (Προαιρετικά - τοπικές ρυθμίσεις χρήστη)
-.vscode/settings.json
-.vscode/tasks.json
-.vscode/launch.json
+google-services.json
+GoogleService-Info.plist

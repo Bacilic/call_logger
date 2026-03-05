@@ -1,12 +1,14 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import '../config/app_config.dart';
 import '../services/settings_service.dart';
 import '../../features/calls/models/call_model.dart';
+import 'database_init_result.dart';
 
 /// Αποτέλεσμα ελέγχου σύνδεσης (success + αν χρησιμοποιείται τοπική βάση).
 class ConnectionCheckResult {
@@ -38,6 +40,16 @@ class DatabaseHelper {
     return _database!;
   }
 
+  /// Κλείνει την τρέχουσα σύνδεση και επαναφέρει την κατάσταση.
+  /// Στην επόμενη κλήση [database] θα γίνει νέα σύνδεση (π.χ. με νέα διαδρομή από ρυθμίσεις).
+  Future<void> closeConnection() async {
+    if (_database != null) {
+      await _database!.close();
+      _database = null;
+    }
+    _isUsingLocalDb = false;
+  }
+
   /// Ελέγχει αν η διαδρομή δικτύου είναι προσβάσιμη (με timeout 2 s).
   Future<bool> _isNetworkPathAccessible(String dbPath) async {
     try {
@@ -62,8 +74,7 @@ class DatabaseHelper {
 
     final accessible = await _isNetworkPathAccessible(dbPath);
     if (!accessible) {
-      // ignore: avoid_print
-      print('Δίκτυο μη διαθέσιμο. Ενεργοποίηση Dev Mode (Τοπική Βάση).');
+      debugPrint('Δίκτυο μη διαθέσιμο. Ενεργοποίηση Dev Mode (Τοπική Βάση).');
       dbPath = AppConfig.localDevDbPath;
       _isUsingLocalDb = true;
       final dir = File(dbPath).parent;
@@ -222,6 +233,27 @@ class DatabaseHelper {
     return db.insert('calls', row);
   }
 
+  /// Ελέγχει υγεία βάσης: ύπαρξη πίνακα 'calls' (και βασικών πινάκων).
+  /// Καλείται αφού η σύνδεση είναι ανοιχτή. Επιστρέφει [DatabaseInitResult].
+  Future<DatabaseInitResult> checkDatabaseHealth() async {
+    try {
+      final db = await database;
+      final r = await db.rawQuery(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='calls'",
+      );
+      if (r.isEmpty) {
+        return const DatabaseInitResult(
+          status: DatabaseStatus.corrupted,
+          message: 'Η βάση φαίνεται κατεστραμμένη ή μη έγκυρη.',
+          details: 'Λείπει ο πίνακας calls.',
+        );
+      }
+      return DatabaseInitResult.success();
+    } catch (e) {
+      return DatabaseInitResult.fromException(e);
+    }
+  }
+
   /// Επαληθεύει αν η διαδρομή είναι προσβάσιμη. Fallback σε τοπική όπως στο _initDatabase.
   Future<ConnectionCheckResult> checkConnection() async {
     String dbPath = AppConfig.defaultDbPath;
@@ -233,8 +265,7 @@ class DatabaseHelper {
 
       final accessible = await _isNetworkPathAccessible(dbPath);
       if (!accessible) {
-        // ignore: avoid_print
-        print('Δίκτυο μη διαθέσιμο. Ενεργοποίηση Dev Mode (Τοπική Βάση).');
+        debugPrint('Δίκτυο μη διαθέσιμο. Ενεργοποίηση Dev Mode (Τοπική Βάση).');
         dbPath = AppConfig.localDevDbPath;
       }
 
@@ -249,12 +280,9 @@ class DatabaseHelper {
       final isLocal = dbPath == AppConfig.localDevDbPath;
       return ConnectionCheckResult(success: true, isLocalDev: isLocal);
     } catch (e, st) {
-      // ignore: avoid_print
-      print('[DatabaseHelper] Δεν είναι δυνατή η σύνδεση με τη βάση: $dbPath');
-      // ignore: avoid_print
-      print('[DatabaseHelper] Σφάλμα: $e');
-      // ignore: avoid_print
-      print('[DatabaseHelper] $st');
+      debugPrint('[DatabaseHelper] Δεν είναι δυνατή η σύνδεση με τη βάση: $dbPath');
+      debugPrint('[DatabaseHelper] Σφάλμα: $e');
+      debugPrint('[DatabaseHelper] $st');
       return const ConnectionCheckResult(success: false, isLocalDev: false);
     }
   }

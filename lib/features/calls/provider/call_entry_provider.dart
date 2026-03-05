@@ -87,6 +87,7 @@ class CallEntryNotifier extends Notifier<CallEntryState> {
   }
 
   /// Υποβολή κλήσης, reset φόρμας και επιστροφή focus στο "Εσωτερικό".
+  /// Το requestFocus γίνεται σε microtask ώστε να μην συμπέσει με key event/rebuild.
   Future<bool> submitCall() async {
     final user = state.selectedUser;
     final notes = state.notesController.text.trim();
@@ -101,7 +102,7 @@ class CallEntryNotifier extends Notifier<CallEntryState> {
         status: 'open',
       ));
       reset();
-      state.internalFocusNode.requestFocus();
+      Future.microtask(() => state.internalFocusNode.requestFocus());
       return true;
     } catch (_) {
       return false;

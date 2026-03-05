@@ -8,6 +8,8 @@ import 'widgets/sticky_note_widget.dart';
 import 'widgets/user_info_card.dart';
 
 /// Οθόνη εισαγωγής κλήσης: Εσωτερικό, lookup 3 ψηφία, κάρτα χρήστη, ιστορικό, sticky note, σημειώσεις, Enter = αποθήκευση + focus πίσω.
+/// Το focus από shortcut (Quick Capture / Ctrl+Alt+L) γίνεται μέσω root Shortcuts/Actions σε microtask,
+/// ώστε να μην συμπέσει με autofocus ή rebuild (βλ. docs/KEYBOARD_AND_FOCUS.md).
 class CallsScreen extends ConsumerWidget {
   const CallsScreen({super.key});
 
@@ -29,7 +31,7 @@ class CallsScreen extends ConsumerWidget {
                 child: TextField(
                   controller: entry.internalController,
                   focusNode: entry.internalFocusNode,
-                  autofocus: true,
+                  autofocus: true, // μόνο για πρώτη φόρτωση· shortcut χρησιμοποιεί microtask
                   decoration: const InputDecoration(
                     labelText: 'Εσωτερικό',
                     border: OutlineInputBorder(),

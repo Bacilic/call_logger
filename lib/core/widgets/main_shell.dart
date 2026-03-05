@@ -1,30 +1,69 @@
+import 'dart:io';
+
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../database/database_init_result.dart';
 import '../../features/calls/provider/import_log_provider.dart';
 import '../../features/calls/screens/calls_screen.dart';
 import '../../features/calls/screens/widgets/import_console_widget.dart';
+import '../../features/settings/screens/settings_screen.dart';
 import '../services/import_service.dart';
+import '../services/settings_service.dart';
 
 /// Κύριο κέλυφος εφαρμογής: πλευρική πλοήγηση και περιοχή περιεχομένου.
 class MainShell extends ConsumerStatefulWidget {
   const MainShell({
     super.key,
-    required this.databaseInitSuccess,
+    required this.databaseResult,
     required this.isLocalDevMode,
+    this.onReturnFromSettings,
   });
 
-  final bool databaseInitSuccess;
+  final DatabaseInitResult databaseResult;
   final bool isLocalDevMode;
+  /// Κλήση όταν ο χρήστης κλείνει την οθόνη Ρυθμίσεων· ξανατρέχουν οι έλεγχοι βάσης.
+  final Future<void> Function()? onReturnFromSettings;
 
   @override
   ConsumerState<MainShell> createState() => _MainShellState();
 }
 
 class _MainShellState extends ConsumerState<MainShell> {
+  /// True αν άλλαξε η διαδρομή βάσης από Ρυθμίσεις και απαιτείται επανεκκίνηση.
+  bool _pendingRestartDueToPathChange = false;
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      appBar: AppBar(
+        title: const Text('Καταγραφή Κλήσεων'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.settings),
+            tooltip: 'Ρυθμίσεις',
+            onPressed: () async {
+              final pathBefore =
+                  await SettingsService().getDatabasePath();
+              if (!context.mounted) return;
+              await Navigator.of(context).push<void>(
+                MaterialPageRoute<void>(
+                  builder: (context) => const SettingsScreen(),
+                ),
+              );
+              if (!context.mounted) return;
+              await widget.onReturnFromSettings?.call();
+              if (!context.mounted) return;
+              final pathAfter =
+                  await SettingsService().getDatabasePath();
+              if (pathBefore != pathAfter) {
+                setState(() => _pendingRestartDueToPathChange = true);
+              }
+            },
+          ),
+        ],
+      ),
       floatingActionButton: FloatingActionButton(
         onPressed: _onImportExcel,
         tooltip: 'Import Excel',
@@ -72,18 +111,90 @@ class _MainShellState extends ConsumerState<MainShell> {
                   ),
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-                  child: Text(
-                    widget.databaseInitSuccess
-                        ? 'Η σύνδεση με τη βάση δεδομένων πέτυχε.'
-                        : 'Η σύνδεση με τη βάση δεδομένων απέτυχε.',
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: widget.databaseInitSuccess
-                              ? Colors.green.shade700
-                              : Colors.red.shade700,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        widget.databaseResult.isSuccess
+                            ? (widget.databaseResult.message ??
+                                'Η σύνδεση με τη βάση δεδομένων πέτυχε.')
+                            : (widget.databaseResult.message ??
+                                'Άγνωστο σφάλμα με τη βάση δεδομένων.'),
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: widget.databaseResult.isSuccess
+                                  ? Colors.green.shade700
+                                  : Colors.red.shade700,
+                            ),
+                      ),
+                      if (widget.databaseResult.details != null &&
+                          !widget.databaseResult.isSuccess) ...[
+                        const SizedBox(height: 4),
+                        Tooltip(
+                          message: widget.databaseResult.details!,
+                          child: Text(
+                            widget.databaseResult.details!,
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodySmall
+                                ?.copyWith(
+                                  color: Colors.red.shade300,
+                                  fontSize: 11,
+                                ),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
+                      ],
+                    ],
                   ),
                 ),
                 const Expanded(child: CallsScreen()),
+                if (_pendingRestartDueToPathChange)
+                  Material(
+                    color: Colors.grey.shade800,
+                    child: SafeArea(
+                      top: false,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 12),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: RichText(
+                                text: TextSpan(
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 13,
+                                  ),
+                                  children: [
+                                    const TextSpan(
+                                      text:
+                                          'Έγινε αλλαγή διαδρομής βάσης. Παρακαλώ επανεκκινήστε την εφαρμογή για να ισχύσει πλήρως. ',
+                                    ),
+                                    TextSpan(
+                                      text: 'Επανεκκίνηση...',
+                                      style: TextStyle(
+                                        color: Theme.of(context)
+                                            .colorScheme
+                                            .primaryContainer,
+                                        fontWeight: FontWeight.w600,
+                                        decoration: TextDecoration.underline,
+                                      ),
+                                      recognizer: TapGestureRecognizer()
+                                        ..onTap = () {
+                                          exit(0);
+                                        },
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
               ],
             ),
           ),
