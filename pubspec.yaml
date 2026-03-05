@@ -1,0 +1,95 @@
+name: call_logger
+description: "Επαγγελματική εφαρμογή καταγραφής και διαχείρισης κλήσεων IT Support."
+
+# Η ακόλουθη γραμμή εμποδίζει την τυχαία δημοσίευση του πακέτου στο
+# pub.dev με την εντολή `flutter pub publish`. Προτιμάται για ιδιωτικά πακέτα.
+publish_to: 'none' # Αφαιρέστε αυτή τη γραμμή αν θέλετε να δημοσιεύσετε στο pub.dev
+
+# Παρακάτω ορίζονται ο αριθμός έκδοσης (version) και ο αριθμός κατασκευής (build number).
+# Ο αριθμός έκδοσης είναι τρεις αριθμοί διαχωρισμένοι με τελείες, π.χ. 1.2.43,
+# ακολουθούμενοι προαιρετικά από αριθμό κατασκευής με διαχωριστικό +.
+# Τόσο η έκδοση όσο και ο αριθμός κατασκευής μπορούν να παρακαμφθούν κατά το
+# build της Flutter με τις παραμέτρους --build-name και --build-number αντίστοιχα.
+# Στο Android, το build-name χρησιμοποιείται ως versionName και το build-number ως versionCode.
+# Δείτε: https://developer.android.com/studio/publish/versioning
+# Στο iOS, το build-name αντιστοιχεί στο CFBundleShortVersionString και το build-number στο CFBundleVersion.
+# Δείτε: https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
+# Στο Windows, το build-name χρησιμοποιείται για τα τμήματα major, minor και patch
+# των εκδόσεων προϊόντος και αρχείου, ενώ το build-number για το επίθημα κατασκευής.
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.10.7
+
+# Οι εξαρτήσεις (dependencies) ορίζουν τα πακέτα που χρειάζεται το δικό σας πακέτο για να λειτουργήσει.
+# Για αυτόματη αναβάθμιση στις πιο πρόσφατες εκδόσεις τρέξτε
+# `flutter pub upgrade --major-versions`. Εναλλακτικά, ενημερώστε χειροκίνητα
+# τις εκδόσεις παρακάτω. Για να δείτε ποιες εξαρτήσεις έχουν νεότερες εκδόσεις: `flutter pub outdated`.
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # Προσθέτει τη γραμματοσειρά Cupertino Icons στην εφαρμογή.
+  # Χρήση με την κλάση CupertinoIcons για εικονίδια σε στυλ iOS.
+  cupertino_icons: ^1.0.8
+  flutter_riverpod: ^3.2.1
+  sqflite_common_ffi: ^2.3.3
+  sqlite3_flutter_libs: ^0.6.0
+  path_provider: ^2.1.2
+  path: ^1.9.0
+  google_fonts: ^8.0.2
+  intl: ^0.20.2
+  window_manager: ^0.5.1
+  shared_preferences: ^2.3.3
+  url_launcher: ^6.3.0
+  excel: ^4.0.6
+  file_picker: ^8.0.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+  # Το πακέτο "flutter_lints" περιέχει ένα σύνολο συνιστώμενων ελέγχων (lints)
+  # για καλές πρακτικές κώδικα. Το σύνολο ενεργοποιείται στο αρχείο
+  # `analysis_options.yaml` στη ρίζα του πακέτου. Δείτε εκεί πληροφορίες για
+  # απενεργοποίηση συγκεκριμένων κανόνων και ενεργοποίηση επιπλέον.
+  flutter_lints: ^6.0.0
+
+# Για το γενικό τμήμα Dart αυτού του αρχείου, δείτε:
+# https://dart.dev/tools/pub/pubspec
+
+# Το ακόλουθο τμήμα αφορά ειδικά πακέτα Flutter.
+flutter:
+
+  # Η ακόλουθη γραμμή διασφαλίζει ότι η γραμματοσειρά Material Icons
+  # περιλαμβάνεται στην εφαρμογή ώστε να χρησιμοποιείτε τα εικονίδια
+  # της κλάσης Icons (Material Design).
+  uses-material-design: true
+
+  assets:
+    - assets/
+
+  # Ένα περιουσιακό στοιχείο (asset) εικόνας μπορεί να αναφέρεται σε μία ή περισσότερες
+  # «παραλλαγές» ανά ανάλυση· δείτε https://flutter.dev/to/resolution-aware-images
+
+  # Για προσθήκη assets από εξαρτήσεις πακέτων:
+  # https://flutter.dev/to/asset-from-package
+
+  # Για προσαρμοσμένες γραμματοσειρές, προσθέστε τμήμα fonts εδώ, μέσα στο
+  # τμήμα "flutter". Κάθε εγγραφή πρέπει να έχει κλειδί "family" με το όνομα
+  # της οικογένειας γραμματοσειράς και κλειδί "fonts" με λίστα asset και
+  # περιγραφών. Παράδειγμα:
+  # fonts:
+  #   - family: Schyler
+  #     fonts:
+  #       - asset: fonts/Schyler-Regular.ttf
+  #       - asset: fonts/Schyler-Italic.ttf
+  #         style: italic
+  #   - family: Trajan Pro
+  #     fonts:
+  #       - asset: fonts/TrajanPro.ttf
+  #       - asset: fonts/TrajanPro_Bold.ttf
+  #         weight: 700
+  #
+  # Για γραμματοσειρές από εξαρτήσεις πακέτων:
+  # https://flutter.dev/to/font-from-package
