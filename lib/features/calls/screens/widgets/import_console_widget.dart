@@ -2,9 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../../../../core/services/import_types.dart';
 import '../../provider/import_log_provider.dart';
 
-/// Live console για οπτικοποίηση του Import Excel (μαύρο φόντο, πράσινο κείμενο, auto-scroll).
+/// Live console για οπτικοποίηση του Import Excel (μαύρο φόντο, χρώματα ανά τύπο, auto-scroll).
 class ImportConsoleWidget extends ConsumerStatefulWidget {
   const ImportConsoleWidget({super.key});
 
@@ -14,6 +15,19 @@ class ImportConsoleWidget extends ConsumerStatefulWidget {
 
 class _ImportConsoleWidgetState extends ConsumerState<ImportConsoleWidget> {
   final ScrollController _scrollController = ScrollController();
+
+  Color _colorForLevel(ImportLogLevel level) {
+    switch (level) {
+      case ImportLogLevel.success:
+        return Colors.green.shade300;
+      case ImportLogLevel.skip:
+        return Colors.amber.shade300;
+      case ImportLogLevel.error:
+        return Colors.red.shade300;
+      case ImportLogLevel.info:
+        return Colors.green.shade200;
+    }
+  }
 
   @override
   void initState() {
@@ -36,7 +50,7 @@ class _ImportConsoleWidgetState extends ConsumerState<ImportConsoleWidget> {
   Widget build(BuildContext context) {
     final logs = ref.watch(importLogProvider);
 
-    ref.listen<List<String>>(importLogProvider, (_, next) {
+    ref.listen<List<ImportLogEntry>>(importLogProvider, (_, next) {
       if (next.isNotEmpty) {
         WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToEnd());
       }
@@ -49,13 +63,14 @@ class _ImportConsoleWidgetState extends ConsumerState<ImportConsoleWidget> {
         controller: _scrollController,
         itemCount: logs.length,
         itemBuilder: (context, index) {
+          final entry = logs[index];
           return Padding(
             padding: const EdgeInsets.symmetric(vertical: 2),
             child: Text(
-              logs[index],
+              entry.message,
               style: GoogleFonts.robotoMono(
                 fontSize: 12,
-                color: Colors.green.shade300,
+                color: _colorForLevel(entry.level),
               ),
             ),
           );

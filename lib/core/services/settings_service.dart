@@ -6,6 +6,7 @@ import '../config/app_config.dart';
 class SettingsService {
   static const String _keyDatabasePath = 'database_path';
   static const String _keyRecentPaths = 'recent_database_paths';
+  static const String _keyShowImportExcelButton = 'show_import_excel_button';
   static const int _maxRecentPaths = 3;
 
   /// Επιστρέφει την αποθηκευμένη διαδρομή βάσης δεδομένων.
@@ -50,5 +51,17 @@ class SettingsService {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_keyDatabasePath);
     await _addToRecentPaths(prefs, AppConfig.defaultDbPath);
+  }
+
+  /// Εμφάνιση κουμπιού Import Excel στη βασική οθόνη. Προεπιλογή: false (απόκρυψη).
+  Future<bool> getShowImportExcelButton() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_keyShowImportExcelButton) ?? false;
+  }
+
+  /// Ορίζει αν θα εμφανίζεται το κουμπί Import Excel.
+  Future<void> setShowImportExcelButton(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_keyShowImportExcelButton, value);
   }
 }

@@ -56,4 +56,49 @@ class LookupService {
     }
     return null;
   }
+
+  /// Επιστρέφει τηλέφωνα (από users) που ταιριάζουν με το prefix (ψηφία), όταν prefix.length >= 2.
+  /// Χωρίς ταξινόμηση κατά πρόσφατη χρήση (γίνεται στο call_header_provider).
+  List<String> searchPhonesByPrefix(String prefix) {
+    final digits = _digitsOnly(prefix);
+    if (digits.length < 2) return [];
+    final lower = digits.toLowerCase();
+    final seen = <String>{};
+    final result = <String>[];
+    for (final u in _users) {
+      final phone = (u.phone ?? '').trim();
+      if (phone.isEmpty) continue;
+      final phoneNorm = phone.toLowerCase();
+      if ((phoneNorm.contains(lower) || phoneNorm.startsWith(lower)) &&
+          seen.add(phoneNorm)) {
+        result.add(phone);
+      }
+    }
+    return result;
+  }
+
+  /// Αναζήτηση χρηστών στη μνήμη: name, phone, department περιέχουν το query (case-insensitive).
+  List<UserModel> searchUsersByQuery(String query) {
+    final q = query.trim().toLowerCase();
+    if (q.isEmpty) return [];
+    return _users.where((u) {
+      final name = (u.name ?? '').toLowerCase();
+      final phone = (u.phone ?? '').toLowerCase();
+      final dept = (u.department ?? '').toLowerCase();
+      return name.contains(q) || phone.contains(q) || dept.contains(q);
+    }).toList();
+  }
+
+  /// Επιστρέφει εξοπλισμό του χρήστη που αντιστοιχεί στο τηλέφωνο (αν βρεθεί, ≥3 ψηφία).
+  List<EquipmentModel> searchEquipmentsByPhone(String phone) {
+    final digits = _digitsOnly(phone);
+    if (digits.length < 3) return [];
+    final result = search(digits);
+    if (result == null) return [];
+    return _equipmentByUserId[result.user.id] ?? [];
+  }
+
+  static String _digitsOnly(String s) {
+    return s.replaceAll(RegExp(r'[^0-9]'), '');
+  }
 }

@@ -6,6 +6,7 @@ import '../../../core/services/lookup_service.dart';
 import '../models/call_model.dart';
 import '../models/equipment_model.dart';
 import '../models/user_model.dart';
+import 'call_header_provider.dart';
 
 /// Κατάσταση φόρμας εισαγωγής κλήσης.
 class CallEntryState {
@@ -86,23 +87,27 @@ class CallEntryNotifier extends Notifier<CallEntryState> {
     state = state.copyWith(category: value);
   }
 
-  /// Υποβολή κλήσης, reset φόρμας και επιστροφή focus στο "Εσωτερικό".
-  /// Το requestFocus γίνεται σε microtask ώστε να μην συμπέσει με key event/rebuild.
-  Future<bool> submitCall() async {
-    final user = state.selectedUser;
+  /// Υποβολή κλήσης: διαβάζει caller/equipment από call_header_provider.
+  /// Μετά επιτυχία: markPhoneUsed, reset notes, clearAfterSubmit (focus με addPostFrameCallback).
+  Future<bool> submitCall(WidgetRef ref) async {
+    final header = ref.read(callHeaderProvider);
+    final user = header.selectedCaller;
     final notes = state.notesController.text.trim();
     if (user == null || notes.isEmpty) return false;
     try {
       await DatabaseHelper.instance.insertCall(CallModel(
         callerId: user.id,
-        equipmentId: state.selectedEquipment?.id,
+        equipmentId: header.selectedEquipment?.id,
         issue: notes,
         solution: null,
         category: state.category.isEmpty ? null : state.category,
         status: 'open',
       ));
+      if (header.selectedPhone != null) {
+        ref.read(callHeaderProvider.notifier).markPhoneUsed(header.selectedPhone!);
+      }
       reset();
-      Future.microtask(() => state.internalFocusNode.requestFocus());
+      ref.read(callHeaderProvider.notifier).clearAfterSubmit();
       return true;
     } catch (_) {
       return false;

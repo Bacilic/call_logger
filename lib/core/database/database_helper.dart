@@ -18,6 +18,14 @@ class ConnectionCheckResult {
   final bool isLocalDev;
 }
 
+/// Αποτέλεσμα προεπισκόπησης πίνακα: ονόματα στηλών και γραμμές (List<Map>).
+class TablePreviewResult {
+  const TablePreviewResult({required this.columns, required this.rows});
+
+  final List<String> columns;
+  final List<Map<String, dynamic>> rows;
+}
+
 /// Singleton helper για πρόσβαση στη SQLite βάση δεδομένων (sqflite_common_ffi).
 /// Υποστηρίζει δυναμική διαδρομή, WAL και έξυπνο fallback σε τοπική βάση.
 class DatabaseHelper {
@@ -85,7 +93,7 @@ class DatabaseHelper {
 
     final db = await openDatabase(
       dbPath,
-      version: 1,
+      version: 3,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
       singleInstance: false,
@@ -118,8 +126,8 @@ class DatabaseHelper {
       CREATE TABLE users (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT,
-        department TEXT,
         phone TEXT,
+        department TEXT,
         location TEXT,
         notes TEXT
       )
@@ -128,12 +136,10 @@ class DatabaseHelper {
     await db.execute('''
       CREATE TABLE equipment (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
+        code_equipment TEXT,
         type TEXT,
-        brand TEXT,
-        model TEXT,
-        serial_number TEXT,
         user_id INTEGER,
-        buy_date TEXT
+        notes TEXT
       )
     ''');
 
@@ -184,7 +190,17 @@ class DatabaseHelper {
 
   /// Σκελετός για μελλοντικές αναβαθμίσεις σχήματος (migrations).
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
-    // Εδώ θα προστεθούν migrations όταν αλλάξει το schema.
+    if (oldVersion < 2) {
+      await db.execute('ALTER TABLE equipment ADD COLUMN notes TEXT');
+    }
+    if (oldVersion < 3) {
+      try {
+        await db.execute('ALTER TABLE equipment ADD COLUMN code TEXT');
+      } catch (_) {}
+      try {
+        await db.execute('ALTER TABLE equipment ADD COLUMN description TEXT');
+      } catch (_) {}
+    }
   }
 
   /// Επιστρέφει όλους τους χρήστες.
@@ -214,6 +230,58 @@ class DatabaseHelper {
     );
   }
 
+  /// Διαγράφει users + equipment πριν το νέο import.
+  Future<void> clearImportedData() async {
+    final db = await database;
+    await db.transaction((txn) async {
+      await txn.delete('equipment');
+      await txn.delete('users');
+    });
+  }
+
+  /// Εισαγωγή prepared δεδομένων σε ένα transaction:
+  /// 1. Insert owners → map ownerId → db user_id
+  /// 2. Insert equipment (μόνο code + user_id)
+  Future<({int usersInserted, int equipmentInserted})> importPreparedData(
+    List<Map<String, dynamic>> ownersList,
+    List<Map<String, dynamic>> equipmentList,
+  ) async {
+    if (ownersList.isEmpty && equipmentList.isEmpty) {
+      return (usersInserted: 0, equipmentInserted: 0);
+    }
+    final db = await database;
+    int usersInserted = 0;
+    int equipmentInserted = 0;
+
+    await db.transaction((txn) async {
+      final ownerCodeToDbId = <int, int>{};
+      for (final u in ownersList) {
+        final ownerId = u['ownerId'] as int? ?? 0;
+        final id = await txn.insert('users', {
+          'name': u['fullName'] as String? ?? '',
+          'phone': u['phones'] as String? ?? '',
+          'department': u['department'] as String? ?? '',
+          'location': null,
+          'notes': null,
+        });
+        ownerCodeToDbId[ownerId] = id;
+      }
+      usersInserted = ownerCodeToDbId.length;
+
+      for (final e in equipmentList) {
+        final ownerCodeTemp = e['ownerCodeTemp'] as int? ?? 0;
+        final userId = ownerCodeToDbId[ownerCodeTemp];
+        await txn.insert('equipment', {
+          'code_equipment': e['code'] as String?,
+          'user_id': userId,
+        });
+        equipmentInserted++;
+      }
+    });
+
+    return (usersInserted: usersInserted, equipmentInserted: equipmentInserted);
+  }
+
   /// Εισάγει νέα κλήση. date/time τίθενται από τώρα αν δεν δοθούν.
   Future<int> insertCall(CallModel call) async {
     final db = await database;
@@ -231,6 +299,26 @@ class DatabaseHelper {
       'is_priority': call.isPriority ?? 0,
     };
     return db.insert('calls', row);
+  }
+
+  /// Λίστα ονομάτων πινάκων (χωρίς εσωτερικά sqlite_*). Για προβολή Βάσης Δεδομένων.
+  Future<List<String>> getTableNames() async {
+    final db = await database;
+    final r = await db.rawQuery(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name",
+    );
+    return r.map((e) => e['name'] as String).toList();
+  }
+
+  /// Προεπισκόπηση πίνακα: στήλες + γραμμές (μέγ. [rowLimit]). Για προβολή τύπου Excel.
+  Future<TablePreviewResult> getTablePreview(String tableName, {int rowLimit = 500}) async {
+    final db = await database;
+    final info = await db.rawQuery('PRAGMA table_info($tableName)');
+    final columns = (info.map((e) => e['name'] as String?).whereType<String>().toList());
+    if (columns.isEmpty) return TablePreviewResult(columns: [], rows: []);
+
+    final rows = await db.rawQuery('SELECT * FROM $tableName LIMIT $rowLimit');
+    return TablePreviewResult(columns: columns, rows: rows);
   }
 
   /// Ελέγχει υγεία βάσης: ύπαρξη πίνακα 'calls' (και βασικών πινάκων).

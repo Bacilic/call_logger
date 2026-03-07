@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../provider/call_entry_provider.dart';
-import '../provider/lookup_provider.dart';
+import '../provider/call_header_provider.dart';
+import 'widgets/call_header_form.dart';
 import 'widgets/recent_calls_list.dart';
 import 'widgets/sticky_note_widget.dart';
 import 'widgets/user_info_card.dart';
@@ -16,44 +17,23 @@ class CallsScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final entry = ref.watch(callEntryProvider);
-    final lookupAsync = ref.watch(lookupServiceProvider);
-    final lookupService = lookupAsync.value;
+    final header = ref.watch(callHeaderProvider);
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            children: [
-              SizedBox(
-                width: 200,
-                child: TextField(
-                  controller: entry.internalController,
-                  focusNode: entry.internalFocusNode,
-                  autofocus: true, // μόνο για πρώτη φόρτωση· shortcut χρησιμοποιεί microtask
-                  decoration: const InputDecoration(
-                    labelText: 'Εσωτερικό',
-                    border: OutlineInputBorder(),
-                    isDense: true,
-                  ),
-                  keyboardType: TextInputType.number,
-                  onChanged: (value) => ref
-                      .read(callEntryProvider.notifier)
-                      .setInternalDigits(value, lookupService),
-                ),
-              ),
-            ],
-          ),
-          if (entry.selectedUser != null) ...[
+          const CallHeaderForm(),
+          if (header.selectedCaller != null) ...[
             UserInfoCard(
-              user: entry.selectedUser!,
-              equipment: entry.selectedEquipment,
+              user: header.selectedCaller!,
+              equipment: header.selectedEquipment,
             ),
-            if (entry.selectedUser!.notes != null &&
-                entry.selectedUser!.notes!.trim().isNotEmpty)
-              StickyNoteWidget(notes: entry.selectedUser!.notes!),
-            RecentCallsList(userId: entry.selectedUser!.id!),
+            if (header.selectedCaller!.notes != null &&
+                header.selectedCaller!.notes!.trim().isNotEmpty)
+              StickyNoteWidget(notes: header.selectedCaller!.notes!),
+            RecentCallsList(userId: header.selectedCaller!.id!),
           ],
           const SizedBox(height: 16),
           TextField(
@@ -67,7 +47,7 @@ class CallsScreen extends ConsumerWidget {
             onChanged: (value) =>
                 ref.read(callEntryProvider.notifier).setNotes(value),
             onSubmitted: (_) async {
-              final ok = await ref.read(callEntryProvider.notifier).submitCall();
+              final ok = await ref.read(callEntryProvider.notifier).submitCall(ref);
               if (context.mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(

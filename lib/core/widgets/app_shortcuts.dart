@@ -4,7 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../database/database_init_result.dart';
 import '../database/database_init_runner.dart';
-import '../../features/calls/provider/call_entry_provider.dart';
+import '../../features/calls/provider/call_header_provider.dart';
 import 'main_shell.dart';
 
 /// Intent για γρήγορη καταγραφή κλήσης (εστίαση στο πεδίο εσωτερικού).
@@ -77,7 +77,7 @@ class _AppShortcutsState extends ConsumerState<AppShortcuts> {
           QuickCaptureIntent: CallbackAction<QuickCaptureIntent>(
             onInvoke: (QuickCaptureIntent intent) {
               Future.microtask(() {
-                ref.read(callEntryProvider).internalFocusNode.requestFocus();
+                ref.read(callHeaderProvider.notifier).requestPhoneFocus();
               });
               return null;
             },

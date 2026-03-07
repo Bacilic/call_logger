@@ -25,6 +25,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   String? _selectedNewPath;
   bool _isLoadingPath = true;
   String? _errorMessage;
+  bool _showImportExcelButton = false;
 
   @override
   void initState() {
@@ -53,11 +54,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         paths.insert(0, p);
         paths = paths.take(3).toList();
       }
+      final showImport = await _settings.getShowImportExcelButton();
       if (mounted) {
         setState(() {
           _currentPath = p;
           _recentPaths = paths;
           _currentPathExists = exists;
+          _showImportExcelButton = showImport;
           _isLoadingPath = false;
         });
       }
@@ -180,6 +183,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       _errorMessage = null;
     });
     await _loadCurrentPath();
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Η διαδρομή αποθηκεύτηκε επιτυχώς')),
     );
@@ -352,6 +356,27 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 ),
               ),
             ],
+            const SizedBox(height: 32),
+            const Divider(),
+            const SizedBox(height: 16),
+            Text(
+              'Άλλες επιλογές',
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 12),
+            SwitchListTile(
+              value: _showImportExcelButton,
+              onChanged: (value) async {
+                await _settings.setShowImportExcelButton(value);
+                if (mounted) setState(() => _showImportExcelButton = value);
+              },
+              title: const Text('Εμφάνιση κουμπιού Import Excel'),
+              subtitle: const Text(
+                'Ενεργοποίηση για να εμφανίζεται το κουμπί εισαγωγής Excel στην κύρια οθόνη.',
+              ),
+            ),
           ],
         ),
       ),

@@ -6,10 +6,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../database/database_init_result.dart';
 import '../../features/calls/provider/import_log_provider.dart';
+import '../../features/calls/provider/lookup_provider.dart';
 import '../../features/calls/screens/calls_screen.dart';
 import '../../features/calls/screens/widgets/import_console_widget.dart';
+import '../../features/database/screens/database_browser_screen.dart';
 import '../../features/settings/screens/settings_screen.dart';
 import '../services/import_service.dart';
+import '../services/import_types.dart';
 import '../services/settings_service.dart';
 
 /// Κύριο κέλυφος εφαρμογής: πλευρική πλοήγηση και περιοχή περιεχομένου.
@@ -33,6 +36,21 @@ class MainShell extends ConsumerStatefulWidget {
 class _MainShellState extends ConsumerState<MainShell> {
   /// True αν άλλαξε η διαδρομή βάσης από Ρυθμίσεις και απαιτείται επανεκκίνηση.
   bool _pendingRestartDueToPathChange = false;
+  /// Επιλεγμένο στοιχείο πλοήγησης: 0=Κλήσεις, 1=Κατάλογος, 2=Εκκρεμότητες, 3=Βάση Δεδομένων.
+  int _selectedIndex = 0;
+  /// Εμφάνιση κουμπιού Import Excel (ρύθμιση από Ρυθμίσεις· προεπιλογή false).
+  bool _showImportExcelButton = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadShowImportExcelSetting();
+  }
+
+  Future<void> _loadShowImportExcelSetting() async {
+    final value = await SettingsService().getShowImportExcelButton();
+    if (mounted) setState(() => _showImportExcelButton = value);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -60,19 +78,27 @@ class _MainShellState extends ConsumerState<MainShell> {
               if (pathBefore != pathAfter) {
                 setState(() => _pendingRestartDueToPathChange = true);
               }
+              await _loadShowImportExcelSetting();
+              if (mounted) setState(() {});
             },
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _onImportExcel,
-        tooltip: 'Import Excel',
-        child: const Icon(Icons.upload_file),
-      ),
+      floatingActionButton: _showImportExcelButton
+          ? FloatingActionButton(
+              onPressed: _onImportExcel,
+              tooltip: 'Import Excel',
+              child: const Icon(Icons.upload_file),
+            )
+          : null,
       body: Row(
         children: [
           NavigationRail(
             extended: true,
+            selectedIndex: _selectedIndex,
+            onDestinationSelected: (index) {
+              setState(() => _selectedIndex = index);
+            },
             destinations: const [
               NavigationRailDestination(
                 icon: Icon(Icons.phone_in_talk),
@@ -86,9 +112,11 @@ class _MainShellState extends ConsumerState<MainShell> {
                 icon: Icon(Icons.task_alt),
                 label: Text('Εκκρεμότητες'),
               ),
+              NavigationRailDestination(
+                icon: Icon(Icons.storage),
+                label: Text('Βάση Δεδομένων'),
+              ),
             ],
-            selectedIndex: 0,
-            onDestinationSelected: (_) {},
           ),
           const VerticalDivider(thickness: 1, width: 1),
           Expanded(
@@ -149,7 +177,11 @@ class _MainShellState extends ConsumerState<MainShell> {
                     ],
                   ),
                 ),
-                const Expanded(child: CallsScreen()),
+                Expanded(
+                  child: _selectedIndex == 3
+                      ? const DatabaseBrowserScreen()
+                      : const CallsScreen(),
+                ),
                 if (_pendingRestartDueToPathChange)
                   Material(
                     color: Colors.grey.shade800,
@@ -240,11 +272,21 @@ class _MainShellState extends ConsumerState<MainShell> {
     await Future.delayed(const Duration(milliseconds: 100));
     try {
       final result = await ImportService().importFromExcel(
-        onLog: (msg) => ref.read(importLogProvider.notifier).addLog(msg),
+        onLog: (msg, [level]) =>
+            ref.read(importLogProvider.notifier).addLog(msg, level ?? ImportLogLevel.info),
       );
       if (!result.success && result.errorMessage != null) {
         messenger.showSnackBar(
           SnackBar(content: Text(result.errorMessage!)),
+        );
+      } else if (result.success && (result.usersInserted > 0 || result.equipmentInserted > 0)) {
+        ref.invalidate(lookupServiceProvider);
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text(
+              'Εισήχθησαν ${result.usersInserted} χρήστες και ${result.equipmentInserted} υπολογιστές',
+            ),
+          ),
         );
       }
     } catch (e) {
