@@ -98,6 +98,26 @@ class LookupService {
     return _equipmentByUserId[result.user.id] ?? [];
   }
 
+  /// Όλοι οι χρήστες whose phone περιέχει/ταιριάζει με τα ψηφία (≥3). Ταξινόμηση κατά name.
+  List<UserModel> findUsersByPhone(String phone) {
+    final digits = _digitsOnly(phone);
+    if (digits.length < 3) return [];
+    final lower = digits.toLowerCase();
+    final list = _users
+        .where((u) {
+          final p = (u.phone ?? '').trim().toLowerCase();
+          return p.contains(lower) || p.startsWith(lower);
+        })
+        .toList();
+    list.sort((a, b) => (a.name ?? '').compareTo(b.name ?? ''));
+    return list;
+  }
+
+  /// Εξοπλισμός που ανήκει στον χρήστη (user_id).
+  List<EquipmentModel> findEquipmentsForUser(int userId) {
+    return _equipmentByUserId[userId] ?? [];
+  }
+
   static String _digitsOnly(String s) {
     return s.replaceAll(RegExp(r'[^0-9]'), '');
   }

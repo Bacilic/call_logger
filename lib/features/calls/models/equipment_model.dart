@@ -15,6 +15,13 @@ class EquipmentModel {
   final String? notes;
   final int? userId;
 
+  /// Για εμφάνιση σε λίστες (κωδικός + τύπος).
+  String get displayLabel {
+    final c = code?.trim() ?? '';
+    final t = type?.trim() ?? '';
+    return t.isEmpty ? c : (c.isEmpty ? t : '$c ($t)');
+  }
+
   factory EquipmentModel.fromMap(Map<String, dynamic> map) {
     return EquipmentModel(
       id: map['id'] as int?,

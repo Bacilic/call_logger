@@ -36,7 +36,7 @@ class MainShell extends ConsumerStatefulWidget {
 class _MainShellState extends ConsumerState<MainShell> {
   /// True αν άλλαξε η διαδρομή βάσης από Ρυθμίσεις και απαιτείται επανεκκίνηση.
   bool _pendingRestartDueToPathChange = false;
-  /// Επιλεγμένο στοιχείο πλοήγησης: 0=Κλήσεις, 1=Κατάλογος, 2=Εκκρεμότητες, 3=Βάση Δεδομένων.
+  /// Επιλεγμένο στοιχείο πλοήγησης: 0=Κλήσεις, 1=Εκκρεμότητες, 2=Κατάλογος, 3=Ιστορικό, 4=Βάση Δεδομένων.
   int _selectedIndex = 0;
   /// Εμφάνιση κουμπιού Import Excel (ρύθμιση από Ρυθμίσεις· προεπιλογή false).
   bool _showImportExcelButton = false;
@@ -101,19 +101,53 @@ class _MainShellState extends ConsumerState<MainShell> {
             },
             destinations: const [
               NavigationRailDestination(
-                icon: Icon(Icons.phone_in_talk),
+                icon: Tooltip(
+                  waitDuration: Duration(milliseconds: 600),
+                  showDuration: Duration(seconds: 4),
+                  message:
+                      'Καταγραφή νέας κλήσης τεχνικής υποστήριξης\nΚύρια οθόνη – πατήστε εδώ όταν χτυπά τηλέφωνο',
+                  child: Icon(Icons.phone_in_talk),
+                ),
                 label: Text('Κλήσεις'),
               ),
               NavigationRailDestination(
-                icon: Icon(Icons.contacts),
-                label: Text('Κατάλογος'),
-              ),
-              NavigationRailDestination(
-                icon: Icon(Icons.task_alt),
+                icon: Tooltip(
+                  waitDuration: Duration(milliseconds: 600),
+                  showDuration: Duration(seconds: 4),
+                  message:
+                      'Προβλήματα που χρήζουν παρακολούθησης\nΑνοιχτές εργασίες & υπενθυμίσεις',
+                  child: Icon(Icons.task_alt),
+                ),
                 label: Text('Εκκρεμότητες'),
               ),
               NavigationRailDestination(
-                icon: Icon(Icons.storage),
+                icon: Tooltip(
+                  waitDuration: Duration(milliseconds: 600),
+                  showDuration: Duration(seconds: 4),
+                  message:
+                      'Διαχείριση χρηστών και εξοπλισμού\nΠροσθήκη / διόρθωση ονομάτων, τμημάτων, υπολογιστών',
+                  child: Icon(Icons.contacts),
+                ),
+                label: Text('Κατάλογος'),
+              ),
+              NavigationRailDestination(
+                icon: Tooltip(
+                  waitDuration: Duration(milliseconds: 600),
+                  showDuration: Duration(seconds: 4),
+                  message:
+                      'Προηγούμενες κλήσεις & αναζήτηση\nΕμφάνιση, τροποποίηση ή διαγραφή παλιών καταγραφών',
+                  child: Icon(Icons.history),
+                ),
+                label: Text('Ιστορικό'),
+              ),
+              NavigationRailDestination(
+                icon: Tooltip(
+                  waitDuration: Duration(milliseconds: 600),
+                  showDuration: Duration(seconds: 4),
+                  message:
+                      'Εργαλεία διαχείρισης & εποπτείας βάσης\nΑντίγραφα ασφαλείας, εγγραφές, προβολή πινάκων (για προχωρημένους χρήστες)',
+                  child: Icon(Icons.storage),
+                ),
                 label: Text('Βάση Δεδομένων'),
               ),
             ],
@@ -178,7 +212,7 @@ class _MainShellState extends ConsumerState<MainShell> {
                   ),
                 ),
                 Expanded(
-                  child: _selectedIndex == 3
+                  child: _selectedIndex == 4
                       ? const DatabaseBrowserScreen()
                       : const CallsScreen(),
                 ),

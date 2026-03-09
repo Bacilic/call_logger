@@ -46,7 +46,25 @@ class CallsScreen extends ConsumerWidget {
             maxLines: 4,
             onChanged: (value) =>
                 ref.read(callEntryProvider.notifier).setNotes(value),
-            onSubmitted: (_) async {
+          ),
+          const SizedBox(height: 16),
+          _buildSubmitButton(context, ref, header),
+        ],
+      ),
+    );
+  }
+}
+
+Widget _buildSubmitButton(
+  BuildContext context,
+  WidgetRef ref,
+  CallHeaderState header,
+) {
+  final button = SizedBox(
+    width: double.infinity,
+    child: ElevatedButton(
+      onPressed: header.canSubmitCall
+          ? () async {
               final ok = await ref.read(callEntryProvider.notifier).submitCall(ref);
               if (context.mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
@@ -56,11 +74,28 @@ class CallsScreen extends ConsumerWidget {
                     ),
                   ),
                 );
+                ref.read(callHeaderProvider.notifier).requestPhoneFocus();
               }
-            },
-          ),
-        ],
+            }
+          : null,
+      style: ElevatedButton.styleFrom(
+        backgroundColor: header.canSubmitCall
+            ? Theme.of(context).colorScheme.primary
+            : Colors.grey,
+        foregroundColor: header.canSubmitCall
+            ? Theme.of(context).colorScheme.onPrimary
+            : Colors.grey[700],
+        padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 24),
+        minimumSize: const Size(double.infinity, 48),
       ),
-    );
+      child: const Text('Καταγραφή Κλήσης'),
+    ),
+  );
+  if (header.canSubmitCall) {
+    return button;
   }
+  return Tooltip(
+    message: 'Συμπληρώστε εσωτερικό αριθμό και πρέπει να βρεθεί ο καλώντας',
+    child: button,
+  );
 }

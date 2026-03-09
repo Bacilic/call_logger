@@ -66,9 +66,11 @@ class CallEntryNotifier extends Notifier<CallEntryState> {
 
   void setInternalDigits(String value, LookupService? lookupService) {
     final digits = value.trim();
+    debugPrint('[setInternalDigits] value="$value" digits="$digits" length=${digits.length}');
     LookupResult? result;
     if (digits.length >= 3 && lookupService != null) {
       result = lookupService.search(digits);
+      debugPrint('[setInternalDigits] lookup result: user=${result?.user.name}');
     }
     state = state.copyWith(
       internalDigits: value,
@@ -88,26 +90,40 @@ class CallEntryNotifier extends Notifier<CallEntryState> {
   }
 
   /// Υποβολή κλήσης: διαβάζει caller/equipment από call_header_provider.
-  /// Μετά επιτυχία: markPhoneUsed, reset notes, clearAfterSubmit (focus με addPostFrameCallback).
+  /// Μετά επιτυχία: markPhoneUsed, reset notes, clearAll + requestPhoneFocus.
   Future<bool> submitCall(WidgetRef ref) async {
+    if (!ref.read(callHeaderProvider).canSubmitCall) {
+      return false;
+    }
     final header = ref.read(callHeaderProvider);
     final user = header.selectedCaller;
     final notes = state.notesController.text.trim();
-    if (user == null || notes.isEmpty) return false;
+    final callerId = header.selectedCaller?.id;
+    final callerTextRaw = header.callerDisplayText.trim();
+    final callerText = callerId != null
+        ? null
+        : (callerTextRaw.isEmpty ? 'Άγνωστος' : callerTextRaw);
     try {
       await DatabaseHelper.instance.insertCall(CallModel(
-        callerId: user.id,
+        date: null,
+        time: null,
+        callerId: callerId ?? user?.id,
         equipmentId: header.selectedEquipment?.id,
-        issue: notes,
+        callerText: callerText,
+        issue: notes.isEmpty ? null : notes,
         solution: null,
         category: state.category.isEmpty ? null : state.category,
         status: 'open',
       ));
+      if (user?.id != null) {
+        ref.invalidate(recentCallsProvider(user!.id!));
+      }
       if (header.selectedPhone != null) {
         ref.read(callHeaderProvider.notifier).markPhoneUsed(header.selectedPhone!);
       }
       reset();
-      ref.read(callHeaderProvider.notifier).clearAfterSubmit();
+      ref.read(callHeaderProvider.notifier).clearAll();
+      ref.read(callHeaderProvider.notifier).requestPhoneFocus();
       return true;
     } catch (_) {
       return false;

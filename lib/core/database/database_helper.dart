@@ -93,7 +93,7 @@ class DatabaseHelper {
 
     final db = await openDatabase(
       dbPath,
-      version: 3,
+      version: 5,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
       singleInstance: false,
@@ -125,7 +125,8 @@ class DatabaseHelper {
     await db.execute('''
       CREATE TABLE users (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT,
+        last_name TEXT NOT NULL,
+        first_name TEXT NOT NULL,
         phone TEXT,
         department TEXT,
         location TEXT,
@@ -189,6 +190,7 @@ class DatabaseHelper {
   }
 
   /// Σκελετός για μελλοντικές αναβαθμίσεις σχήματος (migrations).
+  /// users: phone δεν έχει UNIQUE ώστε να επιτρέπονται πολλαπλά τηλέφωνα ανά χρήστη (π.χ. comma-separated).
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
     if (oldVersion < 2) {
       await db.execute('ALTER TABLE equipment ADD COLUMN notes TEXT');
@@ -201,6 +203,79 @@ class DatabaseHelper {
         await db.execute('ALTER TABLE equipment ADD COLUMN description TEXT');
       } catch (_) {}
     }
+    if (oldVersion < 4) {
+      await db.execute('ALTER TABLE calls ADD COLUMN caller_text TEXT');
+    }
+    // Migration users: name → last_name + first_name (split: last word = last_name, υπόλοιπο = first_name).
+    if (oldVersion < 5) {
+      await _migrateUsersToFirstLastName(db);
+    }
+  }
+
+  /// Μετεγκατάσταση πίνακα users από name σε last_name + first_name.
+  /// Λογική split: last_name = τελευταία λέξη του name (trim & split by κενό), first_name = όλες οι άλλες (join με κενό).
+  /// Τα πεδία department, location, notes δεν αλλάζουν.
+  Future<void> _migrateUsersToFirstLastName(Database db) async {
+    final info = await db.rawQuery('PRAGMA table_info(users)');
+    final columns = (info.map((e) => e['name'] as String?)).whereType<String>().toSet();
+    if (!columns.contains('name')) {
+      return; // Ήδη μετεγκαταστάθηκε (π.χ. από εφάπαξ script).
+    }
+
+    // 1) Πρόσθεσε νέο πεδίο first_name.
+    await db.execute('ALTER TABLE users ADD COLUMN first_name TEXT');
+    // 2) Πρόσθεσε last_name (θα γεμίσει μαζί με first_name από το name).
+    await db.execute('ALTER TABLE users ADD COLUMN last_name TEXT');
+
+    // 3) Πλήρωσε first_name / last_name με split από name (Dart: πιο αξιόπιστο από pure SQL χωρίς REVERSE).
+    final rows = await db.rawQuery('SELECT id, name FROM users');
+    for (final row in rows) {
+      final id = row['id'] as int?;
+      final nameRaw = row['name'] as String?;
+      if (id == null) continue;
+      final parts = (nameRaw ?? '').trim().split(RegExp(r'\s+'));
+      final String lastName;
+      final String firstName;
+      if (parts.isEmpty) {
+        lastName = '';
+        firstName = '';
+      } else if (parts.length == 1) {
+        lastName = parts.single;
+        firstName = parts.single;
+      } else {
+        lastName = parts.last;
+        firstName = parts.sublist(0, parts.length - 1).join(' ');
+      }
+      await db.rawUpdate(
+        'UPDATE users SET first_name = ?, last_name = ? WHERE id = ?',
+        [firstName, lastName, id],
+      );
+    }
+
+    // 4) Αντικατάσταση name: δημιουργία πίνακα με νέο σχήμα (last_name NOT NULL, first_name NOT NULL), copy, drop παλιό, rename.
+    await db.execute('''
+      CREATE TABLE users_new (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        last_name TEXT NOT NULL,
+        first_name TEXT NOT NULL,
+        phone TEXT,
+        department TEXT,
+        location TEXT,
+        notes TEXT
+      )
+    ''');
+    await db.execute('''
+      INSERT INTO users_new (id, last_name, first_name, phone, department, location, notes)
+      SELECT id, last_name, first_name, phone, department, location, notes FROM users
+    ''');
+    await db.execute('DROP TABLE users');
+    await db.execute('ALTER TABLE users_new RENAME TO users');
+    final maxId = await db.rawQuery('SELECT MAX(id) AS m FROM users');
+    final seq = (maxId.first['m'] as int?) ?? 0;
+    await db.rawUpdate(
+      "UPDATE sqlite_sequence SET seq = ? WHERE name = 'users'",
+      [seq],
+    );
   }
 
   /// Επιστρέφει όλους τους χρήστες.
@@ -257,8 +332,23 @@ class DatabaseHelper {
       final ownerCodeToDbId = <int, int>{};
       for (final u in ownersList) {
         final ownerId = u['ownerId'] as int? ?? 0;
+        final fullName = (u['fullName'] as String? ?? '').trim();
+        final parts = fullName.split(RegExp(r'\s+'));
+        final String lastName;
+        final String firstName;
+        if (parts.isEmpty) {
+          lastName = '';
+          firstName = '';
+        } else if (parts.length == 1) {
+          lastName = parts.single;
+          firstName = parts.single;
+        } else {
+          lastName = parts.last;
+          firstName = parts.sublist(0, parts.length - 1).join(' ');
+        }
         final id = await txn.insert('users', {
-          'name': u['fullName'] as String? ?? '',
+          'last_name': lastName,
+          'first_name': firstName,
           'phone': u['phones'] as String? ?? '',
           'department': u['department'] as String? ?? '',
           'location': null,
@@ -282,6 +372,74 @@ class DatabaseHelper {
     return (usersInserted: usersInserted, equipmentInserted: equipmentInserted);
   }
 
+  /// Ενημερώνει συσχετίσεις χρήστη: τηλέφωνο (users.phone) και/ή εξοπλισμό (equipment.user_id) με βάση τον κωδικό του.
+  /// [name] αναφέρεται στο πλήρες όνομα· εσωτερικά γίνεται split σε first_name / last_name.
+  Future<int> insertUser({
+    required String name,
+    String? phone,
+    String? department,
+    String? location,
+    String? notes,
+  }) async {
+    final parts = name.trim().split(RegExp(r'\s+'));
+    final String lastName;
+    final String firstName;
+    if (parts.isEmpty) {
+      lastName = '';
+      firstName = '';
+    } else if (parts.length == 1) {
+      lastName = parts.single;
+      firstName = parts.single;
+    } else {
+      lastName = parts.last;
+      firstName = parts.sublist(0, parts.length - 1).join(' ');
+    }
+    final db = await database;
+    return db.insert('users', {
+      'last_name': lastName,
+      'first_name': firstName,
+      'phone': phone,
+      'department': department,
+      'location': location,
+      'notes': notes,
+    });
+  }
+
+  /// Ενημερώνει συσχετίσεις χρήστη: τηλέφωνο (users.phone) και/ή εξοπλισμό (equipment.user_id) με βάση τον κωδικό του.
+  Future<void> updateAssociationsIfNeeded(
+    int? userId,
+    String? phone,
+    String? equipmentCode,
+  ) async {
+    if (userId == null) return;
+    final db = await database;
+    await db.transaction((txn) async {
+      if (phone != null && phone.isNotEmpty) {
+        // Αντί να αντικαθιστούμε, καλύτερα να το προσθέτουμε στο τέλος αν έχει ήδη τηλέφωνα,
+        // ή να το θέτουμε αν είναι null, αλλά η απαίτηση ήταν "ή != phone".
+        // Εφόσον η εφαρμογή ψάχνει πλέον με contains, ας κάνουμε append.
+        final userResult = await txn.query('users', columns: ['phone'], where: 'id = ?', whereArgs: [userId]);
+        if (userResult.isNotEmpty) {
+          final currentPhone = userResult.first['phone'] as String?;
+          if (currentPhone == null || currentPhone.trim().isEmpty) {
+            await txn.update('users', {'phone': phone}, where: 'id = ?', whereArgs: [userId]);
+          } else if (!currentPhone.contains(phone)) {
+            await txn.update('users', {'phone': '$currentPhone, $phone'}, where: 'id = ?', whereArgs: [userId]);
+          }
+        }
+      }
+      if (equipmentCode != null && equipmentCode.isNotEmpty) {
+        // Υποθέτουμε ότι η στήλη είναι code_equipment (από create table)
+        await txn.update(
+          'equipment',
+          {'user_id': userId},
+          where: 'code_equipment = ? AND (user_id IS NULL OR user_id != ?)',
+          whereArgs: [equipmentCode, userId],
+        );
+      }
+    });
+  }
+
   /// Εισάγει νέα κλήση. date/time τίθενται από τώρα αν δεν δοθούν.
   Future<int> insertCall(CallModel call) async {
     final db = await database;
@@ -291,6 +449,7 @@ class DatabaseHelper {
       'time': call.time ?? DateFormat('HH:mm').format(now),
       'caller_id': call.callerId,
       'equipment_id': call.equipmentId,
+      'caller_text': call.callerText,
       'issue': call.issue,
       'solution': call.solution,
       'category': call.category,
