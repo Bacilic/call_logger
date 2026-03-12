@@ -1,12 +1,9 @@
-/// Κατάσταση αρχικοποίησης / ελέγχου βάσης δεδομένων.
+/// Κατάσταση αρχικοποίησης / ελέγχου βάσης δεδομένων (fail-fast).
 enum DatabaseStatus {
   success,
   fileNotFound,
-  notReadable,
-  corrupted,
-  locked,
-  invalidPath,
-  unknownError,
+  accessDenied,
+  corruptedOrInvalid,
 }
 
 /// Αποτέλεσμα αρχικοποίησης ή ελέγχου υγείας βάσης δεδομένων.
@@ -16,65 +13,54 @@ class DatabaseInitResult {
     required this.status,
     this.message,
     this.details,
+    this.path,
   });
 
   final DatabaseStatus status;
   final String? message;
   final String? details;
+  /// Διαδρομή αρχείου βάσης (για προβολή στο UI).
+  final String? path;
 
   bool get isSuccess => status == DatabaseStatus.success;
 
-  /// Από exception (SQLite / IO) → κατάλληλο status και μήνυμα.
+  /// Από exception (SQLite / IO) → κατάλληλο status (accessDenied ή corruptedOrInvalid).
   factory DatabaseInitResult.fromException(Object error, [String? path]) {
     final msg = error.toString().toLowerCase();
     final pathInfo = path != null && path.isNotEmpty ? ' Διαδρομή: $path' : '';
 
     if (msg.contains('database is locked') ||
         msg.contains('locked') ||
-        msg.contains('busy')) {
-      return DatabaseInitResult(
-        status: DatabaseStatus.locked,
-        message: 'Η βάση είναι κλειδωμένη από άλλη διεργασία.',
-        details: 'Περιμένετε ή κλείστε άλλες εφαρμογές που μπορεί να τη χρησιμοποιούν.$pathInfo',
-      );
-    }
-    if (msg.contains('file is not a database') ||
-        msg.contains('not a database') ||
-        msg.contains('corrupted') ||
-        msg.contains('sqlite_error')) {
-      return DatabaseInitResult(
-        status: DatabaseStatus.corrupted,
-        message: 'Η βάση φαίνεται κατεστραμμένη ή μη έγκυρη.',
-        details: 'Επιβεβαιώστε ότι το αρχείο είναι SQLite βάση.$pathInfo',
-      );
-    }
-    if (msg.contains('no such file') ||
-        msg.contains('cannot open') ||
+        msg.contains('busy') ||
         msg.contains('access denied') ||
         msg.contains('permission denied') ||
-        msg.contains('denied')) {
+        msg.contains('denied') ||
+        msg.contains('readonly') ||
+        msg.contains('read-only')) {
       return DatabaseInitResult(
-        status: DatabaseStatus.notReadable,
-        message: 'Δεν έχετε δικαίωμα ανάγνωσης του αρχείου βάσης.',
-        details: 'Ελέγξτε δικαιώματα ή διαδρομή.$pathInfo',
+        status: DatabaseStatus.accessDenied,
+        message: 'Αδυναμία πρόσβασης ή εγγραφής στο αρχείο βάσης.',
+        details: 'Ελέγξτε δικαιώματα ή ότι το αρχείο δεν είναι κλειδωμένο.$pathInfo',
+        path: path,
       );
     }
-    if (msg.contains('invalid path') || msg.contains('path')) {
+    if (msg.contains('no such file') || msg.contains('cannot open')) {
       return DatabaseInitResult(
-        status: DatabaseStatus.invalidPath,
-        message: 'Η διαδρομή της βάσης δεδομένων δεν είναι έγκυρη.',
-        details: 'Επιλέξτε σωστή διαδρομή από Ρυθμίσεις.$pathInfo',
+        status: DatabaseStatus.fileNotFound,
+        message: 'Δεν βρέθηκε αρχείο βάσης.',
+        details: path != null && path.isNotEmpty ? 'Διαδρομή: $path' : null,
+        path: path,
       );
     }
-
     return DatabaseInitResult(
-      status: DatabaseStatus.unknownError,
-      message: 'Προέκυψε άγνωστο σφάλμα με τη βάση δεδομένων.',
-      details: '$error$pathInfo',
+      status: DatabaseStatus.corruptedOrInvalid,
+      message: 'Η βάση φαίνεται κατεστραμμένη ή μη έγκυρη.',
+      details: 'Επιβεβαιώστε ότι το αρχείο είναι SQLite βάση.$pathInfo',
+      path: path,
     );
   }
 
-  /// Επιτυχής αρχικοποίηση. Αν δοθεί [dbPath], το μήνυμα περιλαμβάνει το όνομα αρχείου.
+  /// Επιτυχής αρχικοποίηση.
   factory DatabaseInitResult.success([String? dbPath]) {
     String message = 'Η σύνδεση με τη βάση δεδομένων πέτυχε.';
     if (dbPath != null && dbPath.trim().isNotEmpty) {
@@ -86,6 +72,7 @@ class DatabaseInitResult {
     return DatabaseInitResult(
       status: DatabaseStatus.success,
       message: message,
+      path: dbPath,
     );
   }
 
@@ -94,30 +81,61 @@ class DatabaseInitResult {
     return DatabaseInitResult(
       status: DatabaseStatus.fileNotFound,
       message: dbPath.isNotEmpty
-          ? 'Δεν βρέθηκε αρχείο βάσης στη διαδρομή: $dbPath'
+          ? 'Δεν βρέθηκε αρχείο βάσης στη διαδρομή.'
           : 'Δεν βρέθηκε αρχείο βάσης στη διαδρομή.',
       details: dbPath.isNotEmpty ? 'Διαδρομή: $dbPath' : null,
+      path: dbPath.isNotEmpty ? dbPath : null,
     );
   }
 
-  /// Αρχείο δεν είναι αναγνώσιμο (δικαιώματα).
-  factory DatabaseInitResult.notReadable(String? dbPath) {
+  /// Αδυναμία πρόσβασης (δικαιώματα, κλειδωμένο).
+  factory DatabaseInitResult.accessDenied(String? dbPath, [String? extraMessage]) {
     return DatabaseInitResult(
-      status: DatabaseStatus.notReadable,
-      message: 'Δεν έχετε δικαίωμα ανάγνωσης του αρχείου βάσης.',
+      status: DatabaseStatus.accessDenied,
+      message: extraMessage ?? 'Δεν έχετε δικαίωμα ανάγνωσης/εγγραφής του αρχείου βάσης.',
       details: dbPath != null && dbPath.isNotEmpty ? 'Διαδρομή: $dbPath' : null,
+      path: dbPath,
     );
+  }
+
+  /// Βάση κατεστραμμένη ή μη έγκυρο αρχείο (π.χ. λείπει πίνακας calls).
+  factory DatabaseInitResult.corruptedOrInvalid(String? dbPath, [String? extraMessage]) {
+    return DatabaseInitResult(
+      status: DatabaseStatus.corruptedOrInvalid,
+      message: extraMessage ?? 'Η βάση φαίνεται κατεστραμμένη ή μη έγκυρη.',
+      details: dbPath != null && dbPath.isNotEmpty
+          ? 'Επιβεβαιώστε ότι το αρχείο είναι SQLite βάση. Διαδρομή: $dbPath'
+          : 'Επιβεβαιώστε ότι το αρχείο είναι SQLite βάση.',
+      path: dbPath,
+    );
+  }
+
+  /// Exception που μεταφέρει αποτέλεσμα αρχικοποίησης (για fail-fast από DatabaseHelper).
+  static DatabaseInitException toException(DatabaseInitResult result) {
+    return DatabaseInitException(result);
   }
 
   DatabaseInitResult copyWith({
     DatabaseStatus? status,
     String? message,
     String? details,
+    String? path,
   }) {
     return DatabaseInitResult(
       status: status ?? this.status,
       message: message ?? this.message,
       details: details ?? this.details,
+      path: path ?? this.path,
     );
   }
+}
+
+/// Exception που φέρει [DatabaseInitResult] όταν η αρχικοποίηση αποτύχει (fail-fast).
+class DatabaseInitException implements Exception {
+  const DatabaseInitException(this.result);
+
+  final DatabaseInitResult result;
+
+  @override
+  String toString() => result.message ?? 'DatabaseInitException: ${result.status}';
 }

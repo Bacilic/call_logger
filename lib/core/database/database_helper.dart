@@ -73,7 +73,8 @@ class DatabaseHelper {
     }
   }
 
-  /// Αρχικοποίηση βάσης: έλεγχος δικτύου, fallback σε τοπική, WAL, πίνακες.
+  /// Αρχικοποίηση βάσης: έλεγχος δικτύου, ύπαρξη αρχείου, WAL, σχήμα (fail-fast).
+  /// Δεν δημιουργεί αυτόματα αρχείο· ρίχνει [DatabaseInitException] σε αποτυχία.
   Future<Database> _initDatabase() async {
     String dbPath = await SettingsService().getDatabasePath();
     if (dbPath.trim().isEmpty) {
@@ -91,15 +92,64 @@ class DatabaseHelper {
       }
     }
 
+    if (!await File(dbPath).exists()) {
+      throw DatabaseInitException(DatabaseInitResult.fileNotFound(dbPath));
+    }
+
+    Database db;
+    try {
+      db = await openDatabase(
+        dbPath,
+        version: 5,
+        onCreate: _onCreate,
+        onUpgrade: _onUpgrade,
+        singleInstance: false,
+      );
+    } on DatabaseInitException {
+      rethrow;
+    } catch (e) {
+      throw DatabaseInitException(
+        DatabaseInitResult.fromException(e, dbPath),
+      );
+    }
+
+    try {
+      await _validateSchema(db, dbPath);
+    } catch (_) {
+      await db.close();
+      _database = null;
+      rethrow;
+    }
+
+    await db.execute('PRAGMA journal_mode = WAL;');
+    return db;
+  }
+
+  /// Επαληθεύει ότι υπάρχει ο πίνακας [calls]. Αλλιώς ρίχνει [DatabaseInitException].
+  Future<void> _validateSchema(Database db, String dbPath) async {
+    final r = await db.rawQuery('PRAGMA table_info(calls)');
+    if (r.isEmpty) {
+      throw DatabaseInitException(
+        DatabaseInitResult.corruptedOrInvalid(
+          dbPath,
+          'Λείπει ο πίνακας calls· το αρχείο δεν φαίνεται έγκυρη βάση.',
+        ),
+      );
+    }
+  }
+
+  /// Δημιουργεί νέο αρχείο βάσης στο [filePath] με το τρέχον σχήμα.
+  /// Δεν αλλάζει την ενεργή σύνδεση (_database). Για χρήση από Ρυθμίσεις (δημιουργία από μηδέν).
+  Future<void> createNewDatabaseFile(String filePath) async {
     final db = await openDatabase(
-      dbPath,
+      filePath,
       version: 5,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
       singleInstance: false,
     );
     await db.execute('PRAGMA journal_mode = WAL;');
-    return db;
+    await db.close();
   }
 
   /// Δημιουργία σχήματος (πίνακες) στην πρώτη εγκατάσταση.
@@ -189,22 +239,33 @@ class DatabaseHelper {
     ''');
   }
 
+  /// Επιστρέφει true αν ο πίνακας [table] έχει τη στήλη [column].
+  Future<bool> _tableHasColumn(Database db, String table, String column) async {
+    final info = await db.rawQuery('PRAGMA table_info($table)');
+    final names = (info.map((e) => e['name'] as String?)).whereType<String>();
+    return names.contains(column);
+  }
+
   /// Σκελετός για μελλοντικές αναβαθμίσεις σχήματος (migrations).
   /// users: phone δεν έχει UNIQUE ώστε να επιτρέπονται πολλαπλά τηλέφωνα ανά χρήστη (π.χ. comma-separated).
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
     if (oldVersion < 2) {
-      await db.execute('ALTER TABLE equipment ADD COLUMN notes TEXT');
+      if (!await _tableHasColumn(db, 'equipment', 'notes')) {
+        await db.execute('ALTER TABLE equipment ADD COLUMN notes TEXT');
+      }
     }
     if (oldVersion < 3) {
-      try {
+      if (!await _tableHasColumn(db, 'equipment', 'code')) {
         await db.execute('ALTER TABLE equipment ADD COLUMN code TEXT');
-      } catch (_) {}
-      try {
+      }
+      if (!await _tableHasColumn(db, 'equipment', 'description')) {
         await db.execute('ALTER TABLE equipment ADD COLUMN description TEXT');
-      } catch (_) {}
+      }
     }
     if (oldVersion < 4) {
-      await db.execute('ALTER TABLE calls ADD COLUMN caller_text TEXT');
+      if (!await _tableHasColumn(db, 'calls', 'caller_text')) {
+        await db.execute('ALTER TABLE calls ADD COLUMN caller_text TEXT');
+      }
     }
     // Migration users: name → last_name + first_name (split: last word = last_name, υπόλοιπο = first_name).
     if (oldVersion < 5) {
@@ -222,10 +283,14 @@ class DatabaseHelper {
       return; // Ήδη μετεγκαταστάθηκε (π.χ. από εφάπαξ script).
     }
 
-    // 1) Πρόσθεσε νέο πεδίο first_name.
-    await db.execute('ALTER TABLE users ADD COLUMN first_name TEXT');
-    // 2) Πρόσθεσε last_name (θα γεμίσει μαζί με first_name από το name).
-    await db.execute('ALTER TABLE users ADD COLUMN last_name TEXT');
+    // 1) Πρόσθεσε νέο πεδίο first_name (idempotent).
+    if (!columns.contains('first_name')) {
+      await db.execute('ALTER TABLE users ADD COLUMN first_name TEXT');
+    }
+    // 2) Πρόσθεσε last_name (idempotent).
+    if (!columns.contains('last_name')) {
+      await db.execute('ALTER TABLE users ADD COLUMN last_name TEXT');
+    }
 
     // 3) Πλήρωσε first_name / last_name με split από name (Dart: πιο αξιόπιστο από pure SQL χωρίς REVERSE).
     final rows = await db.rawQuery('SELECT id, name FROM users');
@@ -490,7 +555,7 @@ class DatabaseHelper {
       );
       if (r.isEmpty) {
         return const DatabaseInitResult(
-          status: DatabaseStatus.corrupted,
+          status: DatabaseStatus.corruptedOrInvalid,
           message: 'Η βάση φαίνεται κατεστραμμένη ή μη έγκυρη.',
           details: 'Λείπει ο πίνακας calls.',
         );

@@ -42,7 +42,7 @@ Future<DatabaseInitRunnerResult> runDatabaseInitChecks({
         try {
           await dbFile.readAsBytes();
         } catch (_) {
-          result = DatabaseInitResult.notReadable(dbPath);
+          result = DatabaseInitResult.accessDenied(dbPath);
         }
 
         if (result == null) {
@@ -56,6 +56,8 @@ Future<DatabaseInitRunnerResult> runDatabaseInitChecks({
             result = health.isSuccess
                 ? DatabaseInitResult.success(dbPath)
                 : health;
+          } on DatabaseInitException catch (e) {
+            result = e.result;
           } catch (e) {
             result = DatabaseInitResult.fromException(e, dbPath);
           }

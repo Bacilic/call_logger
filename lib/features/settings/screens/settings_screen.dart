@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as path;
 
 import '../../../core/config/app_config.dart';
+import '../../../core/database/database_helper.dart';
 import '../../../core/services/settings_service.dart';
 
 /// Οθόνη ρυθμίσεων: διαδρομή βάσης δεδομένων και άλλες επιλογές.
@@ -113,6 +114,123 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         setState(() => _errorMessage = 'Δεν επιλέχθηκε αρχείο ή φάκελος.');
       }
     }
+  }
+
+  Future<void> _showCreateNewDatabaseDialog() async {
+    setState(() => _errorMessage = null);
+    final fullPath = await showDialog<String>(
+      context: context,
+      builder: (ctx) => const _CreateNewDatabaseDialog(),
+    );
+    if (fullPath == null || !mounted) return;
+
+    final file = File(fullPath);
+    final exists = await file.exists();
+
+    if (exists) {
+      final overwrite = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Υπάρχον αρχείο'),
+          content: const Text(
+            'Στη διαδρομή που επιλέξατε υπάρχει ήδη αρχείο. Αν συνεχίσετε, θα δημιουργηθεί νέα κενή βάση και το υπάρχον αρχείο θα αντικατασταθεί. Όλα τα δεδομένα του υπάρχοντος αρχείου θα χαθούν οριστικά.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Ακύρωση'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: const Text('Αντικατάσταση'),
+            ),
+          ],
+        ),
+      );
+      if (overwrite != true || !mounted) return;
+      try {
+        await file.delete();
+      } catch (e) {
+        if (mounted) {
+          setState(() => _errorMessage = 'Δεν ήταν δυνατή η αντικατάσταση: $e');
+        }
+        return;
+      }
+    } else {
+      final confirm = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Δημιουργία νέου αρχείου βάσης'),
+          content: Text(
+            'Θα δημιουργηθεί νέο κενό αρχείο βάσης στη διαδρομή:\n\n$fullPath\n\nΗ νέα διαδρομή θα οριστεί ως ενεργή και θα ισχύσει μετά την επανεκκίνηση της εφαρμογής.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Ακύρωση'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: const Text('Δημιουργία'),
+            ),
+          ],
+        ),
+      );
+      if (confirm != true || !mounted) return;
+    }
+
+    try {
+      await DatabaseHelper.instance.createNewDatabaseFile(fullPath);
+    } catch (e) {
+      if (mounted) {
+        setState(() => _errorMessage =
+            'Δεν ήταν δυνατή η δημιουργία του αρχείου. Ελέγξτε δικαιώματα και ότι η διαδρομή είναι έγκυρη.');
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Σφάλμα: $e'),
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
+        );
+      }
+      return;
+    }
+
+    try {
+      await _settings.setDatabasePath(fullPath);
+    } catch (e) {
+      if (mounted) {
+        setState(() => _errorMessage = 'Σφάλμα αποθήκευσης ρύθμισης: $e');
+      }
+      return;
+    }
+
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Ρυθμίσεις αποθηκεύτηκαν'),
+        content: const Text(
+          'Το νέο αρχείο βάσης δημιουργήθηκε. Η νέα διαδρομή θα ισχύσει στην επόμενη εκκίνηση της εφαρμογής. Παρακαλώ κλείστε την εφαρμογή χειροκίνητα (π.χ. Alt+F4 ή κουμπί κλεισίματος) και ανοίξτε την ξανά.',
+        ),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Εντάξει'),
+          ),
+        ],
+      ),
+    );
+    setState(() {
+      _currentPath = fullPath;
+      _selectedNewPath = null;
+      _errorMessage = null;
+    });
+    await _loadCurrentPath();
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Το νέο αρχείο βάσης δημιουργήθηκε. Κλείστε και ξανανοίξτε την εφαρμογή.')),
+    );
   }
 
   Future<void> _saveSettings() async {
@@ -356,6 +474,26 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 ),
               ),
             ],
+            const SizedBox(height: 28),
+            Text(
+              'Δημιουργία νέου αρχείου βάσης',
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Δημιουργεί νέο κενό αρχείο βάσης και το ορίζει ως ενεργό. Η τρέχουσα διαδρομή στις ρυθμίσεις θα αντικατασταθεί.',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 12),
+            FilledButton.tonalIcon(
+              onPressed: _showCreateNewDatabaseDialog,
+              icon: const Icon(Icons.add_circle_outline),
+              label: const Text('Δημιουργία νέου αρχείου βάσης'),
+            ),
             const SizedBox(height: 32),
             const Divider(),
             const SizedBox(height: 16),
@@ -380,6 +518,134 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Διάλογος επιλογής φακέλου και ονόματος αρχείου για δημιουργία νέου .db.
+class _CreateNewDatabaseDialog extends StatefulWidget {
+  const _CreateNewDatabaseDialog();
+
+  @override
+  State<_CreateNewDatabaseDialog> createState() => _CreateNewDatabaseDialogState();
+}
+
+class _CreateNewDatabaseDialogState extends State<_CreateNewDatabaseDialog> {
+  String? _selectedFolder;
+  final TextEditingController _filenameController = TextEditingController(text: 'call_logger.db');
+  String? _validationError;
+
+  @override
+  void dispose() {
+    _filenameController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _pickFolder() async {
+    final dirPath = await FilePicker.platform.getDirectoryPath(
+      dialogTitle: 'Επιλογή φακέλου για νέο αρχείο βάσης',
+    );
+    if (dirPath != null && dirPath.trim().isNotEmpty && mounted) {
+      setState(() {
+        _selectedFolder = dirPath;
+        _validationError = null;
+      });
+    }
+  }
+
+  void _submit() {
+    final folder = _selectedFolder?.trim();
+    final name = _filenameController.text.trim();
+    if (folder == null || folder.isEmpty) {
+      setState(() => _validationError = 'Επιλέξτε φάκελο.');
+      return;
+    }
+    if (name.isEmpty) {
+      setState(() => _validationError = 'Εισάγετε όνομα αρχείου.');
+      return;
+    }
+    if (!name.toLowerCase().endsWith('.db')) {
+      setState(() => _validationError = 'Το όνομα αρχείου πρέπει να τελειώνει σε .db');
+      return;
+    }
+    if (name.contains(RegExp(r'[/\\]'))) {
+      setState(() => _validationError = 'Το όνομα αρχείου δεν πρέπει να περιέχει διαχωριστικά διαδρομής.');
+      return;
+    }
+    final fullPath = path.join(folder, name);
+    Navigator.of(context).pop(fullPath);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return AlertDialog(
+      title: const Text('Δημιουργία νέου αρχείου βάσης'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Text(
+              'Επιλέξτε φάκελο και δώστε όνομα αρχείου (π.χ. new_base.db).',
+              style: TextStyle(fontSize: 13),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    _selectedFolder ?? 'Δεν έχει επιλεγεί φάκελος',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      fontFamily: 'monospace',
+                      color: _selectedFolder != null
+                          ? theme.colorScheme.onSurface
+                          : theme.colorScheme.onSurfaceVariant,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                FilledButton.tonalIcon(
+                  onPressed: _pickFolder,
+                  icon: const Icon(Icons.folder_open),
+                  label: const Text('Φάκελος'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _filenameController,
+              decoration: const InputDecoration(
+                labelText: 'Όνομα αρχείου',
+                hintText: 'π.χ. new_base.db',
+                border: OutlineInputBorder(),
+              ),
+              onChanged: (_) => setState(() => _validationError = null),
+            ),
+            if (_validationError != null) ...[
+              const SizedBox(height: 8),
+              Text(
+                _validationError!,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.error,
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Ακύρωση'),
+        ),
+        FilledButton(
+          onPressed: _submit,
+          child: const Text('Δημιουργία'),
+        ),
+      ],
     );
   }
 }

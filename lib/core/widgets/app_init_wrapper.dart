@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../database/database_init_result.dart';
+import '../database/database_helper.dart';
 import '../init/app_init_provider.dart';
 import 'app_shortcuts.dart';
+import 'database_error_screen.dart';
 
 /// Φορτώνει το [appInitProvider] και εμφανίζει loading, σφάλμα ή την κύρια εφαρμογή.
 class AppInitWrapper extends ConsumerWidget {
@@ -14,10 +17,17 @@ class AppInitWrapper extends ConsumerWidget {
 
     return asyncResult.when(
       loading: () => const _InitLoadingScreen(),
-      error: (err, _) => _InitErrorScreen(
-        message: 'Προέκυψε σφάλμα κατά την εκκίνηση.',
-        details: err.toString(),
-      ),
+      error: (err, _) {
+        final result = DatabaseInitResult.fromException(err);
+        return DatabaseErrorScreen(
+          result: result,
+          dbPath: result.path,
+          onRetry: () async {
+            await DatabaseHelper.instance.closeConnection();
+            ref.invalidate(appInitProvider);
+          },
+        );
+      },
       data: (initResult) {
         if (initResult.success) {
           return AppShortcuts(
@@ -25,9 +35,13 @@ class AppInitWrapper extends ConsumerWidget {
             initialIsLocalDevMode: initResult.isLocalDevMode,
           );
         }
-        return _InitErrorScreen(
-          message: initResult.message ?? 'Η σύνδεση με τη βάση δεδομένων απέτυχε.',
-          details: initResult.details,
+        return DatabaseErrorScreen(
+          result: initResult.result,
+          dbPath: initResult.result.path,
+          onRetry: () async {
+            await DatabaseHelper.instance.closeConnection();
+            ref.invalidate(appInitProvider);
+          },
         );
       },
     );
@@ -48,57 +62,6 @@ class _InitLoadingScreen extends StatelessWidget {
             SizedBox(height: 24),
             Text('Φόρτωση εφαρμογής...'),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-class _InitErrorScreen extends StatelessWidget {
-  const _InitErrorScreen({required this.message, this.details});
-
-  final String message;
-  final String? details;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Scaffold(
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Icon(
-                Icons.error_outline,
-                size: 64,
-                color: theme.colorScheme.error,
-              ),
-              const SizedBox(height: 24),
-              Text(
-                message,
-                style: theme.textTheme.titleMedium?.copyWith(
-                  color: theme.colorScheme.onSurface,
-                  fontWeight: FontWeight.w600,
-                ),
-                textAlign: TextAlign.center,
-              ),
-              if (details != null && details!.isNotEmpty) ...[
-                const SizedBox(height: 12),
-                Text(
-                  details!,
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                  textAlign: TextAlign.center,
-                  maxLines: 5,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
-            ],
-          ),
         ),
       ),
     );
