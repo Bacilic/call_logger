@@ -10,6 +10,7 @@ import '../../features/calls/provider/lookup_provider.dart';
 import '../../features/calls/screens/calls_screen.dart';
 import '../../features/calls/screens/widgets/import_console_widget.dart';
 import '../../features/database/screens/database_browser_screen.dart';
+import '../../features/directory/screens/directory_screen.dart';
 import '../../features/settings/screens/settings_screen.dart';
 import '../services/import_service.dart';
 import '../services/import_types.dart';
@@ -171,50 +172,53 @@ class _MainShellState extends ConsumerState<MainShell> {
                           ),
                     ),
                   ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        widget.databaseResult.isSuccess
-                            ? (widget.databaseResult.message ??
-                                'Η σύνδεση με τη βάση δεδομένων πέτυχε.')
-                            : (widget.databaseResult.message ??
-                                'Άγνωστο σφάλμα με τη βάση δεδομένων.'),
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: widget.databaseResult.isSuccess
-                                  ? Colors.green.shade700
-                                  : Colors.red.shade700,
-                            ),
-                      ),
-                      if (widget.databaseResult.details != null &&
-                          !widget.databaseResult.isSuccess) ...[
-                        const SizedBox(height: 4),
-                        Tooltip(
-                          message: widget.databaseResult.details!,
-                          child: Text(
-                            widget.databaseResult.details!,
-                            style: Theme.of(context)
-                                .textTheme
-                                .bodySmall
-                                ?.copyWith(
-                                  color: Colors.red.shade300,
-                                  fontSize: 11,
-                                ),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                          ),
+                if (_selectedIndex != 2)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          widget.databaseResult.isSuccess
+                              ? (widget.databaseResult.message ??
+                                  'Η σύνδεση με τη βάση δεδομένων πέτυχε.')
+                              : (widget.databaseResult.message ??
+                                  'Άγνωστο σφάλμα με τη βάση δεδομένων.'),
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                color: widget.databaseResult.isSuccess
+                                    ? Colors.green.shade700
+                                    : Colors.red.shade700,
+                              ),
                         ),
+                        if (widget.databaseResult.details != null &&
+                            !widget.databaseResult.isSuccess) ...[
+                          const SizedBox(height: 4),
+                          Tooltip(
+                            message: widget.databaseResult.details!,
+                            child: Text(
+                              widget.databaseResult.details!,
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodySmall
+                                  ?.copyWith(
+                                    color: Colors.red.shade300,
+                                    fontSize: 11,
+                                  ),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
                       ],
-                    ],
+                    ),
                   ),
-                ),
                 Expanded(
-                  child: _selectedIndex == 4
-                      ? const DatabaseBrowserScreen()
-                      : const CallsScreen(),
+                  child: switch (_selectedIndex) {
+                    2 => const DirectoryScreen(),
+                    4 => const DatabaseBrowserScreen(),
+                    _ => const CallsScreen(),
+                  },
                 ),
                 if (_pendingRestartDueToPathChange)
                   Material(

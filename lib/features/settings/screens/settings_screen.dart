@@ -8,6 +8,7 @@ import 'package:path/path.dart' as path;
 import '../../../core/config/app_config.dart';
 import '../../../core/database/database_helper.dart';
 import '../../../core/services/settings_service.dart';
+import '../../directory/providers/directory_provider.dart';
 
 /// Οθόνη ρυθμίσεων: διαδρομή βάσης δεδομένων και άλλες επιλογές.
 class SettingsScreen extends ConsumerStatefulWidget {
@@ -128,6 +129,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final exists = await file.exists();
 
     if (exists) {
+      if (!mounted) return;
       final overwrite = await showDialog<bool>(
         context: context,
         builder: (ctx) => AlertDialog(
@@ -157,6 +159,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         return;
       }
     } else {
+      if (!mounted) return;
       final confirm = await showDialog<bool>(
         context: context,
         builder: (ctx) => AlertDialog(
@@ -513,6 +516,20 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               title: const Text('Εμφάνιση κουμπιού Import Excel'),
               subtitle: const Text(
                 'Ενεργοποίηση για να εμφανίζεται το κουμπί εισαγωγής Excel στην κύρια οθόνη.',
+              ),
+            ),
+            SwitchListTile(
+              value: ref.watch(catalogContinuousScrollProvider).value ?? true,
+              onChanged: (bool val) async {
+                await DatabaseHelper.instance.setSetting(
+                  'catalog_continuous_scroll',
+                  val.toString(),
+                );
+                ref.invalidate(catalogContinuousScrollProvider);
+              },
+              title: const Text('Συνεχής κύλιση πίνακα Καταλόγου'),
+              subtitle: const Text(
+                'Mouse wheel γραμμή-γραμμή αντί για αλλαγή σελίδας.',
               ),
             ),
           ],

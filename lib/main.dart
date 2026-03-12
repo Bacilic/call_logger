@@ -3,16 +3,31 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:screen_retriever/screen_retriever.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'package:window_manager/window_manager.dart';
 
 import 'core/widgets/app_init_wrapper.dart';
 
-void main() {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   if (Platform.isWindows) {
     sqfliteFfiInit();
     databaseFactory = databaseFactoryFfi;
+
+    final wm = WindowManager.instance;
+    await wm.ensureInitialized();
+    await wm.waitUntilReadyToShow(null, () async {
+      await wm.show();
+    });
+    final display = await ScreenRetriever.instance.getPrimaryDisplay();
+    final screenWidth = display.size.width;
+    final bounds = await wm.getBounds();
+    if (bounds.width > screenWidth) {
+      await wm.setSize(Size(screenWidth, bounds.height));
+    }
+    await wm.center();
   }
 
   runApp(const ProviderScope(child: MyApp()));

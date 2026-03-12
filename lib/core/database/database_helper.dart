@@ -349,6 +349,73 @@ class DatabaseHelper {
     return db.query('users');
   }
 
+  /// Εισάγει χρήστη από map (π.χ. UserModel.toMap()). Αφαιρεί [id] πριν το insert.
+  Future<int> insertUserFromMap(Map<String, dynamic> row) async {
+    final map = Map<String, dynamic>.from(row);
+    map.remove('id');
+    final db = await database;
+    return db.insert('users', map);
+  }
+
+  /// Ενημερώνει χρήστη. Αφαιρεί [id] από [values] πριν το update.
+  Future<int> updateUser(int id, Map<String, dynamic> values) async {
+    final map = Map<String, dynamic>.from(values);
+    map.remove('id');
+    final db = await database;
+    return db.update('users', map, where: 'id = ?', whereArgs: [id]);
+  }
+
+  /// Μαζική ενημέρωση: εφαρμόζει τα ίδια [changes] σε όλα τα [ids]. Transaction.
+  Future<void> bulkUpdateUsers(List<int> ids, Map<String, dynamic> changes) async {
+    if (ids.isEmpty || changes.isEmpty) return;
+    final map = Map<String, dynamic>.from(changes);
+    map.remove('id');
+    if (map.isEmpty) return;
+    final db = await database;
+    await db.transaction((txn) async {
+      for (final id in ids) {
+        await txn.update('users', map, where: 'id = ?', whereArgs: [id]);
+      }
+    });
+  }
+
+  /// Διαγράφει χρήστες με τα δεδομένα ids. Transaction αν ids non-empty.
+  Future<void> deleteUsers(List<int> ids) async {
+    if (ids.isEmpty) return;
+    final db = await database;
+    final placeholders = List.filled(ids.length, '?').join(',');
+    await db.transaction((txn) async {
+      await txn.delete(
+        'users',
+        where: 'id IN ($placeholders)',
+        whereArgs: ids,
+      );
+    });
+  }
+
+  /// Αναγνώριση ρύθμισης από πίνακα app_settings. Επιστρέφει null αν δεν υπάρχει.
+  Future<String?> getSetting(String key) async {
+    final db = await database;
+    final rows = await db.query(
+      'app_settings',
+      columns: ['value'],
+      where: 'key = ?',
+      whereArgs: [key],
+    );
+    if (rows.isEmpty) return null;
+    return rows.first['value'] as String?;
+  }
+
+  /// Αποθήκευση ρύθμισης στον πίνακα app_settings (insert ή replace).
+  Future<void> setSetting(String key, String value) async {
+    final db = await database;
+    await db.insert(
+      'app_settings',
+      {'key': key, 'value': value},
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
   /// Επιστρέφει όλο τον εξοπλισμό.
   Future<List<Map<String, dynamic>>> getAllEquipment() async {
     final db = await database;
