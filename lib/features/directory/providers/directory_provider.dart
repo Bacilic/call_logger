@@ -1,30 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/database/database_helper.dart';
+import '../../../core/utils/search_text_normalizer.dart';
 import '../../calls/models/user_model.dart';
-
-/// Κανονικοποίηση για αναζήτηση: αφαιρεί τόνο και διαλυτικά ώστε ι = ί = ϊ = ΐ κ.λπ.
-String _normalizeForSearch(String s) {
-  return s
-      .replaceAll('ά', 'α')
-      .replaceAll('έ', 'ε')
-      .replaceAll('ή', 'η')
-      .replaceAll('ί', 'ι')
-      .replaceAll('ϊ', 'ι')
-      .replaceAll('ΐ', 'ι')
-      .replaceAll('ό', 'ο')
-      .replaceAll('ύ', 'υ')
-      .replaceAll('ϋ', 'υ')
-      .replaceAll('ΰ', 'υ')
-      .replaceAll('ώ', 'ω')
-      .replaceAll('Ά', 'α')
-      .replaceAll('Έ', 'ε')
-      .replaceAll('Ή', 'η')
-      .replaceAll('Ί', 'ι')
-      .replaceAll('Ό', 'ο')
-      .replaceAll('Ύ', 'υ')
-      .replaceAll('Ώ', 'ω');
-}
 
 /// Κατάσταση του κατάλογου χρηστών: πλήρης λίστα, φιλτραρισμένη λίστα, αναζήτηση, sort, επιλογές, undo, focused row.
 class DirectoryState {
@@ -80,17 +58,20 @@ class DirectoryNotifier extends Notifier<DirectoryState> {
   /// Φιλτράρισμα in-memory (name + fullNameWithDepartment + phone + department + location + notes) και ταξινόμηση.
   /// Χωρίς διάκριση τόνου/διαλυτικών (ι = ί = ϊ = ΐ).
   void filterAndSort() {
-    final rawQ = state.searchQuery.trim().toLowerCase();
-    final q = _normalizeForSearch(rawQ);
+    final q = SearchTextNormalizer.normalizeForSearch(state.searchQuery);
     var list = state.allUsers;
     if (q.isNotEmpty) {
       list = list.where((u) {
-        final name = _normalizeForSearch((u.name ?? '').toLowerCase());
-        final full = _normalizeForSearch(u.fullNameWithDepartment.toLowerCase());
-        final phone = _normalizeForSearch((u.phone ?? '').toLowerCase());
-        final dept = _normalizeForSearch((u.department ?? '').toLowerCase());
-        final loc = _normalizeForSearch((u.location ?? '').toLowerCase());
-        final notes = _normalizeForSearch((u.notes ?? '').toLowerCase());
+        final name = SearchTextNormalizer.normalizeForSearch(u.name ?? '');
+        final full = SearchTextNormalizer.normalizeForSearch(
+          u.fullNameWithDepartment,
+        );
+        final phone = SearchTextNormalizer.normalizeForSearch(u.phone ?? '');
+        final dept = SearchTextNormalizer.normalizeForSearch(
+          u.department ?? '',
+        );
+        final loc = SearchTextNormalizer.normalizeForSearch(u.location ?? '');
+        final notes = SearchTextNormalizer.normalizeForSearch(u.notes ?? '');
         return name.contains(q) ||
             full.contains(q) ||
             phone.contains(q) ||

@@ -7,6 +7,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import '../config/app_config.dart';
 import '../services/settings_service.dart';
+import '../utils/name_parser.dart';
 import '../../features/calls/models/call_model.dart';
 import 'database_init_result.dart';
 
@@ -100,7 +101,7 @@ class DatabaseHelper {
     try {
       db = await openDatabase(
         dbPath,
-        version: 5,
+        version: 6,
         onCreate: _onCreate,
         onUpgrade: _onUpgrade,
         singleInstance: false,
@@ -143,7 +144,7 @@ class DatabaseHelper {
   Future<void> createNewDatabaseFile(String filePath) async {
     final db = await openDatabase(
       filePath,
-      version: 5,
+      version: 6,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
       singleInstance: false,
@@ -190,7 +191,10 @@ class DatabaseHelper {
         code_equipment TEXT,
         type TEXT,
         user_id INTEGER,
-        notes TEXT
+        notes TEXT,
+        custom_ip TEXT,
+        anydesk_id TEXT,
+        default_remote_tool TEXT
       )
     ''');
 
@@ -270,6 +274,18 @@ class DatabaseHelper {
     // Migration users: name → last_name + first_name (split: last word = last_name, υπόλοιπο = first_name).
     if (oldVersion < 5) {
       await _migrateUsersToFirstLastName(db);
+    }
+    // Στήλες απομακρυσμένης σύνδεσης (exception-based).
+    if (oldVersion < 6) {
+      if (!await _tableHasColumn(db, 'equipment', 'custom_ip')) {
+        await db.execute('ALTER TABLE equipment ADD COLUMN custom_ip TEXT');
+      }
+      if (!await _tableHasColumn(db, 'equipment', 'anydesk_id')) {
+        await db.execute('ALTER TABLE equipment ADD COLUMN anydesk_id TEXT');
+      }
+      if (!await _tableHasColumn(db, 'equipment', 'default_remote_tool')) {
+        await db.execute('ALTER TABLE equipment ADD COLUMN default_remote_tool TEXT');
+      }
     }
   }
 
@@ -464,23 +480,11 @@ class DatabaseHelper {
       final ownerCodeToDbId = <int, int>{};
       for (final u in ownersList) {
         final ownerId = u['ownerId'] as int? ?? 0;
-        final fullName = (u['fullName'] as String? ?? '').trim();
-        final parts = fullName.split(RegExp(r'\s+'));
-        final String lastName;
-        final String firstName;
-        if (parts.isEmpty) {
-          lastName = '';
-          firstName = '';
-        } else if (parts.length == 1) {
-          lastName = parts.single;
-          firstName = parts.single;
-        } else {
-          lastName = parts.last;
-          firstName = parts.sublist(0, parts.length - 1).join(' ');
-        }
+        final fullName = u['fullName'] as String? ?? '';
+        final parsed = NameParserUtility.parse(fullName);
         final id = await txn.insert('users', {
-          'last_name': lastName,
-          'first_name': firstName,
+          'last_name': parsed.lastName,
+          'first_name': parsed.firstName,
           'phone': u['phones'] as String? ?? '',
           'department': u['department'] as String? ?? '',
           'location': null,
@@ -504,28 +508,15 @@ class DatabaseHelper {
     return (usersInserted: usersInserted, equipmentInserted: equipmentInserted);
   }
 
-  /// Ενημερώνει συσχετίσεις χρήστη: τηλέφωνο (users.phone) και/ή εξοπλισμό (equipment.user_id) με βάση τον κωδικό του.
-  /// [name] αναφέρεται στο πλήρες όνομα· εσωτερικά γίνεται split σε first_name / last_name.
+  /// Εισάγει νέο χρήστη. Το Data Layer δέχεται ήδη διαχωρισμένα firstName/lastName (parsing γίνεται στο Domain/UI).
   Future<int> insertUser({
-    required String name,
+    required String firstName,
+    required String lastName,
     String? phone,
     String? department,
     String? location,
     String? notes,
   }) async {
-    final parts = name.trim().split(RegExp(r'\s+'));
-    final String lastName;
-    final String firstName;
-    if (parts.isEmpty) {
-      lastName = '';
-      firstName = '';
-    } else if (parts.length == 1) {
-      lastName = parts.single;
-      firstName = parts.single;
-    } else {
-      lastName = parts.last;
-      firstName = parts.sublist(0, parts.length - 1).join(' ');
-    }
     final db = await database;
     return db.insert('users', {
       'last_name': lastName,

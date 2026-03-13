@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/database/database_helper.dart';
+import '../../../core/utils/name_parser.dart';
 import 'lookup_provider.dart';
 import '../models/equipment_model.dart';
 import '../models/user_model.dart';
@@ -513,8 +514,10 @@ class CallHeaderNotifier extends Notifier<CallHeaderState> {
       final name = state.normalizedCallerDisplayText;
       final phone = state.selectedPhone?.trim();
       final equipmentCode = state.equipmentText.trim();
+      final parsed = NameParserUtility.parse(name);
       final userId = await DatabaseHelper.instance.insertUser(
-        name: name,
+        firstName: parsed.firstName,
+        lastName: parsed.lastName,
         phone: phone?.isNotEmpty == true ? phone : null,
       );
 
@@ -524,24 +527,11 @@ class CallHeaderNotifier extends Notifier<CallHeaderState> {
         equipmentCode.isNotEmpty ? equipmentCode : null,
       );
 
-      final parts = name.trim().split(RegExp(r'\s+'));
-      final String firstName;
-      final String lastName;
-      if (parts.isEmpty) {
-        firstName = '';
-        lastName = '';
-      } else if (parts.length == 1) {
-        firstName = parts.single;
-        lastName = parts.single;
-      } else {
-        lastName = parts.last;
-        firstName = parts.sublist(0, parts.length - 1).join(' ');
-      }
       state = state.copyWith(
         selectedCaller: UserModel(
           id: userId,
-          firstName: firstName,
-          lastName: lastName,
+          firstName: parsed.firstName,
+          lastName: parsed.lastName,
           phone: phone?.isNotEmpty == true ? phone : null,
         ),
         selectedEquipment: equipmentCode.isNotEmpty

@@ -51,6 +51,10 @@ Future<DatabaseInitRunnerResult> runDatabaseInitChecks({
           }
           try {
             await DatabaseHelper.instance.database;
+            SettingsService.registerAppSettingsProvider(
+              DatabaseHelper.instance.getSetting,
+              DatabaseHelper.instance.setSetting,
+            );
             isLocalDevMode = DatabaseHelper.instance.isUsingLocalDb;
             final health = await DatabaseHelper.instance.checkDatabaseHealth();
             result = health.isSuccess

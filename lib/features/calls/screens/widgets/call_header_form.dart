@@ -3,6 +3,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/services/lookup_service.dart';
+import '../../../../core/utils/name_parser.dart';
+import '../../../../core/utils/search_text_normalizer.dart';
 import '../../models/equipment_model.dart';
 import '../../models/user_model.dart';
 import '../../provider/call_header_provider.dart';
@@ -491,14 +493,20 @@ class _CallerFieldState extends State<_CallerField> {
       widget.focusNode.addListener(_onCallerFocusChange);
     }
     final displayText = widget.header.callerDisplayText;
-    if (displayText.isNotEmpty && widget.controller.text != displayText) {
+    if (!widget.focusNode.hasFocus &&
+        displayText.isNotEmpty &&
+        widget.controller.text != displayText) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
-          widget.controller.text = displayText;
+          widget.controller.value = TextEditingValue(
+            text: displayText,
+            selection: TextSelection.collapsed(offset: displayText.length),
+          );
         }
       });
     }
-    if (displayText.isEmpty &&
+    if (!widget.focusNode.hasFocus &&
+        displayText.isEmpty &&
         oldWidget.header.callerDisplayText.isNotEmpty &&
         widget.header.selectedCaller == null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -539,7 +547,9 @@ class _CallerFieldState extends State<_CallerField> {
               focusNode: focusNode,
               textEditingController: controller,
               optionsBuilder: (TextEditingValue textEditingValue) {
-                final q = textEditingValue.text.trim().toLowerCase();
+                final q = SearchTextNormalizer.normalizeForSearch(
+                  textEditingValue.text,
+                );
                 final options = <String>[];
                 if (header.callerCandidates.isNotEmpty) {
                   if (q.isEmpty) {
@@ -548,7 +558,10 @@ class _CallerFieldState extends State<_CallerField> {
                     }
                   } else {
                     for (final u in header.callerCandidates) {
-                      if ((u.fullNameWithDepartment).toLowerCase().contains(q)) {
+                      if (SearchTextNormalizer.matchesNormalizedQuery(
+                        u.fullNameWithDepartment,
+                        q,
+                      )) {
                         options.add(u.fullNameWithDepartment);
                       }
                     }
@@ -561,10 +574,9 @@ class _CallerFieldState extends State<_CallerField> {
                     options.add(u.fullNameWithDepartment);
                   }
                 }
-                options.add('Άγνωστος');
                 return options
                     .where((option) =>
-                        option.toLowerCase().contains(q))
+                        SearchTextNormalizer.matchesNormalizedQuery(option, q))
                     .toList();
               },
               onSelected: (String selection) {
@@ -631,7 +643,7 @@ class _CallerFieldState extends State<_CallerField> {
                         notifier.clearCaller();
                         notifier.clearEquipment();
                       } else {
-                        notifier.updateCallerDisplayText(value.trim());
+                        notifier.updateCallerDisplayText(value);
                         if (header.selectedCaller != null) {
                           final n = header.selectedCaller!.name;
                           final f = header.selectedCaller!.fullNameWithDepartment;
@@ -655,8 +667,53 @@ class _CallerFieldState extends State<_CallerField> {
                 notifier: notifier,
                 controller: controller,
                 theme: theme,
+                showUnknownOption: controller.text.trim().isEmpty,
                 onSelectionCommitted: _onSuggestionSelected,
               ),
+            _CallerParseHint(header: header, theme: theme),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Οπτική ανατροφοδότηση: πώς θα ερμηνευτεί το κείμενο Καλούντα (Όνομα / Επώνυμο).
+class _CallerParseHint extends StatelessWidget {
+  const _CallerParseHint({
+    required this.header,
+    required this.theme,
+  });
+
+  final CallHeaderState header;
+  final ThemeData theme;
+
+  @override
+  Widget build(BuildContext context) {
+    if (header.selectedCaller != null) return const SizedBox.shrink();
+    if (header.isUnknownCaller) return const SizedBox.shrink();
+    final text = header.callerDisplayText.trim();
+    if (text.isEmpty) return const SizedBox.shrink();
+
+    final parsed = NameParserUtility.parse(text);
+    final style = theme.textTheme.bodySmall ?? const TextStyle();
+    return Padding(
+      padding: const EdgeInsets.only(top: 4),
+      child: RichText(
+        textScaler: TextScaler.noScaling,
+        text: TextSpan(
+          style: style.copyWith(color: theme.colorScheme.onSurface),
+          children: [
+            TextSpan(
+              text: 'Όνομα: ${parsed.firstName} ',
+              style: style.copyWith(color: theme.colorScheme.primary),
+            ),
+            TextSpan(
+              text: '- Επώνυμο: ${parsed.lastName}',
+              style: style.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
           ],
         ),
       ),
@@ -672,6 +729,7 @@ class _CallerSuggestionList extends StatelessWidget {
     required this.notifier,
     required this.controller,
     required this.theme,
+    required this.showUnknownOption,
     this.onSelectionCommitted,
   });
 
@@ -679,6 +737,7 @@ class _CallerSuggestionList extends StatelessWidget {
   final CallHeaderNotifier notifier;
   final TextEditingController controller;
   final ThemeData theme;
+  final bool showUnknownOption;
   final VoidCallback? onSelectionCommitted;
 
   @override
@@ -705,22 +764,23 @@ class _CallerSuggestionList extends StatelessWidget {
                 onSelectionCommitted?.call();
               },
             ),
-          ListTile(
-            dense: true,
-            title: Text(
-              'Άγνωστος',
-              style: theme.textTheme.bodyMedium?.copyWith(
-                fontStyle: FontStyle.italic,
-                color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.8),
+          if (showUnknownOption)
+            ListTile(
+              dense: true,
+              title: Text(
+                'Άγνωστος',
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  fontStyle: FontStyle.italic,
+                  color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.8),
+                ),
               ),
+              onTap: () {
+                notifier.updateSelectedCaller(null);
+                notifier.updateCallerDisplayText('Άγνωστος');
+                controller.text = 'Άγνωστος';
+                onSelectionCommitted?.call();
+              },
             ),
-            onTap: () {
-              notifier.updateSelectedCaller(null);
-              notifier.updateCallerDisplayText('Άγνωστος');
-              controller.text = 'Άγνωστος';
-              onSelectionCommitted?.call();
-            },
-          ),
         ],
       ),
     );
@@ -917,7 +977,7 @@ class _EquipmentFieldState extends State<_EquipmentField> {
     LookupService? lookupService,
     String query,
   ) {
-    final q = query.trim().toLowerCase();
+    final q = SearchTextNormalizer.normalizeForSearch(query);
     if (q.isEmpty) {
       return const [];
     }
@@ -926,8 +986,13 @@ class _EquipmentFieldState extends State<_EquipmentField> {
         .toList();
     return _dedupeEquipments(
       base.where((equipment) {
-        return equipment.displayLabel.toLowerCase().contains(q) ||
-            (equipment.code ?? '').toLowerCase().contains(q);
+        final normalizedLabel = SearchTextNormalizer.normalizeForSearch(
+          equipment.displayLabel,
+        );
+        final normalizedCode = SearchTextNormalizer.normalizeForSearch(
+          equipment.code ?? '',
+        );
+        return normalizedLabel.contains(q) || normalizedCode.contains(q);
       }),
     );
   }

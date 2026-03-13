@@ -1,4 +1,5 @@
 import '../database/database_helper.dart';
+import '../utils/search_text_normalizer.dart';
 import '../../features/calls/models/equipment_model.dart';
 import '../../features/calls/models/user_model.dart';
 
@@ -79,13 +80,12 @@ class LookupService {
 
   /// Αναζήτηση χρηστών στη μνήμη: name, phone, department περιέχουν το query (case-insensitive).
   List<UserModel> searchUsersByQuery(String query) {
-    final q = query.trim().toLowerCase();
+    final q = SearchTextNormalizer.normalizeForSearch(query);
     if (q.isEmpty) return [];
     return _users.where((u) {
-      final name = (u.name ?? '').toLowerCase();
-      final phone = (u.phone ?? '').toLowerCase();
-      final dept = (u.department ?? '').toLowerCase();
-      return name.contains(q) || phone.contains(q) || dept.contains(q);
+      return SearchTextNormalizer.matchesNormalizedQuery(u.name ?? '', q) ||
+          SearchTextNormalizer.matchesNormalizedQuery(u.phone ?? '', q) ||
+          SearchTextNormalizer.matchesNormalizedQuery(u.department ?? '', q);
     }).toList();
   }
 

@@ -29,10 +29,22 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   String? _errorMessage;
   bool _showImportExcelButton = false;
 
+  final TextEditingController _vncPathsController = TextEditingController();
+  final TextEditingController _vncPasswordController = TextEditingController();
+  final TextEditingController _anydeskPathController = TextEditingController();
+
   @override
   void initState() {
     super.initState();
     _loadCurrentPath();
+  }
+
+  @override
+  void dispose() {
+    _vncPathsController.dispose();
+    _vncPasswordController.dispose();
+    _anydeskPathController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadCurrentPath() async {
@@ -57,7 +69,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         paths = paths.take(3).toList();
       }
       final showImport = await _settings.getShowImportExcelButton();
+      final vncPaths = await _settings.getVncPaths();
+      final vncPassword = await _settings.getVncPassword();
+      final anydeskPath = await _settings.getAnydeskPath();
       if (mounted) {
+        _vncPathsController.text = vncPaths.join('\n');
+        _vncPasswordController.text = vncPassword;
+        _anydeskPathController.text = anydeskPath;
         setState(() {
           _currentPath = p;
           _recentPaths = paths;
@@ -310,6 +328,35 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     );
   }
 
+  /// Αποθήκευση ρυθμίσεων VNC/AnyDesk από τα πεδία στη βάση (app_settings).
+  Future<void> _saveRemoteConnectionSettings() async {
+    try {
+      final vncPathsText = _vncPathsController.text;
+      final paths = vncPathsText
+          .split('\n')
+          .map((e) => e.trim())
+          .where((e) => e.isNotEmpty)
+          .toList();
+      await _settings.setVncPaths(paths);
+      await _settings.setVncPassword(_vncPasswordController.text);
+      await _settings.setAnydeskPath(_anydeskPathController.text);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Σφάλμα αποθήκευσης: $e'),
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
+        );
+      }
+      return;
+    }
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Οι ρυθμίσεις απομακρυσμένης σύνδεσης αποθηκεύτηκαν.')),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -496,6 +543,52 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               onPressed: _showCreateNewDatabaseDialog,
               icon: const Icon(Icons.add_circle_outline),
               label: const Text('Δημιουργία νέου αρχείου βάσης'),
+            ),
+            const SizedBox(height: 32),
+            const Divider(),
+            const SizedBox(height: 16),
+            Text(
+              'Ρυθμίσεις Απομακρυσμένης Σύνδεσης (VNC & AnyDesk)',
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _vncPathsController,
+              maxLines: 3,
+              decoration: InputDecoration(
+                labelText: 'Διαδρομές VNC (Μία ανά γραμμή)',
+                hintText: 'π.χ. C:\\Program Files\\TightVNC\\tvnviewer.exe',
+                border: const OutlineInputBorder(),
+                alignLabelWithHint: true,
+              ),
+              style: theme.textTheme.bodyMedium?.copyWith(fontFamily: 'monospace'),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _vncPasswordController,
+              obscureText: true,
+              decoration: const InputDecoration(
+                labelText: 'Κωδικός VNC',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _anydeskPathController,
+              decoration: const InputDecoration(
+                labelText: 'Διαδρομή AnyDesk.exe',
+                hintText: 'π.χ. C:\\Program Files (x86)\\AnyDesk\\AnyDesk.exe',
+                border: OutlineInputBorder(),
+              ),
+              style: theme.textTheme.bodyMedium?.copyWith(fontFamily: 'monospace'),
+            ),
+            const SizedBox(height: 16),
+            FilledButton.tonalIcon(
+              onPressed: _saveRemoteConnectionSettings,
+              icon: const Icon(Icons.save),
+              label: const Text('Αποθήκευση ρυθμίσεων απομακρυσμένης σύνδεσης'),
             ),
             const SizedBox(height: 32),
             const Divider(),
