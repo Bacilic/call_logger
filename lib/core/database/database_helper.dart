@@ -438,6 +438,51 @@ class DatabaseHelper {
     return db.query('equipment');
   }
 
+  /// Εισάγει εξοπλισμό από map (π.χ. EquipmentModel.toMap()). Αφαιρεί [id] πριν το insert.
+  Future<int> insertEquipmentFromMap(Map<String, dynamic> row) async {
+    final map = Map<String, dynamic>.from(row);
+    map.remove('id');
+    final db = await database;
+    return db.insert('equipment', map);
+  }
+
+  /// Ενημερώνει εξοπλισμό. Αφαιρεί [id] από [values] πριν το update.
+  Future<int> updateEquipment(int id, Map<String, dynamic> values) async {
+    final map = Map<String, dynamic>.from(values);
+    map.remove('id');
+    final db = await database;
+    return db.update('equipment', map, where: 'id = ?', whereArgs: [id]);
+  }
+
+  /// Μαζική ενημέρωση εξοπλισμού: εφαρμόζει τα ίδια [changes] σε όλα τα [ids]. Transaction.
+  Future<void> bulkUpdateEquipments(
+      List<int> ids, Map<String, dynamic> changes) async {
+    if (ids.isEmpty || changes.isEmpty) return;
+    final map = Map<String, dynamic>.from(changes);
+    map.remove('id');
+    if (map.isEmpty) return;
+    final db = await database;
+    await db.transaction((txn) async {
+      for (final id in ids) {
+        await txn.update('equipment', map, where: 'id = ?', whereArgs: [id]);
+      }
+    });
+  }
+
+  /// Διαγράφει εξοπλισμό με τα δεδομένα ids. Transaction αν ids non-empty.
+  Future<void> deleteEquipments(List<int> ids) async {
+    if (ids.isEmpty) return;
+    final db = await database;
+    final placeholders = List.filled(ids.length, '?').join(',');
+    await db.transaction((txn) async {
+      await txn.delete(
+        'equipment',
+        where: 'id IN ($placeholders)',
+        whereArgs: ids,
+      );
+    });
+  }
+
   /// Επιστρέφει τις τελευταίες κλήσεις για χρήστη (κατά id DESC).
   Future<List<Map<String, dynamic>>> getRecentCallsByUserId(
     int userId, {

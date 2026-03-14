@@ -16,11 +16,8 @@ class SettingsService {
   static const String _keyVncPassword = 'vnc_password';
   static const String _keyAnydeskPath = 'anydesk_path';
 
-  /// Προεπιλεγμένες διαδρομές αναζήτησης TightVNC Viewer.
-  static const List<String> _defaultVncPaths = [
-    r'C:\Program Files\TightVNC\tvnviewer.exe',
-    r'C:\Program Files (x86)\TightVNC\tvnviewer.exe',
-  ];
+  /// Προεπιλεγμένη διαδρομή TightVNC Viewer (μία μόνο).
+  static const String _defaultVncPath = r'C:\Program Files\TightVNC\tvnviewer.exe';
 
   /// Προεπιλεγμένη διαδρομή AnyDesk.
   static const String _defaultAnydeskPath = r'C:\Program Files (x86)\AnyDesk\AnyDesk.exe';
@@ -96,24 +93,23 @@ class SettingsService {
 
   // --- Ρυθμίσεις απομακρυσμένης σύνδεσης (app_settings) ---
 
-  /// Επιστρέφει τη λίστα διαδρομών για TightVNC Viewer.
-  /// Αν δεν υπάρχει τιμή στη βάση, επιστρέφει τις προεπιλεγμένες διαδρομές.
-  /// Η τιμή αποθηκεύεται ως JSON (λίστα strings).
-  Future<List<String>> getVncPaths() async {
+  /// Επιστρέφει τη μοναδική διαδρομή για TightVNC Viewer.
+  /// Αν δεν υπάρχει τιμή στη βάση, επιστρέφει την προεπιλεγμένη.
+  /// Υποστηρίζει και παλιά αποθηκευμένη λίστα (JSON array): χρησιμοποιεί το πρώτο στοιχείο.
+  Future<String> getVncPath() async {
     final raw = _getAppSetting != null ? await _getAppSetting!(_keyVncPaths) : null;
-    if (raw == null || raw.trim().isEmpty) return List.from(_defaultVncPaths);
+    if (raw == null || raw.trim().isEmpty) return _defaultVncPath;
     try {
-      final decoded = jsonDecode(raw) as List<dynamic>?;
-      if (decoded == null) return List.from(_defaultVncPaths);
-      return decoded.map((e) => e.toString()).toList();
-    } catch (_) {
-      return List.from(_defaultVncPaths);
-    }
+      final decoded = jsonDecode(raw);
+      if (decoded is List && decoded.isNotEmpty) return decoded.first.toString().trim();
+      if (decoded is String && decoded.trim().isNotEmpty) return decoded.trim();
+    } catch (_) {}
+    return _defaultVncPath;
   }
 
-  /// Αποθηκεύει τη λίστα διαδρομών VNC στη βάση (JSON).
-  Future<void> setVncPaths(List<String> paths) async {
-    if (_setAppSetting != null) await _setAppSetting!(_keyVncPaths, jsonEncode(paths));
+  /// Αποθηκεύει τη διαδρομή VNC στη βάση (JSON array με ένα στοιχείο για συμβατότητα).
+  Future<void> setVncPath(String path) async {
+    if (_setAppSetting != null) await _setAppSetting!(_keyVncPaths, jsonEncode([path.trim()]));
   }
 
   /// Επιστρέφει τον αποθηκευμένο κωδικό VNC. Προεπιλογή: κενό string.

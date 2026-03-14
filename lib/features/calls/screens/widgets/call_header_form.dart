@@ -101,7 +101,7 @@ class _CallHeaderFormState extends ConsumerState<CallHeaderForm> {
 
     final screenWidth = MediaQuery.sizeOf(context).width;
     final w1 = (screenWidth / 5).clamp(0.0, 180.0);
-    final w2 = (screenWidth / 5).clamp(0.0, 220.0);
+    final w2 = (screenWidth * 0.35).clamp(220.0, 250.0); // Πιο φαρδύ για μεγάλα ονόματα καλούντος
     final w3 = (screenWidth / 5).clamp(0.0, 200.0);
 
     final hasAnyContent = ref.watch(
@@ -137,6 +137,7 @@ class _CallHeaderFormState extends ConsumerState<CallHeaderForm> {
             ),
             const SizedBox(width: 12),
             Flexible(
+              flex: 2,
               child: _CallerField(
                 width: w2,
                 controller: _callerController,
@@ -332,6 +333,9 @@ class _PhoneFieldState extends State<_PhoneField> {
                     autofocus: true,
                     decoration: InputDecoration(
                       hintText: 'π.χ. 2345',
+                      hintStyle: TextStyle(
+                        color: Theme.of(context).hintColor, // χρησιμοποιεί το system "αγνό γκρι" hint
+                      ),
                       border: const OutlineInputBorder(),
                       isDense: true,
                     suffixIcon: Semantics(
@@ -615,14 +619,16 @@ class _CallerFieldState extends State<_CallerField> {
               ) {
                 return Semantics(
                   label: 'Όνομα καλούντος',
-                  child: TextField(
-                    controller: textController,
-                    focusNode: focusNodeParam,
-                    decoration: InputDecoration(
-                      hintText: hintText,
-                      hintStyle: theme.textTheme.bodyMedium?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
-                      ),
+                  child: SizedBox(
+                    width: width,
+                    child: TextField(
+                      controller: textController,
+                      focusNode: focusNodeParam,
+                      decoration: InputDecoration(
+                        hintText: hintText,
+                        hintStyle: theme.textTheme.bodyMedium?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
+                        ),
                       border: const OutlineInputBorder(),
                       isDense: true,
                       suffixIcon: Semantics(
@@ -658,7 +664,8 @@ class _CallerFieldState extends State<_CallerField> {
                       nextFocusNode.requestFocus();
                     },
                   ),
-                );
+                ),
+              );
               },
             ),
             if (showSuggestions && _showSuggestionList)
@@ -997,9 +1004,13 @@ class _EquipmentFieldState extends State<_EquipmentField> {
     );
   }
 
+  /// Κείμενο για το πλαίσιο εισαγωγής: μόνο κωδικός (η λίστα δείχνει κωδικός + τύπο).
+  static String _equipmentFieldText(EquipmentModel e) =>
+      e.code?.trim().isNotEmpty == true ? e.code!.trim() : e.displayLabel;
+
   void _selectEquipment(EquipmentModel equipment) {
     _isSelectingEquipment = true;
-    widget.controller.text = equipment.displayLabel;
+    widget.controller.text = _equipmentFieldText(equipment);
     widget.notifier.setEquipment(equipment);
     widget.notifier.checkContent();
     setState(() {
@@ -1022,10 +1033,10 @@ class _EquipmentFieldState extends State<_EquipmentField> {
       widget.controller.addListener(_onEquipmentTextChange);
     }
     final sel = widget.header.selectedEquipment;
-    if (sel != null && widget.controller.text != sel.displayLabel) {
+    if (sel != null && widget.controller.text != _equipmentFieldText(sel)) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
-          widget.controller.text = sel.displayLabel;
+          widget.controller.text = _equipmentFieldText(sel);
         }
       });
     }
@@ -1118,7 +1129,8 @@ class _EquipmentFieldState extends State<_EquipmentField> {
                           return;
                         }
                         final selected = header.selectedEquipment;
-                        if (selected != null && value != selected.displayLabel) {
+                        if (selected != null &&
+                            value != _equipmentFieldText(selected)) {
                           notifier.clearEquipment();
                         }
                         // Θέλουμε να ενημερωθεί το equipmentText για να μπορεί να εμφανιστεί ο σταυρός άμεσα ή στο checkContent

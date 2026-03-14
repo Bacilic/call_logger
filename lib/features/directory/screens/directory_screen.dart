@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'widgets/equipment_tab.dart';
 import 'widgets/users_tab.dart';
 
 /// Οθόνη Κατάλογου: TabBar Χρήστες | Εξοπλισμός.
@@ -25,23 +26,9 @@ class DirectoryScreen extends StatelessWidget {
         body: const TabBarView(
           children: [
             UsersTab(),
-            _EquipmentPlaceholder(),
+            EquipmentTab(),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _EquipmentPlaceholder extends StatelessWidget {
-  const _EquipmentPlaceholder();
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Text(
-        'Εξοπλισμός – σύντομα',
-        style: Theme.of(context).textTheme.bodyLarge,
       ),
     );
   }

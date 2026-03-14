@@ -8,6 +8,7 @@ import 'package:path/path.dart' as path;
 import '../../../core/config/app_config.dart';
 import '../../../core/database/database_helper.dart';
 import '../../../core/services/settings_service.dart';
+import '../../calls/provider/remote_paths_provider.dart';
 import '../../directory/providers/directory_provider.dart';
 
 /// Οθόνη ρυθμίσεων: διαδρομή βάσης δεδομένων και άλλες επιλογές.
@@ -28,10 +29,16 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   bool _isLoadingPath = true;
   String? _errorMessage;
   bool _showImportExcelButton = false;
+  bool _vncPasswordObscure = true;
 
-  final TextEditingController _vncPathsController = TextEditingController();
+  final TextEditingController _vncPathController = TextEditingController();
   final TextEditingController _vncPasswordController = TextEditingController();
   final TextEditingController _anydeskPathController = TextEditingController();
+
+  /// Αρχικές τιμές ρυθμίσεων απομακρυσμένης σύνδεσης (όταν φορτώθηκαν) για σύγκριση.
+  String _initialVncPath = '';
+  String _initialVncPassword = '';
+  String _initialAnydeskPath = '';
 
   @override
   void initState() {
@@ -41,7 +48,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
   @override
   void dispose() {
-    _vncPathsController.dispose();
+    _vncPathController.dispose();
     _vncPasswordController.dispose();
     _anydeskPathController.dispose();
     super.dispose();
@@ -69,13 +76,16 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         paths = paths.take(3).toList();
       }
       final showImport = await _settings.getShowImportExcelButton();
-      final vncPaths = await _settings.getVncPaths();
+      final vncPath = await _settings.getVncPath();
       final vncPassword = await _settings.getVncPassword();
       final anydeskPath = await _settings.getAnydeskPath();
       if (mounted) {
-        _vncPathsController.text = vncPaths.join('\n');
+        _vncPathController.text = vncPath;
         _vncPasswordController.text = vncPassword;
         _anydeskPathController.text = anydeskPath;
+        _initialVncPath = vncPath;
+        _initialVncPassword = vncPassword;
+        _initialAnydeskPath = anydeskPath;
         setState(() {
           _currentPath = p;
           _recentPaths = paths;
@@ -329,15 +339,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   }
 
   /// Αποθήκευση ρυθμίσεων VNC/AnyDesk από τα πεδία στη βάση (app_settings).
+  /// Επιτρέπεται μη έγκυρη διαδρομή (π.χ. όταν δεν υπάρχει VNC/AnyDesk στον υπολογιστή).
   Future<void> _saveRemoteConnectionSettings() async {
     try {
-      final vncPathsText = _vncPathsController.text;
-      final paths = vncPathsText
-          .split('\n')
-          .map((e) => e.trim())
-          .where((e) => e.isNotEmpty)
-          .toList();
-      await _settings.setVncPaths(paths);
+      await _settings.setVncPath(_vncPathController.text.trim());
       await _settings.setVncPassword(_vncPasswordController.text);
       await _settings.setAnydeskPath(_anydeskPathController.text);
     } catch (e) {
@@ -352,9 +357,37 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       return;
     }
     if (!mounted) return;
+    _initialVncPath = _vncPathController.text.trim();
+    _initialVncPassword = _vncPasswordController.text;
+    _initialAnydeskPath = _anydeskPathController.text.trim();
+    setState(() {});
+    ref.invalidate(validRemotePathsProvider);
+    ref.invalidate(remoteLauncherStatusProvider);
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Οι ρυθμίσεις απομακρυσμένης σύνδεσης αποθηκεύτηκαν.')),
     );
+  }
+
+  /// True αν άλλαξε κάποια από τις ρυθμίσεις απομακρυσμένης σύνδεσης.
+  bool get _hasRemoteSettingsChanged =>
+      _vncPathController.text.trim() != _initialVncPath.trim() ||
+      _vncPasswordController.text != _initialVncPassword ||
+      _anydeskPathController.text.trim() != _initialAnydeskPath.trim();
+
+  /// Επιλογή εκτελέσιμου αρχείου (.exe) και εισαγωγή της διαδρομής στο [controller].
+  Future<void> _pickExecutablePath(TextEditingController controller) async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['exe'],
+      dialogTitle: 'Επιλογή εκτελέσιμου αρχείου',
+    );
+    if (result != null &&
+        result.files.isNotEmpty &&
+        result.files.single.path != null &&
+        mounted) {
+      controller.text = result.files.single.path!;
+      setState(() {});
+    }
   }
 
   @override
@@ -554,39 +587,107 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               ),
             ),
             const SizedBox(height: 12),
-            TextField(
-              controller: _vncPathsController,
-              maxLines: 3,
-              decoration: InputDecoration(
-                labelText: 'Διαδρομές VNC (Μία ανά γραμμή)',
-                hintText: 'π.χ. C:\\Program Files\\TightVNC\\tvnviewer.exe',
-                border: const OutlineInputBorder(),
-                alignLabelWithHint: true,
-              ),
-              style: theme.textTheme.bodyMedium?.copyWith(fontFamily: 'monospace'),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _vncPathController,
+                    maxLines: 1,
+                    onChanged: (_) => setState(() {}),
+                    decoration: const InputDecoration(
+                      labelText: 'Διαδρομή VNC',
+                      hintText: 'π.χ. C:\\Program Files\\TightVNC\\tvnviewer.exe',
+                      border: OutlineInputBorder(),
+                    ),
+                    style: theme.textTheme.bodyMedium?.copyWith(fontFamily: 'monospace'),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Tooltip(
+                  message: 'Εντοπισμός εφαρμογής',
+                  child: IconButton.filled(
+                    onPressed: () => _pickExecutablePath(_vncPathController),
+                    icon: const Icon(Icons.folder_open),
+                    style: IconButton.styleFrom(
+                      backgroundColor: theme.colorScheme.primaryContainer,
+                      foregroundColor: theme.colorScheme.onPrimaryContainer,
+                    ),
+                  ),
+                ),
+              ],
             ),
+            if (_vncPathController.text.trim().isNotEmpty &&
+                !File(_vncPathController.text.trim()).existsSync()) ...[
+              const SizedBox(height: 4),
+              Text(
+                'Το VNC δεν βρέθηκε.',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.error,
+                ),
+              ),
+            ],
             const SizedBox(height: 12),
             TextField(
               controller: _vncPasswordController,
-              obscureText: true,
-              decoration: const InputDecoration(
+              obscureText: _vncPasswordObscure,
+              onChanged: (_) => setState(() {}),
+              decoration: InputDecoration(
                 labelText: 'Κωδικός VNC',
-                border: OutlineInputBorder(),
+                border: const OutlineInputBorder(),
+                suffixIcon: IconButton(
+                  icon: Icon(
+                    _vncPasswordObscure ? Icons.visibility_off : Icons.visibility,
+                  ),
+                  onPressed: () => setState(() => _vncPasswordObscure = !_vncPasswordObscure),
+                  tooltip: _vncPasswordObscure ? 'Εμφάνιση κωδικού' : 'Απόκρυψη κωδικού',
+                ),
               ),
             ),
             const SizedBox(height: 12),
-            TextField(
-              controller: _anydeskPathController,
-              decoration: const InputDecoration(
-                labelText: 'Διαδρομή AnyDesk.exe',
-                hintText: 'π.χ. C:\\Program Files (x86)\\AnyDesk\\AnyDesk.exe',
-                border: OutlineInputBorder(),
-              ),
-              style: theme.textTheme.bodyMedium?.copyWith(fontFamily: 'monospace'),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _anydeskPathController,
+                    maxLines: 1,
+                    onChanged: (_) => setState(() {}),
+                    decoration: const InputDecoration(
+                      labelText: 'Διαδρομή AnyDesk.exe',
+                      hintText: 'π.χ. C:\\Program Files (x86)\\AnyDesk\\AnyDesk.exe',
+                      border: OutlineInputBorder(),
+                    ),
+                    style: theme.textTheme.bodyMedium?.copyWith(fontFamily: 'monospace'),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Tooltip(
+                  message: 'Εντοπισμός εφαρμογής',
+                  child: IconButton.filled(
+                    onPressed: () => _pickExecutablePath(_anydeskPathController),
+                    icon: const Icon(Icons.folder_open),
+                    style: IconButton.styleFrom(
+                      backgroundColor: theme.colorScheme.primaryContainer,
+                      foregroundColor: theme.colorScheme.onPrimaryContainer,
+                    ),
+                  ),
+                ),
+              ],
             ),
+            if (_anydeskPathController.text.trim().isNotEmpty &&
+                !File(_anydeskPathController.text.trim()).existsSync()) ...[
+              const SizedBox(height: 4),
+              Text(
+                'Διαδρομή AnyDesk δεν είναι έγκυρη.',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.error,
+                ),
+              ),
+            ],
             const SizedBox(height: 16),
             FilledButton.tonalIcon(
-              onPressed: _saveRemoteConnectionSettings,
+              onPressed: _hasRemoteSettingsChanged ? _saveRemoteConnectionSettings : null,
               icon: const Icon(Icons.save),
               label: const Text('Αποθήκευση ρυθμίσεων απομακρυσμένης σύνδεσης'),
             ),

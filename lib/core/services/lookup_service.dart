@@ -20,6 +20,9 @@ class LookupService {
   final List<EquipmentModel> _equipment = [];
   Map<int, List<EquipmentModel>> _equipmentByUserId = {};
 
+  /// Λίστα χρηστών (μετά loadFromDatabase). Για dropdown κατόχου σε φόρμες.
+  List<UserModel> get users => List.unmodifiable(_users);
+
   /// Φόρτωση από βάση ΜΟΝΟ μία φορά κατά το init.
   Future<void> loadFromDatabase() async {
     if (_loaded) return;

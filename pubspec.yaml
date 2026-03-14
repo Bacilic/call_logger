@@ -69,6 +69,8 @@ flutter:
 
   assets:
     - assets/
+    - assets/anydesk_seeklogo.png
+    - assets/vnc_viewer.png
 
   # Ένα περιουσιακό στοιχείο (asset) εικόνας μπορεί να αναφέρεται σε μία ή περισσότερες
   # «παραλλαγές» ανά ανάλυση· δείτε https://flutter.dev/to/resolution-aware-images

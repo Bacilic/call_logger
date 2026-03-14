@@ -9,17 +9,13 @@ class RemoteConnectionService {
 
   final SettingsService _settings;
 
-  /// Επιστρέφει την πρώτη διαδρομή από τις ρυθμισμένες VNC paths που υπάρχει στο δίσκο.
-  /// Διαβάζει τη λίστα [vncPaths] από το [SettingsService], ελέγχει κάθε path με [File.existsSync]
-  /// και επιστρέφει το πρώτο που υπάρχει. Αν κανένα δεν βρεθεί, επιστρέφει null.
-  /// Χρήσιμο πριν την εκκίνηση του TightVNC Viewer ώστε να χρησιμοποιείται μόνο έγκυρο executable.
+  /// Επιστρέφει τη ρυθμισμένη διαδρομή VNC αν υπάρχει στο δίσκο.
+  /// Επιστρέφει null αν η διαδρομή είναι κενή ή το αρχείο δεν υπάρχει.
   Future<String?> getValidVncPath() async {
-    final paths = await _settings.getVncPaths();
-    for (final path in paths) {
-      final trimmed = path.trim();
-      if (trimmed.isEmpty) continue;
-      if (File(trimmed).existsSync()) return trimmed;
-    }
+    final p = await _settings.getVncPath();
+    final trimmed = p.trim();
+    if (trimmed.isEmpty) return null;
+    if (File(trimmed).existsSync()) return trimmed;
     return null;
   }
 

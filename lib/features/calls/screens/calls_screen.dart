@@ -29,6 +29,7 @@ class CallsScreen extends ConsumerWidget {
             UserInfoCard(
               user: header.selectedCaller!,
               equipment: header.selectedEquipment,
+              equipmentCodeText: header.equipmentText,
             ),
             if (header.selectedCaller!.notes != null &&
                 header.selectedCaller!.notes!.trim().isNotEmpty)
