@@ -8,6 +8,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import '../config/app_config.dart';
 import '../services/settings_service.dart';
 import '../utils/name_parser.dart';
+import '../utils/phone_list_parser.dart';
 import '../../features/calls/models/call_model.dart';
 import 'database_init_result.dart';
 
@@ -583,16 +584,17 @@ class DatabaseHelper {
     final db = await database;
     await db.transaction((txn) async {
       if (phone != null && phone.isNotEmpty) {
-        // Αντί να αντικαθιστούμε, καλύτερα να το προσθέτουμε στο τέλος αν έχει ήδη τηλέφωνα,
-        // ή να το θέτουμε αν είναι null, αλλά η απαίτηση ήταν "ή != phone".
-        // Εφόσον η εφαρμογή ψάχνει πλέον με contains, ας κάνουμε append.
         final userResult = await txn.query('users', columns: ['phone'], where: 'id = ?', whereArgs: [userId]);
         if (userResult.isNotEmpty) {
           final currentPhone = userResult.first['phone'] as String?;
           if (currentPhone == null || currentPhone.trim().isEmpty) {
             await txn.update('users', {'phone': phone}, where: 'id = ?', whereArgs: [userId]);
-          } else if (!currentPhone.contains(phone)) {
-            await txn.update('users', {'phone': '$currentPhone, $phone'}, where: 'id = ?', whereArgs: [userId]);
+          } else if (!PhoneListParser.containsPhone(currentPhone, phone)) {
+            final merged = PhoneListParser.joinPhones([
+              ...PhoneListParser.splitPhones(currentPhone),
+              phone,
+            ]);
+            await txn.update('users', {'phone': merged}, where: 'id = ?', whereArgs: [userId]);
           }
         }
       }

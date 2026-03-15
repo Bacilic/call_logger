@@ -1,28 +1,29 @@
-# This file configures the analyzer, which statically analyzes Dart code to
-# check for errors, warnings, and lints.
+# Αυτό το αρχείο ρυθμίζει τον αναλυτή (analyzer), που ελέγχει στατικά τον κώδικα Dart
+# για σφάλματα, προειδοποιήσεις και ελέγχους λογικής (lints).
 #
-# The issues identified by the analyzer are surfaced in the UI of Dart-enabled
-# IDEs (https://dart.dev/tools#ides-and-editors). The analyzer can also be
-# invoked from the command line by running `flutter analyze`.
+# Τα ευρήματα εμφανίζονται στο περιβάλλον των IDE που υποστηρίζουν Dart
+# (https://dart.dev/tools#ides-and-editors). Ο αναλυτής μπορεί να τρέξει και από
+# γραμμή εντολών με: `flutter analyze`.
 
-# The following line activates a set of recommended lints for Flutter apps,
-# packages, and plugins designed to encourage good coding practices.
+# Η ακόλουθη γραμμή ενεργοποιεί μια συλλογή συνιστώμενων κανόνων (lints) για
+# εφαρμογές, πακέτα και πρόσθετα Flutter, για καλές πρακτικές κώδικα.
 include: package:flutter_lints/flutter.yaml
 
-linter:
-  # The lint rules applied to this project can be customized in the
-  # section below to disable rules from the `package:flutter_lints/flutter.yaml`
-  # included above or to enable additional rules. A list of all available lints
-  # and their documentation is published at https://dart.dev/lints.
-  #
-  # Instead of disabling a lint rule for the entire project in the
-  # section below, it can also be suppressed for a single line of code
-  # or a specific dart file by using the `// ignore: name_of_lint` and
-  # `// ignore_for_file: name_of_lint` syntax on the line or in the file
-  # producing the lint.
-  rules:
-    # avoid_print: false  # Uncomment to disable the `avoid_print` rule
-    # prefer_single_quotes: true  # Uncomment to enable the `prefer_single_quotes` rule
+analyzer:
+  exclude:
+    - "Grok/**"
 
-# Additional information about this file can be found at
-# https://dart.dev/guides/language/analysis-options
+linter:
+  # Οι κανόνες ελέγχου που ισχύουν στο project μπορούν να προσαρμοστούν πιο κάτω:
+  # απενεργοποίηση κανόνων από το `package:flutter_lints/flutter.yaml` ή
+  # ενεργοποίηση επιπλέον. Πλήρης λίστα: https://dart.dev/lints.
+  #
+  # Αντί να απενεργοποιήσετε έναν κανόνα για όλο το project, μπορείτε να τον
+  # αγνοήσετε μόνο σε μια γραμμή ή σε ένα συγκεκριμένο αρχείο .dart με τη σύνταξη
+  # `// ignore: name_of_lint` και `// ignore_for_file: name_of_lint` στη γραμμή
+  # ή στο αρχείο που πυροδοτεί τον έλεγχο.
+  rules:
+    # avoid_print: false   # Ξεσχολιάστε για να απενεργοποιήσετε τον κανόνα avoid_print
+    # prefer_single_quotes: true   # Ξεσχολιάστε για να ενεργοποιήσετε τον κανόνα prefer_single_quotes
+
+# Περισσότερα: https://dart.dev/guides/language/analysis-options

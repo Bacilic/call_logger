@@ -1,5 +1,7 @@
 # Call Logger — Project Anatomy
 
+**Ημερομηνία τροποποίησης:** 15 Μαρτίου 2026  
+
 Συμπυκνωμένη «ακτινογραφία» του project για τροφοδότηση σε εξωτερικό LLM (Καθοδηγητής). Flutter Desktop (Windows 11), Clean Architecture, Riverpod.
 
 ---
@@ -33,6 +35,7 @@ lib/
 │   │   └── settings_service.dart
 │   ├── utils/
 │   │   ├── name_parser.dart
+│   │   ├── phone_list_parser.dart
 │   │   └── search_text_normalizer.dart
 │   └── widgets/
 │       ├── app_init_wrapper.dart
@@ -89,6 +92,9 @@ lib/
         ├── providers/
         │   ├── task_service_provider.dart
         │   └── tasks_provider.dart
+        ├── screens/
+        │   ├── task_card.dart
+        │   └── tasks_screen.dart
         └── services/
             └── task_service.dart
 ```
@@ -97,17 +103,17 @@ lib/
 
 ## 2. Σχήμα Βάσης Δεδομένων (DATABASE SCHEMA)
 
-Πηγή: `lib/core/database/database_helper.dart`. Έκδοση σχήματος: **6**. Τελικές στήλες μετά από _onCreate και migrations.
+Πηγή: `lib/core/database/database_helper.dart`. Έκδοση σχήματος: **6**. Τελικές στήλες μετά από _onCreate και migrations (_onUpgrade).
 
 | Πίνακας | Στήλες (όνομα → τύπος) |
-|--------|------------------------|
-| **calls** | id INTEGER PK AUTOINCREMENT, date TEXT, time TEXT, caller_id INTEGER, equipment_id INTEGER, caller_text TEXT (v4), issue TEXT, solution TEXT, category TEXT, status TEXT, duration INTEGER, is_priority INTEGER DEFAULT 0 |
-| **users** | id INTEGER PK AUTOINCREMENT, last_name TEXT NOT NULL, first_name TEXT NOT NULL, phone TEXT, department TEXT, location TEXT, notes TEXT |
-| **equipment** | id INTEGER PK AUTOINCREMENT, code_equipment TEXT, type TEXT, user_id INTEGER, notes TEXT, code TEXT (v3), description TEXT (v3), custom_ip TEXT (v6), anydesk_id TEXT (v6), default_remote_tool TEXT (v6) |
-| **categories** | id INTEGER PK AUTOINCREMENT, name TEXT |
-| **tasks** | id INTEGER PK AUTOINCREMENT, title TEXT, description TEXT, due_date TEXT, status TEXT, call_id INTEGER |
-| **knowledge_base** | id INTEGER PK AUTOINCREMENT, topic TEXT, content TEXT, tags TEXT |
-| **audit_log** | id INTEGER PK AUTOINCREMENT, action TEXT, timestamp TEXT, user_performing TEXT, details TEXT |
+|--------|-------------------------|
+| **calls** | id INTEGER PRIMARY KEY AUTOINCREMENT, date TEXT, time TEXT, caller_id INTEGER, equipment_id INTEGER, issue TEXT, solution TEXT, category TEXT, status TEXT, duration INTEGER, is_priority INTEGER DEFAULT 0 · (+ caller_text TEXT από migration v4) |
+| **users** | id INTEGER PRIMARY KEY AUTOINCREMENT, last_name TEXT NOT NULL, first_name TEXT NOT NULL, phone TEXT, department TEXT, location TEXT, notes TEXT (μετά από migration v5: name → first_name, last_name) |
+| **equipment** | id INTEGER PRIMARY KEY AUTOINCREMENT, code_equipment TEXT, type TEXT, user_id INTEGER, notes TEXT, custom_ip TEXT, anydesk_id TEXT, default_remote_tool TEXT · (+ code TEXT, description TEXT από migration v3) |
+| **categories** | id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT |
+| **tasks** | id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT, description TEXT, due_date TEXT, status TEXT, call_id INTEGER |
+| **knowledge_base** | id INTEGER PRIMARY KEY AUTOINCREMENT, topic TEXT, content TEXT, tags TEXT |
+| **audit_log** | id INTEGER PRIMARY KEY AUTOINCREMENT, action TEXT, timestamp TEXT, user_performing TEXT, details TEXT |
 | **app_settings** | key TEXT PRIMARY KEY, value TEXT |
 
 Σημείωση: Στον πίνακα **equipment** η κύρια στήλη κωδικού στη βάση είναι `code_equipment`· στα μοντέλα χρησιμοποιείται πεδίο `code` (αντιστοίχιση στο fromMap/toMap).
@@ -127,8 +133,8 @@ lib/
 - **EquipmentModel**  
   id, code (αντιστοιχία με code_equipment), type, notes, userId, customIp, anydeskId, defaultRemoteTool. Υπολογιζόμενα: displayLabel, vncTarget, anydeskTarget. fromMap/toMap με code_equipment.
 
-- **EquipmentColumn** (ορισμός στήλης πίνακα εξοπλισμού)  
-  key, label, displayValue(EquipmentRow), sortValue(EquipmentRow). Στατικές σταθερές: code, type, owner, location, phone, notes, customIp, anydeskId, defaultRemote· defaults, all.
+- **EquipmentColumn**  
+  Ορισμός στήλης πίνακα εξοπλισμού: key, label, displayValue(EquipmentRow), sortValue(EquipmentRow). Στατικές σταθερές: code, type, owner, location, phone, notes, customIp, anydeskId, defaultRemote· defaults, all.
 
 - **EquipmentRow**  
   Typedef: (EquipmentModel, UserModel?) — γραμμή πίνακα = εξοπλισμός + κάτοχος.
@@ -158,6 +164,7 @@ lib/
 | **showActiveTimerProvider** | FutureProvider, core/providers | Ρύθμιση εμφάνισης ενεργού χρονομέτρου στη φόρμα κλήσεων (από SettingsService). |
 | **taskServiceProvider** | Provider, features/tasks/providers | Singleton TaskService (CRUD tasks στη βάση). |
 | **tasksProvider** | AsyncNotifierProvider, features/tasks/providers | Λίστα ανοιχτών εργασιών (Task)· refresh από TaskService. |
+| **orphanCallsProvider** | FutureProvider, features/tasks/providers | Κλήσεις χωρίς αντίστοιχο task (για οθόνη εκκρεμοτήτων). |
 
 ---
 

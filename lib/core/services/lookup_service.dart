@@ -1,4 +1,5 @@
 import '../database/database_helper.dart';
+import '../utils/phone_list_parser.dart';
 import '../utils/search_text_normalizer.dart';
 import '../../features/calls/models/equipment_model.dart';
 import '../../features/calls/models/user_model.dart';
@@ -69,12 +70,13 @@ class LookupService {
     final seen = <String>{};
     final result = <String>[];
     for (final u in _users) {
-      final phone = (u.phone ?? '').trim();
-      if (phone.isEmpty) continue;
-      final phoneDigits = _digitsOnly(phone);
-      if ((phoneDigits.contains(digits) || phoneDigits.startsWith(digits)) &&
-          seen.add(phone)) {
-        result.add(phone);
+      final phones = PhoneListParser.splitPhones(u.phone);
+      for (final phone in phones) {
+        final phoneDigits = _digitsOnly(phone);
+        if ((phoneDigits.contains(digits) || phoneDigits.startsWith(digits)) &&
+            seen.add(phone)) {
+          result.add(phone);
+        }
       }
     }
     return result;
@@ -119,6 +121,72 @@ class LookupService {
   /// Εξοπλισμός που ανήκει στον χρήστη (user_id).
   List<EquipmentModel> findEquipmentsForUser(int userId) {
     return _equipmentByUserId[userId] ?? [];
+  }
+
+  /// Αναζήτηση εξοπλισμών με βάση κωδικό ή label (case-insensitive/normalized).
+  /// Επιστρέφει πολλαπλά αποτελέσματα όταν το query ταιριάζει σε περισσότερες εγγραφές.
+  List<EquipmentModel> findEquipmentsByCode(String query) {
+    final q = SearchTextNormalizer.normalizeForSearch(query);
+    if (q.isEmpty) return [];
+    final seen = <String>{};
+    final exact = <EquipmentModel>[];
+    final prefix = <EquipmentModel>[];
+    final contains = <EquipmentModel>[];
+
+    bool addOnce(List<EquipmentModel> target, EquipmentModel equipment) {
+      final key = (equipment.code?.trim().isNotEmpty == true)
+          ? equipment.code!.trim().toLowerCase()
+          : equipment.displayLabel.trim().toLowerCase();
+      if (!seen.add(key)) return false;
+      target.add(equipment);
+      return true;
+    }
+
+    for (final equipment in _equipment) {
+      final code = equipment.code ?? '';
+      final label = equipment.displayLabel;
+      final normCode = SearchTextNormalizer.normalizeForSearch(code);
+      final normLabel = SearchTextNormalizer.normalizeForSearch(label);
+      if (normCode.isEmpty && normLabel.isEmpty) {
+        continue;
+      }
+
+      final isExact = normCode == q;
+      final isPrefix =
+          normCode.startsWith(q) || (!isExact && normLabel.startsWith(q));
+      final isContains =
+          normCode.contains(q) || (!isPrefix && normLabel.contains(q));
+
+      if (isExact) {
+        addOnce(exact, equipment);
+      } else if (isPrefix) {
+        addOnce(prefix, equipment);
+      } else if (isContains) {
+        addOnce(contains, equipment);
+      }
+    }
+
+    int compareByCodeThenLabel(EquipmentModel a, EquipmentModel b) {
+      final ac = (a.code ?? '').toLowerCase();
+      final bc = (b.code ?? '').toLowerCase();
+      final byCode = ac.compareTo(bc);
+      if (byCode != 0) return byCode;
+      return a.displayLabel.toLowerCase().compareTo(b.displayLabel.toLowerCase());
+    }
+
+    exact.sort(compareByCodeThenLabel);
+    prefix.sort(compareByCodeThenLabel);
+    contains.sort(compareByCodeThenLabel);
+    return [...exact, ...prefix, ...contains];
+  }
+
+  /// Αναζήτηση χρήστη by id μέσα από in-memory λίστα.
+  UserModel? findUserById(int? userId) {
+    if (userId == null) return null;
+    for (final user in _users) {
+      if (user.id == userId) return user;
+    }
+    return null;
   }
 
   static String _digitsOnly(String s) {
