@@ -49,17 +49,7 @@ class CallsScreen extends ConsumerWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Expanded(
-                      child: TextField(
-                        controller: entry.notesController,
-                        decoration: const InputDecoration(
-                          labelText: 'Σημειώσεις',
-                          border: OutlineInputBorder(),
-                          alignLabelWithHint: true,
-                        ),
-                        maxLines: 3,
-                        onChanged: (value) =>
-                            ref.read(callEntryProvider.notifier).setNotes(value),
-                      ),
+                      child: _NotesTextField(entry: entry),
                     ),
                     const SizedBox(width: 16),
                     const CallStatusBar(),
@@ -119,4 +109,49 @@ Widget _buildSubmitButton(
     message: 'Συμπληρώστε εσωτερικό αριθμό και πρέπει να βρεθεί ο καλώντας',
     child: button,
   );
+}
+
+/// Πεδίο σημειώσεων με δικό του controller (εκτός state για αποφυγή διαρροής μνήμης).
+class _NotesTextField extends ConsumerStatefulWidget {
+  const _NotesTextField({required this.entry});
+
+  final CallEntryState entry;
+
+  @override
+  ConsumerState<_NotesTextField> createState() => _NotesTextFieldState();
+}
+
+class _NotesTextFieldState extends ConsumerState<_NotesTextField> {
+  late final TextEditingController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.entry.notes);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final entry = ref.watch(callEntryProvider);
+    if (entry.notes.isEmpty && _controller.text.isNotEmpty) {
+      _controller.text = '';
+    }
+    return TextField(
+      controller: _controller,
+      decoration: const InputDecoration(
+        labelText: 'Σημειώσεις',
+        border: OutlineInputBorder(),
+        alignLabelWithHint: true,
+      ),
+      maxLines: 3,
+      onChanged: (value) =>
+          ref.read(callEntryProvider.notifier).setNotes(value),
+    );
+  }
 }

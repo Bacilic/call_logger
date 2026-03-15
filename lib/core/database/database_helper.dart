@@ -102,7 +102,7 @@ class DatabaseHelper {
     try {
       db = await openDatabase(
         dbPath,
-        version: 6,
+        version: 7,
         onCreate: _onCreate,
         onUpgrade: _onUpgrade,
         singleInstance: false,
@@ -145,7 +145,7 @@ class DatabaseHelper {
   Future<void> createNewDatabaseFile(String filePath) async {
     final db = await openDatabase(
       filePath,
-      version: 6,
+      version: 7,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
       singleInstance: false,
@@ -213,7 +213,14 @@ class DatabaseHelper {
         description TEXT,
         due_date TEXT,
         status TEXT,
-        call_id INTEGER
+        call_id INTEGER,
+        priority INTEGER,
+        solution_notes TEXT,
+        snooze_until TEXT,
+        user_id INTEGER,
+        equipment_id INTEGER,
+        created_at TEXT,
+        updated_at TEXT
       )
     ''');
 
@@ -286,6 +293,30 @@ class DatabaseHelper {
       }
       if (!await _tableHasColumn(db, 'equipment', 'default_remote_tool')) {
         await db.execute('ALTER TABLE equipment ADD COLUMN default_remote_tool TEXT');
+      }
+    }
+    // Πίνακας tasks: στήλες για προτεραιότητα, σημειώσεις λύσης, αναβολή, timestamps.
+    if (oldVersion < 7) {
+      if (!await _tableHasColumn(db, 'tasks', 'priority')) {
+        await db.execute('ALTER TABLE tasks ADD COLUMN priority INTEGER');
+      }
+      if (!await _tableHasColumn(db, 'tasks', 'solution_notes')) {
+        await db.execute('ALTER TABLE tasks ADD COLUMN solution_notes TEXT');
+      }
+      if (!await _tableHasColumn(db, 'tasks', 'snooze_until')) {
+        await db.execute('ALTER TABLE tasks ADD COLUMN snooze_until TEXT');
+      }
+      if (!await _tableHasColumn(db, 'tasks', 'updated_at')) {
+        await db.execute('ALTER TABLE tasks ADD COLUMN updated_at TEXT');
+      }
+      if (!await _tableHasColumn(db, 'tasks', 'created_at')) {
+        await db.execute('ALTER TABLE tasks ADD COLUMN created_at TEXT');
+      }
+      if (!await _tableHasColumn(db, 'tasks', 'user_id')) {
+        await db.execute('ALTER TABLE tasks ADD COLUMN user_id INTEGER');
+      }
+      if (!await _tableHasColumn(db, 'tasks', 'equipment_id')) {
+        await db.execute('ALTER TABLE tasks ADD COLUMN equipment_id INTEGER');
       }
     }
   }

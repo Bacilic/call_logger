@@ -1,21 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/task.dart';
-import '../models/task_filter.dart';
 import '../services/task_service.dart';
 import 'task_service_provider.dart';
-
-class TaskFilterNotifier extends Notifier<TaskFilter> {
-  @override
-  TaskFilter build() => TaskFilter.initial();
-
-  void update(TaskFilter Function(TaskFilter) fn) {
-    state = fn(state);
-  }
-}
-
-final taskFilterProvider =
-    NotifierProvider<TaskFilterNotifier, TaskFilter>(TaskFilterNotifier.new);
 
 final tasksProvider =
     AsyncNotifierProvider<TasksNotifier, List<Task>>(TasksNotifier.new);
@@ -24,15 +11,13 @@ class TasksNotifier extends AsyncNotifier<List<Task>> {
   @override
   Future<List<Task>> build() async {
     final service = ref.read(taskServiceProvider);
-    final filter = ref.watch(taskFilterProvider);
-    return service.getFilteredTasks(filter);
+    return service.getOpenTasks();
   }
 
   Future<void> refresh() async {
     state = const AsyncLoading();
     final service = ref.read(taskServiceProvider);
-    final filter = ref.read(taskFilterProvider);
-    state = await AsyncValue.guard(() => service.getFilteredTasks(filter));
+    state = await AsyncValue.guard(() => service.getOpenTasks());
   }
 
   Future<void> addTask(Task task) async {

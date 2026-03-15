@@ -241,56 +241,21 @@ class CallHeaderState {
 }
 
 /// Notifier για το header: update/clear, recentPhones, clearAfterSubmit.
-/// FocusNodes και Controllers εγγράφονται από το widget.
+/// Focus και controllers ανήκουν στο widget· το notifier δουλεύει μόνο με state.
 class CallHeaderNotifier extends Notifier<CallHeaderState> {
-  FocusNode? _phoneFocusNode;
-  FocusNode? _callerFocusNode;
-  FocusNode? _equipmentFocusNode;
-  TextEditingController? _phoneController;
-  TextEditingController? _callerController;
-  TextEditingController? _equipmentController;
   bool _isFillingFromLookup = false;
 
-  FocusNode? get phoneFocusNode => _phoneFocusNode;
-  FocusNode? get callerFocusNode => _callerFocusNode;
-  FocusNode? get equipmentFocusNode => _equipmentFocusNode;
-
-  void registerFocusNodes({
-    required FocusNode phone,
-    required FocusNode caller,
-    required FocusNode equipment,
+  bool _computeHasAnyContent({
+    String? phoneText,
+    String? callerText,
+    String? equipmentText,
   }) {
-    _phoneFocusNode = phone;
-    _callerFocusNode = caller;
-    _equipmentFocusNode = equipment;
-  }
-
-  void registerControllers({
-    required TextEditingController phone,
-    required TextEditingController caller,
-    required TextEditingController equipment,
-  }) {
-    _phoneController = phone;
-    _callerController = caller;
-    _equipmentController = equipment;
-  }
-
-  void unregisterFocusNodes() {
-    _phoneFocusNode = null;
-    _callerFocusNode = null;
-    _equipmentFocusNode = null;
-  }
-
-  void unregisterControllers() {
-    _phoneController = null;
-    _callerController = null;
-    _equipmentController = null;
-  }
-
-  bool _computeHasAnyContent() {
-    return (_phoneController?.text.trim().isNotEmpty ?? false) ||
-        (_callerController?.text.trim().isNotEmpty ?? false) ||
-        (_equipmentController?.text.trim().isNotEmpty ?? false) ||
+    final phone = phoneText?.trim().isNotEmpty ?? state.selectedPhone?.trim().isNotEmpty ?? false;
+    final caller = callerText?.trim().isNotEmpty ?? state.callerDisplayText.trim().isNotEmpty;
+    final equipment = equipmentText?.trim().isNotEmpty ?? state.equipmentText.trim().isNotEmpty;
+    return phone ||
+        caller ||
+        equipment ||
         state.selectedCaller != null ||
         state.selectedEquipment != null ||
         state.callerCandidates.isNotEmpty ||
@@ -298,11 +263,19 @@ class CallHeaderNotifier extends Notifier<CallHeaderState> {
   }
 
   /// Κλήση μετά από Enter ή focus out· ενημερώνει hasAnyContent για εμφάνιση κουμπιού "Καθαρισμός όλων"
-  /// και αποθηκεύει το equipmentText για να μπορεί να συσχετιστεί ακόμα κι αν δεν επιλέχθηκε.
-  void checkContent() {
+  /// και αποθηκεύει το equipmentText. Το UI περνάει τις τρέχουσες τιμές πεδίων (phone/caller/equipment).
+  void checkContent({
+    String? phoneText,
+    String? callerText,
+    String? equipmentText,
+  }) {
     state = state.copyWith(
-      hasAnyContent: _computeHasAnyContent(),
-      equipmentText: _equipmentController?.text.trim() ?? '',
+      hasAnyContent: _computeHasAnyContent(
+        phoneText: phoneText,
+        callerText: callerText,
+        equipmentText: equipmentText,
+      ),
+      equipmentText: equipmentText?.trim() ?? state.equipmentText,
     );
   }
 
@@ -312,6 +285,7 @@ class CallHeaderNotifier extends Notifier<CallHeaderState> {
   }
 
   void updatePhone(String? value) {
+    if (value == state.selectedPhone && state.selectedCaller != null) return;
     state = state.copyWith(
       selectedPhone: value,
       clearSelectedPhone: value == null,
@@ -348,6 +322,12 @@ class CallHeaderNotifier extends Notifier<CallHeaderState> {
   void selectPhoneFromCandidates(String value) {
     final trimmed = value.trim();
     if (trimmed.isEmpty) return;
+    final list = List<String>.from(state.recentPhones);
+    list.remove(trimmed);
+    list.insert(0, trimmed);
+    if (list.length > CallHeaderState._maxRecentPhones) {
+      list.length = CallHeaderState._maxRecentPhones;
+    }
     state = state.copyWith(
       selectedPhone: trimmed,
       clearSelectedPhone: false,
@@ -355,12 +335,8 @@ class CallHeaderNotifier extends Notifier<CallHeaderState> {
       clearPhoneCandidates: true,
       isPhoneAmbiguous: false,
       phoneIsManual: true,
+      recentPhones: list,
     );
-    _phoneController?.value = TextEditingValue(
-      text: trimmed,
-      selection: TextSelection.collapsed(offset: trimmed.length),
-    );
-    markPhoneUsed(trimmed);
 
     final callerId = state.selectedCaller?.id;
     final canAutofillEquipment =
@@ -389,11 +365,9 @@ class CallHeaderNotifier extends Notifier<CallHeaderState> {
     state = state.copyWithClearSelections();
   }
 
-  /// Μηδενίζει selectedPhone, selectedCaller, selectedEquipment, phoneError, candidates και κείμενο πεδίων.
+  /// Μηδενίζει selectedPhone, selectedCaller, selectedEquipment, phoneError, candidates.
+  /// Ο καθαρισμός των πεδίων κειμένου γίνεται από το UI.
   void clearAll() {
-    _phoneController?.clear();
-    _callerController?.clear();
-    _equipmentController?.clear();
     state = state.copyWithClearSelections();
   }
 
@@ -425,10 +399,6 @@ class CallHeaderNotifier extends Notifier<CallHeaderState> {
       isPhoneAmbiguous: false,
       phoneIsManual: false,
     );
-    _phoneController?.value = TextEditingValue(
-      text: trimmed,
-      selection: TextSelection.collapsed(offset: trimmed.length),
-    );
     markPhoneUsed(trimmed);
   }
 
@@ -442,7 +412,6 @@ class CallHeaderNotifier extends Notifier<CallHeaderState> {
       isPhoneAmbiguous: true,
       clearPhoneError: true,
     );
-    _phoneController?.clear();
   }
 
   bool _canAutofillPhone() {
@@ -791,14 +760,10 @@ class CallHeaderNotifier extends Notifier<CallHeaderState> {
 
   void clearAfterSubmit() {
     state = state.copyWithClearSelections();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _phoneFocusNode?.requestFocus();
-    });
   }
 
-  void requestPhoneFocus() {
-    _phoneFocusNode?.requestFocus();
-  }
+  /// Υπενθύμιση στο UI να δώσει focus στο πεδίο τηλεφώνου (το UI το διαχειρίζεται).
+  void requestPhoneFocus() {}
 
   /// Προσθέτει τηλέφωνο/εξοπλισμό στον τρέχοντα χρήστη στη βάση· invalidate lookup· επιστρέφει μήνυμα για SnackBar.
   Future<String?> associateCurrentIfNeeded() async {

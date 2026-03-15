@@ -3,7 +3,6 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import '../../../core/database/database_helper.dart';
 import '../models/task.dart';
-import '../models/task_filter.dart';
 
 /// Κλήση με status pending που δεν έχει αντίστοιχο task.
 class OrphanCall {
@@ -88,42 +87,6 @@ class TaskService {
     final db = await _db;
     final rows = await db.rawQuery(
       "SELECT * FROM tasks WHERE status = 'open' AND due_date >= datetime('now') ORDER BY due_date ASC LIMIT $limit",
-    );
-    return rows.map((row) => Task.fromMap(row)).toList();
-  }
-
-  /// Λίστα tasks με δυναμικό φίλτρο (search, statuses, ημερομηνίες). Ταξινόμηση due_date ASC.
-  Future<List<Task>> getFilteredTasks(TaskFilter filter) async {
-    final db = await _db;
-    final conditions = <String>[];
-    final args = <Object?>[];
-
-    if (filter.searchQuery.trim().isNotEmpty) {
-      final pattern = '%${filter.searchQuery.trim()}%';
-      conditions.add('(title LIKE ? OR description LIKE ?)');
-      args.add(pattern);
-      args.add(pattern);
-    }
-    if (filter.statuses.isNotEmpty) {
-      final placeholders = List.filled(filter.statuses.length, '?').join(',');
-      conditions.add('status IN ($placeholders)');
-      for (final s in filter.statuses) {
-        args.add(s.toDbValue);
-      }
-    }
-    if (filter.startDate != null) {
-      conditions.add('due_date >= ?');
-      args.add(filter.startDate!.toIso8601String());
-    }
-    if (filter.endDate != null) {
-      conditions.add('due_date <= ?');
-      args.add(filter.endDate!.toIso8601String());
-    }
-
-    final where = conditions.isEmpty ? '' : 'WHERE ${conditions.join(' AND ')}';
-    final rows = await db.rawQuery(
-      'SELECT * FROM tasks $where ORDER BY due_date ASC',
-      args,
     );
     return rows.map((row) => Task.fromMap(row)).toList();
   }

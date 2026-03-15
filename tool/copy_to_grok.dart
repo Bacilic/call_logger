@@ -3,35 +3,51 @@
 import 'dart:io';
 
 /// Script που αντιγράφει συγκεκριμένα αρχεία στο φάκελο Grok.
-/// Δέχεται ως όρισμα ένα string με ονόματα αρχείων χωρισμένα με κόμμα.
+/// Δέχεται ονόματα αρχείων ή paths (χωρισμένα με κόμμα).
+/// Path: χρήση απευθείας. Όνομα αρχείου: αναδρομική αναζήτηση σε lib/ και root.
 ///
-/// Παράδειγμα: dart run tool/copy_to_grok.dart main.dart,import_service.dart
+/// Παράδειγμα: dart run tool/copy_to_grok.dart main.dart,lib/features/tasks/models/task.dart
 void main(List<String> arguments) {
   try {
     // Ρίζα του project (υποθέτουμε ότι τρέχουμε από το root)
     final projectRoot = Directory.current;
     final grokDir = Directory('${projectRoot.path}${Platform.pathSeparator}Grok');
+    final sep = Platform.pathSeparator;
 
     // 1. Επαναφορά/δημιουργία φακέλου Grok
     _prepareGrokDirectory(grokDir);
 
-    // 2. Ανάλυση ορισμάτων: ένα string με ονόματα αρχείων χωρισμένα με κόμμα
-    final filenames = _parseFilenames(arguments);
-    if (filenames.isEmpty) {
-      print('Δεν δόθηκαν ονόματα αρχείων. Χρήση: dart run tool/copy_to_grok.dart file1.dart,file2.dart');
+    // 2. Ανάλυση ορισμάτων: ονόματα αρχείων ή paths χωρισμένα με κόμμα
+    final items = _parseItems(arguments);
+    if (items.isEmpty) {
+      print('Δεν δόθηκαν αρχεία. Χρήση: dart run tool/copy_to_grok.dart file1.dart,lib/path/to/file2.dart');
       exit(1);
     }
 
-    // 3. Αναζήτηση και αντιγραφή κάθε αρχείου
-    final libDir = Directory('${projectRoot.path}${Platform.pathSeparator}lib');
-    for (final filename in filenames) {
-      final found = _findFileRecursively(libDir, filename) ?? _findFileRecursively(projectRoot, filename);
+    // 3. Αντιγραφή: path → απευθείας, όνομα αρχείου → αναδρομική αναζήτηση
+    final libDir = Directory('${projectRoot.path}$sep''lib');
+    for (final item in items) {
+      final bool isPath = _isPath(item);
+      File? found;
+      String destFilename = item;
+
+      if (isPath) {
+        // Path: σχετικό από το root του project
+        final fullPath = item.contains(sep) ? item : item.replaceAll('/', sep);
+        final file = File('${projectRoot.path}$sep$fullPath');
+        if (file.existsSync()) {
+          found = file;
+          destFilename = file.uri.pathSegments.last;
+        }
+      }
+      found ??= _findFileRecursively(libDir, item) ?? _findFileRecursively(projectRoot, item);
+
       if (found != null) {
-        final dest = File('${grokDir.path}${Platform.pathSeparator}$filename');
+        final dest = File('${grokDir.path}$sep$destFilename');
         found.copySync(dest.path);
         print('Αντιγράφηκε: ${found.path} -> ${dest.path}');
       } else {
-        print('ΠΡΟΕΙΔΟΠΟΙΗΣΗ: Δεν βρέθηκε το αρχείο "$filename" (αναζήτηση σε lib/ και root).');
+        print('ΠΡΟΕΙΔΟΠΟΙΗΣΗ: Δεν βρέθηκε το αρχείο "$item" (αναζήτηση σε lib/ και root).');
       }
     }
   } on IOException catch (e) {
@@ -52,8 +68,11 @@ void _prepareGrokDirectory(Directory grokDir) {
   grokDir.createSync(recursive: true);
 }
 
-/// Παίρνει τα ορίσματα και επιστρέφει λίστα ονομάτων αρχείων (χωρισμένα με κόμμα).
-List<String> _parseFilenames(List<String> arguments) {
+/// Επιστρέφει true αν το [item] είναι path (περιέχει / ή \).
+bool _isPath(String item) => item.contains('/') || item.contains('\\');
+
+/// Παίρνει τα ορίσματα και επιστρέφει λίστα στοιχείων (paths ή ονόματα αρχείων, χωρισμένα με κόμμα).
+List<String> _parseItems(List<String> arguments) {
   if (arguments.isEmpty) return [];
   final singleString = arguments.join(',');
   return singleString

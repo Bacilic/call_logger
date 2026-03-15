@@ -6,7 +6,6 @@ import '../providers/task_service_provider.dart';
 import '../providers/tasks_provider.dart';
 import 'task_card.dart';
 import 'task_close_dialog.dart';
-import 'task_filter_bar.dart';
 import 'task_form_dialog.dart';
 
 class TasksScreen extends ConsumerWidget {
@@ -24,13 +23,8 @@ class TasksScreen extends ConsumerWidget {
         onPressed: () => _openNewTaskForm(context, ref),
         child: const Icon(Icons.add),
       ),
-      body: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          const TaskFilterBar(),
-          Expanded(
-            child: asyncTasks.when(
-              loading: () => const Center(
+      body: asyncTasks.when(
+        loading: () => const Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
@@ -121,9 +115,6 @@ class TasksScreen extends ConsumerWidget {
             ],
           );
         },
-            ),
-          ),
-        ],
       ),
     );
   }

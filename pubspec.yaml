@@ -28,6 +28,8 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  flutter_localizations:
+    sdk: flutter
 
   # Προσθέτει τη γραμματοσειρά Cupertino Icons στην εφαρμογή.
   # Χρήση με την κλάση CupertinoIcons για εικονίδια σε στυλ iOS.

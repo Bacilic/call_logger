@@ -22,9 +22,6 @@ class CallEntryState {
     this.category = '',
     this.isPending = false,
     this.durationSeconds = 0,
-    required this.internalFocusNode,
-    required this.internalController,
-    required this.notesController,
   });
 
   final String internalDigits;
@@ -34,9 +31,6 @@ class CallEntryState {
   final String category;
   final bool isPending;
   final int durationSeconds;
-  final FocusNode internalFocusNode;
-  final TextEditingController internalController;
-  final TextEditingController notesController;
 
   CallEntryState copyWith({
     String? internalDigits,
@@ -46,9 +40,6 @@ class CallEntryState {
     String? category,
     bool? isPending,
     int? durationSeconds,
-    FocusNode? internalFocusNode,
-    TextEditingController? internalController,
-    TextEditingController? notesController,
   }) {
     return CallEntryState(
       internalDigits: internalDigits ?? this.internalDigits,
@@ -58,9 +49,6 @@ class CallEntryState {
       category: category ?? this.category,
       isPending: isPending ?? this.isPending,
       durationSeconds: durationSeconds ?? this.durationSeconds,
-      internalFocusNode: internalFocusNode ?? this.internalFocusNode,
-      internalController: internalController ?? this.internalController,
-      notesController: notesController ?? this.notesController,
     );
   }
 }
@@ -77,11 +65,7 @@ class CallEntryNotifier extends Notifier<CallEntryState> {
       stopTimer();
     });
     // Timer και durationSeconds αρχικοποιούνται μόνο μέσω startTimerOnce() από το UI (focus loss / Enter).
-    return CallEntryState(
-      internalFocusNode: FocusNode(),
-      internalController: TextEditingController(),
-      notesController: TextEditingController(),
-    );
+    return CallEntryState();
   }
 
   void togglePending() {
@@ -146,7 +130,7 @@ class CallEntryNotifier extends Notifier<CallEntryState> {
     }
     final header = ref.read(callHeaderProvider);
     final user = header.selectedCaller;
-    final notes = state.notesController.text.trim();
+    final notes = state.notes.trim();
     final callerId = header.selectedCaller?.id;
     final callerTextRaw = header.callerDisplayText.trim();
     final callerText = callerId != null
@@ -195,12 +179,7 @@ class CallEntryNotifier extends Notifier<CallEntryState> {
   /// Επαναφορά όλων των πεδίων της φόρμας κλήσης (χρονόμετρο, πεδία, σημειώσεις, κατηγορία, checkbox).
   void reset() {
     stopTimer();
-    state.internalController.clear();
-    state.notesController.clear();
     state = CallEntryState(
-      internalFocusNode: state.internalFocusNode,
-      internalController: state.internalController,
-      notesController: state.notesController,
       internalDigits: '',
       selectedUser: null,
       selectedEquipment: null,

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -27,13 +29,24 @@ class _CallHeaderFormState extends ConsumerState<CallHeaderForm> {
   late final FocusNode _callerFocusNode;
   late final FocusNode _equipmentFocusNode;
   late final CallHeaderNotifier _notifier;
+  bool _isSelectingFromList = false;
 
   void _onFocusOut() {
-    _notifier.checkContent();
+    if (_isSelectingFromList) return;
+    _notifier.checkContent(
+      phoneText: _phoneController.text,
+      callerText: _callerController.text,
+      equipmentText: _equipmentController.text,
+    );
   }
 
   void _onPhoneFocusOut() {
-    _notifier.checkContent();
+    if (_isSelectingFromList) return;
+    _notifier.checkContent(
+      phoneText: _phoneController.text,
+      callerText: _callerController.text,
+      equipmentText: _equipmentController.text,
+    );
     if (!_phoneFocusNode.hasFocus) {
       final digits = _phoneController.text.replaceAll(RegExp(r'[^0-9]'), '');
       if (digits.isNotEmpty) {
@@ -54,16 +67,6 @@ class _CallHeaderFormState extends ConsumerState<CallHeaderForm> {
     _callerFocusNode = FocusNode();
     _equipmentFocusNode = FocusNode();
     _notifier = ref.read(callHeaderProvider.notifier);
-    _notifier.registerFocusNodes(
-      phone: _phoneFocusNode,
-      caller: _callerFocusNode,
-      equipment: _equipmentFocusNode,
-    );
-    _notifier.registerControllers(
-      phone: _phoneController,
-      caller: _callerController,
-      equipment: _equipmentController,
-    );
     _phoneFocusNode.addListener(_onPhoneFocusOut);
     _callerFocusNode.addListener(_onFocusOut);
     _equipmentFocusNode.addListener(_onFocusOut);
@@ -74,8 +77,6 @@ class _CallHeaderFormState extends ConsumerState<CallHeaderForm> {
     _phoneFocusNode.removeListener(_onPhoneFocusOut);
     _callerFocusNode.removeListener(_onFocusOut);
     _equipmentFocusNode.removeListener(_onFocusOut);
-    _notifier.unregisterFocusNodes();
-    _notifier.unregisterControllers();
     _phoneFocusNode.dispose();
     _callerFocusNode.dispose();
     _equipmentFocusNode.dispose();
@@ -122,6 +123,35 @@ class _CallHeaderFormState extends ConsumerState<CallHeaderForm> {
     );
     final theme = Theme.of(context);
 
+    ref.listen(callHeaderProvider, (previous, next) {
+      // Ενημέρωση Phone
+      if (next.selectedPhone != null &&
+          next.selectedPhone != _phoneController.text) {
+        _phoneController.value = TextEditingValue(
+          text: next.selectedPhone!,
+          selection: TextSelection.collapsed(offset: next.selectedPhone!.length),
+        );
+      }
+
+      // Ενημέρωση Caller (callerDisplayText)
+      if (next.callerDisplayText != _callerController.text) {
+        _callerController.value = TextEditingValue(
+          text: next.callerDisplayText,
+          selection:
+              TextSelection.collapsed(offset: next.callerDisplayText.length),
+        );
+      }
+
+      // Ενημέρωση Equipment (equipmentText)
+      if (next.equipmentText != _equipmentController.text) {
+        _equipmentController.value = TextEditingValue(
+          text: next.equipmentText,
+          selection:
+              TextSelection.collapsed(offset: next.equipmentText.length),
+        );
+      }
+    });
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -146,7 +176,11 @@ class _CallHeaderFormState extends ConsumerState<CallHeaderForm> {
                   ref.read(callEntryProvider.notifier).resetTimerToStandby();
                   _phoneFocusNode.requestFocus();
                 },
-                onContentChecked: () => _notifier.checkContent(),
+                onContentChecked: () => _notifier.checkContent(
+                  phoneText: _phoneController.text,
+                  callerText: _callerController.text,
+                  equipmentText: _equipmentController.text,
+                ),
                 onPhoneSubmitted: () {
                   final digits = _phoneController.text.replaceAll(RegExp(r'[^0-9]'), '');
                   if (digits.isNotEmpty) {
@@ -158,12 +192,16 @@ class _CallHeaderFormState extends ConsumerState<CallHeaderForm> {
                 onPhoneBecameEmpty: () =>
                     ref.read(callEntryProvider.notifier).resetTimerToStandby(),
                 onPhoneSelectedFromList: (value) {
+                  setState(() => _isSelectingFromList = true);
                   final digits = value.replaceAll(RegExp(r'[^0-9]'), '');
                   if (digits.isNotEmpty) {
                     ref.read(callEntryProvider.notifier).startTimerOnce();
                   } else {
                     ref.read(callEntryProvider.notifier).resetTimerToStandby();
                   }
+                  Future.delayed(const Duration(milliseconds: 150), () {
+                    if (mounted) setState(() => _isSelectingFromList = false);
+                  });
                 },
               ),
             ),
@@ -178,8 +216,16 @@ class _CallHeaderFormState extends ConsumerState<CallHeaderForm> {
                 header: header,
                 lookupService: lookupService,
                 notifier: _notifier,
-                onContentChecked: () => _notifier.checkContent(),
-                onCallerFocusOut: () => _notifier.checkContent(),
+                onContentChecked: () => _notifier.checkContent(
+                  phoneText: _phoneController.text,
+                  callerText: _callerController.text,
+                  equipmentText: _equipmentController.text,
+                ),
+                onCallerFocusOut: () => _notifier.checkContent(
+                  phoneText: _phoneController.text,
+                  callerText: _callerController.text,
+                  equipmentText: _equipmentController.text,
+                ),
               ),
             ),
             const SizedBox(width: 12),
@@ -192,7 +238,11 @@ class _CallHeaderFormState extends ConsumerState<CallHeaderForm> {
                 header: header,
                 lookupService: lookupService,
                 notifier: _notifier,
-                onContentChecked: () => _notifier.checkContent(),
+                onContentChecked: () => _notifier.checkContent(
+                  phoneText: _phoneController.text,
+                  callerText: _callerController.text,
+                  equipmentText: _equipmentController.text,
+                ),
               ),
             ),
             const SizedBox(width: 8),
@@ -284,6 +334,7 @@ class _PhoneField extends StatefulWidget {
 
 class _PhoneFieldState extends State<_PhoneField> {
   bool _isSelectingFromList = false;
+  Timer? _debounce;
 
   /// Lookup τηλεφώνου: χρήση performPhoneLookup για 0/1/πολλά αποτελέσματα.
   void _performLookup() {
@@ -296,7 +347,8 @@ class _PhoneFieldState extends State<_PhoneField> {
 
   void _scheduleCompletedLookup() {
     if (_isSelectingFromList) return;
-    Future<void>.delayed(const Duration(milliseconds: 250), () {
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 250), () {
       if (!mounted) return;
       if (_isSelectingFromList) return;
       _performLookup();
@@ -314,6 +366,17 @@ class _PhoneFieldState extends State<_PhoneField> {
     _scheduleCompletedLookup();
   }
 
+  void _onPhoneChanged(String value) {
+    _debounce?.cancel();
+    if (value == widget.header.selectedPhone) return;
+    final digits = value.replaceAll(RegExp(r'[^0-9]'), '');
+    widget.notifier.updatePhone(digits.isEmpty ? null : digits);
+    widget.notifier.markPhoneAsManual();
+    if (digits.isEmpty) {
+      widget.onPhoneBecameEmpty();
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -322,6 +385,7 @@ class _PhoneFieldState extends State<_PhoneField> {
 
   @override
   void dispose() {
+    _debounce?.cancel();
     widget.focusNode.removeListener(_onFocusChange);
     super.dispose();
   }
@@ -431,14 +495,7 @@ class _PhoneFieldState extends State<_PhoneField> {
                       FilteringTextInputFormatter.digitsOnly,
                     ],
                     keyboardType: TextInputType.number,
-                    onChanged: (value) {
-                    final digits = value.replaceAll(RegExp(r'[^0-9]'), '');
-                    notifier.updatePhone(digits.isEmpty ? null : digits);
-                    notifier.markPhoneAsManual();
-                    if (digits.isEmpty) {
-                      widget.onPhoneBecameEmpty();
-                    }
-                  },
+                    onChanged: _onPhoneChanged,
                   onSubmitted: (value) {
                     final digits = value.replaceAll(RegExp(r'[^0-9]'), '');
                     if (digits.length < 2) {
@@ -464,12 +521,12 @@ class _PhoneFieldState extends State<_PhoneField> {
                   setState(() {
                     _isSelectingFromList = true;
                   });
-                  controller.text = value;
                   notifier.selectPhoneFromCandidates(value);
+                  focusNode.requestFocus();
                   widget.onPhoneSelectedFromList(value);
                   
                   // Επαναφέρουμε τη σημαία αφού ολοκληρωθεί ο κύκλος
-                  Future.delayed(const Duration(milliseconds: 100), () {
+                  Future.delayed(const Duration(milliseconds: 300), () {
                     if (mounted) {
                       setState(() {
                         _isSelectingFromList = false;
@@ -546,6 +603,7 @@ class _CallerField extends StatefulWidget {
 class _CallerFieldState extends State<_CallerField> {
   /// Όταν true, η λίστα προτάσεων εμφανίζεται. Γίνεται false μόλις ο χρήστης επιλέξει από τη λίστα.
   bool _showSuggestionList = false;
+  Timer? _debounce;
 
   void _performLookup() {
     final query = widget.controller.text.trim();
@@ -554,7 +612,8 @@ class _CallerFieldState extends State<_CallerField> {
   }
 
   void _scheduleCompletedLookup() {
-    Future<void>.delayed(const Duration(milliseconds: 250), () {
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 250), () {
       if (!mounted) return;
       _performLookup();
     });
@@ -604,6 +663,7 @@ class _CallerFieldState extends State<_CallerField> {
 
   @override
   void dispose() {
+    _debounce?.cancel();
     widget.focusNode.removeListener(_onCallerFocusChange);
     widget.controller.removeListener(_onCallerTextChange);
     super.dispose();
@@ -983,6 +1043,7 @@ class _EquipmentFieldState extends State<_EquipmentField> {
   bool _showInitialList = false;
   /// True μόνο αμέσως μετά επιλογή από _EquipmentSuggestionList· αποτρέπει το didUpdateWidget από clear.
   bool _justSelectedFromCustomList = false;
+  Timer? _debounce;
 
   void _performLookup() {
     final query = widget.controller.text.trim();
@@ -991,7 +1052,8 @@ class _EquipmentFieldState extends State<_EquipmentField> {
   }
 
   void _scheduleCompletedLookup() {
-    Future<void>.delayed(const Duration(milliseconds: 250), () {
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 250), () {
       if (!mounted) return;
       _performLookup();
     });
@@ -1007,6 +1069,7 @@ class _EquipmentFieldState extends State<_EquipmentField> {
 
   @override
   void dispose() {
+    _debounce?.cancel();
     widget.focusNode.removeListener(_onEquipmentFocusChange);
     widget.controller.removeListener(_onEquipmentTextChange);
     super.dispose();
@@ -1168,7 +1231,7 @@ class _EquipmentFieldState extends State<_EquipmentField> {
     widget.notifier.setEquipment(equipment);
     widget.notifier.markEquipmentAsManual();
     widget.notifier.performEquipmentLookupByCode(_equipmentFieldText(equipment));
-    widget.notifier.checkContent();
+    widget.notifier.checkContent(equipmentText: widget.controller.text);
     setState(() {
       _showInitialList = false;
     });
@@ -1287,7 +1350,7 @@ class _EquipmentFieldState extends State<_EquipmentField> {
                       ),
                       onChanged: (value) {
                         if (_isSelectingEquipment) {
-                          notifier.checkContent();
+                          notifier.checkContent(equipmentText: value);
                           return;
                         }
                         final selected = header.selectedEquipment;
@@ -1297,7 +1360,7 @@ class _EquipmentFieldState extends State<_EquipmentField> {
                         }
                         notifier.markEquipmentAsManual();
                         // Θέλουμε να ενημερωθεί το equipmentText για να μπορεί να εμφανιστεί ο σταυρός άμεσα ή στο checkContent
-                        notifier.checkContent();
+                        notifier.checkContent(equipmentText: value);
                       },
                       onSubmitted: (_) {
                         widget.onContentChecked();
