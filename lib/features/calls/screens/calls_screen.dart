@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../provider/call_entry_provider.dart';
 import '../provider/call_header_provider.dart';
 import 'widgets/call_header_form.dart';
+import 'widgets/call_status_bar.dart';
 import 'widgets/recent_calls_list.dart';
 import 'widgets/sticky_note_widget.dart';
 import 'widgets/user_info_card.dart';
@@ -21,36 +22,55 @@ class CallsScreen extends ConsumerWidget {
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          const CallHeaderForm(),
-          if (header.selectedCaller != null) ...[
-            UserInfoCard(
-              user: header.selectedCaller!,
-              equipment: header.selectedEquipment,
-              equipmentCodeText: header.equipmentText,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final width = constraints.maxWidth.isFinite
+              ? constraints.maxWidth
+              : MediaQuery.sizeOf(context).width;
+          return SizedBox(
+            width: width,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const CallHeaderForm(),
+                if (header.selectedCaller != null) ...[
+                  UserInfoCard(
+                    user: header.selectedCaller!,
+                    equipment: header.selectedEquipment,
+                    equipmentCodeText: header.equipmentText,
+                  ),
+                  if (header.selectedCaller!.notes != null &&
+                      header.selectedCaller!.notes!.trim().isNotEmpty)
+                    StickyNoteWidget(notes: header.selectedCaller!.notes!),
+                  RecentCallsList(userId: header.selectedCaller!.id!),
+                ],
+                const SizedBox(height: 16),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: entry.notesController,
+                        decoration: const InputDecoration(
+                          labelText: 'Σημειώσεις',
+                          border: OutlineInputBorder(),
+                          alignLabelWithHint: true,
+                        ),
+                        maxLines: 3,
+                        onChanged: (value) =>
+                            ref.read(callEntryProvider.notifier).setNotes(value),
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    const CallStatusBar(),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                _buildSubmitButton(context, ref, header),
+              ],
             ),
-            if (header.selectedCaller!.notes != null &&
-                header.selectedCaller!.notes!.trim().isNotEmpty)
-              StickyNoteWidget(notes: header.selectedCaller!.notes!),
-            RecentCallsList(userId: header.selectedCaller!.id!),
-          ],
-          const SizedBox(height: 16),
-          TextField(
-            controller: entry.notesController,
-            decoration: const InputDecoration(
-              labelText: 'Σημειώσεις',
-              border: OutlineInputBorder(),
-              alignLabelWithHint: true,
-            ),
-            maxLines: 4,
-            onChanged: (value) =>
-                ref.read(callEntryProvider.notifier).setNotes(value),
-          ),
-          const SizedBox(height: 16),
-          _buildSubmitButton(context, ref, header),
-        ],
+          );
+        },
       ),
     );
   }

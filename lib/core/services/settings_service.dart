@@ -9,12 +9,15 @@ class SettingsService {
   static const String _keyDatabasePath = 'database_path';
   static const String _keyRecentPaths = 'recent_database_paths';
   static const String _keyShowImportExcelButton = 'show_import_excel_button';
+  static const String _keyShowActiveTimer = 'show_active_timer';
   static const int _maxRecentPaths = 3;
 
   /// Κλειδιά για ρυθμίσεις απομακρυσμένης σύνδεσης (πίνακας app_settings).
   static const String _keyVncPaths = 'vnc_paths';
   static const String _keyVncPassword = 'vnc_password';
   static const String _keyAnydeskPath = 'anydesk_path';
+  static const String _keyRemoteSurfaceApps = 'remote_surface_apps';
+  static const String _keyEquipmentTypes = 'equipment_types';
 
   /// Προεπιλεγμένη διαδρομή TightVNC Viewer (μία μόνο).
   static const String _defaultVncPath = r'C:\Program Files\TightVNC\tvnviewer.exe';
@@ -91,6 +94,18 @@ class SettingsService {
     await prefs.setBool(_keyShowImportExcelButton, value);
   }
 
+  /// Εμφάνιση ενεργού χρονομέτρου στη φόρμα κλήσεων. Προεπιλογή: true.
+  Future<bool> getShowActiveTimer() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_keyShowActiveTimer) ?? true;
+  }
+
+  /// Ορίζει αν θα εμφανίζεται το ενεργό χρονόμετρο (MM:SS) στη φόρμα κλήσεων.
+  Future<void> setShowActiveTimer(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_keyShowActiveTimer, value);
+  }
+
   // --- Ρυθμίσεις απομακρυσμένης σύνδεσης (app_settings) ---
 
   /// Επιστρέφει τη μοναδική διαδρομή για TightVNC Viewer.
@@ -133,5 +148,50 @@ class SettingsService {
   /// Αποθηκεύει τη διαδρομή AnyDesk στη βάση.
   Future<void> setAnydeskPath(String path) async {
     if (_setAppSetting != null) await _setAppSetting!(_keyAnydeskPath, path.trim());
+  }
+
+  /// Επιστρέφει το ακατέργαστο string επιλογών εφαρμογής απομακρυσμένης επιφάνειας (διαχωρισμένα με κόμμα).
+  /// Χρήση στο UI ρυθμίσεων. Προεπιλογή: "AnyDesk, VNC".
+  Future<String> getRemoteSurfaceAppsRaw() async {
+    final value = _getAppSetting != null ? await _getAppSetting!(_keyRemoteSurfaceApps) : null;
+    if (value == null || value.trim().isEmpty) return 'AnyDesk, VNC';
+    return value.trim();
+  }
+
+  /// Αποθηκεύει τις επιλογές εφαρμογής απομακρυσμένης επιφάνειας (comma-separated).
+  Future<void> setRemoteSurfaceApps(String value) async {
+    if (_setAppSetting != null) await _setAppSetting!(_keyRemoteSurfaceApps, value.trim());
+  }
+
+  /// Επιστρέφει λίστα επιλογών για dropdown (split by comma, trim, μη κενά). Τελευταία επιλογή "Κανένα" προστίθεται στα dialogs.
+  /// Αν η ρύθμιση είναι κενή, επιστρέφει ["AnyDesk", "VNC"].
+  Future<List<String>> getRemoteSurfaceAppsList() async {
+    final raw = await getRemoteSurfaceAppsRaw();
+    final list = raw.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
+    if (list.isEmpty) return ['AnyDesk', 'VNC'];
+    return list;
+  }
+
+  // --- Τύποι εξοπλισμού (app_settings, comma-separated) ---
+
+  /// Επιστρέφει το ακατέργαστο string τύπων εξοπλισμού (διαχωρισμένα με κόμμα).
+  /// Χρήση στο UI ρυθμίσεων. Προεπιλογή: "Υπολογιστής, Εκτυπωτής".
+  Future<String> getEquipmentTypesRaw() async {
+    final value = _getAppSetting != null ? await _getAppSetting!(_keyEquipmentTypes) : null;
+    if (value == null || value.trim().isEmpty) return 'Υπολογιστής, Εκτυπωτής';
+    return value.trim();
+  }
+
+  /// Αποθηκεύει τους τύπους εξοπλισμού (comma-separated).
+  Future<void> setEquipmentTypes(String value) async {
+    if (_setAppSetting != null) await _setAppSetting!(_keyEquipmentTypes, value.trim());
+  }
+
+  /// Επιστρέφει λίστα τύπων για dropdown. Αν η ρύθμιση είναι κενή, επιστρέφει ["Υπολογιστής", "Εκτυπωτής"].
+  Future<List<String>> getEquipmentTypesList() async {
+    final raw = await getEquipmentTypesRaw();
+    final list = raw.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
+    if (list.isEmpty) return ['Υπολογιστής', 'Εκτυπωτής'];
+    return list;
   }
 }

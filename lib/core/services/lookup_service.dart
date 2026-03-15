@@ -46,14 +46,14 @@ class LookupService {
     _loaded = true;
   }
 
-  /// Αναζήτηση στη μνήμη βάσει digits (phone). Επιστρέφει αποτέλεσμα μόνο αν query.length >= 3.
+  /// Αναζήτηση στη μνήμη βάσει ψηφίων τηλεφώνου. Κενά/παύλες αγνοούνται και στα δύο μέρη.
   LookupResult? search(String query) {
-    final digits = query.trim();
+    final digits = _digitsOnly(query);
     if (digits.length < 3) return null;
-    final lower = digits.toLowerCase();
     for (final u in _users) {
-      final phone = (u.phone ?? '').trim().toLowerCase();
-      if (phone.contains(lower) || phone.startsWith(lower)) {
+      final phoneDigits = _digitsOnly(u.phone ?? '');
+      if (phoneDigits.isEmpty) continue;
+      if (phoneDigits.contains(digits) || phoneDigits.startsWith(digits)) {
         final equipment = _equipmentByUserId[u.id] ?? [];
         return LookupResult(user: u, equipment: equipment);
       }
@@ -62,19 +62,18 @@ class LookupService {
   }
 
   /// Επιστρέφει τηλέφωνα (από users) που ταιριάζουν με το prefix (ψηφία), όταν prefix.length >= 2.
-  /// Χωρίς ταξινόμηση κατά πρόσφατη χρήση (γίνεται στο call_header_provider).
+  /// Κενά/παύλες αγνοούνται· η σύγκριση γίνεται μόνο σε ψηφία.
   List<String> searchPhonesByPrefix(String prefix) {
     final digits = _digitsOnly(prefix);
     if (digits.length < 2) return [];
-    final lower = digits.toLowerCase();
     final seen = <String>{};
     final result = <String>[];
     for (final u in _users) {
       final phone = (u.phone ?? '').trim();
       if (phone.isEmpty) continue;
-      final phoneNorm = phone.toLowerCase();
-      if ((phoneNorm.contains(lower) || phoneNorm.startsWith(lower)) &&
-          seen.add(phoneNorm)) {
+      final phoneDigits = _digitsOnly(phone);
+      if ((phoneDigits.contains(digits) || phoneDigits.startsWith(digits)) &&
+          seen.add(phone)) {
         result.add(phone);
       }
     }
@@ -102,14 +101,15 @@ class LookupService {
   }
 
   /// Όλοι οι χρήστες whose phone περιέχει/ταιριάζει με τα ψηφία (≥3). Ταξινόμηση κατά name.
+  /// Κενά/παύλες αγνοούνται και στο input και στο αποθηκευμένο τηλέφωνο.
   List<UserModel> findUsersByPhone(String phone) {
     final digits = _digitsOnly(phone);
     if (digits.length < 3) return [];
-    final lower = digits.toLowerCase();
     final list = _users
         .where((u) {
-          final p = (u.phone ?? '').trim().toLowerCase();
-          return p.contains(lower) || p.startsWith(lower);
+          final phoneDigits = _digitsOnly(u.phone ?? '');
+          return phoneDigits.isNotEmpty &&
+              (phoneDigits.contains(digits) || phoneDigits.startsWith(digits));
         })
         .toList();
     list.sort((a, b) => (a.name ?? '').compareTo(b.name ?? ''));

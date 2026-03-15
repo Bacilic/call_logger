@@ -5,6 +5,11 @@ import 'package:flutter/services.dart';
 
 import '../../models/equipment_column.dart';
 
+const _minColumnWidth = 40.0;
+const _maxColumnWidth = 600.0;
+const _defaultDataColumnWidth = 120.0;
+const _defaultCheckboxColumnWidth = 52.0;
+
 /// Πίνακας εξοπλισμού: mirror του UsersDataTable – checkbox, δυναμικές στήλες, sort, πλήκτρα, focus.
 class EquipmentDataTable extends StatefulWidget {
   const EquipmentDataTable({
@@ -46,10 +51,29 @@ class _EquipmentDataTableState extends State<EquipmentDataTable> {
   final _source = _EquipmentTableSource();
   final FocusNode _tableFocusNode = FocusNode();
   final ScrollController _verticalScrollController = ScrollController();
+  final ScrollController _horizontalScrollController = ScrollController();
+  double _checkboxColumnWidth = _defaultCheckboxColumnWidth;
+  final Map<String, double> _dataColumnWidths = {};
+
+  double _getColumnWidth(int index) {
+    if (index == 0) return _checkboxColumnWidth;
+    final col = widget.visibleColumns[index - 1];
+    return _dataColumnWidths[col.key] ?? _defaultDataColumnWidth;
+  }
+
+  void _setColumnWidth(int index, double width) {
+    final w = width.clamp(_minColumnWidth, _maxColumnWidth);
+    if (index == 0) {
+      setState(() => _checkboxColumnWidth = w);
+    } else {
+      setState(() => _dataColumnWidths[widget.visibleColumns[index - 1].key] = w);
+    }
+  }
 
   @override
   void dispose() {
     _verticalScrollController.dispose();
+    _horizontalScrollController.dispose();
     _tableFocusNode.dispose();
     super.dispose();
   }
@@ -119,6 +143,127 @@ class _EquipmentDataTableState extends State<EquipmentDataTable> {
     return KeyEventResult.ignored;
   }
 
+  Widget _buildStickyHeader(
+    BuildContext context,
+    List<DataColumn> columns,
+    double headingHeight,
+    Color? headingColor,
+    TextStyle headingTextStyle,
+    Map<int, TableColumnWidth> columnWidths,
+  ) {
+    final sortedCol = widget.sortColumn;
+    final asc = widget.sortAscending;
+    final sortedIndex = sortedCol != null
+        ? widget.visibleColumns.indexOf(sortedCol) + 1
+        : -1;
+    return Table(
+      columnWidths: columnWidths,
+      defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+      children: [
+        TableRow(
+          decoration: BoxDecoration(
+            color: headingColor ??
+                Theme.of(context).colorScheme.surfaceContainerHighest,
+          ),
+          children: [
+            for (var i = 0; i < columns.length; i++)
+              TableCell(
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Expanded(
+                      child: Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          onTap: columns[i].onSort != null
+                              ? () => columns[i].onSort!(
+                                  0,
+                                  i == sortedIndex ? !asc : true,
+                                )
+                              : null,
+                          child: Container(
+                            height: headingHeight,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 12,
+                            ),
+                            alignment: Alignment.centerLeft,
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Expanded(
+                                  child: DefaultTextStyle(
+                                    style: headingTextStyle,
+                                    child: columns[i].label,
+                                  ),
+                                ),
+                                if (i == sortedIndex) ...[
+                                  const SizedBox(width: 4),
+                                  Icon(
+                                    asc ? Icons.arrow_drop_up : Icons.arrow_drop_down,
+                                    size: 20,
+                                    color: Theme.of(context).colorScheme.onSurface,
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    if (i < columns.length - 1)
+                      _TableResizeHandle(
+                        onResize: (delta) {
+                          _setColumnWidth(
+                            i,
+                            _getColumnWidth(i) + delta,
+                          );
+                        },
+                      ),
+                  ],
+                ),
+              ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  TableRow _dataRowToTableRow(
+    BuildContext context,
+    DataRow dataRow,
+  ) {
+    final theme = Theme.of(context);
+    final dataTableTheme = theme.dataTableTheme;
+    final rowColor = dataRow.selected
+        ? (dataTableTheme.dataRowColor?.resolve({WidgetState.selected}) ??
+            theme.colorScheme.primaryContainer.withValues(alpha: 0.3))
+        : dataTableTheme.dataRowColor?.resolve({WidgetState.selected});
+    return TableRow(
+      decoration: BoxDecoration(color: rowColor),
+      children: [
+        for (final cell in dataRow.cells)
+          TableCell(
+            verticalAlignment: TableCellVerticalAlignment.middle,
+            child: InkWell(
+              onTap: cell.onTap,
+              onDoubleTap: cell.onDoubleTap,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 12,
+                ),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: cell.child,
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -177,31 +322,72 @@ class _EquipmentDataTableState extends State<EquipmentDataTable> {
       if (row != null) rows.add(row);
     }
 
-    final tableWidth = 700.0 + widget.visibleColumns.length * 120.0;
+    final columnWidths = Map<int, TableColumnWidth>.fromIterables(
+      List.generate(columns.length, (i) => i),
+      List.generate(columns.length, (i) => FixedColumnWidth(_getColumnWidth(i))),
+    );
+    const columnSpacing = 24.0;
+    const horizontalMargin = 16.0;
+    final tableWidth = List.generate(columns.length, (i) => _getColumnWidth(i))
+            .fold<double>(0, (a, b) => a + b) +
+        (columns.length - 1) * columnSpacing +
+        horizontalMargin * 2;
+
     final Widget tableContent;
     if (widget.continuousScroll) {
-      tableContent = Scrollbar(
-        controller: _verticalScrollController,
-        thumbVisibility: true,
-        thickness: 12,
-        radius: const Radius.circular(10),
-        child: SingleChildScrollView(
-          controller: _verticalScrollController,
-          scrollDirection: Axis.vertical,
-          child: SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: SizedBox(
-              width: tableWidth,
-              child: DataTable(
-                showCheckboxColumn: false,
-                columns: columns,
-                rows: rows,
-                columnSpacing: 24,
-                horizontalMargin: 16,
+      final dataTableTheme = theme.dataTableTheme;
+      final headingHeight = dataTableTheme.headingRowHeight ?? 56.0;
+      final Color? headingColor =
+          (dataTableTheme.headingRowColor ??
+                  theme.colorScheme.surfaceContainerHighest)
+              as Color?;
+      final headingTextStyle =
+          dataTableTheme.headingTextStyle ?? theme.textTheme.titleSmall!;
+      tableContent = LayoutBuilder(
+        builder: (context, constraints) {
+          return Scrollbar(
+            controller: _verticalScrollController,
+            thumbVisibility: true,
+            thickness: 12,
+            radius: const Radius.circular(10),
+            child: SingleChildScrollView(
+              controller: _horizontalScrollController,
+              scrollDirection: Axis.horizontal,
+              child: SizedBox(
+                width: tableWidth,
+                height: constraints.maxHeight,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _buildStickyHeader(
+                      context,
+                      columns,
+                      headingHeight,
+                      headingColor,
+                      headingTextStyle,
+                      columnWidths,
+                    ),
+                    Expanded(
+                      child: SingleChildScrollView(
+                        controller: _verticalScrollController,
+                        child: Table(
+                          columnWidths: columnWidths,
+                          defaultVerticalAlignment:
+                              TableCellVerticalAlignment.middle,
+                          children: [
+                            for (final row in rows)
+                              _dataRowToTableRow(context, row),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
-          ),
-        ),
+          );
+        },
       );
     } else {
       tableContent = SingleChildScrollView(
@@ -230,6 +416,54 @@ class _EquipmentDataTableState extends State<EquipmentDataTable> {
       child: MouseRegion(
         onEnter: (_) => _tableFocusNode.requestFocus(),
         child: tableContent,
+      ),
+    );
+  }
+}
+
+class _TableResizeHandle extends StatefulWidget {
+  const _TableResizeHandle({required this.onResize});
+
+  final void Function(double delta) onResize;
+
+  @override
+  State<_TableResizeHandle> createState() => _TableResizeHandleState();
+}
+
+class _TableResizeHandleState extends State<_TableResizeHandle> {
+  bool _isHovered = false;
+  bool _isDragging = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final showActive = _isHovered || _isDragging;
+    return MouseRegion(
+      cursor: SystemMouseCursors.resizeColumn,
+      onEnter: (_) => setState(() => _isHovered = true),
+      onExit: (_) => setState(() => _isHovered = false),
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onHorizontalDragStart: (_) => setState(() => _isDragging = true),
+        onHorizontalDragEnd: (_) => setState(() => _isDragging = false),
+        onHorizontalDragCancel: () => setState(() => _isDragging = false),
+        onHorizontalDragUpdate: (details) => widget.onResize(details.delta.dx),
+        child: SizedBox(
+          width: 12,
+          child: Center(
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 120),
+              width: 2,
+              height: showActive ? 26 : 18,
+              decoration: BoxDecoration(
+                color: showActive
+                    ? theme.colorScheme.primary
+                    : theme.colorScheme.outlineVariant,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -339,8 +573,8 @@ class _EquipmentTableSource extends DataTableSource {
           (col) => DataCell(
             Text(
               col.displayValue(row),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
+              softWrap: true,
+              overflow: TextOverflow.visible,
             ),
             onTap: () => _onRowTap?.call(index),
             onDoubleTap: () => _onDoubleTap(row, col.key),

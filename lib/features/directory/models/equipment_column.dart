@@ -33,7 +33,7 @@ class EquipmentColumn {
   static final owner = EquipmentColumn(
     'owner',
     'Κάτοχος',
-    (row) => row.$2?.name ?? '–',
+    (row) => row.$2?.name ?? 'Χωρίς κάτοχο',
     (row) => row.$2?.name ?? '',
   );
   static final location = EquipmentColumn(

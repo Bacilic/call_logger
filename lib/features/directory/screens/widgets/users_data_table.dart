@@ -42,14 +42,36 @@ class UsersDataTable extends StatefulWidget {
   State<UsersDataTable> createState() => _UsersDataTableState();
 }
 
+const _minColumnWidth = 40.0;
+const _maxColumnWidth = 600.0;
+const _defaultUserColumnWidths = [
+  52.0,  // checkbox
+  56.0,  // ID
+  140.0, // Επώνυμο
+  120.0, // Όνομα
+  120.0, // Τηλέφωνο
+  140.0, // Τμήμα
+  120.0, // Τοποθεσία
+  180.0, // Σημειώσεις
+];
+
 class _UsersDataTableState extends State<UsersDataTable> {
   final _source = _UsersTableSource();
   final FocusNode _tableFocusNode = FocusNode();
   final ScrollController _verticalScrollController = ScrollController();
+  final ScrollController _horizontalScrollController = ScrollController();
+  late List<double> _columnWidths;
+
+  @override
+  void initState() {
+    super.initState();
+    _columnWidths = List<double>.from(_defaultUserColumnWidths);
+  }
 
   @override
   void dispose() {
     _verticalScrollController.dispose();
+    _horizontalScrollController.dispose();
     _tableFocusNode.dispose();
     super.dispose();
   }
@@ -74,6 +96,135 @@ class _UsersDataTableState extends State<UsersDataTable> {
 
   Color? get _focusHighlightColor =>
       Theme.of(context).colorScheme.surfaceContainerHighest;
+
+  static const _sortColumnToIndex = {
+    'id': 1,
+    'last_name': 2,
+    'first_name': 3,
+    'phone': 4,
+    'department': 5,
+    'location': 6,
+  };
+
+  Widget _buildStickyHeader(
+    BuildContext context,
+    List<DataColumn> columns,
+    double headingHeight,
+    Color? headingColor,
+    TextStyle headingTextStyle,
+    Map<int, TableColumnWidth> columnWidths,
+  ) {
+    final sortedIndex = widget.sortColumn != null
+        ? _sortColumnToIndex[widget.sortColumn] ?? -1
+        : -1;
+    final asc = widget.sortAscending;
+    return Table(
+      columnWidths: columnWidths,
+      defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+      children: [
+        TableRow(
+          decoration: BoxDecoration(
+            color: headingColor ?? Theme.of(context).colorScheme.surfaceContainerHighest,
+          ),
+          children: [
+            for (var i = 0; i < columns.length; i++)
+              TableCell(
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Expanded(
+                      child: Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          onTap: columns[i].onSort != null
+                              ? () => columns[i].onSort!(
+                                  0,
+                                  i == sortedIndex ? !asc : true,
+                                )
+                              : null,
+                    child: Container(
+                      height: headingHeight,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 12,
+                      ),
+                      alignment: Alignment.centerLeft,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Expanded(
+                            child: DefaultTextStyle(
+                              style: headingTextStyle,
+                              child: columns[i].label,
+                            ),
+                          ),
+                          if (i == sortedIndex) ...[
+                            const SizedBox(width: 4),
+                            Icon(
+                              asc ? Icons.arrow_drop_up : Icons.arrow_drop_down,
+                              size: 20,
+                              color: Theme.of(context).colorScheme.onSurface,
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                        ),
+                      ),
+                    ),
+                    if (i < columns.length - 1)
+                      _TableResizeHandle(
+                        onResize: (delta) {
+                          setState(() {
+                            _columnWidths[i] = (_columnWidths[i] + delta)
+                                .clamp(_minColumnWidth, _maxColumnWidth);
+                          });
+                        },
+                      ),
+                  ],
+                ),
+              ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  TableRow _dataRowToTableRow(
+    BuildContext context,
+    DataRow dataRow,
+    int rowIndex,
+  ) {
+    final theme = Theme.of(context);
+    final dataTableTheme = theme.dataTableTheme;
+    final rowColor = dataRow.selected
+        ? (dataTableTheme.dataRowColor?.resolve({WidgetState.selected}) ??
+            theme.colorScheme.primaryContainer.withValues(alpha: 0.3))
+        : dataTableTheme.dataRowColor?.resolve({WidgetState.selected});
+    return TableRow(
+      decoration: BoxDecoration(color: rowColor),
+      children: [
+        for (final cell in dataRow.cells)
+          TableCell(
+            verticalAlignment: TableCellVerticalAlignment.middle,
+            child: InkWell(
+              onTap: cell.onTap,
+              onDoubleTap: cell.onDoubleTap,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 12,
+                ),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: cell.child,
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
 
   KeyEventResult _handleKey(FocusNode node, KeyEvent event) {
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
@@ -132,11 +283,6 @@ class _UsersDataTableState extends State<UsersDataTable> {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final width = constraints.maxWidth.isFinite
-            ? constraints.maxWidth
-            : MediaQuery.sizeOf(context).width;
-        final tableWidth = width > 700 ? width : 700.0;
-
         final columns = <DataColumn>[
           DataColumn(
             label: _SelectAllCheckbox(
@@ -193,36 +339,71 @@ class _UsersDataTableState extends State<UsersDataTable> {
             final row = _source.getRow(i);
             if (row != null) rows.add(row);
           }
+          final theme = Theme.of(context);
+          final dataTableTheme = theme.dataTableTheme;
+          final headingHeight =
+              dataTableTheme.headingRowHeight ?? 56.0;
+          final Color? headingColor =
+              (dataTableTheme.headingRowColor ?? theme.colorScheme.surfaceContainerHighest) as Color?;
+          final columnWidths = Map<int, TableColumnWidth>.fromIterables(
+            List.generate(_columnWidths.length, (i) => i),
+            _columnWidths.map((w) => FixedColumnWidth(w)),
+          );
+          const columnSpacing = 24.0;
+          const horizontalMargin = 16.0;
+          final tableWidth = _columnWidths.fold<double>(0, (a, b) => a + b) +
+              (_columnWidths.length - 1) * columnSpacing +
+              horizontalMargin * 2;
           tableContent = Scrollbar(
             controller: _verticalScrollController,
             thumbVisibility: true,
             thickness: 12,
             radius: const Radius.circular(10),
             child: SingleChildScrollView(
-              controller: _verticalScrollController,
-              scrollDirection: Axis.vertical,
-              child: SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: SizedBox(
-                  width: tableWidth,
-                  child: DataTable(
-                    showCheckboxColumn: false,
-                    columns: columns,
-                    rows: rows,
-                    columnSpacing: 24,
-                    horizontalMargin: 16,
-                  ),
+              controller: _horizontalScrollController,
+              scrollDirection: Axis.horizontal,
+              child: SizedBox(
+                width: tableWidth,
+                height: constraints.maxHeight,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _buildStickyHeader(
+                      context,
+                      columns,
+                      headingHeight,
+                      headingColor,
+                      dataTableTheme.headingTextStyle ?? theme.textTheme.titleSmall!,
+                      columnWidths,
+                    ),
+                    Expanded(
+                      child: SingleChildScrollView(
+                        controller: _verticalScrollController,
+                        child: Table(
+                          columnWidths: columnWidths,
+                          defaultVerticalAlignment:
+                              TableCellVerticalAlignment.middle,
+                          children: [
+                            for (var i = 0; i < rows.length; i++)
+                              _dataRowToTableRow(context, rows[i], i),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),
           );
         } else {
+          final fallbackTableWidth = 700.0;
           tableContent = SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: SingleChildScrollView(
               scrollDirection: Axis.vertical,
               child: SizedBox(
-                width: tableWidth,
+                width: fallbackTableWidth,
                 child: PaginatedDataTable(
                   showCheckboxColumn: false,
                   columns: columns,
@@ -246,6 +427,54 @@ class _UsersDataTableState extends State<UsersDataTable> {
           ),
         );
       },
+    );
+  }
+}
+
+class _TableResizeHandle extends StatefulWidget {
+  const _TableResizeHandle({required this.onResize});
+
+  final void Function(double delta) onResize;
+
+  @override
+  State<_TableResizeHandle> createState() => _TableResizeHandleState();
+}
+
+class _TableResizeHandleState extends State<_TableResizeHandle> {
+  bool _isHovered = false;
+  bool _isDragging = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final showActive = _isHovered || _isDragging;
+    return MouseRegion(
+      cursor: SystemMouseCursors.resizeColumn,
+      onEnter: (_) => setState(() => _isHovered = true),
+      onExit: (_) => setState(() => _isHovered = false),
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onHorizontalDragStart: (_) => setState(() => _isDragging = true),
+        onHorizontalDragEnd: (_) => setState(() => _isDragging = false),
+        onHorizontalDragCancel: () => setState(() => _isDragging = false),
+        onHorizontalDragUpdate: (details) => widget.onResize(details.delta.dx),
+        child: SizedBox(
+          width: 12,
+          child: Center(
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 120),
+              width: 2,
+              height: showActive ? 26 : 18,
+              decoration: BoxDecoration(
+                color: showActive
+                    ? theme.colorScheme.primary
+                    : theme.colorScheme.outlineVariant,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
@@ -352,35 +581,55 @@ class _UsersTableSource extends DataTableSource {
           onDoubleTap: () => _onDoubleTap(user, 'id'),
         ),
         DataCell(
-          Text(user.lastName ?? ''),
+          Text(
+            user.lastName ?? '',
+            softWrap: true,
+            overflow: TextOverflow.visible,
+          ),
           onTap: () => _onRowTap?.call(index),
           onDoubleTap: () => _onDoubleTap(user, 'lastName'),
         ),
         DataCell(
-          Text(user.firstName ?? ''),
+          Text(
+            user.firstName ?? '',
+            softWrap: true,
+            overflow: TextOverflow.visible,
+          ),
           onTap: () => _onRowTap?.call(index),
           onDoubleTap: () => _onDoubleTap(user, 'firstName'),
         ),
         DataCell(
-          Text(user.phone ?? ''),
+          Text(
+            user.phone ?? '',
+            softWrap: true,
+            overflow: TextOverflow.visible,
+          ),
           onTap: () => _onRowTap?.call(index),
           onDoubleTap: () => _onDoubleTap(user, 'phone'),
         ),
         DataCell(
-          Text(user.department ?? ''),
+          Text(
+            user.department ?? '',
+            softWrap: true,
+            overflow: TextOverflow.visible,
+          ),
           onTap: () => _onRowTap?.call(index),
           onDoubleTap: () => _onDoubleTap(user, 'department'),
         ),
         DataCell(
-          Text(user.location ?? ''),
+          Text(
+            user.location ?? '',
+            softWrap: true,
+            overflow: TextOverflow.visible,
+          ),
           onTap: () => _onRowTap?.call(index),
           onDoubleTap: () => _onDoubleTap(user, 'location'),
         ),
         DataCell(
           Text(
             user.notes ?? '',
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
+            softWrap: true,
+            overflow: TextOverflow.visible,
           ),
           onTap: () => _onRowTap?.call(index),
           onDoubleTap: () => _onDoubleTap(user, 'notes'),

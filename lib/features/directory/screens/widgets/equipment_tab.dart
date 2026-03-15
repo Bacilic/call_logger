@@ -216,6 +216,7 @@ class _EquipmentTabState extends ConsumerState<EquipmentTab> {
       builder: (ctx) => BulkEquipmentEditDialog(
         selectedRows: selectedRows,
         notifier: ref.read(equipmentDirectoryProvider.notifier),
+        ref: ref,
       ),
     );
   }
@@ -245,6 +246,7 @@ class _EquipmentTabState extends ConsumerState<EquipmentTab> {
       builder: (ctx) => EquipmentFormDialog(
         initialEquipment: initialEquipment,
         notifier: ref.read(equipmentDirectoryProvider.notifier),
+        ref: ref,
         isClone: isClone,
         focusedField: focusedField,
       ),

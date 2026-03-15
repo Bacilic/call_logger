@@ -511,7 +511,7 @@ class CallHeaderNotifier extends Notifier<CallHeaderState> {
 
     final msg = state.associationTooltip;
     if (state.needsNewCallerCreation) {
-      final name = state.normalizedCallerDisplayText;
+      final name = NameParserUtility.stripParentheticalSuffix(state.normalizedCallerDisplayText);
       final phone = state.selectedPhone?.trim();
       final equipmentCode = state.equipmentText.trim();
       final parsed = NameParserUtility.parse(name);

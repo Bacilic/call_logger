@@ -104,6 +104,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('–'), findsNWidgets(3));
+    expect(find.text('Χωρίς κάτοχο'), findsOneWidget);
+    expect(find.text('–'), findsNWidgets(2));
   });
 }

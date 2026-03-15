@@ -199,10 +199,50 @@ class _UsersTabState extends ConsumerState<UsersTab> {
     final notifier = ref.read(directoryProvider.notifier);
     await notifier.deleteSelected();
     if (!context.mounted) return;
-    final deletedCount = ref.read(directoryProvider).lastDeleted?.length ?? count;
+    final deleted = ref.read(directoryProvider).lastDeleted ?? [];
+    final deletedCount = deleted.length;
+    final names = deleted.map((u) => u.name?.trim().isEmpty ?? true ? '?' : u.name!).toList();
+    const maxNamesLength = 70;
+    final namesPart = names.join(', ');
+    int take = 0;
+    int len = 0;
+    for (; take < names.length; take++) {
+      final add = (take == 0 ? '' : ', ') + names[take];
+      if (len + add.length > maxNamesLength) break;
+      len += add.length;
+    }
+    final truncated = take < names.length;
+    final displayNames = truncated ? '${names.sublist(0, take).join(', ')}...' : namesPart;
+    final isOne = deletedCount == 1;
+    final label = isOne ? 'χρήστης' : 'χρήστες';
+    final message = names.isEmpty
+        ? 'Διαγράφηκαν $deletedCount $label.'
+        : 'Διαγράφηκαν $deletedCount $label: $displayNames';
+    final tooltipAllNames = names.isEmpty ? null : names.join(', ');
+
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('Διαγράφηκαν $deletedCount χρήστες.'),
+        content: Row(
+          children: [
+            Expanded(
+              child: tooltipAllNames != null
+                  ? Tooltip(
+                      message: tooltipAllNames,
+                      child: Text(message),
+                    )
+                  : Text(message),
+            ),
+            IconButton(
+              icon: const Icon(Icons.close, size: 20),
+              onPressed: () => ScaffoldMessenger.of(context).hideCurrentSnackBar(),
+              style: IconButton.styleFrom(
+                foregroundColor: Theme.of(context).colorScheme.onInverseSurface,
+                padding: const EdgeInsets.all(4),
+                minimumSize: const Size(32, 32),
+              ),
+            ),
+          ],
+        ),
         duration: const Duration(seconds: 5),
         action: SnackBarAction(
           label: 'Αναίρεση',

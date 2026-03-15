@@ -7,6 +7,7 @@ import '../../../../core/utils/name_parser.dart';
 import '../../../../core/utils/search_text_normalizer.dart';
 import '../../models/equipment_model.dart';
 import '../../models/user_model.dart';
+import '../../provider/call_entry_provider.dart';
 import '../../provider/call_header_provider.dart';
 import '../../provider/lookup_provider.dart';
 
@@ -31,6 +32,18 @@ class _CallHeaderFormState extends ConsumerState<CallHeaderForm> {
     _notifier.checkContent();
   }
 
+  void _onPhoneFocusOut() {
+    _notifier.checkContent();
+    if (!_phoneFocusNode.hasFocus) {
+      final digits = _phoneController.text.replaceAll(RegExp(r'[^0-9]'), '');
+      if (digits.isNotEmpty) {
+        ref.read(callEntryProvider.notifier).startTimerOnce();
+      } else {
+        ref.read(callEntryProvider.notifier).resetTimerToStandby();
+      }
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -51,14 +64,14 @@ class _CallHeaderFormState extends ConsumerState<CallHeaderForm> {
       caller: _callerController,
       equipment: _equipmentController,
     );
-    _phoneFocusNode.addListener(_onFocusOut);
+    _phoneFocusNode.addListener(_onPhoneFocusOut);
     _callerFocusNode.addListener(_onFocusOut);
     _equipmentFocusNode.addListener(_onFocusOut);
   }
 
   @override
   void dispose() {
-    _phoneFocusNode.removeListener(_onFocusOut);
+    _phoneFocusNode.removeListener(_onPhoneFocusOut);
     _callerFocusNode.removeListener(_onFocusOut);
     _equipmentFocusNode.removeListener(_onFocusOut);
     _notifier.unregisterFocusNodes();
@@ -130,9 +143,28 @@ class _CallHeaderFormState extends ConsumerState<CallHeaderForm> {
                   _callerController.clear();
                   _equipmentController.clear();
                   _notifier.clearAll();
+                  ref.read(callEntryProvider.notifier).resetTimerToStandby();
                   _phoneFocusNode.requestFocus();
                 },
                 onContentChecked: () => _notifier.checkContent(),
+                onPhoneSubmitted: () {
+                  final digits = _phoneController.text.replaceAll(RegExp(r'[^0-9]'), '');
+                  if (digits.isNotEmpty) {
+                    ref.read(callEntryProvider.notifier).startTimerOnce();
+                  } else {
+                    ref.read(callEntryProvider.notifier).resetTimerToStandby();
+                  }
+                },
+                onPhoneBecameEmpty: () =>
+                    ref.read(callEntryProvider.notifier).resetTimerToStandby(),
+                onPhoneSelectedFromList: (value) {
+                  final digits = value.replaceAll(RegExp(r'[^0-9]'), '');
+                  if (digits.isNotEmpty) {
+                    ref.read(callEntryProvider.notifier).startTimerOnce();
+                  } else {
+                    ref.read(callEntryProvider.notifier).resetTimerToStandby();
+                  }
+                },
               ),
             ),
             const SizedBox(width: 12),
@@ -180,6 +212,7 @@ class _CallHeaderFormState extends ConsumerState<CallHeaderForm> {
                       _callerController.clear();
                       _equipmentController.clear();
                       _notifier.clearAll();
+                      ref.read(callEntryProvider.notifier).resetTimerToStandby();
                       _phoneFocusNode.requestFocus();
                     },
                   ),
@@ -226,6 +259,9 @@ class _PhoneField extends StatefulWidget {
     required this.onLessThan2DigitsSubmit,
     required this.onClearAll,
     required this.onContentChecked,
+    required this.onPhoneSubmitted,
+    required this.onPhoneBecameEmpty,
+    required this.onPhoneSelectedFromList,
   });
 
   final double width;
@@ -238,6 +274,9 @@ class _PhoneField extends StatefulWidget {
   final VoidCallback onLessThan2DigitsSubmit;
   final VoidCallback onClearAll;
   final VoidCallback onContentChecked;
+  final VoidCallback onPhoneSubmitted;
+  final VoidCallback onPhoneBecameEmpty;
+  final ValueChanged<String> onPhoneSelectedFromList;
 
   @override
   State<_PhoneField> createState() => _PhoneFieldState();
@@ -318,6 +357,7 @@ class _PhoneFieldState extends State<_PhoneField> {
                 notifier.updatePhone(value);
                 notifier.markPhoneUsed(value);
                 notifier.performPhoneLookup(value.replaceAll(RegExp(r'[^0-9]'), ''));
+                widget.onPhoneSelectedFromList(value);
               },
               fieldViewBuilder: (
                 context,
@@ -357,6 +397,9 @@ class _PhoneFieldState extends State<_PhoneField> {
                     onChanged: (value) {
                     final digits = value.replaceAll(RegExp(r'[^0-9]'), '');
                     notifier.updatePhone(digits.isEmpty ? null : digits);
+                    if (digits.isEmpty) {
+                      widget.onPhoneBecameEmpty();
+                    }
                   },
                   onSubmitted: (value) {
                     final digits = value.replaceAll(RegExp(r'[^0-9]'), '');
@@ -365,6 +408,7 @@ class _PhoneFieldState extends State<_PhoneField> {
                       return;
                     }
                     onContentChecked();
+                    widget.onPhoneSubmitted();
                     nextFocusNode.requestFocus();
                     _scheduleCompletedLookup();
                   },
@@ -411,14 +455,8 @@ class _CallerFieldState extends State<_CallerField> {
   bool _showSuggestionList = false;
 
   String _extractDisplayName(String selection) {
-    if (selection == 'Άγνωστος') {
-      return selection;
-    }
-    final idx = selection.indexOf(' (');
-    if (idx <= 0) {
-      return selection.trim();
-    }
-    return selection.substring(0, idx).trim();
+    if (selection == 'Άγνωστος') return selection;
+    return NameParserUtility.stripParentheticalSuffix(selection);
   }
 
   UserModel? _resolveSelectedUser(
@@ -832,6 +870,8 @@ class _EquipmentField extends StatefulWidget {
 class _EquipmentFieldState extends State<_EquipmentField> {
   bool _isSelectingEquipment = false;
   bool _showInitialList = false;
+  /// True μόνο αμέσως μετά επιλογή από _EquipmentSuggestionList· αποτρέπει το didUpdateWidget από clear.
+  bool _justSelectedFromCustomList = false;
 
   @override
   void initState() {
@@ -1008,8 +1048,9 @@ class _EquipmentFieldState extends State<_EquipmentField> {
   static String _equipmentFieldText(EquipmentModel e) =>
       e.code?.trim().isNotEmpty == true ? e.code!.trim() : e.displayLabel;
 
-  void _selectEquipment(EquipmentModel equipment) {
+  void _selectEquipment(EquipmentModel equipment, {bool fromCustomList = false}) {
     _isSelectingEquipment = true;
+    if (fromCustomList) _justSelectedFromCustomList = true;
     widget.controller.text = _equipmentFieldText(equipment);
     widget.notifier.setEquipment(equipment);
     widget.notifier.checkContent();
@@ -1017,7 +1058,10 @@ class _EquipmentFieldState extends State<_EquipmentField> {
       _showInitialList = false;
     });
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _isSelectingEquipment = false;
+      if (mounted) {
+        _isSelectingEquipment = false;
+        if (fromCustomList) _justSelectedFromCustomList = false;
+      }
     });
   }
 
@@ -1043,6 +1087,7 @@ class _EquipmentFieldState extends State<_EquipmentField> {
     if (sel == null &&
         oldWidget.header.selectedEquipment != null &&
         !_isSelectingEquipment &&
+        !_justSelectedFromCustomList &&
         widget.header.equipmentCandidates.length <= 1 &&
         widget.header.isEquipmentAmbiguous == false) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -1148,7 +1193,7 @@ class _EquipmentFieldState extends State<_EquipmentField> {
               _EquipmentSuggestionList(
                 suggestions: initialSuggestions,
                 theme: theme,
-                onSelected: _selectEquipment,
+                onSelected: (e) => _selectEquipment(e, fromCustomList: true),
               ),
           ],
         ),

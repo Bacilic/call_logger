@@ -621,7 +621,7 @@ class DatabaseHelper {
       'issue': call.issue,
       'solution': call.solution,
       'category': call.category,
-      'status': call.status ?? 'open',
+      'status': call.status ?? 'completed',
       'duration': call.duration,
       'is_priority': call.isPriority ?? 0,
     };

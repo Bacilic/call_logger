@@ -7,6 +7,7 @@ import 'package:path/path.dart' as path;
 
 import '../../../core/config/app_config.dart';
 import '../../../core/database/database_helper.dart';
+import '../../../core/providers/settings_provider.dart';
 import '../../../core/services/settings_service.dart';
 import '../../calls/provider/remote_paths_provider.dart';
 import '../../directory/providers/directory_provider.dart';
@@ -29,16 +30,21 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   bool _isLoadingPath = true;
   String? _errorMessage;
   bool _showImportExcelButton = false;
+  bool _showActiveTimer = true;
   bool _vncPasswordObscure = true;
 
   final TextEditingController _vncPathController = TextEditingController();
   final TextEditingController _vncPasswordController = TextEditingController();
   final TextEditingController _anydeskPathController = TextEditingController();
+  final TextEditingController _remoteSurfaceAppsController = TextEditingController();
+  final TextEditingController _equipmentTypesController = TextEditingController();
 
   /// Αρχικές τιμές ρυθμίσεων απομακρυσμένης σύνδεσης (όταν φορτώθηκαν) για σύγκριση.
   String _initialVncPath = '';
   String _initialVncPassword = '';
   String _initialAnydeskPath = '';
+  String _initialRemoteSurfaceApps = '';
+  String _initialEquipmentTypes = '';
 
   @override
   void initState() {
@@ -51,6 +57,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     _vncPathController.dispose();
     _vncPasswordController.dispose();
     _anydeskPathController.dispose();
+    _remoteSurfaceAppsController.dispose();
+    _equipmentTypesController.dispose();
     super.dispose();
   }
 
@@ -76,21 +84,29 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         paths = paths.take(3).toList();
       }
       final showImport = await _settings.getShowImportExcelButton();
+      final showActiveTimer = await _settings.getShowActiveTimer();
       final vncPath = await _settings.getVncPath();
       final vncPassword = await _settings.getVncPassword();
       final anydeskPath = await _settings.getAnydeskPath();
+      final remoteSurfaceApps = await _settings.getRemoteSurfaceAppsRaw();
+      final equipmentTypes = await _settings.getEquipmentTypesRaw();
       if (mounted) {
         _vncPathController.text = vncPath;
         _vncPasswordController.text = vncPassword;
         _anydeskPathController.text = anydeskPath;
+        _remoteSurfaceAppsController.text = remoteSurfaceApps;
+        _equipmentTypesController.text = equipmentTypes;
         _initialVncPath = vncPath;
         _initialVncPassword = vncPassword;
         _initialAnydeskPath = anydeskPath;
+        _initialRemoteSurfaceApps = remoteSurfaceApps;
+        _initialEquipmentTypes = equipmentTypes;
         setState(() {
           _currentPath = p;
           _recentPaths = paths;
           _currentPathExists = exists;
           _showImportExcelButton = showImport;
+          _showActiveTimer = showActiveTimer;
           _isLoadingPath = false;
         });
       }
@@ -338,13 +354,15 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     );
   }
 
-  /// Αποθήκευση ρυθμίσεων VNC/AnyDesk από τα πεδία στη βάση (app_settings).
+  /// Αποθήκευση ρυθμίσεων VNC/AnyDesk και τύπων εξοπλισμού στη βάση (app_settings).
   /// Επιτρέπεται μη έγκυρη διαδρομή (π.χ. όταν δεν υπάρχει VNC/AnyDesk στον υπολογιστή).
   Future<void> _saveRemoteConnectionSettings() async {
     try {
       await _settings.setVncPath(_vncPathController.text.trim());
       await _settings.setVncPassword(_vncPasswordController.text);
       await _settings.setAnydeskPath(_anydeskPathController.text);
+      await _settings.setRemoteSurfaceApps(_remoteSurfaceAppsController.text.trim());
+      await _settings.setEquipmentTypes(_equipmentTypesController.text.trim());
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -360,6 +378,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     _initialVncPath = _vncPathController.text.trim();
     _initialVncPassword = _vncPasswordController.text;
     _initialAnydeskPath = _anydeskPathController.text.trim();
+    _initialRemoteSurfaceApps = _remoteSurfaceAppsController.text.trim();
+    _initialEquipmentTypes = _equipmentTypesController.text.trim();
     setState(() {});
     ref.invalidate(validRemotePathsProvider);
     ref.invalidate(remoteLauncherStatusProvider);
@@ -368,11 +388,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     );
   }
 
-  /// True αν άλλαξε κάποια από τις ρυθμίσεις απομακρυσμένης σύνδεσης.
+  /// True αν άλλαξε κάποια από τις ρυθμίσεις απομακρυσμένης σύνδεσης ή τύπων εξοπλισμού.
   bool get _hasRemoteSettingsChanged =>
       _vncPathController.text.trim() != _initialVncPath.trim() ||
       _vncPasswordController.text != _initialVncPassword ||
-      _anydeskPathController.text.trim() != _initialAnydeskPath.trim();
+      _anydeskPathController.text.trim() != _initialAnydeskPath.trim() ||
+      _remoteSurfaceAppsController.text.trim() != _initialRemoteSurfaceApps.trim() ||
+      _equipmentTypesController.text.trim() != _initialEquipmentTypes.trim();
 
   /// Επιλογή εκτελέσιμου αρχείου (.exe) και εισαγωγή της διαδρομής στο [controller].
   Future<void> _pickExecutablePath(TextEditingController controller) async {
@@ -685,6 +707,26 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 ),
               ),
             ],
+            const SizedBox(height: 12),
+            TextField(
+              controller: _remoteSurfaceAppsController,
+              onChanged: (_) => setState(() {}),
+              decoration: const InputDecoration(
+                labelText: 'Εφαρμογή απομακρυσμένης επιφάνειας',
+                hintText: 'Διαχωρίστε με κόμμα, π.χ. AnyDesk, VNC',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _equipmentTypesController,
+              onChanged: (_) => setState(() {}),
+              decoration: const InputDecoration(
+                labelText: 'Τύποι εξοπλισμού',
+                hintText: 'Διαχωρίστε με κόμμα, π.χ. Υπολογιστής, Εκτυπωτής, Οθόνη',
+                border: OutlineInputBorder(),
+              ),
+            ),
             const SizedBox(height: 16),
             FilledButton.tonalIcon(
               onPressed: _hasRemoteSettingsChanged ? _saveRemoteConnectionSettings : null,
@@ -710,6 +752,18 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               title: const Text('Εμφάνιση κουμπιού Import Excel'),
               subtitle: const Text(
                 'Ενεργοποίηση για να εμφανίζεται το κουμπί εισαγωγής Excel στην κύρια οθόνη.',
+              ),
+            ),
+            SwitchListTile(
+              value: _showActiveTimer,
+              onChanged: (value) async {
+                await _settings.setShowActiveTimer(value);
+                if (mounted) setState(() => _showActiveTimer = value);
+                ref.invalidate(showActiveTimerProvider);
+              },
+              title: const Text('Εμφάνιση ενεργού χρονομέτρου'),
+              subtitle: const Text(
+                'Ενεργοποίηση για να εμφανίζεται ο χρόνος (MM:SS) στη φόρμα καταγραφής κλήσεων.',
               ),
             ),
             SwitchListTile(

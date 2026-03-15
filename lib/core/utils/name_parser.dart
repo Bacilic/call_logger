@@ -3,6 +3,15 @@
 class NameParserUtility {
   NameParserUtility._();
 
+  /// Αφαιρεί τυχόν παρενθετικό τμήμα στο τέλος (π.χ. " (Τμήμα)") για αναζήτηση/parse.
+  /// Χρήση: όταν το κείμενο προέρχεται από fullNameWithDepartment ώστε να μην μπει το τμήμα στο επώνυμο.
+  static String stripParentheticalSuffix(String value) {
+    final v = value.trim();
+    final idx = v.indexOf(' (');
+    if (idx <= 0) return v;
+    return v.substring(0, idx).trim();
+  }
+
   /// Κανονικοποιεί το [fullName] (trim, πολλαπλά κενά → ένα) και το χωρίζει σε όνομα/επώνυμο.
   ///
   /// Heuristics:

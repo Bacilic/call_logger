@@ -10,6 +10,7 @@ import '../../features/calls/provider/lookup_provider.dart';
 import '../../features/calls/screens/calls_screen.dart';
 import '../../features/calls/screens/widgets/import_console_widget.dart';
 import '../../features/database/screens/database_browser_screen.dart';
+import '../../features/tasks/screens/tasks_screen.dart';
 import '../../features/directory/screens/directory_screen.dart';
 import '../../features/settings/screens/settings_screen.dart';
 import '../services/import_service.dart';
@@ -172,7 +173,7 @@ class _MainShellState extends ConsumerState<MainShell> {
                           ),
                     ),
                   ),
-                if (_selectedIndex != 2)
+                if (_selectedIndex != 2 && _selectedIndex != 1)
                   Padding(
                     padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
                     child: Column(
@@ -215,6 +216,7 @@ class _MainShellState extends ConsumerState<MainShell> {
                   ),
                 Expanded(
                   child: switch (_selectedIndex) {
+                    1 => const TasksScreen(),
                     2 => const DirectoryScreen(),
                     4 => const DatabaseBrowserScreen(),
                     _ => const CallsScreen(),
