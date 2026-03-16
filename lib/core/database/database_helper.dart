@@ -102,7 +102,7 @@ class DatabaseHelper {
     try {
       db = await openDatabase(
         dbPath,
-        version: 7,
+        version: 8,
         onCreate: _onCreate,
         onUpgrade: _onUpgrade,
         singleInstance: false,
@@ -145,7 +145,7 @@ class DatabaseHelper {
   Future<void> createNewDatabaseFile(String filePath) async {
     final db = await openDatabase(
       filePath,
-      version: 7,
+      version: 8,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
       singleInstance: false,
@@ -249,6 +249,36 @@ class DatabaseHelper {
         value TEXT
       )
     ''');
+
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS remote_tool_args (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        tool_name TEXT,
+        arg_flag TEXT,
+        description TEXT,
+        is_active INTEGER DEFAULT 0
+      )
+    ''');
+    await _seedRemoteToolArgsIfEmpty(db);
+  }
+
+  /// Εισάγει προεπιλεγμένα ορίσματα VNC/AnyDesk αν ο πίνακας remote_tool_args είναι άδειος.
+  static Future<void> _seedRemoteToolArgsIfEmpty(Database db) async {
+    final result = await db.rawQuery('SELECT COUNT(*) AS c FROM remote_tool_args');
+    final count = result.isNotEmpty ? (result.first['c'] as int? ?? 0) : 0;
+    if (count > 0) return;
+
+    final defaults = <Map<String, dynamic>>[
+      {'tool_name': 'vnc', 'arg_flag': '-host={TARGET}', 'description': 'Host/IP στόχου', 'is_active': 1},
+      {'tool_name': 'vnc', 'arg_flag': '-password={PASSWORD}', 'description': 'Κωδικός VNC', 'is_active': 1},
+      {'tool_name': 'vnc', 'arg_flag': '-fullscreen', 'description': 'Πλήρης οθόνη', 'is_active': 0},
+      {'tool_name': 'vnc', 'arg_flag': '-viewonly', 'description': 'Μόνο προβολή', 'is_active': 0},
+      {'tool_name': 'anydesk', 'arg_flag': '{TARGET}', 'description': 'AnyDesk ID στόχου', 'is_active': 1},
+      {'tool_name': 'anydesk', 'arg_flag': '--fullscreen', 'description': 'Πλήρης οθόνη', 'is_active': 0},
+    ];
+    for (final row in defaults) {
+      await db.insert('remote_tool_args', row);
+    }
   }
 
   /// Επιστρέφει true αν ο πίνακας [table] έχει τη στήλη [column].
@@ -318,6 +348,18 @@ class DatabaseHelper {
       if (!await _tableHasColumn(db, 'tasks', 'equipment_id')) {
         await db.execute('ALTER TABLE tasks ADD COLUMN equipment_id INTEGER');
       }
+    }
+    if (oldVersion < 8) {
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS remote_tool_args (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          tool_name TEXT,
+          arg_flag TEXT,
+          description TEXT,
+          is_active INTEGER DEFAULT 0
+        )
+      ''');
+      await _seedRemoteToolArgsIfEmpty(db);
     }
   }
 
@@ -700,6 +742,65 @@ class DatabaseHelper {
     } catch (e) {
       return DatabaseInitResult.fromException(e);
     }
+  }
+
+  /// Επιστρέφει ονόματα κατηγοριών από τον πίνακα categories (για dropdown φίλτρων).
+  Future<List<String>> getCategoryNames() async {
+    final db = await database;
+    final rows = await db.query('categories', columns: ['name'], orderBy: 'name');
+    return rows.map((r) => r['name'] as String? ?? '').where((s) => s.isNotEmpty).toList();
+  }
+
+  /// Ιστορικό κλήσεων με προαιρετικά φίλτρα. LEFT JOIN users και equipment.
+  /// [keyword]: αναζήτηση LIKE σε issue, solution, caller_text, όνομα χρήστη, code_equipment.
+  /// [dateFrom] / [dateTo]: ημερομηνίες σε μορφή yyyy-MM-dd.
+  Future<List<Map<String, dynamic>>> getHistoryCalls({
+    String? keyword,
+    String? dateFrom,
+    String? dateTo,
+    String? category,
+  }) async {
+    final db = await database;
+    final whereClauses = <String>[];
+    final args = <dynamic>[];
+
+    if (dateFrom != null && dateFrom.isNotEmpty) {
+      whereClauses.add('calls.date >= ?');
+      args.add(dateFrom);
+    }
+    if (dateTo != null && dateTo.isNotEmpty) {
+      whereClauses.add('calls.date <= ?');
+      args.add(dateTo);
+    }
+    if (category != null && category.isNotEmpty) {
+      whereClauses.add('calls.category = ?');
+      args.add(category);
+    }
+    if (keyword != null && keyword.trim().isNotEmpty) {
+      final pattern = '%${keyword.trim()}%';
+      whereClauses.add('''
+        (calls.issue LIKE ? OR calls.solution LIKE ? OR calls.caller_text LIKE ?
+         OR (COALESCE(users.first_name, '') || ' ' || COALESCE(users.last_name, '')) LIKE ?
+         OR equipment.code_equipment LIKE ?)
+      '''.replaceAll(RegExp(r'\s+'), ' ').trim());
+      args.addAll([pattern, pattern, pattern, pattern, pattern]);
+    }
+
+    final whereSql = whereClauses.isEmpty ? '' : 'WHERE ${whereClauses.join(' AND ')}';
+    final sql = '''
+      SELECT calls.id, calls.date, calls.time, calls.caller_id, calls.equipment_id,
+             calls.issue, calls.solution, calls.caller_text, calls.category, calls.status,
+             calls.duration, calls.is_priority,
+             users.first_name AS user_first_name, users.last_name AS user_last_name,
+             equipment.code_equipment AS equipment_code
+      FROM calls
+      LEFT JOIN users ON calls.caller_id = users.id
+      LEFT JOIN equipment ON calls.equipment_id = equipment.id
+      $whereSql
+      ORDER BY calls.date DESC, calls.time DESC
+    ''';
+
+    return db.rawQuery(sql, args);
   }
 
   /// Επαληθεύει αν η διαδρομή είναι προσβάσιμη. Fallback σε τοπική όπως στο _initDatabase.

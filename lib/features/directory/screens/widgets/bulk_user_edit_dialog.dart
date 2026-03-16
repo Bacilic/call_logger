@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/utils/spell_check.dart';
 import '../../../calls/models/user_model.dart';
 import '../../providers/directory_provider.dart';
 
@@ -165,6 +166,7 @@ class _BulkUserEditDialogState extends State<BulkUserEditDialog> {
                             : null,
                         border: const OutlineInputBorder(),
                       ),
+                      spellCheckConfiguration: platformSpellCheckConfiguration,
                       onChanged: (_) => setState(() {}),
                     ),
                   ),

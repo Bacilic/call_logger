@@ -43,8 +43,8 @@ class MyApp extends StatelessWidget {
       title: 'Καταγραφή Κλήσεων v1.0',
       locale: const Locale('el'),
       supportedLocales: const [
-        Locale('el'),
-        Locale('en'),
+        Locale('el', 'GR'),
+        Locale('en', 'US'),
       ],
       localizationsDelegates: const [
         GlobalMaterialLocalizations.delegate,

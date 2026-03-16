@@ -38,6 +38,9 @@ out/
 .cursor/
 .cursorignore
 
+# Grok (αγνοείται σε @ suggestions και στο git)
+Grok/
+
 # =========================
 # FLUTTER / DART / PUB
 # =========================

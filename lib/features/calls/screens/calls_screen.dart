@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/utils/spell_check.dart';
 import '../provider/call_entry_provider.dart';
 import '../provider/call_header_provider.dart';
 import 'widgets/call_header_form.dart';
@@ -150,6 +151,7 @@ class _NotesTextFieldState extends ConsumerState<_NotesTextField> {
         alignLabelWithHint: true,
       ),
       maxLines: 3,
+      spellCheckConfiguration: platformSpellCheckConfiguration,
       onChanged: (value) =>
           ref.read(callEntryProvider.notifier).setNotes(value),
     );

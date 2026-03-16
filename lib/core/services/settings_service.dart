@@ -16,6 +16,7 @@ class SettingsService {
   static const String _keyVncPaths = 'vnc_paths';
   static const String _keyVncPassword = 'vnc_password';
   static const String _keyAnydeskPath = 'anydesk_path';
+  static const String _keyTestTargetIp = 'test_target_ip';
   static const String _keyRemoteSurfaceApps = 'remote_surface_apps';
   static const String _keyEquipmentTypes = 'equipment_types';
 
@@ -148,6 +149,17 @@ class SettingsService {
   /// Αποθηκεύει τη διαδρομή AnyDesk στη βάση.
   Future<void> setAnydeskPath(String path) async {
     if (_setAppSetting != null) await _setAppSetting!(_keyAnydeskPath, path.trim());
+  }
+
+  /// Επιστρέφει τη δοκιμαστική IP/hostname για έλεγχο παραμέτρων (Test). Κενό string αν δεν οριστεί.
+  Future<String> getTestTargetIp() async {
+    final value = _getAppSetting != null ? await _getAppSetting!(_keyTestTargetIp) : null;
+    return value ?? '';
+  }
+
+  /// Αποθηκεύει τη δοκιμαστική IP/hostname για Test (VNC/AnyDesk).
+  Future<void> setTestTargetIp(String value) async {
+    if (_setAppSetting != null) await _setAppSetting!(_keyTestTargetIp, value.trim());
   }
 
   /// Επιστρέφει το ακατέργαστο string επιλογών εφαρμογής απομακρυσμένης επιφάνειας (διαχωρισμένα με κόμμα).

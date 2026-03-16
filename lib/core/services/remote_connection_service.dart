@@ -1,13 +1,28 @@
 import 'dart:io';
 
+import 'remote_args_service.dart';
 import 'settings_service.dart';
 
 /// Υπηρεσία υποστήριξης απομακρυσμένων συνδέσεων (VNC, AnyDesk).
 /// Διαχειρίζεται την εύρεση έγκυρων διαδρομών, έλεγχο δικτύου (VNC port) και εκκίνηση διεργασιών.
 class RemoteConnectionService {
-  RemoteConnectionService(this._settings);
+  RemoteConnectionService(this._settings, this._argsService);
 
   final SettingsService _settings;
+  final RemoteArgsService _argsService;
+
+  /// Δημιουργεί λίστα ορισμάτων με αντικατάσταση placeholders.
+  List<String> _resolveArgs(
+    List<String> argFlags, {
+    required String target,
+    String password = '',
+  }) {
+    return argFlags
+        .map((flag) => flag
+            .replaceAll('{TARGET}', target)
+            .replaceAll('{PASSWORD}', password))
+        .toList();
+  }
 
   /// Επιστρέφει τη ρυθμισμένη διαδρομή VNC αν υπάρχει στο δίσκο.
   /// Επιστρέφει null αν η διαδρομή είναι κενή ή το αρχείο δεν υπάρχει.
@@ -62,10 +77,9 @@ class RemoteConnectionService {
     }
 
     final password = await _settings.getVncPassword();
-    final List<String> arguments = password.trim().isEmpty
-        ? [target]
-        : [target, '-password=$password'];
-
+    final activeArgs = await _argsService.getActiveArgsForTool('vnc');
+    final argFlags = activeArgs.map((a) => a.argFlag).toList();
+    final arguments = _resolveArgs(argFlags, target: target, password: password);
     await Process.start(path, arguments, mode: ProcessStartMode.detached);
   }
 
@@ -77,6 +91,10 @@ class RemoteConnectionService {
       throw Exception('Δεν βρέθηκε εγκατάσταση AnyDesk. Ελέγξτε τις ρυθμίσεις.');
     }
 
-    await Process.start(path, [targetId], mode: ProcessStartMode.detached);
+    final activeArgs = await _argsService.getActiveArgsForTool('anydesk');
+    final argFlags = activeArgs.map((a) => a.argFlag).toList();
+    final arguments = _resolveArgs(argFlags, target: targetId);
+
+    await Process.start(path, arguments, mode: ProcessStartMode.detached);
   }
 }

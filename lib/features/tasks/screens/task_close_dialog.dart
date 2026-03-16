@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/utils/spell_check.dart';
+
 /// Δialόγιο κλεισίματος εκκρεμότητας με υποχρεωτικό πεδίο "Λύση / Σημειώσεις Κλεισίματος".
 /// Επιστρέφει τα solutionNotes αν ο χρήστης επιβεβαιώσει, αλλιώς null.
 Future<String?> showTaskCloseDialog(BuildContext context) {
@@ -55,6 +57,7 @@ class _TaskCloseDialogState extends State<_TaskCloseDialog> {
             return null;
           },
           textCapitalization: TextCapitalization.sentences,
+          spellCheckConfiguration: platformSpellCheckConfiguration,
         ),
       ),
       actions: [

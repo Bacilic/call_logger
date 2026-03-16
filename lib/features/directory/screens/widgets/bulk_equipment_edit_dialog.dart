@@ -6,6 +6,7 @@ import '../../../../core/services/lookup_service.dart';
 import '../../../../core/services/settings_service.dart';
 import '../../../../core/utils/name_parser.dart';
 import '../../../../core/utils/search_text_normalizer.dart';
+import '../../../../core/utils/spell_check.dart';
 import '../../../calls/provider/lookup_provider.dart';
 import '../../models/equipment_column.dart';
 import '../../providers/equipment_directory_provider.dart';
@@ -438,6 +439,7 @@ class _BulkEquipmentEditDialogState extends State<BulkEquipmentEditDialog> {
                                       : null,
                                   border: const OutlineInputBorder(),
                                 ),
+                                spellCheckConfiguration: platformSpellCheckConfiguration,
                                 onChanged: (_) => setState(() {}),
                               ),
                   ),

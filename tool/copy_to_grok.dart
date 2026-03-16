@@ -32,15 +32,28 @@ void main(List<String> arguments) {
       String destFilename = item;
 
       if (isPath) {
-        // Path: σχετικό από το root του project
-        final fullPath = item.contains(sep) ? item : item.replaceAll('/', sep);
-        final file = File('${projectRoot.path}$sep$fullPath');
-        if (file.existsSync()) {
-          found = file;
-          destFilename = file.uri.pathSegments.last;
+        // Path: σχετικό από το root του project (και από lib/ αν δεν υπάρχει στο root)
+        final normalized = item.replaceAll('/', sep);
+        final candidates = [
+          '${projectRoot.path}$sep$normalized',
+          '${projectRoot.path}$sep''lib$sep$normalized',
+        ];
+        for (final p in candidates) {
+          final file = File(p);
+          if (file.existsSync()) {
+            found = file;
+            destFilename = file.uri.pathSegments.last;
+            break;
+          }
         }
       }
-      found ??= _findFileRecursively(libDir, item) ?? _findFileRecursively(projectRoot, item);
+      if (found == null) {
+        // Fallback: αναζήτηση με βάση μόνο το όνομα αρχείου (τελευταίο segment)
+        final basename = item.contains('/') || item.contains('\\')
+            ? item.replaceAll('\\', '/').split('/').last
+            : item;
+        found = _findFileRecursively(libDir, basename) ?? _findFileRecursively(projectRoot, basename);
+      }
 
       if (found != null) {
         final dest = File('${grokDir.path}$sep$destFilename');

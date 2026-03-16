@@ -11,6 +11,7 @@ import '../../../core/providers/settings_provider.dart';
 import '../../../core/services/settings_service.dart';
 import '../../calls/provider/remote_paths_provider.dart';
 import '../../directory/providers/directory_provider.dart';
+import '../widgets/remote_args_editor.dart';
 
 /// Οθόνη ρυθμίσεων: διαδρομή βάσης δεδομένων και άλλες επιλογές.
 class SettingsScreen extends ConsumerStatefulWidget {
@@ -36,6 +37,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   final TextEditingController _vncPathController = TextEditingController();
   final TextEditingController _vncPasswordController = TextEditingController();
   final TextEditingController _anydeskPathController = TextEditingController();
+  final TextEditingController _testIpController = TextEditingController();
   final TextEditingController _remoteSurfaceAppsController = TextEditingController();
   final TextEditingController _equipmentTypesController = TextEditingController();
 
@@ -57,6 +59,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     _vncPathController.dispose();
     _vncPasswordController.dispose();
     _anydeskPathController.dispose();
+    _testIpController.dispose();
     _remoteSurfaceAppsController.dispose();
     _equipmentTypesController.dispose();
     super.dispose();
@@ -88,12 +91,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       final vncPath = await _settings.getVncPath();
       final vncPassword = await _settings.getVncPassword();
       final anydeskPath = await _settings.getAnydeskPath();
+      final testTargetIp = await _settings.getTestTargetIp();
       final remoteSurfaceApps = await _settings.getRemoteSurfaceAppsRaw();
       final equipmentTypes = await _settings.getEquipmentTypesRaw();
       if (mounted) {
         _vncPathController.text = vncPath;
         _vncPasswordController.text = vncPassword;
         _anydeskPathController.text = anydeskPath;
+        _testIpController.text = testTargetIp;
         _remoteSurfaceAppsController.text = remoteSurfaceApps;
         _equipmentTypesController.text = equipmentTypes;
         _initialVncPath = vncPath;
@@ -667,6 +672,27 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               ),
             ),
             const SizedBox(height: 12),
+            TextField(
+              controller: _testIpController,
+              decoration: const InputDecoration(
+                labelText: 'Δοκιμαστική IP / Hostname (για Test)',
+                hintText: 'π.χ. 192.168.1.100',
+                border: OutlineInputBorder(),
+              ),
+              onChanged: (value) => _settings.setTestTargetIp(value),
+            ),
+            const SizedBox(height: 12),
+            ExpansionTile(
+              title: const Text('Ορίσματα εκκίνησης VNC'),
+              subtitle: const Text('Placeholders: {TARGET}, {PASSWORD}'),
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                  child: RemoteArgsEditor(toolName: 'vnc'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -707,6 +733,17 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 ),
               ),
             ],
+            const SizedBox(height: 12),
+            ExpansionTile(
+              title: const Text('Ορίσματα εκκίνησης AnyDesk'),
+              subtitle: const Text('Placeholder: {TARGET}'),
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                  child: RemoteArgsEditor(toolName: 'anydesk'),
+                ),
+              ],
+            ),
             const SizedBox(height: 12),
             TextField(
               controller: _remoteSurfaceAppsController,

@@ -6,6 +6,7 @@ import '../../../../core/services/lookup_service.dart';
 import '../../../../core/services/settings_service.dart';
 import '../../../../core/utils/name_parser.dart';
 import '../../../../core/utils/search_text_normalizer.dart';
+import '../../../../core/utils/spell_check.dart';
 import '../../../calls/models/equipment_model.dart';
 import '../../../calls/provider/lookup_provider.dart';
 import '../../providers/equipment_directory_provider.dart';
@@ -240,6 +241,7 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog> {
                   alignLabelWithHint: true,
                 ),
                 maxLines: 3,
+                spellCheckConfiguration: platformSpellCheckConfiguration,
               ),
               const SizedBox(height: 12),
               TextFormField(

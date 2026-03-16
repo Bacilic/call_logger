@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/utils/spell_check.dart';
 import '../../../calls/models/user_model.dart';
 import '../../providers/directory_provider.dart';
 
@@ -253,6 +254,7 @@ class _UserFormDialogState extends State<UserFormDialog> {
                   alignLabelWithHint: true,
                 ),
                 maxLines: 3,
+                spellCheckConfiguration: platformSpellCheckConfiguration,
                 onTap: () => _selectAll(_notesController),
               ),
             ],

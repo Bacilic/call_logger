@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/utils/spell_check.dart';
 import '../models/task.dart';
 
 /// Επιστρέφει το Task που δημιουργήθηκε/τροποποιήθηκε ή null αν ακυρώθηκε.
@@ -115,6 +116,7 @@ class _TaskFormDialogState extends State<_TaskFormDialog> {
                   validator: (v) =>
                       (v == null || v.trim().isEmpty) ? 'Υποχρεωτικό πεδίο' : null,
                   textCapitalization: TextCapitalization.sentences,
+                  spellCheckConfiguration: platformSpellCheckConfiguration,
                 ),
                 const SizedBox(height: 12),
                 TextFormField(
@@ -126,6 +128,7 @@ class _TaskFormDialogState extends State<_TaskFormDialog> {
                   ),
                   maxLines: 3,
                   textCapitalization: TextCapitalization.sentences,
+                  spellCheckConfiguration: platformSpellCheckConfiguration,
                 ),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<int>(
