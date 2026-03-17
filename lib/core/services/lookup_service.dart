@@ -3,6 +3,7 @@ import '../utils/phone_list_parser.dart';
 import '../utils/search_text_normalizer.dart';
 import '../../features/calls/models/equipment_model.dart';
 import '../../features/calls/models/user_model.dart';
+import '../../features/directory/models/department_model.dart';
 
 /// Αποτέλεσμα αναζήτησης: χρήστης και εξοπλισμός του.
 class LookupResult {
@@ -13,18 +14,35 @@ class LookupResult {
 }
 
 /// Υπηρεσία in-memory lookup: φορτώνει Users/Equipment μία φορά, search στη μνήμη.
+/// Singleton ώστε UserModel.departmentName να χρησιμοποιεί το ίδιο φορτωμένο cache.
 class LookupService {
-  LookupService() : _loaded = false;
+  LookupService._() : _loaded = false;
+
+  /// Constructor for test fakes (subclasses). Production code uses [LookupService.instance].
+  LookupService.forTest() : _loaded = false;
+
+  static final LookupService _instance = LookupService._();
+  static LookupService get instance => _instance;
 
   bool _loaded;
+  bool _loadedDepartments = false;
   final List<UserModel> _users = [];
   final List<EquipmentModel> _equipment = [];
   Map<int, List<EquipmentModel>> _equipmentByUserId = {};
 
+  List<DepartmentModel> departments = [];
+  Map<int, String> departmentIdToName = {};
+
   /// Λίστα χρηστών (μετά loadFromDatabase). Για dropdown κατόχου σε φόρμες.
   List<UserModel> get users => List.unmodifiable(_users);
 
-  /// Φόρτωση από βάση ΜΟΝΟ μία φορά κατά το init.
+  /// Επαναφορά κατάστασης (για reload μετά από invalidate του provider).
+  void resetForReload() {
+    _loaded = false;
+    _loadedDepartments = false;
+  }
+
+  /// Φόρτωση από βάση ΜΟΝΟ μία φορά κατά το init (ή μετά resetForReload).
   Future<void> loadFromDatabase() async {
     if (_loaded) return;
     final db = await DatabaseHelper.instance.database;
@@ -45,7 +63,25 @@ class LookupService {
       }
     }
     _loaded = true;
+    await loadDepartments();
   }
+
+  Future<void> loadDepartments() async {
+    if (_loadedDepartments) return;
+    final db = await DatabaseHelper.instance.database;
+    final maps = await db.query('departments');
+    departments.clear();
+    departmentIdToName.clear();
+    for (final map in maps) {
+      final dep = DepartmentModel.fromMap(map);
+      departments.add(dep);
+      if (dep.id != null) departmentIdToName[dep.id!] = dep.name;
+    }
+    _loadedDepartments = true;
+  }
+
+  String? getDepartmentName(int? id) =>
+      id == null ? null : departmentIdToName[id] ?? '';
 
   /// Αναζήτηση στη μνήμη βάσει ψηφίων τηλεφώνου. Κενά/παύλες αγνοούνται και στα δύο μέρη.
   LookupResult? search(String query) {
@@ -89,7 +125,7 @@ class LookupService {
     return _users.where((u) {
       return SearchTextNormalizer.matchesNormalizedQuery(u.name ?? '', q) ||
           SearchTextNormalizer.matchesNormalizedQuery(u.phone ?? '', q) ||
-          SearchTextNormalizer.matchesNormalizedQuery(u.department ?? '', q);
+          SearchTextNormalizer.matchesNormalizedQuery(u.departmentName ?? '', q);
     }).toList();
   }
 

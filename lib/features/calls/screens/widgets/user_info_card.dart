@@ -48,9 +48,8 @@ class UserInfoCard extends ConsumerWidget {
                 Expanded(
                   child: Column(
                     children: [
-                      _row(theme, Icons.business, 'Τμήμα', user.department),
+                      _row(theme, Icons.business, 'Τμήμα', user.departmentName ?? '–'),
                       _row(theme, Icons.phone, 'Τηλ.', user.phone),
-                      _row(theme, Icons.location_on, 'Τοποθεσία', user.location),
                     ],
                   ),
                 ),

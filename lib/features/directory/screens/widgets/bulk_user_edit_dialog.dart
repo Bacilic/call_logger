@@ -20,15 +20,13 @@ class BulkUserEditDialog extends StatefulWidget {
 }
 
 class _BulkUserEditDialogState extends State<BulkUserEditDialog> {
-  static const _fieldKeys = ['lastName', 'firstName', 'phone', 'department', 'location', 'notes'];
-  static const _dbKeys = ['last_name', 'first_name', 'phone', 'department', 'location', 'notes'];
+  static const _fieldKeys = ['lastName', 'firstName', 'phone', 'notes'];
+  static const _dbKeys = ['last_name', 'first_name', 'phone', 'notes'];
 
   final Map<String, bool> _applyField = {
     'lastName': false,
     'firstName': false,
     'phone': false,
-    'department': false,
-    'location': false,
     'notes': false,
   };
   final Map<String, TextEditingController> _controllers = {};
@@ -62,10 +60,6 @@ class _BulkUserEditDialogState extends State<BulkUserEditDialog> {
         return (u) => u.firstName;
       case 'phone':
         return (u) => u.phone;
-      case 'department':
-        return (u) => u.department;
-      case 'location':
-        return (u) => u.location;
       case 'notes':
         return (u) => u.notes;
       default:
@@ -133,8 +127,6 @@ class _BulkUserEditDialogState extends State<BulkUserEditDialog> {
       'lastName': 'Επώνυμο',
       'firstName': 'Όνομα',
       'phone': 'Τηλέφωνο',
-      'department': 'Τμήμα',
-      'location': 'Τοποθεσία',
       'notes': 'Σημειώσεις',
     };
     return AlertDialog(

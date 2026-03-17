@@ -7,6 +7,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 class _FakeLookupService extends LookupService {
+  _FakeLookupService() : super.forTest();
+
   @override
   List<String> searchPhonesByPrefix(String prefix) => const [];
 

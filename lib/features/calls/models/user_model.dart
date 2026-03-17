@@ -1,4 +1,6 @@
-/// Μοντέλο χρήστη (πίνακας users): id, last_name, first_name, phone, department, location, notes.
+import '../../../core/services/lookup_service.dart';
+
+/// Μοντέλο χρήστη (πίνακας users): id, last_name, first_name, phone, department_id, notes.
 /// Το [name] είναι υπολογιζόμενο από first_name + last_name για συμβατότητα.
 class UserModel {
   UserModel({
@@ -6,8 +8,7 @@ class UserModel {
     this.firstName,
     this.lastName,
     this.phone,
-    this.department,
-    this.location,
+    this.departmentId,
     this.notes,
   });
 
@@ -15,8 +16,7 @@ class UserModel {
   final String? firstName;
   final String? lastName;
   final String? phone;
-  final String? department;
-  final String? location;
+  final int? departmentId;
   final String? notes;
 
   /// Πλήρες όνομα (first_name + last_name). Συμβατότητα με κώδικα που χρησιμοποιεί name.
@@ -27,10 +27,13 @@ class UserModel {
     return '$f $l'.trim();
   }
 
+  String? get departmentName =>
+      LookupService.instance.getDepartmentName(departmentId);
+
   /// Για εμφάνιση σε λίστες (όνομα + τμήμα).
   String get fullNameWithDepartment {
     final n = name?.trim() ?? '';
-    final d = department?.trim() ?? '';
+    final d = departmentName?.trim() ?? '';
     if (n.isEmpty) return d.isNotEmpty ? d : (phone ?? '');
     return d.isEmpty ? n : '$n ($d)';
   }
@@ -57,8 +60,7 @@ class UserModel {
       firstName: firstName,
       lastName: lastName,
       phone: map['phone'] as String?,
-      department: map['department'] as String?,
-      location: map['location'] as String?,
+      departmentId: map['department_id'] as int?,
       notes: map['notes'] as String?,
     );
   }
@@ -69,8 +71,7 @@ class UserModel {
       if (firstName != null) 'first_name': firstName,
       if (lastName != null) 'last_name': lastName,
       if (phone != null) 'phone': phone,
-      if (department != null) 'department': department,
-      if (location != null) 'location': location,
+      if (departmentId != null) 'department_id': departmentId,
       if (notes != null) 'notes': notes,
     };
   }

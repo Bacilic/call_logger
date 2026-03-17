@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../calls/models/user_model.dart';
+import '../../../calls/provider/lookup_provider.dart';
 import '../../providers/directory_provider.dart';
 import 'bulk_user_edit_dialog.dart';
 import 'user_form_dialog.dart';
@@ -34,6 +35,7 @@ class _UsersTabState extends ConsumerState<UsersTab> {
 
   @override
   Widget build(BuildContext context) {
+    ref.watch(lookupServiceProvider);
     final state = ref.watch(directoryProvider);
     final notifier = ref.read(directoryProvider.notifier);
     final continuousScrollAsync = ref.watch(catalogContinuousScrollProvider);

@@ -842,8 +842,7 @@ class CallHeaderNotifier extends Notifier<CallHeaderState> {
         firstName: state.selectedCaller?.firstName,
         lastName: state.selectedCaller?.lastName,
         phone: updatedPhone,
-        department: state.selectedCaller?.department,
-        location: state.selectedCaller?.location,
+        departmentId: state.selectedCaller?.departmentId,
         notes: state.selectedCaller?.notes,
       ),
       selectedEquipment: eqCode?.isNotEmpty == true

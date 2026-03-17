@@ -55,7 +55,7 @@ class DirectoryNotifier extends Notifier<DirectoryState> {
     filterAndSort();
   }
 
-  /// Φιλτράρισμα in-memory (name + fullNameWithDepartment + phone + department + location + notes) και ταξινόμηση.
+  /// Φιλτράρισμα in-memory (name + fullNameWithDepartment + phone + departmentName + notes) και ταξινόμηση.
   /// Χωρίς διάκριση τόνου/διαλυτικών (ι = ί = ϊ = ΐ).
   void filterAndSort() {
     final q = SearchTextNormalizer.normalizeForSearch(state.searchQuery);
@@ -68,15 +68,13 @@ class DirectoryNotifier extends Notifier<DirectoryState> {
         );
         final phone = SearchTextNormalizer.normalizeForSearch(u.phone ?? '');
         final dept = SearchTextNormalizer.normalizeForSearch(
-          u.department ?? '',
+          u.departmentName ?? '',
         );
-        final loc = SearchTextNormalizer.normalizeForSearch(u.location ?? '');
         final notes = SearchTextNormalizer.normalizeForSearch(u.notes ?? '');
         return name.contains(q) ||
             full.contains(q) ||
             phone.contains(q) ||
             dept.contains(q) ||
-            loc.contains(q) ||
             notes.contains(q);
       }).toList();
     }
@@ -100,10 +98,7 @@ class DirectoryNotifier extends Notifier<DirectoryState> {
             cmp = (a.phone ?? '').compareTo(b.phone ?? '');
             break;
           case 'department':
-            cmp = (a.department ?? '').compareTo(b.department ?? '');
-            break;
-          case 'location':
-            cmp = (a.location ?? '').compareTo(b.location ?? '');
+            cmp = (a.departmentName ?? '').compareTo(b.departmentName ?? '');
             break;
           case 'notes':
             cmp = (a.notes ?? '').compareTo(b.notes ?? '');
@@ -212,22 +207,20 @@ class DirectoryNotifier extends Notifier<DirectoryState> {
     );
   }
 
-  /// True αν υπάρχει ήδη χρήστης με τα ίδια επώνυμο, όνομα, τηλέφωνο, τμήμα, τοποθεσία (σημειώσεις αγνοούνται).
+  /// True αν υπάρχει ήδη χρήστης με τα ίδια επώνυμο, όνομα, τηλέφωνο, σημειώσεις.
   /// [excludeId] = id χρήστη να αγνοηθεί (π.χ. κατά επεξεργασία).
   bool hasDuplicateExcludingNotes(UserModel u, {int? excludeId}) {
     final ln = (u.lastName ?? '').trim();
     final fn = (u.firstName ?? '').trim();
     final ph = (u.phone ?? '').trim();
-    final dept = (u.department ?? '').trim();
-    final loc = (u.location ?? '').trim();
+    final nt = (u.notes ?? '').trim();
     for (final existing in state.allUsers) {
       if (excludeId != null && existing.id == excludeId) continue;
       final eLn = (existing.lastName ?? '').trim();
       final eFn = (existing.firstName ?? '').trim();
       final ePh = (existing.phone ?? '').trim();
-      final eDept = (existing.department ?? '').trim();
-      final eLoc = (existing.location ?? '').trim();
-      if (ln == eLn && fn == eFn && ph == ePh && dept == eDept && loc == eLoc) {
+      final eNt = (existing.notes ?? '').trim();
+      if (ln == eLn && fn == eFn && ph == ePh && nt == eNt) {
         return true;
       }
     }

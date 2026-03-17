@@ -39,8 +39,8 @@ class EquipmentColumn {
   static final location = EquipmentColumn(
     'location',
     'Τοποθεσία',
-    (row) => row.$2?.location ?? '–',
-    (row) => row.$2?.location ?? '',
+    (row) => '–',
+    (row) => '',
   );
   static final phone = EquipmentColumn(
     'phone',

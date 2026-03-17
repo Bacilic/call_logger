@@ -51,7 +51,6 @@ const _defaultUserColumnWidths = [
   120.0, // Όνομα
   120.0, // Τηλέφωνο
   140.0, // Τμήμα
-  120.0, // Τοποθεσία
   180.0, // Σημειώσεις
 ];
 
@@ -103,7 +102,7 @@ class _UsersDataTableState extends State<UsersDataTable> {
     'first_name': 3,
     'phone': 4,
     'department': 5,
-    'location': 6,
+    'notes': 6,
   };
 
   Widget _buildStickyHeader(
@@ -324,10 +323,6 @@ class _UsersDataTableState extends State<UsersDataTable> {
           DataColumn(
             label: const Text('Τμήμα'),
             onSort: (_, asc) => widget.onSetSort('department', asc),
-          ),
-          DataColumn(
-            label: const Text('Τοποθεσία'),
-            onSort: (_, asc) => widget.onSetSort('location', asc),
           ),
           const DataColumn(label: Text('Σημειώσεις')),
         ];
@@ -609,21 +604,12 @@ class _UsersTableSource extends DataTableSource {
         ),
         DataCell(
           Text(
-            user.department ?? '',
+            user.departmentName ?? '–',
             softWrap: true,
             overflow: TextOverflow.visible,
           ),
           onTap: () => _onRowTap?.call(index),
           onDoubleTap: () => _onDoubleTap(user, 'department'),
-        ),
-        DataCell(
-          Text(
-            user.location ?? '',
-            softWrap: true,
-            overflow: TextOverflow.visible,
-          ),
-          onTap: () => _onRowTap?.call(index),
-          onDoubleTap: () => _onDoubleTap(user, 'location'),
         ),
         DataCell(
           Text(

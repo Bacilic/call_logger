@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/database/database_helper.dart';
 import '../../../../core/utils/spell_check.dart';
 import '../../../calls/models/user_model.dart';
+import '../../../calls/provider/lookup_provider.dart';
 import '../../providers/directory_provider.dart';
 
 /// Διάλογος φόρμας για δημιουργία/επεξεργασία/αντίγραφο χρήστη.
-class UserFormDialog extends StatefulWidget {
+class UserFormDialog extends ConsumerStatefulWidget {
   const UserFormDialog({
     super.key,
     this.initialUser,
@@ -21,23 +24,21 @@ class UserFormDialog extends StatefulWidget {
   final String? focusedField;
 
   @override
-  State<UserFormDialog> createState() => _UserFormDialogState();
+  ConsumerState<UserFormDialog> createState() => _UserFormDialogState();
 }
 
-class _UserFormDialogState extends State<UserFormDialog> {
+class _UserFormDialogState extends ConsumerState<UserFormDialog> {
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _lastNameController;
   late final TextEditingController _firstNameController;
   late final TextEditingController _phoneController;
   late final TextEditingController _departmentController;
-  late final TextEditingController _locationController;
   late final TextEditingController _notesController;
-  
+
   final FocusNode _lastNameFocusNode = FocusNode();
   final FocusNode _firstNameFocusNode = FocusNode();
   final FocusNode _phoneFocusNode = FocusNode();
   final FocusNode _departmentFocusNode = FocusNode();
-  final FocusNode _locationFocusNode = FocusNode();
   final FocusNode _notesFocusNode = FocusNode();
 
   bool get _isEdit => widget.initialUser != null && !widget.isClone;
@@ -56,10 +57,9 @@ class _UserFormDialogState extends State<UserFormDialog> {
     _lastNameController = TextEditingController(text: u?.lastName ?? '');
     _firstNameController = TextEditingController(text: u?.firstName ?? '');
     _phoneController = TextEditingController(text: u?.phone ?? '');
-    _departmentController = TextEditingController(text: u?.department ?? '');
-    _locationController = TextEditingController(text: u?.location ?? '');
+    _departmentController = TextEditingController(text: u?.departmentName ?? '');
     _notesController = TextEditingController(text: u?.notes ?? '');
-    
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       switch (widget.focusedField) {
@@ -74,10 +74,6 @@ class _UserFormDialogState extends State<UserFormDialog> {
         case 'department':
           _departmentFocusNode.requestFocus();
           _selectAll(_departmentController);
-          break;
-        case 'location':
-          _locationFocusNode.requestFocus();
-          _selectAll(_locationController);
           break;
         case 'notes':
           _notesFocusNode.requestFocus();
@@ -98,14 +94,12 @@ class _UserFormDialogState extends State<UserFormDialog> {
     _firstNameFocusNode.dispose();
     _phoneFocusNode.dispose();
     _departmentFocusNode.dispose();
-    _locationFocusNode.dispose();
     _notesFocusNode.dispose();
-    
+
     _lastNameController.dispose();
     _firstNameController.dispose();
     _phoneController.dispose();
     _departmentController.dispose();
-    _locationController.dispose();
     _notesController.dispose();
     super.dispose();
   }
@@ -115,6 +109,8 @@ class _UserFormDialogState extends State<UserFormDialog> {
 
   Future<void> _save() async {
     if (!(_formKey.currentState?.validate() ?? false)) return;
+    final departmentId = await DatabaseHelper.instance
+        .getOrCreateDepartmentIdByName(_departmentController.text);
     final user = UserModel(
       id: _isEdit ? widget.initialUser?.id : null,
       lastName: _lastNameController.text.trim(),
@@ -122,12 +118,7 @@ class _UserFormDialogState extends State<UserFormDialog> {
       phone: _phoneController.text.trim().isEmpty
           ? null
           : _phoneController.text.trim(),
-      department: _departmentController.text.trim().isEmpty
-          ? null
-          : _departmentController.text.trim(),
-      location: _locationController.text.trim().isEmpty
-          ? null
-          : _locationController.text.trim(),
+      departmentId: departmentId,
       notes: _notesController.text.trim().isEmpty
           ? null
           : _notesController.text.trim(),
@@ -139,7 +130,7 @@ class _UserFormDialogState extends State<UserFormDialog> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text(
-              'Υπάρχει ήδη χρήστης με τα ίδια στοιχεία (επώνυμο, όνομα, τηλέφωνο, τμήμα, τοποθεσία). Διορθώστε τα δεδομένα.',
+              'Υπάρχει ήδη χρήστης με τα ίδια στοιχεία (επώνυμο, όνομα, τηλέφωνο). Διορθώστε τα δεδομένα.',
             ),
             backgroundColor: Colors.orange,
           ),
@@ -147,6 +138,9 @@ class _UserFormDialogState extends State<UserFormDialog> {
         return;
       }
       await widget.notifier.updateUser(user);
+      ref.invalidate(lookupServiceProvider);
+      await ref.read(lookupServiceProvider.future);
+      await widget.notifier.loadUsers();
       if (!mounted) return;
       Navigator.of(context).pop();
       ScaffoldMessenger.of(context).showSnackBar(
@@ -159,7 +153,7 @@ class _UserFormDialogState extends State<UserFormDialog> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
-            'Υπάρχει ήδη χρήστης με τα ίδια στοιχεία (επώνυμο, όνομα, τηλέφωνο, τμήμα, τοποθεσία). Διορθώστε τα δεδομένα.',
+            'Υπάρχει ήδη χρήστης με τα ίδια στοιχεία (επώνυμο, όνομα, τηλέφωνο). Διορθώστε τα δεδομένα.',
           ),
           backgroundColor: Colors.orange,
         ),
@@ -167,6 +161,9 @@ class _UserFormDialogState extends State<UserFormDialog> {
       return;
     }
     await widget.notifier.addUser(user);
+    ref.invalidate(lookupServiceProvider);
+    await ref.read(lookupServiceProvider.future);
+    await widget.notifier.loadUsers();
     if (!mounted) return;
     Navigator.of(context).pop();
     ScaffoldMessenger.of(context).showSnackBar(
@@ -182,6 +179,14 @@ class _UserFormDialogState extends State<UserFormDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final lookupAsync = ref.watch(lookupServiceProvider);
+    final departmentNames = lookupAsync.maybeWhen(
+      data: (service) => service.departments
+          .map((d) => d.name.trim())
+          .where((name) => name.isNotEmpty)
+          .toList(),
+      orElse: () => const <String>[],
+    );
     return AlertDialog(
       title: Text(_title),
       content: Form(
@@ -225,24 +230,59 @@ class _UserFormDialogState extends State<UserFormDialog> {
                 onTap: () => _selectAll(_phoneController),
               ),
               const SizedBox(height: 12),
-              TextFormField(
-                controller: _departmentController,
+              RawAutocomplete<String>(
+                textEditingController: _departmentController,
                 focusNode: _departmentFocusNode,
-                decoration: const InputDecoration(
-                  labelText: 'Τμήμα',
-                  border: OutlineInputBorder(),
-                ),
-                onTap: () => _selectAll(_departmentController),
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _locationController,
-                focusNode: _locationFocusNode,
-                decoration: const InputDecoration(
-                  labelText: 'Τοποθεσία',
-                  border: OutlineInputBorder(),
-                ),
-                onTap: () => _selectAll(_locationController),
+                optionsBuilder: (textEditingValue) {
+                  final q = textEditingValue.text.trim().toLowerCase();
+                  if (q.isEmpty) return departmentNames;
+                  return departmentNames.where(
+                    (name) => name.toLowerCase().contains(q),
+                  );
+                },
+                displayStringForOption: (option) => option,
+                onSelected: (selection) {
+                  _departmentController.text = selection;
+                },
+                fieldViewBuilder: (context, controller, focusNode, _) {
+                  return TextFormField(
+                    controller: controller,
+                    focusNode: focusNode,
+                    decoration: const InputDecoration(
+                      labelText: 'Τμήμα',
+                      border: OutlineInputBorder(),
+                    ),
+                    textCapitalization: TextCapitalization.words,
+                    onTap: () => _selectAll(controller),
+                  );
+                },
+                optionsViewBuilder: (context, onSelected, options) {
+                  return Align(
+                    alignment: Alignment.topLeft,
+                    child: Material(
+                      elevation: 4,
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(
+                          maxWidth: 360,
+                          maxHeight: 220,
+                        ),
+                        child: ListView.builder(
+                          padding: EdgeInsets.zero,
+                          shrinkWrap: true,
+                          itemCount: options.length,
+                          itemBuilder: (context, index) {
+                            final option = options.elementAt(index);
+                            return ListTile(
+                              dense: true,
+                              title: Text(option),
+                              onTap: () => onSelected(option),
+                            );
+                          },
+                        ),
+                      ),
+                    ),
+                  );
+                },
               ),
               const SizedBox(height: 12),
               TextFormField(

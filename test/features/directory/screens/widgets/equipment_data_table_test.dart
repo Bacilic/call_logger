@@ -22,7 +22,6 @@ void main() {
           firstName: 'Γιάννης',
           lastName: 'Ιωάννου',
           phone: '2101234567',
-          location: 'Κτίριο Α',
         ),
       ),
     ];

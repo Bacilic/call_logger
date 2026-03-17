@@ -506,6 +506,35 @@ class DatabaseHelper {
     );
   }
 
+  /// Επιστρέφει department_id για το [name].
+  /// Αν δεν υπάρχει, δημιουργεί νέο τμήμα και επιστρέφει το νέο id.
+  Future<int?> getOrCreateDepartmentIdByName(String? name) async {
+    final normalized = name?.trim() ?? '';
+    if (normalized.isEmpty) return null;
+    final db = await database;
+    return db.transaction<int?>((txn) async {
+      final existing = await txn.rawQuery(
+        'SELECT id FROM departments WHERE TRIM(name) = ? COLLATE NOCASE LIMIT 1',
+        [normalized],
+      );
+      if (existing.isNotEmpty) {
+        return existing.first['id'] as int?;
+      }
+
+      await txn.insert(
+        'departments',
+        {'name': normalized},
+        conflictAlgorithm: ConflictAlgorithm.ignore,
+      );
+
+      final rows = await txn.rawQuery(
+        'SELECT id FROM departments WHERE TRIM(name) = ? COLLATE NOCASE LIMIT 1',
+        [normalized],
+      );
+      return rows.isNotEmpty ? rows.first['id'] as int? : null;
+    });
+  }
+
   /// Επιστρέφει όλο τον εξοπλισμό.
   Future<List<Map<String, dynamic>>> getAllEquipment() async {
     final db = await database;
