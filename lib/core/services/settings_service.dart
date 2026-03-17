@@ -10,6 +10,7 @@ class SettingsService {
   static const String _keyRecentPaths = 'recent_database_paths';
   static const String _keyShowImportExcelButton = 'show_import_excel_button';
   static const String _keyShowActiveTimer = 'show_active_timer';
+  static const String _keyShowAnyDeskRemote = 'show_anydesk_remote';
   static const int _maxRecentPaths = 3;
 
   /// Κλειδιά για ρυθμίσεις απομακρυσμένης σύνδεσης (πίνακας app_settings).
@@ -105,6 +106,18 @@ class SettingsService {
   Future<void> setShowActiveTimer(bool value) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_keyShowActiveTimer, value);
+  }
+
+  /// Εμφάνιση κουμπιού AnyDesk στη φόρμα κλήσεων. Προεπιλογή: true.
+  Future<bool> getShowAnyDeskRemote() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_keyShowAnyDeskRemote) ?? true;
+  }
+
+  /// Ορίζει αν θα εμφανίζεται το κουμπί AnyDesk για απομακρυσμένη σύνδεση.
+  Future<void> setShowAnyDeskRemote(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_keyShowAnyDeskRemote, value);
   }
 
   // --- Ρυθμίσεις απομακρυσμένης σύνδεσης (app_settings) ---

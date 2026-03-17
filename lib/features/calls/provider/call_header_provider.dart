@@ -732,7 +732,15 @@ class CallHeaderNotifier extends Notifier<CallHeaderState> {
   }
 
   void clearEquipment() {
-    state = state.copyWith(clearSelectedEquipment: true, clearEquipmentCandidates: true, isEquipmentAmbiguous: false);
+    state = state.copyWith(
+      clearSelectedEquipment: true,
+      clearEquipmentCandidates: true,
+      isEquipmentAmbiguous: false,
+      equipmentNoMatch: false,
+      equipmentText: '',
+      equipmentIsManual: false,
+      hasAnyContent: _computeHasAnyContent(equipmentText: ''),
+    );
   }
 
   void setPhoneError(String? message) {

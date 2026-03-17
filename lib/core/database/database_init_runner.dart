@@ -51,6 +51,7 @@ Future<DatabaseInitRunnerResult> runDatabaseInitChecks({
           }
           try {
             await DatabaseHelper.instance.database;
+            await DatabaseHelper.instance.migrateDepartmentsIfNeeded();
             SettingsService.registerAppSettingsProvider(
               DatabaseHelper.instance.getSetting,
               DatabaseHelper.instance.setSetting,

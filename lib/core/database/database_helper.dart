@@ -835,4 +835,46 @@ class DatabaseHelper {
       return const ConnectionCheckResult(success: false, isLocalDev: false);
     }
   }
+
+  /// One-time migration: δημιουργεί πίνακα departments και τον γεμίζει από users.department & location.
+  /// Idempotent: αν app_settings έχει key='departments_migration_done', value='1', δεν κάνει τίποτα.
+  Future<void> migrateDepartmentsIfNeeded() async {
+    final db = await database;
+    final rows = await db.rawQuery(
+      "SELECT value FROM app_settings WHERE key = ? AND value = ?",
+      ['departments_migration_done', '1'],
+    );
+    if (rows.isNotEmpty) return;
+
+    try {
+      await db.transaction((txn) async {
+        await txn.execute('''
+          CREATE TABLE IF NOT EXISTS departments (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT UNIQUE NOT NULL,
+            building TEXT,
+            color TEXT DEFAULT '#1976D2',
+            notes TEXT,
+            map_floor TEXT,
+            map_x REAL DEFAULT 0.0,
+            map_y REAL DEFAULT 0.0,
+            map_width REAL DEFAULT 0.0,
+            map_height REAL DEFAULT 0.0
+          )
+        ''');
+        await txn.execute(
+          'INSERT OR IGNORE INTO departments (name, building) '
+          "SELECT DISTINCT department, location FROM users WHERE department IS NOT NULL AND department != '' ORDER BY department",
+        );
+        await txn.execute("UPDATE departments SET color = '#1976D2' WHERE color IS NULL");
+        await txn.execute(
+          "INSERT OR REPLACE INTO app_settings (key, value) VALUES ('departments_migration_done', '1')",
+        );
+      });
+      debugPrint('Departments table created and populated from users.department & location.');
+    } catch (e, st) {
+      debugPrint('migrateDepartmentsIfNeeded error: $e');
+      debugPrint('$st');
+    }
+  }
 }

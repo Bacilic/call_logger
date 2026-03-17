@@ -7,6 +7,7 @@ import '../provider/call_header_provider.dart';
 import 'widgets/call_header_form.dart';
 import 'widgets/call_status_bar.dart';
 import 'widgets/recent_calls_list.dart';
+import 'widgets/remote_connection_buttons.dart';
 import 'widgets/sticky_note_widget.dart';
 import 'widgets/user_info_card.dart';
 
@@ -34,6 +35,14 @@ class CallsScreen extends ConsumerWidget {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 const CallHeaderForm(),
+                if (header.equipmentText.trim().isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    child: RemoteConnectionButtons(
+                      equipment: header.selectedEquipment,
+                      equipmentCodeText: header.equipmentText,
+                    ),
+                  ),
                 if (header.selectedCaller != null) ...[
                   UserInfoCard(
                     user: header.selectedCaller!,
