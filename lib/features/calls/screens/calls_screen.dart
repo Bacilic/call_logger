@@ -1,14 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/utils/spell_check.dart';
 import '../provider/call_entry_provider.dart';
 import '../provider/call_header_provider.dart';
 import 'widgets/call_header_form.dart';
 import 'widgets/call_status_bar.dart';
 import 'widgets/recent_calls_list.dart';
+import 'widgets/equipment_info_card.dart';
+import 'widgets/notes_sticky_field.dart';
 import 'widgets/remote_connection_buttons.dart';
-import 'widgets/sticky_note_widget.dart';
 import 'widgets/user_info_card.dart';
 
 /// Οθόνη εισαγωγής κλήσης: Εσωτερικό, lookup 3 ψηφία, κάρτα χρήστη, ιστορικό, sticky note, σημειώσεις, Enter = αποθήκευση + focus πίσω.
@@ -35,23 +35,34 @@ class CallsScreen extends ConsumerWidget {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 const CallHeaderForm(),
-                if (header.equipmentText.trim().isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                    child: RemoteConnectionButtons(
-                      equipment: header.selectedEquipment,
-                      equipmentCodeText: header.equipmentText,
-                    ),
+                Padding(
+                  padding: const EdgeInsets.only(top: 16),
+                  child: Wrap(
+                    spacing: 16.0,
+                    runSpacing: 16.0,
+                    crossAxisAlignment: WrapCrossAlignment.start,
+                    children: [
+                      if (header.selectedCaller != null)
+                        UserInfoCard(user: header.selectedCaller!),
+                      if (header.selectedEquipment != null ||
+                          header.equipmentText.trim().isNotEmpty)
+                        EquipmentInfoCard(
+                          equipment: header.selectedEquipment,
+                          equipmentCodeText: header.equipmentText,
+                        ),
+                      if (header.equipmentText.trim().isNotEmpty ||
+                          header.selectedEquipment != null)
+                        RemoteConnectionButtons(
+                          equipment: header.selectedEquipment,
+                          equipmentCodeText:
+                              header.equipmentText.isNotEmpty
+                                  ? header.equipmentText
+                                  : (header.selectedEquipment?.code ?? ''),
+                        ),
+                    ],
                   ),
+                ),
                 if (header.selectedCaller != null) ...[
-                  UserInfoCard(
-                    user: header.selectedCaller!,
-                    equipment: header.selectedEquipment,
-                    equipmentCodeText: header.equipmentText,
-                  ),
-                  if (header.selectedCaller!.notes != null &&
-                      header.selectedCaller!.notes!.trim().isNotEmpty)
-                    StickyNoteWidget(notes: header.selectedCaller!.notes!),
                   RecentCallsList(userId: header.selectedCaller!.id!),
                 ],
                 const SizedBox(height: 16),
@@ -59,10 +70,16 @@ class CallsScreen extends ConsumerWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Expanded(
-                      child: _NotesTextField(entry: entry),
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: NotesStickyField(entry: entry),
+                      ),
                     ),
-                    const SizedBox(width: 16),
-                    const CallStatusBar(),
+                    const SizedBox(width: 12),
+                    Flexible(
+                      fit: FlexFit.loose,
+                      child: CallStatusBar(),
+                    ),
                   ],
                 ),
                 const SizedBox(height: 16),
@@ -81,88 +98,89 @@ Widget _buildSubmitButton(
   WidgetRef ref,
   CallHeaderState header,
 ) {
-  final button = SizedBox(
-    width: double.infinity,
-    child: ElevatedButton(
-      onPressed: header.canSubmitCall
-          ? () async {
-              final ok = await ref.read(callEntryProvider.notifier).submitCall(ref);
-              if (context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(
-                      ok ? 'Κλήση αποθηκεύτηκε' : 'Αποτυχία αποθήκευσης',
-                    ),
+  final isPending = ref.watch(callEntryProvider).isPending;
+  final elevated = ElevatedButton(
+    onPressed: header.canSubmitCall
+        ? () async {
+            final ok =
+                await ref.read(callEntryProvider.notifier).submitCall(ref);
+            if (context.mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(
+                    ok ? 'Κλήση αποθηκεύτηκε' : 'Αποτυχία αποθήκευσης',
                   ),
-                );
-                ref.read(callHeaderProvider.notifier).requestPhoneFocus();
-              }
+                ),
+              );
+              ref.read(callHeaderProvider.notifier).requestPhoneFocus();
             }
-          : null,
-      style: ElevatedButton.styleFrom(
-        backgroundColor: header.canSubmitCall
-            ? Theme.of(context).colorScheme.primary
-            : Colors.grey,
-        foregroundColor: header.canSubmitCall
-            ? Theme.of(context).colorScheme.onPrimary
-            : Colors.grey[700],
-        padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 24),
-        minimumSize: const Size(double.infinity, 48),
-      ),
-      child: const Text('Καταγραφή Κλήσης'),
+          }
+        : null,
+    style: ElevatedButton.styleFrom(
+      backgroundColor: header.canSubmitCall
+          ? Theme.of(context).colorScheme.primary
+          : Colors.grey,
+      foregroundColor: header.canSubmitCall
+          ? Theme.of(context).colorScheme.onPrimary
+          : Colors.grey[700],
+      padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 24),
+      minimumSize: const Size(double.infinity, 48),
     ),
+    child: const Text('Καταγραφή Κλήσης'),
   );
-  if (header.canSubmitCall) {
-    return button;
-  }
-  return Tooltip(
-    message: 'Συμπληρώστε εσωτερικό αριθμό και πρέπει να βρεθεί ο καλώντας',
-    child: button,
+  final mainSubmit = header.canSubmitCall
+      ? elevated
+      : Tooltip(
+          message:
+              'Συμπληρώστε εσωτερικό αριθμό και πρέπει να βρεθεί ο καλώντας',
+          child: elevated,
+        );
+
+  final pendingBtn = OutlinedButton.icon(
+    icon: const Icon(Icons.task_alt),
+    label: const Text('Εκκρεμότητα'),
+    style: OutlinedButton.styleFrom(
+      padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
+    ),
+    onPressed: () async {
+      final ok =
+          await ref.read(callEntryProvider.notifier).submitOnlyPending(ref);
+      if (context.mounted && ok) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Η εκκρεμότητα καταχωρήθηκε'),
+          ),
+        );
+      }
+    },
   );
-}
 
-/// Πεδίο σημειώσεων με δικό του controller (εκτός state για αποφυγή διαρροής μνήμης).
-class _NotesTextField extends ConsumerStatefulWidget {
-  const _NotesTextField({required this.entry});
-
-  final CallEntryState entry;
-
-  @override
-  ConsumerState<_NotesTextField> createState() => _NotesTextFieldState();
-}
-
-class _NotesTextFieldState extends ConsumerState<_NotesTextField> {
-  late final TextEditingController _controller;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = TextEditingController(text: widget.entry.notes);
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final entry = ref.watch(callEntryProvider);
-    if (entry.notes.isEmpty && _controller.text.isNotEmpty) {
-      _controller.text = '';
-    }
-    return TextField(
-      controller: _controller,
-      decoration: const InputDecoration(
-        labelText: 'Σημειώσεις',
-        border: OutlineInputBorder(),
-        alignLabelWithHint: true,
-      ),
-      maxLines: 3,
-      spellCheckConfiguration: platformSpellCheckConfiguration,
-      onChanged: (value) =>
-          ref.read(callEntryProvider.notifier).setNotes(value),
-    );
-  }
+  return LayoutBuilder(
+    builder: (context, constraints) {
+      final narrow = constraints.maxWidth < 520 && isPending;
+      if (narrow) {
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            mainSubmit,
+            const SizedBox(height: 12),
+            pendingBtn,
+          ],
+        );
+      }
+      return Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Expanded(child: mainSubmit),
+          if (isPending) ...[
+            const SizedBox(width: 16),
+            Flexible(
+              fit: FlexFit.loose,
+              child: pendingBtn,
+            ),
+          ],
+        ],
+      );
+    },
+  );
 }

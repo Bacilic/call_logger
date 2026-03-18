@@ -1,70 +1,89 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../models/equipment_model.dart';
 import '../../models/user_model.dart';
 
-/// Κάρτα στοιχείων χρήστη και εξοπλισμού (όνομα, τμήμα, τηλέφωνο, τοποθεσία, εξοπλισμός).
+/// Κάρτα στοιχείων χρήστη (όνομα, τμήμα, τηλέφωνο).
 class UserInfoCard extends ConsumerWidget {
   const UserInfoCard({
     super.key,
     required this.user,
-    this.equipment,
-    this.equipmentCodeText = '',
   });
 
   final UserModel user;
-  final EquipmentModel? equipment;
-  final String equipmentCodeText;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
 
     return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      margin: EdgeInsets.zero,
       child: Padding(
         padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Row(
-              children: [
-                Icon(Icons.person, color: theme.colorScheme.primary),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    user.name ?? '—',
-                    style: theme.textTheme.titleMedium,
+        child: IntrinsicWidth(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.person, color: theme.colorScheme.primary),
+                  const SizedBox(width: 8),
+                  Flexible(
+                    fit: FlexFit.loose,
+                    child: Text(
+                      user.name ?? '—',
+                      style: theme.textTheme.titleMedium,
+                    ),
                   ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: Column(
-                    children: [
-                      _row(theme, Icons.business, 'Τμήμα', user.departmentName ?? '–'),
-                      _row(theme, Icons.phone, 'Τηλ.', user.phone),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            if (equipment != null) ...[
-              const Divider(height: 24),
-              Text(
-                'Εξοπλισμός',
-                style: theme.textTheme.titleSmall,
+                ],
               ),
-              _row(theme, Icons.computer, 'Τύπος', equipment!.type),
-              _row(theme, Icons.tag, 'Κωδικός εξοπλισμού', equipment!.code),
+              const SizedBox(height: 8),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _row(theme, Icons.business, 'Τμήμα', user.departmentName ?? '–'),
+                  _row(theme, Icons.phone, 'Τηλ.', user.phone),
+                  if (user.notes != null && user.notes!.trim().isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Tooltip(
+                        message: user.notes!.trim(),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Icon(
+                              Icons.note_alt_outlined,
+                              size: 18,
+                              color: theme.colorScheme.onSurfaceVariant,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              'Σημείωση: ',
+                              style: theme.textTheme.bodySmall,
+                            ),
+                            Flexible(
+                              fit: FlexFit.loose,
+                              child: Text(
+                                user.notes!,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: theme.textTheme.bodyMedium?.copyWith(
+                                  fontStyle: FontStyle.italic,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                ],
+              ),
             ],
-          ],
+          ),
         ),
       ),
     );
@@ -80,12 +99,16 @@ class UserInfoCard extends ConsumerWidget {
     return Padding(
       padding: const EdgeInsets.only(top: 4),
       child: Row(
+        mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Icon(icon, size: 18, color: theme.colorScheme.onSurfaceVariant),
           const SizedBox(width: 8),
           Text('$label: ', style: theme.textTheme.bodySmall),
-          Expanded(child: Text(value, style: theme.textTheme.bodyMedium)),
+          Flexible(
+            fit: FlexFit.loose,
+            child: Text(value, style: theme.textTheme.bodyMedium),
+          ),
         ],
       ),
     );

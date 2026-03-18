@@ -57,6 +57,7 @@ class _MainShellState extends ConsumerState<MainShell> {
 
   @override
   Widget build(BuildContext context) {
+    final railExtended = MediaQuery.sizeOf(context).width >= 760;
     return Scaffold(
       appBar: AppBar(
         title: const Text('Καταγραφή Κλήσεων'),
@@ -97,7 +98,7 @@ class _MainShellState extends ConsumerState<MainShell> {
       body: Row(
         children: [
           NavigationRail(
-            extended: true,
+            extended: railExtended,
             selectedIndex: _selectedIndex,
             onDestinationSelected: (index) {
               setState(() => _selectedIndex = index);

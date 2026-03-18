@@ -7,13 +7,29 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/services/lookup_service.dart';
 import '../../../../core/utils/name_parser.dart';
 import '../../../../core/utils/search_text_normalizer.dart';
+import '../../../../features/directory/models/department_model.dart';
 import '../../models/equipment_model.dart';
 import '../../models/user_model.dart';
 import '../../provider/call_entry_provider.dart';
 import '../../provider/call_header_provider.dart';
 import '../../provider/lookup_provider.dart';
 
-/// Header φόρμα εισαγωγής κλήσης: τρία Autocomplete (Εσωτερικό, Καλούντας, Κωδικός Εξοπλισμού).
+bool _textOverflowsSingleLine({
+  required String text,
+  required TextStyle style,
+  required double maxWidth,
+  required TextDirection textDirection,
+}) {
+  if (text.trim().isEmpty || maxWidth <= 0) return false;
+  final painter = TextPainter(
+    text: TextSpan(text: text, style: style),
+    maxLines: 1,
+    textDirection: textDirection,
+  )..layout(maxWidth: double.infinity);
+  return painter.width > maxWidth;
+}
+
+/// Header φόρμα εισαγωγής κλήσης: Τηλέφωνο, Καλούντας, Τμήμα, Κωδικός Εξοπλισμού.
 class CallHeaderForm extends ConsumerStatefulWidget {
   const CallHeaderForm({super.key});
 
@@ -24,9 +40,11 @@ class CallHeaderForm extends ConsumerStatefulWidget {
 class _CallHeaderFormState extends ConsumerState<CallHeaderForm> {
   late final TextEditingController _phoneController;
   late final TextEditingController _callerController;
+  late final TextEditingController _departmentController;
   late final TextEditingController _equipmentController;
   late final FocusNode _phoneFocusNode;
   late final FocusNode _callerFocusNode;
+  late final FocusNode _departmentFocusNode;
   late final FocusNode _equipmentFocusNode;
   late final CallHeaderNotifier _notifier;
   bool _isSelectingFromList = false;
@@ -36,6 +54,7 @@ class _CallHeaderFormState extends ConsumerState<CallHeaderForm> {
     _notifier.checkContent(
       phoneText: _phoneController.text,
       callerText: _callerController.text,
+      departmentText: _departmentController.text,
       equipmentText: _equipmentController.text,
     );
   }
@@ -45,6 +64,7 @@ class _CallHeaderFormState extends ConsumerState<CallHeaderForm> {
     _notifier.checkContent(
       phoneText: _phoneController.text,
       callerText: _callerController.text,
+      departmentText: _departmentController.text,
       equipmentText: _equipmentController.text,
     );
     if (!_phoneFocusNode.hasFocus) {
@@ -62,13 +82,16 @@ class _CallHeaderFormState extends ConsumerState<CallHeaderForm> {
     super.initState();
     _phoneController = TextEditingController();
     _callerController = TextEditingController();
+    _departmentController = TextEditingController();
     _equipmentController = TextEditingController();
     _phoneFocusNode = FocusNode();
     _callerFocusNode = FocusNode();
+    _departmentFocusNode = FocusNode();
     _equipmentFocusNode = FocusNode();
     _notifier = ref.read(callHeaderProvider.notifier);
     _phoneFocusNode.addListener(_onPhoneFocusOut);
     _callerFocusNode.addListener(_onFocusOut);
+    _departmentFocusNode.addListener(_onFocusOut);
     _equipmentFocusNode.addListener(_onFocusOut);
   }
 
@@ -76,12 +99,15 @@ class _CallHeaderFormState extends ConsumerState<CallHeaderForm> {
   void dispose() {
     _phoneFocusNode.removeListener(_onPhoneFocusOut);
     _callerFocusNode.removeListener(_onFocusOut);
+    _departmentFocusNode.removeListener(_onFocusOut);
     _equipmentFocusNode.removeListener(_onFocusOut);
     _phoneFocusNode.dispose();
     _callerFocusNode.dispose();
+    _departmentFocusNode.dispose();
     _equipmentFocusNode.dispose();
     _phoneController.dispose();
     _callerController.dispose();
+    _departmentController.dispose();
     _equipmentController.dispose();
     super.dispose();
   }
@@ -91,7 +117,9 @@ class _CallHeaderFormState extends ConsumerState<CallHeaderForm> {
     List<String> recentPhones,
   ) {
     if (recentPhones.isEmpty) return phones;
-    final recentLower = recentPhones.map((e) => e.trim().toLowerCase()).toList();
+    final recentLower = recentPhones
+        .map((e) => e.trim().toLowerCase())
+        .toList();
     final order = <String>[];
     for (final r in recentLower) {
       for (final p in phones) {
@@ -113,23 +141,30 @@ class _CallHeaderFormState extends ConsumerState<CallHeaderForm> {
     final lookupAsync = ref.watch(lookupServiceProvider);
     final lookupService = lookupAsync.value;
 
-    final screenWidth = MediaQuery.sizeOf(context).width;
-    final w1 = (screenWidth / 5).clamp(0.0, 180.0);
-    final w2 = (screenWidth * 0.35).clamp(220.0, 250.0); // Πιο φαρδύ για μεγάλα ονόματα καλούντος
-    final w3 = (screenWidth / 5).clamp(0.0, 200.0);
-
     final hasAnyContent = ref.watch(
       callHeaderProvider.select((s) => s.hasAnyContent),
     );
     final theme = Theme.of(context);
 
     ref.listen(callHeaderProvider, (previous, next) {
+      final prevPhone = previous?.selectedPhone?.trim() ?? '';
+      final nextPhone = next.selectedPhone?.trim() ?? '';
+      if (prevPhone.isEmpty &&
+          nextPhone.isNotEmpty &&
+          !_phoneFocusNode.hasFocus) {
+        final timerNotifier = ref.read(callEntryProvider.notifier);
+        if (!timerNotifier.isTimerRunning) {
+          timerNotifier.startTimerOnce();
+        }
+      }
       // Ενημέρωση Phone
       if (next.selectedPhone != null &&
           next.selectedPhone != _phoneController.text) {
         _phoneController.value = TextEditingValue(
           text: next.selectedPhone!,
-          selection: TextSelection.collapsed(offset: next.selectedPhone!.length),
+          selection: TextSelection.collapsed(
+            offset: next.selectedPhone!.length,
+          ),
         );
       }
 
@@ -137,8 +172,19 @@ class _CallHeaderFormState extends ConsumerState<CallHeaderForm> {
       if (next.callerDisplayText != _callerController.text) {
         _callerController.value = TextEditingValue(
           text: next.callerDisplayText,
-          selection:
-              TextSelection.collapsed(offset: next.callerDisplayText.length),
+          selection: TextSelection.collapsed(
+            offset: next.callerDisplayText.length,
+          ),
+        );
+      }
+
+      // Ενημέρωση Department (departmentText)
+      if (next.departmentText != _departmentController.text) {
+        _departmentController.value = TextEditingValue(
+          text: next.departmentText,
+          selection: TextSelection.collapsed(
+            offset: next.departmentText.length,
+          ),
         );
       }
 
@@ -146,21 +192,38 @@ class _CallHeaderFormState extends ConsumerState<CallHeaderForm> {
       if (next.equipmentText != _equipmentController.text) {
         _equipmentController.value = TextEditingValue(
           text: next.equipmentText,
-          selection:
-              TextSelection.collapsed(offset: next.equipmentText.length),
+          selection: TextSelection.collapsed(offset: next.equipmentText.length),
         );
       }
     });
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Flexible(
-              child: _PhoneField(
-                width: w1,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final mw = constraints.maxWidth.isFinite && constraints.maxWidth > 0
+            ? constraints.maxWidth
+            : MediaQuery.sizeOf(context).width;
+
+        // Κρατάμε ανώτατα όρια στα πλάτη ώστε το ×/+ να μένει πάντα κοντά
+        // στο πεδίο εξοπλισμού και να μην "φεύγει" δεξιά σε πολύ φαρδιά οθόνη.
+        final w1 = (mw * 0.18).clamp(120.0, 170.0);
+        final w2 = (mw * 0.34).clamp(220.0, 300.0);
+        final wDept = (mw * 0.24).clamp(160.0, 240.0);
+        final w3 = (mw * 0.20).clamp(130.0, 185.0);
+        final headerFields = ScrollConfiguration(
+          behavior: ScrollConfiguration.of(context).copyWith(
+            scrollbars: true,
+            physics: const ClampingScrollPhysics(),
+          ),
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                      SizedBox(
+                        width: w1,
+                        child: _PhoneField(
+                          width: w1,
                 controller: _phoneController,
                 focusNode: _phoneFocusNode,
                 nextFocusNode: _callerFocusNode,
@@ -171,6 +234,7 @@ class _CallHeaderFormState extends ConsumerState<CallHeaderForm> {
                 onClearAll: () {
                   _phoneController.clear();
                   _callerController.clear();
+                  _departmentController.clear();
                   _equipmentController.clear();
                   _notifier.clearAll();
                   ref.read(callEntryProvider.notifier).resetTimerToStandby();
@@ -179,10 +243,14 @@ class _CallHeaderFormState extends ConsumerState<CallHeaderForm> {
                 onContentChecked: () => _notifier.checkContent(
                   phoneText: _phoneController.text,
                   callerText: _callerController.text,
+                  departmentText: _departmentController.text,
                   equipmentText: _equipmentController.text,
                 ),
                 onPhoneSubmitted: () {
-                  final digits = _phoneController.text.replaceAll(RegExp(r'[^0-9]'), '');
+                  final digits = _phoneController.text.replaceAll(
+                    RegExp(r'[^0-9]'),
+                    '',
+                  );
                   if (digits.isNotEmpty) {
                     ref.read(callEntryProvider.notifier).startTimerOnce();
                   } else {
@@ -203,15 +271,40 @@ class _CallHeaderFormState extends ConsumerState<CallHeaderForm> {
                     if (mounted) setState(() => _isSelectingFromList = false);
                   });
                 },
-              ),
-            ),
-            const SizedBox(width: 12),
-            Flexible(
-              flex: 2,
-              child: _CallerField(
-                width: w2,
-                controller: _callerController,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  SizedBox(
+                    width: w2,
+                    child: _CallerField(
+                      width: w2,
+                      controller: _callerController,
                 focusNode: _callerFocusNode,
+                nextFocusNode: _departmentFocusNode,
+                header: header,
+                lookupService: lookupService,
+                notifier: _notifier,
+                onContentChecked: () => _notifier.checkContent(
+                  phoneText: _phoneController.text,
+                  callerText: _callerController.text,
+                  departmentText: _departmentController.text,
+                  equipmentText: _equipmentController.text,
+                ),
+                onCallerFocusOut: () => _notifier.checkContent(
+                  phoneText: _phoneController.text,
+                  callerText: _callerController.text,
+                  departmentText: _departmentController.text,
+                  equipmentText: _equipmentController.text,
+                ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  SizedBox(
+                    width: wDept,
+                    child: _DepartmentField(
+                      width: wDept,
+                      controller: _departmentController,
+                focusNode: _departmentFocusNode,
                 nextFocusNode: _equipmentFocusNode,
                 header: header,
                 lookupService: lookupService,
@@ -219,20 +312,17 @@ class _CallHeaderFormState extends ConsumerState<CallHeaderForm> {
                 onContentChecked: () => _notifier.checkContent(
                   phoneText: _phoneController.text,
                   callerText: _callerController.text,
+                  departmentText: _departmentController.text,
                   equipmentText: _equipmentController.text,
                 ),
-                onCallerFocusOut: () => _notifier.checkContent(
-                  phoneText: _phoneController.text,
-                  callerText: _callerController.text,
-                  equipmentText: _equipmentController.text,
-                ),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Flexible(
-              child: _EquipmentField(
-                width: w3,
-                controller: _equipmentController,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  SizedBox(
+                    width: w3,
+                    child: _EquipmentField(
+                      width: w3,
+                      controller: _equipmentController,
                 focusNode: _equipmentFocusNode,
                 nextFocusNode: _phoneFocusNode,
                 header: header,
@@ -241,58 +331,123 @@ class _CallHeaderFormState extends ConsumerState<CallHeaderForm> {
                 onContentChecked: () => _notifier.checkContent(
                   phoneText: _phoneController.text,
                   callerText: _callerController.text,
+                  departmentText: _departmentController.text,
                   equipmentText: _equipmentController.text,
                 ),
-              ),
-            ),
-            const SizedBox(width: 8),
-            IgnorePointer(
-              ignoring: !hasAnyContent,
-              child: AnimatedOpacity(
-                opacity: hasAnyContent ? 1.0 : 0.0,
-                duration: const Duration(milliseconds: 180),
-                child: AnimatedScale(
-                  scale: hasAnyContent ? 1.0 : 0.0,
-                  duration: const Duration(milliseconds: 180),
-                  child: IconButton(
-                    icon: Icon(Icons.clear, color: theme.colorScheme.error),
-                    tooltip: 'Καθαρισμός όλων των πεδίων',
-                    onPressed: () {
-                      _phoneController.clear();
-                      _callerController.clear();
-                      _equipmentController.clear();
-                      _notifier.clearAll();
-                      ref.read(callEntryProvider.notifier).resetTimerToStandby();
-                      _phoneFocusNode.requestFocus();
-                    },
+                    ),
                   ),
-                ),
-              ),
+                  const SizedBox(width: 4),
+                  IgnorePointer(
+                    ignoring: !hasAnyContent,
+                    child: AnimatedOpacity(
+                      opacity: hasAnyContent ? 1.0 : 0.0,
+                      duration: const Duration(milliseconds: 180),
+                      child: AnimatedScale(
+                        scale: hasAnyContent ? 1.0 : 0.0,
+                        duration: const Duration(milliseconds: 180),
+                        child: IconButton(
+                          icon: Icon(
+                            Icons.clear,
+                            color: theme.colorScheme.error,
+                          ),
+                          tooltip: 'Καθαρισμός όλων των πεδίων',
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(
+                            minWidth: 40,
+                            minHeight: 40,
+                          ),
+                          onPressed: () {
+                            _phoneController.clear();
+                            _callerController.clear();
+                            _departmentController.clear();
+                            _equipmentController.clear();
+                            _notifier.clearAll();
+                            ref
+                                .read(callEntryProvider.notifier)
+                                .resetTimerToStandby();
+                            _phoneFocusNode.requestFocus();
+                          },
+                        ),
+                      ),
+                    ),
+                  ),
+                  if (header.needsAssociation)
+                    IconButton(
+                      icon: Icon(Icons.add, color: header.associationColor),
+                      tooltip: header.associationTooltip ?? '',
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(
+                        minWidth: 40,
+                        minHeight: 40,
+                      ),
+                      onPressed: () async {
+                        final messenger = ScaffoldMessenger.of(context);
+                        final currentHeader = ref.read(callHeaderProvider);
+                        final caller = currentHeader.selectedCaller;
+                        final departmentText =
+                            currentHeader.departmentText.trim();
+                        final selectedDepartment = departmentText.isNotEmpty
+                            ? lookupService
+                                ?.findDepartmentByName(departmentText)
+                            : null;
+                        var updatePrimaryDepartment = false;
+
+                        if (caller?.id != null &&
+                            selectedDepartment?.id != null &&
+                            selectedDepartment!.id != caller!.departmentId) {
+                          final askUpdate = await showDialog<bool>(
+                            context: context,
+                            builder: (dialogContext) {
+                              return AlertDialog(
+                                title: const Text('Αλλαγή κύριου τμήματος'),
+                                content: Text(
+                                  'Ο χρήστης έχει κύριο τμήμα "${caller.departmentName ?? 'Χωρίς τμήμα'}". '
+                                  'Να γίνει νέο κύριο τμήμα του χρήστη το "${selectedDepartment.name}";',
+                                ),
+                                actions: [
+                                  TextButton(
+                                    onPressed: () =>
+                                        Navigator.of(dialogContext).pop(false),
+                                    child: const Text('Όχι'),
+                                  ),
+                                  FilledButton(
+                                    onPressed: () =>
+                                        Navigator.of(dialogContext).pop(true),
+                                    child: const Text('Ναι'),
+                                  ),
+                                ],
+                              );
+                            },
+                          );
+                          updatePrimaryDepartment = askUpdate ?? false;
+                        }
+
+                        final msg = await _notifier.associateCurrentIfNeeded(
+                          updatePrimaryDepartment: updatePrimaryDepartment,
+                        );
+                        if (mounted && msg != null) {
+                          messenger.showSnackBar(SnackBar(content: Text(msg)));
+                        }
+                      },
+                    ),
+              ],
             ),
-            if (header.needsAssociation)
-              IconButton(
-                icon: Icon(Icons.add, color: header.associationColor),
-                tooltip: header.associationTooltip ?? '',
-                onPressed: () async {
-                  final messenger = ScaffoldMessenger.of(context);
-                  final msg =
-                      await _notifier.associateCurrentIfNeeded();
-                  if (mounted && msg != null) {
-                    messenger.showSnackBar(
-                      SnackBar(content: Text(msg)),
-                    );
-                  }
-                },
-              ),
+          ),
+        );
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            headerFields,
+            const SizedBox(height: 4),
+            _PhoneHelperAndError(
+              header: header,
+              lookupService: lookupService,
+              notifier: _notifier,
+            ),
           ],
-        ),
-        const SizedBox(height: 4),
-        _PhoneHelperAndError(
-          header: header,
-          lookupService: lookupService,
-          notifier: _notifier,
-        ),
-      ],
+        );
+      },
     );
   }
 }
@@ -334,9 +489,13 @@ class _PhoneField extends StatefulWidget {
 
 class _PhoneFieldState extends State<_PhoneField> {
   bool _isSelectingFromList = false;
+
+  /// Κρατά τη λίστα πολλαπλών τηλεφώνων ορατή λίγο μετά το blur, ώστε να
+  /// προλαβαίνει το tap (ίδια ιδέα με το πεδίο Καλούντας).
+  bool _showSuggestionList = false;
   Timer? _debounce;
 
-  /// Lookup τηλεφώνου: χρήση performPhoneLookup για 0/1/πολλά αποτελέσματα.
+  /// Αναζήτηση τηλεφώνου: `performPhoneLookup` για 0 / 1 / πολλαπλά αποτελέσματα.
   void _performLookup() {
     final digits = widget.controller.text.replaceAll(RegExp(r'[^0-9]'), '');
     if (digits.length >= 3) {
@@ -360,13 +519,21 @@ class _PhoneFieldState extends State<_PhoneField> {
       setState(() {});
     }
     if (widget.focusNode.hasFocus) {
+      setState(() => _showSuggestionList = true);
       return;
     }
     if (_isSelectingFromList) return;
-    _scheduleCompletedLookup();
+    // Καθυστέρηση κλεισίματος λίστας ώστε να προλάβει το onTap (blur πριν το tap).
+    Future.delayed(const Duration(milliseconds: 150), () {
+      if (!mounted) return;
+      if (widget.focusNode.hasFocus) return;
+      setState(() => _showSuggestionList = false);
+      _scheduleCompletedLookup();
+    });
   }
 
   void _onPhoneChanged(String value) {
+    if (_isSelectingFromList) return;
     _debounce?.cancel();
     if (value == widget.header.selectedPhone) return;
     final digits = value.replaceAll(RegExp(r'[^0-9]'), '');
@@ -377,16 +544,25 @@ class _PhoneFieldState extends State<_PhoneField> {
     }
   }
 
+  void _onPhoneTextChange() {
+    if (widget.focusNode.hasFocus) {
+      setState(() => _showSuggestionList = true);
+    }
+  }
+
   @override
   void initState() {
     super.initState();
+    _showSuggestionList = widget.focusNode.hasFocus;
     widget.focusNode.addListener(_onFocusChange);
+    widget.controller.addListener(_onPhoneTextChange);
   }
 
   @override
   void dispose() {
     _debounce?.cancel();
     widget.focusNode.removeListener(_onFocusChange);
+    widget.controller.removeListener(_onPhoneTextChange);
     super.dispose();
   }
 
@@ -404,7 +580,7 @@ class _PhoneFieldState extends State<_PhoneField> {
     final onContentChecked = widget.onContentChecked;
     final showPhoneCandidates =
         header.phoneCandidates.isNotEmpty &&
-        focusNode.hasFocus &&
+        _showSuggestionList &&
         controller.text.trim().isEmpty;
 
     return SizedBox(
@@ -414,7 +590,24 @@ class _PhoneFieldState extends State<_PhoneField> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Τηλέφωνο', style: Theme.of(context).textTheme.labelMedium),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(
+                  Icons.phone_outlined,
+                  size: 16,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: Text(
+                    'Τηλέφωνο',
+                    style: Theme.of(context).textTheme.labelMedium,
+                    softWrap: true,
+                  ),
+                ),
+              ],
+            ),
             const SizedBox(height: 4),
             Autocomplete<String>(
               focusNode: focusNode,
@@ -422,9 +615,9 @@ class _PhoneFieldState extends State<_PhoneField> {
               optionsBuilder: (value) {
                 final text = value.text.replaceAll(RegExp(r'[^0-9]'), '');
                 if (header.phoneCandidates.isNotEmpty) {
-                  // Η custom λίστα (_PhoneSuggestionList) αναλαμβάνει όταν το κείμενο είναι κενό
+                  // Κενό πεδίο: η λίστα κάτω (_PhoneSuggestionList) δείχνει τα candidates.
                   if (text.isEmpty) return const Iterable<String>.empty();
-                  
+
                   final candidates = _CallHeaderFormState._sortPhonesByRecent(
                     List<String>.from(header.phoneCandidates),
                     header.recentPhones,
@@ -442,74 +635,81 @@ class _PhoneFieldState extends State<_PhoneField> {
                 );
               },
               onSelected: (value) {
+                setState(() {
+                  _isSelectingFromList = true;
+                  _showSuggestionList = false;
+                });
                 WidgetsBinding.instance.addPostFrameCallback((_) {
                   controller.text = value;
-                  // Αν η επιλογή προέρχεται από τη λίστα υποψηφίων καλούντα (phoneCandidates), κρατάμε context.
+                  notifier.setPhone(value);
+                  // Από `phoneCandidates`: διατηρούμε caller / εξοπλισμό χωρίς νέο lookup.
                   final fromCandidates = header.phoneCandidates.contains(value);
                   if (fromCandidates) {
                     notifier.selectPhoneFromCandidates(value);
                   } else {
-                    notifier.updatePhone(value);
-                    notifier.markPhoneAsManual();
                     notifier.markPhoneUsed(value);
-                    notifier.performPhoneLookup(value.replaceAll(RegExp(r'[^0-9]'), ''));
+                    notifier.performPhoneLookup(
+                      value.replaceAll(RegExp(r'[^0-9]'), ''),
+                    );
                   }
                   widget.onPhoneSelectedFromList(value);
                   if (!focusNode.hasFocus) {
                     focusNode.requestFocus();
                   }
+                  Future.delayed(const Duration(milliseconds: 250), () {
+                    if (mounted) setState(() => _isSelectingFromList = false);
+                  });
                 });
               },
-              fieldViewBuilder: (
-                context,
-                textController,
-                focusNodeParam,
-                onFieldSubmitted,
-              ) {
-                return Semantics(
-                  label: 'Αριθμός τηλεφώνου',
-                  child: TextField(
-                    controller: textController,
-                    focusNode: focusNodeParam,
-                    autofocus: true,
-                    decoration: InputDecoration(
-                      hintText: 'π.χ. 2345',
-                      hintStyle: TextStyle(
-                        color: Theme.of(context).hintColor, // χρησιμοποιεί το system "αγνό γκρι" hint
-                      ),
-                      border: const OutlineInputBorder(),
-                      isDense: true,
-                    suffixIcon: Semantics(
-                      label: 'Καθαρισμός Τηλεφώνου',
-                      child: IconButton(
-                        icon: const Icon(Icons.close, size: 20),
-                        onPressed: () {
-                          textController.clear();
-                          onClearAll();
+              fieldViewBuilder:
+                  (context, textController, focusNodeParam, onFieldSubmitted) {
+                    return Semantics(
+                      label: 'Αριθμός τηλεφώνου',
+                      child: TextField(
+                        controller: textController,
+                        focusNode: focusNodeParam,
+                        autofocus: true,
+                        decoration: InputDecoration(
+                          hintText: 'π.χ. 2345',
+                          hintStyle: TextStyle(
+                            color: Theme.of(context).hintColor,
+                          ),
+                          border: const OutlineInputBorder(),
+                          isDense: true,
+                          suffixIcon: Semantics(
+                            label: 'Καθαρισμός Τηλεφώνου',
+                            child: IconButton(
+                              icon: const Icon(Icons.close, size: 20),
+                              onPressed: () {
+                                textController.clear();
+                                onClearAll();
+                              },
+                              tooltip: 'Καθαρισμός Τηλεφώνου',
+                            ),
+                          ),
+                        ),
+                        inputFormatters: [
+                          FilteringTextInputFormatter.digitsOnly,
+                        ],
+                        keyboardType: TextInputType.number,
+                        onChanged: _onPhoneChanged,
+                        onSubmitted: (value) {
+                          final digits = value.replaceAll(
+                            RegExp(r'[^0-9]'),
+                            '',
+                          );
+                          if (digits.length < 2) {
+                            onLessThan2DigitsSubmit();
+                            return;
+                          }
+                          onContentChecked();
+                          widget.onPhoneSubmitted();
+                          nextFocusNode.requestFocus();
+                          _scheduleCompletedLookup();
                         },
-                        tooltip: 'Καθαρισμός Τηλεφώνου',
                       ),
-                    ),
-                    ),
-                    inputFormatters: [
-                      FilteringTextInputFormatter.digitsOnly,
-                    ],
-                    keyboardType: TextInputType.number,
-                    onChanged: _onPhoneChanged,
-                  onSubmitted: (value) {
-                    final digits = value.replaceAll(RegExp(r'[^0-9]'), '');
-                    if (digits.length < 2) {
-                      onLessThan2DigitsSubmit();
-                      return;
-                    }
-                    onContentChecked();
-                    widget.onPhoneSubmitted();
-                    nextFocusNode.requestFocus();
-                    _scheduleCompletedLookup();
+                    );
                   },
-                ),
-              );
-              },
             ),
             if (showPhoneCandidates)
               _PhoneSuggestionList(
@@ -520,12 +720,12 @@ class _PhoneFieldState extends State<_PhoneField> {
                 onSelected: (value) {
                   setState(() {
                     _isSelectingFromList = true;
+                    _showSuggestionList = false;
                   });
                   notifier.selectPhoneFromCandidates(value);
                   focusNode.requestFocus();
                   widget.onPhoneSelectedFromList(value);
-                  
-                  // Επαναφέρουμε τη σημαία αφού ολοκληρωθεί ο κύκλος
+
                   Future.delayed(const Duration(milliseconds: 300), () {
                     if (mounted) {
                       setState(() {
@@ -543,10 +743,7 @@ class _PhoneFieldState extends State<_PhoneField> {
 }
 
 class _PhoneSuggestionList extends StatelessWidget {
-  const _PhoneSuggestionList({
-    required this.phones,
-    required this.onSelected,
-  });
+  const _PhoneSuggestionList({required this.phones, required this.onSelected});
 
   final List<String> phones;
   final ValueChanged<String> onSelected;
@@ -639,7 +836,8 @@ class _CallerFieldState extends State<_CallerField> {
     }
     final displayName = _extractDisplayName(selection);
     final matches = lookupService.searchUsersByQuery(displayName).where((user) {
-      return user.fullNameWithDepartment == selection || user.name == displayName;
+      return user.fullNameWithDepartment == selection ||
+          user.name == displayName;
     }).toList();
     if (matches.isEmpty) {
       return null;
@@ -679,8 +877,7 @@ class _CallerFieldState extends State<_CallerField> {
     if (widget.focusNode.hasFocus) {
       setState(() => _showSuggestionList = true);
     } else {
-      _scheduleCompletedLookup();
-      // Καθυστέρηση κλεισίματος για να προλάβει το onTap αν ο χρήστης πατήσει στη λίστα
+      // Καθυστέρηση κλεισίματος ώστε να προλάβει το onTap στη λίστα.
       Future.delayed(const Duration(milliseconds: 150), () {
         if (mounted && !widget.focusNode.hasFocus) {
           setState(() => _showSuggestionList = false);
@@ -736,6 +933,7 @@ class _CallerFieldState extends State<_CallerField> {
     final lookupService = widget.lookupService;
     final notifier = widget.notifier;
     final theme = Theme.of(context);
+    final textDirection = Directionality.of(context);
 
     final hintText = header.callerNoMatch ? 'Καμία αντιστοιχία' : null;
 
@@ -749,7 +947,24 @@ class _CallerFieldState extends State<_CallerField> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Καλούντας', style: theme.textTheme.labelMedium),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(
+                  Icons.person_outline,
+                  size: 16,
+                  color: theme.colorScheme.primary,
+                ),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: Text(
+                    'Καλούντας',
+                    style: theme.textTheme.labelMedium,
+                    softWrap: true,
+                  ),
+                ),
+              ],
+            ),
             const SizedBox(height: 4),
             Autocomplete<String>(
               displayStringForOption: (String option) => option,
@@ -778,14 +993,21 @@ class _CallerFieldState extends State<_CallerField> {
                 } else {
                   final users = q.isEmpty
                       ? <UserModel>[]
-                      : (lookupService?.searchUsersByQuery(textEditingValue.text.trim()) ?? []);
+                      : (lookupService?.searchUsersByQuery(
+                              textEditingValue.text.trim(),
+                            ) ??
+                            []);
                   for (final u in users) {
                     options.add(u.fullNameWithDepartment);
                   }
                 }
                 return options
-                    .where((option) =>
-                        SearchTextNormalizer.matchesNormalizedQuery(option, q))
+                    .where(
+                      (option) => SearchTextNormalizer.matchesNormalizedQuery(
+                        option,
+                        q,
+                      ),
+                    )
                     .toList();
               },
               onSelected: (String selection) {
@@ -810,70 +1032,84 @@ class _CallerFieldState extends State<_CallerField> {
                     notifier.clearCaller();
                   }
                   notifier.updateCallerDisplayText(displayName);
-                  notifier.markCallerAsManual();
                   controller.text = displayName;
                   notifier.performCallerLookup(displayName);
                   _onSuggestionSelected();
                 }
               },
-              fieldViewBuilder: (
-                context,
-                textController,
-                focusNodeParam,
-                onFieldSubmitted,
-              ) {
-                return Semantics(
-                  label: 'Όνομα καλούντος',
-                  child: SizedBox(
-                    width: width,
-                    child: TextField(
+              fieldViewBuilder:
+                  (context, textController, focusNodeParam, onFieldSubmitted) {
+                    final style =
+                        theme.textTheme.bodyLarge ?? const TextStyle();
+                    final showTooltip =
+                        !focusNodeParam.hasFocus &&
+                        _textOverflowsSingleLine(
+                          text: textController.text,
+                          style: style,
+                          maxWidth: width - 88,
+                          textDirection: textDirection,
+                        );
+                    final field = TextField(
                       controller: textController,
                       focusNode: focusNodeParam,
                       decoration: InputDecoration(
                         hintText: hintText,
                         hintStyle: theme.textTheme.bodyMedium?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
+                          color: theme.colorScheme.onSurfaceVariant.withValues(
+                            alpha: 0.7,
+                          ),
                         ),
-                      border: const OutlineInputBorder(),
-                      isDense: true,
-                      suffixIcon: Semantics(
-                        label: 'Καθαρισμός Καλούντα',
-                        child: IconButton(
-                          icon: const Icon(Icons.close, size: 20),
-                          onPressed: () {
-                            textController.clear();
-                            notifier.clearCaller();
-                            notifier.clearEquipment();
-                          },
-                          tooltip: 'Καθαρισμός Καλούντα',
+                        border: const OutlineInputBorder(),
+                        isDense: true,
+                        suffixIcon: Semantics(
+                          label: 'Καθαρισμός Καλούντα',
+                          child: IconButton(
+                            icon: const Icon(Icons.close, size: 20),
+                            onPressed: () {
+                              textController.clear();
+                              notifier.clearCaller();
+                              notifier.clearEquipment();
+                            },
+                            tooltip: 'Καθαρισμός Καλούντα',
+                          ),
                         ),
                       ),
-                    ),
-                    onChanged: (value) {
-                      if (value.trim().isEmpty) {
-                        notifier.clearCaller();
-                        notifier.clearEquipment();
-                      } else {
-                        notifier.updateCallerDisplayText(value);
-                        notifier.markCallerAsManual();
-                        if (header.selectedCaller != null) {
-                          final n = header.selectedCaller!.name;
-                          final f = header.selectedCaller!.fullNameWithDepartment;
-                          if (value.trim() != n && value.trim() != f) {
-                            notifier.updateSelectedCaller(null);
+                      onChanged: (value) {
+                        if (value.trim().isEmpty) {
+                          notifier.clearCaller();
+                          notifier.clearEquipment();
+                        } else {
+                          notifier.updateCallerDisplayText(value);
+                          notifier.markCallerAsManual();
+                          if (header.selectedCaller != null) {
+                            final n = header.selectedCaller!.name;
+                            final f =
+                                header.selectedCaller!.fullNameWithDepartment;
+                            if (value.trim() != n && value.trim() != f) {
+                              notifier.updateSelectedCaller(null);
+                            }
                           }
                         }
-                      }
-                    },
-                    onSubmitted: (_) {
-                      widget.onContentChecked();
-                      nextFocusNode.requestFocus();
-                      _scheduleCompletedLookup();
-                    },
-                  ),
-                ),
-              );
-              },
+                      },
+                      onSubmitted: (_) {
+                        widget.onContentChecked();
+                        nextFocusNode.requestFocus();
+                        _scheduleCompletedLookup();
+                      },
+                    );
+                    return Semantics(
+                      label: 'Όνομα καλούντος',
+                      child: SizedBox(
+                        width: width,
+                        child: showTooltip
+                            ? Tooltip(
+                                message: textController.text,
+                                child: field,
+                              )
+                            : field,
+                      ),
+                    );
+                  },
             ),
             if (showSuggestions && _showSuggestionList)
               _CallerSuggestionList(
@@ -894,10 +1130,7 @@ class _CallerFieldState extends State<_CallerField> {
 
 /// Οπτική ανατροφοδότηση: πώς θα ερμηνευτεί το κείμενο Καλούντα (Όνομα / Επώνυμο).
 class _CallerParseHint extends StatelessWidget {
-  const _CallerParseHint({
-    required this.header,
-    required this.theme,
-  });
+  const _CallerParseHint({required this.header, required this.theme});
 
   final CallHeaderState header;
   final ThemeData theme;
@@ -924,9 +1157,7 @@ class _CallerParseHint extends StatelessWidget {
             ),
             TextSpan(
               text: '- Επώνυμο: ${parsed.lastName}',
-              style: style.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
+              style: style.copyWith(color: theme.colorScheme.onSurfaceVariant),
             ),
           ],
         ),
@@ -957,9 +1188,14 @@ class _CallerSuggestionList extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // Για εμφάνιση στο πεδίο: μόνο ονοματεπόνυμο (name), fallback fullNameWithDepartment.
-    final callerDisplayName = header.selectedCaller?.name ??
+    final callerDisplayName =
+        header.selectedCaller?.name ??
         header.selectedCaller?.fullNameWithDepartment ??
         '';
+    final filteredCandidates = header.callerCandidates.where((u) {
+      final candidateName = (u.name ?? u.fullNameWithDepartment).trim();
+      return candidateName.isNotEmpty && candidateName != callerDisplayName;
+    }).toList();
     return Material(
       color: theme.colorScheme.surfaceContainerLow,
       elevation: 1,
@@ -967,6 +1203,19 @@ class _CallerSuggestionList extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
+          for (final user in filteredCandidates)
+            ListTile(
+              dense: true,
+              title: Text(user.fullNameWithDepartment),
+              onTap: () {
+                final displayName = user.name ?? user.fullNameWithDepartment;
+                controller.text = displayName;
+                notifier.updateSelectedCaller(user);
+                notifier.updateCallerDisplayText(displayName);
+                notifier.performCallerLookup(displayName);
+                onSelectionCommitted?.call();
+              },
+            ),
           if (callerDisplayName.isNotEmpty)
             ListTile(
               dense: true,
@@ -975,7 +1224,6 @@ class _CallerSuggestionList extends StatelessWidget {
                 // Στο πεδίο μόνο ονοματεπόνυμο.
                 controller.text = callerDisplayName;
                 notifier.updateCallerDisplayText(callerDisplayName);
-                notifier.markCallerAsManual();
                 onSelectionCommitted?.call();
               },
             ),
@@ -986,7 +1234,9 @@ class _CallerSuggestionList extends StatelessWidget {
                 'Άγνωστος',
                 style: theme.textTheme.bodyMedium?.copyWith(
                   fontStyle: FontStyle.italic,
-                  color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.8),
+                  color: theme.colorScheme.onSurfaceVariant.withValues(
+                    alpha: 0.8,
+                  ),
                 ),
               ),
               onTap: () {
@@ -998,6 +1248,134 @@ class _CallerSuggestionList extends StatelessWidget {
               },
             ),
         ],
+      ),
+    );
+  }
+}
+
+/// Πεδίο Τμήμα: `Autocomplete<DepartmentModel>` ανάμεσα σε Καλούντας και Εξοπλισμό.
+class _DepartmentField extends StatelessWidget {
+  const _DepartmentField({
+    required this.width,
+    required this.controller,
+    required this.focusNode,
+    required this.nextFocusNode,
+    required this.header,
+    required this.lookupService,
+    required this.notifier,
+    required this.onContentChecked,
+  });
+
+  final double width;
+  final TextEditingController controller;
+  final FocusNode focusNode;
+  final FocusNode nextFocusNode;
+  final CallHeaderState header;
+  final LookupService? lookupService;
+  final CallHeaderNotifier notifier;
+  final VoidCallback onContentChecked;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final textDirection = Directionality.of(context);
+    return SizedBox(
+      width: width,
+      child: MergeSemantics(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(
+                  Icons.business_outlined,
+                  size: 16,
+                  color: theme.colorScheme.primary,
+                ),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: Text(
+                    'Τμήμα',
+                    style: theme.textTheme.labelMedium,
+                    softWrap: true,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Autocomplete<DepartmentModel>(
+              displayStringForOption: (DepartmentModel d) => d.name,
+              focusNode: focusNode,
+              textEditingController: controller,
+              optionsBuilder: (TextEditingValue value) {
+                final query = value.text.trim();
+                if (lookupService == null) return const [];
+                return lookupService!.searchDepartments(query);
+              },
+              onSelected: (DepartmentModel selection) {
+                controller.text = selection.name;
+                notifier.selectDepartment(selection);
+                onContentChecked();
+                nextFocusNode.requestFocus();
+              },
+              fieldViewBuilder:
+                  (context, textController, focusNodeParam, onFieldSubmitted) {
+                    final style =
+                        theme.textTheme.bodyLarge ?? const TextStyle();
+                    final showTooltip =
+                        !focusNodeParam.hasFocus &&
+                        _textOverflowsSingleLine(
+                          text: textController.text,
+                          style: style,
+                          maxWidth: width - 88,
+                          textDirection: textDirection,
+                        );
+                    final field = TextField(
+                      controller: textController,
+                      focusNode: focusNodeParam,
+                      decoration: InputDecoration(
+                        border: const OutlineInputBorder(),
+                        isDense: true,
+                        suffixIcon: Semantics(
+                          label: 'Καθαρισμός Τμήματος',
+                          child: IconButton(
+                            icon: const Icon(Icons.close, size: 20),
+                            onPressed: () {
+                              textController.clear();
+                              notifier.updateDepartmentText('');
+                              onContentChecked();
+                            },
+                            tooltip: 'Καθαρισμός Τμήματος',
+                          ),
+                        ),
+                      ),
+                      onChanged: (value) {
+                        notifier.updateDepartmentText(value);
+                        onContentChecked();
+                      },
+                      onSubmitted: (_) {
+                        onContentChecked();
+                        nextFocusNode.requestFocus();
+                      },
+                    );
+                    return Semantics(
+                      label: 'Τμήμα',
+                      child: SizedBox(
+                        width: width,
+                        child: showTooltip
+                            ? Tooltip(
+                                message: textController.text,
+                                child: field,
+                              )
+                            : field,
+                      ),
+                    );
+                  },
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1041,6 +1419,7 @@ class _EquipmentField extends StatefulWidget {
 class _EquipmentFieldState extends State<_EquipmentField> {
   bool _isSelectingEquipment = false;
   bool _showInitialList = false;
+
   /// True μόνο αμέσως μετά επιλογή από _EquipmentSuggestionList· αποτρέπει το didUpdateWidget από clear.
   bool _justSelectedFromCustomList = false;
   Timer? _debounce;
@@ -1082,7 +1461,7 @@ class _EquipmentFieldState extends State<_EquipmentField> {
       });
     } else {
       _scheduleCompletedLookup();
-      // Καθυστέρηση κλεισίματος για να προλάβει το onTap αν ο χρήστης πατήσει στη λίστα
+      // Καθυστέρηση κλεισίματος ώστε να προλάβει το onTap στη λίστα.
       Future.delayed(const Duration(milliseconds: 150), () {
         if (mounted && !widget.focusNode.hasFocus) {
           setState(() {
@@ -1184,10 +1563,7 @@ class _EquipmentFieldState extends State<_EquipmentField> {
       final key = _equipmentKey(equipment);
       if (!callerKeys.contains(key) && seen.add(key)) {
         combined.add(
-          _EquipmentSuggestion(
-            equipment: equipment,
-            sourceLabel: 'Τηλέφωνο',
-          ),
+          _EquipmentSuggestion(equipment: equipment, sourceLabel: 'Τηλέφωνο'),
         );
       }
     }
@@ -1196,10 +1572,7 @@ class _EquipmentFieldState extends State<_EquipmentField> {
       final key = _equipmentKey(equipment);
       if (!phoneKeys.contains(key) && seen.add(key)) {
         combined.add(
-          _EquipmentSuggestion(
-            equipment: equipment,
-            sourceLabel: 'Όνομα',
-          ),
+          _EquipmentSuggestion(equipment: equipment, sourceLabel: 'Όνομα'),
         );
       }
     }
@@ -1224,13 +1597,18 @@ class _EquipmentFieldState extends State<_EquipmentField> {
   static String _equipmentFieldText(EquipmentModel e) =>
       e.code?.trim().isNotEmpty == true ? e.code!.trim() : e.displayLabel;
 
-  void _selectEquipment(EquipmentModel equipment, {bool fromCustomList = false}) {
+  void _selectEquipment(
+    EquipmentModel equipment, {
+    bool fromCustomList = false,
+  }) {
     _isSelectingEquipment = true;
     if (fromCustomList) _justSelectedFromCustomList = true;
     widget.controller.text = _equipmentFieldText(equipment);
     widget.notifier.setEquipment(equipment);
     widget.notifier.markEquipmentAsManual();
-    widget.notifier.performEquipmentLookupByCode(_equipmentFieldText(equipment));
+    widget.notifier.performEquipmentLookupByCode(
+      _equipmentFieldText(equipment),
+    );
     widget.notifier.checkContent(equipmentText: widget.controller.text);
     setState(() {
       _showInitialList = false;
@@ -1303,9 +1681,23 @@ class _EquipmentFieldState extends State<_EquipmentField> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              'Κωδικός Εξοπλισμού',
-              style: theme.textTheme.labelMedium,
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(
+                  Icons.computer_outlined,
+                  size: 16,
+                  color: theme.colorScheme.primary,
+                ),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: Text(
+                    'Κωδικός Εξοπλισμού',
+                    style: theme.textTheme.labelMedium,
+                    softWrap: true,
+                  ),
+                ),
+              ],
             ),
             const SizedBox(height: 4),
             Autocomplete<EquipmentModel>(
@@ -1318,59 +1710,56 @@ class _EquipmentFieldState extends State<_EquipmentField> {
               onSelected: (value) {
                 _selectEquipment(value);
               },
-              fieldViewBuilder: (
-                  context,
-                  textController,
-                  focusNodeParam,
-                  onFieldSubmitted,
-                ) {
-                  return Semantics(
-                    label: 'Κωδικός εξοπλισμού',
-                    child: TextField(
-                      controller: textController,
-                      focusNode: focusNodeParam,
-                      decoration: InputDecoration(
-                        hintText: hintText,
-                        hintStyle: theme.textTheme.bodyMedium?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
-                        ),
-                        border: const OutlineInputBorder(),
-                        isDense: true,
-                        suffixIcon: Semantics(
-                          label: 'Καθαρισμός Εξοπλισμού',
-                          child: IconButton(
-                            icon: const Icon(Icons.close, size: 20),
-                            onPressed: () {
-                              textController.clear();
-                              notifier.clearEquipment();
-                            },
-                            tooltip: 'Καθαρισμός Εξοπλισμού',
+              fieldViewBuilder:
+                  (context, textController, focusNodeParam, onFieldSubmitted) {
+                    return Semantics(
+                      label: 'Κωδικός εξοπλισμού',
+                      child: TextField(
+                        controller: textController,
+                        focusNode: focusNodeParam,
+                        decoration: InputDecoration(
+                          hintText: hintText,
+                          hintStyle: theme.textTheme.bodyMedium?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant
+                                .withValues(alpha: 0.7),
+                          ),
+                          border: const OutlineInputBorder(),
+                          isDense: true,
+                          suffixIcon: Semantics(
+                            label: 'Καθαρισμός Εξοπλισμού',
+                            child: IconButton(
+                              icon: const Icon(Icons.close, size: 20),
+                              onPressed: () {
+                                textController.clear();
+                                notifier.clearEquipment();
+                              },
+                              tooltip: 'Καθαρισμός Εξοπλισμού',
+                            ),
                           ),
                         ),
-                      ),
-                      onChanged: (value) {
-                        if (_isSelectingEquipment) {
+                        onChanged: (value) {
+                          if (_isSelectingEquipment) {
+                            notifier.checkContent(equipmentText: value);
+                            return;
+                          }
+                          final selected = header.selectedEquipment;
+                          if (selected != null &&
+                              value != _equipmentFieldText(selected)) {
+                            notifier.clearEquipment();
+                          }
+                          notifier.markEquipmentAsManual();
+                          // Θέλουμε να ενημερωθεί το equipmentText για να μπορεί να εμφανιστεί ο σταυρός άμεσα ή στο checkContent
                           notifier.checkContent(equipmentText: value);
-                          return;
-                        }
-                        final selected = header.selectedEquipment;
-                        if (selected != null &&
-                            value != _equipmentFieldText(selected)) {
-                          notifier.clearEquipment();
-                        }
-                        notifier.markEquipmentAsManual();
-                        // Θέλουμε να ενημερωθεί το equipmentText για να μπορεί να εμφανιστεί ο σταυρός άμεσα ή στο checkContent
-                        notifier.checkContent(equipmentText: value);
-                      },
-                      onSubmitted: (_) {
-                        widget.onContentChecked();
-                        nextFocusNode.requestFocus();
-                        _scheduleCompletedLookup();
-                      },
-                    ),
-                  );
-                },
-              ),
+                        },
+                        onSubmitted: (_) {
+                          widget.onContentChecked();
+                          nextFocusNode.requestFocus();
+                          _scheduleCompletedLookup();
+                        },
+                      ),
+                    );
+                  },
+            ),
             if (showInitialSuggestionList)
               _EquipmentSuggestionList(
                 suggestions: initialSuggestions,

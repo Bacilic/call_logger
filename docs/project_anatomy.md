@@ -1,21 +1,18 @@
 # Call Logger — Project Anatomy
 
-**Ημερομηνία τροποποίησης:** 17 Μαρτίου 2026  
+**Ημερομηνία τροποποίησης:** 18 Μαρτίου 2026  
 
-Συμπυκνωμένη «ακτινογραφία» του project για τροφοδότηση σε εξωτερικό LLM (Καθοδηγητής). Flutter Desktop (Windows 11), Clean Architecture, Riverpod.
+Συμπυκνωμένη «ακτινογραφία» για τροφοδότηση σε εξωτερικό LLM (Καθοδηγητής). Flutter Desktop (Windows 11), καθαρή αρχιτεκτονική κατά feature, Riverpod.
 
 ---
 
-## 1. DIRTREE (Δομή φακέλων `lib/`)
-
-Καθαρό δέντρο μόνο του `lib/`. Αγνοούνται build, android, ios, windows, test.
+## 1. DIRTREE (`lib/`)
 
 ```
 lib/
 ├── main.dart
 ├── core/
-│   ├── config/
-│   │   └── app_config.dart
+│   ├── config/app_config.dart
 │   ├── database/
 │   │   ├── database_helper.dart
 │   │   ├── database_init_result.dart
@@ -23,10 +20,8 @@ lib/
 │   ├── init/
 │   │   ├── app_init_provider.dart
 │   │   └── app_initializer.dart
-│   ├── models/
-│   │   └── remote_tool_arg.dart
-│   ├── providers/
-│   │   └── settings_provider.dart
+│   ├── models/remote_tool_arg.dart
+│   ├── providers/settings_provider.dart
 │   ├── services/
 │   │   ├── excel_parser.dart
 │   │   ├── import_service.dart
@@ -36,7 +31,6 @@ lib/
 │   │   ├── remote_connection_service.dart
 │   │   ├── remote_launcher_service.dart
 │   │   └── settings_service.dart
-│   ├── theme/
 │   ├── utils/
 │   │   ├── name_parser.dart
 │   │   ├── phone_list_parser.dart
@@ -49,10 +43,7 @@ lib/
 │       └── main_shell.dart
 └── features/
     ├── calls/
-    │   ├── models/
-    │   │   ├── call_model.dart
-    │   │   ├── equipment_model.dart
-    │   │   └── user_model.dart
+    │   ├── models/ (call_model, equipment_model, user_model)
     │   ├── provider/
     │   │   ├── call_entry_provider.dart
     │   │   ├── call_header_provider.dart
@@ -61,157 +52,113 @@ lib/
     │   │   └── remote_paths_provider.dart
     │   └── screens/
     │       ├── calls_screen.dart
-    │       └── widgets/
-    │           ├── call_header_form.dart
-    │           ├── call_status_bar.dart
-    │           ├── import_console_widget.dart
-    │           ├── recent_calls_list.dart
-    │           ├── remote_connection_buttons.dart
-    │           ├── sticky_note_widget.dart
-    │           └── user_info_card.dart
-    ├── database/
-    │   └── screens/
-    │       └── database_browser_screen.dart
+    │       └── widgets/ (call_header_form, call_status_bar, equipment_info_card, notes_sticky_field, recent_calls_list, remote_connection_buttons, sticky_note_widget, user_info_card, import_console_widget)
+    ├── database/screens/database_browser_screen.dart
     ├── directory/
-    │   ├── models/
-    │   │   └── equipment_column.dart
-    │   ├── providers/
-    │   │   ├── directory_provider.dart
-    │   │   └── equipment_directory_provider.dart
-    │   └── screens/
-    │       ├── directory_screen.dart
-    │       └── widgets/
-    │           ├── bulk_equipment_edit_dialog.dart
-    │           ├── bulk_user_edit_dialog.dart
-    │           ├── equipment_data_table.dart
-    │           ├── equipment_form_dialog.dart
-    │           ├── equipment_tab.dart
-    │           ├── user_form_dialog.dart
-    │           ├── users_data_table.dart
-    │           └── users_tab.dart
+    │   ├── models/ (department_model, equipment_column)
+    │   ├── providers/ (directory_provider, equipment_directory_provider)
+    │   └── screens/ (directory_screen, widgets: users_tab, equipment_tab, φόρμες, πίνακες, bulk dialogs)
     ├── history/
-    │   ├── providers/
-    │   │   └── history_provider.dart
-    │   └── screens/
-    │       └── history_screen.dart
+    │   ├── providers/history_provider.dart
+    │   └── screens/history_screen.dart
     ├── settings/
-    │   ├── screens/
-    │   │   └── settings_screen.dart
-    │   └── widgets/
-    │       └── remote_args_editor.dart
+    │   ├── screens/settings_screen.dart
+    │   └── widgets/remote_args_editor.dart
     └── tasks/
-        ├── models/
-        │   ├── task.dart
-        │   └── task_filter.dart
-        ├── providers/
-        │   ├── task_service_provider.dart
-        │   └── tasks_provider.dart
-        ├── screens/
-        │   ├── task_card.dart
-        │   ├── task_close_dialog.dart
-        │   ├── task_filter_bar.dart
-        │   ├── task_form_dialog.dart
-        │   └── tasks_screen.dart
-        └── services/
-            └── task_service.dart
+        ├── models/ (task, task_filter)
+        ├── providers/ (task_service_provider, tasks_provider)
+        ├── services/task_service.dart
+        └── screens/ (tasks_screen, task_card, task_filter_bar, task_form_dialog, task_close_dialog)
 ```
 
 ---
 
-## 2. Σχήμα Βάσης Δεδομένων (DATABASE SCHEMA)
+## 2. DATABASE SCHEMA (SQLite)
 
-Πηγή: `lib/core/database/database_helper.dart`. Έκδοση σχήματος: **8**. Τελικές στήλες μετά από _onCreate και migrations (_onUpgrade).
+Πηγή: `database_helper.dart` (`_onCreate`, `_onUpgrade`, `migrateDepartmentsIfNeeded`). Τύποι όπως στο DDL.
 
 | Πίνακας | Στήλες (όνομα → τύπος) |
-|--------|-------------------------|
-| **calls** | id INTEGER PRIMARY KEY AUTOINCREMENT, date TEXT, time TEXT, caller_id INTEGER, equipment_id INTEGER, issue TEXT, solution TEXT, category TEXT, status TEXT, duration INTEGER, is_priority INTEGER DEFAULT 0, caller_text TEXT |
-| **users** | id INTEGER PRIMARY KEY AUTOINCREMENT, last_name TEXT NOT NULL, first_name TEXT NOT NULL, phone TEXT, department TEXT, location TEXT, notes TEXT |
-| **equipment** | id INTEGER PRIMARY KEY AUTOINCREMENT, code_equipment TEXT, type TEXT, user_id INTEGER, notes TEXT, custom_ip TEXT, anydesk_id TEXT, default_remote_tool TEXT, code TEXT, description TEXT |
-| **categories** | id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT |
-| **tasks** | id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT, description TEXT, due_date TEXT, status TEXT, call_id INTEGER, priority INTEGER, solution_notes TEXT, snooze_until TEXT, user_id INTEGER, equipment_id INTEGER, created_at TEXT, updated_at TEXT |
-| **knowledge_base** | id INTEGER PRIMARY KEY AUTOINCREMENT, topic TEXT, content TEXT, tags TEXT |
-| **audit_log** | id INTEGER PRIMARY KEY AUTOINCREMENT, action TEXT, timestamp TEXT, user_performing TEXT, details TEXT |
-| **app_settings** | key TEXT PRIMARY KEY, value TEXT |
-| **remote_tool_args** | id INTEGER PRIMARY KEY AUTOINCREMENT, tool_name TEXT, arg_flag TEXT, description TEXT, is_active INTEGER DEFAULT 0 |
-| **departments** | id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE NOT NULL, building TEXT, color TEXT DEFAULT '#1976D2', notes TEXT, map_floor TEXT, map_x REAL DEFAULT 0.0, map_y REAL DEFAULT 0.0, map_width REAL DEFAULT 0.0, map_height REAL DEFAULT 0.0 |
-
-Σημείωση: Ο πίνακας **departments** δημιουργείται από migrateDepartmentsIfNeeded (one-time). Στον **equipment** η κύρια στήλη κωδικού είναι `code_equipment`· στα μοντέλα χρησιμοποιείται πεδίο `code` (fromMap/toMap).
+|---------|------------------------|
+| **calls** | id INTEGER PK AUTOINCREMENT, date TEXT, time TEXT, caller_id INTEGER, equipment_id INTEGER, issue TEXT, solution TEXT, category TEXT, status TEXT, duration INTEGER, is_priority INTEGER DEFAULT 0 · **+** caller_text TEXT (migration v4) |
+| **users** | id INTEGER PK AUTOINCREMENT, last_name TEXT NOT NULL, first_name TEXT NOT NULL, phone TEXT, department TEXT, location TEXT, notes TEXT (μετά migration v5 από name→first/last) · **Σημ.:** ο κώδικας εισαγωγής/ενημέρωσης χρησιμοποιεί και **department_id INTEGER** όπου υπάρχει στη βάση |
+| **equipment** | id INTEGER PK AUTOINCREMENT, code_equipment TEXT, type TEXT, user_id INTEGER, notes TEXT, custom_ip TEXT, anydesk_id TEXT, default_remote_tool TEXT · **+** code TEXT, description TEXT (migrations v2–3) |
+| **categories** | id INTEGER PK, name TEXT |
+| **tasks** | id INTEGER PK, title TEXT, description TEXT, due_date TEXT, status TEXT, call_id INTEGER · **+** priority, solution_notes, snooze_until, user_id, equipment_id, created_at, updated_at (migration v7) |
+| **knowledge_base** | id INTEGER PK, topic TEXT, content TEXT, tags TEXT |
+| **audit_log** | id INTEGER PK, action TEXT, timestamp TEXT, user_performing TEXT, details TEXT |
+| **app_settings** | key TEXT PK, value TEXT |
+| **remote_tool_args** | id INTEGER PK, tool_name TEXT, arg_flag TEXT, description TEXT, is_active INTEGER DEFAULT 0 |
+| **departments** | id INTEGER PK, name TEXT UNIQUE NOT NULL, building TEXT, color TEXT DEFAULT '#1976D2', notes TEXT, map_floor TEXT, map_x REAL DEFAULT 0, map_y REAL DEFAULT 0, map_width REAL DEFAULT 0, map_height REAL DEFAULT 0 (δημιουργία runtime αν λείπει migration flag) |
 
 ---
 
-## 3. Μοντέλα (MODELS)
+## 3. MODELS (πεδία)
 
-**Θέση:** `lib/features/calls/models/` (CallModel, UserModel, EquipmentModel), `lib/features/directory/models/` (EquipmentColumn, EquipmentRow), `lib/features/tasks/models/` (Task, TaskStatus, TaskFilter), `lib/core/models/` (RemoteToolArg).
+**Calls (`lib/features/calls/models/`)**  
+- **CallModel:** id, date, time, callerId, equipmentId, callerText, issue, solution, category, status, duration, isPriority  
+- **UserModel:** id, firstName, lastName, phone, departmentId, notes (+ υπολογιζόμενα name, departmentName, fullNameWithDepartment)  
+- **EquipmentModel:** id, code, type, notes, userId, customIp, anydeskId, defaultRemoteTool (+ displayLabel, vncTarget, anydeskTarget)
 
-- **CallModel** — id, date, time, callerId, equipmentId, callerText, issue, solution, category, status, duration, isPriority. fromMap/toMap με snake_case κλειδιά.
+**Directory (`lib/features/directory/models/`)**  
+- **DepartmentModel:** id, name, building, color, notes, mapFloor, mapX, mapY, mapWidth, mapHeight  
+- **EquipmentColumn:** ορισμός στηλών πίνακα (key, label, displayValue, sortValue) — όχι ORM row  
+- **EquipmentRow:** typedef (EquipmentModel, UserModel?)
 
-- **UserModel** — id, firstName, lastName, phone, department, location, notes. Υπολογιζόμενα: name (first + last), fullNameWithDepartment. fromMap υποστηρίζει παλιό πεδίο `name`.
+**Tasks (`lib/features/tasks/models/`)**  
+- **Task:** id, callId, userId, equipmentId, title, description, dueDate, snoozeUntil, status, priority, solutionNotes, createdAt, updatedAt  
+- **TaskFilter:** searchQuery, statuses (open/snoozed), startDate, endDate  
+- **TaskStatus** (enum): open, snoozed, closed
 
-- **EquipmentModel** — id, code (αντιστοιχία code_equipment), type, notes, userId, customIp, anydeskId, defaultRemoteTool. Υπολογιζόμενα: displayLabel, vncTarget, anydeskTarget. fromMap/toMap με code_equipment.
-
-- **EquipmentColumn** — Ορισμός στήλης πίνακα εξοπλισμού: key, label, displayValue(EquipmentRow), sortValue(EquipmentRow). Στατικές: code, type, owner, location, phone, notes, customIp, anydeskId, defaultRemote· defaults, all.
-
-- **EquipmentRow** — Typedef: (EquipmentModel, UserModel?) — γραμμή πίνακα = εξοπλισμός + κάτοχος.
-
-- **Task** — id, callId, userId, equipmentId, title, description, dueDate, snoozeUntil, status, priority, solutionNotes, createdAt, updatedAt. Enum TaskStatus: open, snoozed, closed.
-
-- **TaskFilter** — searchQuery, statuses (List<TaskStatus>), startDate, endDate. Για φιλτράρισμα λίστας εκκρεμοτήτων.
-
-- **RemoteToolArg** — id, toolName, argFlag, description, isActive. Ορίσματα γραμμής εντολών για VNC/AnyDesk· placeholders {TARGET}, {PASSWORD}.
-
----
-
-## 4. Διαχείριση Κατάστασης — Πάροχοι (STATE MANAGEMENT — Providers)
-
-| Πάροχος | Τύπος / Θέση | Τι διαχειρίζει |
-|---------|----------------|----------------|
-| **appInitProvider** | FutureProvider, core/init | Αποτέλεσμα αρχικοποίησης εφαρμογής (DB, success/fail). Τρέχει μία φορά στην εκκίνηση. |
-| **callHeaderProvider** | NotifierProvider, features/calls/provider | Κατάσταση header φόρμας κλήσης: επιλεγμένο τηλέφωνο/χρήστη/εξοπλισμό, λίστες candidates, σφάλματα, flags (ambiguous, no-match), equipmentText, callerDisplayText. |
-| **callEntryProvider** | NotifierProvider, features/calls/provider | Κατάσταση φόρμας εισαγωγής κλήσης: internal digits, selected user/equipment, notes, category, χρονομέτρηση. |
-| **lookupServiceProvider** | FutureProvider, features/calls/provider | Φόρτωση LookupService μία φορά· cache για αναζήτηση χρηστών/εξοπλισμού από τη βάση. |
-| **remoteArgsServiceProvider** | Provider, features/calls/provider | Singleton RemoteArgsService (CRUD ορίσματα VNC/AnyDesk στη βάση). |
-| **validRemotePathsProvider** | FutureProvider, features/calls/provider | Έγκυρες διαδρομές VNC και AnyDesk (για απενεργοποίηση κουμπιών / tooltip). |
-| **remoteLauncherStatusProvider** | FutureProvider, features/calls/provider | Κατάσταση εκκινητών VNC/AnyDesk: διαδρομή και μήνυμα σφάλματος όταν απενεργό. |
-| **remoteConnectionServiceProvider** | Provider, features/calls/provider | Singleton RemoteConnectionService (εκκίνηση VNC/AnyDesk με target/password). |
-| **remoteLauncherServiceProvider** | Provider, features/calls/provider | Singleton RemoteLauncherService (εκκίνηση χωρίς παραμέτρους). |
-| **recentCallsProvider(userId)** | FutureProvider.family, features/calls/provider | Τελευταίες κλήσεις ανά caller_id για προβολή στο πεδίο καλούντος. |
-| **importLogProvider** | NotifierProvider, features/calls/provider | Λίστα ImportLogEntry (μηνύματα + level) για Live Console Import Excel. |
-| **directoryProvider** | NotifierProvider.autoDispose, features/directory/providers | Κατάσταση κατάλογου χρηστών: allUsers, filteredUsers, searchQuery, sort, selectedIds, undo, focusedRowIndex. |
-| **equipmentDirectoryProvider** | NotifierProvider.autoDispose, features/directory/providers | Κατάσταση κατάλογου εξοπλισμού: allItems, filteredItems, visibleColumns, searchQuery, sort, selectedIds, undo, focusedRowIndex. |
-| **catalogContinuousScrollProvider** | FutureProvider.autoDispose, features/directory/providers | Flag «συνεχής κύλιση» πίνακα Καταλόγου (από app_settings). |
-| **historyFilterProvider** | NotifierProvider, features/history/providers | Φίλτρα ιστορικού κλήσεων: keyword, dateFrom, dateTo, category. |
-| **historyCallsProvider** | FutureProvider.autoDispose, features/history/providers | Λίστα κλήσεων ιστορικού με βάση historyFilterProvider. |
-| **historyCategoriesProvider** | FutureProvider.autoDispose, features/history/providers | Ονόματα κατηγοριών για dropdown φίλτρου ιστορικού. |
-| **showActiveTimerProvider** | FutureProvider, core/providers | Ρύθμιση εμφάνισης ενεργού χρονομέτρου στη φόρμα κλήσεων. |
-| **showAnyDeskRemoteProvider** | FutureProvider, core/providers | Ρύθμιση εμφάνισης κουμπιού AnyDesk (και launcher χωρίς παραμέτρους)· προεπιλογή true. |
-| **taskServiceProvider** | Provider, features/tasks/providers | Singleton TaskService (CRUD tasks στη βάση). |
-| **taskFilterProvider** | NotifierProvider, features/tasks/providers | Κριτήρια φιλτραρίσματος εκκρεμοτήτων: searchQuery, statuses, startDate, endDate. |
-| **tasksProvider** | AsyncNotifierProvider, features/tasks/providers | Λίστα εργασιών (Task) με βάση taskFilterProvider· refresh από TaskService. |
-| **orphanCallsProvider** | FutureProvider, features/tasks/providers | Κλήσεις χωρίς αντίστοιχο task (για οθόνη εκκρεμοτήτων). |
+**Core**  
+- **RemoteToolArg** (`core/models/`): αντιστοιχία σε remote_tool_args
 
 ---
 
-## 5. Εξαρτήσεις (DEPENDENCIES)
+## 4. STATE MANAGEMENT — Riverpod (κύριοι providers)
 
-Από `pubspec.yaml` (μόνο dependencies):
+| Provider | Ρόλος |
+|----------|--------|
+| **appInitProvider** | Μία φορά στην εκκίνηση: έλεγχος/σύνδεση βάσης, αποτέλεσμα init. |
+| **callHeaderProvider** | Κατάσταση φόρμας κεφαλίδας κλήσης (τηλέφωνο, καλών, τμήμα, εξοπλισμός, candidates, canSubmit, focus). |
+| **callEntryProvider** | Φόρμα εισαγωγής κλήσης: σημειώσεις, κατηγορία, εκκρεμότητα, χρονόμετρο, submit / submit μόνο task. |
+| **lookupServiceProvider** | Ασύγχρονο φόρτωμα LookupService (χρήστες, τμήματα, εξοπλισμός στη μνήμη). |
+| **recentCallsProvider** (family) | Τελευταίες κλήσεις ανά userId. |
+| **importLogProvider** | Καταγραφές μηνυμάτων import. |
+| **remoteArgsServiceProvider** / **validRemotePathsProvider** / **remoteLauncherStatusProvider** / **remoteConnectionServiceProvider** / **remoteLauncherServiceProvider** | Διαδρομές & εκκίνηση VNC/AnyDesk. |
+| **taskServiceProvider** | Ανάλυση TaskService (singleton ανά scope). |
+| **taskFilterProvider** | Φίλτρο λίστας εκκρεμοτήτων. |
+| **tasksProvider** | Λίστα tasks (async) + refresh/add/update/delete/close. |
+| **orphanCallsProvider** | Κλήσεις pending χωρίς task. |
+| **directoryProvider** | Κατάλογος χρηστών/εξοπλισμού (φόρτωση, επεξεργασία, διαγραφές). |
+| **equipmentDirectoryProvider** | Κατάσταση καρτέλας εξοπλισμού καταλόγου. |
+| **catalogContinuousScrollProvider** | Ρύθμιση συνεχούς κύλισης στον κατάλογο. |
+| **historyFilterProvider** / **historyCallsProvider** / **historyCategoriesProvider** | Ιστορικό κλήσεων και φίλτρα. |
+| **showActiveTimerProvider** / **showAnyDeskRemoteProvider** | Ρυθμίσεις UI από SettingsService. |
 
-- **flutter** (sdk)
-- **flutter_localizations** (sdk)
-- **cupertino_icons** ^1.0.8
-- **flutter_riverpod** ^3.2.1
-- **sqflite_common_ffi** ^2.3.3
-- **sqlite3_flutter_libs** ^0.6.0
-- **path_provider** ^2.1.2
-- **path** ^1.9.0
-- **google_fonts** ^8.0.2
-- **intl** ^0.20.2
-- **window_manager** ^0.5.1
-- **screen_retriever** ^0.2.0
-- **shared_preferences** ^2.3.3
-- **url_launcher** ^6.3.0
-- **excel** ^4.0.6
-- **file_picker** ^8.0.0
+---
 
-**dev_dependencies:** flutter_test (sdk), flutter_lints ^6.0.0  
+## 5. DEPENDENCIES (`pubspec.yaml`)
 
-**environment.sdk:** ^3.10.7
+- **flutter** / **flutter_localizations** (sdk)  
+- **cupertino_icons:** ^1.0.8  
+- **flutter_riverpod:** ^3.2.1  
+- **sqflite_common_ffi:** ^2.3.3  
+- **sqlite3_flutter_libs:** ^0.6.0  
+- **path_provider:** ^2.1.2  
+- **path:** ^1.9.0  
+- **google_fonts:** ^8.0.2  
+- **intl:** ^0.20.2  
+- **window_manager:** ^0.5.1  
+- **screen_retriever:** ^0.2.0  
+- **shared_preferences:** ^2.3.3  
+- **url_launcher:** ^6.3.0  
+- **excel:** ^4.0.6  
+- **file_picker:** ^8.0.0  
+
+**dev:** flutter_test (sdk), **flutter_lints:** ^6.0.0  
+
+**environment:** sdk ^3.10.7  
+
+---
+
+*Τέλος εγγράφου — μόνο περιγραφές, χωρίς αυτούσιο κώδικα εφαρμογής.*

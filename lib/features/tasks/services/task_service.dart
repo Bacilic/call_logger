@@ -43,9 +43,9 @@ class TaskService {
     return d;
   }
 
-  /// Δημιουργεί εκκρεμότητα από κλήση. Επιστρέφει το νέο task id.
+  /// Δημιουργεί εκκρεμότητα από κλήση ή αυτόνομα ([callId] null = χωρίς εγγραφή κλήσης).
   Future<int> createFromCall({
-    required int callId,
+    int? callId,
     required String? callerName,
     required String description,
     required DateTime callDate,

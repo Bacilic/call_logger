@@ -2,11 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/database/database_helper.dart';
+import '../../../core/services/lookup_service.dart';
 import '../../../core/utils/name_parser.dart';
 import '../../../core/utils/phone_list_parser.dart';
+import '../../../core/utils/search_text_normalizer.dart';
 import 'lookup_provider.dart';
 import '../models/equipment_model.dart';
 import '../models/user_model.dart';
+import '../../directory/models/department_model.dart';
 
 /// Κατάσταση header φόρμας κλήσης: επιλογές, σφάλμα, πρόσφατα τηλέφωνα.
 /// FocusNodes ΔΕΝ αποθηκεύονται εδώ — ζουν στο widget State.
@@ -27,13 +30,16 @@ class CallHeaderState {
     this.hasAnyContent = false,
     this.equipmentText = '',
     this.callerDisplayText = '',
+    this.departmentText = '',
+    this.selectedDepartmentId,
+    this.departmentIsManual = false,
     this.phoneIsManual = false,
     this.callerIsManual = false,
     this.equipmentIsManual = false,
-  })  : recentPhones = recentPhones ?? [],
-        phoneCandidates = phoneCandidates ?? [],
-        callerCandidates = callerCandidates ?? [],
-        equipmentCandidates = equipmentCandidates ?? [];
+  }) : recentPhones = recentPhones ?? [],
+       phoneCandidates = phoneCandidates ?? [],
+       callerCandidates = callerCandidates ?? [],
+       equipmentCandidates = equipmentCandidates ?? [];
 
   final String? selectedPhone;
   final UserModel? selectedCaller;
@@ -45,20 +51,37 @@ class CallHeaderState {
   final List<EquipmentModel> equipmentCandidates;
   final bool isPhoneAmbiguous;
   final bool isEquipmentAmbiguous;
+
   /// True όταν έγινε phone lookup και βρέθηκαν 0 χρήστες (υπόδειξη "Καμία αντιστοιχία").
   final bool callerNoMatch;
+
   /// True όταν έγινε equipment lookup και βρέθηκαν 0 (υπόδειξη "Καμία αντιστοιχία").
   final bool equipmentNoMatch;
+
   /// Ενημερώνεται μετά από Enter ή focus out· χρησιμοποιείται για εμφάνιση κουμπιού "Καθαρισμός όλων".
   final bool hasAnyContent;
+
   /// Το κείμενο που έχει πληκτρολογήσει ο χρήστης στο πεδίο Κωδικός Εξοπλισμού (ανεξάρτητα από το αν το επέλεξε).
   final String equipmentText;
+
   /// Κείμενο εμφάνισης καλούντα (όνομα ή "Άγνωστος").
   final String callerDisplayText;
+
+  /// Κείμενο πεδίου Τμήμα (από επιλογή ή ελεύθερο πληκτρολόγηση).
+  final String departmentText;
+
+  /// Επιλεγμένο τμήμα (department_id) όταν υπάρχει σαφής αντιστοίχιση.
+  final int? selectedDepartmentId;
+
+  /// True όταν το τμήμα έχει τροποποιηθεί χειροκίνητα από τον χρήστη.
+  final bool departmentIsManual;
+
   /// True όταν το τηλέφωνο έχει τροποποιηθεί χειροκίνητα από τον χρήστη.
   final bool phoneIsManual;
+
   /// True όταν ο καλών έχει τροποποιηθεί χειροκίνητα από τον χρήστη.
   final bool callerIsManual;
+
   /// True όταν ο εξοπλισμός έχει τροποποιηθεί χειροκίνητα από τον χρήστη.
   final bool equipmentIsManual;
 
@@ -86,10 +109,15 @@ class CallHeaderState {
     if (selectedCaller == null) return false;
     final text = equipmentText.trim();
     if (text.isEmpty) return false;
-    if (selectedEquipment != null && selectedEquipment!.userId == selectedCaller!.id) return true;
-    
+    if (selectedEquipment != null &&
+        selectedEquipment!.userId == selectedCaller!.id) {
+      return true;
+    }
+
     // Έλεγχος αν ο εξοπλισμός (βάσει κειμένου) ανήκει ήδη στον χρήστη, μέσω της λίστας
-    return equipmentCandidates.any((e) => e.code?.trim() == text || e.displayLabel == text);
+    return equipmentCandidates.any(
+      (e) => e.code?.trim() == text || e.displayLabel == text,
+    );
   }
 
   /// True όταν υπάρχει ήδη γνωστός χρήστης και τουλάχιστον ένα από Τηλέφωνο/Εξοπλισμό έχει τιμή και δεν είναι συσχετισμένο.
@@ -114,7 +142,31 @@ class CallHeaderState {
 
   /// Το κουμπί `+` εμφανίζεται είτε για νέα συσχέτιση σε υπάρχοντα χρήστη είτε για δημιουργία νέου καλούντα.
   bool get needsAssociation =>
-      needsExistingCallerAssociation || needsNewCallerCreation;
+      needsExistingCallerAssociation ||
+      needsNewCallerCreation ||
+      hasPendingDepartmentChange;
+
+  bool get hasPendingDepartmentChange {
+    final caller = selectedCaller;
+    if (caller?.id == null) return false;
+    final nextDepartmentId = selectedDepartmentId;
+    if (nextDepartmentId == null) return false;
+    return nextDepartmentId != caller!.departmentId;
+  }
+
+  String? get pendingDepartmentChangeTooltip {
+    if (!hasPendingDepartmentChange) return null;
+    final caller = selectedCaller;
+    final nextDepartmentText = departmentText.trim();
+    final oldDepartment = caller?.departmentName?.trim();
+    final oldText = (oldDepartment == null || oldDepartment.isEmpty)
+        ? 'Χωρίς τμήμα'
+        : oldDepartment;
+    final callerName = caller?.name?.trim().isNotEmpty == true
+        ? caller!.name!.trim()
+        : normalizedCallerDisplayText;
+    return 'Αλλαγή τμήματος ($oldText -> $nextDepartmentText) για $callerName';
+  }
 
   /// Πράσινο: μία πλήρης συσχέτιση ή και τα δύο μη συσχετισμένα. Πορτοκαλί: μερική ενημέρωση (και τα δύο συμπληρωμένα, μόνο το ένα συσχετισμένο).
   Color get associationColor {
@@ -140,11 +192,17 @@ class CallHeaderState {
     final equipmentFilled = hasEquipmentInput;
 
     if (needsNewCallerCreation) {
+      // Για νέο καλούντα, αναφέρουμε εξοπλισμό μόνο αν ο χρήστης
+      // τον έχει τροποποιήσει ρητά (equipmentIsManual = true). Έτσι
+      // δεν "υπόσχεται" αλλαγή εξοπλισμού όταν το πεδίο προέκυψε
+      // μόνο από autofill.
+      final includeEquipmentForNewCaller =
+          equipmentFilled && equipmentIsManual;
       final parts = <String>[];
       if (phoneFilled) {
         parts.add('τηλέφωνο: ${selectedPhone!.trim()}');
       }
-      if (equipmentFilled) {
+      if (includeEquipmentForNewCaller) {
         parts.add('εξοπλισμό: ${equipmentText.trim()}');
       }
       if (parts.isEmpty) {
@@ -161,8 +219,15 @@ class CallHeaderState {
     if (equipmentFilled && !hasEquipmentAssociation) {
       parts.add('εξοπλισμού: ${equipmentText.trim()}');
     }
-    if (parts.isEmpty) return null;
-    return 'Προσθήκη ${parts.join(' και ')} στο $name';
+    final base = parts.isEmpty
+        ? null
+        : 'Προσθήκη ${parts.join(' και ')} στο $name';
+    final departmentPart = pendingDepartmentChangeTooltip;
+    if (base == null) return departmentPart;
+    if (departmentPart == null) return base;
+    // Δεύτερη γραμμή για την αλλαγή τμήματος, ώστε το tooltip
+    // να μην γίνεται υπερβολικά μακρύ σε μία μόνο σειρά.
+    return '$base\n$departmentPart';
   }
 
   /// True όταν μπορεί να γίνει υποβολή κλήσης: συμπληρωμένο τηλέφωνο.
@@ -191,19 +256,35 @@ class CallHeaderState {
     bool? hasAnyContent,
     String? equipmentText,
     String? callerDisplayText,
+    String? departmentText,
+    int? selectedDepartmentId,
+    bool clearSelectedDepartmentId = false,
+    bool? departmentIsManual,
     bool? phoneIsManual,
     bool? callerIsManual,
     bool? equipmentIsManual,
   }) {
     return CallHeaderState(
-      selectedPhone: clearSelectedPhone ? null : (selectedPhone ?? this.selectedPhone),
-      selectedCaller: clearSelectedCaller ? null : (selectedCaller ?? this.selectedCaller),
-      selectedEquipment: clearSelectedEquipment ? null : (selectedEquipment ?? this.selectedEquipment),
+      selectedPhone: clearSelectedPhone
+          ? null
+          : (selectedPhone ?? this.selectedPhone),
+      selectedCaller: clearSelectedCaller
+          ? null
+          : (selectedCaller ?? this.selectedCaller),
+      selectedEquipment: clearSelectedEquipment
+          ? null
+          : (selectedEquipment ?? this.selectedEquipment),
       phoneError: clearPhoneError ? null : (phoneError ?? this.phoneError),
       recentPhones: recentPhones ?? this.recentPhones,
-      phoneCandidates: clearPhoneCandidates ? [] : (phoneCandidates ?? this.phoneCandidates),
-      callerCandidates: clearCallerCandidates ? [] : (callerCandidates ?? this.callerCandidates),
-      equipmentCandidates: clearEquipmentCandidates ? [] : (equipmentCandidates ?? this.equipmentCandidates),
+      phoneCandidates: clearPhoneCandidates
+          ? []
+          : (phoneCandidates ?? this.phoneCandidates),
+      callerCandidates: clearCallerCandidates
+          ? []
+          : (callerCandidates ?? this.callerCandidates),
+      equipmentCandidates: clearEquipmentCandidates
+          ? []
+          : (equipmentCandidates ?? this.equipmentCandidates),
       isPhoneAmbiguous: isPhoneAmbiguous ?? this.isPhoneAmbiguous,
       isEquipmentAmbiguous: isEquipmentAmbiguous ?? this.isEquipmentAmbiguous,
       callerNoMatch: callerNoMatch ?? this.callerNoMatch,
@@ -211,6 +292,11 @@ class CallHeaderState {
       hasAnyContent: hasAnyContent ?? this.hasAnyContent,
       equipmentText: equipmentText ?? this.equipmentText,
       callerDisplayText: callerDisplayText ?? this.callerDisplayText,
+      departmentText: departmentText ?? this.departmentText,
+      selectedDepartmentId: clearSelectedDepartmentId
+          ? null
+          : (selectedDepartmentId ?? this.selectedDepartmentId),
+      departmentIsManual: departmentIsManual ?? this.departmentIsManual,
       phoneIsManual: phoneIsManual ?? this.phoneIsManual,
       callerIsManual: callerIsManual ?? this.callerIsManual,
       equipmentIsManual: equipmentIsManual ?? this.equipmentIsManual,
@@ -233,6 +319,9 @@ class CallHeaderState {
       hasAnyContent: false,
       equipmentText: '',
       callerDisplayText: '',
+      departmentText: '',
+      clearSelectedDepartmentId: true,
+      departmentIsManual: false,
       phoneIsManual: false,
       callerIsManual: false,
       equipmentIsManual: false,
@@ -249,13 +338,25 @@ class CallHeaderNotifier extends Notifier<CallHeaderState> {
     String? phoneText,
     String? callerText,
     String? equipmentText,
+    String? departmentText,
   }) {
-    final phone = phoneText?.trim().isNotEmpty ?? state.selectedPhone?.trim().isNotEmpty ?? false;
-    final caller = callerText?.trim().isNotEmpty ?? state.callerDisplayText.trim().isNotEmpty;
-    final equipment = equipmentText?.trim().isNotEmpty ?? state.equipmentText.trim().isNotEmpty;
+    final phone =
+        phoneText?.trim().isNotEmpty ??
+        state.selectedPhone?.trim().isNotEmpty ??
+        false;
+    final caller =
+        callerText?.trim().isNotEmpty ??
+        state.callerDisplayText.trim().isNotEmpty;
+    final equipment =
+        equipmentText?.trim().isNotEmpty ??
+        state.equipmentText.trim().isNotEmpty;
+    final department =
+        departmentText?.trim().isNotEmpty ??
+        state.departmentText.trim().isNotEmpty;
     return phone ||
         caller ||
         equipment ||
+        department ||
         state.selectedCaller != null ||
         state.selectedEquipment != null ||
         state.callerCandidates.isNotEmpty ||
@@ -263,19 +364,24 @@ class CallHeaderNotifier extends Notifier<CallHeaderState> {
   }
 
   /// Κλήση μετά από Enter ή focus out· ενημερώνει hasAnyContent για εμφάνιση κουμπιού "Καθαρισμός όλων"
-  /// και αποθηκεύει το equipmentText. Το UI περνάει τις τρέχουσες τιμές πεδίων (phone/caller/equipment).
+  /// και αποθηκεύει το equipmentText/departmentText. Το UI περνάει τις τρέχουσες τιμές πεδίων.
   void checkContent({
     String? phoneText,
     String? callerText,
     String? equipmentText,
+    String? departmentText,
   }) {
     state = state.copyWith(
       hasAnyContent: _computeHasAnyContent(
         phoneText: phoneText,
         callerText: callerText,
         equipmentText: equipmentText,
+        departmentText: departmentText,
       ),
       equipmentText: equipmentText?.trim() ?? state.equipmentText,
+      // Στο departmentText κρατάμε το ακριβές input του χρήστη (με κενά),
+      // ώστε να μην αφαιρούνται αυτόματα τα διαστήματα πληκτρολόγησης.
+      departmentText: departmentText ?? state.departmentText,
     );
   }
 
@@ -317,8 +423,26 @@ class CallHeaderNotifier extends Notifier<CallHeaderState> {
     }
   }
 
-  /// Επιλογή τηλεφώνου από λίστα candidates που προήλθαν από ήδη γνωστό caller.
-  /// Δεν καθαρίζει caller/equipment context.
+  /// Ρητή επιλογή τηλεφώνου από λίστα προτάσεων (Autocomplete/Search).
+  /// Δεν κάνει destructive reset caller/equipment και κρατά ως source την επιλογή λίστας.
+  void setPhone(String phone) {
+    final trimmed = phone.trim();
+    if (trimmed.isEmpty) {
+      updatePhone(null);
+      return;
+    }
+    state = state.copyWith(
+      selectedPhone: trimmed,
+      clearSelectedPhone: false,
+      clearPhoneError: true,
+      clearPhoneCandidates: true,
+      isPhoneAmbiguous: false,
+      phoneIsManual: false,
+    );
+  }
+
+  /// Επιλογή τηλεφώνου από τη λίστα `phoneCandidates` (ήδη γνωστός καλούντας).
+  /// Δεν καθαρίζει context καλούντα / εξοπλισμού.
   void selectPhoneFromCandidates(String value) {
     final trimmed = value.trim();
     if (trimmed.isEmpty) return;
@@ -334,7 +458,7 @@ class CallHeaderNotifier extends Notifier<CallHeaderState> {
       clearPhoneError: true,
       clearPhoneCandidates: true,
       isPhoneAmbiguous: false,
-      phoneIsManual: true,
+      phoneIsManual: false,
       recentPhones: list,
     );
 
@@ -415,7 +539,32 @@ class CallHeaderNotifier extends Notifier<CallHeaderState> {
   }
 
   bool _canAutofillPhone() {
-    return !state.phoneIsManual || (state.selectedPhone?.trim().isEmpty ?? true);
+    return !state.phoneIsManual ||
+        (state.selectedPhone?.trim().isEmpty ?? true);
+  }
+
+  bool _canAutofillDepartmentForUser(UserModel user) {
+    final hasLockedManualDepartmentSelection =
+        state.departmentIsManual &&
+        state.selectedDepartmentId != null &&
+        state.departmentText.trim().isNotEmpty;
+    if (hasLockedManualDepartmentSelection) {
+      // Όταν ο χρήστης έχει επιλέξει ρητά τμήμα στο header, δεν το
+      // αντικαθιστούμε αυτόματα από το προφίλ του caller.
+      return false;
+    }
+    final currentCallerId = state.selectedCaller?.id;
+    final newCallerId = user.id;
+    if (newCallerId != null && currentCallerId != newCallerId) {
+      // Σε αλλαγή καλούντα επιτρέπουμε auto-fill από το νέο προφίλ.
+      return true;
+    }
+    return !state.departmentIsManual || state.departmentText.trim().isEmpty;
+  }
+
+  String _departmentTextForUser(UserModel user) {
+    if (user.departmentId == null) return '';
+    return LookupService.instance.departmentIdToName[user.departmentId] ?? '';
   }
 
   /// Lookup τηλεφώνου: 0 → no match hint, 1 → setCaller + equipment lookup, >1 → dropdown candidates.
@@ -423,78 +572,99 @@ class CallHeaderNotifier extends Notifier<CallHeaderState> {
     if (_isFillingFromLookup) return;
     _isFillingFromLookup = true;
     try {
-    final digits = phone.replaceAll(RegExp(r'[^0-9]'), '');
-    if (digits.length < 3) {
+      final digits = phone.replaceAll(RegExp(r'[^0-9]'), '');
+      if (digits.length < 3) {
+        state = state.copyWith(
+          clearPhoneCandidates: true,
+          clearCallerCandidates: true,
+          clearSelectedCaller: true,
+          clearEquipmentCandidates: true,
+          clearSelectedEquipment: true,
+          isPhoneAmbiguous: false,
+          isEquipmentAmbiguous: false,
+          callerNoMatch: false,
+          equipmentNoMatch: false,
+        );
+        return;
+      }
+      final asyncLookup = ref.read(lookupServiceProvider);
+      final lookup = asyncLookup.hasValue ? asyncLookup.value : null;
+      if (lookup == null) return;
+      final users = lookup.findUsersByPhone(digits);
+      if (users.isEmpty) {
+        state = state.copyWith(
+          clearPhoneCandidates: true,
+          callerCandidates: [],
+          clearSelectedCaller: true,
+          equipmentCandidates: [],
+          clearSelectedEquipment: true,
+          isPhoneAmbiguous: false,
+          isEquipmentAmbiguous: false,
+          callerNoMatch: true,
+          equipmentNoMatch: false,
+        );
+        return;
+      }
+      if (users.length == 1) {
+        final user = users.first;
+        final name = user.name ?? user.fullNameWithDepartment;
+        final shouldAutofillDepartment = _canAutofillDepartmentForUser(user);
+        final canAutofillCaller =
+            !state.callerIsManual || state.callerDisplayText.trim().isEmpty;
+        if (canAutofillCaller) {
+          state = state.copyWith(
+            clearPhoneCandidates: true,
+            selectedCaller: user,
+            callerCandidates: [],
+            isPhoneAmbiguous: false,
+            callerNoMatch: false,
+            callerDisplayText: name,
+            departmentText: shouldAutofillDepartment
+                ? _departmentTextForUser(user)
+                : state.departmentText,
+            selectedDepartmentId: shouldAutofillDepartment
+                ? user.departmentId
+                : state.selectedDepartmentId,
+            departmentIsManual: shouldAutofillDepartment
+                ? false
+                : state.departmentIsManual,
+            callerIsManual: false,
+          );
+        } else if (shouldAutofillDepartment) {
+          state = state.copyWith(
+            clearPhoneCandidates: true,
+            callerCandidates: [],
+            isPhoneAmbiguous: false,
+            callerNoMatch: false,
+            departmentText: _departmentTextForUser(user),
+            selectedDepartmentId: user.departmentId,
+            departmentIsManual: false,
+          );
+        } else {
+          state = state.copyWith(
+            clearPhoneCandidates: true,
+            callerCandidates: [],
+            isPhoneAmbiguous: false,
+            callerNoMatch: false,
+          );
+        }
+        markPhoneUsed(digits);
+        if (users.first.id != null) {
+          _performEquipmentLookupForUser(users.first.id!);
+        }
+        return;
+      }
       state = state.copyWith(
         clearPhoneCandidates: true,
-        clearCallerCandidates: true,
+        callerCandidates: users,
         clearSelectedCaller: true,
-        clearEquipmentCandidates: true,
+        equipmentCandidates: [],
         clearSelectedEquipment: true,
-        isPhoneAmbiguous: false,
+        isPhoneAmbiguous: true,
         isEquipmentAmbiguous: false,
         callerNoMatch: false,
         equipmentNoMatch: false,
       );
-      return;
-    }
-    final asyncLookup = ref.read(lookupServiceProvider);
-    final lookup = asyncLookup.hasValue ? asyncLookup.value : null;
-    if (lookup == null) return;
-    final users = lookup.findUsersByPhone(digits);
-    if (users.isEmpty) {
-      state = state.copyWith(
-        clearPhoneCandidates: true,
-        callerCandidates: [],
-        clearSelectedCaller: true,
-        equipmentCandidates: [],
-        clearSelectedEquipment: true,
-        isPhoneAmbiguous: false,
-        isEquipmentAmbiguous: false,
-        callerNoMatch: true,
-        equipmentNoMatch: false,
-      );
-      return;
-    }
-    if (users.length == 1) {
-      final name = users.first.name ?? users.first.fullNameWithDepartment;
-      final canAutofillCaller =
-          !state.callerIsManual || state.callerDisplayText.trim().isEmpty;
-      if (canAutofillCaller) {
-        state = state.copyWith(
-          clearPhoneCandidates: true,
-          selectedCaller: users.first,
-          callerCandidates: [],
-          isPhoneAmbiguous: false,
-          callerNoMatch: false,
-          callerDisplayText: name,
-          callerIsManual: false,
-        );
-      } else {
-        state = state.copyWith(
-          clearPhoneCandidates: true,
-          callerCandidates: [],
-          isPhoneAmbiguous: false,
-          callerNoMatch: false,
-        );
-      }
-      markPhoneUsed(digits);
-      if (users.first.id != null) {
-        _performEquipmentLookupForUser(users.first.id!);
-      }
-      return;
-    }
-    state = state.copyWith(
-      clearPhoneCandidates: true,
-      callerCandidates: users,
-      clearSelectedCaller: true,
-      equipmentCandidates: [],
-      clearSelectedEquipment: true,
-      isPhoneAmbiguous: true,
-      isEquipmentAmbiguous: false,
-      callerNoMatch: false,
-      equipmentNoMatch: false,
-    );
     } finally {
       _isFillingFromLookup = false;
     }
@@ -587,6 +757,7 @@ class CallHeaderNotifier extends Notifier<CallHeaderState> {
 
       final user = users.first;
       final displayName = user.name ?? user.fullNameWithDepartment;
+      final shouldAutofillDepartment = _canAutofillDepartmentForUser(user);
       state = state.copyWith(
         selectedCaller: user,
         clearPhoneCandidates: true,
@@ -594,9 +765,17 @@ class CallHeaderNotifier extends Notifier<CallHeaderState> {
         callerNoMatch: false,
         isPhoneAmbiguous: false,
         callerDisplayText: displayName,
+        departmentText: shouldAutofillDepartment
+            ? _departmentTextForUser(user)
+            : state.departmentText,
+        selectedDepartmentId: shouldAutofillDepartment
+            ? user.departmentId
+            : state.selectedDepartmentId,
+        departmentIsManual: shouldAutofillDepartment
+            ? false
+            : state.departmentIsManual,
         callerIsManual: false,
       );
-
       if (_canAutofillPhone()) {
         final phones = _splitPhones(user.phone);
         if (phones.length == 1) {
@@ -658,16 +837,37 @@ class CallHeaderNotifier extends Notifier<CallHeaderState> {
       final user = lookup.findUserById(equipment.userId);
       if (user == null) return;
 
+      final shouldAutofillDepartment = _canAutofillDepartmentForUser(user);
       final canAutofillCaller =
           !state.callerIsManual || state.callerDisplayText.trim().isEmpty;
-      if (canAutofillCaller) {
+      final hasLockedDepartmentSelection =
+          state.departmentIsManual && state.selectedDepartmentId != null;
+      final isCallerOutsideSelectedDepartment =
+          hasLockedDepartmentSelection &&
+          user.departmentId != state.selectedDepartmentId;
+      if (canAutofillCaller && !isCallerOutsideSelectedDepartment) {
         state = state.copyWith(
           selectedCaller: user,
           callerCandidates: [],
           isPhoneAmbiguous: false,
           callerNoMatch: false,
           callerDisplayText: user.name ?? user.fullNameWithDepartment,
+          departmentText: shouldAutofillDepartment
+              ? _departmentTextForUser(user)
+              : state.departmentText,
+          selectedDepartmentId: shouldAutofillDepartment
+              ? user.departmentId
+              : state.selectedDepartmentId,
+          departmentIsManual: shouldAutofillDepartment
+              ? false
+              : state.departmentIsManual,
           callerIsManual: false,
+        );
+      } else if (shouldAutofillDepartment) {
+        state = state.copyWith(
+          departmentText: _departmentTextForUser(user),
+          selectedDepartmentId: user.departmentId,
+          departmentIsManual: false,
         );
       }
 
@@ -685,13 +885,11 @@ class CallHeaderNotifier extends Notifier<CallHeaderState> {
   }
 
   void clearPhoneCandidates() {
-    state = state.copyWith(
-      clearPhoneCandidates: true,
-      isPhoneAmbiguous: false,
-    );
+    state = state.copyWith(clearPhoneCandidates: true, isPhoneAmbiguous: false);
   }
 
   void setCaller(UserModel? value) {
+    final deptText = value == null ? '' : _departmentTextForUser(value);
     state = state.copyWith(
       selectedCaller: value,
       clearSelectedCaller: value == null,
@@ -700,6 +898,10 @@ class CallHeaderNotifier extends Notifier<CallHeaderState> {
       isPhoneAmbiguous: false,
       callerNoMatch: false,
       callerDisplayText: value?.name ?? value?.fullNameWithDepartment ?? '',
+      departmentText: deptText,
+      selectedDepartmentId: value?.departmentId,
+      departmentIsManual: false,
+      callerIsManual: false,
     );
   }
 
@@ -718,6 +920,86 @@ class CallHeaderNotifier extends Notifier<CallHeaderState> {
       clearCallerCandidates: true,
       isPhoneAmbiguous: false,
       callerDisplayText: '',
+      departmentText: '',
+      clearSelectedDepartmentId: true,
+      departmentIsManual: false,
+      callerIsManual: false,
+    );
+  }
+
+  void updateDepartmentText(String text) {
+    final trimmed = text.trim();
+    int? matchedDepartmentId;
+    if (trimmed.isNotEmpty) {
+      final lookup = ref.read(lookupServiceProvider).value;
+      if (lookup != null) {
+        final normalized = SearchTextNormalizer.normalizeForSearch(trimmed);
+        for (final dep in lookup.departments) {
+          if (SearchTextNormalizer.normalizeForSearch(dep.name) == normalized) {
+            matchedDepartmentId = dep.id;
+            break;
+          }
+        }
+      }
+    }
+    state = state.copyWith(
+      // Αποθηκεύουμε το raw κείμενο (με κενά) ώστε ο χρήστης να βλέπει
+      // ακριβώς αυτό που πληκτρολόγησε. Το trimming χρησιμοποιείται μόνο
+      // για matching/clearSelectedDepartmentId.
+      departmentText: text,
+      selectedDepartmentId: matchedDepartmentId,
+      clearSelectedDepartmentId: trimmed.isEmpty,
+      departmentIsManual: true,
+    );
+  }
+
+  void selectDepartment(DepartmentModel dept) {
+    final departmentId = dept.id;
+    if (departmentId == null) {
+      updateDepartmentText(dept.name);
+      return;
+    }
+    final asyncLookup = ref.read(lookupServiceProvider);
+    final lookup = asyncLookup.hasValue ? asyncLookup.value : null;
+
+    List<UserModel>? callerCandidates;
+    List<EquipmentModel>? equipmentCandidates;
+    List<String>? phoneCandidates;
+    final hasCallerInput = state.callerDisplayText.trim().isNotEmpty;
+    final keepCallerUntouched = hasCallerInput || state.selectedCaller != null;
+    final hasPhoneInput = state.selectedPhone?.trim().isNotEmpty == true;
+    final hasEquipmentInput = state.equipmentText.trim().isNotEmpty;
+
+    if (lookup != null) {
+      // Αν ο καλών είναι ήδη ορισμένος/ορατός, δεν τον πειράζουμε στην αλλαγή τμήματος.
+      // Prefill λίστας caller μόνο όταν το πεδίο είναι πραγματικά κενό.
+      if (!keepCallerUntouched) {
+        callerCandidates = lookup.getUsersByDepartment(departmentId);
+      }
+      if (!hasEquipmentInput && !state.equipmentIsManual) {
+        equipmentCandidates = lookup.getEquipmentByDepartment(departmentId);
+      }
+      if (!hasPhoneInput && !state.phoneIsManual) {
+        phoneCandidates = lookup.getPhonesByDepartment(departmentId);
+      }
+    }
+
+    state = state.copyWith(
+      departmentText: dept.name,
+      selectedDepartmentId: departmentId,
+      departmentIsManual: true,
+      clearSelectedCaller: !keepCallerUntouched,
+      callerDisplayText: keepCallerUntouched ? state.callerDisplayText : '',
+      callerIsManual: keepCallerUntouched ? state.callerIsManual : false,
+      callerCandidates: keepCallerUntouched
+          ? state.callerCandidates
+          : (callerCandidates ?? state.callerCandidates),
+      equipmentCandidates: equipmentCandidates ?? state.equipmentCandidates,
+      phoneCandidates: phoneCandidates ?? state.phoneCandidates,
+      callerNoMatch: false,
+      equipmentNoMatch: false,
+      isPhoneAmbiguous: false,
+      isEquipmentAmbiguous: false,
     );
   }
 
@@ -774,19 +1056,30 @@ class CallHeaderNotifier extends Notifier<CallHeaderState> {
   void requestPhoneFocus() {}
 
   /// Προσθέτει τηλέφωνο/εξοπλισμό στον τρέχοντα χρήστη στη βάση· invalidate lookup· επιστρέφει μήνυμα για SnackBar.
-  Future<String?> associateCurrentIfNeeded() async {
+  Future<String?> associateCurrentIfNeeded({
+    bool updatePrimaryDepartment = false,
+  }) async {
     if (!state.needsAssociation) return null;
 
     final msg = state.associationTooltip;
     if (state.needsNewCallerCreation) {
-      final name = NameParserUtility.stripParentheticalSuffix(state.normalizedCallerDisplayText);
+      final name = NameParserUtility.stripParentheticalSuffix(
+        state.normalizedCallerDisplayText,
+      );
       final phone = state.selectedPhone?.trim();
       final equipmentCode = state.equipmentText.trim();
       final parsed = NameParserUtility.parse(name);
+      final lookup = ref.read(lookupServiceProvider).value;
+      final departmentId =
+          state.selectedDepartmentId ??
+          (state.departmentText.trim().isNotEmpty && lookup != null
+              ? lookup.findDepartmentByName(state.departmentText)?.id
+              : null);
       final userId = await DatabaseHelper.instance.insertUser(
         firstName: parsed.firstName,
         lastName: parsed.lastName,
         phone: phone?.isNotEmpty == true ? phone : null,
+        departmentId: departmentId,
       );
 
       await DatabaseHelper.instance.updateAssociationsIfNeeded(
@@ -801,11 +1094,13 @@ class CallHeaderNotifier extends Notifier<CallHeaderState> {
           firstName: parsed.firstName,
           lastName: parsed.lastName,
           phone: phone?.isNotEmpty == true ? phone : null,
+          departmentId: departmentId,
         ),
         selectedEquipment: equipmentCode.isNotEmpty
             ? EquipmentModel(code: equipmentCode, userId: userId)
             : state.selectedEquipment,
         callerDisplayText: name,
+        departmentText: state.departmentText,
         phoneIsManual: false,
         callerIsManual: false,
         equipmentIsManual: false,
@@ -816,8 +1111,12 @@ class CallHeaderNotifier extends Notifier<CallHeaderState> {
 
     if (state.selectedCaller?.id == null) return null;
     final userId = state.selectedCaller!.id!;
-    final phone = state.hasPhoneAssociation ? null : state.selectedPhone?.trim();
-    final eqCode = state.hasEquipmentAssociation ? null : state.equipmentText.trim();
+    final phone = state.hasPhoneAssociation
+        ? null
+        : state.selectedPhone?.trim();
+    final eqCode = state.hasEquipmentAssociation
+        ? null
+        : state.equipmentText.trim();
 
     await DatabaseHelper.instance.updateAssociationsIfNeeded(
       userId,
@@ -825,16 +1124,38 @@ class CallHeaderNotifier extends Notifier<CallHeaderState> {
       eqCode?.isNotEmpty == true ? eqCode : null,
     );
 
+    final lookup = ref.read(lookupServiceProvider).value;
+    final selectedDepartmentId =
+        state.selectedDepartmentId ??
+        (state.departmentText.trim().isNotEmpty && lookup != null
+            ? lookup.findDepartmentByName(state.departmentText)?.id
+            : null);
+    var updatedDepartmentId = state.selectedCaller?.departmentId;
+    if (updatePrimaryDepartment &&
+        selectedDepartmentId != null &&
+        selectedDepartmentId != state.selectedCaller?.departmentId &&
+        state.selectedCaller?.id != null) {
+      final updatedMap = Map<String, dynamic>.from(
+        state.selectedCaller!.toMap(),
+      );
+      updatedMap['department_id'] = selectedDepartmentId;
+      await DatabaseHelper.instance.updateUser(
+        state.selectedCaller!.id!,
+        updatedMap,
+      );
+      updatedDepartmentId = selectedDepartmentId;
+    }
+
     final currentPhone = state.selectedCaller?.phone?.trim();
     final updatedPhone = phone?.isNotEmpty == true
         ? (currentPhone == null || currentPhone.isEmpty
               ? phone
               : PhoneListParser.containsPhone(currentPhone, phone)
-                  ? currentPhone
-                  : PhoneListParser.joinPhones([
-                      ...PhoneListParser.splitPhones(currentPhone),
-                      phone!,
-                    ]))
+              ? currentPhone
+              : PhoneListParser.joinPhones([
+                  ...PhoneListParser.splitPhones(currentPhone),
+                  phone!,
+                ]))
         : currentPhone;
     state = state.copyWith(
       selectedCaller: UserModel(
@@ -842,7 +1163,7 @@ class CallHeaderNotifier extends Notifier<CallHeaderState> {
         firstName: state.selectedCaller?.firstName,
         lastName: state.selectedCaller?.lastName,
         phone: updatedPhone,
-        departmentId: state.selectedCaller?.departmentId,
+        departmentId: updatedDepartmentId,
         notes: state.selectedCaller?.notes,
       ),
       selectedEquipment: eqCode?.isNotEmpty == true
@@ -865,4 +1186,6 @@ class CallHeaderNotifier extends Notifier<CallHeaderState> {
 }
 
 final callHeaderProvider =
-    NotifierProvider<CallHeaderNotifier, CallHeaderState>(CallHeaderNotifier.new);
+    NotifierProvider<CallHeaderNotifier, CallHeaderState>(
+      CallHeaderNotifier.new,
+    );

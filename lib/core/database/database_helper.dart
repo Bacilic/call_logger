@@ -657,6 +657,7 @@ class DatabaseHelper {
   }
 
   /// Εισάγει νέο χρήστη. Το Data Layer δέχεται ήδη διαχωρισμένα firstName/lastName (parsing γίνεται στο Domain/UI).
+  /// [departmentId] αντιστοιχεί στον πίνακα departments (schema με department_id).
   Future<int> insertUser({
     required String firstName,
     required String lastName,
@@ -664,16 +665,21 @@ class DatabaseHelper {
     String? department,
     String? location,
     String? notes,
+    int? departmentId,
   }) async {
     final db = await database;
-    return db.insert('users', {
+    final map = <String, dynamic>{
       'last_name': lastName,
       'first_name': firstName,
       'phone': phone,
       'department': department,
       'location': location,
       'notes': notes,
-    });
+    };
+    if (departmentId != null) {
+      map['department_id'] = departmentId;
+    }
+    return db.insert('users', map);
   }
 
   /// Ενημερώνει συσχετίσεις χρήστη: τηλέφωνο (users.phone) και/ή εξοπλισμό (equipment.user_id) με βάση τον κωδικό του.

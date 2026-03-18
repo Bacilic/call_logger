@@ -125,7 +125,10 @@ class LookupService {
     return _users.where((u) {
       return SearchTextNormalizer.matchesNormalizedQuery(u.name ?? '', q) ||
           SearchTextNormalizer.matchesNormalizedQuery(u.phone ?? '', q) ||
-          SearchTextNormalizer.matchesNormalizedQuery(u.departmentName ?? '', q);
+          SearchTextNormalizer.matchesNormalizedQuery(
+            u.departmentName ?? '',
+            q,
+          );
     }).toList();
   }
 
@@ -143,13 +146,11 @@ class LookupService {
   List<UserModel> findUsersByPhone(String phone) {
     final digits = _digitsOnly(phone);
     if (digits.length < 3) return [];
-    final list = _users
-        .where((u) {
-          final phoneDigits = _digitsOnly(u.phone ?? '');
-          return phoneDigits.isNotEmpty &&
-              (phoneDigits.contains(digits) || phoneDigits.startsWith(digits));
-        })
-        .toList();
+    final list = _users.where((u) {
+      final phoneDigits = _digitsOnly(u.phone ?? '');
+      return phoneDigits.isNotEmpty &&
+          (phoneDigits.contains(digits) || phoneDigits.startsWith(digits));
+    }).toList();
     list.sort((a, b) => (a.name ?? '').compareTo(b.name ?? ''));
     return list;
   }
@@ -207,7 +208,9 @@ class LookupService {
       final bc = (b.code ?? '').toLowerCase();
       final byCode = ac.compareTo(bc);
       if (byCode != 0) return byCode;
-      return a.displayLabel.toLowerCase().compareTo(b.displayLabel.toLowerCase());
+      return a.displayLabel.toLowerCase().compareTo(
+        b.displayLabel.toLowerCase(),
+      );
     }
 
     exact.sort(compareByCodeThenLabel);
@@ -223,6 +226,63 @@ class LookupService {
       if (user.id == userId) return user;
     }
     return null;
+  }
+
+  /// Αναζήτηση τμημάτων στη μνήμη βάσει ονόματος (case-insensitive, αγνοώντας τόνους).
+  List<DepartmentModel> searchDepartments(String query) {
+    final q = SearchTextNormalizer.normalizeForSearch(query);
+    if (q.isEmpty) return List.from(departments);
+    return departments
+        .where((d) => SearchTextNormalizer.matchesNormalizedQuery(d.name, q))
+        .toList();
+  }
+
+  /// Εύρεση τμήματος από όνομα (ακριβές ή κανονικοποιημένο match). Επιστρέφει null αν δεν βρεθεί.
+  DepartmentModel? findDepartmentByName(String name) {
+    final trimmed = name.trim();
+    if (trimmed.isEmpty) return null;
+    final q = SearchTextNormalizer.normalizeForSearch(trimmed);
+    for (final d in departments) {
+      if (SearchTextNormalizer.normalizeForSearch(d.name) == q) return d;
+      if (SearchTextNormalizer.matchesNormalizedQuery(d.name, q)) return d;
+    }
+    return null;
+  }
+
+  /// Χρήστες συγκεκριμένου τμήματος (department_id).
+  List<UserModel> getUsersByDepartment(int departmentId) {
+    final result = _users.where((u) => u.departmentId == departmentId).toList();
+    result.sort((a, b) => (a.name ?? '').compareTo(b.name ?? ''));
+    return result;
+  }
+
+  /// Εξοπλισμός όλων των χρηστών συγκεκριμένου τμήματος.
+  List<EquipmentModel> getEquipmentByDepartment(int departmentId) {
+    final users = getUsersByDepartment(departmentId);
+    if (users.isEmpty) return [];
+    final userIds = users.map((u) => u.id).whereType<int>().toSet();
+    if (userIds.isEmpty) return [];
+    return _equipment
+        .where((e) => e.userId != null && userIds.contains(e.userId))
+        .toList();
+  }
+
+  /// Όλα τα τηλέφωνα χρηστών τμήματος (split/trim/dedupe), σε σταθερή αλφαβητική σειρά.
+  List<String> getPhonesByDepartment(int departmentId) {
+    final users = getUsersByDepartment(departmentId);
+    final seen = <String>{};
+    final phones = <String>[];
+    for (final user in users) {
+      for (final phone in PhoneListParser.splitPhones(user.phone)) {
+        final trimmed = phone.trim();
+        if (trimmed.isEmpty) continue;
+        if (seen.add(trimmed)) {
+          phones.add(trimmed);
+        }
+      }
+    }
+    phones.sort((a, b) => a.compareTo(b));
+    return phones;
   }
 
   static String _digitsOnly(String s) {

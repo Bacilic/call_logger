@@ -35,7 +35,7 @@ class CallStatusBar extends ConsumerWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
-          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Checkbox(
               value: entry.isPending,
@@ -43,12 +43,18 @@ class CallStatusBar extends ConsumerWidget {
               tristate: false,
             ),
             const SizedBox(width: 4),
-            Text(
-              'Εκκρεμότητα',
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: notesNonEmpty
-                    ? null
-                    : Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.38),
+            Expanded(
+              child: Text(
+                'Εκκρεμότητα',
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: notesNonEmpty
+                      ? null
+                      : Theme.of(context)
+                          .colorScheme
+                          .onSurface
+                          .withValues(alpha: 0.38),
+                ),
+                softWrap: true,
               ),
             ),
           ],
