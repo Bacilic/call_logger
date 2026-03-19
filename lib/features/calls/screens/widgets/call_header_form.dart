@@ -55,6 +55,10 @@ void _syncHighlightedListScroll({
   });
 }
 
+/// Ελάχιστο πλάτος γραμμής πεδίων ώστε να χωράει Τηλ. + Καλών. + Τμήμα + Εξοπλισμός + × + +.
+/// Υπολογισμός: w1(120) + 12 + w2(220) + 12 + wDept(160) + 12 + w3(130) + 4 + 40 + 40 = 750.
+const double kCallHeaderRowMinWidth = 790;
+
 /// Header φόρμα εισαγωγής κλήσης: Τηλέφωνο, Καλούντας, Τμήμα, Κωδικός Εξοπλισμού.
 class CallHeaderForm extends ConsumerStatefulWidget {
   const CallHeaderForm({super.key});
@@ -229,27 +233,22 @@ class _CallHeaderFormState extends ConsumerState<CallHeaderForm> {
             ? constraints.maxWidth
             : MediaQuery.sizeOf(context).width;
 
-        // Κρατάμε ανώτατα όρια στα πλάτη ώστε το ×/+ να μένει πάντα κοντά
-        // στο πεδίο εξοπλισμού και να μην "φεύγει" δεξιά σε πολύ φαρδιά οθόνη.
-        final w1 = (mw * 0.18).clamp(120.0, 170.0);
-        final w2 = (mw * 0.34).clamp(220.0, 300.0);
-        final wDept = (mw * 0.24).clamp(160.0, 240.0);
-        final w3 = (mw * 0.20).clamp(130.0, 185.0);
-        final headerFields = ScrollConfiguration(
-          behavior: ScrollConfiguration.of(context).copyWith(
-            scrollbars: true,
-            physics: const ClampingScrollPhysics(),
-          ),
-          child: SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                      SizedBox(
-                        width: w1,
-                        child: _PhoneField(
-                          width: w1,
+        // Διαθέσιμο πλάτος μείον κενά και κουμπιά ×/+ ώστε η γραμμή να χωράει πάντα (όχι overflow).
+        const gapsAndIcons = 12.0 + 12.0 + 12.0 + 4.0 + 40.0 + 40.0; // 120
+        final available = (mw - gapsAndIcons).clamp(200.0, double.infinity);
+        // Αναλογία 18:34:24:20 (άθροισμα 96%) ώστε το σύνολο να μην ξεπερνά το available.
+        final w1 = (available * 0.18).clamp(0.0, 170.0);
+        final w2 = (available * 0.34).clamp(0.0, 300.0);
+        final wDept = (available * 0.24).clamp(0.0, 240.0);
+        final w3 = (available * 0.20).clamp(0.0, 185.0);
+
+        final headerFields = Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(
+              width: w1,
+              child: _PhoneField(
+                width: w1,
                 controller: _phoneController,
                 focusNode: _phoneFocusNode,
                 nextFocusNode: _callerFocusNode,
@@ -297,14 +296,14 @@ class _CallHeaderFormState extends ConsumerState<CallHeaderForm> {
                     if (mounted) setState(() => _isSelectingFromList = false);
                   });
                 },
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  SizedBox(
-                    width: w2,
-                    child: _CallerField(
-                      width: w2,
-                      controller: _callerController,
+              ),
+            ),
+            const SizedBox(width: 12),
+            SizedBox(
+              width: w2,
+              child: _CallerField(
+                width: w2,
+                controller: _callerController,
                 focusNode: _callerFocusNode,
                 nextFocusNode: _departmentFocusNode,
                 header: header,
@@ -322,14 +321,14 @@ class _CallHeaderFormState extends ConsumerState<CallHeaderForm> {
                   departmentText: _departmentController.text,
                   equipmentText: _equipmentController.text,
                 ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  SizedBox(
-                    width: wDept,
-                    child: _DepartmentField(
-                      width: wDept,
-                      controller: _departmentController,
+              ),
+            ),
+            const SizedBox(width: 12),
+            SizedBox(
+              width: wDept,
+              child: _DepartmentField(
+                width: wDept,
+                controller: _departmentController,
                 focusNode: _departmentFocusNode,
                 nextFocusNode: _equipmentFocusNode,
                 header: header,
@@ -341,14 +340,14 @@ class _CallHeaderFormState extends ConsumerState<CallHeaderForm> {
                   departmentText: _departmentController.text,
                   equipmentText: _equipmentController.text,
                 ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  SizedBox(
-                    width: w3,
-                    child: _EquipmentField(
-                      width: w3,
-                      controller: _equipmentController,
+              ),
+            ),
+            const SizedBox(width: 12),
+            SizedBox(
+              width: w3,
+              child: _EquipmentField(
+                width: w3,
+                controller: _equipmentController,
                 focusNode: _equipmentFocusNode,
                 nextFocusNode: _phoneFocusNode,
                 header: header,
@@ -360,45 +359,45 @@ class _CallHeaderFormState extends ConsumerState<CallHeaderForm> {
                   departmentText: _departmentController.text,
                   equipmentText: _equipmentController.text,
                 ),
+              ),
+            ),
+            const SizedBox(width: 4),
+            IgnorePointer(
+              ignoring: !hasAnyContent,
+              child: AnimatedOpacity(
+                opacity: hasAnyContent ? 1.0 : 0.0,
+                duration: const Duration(milliseconds: 180),
+                child: AnimatedScale(
+                  scale: hasAnyContent ? 1.0 : 0.0,
+                  duration: const Duration(milliseconds: 180),
+                  child: IconButton(
+                    icon: Icon(
+                      Icons.clear,
+                      color: theme.colorScheme.error,
                     ),
-                  ),
-                  const SizedBox(width: 4),
-                  IgnorePointer(
-                    ignoring: !hasAnyContent,
-                    child: AnimatedOpacity(
-                      opacity: hasAnyContent ? 1.0 : 0.0,
-                      duration: const Duration(milliseconds: 180),
-                      child: AnimatedScale(
-                        scale: hasAnyContent ? 1.0 : 0.0,
-                        duration: const Duration(milliseconds: 180),
-                        child: IconButton(
-                          icon: Icon(
-                            Icons.clear,
-                            color: theme.colorScheme.error,
-                          ),
-                          tooltip: 'Καθαρισμός όλων των πεδίων',
-                          padding: EdgeInsets.zero,
-                          constraints: const BoxConstraints(
-                            minWidth: 40,
-                            minHeight: 40,
-                          ),
-                          onPressed: () {
-                            _phoneController.clear();
-                            _callerController.clear();
-                            _departmentController.clear();
-                            _equipmentController.clear();
-                            _notifier.clearAll();
-                            ref
-                                .read(callEntryProvider.notifier)
-                                .resetTimerToStandby();
-                            _phoneFocusNode.requestFocus();
-                          },
-                        ),
-                      ),
+                    tooltip: 'Καθαρισμός όλων των πεδίων',
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(
+                      minWidth: 40,
+                      minHeight: 40,
                     ),
+                    onPressed: () {
+                      _phoneController.clear();
+                      _callerController.clear();
+                      _departmentController.clear();
+                      _equipmentController.clear();
+                      _notifier.clearAll();
+                      ref
+                          .read(callEntryProvider.notifier)
+                          .resetTimerToStandby();
+                      _phoneFocusNode.requestFocus();
+                    },
                   ),
-                  if (header.needsAssociation)
-                    IconButton(
+                ),
+              ),
+            ),
+            if (header.needsAssociation)
+              IconButton(
                       icon: Icon(Icons.add, color: header.associationColor),
                       tooltip: header.associationTooltip ?? '',
                       padding: EdgeInsets.zero,
@@ -455,10 +454,8 @@ class _CallHeaderFormState extends ConsumerState<CallHeaderForm> {
                           messenger.showSnackBar(SnackBar(content: Text(msg)));
                         }
                       },
-                    ),
-              ],
-            ),
-          ),
+              ),
+          ],
         );
 
         return Column(
@@ -2621,9 +2618,14 @@ class _PhoneHelperAndError extends StatelessWidget {
     if (header.selectedCaller != null &&
         header.selectedPhone != null &&
         lookupService != null) {
-      equipmentCount = lookupService!
-          .searchEquipmentsByPhone(header.selectedPhone!)
-          .length;
+      // Ο πρώτος χρήστης που ταιριάζει στο τηλέφωνο (search) μπορεί να είναι
+      // διαφορετικός από τον επιλεγμένο καλούντα· εμφανίζουμε εξοπλισμό του επιλεγμένου.
+      final callerId = header.selectedCaller!.id;
+      equipmentCount = callerId != null
+          ? lookupService!.findEquipmentsForUser(callerId).length
+          : lookupService!
+              .searchEquipmentsByPhone(header.selectedPhone!)
+              .length;
     } else {
       equipmentCount = null;
     }

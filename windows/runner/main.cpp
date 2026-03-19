@@ -26,7 +26,8 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
 
   FlutterWindow window(project);
   Win32Window::Point origin(10, 10);
-  Win32Window::Size size(1280, 720);
+  // Αρχικό μέγεθος ώστε η γραμμή πεδίων Κλήσεων + κουμπί + να χωράει (rail ~280 + row 750 + padding 32 ≈ 1062).
+  Win32Window::Size size(1200, 600);
   if (!window.Create(L"call_logger", origin, size)) {
     return EXIT_FAILURE;
   }

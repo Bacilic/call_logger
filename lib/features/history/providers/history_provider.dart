@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/database/database_helper.dart';
+import '../../../core/utils/search_text_normalizer.dart';
 
 /// Μοντέλο φίλτρων για το ιστορικό κλήσεων.
 class HistoryFilterModel {
@@ -63,17 +64,34 @@ final historyFilterProvider =
 );
 
 /// Λίστα κλήσεων ιστορικού με βάση τα τρέχοντα φίλτρα.
+/// Η αναζήτηση per keyword γίνεται in-memory με SearchTextNormalizer (Unicode/Ελληνικά case-insensitive).
 final historyCallsProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
   final filter = ref.watch(historyFilterProvider);
-  return DatabaseHelper.instance.getHistoryCalls(
-    keyword: filter.keyword.trim().isEmpty ? null : filter.keyword.trim(),
+  final allCalls = await DatabaseHelper.instance.getHistoryCalls(
     dateFrom: filter.dateFromSql,
     dateTo: filter.dateToSql,
     category: filter.category != null && filter.category!.isEmpty
         ? null
         : filter.category,
   );
+
+  final keyword = filter.keyword.trim();
+  if (keyword.isEmpty) return allCalls;
+
+  final normalizedKeyword = SearchTextNormalizer.normalizeForSearch(keyword);
+  return allCalls.where((call) {
+    final combined = [
+      call['issue'],
+      call['solution'],
+      call['user_first_name'],
+      call['user_last_name'],
+      call['user_phone'],
+      call['user_department'],
+      call['equipment_code'],
+    ].map((v) => v?.toString().trim() ?? '').join(' ');
+    return SearchTextNormalizer.matchesNormalizedQuery(combined, normalizedKeyword);
+  }).toList();
 });
 
 /// Λίστα ονομάτων κατηγοριών για το dropdown φίλτρου.

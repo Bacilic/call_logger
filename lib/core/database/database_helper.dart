@@ -102,7 +102,7 @@ class DatabaseHelper {
     try {
       db = await openDatabase(
         dbPath,
-        version: 8,
+        version: 10,
         onCreate: _onCreate,
         onUpgrade: _onUpgrade,
         singleInstance: false,
@@ -145,7 +145,7 @@ class DatabaseHelper {
   Future<void> createNewDatabaseFile(String filePath) async {
     final db = await openDatabase(
       filePath,
-      version: 8,
+      version: 10,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
       singleInstance: false,
@@ -165,6 +165,10 @@ class DatabaseHelper {
         time TEXT,
         caller_id INTEGER,
         equipment_id INTEGER,
+        caller_text TEXT,
+        phone_text TEXT,
+        department_text TEXT,
+        equipment_text TEXT,
         issue TEXT,
         solution TEXT,
         category TEXT,
@@ -181,6 +185,7 @@ class DatabaseHelper {
         first_name TEXT NOT NULL,
         phone TEXT,
         department TEXT,
+        department_id INTEGER,
         location TEXT,
         notes TEXT
       )
@@ -360,6 +365,24 @@ class DatabaseHelper {
         )
       ''');
       await _seedRemoteToolArgsIfEmpty(db);
+    }
+    // Στήλη department_id στον πίνακα users (συσχέτιση με πίνακα departments).
+    if (oldVersion < 9) {
+      if (!await _tableHasColumn(db, 'users', 'department_id')) {
+        await db.execute('ALTER TABLE users ADD COLUMN department_id INTEGER');
+      }
+    }
+    // Fallback (Hybrid Schema): ελεύθερο κείμενο τηλ./τμήματος/εξοπλισμού αν δεν υπάρχει στο join.
+    if (oldVersion < 10) {
+      if (!await _tableHasColumn(db, 'calls', 'phone_text')) {
+        await db.execute('ALTER TABLE calls ADD COLUMN phone_text TEXT');
+      }
+      if (!await _tableHasColumn(db, 'calls', 'department_text')) {
+        await db.execute('ALTER TABLE calls ADD COLUMN department_text TEXT');
+      }
+      if (!await _tableHasColumn(db, 'calls', 'equipment_text')) {
+        await db.execute('ALTER TABLE calls ADD COLUMN equipment_text TEXT');
+      }
     }
   }
 
@@ -707,13 +730,33 @@ class DatabaseHelper {
         }
       }
       if (equipmentCode != null && equipmentCode.isNotEmpty) {
-        // Υποθέτουμε ότι η στήλη είναι code_equipment (από create table)
-        await txn.update(
-          'equipment',
-          {'user_id': userId},
-          where: 'code_equipment = ? AND (user_id IS NULL OR user_id != ?)',
-          whereArgs: [equipmentCode, userId],
-        );
+        final code = equipmentCode.trim();
+        if (code.isNotEmpty) {
+          // Υποθέτουμε ότι η στήλη είναι code_equipment (από create table)
+          var rows = await txn.update(
+            'equipment',
+            {'user_id': userId},
+            where: 'code_equipment = ? AND (user_id IS NULL OR user_id != ?)',
+            whereArgs: [code, userId],
+          );
+          // Αν δεν υπάρχει γραμμή με αυτόν τον κωδικό, το UPDATE δεν αλλάζει τίποτα·
+          // δημιουργούμε νέα εγγραφή εξοπλισμού συνδεδεμένη με τον χρήστη.
+          if (rows == 0) {
+            final existing = await txn.query(
+              'equipment',
+              columns: ['id', 'user_id'],
+              where: 'code_equipment = ?',
+              whereArgs: [code],
+              limit: 1,
+            );
+            if (existing.isEmpty) {
+              await txn.insert('equipment', {
+                'code_equipment': code,
+                'user_id': userId,
+              });
+            }
+          }
+        }
       }
     });
   }
@@ -728,6 +771,9 @@ class DatabaseHelper {
       'caller_id': call.callerId,
       'equipment_id': call.equipmentId,
       'caller_text': call.callerText,
+      'phone_text': call.phoneText,
+      'department_text': call.departmentText,
+      'equipment_text': call.equipmentText,
       'issue': call.issue,
       'solution': call.solution,
       'category': call.category,
@@ -787,10 +833,9 @@ class DatabaseHelper {
   }
 
   /// Ιστορικό κλήσεων με προαιρετικά φίλτρα. LEFT JOIN users και equipment.
-  /// [keyword]: αναζήτηση LIKE σε issue, solution, caller_text, όνομα χρήστη, code_equipment.
+  /// Φιλτράρει μόνο βάσει ημερομηνιών και κατηγορίας· η αναζήτηση per keyword γίνεται in-memory στο provider.
   /// [dateFrom] / [dateTo]: ημερομηνίες σε μορφή yyyy-MM-dd.
   Future<List<Map<String, dynamic>>> getHistoryCalls({
-    String? keyword,
     String? dateFrom,
     String? dateTo,
     String? category,
@@ -811,23 +856,17 @@ class DatabaseHelper {
       whereClauses.add('calls.category = ?');
       args.add(category);
     }
-    if (keyword != null && keyword.trim().isNotEmpty) {
-      final pattern = '%${keyword.trim()}%';
-      whereClauses.add('''
-        (calls.issue LIKE ? OR calls.solution LIKE ? OR calls.caller_text LIKE ?
-         OR (COALESCE(users.first_name, '') || ' ' || COALESCE(users.last_name, '')) LIKE ?
-         OR equipment.code_equipment LIKE ?)
-      '''.replaceAll(RegExp(r'\s+'), ' ').trim());
-      args.addAll([pattern, pattern, pattern, pattern, pattern]);
-    }
 
     final whereSql = whereClauses.isEmpty ? '' : 'WHERE ${whereClauses.join(' AND ')}';
     final sql = '''
       SELECT calls.id, calls.date, calls.time, calls.caller_id, calls.equipment_id,
-             calls.issue, calls.solution, calls.caller_text, calls.category, calls.status,
-             calls.duration, calls.is_priority,
-             users.first_name AS user_first_name, users.last_name AS user_last_name,
-             equipment.code_equipment AS equipment_code
+             calls.issue, calls.solution, calls.caller_text, calls.phone_text, calls.department_text, calls.equipment_text,
+             calls.category, calls.status, calls.duration, calls.is_priority,
+             COALESCE(users.first_name, calls.caller_text, '') AS user_first_name,
+             COALESCE(users.last_name, '') AS user_last_name,
+             COALESCE(users.phone, calls.phone_text, '-') AS user_phone,
+             COALESCE(users.department, calls.department_text, '-') AS user_department,
+             COALESCE(equipment.code_equipment, calls.equipment_text, '-') AS equipment_code
       FROM calls
       LEFT JOIN users ON calls.caller_id = users.id
       LEFT JOIN equipment ON calls.equipment_id = equipment.id

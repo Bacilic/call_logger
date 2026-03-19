@@ -6,6 +6,29 @@ import 'package:intl/intl.dart';
 
 import '../providers/history_provider.dart';
 
+/// Επίπεδο μεγέθυνσης πίνακα ιστορικού (0.5–2.0).
+final historyTableZoomProvider =
+    NotifierProvider.autoDispose<HistoryTableZoomNotifier, double>(
+  HistoryTableZoomNotifier.new,
+);
+
+class HistoryTableZoomNotifier extends Notifier<double> {
+  @override
+  double build() => 1.0;
+
+  void zoomOut() {
+    state = (state - 0.1).clamp(0.5, 2.0);
+  }
+
+  void zoomIn() {
+    state = (state + 0.1).clamp(0.5, 2.0);
+  }
+
+  void reset() {
+    state = 1.0;
+  }
+}
+
 /// Οθόνη Ιστορικού Κλήσεων: φίλτρα (keyword, ημερομηνίες, κατηγορία) και πίνακας αποτελεσμάτων.
 class HistoryScreen extends ConsumerStatefulWidget {
   const HistoryScreen({super.key});
@@ -71,6 +94,7 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
     final filter = ref.watch(historyFilterProvider);
     final asyncCalls = ref.watch(historyCallsProvider);
     final asyncCategories = ref.watch(historyCategoriesProvider);
+    final tableZoom = ref.watch(historyTableZoomProvider);
 
     String dateRangeLabel = '';
     if (filter.dateFrom != null && filter.dateTo != null) {
@@ -109,8 +133,25 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
                           controller: _searchController,
                           onChanged: _onSearchChanged,
                           decoration: InputDecoration(
-                            hintText: 'Αναζήτηση (θέμα, λύση, καλούντας, εξοπλισμός)',
+                            hintText: 'Αναζήτηση (Σε όλα τα πεδία, εκτός από ώρα και διάρκεια)',
                             prefixIcon: const Icon(Icons.search),
+                            suffixIcon: ValueListenableBuilder<TextEditingValue>(
+                              valueListenable: _searchController,
+                              builder: (context, value, _) {
+                                if (value.text.isEmpty) return const SizedBox.shrink();
+                                return IconButton(
+                                  icon: const Icon(Icons.close),
+                                  onPressed: () {
+                                    _debounceTimer?.cancel();
+                                    _searchController.clear();
+                                    ref.read(historyFilterProvider.notifier).update(
+                                          (s) => s.copyWith(keyword: ''),
+                                        );
+                                  },
+                                  tooltip: 'Καθαρισμός αναζήτησης',
+                                );
+                              },
+                            ),
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(12),
                             ),
@@ -172,6 +213,42 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
                       ),
                     ],
                   ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Text(
+                        'Μέγεθος πίνακα',
+                        style: theme.textTheme.labelLarge?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        '${(tableZoom * 100).round()}%',
+                        style: theme.textTheme.labelMedium?.copyWith(
+                          fontFeatures: const [FontFeature.tabularFigures()],
+                        ),
+                      ),
+                      const Spacer(),
+                      IconButton(
+                        tooltip: 'Σμίκρυνση',
+                        icon: const Icon(Icons.zoom_out),
+                        onPressed: () =>
+                            ref.read(historyTableZoomProvider.notifier).zoomOut(),
+                      ),
+                      TextButton(
+                        onPressed: () =>
+                            ref.read(historyTableZoomProvider.notifier).reset(),
+                        child: const Text('100%'),
+                      ),
+                      IconButton(
+                        tooltip: 'Μεγέθυνση',
+                        icon: const Icon(Icons.zoom_in),
+                        onPressed: () =>
+                            ref.read(historyTableZoomProvider.notifier).zoomIn(),
+                      ),
+                    ],
+                  ),
                   if (hasDateRange) ...[
                     const SizedBox(height: 8),
                     Wrap(
@@ -215,11 +292,15 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
                     children: [
                       Icon(Icons.error_outline, size: 48, color: theme.colorScheme.error),
                       const SizedBox(height: 16),
-                      Text(
-                        err.toString(),
-                        textAlign: TextAlign.center,
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          color: theme.colorScheme.error,
+                      Expanded(
+                        child: SingleChildScrollView(
+                          child: SelectableText(
+                            err.toString(),
+                            textAlign: TextAlign.center,
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              color: theme.colorScheme.error,
+                            ),
+                          ),
                         ),
                       ),
                       const SizedBox(height: 16),
@@ -253,11 +334,35 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
   }
 }
 
-/// Πίνακας γραμμών ιστορικού (ημερομηνία, χρήστης, εξοπλισμός, θέμα, διάρκεια).
-class _HistoryDataTable extends StatelessWidget {
+/// Πίνακας γραμμών ιστορικού (ημ/νία & ώρα, καλούντας, τηλέφωνο, τμήμα, εξοπλισμός, σημειώσεις, διάρκεια).
+class _HistoryDataTable extends ConsumerStatefulWidget {
   const _HistoryDataTable({required this.rows});
 
   final List<Map<String, dynamic>> rows;
+
+  @override
+  ConsumerState<_HistoryDataTable> createState() => _HistoryDataTableState();
+}
+
+class _HistoryDataTableState extends ConsumerState<_HistoryDataTable> {
+  late final ScrollController _horizontalScrollController;
+  late final ScrollController _verticalScrollController;
+  int? _sortColumnIndex;
+  bool _sortAscending = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _horizontalScrollController = ScrollController();
+    _verticalScrollController = ScrollController();
+  }
+
+  @override
+  void dispose() {
+    _horizontalScrollController.dispose();
+    _verticalScrollController.dispose();
+    super.dispose();
+  }
 
   String _userDisplay(Map<String, dynamic> row) {
     final first = row['user_first_name'] as String? ?? '';
@@ -278,50 +383,169 @@ class _HistoryDataTable extends StatelessWidget {
     return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
   }
 
+  /// Τιμή για σύγκριση ταξινόμησης ανά ευρετήριο στήλης (0..6).
+  Comparable<Object> _valueForSort(Map<String, dynamic> row, int columnIndex) {
+    switch (columnIndex) {
+      case 0:
+        final d = _str(row['date']);
+        final t = _str(row['time']);
+        return '$d $t'.trim();
+      case 1:
+        return _userDisplay(row);
+      case 2:
+        return row['user_phone']?.toString().trim() ?? '';
+      case 3:
+        return _str(row['user_department']);
+      case 4:
+        return _str(row['equipment_code']);
+      case 5:
+        return _str(row['issue']);
+      case 6:
+        final dur = row['duration'];
+        if (dur == null) return -1;
+        return dur is int ? dur : int.tryParse(dur?.toString() ?? '') ?? -1;
+      default:
+        return '';
+    }
+  }
+
+  List<Map<String, dynamic>> _sortedRows(
+    List<Map<String, dynamic>> rows,
+    int columnIndex,
+    bool ascending,
+  ) {
+    final list = List<Map<String, dynamic>>.from(rows);
+    list.sort((a, b) {
+      final va = _valueForSort(a, columnIndex);
+      final vb = _valueForSort(b, columnIndex);
+      final c = va.compareTo(vb);
+      return ascending ? c : -c;
+    });
+    return list;
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final zoomLevel = ref.watch(historyTableZoomProvider);
+    final rowsToShow = _sortColumnIndex != null
+        ? _sortedRows(widget.rows, _sortColumnIndex!, _sortAscending)
+        : widget.rows;
 
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
+    return Scrollbar(
+      controller: _horizontalScrollController,
+      thumbVisibility: true,
+      trackVisibility: true,
       child: SingleChildScrollView(
-        scrollDirection: Axis.vertical,
-        child: DataTable(
-          headingRowColor: WidgetStateProperty.all(
-            theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+        controller: _horizontalScrollController,
+        scrollDirection: Axis.horizontal,
+        child: Scrollbar(
+          controller: _verticalScrollController,
+          thumbVisibility: true,
+          trackVisibility: true,
+          child: SingleChildScrollView(
+            controller: _verticalScrollController,
+            scrollDirection: Axis.vertical,
+            child: MediaQuery(
+              data: MediaQuery.of(context).copyWith(
+                textScaler: TextScaler.linear(zoomLevel),
+              ),
+              child: IconTheme(
+                data: IconThemeData(size: 24.0 * zoomLevel),
+                child: DataTable(
+                  headingRowColor: WidgetStateProperty.all(
+                    theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+                  ),
+                  dataRowMinHeight: 48.0 * zoomLevel,
+                  dataRowMaxHeight: 48.0 * zoomLevel,
+                  headingRowHeight: 56.0 * zoomLevel,
+                  columnSpacing: 56.0 * zoomLevel,
+                  horizontalMargin: 24.0 * zoomLevel,
+                  sortColumnIndex: _sortColumnIndex,
+                  sortAscending: _sortAscending,
+                columns: [
+                  DataColumn(
+                    label: const Text('Ημ/νία & Ώρα'),
+                    onSort: (_, asc) => setState(() {
+                      _sortColumnIndex = 0;
+                      _sortAscending = asc;
+                    }),
+                  ),
+                  DataColumn(
+                    label: const Text('Καλούντας'),
+                    onSort: (_, asc) => setState(() {
+                      _sortColumnIndex = 1;
+                      _sortAscending = asc;
+                    }),
+                  ),
+                  DataColumn(
+                    label: const Text('Τηλέφωνο'),
+                    onSort: (_, asc) => setState(() {
+                      _sortColumnIndex = 2;
+                      _sortAscending = asc;
+                    }),
+                  ),
+                  DataColumn(
+                    label: const Text('Τμήμα'),
+                    onSort: (_, asc) => setState(() {
+                      _sortColumnIndex = 3;
+                      _sortAscending = asc;
+                    }),
+                  ),
+                  DataColumn(
+                    label: const Text('Εξοπλισμός'),
+                    onSort: (_, asc) => setState(() {
+                      _sortColumnIndex = 4;
+                      _sortAscending = asc;
+                    }),
+                  ),
+                  DataColumn(
+                    label: const Text('Σημειώσεις'),
+                    onSort: (_, asc) => setState(() {
+                      _sortColumnIndex = 5;
+                      _sortAscending = asc;
+                    }),
+                  ),
+                  DataColumn(
+                    label: const Text('Διάρκεια'),
+                    onSort: (_, asc) => setState(() {
+                      _sortColumnIndex = 6;
+                      _sortAscending = asc;
+                    }),
+                  ),
+                ],
+                rows: rowsToShow.map((row) {
+                  final date = _str(row['date']);
+                  final time = _str(row['time']);
+                  final dateTime = '$date $time'.trim();
+                  final user = _userDisplay(row);
+                  final phone = row['user_phone']?.toString().trim() ?? '—';
+                  final department = _str(row['user_department']);
+                  final equipment = _str(row['equipment_code']);
+                  final issue = _str(row['issue']);
+                  final durationStr = _formatDuration(row['duration']);
+                  return DataRow(
+                    cells: [
+                      DataCell(Text(dateTime.isEmpty ? '—' : dateTime)),
+                      DataCell(ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 180),
+                        child: Text(user, overflow: TextOverflow.ellipsis),
+                      )),
+                      DataCell(Text(phone.isEmpty ? '—' : phone)),
+                      DataCell(Text(department.isEmpty ? '—' : department)),
+                      DataCell(Text(equipment)),
+                      DataCell(ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 220),
+                        child: Text(issue, overflow: TextOverflow.ellipsis),
+                      )),
+                      DataCell(Text(durationStr)),
+                    ],
+                  );
+                }).toList(),
+                ),
+              ),
+            ),
           ),
-          columns: const [
-            DataColumn(label: Text('Ημερομηνία')),
-            DataColumn(label: Text('Ώρα')),
-            DataColumn(label: Text('Καλούντας')),
-            DataColumn(label: Text('Εξοπλισμός')),
-            DataColumn(label: Text('Θέμα')),
-            DataColumn(label: Text('Διάρκεια')),
-          ],
-          rows: rows.map((row) {
-            final date = _str(row['date']);
-            final time = _str(row['time']);
-            final user = _userDisplay(row);
-            final equipment = _str(row['equipment_code']);
-            final issue = _str(row['issue']);
-            final durationStr = _formatDuration(row['duration']);
-            return DataRow(
-              cells: [
-                DataCell(Text(date)),
-                DataCell(Text(time)),
-                DataCell(ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 180),
-                  child: Text(user, overflow: TextOverflow.ellipsis),
-                )),
-                DataCell(Text(equipment)),
-                DataCell(ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 220),
-                  child: Text(issue, overflow: TextOverflow.ellipsis),
-                )),
-                DataCell(Text(durationStr)),
-              ],
-            );
-          }).toList(),
         ),
       ),
     );

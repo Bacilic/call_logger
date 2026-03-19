@@ -7,6 +7,9 @@ class CallModel {
     this.callerId,
     this.equipmentId,
     this.callerText,
+    this.phoneText,
+    this.departmentText,
+    this.equipmentText,
     this.issue,
     this.solution,
     this.category,
@@ -21,6 +24,9 @@ class CallModel {
   final int? callerId;
   final int? equipmentId;
   final String? callerText;
+  final String? phoneText;
+  final String? departmentText;
+  final String? equipmentText;
   final String? issue;
   final String? solution;
   final String? category;
@@ -36,6 +42,9 @@ class CallModel {
       callerId: map['caller_id'] as int?,
       equipmentId: map['equipment_id'] as int?,
       callerText: map['caller_text'] as String?,
+      phoneText: map['phone_text'] as String?,
+      departmentText: map['department_text'] as String?,
+      equipmentText: map['equipment_text'] as String?,
       issue: map['issue'] as String?,
       solution: map['solution'] as String?,
       category: map['category'] as String?,
@@ -53,6 +62,9 @@ class CallModel {
       if (callerId != null) 'caller_id': callerId,
       if (equipmentId != null) 'equipment_id': equipmentId,
       if (callerText != null) 'caller_text': callerText,
+      if (phoneText != null) 'phone_text': phoneText,
+      if (departmentText != null) 'department_text': departmentText,
+      if (equipmentText != null) 'equipment_text': equipmentText,
       if (issue != null) 'issue': issue,
       if (solution != null) 'solution': solution,
       if (category != null) 'category': category,

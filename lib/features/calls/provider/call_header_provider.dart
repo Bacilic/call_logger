@@ -1106,6 +1106,7 @@ class CallHeaderNotifier extends Notifier<CallHeaderState> {
         equipmentIsManual: false,
       );
       ref.invalidate(lookupServiceProvider);
+      await ref.read(lookupServiceProvider.future);
       return msg ?? 'Προστέθηκε.';
     }
 
@@ -1181,6 +1182,7 @@ class CallHeaderNotifier extends Notifier<CallHeaderState> {
     );
 
     ref.invalidate(lookupServiceProvider);
+    await ref.read(lookupServiceProvider.future);
     return msg ?? 'Προστέθηκε.';
   }
 }
