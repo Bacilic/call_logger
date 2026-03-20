@@ -161,6 +161,67 @@ class TaskCard extends StatefulWidget {
 class _TaskCardState extends State<TaskCard> {
   bool _showSolution = false;
 
+  static bool _nonEmptyText(String? value) =>
+      value != null && value.trim().isNotEmpty;
+
+  bool _hasEntityMetadata() {
+    final t = widget.task;
+    return _nonEmptyText(t.userText) ||
+        _nonEmptyText(t.phoneText) ||
+        _nonEmptyText(t.departmentText) ||
+        _nonEmptyText(t.equipmentText);
+  }
+
+  Widget _buildEntityMetadata(ThemeData theme) {
+    final t = widget.task;
+    final user = t.userText?.trim();
+    final phone = t.phoneText?.trim();
+    final dept = t.departmentText?.trim();
+    final equip = t.equipmentText?.trim();
+
+    final hasUser = user != null && user.isNotEmpty;
+    final hasPhone = phone != null && phone.isNotEmpty;
+    final hasDept = dept != null && dept.isNotEmpty;
+    final hasEquip = equip != null && equip.isNotEmpty;
+
+    if (!hasUser && !hasPhone && !hasDept && !hasEquip) {
+      return const SizedBox.shrink();
+    }
+
+    final onVar = theme.colorScheme.onSurfaceVariant;
+    final textStyle = theme.textTheme.bodySmall?.copyWith(color: onVar);
+
+    Widget row(IconData icon, String text) {
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 16, color: onVar),
+          const SizedBox(width: 4),
+          Flexible(
+            child: Text(
+              text,
+              style: textStyle,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      );
+    }
+
+    return Wrap(
+      spacing: 12.0,
+      runSpacing: 4.0,
+      children: [
+        if (hasUser) row(Icons.person_outline, user),
+        if (hasPhone) row(Icons.phone_outlined, phone),
+        if (hasDept) row(Icons.domain, dept),
+        if (hasEquip) row(Icons.computer_outlined, equip),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -261,6 +322,11 @@ class _TaskCardState extends State<TaskCard> {
               children: [
                 if (task.description != null && task.description!.isNotEmpty)
                   _TaskDescription(description: task.description!),
+                if (task.description != null &&
+                    task.description!.isNotEmpty &&
+                    _hasEntityMetadata())
+                  const SizedBox(height: 8),
+                _buildEntityMetadata(theme),
               ],
             ),
             trailing: Row(

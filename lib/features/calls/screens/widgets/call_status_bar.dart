@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/providers/settings_provider.dart';
 import '../../provider/call_entry_provider.dart';
+import '../../provider/notes_field_hint_provider.dart';
 
 /// Μπάρα κατάστασης κλήσης: εκκρεμότητα (checkbox) και χρονόμετρο (MM:SS ή εικονίδιο) με Play/Pause και χειροκίνητη εισαγωγή.
 class CallStatusBar extends ConsumerWidget {
@@ -34,30 +35,13 @@ class CallStatusBar extends ConsumerWidget {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Checkbox(
-              value: entry.isPending,
-              onChanged: notesNonEmpty ? (_) => notifier.togglePending() : null,
-              tristate: false,
-            ),
-            const SizedBox(width: 4),
-            Expanded(
-              child: Text(
-                'Εκκρεμότητα',
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: notesNonEmpty
-                      ? null
-                      : Theme.of(context)
-                          .colorScheme
-                          .onSurface
-                          .withValues(alpha: 0.38),
-                ),
-                softWrap: true,
-              ),
-            ),
-          ],
+        _PendingCheckboxRow(
+          entry: entry,
+          notesNonEmpty: notesNonEmpty,
+          onTogglePending: () => notifier.togglePending(),
+          onDisabledTap: () => ref
+              .read(notesFieldHintTickProvider.notifier)
+              .requestHintFlash(),
         ),
         const SizedBox(height: 8),
         showTimerAsync.when(
@@ -174,5 +158,57 @@ class CallStatusBar extends ConsumerWidget {
     if (result != null && context.mounted) {
       notifier.setDurationManually(result * 60);
     }
+  }
+}
+
+class _PendingCheckboxRow extends StatelessWidget {
+  const _PendingCheckboxRow({
+    required this.entry,
+    required this.notesNonEmpty,
+    required this.onTogglePending,
+    required this.onDisabledTap,
+  });
+
+  final CallEntryState entry;
+  final bool notesNonEmpty;
+  final VoidCallback onTogglePending;
+  final VoidCallback onDisabledTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final row = Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Checkbox(
+          value: entry.isPending,
+          onChanged: notesNonEmpty ? (_) => onTogglePending() : null,
+          tristate: false,
+        ),
+        const SizedBox(width: 4),
+        Expanded(
+          child: Text(
+            'Εκκρεμότητα',
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: notesNonEmpty
+                      ? null
+                      : Theme.of(context)
+                          .colorScheme
+                          .onSurface
+                          .withValues(alpha: 0.38),
+                ),
+            softWrap: true,
+          ),
+        ),
+      ],
+    );
+    if (notesNonEmpty) return row;
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        behavior: HitTestBehavior.translucent,
+        onTap: onDisabledTap,
+        child: row,
+      ),
+    );
   }
 }

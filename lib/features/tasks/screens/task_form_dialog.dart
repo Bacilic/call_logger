@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/utils/spell_check.dart';
+import '../../calls/provider/smart_entity_selector_provider.dart';
+import '../../calls/screens/widgets/smart_entity_selector_widget.dart';
 import '../models/task.dart';
 import '../models/task_snooze_config.dart';
 import '../providers/task_service_provider.dart';
@@ -29,6 +31,10 @@ class _TaskFormDialog extends ConsumerStatefulWidget {
 
 class _TaskFormDialogState extends ConsumerState<_TaskFormDialog> {
   final _formKey = GlobalKey<FormState>();
+  final GlobalKey<SmartEntitySelectorWidgetState> _entitySelectorKey =
+      GlobalKey<SmartEntitySelectorWidgetState>();
+  /// Για ασφαλές `invalidate` στο `dispose` — το `ref` εκεί δεν επιτρέπεται.
+  ProviderContainer? _providerContainer;
   late final TextEditingController _titleController;
   late final TextEditingController _descriptionController;
   late int _priority;
@@ -41,6 +47,12 @@ class _TaskFormDialogState extends ConsumerState<_TaskFormDialog> {
   @override
   void initState() {
     super.initState();
+    if (widget.task != null) {
+      Future.microtask(() {
+        if (!mounted) return;
+        ref.read(taskSmartEntityProvider.notifier).loadFromTask(widget.task!);
+      });
+    }
     final t = widget.task;
     _titleController = TextEditingController(text: t?.title ?? '');
     _descriptionController = TextEditingController(text: t?.description ?? '');
@@ -67,7 +79,14 @@ class _TaskFormDialogState extends ConsumerState<_TaskFormDialog> {
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _providerContainer ??= ProviderScope.containerOf(context);
+  }
+
+  @override
   void dispose() {
+    _providerContainer?.invalidate(taskSmartEntityProvider);
     _titleController.dispose();
     _descriptionController.dispose();
     super.dispose();
@@ -131,6 +150,15 @@ class _TaskFormDialogState extends ConsumerState<_TaskFormDialog> {
     final title = _titleController.text.trim();
     if (title.isEmpty) return;
     final dueDateStr = _dueDate.toIso8601String();
+    final entityState = ref.read(taskSmartEntityProvider);
+    final phoneRaw = entityState.phoneText?.trim();
+    final phoneText =
+        phoneRaw == null || phoneRaw.isEmpty ? null : phoneRaw;
+    String? trimOrNull(String s) {
+      final t = s.trim();
+      return t.isEmpty ? null : t;
+    }
+
     final result = widget.task?.copyWith(
           title: title,
           description: _descriptionController.text.trim().isEmpty
@@ -139,6 +167,11 @@ class _TaskFormDialogState extends ConsumerState<_TaskFormDialog> {
           dueDate: dueDateStr,
           priority: _priority,
           updatedAt: DateTime.now().toIso8601String(),
+          callerId: entityState.selectedCaller?.id,
+          userText: trimOrNull(entityState.callerDisplayText),
+          phoneText: phoneText,
+          departmentText: trimOrNull(entityState.departmentText),
+          equipmentText: trimOrNull(entityState.equipmentText),
         ) ??
         Task(
           title: title,
@@ -148,6 +181,11 @@ class _TaskFormDialogState extends ConsumerState<_TaskFormDialog> {
           dueDate: dueDateStr,
           status: 'open',
           priority: _priority,
+          callerId: entityState.selectedCaller?.id,
+          userText: trimOrNull(entityState.callerDisplayText),
+          phoneText: phoneText,
+          departmentText: trimOrNull(entityState.departmentText),
+          equipmentText: trimOrNull(entityState.equipmentText),
         );
     Navigator.of(context).pop(result);
   }
@@ -167,10 +205,17 @@ class _TaskFormDialogState extends ConsumerState<_TaskFormDialog> {
       fromDate: DateTime.now(),
     );
 
+    final theme = Theme.of(context);
+    final mq = MediaQuery.sizeOf(context);
+    final dialogWidth = (mq.width - 48).clamp(400.0, 860.0);
+    final hasEntityContent = ref.watch(
+      taskSmartEntityProvider.select((s) => s.hasAnyContent),
+    );
+
     return AlertDialog(
       title: Text(widget.task == null ? 'Νέα εκκρεμότητα' : 'Επεξεργασία εκκρεμότητας'),
       content: SizedBox(
-        width: 400,
+        width: dialogWidth,
         child: Form(
           key: _formKey,
           child: SingleChildScrollView(
@@ -178,6 +223,81 @@ class _TaskFormDialogState extends ConsumerState<_TaskFormDialog> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                Card(
+                  color: theme.colorScheme.surfaceContainerHighest,
+                  elevation: 0,
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: LayoutBuilder(
+                      builder: (context, constraints) {
+                        const gapsAndTrailing = 120.0;
+                        final mw = constraints.maxWidth;
+                        final available =
+                            (mw - gapsAndTrailing).clamp(200.0, double.infinity);
+                        final w1 = (available * 0.18).clamp(0.0, 170.0);
+                        final w2 = (available * 0.34).clamp(0.0, 300.0);
+                        final wDept = (available * 0.24).clamp(0.0, 240.0);
+                        final w3 = (available * 0.20).clamp(0.0, 185.0);
+                        final minRowWidth = w1 +
+                            12 +
+                            w2 +
+                            12 +
+                            wDept +
+                            12 +
+                            w3 +
+                            gapsAndTrailing;
+                        final selector = SmartEntitySelectorWidget(
+                          key: _entitySelectorKey,
+                          provider: taskSmartEntityProvider,
+                          w1: w1,
+                          w2: w2,
+                          wDept: wDept,
+                          w3: w3,
+                          trailingRowChildren: [
+                            const SizedBox(width: 4),
+                            IgnorePointer(
+                              ignoring: !hasEntityContent,
+                              child: AnimatedOpacity(
+                                opacity: hasEntityContent ? 1.0 : 0.0,
+                                duration: const Duration(milliseconds: 180),
+                                child: AnimatedScale(
+                                  scale: hasEntityContent ? 1.0 : 0.0,
+                                  duration: const Duration(milliseconds: 180),
+                                  child: IconButton(
+                                    icon: Icon(
+                                      Icons.clear,
+                                      color: theme.colorScheme.error,
+                                    ),
+                                    tooltip: 'Καθαρισμός πεδίων καλούντα',
+                                    padding: EdgeInsets.zero,
+                                    constraints: const BoxConstraints(
+                                      minWidth: 40,
+                                      minHeight: 40,
+                                    ),
+                                    onPressed: () => _entitySelectorKey
+                                        .currentState
+                                        ?.performClearAllFields(),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        );
+                        if (mw + 0.5 < minRowWidth) {
+                          return SingleChildScrollView(
+                            scrollDirection: Axis.horizontal,
+                            child: SizedBox(
+                              width: minRowWidth,
+                              child: selector,
+                            ),
+                          );
+                        }
+                        return selector;
+                      },
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
                 TextFormField(
                   controller: _titleController,
                   decoration: const InputDecoration(

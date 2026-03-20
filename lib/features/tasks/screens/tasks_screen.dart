@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -516,11 +518,19 @@ class TasksScreen extends ConsumerWidget {
   }
 
   static Future<void> _onDelete(BuildContext context, WidgetRef ref, Task task) async {
+    if (task.id == null) return;
+    final created = task.createdAtDateTime;
+    final createdLabel = created != null
+        ? DateFormat('dd/MM/yyyy HH:mm').format(created)
+        : 'άγνωστη ημερομηνία';
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Διαγραφή εκκρεμότητας'),
-        content: const Text('Να διαγραφεί αυτή η εκκρεμότητα;'),
+        content: Text(
+          'Να διαγραφεί η εκκρεμότητα: ${task.title} από τη $createdLabel.\n\n'
+          'Αυτή η πράξη δεν μπορεί να αναιρεθεί.',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
@@ -534,11 +544,27 @@ class TasksScreen extends ConsumerWidget {
       ),
     );
     if (confirm != true || !context.mounted) return;
-    if (task.id == null) return;
-    await ref.read(tasksProvider.notifier).deleteTask(task.id!);
-    if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Εκκρεμότητα διαγράφηκε.')),
+
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.hideCurrentSnackBar();
+    messenger.showSnackBar(
+      SnackBar(
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(days: 1),
+        content: _TaskDeleteCountdownSnackContent(
+          taskTitle: task.title,
+          onUndo: messenger.hideCurrentSnackBar,
+          onExpired: () async {
+            if (!context.mounted) return;
+            messenger.hideCurrentSnackBar();
+            await ref.read(tasksProvider.notifier).deleteTask(task.id!);
+            if (!context.mounted) return;
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Η εκκρεμότητα διαγράφηκε.')),
+            );
+          },
+        ),
+      ),
     );
   }
 
@@ -553,6 +579,96 @@ class TasksScreen extends ConsumerWidget {
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Εκκρεμότητα ολοκληρώθηκε.')),
+    );
+  }
+}
+
+/// Αντίστροφη μέτρηση πριν την οριστική διαγραφή· «Αναίρεση» κλείνει το SnackBar.
+class _TaskDeleteCountdownSnackContent extends StatefulWidget {
+  const _TaskDeleteCountdownSnackContent({
+    required this.taskTitle,
+    required this.onUndo,
+    required this.onExpired,
+  });
+
+  final String taskTitle;
+  final VoidCallback onUndo;
+  final Future<void> Function() onExpired;
+
+  @override
+  State<_TaskDeleteCountdownSnackContent> createState() =>
+      _TaskDeleteCountdownSnackContentState();
+}
+
+class _TaskDeleteCountdownSnackContentState
+    extends State<_TaskDeleteCountdownSnackContent> {
+  static const int _initialSeconds = 5;
+  int _remaining = _initialSeconds;
+  Timer? _timer;
+  bool _undone = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!mounted || _undone) return;
+      if (_remaining <= 1) {
+        _timer?.cancel();
+        _timer = null;
+        widget.onExpired();
+        return;
+      }
+      setState(() => _remaining--);
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  void _undo() {
+    if (_undone) return;
+    _undone = true;
+    _timer?.cancel();
+    widget.onUndo();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    const undoLinkBlue = Color(0xFF039BE5);
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          child: Text(
+            'Η εκκρεμότητα: ${widget.taskTitle} θα διαγραφεί σε: $_remaining δευτ.',
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w700,
+                ) ??
+                const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 14,
+                  height: 1.35,
+                ),
+            maxLines: 4,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+        TextButton(
+          onPressed: _undo,
+          style: TextButton.styleFrom(
+            foregroundColor: undoLinkBlue,
+            padding: const EdgeInsets.only(left: 8),
+            minimumSize: Size.zero,
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          ),
+          child: const Text('Αναίρεση'),
+        ),
+      ],
     );
   }
 }

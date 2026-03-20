@@ -3,15 +3,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../provider/call_entry_provider.dart';
 
-/// Λίστα τελευταίων 3 κλήσεων για τον επιλεγμένο χρήστη.
+/// Λίστα τελευταίων 3 κλήσεων για τον επιλεγμένο καλούντα (calls.caller_id).
 class RecentCallsList extends ConsumerWidget {
-  const RecentCallsList({super.key, required this.userId});
+  const RecentCallsList({super.key, required this.callerId});
 
-  final int userId;
+  final int callerId;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final asyncCalls = ref.watch(recentCallsProvider(userId));
+    final asyncCalls = ref.watch(recentCallsProvider(callerId));
     return asyncCalls.when(
       data: (calls) {
         if (calls.isEmpty) return const SizedBox.shrink();

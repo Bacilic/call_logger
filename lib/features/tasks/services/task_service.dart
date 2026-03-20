@@ -5,8 +5,9 @@ import 'package:intl/intl.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import '../../../core/database/database_helper.dart';
+import '../../../core/utils/search_text_normalizer.dart';
 import '../models/task.dart';
-import '../models/task_filter.dart';
+import '../models/task_filter.dart' show TaskFilter, TaskSortOption;
 import '../models/task_snooze_config.dart';
 
 /// Κλήση με status pending που δεν έχει αντίστοιχο task.
@@ -44,8 +45,9 @@ class TaskService {
 
   /// Ρυθμίσεις αναβολών / εργάσιμων ωρών από `app_settings` (JSON).
   Future<TaskSnoozeConfig> getSnoozeConfig() async {
-    final raw =
-        await DatabaseHelper.instance.getSetting(TaskSnoozeConfig.appSettingsKey);
+    final raw = await DatabaseHelper.instance.getSetting(
+      TaskSnoozeConfig.appSettingsKey,
+    );
     if (raw == null || raw.trim().isEmpty) {
       return TaskSnoozeConfig.defaultConfig();
     }
@@ -74,7 +76,8 @@ class TaskService {
     DateTime? fromDate,
   }) {
     final base = fromDate ?? DateTime.now();
-    final resolved = (option == TaskSnoozeConfig.kOptionDefault || option.isEmpty)
+    final resolved =
+        (option == TaskSnoozeConfig.kOptionDefault || option.isEmpty)
         ? config.defaultSnoozeOption
         : TaskSnoozeConfig.normalizeSnoozeOption(option);
 
@@ -91,7 +94,13 @@ class TaskService {
   }
 
   DateTime _atTimeOnDay(DateTime dayStart, TimeOfDay t) {
-    return DateTime(dayStart.year, dayStart.month, dayStart.day, t.hour, t.minute);
+    return DateTime(
+      dayStart.year,
+      dayStart.month,
+      dayStart.day,
+      t.hour,
+      t.minute,
+    );
   }
 
   /// Τέλος «μέσα στην ημέρα»: σήμερα στο [dayEndTime] αν ακόμα μετά το [base], αλλιώς επόμενες ημέρες (+ Σ/Κ αν [skipWeekends]).
@@ -113,7 +122,10 @@ class TaskService {
   }
 
   /// Επόμενη ημέρα (ημερολογιακά μετά την ημέρα του [base]) στην [nextBusinessHour], με παράλειψη Σ/Κ αν [skipWeekends].
-  DateTime _nextBusinessMorningDateTime(TaskSnoozeConfig config, DateTime base) {
+  DateTime _nextBusinessMorningDateTime(
+    TaskSnoozeConfig config,
+    DateTime base,
+  ) {
     var day = DateTime(base.year, base.month, base.day);
     day = day.add(const Duration(days: 1));
     var candidate = _atTimeOnDay(day, config.nextBusinessHour);
@@ -135,18 +147,70 @@ class TaskService {
     );
   }
 
+  /// Τίτλος εκκρεμότητας από σημειώσεις/κατηγορία (μορφή φόρμας κλήσης).
+  /// Ο εξοπλισμός περνά μόνο ως metadata (`equipment_text` / FK), όχι στον τίτλο.
+  ///
+  /// `description` = πλήρες κείμενο σημειώσεων (το ίδιο αποθηκεύεται στο task.description).
+  static String smartTaskTitleFromCallContext({
+    required String description,
+    String? categoryName,
+    required DateTime titleAt,
+    String? callerFallback,
+  }) {
+    final notesRaw = description;
+    String snippet = '';
+    if (notesRaw.isNotEmpty) {
+      var line = notesRaw.replaceAll(RegExp(r'[\r\n]+'), ' ').trim();
+      line = line.replaceAll(RegExp(r' +'), ' ');
+      if (line.length > 40) {
+        snippet = '${line.substring(0, 40)}...';
+      } else {
+        snippet = line;
+      }
+    }
+
+    final categoryPart = (categoryName ?? '').trim();
+
+    final dateStr = DateFormat('dd/MM/yyyy HH:mm').format(titleAt);
+    final right = categoryPart.isNotEmpty
+        ? '$categoryPart ($dateStr)'
+        : '($dateStr)';
+
+    if (snippet.isEmpty) {
+      if (categoryPart.isEmpty &&
+          callerFallback != null &&
+          callerFallback.trim().isNotEmpty) {
+        return '${callerFallback.trim()} | $right';
+      }
+      return right;
+    }
+    return '$snippet | $right';
+  }
+
   /// Δημιουργεί εκκρεμότητα από κλήση ή αυτόνομα ([callId] null = χωρίς εγγραφή κλήσης).
   Future<int> createFromCall({
     int? callId,
     required String? callerName,
     required String description,
     required DateTime callDate,
+    int? callerId,
+    int? equipmentId,
+    int? departmentId,
+    int? phoneId,
+    String? phoneText,
+    String? userText,
+    String? equipmentText,
+    String? departmentText,
+    String? categoryName,
+    DateTime? titleTimestamp,
   }) async {
-    final name = (callerName == null || callerName.trim().isEmpty)
-        ? 'Άγνωστος καλών'
-        : callerName.trim();
-    final title =
-        '$name – Εκκρεμότητα στις ${DateFormat('dd/MM/yyyy').format(callDate)}';
+    final titleAt = titleTimestamp ?? callDate;
+    final title = smartTaskTitleFromCallContext(
+      description: description,
+      categoryName: categoryName,
+      titleAt: titleAt,
+      callerFallback: callerName,
+    );
     final config = await getSnoozeConfig();
     final dueDate = calculateNextDueDate(
       config,
@@ -160,6 +224,24 @@ class TaskService {
       'description': description,
       'due_date': dueDate.toIso8601String(),
       'status': 'open',
+      'caller_id': callerId,
+      'equipment_id': equipmentId,
+      'department_id': departmentId,
+      'phone_id': phoneId,
+      'phone_text': phoneText,
+      'user_text': userText,
+      'equipment_text': equipmentText,
+      'department_text': departmentText,
+      'search_index': SearchTextNormalizer.normalizeForSearch(
+        [
+          title,
+          description,
+          userText ?? '',
+          phoneText ?? '',
+          equipmentText ?? '',
+          departmentText ?? '',
+        ].join(' '),
+      ),
     };
     final id = await db.insert('tasks', row);
     return id;
@@ -189,19 +271,38 @@ class TaskService {
     return rows.map((row) => Task.fromMap(row)).toList();
   }
 
-  /// Λίστα tasks με δυναμικό φίλτρο (search, statuses, ημερομηνίες). Ταξινόμηση due_date ASC.
-  Future<List<Task>> getFilteredTasks(TaskFilter filter) async {
+  /// Συνολικό πλήθος εκκρεμοτήτων `open` + `snoozed` (για badge μενού).
+  Future<int> getGlobalPendingTasksCount() async {
     final db = await _db;
-    final conditions = <String>[];
-    final args = <Object?>[];
+    final rows = await db.rawQuery(
+      "SELECT COUNT(id) AS count FROM tasks WHERE status IN ('open', 'snoozed')",
+    );
+    if (rows.isEmpty) return 0;
+    final n = rows.first['count'];
+    return n is int ? n : (n is num ? n.toInt() : int.tryParse('$n') ?? 0);
+  }
 
+  void _appendTaskFilterWhereParts(
+    TaskFilter filter,
+    List<String> conditions,
+    List<Object?> args, {
+    bool includeStatuses = true,
+  }) {
     if (filter.searchQuery.trim().isNotEmpty) {
-      final pattern = '%${filter.searchQuery.trim()}%';
-      conditions.add('(title LIKE ? OR description LIKE ?)');
-      args.add(pattern);
-      args.add(pattern);
+      final normalizedQuery = SearchTextNormalizer.normalizeForSearch(
+        filter.searchQuery,
+      );
+      final tokens = normalizedQuery
+          .split(RegExp(r'\s+'))
+          .where((t) => t.isNotEmpty)
+          .toList();
+      for (final token in tokens) {
+        conditions.add('search_index LIKE ?');
+        args.add('%$token%');
+      }
     }
-    if (filter.statuses.isNotEmpty) {
+
+    if (includeStatuses && filter.statuses.isNotEmpty) {
       final placeholders = List.filled(filter.statuses.length, '?').join(',');
       conditions.add('status IN ($placeholders)');
       for (final s in filter.statuses) {
@@ -216,10 +317,61 @@ class TaskService {
       conditions.add('due_date <= ?');
       args.add(filter.endDate!.toIso8601String());
     }
+  }
+
+  /// Πλήθος ανά `status` με ίδια φίλτρα αναζήτησης/ημερομηνίας με [getFilteredTasks],
+  /// χωρίς φίλτρο επιλεγμένων statuses (για μετρητές στα chips).
+  Future<Map<TaskStatus, int>> getTaskCounts(TaskFilter filter) async {
+    final db = await _db;
+    final conditions = <String>[];
+    final args = <Object?>[];
+    _appendTaskFilterWhereParts(filter, conditions, args, includeStatuses: false);
+    final where =
+        conditions.isEmpty ? '' : 'WHERE ${conditions.join(' AND ')}';
+
+    final rows = await db.rawQuery(
+      'SELECT tasks.status AS status, COUNT(DISTINCT tasks.id) AS count '
+      'FROM tasks $where GROUP BY tasks.status',
+      args,
+    );
+
+    final result = <TaskStatus, int>{
+      for (final s in TaskStatus.values) s: 0,
+    };
+    for (final row in rows) {
+      final raw = row['status'] as String?;
+      if (raw == null) continue;
+      final status = TaskStatusX.fromString(raw);
+      final n = row['count'];
+      final c = n is int ? n : (n is num ? n.toInt() : int.tryParse('$n') ?? 0);
+      result[status] = c;
+    }
+    return result;
+  }
+
+  /// Λίστα tasks με δυναμικό φίλτρο (search, statuses, ημερομηνίες) και ταξινόμηση.
+  Future<List<Task>> getFilteredTasks(TaskFilter filter) async {
+    final db = await _db;
+    final conditions = <String>[];
+    final args = <Object?>[];
+    _appendTaskFilterWhereParts(filter, conditions, args, includeStatuses: true);
 
     final where = conditions.isEmpty ? '' : 'WHERE ${conditions.join(' AND ')}';
+
+    // Στήλη λήξης στο σχήμα: `due_date` (όχι due_at).
+    final sortColumn = switch (filter.sortBy) {
+      TaskSortOption.createdAt => 'created_at',
+      TaskSortOption.dueAt => 'due_date',
+      TaskSortOption.priority => 'priority',
+      TaskSortOption.department => 'department_text',
+      TaskSortOption.user => 'user_text',
+      TaskSortOption.equipment => 'equipment_text',
+    };
+    final sortDirection = filter.sortAscending ? 'ASC' : 'DESC';
+    final orderByClause = 'ORDER BY $sortColumn $sortDirection';
+
     final rows = await db.rawQuery(
-      'SELECT * FROM tasks $where ORDER BY due_date ASC',
+      'SELECT * FROM tasks $where $orderByClause',
       args,
     );
     return rows.map((row) => Task.fromMap(row)).toList();
@@ -236,6 +388,9 @@ class TaskService {
     final now = DateTime.now().toIso8601String();
     map['created_at'] = now;
     map['updated_at'] = now;
+    map['search_index'] = SearchTextNormalizer.normalizeForSearch(
+      task.combinedSearchText,
+    );
     return db.insert('tasks', map);
   }
 
@@ -249,12 +404,10 @@ class TaskService {
       map.remove('snooze_history_json');
     }
     map['updated_at'] = DateTime.now().toIso8601String();
-    await db.update(
-      'tasks',
-      map,
-      where: 'id = ?',
-      whereArgs: [task.id],
+    map['search_index'] = SearchTextNormalizer.normalizeForSearch(
+      task.combinedSearchText,
     );
+    await db.update('tasks', map, where: 'id = ?', whereArgs: [task.id]);
   }
 
   /// Διαγράφει την εγγραφή βάσει ID.
@@ -269,11 +422,7 @@ class TaskService {
     final now = DateTime.now().toIso8601String();
     await db.update(
       'tasks',
-      {
-        'status': 'closed',
-        'solution_notes': solutionNotes,
-        'updated_at': now,
-      },
+      {'status': 'closed', 'solution_notes': solutionNotes, 'updated_at': now},
       where: 'id = ?',
       whereArgs: [id],
     );
@@ -290,14 +439,16 @@ class TaskService {
       ORDER BY c.id
     ''');
     return rows
-        .map((r) => OrphanCall(
-              id: r['id'] as int,
-              date: r['date'] as String?,
-              time: r['time'] as String?,
-              callerId: r['caller_id'] as int?,
-              callerText: r['caller_text'] as String?,
-              issue: r['issue'] as String?,
-            ))
+        .map(
+          (r) => OrphanCall(
+            id: r['id'] as int,
+            date: r['date'] as String?,
+            time: r['time'] as String?,
+            callerId: r['caller_id'] as int?,
+            callerText: r['caller_text'] as String?,
+            issue: r['issue'] as String?,
+          ),
+        )
         .toList();
   }
 
@@ -323,7 +474,9 @@ class TaskService {
         }
       }
       if (callerName == null || callerName.isEmpty) {
-        callerName = o.callerText?.trim().isEmpty == true ? null : o.callerText?.trim();
+        callerName = o.callerText?.trim().isEmpty == true
+            ? null
+            : o.callerText?.trim();
       }
       DateTime callDate = DateTime.now();
       if (o.date != null && o.date!.isNotEmpty) {
@@ -337,6 +490,7 @@ class TaskService {
         callerName: callerName,
         description: o.issue ?? '',
         callDate: callDate,
+        titleTimestamp: callDate,
       );
       created++;
     }

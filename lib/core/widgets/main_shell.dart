@@ -14,9 +14,11 @@ import '../../features/tasks/screens/tasks_screen.dart';
 import '../../features/directory/screens/directory_screen.dart';
 import '../../features/history/screens/history_screen.dart';
 import '../../features/settings/screens/settings_screen.dart';
+import '../providers/settings_provider.dart';
 import '../services/import_service.dart';
 import '../services/import_types.dart';
 import '../services/settings_service.dart';
+import '../../features/tasks/providers/tasks_provider.dart';
 
 /// Κύριο κέλυφος εφαρμογής: πλευρική πλοήγηση και περιοχή περιεχομένου.
 class MainShell extends ConsumerStatefulWidget {
@@ -55,8 +57,27 @@ class _MainShellState extends ConsumerState<MainShell> {
     if (mounted) setState(() => _showImportExcelButton = value);
   }
 
+  Widget _tasksNavigationIcon(bool showBadge, int pendingCount) {
+    final core = Tooltip(
+      waitDuration: const Duration(milliseconds: 600),
+      showDuration: const Duration(seconds: 4),
+      message:
+          'Προβλήματα που χρήζουν παρακολούθησης\nΑνοιχτές εργασίες & υπενθυμίσεις',
+      child: const Icon(Icons.task_alt),
+    );
+    return Badge(
+      isLabelVisible: showBadge && pendingCount > 0,
+      label: Text(pendingCount.toString()),
+      child: core,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final showBadgeAsync = ref.watch(showTasksBadgeProvider);
+    final pendingCountAsync = ref.watch(globalPendingTasksCountProvider);
+    final showBadge = showBadgeAsync.value ?? true;
+    final pendingCount = pendingCountAsync.value ?? 0;
     final railExtended = MediaQuery.sizeOf(context).width >= 760;
     return Scaffold(
       appBar: AppBar(
@@ -103,56 +124,51 @@ class _MainShellState extends ConsumerState<MainShell> {
             onDestinationSelected: (index) {
               setState(() => _selectedIndex = index);
             },
-            destinations: const [
+            destinations: [
               NavigationRailDestination(
                 icon: Tooltip(
-                  waitDuration: Duration(milliseconds: 600),
-                  showDuration: Duration(seconds: 4),
+                  waitDuration: const Duration(milliseconds: 600),
+                  showDuration: const Duration(seconds: 4),
                   message:
                       'Καταγραφή νέας κλήσης τεχνικής υποστήριξης\nΚύρια οθόνη – πατήστε εδώ όταν χτυπά τηλέφωνο',
-                  child: Icon(Icons.phone_in_talk),
+                  child: const Icon(Icons.phone_in_talk),
                 ),
-                label: Text('Κλήσεις'),
+                label: const Text('Κλήσεις'),
+              ),
+              NavigationRailDestination(
+                icon: _tasksNavigationIcon(showBadge, pendingCount),
+                selectedIcon: _tasksNavigationIcon(showBadge, pendingCount),
+                label: const Text('Εκκρεμότητες'),
               ),
               NavigationRailDestination(
                 icon: Tooltip(
-                  waitDuration: Duration(milliseconds: 600),
-                  showDuration: Duration(seconds: 4),
-                  message:
-                      'Προβλήματα που χρήζουν παρακολούθησης\nΑνοιχτές εργασίες & υπενθυμίσεις',
-                  child: Icon(Icons.task_alt),
-                ),
-                label: Text('Εκκρεμότητες'),
-              ),
-              NavigationRailDestination(
-                icon: Tooltip(
-                  waitDuration: Duration(milliseconds: 600),
-                  showDuration: Duration(seconds: 4),
+                  waitDuration: const Duration(milliseconds: 600),
+                  showDuration: const Duration(seconds: 4),
                   message:
                       'Διαχείριση χρηστών και εξοπλισμού\nΠροσθήκη / διόρθωση ονομάτων, τμημάτων, υπολογιστών',
-                  child: Icon(Icons.contacts),
+                  child: const Icon(Icons.contacts),
                 ),
-                label: Text('Κατάλογος'),
+                label: const Text('Κατάλογος'),
               ),
               NavigationRailDestination(
                 icon: Tooltip(
-                  waitDuration: Duration(milliseconds: 600),
-                  showDuration: Duration(seconds: 4),
+                  waitDuration: const Duration(milliseconds: 600),
+                  showDuration: const Duration(seconds: 4),
                   message:
                       'Προηγούμενες κλήσεις & αναζήτηση\nΕμφάνιση, τροποποίηση ή διαγραφή παλιών καταγραφών',
-                  child: Icon(Icons.history),
+                  child: const Icon(Icons.history),
                 ),
-                label: Text('Ιστορικό'),
+                label: const Text('Ιστορικό'),
               ),
               NavigationRailDestination(
                 icon: Tooltip(
-                  waitDuration: Duration(milliseconds: 600),
-                  showDuration: Duration(seconds: 4),
+                  waitDuration: const Duration(milliseconds: 600),
+                  showDuration: const Duration(seconds: 4),
                   message:
                       'Εργαλεία διαχείρισης & εποπτείας βάσης\nΑντίγραφα ασφαλείας, εγγραφές, προβολή πινάκων (για προχωρημένους χρήστες)',
-                  child: Icon(Icons.storage),
+                  child: const Icon(Icons.storage),
                 ),
-                label: Text('Βάση Δεδομένων'),
+                label: const Text('Βάση Δεδομένων'),
               ),
             ],
           ),

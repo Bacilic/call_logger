@@ -11,3 +11,7 @@ final showActiveTimerProvider =
 /// Invalidate μετά αλλαγή από την οθόνη ρυθμίσεων.
 final showAnyDeskRemoteProvider =
     FutureProvider<bool>((ref) => SettingsService().getShowAnyDeskRemote());
+
+/// Εμφάνιση badge πλήθους εκκρεμοτήτων στο μενού. Invalidate μετά από Ρυθμίσεις.
+final showTasksBadgeProvider =
+    FutureProvider<bool>((ref) => SettingsService().getShowTasksBadge());

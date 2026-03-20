@@ -9,12 +9,16 @@ import '../config/app_config.dart';
 import '../services/settings_service.dart';
 import '../utils/name_parser.dart';
 import '../utils/phone_list_parser.dart';
+import '../utils/search_text_normalizer.dart';
 import '../../features/calls/models/call_model.dart';
 import 'database_init_result.dart';
 
 /// Αποτέλεσμα ελέγχου σύνδεσης (success + αν χρησιμοποιείται τοπική βάση).
 class ConnectionCheckResult {
-  const ConnectionCheckResult({required this.success, required this.isLocalDev});
+  const ConnectionCheckResult({
+    required this.success,
+    required this.isLocalDev,
+  });
 
   final bool success;
   final bool isLocalDev;
@@ -63,10 +67,9 @@ class DatabaseHelper {
   /// Ελέγχει αν η διαδρομή δικτύου είναι προσβάσιμη (με timeout 2 s).
   Future<bool> _isNetworkPathAccessible(String dbPath) async {
     try {
-      final exists = await File(dbPath).exists().timeout(
-            const Duration(seconds: 2),
-            onTimeout: () => false,
-          );
+      final exists = await File(
+        dbPath,
+      ).exists().timeout(const Duration(seconds: 2), onTimeout: () => false);
       return exists;
     } on TimeoutException {
       return false;
@@ -102,7 +105,7 @@ class DatabaseHelper {
     try {
       db = await openDatabase(
         dbPath,
-        version: 12,
+        version: 13,
         onCreate: _onCreate,
         onUpgrade: _onUpgrade,
         singleInstance: false,
@@ -110,10 +113,10 @@ class DatabaseHelper {
     } on DatabaseInitException {
       rethrow;
     } catch (e) {
-      throw DatabaseInitException(
-        DatabaseInitResult.fromException(e, dbPath),
-      );
+      throw DatabaseInitException(DatabaseInitResult.fromException(e, dbPath));
     }
+
+    await _ensureTasksSearchIndexColumnAndBackfill(db);
 
     try {
       await _validateSchema(db, dbPath);
@@ -145,7 +148,7 @@ class DatabaseHelper {
   Future<void> createNewDatabaseFile(String filePath) async {
     final db = await openDatabase(
       filePath,
-      version: 12,
+      version: 13,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
       singleInstance: false,
@@ -223,10 +226,17 @@ class DatabaseHelper {
         priority INTEGER,
         solution_notes TEXT,
         snooze_until TEXT,
-        user_id INTEGER,
+        caller_id INTEGER,
         equipment_id INTEGER,
+        department_id INTEGER,
+        phone_id INTEGER,
+        phone_text TEXT,
+        user_text TEXT,
+        equipment_text TEXT,
+        department_text TEXT,
         created_at TEXT,
-        updated_at TEXT
+        updated_at TEXT,
+        search_index TEXT
       )
     ''');
 
@@ -270,20 +280,83 @@ class DatabaseHelper {
 
   /// Εισάγει προεπιλεγμένα ορίσματα VNC/AnyDesk αν ο πίνακας remote_tool_args είναι άδειος.
   static Future<void> _seedRemoteToolArgsIfEmpty(Database db) async {
-    final result = await db.rawQuery('SELECT COUNT(*) AS c FROM remote_tool_args');
+    final result = await db.rawQuery(
+      'SELECT COUNT(*) AS c FROM remote_tool_args',
+    );
     final count = result.isNotEmpty ? (result.first['c'] as int? ?? 0) : 0;
     if (count > 0) return;
 
     final defaults = <Map<String, dynamic>>[
-      {'tool_name': 'vnc', 'arg_flag': '-host={TARGET}', 'description': 'Host/IP στόχου', 'is_active': 1},
-      {'tool_name': 'vnc', 'arg_flag': '-password={PASSWORD}', 'description': 'Κωδικός VNC', 'is_active': 1},
-      {'tool_name': 'vnc', 'arg_flag': '-fullscreen', 'description': 'Πλήρης οθόνη', 'is_active': 0},
-      {'tool_name': 'vnc', 'arg_flag': '-viewonly', 'description': 'Μόνο προβολή', 'is_active': 0},
-      {'tool_name': 'anydesk', 'arg_flag': '{TARGET}', 'description': 'AnyDesk ID στόχου', 'is_active': 1},
-      {'tool_name': 'anydesk', 'arg_flag': '--fullscreen', 'description': 'Πλήρης οθόνη', 'is_active': 0},
+      {
+        'tool_name': 'vnc',
+        'arg_flag': '-host={TARGET}',
+        'description': 'Host/IP στόχου',
+        'is_active': 1,
+      },
+      {
+        'tool_name': 'vnc',
+        'arg_flag': '-password={PASSWORD}',
+        'description': 'Κωδικός VNC',
+        'is_active': 1,
+      },
+      {
+        'tool_name': 'vnc',
+        'arg_flag': '-fullscreen',
+        'description': 'Πλήρης οθόνη',
+        'is_active': 0,
+      },
+      {
+        'tool_name': 'vnc',
+        'arg_flag': '-viewonly',
+        'description': 'Μόνο προβολή',
+        'is_active': 0,
+      },
+      {
+        'tool_name': 'anydesk',
+        'arg_flag': '{TARGET}',
+        'description': 'AnyDesk ID στόχου',
+        'is_active': 1,
+      },
+      {
+        'tool_name': 'anydesk',
+        'arg_flag': '--fullscreen',
+        'description': 'Πλήρης οθόνη',
+        'is_active': 0,
+      },
     ];
     for (final row in defaults) {
       await db.insert('remote_tool_args', row);
+    }
+  }
+
+  /// Προσθέτει `tasks.search_index` αν λείπει (χωρίς αλλαγή user_version) και γεμίζει υπάρχουσες γραμμές.
+  Future<void> _ensureTasksSearchIndexColumnAndBackfill(Database db) async {
+    var added = false;
+    if (!await _tableHasColumn(db, 'tasks', 'search_index')) {
+      await db.execute('ALTER TABLE tasks ADD COLUMN search_index TEXT');
+      added = true;
+    }
+    if (!added) return;
+
+    final rows = await db.query('tasks');
+    for (final row in rows) {
+      final id = row['id'] as int?;
+      if (id == null) continue;
+      final combined = [
+        row['title'] as String? ?? '',
+        row['description'] as String? ?? '',
+        row['user_text'] as String? ?? '',
+        row['phone_text'] as String? ?? '',
+        row['equipment_text'] as String? ?? '',
+        row['department_text'] as String? ?? '',
+      ].join(' ');
+      final index = SearchTextNormalizer.normalizeForSearch(combined);
+      await db.update(
+        'tasks',
+        {'search_index': index},
+        where: 'id = ?',
+        whereArgs: [id],
+      );
     }
   }
 
@@ -328,7 +401,9 @@ class DatabaseHelper {
         await db.execute('ALTER TABLE equipment ADD COLUMN anydesk_id TEXT');
       }
       if (!await _tableHasColumn(db, 'equipment', 'default_remote_tool')) {
-        await db.execute('ALTER TABLE equipment ADD COLUMN default_remote_tool TEXT');
+        await db.execute(
+          'ALTER TABLE equipment ADD COLUMN default_remote_tool TEXT',
+        );
       }
     }
     // Πίνακας tasks: στήλες για προτεραιότητα, σημειώσεις λύσης, αναβολή, timestamps.
@@ -348,8 +423,12 @@ class DatabaseHelper {
       if (!await _tableHasColumn(db, 'tasks', 'created_at')) {
         await db.execute('ALTER TABLE tasks ADD COLUMN created_at TEXT');
       }
-      if (!await _tableHasColumn(db, 'tasks', 'user_id')) {
-        await db.execute('ALTER TABLE tasks ADD COLUMN user_id INTEGER');
+      if (!await _tableHasColumn(db, 'tasks', 'caller_id') &&
+          !await _tableHasColumn(db, 'tasks', 'user_id')) {
+        await db.execute('ALTER TABLE tasks ADD COLUMN caller_id INTEGER');
+      } else if (!await _tableHasColumn(db, 'tasks', 'caller_id') &&
+          await _tableHasColumn(db, 'tasks', 'user_id')) {
+        await db.execute('ALTER TABLE tasks RENAME COLUMN user_id TO caller_id');
       }
       if (!await _tableHasColumn(db, 'tasks', 'equipment_id')) {
         await db.execute('ALTER TABLE tasks ADD COLUMN equipment_id INTEGER');
@@ -389,7 +468,9 @@ class DatabaseHelper {
     if (oldVersion < 11) {
       if (!await _tableHasColumn(db, 'calls', 'category_text')) {
         if (await _tableHasColumn(db, 'calls', 'category')) {
-          await db.execute('ALTER TABLE calls RENAME COLUMN category TO category_text');
+          await db.execute(
+            'ALTER TABLE calls RENAME COLUMN category TO category_text',
+          );
         }
       }
       if (!await _tableHasColumn(db, 'calls', 'category_id')) {
@@ -398,7 +479,16 @@ class DatabaseHelper {
     }
     if (oldVersion < 12) {
       if (!await _tableHasColumn(db, 'tasks', 'snooze_history_json')) {
-        await db.execute('ALTER TABLE tasks ADD COLUMN snooze_history_json TEXT');
+        await db.execute(
+          'ALTER TABLE tasks ADD COLUMN snooze_history_json TEXT',
+        );
+      }
+    }
+    // tasks: user_id → caller_id (συμβατό με calls.caller_id / καλών).
+    if (oldVersion < 13) {
+      if (await _tableHasColumn(db, 'tasks', 'user_id') &&
+          !await _tableHasColumn(db, 'tasks', 'caller_id')) {
+        await db.execute('ALTER TABLE tasks RENAME COLUMN user_id TO caller_id');
       }
     }
   }
@@ -408,7 +498,9 @@ class DatabaseHelper {
   /// Τα πεδία department, location, notes δεν αλλάζουν.
   Future<void> _migrateUsersToFirstLastName(Database db) async {
     final info = await db.rawQuery('PRAGMA table_info(users)');
-    final columns = (info.map((e) => e['name'] as String?)).whereType<String>().toSet();
+    final columns = (info.map(
+      (e) => e['name'] as String?,
+    )).whereType<String>().toSet();
     if (!columns.contains('name')) {
       return; // Ήδη μετεγκαταστάθηκε (π.χ. από εφάπαξ script).
     }
@@ -496,7 +588,10 @@ class DatabaseHelper {
   }
 
   /// Μαζική ενημέρωση: εφαρμόζει τα ίδια [changes] σε όλα τα [ids]. Transaction.
-  Future<void> bulkUpdateUsers(List<int> ids, Map<String, dynamic> changes) async {
+  Future<void> bulkUpdateUsers(
+    List<int> ids,
+    Map<String, dynamic> changes,
+  ) async {
     if (ids.isEmpty || changes.isEmpty) return;
     final map = Map<String, dynamic>.from(changes);
     map.remove('id');
@@ -515,11 +610,7 @@ class DatabaseHelper {
     final db = await database;
     final placeholders = List.filled(ids.length, '?').join(',');
     await db.transaction((txn) async {
-      await txn.delete(
-        'users',
-        where: 'id IN ($placeholders)',
-        whereArgs: ids,
-      );
+      await txn.delete('users', where: 'id IN ($placeholders)', whereArgs: ids);
     });
   }
 
@@ -539,11 +630,10 @@ class DatabaseHelper {
   /// Αποθήκευση ρύθμισης στον πίνακα app_settings (insert ή replace).
   Future<void> setSetting(String key, String value) async {
     final db = await database;
-    await db.insert(
-      'app_settings',
-      {'key': key, 'value': value},
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
+    await db.insert('app_settings', {
+      'key': key,
+      'value': value,
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
   /// Επιστρέφει department_id για το [name].
@@ -561,11 +651,9 @@ class DatabaseHelper {
         return existing.first['id'] as int?;
       }
 
-      await txn.insert(
-        'departments',
-        {'name': normalized},
-        conflictAlgorithm: ConflictAlgorithm.ignore,
-      );
+      await txn.insert('departments', {
+        'name': normalized,
+      }, conflictAlgorithm: ConflictAlgorithm.ignore);
 
       final rows = await txn.rawQuery(
         'SELECT id FROM departments WHERE TRIM(name) = ? COLLATE NOCASE LIMIT 1',
@@ -599,7 +687,9 @@ class DatabaseHelper {
 
   /// Μαζική ενημέρωση εξοπλισμού: εφαρμόζει τα ίδια [changes] σε όλα τα [ids]. Transaction.
   Future<void> bulkUpdateEquipments(
-      List<int> ids, Map<String, dynamic> changes) async {
+    List<int> ids,
+    Map<String, dynamic> changes,
+  ) async {
     if (ids.isEmpty || changes.isEmpty) return;
     final map = Map<String, dynamic>.from(changes);
     map.remove('id');
@@ -626,16 +716,16 @@ class DatabaseHelper {
     });
   }
 
-  /// Επιστρέφει τις τελευταίες κλήσεις για χρήστη (κατά id DESC).
-  Future<List<Map<String, dynamic>>> getRecentCallsByUserId(
-    int userId, {
+  /// Επιστρέφει τις τελευταίες κλήσεις για καλούντα (calls.caller_id, κατά id DESC).
+  Future<List<Map<String, dynamic>>> getRecentCallsByCallerId(
+    int callerId, {
     int limit = 3,
   }) async {
     final db = await database;
     return db.query(
       'calls',
       where: 'caller_id = ?',
-      whereArgs: [userId],
+      whereArgs: [callerId],
       orderBy: 'id DESC',
       limit: limit,
     );
@@ -732,17 +822,32 @@ class DatabaseHelper {
     final db = await database;
     await db.transaction((txn) async {
       if (phone != null && phone.isNotEmpty) {
-        final userResult = await txn.query('users', columns: ['phone'], where: 'id = ?', whereArgs: [userId]);
+        final userResult = await txn.query(
+          'users',
+          columns: ['phone'],
+          where: 'id = ?',
+          whereArgs: [userId],
+        );
         if (userResult.isNotEmpty) {
           final currentPhone = userResult.first['phone'] as String?;
           if (currentPhone == null || currentPhone.trim().isEmpty) {
-            await txn.update('users', {'phone': phone}, where: 'id = ?', whereArgs: [userId]);
+            await txn.update(
+              'users',
+              {'phone': phone},
+              where: 'id = ?',
+              whereArgs: [userId],
+            );
           } else if (!PhoneListParser.containsPhone(currentPhone, phone)) {
             final merged = PhoneListParser.joinPhones([
               ...PhoneListParser.splitPhones(currentPhone),
               phone,
             ]);
-            await txn.update('users', {'phone': merged}, where: 'id = ?', whereArgs: [userId]);
+            await txn.update(
+              'users',
+              {'phone': merged},
+              where: 'id = ?',
+              whereArgs: [userId],
+            );
           }
         }
       }
@@ -812,10 +917,16 @@ class DatabaseHelper {
   }
 
   /// Προεπισκόπηση πίνακα: στήλες + γραμμές (μέγ. [rowLimit]). Για προβολή τύπου Excel.
-  Future<TablePreviewResult> getTablePreview(String tableName, {int rowLimit = 500}) async {
+  Future<TablePreviewResult> getTablePreview(
+    String tableName, {
+    int rowLimit = 500,
+  }) async {
     final db = await database;
     final info = await db.rawQuery('PRAGMA table_info($tableName)');
-    final columns = (info.map((e) => e['name'] as String?).whereType<String>().toList());
+    final columns = (info
+        .map((e) => e['name'] as String?)
+        .whereType<String>()
+        .toList());
     if (columns.isEmpty) return TablePreviewResult(columns: [], rows: []);
 
     final rows = await db.rawQuery('SELECT * FROM $tableName LIMIT $rowLimit');
@@ -846,8 +957,15 @@ class DatabaseHelper {
   /// Επιστρέφει ονόματα κατηγοριών από τον πίνακα categories (για dropdown φίλτρων).
   Future<List<String>> getCategoryNames() async {
     final db = await database;
-    final rows = await db.query('categories', columns: ['name'], orderBy: 'name');
-    return rows.map((r) => r['name'] as String? ?? '').where((s) => s.isNotEmpty).toList();
+    final rows = await db.query(
+      'categories',
+      columns: ['name'],
+      orderBy: 'name',
+    );
+    return rows
+        .map((r) => r['name'] as String? ?? '')
+        .where((s) => s.isNotEmpty)
+        .toList();
   }
 
   /// Εισάγει νέα κατηγορία και επιστρέφει το row id (sqlite rowid).
@@ -881,8 +999,11 @@ class DatabaseHelper {
       args.add(category);
     }
 
-    final whereSql = whereClauses.isEmpty ? '' : 'WHERE ${whereClauses.join(' AND ')}';
-    final sql = '''
+    final whereSql = whereClauses.isEmpty
+        ? ''
+        : 'WHERE ${whereClauses.join(' AND ')}';
+    final sql =
+        '''
       SELECT calls.id, calls.date, calls.time, calls.caller_id, calls.equipment_id,
              calls.issue, calls.solution, calls.caller_text, calls.phone_text, calls.department_text, calls.equipment_text,
              calls.category_text AS category, calls.status, calls.duration, calls.is_priority,
@@ -928,7 +1049,9 @@ class DatabaseHelper {
       final isLocal = dbPath == AppConfig.localDevDbPath;
       return ConnectionCheckResult(success: true, isLocalDev: isLocal);
     } catch (e, st) {
-      debugPrint('[DatabaseHelper] Δεν είναι δυνατή η σύνδεση με τη βάση: $dbPath');
+      debugPrint(
+        '[DatabaseHelper] Δεν είναι δυνατή η σύνδεση με τη βάση: $dbPath',
+      );
       debugPrint('[DatabaseHelper] Σφάλμα: $e');
       debugPrint('[DatabaseHelper] $st');
       return const ConnectionCheckResult(success: false, isLocalDev: false);
@@ -965,12 +1088,16 @@ class DatabaseHelper {
           'INSERT OR IGNORE INTO departments (name, building) '
           "SELECT DISTINCT department, location FROM users WHERE department IS NOT NULL AND department != '' ORDER BY department",
         );
-        await txn.execute("UPDATE departments SET color = '#1976D2' WHERE color IS NULL");
+        await txn.execute(
+          "UPDATE departments SET color = '#1976D2' WHERE color IS NULL",
+        );
         await txn.execute(
           "INSERT OR REPLACE INTO app_settings (key, value) VALUES ('departments_migration_done', '1')",
         );
       });
-      debugPrint('Departments table created and populated from users.department & location.');
+      debugPrint(
+        'Departments table created and populated from users.department & location.',
+      );
     } catch (e, st) {
       debugPrint('migrateDepartmentsIfNeeded error: $e');
       debugPrint('$st');

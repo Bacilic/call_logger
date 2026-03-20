@@ -1,11 +1,7 @@
 import 'dart:convert';
 
 /// Κατάσταση εργασίας (tasks.status).
-enum TaskStatus {
-  open,
-  snoozed,
-  closed,
-}
+enum TaskStatus { open, snoozed, closed }
 
 extension TaskStatusX on TaskStatus {
   static TaskStatus fromString(String value) {
@@ -22,17 +18,17 @@ extension TaskStatusX on TaskStatus {
   }
 
   String get toDbValue => switch (this) {
-        TaskStatus.open => 'open',
-        TaskStatus.snoozed => 'snoozed',
-        TaskStatus.closed => 'closed',
-      };
+    TaskStatus.open => 'open',
+    TaskStatus.snoozed => 'snoozed',
+    TaskStatus.closed => 'closed',
+  };
 
   /// Ετικέτα για το UI (η DB κρατά αγγλικά κλειδιά).
   String get displayLabelEl => switch (this) {
-        TaskStatus.open => 'ανοικτή',
-        TaskStatus.snoozed => 'αναβληθείσα',
-        TaskStatus.closed => 'ολοκληρωμένη',
-      };
+    TaskStatus.open => 'ανοικτή',
+    TaskStatus.snoozed => 'αναβληθείσα',
+    TaskStatus.closed => 'ολοκληρωμένη',
+  };
 }
 
 /// Μοντέλο εργασίας (πίνακας tasks).
@@ -40,8 +36,14 @@ class Task {
   Task({
     this.id,
     this.callId,
-    this.userId,
+    this.callerId,
     this.equipmentId,
+    this.departmentId,
+    this.phoneId,
+    this.phoneText,
+    this.userText,
+    this.equipmentText,
+    this.departmentText,
     required this.title,
     this.description,
     required this.dueDate,
@@ -56,8 +58,17 @@ class Task {
 
   final int? id;
   final int? callId;
-  final int? userId;
+  /// FK προς users.id (ο καλών της σχετικής κλήσης).
+  final int? callerId;
   final int? equipmentId;
+  final int? departmentId;
+
+  /// Προαιρετικό αναγνωριστικό (π.χ. εσωτερικός αριθμός από τη φόρμα κλήσης).
+  final int? phoneId;
+  final String? phoneText;
+  final String? userText;
+  final String? equipmentText;
+  final String? departmentText;
   final String title;
   final String? description;
   final String dueDate;
@@ -78,8 +89,14 @@ class Task {
     return Task(
       id: map['id'] as int?,
       callId: map['call_id'] as int?,
-      userId: map['user_id'] as int?,
+      callerId: map['caller_id'] as int? ?? map['user_id'] as int?,
       equipmentId: map['equipment_id'] as int?,
+      departmentId: map['department_id'] as int?,
+      phoneId: map['phone_id'] as int?,
+      phoneText: map['phone_text'] as String?,
+      userText: map['user_text'] as String?,
+      equipmentText: map['equipment_text'] as String?,
+      departmentText: map['department_text'] as String?,
       title: map['title'] as String? ?? '',
       description: map['description'] as String?,
       dueDate: map['due_date'] as String? ?? '',
@@ -97,8 +114,14 @@ class Task {
     return {
       if (id != null) 'id': id,
       if (callId != null) 'call_id': callId,
-      if (userId != null) 'user_id': userId,
+      if (callerId != null) 'caller_id': callerId,
       if (equipmentId != null) 'equipment_id': equipmentId,
+      if (departmentId != null) 'department_id': departmentId,
+      if (phoneId != null) 'phone_id': phoneId,
+      if (phoneText != null) 'phone_text': phoneText,
+      if (userText != null) 'user_text': userText,
+      if (equipmentText != null) 'equipment_text': equipmentText,
+      if (departmentText != null) 'department_text': departmentText,
       'title': title,
       if (description != null) 'description': description,
       'due_date': dueDate,
@@ -115,8 +138,14 @@ class Task {
   Task copyWith({
     int? id,
     int? callId,
-    int? userId,
+    int? callerId,
     int? equipmentId,
+    int? departmentId,
+    int? phoneId,
+    String? phoneText,
+    String? userText,
+    String? equipmentText,
+    String? departmentText,
     String? title,
     String? description,
     String? dueDate,
@@ -131,8 +160,14 @@ class Task {
     return Task(
       id: id ?? this.id,
       callId: callId ?? this.callId,
-      userId: userId ?? this.userId,
+      callerId: callerId ?? this.callerId,
       equipmentId: equipmentId ?? this.equipmentId,
+      departmentId: departmentId ?? this.departmentId,
+      phoneId: phoneId ?? this.phoneId,
+      phoneText: phoneText ?? this.phoneText,
+      userText: userText ?? this.userText,
+      equipmentText: equipmentText ?? this.equipmentText,
+      departmentText: departmentText ?? this.departmentText,
       title: title ?? this.title,
       description: description ?? this.description,
       dueDate: dueDate ?? this.dueDate,
@@ -145,6 +180,16 @@ class Task {
       updatedAt: updatedAt ?? this.updatedAt,
     );
   }
+
+  /// Ενιαίο κείμενο για ευρετήριο αναζήτησης (τίτλος + πεδία κλήσης / περιγραφή).
+  String get combinedSearchText => [
+        title,
+        description ?? '',
+        userText ?? '',
+        phoneText ?? '',
+        equipmentText ?? '',
+        departmentText ?? '',
+      ].join(' ');
 
   DateTime? get dueDateTime => _parseDateTime(dueDate);
   DateTime? get snoozeUntilDateTime => _parseDateTime(snoozeUntil);
@@ -187,10 +232,7 @@ class Task {
 
   /// Επιστρέφει νέο Task με append στο ιστορικό αναβολών.
   Task addSnoozeEntry(DateTime date) {
-    final entry = TaskSnoozeEntry(
-      snoozedAt: DateTime.now(),
-      dueAt: date,
-    );
+    final entry = TaskSnoozeEntry(snoozedAt: DateTime.now(), dueAt: date);
     final next = [...snoozeEntries, entry]
         .map(
           (e) => {
@@ -202,8 +244,7 @@ class Task {
     return copyWith(snoozeHistoryJson: jsonEncode(next));
   }
 
-  bool get isOverdue =>
-      dueDateTime?.isBefore(DateTime.now()) ?? false;
+  bool get isOverdue => dueDateTime?.isBefore(DateTime.now()) ?? false;
 
   bool get isSnoozed =>
       snoozeUntil != null &&
@@ -211,10 +252,7 @@ class Task {
 }
 
 class TaskSnoozeEntry {
-  const TaskSnoozeEntry({
-    required this.snoozedAt,
-    this.dueAt,
-  });
+  const TaskSnoozeEntry({required this.snoozedAt, this.dueAt});
 
   final DateTime snoozedAt;
   final DateTime? dueAt;

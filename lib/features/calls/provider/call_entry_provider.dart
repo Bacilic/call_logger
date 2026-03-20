@@ -130,7 +130,7 @@ class CallEntryNotifier extends Notifier<CallEntryState> {
 
   /// Υποβολή κλήσης: διαβάζει caller/equipment από call_header_provider.
   /// Αν τροποποιήθηκε τμήμα σε υπάρχοντα καλούντα, ενημερώνει το department_id πριν την εισαγωγή κλήσης.
-  /// Μετά επιτυχία: markPhoneUsed, reset notes, clearAll + requestPhoneFocus.
+  /// Μετά επιτυχία: markPhoneUsed, reset notes, clearAll (focus τηλεφώνου: UI / SmartEntitySelectorWidget).
   Future<bool> submitCall(WidgetRef ref) async {
     if (!ref.read(callHeaderProvider).canSubmitCall) {
       return false;
@@ -168,9 +168,15 @@ class CallEntryNotifier extends Notifier<CallEntryState> {
           callerId: callerId ?? user?.id,
           equipmentId: header.selectedEquipment?.id,
           callerText: callerText,
-          phoneText: (header.selectedPhone?.trim().isEmpty ?? true) ? null : header.selectedPhone!.trim(),
-          departmentText: header.departmentText.trim().isEmpty ? null : header.departmentText.trim(),
-          equipmentText: header.equipmentText.trim().isEmpty ? null : header.equipmentText.trim(),
+          phoneText: (header.selectedPhone?.trim().isEmpty ?? true)
+              ? null
+              : header.selectedPhone!.trim(),
+          departmentText: header.departmentText.trim().isEmpty
+              ? null
+              : header.departmentText.trim(),
+          equipmentText: header.equipmentText.trim().isEmpty
+              ? null
+              : header.equipmentText.trim(),
           issue: notes.isEmpty ? null : notes,
           solution: null,
           category: state.category.isEmpty ? null : state.category,
@@ -191,13 +197,26 @@ class CallEntryNotifier extends Notifier<CallEntryState> {
             user?.name ??
             (callerTextRaw.trim().isEmpty ? null : callerTextRaw.trim());
         final callDate = DateTime.now();
+        final taskFields = callsFormPendingTaskFields(ref);
+        final categoryName = state.category.trim().isEmpty
+            ? null
+            : state.category.trim();
         await ref
             .read(taskServiceProvider)
             .createFromCall(
               callId: callId,
               callerName: callerName,
-              description: notes,
+              description: state.notes,
               callDate: callDate,
+              callerId: taskFields.callerId,
+              equipmentId: taskFields.equipmentId,
+              departmentId: taskFields.departmentId,
+              phoneId: taskFields.phoneId,
+              phoneText: taskFields.phoneText,
+              userText: taskFields.userText,
+              equipmentText: taskFields.equipmentText,
+              departmentText: taskFields.departmentText,
+              categoryName: categoryName,
             );
         ref
             .read(taskFilterProvider.notifier)
@@ -206,7 +225,6 @@ class CallEntryNotifier extends Notifier<CallEntryState> {
       }
       reset();
       ref.read(callHeaderProvider.notifier).clearAll();
-      ref.read(callHeaderProvider.notifier).requestPhoneFocus();
       return true;
     } catch (_) {
       return false;
@@ -217,24 +235,38 @@ class CallEntryNotifier extends Notifier<CallEntryState> {
   Future<bool> submitOnlyPending(WidgetRef ref) async {
     final header = ref.read(callHeaderProvider);
     final user = header.selectedCaller;
-    final notes = state.notes.trim();
     final callerTextRaw = header.callerDisplayText.trim();
-    final callerName = user?.name ??
+    final callerName =
+        user?.name ??
         (callerTextRaw.trim().isEmpty ? null : callerTextRaw.trim());
     final callDate = DateTime.now();
     try {
       stopTimer();
-      await ref.read(taskServiceProvider).createFromCall(
+      final taskFields = callsFormPendingTaskFields(ref);
+      final categoryName = state.category.trim().isEmpty
+          ? null
+          : state.category.trim();
+      await ref
+          .read(taskServiceProvider)
+          .createFromCall(
             callId: null,
             callerName: callerName,
-            description: notes,
+            description: state.notes,
             callDate: callDate,
+            callerId: taskFields.callerId,
+            equipmentId: taskFields.equipmentId,
+            departmentId: taskFields.departmentId,
+            phoneId: taskFields.phoneId,
+            phoneText: taskFields.phoneText,
+            userText: taskFields.userText,
+            equipmentText: taskFields.equipmentText,
+            departmentText: taskFields.departmentText,
+            categoryName: categoryName,
           );
       ref.read(taskFilterProvider.notifier).update((_) => TaskFilter.initial());
       ref.invalidate(tasksProvider);
       reset();
       ref.read(callHeaderProvider.notifier).clearAll();
-      ref.read(callHeaderProvider.notifier).requestPhoneFocus();
       return true;
     } catch (_) {
       return false;
@@ -260,13 +292,52 @@ final callEntryProvider = NotifierProvider<CallEntryNotifier, CallEntryState>(
   CallEntryNotifier.new,
 );
 
-/// Τελευταίες κλήσεις ανά userId (limit 3).
+/// Πεδία FK + snapshot κειμένου από τη φόρμα Κλήσεων για εισαγωγή εκκρεμότητας.
+({
+  int? callerId,
+  int? equipmentId,
+  int? departmentId,
+  int? phoneId,
+  String? phoneText,
+  String? userText,
+  String? equipmentText,
+  String? departmentText,
+})
+callsFormPendingTaskFields(WidgetRef ref) {
+  final smart = ref.read(callSmartEntityProvider);
+  final digitsOnly = ref
+      .read(callEntryProvider)
+      .internalDigits
+      .replaceAll(RegExp(r'[^0-9]'), '');
+  final phoneId = digitsOnly.isEmpty ? null : int.tryParse(digitsOnly);
+  final phone = smart.selectedPhone?.trim();
+  final phoneText = (phone == null || phone.isEmpty) ? null : phone;
+  final userTrim = smart.callerDisplayText.trim();
+  final userText = userTrim.isEmpty ? null : userTrim;
+  final eqTrim = smart.equipmentText.trim();
+  final equipmentText = eqTrim.isEmpty ? null : eqTrim;
+  final deptTrim = smart.departmentText.trim();
+  final departmentText = deptTrim.isEmpty ? null : deptTrim;
+  return (
+    callerId: smart.selectedCaller?.id,
+    equipmentId: smart.selectedEquipment?.id,
+    departmentId:
+        smart.selectedDepartmentId ?? smart.selectedCaller?.departmentId,
+    phoneId: phoneId,
+    phoneText: phoneText,
+    userText: userText,
+    equipmentText: equipmentText,
+    departmentText: departmentText,
+  );
+}
+
+/// Τελευταίες κλήσεις ανά caller_id (limit 3).
 final recentCallsProvider = FutureProvider.family<List<CallModel>, int>((
   ref,
-  userId,
+  callerId,
 ) async {
-  final maps = await DatabaseHelper.instance.getRecentCallsByUserId(
-    userId,
+  final maps = await DatabaseHelper.instance.getRecentCallsByCallerId(
+    callerId,
     limit: 3,
   );
   return maps.map((m) => CallModel.fromMap(m)).toList();

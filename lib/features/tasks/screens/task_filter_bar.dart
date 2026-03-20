@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import '../models/task.dart';
+import '../models/task_filter.dart';
 import '../providers/tasks_provider.dart';
 
 /// Μπάρα αναζήτησης και φίλτρων: κείμενο (debounce 300ms), status chips, εύρος ημερομηνιών.
@@ -26,13 +27,27 @@ class _TaskFilterBarState extends ConsumerState<TaskFilterBar> {
     super.initState();
     final filter = ref.read(taskFilterProvider);
     _searchController.text = filter.searchQuery;
+    _searchController.addListener(_onSearchControllerChanged);
+  }
+
+  void _onSearchControllerChanged() {
+    if (mounted) setState(() {});
   }
 
   @override
   void dispose() {
+    _searchController.removeListener(_onSearchControllerChanged);
     _debounceTimer?.cancel();
     _searchController.dispose();
     super.dispose();
+  }
+
+  void _clearSearch() {
+    _debounceTimer?.cancel();
+    _searchController.clear();
+    ref
+        .read(taskFilterProvider.notifier)
+        .update((s) => s.copyWith(searchQuery: ''));
   }
 
   void _onSearchChanged(String value) {
@@ -76,9 +91,53 @@ class _TaskFilterBarState extends ConsumerState<TaskFilterBar> {
     ref.read(taskFilterProvider.notifier).update((s) => s.copyWith(clearDateRange: true));
   }
 
+  Widget _statusChipLabel(
+    TaskStatus status,
+    AsyncValue<Map<TaskStatus, int>> countsAsync,
+    TaskFilter filter,
+  ) {
+    final count = countsAsync.value?[status];
+    var showCount = count != null &&
+        count > 0 &&
+        !countsAsync.isLoading &&
+        !countsAsync.hasError;
+    // Μεγάλα πλήθη «ολοκληρωμένων» μόνο όταν το chip είναι ενεργό ή «Εμφάνιση όλων».
+    if (status == TaskStatus.closed &&
+        !filter.statuses.contains(TaskStatus.closed) &&
+        !filter.allFiltersOff) {
+      showCount = false;
+    }
+    if (!showCount) {
+      return Text(switch (status) {
+        TaskStatus.open => 'Ανοιχτές',
+        TaskStatus.snoozed => 'Αναβολές',
+        TaskStatus.closed => 'Ολοκληρωμένες',
+      });
+    }
+    return Text('${status.displayLabelEl} ($count)');
+  }
+
+  String _getSortOptionLabel(TaskSortOption option) {
+    switch (option) {
+      case TaskSortOption.createdAt:
+        return 'Δημιουργία';
+      case TaskSortOption.dueAt:
+        return 'Λήξη';
+      case TaskSortOption.priority:
+        return 'Προτεραιότητα';
+      case TaskSortOption.department:
+        return 'Τμήμα';
+      case TaskSortOption.user:
+        return 'Χρήστης';
+      case TaskSortOption.equipment:
+        return 'Εξοπλισμός';
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final filter = ref.watch(taskFilterProvider);
+    final countsAsync = ref.watch(taskStatusCountsProvider);
     final theme = Theme.of(context);
     final hasDateRange = filter.startDate != null || filter.endDate != null;
     final allFiltersOff = filter.allFiltersOff;
@@ -110,6 +169,13 @@ class _TaskFilterBarState extends ConsumerState<TaskFilterBar> {
                     decoration: InputDecoration(
                       hintText: 'Αναζήτηση τίτλου / περιγραφής',
                       prefixIcon: const Icon(Icons.search),
+                      suffixIcon: _searchController.text.isEmpty
+                          ? null
+                          : IconButton(
+                              tooltip: 'Καθαρισμός αναζήτησης',
+                              icon: const Icon(Icons.clear),
+                              onPressed: _clearSearch,
+                            ),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),
@@ -135,17 +201,17 @@ class _TaskFilterBarState extends ConsumerState<TaskFilterBar> {
               runSpacing: 6,
               children: [
                 FilterChip(
-                  label: const Text('Ανοιχτές'),
+                  label: _statusChipLabel(TaskStatus.open, countsAsync, filter),
                   selected: filter.statuses.contains(TaskStatus.open),
                   onSelected: (_) => _toggleStatus(TaskStatus.open),
                 ),
                 FilterChip(
-                  label: const Text('Αναβολές'),
+                  label: _statusChipLabel(TaskStatus.snoozed, countsAsync, filter),
                   selected: filter.statuses.contains(TaskStatus.snoozed),
                   onSelected: (_) => _toggleStatus(TaskStatus.snoozed),
                 ),
                 FilterChip(
-                  label: const Text('Ολοκληρωμένες'),
+                  label: _statusChipLabel(TaskStatus.closed, countsAsync, filter),
                   selected: filter.statuses.contains(TaskStatus.closed),
                   onSelected: (_) => _toggleStatus(TaskStatus.closed),
                 ),
@@ -172,6 +238,50 @@ class _TaskFilterBarState extends ConsumerState<TaskFilterBar> {
                     onPressed: _clearDateRange,
                   ),
                 ],
+                const SizedBox(width: 8),
+                PopupMenuButton<TaskSortOption>(
+                  tooltip: 'Ταξινόμηση',
+                  onSelected: (value) {
+                    ref
+                        .read(taskFilterProvider.notifier)
+                        .update((s) => s.copyWith(sortBy: value));
+                  },
+                  itemBuilder: (context) => TaskSortOption.values
+                      .map(
+                        (o) => PopupMenuItem<TaskSortOption>(
+                          value: o,
+                          child: Text(_getSortOptionLabel(o)),
+                        ),
+                      )
+                      .toList(),
+                  child: Chip(
+                    avatar: const Icon(Icons.sort, size: 18),
+                    label: Text(_getSortOptionLabel(filter.sortBy)),
+                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    visualDensity: VisualDensity.compact,
+                  ),
+                ),
+                IconButton.filledTonal(
+                  constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+                  padding: EdgeInsets.zero,
+                  style: IconButton.styleFrom(
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                  tooltip: filter.sortAscending
+                      ? 'Αύξουσα ταξινόμηση'
+                      : 'Φθίνουσα ταξινόμηση',
+                  onPressed: () {
+                    ref.read(taskFilterProvider.notifier).update(
+                          (s) => s.copyWith(sortAscending: !s.sortAscending),
+                        );
+                  },
+                  icon: Icon(
+                    filter.sortAscending
+                        ? Icons.arrow_upward
+                        : Icons.arrow_downward,
+                    size: 20,
+                  ),
+                ),
               ],
             ),
           ],

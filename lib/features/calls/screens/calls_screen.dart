@@ -55,16 +55,15 @@ class CallsScreen extends ConsumerWidget {
                           header.selectedEquipment != null)
                         RemoteConnectionButtons(
                           equipment: header.selectedEquipment,
-                          equipmentCodeText:
-                              header.equipmentText.isNotEmpty
-                                  ? header.equipmentText
-                                  : (header.selectedEquipment?.code ?? ''),
+                          equipmentCodeText: header.equipmentText.isNotEmpty
+                              ? header.equipmentText
+                              : (header.selectedEquipment?.code ?? ''),
                         ),
                     ],
                   ),
                 ),
                 if (header.selectedCaller != null) ...[
-                  RecentCallsList(userId: header.selectedCaller!.id!),
+                  RecentCallsList(callerId: header.selectedCaller!.id!),
                 ],
                 const SizedBox(height: 16),
                 Row(
@@ -77,10 +76,7 @@ class CallsScreen extends ConsumerWidget {
                       ),
                     ),
                     const SizedBox(width: 12),
-                    Flexible(
-                      fit: FlexFit.loose,
-                      child: CallStatusBar(),
-                    ),
+                    Flexible(fit: FlexFit.loose, child: CallStatusBar()),
                   ],
                 ),
                 const SizedBox(height: 16),
@@ -109,8 +105,9 @@ Widget _buildSubmitButton(
   final elevated = ElevatedButton(
     onPressed: header.canSubmitCall
         ? () async {
-            final ok =
-                await ref.read(callEntryProvider.notifier).submitCall(ref);
+            final ok = await ref
+                .read(callEntryProvider.notifier)
+                .submitCall(ref);
             if (context.mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
@@ -119,7 +116,6 @@ Widget _buildSubmitButton(
                   ),
                 ),
               );
-              ref.read(callHeaderProvider.notifier).requestPhoneFocus();
             }
           }
         : null,
@@ -150,13 +146,12 @@ Widget _buildSubmitButton(
       padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
     ),
     onPressed: () async {
-      final ok =
-          await ref.read(callEntryProvider.notifier).submitOnlyPending(ref);
+      final ok = await ref
+          .read(callEntryProvider.notifier)
+          .submitOnlyPending(ref);
       if (context.mounted && ok) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Η εκκρεμότητα καταχωρήθηκε'),
-          ),
+          const SnackBar(content: Text('Η εκκρεμότητα καταχωρήθηκε')),
         );
       }
     },
@@ -168,11 +163,7 @@ Widget _buildSubmitButton(
       if (narrow) {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            mainSubmit,
-            const SizedBox(height: 12),
-            pendingBtn,
-          ],
+          children: [mainSubmit, const SizedBox(height: 12), pendingBtn],
         );
       }
       return Row(
@@ -181,10 +172,7 @@ Widget _buildSubmitButton(
           Expanded(child: mainSubmit),
           if (isPending) ...[
             const SizedBox(width: 16),
-            Flexible(
-              fit: FlexFit.loose,
-              child: pendingBtn,
-            ),
+            Flexible(fit: FlexFit.loose, child: pendingBtn),
           ],
         ],
       );

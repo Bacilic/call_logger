@@ -17,8 +17,24 @@ class TaskFilterNotifier extends Notifier<TaskFilter> {
 final taskFilterProvider =
     NotifierProvider<TaskFilterNotifier, TaskFilter>(TaskFilterNotifier.new);
 
+/// Μετρητές ανά κατάσταση (ίδια φίλτρα αναζήτησης/ημερομηνίας, χωρίς status chips).
+/// Παρακολουθεί [tasksProvider] ώστε να ενημερώνεται μετά από αλλαγές λίστας.
+final taskStatusCountsProvider =
+    FutureProvider<Map<TaskStatus, int>>((ref) async {
+  final filter = ref.watch(taskFilterProvider);
+  ref.watch(tasksProvider);
+  final service = ref.read(taskServiceProvider);
+  return service.getTaskCounts(filter);
+});
+
 final tasksProvider =
     AsyncNotifierProvider<TasksNotifier, List<Task>>(TasksNotifier.new);
+
+/// Πλήθος open+snoozed για badge στο κύριο μενού. Ανανεώνεται όταν αλλάζει η λίστα tasks.
+final globalPendingTasksCountProvider = FutureProvider<int>((ref) async {
+  ref.watch(tasksProvider);
+  return ref.read(taskServiceProvider).getGlobalPendingTasksCount();
+});
 
 class TasksNotifier extends AsyncNotifier<List<Task>> {
   @override

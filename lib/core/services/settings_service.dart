@@ -11,6 +11,7 @@ class SettingsService {
   static const String _keyShowImportExcelButton = 'show_import_excel_button';
   static const String _keyShowActiveTimer = 'show_active_timer';
   static const String _keyShowAnyDeskRemote = 'show_anydesk_remote';
+  static const String _keyShowTasksBadge = 'show_tasks_badge';
   static const int _maxRecentPaths = 3;
 
   /// Κλειδιά για ρυθμίσεις απομακρυσμένης σύνδεσης (πίνακας app_settings).
@@ -118,6 +119,17 @@ class SettingsService {
   Future<void> setShowAnyDeskRemote(bool value) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_keyShowAnyDeskRemote, value);
+  }
+
+  /// Εμφάνιση μετρητή (badge) εκκρεμοτήτων στο κεντρικό μενού. Προεπιλογή: true.
+  Future<bool> getShowTasksBadge() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_keyShowTasksBadge) ?? true;
+  }
+
+  Future<void> setShowTasksBadge(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_keyShowTasksBadge, value);
   }
 
   // --- Ρυθμίσεις απομακρυσμένης σύνδεσης (app_settings) ---
