@@ -102,7 +102,7 @@ class DatabaseHelper {
     try {
       db = await openDatabase(
         dbPath,
-        version: 10,
+        version: 12,
         onCreate: _onCreate,
         onUpgrade: _onUpgrade,
         singleInstance: false,
@@ -145,7 +145,7 @@ class DatabaseHelper {
   Future<void> createNewDatabaseFile(String filePath) async {
     final db = await openDatabase(
       filePath,
-      version: 10,
+      version: 12,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
       singleInstance: false,
@@ -171,7 +171,8 @@ class DatabaseHelper {
         equipment_text TEXT,
         issue TEXT,
         solution TEXT,
-        category TEXT,
+        category_text TEXT,
+        category_id INTEGER,
         status TEXT,
         duration INTEGER,
         is_priority INTEGER DEFAULT 0
@@ -184,7 +185,6 @@ class DatabaseHelper {
         last_name TEXT NOT NULL,
         first_name TEXT NOT NULL,
         phone TEXT,
-        department TEXT,
         department_id INTEGER,
         location TEXT,
         notes TEXT
@@ -217,6 +217,7 @@ class DatabaseHelper {
         title TEXT,
         description TEXT,
         due_date TEXT,
+        snooze_history_json TEXT,
         status TEXT,
         call_id INTEGER,
         priority INTEGER,
@@ -382,6 +383,22 @@ class DatabaseHelper {
       }
       if (!await _tableHasColumn(db, 'calls', 'equipment_text')) {
         await db.execute('ALTER TABLE calls ADD COLUMN equipment_text TEXT');
+      }
+    }
+    // Κανονικοποίηση κατηγορίας: category → category_text + category_id (FK προς categories).
+    if (oldVersion < 11) {
+      if (!await _tableHasColumn(db, 'calls', 'category_text')) {
+        if (await _tableHasColumn(db, 'calls', 'category')) {
+          await db.execute('ALTER TABLE calls RENAME COLUMN category TO category_text');
+        }
+      }
+      if (!await _tableHasColumn(db, 'calls', 'category_id')) {
+        await db.execute('ALTER TABLE calls ADD COLUMN category_id INTEGER');
+      }
+    }
+    if (oldVersion < 12) {
+      if (!await _tableHasColumn(db, 'tasks', 'snooze_history_json')) {
+        await db.execute('ALTER TABLE tasks ADD COLUMN snooze_history_json TEXT');
       }
     }
   }
@@ -776,7 +793,8 @@ class DatabaseHelper {
       'equipment_text': call.equipmentText,
       'issue': call.issue,
       'solution': call.solution,
-      'category': call.category,
+      'category_text': call.category,
+      'category_id': null,
       'status': call.status ?? 'completed',
       'duration': call.duration,
       'is_priority': call.isPriority ?? 0,
@@ -832,6 +850,12 @@ class DatabaseHelper {
     return rows.map((r) => r['name'] as String? ?? '').where((s) => s.isNotEmpty).toList();
   }
 
+  /// Εισάγει νέα κατηγορία και επιστρέφει το row id (sqlite rowid).
+  Future<int> insertCategoryAndGetId(String name) async {
+    final db = await database;
+    return db.insert('categories', {'name': name.trim()});
+  }
+
   /// Ιστορικό κλήσεων με προαιρετικά φίλτρα. LEFT JOIN users και equipment.
   /// Φιλτράρει μόνο βάσει ημερομηνιών και κατηγορίας· η αναζήτηση per keyword γίνεται in-memory στο provider.
   /// [dateFrom] / [dateTo]: ημερομηνίες σε μορφή yyyy-MM-dd.
@@ -853,7 +877,7 @@ class DatabaseHelper {
       args.add(dateTo);
     }
     if (category != null && category.isNotEmpty) {
-      whereClauses.add('calls.category = ?');
+      whereClauses.add('calls.category_text = ?');
       args.add(category);
     }
 
@@ -861,15 +885,16 @@ class DatabaseHelper {
     final sql = '''
       SELECT calls.id, calls.date, calls.time, calls.caller_id, calls.equipment_id,
              calls.issue, calls.solution, calls.caller_text, calls.phone_text, calls.department_text, calls.equipment_text,
-             calls.category, calls.status, calls.duration, calls.is_priority,
+             calls.category_text AS category, calls.status, calls.duration, calls.is_priority,
              COALESCE(users.first_name, calls.caller_text, '') AS user_first_name,
              COALESCE(users.last_name, '') AS user_last_name,
              COALESCE(users.phone, calls.phone_text, '-') AS user_phone,
-             COALESCE(users.department, calls.department_text, '-') AS user_department,
+             COALESCE(departments.name, calls.department_text, '-') AS user_department,
              COALESCE(equipment.code_equipment, calls.equipment_text, '-') AS equipment_code
       FROM calls
       LEFT JOIN users ON calls.caller_id = users.id
       LEFT JOIN equipment ON calls.equipment_id = equipment.id
+      LEFT JOIN departments ON users.department_id = departments.id
       $whereSql
       ORDER BY calls.date DESC, calls.time DESC
     ''';

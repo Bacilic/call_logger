@@ -8,6 +8,7 @@ import 'widgets/call_status_bar.dart';
 import 'widgets/recent_calls_list.dart';
 import 'widgets/equipment_info_card.dart';
 import 'widgets/notes_sticky_field.dart';
+import 'widgets/category_autocomplete_field.dart';
 import 'widgets/remote_connection_buttons.dart';
 import 'widgets/user_info_card.dart';
 
@@ -81,6 +82,12 @@ class CallsScreen extends ConsumerWidget {
                       child: CallStatusBar(),
                     ),
                   ],
+                ),
+                const SizedBox(height: 16),
+                CategoryAutocompleteField(
+                  onCategorySelected: (selected) {
+                    ref.read(callEntryProvider.notifier).setCategory(selected);
+                  },
                 ),
                 const SizedBox(height: 16),
                 _buildSubmitButton(context, ref, header),

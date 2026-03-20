@@ -81,6 +81,7 @@ class _TaskFilterBarState extends ConsumerState<TaskFilterBar> {
     final filter = ref.watch(taskFilterProvider);
     final theme = Theme.of(context);
     final hasDateRange = filter.startDate != null || filter.endDate != null;
+    final allFiltersOff = filter.allFiltersOff;
     String dateRangeLabel = '';
     if (filter.startDate != null && filter.endDate != null) {
       dateRangeLabel =
@@ -148,6 +149,17 @@ class _TaskFilterBarState extends ConsumerState<TaskFilterBar> {
                   selected: filter.statuses.contains(TaskStatus.closed),
                   onSelected: (_) => _toggleStatus(TaskStatus.closed),
                 ),
+                if (allFiltersOff)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                    child: Text(
+                      'Εμφάνιση Όλων',
+                      textAlign: TextAlign.center,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: Colors.grey[600],
+                          ),
+                    ),
+                  ),
                 if (hasDateRange) ...[
                   const SizedBox(width: 8),
                   ActionChip(

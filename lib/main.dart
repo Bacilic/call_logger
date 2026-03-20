@@ -16,6 +16,8 @@ import 'features/calls/screens/widgets/call_header_form.dart';
 const double _kCallsScreenPaddingH = 32;
 const double _kNavigationRailExtendedWidth = 280;
 const double _kMinWindowWidthMargin = 20;
+
+
 final double _kMinWindowWidth =
     kCallHeaderRowMinWidth + _kCallsScreenPaddingH + _kNavigationRailExtendedWidth + _kMinWindowWidthMargin;
 const double _kMinWindowHeight = 640;

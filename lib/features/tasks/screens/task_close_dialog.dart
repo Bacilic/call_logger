@@ -4,15 +4,22 @@ import '../../../core/utils/spell_check.dart';
 
 /// Δialόγιο κλεισίματος εκκρεμότητας με υποχρεωτικό πεδίο "Λύση / Σημειώσεις Κλεισίματος".
 /// Επιστρέφει τα solutionNotes αν ο χρήστης επιβεβαιώσει, αλλιώς null.
-Future<String?> showTaskCloseDialog(BuildContext context) {
+Future<String?> showTaskCloseDialog(
+  BuildContext context, {
+  String? initialSolutionNotes,
+}) {
   return showDialog<String?>(
     context: context,
-    builder: (context) => const _TaskCloseDialog(),
+    builder: (context) => _TaskCloseDialog(
+      initialSolutionNotes: initialSolutionNotes,
+    ),
   );
 }
 
 class _TaskCloseDialog extends StatefulWidget {
-  const _TaskCloseDialog();
+  const _TaskCloseDialog({this.initialSolutionNotes});
+
+  final String? initialSolutionNotes;
 
   @override
   State<_TaskCloseDialog> createState() => _TaskCloseDialogState();
@@ -21,6 +28,12 @@ class _TaskCloseDialog extends StatefulWidget {
 class _TaskCloseDialogState extends State<_TaskCloseDialog> {
   final _formKey = GlobalKey<FormState>();
   final _controller = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    _controller.text = widget.initialSolutionNotes?.trim() ?? '';
+  }
 
   @override
   void dispose() {

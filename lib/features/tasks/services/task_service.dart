@@ -1,9 +1,13 @@
+import 'dart:convert';
+
+import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import '../../../core/database/database_helper.dart';
 import '../models/task.dart';
 import '../models/task_filter.dart';
+import '../models/task_snooze_config.dart';
 
 /// Κλήση με status pending που δεν έχει αντίστοιχο task.
 class OrphanCall {
@@ -27,20 +31,108 @@ class OrphanCall {
 /// Υπηρεσία ανάγνωσης εργασιών από τον πίνακα tasks.
 class TaskService {
   Future<Database> get _db => DatabaseHelper.instance.database;
+  bool? _hasSnoozeHistoryColumnCache;
 
-  /// Επόμενη πλήρη ώρα (π.χ. 11:10 → 12:00). Αν ώρα > 13:00 → επόμενη εργάσιμη 08:00.
-  DateTime _calculateInitialDueDate(DateTime now) {
-    final nextFullHour = DateTime(now.year, now.month, now.day, now.hour + 1, 0, 0, 0);
-    final minutesSinceMidnight = now.hour * 60 + now.minute;
-    const cutoff = 13 * 60; // 13:00
-    if (minutesSinceMidnight <= cutoff) {
-      return nextFullHour;
+  Future<bool> _hasSnoozeHistoryColumn(Database db) async {
+    final cached = _hasSnoozeHistoryColumnCache;
+    if (cached != null) return cached;
+    final info = await db.rawQuery('PRAGMA table_info(tasks)');
+    final has = info.any((row) => row['name'] == 'snooze_history_json');
+    _hasSnoozeHistoryColumnCache = has;
+    return has;
+  }
+
+  /// Ρυθμίσεις αναβολών / εργάσιμων ωρών από `app_settings` (JSON).
+  Future<TaskSnoozeConfig> getSnoozeConfig() async {
+    final raw =
+        await DatabaseHelper.instance.getSetting(TaskSnoozeConfig.appSettingsKey);
+    if (raw == null || raw.trim().isEmpty) {
+      return TaskSnoozeConfig.defaultConfig();
     }
-    DateTime d = DateTime(now.year, now.month, now.day + 1, 8, 0, 0, 0);
-    while (d.weekday == DateTime.saturday || d.weekday == DateTime.sunday) {
-      d = DateTime(d.year, d.month, d.day + 1, 8, 0, 0, 0);
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is Map<String, dynamic>) {
+        return TaskSnoozeConfig.fromMap(decoded);
+      }
+      if (decoded is Map) {
+        return TaskSnoozeConfig.fromMap(Map<String, dynamic>.from(decoded));
+      }
+    } catch (_) {}
+    return TaskSnoozeConfig.defaultConfig();
+  }
+
+  /// Συμβατότητα: ίδιο με [getSnoozeConfig].
+  Future<TaskSnoozeConfig> getTaskSnoozeConfig() => getSnoozeConfig();
+
+  /// Επόμενη προτεινόμενη ημερομηνία/ώρα λήξης βάσει ρυθμίσεων.
+  ///
+  /// [option]: `TaskSnoozeConfig.kOptionDefault` → χρήση [TaskSnoozeConfig.defaultSnoozeOption],
+  /// αλλιώς `one_hour` / `day_end` / `next_business`.
+  DateTime calculateNextDueDate(
+    TaskSnoozeConfig config, {
+    String option = TaskSnoozeConfig.kOptionDefault,
+    DateTime? fromDate,
+  }) {
+    final base = fromDate ?? DateTime.now();
+    final resolved = (option == TaskSnoozeConfig.kOptionDefault || option.isEmpty)
+        ? config.defaultSnoozeOption
+        : TaskSnoozeConfig.normalizeSnoozeOption(option);
+
+    switch (resolved) {
+      case TaskSnoozeConfig.kOneHour:
+        return base.add(const Duration(hours: 1));
+      case TaskSnoozeConfig.kDayEnd:
+        return _nextDayEndDateTime(config, base);
+      case TaskSnoozeConfig.kNextBusiness:
+        return _nextBusinessMorningDateTime(config, base);
+      default:
+        return base.add(const Duration(hours: 1));
     }
-    return d;
+  }
+
+  DateTime _atTimeOnDay(DateTime dayStart, TimeOfDay t) {
+    return DateTime(dayStart.year, dayStart.month, dayStart.day, t.hour, t.minute);
+  }
+
+  /// Τέλος «μέσα στην ημέρα»: σήμερα στο [dayEndTime] αν ακόμα μετά το [base], αλλιώς επόμενες ημέρες (+ Σ/Κ αν [skipWeekends]).
+  DateTime _nextDayEndDateTime(TaskSnoozeConfig config, DateTime base) {
+    var day = DateTime(base.year, base.month, base.day);
+    var candidate = _atTimeOnDay(day, config.dayEndTime);
+    if (!candidate.isAfter(base)) {
+      day = day.add(const Duration(days: 1));
+      candidate = _atTimeOnDay(day, config.dayEndTime);
+    }
+    if (config.skipWeekends) {
+      while (candidate.weekday == DateTime.saturday ||
+          candidate.weekday == DateTime.sunday) {
+        day = day.add(const Duration(days: 1));
+        candidate = _atTimeOnDay(day, config.dayEndTime);
+      }
+    }
+    return candidate;
+  }
+
+  /// Επόμενη ημέρα (ημερολογιακά μετά την ημέρα του [base]) στην [nextBusinessHour], με παράλειψη Σ/Κ αν [skipWeekends].
+  DateTime _nextBusinessMorningDateTime(TaskSnoozeConfig config, DateTime base) {
+    var day = DateTime(base.year, base.month, base.day);
+    day = day.add(const Duration(days: 1));
+    var candidate = _atTimeOnDay(day, config.nextBusinessHour);
+    if (config.skipWeekends) {
+      while (candidate.weekday == DateTime.saturday ||
+          candidate.weekday == DateTime.sunday) {
+        day = day.add(const Duration(days: 1));
+        candidate = _atTimeOnDay(day, config.nextBusinessHour);
+      }
+    }
+    return candidate;
+  }
+
+  /// Αποθήκευση ρυθμίσεων αναβολών στο `app_settings`.
+  Future<void> saveTaskSnoozeConfig(TaskSnoozeConfig config) async {
+    await DatabaseHelper.instance.setSetting(
+      TaskSnoozeConfig.appSettingsKey,
+      jsonEncode(config.toMap()),
+    );
   }
 
   /// Δημιουργεί εκκρεμότητα από κλήση ή αυτόνομα ([callId] null = χωρίς εγγραφή κλήσης).
@@ -55,7 +147,12 @@ class TaskService {
         : callerName.trim();
     final title =
         '$name – Εκκρεμότητα στις ${DateFormat('dd/MM/yyyy').format(callDate)}';
-    final dueDate = _calculateInitialDueDate(DateTime.now());
+    final config = await getSnoozeConfig();
+    final dueDate = calculateNextDueDate(
+      config,
+      option: TaskSnoozeConfig.kOptionDefault,
+      fromDate: DateTime.now(),
+    );
     final db = await _db;
     final row = <String, dynamic>{
       'call_id': callId,
@@ -133,6 +230,9 @@ class TaskService {
     final db = await _db;
     final map = task.toMap();
     map.remove('id');
+    if (!await _hasSnoozeHistoryColumn(db)) {
+      map.remove('snooze_history_json');
+    }
     final now = DateTime.now().toIso8601String();
     map['created_at'] = now;
     map['updated_at'] = now;
@@ -145,6 +245,9 @@ class TaskService {
     final db = await _db;
     final map = task.toMap();
     map.remove('id');
+    if (!await _hasSnoozeHistoryColumn(db)) {
+      map.remove('snooze_history_json');
+    }
     map['updated_at'] = DateTime.now().toIso8601String();
     await db.update(
       'tasks',

@@ -1,13 +1,23 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
 
 import '../models/task.dart';
+import '../models/task_snooze_config.dart';
 import '../providers/task_service_provider.dart';
+import '../providers/task_snooze_config_provider.dart';
 import '../providers/tasks_provider.dart';
 import 'task_card.dart';
 import 'task_close_dialog.dart';
 import 'task_filter_bar.dart';
 import 'task_form_dialog.dart';
+import 'task_snooze_settings_dialog.dart';
+
+enum _ClosedEditMode {
+  recreate,
+  reopen,
+  snooze,
+}
 
 class TasksScreen extends ConsumerWidget {
   const TasksScreen({super.key});
@@ -16,9 +26,17 @@ class TasksScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final asyncTasks = ref.watch(tasksProvider);
     final asyncOrphans = ref.watch(orphanCallsProvider);
+    ref.watch(taskSnoozeConfigProvider);
     return Scaffold(
       appBar: AppBar(
         title: const Text('Εκκρεμότητες'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.schedule),
+            tooltip: 'Ρυθμίσεις αναβολών & εργάσιμων ωρών',
+            onPressed: () => _openSnoozeSettings(context, ref),
+          ),
+        ],
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: () => _openNewTaskForm(context, ref),
@@ -156,9 +174,79 @@ class TasksScreen extends ConsumerWidget {
     );
   }
 
+  static Future<void> _openSnoozeSettings(BuildContext context, WidgetRef ref) async {
+    await showDialog<void>(
+      context: context,
+      builder: (context) => const TaskSnoozeSettingsDialog(),
+    );
+  }
+
   static Future<void> _onEdit(BuildContext context, WidgetRef ref, Task task) async {
+    _ClosedEditMode? closedMode;
+    if (TaskStatusX.fromString(task.status) == TaskStatus.closed) {
+      closedMode = await _pickClosedEditMode(context, task);
+      if (!context.mounted || closedMode == null) return;
+    }
+
     final result = await showTaskFormDialog(context, task: task);
     if (!context.mounted || result == null) return;
+
+    if (closedMode != null) {
+      final notifier = ref.read(tasksProvider.notifier);
+      switch (closedMode) {
+        case _ClosedEditMode.recreate:
+          await notifier.addTask(
+            result.copyWith(
+              id: null,
+              status: TaskStatus.open.toDbValue,
+              solutionNotes: null,
+              snoozeHistoryJson: null,
+              createdAt: null,
+              updatedAt: null,
+            ),
+          );
+          if (!context.mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Δημιουργήθηκε νέα εκκρεμότητα.')),
+          );
+          return;
+        case _ClosedEditMode.reopen:
+          await notifier.updateTask(
+            result.copyWith(
+              status: TaskStatus.open.toDbValue,
+              // Ρητό: στην αναίρεση ολοκλήρωσης η λύση παραμένει.
+              solutionNotes: task.solutionNotes,
+              createdAt: task.createdAt,
+              snoozeHistoryJson: task.snoozeHistoryJson,
+            ),
+          );
+          if (!context.mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Η ολοκλήρωση αναιρέθηκε.')),
+          );
+          return;
+        case _ClosedEditMode.snooze:
+          final due = result.dueDateTime ?? DateTime.now();
+          await notifier.updateTask(
+            result
+                .copyWith(
+                  status: TaskStatus.snoozed.toDbValue,
+                  createdAt: task.createdAt,
+                )
+                .addSnoozeEntry(due),
+          );
+          if (!context.mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Η εκκρεμότητα αναβλήθηκε για τις: ${DateFormat('dd/MM HH:mm').format(due)}',
+              ),
+            ),
+          );
+          return;
+      }
+    }
+
     if (result.id != null) {
       await ref.read(tasksProvider.notifier).updateTask(result);
     } else {
@@ -170,12 +258,236 @@ class TasksScreen extends ConsumerWidget {
     );
   }
 
+  static String _buildClosedInfoText(Task task) {
+    final completedAt = task.updatedAtDateTime;
+    final createdAt = task.createdAtDateTime;
+    final completedText = completedAt != null
+        ? DateFormat('dd/MM/yyyy HH:mm').format(completedAt)
+        : 'άγνωστη ημερομηνία';
+    String durationText = '';
+    if (completedAt != null && createdAt != null) {
+      final diff = completedAt.difference(createdAt);
+      final mins = diff.inMinutes < 1 ? 1 : diff.inMinutes;
+      final days = mins ~/ (24 * 60);
+      final hours = (mins % (24 * 60)) ~/ 60;
+      final minutes = mins % 60;
+      if (days > 0) {
+        durationText = '$days μ. $hours ώρ. $minutes λ.';
+      } else if (hours > 0) {
+        durationText = '$hours ώρ. $minutes λ.';
+      } else {
+        durationText = '$minutes λ.';
+      }
+    }
+    final solution = (task.solutionNotes?.trim().isNotEmpty ?? false)
+        ? task.solutionNotes!.trim()
+        : 'Καθόλου λύση';
+    return 'Η εκκρεμότητα έχει ολοκληρωθεί στις $completedText'
+        '${durationText.isNotEmpty ? ' ($durationText)' : ''}.\n'
+        'Λύση: $solution';
+  }
+
+  static Future<_ClosedEditMode?> _pickClosedEditMode(
+    BuildContext context,
+    Task task,
+  ) async {
+    var selected = _ClosedEditMode.reopen;
+    return showDialog<_ClosedEditMode>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setState) => AlertDialog(
+          title: const Text('Επεξεργασία Εκκρεμότητας'),
+          content: SizedBox(
+            width: 440,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  _buildClosedInfoText(task),
+                  style: Theme.of(ctx).textTheme.bodyMedium,
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'Θέλετε να την επαναφέρετε ως:',
+                  style: Theme.of(ctx).textTheme.titleSmall,
+                ),
+                const SizedBox(height: 8),
+                DropdownButtonFormField<_ClosedEditMode>(
+                  initialValue: selected,
+                  decoration: const InputDecoration(
+                    border: OutlineInputBorder(),
+                  ),
+                  items: const [
+                    DropdownMenuItem(
+                      value: _ClosedEditMode.recreate,
+                      child: Text('Εκ νέου'),
+                    ),
+                    DropdownMenuItem(
+                      value: _ClosedEditMode.reopen,
+                      child: Text('Αναίρεση ολοκλήρωσης'),
+                    ),
+                    DropdownMenuItem(
+                      value: _ClosedEditMode.snooze,
+                      child: Text('Αναβολή'),
+                    ),
+                  ],
+                  onChanged: (v) {
+                    if (v != null) setState(() => selected = v);
+                  },
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('Ακύρωση'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(ctx).pop(selected),
+              child: const Text('Συνέχεια'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   static Future<void> _onSnooze(BuildContext context, WidgetRef ref, Task task) async {
+    final service = ref.read(taskServiceProvider);
+    final config = ref.read(taskSnoozeConfigProvider).maybeWhen(
+          data: (c) => c,
+          orElse: () => null,
+        ) ??
+        TaskSnoozeConfig.defaultConfig();
+    final maxRangeText = config.maxSnoozeDays == 1
+        ? 'Μέγιστο εύρος: 1 ημέρα'
+        : 'Μέγιστο εύρος: ${config.maxSnoozeDays} ημέρες';
+
+    final choice = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Αναβολή'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                'Γρήγορη επιλογή',
+                style: Theme.of(ctx).textTheme.titleSmall,
+              ),
+              const SizedBox(height: 8),
+              FilledButton.tonal(
+                onPressed: () =>
+                    Navigator.of(ctx).pop(TaskSnoozeConfig.kOneHour),
+                child: const Text('+1 ώρα'),
+              ),
+              const SizedBox(height: 8),
+              FilledButton.tonal(
+                onPressed: () =>
+                    Navigator.of(ctx).pop(TaskSnoozeConfig.kDayEnd),
+                child: const Text('Μέσα στην ημέρα'),
+              ),
+              const SizedBox(height: 8),
+              FilledButton.tonal(
+                onPressed: () =>
+                    Navigator.of(ctx).pop(TaskSnoozeConfig.kNextBusiness),
+                child: const Text('Επόμενη εργάσιμη'),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Expanded(
+                    child: Text(
+                      maxRangeText,
+                      style: Theme.of(ctx).textTheme.bodySmall?.copyWith(
+                            fontWeight: FontWeight.bold,
+                            color: Theme.of(ctx).colorScheme.onSurface,
+                          ),
+                    ),
+                  ),
+                  TextButton.icon(
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
+                      visualDensity: VisualDensity.compact,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    onPressed: () => Navigator.of(ctx).pop('custom'),
+                    icon: const Icon(Icons.edit_calendar_outlined, size: 20),
+                    label: const Text('Άλλη ημερομηνία…'),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Ο επιλογέας ημερομηνίας περιορίζεται στο παραπάνω εύρος.',
+                style: Theme.of(ctx).textTheme.bodySmall?.copyWith(
+                      color: Theme.of(ctx).colorScheme.onSurfaceVariant,
+                    ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Ακύρωση'),
+          ),
+        ],
+      ),
+    );
+
+    if (!context.mounted || choice == null) return;
+
+    if (choice != 'custom') {
+      final newDue = service.calculateNextDueDate(
+        config,
+        option: choice,
+        fromDate: DateTime.now(),
+      );
+      final updatedTask = task
+          .copyWith(
+            dueDate: newDue.toIso8601String(),
+            status: TaskStatus.snoozed.toDbValue,
+          )
+          .addSnoozeEntry(newDue);
+      await ref.read(tasksProvider.notifier).updateTask(
+            updatedTask,
+          );
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Η εκκρεμότητα αναβλήθηκε για τις: ${DateFormat('dd/MM HH:mm').format(newDue)}',
+          ),
+        ),
+      );
+      return;
+    }
+
+    final now = DateTime.now();
+    final firstDate = DateTime(now.year, now.month, now.day);
+    final lastDate = firstDate.add(Duration(days: config.maxSnoozeDays));
+    final raw = task.dueDateTime ?? now;
+    final rawDay = DateTime(raw.year, raw.month, raw.day);
+    var initialDate = rawDay;
+    if (initialDate.isBefore(firstDate)) {
+      initialDate = firstDate;
+    } else if (initialDate.isAfter(lastDate)) {
+      initialDate = lastDate;
+    }
+
     final date = await showDatePicker(
       context: context,
-      initialDate: task.dueDateTime ?? DateTime.now(),
-      firstDate: DateTime.now(),
-      lastDate: DateTime.now().add(const Duration(days: 365)),
+      initialDate: initialDate,
+      firstDate: firstDate,
+      lastDate: lastDate,
     );
     if (!context.mounted || date == null) return;
     final time = await showTimePicker(
@@ -184,12 +496,22 @@ class TasksScreen extends ConsumerWidget {
     );
     if (!context.mounted || time == null) return;
     final newDue = DateTime(date.year, date.month, date.day, time.hour, time.minute);
+    final updatedTask = task
+        .copyWith(
+          dueDate: newDue.toIso8601String(),
+          status: TaskStatus.snoozed.toDbValue,
+        )
+        .addSnoozeEntry(newDue);
     await ref.read(tasksProvider.notifier).updateTask(
-          task.copyWith(dueDate: newDue.toIso8601String()),
+          updatedTask,
         );
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Ημερομηνία αναβλήθηκε.')),
+      SnackBar(
+        content: Text(
+          'Η εκκρεμότητα αναβλήθηκε για τις: ${DateFormat('dd/MM HH:mm').format(newDue)}',
+        ),
+      ),
     );
   }
 
@@ -221,7 +543,10 @@ class TasksScreen extends ConsumerWidget {
   }
 
   static Future<void> _onComplete(BuildContext context, WidgetRef ref, Task task) async {
-    final solutionNotes = await showTaskCloseDialog(context);
+    final solutionNotes = await showTaskCloseDialog(
+      context,
+      initialSolutionNotes: task.solutionNotes,
+    );
     if (!context.mounted || solutionNotes == null) return;
     if (task.id == null) return;
     await ref.read(tasksProvider.notifier).closeTask(task.id!, solutionNotes);

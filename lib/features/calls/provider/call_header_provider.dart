@@ -543,6 +543,14 @@ class CallHeaderNotifier extends Notifier<CallHeaderState> {
         (state.selectedPhone?.trim().isEmpty ?? true);
   }
 
+  /// Autofill τηλεφώνου από τον κάτοχο του εξοπλισμού μόνο όταν δεν υπάρχει ήδη
+  /// επιλεγμένος αριθμός — αλλιώς (π.χ. lookup γραμμής) δεν καλούμε
+  /// `_setPhoneCandidatesFromLookup` (αποφυγή `clearSelectedPhone`).
+  bool _shouldApplyEquipmentOwnerPhoneAutofill() {
+    if (!_canAutofillPhone()) return false;
+    return state.selectedPhone?.trim().isEmpty ?? true;
+  }
+
   bool _canAutofillDepartmentForUser(UserModel user) {
     final hasLockedManualDepartmentSelection =
         state.departmentIsManual &&
@@ -776,12 +784,16 @@ class CallHeaderNotifier extends Notifier<CallHeaderState> {
             : state.departmentIsManual,
         callerIsManual: false,
       );
+      final hadPhoneBeforeProfileAutofill =
+          state.selectedPhone?.trim().isNotEmpty == true;
       if (_canAutofillPhone()) {
-        final phones = _splitPhones(user.phone);
-        if (phones.length == 1) {
-          _setPhoneValueFromLookup(phones.first);
-        } else if (phones.length > 1) {
-          _setPhoneCandidatesFromLookup(phones);
+        if (!hadPhoneBeforeProfileAutofill) {
+          final phones = _splitPhones(user.phone);
+          if (phones.length == 1) {
+            _setPhoneValueFromLookup(phones.first);
+          } else if (phones.length > 1) {
+            _setPhoneCandidatesFromLookup(phones);
+          }
         }
       }
 
@@ -871,7 +883,7 @@ class CallHeaderNotifier extends Notifier<CallHeaderState> {
         );
       }
 
-      if (_canAutofillPhone()) {
+      if (_shouldApplyEquipmentOwnerPhoneAutofill()) {
         final phones = _splitPhones(user.phone);
         if (phones.length == 1) {
           _setPhoneValueFromLookup(phones.first);

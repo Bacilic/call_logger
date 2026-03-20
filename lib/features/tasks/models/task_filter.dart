@@ -14,6 +14,9 @@ class TaskFilter {
   final DateTime? startDate;
   final DateTime? endDate;
 
+  /// True όταν δεν είναι επιλεγμένο κανένα status chip.
+  bool get allFiltersOff => statuses.isEmpty;
+
   /// Προεπιλογή: κείμενο κενό, statuses open + snoozed, χωρίς ημερομηνίες.
   factory TaskFilter.initial() => TaskFilter(
         searchQuery: '',
