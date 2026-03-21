@@ -26,7 +26,9 @@ class _CallHeaderFormState extends ConsumerState<CallHeaderForm> {
   Widget build(BuildContext context) {
     final header = ref.watch(callHeaderProvider);
     final lookupAsync = ref.watch(lookupServiceProvider);
-    final lookupService = lookupAsync.value;
+    final lookupBundle = lookupAsync.value;
+    final lookupService = lookupBundle?.service;
+    final lookupLoadError = lookupBundle?.loadError;
 
     final hasAnyContent = ref.watch(
       callHeaderProvider.select((s) => s.hasAnyContent),
@@ -48,111 +50,154 @@ class _CallHeaderFormState extends ConsumerState<CallHeaderForm> {
         final wDept = (available * 0.24).clamp(0.0, 240.0);
         final w3 = (available * 0.20).clamp(0.0, 185.0);
 
-        return SmartEntitySelectorWidget(
-          key: _selectorKey,
-          provider: callSmartEntityProvider,
-          w1: w1,
-          w2: w2,
-          wDept: wDept,
-          w3: w3,
-          callEntryHooks: SmartEntityCallEntryHooks(
-            syncTimerFromPhoneText: (raw) {
-              final digits = raw.replaceAll(RegExp(r'[^0-9]'), '');
-              final n = ref.read(callEntryProvider.notifier);
-              if (digits.isNotEmpty) {
-                n.startTimerOnce();
-              } else {
-                n.resetTimerToStandby();
-              }
-            },
-            startTimerOnceIfNotRunningWhenAutofill: () {
-              final n = ref.read(callEntryProvider.notifier);
-              if (!n.isTimerRunning) {
-                n.startTimerOnce();
-              }
-            },
-            resetTimerToStandby: () =>
-                ref.read(callEntryProvider.notifier).resetTimerToStandby(),
-          ),
-          trailingRowChildren: [
-            const SizedBox(width: 4),
-            IgnorePointer(
-              ignoring: !hasAnyContent,
-              child: AnimatedOpacity(
-                opacity: hasAnyContent ? 1.0 : 0.0,
-                duration: const Duration(milliseconds: 180),
-                child: AnimatedScale(
-                  scale: hasAnyContent ? 1.0 : 0.0,
-                  duration: const Duration(milliseconds: 180),
-                  child: IconButton(
-                    icon: Icon(Icons.clear, color: theme.colorScheme.error),
-                    tooltip: 'Καθαρισμός όλων των πεδίων',
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (lookupLoadError != null && lookupLoadError.isNotEmpty)
+              Material(
+                color: theme.colorScheme.errorContainer,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(
+                        Icons.warning_amber_rounded,
+                        color: theme.colorScheme.onErrorContainer,
+                        size: 22,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          lookupLoadError,
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: theme.colorScheme.onErrorContainer,
+                          ),
+                        ),
+                      ),
+                      TextButton(
+                        onPressed: () => ref.invalidate(lookupServiceProvider),
+                        child: const Text('Επαναδοκιμή'),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            SmartEntitySelectorWidget(
+              key: _selectorKey,
+              provider: callSmartEntityProvider,
+              w1: w1,
+              w2: w2,
+              wDept: wDept,
+              w3: w3,
+              callEntryHooks: SmartEntityCallEntryHooks(
+                syncTimerFromPhoneText: (raw) {
+                  final digits = raw.replaceAll(RegExp(r'[^0-9]'), '');
+                  final n = ref.read(callEntryProvider.notifier);
+                  if (digits.isNotEmpty) {
+                    n.startTimerOnce();
+                  } else {
+                    n.resetTimerToStandby();
+                  }
+                },
+                startTimerOnceIfNotRunningWhenAutofill: () {
+                  final n = ref.read(callEntryProvider.notifier);
+                  if (!n.isTimerRunning) {
+                    n.startTimerOnce();
+                  }
+                },
+                resetTimerToStandby: () =>
+                    ref.read(callEntryProvider.notifier).resetTimerToStandby(),
+              ),
+              trailingRowChildren: [
+                const SizedBox(width: 4),
+                IgnorePointer(
+                  ignoring: !hasAnyContent,
+                  child: AnimatedOpacity(
+                    opacity: hasAnyContent ? 1.0 : 0.0,
+                    duration: const Duration(milliseconds: 180),
+                    child: AnimatedScale(
+                      scale: hasAnyContent ? 1.0 : 0.0,
+                      duration: const Duration(milliseconds: 180),
+                      child: IconButton(
+                        icon: Icon(Icons.clear, color: theme.colorScheme.error),
+                        tooltip: 'Καθαρισμός όλων των πεδίων',
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(
+                          minWidth: 40,
+                          minHeight: 40,
+                        ),
+                        onPressed: () =>
+                            _selectorKey.currentState?.performClearAllFields(),
+                      ),
+                    ),
+                  ),
+                ),
+                if (header.needsAssociation)
+                  IconButton(
+                    icon: Icon(Icons.add, color: header.associationColor),
+                    tooltip: header.associationTooltip ?? '',
                     padding: EdgeInsets.zero,
                     constraints: const BoxConstraints(
                       minWidth: 40,
                       minHeight: 40,
                     ),
-                    onPressed: () =>
-                        _selectorKey.currentState?.performClearAllFields(),
-                  ),
-                ),
-              ),
-            ),
-            if (header.needsAssociation)
-              IconButton(
-                icon: Icon(Icons.add, color: header.associationColor),
-                tooltip: header.associationTooltip ?? '',
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
-                onPressed: () async {
-                  final messenger = ScaffoldMessenger.of(context);
-                  final currentHeader = ref.read(callHeaderProvider);
-                  final caller = currentHeader.selectedCaller;
-                  final departmentText = currentHeader.departmentText.trim();
-                  final selectedDepartment = departmentText.isNotEmpty
-                      ? lookupService?.findDepartmentByName(departmentText)
-                      : null;
-                  var updatePrimaryDepartment = false;
+                    onPressed: () async {
+                      final messenger = ScaffoldMessenger.of(context);
+                      final currentHeader = ref.read(callHeaderProvider);
+                      final caller = currentHeader.selectedCaller;
+                      final departmentText = currentHeader.departmentText
+                          .trim();
+                      final selectedDepartment = departmentText.isNotEmpty
+                          ? lookupService?.findDepartmentByName(departmentText)
+                          : null;
+                      var updatePrimaryDepartment = false;
 
-                  if (caller?.id != null &&
-                      selectedDepartment?.id != null &&
-                      selectedDepartment!.id != caller!.departmentId) {
-                    final askUpdate = await showDialog<bool>(
-                      context: context,
-                      builder: (dialogContext) {
-                        return AlertDialog(
-                          title: const Text('Αλλαγή κύριου τμήματος'),
-                          content: Text(
-                            'Ο χρήστης έχει κύριο τμήμα "${caller.departmentName ?? 'Χωρίς τμήμα'}". '
-                            'Να γίνει νέο κύριο τμήμα του χρήστη το "${selectedDepartment.name}";',
-                          ),
-                          actions: [
-                            TextButton(
-                              onPressed: () =>
-                                  Navigator.of(dialogContext).pop(false),
-                              child: const Text('Όχι'),
-                            ),
-                            FilledButton(
-                              onPressed: () =>
-                                  Navigator.of(dialogContext).pop(true),
-                              child: const Text('Ναι'),
-                            ),
-                          ],
+                      if (caller?.id != null &&
+                          selectedDepartment?.id != null &&
+                          selectedDepartment!.id != caller!.departmentId) {
+                        final askUpdate = await showDialog<bool>(
+                          context: context,
+                          builder: (dialogContext) {
+                            return AlertDialog(
+                              title: const Text('Αλλαγή κύριου τμήματος'),
+                              content: Text(
+                                'Ο χρήστης έχει κύριο τμήμα "${caller.departmentName ?? 'Χωρίς τμήμα'}". '
+                                'Να γίνει νέο κύριο τμήμα του χρήστη το "${selectedDepartment.name}";',
+                              ),
+                              actions: [
+                                TextButton(
+                                  onPressed: () =>
+                                      Navigator.of(dialogContext).pop(false),
+                                  child: const Text('Όχι'),
+                                ),
+                                FilledButton(
+                                  onPressed: () =>
+                                      Navigator.of(dialogContext).pop(true),
+                                  child: const Text('Ναι'),
+                                ),
+                              ],
+                            );
+                          },
                         );
-                      },
-                    );
-                    updatePrimaryDepartment = askUpdate ?? false;
-                  }
+                        updatePrimaryDepartment = askUpdate ?? false;
+                      }
 
-                  final notifier = ref.read(callHeaderProvider.notifier);
-                  final msg = await notifier.associateCurrentIfNeeded(
-                    updatePrimaryDepartment: updatePrimaryDepartment,
-                  );
-                  if (context.mounted && msg != null) {
-                    messenger.showSnackBar(SnackBar(content: Text(msg)));
-                  }
-                },
-              ),
+                      final notifier = ref.read(callHeaderProvider.notifier);
+                      final msg = await notifier.associateCurrentIfNeeded(
+                        updatePrimaryDepartment: updatePrimaryDepartment,
+                      );
+                      if (context.mounted && msg != null) {
+                        messenger.showSnackBar(SnackBar(content: Text(msg)));
+                      }
+                    },
+                  ),
+              ],
+            ),
           ],
         );
       },

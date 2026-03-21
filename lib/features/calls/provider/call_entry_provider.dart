@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/database/database_helper.dart';
@@ -101,15 +100,9 @@ class CallEntryNotifier extends Notifier<CallEntryState> {
 
   void setInternalDigits(String value, LookupService? lookupService) {
     final digits = value.trim();
-    debugPrint(
-      '[setInternalDigits] value="$value" digits="$digits" length=${digits.length}',
-    );
     LookupResult? result;
     if (digits.length >= 3 && lookupService != null) {
       result = lookupService.search(digits);
-      debugPrint(
-        '[setInternalDigits] lookup result: user=${result?.user.name}',
-      );
     }
     state = state.copyWith(
       internalDigits: value,
@@ -144,7 +137,7 @@ class CallEntryNotifier extends Notifier<CallEntryState> {
         ? null
         : (callerTextRaw.isEmpty ? 'Άγνωστος' : callerTextRaw);
 
-    final lookupService = ref.read(lookupServiceProvider).value;
+    final lookupService = ref.read(lookupServiceProvider).value?.service;
     final selectedDepartmentId =
         header.selectedDepartmentId ??
         (header.departmentText.trim().isNotEmpty && lookupService != null

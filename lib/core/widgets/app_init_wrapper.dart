@@ -7,6 +7,21 @@ import '../init/app_init_provider.dart';
 import 'app_shortcuts.dart';
 import 'database_error_screen.dart';
 
+/// Κλείνει τη σύνδεση βάσης, επαναλαμβάνει το [appInitProvider] με σειρά και ασφαλή [BuildContext.mounted].
+Future<void> _retryAppInitialization(
+  BuildContext context,
+  WidgetRef ref,
+) async {
+  try {
+    await DatabaseHelper.instance.closeConnection();
+  } catch (_) {}
+  if (!context.mounted) return;
+  ref.invalidate(appInitProvider);
+  try {
+    await ref.read(appInitProvider.future);
+  } catch (_) {}
+}
+
 /// Φορτώνει το [appInitProvider] και εμφανίζει loading, σφάλμα ή την κύρια εφαρμογή.
 class AppInitWrapper extends ConsumerWidget {
   const AppInitWrapper({super.key});
@@ -17,15 +32,12 @@ class AppInitWrapper extends ConsumerWidget {
 
     return asyncResult.when(
       loading: () => const _InitLoadingScreen(),
-      error: (err, _) {
-        final result = DatabaseInitResult.fromException(err);
+      error: (err, st) {
+        final result = DatabaseInitResult.fromException(err, null, st);
         return DatabaseErrorScreen(
           result: result,
           dbPath: result.path,
-          onRetry: () async {
-            await DatabaseHelper.instance.closeConnection();
-            ref.invalidate(appInitProvider);
-          },
+          onRetry: () => _retryAppInitialization(context, ref),
         );
       },
       data: (initResult) {
@@ -38,10 +50,7 @@ class AppInitWrapper extends ConsumerWidget {
         return DatabaseErrorScreen(
           result: initResult.result,
           dbPath: initResult.result.path,
-          onRetry: () async {
-            await DatabaseHelper.instance.closeConnection();
-            ref.invalidate(appInitProvider);
-          },
+          onRetry: () => _retryAppInitialization(context, ref),
         );
       },
     );

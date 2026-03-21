@@ -71,6 +71,15 @@ class DatabaseHelper {
     _isUsingLocalDb = false;
   }
 
+  /// Best-effort WAL checkpoint (passive) ώστε να μειώνεται η έκθεση σε απροσδόκητο κλείσιμο.
+  Future<void> tryWalCheckpoint() async {
+    final db = _database;
+    if (db == null || !db.isOpen) return;
+    try {
+      await db.rawQuery('PRAGMA wal_checkpoint(PASSIVE)');
+    } catch (_) {}
+  }
+
   /// Ελέγχει αν η διαδρομή δικτύου είναι προσβάσιμη (με timeout 2 s).
   Future<bool> _isNetworkPathAccessible(String dbPath) async {
     try {
@@ -95,7 +104,6 @@ class DatabaseHelper {
 
     final accessible = await _isNetworkPathAccessible(dbPath);
     if (!accessible) {
-      debugPrint('Δίκτυο μη διαθέσιμο. Ενεργοποίηση Dev Mode (Τοπική Βάση).');
       dbPath = AppConfig.localDevDbPath;
       _isUsingLocalDb = true;
       final dir = File(dbPath).parent;
@@ -119,8 +127,10 @@ class DatabaseHelper {
       );
     } on DatabaseInitException {
       rethrow;
-    } catch (e) {
-      throw DatabaseInitException(DatabaseInitResult.fromException(e, dbPath));
+    } catch (e, st) {
+      throw DatabaseInitException(
+        DatabaseInitResult.fromException(e, dbPath, st),
+      );
     }
 
     await _ensureCallsSearchIndexColumnAndBackfill(db);
@@ -428,10 +438,10 @@ class DatabaseHelper {
       final id = row['id'] as int?;
       if (id == null) continue;
       final index = await _buildCallSearchIndex(db, row);
-      await db.rawUpdate(
-        'UPDATE calls SET search_index = ? WHERE id = ?',
-        [index, id],
-      );
+      await db.rawUpdate('UPDATE calls SET search_index = ? WHERE id = ?', [
+        index,
+        id,
+      ]);
     }
   }
 
@@ -563,7 +573,9 @@ class DatabaseHelper {
         await db.execute('ALTER TABLE tasks ADD COLUMN caller_id INTEGER');
       } else if (!await _tableHasColumn(db, 'tasks', 'caller_id') &&
           await _tableHasColumn(db, 'tasks', 'user_id')) {
-        await db.execute('ALTER TABLE tasks RENAME COLUMN user_id TO caller_id');
+        await db.execute(
+          'ALTER TABLE tasks RENAME COLUMN user_id TO caller_id',
+        );
       }
       if (!await _tableHasColumn(db, 'tasks', 'equipment_id')) {
         await db.execute('ALTER TABLE tasks ADD COLUMN equipment_id INTEGER');
@@ -623,7 +635,9 @@ class DatabaseHelper {
     if (oldVersion < 13) {
       if (await _tableHasColumn(db, 'tasks', 'user_id') &&
           !await _tableHasColumn(db, 'tasks', 'caller_id')) {
-        await db.execute('ALTER TABLE tasks RENAME COLUMN user_id TO caller_id');
+        await db.execute(
+          'ALTER TABLE tasks RENAME COLUMN user_id TO caller_id',
+        );
       }
     }
     // Soft delete: is_deleted σε κύριους πίνακες (όχι remote_tool_args).
@@ -789,12 +803,7 @@ class DatabaseHelper {
           where: 'id = ?',
           whereArgs: [id],
         );
-        await _appendAuditLog(
-          txn,
-          user,
-          auditActionDelete,
-          'users id=$id',
-        );
+        await _appendAuditLog(txn, user, auditActionDelete, 'users id=$id');
       }
     });
   }
@@ -812,12 +821,7 @@ class DatabaseHelper {
           where: 'id = ?',
           whereArgs: [id],
         );
-        await _appendAuditLog(
-          txn,
-          user,
-          auditActionRestore,
-          'users id=$id',
-        );
+        await _appendAuditLog(txn, user, auditActionRestore, 'users id=$id');
       }
     });
   }
@@ -930,12 +934,7 @@ class DatabaseHelper {
           where: 'id = ?',
           whereArgs: [id],
         );
-        await _appendAuditLog(
-          txn,
-          user,
-          auditActionDelete,
-          'equipment id=$id',
-        );
+        await _appendAuditLog(txn, user, auditActionDelete, 'equipment id=$id');
       }
     });
   }
@@ -1239,8 +1238,8 @@ class DatabaseHelper {
         );
       }
       return DatabaseInitResult.success();
-    } catch (e) {
-      return DatabaseInitResult.fromException(e);
+    } catch (e, st) {
+      return DatabaseInitResult.fromException(e, null, st);
     }
   }
 
@@ -1277,12 +1276,7 @@ class DatabaseHelper {
         where: 'id = ?',
         whereArgs: [id],
       );
-      await _appendAuditLog(
-        txn,
-        user,
-        auditActionDelete,
-        'tasks id=$id',
-      );
+      await _appendAuditLog(txn, user, auditActionDelete, 'tasks id=$id');
     });
   }
 

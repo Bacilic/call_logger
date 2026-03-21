@@ -43,13 +43,14 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog> {
   bool _ownerTextInitialized = false;
 
   int? _selectedUserId;
+
   /// Επιλογή τύπου εξοπλισμού· null = Κανένας.
   String? _selectedType;
+
   /// Επιλογή εργαλείου απομακρυσμένης· null ή κενό ή "Κανένα" = κανένα.
   String? _selectedRemoteTool;
 
-  bool get _isEdit =>
-      widget.initialEquipment != null && !widget.isClone;
+  bool get _isEdit => widget.initialEquipment != null && !widget.isClone;
 
   @override
   void initState() {
@@ -80,15 +81,23 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog> {
   }
 
   /// Επιλύει κείμενο κατόχου σε userId: κενό → null, match → id, αλλιώς insert νέο χρήστη.
-  Future<int?> _resolveOwnerToUserId(String ownerText, LookupService? lookupService) async {
+  Future<int?> _resolveOwnerToUserId(
+    String ownerText,
+    LookupService? lookupService,
+  ) async {
     final text = ownerText.trim();
     if (text.isEmpty) return null;
     if (lookupService == null) return null;
     final textForSearch = NameParserUtility.stripParentheticalSuffix(text);
     final users = lookupService.searchUsersByQuery(textForSearch);
     if (users.isNotEmpty) {
-      final exact = users.where((u) =>
-          (u.fullNameWithDepartment == text) || (u.name?.trim() == textForSearch)).toList();
+      final exact = users
+          .where(
+            (u) =>
+                (u.fullNameWithDepartment == text) ||
+                (u.name?.trim() == textForSearch),
+          )
+          .toList();
       if (exact.isNotEmpty && exact.first.id != null) return exact.first.id;
       if (users.first.id != null) return users.first.id;
     }
@@ -113,7 +122,7 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog> {
   Future<void> _save() async {
     if (!(_formKey.currentState?.validate() ?? false)) return;
     final asyncLookup = widget.ref.read(lookupServiceProvider);
-    final lookup = asyncLookup.hasValue ? asyncLookup.value : null;
+    final lookup = asyncLookup.value?.service;
     final ownerText = _ownerController.text.trim();
     final userId = await _resolveOwnerToUserId(ownerText, lookup);
     final code = _codeController.text.trim();
@@ -152,9 +161,9 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog> {
       if (!mounted) return;
       widget.ref.invalidate(lookupServiceProvider);
       Navigator.of(context).pop();
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Αποθηκεύτηκε')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Αποθηκεύτηκε')));
       return;
     }
     if (widget.notifier.hasDuplicateCode(code)) {
@@ -173,9 +182,9 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog> {
     if (!mounted) return;
     widget.ref.invalidate(lookupServiceProvider);
     Navigator.of(context).pop();
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Αποθηκεύτηκε')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Αποθηκεύτηκε')));
   }
 
   String get _title {
@@ -219,10 +228,10 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog> {
                       border: OutlineInputBorder(),
                     ),
                     items: [
-                      ...options.map((o) => DropdownMenuItem<String?>(
-                            value: o,
-                            child: Text(o),
-                          )),
+                      ...options.map(
+                        (o) =>
+                            DropdownMenuItem<String?>(value: o, child: Text(o)),
+                      ),
                       const DropdownMenuItem<String?>(
                         value: null,
                         child: Text('Κανένας'),
@@ -271,10 +280,10 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog> {
                       border: OutlineInputBorder(),
                     ),
                     items: [
-                      ...options.map((o) => DropdownMenuItem<String?>(
-                            value: o,
-                            child: Text(o),
-                          )),
+                      ...options.map(
+                        (o) =>
+                            DropdownMenuItem<String?>(value: o, child: Text(o)),
+                      ),
                       const DropdownMenuItem<String?>(
                         value: null,
                         child: Text('Κανένα'),
@@ -289,7 +298,8 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog> {
                 builder: (context, ref, _) {
                   final async = ref.watch(lookupServiceProvider);
                   return async.when(
-                    data: (service) {
+                    data: (bundle) {
+                      final service = bundle.service;
                       if (_selectedUserId != null && !_ownerTextInitialized) {
                         final u = service.users
                             .where((u) => u.id == _selectedUserId)
@@ -320,58 +330,71 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog> {
                           return users
                               .where((u) => u.id != null)
                               .map((u) => u.fullNameWithDepartment)
-                              .where((option) =>
-                                  SearchTextNormalizer.matchesNormalizedQuery(
-                                      option, q))
+                              .where(
+                                (option) =>
+                                    SearchTextNormalizer.matchesNormalizedQuery(
+                                      option,
+                                      q,
+                                    ),
+                              )
                               .toList();
                         },
                         onSelected: (String selection) {
-                          final u = service.users.where((user) =>
-                              user.fullNameWithDepartment == selection).firstOrNull;
+                          final u = service.users
+                              .where(
+                                (user) =>
+                                    user.fullNameWithDepartment == selection,
+                              )
+                              .firstOrNull;
                           if (u != null && u.id != null) {
                             setState(() {
                               _selectedUserId = u.id;
-                              _ownerController.text = u.name ?? u.fullNameWithDepartment;
+                              _ownerController.text =
+                                  u.name ?? u.fullNameWithDepartment;
                             });
                           }
                         },
-                        fieldViewBuilder: (
-                          context,
-                          textController,
-                          focusNode,
-                          onFieldSubmitted,
-                        ) {
-                          return TextField(
-                            controller: textController,
-                            focusNode: focusNode,
-                            decoration: InputDecoration(
-                              labelText: 'Κάτοχος',
-                              hintText:
-                                  'Πληκτρολόγησε όνομα ή άφησε κενό (Άγνωστος κάτοχος)',
-                              hintStyle: theme.textTheme.bodyMedium?.copyWith(
-                                color: theme.colorScheme.onSurfaceVariant
-                                    .withValues(alpha: 0.7),
-                              ),
-                              border: const OutlineInputBorder(),
-                              suffixIcon: Semantics(
-                                label: 'Καθαρισμός Κατόχου',
-                                child: IconButton(
-                                  icon: const Icon(Icons.close, size: 20),
-                                  onPressed: () {
-                                    textController.clear();
-                                    setState(() => _selectedUserId = null);
-                                  },
-                                  tooltip: 'Καθαρισμός Κατόχου',
+                        fieldViewBuilder:
+                            (
+                              context,
+                              textController,
+                              focusNode,
+                              onFieldSubmitted,
+                            ) {
+                              return TextField(
+                                controller: textController,
+                                focusNode: focusNode,
+                                decoration: InputDecoration(
+                                  labelText: 'Κάτοχος',
+                                  hintText:
+                                      'Πληκτρολόγησε όνομα ή άφησε κενό (Άγνωστος κάτοχος)',
+                                  hintStyle: theme.textTheme.bodyMedium
+                                      ?.copyWith(
+                                        color: theme
+                                            .colorScheme
+                                            .onSurfaceVariant
+                                            .withValues(alpha: 0.7),
+                                      ),
+                                  border: const OutlineInputBorder(),
+                                  suffixIcon: Semantics(
+                                    label: 'Καθαρισμός Κατόχου',
+                                    child: IconButton(
+                                      icon: const Icon(Icons.close, size: 20),
+                                      onPressed: () {
+                                        textController.clear();
+                                        setState(() => _selectedUserId = null);
+                                      },
+                                      tooltip: 'Καθαρισμός Κατόχου',
+                                    ),
+                                  ),
                                 ),
-                              ),
-                            ),
-                            onChanged: (value) {
-                              if (value.trim().isEmpty) {
-                                setState(() => _selectedUserId = null);
-                              }
+                                onChanged: (value) {
+                                  if (value.trim().isEmpty) {
+                                    setState(() => _selectedUserId = null);
+                                  }
+                                },
+                              );
                             },
-                          );
-                        },
                       );
                     },
                     loading: () => const InputDecorator(

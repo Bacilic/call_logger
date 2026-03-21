@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../database/database_helper.dart';
 import '../database/database_init_result.dart';
 import '../database/database_init_runner.dart';
 import 'main_shell.dart';
@@ -28,7 +31,8 @@ class AppShortcuts extends ConsumerStatefulWidget {
   ConsumerState<AppShortcuts> createState() => _AppShortcutsState();
 }
 
-class _AppShortcutsState extends ConsumerState<AppShortcuts> {
+class _AppShortcutsState extends ConsumerState<AppShortcuts>
+    with WidgetsBindingObserver {
   late DatabaseInitResult _databaseResult;
   late bool _isLocalDevMode;
 
@@ -43,8 +47,23 @@ class _AppShortcutsState extends ConsumerState<AppShortcuts> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _databaseResult = widget.initialDatabaseResult;
     _isLocalDevMode = widget.initialIsLocalDevMode;
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.detached) {
+      unawaited(DatabaseHelper.instance.tryWalCheckpoint());
+    }
   }
 
   @override
@@ -58,14 +77,22 @@ class _AppShortcutsState extends ConsumerState<AppShortcuts> {
   }
 
   Future<void> _recheckDatabase() async {
-    final runnerResult = await runDatabaseInitChecks(
-      closeConnectionFirst: true,
-    );
-    if (mounted) {
-      setState(() {
-        _databaseResult = runnerResult.result;
-        _isLocalDevMode = runnerResult.isLocalDevMode;
-      });
+    try {
+      final runnerResult = await runDatabaseInitChecks(
+        closeConnectionFirst: true,
+      );
+      if (mounted) {
+        setState(() {
+          _databaseResult = runnerResult.result;
+          _isLocalDevMode = runnerResult.isLocalDevMode;
+        });
+      }
+    } catch (e, st) {
+      if (mounted) {
+        setState(() {
+          _databaseResult = DatabaseInitResult.fromException(e, null, st);
+        });
+      }
     }
   }
 

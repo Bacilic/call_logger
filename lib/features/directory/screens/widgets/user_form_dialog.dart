@@ -19,6 +19,7 @@ class UserFormDialog extends ConsumerStatefulWidget {
 
   final UserModel? initialUser;
   final DirectoryNotifier notifier;
+
   /// True = αντίγραφο: φόρμα προ-συμπληρωμένη, κουμπί «Προσθήκη».
   final bool isClone;
   final String? focusedField;
@@ -44,10 +45,7 @@ class _UserFormDialogState extends ConsumerState<UserFormDialog> {
   bool get _isEdit => widget.initialUser != null && !widget.isClone;
 
   void _selectAll(TextEditingController c) {
-    c.selection = TextSelection(
-      baseOffset: 0,
-      extentOffset: c.text.length,
-    );
+    c.selection = TextSelection(baseOffset: 0, extentOffset: c.text.length);
   }
 
   @override
@@ -57,7 +55,9 @@ class _UserFormDialogState extends ConsumerState<UserFormDialog> {
     _lastNameController = TextEditingController(text: u?.lastName ?? '');
     _firstNameController = TextEditingController(text: u?.firstName ?? '');
     _phoneController = TextEditingController(text: u?.phone ?? '');
-    _departmentController = TextEditingController(text: u?.departmentName ?? '');
+    _departmentController = TextEditingController(
+      text: u?.departmentName ?? '',
+    );
     _notesController = TextEditingController(text: u?.notes ?? '');
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -125,7 +125,10 @@ class _UserFormDialogState extends ConsumerState<UserFormDialog> {
     );
     if (_isEdit) {
       if (user.id != null &&
-          widget.notifier.hasDuplicateExcludingNotes(user, excludeId: user.id)) {
+          widget.notifier.hasDuplicateExcludingNotes(
+            user,
+            excludeId: user.id,
+          )) {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -143,9 +146,9 @@ class _UserFormDialogState extends ConsumerState<UserFormDialog> {
       await widget.notifier.loadUsers();
       if (!mounted) return;
       Navigator.of(context).pop();
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Αποθηκεύτηκε')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Αποθηκεύτηκε')));
       return;
     }
     if (widget.notifier.hasDuplicateExcludingNotes(user)) {
@@ -166,9 +169,9 @@ class _UserFormDialogState extends ConsumerState<UserFormDialog> {
     await widget.notifier.loadUsers();
     if (!mounted) return;
     Navigator.of(context).pop();
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Αποθηκεύτηκε')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Αποθηκεύτηκε')));
   }
 
   String get _title {
@@ -181,7 +184,7 @@ class _UserFormDialogState extends ConsumerState<UserFormDialog> {
   Widget build(BuildContext context) {
     final lookupAsync = ref.watch(lookupServiceProvider);
     final departmentNames = lookupAsync.maybeWhen(
-      data: (service) => service.departments
+      data: (bundle) => bundle.service.departments
           .map((d) => d.name.trim())
           .where((name) => name.isNotEmpty)
           .toList(),

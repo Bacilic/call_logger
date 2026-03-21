@@ -396,21 +396,26 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
 
   /// Φόρτωση πεδίων επιλογέα από υπάρχον `Task` (λειτουργία επεξεργασίας).
   Future<void> loadFromTask(Task task) async {
-    final lookupService = await ref.read(lookupServiceProvider.future);
+    final lookupService = (await ref.read(
+      lookupServiceProvider.future,
+    )).service;
     final user = task.callerId != null
         ? lookupService.findUserById(task.callerId)
         : null;
 
     final phoneRaw = task.phoneText?.trim();
-    final phoneValue =
-        phoneRaw != null && phoneRaw.isNotEmpty ? phoneRaw : null;
+    final phoneValue = phoneRaw != null && phoneRaw.isNotEmpty
+        ? phoneRaw
+        : null;
 
     final trimmedUserText = (task.userText ?? '').trim();
     final nameTrim = (user?.name ?? '').trim();
-    final callerDisplayText =
-        trimmedUserText.isNotEmpty ? trimmedUserText : nameTrim;
+    final callerDisplayText = trimmedUserText.isNotEmpty
+        ? trimmedUserText
+        : nameTrim;
 
-    final hasAnyContent = user != null ||
+    final hasAnyContent =
+        user != null ||
         phoneValue != null ||
         trimmedUserText.isNotEmpty ||
         (task.departmentText?.trim().isNotEmpty ?? false) ||
@@ -684,7 +689,7 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
         return;
       }
       final asyncLookup = ref.read(lookupServiceProvider);
-      final lookup = asyncLookup.hasValue ? asyncLookup.value : null;
+      final lookup = asyncLookup.value?.service;
       if (lookup == null) return;
       final users = lookup.findUsersByPhone(digits);
       if (users.isEmpty) {
@@ -779,7 +784,7 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
 
   void _performEquipmentLookupForUser(int userId) {
     final asyncLookup = ref.read(lookupServiceProvider);
-    final lookup = asyncLookup.hasValue ? asyncLookup.value : null;
+    final lookup = asyncLookup.value?.service;
     if (lookup == null) return;
     final list = lookup.findEquipmentsForUser(userId);
     if (list.isEmpty) {
@@ -819,17 +824,14 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
     );
   }
 
-  void performCallerLookup(
-    String nameOrQuery, {
-    String? phoneFieldDigits,
-  }) {
+  void performCallerLookup(String nameOrQuery, {String? phoneFieldDigits}) {
     if (_isFillingFromLookup) return;
     _isFillingFromLookup = true;
     try {
       final query = nameOrQuery.trim();
       if (query.isEmpty || query == 'Άγνωστος') return;
       final asyncLookup = ref.read(lookupServiceProvider);
-      final lookup = asyncLookup.hasValue ? asyncLookup.value : null;
+      final lookup = asyncLookup.value?.service;
       if (lookup == null) return;
       final users = lookup.searchUsersByQuery(query);
       if (users.isEmpty) {
@@ -878,7 +880,8 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
       final snap =
           phoneFieldDigits?.replaceAll(RegExp(r'[^0-9]'), '').trim() ?? '';
       if (snap.isNotEmpty &&
-          (state.selectedPhone == null || state.selectedPhone!.trim().isEmpty)) {
+          (state.selectedPhone == null ||
+              state.selectedPhone!.trim().isEmpty)) {
         state = state.copyWith(
           selectedPhone: snap,
           clearSelectedPhone: false,
@@ -904,7 +907,7 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
       final query = code.trim();
       if (query.isEmpty) return;
       final asyncLookup = ref.read(lookupServiceProvider);
-      final lookup = asyncLookup.hasValue ? asyncLookup.value : null;
+      final lookup = asyncLookup.value?.service;
       if (lookup == null) return;
       final list = lookup.findEquipmentsByCode(query);
       if (list.isEmpty) {
@@ -1038,7 +1041,7 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
     final trimmed = text.trim();
     int? matchedDepartmentId;
     if (trimmed.isNotEmpty) {
-      final lookup = ref.read(lookupServiceProvider).value;
+      final lookup = ref.read(lookupServiceProvider).value?.service;
       if (lookup != null) {
         final normalized = SearchTextNormalizer.normalizeForSearch(trimmed);
         for (final dep in lookup.departments) {
@@ -1067,7 +1070,7 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
       return;
     }
     final asyncLookup = ref.read(lookupServiceProvider);
-    final lookup = asyncLookup.hasValue ? asyncLookup.value : null;
+    final lookup = asyncLookup.value?.service;
 
     List<UserModel>? callerCandidates;
     List<EquipmentModel>? equipmentCandidates;
@@ -1168,7 +1171,7 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
       final phone = state.selectedPhone?.trim();
       final equipmentCode = state.equipmentText.trim();
       final parsed = NameParserUtility.parse(name);
-      final lookup = ref.read(lookupServiceProvider).value;
+      final lookup = ref.read(lookupServiceProvider).value?.service;
       final departmentId =
           state.selectedDepartmentId ??
           (state.departmentText.trim().isNotEmpty && lookup != null
@@ -1189,7 +1192,7 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
         );
 
         final s = state;
-        final lookupNow = ref.read(lookupServiceProvider).value;
+        final lookupNow = ref.read(lookupServiceProvider).value?.service;
         final departmentIdNow =
             s.selectedDepartmentId ??
             (s.departmentText.trim().isNotEmpty && lookupNow != null
@@ -1240,7 +1243,7 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
         eqCode?.isNotEmpty == true ? eqCode : null,
       );
 
-      final lookup = ref.read(lookupServiceProvider).value;
+      final lookup = ref.read(lookupServiceProvider).value?.service;
       final selectedDepartmentId =
           state.selectedDepartmentId ??
           (state.departmentText.trim().isNotEmpty && lookup != null

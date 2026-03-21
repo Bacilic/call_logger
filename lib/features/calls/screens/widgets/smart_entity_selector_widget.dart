@@ -211,7 +211,7 @@ class SmartEntitySelectorWidgetState
   Widget build(BuildContext context) {
     final header = ref.watch(widget.provider);
     final lookupAsync = ref.watch(lookupServiceProvider);
-    final lookupService = lookupAsync.value;
+    final lookupService = lookupAsync.value?.service;
     final hooks = widget.callEntryHooks;
 
     ref.listen(widget.provider, (previous, next) {
@@ -927,6 +927,7 @@ class _CallerField extends StatefulWidget {
   final SmartEntitySelectorState header;
   final LookupService? lookupService;
   final SmartEntitySelectorNotifier notifier;
+
   /// Ψηφία από το πεδίο τηλεφώνου (ίδια σειρά με το UI) για merge πριν το caller lookup.
   final String Function() getPhoneFieldDigits;
   final VoidCallback onContentChecked;

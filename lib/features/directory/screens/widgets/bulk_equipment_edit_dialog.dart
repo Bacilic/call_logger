@@ -67,7 +67,8 @@ class _BulkEquipmentEditDialogState extends State<BulkEquipmentEditDialog> {
   void initState() {
     super.initState();
     for (final key in _fieldKeys) {
-      if (key == 'owner' || key == 'defaultRemoteTool' || key == 'type') continue;
+      if (key == 'owner' || key == 'defaultRemoteTool' || key == 'type')
+        continue;
       _controllers[key] = TextEditingController(text: _commonValue(key));
     }
     _ownerController = TextEditingController();
@@ -86,15 +87,22 @@ class _BulkEquipmentEditDialogState extends State<BulkEquipmentEditDialog> {
   }
 
   Future<int?> _resolveOwnerToUserId(
-      String ownerText, LookupService? lookupService) async {
+    String ownerText,
+    LookupService? lookupService,
+  ) async {
     final text = ownerText.trim();
     if (text.isEmpty) return null;
     if (lookupService == null) return null;
     final textForSearch = NameParserUtility.stripParentheticalSuffix(text);
     final users = lookupService.searchUsersByQuery(textForSearch);
     if (users.isNotEmpty) {
-      final exact = users.where((u) =>
-          (u.fullNameWithDepartment == text) || (u.name?.trim() == textForSearch)).toList();
+      final exact = users
+          .where(
+            (u) =>
+                (u.fullNameWithDepartment == text) ||
+                (u.name?.trim() == textForSearch),
+          )
+          .toList();
       if (exact.isNotEmpty && exact.first.id != null) return exact.first.id;
       if (users.first.id != null) return users.first.id;
     }
@@ -175,7 +183,7 @@ class _BulkEquipmentEditDialogState extends State<BulkEquipmentEditDialog> {
     }
     final changes = <String, dynamic>{};
     final asyncLookup = widget.ref.read(lookupServiceProvider);
-    final lookup = asyncLookup.hasValue ? asyncLookup.value : null;
+    final lookup = asyncLookup.value?.service;
     for (var i = 0; i < _fieldKeys.length; i++) {
       final fieldKey = _fieldKeys[i];
       if (_applyField[fieldKey] != true) continue;
@@ -229,7 +237,8 @@ class _BulkEquipmentEditDialogState extends State<BulkEquipmentEditDialog> {
     };
     return AlertDialog(
       title: Text(
-          'Μαζική επεξεργασία (${widget.selectedRows.length} εξοπλισμός)'),
+        'Μαζική επεξεργασία (${widget.selectedRows.length} εξοπλισμός)',
+      ),
       content: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -243,7 +252,8 @@ class _BulkEquipmentEditDialogState extends State<BulkEquipmentEditDialog> {
                     child: CheckboxListTile(
                       value: _applyField[_fieldKeys[i]]!,
                       onChanged: (v) => setState(
-                          () => _applyField[_fieldKeys[i]] = v ?? false),
+                        () => _applyField[_fieldKeys[i]] = v ?? false,
+                      ),
                       title: Text(labels[_fieldKeys[i]]!),
                       controlAffinity: ListTileControlAffinity.leading,
                       contentPadding: EdgeInsets.zero,
@@ -255,23 +265,25 @@ class _BulkEquipmentEditDialogState extends State<BulkEquipmentEditDialog> {
                             builder: (context, ref, _) {
                               final async = ref.watch(lookupServiceProvider);
                               return async.when(
-                                data: (service) {
+                                data: (bundle) {
+                                  final service = bundle.service;
                                   if (_selectedUserId != null &&
                                       !_ownerTextInitialized) {
                                     final u = service.users
-                                        .where((u) =>
-                                            u.id == _selectedUserId)
+                                        .where((u) => u.id == _selectedUserId)
                                         .firstOrNull;
                                     if (u != null) {
                                       WidgetsBinding.instance
                                           .addPostFrameCallback((_) {
-                                        if (mounted) {
-                                          _ownerController.text =
-                                              u.fullNameWithDepartment;
-                                          setState(() =>
-                                              _ownerTextInitialized = true);
-                                        }
-                                      });
+                                            if (mounted) {
+                                              _ownerController.text =
+                                                  u.fullNameWithDepartment;
+                                              setState(
+                                                () => _ownerTextInitialized =
+                                                    true,
+                                              );
+                                            }
+                                          });
                                     } else {
                                       _ownerTextInitialized = true;
                                     }
@@ -282,166 +294,188 @@ class _BulkEquipmentEditDialogState extends State<BulkEquipmentEditDialog> {
                                     focusNode: _ownerFocusNode,
                                     textEditingController: _ownerController,
                                     optionsBuilder: (TextEditingValue value) {
-                                      final q = SearchTextNormalizer
-                                          .normalizeForSearch(value.text);
+                                      final q =
+                                          SearchTextNormalizer.normalizeForSearch(
+                                            value.text,
+                                          );
                                       final users = q.isEmpty
                                           ? service.users
                                           : service.searchUsersByQuery(
-                                              value.text.trim());
+                                              value.text.trim(),
+                                            );
                                       return users
                                           .where((u) => u.id != null)
                                           .map((u) => u.fullNameWithDepartment)
-                                          .where((option) =>
-                                              SearchTextNormalizer
-                                                  .matchesNormalizedQuery(
-                                                      option, q))
+                                          .where(
+                                            (option) =>
+                                                SearchTextNormalizer.matchesNormalizedQuery(
+                                                  option,
+                                                  q,
+                                                ),
+                                          )
                                           .toList();
                                     },
                                     onSelected: (String selection) {
                                       final u = service.users
-                                          .where((user) =>
-                                              user.fullNameWithDepartment ==
-                                                  selection)
+                                          .where(
+                                            (user) =>
+                                                user.fullNameWithDepartment ==
+                                                selection,
+                                          )
                                           .firstOrNull;
                                       if (u != null && u.id != null) {
                                         setState(() {
                                           _selectedUserId = u.id;
-                                          _ownerController.text = u.name ??
+                                          _ownerController.text =
+                                              u.name ??
                                               u.fullNameWithDepartment;
                                         });
                                       }
                                     },
-                                    fieldViewBuilder: (
-                                      context,
-                                      textController,
-                                      focusNode,
-                                      onFieldSubmitted,
-                                    ) {
-                                      return TextField(
-                                        controller: textController,
-                                        focusNode: focusNode,
-                                        decoration: InputDecoration(
-                                          hintText: _hasDifferentValues('owner')
-                                              ? '(Διαφορετικές τιμές)'
-                                              : 'Πληκτρολόγησε όνομα ή άφησε κενό (Άγνωστος κάτοχος)',
-                                          hintStyle: theme.textTheme.bodyMedium
-                                              ?.copyWith(
-                                            color: theme
-                                                .colorScheme.onSurfaceVariant
-                                                .withValues(alpha: 0.7),
-                                          ),
-                                          border: const OutlineInputBorder(),
-                                          suffixIcon: Semantics(
-                                            label: 'Καθαρισμός Κατόχου',
-                                            child: IconButton(
-                                              icon: const Icon(
-                                                  Icons.close, size: 20),
-                                              onPressed: () {
-                                                textController.clear();
-                                                setState(() =>
-                                                    _selectedUserId = null);
-                                              },
-                                              tooltip: 'Καθαρισμός Κατόχου',
+                                    fieldViewBuilder:
+                                        (
+                                          context,
+                                          textController,
+                                          focusNode,
+                                          onFieldSubmitted,
+                                        ) {
+                                          return TextField(
+                                            controller: textController,
+                                            focusNode: focusNode,
+                                            decoration: InputDecoration(
+                                              hintText:
+                                                  _hasDifferentValues('owner')
+                                                  ? '(Διαφορετικές τιμές)'
+                                                  : 'Πληκτρολόγησε όνομα ή άφησε κενό (Άγνωστος κάτοχος)',
+                                              hintStyle: theme
+                                                  .textTheme
+                                                  .bodyMedium
+                                                  ?.copyWith(
+                                                    color: theme
+                                                        .colorScheme
+                                                        .onSurfaceVariant
+                                                        .withValues(alpha: 0.7),
+                                                  ),
+                                              border:
+                                                  const OutlineInputBorder(),
+                                              suffixIcon: Semantics(
+                                                label: 'Καθαρισμός Κατόχου',
+                                                child: IconButton(
+                                                  icon: const Icon(
+                                                    Icons.close,
+                                                    size: 20,
+                                                  ),
+                                                  onPressed: () {
+                                                    textController.clear();
+                                                    setState(
+                                                      () => _selectedUserId =
+                                                          null,
+                                                    );
+                                                  },
+                                                  tooltip: 'Καθαρισμός Κατόχου',
+                                                ),
+                                              ),
                                             ),
-                                          ),
-                                        ),
-                                        onChanged: (value) {
-                                          if (value.trim().isEmpty) {
-                                            setState(() =>
-                                                _selectedUserId = null);
-                                          }
+                                            onChanged: (value) {
+                                              if (value.trim().isEmpty) {
+                                                setState(
+                                                  () => _selectedUserId = null,
+                                                );
+                                              }
+                                            },
+                                          );
                                         },
-                                      );
-                                    },
                                   );
                                 },
                                 loading: () => const SizedBox(
-                                    height: 48,
-                                    child: Center(
-                                        child: Text('Φόρτωση...'))),
+                                  height: 48,
+                                  child: Center(child: Text('Φόρτωση...')),
+                                ),
                                 error: (_, e) => const Text('Σφάλμα'),
                               );
                             },
                           )
                         : _fieldKeys[i] == 'type'
-                            ? FutureBuilder<List<String>>(
-                                future: SettingsService().getEquipmentTypesList(),
-                                builder: (context, snapshot) {
-                                  var options =
-                                      snapshot.data ?? ['Υπολογιστής', 'Εκτυπωτής'];
-                                  if (_selectedType != null &&
-                                      _selectedType!.trim().isNotEmpty &&
-                                      !options.contains(_selectedType)) {
-                                    options = [_selectedType!, ...options];
-                                  }
-                                  return DropdownButtonFormField<String?>(
-                                    initialValue: _selectedType,
-                                    decoration: InputDecoration(
-                                      hintText: _hasDifferentValues('type')
-                                          ? '(Διαφορετικές τιμές)'
-                                          : null,
-                                      border: const OutlineInputBorder(),
-                                    ),
-                                    items: [
-                                      ...options.map(
-                                        (o) => DropdownMenuItem<String?>(
-                                          value: o,
-                                          child: Text(o),
-                                        ),
-                                      ),
-                                      const DropdownMenuItem<String?>(
-                                        value: null,
-                                        child: Text('Κανένας'),
-                                      ),
-                                    ],
-                                    onChanged: (v) =>
-                                        setState(() => _selectedType = v),
-                                  );
-                                },
-                              )
-                            : _fieldKeys[i] == 'defaultRemoteTool'
-                                ? FutureBuilder<List<String>>(
-                                    future: SettingsService().getRemoteSurfaceAppsList(),
-                                    builder: (context, snapshot) {
-                                      final options =
-                                          snapshot.data ?? ['AnyDesk', 'VNC'];
-                                      return DropdownButtonFormField<String?>(
-                                        initialValue: _selectedRemoteTool,
-                                        decoration: InputDecoration(
-                                          hintText: _hasDifferentValues(
-                                                  'defaultRemoteTool')
-                                              ? '(Διαφορετικές τιμές)'
-                                              : null,
-                                          border: const OutlineInputBorder(),
-                                        ),
-                                        items: [
-                                          ...options.map(
-                                            (o) => DropdownMenuItem<String?>(
-                                              value: o,
-                                              child: Text(o),
-                                            ),
-                                          ),
-                                          const DropdownMenuItem<String?>(
-                                            value: null,
-                                            child: Text('Κανένα'),
-                                          ),
-                                        ],
-                                        onChanged: (v) => setState(
-                                            () => _selectedRemoteTool = v),
-                                      );
-                                    },
-                                  )
-                                : TextFormField(
-                                controller: _controllers[_fieldKeys[i]],
+                        ? FutureBuilder<List<String>>(
+                            future: SettingsService().getEquipmentTypesList(),
+                            builder: (context, snapshot) {
+                              var options =
+                                  snapshot.data ?? ['Υπολογιστής', 'Εκτυπωτής'];
+                              if (_selectedType != null &&
+                                  _selectedType!.trim().isNotEmpty &&
+                                  !options.contains(_selectedType)) {
+                                options = [_selectedType!, ...options];
+                              }
+                              return DropdownButtonFormField<String?>(
+                                initialValue: _selectedType,
                                 decoration: InputDecoration(
-                                  hintText: _hasDifferentValues(_fieldKeys[i])
+                                  hintText: _hasDifferentValues('type')
                                       ? '(Διαφορετικές τιμές)'
                                       : null,
                                   border: const OutlineInputBorder(),
                                 ),
-                                spellCheckConfiguration: platformSpellCheckConfiguration,
-                                onChanged: (_) => setState(() {}),
-                              ),
+                                items: [
+                                  ...options.map(
+                                    (o) => DropdownMenuItem<String?>(
+                                      value: o,
+                                      child: Text(o),
+                                    ),
+                                  ),
+                                  const DropdownMenuItem<String?>(
+                                    value: null,
+                                    child: Text('Κανένας'),
+                                  ),
+                                ],
+                                onChanged: (v) =>
+                                    setState(() => _selectedType = v),
+                              );
+                            },
+                          )
+                        : _fieldKeys[i] == 'defaultRemoteTool'
+                        ? FutureBuilder<List<String>>(
+                            future: SettingsService()
+                                .getRemoteSurfaceAppsList(),
+                            builder: (context, snapshot) {
+                              final options =
+                                  snapshot.data ?? ['AnyDesk', 'VNC'];
+                              return DropdownButtonFormField<String?>(
+                                initialValue: _selectedRemoteTool,
+                                decoration: InputDecoration(
+                                  hintText:
+                                      _hasDifferentValues('defaultRemoteTool')
+                                      ? '(Διαφορετικές τιμές)'
+                                      : null,
+                                  border: const OutlineInputBorder(),
+                                ),
+                                items: [
+                                  ...options.map(
+                                    (o) => DropdownMenuItem<String?>(
+                                      value: o,
+                                      child: Text(o),
+                                    ),
+                                  ),
+                                  const DropdownMenuItem<String?>(
+                                    value: null,
+                                    child: Text('Κανένα'),
+                                  ),
+                                ],
+                                onChanged: (v) =>
+                                    setState(() => _selectedRemoteTool = v),
+                              );
+                            },
+                          )
+                        : TextFormField(
+                            controller: _controllers[_fieldKeys[i]],
+                            decoration: InputDecoration(
+                              hintText: _hasDifferentValues(_fieldKeys[i])
+                                  ? '(Διαφορετικές τιμές)'
+                                  : null,
+                              border: const OutlineInputBorder(),
+                            ),
+                            spellCheckConfiguration:
+                                platformSpellCheckConfiguration,
+                            onChanged: (_) => setState(() {}),
+                          ),
                   ),
                 ],
               ),
@@ -455,10 +489,7 @@ class _BulkEquipmentEditDialogState extends State<BulkEquipmentEditDialog> {
           onPressed: () => Navigator.of(context).pop(),
           child: const Text('Ακύρωση'),
         ),
-        FilledButton(
-          onPressed: _save,
-          child: const Text('Αποθήκευση'),
-        ),
+        FilledButton(onPressed: _save, child: const Text('Αποθήκευση')),
       ],
     );
   }

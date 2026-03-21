@@ -63,14 +63,14 @@ Future<DatabaseInitRunnerResult> runDatabaseInitChecks({
                 : health;
           } on DatabaseInitException catch (e) {
             result = e.result;
-          } catch (e) {
-            result = DatabaseInitResult.fromException(e, dbPath);
+          } catch (e, st) {
+            result = DatabaseInitResult.fromException(e, dbPath, st);
           }
         }
       }
     }
-  } catch (e) {
-    result = DatabaseInitResult.fromException(e, dbPath);
+  } catch (e, st) {
+    result = DatabaseInitResult.fromException(e, dbPath, st);
   }
 
   return DatabaseInitRunnerResult(
