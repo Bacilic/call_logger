@@ -46,7 +46,7 @@ class RemoteArgsService {
     );
   }
 
-  /// Διαγράφει όρισμα.
+  /// Διαγράφει όρισμα (φυσική διαγραφή — ο πίνακας remote_tool_args δεν χρησιμοποιεί soft delete).
   Future<void> deleteArg(int id) async {
     final db = await _db.database;
     await db.delete(

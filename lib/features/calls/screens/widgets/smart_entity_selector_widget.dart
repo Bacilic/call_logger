@@ -307,6 +307,8 @@ class SmartEntitySelectorWidgetState
                 header: header,
                 lookupService: lookupService,
                 notifier: _notifier,
+                getPhoneFieldDigits: () =>
+                    _phoneController.text.replaceAll(RegExp(r'[^0-9]'), ''),
                 onContentChecked: () => _notifier.checkContent(
                   phoneText: _phoneController.text,
                   callerText: _callerController.text,
@@ -913,6 +915,7 @@ class _CallerField extends StatefulWidget {
     required this.header,
     required this.lookupService,
     required this.notifier,
+    required this.getPhoneFieldDigits,
     required this.onContentChecked,
     this.onCallerFocusOut,
   });
@@ -924,6 +927,8 @@ class _CallerField extends StatefulWidget {
   final SmartEntitySelectorState header;
   final LookupService? lookupService;
   final SmartEntitySelectorNotifier notifier;
+  /// Ψηφία από το πεδίο τηλεφώνου (ίδια σειρά με το UI) για merge πριν το caller lookup.
+  final String Function() getPhoneFieldDigits;
   final VoidCallback onContentChecked;
   final VoidCallback? onCallerFocusOut;
 
@@ -1095,6 +1100,7 @@ class _CallerFieldState extends State<_CallerField> {
     required SmartEntitySelectorState header,
     required LookupService? lookupService,
     required SmartEntitySelectorNotifier notifier,
+    required String Function() getPhoneFieldDigits,
   }) {
     _keyboardOptionIndex = -1;
     _lastAutoScrollIndex = -1;
@@ -1117,7 +1123,10 @@ class _CallerFieldState extends State<_CallerField> {
       }
       notifier.updateCallerDisplayText(displayName);
       _setControllerText(controller, displayName);
-      notifier.performCallerLookup(displayName);
+      notifier.performCallerLookup(
+        displayName,
+        phoneFieldDigits: getPhoneFieldDigits(),
+      );
       _onSuggestionSelected();
     }
     widget.onContentChecked();
@@ -1306,6 +1315,7 @@ class _CallerFieldState extends State<_CallerField> {
                   header: header,
                   lookupService: lookupService,
                   notifier: notifier,
+                  getPhoneFieldDigits: widget.getPhoneFieldDigits,
                 );
               },
               fieldViewBuilder:
@@ -1373,6 +1383,7 @@ class _CallerFieldState extends State<_CallerField> {
                             header: header,
                             lookupService: lookupService,
                             notifier: notifier,
+                            getPhoneFieldDigits: widget.getPhoneFieldDigits,
                           );
                           return KeyEventResult.handled;
                         }
@@ -1443,6 +1454,7 @@ class _CallerFieldState extends State<_CallerField> {
                               header: header,
                               lookupService: lookupService,
                               notifier: notifier,
+                              getPhoneFieldDigits: widget.getPhoneFieldDigits,
                             );
                             return;
                           }
@@ -1475,6 +1487,7 @@ class _CallerFieldState extends State<_CallerField> {
                     controller: controller,
                     theme: theme,
                     showUnknownOption: controller.text.trim().isEmpty,
+                    getPhoneFieldDigits: widget.getPhoneFieldDigits,
                     onSelectionCommitted: _onSuggestionSelected,
                   );
                 },
@@ -1534,6 +1547,7 @@ class _CallerSuggestionList extends StatelessWidget {
     required this.controller,
     required this.theme,
     required this.showUnknownOption,
+    required this.getPhoneFieldDigits,
     this.onSelectionCommitted,
   });
 
@@ -1542,6 +1556,7 @@ class _CallerSuggestionList extends StatelessWidget {
   final TextEditingController controller;
   final ThemeData theme;
   final bool showUnknownOption;
+  final String Function() getPhoneFieldDigits;
   final VoidCallback? onSelectionCommitted;
 
   @override
@@ -1576,7 +1591,10 @@ class _CallerSuggestionList extends StatelessWidget {
                 );
                 notifier.updateSelectedCaller(user);
                 notifier.updateCallerDisplayText(displayName);
-                notifier.performCallerLookup(displayName);
+                notifier.performCallerLookup(
+                  displayName,
+                  phoneFieldDigits: getPhoneFieldDigits(),
+                );
                 onSelectionCommitted?.call();
               },
             ),

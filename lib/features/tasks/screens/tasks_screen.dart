@@ -121,9 +121,14 @@ class TasksScreen extends ConsumerWidget {
                     : RefreshIndicator(
                         onRefresh: () =>
                             ref.read(tasksProvider.notifier).refresh(),
+                        // Προσθήκη bottom padding για να μην επικαλύπτεται η τελευταία κάρτα από το FAB
                         child: ListView.builder(
-                          padding: const EdgeInsets.symmetric(
-                              vertical: 8, horizontal: 16),
+                          padding: EdgeInsets.fromLTRB(
+                            16,
+                            8,
+                            16,
+                            88 + MediaQuery.of(context).viewPadding.bottom,
+                          ),
                           itemCount: tasks.length,
                           itemBuilder: (context, index) {
                             final task = tasks[index];

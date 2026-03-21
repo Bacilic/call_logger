@@ -587,6 +587,45 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
     );
   }
 
+  /// Γεμίζει/διατηρεί ένα μόνο εσωτερικό τηλέφωνο από το προφίλ χρήστη (λίστα στο DB).
+  /// - Αν το πεδίο είχε κατά λάθος ολόκληρη τη λίστα `user.phone`, την καθαρίζει και συνεχίζει με λογική πολλαπλών.
+  /// - Αν υπάρχει έγκυρο token μέσα στη λίστα, το κρατάει.
+  /// - Αν είναι κενό και υπάρχουν πολλά → candidates· αν ένα → αυτό.
+  void _autofillPhoneFromUserProfile(UserModel user) {
+    if (!_canAutofillPhone()) return;
+    final pool = user.phone?.trim() ?? '';
+    final phones = _splitPhones(pool);
+    if (phones.isEmpty) return;
+
+    var previous = state.selectedPhone?.trim() ?? '';
+    if (previous.isNotEmpty &&
+        pool.isNotEmpty &&
+        previous == pool &&
+        phones.length > 1) {
+      state = state.copyWith(clearSelectedPhone: true, clearPhoneError: true);
+      previous = '';
+    }
+
+    if (phones.length == 1) {
+      final only = phones.first;
+      if (previous.isEmpty) {
+        _setPhoneValueFromLookup(only);
+      } else if (PhoneListParser.containsPhone(pool, previous)) {
+        _setPhoneValueFromLookup(previous);
+      }
+      return;
+    }
+
+    if (previous.isNotEmpty && PhoneListParser.containsPhone(pool, previous)) {
+      _setPhoneValueFromLookup(previous);
+      return;
+    }
+    if (previous.isNotEmpty) {
+      return;
+    }
+    _setPhoneCandidatesFromLookup(phones);
+  }
+
   bool _canAutofillPhone() {
     return !state.phoneIsManual ||
         (state.selectedPhone?.trim().isEmpty ?? true);
@@ -780,7 +819,10 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
     );
   }
 
-  void performCallerLookup(String nameOrQuery) {
+  void performCallerLookup(
+    String nameOrQuery, {
+    String? phoneFieldDigits,
+  }) {
     if (_isFillingFromLookup) return;
     _isFillingFromLookup = true;
     try {
@@ -833,18 +875,17 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
             : state.departmentIsManual,
         callerIsManual: false,
       );
-      final hadPhoneBeforeProfileAutofill =
-          state.selectedPhone?.trim().isNotEmpty == true;
-      if (_canAutofillPhone()) {
-        if (!hadPhoneBeforeProfileAutofill) {
-          final phones = _splitPhones(user.phone);
-          if (phones.length == 1) {
-            _setPhoneValueFromLookup(phones.first);
-          } else if (phones.length > 1) {
-            _setPhoneCandidatesFromLookup(phones);
-          }
-        }
+      final snap =
+          phoneFieldDigits?.replaceAll(RegExp(r'[^0-9]'), '').trim() ?? '';
+      if (snap.isNotEmpty &&
+          (state.selectedPhone == null || state.selectedPhone!.trim().isEmpty)) {
+        state = state.copyWith(
+          selectedPhone: snap,
+          clearSelectedPhone: false,
+          clearPhoneError: true,
+        );
       }
+      _autofillPhoneFromUserProfile(user);
 
       final canAutofillEquipment =
           !state.equipmentIsManual || state.equipmentText.trim().isEmpty;
@@ -933,12 +974,7 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
       }
 
       if (_shouldApplyEquipmentOwnerPhoneAutofill()) {
-        final phones = _splitPhones(user.phone);
-        if (phones.length == 1) {
-          _setPhoneValueFromLookup(phones.first);
-        } else if (phones.length > 1) {
-          _setPhoneCandidatesFromLookup(phones);
-        }
+        _autofillPhoneFromUserProfile(user);
       }
     } finally {
       _isFillingFromLookup = false;
@@ -964,6 +1000,16 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
       departmentIsManual: false,
       callerIsManual: false,
     );
+    if (value != null) {
+      final pool = value.phone?.trim() ?? '';
+      final sp = state.selectedPhone?.trim() ?? '';
+      if (pool.isNotEmpty &&
+          sp.isNotEmpty &&
+          sp == pool &&
+          _splitPhones(sp).length > 1) {
+        state = state.copyWith(clearSelectedPhone: true, clearPhoneError: true);
+      }
+    }
   }
 
   void updateSelectedCaller(UserModel? value) {

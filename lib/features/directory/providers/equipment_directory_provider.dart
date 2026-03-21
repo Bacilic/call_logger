@@ -262,11 +262,8 @@ class EquipmentDirectoryNotifier extends Notifier<EquipmentDirectoryState> {
   Future<void> undoLastDelete() async {
     final list = state.lastDeleted;
     if (list == null || list.isEmpty) return;
-    for (final row in list) {
-      final map = row.$1.toMap();
-      map.remove('id');
-      await DatabaseHelper.instance.insertEquipmentFromMap(map);
-    }
+    final ids = list.map((row) => row.$1.id).whereType<int>().toList();
+    await DatabaseHelper.instance.restoreEquipment(ids);
     state = state.copyWith(lastDeleted: null);
     await load();
     _invalidateLookupCache();

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/database/database_helper.dart';
 import '../../../core/utils/search_text_normalizer.dart';
 import '../../calls/models/user_model.dart';
+import '../../calls/provider/lookup_provider.dart';
 
 /// Κατάσταση του κατάλογου χρηστών: πλήρης λίστα, φιλτραρισμένη λίστα, αναζήτηση, sort, επιλογές, undo, focused row.
 class DirectoryState {
@@ -36,6 +37,12 @@ class DirectoryNotifier extends Notifier<DirectoryState> {
   @override
   DirectoryState build() {
     return const DirectoryState();
+  }
+
+  /// Ανανέωση in-memory [LookupService] ώστε η φόρμα κλήσης (καλούντας) να βλέπει διαγραφές/επαναφορές χωρίς restart.
+  Future<void> _refreshLookupCache() async {
+    ref.invalidate(lookupServiceProvider);
+    await ref.read(lookupServiceProvider.future);
   }
 
   /// Φόρτωση χρηστών από τη βάση και εφαρμογή filter/sort.
@@ -229,12 +236,14 @@ class DirectoryNotifier extends Notifier<DirectoryState> {
 
   Future<void> addUser(UserModel u) async {
     await DatabaseHelper.instance.insertUserFromMap(u.toMap());
+    await _refreshLookupCache();
     await loadUsers();
   }
 
   Future<void> updateUser(UserModel u) async {
     if (u.id == null) return;
     await DatabaseHelper.instance.updateUser(u.id!, u.toMap());
+    await _refreshLookupCache();
     await loadUsers();
   }
 
@@ -244,6 +253,7 @@ class DirectoryNotifier extends Notifier<DirectoryState> {
         .where((u) => u.id != null && state.selectedIds.contains(u.id))
         .toList();
     await DatabaseHelper.instance.deleteUsers(state.selectedIds.toList());
+    await _refreshLookupCache();
     state = DirectoryState(
       allUsers: state.allUsers,
       filteredUsers: state.filteredUsers,
@@ -261,11 +271,9 @@ class DirectoryNotifier extends Notifier<DirectoryState> {
   Future<void> undoLastDelete() async {
     final list = state.lastDeleted;
     if (list == null || list.isEmpty) return;
-    for (final u in list) {
-      final map = u.toMap();
-      map.remove('id');
-      await DatabaseHelper.instance.insertUserFromMap(map);
-    }
+    final ids = list.map((u) => u.id).whereType<int>().toList();
+    await DatabaseHelper.instance.restoreUsers(ids);
+    await _refreshLookupCache();
     state = DirectoryState(
       allUsers: state.allUsers,
       filteredUsers: state.filteredUsers,
@@ -288,6 +296,7 @@ class DirectoryNotifier extends Notifier<DirectoryState> {
         .toList();
     if (toUpdate.isEmpty) return;
     await DatabaseHelper.instance.bulkUpdateUsers(ids, changes);
+    await _refreshLookupCache();
     state = DirectoryState(
       allUsers: state.allUsers,
       filteredUsers: state.filteredUsers,
@@ -322,6 +331,7 @@ class DirectoryNotifier extends Notifier<DirectoryState> {
       lastBulkUpdatedUsers: null,
       focusedRowIndex: state.focusedRowIndex,
     );
+    await _refreshLookupCache();
     await loadUsers();
   }
 }

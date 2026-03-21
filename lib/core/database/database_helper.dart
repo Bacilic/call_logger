@@ -37,6 +37,13 @@ class TablePreviewResult {
 class DatabaseHelper {
   DatabaseHelper._();
 
+  /// Κλειδί `app_settings` για το όνομα χρήστη στις εγγραφές audit (προαιρετικό).
+  static const String auditUserPerformingSettingsKey = 'audit_user_performing';
+
+  static const String auditActionDelete = 'ΔΙΑΓΡΑΦΗ';
+  static const String auditActionRestore = 'ΕΠΑΝΑΦΟΡΑ';
+  static const String auditActionBulkDelete = 'ΜΑΖΙΚΗ ΔΙΑΓΡΑΦΗ';
+
   static final DatabaseHelper _instance = DatabaseHelper._();
 
   static DatabaseHelper get instance => _instance;
@@ -105,7 +112,7 @@ class DatabaseHelper {
     try {
       db = await openDatabase(
         dbPath,
-        version: 13,
+        version: 15,
         onCreate: _onCreate,
         onUpgrade: _onUpgrade,
         singleInstance: false,
@@ -116,6 +123,7 @@ class DatabaseHelper {
       throw DatabaseInitException(DatabaseInitResult.fromException(e, dbPath));
     }
 
+    await _ensureCallsSearchIndexColumnAndBackfill(db);
     await _ensureTasksSearchIndexColumnAndBackfill(db);
 
     try {
@@ -148,7 +156,7 @@ class DatabaseHelper {
   Future<void> createNewDatabaseFile(String filePath) async {
     final db = await openDatabase(
       filePath,
-      version: 13,
+      version: 15,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
       singleInstance: false,
@@ -178,7 +186,9 @@ class DatabaseHelper {
         category_id INTEGER,
         status TEXT,
         duration INTEGER,
-        is_priority INTEGER DEFAULT 0
+        is_priority INTEGER DEFAULT 0,
+        search_index TEXT,
+        is_deleted INTEGER DEFAULT 0
       )
     ''');
 
@@ -190,7 +200,8 @@ class DatabaseHelper {
         phone TEXT,
         department_id INTEGER,
         location TEXT,
-        notes TEXT
+        notes TEXT,
+        is_deleted INTEGER DEFAULT 0
       )
     ''');
 
@@ -203,14 +214,16 @@ class DatabaseHelper {
         notes TEXT,
         custom_ip TEXT,
         anydesk_id TEXT,
-        default_remote_tool TEXT
+        default_remote_tool TEXT,
+        is_deleted INTEGER DEFAULT 0
       )
     ''');
 
     await db.execute('''
       CREATE TABLE categories (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT
+        name TEXT,
+        is_deleted INTEGER DEFAULT 0
       )
     ''');
 
@@ -236,7 +249,8 @@ class DatabaseHelper {
         department_text TEXT,
         created_at TEXT,
         updated_at TEXT,
-        search_index TEXT
+        search_index TEXT,
+        is_deleted INTEGER DEFAULT 0
       )
     ''');
 
@@ -329,6 +343,98 @@ class DatabaseHelper {
     }
   }
 
+  /// Συγκεντρώνει κείμενα κλήσης + συσχετισμένου χρήστη/εξοπλισμού για `search_index`.
+  /// Το όνομα τμήματος προέρχεται από `departments` (JOIN στο `users.department_id`)·
+  /// η στήλη `users.department` δεν υπάρχει στο τρέχον CREATE TABLE.
+  /// Ο κωδικός εξοπλισμού διαβάζεται από `equipment.code_equipment` (όχι από `code`).
+  Future<String> _buildCallSearchIndex(
+    Database db,
+    Map<String, dynamic> callMap,
+  ) async {
+    void addNonEmpty(List<String> parts, dynamic v) {
+      if (v == null) return;
+      final s = v.toString().trim();
+      if (s.isNotEmpty) parts.add(s);
+    }
+
+    final parts = <String>[];
+
+    addNonEmpty(parts, callMap['issue']);
+    addNonEmpty(parts, callMap['solution']);
+    addNonEmpty(parts, callMap['caller_text']);
+    addNonEmpty(parts, callMap['phone_text']);
+    addNonEmpty(parts, callMap['department_text']);
+    addNonEmpty(parts, callMap['equipment_text']);
+
+    final callerId = callMap['caller_id'] as int?;
+    if (callerId != null) {
+      List<Map<String, Object?>> userRows;
+      if (await _tableExists(db, 'departments')) {
+        userRows = await db.rawQuery(
+          '''
+          SELECT u.first_name, u.last_name, u.phone, d.name AS department_name
+          FROM users u
+          LEFT JOIN departments d ON u.department_id = d.id
+          WHERE u.id = ?
+          LIMIT 1
+          ''',
+          [callerId],
+        );
+      } else {
+        userRows = await db.query(
+          'users',
+          columns: ['first_name', 'last_name', 'phone'],
+          where: 'id = ?',
+          whereArgs: [callerId],
+          limit: 1,
+        );
+      }
+      if (userRows.isNotEmpty) {
+        final u = userRows.first;
+        addNonEmpty(parts, u['first_name']);
+        addNonEmpty(parts, u['last_name']);
+        addNonEmpty(parts, u['phone']);
+        addNonEmpty(parts, u['department_name']);
+      }
+    }
+
+    final equipmentId = callMap['equipment_id'] as int?;
+    if (equipmentId != null) {
+      final eqRows = await db.query(
+        'equipment',
+        columns: ['code_equipment'],
+        where: 'id = ?',
+        whereArgs: [equipmentId],
+        limit: 1,
+      );
+      if (eqRows.isNotEmpty) {
+        addNonEmpty(parts, eqRows.first['code_equipment']);
+      }
+    }
+
+    return SearchTextNormalizer.normalizeForSearch(parts.join(' '));
+  }
+
+  /// Προσθέτει `calls.search_index` αν λείπει (χωρίς αλλαγή user_version) και γεμίζει γραμμές με NULL.
+  Future<void> _ensureCallsSearchIndexColumnAndBackfill(Database db) async {
+    if (!await _tableHasColumn(db, 'calls', 'search_index')) {
+      await db.execute('ALTER TABLE calls ADD COLUMN search_index TEXT');
+    }
+
+    final rows = await db.rawQuery(
+      'SELECT * FROM calls WHERE search_index IS NULL',
+    );
+    for (final row in rows) {
+      final id = row['id'] as int?;
+      if (id == null) continue;
+      final index = await _buildCallSearchIndex(db, row);
+      await db.rawUpdate(
+        'UPDATE calls SET search_index = ? WHERE id = ?',
+        [index, id],
+      );
+    }
+  }
+
   /// Προσθέτει `tasks.search_index` αν λείπει (χωρίς αλλαγή user_version) και γεμίζει υπάρχουσες γραμμές.
   Future<void> _ensureTasksSearchIndexColumnAndBackfill(Database db) async {
     var added = false;
@@ -365,6 +471,35 @@ class DatabaseHelper {
     final info = await db.rawQuery('PRAGMA table_info($table)');
     final names = (info.map((e) => e['name'] as String?)).whereType<String>();
     return names.contains(column);
+  }
+
+  Future<bool> _tableExists(Database db, String tableName) async {
+    final r = await db.rawQuery(
+      "SELECT 1 FROM sqlite_master WHERE type='table' AND name=? LIMIT 1",
+      [tableName],
+    );
+    return r.isNotEmpty;
+  }
+
+  Future<String> _auditPerformingUser(Database db) async {
+    final v = await getSetting(auditUserPerformingSettingsKey);
+    final t = v?.trim();
+    if (t != null && t.isNotEmpty) return t;
+    return '—';
+  }
+
+  Future<void> _appendAuditLog(
+    DatabaseExecutor executor,
+    String performingUser,
+    String action,
+    String details,
+  ) async {
+    await executor.insert('audit_log', {
+      'action': action,
+      'timestamp': DateTime.now().toIso8601String(),
+      'user_performing': performingUser,
+      'details': details,
+    });
   }
 
   /// Σκελετός για μελλοντικές αναβαθμίσεις σχήματος (migrations).
@@ -491,6 +626,39 @@ class DatabaseHelper {
         await db.execute('ALTER TABLE tasks RENAME COLUMN user_id TO caller_id');
       }
     }
+    // Soft delete: is_deleted σε κύριους πίνακες (όχι remote_tool_args).
+    if (oldVersion < 14) {
+      const tablesWithSoftDelete = <String>[
+        'calls',
+        'users',
+        'equipment',
+        'categories',
+        'tasks',
+      ];
+      for (final t in tablesWithSoftDelete) {
+        if (await _tableExists(db, t) &&
+            !await _tableHasColumn(db, t, 'is_deleted')) {
+          await db.execute(
+            'ALTER TABLE $t ADD COLUMN is_deleted INTEGER DEFAULT 0',
+          );
+        }
+      }
+      if (await _tableExists(db, 'departments') &&
+          !await _tableHasColumn(db, 'departments', 'is_deleted')) {
+        await db.execute(
+          'ALTER TABLE departments ADD COLUMN is_deleted INTEGER DEFAULT 0',
+        );
+      }
+    }
+    // remote_tool_args: αφαίρεση soft-deleted γραμμών αν υπήρχε παλιά στήλη is_deleted.
+    if (oldVersion < 15) {
+      if (await _tableExists(db, 'remote_tool_args') &&
+          await _tableHasColumn(db, 'remote_tool_args', 'is_deleted')) {
+        await db.execute(
+          'DELETE FROM remote_tool_args WHERE COALESCE(is_deleted, 0) = 1',
+        );
+      }
+    }
   }
 
   /// Μετεγκατάσταση πίνακα users από name σε last_name + first_name.
@@ -565,10 +733,14 @@ class DatabaseHelper {
     );
   }
 
-  /// Επιστρέφει όλους τους χρήστες.
+  /// Επιστρέφει ενεργούς χρήστες (`is_deleted = 0`).
   Future<List<Map<String, dynamic>>> getAllUsers() async {
     final db = await database;
-    return db.query('users');
+    return db.query(
+      'users',
+      where: 'COALESCE(is_deleted, 0) = ?',
+      whereArgs: [0],
+    );
   }
 
   /// Εισάγει χρήστη από map (π.χ. UserModel.toMap()). Αφαιρεί [id] πριν το insert.
@@ -604,13 +776,49 @@ class DatabaseHelper {
     });
   }
 
-  /// Διαγράφει χρήστες με τα δεδομένα ids. Transaction αν ids non-empty.
+  /// Soft delete χρηστών (`is_deleted = 1`) + audit ανά id.
   Future<void> deleteUsers(List<int> ids) async {
     if (ids.isEmpty) return;
     final db = await database;
-    final placeholders = List.filled(ids.length, '?').join(',');
+    final user = await _auditPerformingUser(db);
     await db.transaction((txn) async {
-      await txn.delete('users', where: 'id IN ($placeholders)', whereArgs: ids);
+      for (final id in ids) {
+        await txn.update(
+          'users',
+          {'is_deleted': 1},
+          where: 'id = ?',
+          whereArgs: [id],
+        );
+        await _appendAuditLog(
+          txn,
+          user,
+          auditActionDelete,
+          'users id=$id',
+        );
+      }
+    });
+  }
+
+  /// Επαναφορά χρηστών μετά από soft delete (`is_deleted = 0`) + audit.
+  Future<void> restoreUsers(List<int> ids) async {
+    if (ids.isEmpty) return;
+    final db = await database;
+    final user = await _auditPerformingUser(db);
+    await db.transaction((txn) async {
+      for (final id in ids) {
+        await txn.update(
+          'users',
+          {'is_deleted': 0},
+          where: 'id = ?',
+          whereArgs: [id],
+        );
+        await _appendAuditLog(
+          txn,
+          user,
+          auditActionRestore,
+          'users id=$id',
+        );
+      }
     });
   }
 
@@ -644,7 +852,8 @@ class DatabaseHelper {
     final db = await database;
     return db.transaction<int?>((txn) async {
       final existing = await txn.rawQuery(
-        'SELECT id FROM departments WHERE TRIM(name) = ? COLLATE NOCASE LIMIT 1',
+        'SELECT id FROM departments WHERE TRIM(name) = ? COLLATE NOCASE '
+        'AND COALESCE(is_deleted, 0) = 0 LIMIT 1',
         [normalized],
       );
       if (existing.isNotEmpty) {
@@ -653,20 +862,26 @@ class DatabaseHelper {
 
       await txn.insert('departments', {
         'name': normalized,
+        'is_deleted': 0,
       }, conflictAlgorithm: ConflictAlgorithm.ignore);
 
       final rows = await txn.rawQuery(
-        'SELECT id FROM departments WHERE TRIM(name) = ? COLLATE NOCASE LIMIT 1',
+        'SELECT id FROM departments WHERE TRIM(name) = ? COLLATE NOCASE '
+        'AND COALESCE(is_deleted, 0) = 0 LIMIT 1',
         [normalized],
       );
       return rows.isNotEmpty ? rows.first['id'] as int? : null;
     });
   }
 
-  /// Επιστρέφει όλο τον εξοπλισμό.
+  /// Επιστρέφει ενεργό εξοπλισμό (`is_deleted = 0`).
   Future<List<Map<String, dynamic>>> getAllEquipment() async {
     final db = await database;
-    return db.query('equipment');
+    return db.query(
+      'equipment',
+      where: 'COALESCE(is_deleted, 0) = ?',
+      whereArgs: [0],
+    );
   }
 
   /// Εισάγει εξοπλισμό από map (π.χ. EquipmentModel.toMap()). Αφαιρεί [id] πριν το insert.
@@ -702,17 +917,49 @@ class DatabaseHelper {
     });
   }
 
-  /// Διαγράφει εξοπλισμό με τα δεδομένα ids. Transaction αν ids non-empty.
+  /// Soft delete εξοπλισμού (`is_deleted = 1`) + audit ανά id.
   Future<void> deleteEquipments(List<int> ids) async {
     if (ids.isEmpty) return;
     final db = await database;
-    final placeholders = List.filled(ids.length, '?').join(',');
+    final user = await _auditPerformingUser(db);
     await db.transaction((txn) async {
-      await txn.delete(
-        'equipment',
-        where: 'id IN ($placeholders)',
-        whereArgs: ids,
-      );
+      for (final id in ids) {
+        await txn.update(
+          'equipment',
+          {'is_deleted': 1},
+          where: 'id = ?',
+          whereArgs: [id],
+        );
+        await _appendAuditLog(
+          txn,
+          user,
+          auditActionDelete,
+          'equipment id=$id',
+        );
+      }
+    });
+  }
+
+  /// Επαναφορά εξοπλισμού μετά από soft delete + audit.
+  Future<void> restoreEquipment(List<int> ids) async {
+    if (ids.isEmpty) return;
+    final db = await database;
+    final user = await _auditPerformingUser(db);
+    await db.transaction((txn) async {
+      for (final id in ids) {
+        await txn.update(
+          'equipment',
+          {'is_deleted': 0},
+          where: 'id = ?',
+          whereArgs: [id],
+        );
+        await _appendAuditLog(
+          txn,
+          user,
+          auditActionRestore,
+          'equipment id=$id',
+        );
+      }
     });
   }
 
@@ -724,19 +971,26 @@ class DatabaseHelper {
     final db = await database;
     return db.query(
       'calls',
-      where: 'caller_id = ?',
-      whereArgs: [callerId],
+      where: 'caller_id = ? AND COALESCE(is_deleted, 0) = ?',
+      whereArgs: [callerId, 0],
       orderBy: 'id DESC',
       limit: limit,
     );
   }
 
-  /// Διαγράφει users + equipment πριν το νέο import.
+  /// Μαζικό soft delete users + equipment πριν νέο import + audit.
   Future<void> clearImportedData() async {
     final db = await database;
+    final user = await _auditPerformingUser(db);
     await db.transaction((txn) async {
-      await txn.delete('equipment');
-      await txn.delete('users');
+      await txn.rawUpdate('UPDATE equipment SET is_deleted = 1');
+      await txn.rawUpdate('UPDATE users SET is_deleted = 1');
+      await _appendAuditLog(
+        txn,
+        user,
+        auditActionBulkDelete,
+        'clearImportedData: users+equipment (soft)',
+      );
     });
   }
 
@@ -767,6 +1021,7 @@ class DatabaseHelper {
           'department': u['department'] as String? ?? '',
           'location': null,
           'notes': null,
+          'is_deleted': 0,
         });
         ownerCodeToDbId[ownerId] = id;
       }
@@ -778,6 +1033,7 @@ class DatabaseHelper {
         await txn.insert('equipment', {
           'code_equipment': e['code'] as String?,
           'user_id': userId,
+          'is_deleted': 0,
         });
         equipmentInserted++;
       }
@@ -805,6 +1061,7 @@ class DatabaseHelper {
       'department': department,
       'location': location,
       'notes': notes,
+      'is_deleted': 0,
     };
     if (departmentId != null) {
       map['department_id'] = departmentId;
@@ -858,7 +1115,9 @@ class DatabaseHelper {
           var rows = await txn.update(
             'equipment',
             {'user_id': userId},
-            where: 'code_equipment = ? AND (user_id IS NULL OR user_id != ?)',
+            where:
+                'code_equipment = ? AND (user_id IS NULL OR user_id != ?) '
+                'AND COALESCE(is_deleted, 0) = 0',
             whereArgs: [code, userId],
           );
           // Αν δεν υπάρχει γραμμή με αυτόν τον κωδικό, το UPDATE δεν αλλάζει τίποτα·
@@ -867,7 +1126,7 @@ class DatabaseHelper {
             final existing = await txn.query(
               'equipment',
               columns: ['id', 'user_id'],
-              where: 'code_equipment = ?',
+              where: 'code_equipment = ? AND COALESCE(is_deleted, 0) = 0',
               whereArgs: [code],
               limit: 1,
             );
@@ -875,6 +1134,7 @@ class DatabaseHelper {
               await txn.insert('equipment', {
                 'code_equipment': code,
                 'user_id': userId,
+                'is_deleted': 0,
               });
             }
           }
@@ -887,7 +1147,7 @@ class DatabaseHelper {
   Future<int> insertCall(CallModel call) async {
     final db = await database;
     final now = DateTime.now();
-    final row = {
+    final map = <String, dynamic>{
       'date': call.date ?? DateFormat('yyyy-MM-dd').format(now),
       'time': call.time ?? DateFormat('HH:mm').format(now),
       'caller_id': call.callerId,
@@ -903,8 +1163,38 @@ class DatabaseHelper {
       'status': call.status ?? 'completed',
       'duration': call.duration,
       'is_priority': call.isPriority ?? 0,
+      'is_deleted': 0,
     };
-    return db.insert('calls', row);
+    map['search_index'] = await _buildCallSearchIndex(db, map);
+    return db.insert('calls', map);
+  }
+
+  /// Ενημερώνει υπάρχουσα κλήση. Απαιτείται μη-null [CallModel.id].
+  Future<int> updateCall(CallModel call) async {
+    final id = call.id;
+    if (id == null) {
+      throw ArgumentError('CallModel.id is required for updateCall');
+    }
+    final db = await database;
+    final map = <String, dynamic>{
+      'date': call.date,
+      'time': call.time,
+      'caller_id': call.callerId,
+      'equipment_id': call.equipmentId,
+      'caller_text': call.callerText,
+      'phone_text': call.phoneText,
+      'department_text': call.departmentText,
+      'equipment_text': call.equipmentText,
+      'issue': call.issue,
+      'solution': call.solution,
+      'category_text': call.category,
+      'status': call.status,
+      'duration': call.duration,
+      'is_priority': call.isPriority ?? 0,
+      'is_deleted': call.isDeleted ? 1 : 0,
+    };
+    map['search_index'] = await _buildCallSearchIndex(db, map);
+    return db.update('calls', map, where: 'id = ?', whereArgs: [id]);
   }
 
   /// Λίστα ονομάτων πινάκων (χωρίς εσωτερικά sqlite_*). Για προβολή Βάσης Δεδομένων.
@@ -960,6 +1250,8 @@ class DatabaseHelper {
     final rows = await db.query(
       'categories',
       columns: ['name'],
+      where: 'COALESCE(is_deleted, 0) = ?',
+      whereArgs: [0],
       orderBy: 'name',
     );
     return rows
@@ -971,16 +1263,37 @@ class DatabaseHelper {
   /// Εισάγει νέα κατηγορία και επιστρέφει το row id (sqlite rowid).
   Future<int> insertCategoryAndGetId(String name) async {
     final db = await database;
-    return db.insert('categories', {'name': name.trim()});
+    return db.insert('categories', {'name': name.trim(), 'is_deleted': 0});
+  }
+
+  /// Soft delete εργασίας (`tasks`) + audit.
+  Future<void> softDeleteTask(int id) async {
+    final db = await database;
+    final user = await _auditPerformingUser(db);
+    await db.transaction((txn) async {
+      await txn.update(
+        'tasks',
+        {'is_deleted': 1},
+        where: 'id = ?',
+        whereArgs: [id],
+      );
+      await _appendAuditLog(
+        txn,
+        user,
+        auditActionDelete,
+        'tasks id=$id',
+      );
+    });
   }
 
   /// Ιστορικό κλήσεων με προαιρετικά φίλτρα. LEFT JOIN users και equipment.
-  /// Φιλτράρει μόνο βάσει ημερομηνιών και κατηγορίας· η αναζήτηση per keyword γίνεται in-memory στο provider.
+  /// Προαιρετικό [keyword]: φιλτράρισμα σε `calls.search_index` (ήδη κανονικοποιημένο).
   /// [dateFrom] / [dateTo]: ημερομηνίες σε μορφή yyyy-MM-dd.
   Future<List<Map<String, dynamic>>> getHistoryCalls({
     String? dateFrom,
     String? dateTo,
     String? category,
+    String? keyword,
   }) async {
     final db = await database;
     final whereClauses = <String>[];
@@ -998,6 +1311,12 @@ class DatabaseHelper {
       whereClauses.add('calls.category_text = ?');
       args.add(category);
     }
+    if (keyword != null && keyword.isNotEmpty) {
+      whereClauses.add('calls.search_index LIKE ?');
+      args.add('%$keyword%');
+    }
+
+    whereClauses.insert(0, 'COALESCE(calls.is_deleted, 0) = 0');
 
     final whereSql = whereClauses.isEmpty
         ? ''
@@ -1009,7 +1328,7 @@ class DatabaseHelper {
              calls.category_text AS category, calls.status, calls.duration, calls.is_priority,
              COALESCE(users.first_name, calls.caller_text, '') AS user_first_name,
              COALESCE(users.last_name, '') AS user_last_name,
-             COALESCE(users.phone, calls.phone_text, '-') AS user_phone,
+             COALESCE(NULLIF(TRIM(calls.phone_text), ''), users.phone, '-') AS user_phone,
              COALESCE(departments.name, calls.department_text, '-') AS user_department,
              COALESCE(equipment.code_equipment, calls.equipment_text, '-') AS equipment_code
       FROM calls
@@ -1081,7 +1400,8 @@ class DatabaseHelper {
             map_x REAL DEFAULT 0.0,
             map_y REAL DEFAULT 0.0,
             map_width REAL DEFAULT 0.0,
-            map_height REAL DEFAULT 0.0
+            map_height REAL DEFAULT 0.0,
+            is_deleted INTEGER DEFAULT 0
           )
         ''');
         await txn.execute(

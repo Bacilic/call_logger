@@ -232,6 +232,7 @@ class TaskService {
       'user_text': userText,
       'equipment_text': equipmentText,
       'department_text': departmentText,
+      'is_deleted': 0,
       'search_index': SearchTextNormalizer.normalizeForSearch(
         [
           title,
@@ -250,7 +251,7 @@ class TaskService {
   Future<List<Task>> getOpenTasks() async {
     final db = await _db;
     final rows = await db.rawQuery(
-      "SELECT * FROM tasks WHERE status = 'open' ORDER BY due_date ASC",
+      "SELECT * FROM tasks WHERE status = 'open' AND COALESCE(is_deleted, 0) = 0 ORDER BY due_date ASC",
     );
     return rows.map((row) => Task.fromMap(row)).toList();
   }
@@ -258,7 +259,7 @@ class TaskService {
   Future<List<Task>> getOverdueTasks() async {
     final db = await _db;
     final rows = await db.rawQuery(
-      "SELECT * FROM tasks WHERE status = 'open' AND due_date < datetime('now') ORDER BY due_date ASC",
+      "SELECT * FROM tasks WHERE status = 'open' AND due_date < datetime('now') AND COALESCE(is_deleted, 0) = 0 ORDER BY due_date ASC",
     );
     return rows.map((row) => Task.fromMap(row)).toList();
   }
@@ -266,7 +267,7 @@ class TaskService {
   Future<List<Task>> getUpcomingTasks({int limit = 50}) async {
     final db = await _db;
     final rows = await db.rawQuery(
-      "SELECT * FROM tasks WHERE status = 'open' AND due_date >= datetime('now') ORDER BY due_date ASC LIMIT $limit",
+      "SELECT * FROM tasks WHERE status = 'open' AND due_date >= datetime('now') AND COALESCE(is_deleted, 0) = 0 ORDER BY due_date ASC LIMIT $limit",
     );
     return rows.map((row) => Task.fromMap(row)).toList();
   }
@@ -275,7 +276,7 @@ class TaskService {
   Future<int> getGlobalPendingTasksCount() async {
     final db = await _db;
     final rows = await db.rawQuery(
-      "SELECT COUNT(id) AS count FROM tasks WHERE status IN ('open', 'snoozed')",
+      "SELECT COUNT(id) AS count FROM tasks WHERE status IN ('open', 'snoozed') AND COALESCE(is_deleted, 0) = 0",
     );
     if (rows.isEmpty) return 0;
     final n = rows.first['count'];
@@ -288,6 +289,7 @@ class TaskService {
     List<Object?> args, {
     bool includeStatuses = true,
   }) {
+    conditions.add('COALESCE(tasks.is_deleted, 0) = 0');
     if (filter.searchQuery.trim().isNotEmpty) {
       final normalizedQuery = SearchTextNormalizer.normalizeForSearch(
         filter.searchQuery,
@@ -410,10 +412,9 @@ class TaskService {
     await db.update('tasks', map, where: 'id = ?', whereArgs: [task.id]);
   }
 
-  /// Διαγράφει την εγγραφή βάσει ID.
+  /// Soft delete εγγραφής βάσει ID (audit στο [DatabaseHelper]).
   Future<void> deleteTask(int id) async {
-    final db = await _db;
-    await db.delete('tasks', where: 'id = ?', whereArgs: [id]);
+    await DatabaseHelper.instance.softDeleteTask(id);
   }
 
   /// Ορίζει status = closed, solution_notes και updated_at.
@@ -434,8 +435,8 @@ class TaskService {
     final rows = await db.rawQuery('''
       SELECT c.id, c.date, c.time, c.caller_id, c.caller_text, c.issue
       FROM calls c
-      LEFT JOIN tasks t ON t.call_id = c.id
-      WHERE t.id IS NULL AND c.status = 'pending'
+      LEFT JOIN tasks t ON t.call_id = c.id AND COALESCE(t.is_deleted, 0) = 0
+      WHERE t.id IS NULL AND c.status = 'pending' AND COALESCE(c.is_deleted, 0) = 0
       ORDER BY c.id
     ''');
     return rows

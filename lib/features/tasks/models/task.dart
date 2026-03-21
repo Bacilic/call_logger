@@ -54,6 +54,7 @@ class Task {
     this.solutionNotes,
     this.createdAt,
     this.updatedAt,
+    this.isDeleted = false,
   });
 
   final int? id;
@@ -79,6 +80,7 @@ class Task {
   final String? solutionNotes;
   final String? createdAt;
   final String? updatedAt;
+  final bool isDeleted;
 
   static DateTime? _parseDateTime(String? value) {
     if (value == null || value.isEmpty) return null;
@@ -107,6 +109,7 @@ class Task {
       solutionNotes: map['solution_notes'] as String?,
       createdAt: map['created_at'] as String?,
       updatedAt: map['updated_at'] as String?,
+      isDeleted: (map['is_deleted'] as int?) == 1,
     );
   }
 
@@ -132,6 +135,7 @@ class Task {
       if (solutionNotes != null) 'solution_notes': solutionNotes,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
+      'is_deleted': isDeleted ? 1 : 0,
     };
   }
 
@@ -156,6 +160,7 @@ class Task {
     String? solutionNotes,
     String? createdAt,
     String? updatedAt,
+    bool? isDeleted,
   }) {
     return Task(
       id: id ?? this.id,
@@ -178,6 +183,7 @@ class Task {
       solutionNotes: solutionNotes ?? this.solutionNotes,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
+      isDeleted: isDeleted ?? this.isDeleted,
     );
   }
 

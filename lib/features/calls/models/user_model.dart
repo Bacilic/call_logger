@@ -10,6 +10,7 @@ class UserModel {
     this.phone,
     this.departmentId,
     this.notes,
+    this.isDeleted = false,
   });
 
   final int? id;
@@ -18,6 +19,8 @@ class UserModel {
   final String? phone;
   final int? departmentId;
   final String? notes;
+  /// Soft delete (πίνακας users.is_deleted).
+  final bool isDeleted;
 
   /// Πλήρες όνομα (first_name + last_name). Συμβατότητα με κώδικα που χρησιμοποιεί name.
   String? get name {
@@ -62,6 +65,7 @@ class UserModel {
       phone: map['phone'] as String?,
       departmentId: map['department_id'] as int?,
       notes: map['notes'] as String?,
+      isDeleted: (map['is_deleted'] as int?) == 1,
     );
   }
 
@@ -73,6 +77,7 @@ class UserModel {
       if (phone != null) 'phone': phone,
       if (departmentId != null) 'department_id': departmentId,
       if (notes != null) 'notes': notes,
+      'is_deleted': isDeleted ? 1 : 0,
     };
   }
 }

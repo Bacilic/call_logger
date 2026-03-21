@@ -10,6 +10,7 @@ class EquipmentModel {
     this.customIp,
     this.anydeskId,
     this.defaultRemoteTool,
+    this.isDeleted = false,
   });
 
   final int? id;
@@ -24,6 +25,7 @@ class EquipmentModel {
   final String? anydeskId;
   /// Προεπιλεγμένο εργαλείο απομακρυσμένης σύνδεσης (π.χ. VNC, AnyDesk).
   final String? defaultRemoteTool;
+  final bool isDeleted;
 
   /// Για εμφάνιση σε λίστες (κωδικός + τύπος).
   String get displayLabel {
@@ -54,6 +56,7 @@ class EquipmentModel {
       customIp: map['custom_ip'] as String?,
       anydeskId: map['anydesk_id'] as String?,
       defaultRemoteTool: map['default_remote_tool'] as String?,
+      isDeleted: (map['is_deleted'] as int?) == 1,
     );
   }
 
@@ -67,6 +70,7 @@ class EquipmentModel {
       if (customIp != null) 'custom_ip': customIp,
       if (anydeskId != null) 'anydesk_id': anydeskId,
       if (defaultRemoteTool != null) 'default_remote_tool': defaultRemoteTool,
+      'is_deleted': isDeleted ? 1 : 0,
     };
   }
 
@@ -79,6 +83,7 @@ class EquipmentModel {
     String? customIp,
     String? anydeskId,
     String? defaultRemoteTool,
+    bool? isDeleted,
   }) {
     return EquipmentModel(
       id: id ?? this.id,
@@ -89,6 +94,7 @@ class EquipmentModel {
       customIp: customIp ?? this.customIp,
       anydeskId: anydeskId ?? this.anydeskId,
       defaultRemoteTool: defaultRemoteTool ?? this.defaultRemoteTool,
+      isDeleted: isDeleted ?? this.isDeleted,
     );
   }
 }

@@ -88,10 +88,13 @@ class LookupService {
     final digits = _digitsOnly(query);
     if (digits.length < 3) return null;
     for (final u in _users) {
+      if (u.isDeleted) continue;
       final phoneDigits = _digitsOnly(u.phone ?? '');
       if (phoneDigits.isEmpty) continue;
       if (phoneDigits.contains(digits) || phoneDigits.startsWith(digits)) {
-        final equipment = _equipmentByUserId[u.id] ?? [];
+        final equipment = (_equipmentByUserId[u.id] ?? [])
+            .where((e) => !e.isDeleted)
+            .toList();
         return LookupResult(user: u, equipment: equipment);
       }
     }
@@ -106,6 +109,7 @@ class LookupService {
     final seen = <String>{};
     final result = <String>[];
     for (final u in _users) {
+      if (u.isDeleted) continue;
       final phones = PhoneListParser.splitPhones(u.phone);
       for (final phone in phones) {
         final phoneDigits = _digitsOnly(phone);
@@ -123,6 +127,7 @@ class LookupService {
     final q = SearchTextNormalizer.normalizeForSearch(query);
     if (q.isEmpty) return [];
     return _users.where((u) {
+      if (u.isDeleted) return false;
       return SearchTextNormalizer.matchesNormalizedQuery(u.name ?? '', q) ||
           SearchTextNormalizer.matchesNormalizedQuery(u.phone ?? '', q) ||
           SearchTextNormalizer.matchesNormalizedQuery(
@@ -138,7 +143,9 @@ class LookupService {
     if (digits.length < 3) return [];
     final result = search(digits);
     if (result == null) return [];
-    return _equipmentByUserId[result.user.id] ?? [];
+    return (_equipmentByUserId[result.user.id] ?? [])
+        .where((e) => !e.isDeleted)
+        .toList();
   }
 
   /// Όλοι οι χρήστες whose phone περιέχει/ταιριάζει με τα ψηφία (≥3). Ταξινόμηση κατά name.
@@ -147,6 +154,7 @@ class LookupService {
     final digits = _digitsOnly(phone);
     if (digits.length < 3) return [];
     final list = _users.where((u) {
+      if (u.isDeleted) return false;
       final phoneDigits = _digitsOnly(u.phone ?? '');
       return phoneDigits.isNotEmpty &&
           (phoneDigits.contains(digits) || phoneDigits.startsWith(digits));
@@ -157,7 +165,9 @@ class LookupService {
 
   /// Εξοπλισμός που ανήκει στον χρήστη (user_id).
   List<EquipmentModel> findEquipmentsForUser(int userId) {
-    return _equipmentByUserId[userId] ?? [];
+    return (_equipmentByUserId[userId] ?? [])
+        .where((e) => !e.isDeleted)
+        .toList();
   }
 
   /// Αναζήτηση εξοπλισμών με βάση κωδικό ή label (case-insensitive/normalized).
@@ -180,6 +190,7 @@ class LookupService {
     }
 
     for (final equipment in _equipment) {
+      if (equipment.isDeleted) continue;
       final code = equipment.code ?? '';
       final label = equipment.displayLabel;
       final normCode = SearchTextNormalizer.normalizeForSearch(code);
@@ -231,9 +242,15 @@ class LookupService {
   /// Αναζήτηση τμημάτων στη μνήμη βάσει ονόματος (case-insensitive, αγνοώντας τόνους).
   List<DepartmentModel> searchDepartments(String query) {
     final q = SearchTextNormalizer.normalizeForSearch(query);
-    if (q.isEmpty) return List.from(departments);
+    if (q.isEmpty) {
+      return departments.where((d) => !d.isDeleted).toList();
+    }
     return departments
-        .where((d) => SearchTextNormalizer.matchesNormalizedQuery(d.name, q))
+        .where(
+          (d) =>
+              !d.isDeleted &&
+              SearchTextNormalizer.matchesNormalizedQuery(d.name, q),
+        )
         .toList();
   }
 
@@ -243,6 +260,7 @@ class LookupService {
     if (trimmed.isEmpty) return null;
     final q = SearchTextNormalizer.normalizeForSearch(trimmed);
     for (final d in departments) {
+      if (d.isDeleted) continue;
       if (SearchTextNormalizer.normalizeForSearch(d.name) == q) return d;
       if (SearchTextNormalizer.matchesNormalizedQuery(d.name, q)) return d;
     }
@@ -251,7 +269,9 @@ class LookupService {
 
   /// Χρήστες συγκεκριμένου τμήματος (department_id).
   List<UserModel> getUsersByDepartment(int departmentId) {
-    final result = _users.where((u) => u.departmentId == departmentId).toList();
+    final result = _users
+        .where((u) => !u.isDeleted && u.departmentId == departmentId)
+        .toList();
     result.sort((a, b) => (a.name ?? '').compareTo(b.name ?? ''));
     return result;
   }
@@ -263,7 +283,12 @@ class LookupService {
     final userIds = users.map((u) => u.id).whereType<int>().toSet();
     if (userIds.isEmpty) return [];
     return _equipment
-        .where((e) => e.userId != null && userIds.contains(e.userId))
+        .where(
+          (e) =>
+              !e.isDeleted &&
+              e.userId != null &&
+              userIds.contains(e.userId),
+        )
         .toList();
   }
 

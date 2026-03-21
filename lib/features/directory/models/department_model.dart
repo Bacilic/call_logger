@@ -11,6 +11,7 @@ class DepartmentModel {
     this.mapY,
     this.mapWidth,
     this.mapHeight,
+    this.isDeleted = false,
   });
 
   final int? id;
@@ -23,6 +24,7 @@ class DepartmentModel {
   final double? mapY;
   final double? mapWidth;
   final double? mapHeight;
+  final bool isDeleted;
 
   factory DepartmentModel.fromMap(Map<String, dynamic> map) {
     return DepartmentModel(
@@ -36,6 +38,7 @@ class DepartmentModel {
       mapY: (map['map_y'] as num?)?.toDouble(),
       mapWidth: (map['map_width'] as num?)?.toDouble(),
       mapHeight: (map['map_height'] as num?)?.toDouble(),
+      isDeleted: (map['is_deleted'] as int?) == 1,
     );
   }
 
@@ -51,6 +54,7 @@ class DepartmentModel {
       if (mapY != null) 'map_y': mapY,
       if (mapWidth != null) 'map_width': mapWidth,
       if (mapHeight != null) 'map_height': mapHeight,
+      'is_deleted': isDeleted ? 1 : 0,
     };
   }
 }

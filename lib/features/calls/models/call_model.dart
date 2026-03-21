@@ -16,6 +16,7 @@ class CallModel {
     this.status,
     this.duration,
     this.isPriority,
+    this.isDeleted = false,
   });
 
   final int? id;
@@ -33,6 +34,7 @@ class CallModel {
   final String? status;
   final int? duration;
   final int? isPriority;
+  final bool isDeleted;
 
   factory CallModel.fromMap(Map<String, dynamic> map) {
     return CallModel(
@@ -47,10 +49,11 @@ class CallModel {
       equipmentText: map['equipment_text'] as String?,
       issue: map['issue'] as String?,
       solution: map['solution'] as String?,
-      category: map['category'] as String?,
+      category: map['category'] as String? ?? map['category_text'] as String?,
       status: map['status'] as String?,
       duration: map['duration'] as int?,
       isPriority: map['is_priority'] as int?,
+      isDeleted: (map['is_deleted'] as int?) == 1,
     );
   }
 
@@ -67,10 +70,11 @@ class CallModel {
       if (equipmentText != null) 'equipment_text': equipmentText,
       if (issue != null) 'issue': issue,
       if (solution != null) 'solution': solution,
-      if (category != null) 'category': category,
+      if (category != null) 'category_text': category,
       if (status != null) 'status': status,
       if (duration != null) 'duration': duration,
       if (isPriority != null) 'is_priority': isPriority,
+      'is_deleted': isDeleted ? 1 : 0,
     };
   }
 }
