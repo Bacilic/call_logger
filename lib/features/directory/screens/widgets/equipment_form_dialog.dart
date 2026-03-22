@@ -8,6 +8,7 @@ import '../../../../core/utils/name_parser.dart';
 import '../../../../core/utils/search_text_normalizer.dart';
 import '../../../../core/utils/spell_check.dart';
 import '../../../calls/models/equipment_model.dart';
+import '../../../calls/models/user_model.dart';
 import '../../../calls/provider/lookup_provider.dart';
 import '../../providers/equipment_directory_provider.dart';
 
@@ -16,6 +17,7 @@ class EquipmentFormDialog extends StatefulWidget {
   const EquipmentFormDialog({
     super.key,
     this.initialEquipment,
+    this.initialOwner,
     required this.notifier,
     required this.ref,
     this.isClone = false,
@@ -23,6 +25,8 @@ class EquipmentFormDialog extends StatefulWidget {
   });
 
   final EquipmentModel? initialEquipment;
+  /// Κάτοχος για προσυμπλήρωση (από `user_equipment` / γραμμή καταλόγου).
+  final UserModel? initialOwner;
   final EquipmentDirectoryNotifier notifier;
   final WidgetRef ref;
   final bool isClone;
@@ -41,6 +45,12 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog> {
   late final TextEditingController _ownerController;
   late final FocusNode _ownerFocusNode;
   bool _ownerTextInitialized = false;
+
+  late final TextEditingController _departmentController;
+  late final FocusNode _departmentFocusNode;
+  bool _equipmentDepartmentTextInitialized = false;
+
+  late final TextEditingController _locationController;
 
   int? _selectedUserId;
 
@@ -62,7 +72,10 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog> {
     _anydeskIdController = TextEditingController(text: e?.anydeskId ?? '');
     _ownerController = TextEditingController();
     _ownerFocusNode = FocusNode();
-    _selectedUserId = e?.userId;
+    _departmentController = TextEditingController();
+    _departmentFocusNode = FocusNode();
+    _locationController = TextEditingController(text: (e?.location ?? '').trim());
+    _selectedUserId = widget.initialOwner?.id;
     final typeRaw = e?.type?.trim() ?? '';
     _selectedType = typeRaw.isEmpty ? null : typeRaw;
     final raw = e?.defaultRemoteTool?.trim() ?? '';
@@ -77,7 +90,39 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog> {
     _anydeskIdController.dispose();
     _ownerController.dispose();
     _ownerFocusNode.dispose();
+    _departmentController.dispose();
+    _departmentFocusNode.dispose();
+    _locationController.dispose();
     super.dispose();
+  }
+
+  Widget _departmentAutocompleteOptionsView(
+    BuildContext context,
+    void Function(String) onSelected,
+    Iterable<String> options,
+  ) {
+    return Align(
+      alignment: Alignment.topLeft,
+      child: Material(
+        elevation: 4,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 360, maxHeight: 220),
+          child: ListView.builder(
+            padding: EdgeInsets.zero,
+            shrinkWrap: true,
+            itemCount: options.length,
+            itemBuilder: (context, index) {
+              final option = options.elementAt(index);
+              return ListTile(
+                dense: true,
+                title: Text(option),
+                onTap: () => onSelected(option),
+              );
+            },
+          ),
+        ),
+      ),
+    );
   }
 
   /// Επιλύει κείμενο κατόχου σε userId: κενό → null, match → id, αλλιώς insert νέο χρήστη.
@@ -127,6 +172,15 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog> {
     final userId = await _resolveOwnerToUserId(ownerText, lookup);
     final code = _codeController.text.trim();
     final typeVal = _selectedType?.trim() ?? '';
+    final deptText = _departmentController.text.trim();
+    final int? equipmentDepartmentId;
+    if (deptText.isEmpty) {
+      equipmentDepartmentId = null;
+    } else {
+      equipmentDepartmentId = await DatabaseHelper.instance
+          .getOrCreateDepartmentIdByName(deptText);
+    }
+    final locTrim = _locationController.text.trim();
     final equipment = EquipmentModel(
       id: _isEdit ? widget.initialEquipment?.id : null,
       code: code.isEmpty ? null : code,
@@ -134,7 +188,6 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog> {
       notes: _notesController.text.trim().isEmpty
           ? null
           : _notesController.text.trim(),
-      userId: userId,
       customIp: _customIpController.text.trim().isEmpty
           ? null
           : _customIpController.text.trim(),
@@ -142,6 +195,8 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog> {
           ? null
           : _anydeskIdController.text.trim(),
       defaultRemoteTool: _normalizedRemoteToolValue(_selectedRemoteTool),
+      departmentId: equipmentDepartmentId,
+      location: locTrim.isEmpty ? null : locTrim,
     );
     if (_isEdit) {
       if (equipment.id != null &&
@@ -157,7 +212,10 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog> {
         );
         return;
       }
-      await widget.notifier.updateEquipment(equipment);
+      await widget.notifier.updateEquipment(
+        equipment,
+        ownerUserId: userId,
+      );
       if (!mounted) return;
       widget.ref.invalidate(lookupServiceProvider);
       Navigator.of(context).pop();
@@ -178,7 +236,10 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog> {
       );
       return;
     }
-    await widget.notifier.addEquipment(equipment);
+    await widget.notifier.addEquipment(
+      equipment,
+      ownerUserId: userId,
+    );
     if (!mounted) return;
     widget.ref.invalidate(lookupServiceProvider);
     Navigator.of(context).pop();
@@ -290,6 +351,137 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog> {
                       ),
                     ],
                     onChanged: (v) => setState(() => _selectedRemoteTool = v),
+                  );
+                },
+              ),
+              const SizedBox(height: 12),
+              Consumer(
+                builder: (context, ref, _) {
+                  final async = ref.watch(lookupServiceProvider);
+                  return async.when(
+                    data: (bundle) {
+                      final service = bundle.service;
+                      final departmentNames = service.departments
+                          .where((d) => !d.isDeleted)
+                          .map((d) => d.name.trim())
+                          .where((name) => name.isNotEmpty)
+                          .toList();
+                      if (!_equipmentDepartmentTextInitialized) {
+                        final did = widget.initialEquipment?.departmentId;
+                        if (did != null) {
+                          _equipmentDepartmentTextInitialized = true;
+                          WidgetsBinding.instance.addPostFrameCallback((_) {
+                            if (!mounted) return;
+                            final name = LookupService.instance
+                                    .getDepartmentName(did)
+                                    ?.trim() ??
+                                '';
+                            if (name.isNotEmpty) {
+                              _departmentController.text = name;
+                            }
+                            setState(() {});
+                          });
+                        } else {
+                          _equipmentDepartmentTextInitialized = true;
+                        }
+                      }
+                      return Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            child: RawAutocomplete<String>(
+                              textEditingController: _departmentController,
+                              focusNode: _departmentFocusNode,
+                              optionsBuilder: (textEditingValue) {
+                                final q = SearchTextNormalizer.normalizeForSearch(
+                                  textEditingValue.text,
+                                );
+                                if (q.isEmpty) return departmentNames;
+                                return departmentNames
+                                    .where(
+                                      (name) => SearchTextNormalizer
+                                          .matchesNormalizedQuery(name, q),
+                                    )
+                                    .toList();
+                              },
+                              displayStringForOption: (option) => option,
+                              onSelected: (selection) {
+                                _departmentController.text = selection;
+                              },
+                              fieldViewBuilder:
+                                  (context, controller, focusNode, _) {
+                                return TextField(
+                                  controller: controller,
+                                  focusNode: focusNode,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Τμήμα',
+                                    border: OutlineInputBorder(),
+                                  ),
+                                );
+                              },
+                              optionsViewBuilder:
+                                  (context, onSelected, options) {
+                                return _departmentAutocompleteOptionsView(
+                                  context,
+                                  onSelected,
+                                  options,
+                                );
+                              },
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: TextFormField(
+                              controller: _locationController,
+                              decoration: const InputDecoration(
+                                labelText: 'Τοποθεσία',
+                                border: OutlineInputBorder(),
+                              ),
+                              spellCheckConfiguration:
+                                  platformSpellCheckConfiguration,
+                            ),
+                          ),
+                        ],
+                      );
+                    },
+                    loading: () => const Row(
+                      children: [
+                        Expanded(
+                          child: InputDecorator(
+                            decoration: InputDecoration(
+                              labelText: 'Τμήμα',
+                              border: OutlineInputBorder(),
+                            ),
+                            child: Text('Φόρτωση...'),
+                          ),
+                        ),
+                        SizedBox(width: 8),
+                        Expanded(
+                          child: InputDecorator(
+                            decoration: InputDecoration(
+                              labelText: 'Τοποθεσία',
+                              border: OutlineInputBorder(),
+                            ),
+                            child: SizedBox.shrink(),
+                          ),
+                        ),
+                      ],
+                    ),
+                    error: (_, _) => const Row(
+                      children: [
+                        Expanded(
+                          child: InputDecorator(
+                            decoration: InputDecoration(
+                              labelText: 'Τμήμα',
+                              border: OutlineInputBorder(),
+                            ),
+                            child: Text('Σφάλμα φόρτωσης'),
+                          ),
+                        ),
+                        SizedBox(width: 8),
+                        Expanded(child: SizedBox.shrink()),
+                      ],
+                    ),
                   );
                 },
               ),

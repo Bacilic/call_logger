@@ -1,3 +1,12 @@
+// Unit tests: EquipmentDirectoryNotifier — αρχική κατάσταση, στήλες, reorder, toggle, load + join users.
+//
+// Ολόκληρο αρχείο:
+//   flutter test test/features/directory/providers/equipment_directory_provider_test.dart
+// Ομάδα:
+//   flutter test test/features/directory/providers/equipment_directory_provider_test.dart --plain-name "EquipmentDirectoryNotifier"
+
+import 'package:call_logger/features/calls/models/equipment_model.dart';
+import 'package:call_logger/features/calls/models/user_model.dart';
 import 'package:call_logger/features/directory/models/equipment_column.dart';
 import 'package:call_logger/features/directory/providers/equipment_directory_provider.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -8,11 +17,16 @@ class _FakeEquipmentDirectoryNotifier extends EquipmentDirectoryNotifier {
     required this.initialState,
     this.equipmentRows = const [],
     this.userRows = const [],
+    this.linkRows = const [],
   });
+
+  @override
+  bool get shouldPersistEquipmentLayout => false;
 
   final EquipmentDirectoryState initialState;
   final List<Map<String, dynamic>> equipmentRows;
   final List<Map<String, dynamic>> userRows;
+  final List<Map<String, dynamic>> linkRows;
 
   @override
   EquipmentDirectoryState build() => initialState;
@@ -22,19 +36,55 @@ class _FakeEquipmentDirectoryNotifier extends EquipmentDirectoryNotifier {
 
   @override
   Future<List<Map<String, dynamic>>> getUserRows() async => userRows;
+
+  @override
+  Future<void> load() async {
+    final usersMap = <int, UserModel>{};
+    for (final map in userRows) {
+      final u = UserModel.fromMap(map);
+      if (u.id != null) usersMap[u.id!] = u;
+    }
+
+    final equipmentIdToUserIds = <int, List<int>>{};
+    for (final row in linkRows) {
+      final uid = row['user_id'] as int?;
+      final eid = row['equipment_id'] as int?;
+      if (uid == null || eid == null) continue;
+      equipmentIdToUserIds.putIfAbsent(eid, () => []).add(uid);
+    }
+    for (final list in equipmentIdToUserIds.values) {
+      list.sort();
+    }
+
+    final items = <(EquipmentModel, UserModel?)>[];
+    for (final eq in equipmentRows) {
+      final equipment = EquipmentModel.fromMap(eq);
+      final eid = equipment.id;
+      UserModel? owner;
+      if (eid != null) {
+        final uids = equipmentIdToUserIds[eid];
+        if (uids != null && uids.isNotEmpty) {
+          owner = usersMap[uids.first];
+        }
+      }
+      items.add((equipment, owner));
+    }
+
+    state = state.copyWith(allItems: items);
+    filterAndSort();
+  }
 }
 
 void main() {
   group('EquipmentDirectoryNotifier', () {
+    // Κενά filteredItems, defaults στήλες, κενό query, null sort.
+    //   flutter test test/features/directory/providers/equipment_directory_provider_test.dart --plain-name "αρχικοποιείται με τις προεπιλεγμένες τιμές state"
     test('αρχικοποιείται με τις προεπιλεγμένες τιμές state', () {
       final container = ProviderContainer(
         overrides: [
           equipmentDirectoryProvider.overrideWith(
             () => _FakeEquipmentDirectoryNotifier(
-              initialState: EquipmentDirectoryState(
-                visibleColumns: List<EquipmentColumn>.from(EquipmentColumn.defaults),
-                allColumns: EquipmentColumn.all,
-              ),
+              initialState: EquipmentDirectoryState(),
             ),
           ),
         ],
@@ -43,22 +93,24 @@ void main() {
 
       final state = container.read(equipmentDirectoryProvider);
       expect(state.filteredItems, isEmpty);
-      expect(state.visibleColumns, orderedEquals(EquipmentColumn.defaults));
-      expect(state.allColumns, orderedEquals(EquipmentColumn.all));
+      expect(
+        state.orderedVisibleColumns,
+        orderedEquals(EquipmentColumn.defaults),
+      );
+      expect(state.columnOrder, orderedEquals(EquipmentColumn.all));
       expect(state.searchQuery, '');
       expect(state.sortColumn, isNull);
       expect(state.sortAscending, isTrue);
     });
 
+    // Αντικατάσταση λίστας ορατών στηλών με νέα σειρά.
+    //   flutter test test/features/directory/providers/equipment_directory_provider_test.dart --plain-name "updateVisibleColumns ενημερώνει πλήρως τη σειρά των στηλών"
     test('updateVisibleColumns ενημερώνει πλήρως τη σειρά των στηλών', () {
       final container = ProviderContainer(
         overrides: [
           equipmentDirectoryProvider.overrideWith(
             () => _FakeEquipmentDirectoryNotifier(
-              initialState: EquipmentDirectoryState(
-                visibleColumns: List<EquipmentColumn>.from(EquipmentColumn.defaults),
-                allColumns: EquipmentColumn.all,
-              ),
+              initialState: EquipmentDirectoryState(),
             ),
           ),
         ],
@@ -74,7 +126,7 @@ void main() {
 
       final state = container.read(equipmentDirectoryProvider);
       expect(
-        state.visibleColumns,
+        state.orderedVisibleColumns,
         orderedEquals([
           EquipmentColumn.owner,
           EquipmentColumn.phone,
@@ -83,6 +135,8 @@ void main() {
       );
     });
 
+    // reorderColumn(0, 3) — συμβατό με ReorderableListView indices.
+    //   flutter test test/features/directory/providers/equipment_directory_provider_test.dart --plain-name "reorderColumn μετακινεί σωστά στήλη με Flutter index semantics"
     test('reorderColumn μετακινεί σωστά στήλη με Flutter index semantics', () {
       final initialVisible = [
         EquipmentColumn.code,
@@ -95,8 +149,9 @@ void main() {
           equipmentDirectoryProvider.overrideWith(
             () => _FakeEquipmentDirectoryNotifier(
               initialState: EquipmentDirectoryState(
-                visibleColumns: initialVisible,
-                allColumns: EquipmentColumn.all,
+                visibleColumnKeys: {
+                  for (final c in initialVisible) c.key,
+                },
               ),
             ),
           ),
@@ -109,7 +164,7 @@ void main() {
 
       final state = container.read(equipmentDirectoryProvider);
       expect(
-        state.visibleColumns,
+        state.orderedVisibleColumns,
         orderedEquals([
           EquipmentColumn.type,
           EquipmentColumn.owner,
@@ -125,8 +180,7 @@ void main() {
           equipmentDirectoryProvider.overrideWith(
             () => _FakeEquipmentDirectoryNotifier(
               initialState: EquipmentDirectoryState(
-                visibleColumns: [EquipmentColumn.code],
-                allColumns: EquipmentColumn.all,
+                visibleColumnKeys: {EquipmentColumn.code.key},
               ),
             ),
           ),
@@ -138,38 +192,36 @@ void main() {
 
       notifier.toggleColumn(EquipmentColumn.phone);
       expect(
-        container.read(equipmentDirectoryProvider).visibleColumns,
+        container.read(equipmentDirectoryProvider).orderedVisibleColumns,
         orderedEquals([EquipmentColumn.code, EquipmentColumn.phone]),
       );
 
       notifier.toggleColumn(EquipmentColumn.phone);
       expect(
-        container.read(equipmentDirectoryProvider).visibleColumns,
+        container.read(equipmentDirectoryProvider).orderedVisibleColumns,
         orderedEquals([EquipmentColumn.code]),
       );
 
       notifier.toggleColumn(EquipmentColumn.code);
       expect(
-        container.read(equipmentDirectoryProvider).visibleColumns,
+        container.read(equipmentDirectoryProvider).orderedVisibleColumns,
         orderedEquals(EquipmentColumn.defaults),
       );
     });
 
-    test('load συσχετίζει σωστά owner με user_id και διατηρεί null όταν λείπει', () async {
+    // load(): join εξοπλισμού με χρήστες από `user_equipment` + userRows· null owner χωρίς σύνδεση.
+    //   flutter test test/features/directory/providers/equipment_directory_provider_test.dart --plain-name "load συσχετίζει σωστά owner μέσω user_equipment και διατηρεί null όταν λείπει"
+    test('load συσχετίζει σωστά owner μέσω user_equipment και διατηρεί null όταν λείπει', () async {
       final container = ProviderContainer(
         overrides: [
           equipmentDirectoryProvider.overrideWith(
             () => _FakeEquipmentDirectoryNotifier(
-              initialState: EquipmentDirectoryState(
-                visibleColumns: List<EquipmentColumn>.from(EquipmentColumn.defaults),
-                allColumns: EquipmentColumn.all,
-              ),
+              initialState: EquipmentDirectoryState(),
               equipmentRows: [
                 {
                   'id': 1,
                   'code_equipment': 'PC-01',
                   'type': 'Desktop',
-                  'user_id': 10,
                   'notes': 'Γραφείο',
                   'custom_ip': '10.0.0.10',
                   'anydesk_id': 'AD-001',
@@ -179,8 +231,10 @@ void main() {
                   'id': 2,
                   'code_equipment': 'PC-02',
                   'type': 'Laptop',
-                  'user_id': null,
                 },
+              ],
+              linkRows: [
+                {'user_id': 10, 'equipment_id': 1},
               ],
               userRows: [
                 {

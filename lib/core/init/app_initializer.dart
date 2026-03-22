@@ -15,6 +15,7 @@ class AppInitResult {
 }
 
 /// Αρχικοποίηση εφαρμογής: έλεγχος βάσης δεδομένων και υπολογισμός τρόπου λειτουργίας.
+/// Χωρίς migrations ή flags παλιού σχήματος στο startup· μόνο έλεγχοι διαδρομής, σύνδεσης και υγείας (v1).
 class AppInitializer {
   AppInitializer._();
 

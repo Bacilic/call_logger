@@ -1,13 +1,28 @@
+import 'dart:convert';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/database/database_helper.dart';
+import '../../../core/services/lookup_service.dart';
+import '../../../core/utils/phone_list_parser.dart';
 import '../../../core/utils/search_text_normalizer.dart';
+import '../../../core/utils/user_identity_normalizer.dart';
+import '../../calls/models/equipment_model.dart';
 import '../../calls/models/user_model.dart';
 import '../../calls/provider/lookup_provider.dart';
+import '../models/user_directory_column.dart';
+
+const _catalogUsersVisibleColumnsKey = 'catalog_users_visible_columns';
+
+/// Αποτέλεσμα ανάγνωσης ρυθμίσεων στηλών χρηστών (σειρά πλήρους λίστας + ποια κλειδιά είναι ορατά).
+typedef _UserColumnLayout = ({
+  List<UserDirectoryColumn> order,
+  Set<String> visible,
+});
 
 /// Κατάσταση του κατάλογου χρηστών: πλήρης λίστα, φιλτραρισμένη λίστα, αναζήτηση, sort, επιλογές, undo, focused row.
 class DirectoryState {
-  const DirectoryState({
+  DirectoryState({
     this.allUsers = const [],
     this.filteredUsers = const [],
     this.searchQuery = '',
@@ -17,7 +32,16 @@ class DirectoryState {
     this.lastDeleted,
     this.lastBulkUpdatedUsers,
     this.focusedRowIndex,
-  });
+    List<UserDirectoryColumn>? columnOrder,
+    Set<String>? visibleColumnKeys,
+  })  : columnOrder = UserDirectoryColumn.pinSelectionFirst(
+          List<UserDirectoryColumn>.from(
+            columnOrder ?? UserDirectoryColumn.all,
+          ),
+        ),
+        visibleColumnKeys = visibleColumnKeys != null
+            ? Set<String>.from(visibleColumnKeys)
+            : {for (final c in UserDirectoryColumn.all) c.key};
 
   final List<UserModel> allUsers;
   final List<UserModel> filteredUsers;
@@ -30,24 +54,134 @@ class DirectoryState {
   final List<UserModel>? lastBulkUpdatedUsers;
   /// Ευρετήριο στη [filteredUsers] για keyboard navigation (πάνω/κάτω, Enter).
   final int? focusedRowIndex;
+  /// Πλήρης σειρά όλων των στηλών (κρυφές παραμένουν στη λίστα).
+  final List<UserDirectoryColumn> columnOrder;
+  /// Ποια στήλες εμφανίζονται στον πίνακα.
+  final Set<String> visibleColumnKeys;
+
+  /// Ορατές στήλες στον πίνακα, κατά [columnOrder].
+  List<UserDirectoryColumn> get orderedVisibleColumns {
+    return [
+      for (final c in columnOrder)
+        if (visibleColumnKeys.contains(c.key)) c
+    ];
+  }
 }
 
 /// Notifier για τη διαχείριση κατάλογου χρηστών: φόρτωση, φιλτράρισμα, ταξινόμηση, επιλογή, CRUD, undo διαγραφής.
 class DirectoryNotifier extends Notifier<DirectoryState> {
+  /// Διάταξη στηλών φορτώνεται από ρυθμίσεις μία φορά ανά ζωή notifier (όχι σε κάθε loadUsers).
+  bool _columnLayoutHydrated = false;
+
   @override
   DirectoryState build() {
-    return const DirectoryState();
+    return DirectoryState();
   }
+
+  /// Όλοι οι χρήστες καταλόγου για έλεγχους από UI (π.χ. συνωνυμία) χωρίς πρόσβαση στο protected [state].
+  List<UserModel> get allUsersForUi => state.allUsers;
 
   /// Ανανέωση in-memory [LookupService] ώστε η φόρμα κλήσης (καλούντας) να βλέπει διαγραφές/επαναφορές χωρίς restart.
   Future<void> _refreshLookupCache() async {
     ref.invalidate(lookupServiceProvider);
     await ref.read(lookupServiceProvider.future);
+    if (!ref.mounted) return;
+  }
+
+  _UserColumnLayout? _parseColumnLayoutFromJson(String raw) {
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is Map<String, dynamic>) {
+        final o = decoded['order'];
+        final v = decoded['visible'];
+        final rawOrder = <UserDirectoryColumn>[];
+        if (o is List) {
+          for (final e in o) {
+            if (e is! String) continue;
+            final c = UserDirectoryColumn.fromKey(e);
+            if (c != null) rawOrder.add(c);
+          }
+        }
+        final seenKeys = <String>{};
+        final order = <UserDirectoryColumn>[];
+        for (final c in rawOrder) {
+          if (seenKeys.add(c.key)) order.add(c);
+        }
+        for (final c in UserDirectoryColumn.all) {
+          if (!seenKeys.contains(c.key)) order.add(c);
+        }
+        Set<String> visible;
+        if (v is List && v.isNotEmpty) {
+          visible = {};
+          for (final e in v) {
+            if (e is String && UserDirectoryColumn.fromKey(e) != null) {
+              visible.add(e);
+            }
+          }
+          if (visible.isEmpty) {
+            visible = {for (final c in order) c.key};
+          }
+        } else {
+          visible = {for (final c in order) c.key};
+        }
+        return (
+          order: UserDirectoryColumn.pinSelectionFirst(order),
+          visible: visible,
+        );
+      }
+      if (decoded is List) {
+        final ordered = <UserDirectoryColumn>[];
+        final seen = <String>{};
+        for (final e in decoded) {
+          if (e is! String) continue;
+          final c = UserDirectoryColumn.fromKey(e);
+          if (c != null && seen.add(c.key)) ordered.add(c);
+        }
+        if (ordered.isEmpty) return null;
+        for (final c in UserDirectoryColumn.all) {
+          if (!seen.contains(c.key)) ordered.add(c);
+        }
+        return (
+          order: UserDirectoryColumn.pinSelectionFirst(ordered),
+          visible: Set<String>.from(seen),
+        );
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  Future<_UserColumnLayout?> _readColumnLayoutFromSettings() async {
+    final raw =
+        await DatabaseHelper.instance.getSetting(_catalogUsersVisibleColumnsKey);
+    if (raw == null || raw.trim().isEmpty) return null;
+    return _parseColumnLayoutFromJson(raw);
+  }
+
+  Future<void> _persistUserColumnLayout(DirectoryState s) async {
+    final order = s.columnOrder;
+    final vis = s.visibleColumnKeys;
+    final payload = jsonEncode({
+      'order': order.map((c) => c.key).toList(),
+      'visible': [
+        for (final c in order)
+          if (vis.contains(c.key)) c.key
+      ],
+    });
+    await DatabaseHelper.instance.setSetting(
+      _catalogUsersVisibleColumnsKey,
+      payload,
+    );
   }
 
   /// Φόρτωση χρηστών από τη βάση και εφαρμογή filter/sort.
   Future<void> loadUsers() async {
+    _UserColumnLayout? parsed;
+    if (!_columnLayoutHydrated) {
+      parsed = await _readColumnLayoutFromSettings();
+      _columnLayoutHydrated = true;
+    }
     final rows = await DatabaseHelper.instance.getAllUsers();
+    if (!ref.mounted) return;
     final list = rows.map((m) => UserModel.fromMap(m)).toList();
     state = DirectoryState(
       allUsers: list,
@@ -58,31 +192,34 @@ class DirectoryNotifier extends Notifier<DirectoryState> {
       lastDeleted: state.lastDeleted,
       lastBulkUpdatedUsers: state.lastBulkUpdatedUsers,
       focusedRowIndex: state.focusedRowIndex,
+      columnOrder: parsed != null
+          ? List<UserDirectoryColumn>.from(parsed.order)
+          : List<UserDirectoryColumn>.from(state.columnOrder),
+      visibleColumnKeys: parsed != null
+          ? Set<String>.from(parsed.visible)
+          : Set<String>.from(state.visibleColumnKeys),
     );
     filterAndSort();
   }
 
-  /// Φιλτράρισμα in-memory (name + fullNameWithDepartment + phone + departmentName + notes) και ταξινόμηση.
-  /// Χωρίς διάκριση τόνου/διαλυτικών (ι = ί = ϊ = ΐ).
+  /// Φιλτράρισμα in-memory σε ενιαίο κείμενο ανά χρήστη: όνομα, επώνυμο, τηλέφωνο,
+  /// σημειώσεις, τμήμα ([LookupService] μέσω [UserModel.departmentName]).
+  /// Όλα τα tokens του query πρέπει να περιέχονται στο κανονικοποιημένο blob
+  /// ([SearchTextNormalizer.containsAllTokens]).
   void filterAndSort() {
     final q = SearchTextNormalizer.normalizeForSearch(state.searchQuery);
     var list = state.allUsers;
     if (q.isNotEmpty) {
       list = list.where((u) {
-        final name = SearchTextNormalizer.normalizeForSearch(u.name ?? '');
-        final full = SearchTextNormalizer.normalizeForSearch(
-          u.fullNameWithDepartment,
-        );
-        final phone = SearchTextNormalizer.normalizeForSearch(u.phone ?? '');
-        final dept = SearchTextNormalizer.normalizeForSearch(
+        final blob = [
+          u.firstName ?? '',
+          u.lastName ?? '',
+          u.phoneJoined,
+          u.notes ?? '',
           u.departmentName ?? '',
-        );
-        final notes = SearchTextNormalizer.normalizeForSearch(u.notes ?? '');
-        return name.contains(q) ||
-            full.contains(q) ||
-            phone.contains(q) ||
-            dept.contains(q) ||
-            notes.contains(q);
+          u.location ?? '',
+        ].join(' ');
+        return SearchTextNormalizer.containsAllTokens(blob, state.searchQuery);
       }).toList();
     }
     final col = state.sortColumn;
@@ -102,7 +239,7 @@ class DirectoryNotifier extends Notifier<DirectoryState> {
             cmp = (a.firstName ?? '').compareTo(b.firstName ?? '');
             break;
           case 'phone':
-            cmp = (a.phone ?? '').compareTo(b.phone ?? '');
+            cmp = a.phoneJoined.compareTo(b.phoneJoined);
             break;
           case 'department':
             cmp = (a.departmentName ?? '').compareTo(b.departmentName ?? '');
@@ -129,6 +266,8 @@ class DirectoryNotifier extends Notifier<DirectoryState> {
       lastDeleted: state.lastDeleted,
       lastBulkUpdatedUsers: state.lastBulkUpdatedUsers,
       focusedRowIndex: clamped,
+      columnOrder: state.columnOrder,
+      visibleColumnKeys: state.visibleColumnKeys,
     );
   }
 
@@ -147,6 +286,8 @@ class DirectoryNotifier extends Notifier<DirectoryState> {
       lastDeleted: state.lastDeleted,
       lastBulkUpdatedUsers: state.lastBulkUpdatedUsers,
       focusedRowIndex: clamped,
+      columnOrder: state.columnOrder,
+      visibleColumnKeys: state.visibleColumnKeys,
     );
   }
 
@@ -161,6 +302,8 @@ class DirectoryNotifier extends Notifier<DirectoryState> {
       lastDeleted: state.lastDeleted,
       lastBulkUpdatedUsers: state.lastBulkUpdatedUsers,
       focusedRowIndex: state.focusedRowIndex,
+      columnOrder: state.columnOrder,
+      visibleColumnKeys: state.visibleColumnKeys,
     );
     filterAndSort();
   }
@@ -176,11 +319,16 @@ class DirectoryNotifier extends Notifier<DirectoryState> {
       lastDeleted: state.lastDeleted,
       lastBulkUpdatedUsers: state.lastBulkUpdatedUsers,
       focusedRowIndex: state.focusedRowIndex,
+      columnOrder: state.columnOrder,
+      visibleColumnKeys: state.visibleColumnKeys,
     );
     filterAndSort();
   }
 
   void toggleSelection(int id) {
+    if (!state.visibleColumnKeys.contains(UserDirectoryColumn.selection.key)) {
+      return;
+    }
     final next = Set<int>.from(state.selectedIds);
     if (next.contains(id)) {
       next.remove(id);
@@ -197,6 +345,8 @@ class DirectoryNotifier extends Notifier<DirectoryState> {
       lastDeleted: state.lastDeleted,
       lastBulkUpdatedUsers: state.lastBulkUpdatedUsers,
       focusedRowIndex: state.focusedRowIndex,
+      columnOrder: state.columnOrder,
+      visibleColumnKeys: state.visibleColumnKeys,
     );
   }
 
@@ -211,33 +361,160 @@ class DirectoryNotifier extends Notifier<DirectoryState> {
       lastDeleted: state.lastDeleted,
       lastBulkUpdatedUsers: state.lastBulkUpdatedUsers,
       focusedRowIndex: state.focusedRowIndex,
+      columnOrder: state.columnOrder,
+      visibleColumnKeys: state.visibleColumnKeys,
     );
   }
 
-  /// True αν υπάρχει ήδη χρήστης με τα ίδια επώνυμο, όνομα, τηλέφωνο, σημειώσεις.
-  /// [excludeId] = id χρήστη να αγνοηθεί (π.χ. κατά επεξεργασία).
-  bool hasDuplicateExcludingNotes(UserModel u, {int? excludeId}) {
-    final ln = (u.lastName ?? '').trim();
-    final fn = (u.firstName ?? '').trim();
-    final ph = (u.phone ?? '').trim();
-    final nt = (u.notes ?? '').trim();
+  /// Αλλαγή σειράς στο διάλογος Στήλες (δείκτες χωρίς τη στήλη [UserDirectoryColumn.selection]).
+  Future<void> reorderUserColumns(int oldIndex, int newIndex) async {
+    final sel = UserDirectoryColumn.selection;
+    final full = List<UserDirectoryColumn>.from(state.columnOrder);
+    final rest = full.where((c) => c != sel).toList();
+    if (oldIndex < newIndex) newIndex -= 1;
+    final item = rest.removeAt(oldIndex);
+    rest.insert(newIndex, item);
+    final newOrder = UserDirectoryColumn.pinSelectionFirst([sel, ...rest]);
+    state = DirectoryState(
+      allUsers: state.allUsers,
+      filteredUsers: state.filteredUsers,
+      searchQuery: state.searchQuery,
+      sortColumn: state.sortColumn,
+      sortAscending: state.sortAscending,
+      selectedIds: state.selectedIds,
+      lastDeleted: state.lastDeleted,
+      lastBulkUpdatedUsers: state.lastBulkUpdatedUsers,
+      focusedRowIndex: state.focusedRowIndex,
+      columnOrder: newOrder,
+      visibleColumnKeys: state.visibleColumnKeys,
+    );
+    await _persistUserColumnLayout(state);
+  }
+
+  /// Ορατότητα στήλης χωρίς αλλαγή θέσης στη [columnOrder].
+  Future<void> setUserColumnVisible(UserDirectoryColumn col, bool visible) async {
+    var keys = Set<String>.from(state.visibleColumnKeys);
+    if (visible) {
+      keys.add(col.key);
+    } else {
+      keys.remove(col.key);
+    }
+    if (keys.isEmpty) {
+      keys = {for (final c in UserDirectoryColumn.all) c.key};
+    }
+    var selectedIds = state.selectedIds;
+    if (!keys.contains(UserDirectoryColumn.selection.key)) {
+      selectedIds = {};
+    }
+    state = DirectoryState(
+      allUsers: state.allUsers,
+      filteredUsers: state.filteredUsers,
+      searchQuery: state.searchQuery,
+      sortColumn: state.sortColumn,
+      sortAscending: state.sortAscending,
+      selectedIds: selectedIds,
+      lastDeleted: state.lastDeleted,
+      lastBulkUpdatedUsers: state.lastBulkUpdatedUsers,
+      focusedRowIndex: state.focusedRowIndex,
+      columnOrder: UserDirectoryColumn.pinSelectionFirst(
+        List<UserDirectoryColumn>.from(state.columnOrder),
+      ),
+      visibleColumnKeys: keys,
+    );
+    await _persistUserColumnLayout(state);
+    filterAndSort();
+  }
+
+  /// True αν υπάρχει ήδη χρήστης με ίδιο κανονικοποιημένο ονοματεπώνυμο
+  /// ([UserIdentityNormalizer]), ίδιο κείμενο τηλεφώνου (`trim`) και ίδιο σύνολο
+  /// κωδικών συνδεδεμένου εξοπλισμού (`user_equipment` → `code_equipment`).
+  ///
+  /// [excludeId]: αγνόηση τρέχουσας εγγραφής (επεξεργασία).
+  /// [mirrorEquipmentFromUserId]: για χρήστη χωρίς `id` που μετά την αποθήκευση
+  /// θα έχει τις ίδιες συνδέσεις με αυτόν το id (π.χ. ροή «νέος υπάλληλος»).
+  static String _phonesComparable(UserModel u) {
+    final list = u.phones
+        .map((p) => p.trim())
+        .where((p) => p.isNotEmpty)
+        .toList()
+      ..sort();
+    return PhoneListParser.joinPhones(list);
+  }
+
+  bool hasDuplicateUser(
+    UserModel u, {
+    int? excludeId,
+    int? mirrorEquipmentFromUserId,
+  }) {
+    final nameKey = UserIdentityNormalizer.identityKeyForPerson(
+      u.firstName,
+      u.lastName,
+    );
+    final ph = _phonesComparable(u);
+    final candidateEquip = _equipmentCodeKeySet(
+      userId: u.id,
+      mirrorEquipmentFromUserId: mirrorEquipmentFromUserId,
+    );
     for (final existing in state.allUsers) {
       if (excludeId != null && existing.id == excludeId) continue;
-      final eLn = (existing.lastName ?? '').trim();
-      final eFn = (existing.firstName ?? '').trim();
-      final ePh = (existing.phone ?? '').trim();
-      final eNt = (existing.notes ?? '').trim();
-      if (ln == eLn && fn == eFn && ph == ePh && nt == eNt) {
+      final eKey = UserIdentityNormalizer.identityKeyForPerson(
+        existing.firstName,
+        existing.lastName,
+      );
+      final ePh = _phonesComparable(existing);
+      final eEquip = existing.id != null
+          ? _equipmentCodeKeySet(userId: existing.id)
+          : <String>{};
+      if (nameKey == eKey &&
+          ph == ePh &&
+          _sameStringSets(candidateEquip, eEquip)) {
         return true;
       }
     }
     return false;
   }
 
+  static Set<String> _equipmentCodeKeySet({
+    int? userId,
+    int? mirrorEquipmentFromUserId,
+  }) {
+    final int? sourceId =
+        mirrorEquipmentFromUserId ?? userId;
+    if (sourceId == null) return {};
+    final list = LookupService.instance.findEquipmentsForUser(sourceId);
+    return {for (final e in list) _equipmentCodeKey(e)};
+  }
+
+  static String _equipmentCodeKey(EquipmentModel e) {
+    final c = e.code?.trim() ?? '';
+    if (c.isNotEmpty) return c.toLowerCase();
+    final id = e.id;
+    if (id != null) return 'id:$id';
+    return 'eq:unknown';
+  }
+
+  static bool _sameStringSets(Set<String> a, Set<String> b) {
+    if (a.length != b.length) return false;
+    return a.containsAll(b);
+  }
+
   Future<void> addUser(UserModel u) async {
     await DatabaseHelper.instance.insertUserFromMap(u.toMap());
     await _refreshLookupCache();
     await loadUsers();
+  }
+
+  /// Εισαγωγή χρήστη και αντιγραφή συνδέσεων `user_equipment` από [sourceUserId].
+  /// Επιστρέφει το νέο `id` ή null αν αποτύχει το insert.
+  Future<int?> addUserCloningEquipmentFrom(
+    UserModel u,
+    int sourceUserId,
+  ) async {
+    final newId = await DatabaseHelper.instance.insertUserFromMap(u.toMap());
+    await DatabaseHelper.instance.copyUserEquipmentLinks(sourceUserId, newId);
+    await _refreshLookupCache();
+    await loadUsers();
+    return newId;
   }
 
   Future<void> updateUser(UserModel u) async {
@@ -254,6 +531,7 @@ class DirectoryNotifier extends Notifier<DirectoryState> {
         .toList();
     await DatabaseHelper.instance.deleteUsers(state.selectedIds.toList());
     await _refreshLookupCache();
+    if (!ref.mounted) return;
     state = DirectoryState(
       allUsers: state.allUsers,
       filteredUsers: state.filteredUsers,
@@ -264,6 +542,8 @@ class DirectoryNotifier extends Notifier<DirectoryState> {
       lastDeleted: toDelete,
       lastBulkUpdatedUsers: state.lastBulkUpdatedUsers,
       focusedRowIndex: state.focusedRowIndex,
+      columnOrder: state.columnOrder,
+      visibleColumnKeys: state.visibleColumnKeys,
     );
     await loadUsers();
   }
@@ -274,6 +554,7 @@ class DirectoryNotifier extends Notifier<DirectoryState> {
     final ids = list.map((u) => u.id).whereType<int>().toList();
     await DatabaseHelper.instance.restoreUsers(ids);
     await _refreshLookupCache();
+    if (!ref.mounted) return;
     state = DirectoryState(
       allUsers: state.allUsers,
       filteredUsers: state.filteredUsers,
@@ -284,6 +565,8 @@ class DirectoryNotifier extends Notifier<DirectoryState> {
       lastDeleted: null,
       lastBulkUpdatedUsers: state.lastBulkUpdatedUsers,
       focusedRowIndex: state.focusedRowIndex,
+      columnOrder: state.columnOrder,
+      visibleColumnKeys: state.visibleColumnKeys,
     );
     await loadUsers();
   }
@@ -297,6 +580,7 @@ class DirectoryNotifier extends Notifier<DirectoryState> {
     if (toUpdate.isEmpty) return;
     await DatabaseHelper.instance.bulkUpdateUsers(ids, changes);
     await _refreshLookupCache();
+    if (!ref.mounted) return;
     state = DirectoryState(
       allUsers: state.allUsers,
       filteredUsers: state.filteredUsers,
@@ -307,6 +591,8 @@ class DirectoryNotifier extends Notifier<DirectoryState> {
       lastDeleted: state.lastDeleted,
       lastBulkUpdatedUsers: toUpdate,
       focusedRowIndex: state.focusedRowIndex,
+      columnOrder: state.columnOrder,
+      visibleColumnKeys: state.visibleColumnKeys,
     );
     await loadUsers();
   }
@@ -318,6 +604,7 @@ class DirectoryNotifier extends Notifier<DirectoryState> {
     for (final u in list) {
       if (u.id != null) {
         await DatabaseHelper.instance.updateUser(u.id!, u.toMap());
+        if (!ref.mounted) return;
       }
     }
     state = DirectoryState(
@@ -330,6 +617,8 @@ class DirectoryNotifier extends Notifier<DirectoryState> {
       lastDeleted: state.lastDeleted,
       lastBulkUpdatedUsers: null,
       focusedRowIndex: state.focusedRowIndex,
+      columnOrder: state.columnOrder,
+      visibleColumnKeys: state.visibleColumnKeys,
     );
     await _refreshLookupCache();
     await loadUsers();

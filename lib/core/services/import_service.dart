@@ -26,7 +26,7 @@ class ImportService {
         return const ImportResult(success: false, errorMessage: 'Δεν ήταν δυνατή η ανάγνωση του αρχείου.');
       }
 
-      final parseResult = await ExcelParser().parseLegacyExcel(path, onLog);
+      final parseResult = await ExcelParser().parseMasterExcel(path, onLog);
       if (!parseResult.success) return parseResult;
 
       final owners = parseResult.preparedOwners ?? [];

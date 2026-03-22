@@ -23,12 +23,16 @@ class CallStatusBar extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final entry = ref.watch(callEntryProvider);
+    final isPending = ref.watch(callEntryProvider.select((s) => s.isPending));
+    final durationSeconds = ref.watch(
+      callEntryProvider.select((s) => s.durationSeconds),
+    );
+    final notesNonEmpty = ref.watch(
+      callEntryProvider.select((s) => s.notes.trim().isNotEmpty),
+    );
     final notifier = ref.read(callEntryProvider.notifier);
     final showTimerAsync = ref.watch(showActiveTimerProvider);
-    final durationSeconds = entry.durationSeconds;
     final isTimerRunning = notifier.isTimerRunning;
-    final notesNonEmpty = entry.notes.trim().isNotEmpty;
     final showPlayPause = durationSeconds > 0 || isTimerRunning;
 
     return Column(
@@ -36,7 +40,7 @@ class CallStatusBar extends ConsumerWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _PendingCheckboxRow(
-          entry: entry,
+          isPending: isPending,
           notesNonEmpty: notesNonEmpty,
           onTogglePending: () => notifier.togglePending(),
           onDisabledTap: () => ref
@@ -163,13 +167,13 @@ class CallStatusBar extends ConsumerWidget {
 
 class _PendingCheckboxRow extends StatelessWidget {
   const _PendingCheckboxRow({
-    required this.entry,
+    required this.isPending,
     required this.notesNonEmpty,
     required this.onTogglePending,
     required this.onDisabledTap,
   });
 
-  final CallEntryState entry;
+  final bool isPending;
   final bool notesNonEmpty;
   final VoidCallback onTogglePending;
   final VoidCallback onDisabledTap;
@@ -180,7 +184,7 @@ class _PendingCheckboxRow extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Checkbox(
-          value: entry.isPending,
+          value: isPending,
           onChanged: notesNonEmpty ? (_) => onTogglePending() : null,
           tristate: false,
         ),

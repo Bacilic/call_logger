@@ -6,9 +6,10 @@ import 'dart:math' as math;
 import 'package:path/path.dart' as p;
 
 /// Script που αντιγράφει συγκεκριμένα αρχεία στο φάκελο Grok.
-/// Δέχεται ονόματα αρχεία ή paths (χωρισμένα με κόμμα).
-/// Path: χρήση απευθείας. Όνομα αρχείου: αναδρομική αναζήτηση σε lib/ και root.
-/// Αν κάποιο αρχείο δεν βρεθεί: fuzzy προτάσεις + διαδραστική επιλογή (stdin).
+/// Δέχεται ονόματα αρχεία ή paths (χωρισμένα με κόμμα)· διπλές εγγραφές στην είσοδο αγνοούνται.
+/// Path: χρήση απευθείας. Όνομα αρχείου: όλα τα ταιριάσματα στο project (ίδιο basename).
+/// Ένα άτομο → αυτόματη αντιγραφή. Πολλά → διαδραστική επιλογή (και "all" με suffix από path).
+/// Αν δεν βρεθεί: fuzzy — έως 7 διακριτά basename (ίδιο όνομα / πολλές διαδρομές = μία πρόταση + suffix).
 ///
 /// Παράδειγμα: dart run tool/copy_to_grok.dart main.dart,lib/features/tasks/models/task.dart
 void main(List<String> arguments) {
@@ -30,45 +31,73 @@ void main(List<String> arguments) {
     final libDir = Directory('${projectRoot.path}$sep''lib');
     final rootAbs = p.normalize(projectRoot.absolute.path);
 
-    // Όλα τα σχετικά paths (μοναδικά) για fuzzy matching — μία συλλογή ανά run.
     final allFilenames = _collectAllFilenames(projectRoot, libDir);
 
     final outcomes = <_CopyOutcome>[];
     for (final item in items) {
-      outcomes.add(_resolveItem(item, projectRoot, libDir, rootAbs, sep));
+      outcomes.add(_resolveItem(item, projectRoot, rootAbs, sep, allFilenames));
     }
 
-    final autoOk = outcomes.whereType<_CopyOk>().toList();
+    var autoOk = outcomes.whereType<_CopyOk>().toList();
+    final ambiguousList = outcomes.whereType<_CopyAmbiguous>().toList();
     final missing = outcomes.whereType<_CopyMissing>().map((m) => m.item).toList();
 
-    final interactive = missing.isNotEmpty
+    autoOk = _dedupeCopyOkBySource(autoOk);
+
+    final copiedSourceAbs = <String>{};
+
+    var automaticCopied = 0;
+    print('');
+    print('— Αυτόματες αντιγραφές (μοναδικό εύρημα ανά ζητούμενο) —');
+    if (autoOk.isEmpty) {
+      print('  (Καμία.)');
+    }
+    for (final ok in autoOk) {
+      _copyFileToGrok(ok, grokDir, sep);
+      copiedSourceAbs.add(p.normalize(ok.source.absolute.path));
+      automaticCopied++;
+    }
+    print('');
+
+    final ambigResult = ambiguousList.isNotEmpty
+        ? _handleAmbiguousInteractive(ambiguousList, rootAbs)
+        : (copies: <_CopyOk>[], skippedQueries: 0);
+
+    var ambiguousInteractiveCopied = 0;
+    for (final ok in ambigResult.copies) {
+      _copyFileToGrok(ok, grokDir, sep);
+      copiedSourceAbs.add(p.normalize(ok.source.absolute.path));
+      ambiguousInteractiveCopied++;
+    }
+
+    final fuzzyResult = missing.isNotEmpty
         ? _handleMissingInteractive(
             missing,
             allFilenames,
-            libDir,
             projectRoot,
             rootAbs,
+            copiedSourceAbs,
           )
         : (copies: <_CopyOk>[], skippedQueries: 0);
 
-    var copiedCount = 0;
-
-    for (final ok in autoOk) {
+    var fuzzyCopied = 0;
+    for (final ok in fuzzyResult.copies) {
       _copyFileToGrok(ok, grokDir, sep);
-      copiedCount++;
+      copiedSourceAbs.add(p.normalize(ok.source.absolute.path));
+      fuzzyCopied++;
     }
 
-    for (final ok in interactive.copies) {
-      _copyFileToGrok(ok, grokDir, sep);
-      copiedCount++;
-    }
-
-    final skippedCount = interactive.skippedQueries;
+    final totalCopied = automaticCopied + ambiguousInteractiveCopied + fuzzyCopied;
 
     _printFinalSummary(
-      copiedCount,
-      skippedCount,
-      hadInteractiveMissing: missing.isNotEmpty,
+      totalCopied: totalCopied,
+      automaticCopied: automaticCopied,
+      ambiguousCopied: ambiguousInteractiveCopied,
+      fuzzyCopied: fuzzyCopied,
+      skippedAmbiguous: ambigResult.skippedQueries,
+      skippedFuzzy: fuzzyResult.skippedQueries,
+      hadAmbiguous: ambiguousList.isNotEmpty,
+      hadFuzzy: missing.isNotEmpty,
     );
   } on IOException catch (e) {
     print('Σφάλμα I/O: $e');
@@ -108,8 +137,6 @@ int _levenshteinDistance(String s1, String s2) {
   return prev[n];
 }
 
-/// Βασικό score 0..1 από Levenshtein, με bonuses (cap στο 1.0).
-/// [candidate] συγκρίνεται κυρίως ως basename· [candidateFullPath] για λέξεις-κλειδιά στο path.
 double _similarityScore(
   String query,
   String candidate, {
@@ -143,7 +170,6 @@ double _similarityScore(
 // Αρχεία project & προτάσεις
 // —————————————————————————————————————————————————————————————————————
 
-/// Συλλογή σχετικών διαδρομών αρχείων από τη ρίζα [root] (αποκλείονται θόρυβοι όπως Grok, build).
 List<String> _collectAllFilenames(Directory root, Directory libDir) {
   final rootPath = p.normalize(root.absolute.path);
   final seen = <String>{};
@@ -176,7 +202,6 @@ List<String> _collectAllFilenames(Directory root, Directory libDir) {
   }
 
   walk(root);
-  // Αν το lib είναι εκτός root (ασυνήθιστο), συμπληρώνουμε ξεχωριστά.
   if (libDir.existsSync()) {
     final libNorm = p.normalize(libDir.absolute.path);
     if (!libNorm.startsWith(rootPath)) {
@@ -188,30 +213,43 @@ List<String> _collectAllFilenames(Directory root, Directory libDir) {
   return list;
 }
 
-class _Suggestion {
-  _Suggestion(this.file, this.score, this.displayName);
+/// Ομάδα fuzzy: ένα basename = μία πρόταση (πολλές διαδρομές = αμφισημία, μία θέση στη λίστα).
+class _FuzzyGroup {
+  _FuzzyGroup({
+    required this.displayName,
+    required this.files,
+    required this.bestScore,
+  });
 
-  final File file;
-  final double score;
   final String displayName;
+  final List<File> files;
+  final double bestScore;
+
+  bool get isAmbiguous => files.length > 1;
 }
 
-/// Top προτάσεις για [query] μέσα σε [allFiles] (σχετικές διαδρομές από project root).
-List<_Suggestion> _findSuggestions(
+const int _kFuzzyMaxGroups = 7;
+const int _kFuzzyMaxFilesPerAmbiguousGroup = 32;
+
+/// Προτάσεις fuzzy: έως [_kFuzzyMaxGroups] **διακριτά basename**· το ίδιο όνομα σε πολλές θέσεις
+/// εμφανίζεται ως μία πρόταση (όχι πολλές από τις 7).
+List<_FuzzyGroup> _findFuzzyGroups(
   String query,
   List<String> allFiles,
-  Directory libDir,
   Directory projectRoot,
+  Set<String> excludeSourceAbsNorm,
 ) {
   final rootPath = projectRoot.absolute.path;
   final q = query.trim();
   if (q.isEmpty) return [];
 
-  final scored = <_Suggestion>[];
+  final scored = <({File file, double score, String basename})>[];
 
   for (final rel in allFiles) {
     final file = File(p.join(rootPath, rel));
     if (!file.existsSync()) continue;
+    final norm = p.normalize(file.absolute.path);
+    if (excludeSourceAbsNorm.contains(norm)) continue;
 
     final base = p.basename(rel);
     final baseNoExt = p.basenameWithoutExtension(rel);
@@ -221,26 +259,109 @@ List<_Suggestion> _findSuggestions(
     final s2 = _similarityScore(q, baseNoExt, candidateFullPath: relLower);
     final score = math.max(s1, s2);
 
-    scored.add(_Suggestion(file, score, base));
+    scored.add((file: file, score: score, basename: base));
   }
 
   scored.sort((a, b) => b.score.compareTo(a.score));
-  return scored.take(5).toList();
+
+  final seenBaseLower = <String>{};
+  final orderedBasenames = <String>[];
+  for (final row in scored) {
+    final key = row.basename.toLowerCase();
+    if (seenBaseLower.contains(key)) continue;
+    seenBaseLower.add(key);
+    orderedBasenames.add(row.basename);
+    if (orderedBasenames.length >= _kFuzzyMaxGroups) break;
+  }
+
+  final scoreByNorm = <String, double>{};
+  for (final row in scored) {
+    final k = p.normalize(row.file.absolute.path);
+    scoreByNorm[k] = math.max(scoreByNorm[k] ?? 0, row.score);
+  }
+
+  final groups = <_FuzzyGroup>[];
+  for (final displayName in orderedBasenames) {
+    final key = displayName.toLowerCase();
+    final pathsForBase = <File>[];
+    for (final rel in allFiles) {
+      if (p.basename(rel).toLowerCase() != key) continue;
+      final file = File(p.join(rootPath, rel));
+      if (!file.existsSync()) continue;
+      final norm = p.normalize(file.absolute.path);
+      if (excludeSourceAbsNorm.contains(norm)) continue;
+      pathsForBase.add(file);
+    }
+
+    if (pathsForBase.isEmpty) continue;
+
+    pathsForBase.sort((a, b) {
+      final sa = scoreByNorm[p.normalize(a.absolute.path)] ?? 0;
+      final sb = scoreByNorm[p.normalize(b.absolute.path)] ?? 0;
+      final c = sb.compareTo(sa);
+      if (c != 0) return c;
+      return a.path.toLowerCase().compareTo(b.path.toLowerCase());
+    });
+
+    var list = pathsForBase;
+    if (list.length > _kFuzzyMaxFilesPerAmbiguousGroup) {
+      list = list.sublist(0, _kFuzzyMaxFilesPerAmbiguousGroup);
+    }
+
+    var best = 0.0;
+    for (final f in list) {
+      final s = scoreByNorm[p.normalize(f.absolute.path)] ?? 0;
+      if (s > best) best = s;
+    }
+
+    groups.add(_FuzzyGroup(displayName: displayName, files: list, bestScore: best));
+  }
+
+  return groups;
+}
+
+/// Αν η ομάδα έχει >1 αρχείο (ίδιο basename), χρησιμοποιείται πάντα suffix από path.
+void _appendCopiesFromFuzzyGroup(
+  _FuzzyGroup group,
+  List<_CopyOk> copies,
+  Set<String> copiedSourceAbs,
+  Set<String> usedDestNames,
+  String rootAbs,
+) {
+  final eligible = group.files
+      .where((f) => !copiedSourceAbs.contains(p.normalize(f.absolute.path)))
+      .toList();
+  if (eligible.isEmpty) {
+    return;
+  }
+
+  final useSuffix = eligible.length > 1;
+  for (final f in eligible) {
+    final norm = p.normalize(f.absolute.path);
+    if (copiedSourceAbs.contains(norm)) continue;
+    var destFilename = useSuffix
+        ? _destFilenameWithEncodedPath(f, rootAbs)
+        : p.basename(f.path);
+    destFilename = _ensureUniqueDestName(destFilename, usedDestNames, f, rootAbs);
+    copies.add(
+      _CopyOk(
+        source: f,
+        destFilename: destFilename,
+        srcDisplay: _displaySourceForLog(f.absolute.path, rootAbs),
+      ),
+    );
+    copiedSourceAbs.add(norm);
+  }
 }
 
 // —————————————————————————————————————————————————————————————————————
-// Interactive missing
+// Interactive ambiguous (ίδιο basename, πολλές διαδρομές)
 // —————————————————————————————————————————————————————————————————————
 
 typedef _InteractivePickResult = ({List<_CopyOk> copies, int skippedQueries});
 
-/// Για κάθε missing: εμφανίζει top-5, διαβάζει stdin.
-/// [skippedQueries]: πόσα ζητούμενα δεν αντιστοιχίστηκαν (κενό input, καμία πρόταση, κ.λπ.).
-_InteractivePickResult _handleMissingInteractive(
-  List<String> missing,
-  List<String> allFiles,
-  Directory libDir,
-  Directory projectRoot,
+_InteractivePickResult _handleAmbiguousInteractive(
+  List<_CopyAmbiguous> ambiguousList,
   String rootAbs,
 ) {
   final copies = <_CopyOk>[];
@@ -248,33 +369,23 @@ _InteractivePickResult _handleMissingInteractive(
 
   print('');
   print(
-    '— Δεν βρέθηκαν ${missing.length} αρχεία · fuzzy προτάσεις (διαδραστική επιλογή) —',
+    '— Ίδιο όνομα αρχείου σε πολλές θέσεις · επιλέξτε αρχείο(α) (μετά τις αυτόματες) —',
   );
   print(
-    'Εντολές: αριθμοί με κενό ή κόμμα (π.χ. 1 3 ή 1,2), "all" για όλες τις προτάσεις, κενό = παράλειψη.',
+    'Εντολές: αριθμοί με κενό ή κόμμα, "all" = όλα με μοναδικό όνομα (suffix από path), κενό = παράλειψη.',
   );
   print('');
 
-  for (final item in missing) {
-    print('Ζητούμενο: "$item"');
-    final suggestions = _findSuggestions(item, allFiles, libDir, projectRoot);
+  for (final amb in ambiguousList) {
+    final files = List<File>.from(amb.files)
+      ..sort((a, b) => a.path.toLowerCase().compareTo(b.path.toLowerCase()));
 
-    if (suggestions.isEmpty) {
-      print('  (Καμία πρόταση στο project.)');
-      skippedQueries++;
-      print('');
-      continue;
+    print('Ζητούμενο: "${amb.item}" · βρέθηκαν ${files.length} αρχεία:');
+    for (var i = 0; i < files.length; i++) {
+      final relDisp = _displaySourceForLog(files[i].absolute.path, rootAbs);
+      print('  ${i + 1}. ${p.basename(files[i].path)}   $relDisp');
     }
 
-    for (var i = 0; i < suggestions.length; i++) {
-      final s = suggestions[i];
-      final pct = (s.score * 100).round();
-      final relDisp = _displaySourceForLog(s.file.absolute.path, rootAbs);
-      print('  ${i + 1}. ${s.displayName}  ($pct%)   $relDisp');
-    }
-
-    // Αποφεύγουμε write/flush σε std streams (σε ορισμένα IDE terminals
-    // μπορεί να οδηγήσει σε "StreamSink is bound to a stream").
     print('Επιλογή>');
     final line = stdin.readLineSync();
     final input = line?.trim() ?? '';
@@ -294,14 +405,14 @@ _InteractivePickResult _handleMissingInteractive(
       continue;
     }
     if (lower == 'all') {
-      for (var i = 0; i < suggestions.length; i++) {
+      for (var i = 0; i < files.length; i++) {
         indices.add(i);
       }
     } else {
       for (final part in input.split(RegExp(r'[\s,]+'))) {
         if (part.isEmpty) continue;
         final n = int.tryParse(part);
-        if (n == null || n < 1 || n > suggestions.length) {
+        if (n == null || n < 1 || n > files.length) {
           print('  ! Αγνόησα μη έγκυρο: "$part"');
           continue;
         }
@@ -316,14 +427,212 @@ _InteractivePickResult _handleMissingInteractive(
     }
 
     final sortedIdx = indices.toList()..sort();
+    final useSuffix = sortedIdx.length > 1;
+
+    final usedDestNames = <String>{};
     for (final idx in sortedIdx) {
-      final s = suggestions[idx];
+      final f = files[idx];
+      var destFilename = useSuffix
+          ? _destFilenameWithEncodedPath(f, rootAbs)
+          : p.basename(f.path);
+      destFilename = _ensureUniqueDestName(destFilename, usedDestNames, f, rootAbs);
       copies.add(
         _CopyOk(
-          source: s.file,
-          destFilename: s.displayName,
-          srcDisplay: _displaySourceForLog(s.file.absolute.path, rootAbs),
+          source: f,
+          destFilename: destFilename,
+          srcDisplay: _displaySourceForLog(f.absolute.path, rootAbs),
         ),
+      );
+    }
+    print('');
+  }
+
+  return (copies: copies, skippedQueries: skippedQueries);
+}
+
+String _ensureUniqueDestName(
+  String destFilename,
+  Set<String> usedDestNames,
+  File source,
+  String rootAbs,
+) {
+  var name = destFilename;
+  var n = 2;
+  while (usedDestNames.contains(name)) {
+    final stem = p.basenameWithoutExtension(destFilename);
+    final ext = p.extension(destFilename);
+    final extra = '_${n}_${_shortHash(source.path)}';
+    name = _trimFilenameForWindows('$stem$extra$ext', maxTotalChars: 200);
+    n++;
+  }
+  usedDestNames.add(name);
+  return name;
+}
+
+int _shortHash(String s) {
+  var h = 5381;
+  for (final c in s.codeUnits) {
+    h = ((h << 5) + h + c) & 0x7fffffff;
+  }
+  return h;
+}
+
+String _sanitizePathSegmentForFilename(String s) {
+  return s.replaceAll(RegExp(r'[^a-zA-Z0-9._-]'), '_');
+}
+
+/// Όνομα προορισμού: stem + '_' + parent path segments (υπό lib ή root), με όρια Windows.
+String _destFilenameWithEncodedPath(File source, String projectRootAbs) {
+  final normSource = p.normalize(source.absolute.path);
+  final normRoot = p.normalize(projectRootAbs);
+  final libRoot = p.normalize(p.join(normRoot, 'lib'));
+
+  String rel;
+  if (normSource.startsWith('$libRoot${p.separator}')) {
+    rel = p.relative(normSource, from: libRoot);
+  } else if (normSource.startsWith('$normRoot${p.separator}')) {
+    rel = p.relative(normSource, from: normRoot);
+  } else {
+    return p.basename(source.path);
+  }
+
+  final relForward = rel.replaceAll('\\', '/');
+  final segments = relForward.split('/').where((s) => s.isNotEmpty).toList();
+  if (segments.isEmpty) return p.basename(source.path);
+
+  final fileName = segments.removeLast();
+  final stem = p.basenameWithoutExtension(fileName);
+  final ext = p.extension(fileName);
+
+  final sanitizedParts = segments.map(_sanitizePathSegmentForFilename).where((s) => s.isNotEmpty).toList();
+  final suffix = sanitizedParts.join('_');
+  final name = suffix.isEmpty ? '$stem$ext' : '$stem''_$suffix$ext';
+
+  return _trimFilenameForWindows(name, maxTotalChars: 200);
+}
+
+/// Μέγιστο ασφαλές μήκος ονόματος αρχείου (Windows component ~255, αφήνουμε περιθώριο).
+String _trimFilenameForWindows(String name, {required int maxTotalChars}) {
+  if (name.length <= maxTotalChars) return name;
+  final ext = p.extension(name);
+  var stem = p.basenameWithoutExtension(name);
+  final tag = _shortHash(name).toRadixString(16);
+  final reserve = tag.length + 1 + ext.length + 2;
+  var maxStem = maxTotalChars - reserve;
+  if (maxStem < 16) maxStem = 16;
+  if (stem.length > maxStem) {
+    stem = stem.substring(0, maxStem);
+  }
+  return '${stem}_$tag$ext';
+}
+
+// —————————————————————————————————————————————————————————————————————
+// Interactive missing (fuzzy)
+// —————————————————————————————————————————————————————————————————————
+
+_InteractivePickResult _handleMissingInteractive(
+  List<String> missing,
+  List<String> allFiles,
+  Directory projectRoot,
+  String rootAbs,
+  Set<String> copiedSourceAbs,
+) {
+  final copies = <_CopyOk>[];
+  var skippedQueries = 0;
+
+  print('');
+  print(
+    '— Δεν βρέθηκαν ${missing.length} αρχεία · fuzzy προτάσεις (μετά τις αυτόματες / αμφισημία) —',
+  );
+  print(
+    'Εντολές: αριθμοί (μία γραμμή = μία ομάδα· αν η ομάδα έχει πολλές διαδρομές, αντιγράφονται όλες με suffix), '
+    '"all" για όλες τις προτάσεις, κενό = παράλειψη. Έως $_kFuzzyMaxGroups προτάσεις (ίδιο basename = μία πρόταση).',
+  );
+  print('');
+
+  for (final item in missing) {
+    print('Ζητούμενο: "$item"');
+    final groups = _findFuzzyGroups(
+      item,
+      allFiles,
+      projectRoot,
+      copiedSourceAbs,
+    );
+
+    if (groups.isEmpty) {
+      print('  (Καμία πρόταση στο project ή όλα ήδη αντιγράφηκαν.)');
+      skippedQueries++;
+      print('');
+      continue;
+    }
+
+    for (var i = 0; i < groups.length; i++) {
+      final g = groups[i];
+      final pct = (g.bestScore * 100).round();
+      if (g.isAmbiguous) {
+        print(
+          '  ${i + 1}. ${g.displayName}  — αμφισημία: ${g.files.length} διαδρομές  ($pct%)',
+        );
+        for (final f in g.files) {
+          final relDisp = _displaySourceForLog(f.absolute.path, rootAbs);
+          print('      · $relDisp');
+        }
+      } else {
+        final f = g.files.single;
+        final relDisp = _displaySourceForLog(f.absolute.path, rootAbs);
+        print('  ${i + 1}. ${g.displayName}  ($pct%)   $relDisp');
+      }
+    }
+
+    print('Επιλογή>');
+    final line = stdin.readLineSync();
+    final input = line?.trim() ?? '';
+
+    if (input.isEmpty) {
+      print('  → Παράλειψη.\n');
+      skippedQueries++;
+      continue;
+    }
+
+    final lower = input.toLowerCase();
+    final indices = <int>{};
+
+    if (lower == 'skip') {
+      print('  → Παράλειψη (skip).\n');
+      skippedQueries++;
+      continue;
+    }
+    if (lower == 'all') {
+      for (var i = 0; i < groups.length; i++) {
+        indices.add(i);
+      }
+    } else {
+      for (final part in input.split(RegExp(r'[\s,]+'))) {
+        if (part.isEmpty) continue;
+        final n = int.tryParse(part);
+        if (n == null || n < 1 || n > groups.length) {
+          print('  ! Αγνόησα μη έγκυρο: "$part"');
+          continue;
+        }
+        indices.add(n - 1);
+      }
+    }
+
+    if (indices.isEmpty) {
+      print('  → Καμία έγκυρη επιλογή — παράλειψη.\n');
+      skippedQueries++;
+      continue;
+    }
+
+    final sortedIdx = indices.toList()..sort();
+    final usedDest = <String>{};
+    for (final idx in sortedIdx) {
+      _appendCopiesFromFuzzyGroup(
+        groups[idx],
+        copies,
+        copiedSourceAbs,
+        usedDest,
+        rootAbs,
       );
     }
     print('');
@@ -352,20 +661,38 @@ final class _CopyMissing extends _CopyOutcome {
   final String item;
 }
 
+final class _CopyAmbiguous extends _CopyOutcome {
+  _CopyAmbiguous(this.item, this.files);
+
+  final String item;
+  final List<File> files;
+}
+
+List<_CopyOk> _dedupeCopyOkBySource(List<_CopyOk> list) {
+  final seen = <String>{};
+  final out = <_CopyOk>[];
+  for (final ok in list) {
+    final k = p.normalize(ok.source.absolute.path);
+    if (seen.add(k)) out.add(ok);
+  }
+  return out;
+}
+
 void _copyFileToGrok(_CopyOk o, Directory grokDir, String sep) {
   final dest = File('${grokDir.path}$sep${o.destFilename}');
   o.source.copySync(dest.path);
   final destDisplay = '\\Grok\\${o.destFilename}';
-  print('✓ ${o.destFilename} → $destDisplay');
+  print('✓ ${o.destFilename} ← ${o.srcDisplay} → $destDisplay');
 }
 
 _CopyOutcome _resolveItem(
   String item,
   Directory projectRoot,
-  Directory libDir,
   String rootAbs,
   String sep,
+  List<String> allFilenames,
 ) {
+  final rootPath = projectRoot.absolute.path;
   final bool isPath = _isPath(item);
   File? found;
   String destFilename = item;
@@ -384,40 +711,73 @@ _CopyOutcome _resolveItem(
         break;
       }
     }
-  }
-  if (found == null) {
-    final basename = item.contains('/') || item.contains('\\')
-        ? item.replaceAll('\\', '/').split('/').last
-        : item;
-    found = _findFileRecursively(libDir, basename) ?? _findFileRecursively(projectRoot, basename);
     if (found != null) {
-      destFilename = p.basename(found.path);
+      final srcDisplay = _displaySourceForLog(found.absolute.path, rootAbs);
+      return _CopyOk(source: found, destFilename: destFilename, srcDisplay: srcDisplay);
+    }
+    return _CopyMissing(item);
+  }
+
+  final wantedBase = item.trim();
+  final matches = <File>[];
+  for (final rel in allFilenames) {
+    if (p.basename(rel).toLowerCase() == wantedBase.toLowerCase()) {
+      final f = File(p.join(rootPath, rel));
+      if (f.existsSync()) matches.add(f);
     }
   }
 
-  if (found != null) {
-    final srcDisplay = _displaySourceForLog(found.absolute.path, rootAbs);
-    return _CopyOk(source: found, destFilename: destFilename, srcDisplay: srcDisplay);
+  final byPath = <String, File>{};
+  for (final f in matches) {
+    byPath[p.normalize(f.absolute.path)] = f;
   }
-  return _CopyMissing(item);
+  final files = byPath.values.toList();
+
+  if (files.isEmpty) {
+    return _CopyMissing(item);
+  }
+  if (files.length == 1) {
+    final f = files.single;
+    final df = p.basename(f.path);
+    return _CopyOk(
+      source: f,
+      destFilename: df,
+      srcDisplay: _displaySourceForLog(f.absolute.path, rootAbs),
+    );
+  }
+  return _CopyAmbiguous(item, files);
 }
 
-void _printFinalSummary(
-  int copiedCount,
-  int skippedCount, {
-  required bool hadInteractiveMissing,
+void _printFinalSummary({
+  required int totalCopied,
+  required int automaticCopied,
+  required int ambiguousCopied,
+  required int fuzzyCopied,
+  required int skippedAmbiguous,
+  required int skippedFuzzy,
+  required bool hadAmbiguous,
+  required bool hadFuzzy,
 }) {
   print('');
-  if (hadInteractiveMissing) {
-    print('Σύνοψη: Αντιγράφηκαν $copiedCount · Παραλήφθηκαν $skippedCount.');
-  } else if (copiedCount == 0) {
+  if (totalCopied == 0 && !hadAmbiguous && !hadFuzzy) {
     print('Σύνοψη: Δεν αντιγράφηκε κανένα αρχείο.');
-  } else {
-    print('Σύνοψη: Αντιγράφηκαν $copiedCount αρχείο(α).');
+    return;
   }
+  final parts = <String>[
+    'Σύνοψη: σύνολο $totalCopied',
+    'αυτόματα $automaticCopied',
+    'διαδραστικά ${ambiguousCopied + fuzzyCopied}',
+  ];
+  if (hadAmbiguous || hadFuzzy) {
+    parts.add('(αμφισημία: $ambiguousCopied · fuzzy: $fuzzyCopied)');
+  }
+  final skippedTotal = skippedAmbiguous + skippedFuzzy;
+  if (skippedTotal > 0) {
+    parts.add('παραλήφθηκαν $skippedTotal (αμφισημία: $skippedAmbiguous · fuzzy: $skippedFuzzy)');
+  }
+  print('${parts.join(' · ')}.');
 }
 
-/// Μετρά μόνο αρχεία (όχι φακέλους) αναδρομικά.
 int _countFilesRecursive(Directory dir) {
   if (!dir.existsSync()) return 0;
   var n = 0;
@@ -453,30 +813,16 @@ bool _isPath(String item) => item.contains('/') || item.contains('\\');
 List<String> _parseItems(List<String> arguments) {
   if (arguments.isEmpty) return [];
   final singleString = arguments.join(',');
-  return singleString
+  final raw = singleString
       .split(',')
       .map((s) => s.trim())
-      .where((s) => s.isNotEmpty)
-      .toList();
-}
-
-File? _findFileRecursively(Directory dir, String filename) {
-  if (!dir.existsSync()) return null;
-  try {
-    for (final entity in dir.listSync(followLinks: false)) {
-      if (entity is File) {
-        if (entity.path.endsWith(filename) || entity.uri.pathSegments.last == filename) {
-          return entity;
-        }
-      } else if (entity is Directory) {
-        final found = _findFileRecursively(entity, filename);
-        if (found != null) return found;
-      }
-    }
-  } on IOException {
-    return null;
+      .where((s) => s.isNotEmpty);
+  final seen = <String>{};
+  final out = <String>[];
+  for (final s in raw) {
+    if (seen.add(s)) out.add(s);
   }
-  return null;
+  return out;
 }
 
 String _displaySourceForLog(String sourceAbsolute, String projectRootAbsolute) {

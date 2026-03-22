@@ -1,3 +1,8 @@
+// Widget tests: EquipmentDataTable — δυναμικές στήλες, τιμές γραμμών, ελλείψεις (παύλες).
+//
+// Ολόκληρο αρχείο:
+//   flutter test test/features/directory/screens/widgets/equipment_data_table_test.dart
+
 import 'package:call_logger/features/calls/models/equipment_model.dart';
 import 'package:call_logger/features/calls/models/user_model.dart';
 import 'package:call_logger/features/directory/models/equipment_column.dart';
@@ -6,6 +11,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  // Έλεγχος επικεφαλίδων και κελιών (κωδικός, κάτοχος, IP, εργαλείο απομακρυσμένης).
+  //   flutter test test/features/directory/screens/widgets/equipment_data_table_test.dart --plain-name "EquipmentDataTable εμφανίζει δυναμικές στήλες και τιμές γραμμών"
   testWidgets('EquipmentDataTable εμφανίζει δυναμικές στήλες και τιμές γραμμών', (tester) async {
     final items = [
       (
@@ -15,13 +22,12 @@ void main() {
           type: 'Desktop',
           customIp: '10.0.0.1',
           defaultRemoteTool: 'AnyDesk',
-          userId: 100,
         ),
         UserModel(
           id: 100,
           firstName: 'Γιάννης',
           lastName: 'Ιωάννου',
-          phone: '2101234567',
+          phones: const ['2101234567'],
         ),
       ),
     ];
@@ -66,11 +72,17 @@ void main() {
     expect(find.text('AnyDesk'), findsOneWidget);
   });
 
+  // Χωρίς κάτοχο/κενά πεδία: «Χωρίς κάτοχο» και em dash στα κενά.
+  //   flutter test test/features/directory/screens/widgets/equipment_data_table_test.dart --plain-name "EquipmentDataTable εμφανίζει παύλα όταν owner ή πεδία λείπουν"
   testWidgets('EquipmentDataTable εμφανίζει παύλα όταν owner ή πεδία λείπουν', (tester) async {
     final items = [
       (
         EquipmentModel(
-            id: 2, code: 'PC-02', type: 'Laptop', notes: null, userId: null),
+          id: 2,
+          code: 'PC-02',
+          type: 'Laptop',
+          notes: null,
+        ),
         null,
       ),
     ];

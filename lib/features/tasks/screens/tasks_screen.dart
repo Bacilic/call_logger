@@ -27,7 +27,6 @@ class TasksScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final asyncTasks = ref.watch(tasksProvider);
-    final asyncOrphans = ref.watch(orphanCallsProvider);
     ref.watch(taskSnoozeConfigProvider);
     return Scaffold(
       appBar: AppBar(
@@ -88,16 +87,8 @@ class TasksScreen extends ConsumerWidget {
           return Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              asyncOrphans.when(
-                data: (orphans) {
-                  if (orphans.isEmpty) return const SizedBox.shrink();
-                  return _OrphanCallsBanner(
-                    count: orphans.length,
-                    onCreateTasks: () => _createTasksForOrphans(context, ref),
-                  );
-                },
-                loading: () => const SizedBox.shrink(),
-                error: (_, _) => const SizedBox.shrink(),
+              _OrphanCallsBanner(
+                onCreateTasks: () => _createTasksForOrphans(context, ref),
               ),
               Expanded(
                 child: tasks.isEmpty
@@ -678,17 +669,24 @@ class _TaskDeleteCountdownSnackContentState
   }
 }
 
-class _OrphanCallsBanner extends StatelessWidget {
+class _OrphanCallsBanner extends ConsumerWidget {
   const _OrphanCallsBanner({
-    required this.count,
     required this.onCreateTasks,
   });
 
-  final int count;
   final VoidCallback onCreateTasks;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final asyncOrphans = ref.watch(orphanCallsProvider);
+    final count = asyncOrphans.when(
+      data: (orphans) => orphans.length,
+      loading: () => 0,
+      error: (_, _) => 0,
+    );
+    if (count == 0) {
+      return const SizedBox.shrink();
+    }
     return Material(
       color: Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.6),
       child: SafeArea(

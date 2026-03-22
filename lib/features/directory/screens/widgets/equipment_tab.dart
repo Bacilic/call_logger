@@ -4,10 +4,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../calls/models/equipment_model.dart';
+import '../../../calls/models/user_model.dart';
+import '../../models/equipment_column.dart';
 import '../../providers/directory_provider.dart';
 import '../../providers/equipment_directory_provider.dart';
-import '../../models/equipment_column.dart';
 import 'bulk_equipment_edit_dialog.dart';
+import 'catalog_column_selector_shell.dart';
 import 'equipment_data_table.dart';
 import 'equipment_form_dialog.dart';
 
@@ -41,7 +43,7 @@ class _EquipmentTabState extends ConsumerState<EquipmentTab> {
     final theme = Theme.of(context);
     final state = ref.watch(equipmentDirectoryProvider);
     final notifier = ref.read(equipmentDirectoryProvider.notifier);
-    final visibleColumns = state.visibleColumns;
+    final visibleColumns = state.orderedVisibleColumns;
     final continuousScrollAsync = ref.watch(catalogContinuousScrollProvider);
     final continuousScroll = continuousScrollAsync.value ?? true;
 
@@ -147,11 +149,16 @@ class _EquipmentTabState extends ConsumerState<EquipmentTab> {
             selectedIds: state.selectedIds,
             sortColumn: state.sortColumn,
             sortAscending: state.sortAscending,
-            visibleColumns: state.visibleColumns,
+            visibleColumns: state.orderedVisibleColumns,
             onToggleSelection: notifier.toggleSelection,
             onSetSort: notifier.setSort,
-            onEditEquipment: (row, {focusedField}) =>
-                _openForm(context, ref, row.$1, focusedField: focusedField),
+            onEditEquipment: (row, {focusedField}) => _openForm(
+              context,
+              ref,
+              row.$1,
+              initialOwner: row.$2,
+              focusedField: focusedField,
+            ),
             focusedRowIndex: state.focusedRowIndex,
             onSetFocusedRowIndex: notifier.setFocusedRowIndex,
             onRequestDelete: () => _confirmAndDeleteSelected(context, ref),
@@ -184,8 +191,13 @@ class _EquipmentTabState extends ConsumerState<EquipmentTab> {
                               .where((r) => r.$1.id == id)
                               .toList();
                           if (candidates.isNotEmpty) {
-                            _openForm(context, ref, candidates.first.$1,
-                                isClone: true);
+                            _openForm(
+                              context,
+                              ref,
+                              candidates.first.$1,
+                              initialOwner: candidates.first.$2,
+                              isClone: true,
+                            );
                           }
                         }
                       : null,
@@ -225,9 +237,10 @@ class _EquipmentTabState extends ConsumerState<EquipmentTab> {
     showDialog<void>(
       context: context,
       barrierDismissible: true,
+      barrierColor: Theme.of(context).colorScheme.scrim.withValues(alpha: 0.4),
       builder: (ctx) => UncontrolledProviderScope(
         container: ProviderScope.containerOf(context),
-        child: _ColumnSelectorOverlay(
+        child: _EquipmentColumnSelectorOverlay(
           onClose: () => Navigator.of(ctx).pop(),
         ),
       ),
@@ -238,6 +251,7 @@ class _EquipmentTabState extends ConsumerState<EquipmentTab> {
     BuildContext context,
     WidgetRef ref,
     EquipmentModel? initialEquipment, {
+    UserModel? initialOwner,
     bool isClone = false,
     String? focusedField,
   }) async {
@@ -245,6 +259,7 @@ class _EquipmentTabState extends ConsumerState<EquipmentTab> {
       context: context,
       builder: (ctx) => EquipmentFormDialog(
         initialEquipment: initialEquipment,
+        initialOwner: initialOwner,
         notifier: ref.read(equipmentDirectoryProvider.notifier),
         ref: ref,
         isClone: isClone,
@@ -296,9 +311,9 @@ class _EquipmentTabState extends ConsumerState<EquipmentTab> {
   }
 }
 
-/// Overlay επιλογής στηλών: μένει ανοιχτός κατά το toggle, κλείνει με κλικ έξω ή με το χ.
-class _ColumnSelectorOverlay extends ConsumerWidget {
-  const _ColumnSelectorOverlay({required this.onClose});
+/// Overlay επιλογής στηλών: [selection] μόνο ορατότητα (πάντα πρώτη)· οι υπόλοιπες με σύρσιμο.
+class _EquipmentColumnSelectorOverlay extends ConsumerWidget {
+  const _EquipmentColumnSelectorOverlay({required this.onClose});
 
   final VoidCallback onClose;
 
@@ -306,68 +321,87 @@ class _ColumnSelectorOverlay extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(equipmentDirectoryProvider);
     final notifier = ref.read(equipmentDirectoryProvider.notifier);
-    final visibleColumns = state.visibleColumns;
+    final order = state.columnOrder;
+    final keys = state.visibleColumnKeys;
     final theme = Theme.of(context);
+    final sel = EquipmentColumn.selection;
+    final orderRest = order
+        .where((c) => c.key != sel.key)
+        .toList(growable: false);
+    final selOn = keys.contains(sel.key);
 
-    return Material(
-      color: Colors.transparent,
-      child: Align(
-        alignment: Alignment.centerRight,
-        child: Padding(
-          padding: const EdgeInsets.only(right: 16),
-          child: Material(
-            elevation: 8,
-            borderRadius: BorderRadius.circular(8),
-            color: theme.colorScheme.surfaceContainerHighest,
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 280, maxHeight: 400),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 8, 4, 4),
-                    child: Row(
-                      children: [
-                        Text(
-                          'Στήλες',
-                          style: theme.textTheme.titleSmall,
-                        ),
-                        const Spacer(),
-                        IconButton(
-                          icon: const Icon(Icons.close, size: 20),
-                          tooltip: 'Κλείσιμο',
-                          onPressed: onClose,
-                          style: IconButton.styleFrom(
-                            minimumSize: const Size(32, 32),
-                            padding: EdgeInsets.zero,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const Divider(height: 1),
-                  Flexible(
-                    child: ListView(
-                      shrinkWrap: true,
-                      padding: const EdgeInsets.symmetric(vertical: 4),
-                      children: EquipmentColumn.all
-                          .map(
-                            (col) => CheckboxListTile(
-                              title: Text(col.label),
-                              value: visibleColumns.contains(col),
-                              onChanged: (_) => notifier.toggleColumn(col),
-                              controlAffinity: ListTileControlAffinity.leading,
-                            ),
-                          )
-                          .toList(),
-                    ),
-                  ),
-                ],
+    return CatalogColumnSelectorShell(
+      onClose: onClose,
+      title: 'Στήλες',
+      listChild: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Material(
+            color: Colors.transparent,
+            child: ListTile(
+              contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+              onTap: () => notifier.setEquipmentColumnVisible(sel, !selOn),
+              leading: Checkbox(
+                value: selOn,
+                onChanged: (v) {
+                  if (v != null) {
+                    notifier.setEquipmentColumnVisible(sel, v);
+                  }
+                },
+              ),
+              title: Text(
+                sel.label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
             ),
           ),
-        ),
+          Expanded(
+            child: ReorderableListView.builder(
+              buildDefaultDragHandles: false,
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              itemCount: orderRest.length,
+              onReorder: notifier.reorderEquipmentColumns,
+              proxyDecorator: (child, index, animation) => Material(
+                elevation: 2,
+                color: theme.colorScheme.surfaceContainerHighest,
+                child: child,
+              ),
+              itemBuilder: (context, index) {
+                final col = orderRest[index];
+                final isOn = keys.contains(col.key);
+                return Material(
+                  key: ValueKey(col.key),
+                  color: Colors.transparent,
+                  child: ListTile(
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+                    onTap: () => notifier.setEquipmentColumnVisible(col, !isOn),
+                    leading: Checkbox(
+                      value: isOn,
+                      onChanged: (v) {
+                        if (v != null) {
+                          notifier.setEquipmentColumnVisible(col, v);
+                        }
+                      },
+                    ),
+                    title: Text(
+                      col.label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    trailing: ReorderableDragStartListener(
+                      index: index,
+                      child: Icon(
+                        Icons.drag_handle,
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
       ),
     );
   }

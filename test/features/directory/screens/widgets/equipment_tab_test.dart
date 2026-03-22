@@ -1,3 +1,8 @@
+// Widget tests: EquipmentTab — chips ορατών στηλών, αφαίρεση/προσθήκη, reorder.
+//
+// Ολόκληρο αρχείο:
+//   flutter test test/features/directory/screens/widgets/equipment_tab_test.dart
+
 import 'package:call_logger/features/directory/models/equipment_column.dart';
 import 'package:call_logger/features/directory/providers/equipment_directory_provider.dart';
 import 'package:call_logger/features/directory/screens/widgets/equipment_tab.dart';
@@ -18,14 +23,15 @@ class _FakeEquipmentDirectoryNotifier extends EquipmentDirectoryNotifier {
 }
 
 void main() {
+  // Fake provider state: εμφάνιση Chip ανά στήλη + ReorderableListView.
+  //   flutter test test/features/directory/screens/widgets/equipment_tab_test.dart --plain-name "EquipmentTab εμφανίζει chips για τις ορατές στήλες"
   testWidgets('EquipmentTab εμφανίζει chips για τις ορατές στήλες', (tester) async {
     final state = EquipmentDirectoryState(
-      visibleColumns: [
-        EquipmentColumn.code,
-        EquipmentColumn.type,
-        EquipmentColumn.owner,
-      ],
-      allColumns: EquipmentColumn.all,
+      visibleColumnKeys: {
+        EquipmentColumn.code.key,
+        EquipmentColumn.type.key,
+        EquipmentColumn.owner.key,
+      },
     );
 
     await tester.pumpWidget(
@@ -46,13 +52,14 @@ void main() {
     expect(find.byType(ReorderableListView), findsOneWidget);
   });
 
+  // Διαγραφή chip «Τύπος», προσθήκη «Τοποθεσία» από μενού στηλών (κοντά στην κορυφή της λίστας).
+  //   flutter test test/features/directory/screens/widgets/equipment_tab_test.dart --plain-name "EquipmentTab αφαιρεί στήλη με delete και προσθέτει από popup"
   testWidgets('EquipmentTab αφαιρεί στήλη με delete και προσθέτει από popup', (tester) async {
     final state = EquipmentDirectoryState(
-      visibleColumns: [
-        EquipmentColumn.code,
-        EquipmentColumn.type,
-      ],
-      allColumns: EquipmentColumn.all,
+      visibleColumnKeys: {
+        EquipmentColumn.code.key,
+        EquipmentColumn.type.key,
+      },
     );
 
     await tester.pumpWidget(
@@ -79,23 +86,26 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.widgetWithText(Chip, 'Τύπος'), findsNothing);
 
-    // Προσθήκη "Σημειώσεις" από popup (δεύτερο Icons.add = μενού στήλων).
-    await tester.tap(find.byIcon(Icons.add).last);
+    // Προσθήκη "Σημειώσεις" από popup στηλών (όχι το FilledButton «Προσθήκη»).
+    await tester.tap(
+      find.byTooltip('Προσθήκη / αφαίρεση στηλών'),
+    );
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Σημειώσεις').last);
+    await tester.tap(find.text('Τοποθεσία'));
     await tester.pumpAndSettle();
 
-    expect(find.widgetWithText(Chip, 'Σημειώσεις'), findsOneWidget);
+    expect(find.widgetWithText(Chip, 'Τοποθεσία'), findsOneWidget);
   });
 
+  // Άμεση κλήση onReorder(0,2) — ενημέρωση σειράς ορατών στη columnOrder.
+  //   flutter test test/features/directory/screens/widgets/equipment_tab_test.dart --plain-name "EquipmentTab καλεί reorder και αλλάζει σειρά chips"
   testWidgets('EquipmentTab καλεί reorder και αλλάζει σειρά chips', (tester) async {
     final state = EquipmentDirectoryState(
-      visibleColumns: [
-        EquipmentColumn.code,
-        EquipmentColumn.type,
-        EquipmentColumn.owner,
-      ],
-      allColumns: EquipmentColumn.all,
+      visibleColumnKeys: {
+        EquipmentColumn.code.key,
+        EquipmentColumn.type.key,
+        EquipmentColumn.owner.key,
+      },
     );
 
     final container = ProviderContainer(
@@ -119,7 +129,8 @@ void main() {
     list.onReorder(0, 2);
     await tester.pumpAndSettle();
 
-    final newOrder = container.read(equipmentDirectoryProvider).visibleColumns;
+    final newOrder =
+        container.read(equipmentDirectoryProvider).orderedVisibleColumns;
     expect(
       newOrder,
       orderedEquals([

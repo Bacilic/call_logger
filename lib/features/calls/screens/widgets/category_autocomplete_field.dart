@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/database/database_helper.dart';
+import '../../../../core/utils/spell_check.dart';
 import '../../../history/providers/history_provider.dart';
 import '../../provider/call_entry_provider.dart';
 
@@ -96,7 +97,7 @@ class _CategoryAutocompleteFieldState
         asyncCats.hasValue ? asyncCats.value! : <String>[];
     final categoriesReady = asyncCats.hasValue;
 
-    final entryCategory = ref.watch(callEntryProvider).category;
+    final entryCategory = ref.watch(callEntryProvider.select((s) => s.category));
     // Μετά από επιτυχή υποβολή το state καθαρίζει την κατηγορία· ευθυγράμμιση πεδίου.
     if (entryCategory.isEmpty && _controller.text.isNotEmpty) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -194,6 +195,7 @@ class _CategoryAutocompleteFieldState
                   child: TextField(
                     controller: textEditingController,
                     focusNode: focusNode,
+                    spellCheckConfiguration: platformSpellCheckConfiguration,
                     decoration: InputDecoration(
                       labelText: 'Κατηγορία προβλήματος',
                       border: const OutlineInputBorder(),

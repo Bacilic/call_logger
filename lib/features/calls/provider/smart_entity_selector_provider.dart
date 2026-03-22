@@ -104,36 +104,39 @@ class SmartEntitySelectorState {
   bool get hasEquipmentInput => equipmentText.trim().isNotEmpty;
 
   bool get hasPhoneAssociation {
-    final callerPhone = selectedCaller?.phone?.trim() ?? '';
+    final callerPhone = selectedCaller?.phoneJoined ?? '';
     final selPhone = selectedPhone?.trim() ?? '';
     if (selPhone.isEmpty) return false;
     return PhoneListParser.containsPhone(callerPhone, selPhone);
   }
 
-  bool get hasEquipmentAssociation {
+  /// [lookup]: για έλεγχο M2M (`user_equipment`) όταν υπάρχει επιλεγμένος εξοπλισμός με id.
+  bool hasEquipmentAssociation(LookupService? lookup) {
     if (selectedCaller == null) return false;
     final text = equipmentText.trim();
     if (text.isEmpty) return false;
-    if (selectedEquipment != null &&
-        selectedEquipment!.userId == selectedCaller!.id) {
-      return true;
+    final callerId = selectedCaller!.id;
+    if (lookup != null &&
+        selectedEquipment?.id != null &&
+        callerId != null) {
+      final owners = lookup.findUsersForEquipment(selectedEquipment!.id!);
+      if (owners.any((u) => u.id == callerId)) return true;
     }
 
-    // Έλεγχος αν ο εξοπλισμός (βάσει κειμένου) ανήκει ήδη στον χρήστη, μέσω της λίστας
     return equipmentCandidates.any(
       (e) => e.code?.trim() == text || e.displayLabel == text,
     );
   }
 
   /// True όταν υπάρχει ήδη γνωστός χρήστης και τουλάχιστον ένα από Τηλέφωνο/Εξοπλισμό έχει τιμή και δεν είναι συσχετισμένο.
-  bool get needsExistingCallerAssociation {
+  bool needsExistingCallerAssociation(LookupService? lookup) {
     if (selectedCaller == null) return false;
     final phoneFilled = selectedPhone?.trim().isNotEmpty == true;
     final equipmentFilled = equipmentText.trim().isNotEmpty;
     if (!phoneFilled && !equipmentFilled) return false;
 
     final needsPhone = phoneFilled && !hasPhoneAssociation;
-    final needsEquipment = equipmentFilled && !hasEquipmentAssociation;
+    final needsEquipment = equipmentFilled && !hasEquipmentAssociation(lookup);
 
     return needsPhone || needsEquipment;
   }
@@ -146,8 +149,8 @@ class SmartEntitySelectorState {
       (hasPhoneInput || hasEquipmentInput);
 
   /// Το κουμπί `+` εμφανίζεται είτε για νέα συσχέτιση σε υπάρχοντα χρήστη είτε για δημιουργία νέου καλούντα.
-  bool get needsAssociation =>
-      needsExistingCallerAssociation ||
+  bool needsAssociation(LookupService? lookup) =>
+      needsExistingCallerAssociation(lookup) ||
       needsNewCallerCreation ||
       hasPendingDepartmentChange;
 
@@ -174,7 +177,7 @@ class SmartEntitySelectorState {
   }
 
   /// Πράσινο: μία πλήρης συσχέτιση ή και τα δύο μη συσχετισμένα. Πορτοκαλί: μερική ενημέρωση (και τα δύο συμπληρωμένα, μόνο το ένα συσχετισμένο).
-  Color get associationColor {
+  Color associationColor(LookupService? lookup) {
     if (needsNewCallerCreation) {
       return Colors.green;
     }
@@ -182,7 +185,7 @@ class SmartEntitySelectorState {
     final equipmentFilled = equipmentText.trim().isNotEmpty;
 
     final needsPhone = phoneFilled && !hasPhoneAssociation;
-    final needsEquipment = equipmentFilled && !hasEquipmentAssociation;
+    final needsEquipment = equipmentFilled && !hasEquipmentAssociation(lookup);
 
     if (phoneFilled && equipmentFilled && (needsPhone != needsEquipment)) {
       return Colors.orange;
@@ -191,8 +194,8 @@ class SmartEntitySelectorState {
   }
 
   /// Τι ακριβώς θα συμβεί είτε για υπάρχοντα χρήστη είτε για νέο καλούντα.
-  String? get associationTooltip {
-    if (!needsAssociation) return null;
+  String? associationTooltip(LookupService? lookup) {
+    if (!needsAssociation(lookup)) return null;
     final phoneFilled = hasPhoneInput;
     final equipmentFilled = hasEquipmentInput;
 
@@ -220,7 +223,7 @@ class SmartEntitySelectorState {
     if (phoneFilled && !hasPhoneAssociation) {
       parts.add('τηλεφώνου: ${selectedPhone!.trim()}');
     }
-    if (equipmentFilled && !hasEquipmentAssociation) {
+    if (equipmentFilled && !hasEquipmentAssociation(lookup)) {
       parts.add('εξοπλισμού: ${equipmentText.trim()}');
     }
     final base = parts.isEmpty
@@ -234,8 +237,16 @@ class SmartEntitySelectorState {
     return '$base\n$departmentPart';
   }
 
-  /// True όταν μπορεί να γίνει υποβολή κλήσης: συμπληρωμένο τηλέφωνο.
-  bool get canSubmitCall => selectedPhone?.trim().isNotEmpty == true;
+  /// True όταν μπορεί να γίνει υποβολή κλήσης: εσωτερικό με τουλάχιστον ένα ψηφίο
+  /// και χωρίς χαρακτήρες γράμματος (π.χ. `210-LAB` μένει ανενεργό).
+  bool get canSubmitCall {
+    final raw = selectedPhone?.trim() ?? '';
+    if (raw.isEmpty) return false;
+    final digits = raw.replaceAll(RegExp(r'[^0-9]'), '');
+    if (digits.isEmpty) return false;
+    if (RegExp(r'[A-Za-zΑ-Ωα-ω]').hasMatch(raw)) return false;
+    return true;
+  }
 
   SmartEntitySelectorState copyWith({
     String? selectedPhone,
@@ -593,13 +604,13 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
   }
 
   /// Γεμίζει/διατηρεί ένα μόνο εσωτερικό τηλέφωνο από το προφίλ χρήστη (λίστα στο DB).
-  /// - Αν το πεδίο είχε κατά λάθος ολόκληρη τη λίστα `user.phone`, την καθαρίζει και συνεχίζει με λογική πολλαπλών.
+  /// - Αν το πεδίο είχε κατά λάθος ολόκληρη τη συνενωμένη λίστα (`phoneJoined`), την καθαρίζει και συνεχίζει με λογική πολλαπλών.
   /// - Αν υπάρχει έγκυρο token μέσα στη λίστα, το κρατάει.
   /// - Αν είναι κενό και υπάρχουν πολλά → candidates· αν ένα → αυτό.
   void _autofillPhoneFromUserProfile(UserModel user) {
     if (!_canAutofillPhone()) return;
-    final pool = user.phone?.trim() ?? '';
-    final phones = _splitPhones(pool);
+    final pool = user.phoneJoined.trim();
+    final phones = List<String>.from(user.phones);
     if (phones.isEmpty) return;
 
     var previous = state.selectedPhone?.trim() ?? '';
@@ -665,16 +676,20 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
 
   String _departmentTextForUser(UserModel user) {
     if (user.departmentId == null) return '';
-    return LookupService.instance.departmentIdToName[user.departmentId] ?? '';
+    final asyncLookup = ref.read(lookupServiceProvider);
+    final lookup = asyncLookup.value?.service;
+    if (lookup == null) return '';
+    return lookup.departmentIdToName[user.departmentId] ?? '';
   }
 
   /// Lookup τηλεφώνου: 0 → no match hint, 1 → setCaller + equipment lookup, >1 → dropdown candidates.
   void performPhoneLookup(String phone) {
     if (_isFillingFromLookup) return;
-    _isFillingFromLookup = true;
-    try {
-      final digits = phone.replaceAll(RegExp(r'[^0-9]'), '');
-      if (digits.length < 3) {
+
+    final digits = phone.replaceAll(RegExp(r'[^0-9]'), '');
+    if (digits.length < 3) {
+      _isFillingFromLookup = true;
+      try {
         state = state.copyWith(
           clearPhoneCandidates: true,
           clearCallerCandidates: true,
@@ -686,11 +701,28 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
           callerNoMatch: false,
           equipmentNoMatch: false,
         );
-        return;
+      } finally {
+        _isFillingFromLookup = false;
       }
-      final asyncLookup = ref.read(lookupServiceProvider);
-      final lookup = asyncLookup.value?.service;
-      if (lookup == null) return;
+      return;
+    }
+
+    final snap = ref.read(lookupServiceProvider);
+    if (snap.hasValue) {
+      _applyPhoneLookupWithCatalog(digits, snap.requireValue.service);
+      return;
+    }
+    // Κατά το πρώτο frame το AsyncValue μπορεί να είναι ακόμα loading.
+    ref.read(lookupServiceProvider.future).then((bundle) {
+      if (!ref.mounted) return;
+      _applyPhoneLookupWithCatalog(digits, bundle.service);
+    }).catchError((_) {});
+  }
+
+  void _applyPhoneLookupWithCatalog(String digits, LookupService lookup) {
+    if (_isFillingFromLookup) return;
+    _isFillingFromLookup = true;
+    try {
       final users = lookup.findUsersByPhone(digits);
       if (users.isEmpty) {
         state = state.copyWith(
@@ -939,7 +971,10 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
         equipmentIsManual: false,
       );
 
-      final user = lookup.findUserById(equipment.userId);
+      final owners = equipment.id != null
+          ? lookup.findUsersForEquipment(equipment.id!)
+          : <UserModel>[];
+      final user = owners.isNotEmpty ? owners.first : null;
       if (user == null) return;
 
       final shouldAutofillDepartment = _canAutofillDepartmentForUser(user);
@@ -1004,7 +1039,7 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
       callerIsManual: false,
     );
     if (value != null) {
-      final pool = value.phone?.trim() ?? '';
+      final pool = value.phoneJoined.trim();
       final sp = state.selectedPhone?.trim() ?? '';
       if (pool.isNotEmpty &&
           sp.isNotEmpty &&
@@ -1161,9 +1196,10 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
   Future<String?> associateCurrentIfNeeded({
     bool updatePrimaryDepartment = false,
   }) async {
-    if (!state.needsAssociation) return null;
+    final lookupForAssoc = ref.read(lookupServiceProvider).value?.service;
+    if (!state.needsAssociation(lookupForAssoc)) return null;
 
-    final msg = state.associationTooltip;
+    final msg = state.associationTooltip(lookupForAssoc);
     if (state.needsNewCallerCreation) {
       final name = NameParserUtility.stripParentheticalSuffix(
         state.normalizedCallerDisplayText,
@@ -1178,10 +1214,11 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
               ? lookup.findDepartmentByName(state.departmentText)?.id
               : null);
       try {
+        final parsedPhones = PhoneListParser.splitPhones(phone);
         final userId = await DatabaseHelper.instance.insertUser(
           firstName: parsed.firstName,
           lastName: parsed.lastName,
-          phone: phone?.isNotEmpty == true ? phone : null,
+          phones: parsedPhones.isEmpty ? null : parsedPhones,
           departmentId: departmentId,
         );
 
@@ -1198,18 +1235,17 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
             (s.departmentText.trim().isNotEmpty && lookupNow != null
                 ? lookupNow.findDepartmentByName(s.departmentText)?.id
                 : null);
-        final phoneNow = s.selectedPhone?.trim();
         final equipTrim = s.equipmentText.trim();
         state = state.copyWith(
           selectedCaller: UserModel(
             id: userId,
             firstName: parsed.firstName,
             lastName: parsed.lastName,
-            phone: phoneNow?.isNotEmpty == true ? phoneNow : null,
+            phones: parsedPhones,
             departmentId: departmentIdNow,
           ),
           selectedEquipment: equipTrim.isNotEmpty
-              ? EquipmentModel(code: equipTrim, userId: userId)
+              ? EquipmentModel(code: equipTrim)
               : s.selectedEquipment,
           callerDisplayText: s.callerDisplayText.trim().isNotEmpty
               ? s.callerDisplayText
@@ -1232,7 +1268,7 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
     final phone = state.hasPhoneAssociation
         ? null
         : state.selectedPhone?.trim();
-    final eqCode = state.hasEquipmentAssociation
+    final eqCode = state.hasEquipmentAssociation(lookupForAssoc)
         ? null
         : state.equipmentText.trim();
 
@@ -1267,36 +1303,29 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
 
       final s = state;
       final phoneNow = s.hasPhoneAssociation ? null : s.selectedPhone?.trim();
-      final eqCodeNow = s.hasEquipmentAssociation
-          ? null
-          : s.equipmentText.trim();
-      final currentPhone = s.selectedCaller?.phone?.trim();
-      final updatedPhone = phoneNow?.isNotEmpty == true
-          ? (currentPhone == null || currentPhone.isEmpty
-                ? phoneNow
-                : PhoneListParser.containsPhone(currentPhone, phoneNow)
-                ? currentPhone
-                : PhoneListParser.joinPhones([
-                    ...PhoneListParser.splitPhones(currentPhone),
-                    phoneNow!,
-                  ]))
-          : currentPhone;
+      final currentPhones = List<String>.from(s.selectedCaller?.phones ?? const []);
+      List<String> updatedPhones = currentPhones;
+      if (phoneNow != null && phoneNow.isNotEmpty) {
+        final joined = PhoneListParser.joinPhones(currentPhones);
+        if (!PhoneListParser.containsPhone(joined, phoneNow)) {
+          updatedPhones = [...currentPhones, phoneNow];
+        }
+      }
       state = state.copyWith(
         selectedCaller: UserModel(
           id: s.selectedCaller?.id,
           firstName: s.selectedCaller?.firstName,
           lastName: s.selectedCaller?.lastName,
-          phone: updatedPhone,
+          phones: updatedPhones,
           departmentId: updatedDepartmentId,
           notes: s.selectedCaller?.notes,
         ),
-        selectedEquipment: eqCodeNow?.isNotEmpty == true
+        selectedEquipment: eqCode?.isNotEmpty == true
             ? EquipmentModel(
                 id: s.selectedEquipment?.id,
-                code: eqCodeNow,
+                code: eqCode,
                 type: s.selectedEquipment?.type,
                 notes: s.selectedEquipment?.notes,
-                userId: userId,
               )
             : s.selectedEquipment,
         phoneIsManual: false,

@@ -1,5 +1,6 @@
+import 'package:flutter/foundation.dart';
+
 import '../database/database_helper.dart';
-import '../utils/phone_list_parser.dart';
 import '../utils/search_text_normalizer.dart';
 import '../../features/calls/models/equipment_model.dart';
 import '../../features/calls/models/user_model.dart';
@@ -29,6 +30,8 @@ class LookupService {
   final List<UserModel> _users = [];
   final List<EquipmentModel> _equipment = [];
   Map<int, List<EquipmentModel>> _equipmentByUserId = {};
+  /// Αντίστροφο ευρετήριο: equipment_id → user ids (για M2M).
+  final Map<int, List<int>> _userIdsByEquipmentId = {};
 
   List<DepartmentModel> departments = [];
   Map<int, String> departmentIdToName = {};
@@ -43,11 +46,20 @@ class LookupService {
   }
 
   /// Φόρτωση από βάση ΜΟΝΟ μία φορά κατά το init (ή μετά resetForReload).
-  Future<void> loadFromDatabase() async {
+  ///
+  /// [forceRefresh]: επαναφόρτωση ακόμα κι αν έχει ήδη γίνει load (π.χ. μετά από
+  /// αλλαγή δεδομένων στη SQLite χωρίς νέο [resetForReload]).
+  Future<void> loadFromDatabase({bool forceRefresh = false}) async {
+    if (forceRefresh) {
+      _loaded = false;
+      _loadedDepartments = false;
+    }
     if (_loaded) return;
+    final userMaps = await DatabaseHelper.instance.getAllUsers();
+    final equipmentMaps = await DatabaseHelper.instance.getAllEquipment();
     final db = await DatabaseHelper.instance.database;
-    final userMaps = await db.query('users');
-    final equipmentMaps = await db.query('equipment');
+    final linkMaps = await db.query('user_equipment');
+    // Καθαρισμός πριν επαναπλήρωση: αποφυγή διπλοτύπων / stale entries μετά από reload στα tests.
     _users.clear();
     _equipment.clear();
     for (final map in userMaps) {
@@ -56,11 +68,20 @@ class LookupService {
     for (final map in equipmentMaps) {
       _equipment.add(EquipmentModel.fromMap(map));
     }
+    final byEquipmentId = <int, EquipmentModel>{
+      for (final e in _equipment)
+        if (e.id != null) e.id!: e,
+    };
     _equipmentByUserId = {};
-    for (final e in _equipment) {
-      if (e.userId != null) {
-        _equipmentByUserId.putIfAbsent(e.userId!, () => []).add(e);
-      }
+    _userIdsByEquipmentId.clear();
+    for (final row in linkMaps) {
+      final uid = row['user_id'] as int?;
+      final eid = row['equipment_id'] as int?;
+      if (uid == null || eid == null) continue;
+      final eq = byEquipmentId[eid];
+      if (eq == null) continue;
+      _equipmentByUserId.putIfAbsent(uid, () => []).add(eq);
+      _userIdsByEquipmentId.putIfAbsent(eid, () => []).add(uid);
     }
     _loaded = true;
     await loadDepartments();
@@ -89,7 +110,7 @@ class LookupService {
     if (digits.length < 3) return null;
     for (final u in _users) {
       if (u.isDeleted) continue;
-      final phoneDigits = _digitsOnly(u.phone ?? '');
+      final phoneDigits = _digitsOnly(_userPhonesDigitPool(u));
       if (phoneDigits.isEmpty) continue;
       if (phoneDigits.contains(digits) || phoneDigits.startsWith(digits)) {
         final equipment = (_equipmentByUserId[u.id] ?? [])
@@ -110,8 +131,7 @@ class LookupService {
     final result = <String>[];
     for (final u in _users) {
       if (u.isDeleted) continue;
-      final phones = PhoneListParser.splitPhones(u.phone);
-      for (final phone in phones) {
+      for (final phone in u.phones) {
         final phoneDigits = _digitsOnly(phone);
         if ((phoneDigits.contains(digits) || phoneDigits.startsWith(digits)) &&
             seen.add(phone)) {
@@ -128,8 +148,15 @@ class LookupService {
     if (q.isEmpty) return [];
     return _users.where((u) {
       if (u.isDeleted) return false;
+      final phoneMatch = SearchTextNormalizer.matchesNormalizedQuery(
+            u.phoneJoined,
+            q,
+          ) ||
+          u.phones.any(
+            (p) => SearchTextNormalizer.matchesNormalizedQuery(p, q),
+          );
       return SearchTextNormalizer.matchesNormalizedQuery(u.name ?? '', q) ||
-          SearchTextNormalizer.matchesNormalizedQuery(u.phone ?? '', q) ||
+          phoneMatch ||
           SearchTextNormalizer.matchesNormalizedQuery(
             u.departmentName ?? '',
             q,
@@ -155,7 +182,7 @@ class LookupService {
     if (digits.length < 3) return [];
     final list = _users.where((u) {
       if (u.isDeleted) return false;
-      final phoneDigits = _digitsOnly(u.phone ?? '');
+      final phoneDigits = _digitsOnly(_userPhonesDigitPool(u));
       return phoneDigits.isNotEmpty &&
           (phoneDigits.contains(digits) || phoneDigits.startsWith(digits));
     }).toList();
@@ -163,11 +190,23 @@ class LookupService {
     return list;
   }
 
-  /// Εξοπλισμός που ανήκει στον χρήστη (user_id).
+  /// Εξοπλισμός που συνδέεται με τον χρήστη (πίνακας `user_equipment`).
   List<EquipmentModel> findEquipmentsForUser(int userId) {
     return (_equipmentByUserId[userId] ?? [])
         .where((e) => !e.isDeleted)
         .toList();
+  }
+
+  /// Χρήστες συνδεδεμένοι με τον εξοπλισμό (ταξινόμηση κατά user id).
+  List<UserModel> findUsersForEquipment(int equipmentId) {
+    final ids = List<int>.from(_userIdsByEquipmentId[equipmentId] ?? const [])
+      ..sort();
+    final out = <UserModel>[];
+    for (final id in ids) {
+      final u = findUserById(id);
+      if (u != null && !u.isDeleted) out.add(u);
+    }
+    return out;
   }
 
   /// Αναζήτηση εξοπλισμών με βάση κωδικό ή label (case-insensitive/normalized).
@@ -276,20 +315,23 @@ class LookupService {
     return result;
   }
 
-  /// Εξοπλισμός όλων των χρηστών συγκεκριμένου τμήματος.
+  /// Εξοπλισμός όλων των χρηστών συγκεκριμένου τμήματος (ενωσιακά, χωρίς διπλότυπα).
   List<EquipmentModel> getEquipmentByDepartment(int departmentId) {
     final users = getUsersByDepartment(departmentId);
     if (users.isEmpty) return [];
-    final userIds = users.map((u) => u.id).whereType<int>().toSet();
-    if (userIds.isEmpty) return [];
-    return _equipment
-        .where(
-          (e) =>
-              !e.isDeleted &&
-              e.userId != null &&
-              userIds.contains(e.userId),
-        )
-        .toList();
+    final seenEqIds = <int>{};
+    final out = <EquipmentModel>[];
+    for (final u in users) {
+      final id = u.id;
+      if (id == null) continue;
+      for (final e in findEquipmentsForUser(id)) {
+        final eid = e.id;
+        if (eid != null && seenEqIds.add(eid)) {
+          out.add(e);
+        }
+      }
+    }
+    return out;
   }
 
   /// Όλα τα τηλέφωνα χρηστών τμήματος (split/trim/dedupe), σε σταθερή αλφαβητική σειρά.
@@ -298,7 +340,7 @@ class LookupService {
     final seen = <String>{};
     final phones = <String>[];
     for (final user in users) {
-      for (final phone in PhoneListParser.splitPhones(user.phone)) {
+      for (final phone in user.phones) {
         final trimmed = phone.trim();
         if (trimmed.isEmpty) continue;
         if (seen.add(trimmed)) {
@@ -312,5 +354,55 @@ class LookupService {
 
   static String _digitsOnly(String s) {
     return s.replaceAll(RegExp(r'[^0-9]'), '');
+  }
+
+  /// Συνενωμένα ψηφία όλων των τηλεφώνων χρήστη (για ταίριασμα prefix / contains).
+  static String _userPhonesDigitPool(UserModel u) {
+    return u.phones.map(_digitsOnly).join();
+  }
+
+  /// Μόνο για αυτόματα τεστ: γεμίζει in-memory cache χωρίς ανάγνωση από SQLite.
+  @visibleForTesting
+  void injectInMemoryCatalogForTests({
+    required List<UserModel> users,
+    required List<EquipmentModel> equipment,
+    required List<DepartmentModel> departmentRows,
+    /// userId → λίστα equipment ids (M2M). Αν null/κενό, χωρίς συσχετίσεις.
+    Map<int, List<int>>? userToEquipmentIds,
+  }) {
+    _loaded = true;
+    _loadedDepartments = true;
+    _users
+      ..clear()
+      ..addAll(users);
+    _equipment
+      ..clear()
+      ..addAll(equipment);
+    final byEquipmentId = <int, EquipmentModel>{
+      for (final e in _equipment)
+        if (e.id != null) e.id!: e,
+    };
+    _equipmentByUserId = {};
+    _userIdsByEquipmentId.clear();
+    final links = userToEquipmentIds ?? const <int, List<int>>{};
+    for (final entry in links.entries) {
+      final uid = entry.key;
+      for (final eid in entry.value) {
+        final eq = byEquipmentId[eid];
+        if (eq == null) continue;
+        _equipmentByUserId.putIfAbsent(uid, () => []).add(eq);
+        _userIdsByEquipmentId.putIfAbsent(eid, () => []).add(uid);
+      }
+    }
+    departments
+      ..clear()
+      ..addAll(departmentRows);
+    departmentIdToName
+      .clear();
+    for (final d in departments) {
+      if (d.id != null) {
+        departmentIdToName[d.id!] = d.name;
+      }
+    }
   }
 }

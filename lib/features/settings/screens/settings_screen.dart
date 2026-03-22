@@ -15,7 +15,17 @@ import '../widgets/remote_args_editor.dart';
 
 /// Οθόνη ρυθμίσεων: διαδρομή βάσης δεδομένων και άλλες επιλογές.
 class SettingsScreen extends ConsumerStatefulWidget {
-  const SettingsScreen({super.key});
+  const SettingsScreen({
+    super.key,
+    this.openFindDatabaseOnStart = false,
+    this.openCreateDatabaseOnStart = false,
+  });
+
+  /// Μετά το πρώτο frame ανοίγει αμέσως ο διάλογος επιλογής αρχείου/φακέλου βάσης.
+  final bool openFindDatabaseOnStart;
+
+  /// Μετά το πρώτο frame ανοίγει ο διάλογος δημιουργίας νέου αρχείου βάσης.
+  final bool openCreateDatabaseOnStart;
 
   @override
   ConsumerState<SettingsScreen> createState() => _SettingsScreenState();
@@ -54,6 +64,15 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   void initState() {
     super.initState();
     _loadCurrentPath();
+    if (widget.openFindDatabaseOnStart) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _pickDatabasePath();
+      });
+    } else if (widget.openCreateDatabaseOnStart) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _showCreateNewDatabaseDialog();
+      });
+    }
   }
 
   @override

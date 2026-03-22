@@ -83,7 +83,7 @@ const Set<String> _pcDescriptionsExact = {
   'vero pc oktavit, intel e5700/3 ghz,ram 2gb/ddr3,hdd sata 500gb, μητρική asus p5g41t-m lx2-gb-lpt, windows 7 pr. 32 bit gr',
 };
 
-/// Parser για legacy Master Excel (Λάμπα): offices → owners → equipment.
+/// Parser για Master Excel (Λάμπα): φύλλα offices / owners / equipment.
 class ExcelParser {
   ExcelParser();
 
@@ -116,8 +116,8 @@ class ExcelParser {
   /// - **equipment** (header row 4, δεδομένα από row 5):
   ///   `[0]code [1]description [6]state_name [13]owner`
   ///   Φίλτρο: state_name == "Σε λειτουργία" ΚΑΙ description **exact match** (case-insensitive) με _pcDescriptionsExact.
-  ///   Εισάγεται μόνο `code` + `user_id`. **description δεν εισάγεται**.
-  Future<ImportResult> parseLegacyExcel(
+  ///   Εισάγεται `code` + σύνδεση στο `user_equipment` (όχι πλέον `equipment.user_id`). **description δεν εισάγεται**.
+  Future<ImportResult> parseMasterExcel(
     String filePath,
     void Function(String message, [ImportLogLevel? level]) onLog,
   ) async {

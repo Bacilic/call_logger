@@ -3,8 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../calls/models/user_model.dart';
 import '../../../calls/provider/lookup_provider.dart';
+import '../../models/user_directory_column.dart';
 import '../../providers/directory_provider.dart';
 import 'bulk_user_edit_dialog.dart';
+import 'catalog_column_selector_shell.dart';
 import 'user_form_dialog.dart';
 import 'users_data_table.dart';
 
@@ -38,6 +40,7 @@ class _UsersTabState extends ConsumerState<UsersTab> {
     ref.watch(lookupServiceProvider);
     final state = ref.watch(directoryProvider);
     final notifier = ref.read(directoryProvider.notifier);
+    final visibleColumns = state.orderedVisibleColumns;
     final continuousScrollAsync = ref.watch(catalogContinuousScrollProvider);
     final continuousScroll = continuousScrollAsync.value ?? true;
     if (_searchController.text != state.searchQuery) {
@@ -73,6 +76,11 @@ class _UsersTabState extends ConsumerState<UsersTab> {
                   ),
                 ),
               ),
+              IconButton(
+                tooltip: 'Στήλες πίνακα',
+                icon: const Icon(Icons.view_column_outlined),
+                onPressed: () => _openColumnSelector(context, ref),
+              ),
               const SizedBox(width: 12),
               FilledButton.icon(
                 onPressed: () => _openForm(context, ref, null),
@@ -88,6 +96,7 @@ class _UsersTabState extends ConsumerState<UsersTab> {
             selectedIds: state.selectedIds,
             sortColumn: state.sortColumn,
             sortAscending: state.sortAscending,
+            visibleColumns: visibleColumns,
             onToggleSelection: notifier.toggleSelection,
             onSetSort: notifier.setSort,
             onEditUser: (user, {focusedField}) => _openForm(context, ref, user, focusedField: focusedField),
@@ -140,6 +149,20 @@ class _UsersTabState extends ConsumerState<UsersTab> {
           ),
         ],
       ],
+    );
+  }
+
+  void _openColumnSelector(BuildContext context, WidgetRef ref) {
+    showDialog<void>(
+      context: context,
+      barrierDismissible: true,
+      barrierColor: Theme.of(context).colorScheme.scrim.withValues(alpha: 0.4),
+      builder: (ctx) => UncontrolledProviderScope(
+        container: ProviderScope.containerOf(context),
+        child: _UserColumnSelectorOverlay(
+          onClose: () => Navigator.of(ctx).pop(),
+        ),
+      ),
     );
   }
 
@@ -252,6 +275,99 @@ class _UsersTabState extends ConsumerState<UsersTab> {
             await ref.read(directoryProvider.notifier).undoLastDelete();
           },
         ),
+      ),
+    );
+  }
+}
+
+/// Overlay επιλογής στηλών: [selection] μόνο ορατότητα (πάντα πρώτη)· οι υπόλοιπες με σύρσιμο.
+class _UserColumnSelectorOverlay extends ConsumerWidget {
+  const _UserColumnSelectorOverlay({required this.onClose});
+
+  final VoidCallback onClose;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final state = ref.watch(directoryProvider);
+    final notifier = ref.read(directoryProvider.notifier);
+    final theme = Theme.of(context);
+    final order = state.columnOrder;
+    final keys = state.visibleColumnKeys;
+    final sel = UserDirectoryColumn.selection;
+    final orderRest =
+        order.where((c) => c != sel).toList(growable: false);
+    final selOn = keys.contains(sel.key);
+
+    return CatalogColumnSelectorShell(
+      onClose: onClose,
+      title: 'Στήλες',
+      listChild: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Material(
+            color: Colors.transparent,
+            child: ListTile(
+              contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+              onTap: () => notifier.setUserColumnVisible(sel, !selOn),
+              leading: Checkbox(
+                value: selOn,
+                onChanged: (v) {
+                  if (v != null) notifier.setUserColumnVisible(sel, v);
+                },
+              ),
+              title: Text(
+                sel.label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ),
+          Expanded(
+            child: ReorderableListView.builder(
+              buildDefaultDragHandles: false,
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              itemCount: orderRest.length,
+              onReorder: notifier.reorderUserColumns,
+              proxyDecorator: (child, index, animation) => Material(
+                elevation: 2,
+                color: theme.colorScheme.surfaceContainerHighest,
+                child: child,
+              ),
+              itemBuilder: (context, index) {
+                final col = orderRest[index];
+                final isOn = keys.contains(col.key);
+                return Material(
+                  key: ValueKey(col.key),
+                  color: Colors.transparent,
+                  child: ListTile(
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+                    onTap: () => notifier.setUserColumnVisible(col, !isOn),
+                    leading: Checkbox(
+                      value: isOn,
+                      onChanged: (v) {
+                        if (v != null) {
+                          notifier.setUserColumnVisible(col, v);
+                        }
+                      },
+                    ),
+                    title: Text(
+                      col.label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    trailing: ReorderableDragStartListener(
+                      index: index,
+                      child: Icon(
+                        Icons.drag_handle,
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
       ),
     );
   }

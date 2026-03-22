@@ -20,7 +20,6 @@ class CallsScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final entry = ref.watch(callEntryProvider);
     final header = ref.watch(callHeaderProvider);
 
     return SingleChildScrollView(
@@ -62,7 +61,7 @@ class CallsScreen extends ConsumerWidget {
                     ],
                   ),
                 ),
-                if (header.selectedCaller != null) ...[
+                if (header.selectedCaller?.id != null) ...[
                   RecentCallsList(callerId: header.selectedCaller!.id!),
                 ],
                 const SizedBox(height: 16),
@@ -72,7 +71,7 @@ class CallsScreen extends ConsumerWidget {
                     Expanded(
                       child: Align(
                         alignment: Alignment.centerLeft,
-                        child: NotesStickyField(entry: entry),
+                        child: const NotesStickyField(),
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -101,13 +100,13 @@ Widget _buildSubmitButton(
   WidgetRef ref,
   CallHeaderState header,
 ) {
-  final isPending = ref.watch(callEntryProvider).isPending;
+  final isPending = ref.watch(callEntryProvider.select((s) => s.isPending));
   final elevated = ElevatedButton(
     onPressed: header.canSubmitCall
         ? () async {
             final ok = await ref
                 .read(callEntryProvider.notifier)
-                .submitCall(ref);
+                .submitCall();
             if (context.mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
@@ -148,7 +147,7 @@ Widget _buildSubmitButton(
     onPressed: () async {
       final ok = await ref
           .read(callEntryProvider.notifier)
-          .submitOnlyPending(ref);
+                .submitOnlyPending();
       if (context.mounted && ok) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Η εκκρεμότητα καταχωρήθηκε')),

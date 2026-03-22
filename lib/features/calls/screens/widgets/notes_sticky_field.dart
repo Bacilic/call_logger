@@ -9,9 +9,7 @@ import '../../provider/notes_field_hint_provider.dart';
 
 /// Πεδίο σημειώσεων σε στυλ post-it (εκτός state για αποφυγή διαρροής μνήμης).
 class NotesStickyField extends ConsumerStatefulWidget {
-  const NotesStickyField({super.key, required this.entry});
-
-  final CallEntryState entry;
+  const NotesStickyField({super.key});
 
   @override
   ConsumerState<NotesStickyField> createState() => NotesStickyFieldState();
@@ -26,7 +24,8 @@ class NotesStickyFieldState extends ConsumerState<NotesStickyField> {
   @override
   void initState() {
     super.initState();
-    _controller = TextEditingController(text: widget.entry.notes);
+    final initialNotes = ref.read(callEntryProvider).notes;
+    _controller = TextEditingController(text: initialNotes);
   }
 
   @override
@@ -56,13 +55,13 @@ class NotesStickyFieldState extends ConsumerState<NotesStickyField> {
 
   @override
   Widget build(BuildContext context) {
-    final entry = ref.watch(callEntryProvider);
+    final notes = ref.watch(callEntryProvider.select((s) => s.notes));
     ref.listen<int>(notesFieldHintTickProvider, (prev, next) {
       if (prev != null && next > prev) {
         _playDoubleFlash();
       }
     });
-    if (entry.notes.isEmpty && _controller.text.isNotEmpty) {
+    if (notes.isEmpty && _controller.text.isNotEmpty) {
       _controller.text = '';
     }
     final scheme = Theme.of(context).colorScheme;

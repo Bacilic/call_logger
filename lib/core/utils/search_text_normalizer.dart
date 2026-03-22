@@ -50,4 +50,21 @@ class SearchTextNormalizer {
       (queryToken) => textTokens.any((textToken) => textToken.startsWith(queryToken)),
     );
   }
+
+  /// Κανονικοποιεί [text] και [query] και επιστρέφει true μόνο αν κάθε token
+  /// του query (διαχωρισμός με κενά μετά την κανονικοποίηση) εμφανίζεται ως
+  /// υποσύνολο στο κανονικοποιημένο [text] ([String.contains]).
+  ///
+  /// Κενό ή μόνο-κενά query θεωρείται «χωρίς φίλτρο» → true.
+  static bool containsAllTokens(String text, String query) {
+    final normalizedText = normalizeForSearch(text);
+    final normalizedQuery = normalizeForSearch(query);
+    if (normalizedQuery.isEmpty) return true;
+    final tokens = normalizedQuery
+        .split(' ')
+        .where((t) => t.isNotEmpty)
+        .toList();
+    if (tokens.isEmpty) return true;
+    return tokens.every((token) => normalizedText.contains(token));
+  }
 }

@@ -63,7 +63,7 @@ class _MainShellState extends ConsumerState<MainShell> {
       showDuration: const Duration(seconds: 4),
       message:
           'Προβλήματα που χρήζουν παρακολούθησης\nΑνοιχτές εργασίες & υπενθυμίσεις',
-      child: const Icon(Icons.task_alt),
+      child: const Icon(Icons.task_alt, key: ValueKey('nav_rail_tasks')),
     );
     return Badge(
       isLabelVisible: showBadge && pendingCount > 0,
@@ -131,7 +131,7 @@ class _MainShellState extends ConsumerState<MainShell> {
                   showDuration: const Duration(seconds: 4),
                   message:
                       'Καταγραφή νέας κλήσης τεχνικής υποστήριξης\nΚύρια οθόνη – πατήστε εδώ όταν χτυπά τηλέφωνο',
-                  child: const Icon(Icons.phone_in_talk),
+                  child: const Icon(Icons.phone_in_talk, key: ValueKey('nav_rail_calls')),
                 ),
                 label: const Text('Κλήσεις'),
               ),
@@ -146,7 +146,7 @@ class _MainShellState extends ConsumerState<MainShell> {
                   showDuration: const Duration(seconds: 4),
                   message:
                       'Διαχείριση χρηστών και εξοπλισμού\nΠροσθήκη / διόρθωση ονομάτων, τμημάτων, υπολογιστών',
-                  child: const Icon(Icons.contacts),
+                  child: const Icon(Icons.contacts, key: ValueKey('nav_rail_directory')),
                 ),
                 label: const Text('Κατάλογος'),
               ),
@@ -156,7 +156,7 @@ class _MainShellState extends ConsumerState<MainShell> {
                   showDuration: const Duration(seconds: 4),
                   message:
                       'Προηγούμενες κλήσεις & αναζήτηση\nΕμφάνιση, τροποποίηση ή διαγραφή παλιών καταγραφών',
-                  child: const Icon(Icons.history),
+                  child: const Icon(Icons.history, key: ValueKey('nav_rail_history')),
                 ),
                 label: const Text('Ιστορικό'),
               ),
@@ -166,7 +166,7 @@ class _MainShellState extends ConsumerState<MainShell> {
                   showDuration: const Duration(seconds: 4),
                   message:
                       'Εργαλεία διαχείρισης & εποπτείας βάσης\nΑντίγραφα ασφαλείας, εγγραφές, προβολή πινάκων (για προχωρημένους χρήστες)',
-                  child: const Icon(Icons.storage),
+                  child: const Icon(Icons.storage, key: ValueKey('nav_rail_database')),
                 ),
                 label: const Text('Βάση Δεδομένων'),
               ),

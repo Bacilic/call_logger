@@ -7,11 +7,17 @@ import '../../../core/services/lookup_service.dart';
 ///
 /// Σε αποτυχία φόρτωσης το [service] παραμένει χρησιμοποιήσιμο (κενό cache)
 /// και το [loadError] περιγράφει το πρόβλημα για UI + επαναδοκιμή.
+/// Το [loadErrorDetails] (λεπτομέρειες / αρχικό μήνυμα) εμφανίζεται κάτω από το banner.
 class LookupLoadResult {
-  const LookupLoadResult({required this.service, this.loadError});
+  const LookupLoadResult({
+    required this.service,
+    this.loadError,
+    this.loadErrorDetails,
+  });
 
   final LookupService service;
   final String? loadError;
+  final String? loadErrorDetails;
 
   bool get isCatalogReady => loadError == null;
 }
@@ -25,12 +31,18 @@ final lookupServiceProvider = FutureProvider<LookupLoadResult>((ref) async {
     return LookupLoadResult(service: service);
   } catch (e, st) {
     final mapped = DatabaseInitResult.fromException(e, null, st);
+    final detailBody = mapped.details?.trim();
+    final orig = mapped.originalExceptionText?.trim();
+    final loadErrorDetails = (detailBody != null && detailBody.isNotEmpty)
+        ? detailBody
+        : (orig != null && orig.isNotEmpty ? orig : null);
     return LookupLoadResult(
       service: service,
       loadError:
           mapped.message ??
           mapped.details ??
           'Αποτυχία φόρτωσης καταλόγου χρηστών/εξοπλισμού.',
+      loadErrorDetails: loadErrorDetails,
     );
   }
 });

@@ -59,7 +59,7 @@ class _BulkUserEditDialogState extends State<BulkUserEditDialog> {
       case 'firstName':
         return (u) => u.firstName;
       case 'phone':
-        return (u) => u.phone;
+        return (u) => u.phoneJoined;
       case 'notes':
         return (u) => u.notes;
       default:

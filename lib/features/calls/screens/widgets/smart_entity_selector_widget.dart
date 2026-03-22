@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/services/lookup_service.dart';
+import '../../../../core/utils/spell_check.dart';
 import '../../../../core/utils/name_parser.dart';
 import '../../../../core/utils/search_text_normalizer.dart';
 import '../../../../features/directory/models/department_model.dart';
@@ -12,6 +13,9 @@ import '../../models/equipment_model.dart';
 import '../../models/user_model.dart';
 import '../../provider/lookup_provider.dart';
 import '../../provider/smart_entity_selector_provider.dart';
+
+part 'smart_entity_selector_caller_presentational.dart';
+part 'smart_entity_selector_phone_presentational.dart';
 
 bool _textOverflowsSingleLine({
   required String text,
@@ -473,12 +477,18 @@ class _PhoneFieldState extends State<_PhoneField> {
     _keyboardOptionIndex = -1;
     _lastAutoScrollIndex = -1;
     _debounce?.cancel();
-    if (value == widget.header.selectedPhone) return;
     final digits = value.replaceAll(RegExp(r'[^0-9]'), '');
-    widget.notifier.updatePhone(digits.isEmpty ? null : digits);
-    widget.notifier.markPhoneAsManual();
+    final headerPhone = widget.header.selectedPhone ?? '';
+    // Μην κάνουμε return όταν value == selectedPhone: μετά από sync controller↔state
+    // το onChanged μπορεί να ξανακληθεί χωρίς αλλαγή κειμένου· το lookup (≥3 ψηφία) πρέπει να προγραμματίζεται.
+    if (digits != headerPhone) {
+      widget.notifier.updatePhone(digits.isEmpty ? null : digits);
+      widget.notifier.markPhoneAsManual();
+    }
     if (digits.isEmpty) {
       widget.onPhoneBecameEmpty();
+    } else if (digits.length >= 3) {
+      _scheduleCompletedLookup();
     }
   }
 
@@ -783,6 +793,7 @@ class _PhoneFieldState extends State<_PhoneField> {
                           controller: textController,
                           focusNode: focusNodeParam,
                           autofocus: true,
+                          spellCheckConfiguration: platformSpellCheckConfiguration,
                           decoration: InputDecoration(
                             hintText: 'π.χ. 2345',
                             hintStyle: TextStyle(
@@ -1393,6 +1404,7 @@ class _CallerFieldState extends State<_CallerField> {
                       child: TextField(
                         controller: textController,
                         focusNode: focusNodeParam,
+                        spellCheckConfiguration: platformSpellCheckConfiguration,
                         decoration: InputDecoration(
                           hintText: hintText,
                           hintStyle: theme.textTheme.bodyMedium?.copyWith(
@@ -1494,44 +1506,6 @@ class _CallerFieldState extends State<_CallerField> {
                 },
               ),
             _CallerParseHint(header: header, theme: theme),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// Οπτική ανατροφοδότηση: πώς θα ερμηνευτεί το κείμενο Καλούντα (Όνομα / Επώνυμο).
-class _CallerParseHint extends StatelessWidget {
-  const _CallerParseHint({required this.header, required this.theme});
-
-  final SmartEntitySelectorState header;
-  final ThemeData theme;
-
-  @override
-  Widget build(BuildContext context) {
-    if (header.selectedCaller != null) return const SizedBox.shrink();
-    if (header.isUnknownCaller) return const SizedBox.shrink();
-    final text = header.callerDisplayText.trim();
-    if (text.isEmpty) return const SizedBox.shrink();
-
-    final parsed = NameParserUtility.parse(text);
-    final style = theme.textTheme.bodySmall ?? const TextStyle();
-    return Padding(
-      padding: const EdgeInsets.only(top: 4),
-      child: RichText(
-        textScaler: TextScaler.noScaling,
-        text: TextSpan(
-          style: style.copyWith(color: theme.colorScheme.onSurface),
-          children: [
-            TextSpan(
-              text: 'Όνομα: ${parsed.firstName} ',
-              style: style.copyWith(color: theme.colorScheme.primary),
-            ),
-            TextSpan(
-              text: '- Επώνυμο: ${parsed.lastName}',
-              style: style.copyWith(color: theme.colorScheme.onSurfaceVariant),
-            ),
           ],
         ),
       ),
@@ -1888,6 +1862,7 @@ class _DepartmentFieldState extends State<_DepartmentField> {
                       child: TextField(
                         controller: textController,
                         focusNode: focusNodeParam,
+                        spellCheckConfiguration: platformSpellCheckConfiguration,
                         decoration: InputDecoration(
                           border: const OutlineInputBorder(),
                           isDense: true,
@@ -2414,6 +2389,7 @@ class _EquipmentFieldState extends State<_EquipmentField> {
                         child: TextField(
                           controller: textController,
                           focusNode: focusNodeParam,
+                          spellCheckConfiguration: platformSpellCheckConfiguration,
                           decoration: InputDecoration(
                             hintText: hintText,
                             hintStyle: theme.textTheme.bodyMedium?.copyWith(
@@ -2530,68 +2506,3 @@ class _EquipmentSuggestionList extends StatelessWidget {
   }
 }
 
-class _PhoneHelperAndError extends StatelessWidget {
-  const _PhoneHelperAndError({
-    required this.header,
-    required this.lookupService,
-    required this.notifier,
-  });
-
-  final SmartEntitySelectorState header;
-  final LookupService? lookupService;
-  final SmartEntitySelectorNotifier notifier;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final int? equipmentCount;
-    if (header.selectedCaller != null &&
-        header.selectedPhone != null &&
-        lookupService != null) {
-      // Ο πρώτος χρήστης που ταιριάζει στο τηλέφωνο (search) μπορεί να είναι
-      // διαφορετικός από τον επιλεγμένο καλούντα· εμφανίζουμε εξοπλισμό του επιλεγμένου.
-      final callerId = header.selectedCaller!.id;
-      equipmentCount = callerId != null
-          ? lookupService!.findEquipmentsForUser(callerId).length
-          : lookupService!
-                .searchEquipmentsByPhone(header.selectedPhone!)
-                .length;
-    } else {
-      equipmentCount = null;
-    }
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        if (equipmentCount != null)
-          Padding(
-            padding: const EdgeInsets.only(top: 2),
-            child: Text(
-              'Βρέθηκαν $equipmentCount εξοπλισμοί',
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
-          ),
-        if (header.phoneError != null)
-          Padding(
-            padding: const EdgeInsets.only(top: 2),
-            child: GestureDetector(
-              onTap: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Προς υλοποίηση...')),
-                );
-              },
-              child: Text(
-                header.phoneError!,
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.error,
-                ),
-              ),
-            ),
-          ),
-      ],
-    );
-  }
-}

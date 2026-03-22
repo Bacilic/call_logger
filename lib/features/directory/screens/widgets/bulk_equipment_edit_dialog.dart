@@ -67,8 +67,9 @@ class _BulkEquipmentEditDialogState extends State<BulkEquipmentEditDialog> {
   void initState() {
     super.initState();
     for (final key in _fieldKeys) {
-      if (key == 'owner' || key == 'defaultRemoteTool' || key == 'type')
+      if (key == 'owner' || key == 'defaultRemoteTool' || key == 'type') {
         continue;
+      }
       _controllers[key] = TextEditingController(text: _commonValue(key));
     }
     _ownerController = TextEditingController();
@@ -145,8 +146,8 @@ class _BulkEquipmentEditDialogState extends State<BulkEquipmentEditDialog> {
   int? _commonOwnerId() {
     final rows = widget.selectedRows;
     if (rows.isEmpty) return null;
-    final first = rows.first.$1.userId;
-    final allSame = rows.every((r) => r.$1.userId == first);
+    final first = rows.first.$2?.id;
+    final allSame = rows.every((r) => r.$2?.id == first);
     return allSame ? first : null;
   }
 
@@ -154,8 +155,8 @@ class _BulkEquipmentEditDialogState extends State<BulkEquipmentEditDialog> {
     final rows = widget.selectedRows;
     if (rows.length <= 1) return false;
     if (fieldKey == 'owner') {
-      final first = rows.first.$1.userId;
-      return !rows.every((r) => r.$1.userId == first);
+      final first = rows.first.$2?.id;
+      return !rows.every((r) => r.$2?.id == first);
     }
     final getter = _getterFor(fieldKey);
     final firstNorm = _normalized(getter(rows.first));

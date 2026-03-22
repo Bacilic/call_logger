@@ -2,9 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../../calls/models/user_model.dart';
+import '../../models/user_directory_column.dart';
 
-/// Πίνακας χρηστών με σελιδοποίηση, sortable headers, select-all και επιλογή γραμμής.
-/// Single tap = toggle επιλογής, double tap = άνοιγμα modal επεξεργασίας.
+/// Πίνακας χρηστών με σελιδοποίηση, sortable headers, επιλογή γραμμής (αν η στήλη εμφανίζεται), διπλό κλικ = επεξεργασία.
+/// Single tap = toggle επιλογής (μόνο με ορατή στήλη επιλογής), double tap = άνοιγμα modal επεξεργασίας.
 /// Πλήκτρα: ↑/↓ focus γραμμή, Enter = edit, Delete = confirm + deleteSelected.
 class UsersDataTable extends StatefulWidget {
   const UsersDataTable({
@@ -13,6 +14,7 @@ class UsersDataTable extends StatefulWidget {
     required this.selectedIds,
     required this.sortColumn,
     required this.sortAscending,
+    required this.visibleColumns,
     required this.onToggleSelection,
     required this.onSetSort,
     required this.onEditUser,
@@ -27,6 +29,7 @@ class UsersDataTable extends StatefulWidget {
   final Set<int> selectedIds;
   final String? sortColumn;
   final bool sortAscending;
+  final List<UserDirectoryColumn> visibleColumns;
   final void Function(int id) onToggleSelection;
   final void Function(String? column, bool ascending) onSetSort;
   final void Function(UserModel user, {String? focusedField}) onEditUser;
@@ -35,7 +38,7 @@ class UsersDataTable extends StatefulWidget {
   final VoidCallback? onRequestDelete;
   /// Κλήση όταν Enter/Space με πολλαπλή επιλογή → ανοίγει μαζική επεξεργασία.
   final VoidCallback? onRequestBulkEdit;
-  /// true = συνεχής κύλιση (DataTable + Scrollbar), false = PaginatedDataTable.
+  /// true = συνεχής κύλιση· false = σελίδες [_rowsPerPage] με ίδιο Table, resize, βελάκι sort.
   final bool continuousScroll;
 
   @override
@@ -44,28 +47,28 @@ class UsersDataTable extends StatefulWidget {
 
 const _minColumnWidth = 40.0;
 const _maxColumnWidth = 600.0;
-const _defaultUserColumnWidths = [
-  52.0,  // checkbox
-  56.0,  // ID
-  140.0, // Επώνυμο
-  120.0, // Όνομα
-  120.0, // Τηλέφωνο
-  140.0, // Τμήμα
-  180.0, // Σημειώσεις
-];
+const _rowsPerPage = 15;
+
+const _defaultWidthsByKey = <String, double>{
+  'selection': 52.0,
+  'id': 56.0,
+  'last_name': 140.0,
+  'first_name': 120.0,
+  'phone': 120.0,
+  'department': 140.0,
+  'notes': 180.0,
+};
 
 class _UsersDataTableState extends State<UsersDataTable> {
   final _source = _UsersTableSource();
   final FocusNode _tableFocusNode = FocusNode();
   final ScrollController _verticalScrollController = ScrollController();
   final ScrollController _horizontalScrollController = ScrollController();
-  late List<double> _columnWidths;
-
-  @override
-  void initState() {
-    super.initState();
-    _columnWidths = List<double>.from(_defaultUserColumnWidths);
-  }
+  final Map<String, double> _columnWidths = Map<String, double>.from(
+    _defaultWidthsByKey,
+  );
+  /// Δείκτης πρώτης γραμμής τρέχουσας σελίδας (όταν [continuousScroll] == false).
+  int _pagedFirstRowIndex = 0;
 
   @override
   void dispose() {
@@ -79,6 +82,23 @@ class _UsersDataTableState extends State<UsersDataTable> {
     widget.onSetFocusedRowIndex?.call(index);
   }
 
+  bool get _selectionVisible =>
+      widget.visibleColumns.contains(UserDirectoryColumn.selection);
+
+  double _widthForColumn(UserDirectoryColumn col) {
+    return _columnWidths[col.key] ??
+        _defaultWidthsByKey[col.key] ??
+        _defaultDataFallbackWidth;
+  }
+
+  static const _defaultDataFallbackWidth = 120.0;
+
+  void _setColumnWidth(int visibleIndex, double width) {
+    final col = widget.visibleColumns[visibleIndex];
+    final w = width.clamp(_minColumnWidth, _maxColumnWidth);
+    setState(() => _columnWidths[col.key] = w);
+  }
+
   @override
   void didUpdateWidget(UsersDataTable oldWidget) {
     super.didUpdateWidget(oldWidget);
@@ -90,20 +110,36 @@ class _UsersDataTableState extends State<UsersDataTable> {
       widget.focusedRowIndex,
       _focusHighlightColor,
       _onRowTap,
+      widget.visibleColumns,
+      _selectionVisible,
     );
+    if (!widget.continuousScroll) {
+      _clampPagedFirstRowIndex();
+    }
+  }
+
+  void _clampPagedFirstRowIndex() {
+    final n = widget.users.length;
+    if (n == 0) {
+      _pagedFirstRowIndex = 0;
+      return;
+    }
+    if (_pagedFirstRowIndex >= n) {
+      _pagedFirstRowIndex = ((n - 1) ~/ _rowsPerPage) * _rowsPerPage;
+    }
   }
 
   Color? get _focusHighlightColor =>
       Theme.of(context).colorScheme.surfaceContainerHighest;
 
-  static const _sortColumnToIndex = {
-    'id': 1,
-    'last_name': 2,
-    'first_name': 3,
-    'phone': 4,
-    'department': 5,
-    'notes': 6,
-  };
+  int _sortedVisibleColumnIndex() {
+    final sc = widget.sortColumn;
+    if (sc == null) return -1;
+    for (var i = 0; i < widget.visibleColumns.length; i++) {
+      if (widget.visibleColumns[i].sortKey == sc) return i;
+    }
+    return -1;
+  }
 
   Widget _buildStickyHeader(
     BuildContext context,
@@ -113,9 +149,7 @@ class _UsersDataTableState extends State<UsersDataTable> {
     TextStyle headingTextStyle,
     Map<int, TableColumnWidth> columnWidths,
   ) {
-    final sortedIndex = widget.sortColumn != null
-        ? _sortColumnToIndex[widget.sortColumn] ?? -1
-        : -1;
+    final sortedIndex = _sortedVisibleColumnIndex();
     final asc = widget.sortAscending;
     return Table(
       columnWidths: columnWidths,
@@ -123,7 +157,8 @@ class _UsersDataTableState extends State<UsersDataTable> {
       children: [
         TableRow(
           decoration: BoxDecoration(
-            color: headingColor ?? Theme.of(context).colorScheme.surfaceContainerHighest,
+            color: headingColor ??
+                Theme.of(context).colorScheme.surfaceContainerHighest,
           ),
           children: [
             for (var i = 0; i < columns.length; i++)
@@ -137,49 +172,53 @@ class _UsersDataTableState extends State<UsersDataTable> {
                         child: InkWell(
                           onTap: columns[i].onSort != null
                               ? () => columns[i].onSort!(
-                                  0,
-                                  i == sortedIndex ? !asc : true,
-                                )
+                                    0,
+                                    i == sortedIndex ? !asc : true,
+                                  )
                               : null,
-                    child: Container(
-                      height: headingHeight,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 12,
-                      ),
-                      alignment: Alignment.centerLeft,
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Expanded(
-                            child: DefaultTextStyle(
-                              style: headingTextStyle,
-                              child: columns[i].label,
+                          child: Container(
+                            height: headingHeight,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 6,
+                            ),
+                            alignment: Alignment.centerLeft,
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Expanded(
+                                  child: DefaultTextStyle(
+                                    style: headingTextStyle,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    child: columns[i].label,
+                                  ),
+                                ),
+                                if (i == sortedIndex) ...[
+                                  const SizedBox(width: 4),
+                                  Icon(
+                                    asc
+                                        ? Icons.arrow_drop_up
+                                        : Icons.arrow_drop_down,
+                                    size: 18,
+                                    color:
+                                        Theme.of(context).colorScheme.onSurface,
+                                  ),
+                                ],
+                              ],
                             ),
                           ),
-                          if (i == sortedIndex) ...[
-                            const SizedBox(width: 4),
-                            Icon(
-                              asc ? Icons.arrow_drop_up : Icons.arrow_drop_down,
-                              size: 20,
-                              color: Theme.of(context).colorScheme.onSurface,
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
                         ),
                       ),
                     ),
-                    if (i < columns.length - 1)
-                      _TableResizeHandle(
-                        onResize: (delta) {
-                          setState(() {
-                            _columnWidths[i] = (_columnWidths[i] + delta)
-                                .clamp(_minColumnWidth, _maxColumnWidth);
-                          });
-                        },
-                      ),
+                    _TableResizeHandle(
+                      onResize: (delta) {
+                        _setColumnWidth(
+                          i,
+                          _widthForColumn(widget.visibleColumns[i]) + delta,
+                        );
+                      },
+                    ),
                   ],
                 ),
               ),
@@ -192,7 +231,6 @@ class _UsersDataTableState extends State<UsersDataTable> {
   TableRow _dataRowToTableRow(
     BuildContext context,
     DataRow dataRow,
-    int rowIndex,
   ) {
     final theme = Theme.of(context);
     final dataTableTheme = theme.dataTableTheme;
@@ -211,8 +249,8 @@ class _UsersDataTableState extends State<UsersDataTable> {
               onDoubleTap: cell.onDoubleTap,
               child: Padding(
                 padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 12,
+                  horizontal: 12,
+                  vertical: 8,
                 ),
                 child: Align(
                   alignment: Alignment.centerLeft,
@@ -243,7 +281,8 @@ class _UsersDataTableState extends State<UsersDataTable> {
     }
     if (key == LogicalKeyboardKey.arrowUp) {
       if (onSetFocus != null) {
-        final next = current == null ? len - 1 : (current - 1).clamp(0, len - 1);
+        final next =
+            current == null ? len - 1 : (current - 1).clamp(0, len - 1);
         onSetFocus(next);
       }
       return KeyEventResult.handled;
@@ -259,7 +298,8 @@ class _UsersDataTableState extends State<UsersDataTable> {
       }
       return KeyEventResult.handled;
     }
-    if (key == LogicalKeyboardKey.delete || key == LogicalKeyboardKey.backspace) {
+    if (key == LogicalKeyboardKey.delete ||
+        key == LogicalKeyboardKey.backspace) {
       if (widget.selectedIds.isNotEmpty) {
         widget.onRequestDelete?.call();
       }
@@ -268,21 +308,12 @@ class _UsersDataTableState extends State<UsersDataTable> {
     return KeyEventResult.ignored;
   }
 
-  @override
-  Widget build(BuildContext context) {
-    _source.update(
-      widget.users,
-      widget.selectedIds,
-      widget.onToggleSelection,
-      widget.onEditUser,
-      widget.focusedRowIndex,
-      _focusHighlightColor,
-      _onRowTap,
-    );
-
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final columns = <DataColumn>[
+  List<DataColumn> _buildDataColumns(ThemeData theme) {
+    final cols = widget.visibleColumns;
+    final list = <DataColumn>[];
+    for (final col in cols) {
+      if (col == UserDirectoryColumn.selection) {
+        list.add(
           DataColumn(
             label: _SelectAllCheckbox(
               selectedIds: widget.selectedIds,
@@ -304,28 +335,215 @@ class _UsersDataTableState extends State<UsersDataTable> {
                       u.id != null && widget.selectedIds.contains(u.id)),
             ),
           ),
+        );
+      } else {
+        list.add(
           DataColumn(
-            label: const Text('ID'),
-            onSort: (_, asc) => widget.onSetSort('id', asc),
+            label: Text(
+              col.label,
+              maxLines: 1,
+              softWrap: false,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.titleSmall?.copyWith(
+                color: theme.colorScheme.onSurface,
+              ),
+            ),
+            onSort: col.sortKey != null
+                ? (_, asc) => widget.onSetSort(col.sortKey!, asc)
+                : null,
           ),
-          DataColumn(
-            label: const Text('Επώνυμο'),
-            onSort: (_, asc) => widget.onSetSort('last_name', asc),
+        );
+      }
+    }
+    return list;
+  }
+
+  Widget _wrapScrollableUsersTable({
+    required BuildContext context,
+    required ThemeData theme,
+    required List<DataColumn> columns,
+    required List<DataRow> rows,
+    required double maxHeight,
+    required Map<int, TableColumnWidth> columnWidths,
+    required double tableWidth,
+    Widget? bottomBar,
+  }) {
+    final dataTableTheme = theme.dataTableTheme;
+    final headingHeight = dataTableTheme.headingRowHeight ?? 56.0;
+    final Color? headingColor =
+        (dataTableTheme.headingRowColor ??
+                theme.colorScheme.surfaceContainerHighest)
+            as Color?;
+    return Scrollbar(
+      controller: _verticalScrollController,
+      thumbVisibility: true,
+      thickness: 12,
+      radius: const Radius.circular(10),
+      child: SingleChildScrollView(
+        controller: _horizontalScrollController,
+        scrollDirection: Axis.horizontal,
+        child: SizedBox(
+          width: tableWidth,
+          height: maxHeight,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _buildStickyHeader(
+                context,
+                columns,
+                headingHeight,
+                headingColor,
+                dataTableTheme.headingTextStyle ??
+                    theme.textTheme.titleSmall!,
+                columnWidths,
+              ),
+              Expanded(
+                child: SingleChildScrollView(
+                  controller: _verticalScrollController,
+                  child: Table(
+                    columnWidths: columnWidths,
+                    defaultVerticalAlignment:
+                        TableCellVerticalAlignment.middle,
+                    children: [
+                      for (final row in rows)
+                        _dataRowToTableRow(context, row),
+                    ],
+                  ),
+                ),
+              ),
+              ?bottomBar,
+            ],
           ),
-          DataColumn(
-            label: const Text('Όνομα'),
-            onSort: (_, asc) => widget.onSetSort('first_name', asc),
+        ),
+      ),
+    );
+  }
+
+  Widget _usersPaginationBar(BuildContext context, ThemeData theme) {
+    final n = widget.users.length;
+    if (n == 0) {
+      return Material(
+        color: theme.colorScheme.surfaceContainerLowest,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 6),
+          child: Center(
+            child: Text(
+              '0 από 0',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.bodyMedium,
+            ),
           ),
-          DataColumn(
-            label: const Text('Τηλέφωνο'),
-            onSort: (_, asc) => widget.onSetSort('phone', asc),
+        ),
+      );
+    }
+    final start = _pagedFirstRowIndex;
+    final end = (start + _rowsPerPage).clamp(0, n);
+    final lastPageStart = ((n - 1) ~/ _rowsPerPage) * _rowsPerPage;
+
+    void goFirst() => setState(() => _pagedFirstRowIndex = 0);
+    void goPrev() => setState(
+          () => _pagedFirstRowIndex =
+              (start - _rowsPerPage).clamp(0, lastPageStart),
+        );
+    void goNext() => setState(() {
+          final next = start + _rowsPerPage;
+          if (next < n) _pagedFirstRowIndex = next;
+        });
+    void goLast() => setState(() => _pagedFirstRowIndex = lastPageStart);
+
+    return Theme(
+      data: theme.copyWith(
+        iconButtonTheme: IconButtonThemeData(
+          style: IconButton.styleFrom(
+            minimumSize: const Size(32, 32),
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            padding: const EdgeInsets.all(4),
+            visualDensity: VisualDensity.compact,
+            iconSize: 20,
           ),
-          DataColumn(
-            label: const Text('Τμήμα'),
-            onSort: (_, asc) => widget.onSetSort('department', asc),
+        ),
+      ),
+      child: Material(
+        color:
+            theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.65),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+          child: Row(
+            children: [
+              IconButton(
+                tooltip: 'Πρώτη σελίδα',
+                icon: const Icon(Icons.first_page),
+                onPressed: start > 0 ? goFirst : null,
+              ),
+              IconButton(
+                tooltip: 'Προηγούμενη',
+                icon: const Icon(Icons.chevron_left),
+                onPressed: start > 0 ? goPrev : null,
+              ),
+              Expanded(
+                child: Center(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    child: Text(
+                      '${start + 1}–$end από $n',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.center,
+                      style: theme.textTheme.bodyMedium,
+                    ),
+                  ),
+                ),
+              ),
+              IconButton(
+                tooltip: 'Επόμενη',
+                icon: const Icon(Icons.chevron_right),
+                onPressed: end < n ? goNext : null,
+              ),
+              IconButton(
+                tooltip: 'Τελευταία σελίδα',
+                icon: const Icon(Icons.last_page),
+                onPressed: end < n ? goLast : null,
+              ),
+            ],
           ),
-          const DataColumn(label: Text('Σημειώσεις')),
-        ];
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    _source.update(
+      widget.users,
+      widget.selectedIds,
+      widget.onToggleSelection,
+      widget.onEditUser,
+      widget.focusedRowIndex,
+      _focusHighlightColor,
+      _onRowTap,
+      widget.visibleColumns,
+      _selectionVisible,
+    );
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final theme = Theme.of(context);
+        final columns = _buildDataColumns(theme);
+
+        final visible = widget.visibleColumns;
+        final columnWidths = Map<int, TableColumnWidth>.fromIterables(
+          List.generate(visible.length, (i) => i),
+          visible.map((c) => FixedColumnWidth(_widthForColumn(c))).toList(),
+        );
+        const columnSpacing = 24.0;
+        const horizontalMargin = 16.0;
+        final widthSum =
+            visible.fold<double>(0, (a, c) => a + _widthForColumn(c));
+        final tableWidth = widthSum +
+            (visible.length - 1) * columnSpacing +
+            horizontalMargin * 2;
 
         final Widget tableContent;
         if (widget.continuousScroll) {
@@ -334,82 +552,33 @@ class _UsersDataTableState extends State<UsersDataTable> {
             final row = _source.getRow(i);
             if (row != null) rows.add(row);
           }
-          final theme = Theme.of(context);
-          final dataTableTheme = theme.dataTableTheme;
-          final headingHeight =
-              dataTableTheme.headingRowHeight ?? 56.0;
-          final Color? headingColor =
-              (dataTableTheme.headingRowColor ?? theme.colorScheme.surfaceContainerHighest) as Color?;
-          final columnWidths = Map<int, TableColumnWidth>.fromIterables(
-            List.generate(_columnWidths.length, (i) => i),
-            _columnWidths.map((w) => FixedColumnWidth(w)),
-          );
-          const columnSpacing = 24.0;
-          const horizontalMargin = 16.0;
-          final tableWidth = _columnWidths.fold<double>(0, (a, b) => a + b) +
-              (_columnWidths.length - 1) * columnSpacing +
-              horizontalMargin * 2;
-          tableContent = Scrollbar(
-            controller: _verticalScrollController,
-            thumbVisibility: true,
-            thickness: 12,
-            radius: const Radius.circular(10),
-            child: SingleChildScrollView(
-              controller: _horizontalScrollController,
-              scrollDirection: Axis.horizontal,
-              child: SizedBox(
-                width: tableWidth,
-                height: constraints.maxHeight,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    _buildStickyHeader(
-                      context,
-                      columns,
-                      headingHeight,
-                      headingColor,
-                      dataTableTheme.headingTextStyle ?? theme.textTheme.titleSmall!,
-                      columnWidths,
-                    ),
-                    Expanded(
-                      child: SingleChildScrollView(
-                        controller: _verticalScrollController,
-                        child: Table(
-                          columnWidths: columnWidths,
-                          defaultVerticalAlignment:
-                              TableCellVerticalAlignment.middle,
-                          children: [
-                            for (var i = 0; i < rows.length; i++)
-                              _dataRowToTableRow(context, rows[i], i),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
+          tableContent = _wrapScrollableUsersTable(
+            context: context,
+            theme: theme,
+            columns: columns,
+            rows: rows,
+            maxHeight: constraints.maxHeight,
+            columnWidths: columnWidths,
+            tableWidth: tableWidth,
           );
         } else {
-          final fallbackTableWidth = 700.0;
-          tableContent = SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: SingleChildScrollView(
-              scrollDirection: Axis.vertical,
-              child: SizedBox(
-                width: fallbackTableWidth,
-                child: PaginatedDataTable(
-                  showCheckboxColumn: false,
-                  columns: columns,
-                  source: _source,
-                  rowsPerPage: 15,
-                  showFirstLastButtons: true,
-                  columnSpacing: 24,
-                  horizontalMargin: 16,
-                ),
-              ),
-            ),
+          _clampPagedFirstRowIndex();
+          final n = widget.users.length;
+          final start = n == 0 ? 0 : _pagedFirstRowIndex;
+          final pageRows = <DataRow>[];
+          for (var i = start; i < n && i < start + _rowsPerPage; i++) {
+            final row = _source.getRow(i);
+            if (row != null) pageRows.add(row);
+          }
+          tableContent = _wrapScrollableUsersTable(
+            context: context,
+            theme: theme,
+            columns: columns,
+            rows: pageRows,
+            maxHeight: constraints.maxHeight,
+            columnWidths: columnWidths,
+            tableWidth: tableWidth,
+            bottomBar: _usersPaginationBar(context, theme),
           );
         }
 
@@ -513,6 +682,8 @@ class _UsersTableSource extends DataTableSource {
   int? _focusedRowIndex;
   Color? _focusHighlightColor;
   void Function(int index)? _onRowTap;
+  List<UserDirectoryColumn> _visibleColumns = [];
+  bool _selectionVisible = true;
 
   void update(
     List<UserModel> users,
@@ -522,6 +693,8 @@ class _UsersTableSource extends DataTableSource {
     int? focusedRowIndex,
     Color? focusHighlightColor,
     void Function(int index)? onRowTap,
+    List<UserDirectoryColumn> visibleColumns,
+    bool selectionVisible,
   ) {
     _users = users;
     _selectedIds = selectedIds;
@@ -530,6 +703,8 @@ class _UsersTableSource extends DataTableSource {
     _focusedRowIndex = focusedRowIndex;
     _focusHighlightColor = focusHighlightColor;
     _onRowTap = onRowTap;
+    _visibleColumns = visibleColumns;
+    _selectionVisible = selectionVisible;
     notifyListeners();
   }
 
@@ -542,85 +717,121 @@ class _UsersTableSource extends DataTableSource {
   @override
   int get selectedRowCount => _selectedIds.length;
 
-  void _onDoubleTap(UserModel user, String field) => _onEditUser?.call(user, focusedField: field);
+  void _onDoubleTap(UserModel user, UserDirectoryColumn col) =>
+      _onEditUser?.call(user, focusedField: col.editFocusField);
 
-  @override
-  DataRow? getRow(int index) {
-    if (index < 0 || index >= _users.length) return null;
-    final user = _users[index];
-    final id = user.id;
-    final selected = id != null && _selectedIds.contains(id);
-    final focused = index == _focusedRowIndex && _focusHighlightColor != null;
-    return DataRow(
-      selected: selected,
-      onSelectChanged: id != null && _onToggleSelection != null
-          ? (_) => _onToggleSelection!(id)
-          : null,
-      color: focused
-          ? WidgetStateProperty.all(_focusHighlightColor)
-          : null,
-      cells: [
-        DataCell(
+  DataCell _cellForColumn(
+    UserModel user,
+    int? id,
+    bool selected,
+    int rowIndex,
+    UserDirectoryColumn col,
+  ) {
+    switch (col.key) {
+      case 'selection':
+        return DataCell(
           Checkbox(
             value: selected,
             onChanged: id != null && _onToggleSelection != null
                 ? (_) => _onToggleSelection!(id)
                 : null,
           ),
-          onTap: () => _onRowTap?.call(index),
-          onDoubleTap: () => _onDoubleTap(user, 'id'),
-        ),
-        DataCell(
-          Text('${id ?? ''}'),
-          onTap: () => _onRowTap?.call(index),
-          onDoubleTap: () => _onDoubleTap(user, 'id'),
-        ),
-        DataCell(
+          onTap: () => _onRowTap?.call(rowIndex),
+          onDoubleTap: () => _onDoubleTap(user, col),
+        );
+      case 'id':
+        return DataCell(
+          Text(
+            '${id ?? ''}',
+            maxLines: 1,
+            softWrap: false,
+            overflow: TextOverflow.ellipsis,
+          ),
+          onTap: () => _onRowTap?.call(rowIndex),
+          onDoubleTap: () => _onDoubleTap(user, col),
+        );
+      case 'last_name':
+        return DataCell(
           Text(
             user.lastName ?? '',
-            softWrap: true,
-            overflow: TextOverflow.visible,
+            maxLines: 1,
+            softWrap: false,
+            overflow: TextOverflow.ellipsis,
           ),
-          onTap: () => _onRowTap?.call(index),
-          onDoubleTap: () => _onDoubleTap(user, 'lastName'),
-        ),
-        DataCell(
+          onTap: () => _onRowTap?.call(rowIndex),
+          onDoubleTap: () => _onDoubleTap(user, col),
+        );
+      case 'first_name':
+        return DataCell(
           Text(
             user.firstName ?? '',
-            softWrap: true,
-            overflow: TextOverflow.visible,
+            maxLines: 1,
+            softWrap: false,
+            overflow: TextOverflow.ellipsis,
           ),
-          onTap: () => _onRowTap?.call(index),
-          onDoubleTap: () => _onDoubleTap(user, 'firstName'),
-        ),
-        DataCell(
+          onTap: () => _onRowTap?.call(rowIndex),
+          onDoubleTap: () => _onDoubleTap(user, col),
+        );
+      case 'phone':
+        return DataCell(
           Text(
-            user.phone ?? '',
-            softWrap: true,
-            overflow: TextOverflow.visible,
+            user.phoneJoined,
+            maxLines: 1,
+            softWrap: false,
+            overflow: TextOverflow.ellipsis,
           ),
-          onTap: () => _onRowTap?.call(index),
-          onDoubleTap: () => _onDoubleTap(user, 'phone'),
-        ),
-        DataCell(
+          onTap: () => _onRowTap?.call(rowIndex),
+          onDoubleTap: () => _onDoubleTap(user, col),
+        );
+      case 'department':
+        return DataCell(
           Text(
             user.departmentName ?? '–',
-            softWrap: true,
-            overflow: TextOverflow.visible,
+            maxLines: 1,
+            softWrap: false,
+            overflow: TextOverflow.ellipsis,
           ),
-          onTap: () => _onRowTap?.call(index),
-          onDoubleTap: () => _onDoubleTap(user, 'department'),
-        ),
-        DataCell(
+          onTap: () => _onRowTap?.call(rowIndex),
+          onDoubleTap: () => _onDoubleTap(user, col),
+        );
+      case 'notes':
+        return DataCell(
           Text(
             user.notes ?? '',
-            softWrap: true,
-            overflow: TextOverflow.visible,
+            maxLines: 1,
+            softWrap: false,
+            overflow: TextOverflow.ellipsis,
           ),
-          onTap: () => _onRowTap?.call(index),
-          onDoubleTap: () => _onDoubleTap(user, 'notes'),
-        ),
-      ],
+          onTap: () => _onRowTap?.call(rowIndex),
+          onDoubleTap: () => _onDoubleTap(user, col),
+        );
+      default:
+        return DataCell(
+          const SizedBox.shrink(),
+          onTap: () => _onRowTap?.call(rowIndex),
+          onDoubleTap: () => _onDoubleTap(user, col),
+        );
+    }
+  }
+
+  @override
+  DataRow? getRow(int index) {
+    if (index < 0 || index >= _users.length) return null;
+    final user = _users[index];
+    final id = user.id;
+    final selected = _selectionVisible && id != null && _selectedIds.contains(id);
+    final focused = index == _focusedRowIndex && _focusHighlightColor != null;
+    final cells = <DataCell>[
+      for (final col in _visibleColumns)
+        _cellForColumn(user, id, selected, index, col),
+    ];
+    return DataRow(
+      selected: selected,
+      onSelectChanged: _selectionVisible && id != null && _onToggleSelection != null
+          ? (_) => _onToggleSelection!(id)
+          : null,
+      color: focused ? WidgetStateProperty.all(_focusHighlightColor) : null,
+      cells: cells,
     );
   }
 }

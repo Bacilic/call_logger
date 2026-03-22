@@ -1,14 +1,16 @@
 import '../../../core/services/lookup_service.dart';
+import '../../../core/utils/phone_list_parser.dart';
 
-/// Μοντέλο χρήστη (πίνακας users): id, last_name, first_name, phone, department_id, notes.
+/// Μοντέλο χρήστη (πίνακας users + M2M `user_phones` / `phones`).
 /// Το [name] είναι υπολογιζόμενο από first_name + last_name για συμβατότητα.
 class UserModel {
   UserModel({
     this.id,
     this.firstName,
     this.lastName,
-    this.phone,
+    this.phones = const [],
     this.departmentId,
+    this.location,
     this.notes,
     this.isDeleted = false,
   });
@@ -16,11 +18,17 @@ class UserModel {
   final int? id;
   final String? firstName;
   final String? lastName;
-  final String? phone;
+  /// Κανονικοποιημένα τηλέφωνα (από `phones` / `user_phones`).
+  final List<String> phones;
   final int? departmentId;
+  /// Φυσική τοποθεσία / γραφείο χρήστη (στήλη `users.location`).
+  final String? location;
   final String? notes;
   /// Soft delete (πίνακας users.is_deleted).
   final bool isDeleted;
+
+  /// Ένα string για συμβατότητα με κώδικα που περιμένει ενιαίο κείμενο (π.χ. `PhoneListParser`).
+  String get phoneJoined => PhoneListParser.joinPhones(phones);
 
   /// Πλήρες όνομα (first_name + last_name). Συμβατότητα με κώδικα που χρησιμοποιεί name.
   String? get name {
@@ -37,47 +45,69 @@ class UserModel {
   String get fullNameWithDepartment {
     final n = name?.trim() ?? '';
     final d = departmentName?.trim() ?? '';
-    if (n.isEmpty) return d.isNotEmpty ? d : (phone ?? '');
+    if (n.isEmpty) {
+      if (d.isNotEmpty) return d;
+      return phoneJoined.trim().isEmpty ? '' : phoneJoined;
+    }
     return d.isEmpty ? n : '$n ($d)';
   }
 
+  /// Από `getAllUsers` / joins: λίστα `phones` (όχι ενιαία στήλη `phone`).
+  static List<String> _phonesFromMap(Map<String, dynamic> map) {
+    final p = map['phones'];
+    if (p is! List) return const [];
+    return p
+        .map((e) => e.toString().trim())
+        .where((s) => s.isNotEmpty)
+        .toList();
+  }
+
   factory UserModel.fromMap(Map<String, dynamic> map) {
-    // Νέο σχήμα: first_name, last_name. Παλιό: name (fallback για συμβατότητα).
-    final fn = map['first_name'] as String?;
-    final ln = map['last_name'] as String?;
-    final legacyName = map['name'] as String?;
-    String? firstName = fn;
-    String? lastName = ln;
-    if ((firstName == null || lastName == null) && legacyName != null) {
-      final parts = legacyName.trim().split(RegExp(r'\s+'));
-      if (parts.isEmpty) {
-        firstName = firstName ?? '';
-        lastName = lastName ?? '';
-      } else {
-        lastName = lastName ?? parts.last;
-        firstName = firstName ?? parts.sublist(0, parts.length - 1).join(' ');
-      }
-    }
     return UserModel(
       id: map['id'] as int?,
-      firstName: firstName,
-      lastName: lastName,
-      phone: map['phone'] as String?,
+      firstName: map['first_name'] as String?,
+      lastName: map['last_name'] as String?,
+      phones: _phonesFromMap(map),
       departmentId: map['department_id'] as int?,
+      location: map['location'] as String?,
       notes: map['notes'] as String?,
       isDeleted: (map['is_deleted'] as int?) == 1,
     );
   }
 
+  /// Για επίπεδο SQLite `users` + ξεχωριστή ενημέρωση `user_phones` μέσω [DatabaseHelper.replaceUserPhones].
   Map<String, dynamic> toMap() {
     return {
       if (id != null) 'id': id,
       if (firstName != null) 'first_name': firstName,
       if (lastName != null) 'last_name': lastName,
-      if (phone != null) 'phone': phone,
+      'phones': List<String>.from(phones),
       if (departmentId != null) 'department_id': departmentId,
+      if (location != null) 'location': location,
       if (notes != null) 'notes': notes,
       'is_deleted': isDeleted ? 1 : 0,
     };
+  }
+
+  UserModel copyWith({
+    int? id,
+    String? firstName,
+    String? lastName,
+    List<String>? phones,
+    int? departmentId,
+    String? location,
+    String? notes,
+    bool? isDeleted,
+  }) {
+    return UserModel(
+      id: id ?? this.id,
+      firstName: firstName ?? this.firstName,
+      lastName: lastName ?? this.lastName,
+      phones: phones ?? this.phones,
+      departmentId: departmentId ?? this.departmentId,
+      location: location ?? this.location,
+      notes: notes ?? this.notes,
+      isDeleted: isDeleted ?? this.isDeleted,
+    );
   }
 }

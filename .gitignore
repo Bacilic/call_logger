@@ -3,6 +3,10 @@
 # =========================
 *.class
 *.log
+
+# Κρασάρισμα Flutter CLI: μεταφέρονται στο logs/ (βλ. scripts/move_flutter_tool_logs.ps1)
+logs/
+!logs/.gitkeep
 *.pyc
 *.swp
 .DS_Store

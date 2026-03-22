@@ -7,8 +7,22 @@ import '../../models/equipment_column.dart';
 
 const _minColumnWidth = 40.0;
 const _maxColumnWidth = 600.0;
-const _defaultDataColumnWidth = 120.0;
-const _defaultCheckboxColumnWidth = 52.0;
+const _defaultDataFallbackWidth = 120.0;
+const _rowsPerPage = 15;
+
+const _defaultWidthsByKey = <String, double>{
+  'selection': 52.0,
+  'id': 56.0,
+  'code': 120.0,
+  'type': 120.0,
+  'owner': 140.0,
+  'location': 120.0,
+  'phone': 120.0,
+  'notes': 180.0,
+  'customIp': 140.0,
+  'anydeskId': 120.0,
+  'defaultRemote': 160.0,
+};
 
 /// Πίνακας εξοπλισμού: mirror του UsersDataTable – checkbox, δυναμικές στήλες, sort, πλήκτρα, focus.
 class EquipmentDataTable extends StatefulWidget {
@@ -52,22 +66,31 @@ class _EquipmentDataTableState extends State<EquipmentDataTable> {
   final FocusNode _tableFocusNode = FocusNode();
   final ScrollController _verticalScrollController = ScrollController();
   final ScrollController _horizontalScrollController = ScrollController();
-  double _checkboxColumnWidth = _defaultCheckboxColumnWidth;
   final Map<String, double> _dataColumnWidths = {};
+  int _pagedFirstRowIndex = 0;
 
-  double _getColumnWidth(int index) {
-    if (index == 0) return _checkboxColumnWidth;
-    final col = widget.visibleColumns[index - 1];
-    return _dataColumnWidths[col.key] ?? _defaultDataColumnWidth;
+  bool get _selectionVisible =>
+      widget.visibleColumns.contains(EquipmentColumn.selection);
+
+  double _widthForColumn(EquipmentColumn col) {
+    return _dataColumnWidths[col.key] ??
+        _defaultWidthsByKey[col.key] ??
+        _defaultDataFallbackWidth;
   }
 
-  void _setColumnWidth(int index, double width) {
+  void _setColumnWidth(int visibleIndex, double width) {
+    final col = widget.visibleColumns[visibleIndex];
     final w = width.clamp(_minColumnWidth, _maxColumnWidth);
-    if (index == 0) {
-      setState(() => _checkboxColumnWidth = w);
-    } else {
-      setState(() => _dataColumnWidths[widget.visibleColumns[index - 1].key] = w);
+    setState(() => _dataColumnWidths[col.key] = w);
+  }
+
+  int _sortedVisibleColumnIndex() {
+    final sc = widget.sortColumn;
+    if (sc == null) return -1;
+    for (var i = 0; i < widget.visibleColumns.length; i++) {
+      if (widget.visibleColumns[i].key == sc.key) return i;
     }
+    return -1;
   }
 
   @override
@@ -94,11 +117,37 @@ class _EquipmentDataTableState extends State<EquipmentDataTable> {
       _focusHighlightColor,
       _onRowTap,
       widget.visibleColumns,
+      _selectionVisible,
+      _styleForEmptyOwnerCell(context),
     );
+    if (!widget.continuousScroll) {
+      _clampPagedFirstRowIndex();
+    }
+  }
+
+  void _clampPagedFirstRowIndex() {
+    final n = widget.items.length;
+    if (n == 0) {
+      _pagedFirstRowIndex = 0;
+      return;
+    }
+    if (_pagedFirstRowIndex >= n) {
+      _pagedFirstRowIndex = ((n - 1) ~/ _rowsPerPage) * _rowsPerPage;
+    }
   }
 
   Color? get _focusHighlightColor =>
       Theme.of(context).colorScheme.surfaceContainerHighest;
+
+  /// Πλάγιο, αχνό κείμενο για placeholder «Χωρίς κάτοχο» (δεν είναι πραγματική εγγραφή).
+  TextStyle _styleForEmptyOwnerCell(BuildContext context) {
+    final theme = Theme.of(context);
+    final base = theme.textTheme.bodyMedium ?? const TextStyle();
+    return base.copyWith(
+      fontStyle: FontStyle.italic,
+      color: theme.colorScheme.onSurface.withValues(alpha: 0.42),
+    );
+  }
 
   KeyEventResult _handleKey(FocusNode node, KeyEvent event) {
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
@@ -151,11 +200,8 @@ class _EquipmentDataTableState extends State<EquipmentDataTable> {
     TextStyle headingTextStyle,
     Map<int, TableColumnWidth> columnWidths,
   ) {
-    final sortedCol = widget.sortColumn;
+    final sortedIndex = _sortedVisibleColumnIndex();
     final asc = widget.sortAscending;
-    final sortedIndex = sortedCol != null
-        ? widget.visibleColumns.indexOf(sortedCol) + 1
-        : -1;
     return Table(
       columnWidths: columnWidths,
       defaultVerticalAlignment: TableCellVerticalAlignment.middle,
@@ -184,8 +230,8 @@ class _EquipmentDataTableState extends State<EquipmentDataTable> {
                           child: Container(
                             height: headingHeight,
                             padding: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                              vertical: 12,
+                              horizontal: 12,
+                              vertical: 6,
                             ),
                             alignment: Alignment.centerLeft,
                             child: Row(
@@ -194,6 +240,8 @@ class _EquipmentDataTableState extends State<EquipmentDataTable> {
                                 Expanded(
                                   child: DefaultTextStyle(
                                     style: headingTextStyle,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
                                     child: columns[i].label,
                                   ),
                                 ),
@@ -201,7 +249,7 @@ class _EquipmentDataTableState extends State<EquipmentDataTable> {
                                   const SizedBox(width: 4),
                                   Icon(
                                     asc ? Icons.arrow_drop_up : Icons.arrow_drop_down,
-                                    size: 20,
+                                    size: 18,
                                     color: Theme.of(context).colorScheme.onSurface,
                                   ),
                                 ],
@@ -211,15 +259,14 @@ class _EquipmentDataTableState extends State<EquipmentDataTable> {
                         ),
                       ),
                     ),
-                    if (i < columns.length - 1)
-                      _TableResizeHandle(
-                        onResize: (delta) {
-                          _setColumnWidth(
-                            i,
-                            _getColumnWidth(i) + delta,
-                          );
-                        },
-                      ),
+                    _TableResizeHandle(
+                      onResize: (delta) {
+                        _setColumnWidth(
+                          i,
+                          _widthForColumn(widget.visibleColumns[i]) + delta,
+                        );
+                      },
+                    ),
                   ],
                 ),
               ),
@@ -250,8 +297,8 @@ class _EquipmentDataTableState extends State<EquipmentDataTable> {
               onDoubleTap: cell.onDoubleTap,
               child: Padding(
                 padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 12,
+                  horizontal: 12,
+                  vertical: 8,
                 ),
                 child: Align(
                   alignment: Alignment.centerLeft,
@@ -262,6 +309,207 @@ class _EquipmentDataTableState extends State<EquipmentDataTable> {
           ),
       ],
     );
+  }
+
+  Widget _wrapEquipmentScrollableTable({
+    required BuildContext context,
+    required ThemeData theme,
+    required List<DataColumn> columns,
+    required List<DataRow> rows,
+    required double maxHeight,
+    required Map<int, TableColumnWidth> columnWidths,
+    required double tableWidth,
+    Widget? bottomBar,
+  }) {
+    final dataTableTheme = theme.dataTableTheme;
+    final headingHeight = dataTableTheme.headingRowHeight ?? 56.0;
+    final Color? headingColor =
+        (dataTableTheme.headingRowColor ??
+                theme.colorScheme.surfaceContainerHighest)
+            as Color?;
+    final headingTextStyle =
+        dataTableTheme.headingTextStyle ?? theme.textTheme.titleSmall!;
+    return Scrollbar(
+      controller: _verticalScrollController,
+      thumbVisibility: true,
+      thickness: 12,
+      radius: const Radius.circular(10),
+      child: SingleChildScrollView(
+        controller: _horizontalScrollController,
+        scrollDirection: Axis.horizontal,
+        child: SizedBox(
+          width: tableWidth,
+          height: maxHeight,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _buildStickyHeader(
+                context,
+                columns,
+                headingHeight,
+                headingColor,
+                headingTextStyle,
+                columnWidths,
+              ),
+              Expanded(
+                child: SingleChildScrollView(
+                  controller: _verticalScrollController,
+                  child: Table(
+                    columnWidths: columnWidths,
+                    defaultVerticalAlignment:
+                        TableCellVerticalAlignment.middle,
+                    children: [
+                      for (final row in rows)
+                        _dataRowToTableRow(context, row),
+                    ],
+                  ),
+                ),
+              ),
+              ?bottomBar,
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _equipmentPaginationBar(BuildContext context, ThemeData theme) {
+    final n = widget.items.length;
+    if (n == 0) {
+      return Material(
+        color: theme.colorScheme.surfaceContainerLowest,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 6),
+          child: Center(
+            child: Text(
+              '0 από 0',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.bodyMedium,
+            ),
+          ),
+        ),
+      );
+    }
+    final start = _pagedFirstRowIndex;
+    final end = (start + _rowsPerPage).clamp(0, n);
+    final lastPageStart = ((n - 1) ~/ _rowsPerPage) * _rowsPerPage;
+
+    void goFirst() => setState(() => _pagedFirstRowIndex = 0);
+    void goPrev() => setState(
+          () => _pagedFirstRowIndex =
+              (start - _rowsPerPage).clamp(0, lastPageStart),
+        );
+    void goNext() => setState(() {
+          final next = start + _rowsPerPage;
+          if (next < n) _pagedFirstRowIndex = next;
+        });
+    void goLast() => setState(() => _pagedFirstRowIndex = lastPageStart);
+
+    return Theme(
+      data: theme.copyWith(
+        iconButtonTheme: IconButtonThemeData(
+          style: IconButton.styleFrom(
+            minimumSize: const Size(32, 32),
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            padding: const EdgeInsets.all(4),
+            visualDensity: VisualDensity.compact,
+            iconSize: 20,
+          ),
+        ),
+      ),
+      child: Material(
+        color:
+            theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.65),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+          child: Row(
+            children: [
+              IconButton(
+                tooltip: 'Πρώτη σελίδα',
+                icon: const Icon(Icons.first_page),
+                onPressed: start > 0 ? goFirst : null,
+              ),
+              IconButton(
+                tooltip: 'Προηγούμενη',
+                icon: const Icon(Icons.chevron_left),
+                onPressed: start > 0 ? goPrev : null,
+              ),
+              Expanded(
+                child: Center(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    child: Text(
+                      '${start + 1}–$end από $n',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.center,
+                      style: theme.textTheme.bodyMedium,
+                    ),
+                  ),
+                ),
+              ),
+              IconButton(
+                tooltip: 'Επόμενη',
+                icon: const Icon(Icons.chevron_right),
+                onPressed: end < n ? goNext : null,
+              ),
+              IconButton(
+                tooltip: 'Τελευταία σελίδα',
+                icon: const Icon(Icons.last_page),
+                onPressed: end < n ? goLast : null,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  List<DataColumn> _buildEquipmentDataColumns(ThemeData theme) {
+    return [
+      for (final col in widget.visibleColumns)
+        if (col.key == 'selection')
+          DataColumn(
+            label: _SelectAllCheckbox(
+              selectedIds: widget.selectedIds,
+              items: widget.items,
+              onSelectAll: () {
+                for (final row in widget.items) {
+                  if (row.$1.id != null &&
+                      !widget.selectedIds.contains(row.$1.id)) {
+                    widget.onToggleSelection(row.$1.id!);
+                  }
+                }
+              },
+              onDeselectAll: () {
+                for (final id in widget.selectedIds.toList()) {
+                  widget.onToggleSelection(id);
+                }
+              },
+              allSelected: widget.items.isNotEmpty &&
+                  widget.items.every((r) =>
+                      r.$1.id != null &&
+                      widget.selectedIds.contains(r.$1.id)),
+            ),
+          )
+        else
+          DataColumn(
+            label: Text(
+              col.label,
+              maxLines: 1,
+              softWrap: false,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.titleSmall?.copyWith(
+                color: theme.colorScheme.onSurface,
+              ),
+            ),
+            onSort: col.sortValue != null
+                ? (_, asc) => widget.onSetSort(col, asc)
+                : null,
+          ),
+    ];
   }
 
   @override
@@ -276,146 +524,74 @@ class _EquipmentDataTableState extends State<EquipmentDataTable> {
       _focusHighlightColor,
       _onRowTap,
       widget.visibleColumns,
+      _selectionVisible,
+      _styleForEmptyOwnerCell(context),
     );
 
-    final columns = <DataColumn>[
-      DataColumn(
-        label: _SelectAllCheckbox(
-          selectedIds: widget.selectedIds,
-          items: widget.items,
-          onSelectAll: () {
-            for (final row in widget.items) {
-              if (row.$1.id != null &&
-                  !widget.selectedIds.contains(row.$1.id)) {
-                widget.onToggleSelection(row.$1.id!);
-              }
-            }
-          },
-          onDeselectAll: () {
-            for (final id in widget.selectedIds.toList()) {
-              widget.onToggleSelection(id);
-            }
-          },
-          allSelected: widget.items.isNotEmpty &&
-              widget.items.every((r) =>
-                  r.$1.id != null && widget.selectedIds.contains(r.$1.id)),
-        ),
-      ),
-      ...widget.visibleColumns.map(
-        (col) => DataColumn(
-          label: Text(
-            col.label,
-            style: theme.textTheme.titleSmall?.copyWith(
-              color: theme.colorScheme.onSurface,
-            ),
-          ),
-          onSort: col.sortValue != null
-              ? (_, asc) => widget.onSetSort(col, asc)
-              : null,
-        ),
-      ),
-    ];
-
-    final rows = <DataRow>[];
-    for (var i = 0; i < _source.rowCount; i++) {
-      final row = _source.getRow(i);
-      if (row != null) rows.add(row);
-    }
+    final columns = _buildEquipmentDataColumns(theme);
 
     final columnWidths = Map<int, TableColumnWidth>.fromIterables(
       List.generate(columns.length, (i) => i),
-      List.generate(columns.length, (i) => FixedColumnWidth(_getColumnWidth(i))),
+      List.generate(
+        columns.length,
+        (i) => FixedColumnWidth(_widthForColumn(widget.visibleColumns[i])),
+      ),
     );
     const columnSpacing = 24.0;
     const horizontalMargin = 16.0;
-    final tableWidth = List.generate(columns.length, (i) => _getColumnWidth(i))
-            .fold<double>(0, (a, b) => a + b) +
+    final tableWidth = List.generate(
+            columns.length,
+            (i) => _widthForColumn(widget.visibleColumns[i]))
+        .fold<double>(0, (a, b) => a + b) +
         (columns.length - 1) * columnSpacing +
         horizontalMargin * 2;
-
-    final Widget tableContent;
-    if (widget.continuousScroll) {
-      final dataTableTheme = theme.dataTableTheme;
-      final headingHeight = dataTableTheme.headingRowHeight ?? 56.0;
-      final Color? headingColor =
-          (dataTableTheme.headingRowColor ??
-                  theme.colorScheme.surfaceContainerHighest)
-              as Color?;
-      final headingTextStyle =
-          dataTableTheme.headingTextStyle ?? theme.textTheme.titleSmall!;
-      tableContent = LayoutBuilder(
-        builder: (context, constraints) {
-          return Scrollbar(
-            controller: _verticalScrollController,
-            thumbVisibility: true,
-            thickness: 12,
-            radius: const Radius.circular(10),
-            child: SingleChildScrollView(
-              controller: _horizontalScrollController,
-              scrollDirection: Axis.horizontal,
-              child: SizedBox(
-                width: tableWidth,
-                height: constraints.maxHeight,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    _buildStickyHeader(
-                      context,
-                      columns,
-                      headingHeight,
-                      headingColor,
-                      headingTextStyle,
-                      columnWidths,
-                    ),
-                    Expanded(
-                      child: SingleChildScrollView(
-                        controller: _verticalScrollController,
-                        child: Table(
-                          columnWidths: columnWidths,
-                          defaultVerticalAlignment:
-                              TableCellVerticalAlignment.middle,
-                          children: [
-                            for (final row in rows)
-                              _dataRowToTableRow(context, row),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          );
-        },
-      );
-    } else {
-      tableContent = SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: SingleChildScrollView(
-          scrollDirection: Axis.vertical,
-          child: SizedBox(
-            width: tableWidth,
-            child: PaginatedDataTable(
-              showCheckboxColumn: false,
-              columns: columns,
-              source: _source,
-              rowsPerPage: 15,
-              showFirstLastButtons: true,
-              columnSpacing: 24,
-              horizontalMargin: 16,
-            ),
-          ),
-        ),
-      );
-    }
 
     return Focus(
       focusNode: _tableFocusNode,
       onKeyEvent: _handleKey,
       child: MouseRegion(
         onEnter: (_) => _tableFocusNode.requestFocus(),
-        child: tableContent,
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final Widget tableContent;
+            if (widget.continuousScroll) {
+              final rows = <DataRow>[];
+              for (var i = 0; i < _source.rowCount; i++) {
+                final row = _source.getRow(i);
+                if (row != null) rows.add(row);
+              }
+              tableContent = _wrapEquipmentScrollableTable(
+                context: context,
+                theme: theme,
+                columns: columns,
+                rows: rows,
+                maxHeight: constraints.maxHeight,
+                columnWidths: columnWidths,
+                tableWidth: tableWidth,
+              );
+            } else {
+              _clampPagedFirstRowIndex();
+              final n = widget.items.length;
+              final start = n == 0 ? 0 : _pagedFirstRowIndex;
+              final pageRows = <DataRow>[];
+              for (var i = start; i < n && i < start + _rowsPerPage; i++) {
+                final row = _source.getRow(i);
+                if (row != null) pageRows.add(row);
+              }
+              tableContent = _wrapEquipmentScrollableTable(
+                context: context,
+                theme: theme,
+                columns: columns,
+                rows: pageRows,
+                maxHeight: constraints.maxHeight,
+                columnWidths: columnWidths,
+                tableWidth: tableWidth,
+                bottomBar: _equipmentPaginationBar(context, theme),
+              );
+            }
+            return tableContent;
+          },
+        ),
       ),
     );
   }
@@ -509,6 +685,8 @@ class _EquipmentTableSource extends DataTableSource {
   Color? _focusHighlightColor;
   void Function(int index)? _onRowTap;
   List<EquipmentColumn> _visibleColumns = [];
+  bool _selectionVisible = true;
+  TextStyle? _emptyOwnerTextStyle;
 
   void update(
     List<EquipmentRow> items,
@@ -519,6 +697,8 @@ class _EquipmentTableSource extends DataTableSource {
     Color? focusHighlightColor,
     void Function(int index)? onRowTap,
     List<EquipmentColumn> visibleColumns,
+    bool selectionVisible,
+    TextStyle emptyOwnerTextStyle,
   ) {
     _items = items;
     _selectedIds = selectedIds;
@@ -528,6 +708,8 @@ class _EquipmentTableSource extends DataTableSource {
     _focusHighlightColor = focusHighlightColor;
     _onRowTap = onRowTap;
     _visibleColumns = visibleColumns;
+    _selectionVisible = selectionVisible;
+    _emptyOwnerTextStyle = emptyOwnerTextStyle;
     notifyListeners();
   }
 
@@ -543,44 +725,75 @@ class _EquipmentTableSource extends DataTableSource {
   void _onDoubleTap(EquipmentRow row, String fieldKey) =>
       _onEditEquipment?.call(row, focusedField: fieldKey);
 
-  @override
-  DataRow? getRow(int index) {
-    if (index < 0 || index >= _items.length) return null;
-    final row = _items[index];
-    final id = row.$1.id;
-    final selected = id != null && _selectedIds.contains(id);
-    final focused = index == _focusedRowIndex && _focusHighlightColor != null;
-    return DataRow(
-      selected: selected,
-      onSelectChanged: id != null && _onToggleSelection != null
-          ? (_) => _onToggleSelection!(id)
-          : null,
-      color: focused
-          ? WidgetStateProperty.all(_focusHighlightColor)
-          : null,
-      cells: [
-        DataCell(
+  DataCell _cellForColumn(
+    EquipmentRow row,
+    int? id,
+    bool selected,
+    int rowIndex,
+    EquipmentColumn col,
+  ) {
+    switch (col.key) {
+      case 'selection':
+        return DataCell(
           Checkbox(
             value: selected,
             onChanged: id != null && _onToggleSelection != null
                 ? (_) => _onToggleSelection!(id)
                 : null,
           ),
-          onTap: () => _onRowTap?.call(index),
+          onTap: () => _onRowTap?.call(rowIndex),
           onDoubleTap: () => _onDoubleTap(row, 'code'),
-        ),
-        ..._visibleColumns.map(
-          (col) => DataCell(
-            Text(
-              col.displayValue(row),
-              softWrap: true,
-              overflow: TextOverflow.visible,
-            ),
-            onTap: () => _onRowTap?.call(index),
-            onDoubleTap: () => _onDoubleTap(row, col.key),
+        );
+      case 'id':
+        return DataCell(
+          Text(
+            id != null ? '$id' : '–',
+            maxLines: 1,
+            softWrap: false,
+            overflow: TextOverflow.ellipsis,
           ),
-        ),
-      ],
+          onTap: () => _onRowTap?.call(rowIndex),
+          onDoubleTap: () => _onDoubleTap(row, 'id'),
+        );
+      default:
+        final cellText = col.displayValue(row);
+        final isEmptyOwnerPlaceholder = col.key == EquipmentColumn.owner.key &&
+            cellText == EquipmentColumn.emptyOwnerDisplayLabel;
+        return DataCell(
+          Text(
+            cellText,
+            maxLines: 1,
+            softWrap: false,
+            overflow: TextOverflow.ellipsis,
+            style: isEmptyOwnerPlaceholder ? _emptyOwnerTextStyle : null,
+          ),
+          onTap: () => _onRowTap?.call(rowIndex),
+          onDoubleTap: () => _onDoubleTap(row, col.key),
+        );
+    }
+  }
+
+  @override
+  DataRow? getRow(int index) {
+    if (index < 0 || index >= _items.length) return null;
+    final row = _items[index];
+    final id = row.$1.id;
+    final selected =
+        _selectionVisible && id != null && _selectedIds.contains(id);
+    final focused = index == _focusedRowIndex && _focusHighlightColor != null;
+    final cells = <DataCell>[
+      for (final col in _visibleColumns)
+        _cellForColumn(row, id, selected, index, col),
+    ];
+    return DataRow(
+      selected: selected,
+      onSelectChanged: _selectionVisible && id != null && _onToggleSelection != null
+          ? (_) => _onToggleSelection!(id)
+          : null,
+      color: focused
+          ? WidgetStateProperty.all(_focusHighlightColor)
+          : null,
+      cells: cells,
     );
   }
 }

@@ -29,6 +29,7 @@ class _CallHeaderFormState extends ConsumerState<CallHeaderForm> {
     final lookupBundle = lookupAsync.value;
     final lookupService = lookupBundle?.service;
     final lookupLoadError = lookupBundle?.loadError;
+    final lookupLoadErrorDetails = lookupBundle?.loadErrorDetails;
 
     final hasAnyContent = ref.watch(
       callHeaderProvider.select((s) => s.hasAnyContent),
@@ -72,11 +73,27 @@ class _CallHeaderFormState extends ConsumerState<CallHeaderForm> {
                       ),
                       const SizedBox(width: 8),
                       Expanded(
-                        child: Text(
-                          lookupLoadError,
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                            color: theme.colorScheme.onErrorContainer,
-                          ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            _lookupErrorLeadText(
+                              context,
+                              lookupLoadError,
+                              lookupLoadErrorDetails,
+                            ),
+                            if (lookupLoadErrorDetails != null &&
+                                lookupLoadErrorDetails.isNotEmpty) ...[
+                              const SizedBox(height: 10),
+                              SelectableText(
+                                lookupLoadErrorDetails,
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: theme.colorScheme.onErrorContainer,
+                                  height: 1.35,
+                                ),
+                              ),
+                            ],
+                          ],
                         ),
                       ),
                       TextButton(
@@ -137,10 +154,10 @@ class _CallHeaderFormState extends ConsumerState<CallHeaderForm> {
                     ),
                   ),
                 ),
-                if (header.needsAssociation)
+                if (header.needsAssociation(lookupService))
                   IconButton(
-                    icon: Icon(Icons.add, color: header.associationColor),
-                    tooltip: header.associationTooltip ?? '',
+                    icon: Icon(Icons.add, color: header.associationColor(lookupService)),
+                    tooltip: header.associationTooltip(lookupService) ?? '',
                     padding: EdgeInsets.zero,
                     constraints: const BoxConstraints(
                       minWidth: 40,
@@ -201,6 +218,53 @@ class _CallHeaderFormState extends ConsumerState<CallHeaderForm> {
           ],
         );
       },
+    );
+  }
+
+  /// Κείμενο σφάλματος· στη λέξη «λεπτομέρειες» εμφανίζεται tooltip με τεχνικές λεπτομέρειες.
+  Widget _lookupErrorLeadText(
+    BuildContext context,
+    String message,
+    String? details,
+  ) {
+    final theme = Theme.of(context);
+    final style = theme.textTheme.bodyMedium?.copyWith(
+      color: theme.colorScheme.onErrorContainer,
+    );
+    const key = 'λεπτομέρειες';
+    final i = message.indexOf(key);
+    if (details == null || details.isEmpty || i < 0) {
+      return Text(message, style: style);
+    }
+    final before = message.substring(0, i);
+    final after = message.substring(i + key.length);
+    final tip =
+        details.length > 2500 ? '${details.substring(0, 2500)}…' : details;
+    return Text.rich(
+      TextSpan(
+        style: style,
+        children: [
+          TextSpan(text: before),
+          WidgetSpan(
+            alignment: PlaceholderAlignment.middle,
+            child: Tooltip(
+              message: tip,
+              textStyle: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onInverseSurface,
+              ),
+              child: Text(
+                key,
+                style: style?.copyWith(
+                  decoration: TextDecoration.underline,
+                  color: theme.colorScheme.primary,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ),
+          TextSpan(text: after),
+        ],
+      ),
     );
   }
 }

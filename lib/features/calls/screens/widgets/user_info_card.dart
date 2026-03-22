@@ -45,7 +45,7 @@ class UserInfoCard extends ConsumerWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   _row(theme, Icons.business, 'Τμήμα', user.departmentName ?? '–'),
-                  _row(theme, Icons.phone, 'Τηλ.', user.phone),
+                  _row(theme, Icons.phone, 'Τηλ.', user.phoneJoined),
                   if (user.notes != null && user.notes!.trim().isNotEmpty)
                     Padding(
                       padding: const EdgeInsets.only(top: 4),

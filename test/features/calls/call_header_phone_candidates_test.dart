@@ -1,4 +1,12 @@
+// Unit tests: CallHeaderNotifier — επιλογή τηλεφώνου από υποψήφιους vs updatePhone (regression).
+//
+// Ολόκληρο αρχείο:
+//   flutter test test/features/calls/call_header_phone_candidates_test.dart
+// Ομάδα:
+//   flutter test test/features/calls/call_header_phone_candidates_test.dart --plain-name "CallHeader phone candidates"
+
 import 'package:call_logger/core/services/lookup_service.dart';
+import 'package:call_logger/core/utils/phone_list_parser.dart';
 import 'package:call_logger/features/calls/models/equipment_model.dart';
 import 'package:call_logger/features/calls/models/user_model.dart';
 import 'package:call_logger/features/calls/provider/call_header_provider.dart';
@@ -45,6 +53,8 @@ class _TestCallHeaderNotifier extends CallHeaderNotifier {
 
 void main() {
   group('CallHeader phone candidates', () {
+    // Επιλογή αριθμού από λίστα: διατηρείται ο καλών, selectedPhone, καθαρίζουν candidates.
+    //   flutter test test/features/calls/call_header_phone_candidates_test.dart --plain-name "selectPhoneFromCandidates κρατά caller context και ορίζει selectedPhone"
     test(
       'selectPhoneFromCandidates κρατά caller context και ορίζει selectedPhone',
       () {
@@ -54,7 +64,7 @@ void main() {
               id: 10,
               firstName: 'Σταματίνα',
               lastName: 'Γεωργάκη',
-              phone: '2975 2997 2551 2564',
+              phones: PhoneListParser.splitPhones('2975 2997 2551 2564'),
             ),
             phoneCandidates: const ['2551', '2564', '2975', '2997'],
             callerDisplayText: 'Σταματίνα Γεωργάκη',
@@ -66,7 +76,8 @@ void main() {
           overrides: [
             callHeaderProvider.overrideWith(() => notifier),
             lookupServiceProvider.overrideWith(
-              (ref) async => _FakeLookupService(),
+              (ref) async =>
+                  LookupLoadResult(service: _FakeLookupService()),
             ),
           ],
         );
@@ -86,6 +97,8 @@ void main() {
       },
     );
 
+    // Χειροκίνητη ενημέρωση τηλεφώνου: καθαρίζει selectedCaller (διαφορετικό path από selectPhoneFromCandidates).
+    //   flutter test test/features/calls/call_header_phone_candidates_test.dart --plain-name "updatePhone καθαρίζει caller context (αιτία του regression όταν καλείται λάθος path)"
     test(
       'updatePhone καθαρίζει caller context (αιτία του regression όταν καλείται λάθος path)',
       () {
@@ -104,7 +117,8 @@ void main() {
           overrides: [
             callHeaderProvider.overrideWith(() => notifier),
             lookupServiceProvider.overrideWith(
-              (ref) async => _FakeLookupService(),
+              (ref) async =>
+                  LookupLoadResult(service: _FakeLookupService()),
             ),
           ],
         );
