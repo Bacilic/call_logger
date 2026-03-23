@@ -1,16 +1,17 @@
 import 'package:flutter/material.dart';
 
+import 'widgets/departments_tab.dart';
 import 'widgets/equipment_tab.dart';
 import 'widgets/users_tab.dart';
 
-/// Οθόνη Κατάλογου: TabBar Χρήστες | Εξοπλισμός.
+/// Οθόνη Κατάλογου: TabBar Χρήστες | Τμήματα | Εξοπλισμός.
 class DirectoryScreen extends StatelessWidget {
   const DirectoryScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
-      length: 2,
+      length: 3,
       child: Scaffold(
         appBar: AppBar(
           title: const SizedBox.shrink(),
@@ -19,6 +20,7 @@ class DirectoryScreen extends StatelessWidget {
           bottom: const TabBar(
             tabs: [
               Tab(text: 'Χρήστες'),
+              Tab(text: 'Τμήματα'),
               Tab(text: 'Εξοπλισμός'),
             ],
           ),
@@ -26,6 +28,7 @@ class DirectoryScreen extends StatelessWidget {
         body: const TabBarView(
           children: [
             UsersTab(),
+            DepartmentsTab(),
             EquipmentTab(),
           ],
         ),

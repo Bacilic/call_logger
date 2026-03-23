@@ -45,16 +45,26 @@ class _MainShellState extends ConsumerState<MainShell> {
   int _selectedIndex = 0;
   /// Εμφάνιση κουμπιού Import Excel (ρύθμιση από Ρυθμίσεις· προεπιλογή false).
   bool _showImportExcelButton = false;
+  /// Λεζάντες πλευρικής μπάρας (όταν το πλάτος παραθύρου επιτρέπει extended rail).
+  bool _navRailShowLabels = true;
+
+  static const double _kNavRailWideBreakpoint = 760;
 
   @override
   void initState() {
     super.initState();
     _loadShowImportExcelSetting();
+    _loadNavRailShowLabels();
   }
 
   Future<void> _loadShowImportExcelSetting() async {
     final value = await SettingsService().getShowImportExcelButton();
     if (mounted) setState(() => _showImportExcelButton = value);
+  }
+
+  Future<void> _loadNavRailShowLabels() async {
+    final value = await SettingsService().getNavRailShowLabels();
+    if (mounted) setState(() => _navRailShowLabels = value);
   }
 
   Widget _tasksNavigationIcon(bool showBadge, int pendingCount) {
@@ -78,7 +88,9 @@ class _MainShellState extends ConsumerState<MainShell> {
     final pendingCountAsync = ref.watch(globalPendingTasksCountProvider);
     final showBadge = showBadgeAsync.value ?? true;
     final pendingCount = pendingCountAsync.value ?? 0;
-    final railExtended = MediaQuery.sizeOf(context).width >= 760;
+    final wideEnoughForExtendedRail =
+        MediaQuery.sizeOf(context).width >= _kNavRailWideBreakpoint;
+    final railExtended = wideEnoughForExtendedRail && _navRailShowLabels;
     return Scaffold(
       appBar: AppBar(
         title: const Text('Καταγραφή Κλήσεων'),
@@ -124,6 +136,22 @@ class _MainShellState extends ConsumerState<MainShell> {
             onDestinationSelected: (index) {
               setState(() => _selectedIndex = index);
             },
+            leading: wideEnoughForExtendedRail
+                ? IconButton(
+                    key: const ValueKey('nav_rail_toggle'),
+                    icon: Icon(
+                      railExtended ? Icons.chevron_left : Icons.chevron_right,
+                    ),
+                    tooltip: railExtended
+                        ? 'Σύμπτυξη πλοήγησης'
+                        : 'Επέκταση πλοήγησης',
+                    onPressed: () async {
+                      final next = !_navRailShowLabels;
+                      setState(() => _navRailShowLabels = next);
+                      await SettingsService().setNavRailShowLabels(next);
+                    },
+                  )
+                : null,
             destinations: [
               NavigationRailDestination(
                 icon: Tooltip(

@@ -17,15 +17,15 @@ import 'core/widgets/app_shell_with_global_fatal_error.dart';
 import 'core/widgets/global_fatal_error_notifier.dart';
 import 'features/calls/screens/widgets/call_header_form.dart';
 
-/// Ελάχιστο πλάτος: γραμμή πεδίων + padding Κλήσεων (16*2) + extended NavigationRail (~280) + περιθώριο.
+/// Ελάχιστο πλάτος: γραμμή πεδίων + padding Κλήσεων (16*2) + συμπυγμένο NavigationRail + περιθώριο.
 const double _kCallsScreenPaddingH = 32;
-const double _kNavigationRailExtendedWidth = 280;
+const double _kNavigationRailMinWidth = 80;
 const double _kMinWindowWidthMargin = 20;
 
 final double _kMinWindowWidth =
     kCallHeaderRowMinWidth +
     _kCallsScreenPaddingH +
-    _kNavigationRailExtendedWidth +
+    _kNavigationRailMinWidth +
     _kMinWindowWidthMargin;
 const double _kMinWindowHeight = 640;
 
@@ -47,18 +47,32 @@ void _rootZoneErrorHandler(Object error, StackTrace stack) {
 }
 
 void main() {
-  runZonedGuarded(() {
-    WidgetsFlutterBinding.ensureInitialized();
+  runZonedGuarded(
+    () {
+      WidgetsFlutterBinding.ensureInitialized();
 
-    FlutterError.onError = (FlutterErrorDetails details) {
-      final st = details.stack ?? StackTrace.empty;
-      _routeFatalErrorToUi(details.exception, st);
-    };
+      FlutterError.onError = (FlutterErrorDetails details) {
+        final st = details.stack ?? StackTrace.empty;
+        _routeFatalErrorToUi(details.exception, st);
+      };
 
-    PlatformDispatcher.instance.onError = _platformAsyncErrorHandler;
+      PlatformDispatcher.instance.onError = _platformAsyncErrorHandler;
 
-    unawaited(_bootstrapAndRunApp());
-  }, _rootZoneErrorHandler);
+      unawaited(_bootstrapAndRunApp());
+    },
+    _rootZoneErrorHandler,
+    zoneSpecification: ZoneSpecification(
+      print: (Zone self, ZoneDelegate parent, Zone zone, String line) {
+        // Το sqflite_common τυπώνει κάθε αποτυχία openDatabase· η οθόνα σφάλματος
+        // ήδη ενημερώνει τον χρήστη — αποφεύγουμε θόρυβο στην Debug Console.
+        if (line.startsWith('error ') &&
+            line.endsWith(' during open, closing...')) {
+          return;
+        }
+        parent.print(zone, line);
+      },
+    ),
+  );
 }
 
 Future<void> _bootstrapAndRunApp() async {

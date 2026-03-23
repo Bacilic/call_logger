@@ -12,6 +12,9 @@ class SettingsService {
   static const String _keyShowActiveTimer = 'show_active_timer';
   static const String _keyShowAnyDeskRemote = 'show_anydesk_remote';
   static const String _keyShowTasksBadge = 'show_tasks_badge';
+  static const String _keyNavRailShowLabels = 'nav_rail_show_labels';
+  static const String _keyEquipmentLocationShowBuilding =
+      'equipment_location_show_building';
   static const int _maxRecentPaths = 3;
 
   /// Κλειδιά για ρυθμίσεις απομακρυσμένης σύνδεσης (πίνακας app_settings).
@@ -130,6 +133,29 @@ class SettingsService {
   Future<void> setShowTasksBadge(bool value) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_keyShowTasksBadge, value);
+  }
+
+  /// Εμφάνιση λεζαντών στην πλευρική μπάρα (NavigationRail extended) όταν το πλάτος επιτρέπει.
+  /// Προεπιλογή: true.
+  Future<bool> getNavRailShowLabels() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_keyNavRailShowLabels) ?? true;
+  }
+
+  Future<void> setNavRailShowLabels(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_keyNavRailShowLabels, value);
+  }
+
+  /// Εμφάνιση κωδικού κτιρίου `[...]` στη στήλη Τοποθεσία (πίνακας εξοπλισμού). Προεπιλογή: true.
+  Future<bool> getEquipmentLocationShowBuilding() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_keyEquipmentLocationShowBuilding) ?? true;
+  }
+
+  Future<void> setEquipmentLocationShowBuilding(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_keyEquipmentLocationShowBuilding, value);
   }
 
   // --- Ρυθμίσεις απομακρυσμένης σύνδεσης (app_settings) ---

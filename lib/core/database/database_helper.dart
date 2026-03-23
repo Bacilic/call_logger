@@ -3,14 +3,17 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
+import 'package:path/path.dart' as p;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import '../config/app_config.dart';
 import '../services/settings_service.dart';
+import '../utils/department_display_utils.dart';
 import '../utils/name_parser.dart';
 import '../utils/phone_list_parser.dart';
 import '../utils/search_text_normalizer.dart';
 import '../../features/calls/models/call_model.dart';
+import '../errors/department_exists_exception.dart';
 import 'database_init_result.dart';
 import 'database_v1_schema.dart';
 
@@ -286,6 +289,22 @@ class DatabaseHelper {
     await applyDatabaseV1Schema(db);
   }
 
+  /// Μήνυμα αναντιστοιχίας user_version (αρχείο) έναντι έκδοσης σχήματος εφαρμογής.
+  static String _schemaVersionMismatchUserMessage(
+    Database db,
+    int fileUserVersion,
+    int appSchemaVersion,
+  ) {
+    final fileName = p.basename(db.path);
+    return 'Το αρχείο της βάσης σας $fileName είναι στην έκδοση '
+        '$fileUserVersion. Η εφαρμογή τρέχει την έκδοση '
+        '$appSchemaVersion.\n\n'
+        'Μπορείτε να:\n'
+        '• Μετασχηματίσετε την βάση σας στη σωστή έκδοση με κάποιο script.\n'
+        '• Να εντοπίσετε το σωστό αρχείο βάσης (μέσα από τις ρυθμίσεις).\n'
+        '• Να δημιουργήσετε μια νέα βάση χωρίς δεδομένα (μέσα από τις ρυθμίσεις).';
+  }
+
   /// Αναβάθμιση squashed σχήματος (π.χ. v1 → v2: στήλες `equipment.department_id`, `location`).
   Future<void> _onUpgradeSquashed(
     Database db,
@@ -301,9 +320,7 @@ class DatabaseHelper {
     throw DatabaseInitException(
       DatabaseInitResult(
         status: DatabaseStatus.applicationError,
-        message:
-            'Η βάση έχει user_version $oldVersion — η εφαρμογή αναμένει v$newVersion. '
-            'Μεταφέρετε τα δεδομένα με: dart run tool/migrate_to_v1.dart <παλιό.db> <νέο.db>',
+        message: _schemaVersionMismatchUserMessage(db, oldVersion, newVersion),
       ),
     );
   }
@@ -333,10 +350,7 @@ class DatabaseHelper {
     throw DatabaseInitException(
       DatabaseInitResult(
         status: DatabaseStatus.applicationError,
-        message:
-            'Το αρχείο βάσης έχει user_version $oldVersion > $newVersion (σχήμα εφαρμογής). '
-            'Δημιουργήστε νέο αρχείο v1 με: dart run tool/migrate_to_v1.dart <παλιό.db> <νέο.db> '
-            'και ορίστε τη νέα διαδρομή στις ρυθμίσεις.',
+        message: _schemaVersionMismatchUserMessage(db, oldVersion, newVersion),
       ),
     );
   }
@@ -652,7 +666,7 @@ class DatabaseHelper {
   /// Επιστρέφει department_id για το [name].
   /// Αν δεν υπάρχει, δημιουργεί νέο τμήμα (όνομα στην κανονικοποιημένη μορφή) και επιστρέφει id.
   Future<int?> getOrCreateDepartmentIdByName(String? name) async {
-    final trimmed = name?.trim() ?? '';
+    final trimmed = stripDepartmentDeletedDisplaySuffix(name);
     if (trimmed.isEmpty) return null;
     final canonical = SearchTextNormalizer.normalizeForSearch(trimmed);
     if (canonical.isEmpty) return null;
@@ -682,6 +696,192 @@ class DatabaseHelper {
 
       return findId();
     });
+  }
+
+  /// Όλα τα τμήματα (ενεργά και soft-deleted), ταξινόμηση κατά όνομα.
+  Future<List<Map<String, dynamic>>> getDepartments() async {
+    final db = await database;
+    return db.query(
+      'departments',
+      orderBy: 'name COLLATE NOCASE ASC',
+    );
+  }
+
+  /// Εισαγωγή τμήματος. Αφαιρεί [id] πριν το insert.
+  /// Σε αποτυχία UNIQUE: ρίχνει [DepartmentExistsException] (όχι μηνύματα UI).
+  Future<int> insertDepartment(Map<String, dynamic> row) async {
+    final map = Map<String, dynamic>.from(row);
+    map.remove('id');
+    map['is_deleted'] = map['is_deleted'] ?? 0;
+    final db = await database;
+    try {
+      return await db.insert('departments', map);
+    } catch (e) {
+      if (_isSqliteUniqueConstraintFailure(e)) {
+        final name = map['name'] as String?;
+        final existing = await _findDepartmentRowByExactName(name?.trim() ?? '');
+        if (existing != null) {
+          final deleted = (existing['is_deleted'] as int?) == 1;
+          throw DepartmentExistsException(isDeleted: deleted);
+        }
+        throw DepartmentExistsException(isDeleted: false);
+      }
+      rethrow;
+    }
+  }
+
+  static bool _isSqliteUniqueConstraintFailure(Object e) {
+    final s = e.toString().toUpperCase();
+    return s.contains('UNIQUE') && s.contains('CONSTRAINT');
+  }
+
+  /// Γραμμή τμήματος με ακριβές ταίριασμα στη στήλη `name` (όπως το UNIQUE της SQLite).
+  Future<Map<String, dynamic>?> _findDepartmentRowByExactName(String name) async {
+    if (name.isEmpty) return null;
+    final db = await database;
+    final rows = await db.query(
+      'departments',
+      where: 'name = ?',
+      whereArgs: [name],
+      limit: 1,
+    );
+    if (rows.isEmpty) return null;
+    return rows.first;
+  }
+
+  /// Επαναφορά soft-deleted τμήματος με ακριβές [name] + προαιρετική ενημέρωση πεδίων από τη φόρμα.
+  Future<void> restoreDepartmentByName(
+    String name, {
+    String? building,
+    String? color,
+    String? notes,
+  }) async {
+    final trimmed = name.trim();
+    if (trimmed.isEmpty) {
+      throw StateError('Κενό όνομα τμήματος.');
+    }
+    final row = await _findDepartmentRowByExactName(trimmed);
+    if (row == null) {
+      throw StateError('Δεν βρέθηκε τμήμα με αυτό το όνομα.');
+    }
+    final id = row['id'] as int?;
+    if (id == null) {
+      throw StateError('Μη έγκυρο id τμήματος.');
+    }
+    if ((row['is_deleted'] as int?) != 1) {
+      throw StateError('Το τμήμα δεν είναι διαγραμμένο.');
+    }
+    await restoreDepartments([id]);
+    final updates = <String, dynamic>{};
+    if (building != null) {
+      updates['building'] = building.trim().isEmpty ? null : building.trim();
+    }
+    if (color != null) {
+      updates['color'] = color.trim().isEmpty ? null : color.trim();
+    }
+    if (notes != null) {
+      updates['notes'] = notes.trim().isEmpty ? null : notes.trim();
+    }
+    if (updates.isNotEmpty) {
+      await updateDepartment(id, updates);
+    }
+  }
+
+  /// Ενημέρωση τμήματος. Αφαιρεί [id] από τις τιμές.
+  Future<int> updateDepartment(int id, Map<String, dynamic> values) async {
+    final map = Map<String, dynamic>.from(values);
+    map.remove('id');
+    if (map.isEmpty) return 0;
+    final db = await database;
+    return db.update('departments', map, where: 'id = ?', whereArgs: [id]);
+  }
+
+  /// Μαζική ενημέρωση τμημάτων: ίδια [changes] για όλα τα [ids].
+  Future<void> bulkUpdateDepartments(
+    List<int> ids,
+    Map<String, dynamic> changes,
+  ) async {
+    if (ids.isEmpty || changes.isEmpty) return;
+    final map = Map<String, dynamic>.from(changes);
+    map.remove('id');
+    if (map.isEmpty) return;
+    final db = await database;
+    await db.transaction((txn) async {
+      for (final id in ids) {
+        await txn.update('departments', map, where: 'id = ?', whereArgs: [id]);
+      }
+    });
+  }
+
+  /// Soft delete ενός τμήματος (`is_deleted = 1`) + audit.
+  Future<void> softDeleteDepartment(int id) async {
+    await softDeleteDepartments([id]);
+  }
+
+  /// Soft delete πολλαπλών τμημάτων + audit ανά id.
+  Future<void> softDeleteDepartments(List<int> ids) async {
+    if (ids.isEmpty) return;
+    final db = await database;
+    final user = await _auditPerformingUser(db);
+    await db.transaction((txn) async {
+      for (final id in ids) {
+        await txn.update(
+          'departments',
+          {'is_deleted': 1},
+          where: 'id = ?',
+          whereArgs: [id],
+        );
+        await _appendAuditLog(
+          txn,
+          user,
+          auditActionDelete,
+          'departments id=$id',
+        );
+      }
+    });
+  }
+
+  /// Επαναφορά τμημάτων μετά από soft delete + audit.
+  Future<void> restoreDepartments(List<int> ids) async {
+    if (ids.isEmpty) return;
+    final db = await database;
+    final user = await _auditPerformingUser(db);
+    await db.transaction((txn) async {
+      for (final id in ids) {
+        await txn.update(
+          'departments',
+          {'is_deleted': 0},
+          where: 'id = ?',
+          whereArgs: [id],
+        );
+        await _appendAuditLog(
+          txn,
+          user,
+          auditActionRestore,
+          'departments id=$id',
+        );
+      }
+    });
+  }
+
+  /// True αν υπάρχει **άλλο** ενεργό τμήμα με ίδιο κανονικοποιημένο όνομα
+  /// (εξαιρείται το [excludeId] για φόρμα επεξεργασίας).
+  Future<bool> departmentNameExistsExcluding(String? name, int excludeId) async {
+    final trimmed = stripDepartmentDeletedDisplaySuffix(name);
+    if (trimmed.isEmpty) return false;
+    final key = SearchTextNormalizer.normalizeForSearch(trimmed);
+    if (key.isEmpty) return false;
+    final db = await database;
+    final rows = await db.query(
+      'departments',
+      where: 'COALESCE(is_deleted, 0) = 0 AND id != ?',
+      whereArgs: [excludeId],
+    );
+    for (final r in rows) {
+      final nm = r['name'] as String? ?? '';
+      if (SearchTextNormalizer.normalizeForSearch(nm) == key) return true;
+    }
+    return false;
   }
 
   /// Επιστρέφει ενεργό εξοπλισμό (`is_deleted = 0`).

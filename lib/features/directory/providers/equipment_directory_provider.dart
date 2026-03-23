@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/database/database_helper.dart';
+import '../../../core/services/settings_service.dart';
 import '../../../core/utils/search_text_normalizer.dart';
 import '../../calls/models/equipment_model.dart';
 import '../../calls/provider/lookup_provider.dart';
@@ -54,6 +55,7 @@ class EquipmentDirectoryState {
     this.lastDeleted,
     this.lastBulkUpdated,
     this.focusedRowIndex,
+    this.showBuildingInLocationColumn = true,
     List<EquipmentColumn>? columnOrder,
     Set<String>? visibleColumnKeys,
   })  : columnOrder = _normalizeColumnOrder(columnOrder),
@@ -98,6 +100,8 @@ class EquipmentDirectoryState {
   final List<EquipmentColumn> columnOrder;
   /// Ποια στήλη εμφανίζεται στον πίνακα.
   final Set<String> visibleColumnKeys;
+  /// Πρόθεμα `[Κτίριο]` στη στήλη Τοποθεσία (πίνακας εξοπλισμού).
+  final bool showBuildingInLocationColumn;
 
   /// Ορατές στήλες κατά [columnOrder].
   List<EquipmentColumn> get orderedVisibleColumns => [
@@ -115,6 +119,7 @@ class EquipmentDirectoryState {
     List<EquipmentRow>? lastDeleted,
     List<EquipmentRow>? lastBulkUpdated,
     int? focusedRowIndex,
+    bool? showBuildingInLocationColumn,
     List<EquipmentColumn>? columnOrder,
     Set<String>? visibleColumnKeys,
   }) {
@@ -130,6 +135,8 @@ class EquipmentDirectoryState {
       lastDeleted: lastDeleted ?? this.lastDeleted,
       lastBulkUpdated: lastBulkUpdated ?? this.lastBulkUpdated,
       focusedRowIndex: focusedRowIndex ?? this.focusedRowIndex,
+      showBuildingInLocationColumn:
+          showBuildingInLocationColumn ?? this.showBuildingInLocationColumn,
       columnOrder: columnOrder ?? this.columnOrder,
       visibleColumnKeys: visibleColumnKeys ?? this.visibleColumnKeys,
     );
@@ -145,6 +152,26 @@ class EquipmentDirectoryNotifier extends Notifier<EquipmentDirectoryState> {
 
   void _invalidateLookupCache() {
     ref.invalidate(lookupServiceProvider);
+  }
+
+  String _cellTextForColumn(EquipmentRow row, EquipmentColumn col) {
+    if (col.key == EquipmentColumn.location.key) {
+      return equipmentRowLocationFormattedLine(
+        row,
+        showBuilding: state.showBuildingInLocationColumn,
+      );
+    }
+    return col.displayValue(row);
+  }
+
+  Comparable? _sortComparableForRow(EquipmentRow row, EquipmentColumn col) {
+    if (col.key == EquipmentColumn.location.key) {
+      return equipmentRowLocationFormattedLine(
+        row,
+        showBuilding: state.showBuildingInLocationColumn,
+      );
+    }
+    return col.sortValue?.call(row);
   }
 
   EquipmentColumn? _resolveSortColumn(String? key) {
@@ -277,6 +304,9 @@ class EquipmentDirectoryNotifier extends Notifier<EquipmentDirectoryState> {
       _equipmentLayoutHydrated = true;
     }
 
+    final showBuildingInLocation =
+        await SettingsService().getEquipmentLocationShowBuilding();
+
     final equipmentRows = await getEquipmentRows();
     final userRows = await getUserRows();
     final linkRows = await DatabaseHelper.instance.getAllUserEquipmentLinks();
@@ -320,10 +350,20 @@ class EquipmentDirectoryNotifier extends Notifier<EquipmentDirectoryState> {
         visibleColumnKeys: parsed.visible,
         sortColumn: sortCol,
         sortAscending: parsed.sortAscending,
+        showBuildingInLocationColumn: showBuildingInLocation,
       );
     } else {
-      state = state.copyWith(allItems: items);
+      state = state.copyWith(
+        allItems: items,
+        showBuildingInLocationColumn: showBuildingInLocation,
+      );
     }
+    filterAndSort();
+  }
+
+  Future<void> setEquipmentLocationShowBuilding(bool value) async {
+    await SettingsService().setEquipmentLocationShowBuilding(value);
+    state = state.copyWith(showBuildingInLocationColumn: value);
     filterAndSort();
   }
 
@@ -335,7 +375,7 @@ class EquipmentDirectoryNotifier extends Notifier<EquipmentDirectoryState> {
     if (q.isNotEmpty) {
       list = list.where((row) {
         for (final col in visibleCols) {
-          final text = col.displayValue(row);
+          final text = _cellTextForColumn(row, col);
           if (text.isEmpty) continue;
           if (SearchTextNormalizer.normalizeForSearch(text).contains(q)) {
             return true;
@@ -350,8 +390,8 @@ class EquipmentDirectoryNotifier extends Notifier<EquipmentDirectoryState> {
     if (col != null && col.sortValue != null) {
       list = List<EquipmentRow>.from(list);
       list.sort((a, b) {
-        final va = col.sortValue!(a);
-        final vb = col.sortValue!(b);
+        final va = _sortComparableForRow(a, col);
+        final vb = _sortComparableForRow(b, col);
         final cmp = _compareComparable(va, vb);
         return asc ? cmp : -cmp;
       });

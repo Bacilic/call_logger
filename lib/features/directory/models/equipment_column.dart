@@ -5,49 +5,63 @@ import '../../calls/models/user_model.dart';
 /// Γραμμή πίνακα εξοπλισμού: εξοπλισμός + κάτοχος (από `user_equipment`, εμφάνιση πρώτου). $1 = equipment, $2 = owner.
 typedef EquipmentRow = (EquipmentModel, UserModel?);
 
-String _departmentLocationCombinedLine(String dept, String loc) {
-  final d = dept.trim();
-  final l = loc.trim();
-  if (d.isEmpty && l.isEmpty) return '';
-  if (d.isEmpty) return l;
-  if (l.isEmpty) return d;
-  return '$d - $l';
-}
+/// Στήλη «Τοποθεσία»: `[Κτίριο] Τμήμα - Τοποθεσία` με αυστηρή πηγή (κάτοχος ή εξοπλισμός).
+/// Με [showBuilding]: false παραλείπεται το πρόθεμα `[Κτίριο]`.
+String equipmentRowLocationFormattedLine(
+  EquipmentRow row, {
+  bool showBuilding = true,
+}) {
+  final owner = row.$2;
+  final eq = row.$1;
+  final int? deptId;
+  final String? locRaw;
+  if (owner != null) {
+    deptId = owner.departmentId;
+    locRaw = owner.location;
+  } else {
+    deptId = eq.departmentId;
+    locRaw = eq.location;
+  }
+  final deptName =
+      (deptId != null
+              ? LookupService.instance.getDepartmentName(deptId)
+              : null)
+          ?.trim() ??
+      '';
+  final building =
+      (LookupService.instance.getDepartmentBuilding(deptId) ?? '').trim();
+  final loc = (locRaw ?? '').trim();
 
-/// «Τμήμα - Τοποθεσία»: πρώτα από κάτοχο· αν λείπει πεδίο, fallback στον εξοπλισμό ([LookupService] για τμήμα).
-String _equipmentRowDepartmentLocationDisplay(EquipmentRow row) {
-  final u = row.$2;
-  final e = row.$1;
-  var dept = u?.departmentName?.trim() ?? '';
-  var loc = u?.location?.trim() ?? '';
-  if (dept.isEmpty) {
-    final id = e.departmentId;
-    if (id != null) {
-      dept = LookupService.instance.getDepartmentName(id)?.trim() ?? '';
-    }
-  }
-  if (loc.isEmpty) {
-    loc = e.location?.trim() ?? '';
-  }
-  final line = _departmentLocationCombinedLine(dept, loc);
-  return line.isEmpty ? '–' : line;
-}
+  final hasB = building.isNotEmpty;
+  final hasD = deptName.isNotEmpty;
+  final hasL = loc.isNotEmpty;
 
-String _equipmentRowDepartmentLocationSortKey(EquipmentRow row) {
-  final u = row.$2;
-  final e = row.$1;
-  var dept = u?.departmentName?.trim() ?? '';
-  var loc = u?.location?.trim() ?? '';
-  if (dept.isEmpty) {
-    final id = e.departmentId;
-    if (id != null) {
-      dept = LookupService.instance.getDepartmentName(id)?.trim() ?? '';
-    }
+  if (!hasB && !hasD && !hasL) return '–';
+
+  String deptLoc;
+  if (hasD && hasL) {
+    deptLoc = '$deptName - $loc';
+  } else if (hasD) {
+    deptLoc = deptName;
+  } else if (hasL) {
+    deptLoc = loc;
+  } else {
+    deptLoc = '';
   }
-  if (loc.isEmpty) {
-    loc = e.location?.trim() ?? '';
+
+  if (!showBuilding) {
+    if (deptLoc.isNotEmpty) return deptLoc;
+    return '–';
   }
-  return _departmentLocationCombinedLine(dept, loc);
+
+  if (hasB && deptLoc.isNotEmpty) {
+    return '[$building] $deptLoc';
+  }
+  if (hasB) {
+    return '[$building]';
+  }
+  if (deptLoc.isNotEmpty) return deptLoc;
+  return '–';
 }
 
 /// Ορισμός στηλών πίνακα εξοπλισμού με key, label, displayValue και sortValue.
@@ -101,8 +115,8 @@ class EquipmentColumn {
   static final location = EquipmentColumn(
     'location',
     'Τοποθεσία',
-    _equipmentRowDepartmentLocationDisplay,
-    _equipmentRowDepartmentLocationSortKey,
+    (row) => equipmentRowLocationFormattedLine(row),
+    (row) => equipmentRowLocationFormattedLine(row),
   );
   static final phone = EquipmentColumn(
     'phone',

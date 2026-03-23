@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 import '../database/database_helper.dart';
+import '../utils/department_display_utils.dart';
 import '../utils/search_text_normalizer.dart';
 import '../../features/calls/models/equipment_model.dart';
 import '../../features/calls/models/user_model.dart';
@@ -96,13 +97,30 @@ class LookupService {
     for (final map in maps) {
       final dep = DepartmentModel.fromMap(map);
       departments.add(dep);
-      if (dep.id != null) departmentIdToName[dep.id!] = dep.name;
+      if (dep.id != null) {
+        departmentIdToName[dep.id!] = dep.isDeleted
+            ? '${dep.name}$kDepartmentDeletedDisplaySuffix'
+            : dep.name;
+      }
     }
     _loadedDepartments = true;
   }
 
   String? getDepartmentName(int? id) =>
       id == null ? null : departmentIdToName[id] ?? '';
+
+  /// Κτίριο τμήματος από id (in-memory [departments]). Null αν λείπει ή είναι κενό.
+  String? getDepartmentBuilding(int? id) {
+    if (id == null) return null;
+    for (final d in departments) {
+      if (d.id == id) {
+        final b = d.building?.trim();
+        if (b == null || b.isEmpty) return null;
+        return b;
+      }
+    }
+    return null;
+  }
 
   /// Αναζήτηση στη μνήμη βάσει ψηφίων τηλεφώνου. Κενά/παύλες αγνοούνται και στα δύο μέρη.
   LookupResult? search(String query) {
@@ -397,11 +415,12 @@ class LookupService {
     departments
       ..clear()
       ..addAll(departmentRows);
-    departmentIdToName
-      .clear();
+    departmentIdToName.clear();
     for (final d in departments) {
       if (d.id != null) {
-        departmentIdToName[d.id!] = d.name;
+        departmentIdToName[d.id!] = d.isDeleted
+            ? '${d.name}$kDepartmentDeletedDisplaySuffix'
+            : d.name;
       }
     }
   }

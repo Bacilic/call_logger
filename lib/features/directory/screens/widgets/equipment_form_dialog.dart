@@ -53,6 +53,8 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog> {
   late final TextEditingController _locationController;
 
   int? _selectedUserId;
+  /// Αποφυγή επανάληψης postFrame για συγχρονισμό τμήματος/τοποθεσίας από κάτοχο.
+  int? _deptLocScheduledForUserId;
 
   /// Επιλογή τύπου εξοπλισμού· null = Κανένας.
   String? _selectedType;
@@ -74,7 +76,10 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog> {
     _ownerFocusNode = FocusNode();
     _departmentController = TextEditingController();
     _departmentFocusNode = FocusNode();
-    _locationController = TextEditingController(text: (e?.location ?? '').trim());
+    final hasInitialOwner = widget.initialOwner?.id != null;
+    _locationController = TextEditingController(
+      text: hasInitialOwner ? '' : (e?.location ?? '').trim(),
+    );
     _selectedUserId = widget.initialOwner?.id;
     final typeRaw = e?.type?.trim() ?? '';
     _selectedType = typeRaw.isEmpty ? null : typeRaw;
@@ -94,6 +99,22 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog> {
     _departmentFocusNode.dispose();
     _locationController.dispose();
     super.dispose();
+  }
+
+  void _applyDepartmentLocationFromUser(UserModel u) {
+    _departmentController.text = u.departmentName?.trim() ?? '';
+    _locationController.text = (u.location ?? '').trim();
+  }
+
+  void _applyDepartmentLocationFromEquipment(EquipmentModel? e) {
+    final did = e?.departmentId;
+    if (did != null) {
+      _departmentController.text =
+          LookupService.instance.getDepartmentName(did)?.trim() ?? '';
+    } else {
+      _departmentController.text = '';
+    }
+    _locationController.text = (e?.location ?? '').trim();
   }
 
   Widget _departmentAutocompleteOptionsView(
@@ -367,23 +388,46 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog> {
                           .where((name) => name.isNotEmpty)
                           .toList();
                       if (!_equipmentDepartmentTextInitialized) {
-                        final did = widget.initialEquipment?.departmentId;
-                        if (did != null) {
+                        final hasInitialHolder =
+                            widget.initialOwner?.id != null;
+                        if (hasInitialHolder) {
                           _equipmentDepartmentTextInitialized = true;
-                          WidgetsBinding.instance.addPostFrameCallback((_) {
-                            if (!mounted) return;
-                            final name = LookupService.instance
-                                    .getDepartmentName(did)
-                                    ?.trim() ??
-                                '';
-                            if (name.isNotEmpty) {
-                              _departmentController.text = name;
-                            }
-                            setState(() {});
-                          });
                         } else {
-                          _equipmentDepartmentTextInitialized = true;
+                          final did = widget.initialEquipment?.departmentId;
+                          if (did != null) {
+                            _equipmentDepartmentTextInitialized = true;
+                            WidgetsBinding.instance.addPostFrameCallback((_) {
+                              if (!mounted) return;
+                              final name = LookupService.instance
+                                      .getDepartmentName(did)
+                                      ?.trim() ??
+                                  '';
+                              if (name.isNotEmpty) {
+                                _departmentController.text = name;
+                              }
+                              setState(() {});
+                            });
+                          } else {
+                            _equipmentDepartmentTextInitialized = true;
+                          }
                         }
+                      }
+                      final holderLocksDeptLoc = _selectedUserId != null;
+                      if (holderLocksDeptLoc) {
+                        final uid = _selectedUserId!;
+                        if (_deptLocScheduledForUserId != uid) {
+                          final u = service.findUserById(uid);
+                          if (u != null) {
+                            _deptLocScheduledForUserId = uid;
+                            WidgetsBinding.instance.addPostFrameCallback((_) {
+                              if (!mounted || _selectedUserId != uid) return;
+                              _applyDepartmentLocationFromUser(u);
+                              setState(() {});
+                            });
+                          }
+                        }
+                      } else {
+                        _deptLocScheduledForUserId = null;
                       }
                       return Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -393,6 +437,9 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog> {
                               textEditingController: _departmentController,
                               focusNode: _departmentFocusNode,
                               optionsBuilder: (textEditingValue) {
+                                if (holderLocksDeptLoc) {
+                                  return const Iterable<String>.empty();
+                                }
                                 final q = SearchTextNormalizer.normalizeForSearch(
                                   textEditingValue.text,
                                 );
@@ -406,16 +453,22 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog> {
                               },
                               displayStringForOption: (option) => option,
                               onSelected: (selection) {
-                                _departmentController.text = selection;
+                                if (!holderLocksDeptLoc) {
+                                  _departmentController.text = selection;
+                                }
                               },
                               fieldViewBuilder:
                                   (context, controller, focusNode, _) {
                                 return TextField(
                                   controller: controller,
                                   focusNode: focusNode,
-                                  decoration: const InputDecoration(
+                                  enabled: !holderLocksDeptLoc,
+                                  decoration: InputDecoration(
                                     labelText: 'Τμήμα',
-                                    border: OutlineInputBorder(),
+                                    border: const OutlineInputBorder(),
+                                    helperText: holderLocksDeptLoc
+                                        ? 'Καθορίζεται από τον κάτοχο'
+                                        : null,
                                   ),
                                 );
                               },
@@ -433,9 +486,13 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog> {
                           Expanded(
                             child: TextFormField(
                               controller: _locationController,
-                              decoration: const InputDecoration(
+                              enabled: !holderLocksDeptLoc,
+                              decoration: InputDecoration(
                                 labelText: 'Τοποθεσία',
-                                border: OutlineInputBorder(),
+                                border: const OutlineInputBorder(),
+                                helperText: holderLocksDeptLoc
+                                    ? 'Καθορίζεται από τον κάτοχο'
+                                    : null,
                               ),
                               spellCheckConfiguration:
                                   platformSpellCheckConfiguration,
@@ -541,8 +598,10 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog> {
                           if (u != null && u.id != null) {
                             setState(() {
                               _selectedUserId = u.id;
+                              _deptLocScheduledForUserId = u.id;
                               _ownerController.text =
                                   u.name ?? u.fullNameWithDepartment;
+                              _applyDepartmentLocationFromUser(u);
                             });
                           }
                         },
@@ -574,7 +633,13 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog> {
                                       icon: const Icon(Icons.close, size: 20),
                                       onPressed: () {
                                         textController.clear();
-                                        setState(() => _selectedUserId = null);
+                                        setState(() {
+                                          _selectedUserId = null;
+                                          _deptLocScheduledForUserId = null;
+                                          _applyDepartmentLocationFromEquipment(
+                                            widget.initialEquipment,
+                                          );
+                                        });
                                       },
                                       tooltip: 'Καθαρισμός Κατόχου',
                                     ),
@@ -582,7 +647,13 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog> {
                                 ),
                                 onChanged: (value) {
                                   if (value.trim().isEmpty) {
-                                    setState(() => _selectedUserId = null);
+                                    setState(() {
+                                      _selectedUserId = null;
+                                      _deptLocScheduledForUserId = null;
+                                      _applyDepartmentLocationFromEquipment(
+                                        widget.initialEquipment,
+                                      );
+                                    });
                                   }
                                 },
                               );
