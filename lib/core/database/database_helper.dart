@@ -313,16 +313,19 @@ class DatabaseHelper {
   ) async {
     if (oldVersion >= newVersion) return;
     if (oldVersion == 0) return;
-    if (oldVersion == 1 && newVersion >= 2) {
+    // Sequential, idempotent migrations για άλματα εκδόσεων (π.χ. 2 -> 5).
+    if (oldVersion < 2 && newVersion >= 2) {
       await _migrateEquipmentDepartmentLocationColumns(db);
-      return;
     }
-    throw DatabaseInitException(
-      DatabaseInitResult(
-        status: DatabaseStatus.applicationError,
-        message: _schemaVersionMismatchUserMessage(db, oldVersion, newVersion),
-      ),
-    );
+    if (oldVersion < 3 && newVersion >= 3) {
+      await _migrateDepartmentPhonesTable(db);
+    }
+    if (oldVersion < 4 && newVersion >= 4) {
+      await _migrateDepartmentNameKey(db);
+    }
+    if (oldVersion < 5 && newVersion >= 5) {
+      await _migratePhonesDepartmentColumn(db);
+    }
   }
 
   /// Προσθέτει στήλες τμήμα/τοποθεσία στον πίνακα `equipment` αν λείπουν (idempotent).
@@ -338,6 +341,72 @@ class DatabaseHelper {
     }
     if (!names.contains('location')) {
       await db.execute('ALTER TABLE equipment ADD COLUMN location TEXT');
+    }
+  }
+
+  /// Δημιουργεί πίνακα `department_phones` αν λείπει (idempotent).
+  static Future<void> _migrateDepartmentPhonesTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS department_phones (
+        department_id INTEGER NOT NULL,
+        phone_id INTEGER NOT NULL,
+        PRIMARY KEY (department_id, phone_id)
+      )
+    ''');
+  }
+
+  static const String _kDepartmentsNameKeyColumn = 'name_key';
+
+  /// Προσθέτει `departments.name_key` και το γεμίζει για υπάρχουσες εγγραφές.
+  /// Στόχος: `name` = εμφανίσιμο, `name_key` = κανονικοποιημένο μοναδικό κλειδί.
+  static Future<void> _migrateDepartmentNameKey(Database db) async {
+    final info = await db.rawQuery('PRAGMA table_info(departments)');
+    final names = info.map((r) => r['name'] as String).toSet();
+    if (!names.contains(_kDepartmentsNameKeyColumn)) {
+      await db.execute('ALTER TABLE departments ADD COLUMN name_key TEXT');
+    }
+
+    // Backfill name_key για παλιές εγγραφές.
+    final rows = await db.query(
+      'departments',
+      columns: ['id', 'name', 'name_key'],
+    );
+    for (final r in rows) {
+      final id = r['id'] as int?;
+      if (id == null) continue;
+      final existing = (r['name_key'] as String?)?.trim() ?? '';
+      if (existing.isNotEmpty) continue;
+      final name = (r['name'] as String?)?.trim() ?? '';
+      final key = SearchTextNormalizer.normalizeForSearch(name);
+      if (key.isEmpty) continue;
+      await db.update(
+        'departments',
+        {_kDepartmentsNameKeyColumn: key},
+        where: 'id = ?',
+        whereArgs: [id],
+      );
+    }
+
+    // Unique index για το name_key (πλήρης μοναδικότητα).
+    await db.execute(
+      'CREATE UNIQUE INDEX IF NOT EXISTS idx_departments_name_key ON departments(name_key)',
+    );
+  }
+
+  /// Προσθέτει `phones.department_id` για πολιτική shared-location.
+  static Future<void> _migratePhonesDepartmentColumn(Database db) async {
+    final info = await db.rawQuery('PRAGMA table_info(phones)');
+    final names = info.map((r) => r['name'] as String).toSet();
+    if (!names.contains('department_id')) {
+      await db.execute('ALTER TABLE phones ADD COLUMN department_id INTEGER');
+    }
+  }
+
+  Future<void> _ensurePhonesDepartmentColumn(DatabaseExecutor db) async {
+    final info = await db.rawQuery('PRAGMA table_info(phones)');
+    final names = info.map((r) => r['name'] as String).toSet();
+    if (!names.contains('department_id')) {
+      await db.execute('ALTER TABLE phones ADD COLUMN department_id INTEGER');
     }
   }
 
@@ -474,6 +543,209 @@ class DatabaseHelper {
         conflictAlgorithm: ConflictAlgorithm.ignore,
       );
     }
+  }
+
+  Future<void> _addDepartmentPhoneInTxn(
+    Transaction txn,
+    int departmentId,
+    String phoneNumber,
+  ) async {
+    final t = phoneNumber.trim();
+    if (t.isEmpty) return;
+    await txn.insert(
+      'phones',
+      {'number': t},
+      conflictAlgorithm: ConflictAlgorithm.ignore,
+    );
+    final r = await txn.query(
+      'phones',
+      columns: ['id'],
+      where: 'number = ?',
+      whereArgs: [t],
+      limit: 1,
+    );
+    if (r.isEmpty) return;
+    final pid = r.first['id'] as int;
+    await txn.update(
+      'phones',
+      {'department_id': departmentId},
+      where: 'id = ?',
+      whereArgs: [pid],
+    );
+    await txn.delete(
+      'department_phones',
+      where: 'phone_id = ?',
+      whereArgs: [pid],
+    );
+    await txn.insert(
+      'department_phones',
+      {'department_id': departmentId, 'phone_id': pid},
+      conflictAlgorithm: ConflictAlgorithm.ignore,
+    );
+  }
+
+  /// Προσθέτει “ορφανό” τηλέφωνο σε τμήμα (M2M: `department_phones` ↔ `phones`).
+  Future<void> addDepartmentDirectPhone(
+    int departmentId,
+    String phoneNumber,
+  ) async {
+    final db = await database;
+    await db.transaction((txn) async {
+      await _addDepartmentPhoneInTxn(txn, departmentId, phoneNumber);
+    });
+  }
+
+  /// Αφαιρεί “ορφανό” τηλέφωνο από τμήμα (δεν διαγράφει την εγγραφή από `phones`).
+  Future<void> removeDepartmentDirectPhone(
+    int departmentId,
+    String phoneNumber,
+  ) async {
+    final t = phoneNumber.trim();
+    if (t.isEmpty) return;
+    final db = await database;
+    await db.transaction((txn) async {
+      final r = await txn.query(
+        'phones',
+        columns: ['id'],
+        where: 'number = ?',
+        whereArgs: [t],
+        limit: 1,
+      );
+      if (r.isEmpty) return;
+      final pid = r.first['id'] as int?;
+      if (pid == null) return;
+      await txn.delete(
+        'department_phones',
+        where: 'department_id = ? AND phone_id = ?',
+        whereArgs: [departmentId, pid],
+      );
+    });
+  }
+
+  /// Επιστρέφει map: department_id → λίστα phone numbers (ταξινομημένα).
+  Future<Map<int, List<String>>> getDepartmentDirectPhonesMap() async {
+    final db = await database;
+    await _ensurePhonesDepartmentColumn(db);
+    final rows = await db.rawQuery('''
+      SELECT src.department_id AS department_id, src.number AS number
+      FROM (
+        SELECT dp.department_id AS department_id, p.number AS number
+        FROM department_phones dp
+        JOIN phones p ON p.id = dp.phone_id
+        UNION
+        SELECT p.department_id AS department_id, p.number AS number
+        FROM phones p
+        WHERE p.department_id IS NOT NULL
+      ) src
+      ORDER BY src.department_id, src.number
+    ''');
+    final out = <int, List<String>>{};
+    for (final row in rows) {
+      final did = row['department_id'] as int?;
+      final num = row['number'] as String?;
+      if (did == null || num == null) continue;
+      out.putIfAbsent(did, () => []).add(num);
+    }
+    return out;
+  }
+
+  Future<bool> phoneNumberExists(String phoneNumber) async {
+    final t = phoneNumber.trim();
+    if (t.isEmpty) return false;
+    final db = await database;
+    final rows = await db.query(
+      'phones',
+      columns: ['id'],
+      where: 'number = ?',
+      whereArgs: [t],
+      limit: 1,
+    );
+    return rows.isNotEmpty;
+  }
+
+  Future<bool> equipmentCodeExists(String equipmentCode) async {
+    final t = equipmentCode.trim();
+    if (t.isEmpty) return false;
+    final db = await database;
+    final rows = await db.query(
+      'equipment',
+      columns: ['id'],
+      where: 'code_equipment = ? AND COALESCE(is_deleted, 0) = 0',
+      whereArgs: [t],
+      limit: 1,
+    );
+    return rows.isNotEmpty;
+  }
+
+  /// Θέτει/ενημερώνει το `phones.department_id` χωρίς να αγγίζει `user_phones`.
+  Future<void> updatePhoneDepartment(String phoneNumber, int departmentId) async {
+    final t = phoneNumber.trim();
+    if (t.isEmpty) return;
+    final db = await database;
+    await db.transaction((txn) async {
+      await _ensurePhonesDepartmentColumn(txn);
+      await txn.insert(
+        'phones',
+        {'number': t, 'department_id': departmentId},
+        conflictAlgorithm: ConflictAlgorithm.ignore,
+      );
+      final rows = await txn.query(
+        'phones',
+        columns: ['id'],
+        where: 'number = ?',
+        whereArgs: [t],
+        limit: 1,
+      );
+      if (rows.isEmpty) return;
+      final pid = rows.first['id'] as int;
+      await txn.update(
+        'phones',
+        {'department_id': departmentId},
+        where: 'id = ?',
+        whereArgs: [pid],
+      );
+      await txn.delete(
+        'department_phones',
+        where: 'phone_id = ?',
+        whereArgs: [pid],
+      );
+      await txn.insert(
+        'department_phones',
+        {'department_id': departmentId, 'phone_id': pid},
+        conflictAlgorithm: ConflictAlgorithm.ignore,
+      );
+    });
+  }
+
+  /// Θέτει/ενημερώνει το `equipment.department_id` χωρίς να αγγίζει `user_equipment`.
+  Future<void> updateEquipmentDepartment(String equipmentCode, int departmentId) async {
+    final code = equipmentCode.trim();
+    if (code.isEmpty) return;
+    final db = await database;
+    await db.transaction((txn) async {
+      final rows = await txn.query(
+        'equipment',
+        columns: ['id'],
+        where: 'code_equipment = ? AND COALESCE(is_deleted, 0) = 0',
+        whereArgs: [code],
+        limit: 1,
+      );
+      if (rows.isEmpty) {
+        await txn.insert('equipment', {
+          'code_equipment': code,
+          'department_id': departmentId,
+          'is_deleted': 0,
+        });
+        return;
+      }
+      final id = rows.first['id'] as int;
+      await txn.update(
+        'equipment',
+        {'department_id': departmentId},
+        where: 'id = ?',
+        whereArgs: [id],
+      );
+    });
   }
 
   /// Αντικαθιστά πλήρως τα τηλέφωνα του χρήστη [userId] (κανονικοποιημένα).
@@ -647,50 +919,48 @@ class DatabaseHelper {
   /// True αν υπάρχει ενεργό τμήμα με ίδιο κανονικοποιημένο όνομα
   /// ([SearchTextNormalizer] — όπως στην οθόνη κλήσεων / [LookupService]).
   Future<bool> departmentNameExists(String? name) async {
-    final trimmed = name?.trim() ?? '';
+    final trimmed = stripDepartmentDeletedDisplaySuffix(name);
     if (trimmed.isEmpty) return false;
     final key = SearchTextNormalizer.normalizeForSearch(trimmed);
     if (key.isEmpty) return false;
     final db = await database;
     final rows = await db.query(
       'departments',
-      where: 'COALESCE(is_deleted, 0) = 0',
+      columns: ['id'],
+      where: 'COALESCE(is_deleted, 0) = 0 AND name_key = ?',
+      whereArgs: [key],
+      limit: 1,
     );
-    for (final r in rows) {
-      final nm = r['name'] as String? ?? '';
-      if (SearchTextNormalizer.normalizeForSearch(nm) == key) return true;
-    }
-    return false;
+    return rows.isNotEmpty;
   }
 
   /// Επιστρέφει department_id για το [name].
-  /// Αν δεν υπάρχει, δημιουργεί νέο τμήμα (όνομα στην κανονικοποιημένη μορφή) και επιστρέφει id.
+  /// Αν δεν υπάρχει, δημιουργεί νέο τμήμα (display `name` + normalized `name_key`) και επιστρέφει id.
   Future<int?> getOrCreateDepartmentIdByName(String? name) async {
-    final trimmed = stripDepartmentDeletedDisplaySuffix(name);
-    if (trimmed.isEmpty) return null;
-    final canonical = SearchTextNormalizer.normalizeForSearch(trimmed);
-    if (canonical.isEmpty) return null;
+    final displayName = stripDepartmentDeletedDisplaySuffix(name).trim();
+    if (displayName.isEmpty) return null;
+    final key = SearchTextNormalizer.normalizeForSearch(displayName);
+    if (key.isEmpty) return null;
     final db = await database;
     return db.transaction<int?>((txn) async {
       Future<int?> findId() async {
         final rows = await txn.query(
           'departments',
-          where: 'COALESCE(is_deleted, 0) = 0',
+          columns: ['id'],
+          where: 'COALESCE(is_deleted, 0) = 0 AND name_key = ?',
+          whereArgs: [key],
+          limit: 1,
         );
-        for (final r in rows) {
-          final nm = r['name'] as String? ?? '';
-          if (SearchTextNormalizer.normalizeForSearch(nm) == canonical) {
-            return r['id'] as int?;
-          }
-        }
-        return null;
+        if (rows.isEmpty) return null;
+        return rows.first['id'] as int?;
       }
 
       final existingId = await findId();
       if (existingId != null) return existingId;
 
       await txn.insert('departments', {
-        'name': canonical,
+        'name': displayName,
+        'name_key': key,
         'is_deleted': 0,
       }, conflictAlgorithm: ConflictAlgorithm.ignore);
 
@@ -713,13 +983,19 @@ class DatabaseHelper {
     final map = Map<String, dynamic>.from(row);
     map.remove('id');
     map['is_deleted'] = map['is_deleted'] ?? 0;
+    final name = (map['name'] as String?)?.trim() ?? '';
+    final key = SearchTextNormalizer.normalizeForSearch(name);
+    if (key.isNotEmpty) {
+      map['name_key'] = map['name_key'] ?? key;
+    }
     final db = await database;
     try {
       return await db.insert('departments', map);
     } catch (e) {
       if (_isSqliteUniqueConstraintFailure(e)) {
-        final name = map['name'] as String?;
-        final existing = await _findDepartmentRowByExactName(name?.trim() ?? '');
+        final existing = await _findDepartmentRowByKey(
+          (map['name_key'] as String?)?.trim() ?? key,
+        );
         if (existing != null) {
           final deleted = (existing['is_deleted'] as int?) == 1;
           throw DepartmentExistsException(isDeleted: deleted);
@@ -735,14 +1011,15 @@ class DatabaseHelper {
     return s.contains('UNIQUE') && s.contains('CONSTRAINT');
   }
 
-  /// Γραμμή τμήματος με ακριβές ταίριασμα στη στήλη `name` (όπως το UNIQUE της SQLite).
-  Future<Map<String, dynamic>?> _findDepartmentRowByExactName(String name) async {
-    if (name.isEmpty) return null;
+  /// Γραμμή τμήματος με ακριβές ταίριασμα στη στήλη `name_key`.
+  Future<Map<String, dynamic>?> _findDepartmentRowByKey(String key) async {
+    final k = key.trim();
+    if (k.isEmpty) return null;
     final db = await database;
     final rows = await db.query(
       'departments',
-      where: 'name = ?',
-      whereArgs: [name],
+      where: 'name_key = ?',
+      whereArgs: [k],
       limit: 1,
     );
     if (rows.isEmpty) return null;
@@ -760,7 +1037,8 @@ class DatabaseHelper {
     if (trimmed.isEmpty) {
       throw StateError('Κενό όνομα τμήματος.');
     }
-    final row = await _findDepartmentRowByExactName(trimmed);
+    final key = SearchTextNormalizer.normalizeForSearch(trimmed);
+    final row = await _findDepartmentRowByKey(key);
     if (row == null) {
       throw StateError('Δεν βρέθηκε τμήμα με αυτό το όνομα.');
     }
@@ -773,6 +1051,9 @@ class DatabaseHelper {
     }
     await restoreDepartments([id]);
     final updates = <String, dynamic>{};
+    // Ενημέρωση εμφανίσιμου ονόματος κατά την επαναφορά.
+    updates['name'] = trimmed;
+    updates['name_key'] = key;
     if (building != null) {
       updates['building'] = building.trim().isEmpty ? null : building.trim();
     }
@@ -874,14 +1155,12 @@ class DatabaseHelper {
     final db = await database;
     final rows = await db.query(
       'departments',
-      where: 'COALESCE(is_deleted, 0) = 0 AND id != ?',
-      whereArgs: [excludeId],
+      columns: ['id'],
+      where: 'COALESCE(is_deleted, 0) = 0 AND id != ? AND name_key = ?',
+      whereArgs: [excludeId, key],
+      limit: 1,
     );
-    for (final r in rows) {
-      final nm = r['name'] as String? ?? '';
-      if (SearchTextNormalizer.normalizeForSearch(nm) == key) return true;
-    }
-    return false;
+    return rows.isNotEmpty;
   }
 
   /// Επιστρέφει ενεργό εξοπλισμό (`is_deleted = 0`).

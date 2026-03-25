@@ -5,9 +5,9 @@ import '../../../core/utils/spell_check.dart';
 import '../../calls/provider/smart_entity_selector_provider.dart';
 import '../../calls/screens/widgets/smart_entity_selector_widget.dart';
 import '../models/task.dart';
-import '../models/task_snooze_config.dart';
+import '../models/task_settings_config.dart';
 import '../providers/task_service_provider.dart';
-import '../providers/task_snooze_config_provider.dart';
+import '../providers/task_settings_config_provider.dart';
 
 /// Επιστρέφει το Task που δημιουργήθηκε/τροποποιήθηκε ή null αν ακυρώθηκε.
 Future<Task?> showTaskFormDialog(
@@ -60,18 +60,18 @@ class _TaskFormDialogState extends ConsumerState<_TaskFormDialog> {
     _userPickedDue = t != null;
     _dueDate = t?.dueDateTime ??
         ref.read(taskServiceProvider).calculateNextDueDate(
-              TaskSnoozeConfig.defaultConfig(),
-              option: TaskSnoozeConfig.kOptionDefault,
+              TaskSettingsConfig.defaultConfig(),
+              option: TaskSettingsConfig.kOptionDefault,
             );
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || widget.task != null || _userPickedDue) return;
-      ref.read(taskSnoozeConfigProvider.future).then((c) {
+      ref.read(taskSettingsConfigProvider.future).then((c) {
         if (!mounted || widget.task != null || _userPickedDue) return;
         setState(() {
           _dueDate = ref.read(taskServiceProvider).calculateNextDueDate(
                 c,
-                option: TaskSnoozeConfig.kOptionDefault,
+                option: TaskSettingsConfig.kOptionDefault,
               );
         });
       });
@@ -92,12 +92,12 @@ class _TaskFormDialogState extends ConsumerState<_TaskFormDialog> {
     super.dispose();
   }
 
-  TaskSnoozeConfig _readSnoozeConfig() =>
-      ref.read(taskSnoozeConfigProvider).maybeWhen(
+  TaskSettingsConfig _readSnoozeConfig() =>
+      ref.read(taskSettingsConfigProvider).maybeWhen(
             data: (c) => c,
             orElse: () => null,
           ) ??
-      TaskSnoozeConfig.defaultConfig();
+      TaskSettingsConfig.defaultConfig();
 
   Future<void> _pickDueDate() async {
     final cfg = _readSnoozeConfig();
@@ -192,16 +192,16 @@ class _TaskFormDialogState extends ConsumerState<_TaskFormDialog> {
 
   @override
   Widget build(BuildContext context) {
-    ref.watch(taskSnoozeConfigProvider);
+    ref.watch(taskSettingsConfigProvider);
     final service = ref.read(taskServiceProvider);
-    final cfg = ref.watch(taskSnoozeConfigProvider).maybeWhen(
+    final cfg = ref.watch(taskSettingsConfigProvider).maybeWhen(
           data: (c) => c,
           orElse: () => null,
         ) ??
-        TaskSnoozeConfig.defaultConfig();
+        TaskSettingsConfig.defaultConfig();
     final suggestedDefault = service.calculateNextDueDate(
       cfg,
-      option: TaskSnoozeConfig.kOptionDefault,
+      option: TaskSettingsConfig.kOptionDefault,
       fromDate: DateTime.now(),
     );
 
@@ -356,16 +356,16 @@ class _TaskFormDialogState extends ConsumerState<_TaskFormDialog> {
                   runSpacing: 8,
                   children: [
                     FilledButton.tonal(
-                      onPressed: () => _applyQuickDue(TaskSnoozeConfig.kOneHour),
+                      onPressed: () => _applyQuickDue(TaskSettingsConfig.kOneHour),
                       child: const Text('+1 ώρα'),
                     ),
                     FilledButton.tonal(
-                      onPressed: () => _applyQuickDue(TaskSnoozeConfig.kDayEnd),
+                      onPressed: () => _applyQuickDue(TaskSettingsConfig.kDayEnd),
                       child: const Text('Μέσα στην ημέρα'),
                     ),
                     FilledButton.tonal(
                       onPressed: () =>
-                          _applyQuickDue(TaskSnoozeConfig.kNextBusiness),
+                          _applyQuickDue(TaskSettingsConfig.kNextBusiness),
                       child: const Text('Επόμενη εργάσιμη'),
                     ),
                     FilledButton.tonal(

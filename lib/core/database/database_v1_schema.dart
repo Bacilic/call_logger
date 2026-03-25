@@ -1,7 +1,9 @@
 import 'package:sqflite_common/sqlite_api.dart';
 
 /// User-visible schema version (squashed v1· v2 = στήλες τμήμα/τοποθεσία στον εξοπλισμό).
-const int databaseSchemaVersionV1 = 2;
+/// v4: departments.name = display, departments.name_key = normalized unique key.
+/// v5: phones.department_id for shared-location policy.
+const int databaseSchemaVersionV1 = 5;
 
 /// Δημιουργία σχήματος v1 + seed `remote_tool_args`.
 /// Χωρίς εξαρτήσεις Flutter — ασφαλές για `dart run tool/migrate_to_v1.dart`.
@@ -44,7 +46,16 @@ Future<void> applyDatabaseV1Schema(Database db) async {
   await db.execute('''
       CREATE TABLE phones (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        number TEXT UNIQUE NOT NULL
+        number TEXT UNIQUE NOT NULL,
+        department_id INTEGER
+      )
+    ''');
+
+  await db.execute('''
+      CREATE TABLE department_phones (
+        department_id INTEGER NOT NULL,
+        phone_id INTEGER NOT NULL,
+        PRIMARY KEY (department_id, phone_id)
       )
     ''');
 
@@ -82,7 +93,8 @@ Future<void> applyDatabaseV1Schema(Database db) async {
   await db.execute('''
       CREATE TABLE departments (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT UNIQUE NOT NULL,
+        name TEXT NOT NULL,
+        name_key TEXT UNIQUE NOT NULL,
         building TEXT,
         color TEXT DEFAULT '#1976D2',
         notes TEXT,

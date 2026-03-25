@@ -22,6 +22,7 @@ class EquipmentFormDialog extends StatefulWidget {
     required this.ref,
     this.isClone = false,
     this.focusedField,
+    this.onSaved,
   });
 
   final EquipmentModel? initialEquipment;
@@ -31,6 +32,7 @@ class EquipmentFormDialog extends StatefulWidget {
   final WidgetRef ref;
   final bool isClone;
   final String? focusedField;
+  final VoidCallback? onSaved;
 
   @override
   State<EquipmentFormDialog> createState() => _EquipmentFormDialogState();
@@ -239,7 +241,8 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog> {
       );
       if (!mounted) return;
       widget.ref.invalidate(lookupServiceProvider);
-      Navigator.of(context).pop();
+      widget.onSaved?.call();
+      Navigator.of(context).pop(true);
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('Αποθηκεύτηκε')));
@@ -263,7 +266,8 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog> {
     );
     if (!mounted) return;
     widget.ref.invalidate(lookupServiceProvider);
-    Navigator.of(context).pop();
+    widget.onSaved?.call();
+    Navigator.of(context).pop(true);
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(const SnackBar(content: Text('Αποθηκεύτηκε')));

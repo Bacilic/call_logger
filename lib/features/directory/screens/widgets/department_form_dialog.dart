@@ -14,12 +14,14 @@ class DepartmentFormDialog extends StatefulWidget {
     required this.notifier,
     this.isClone = false,
     this.focusedField,
+    this.onSaved,
   });
 
   final DepartmentModel? initialDepartment;
   final DepartmentDirectoryNotifier notifier;
   final bool isClone;
   final String? focusedField;
+  final VoidCallback? onSaved;
 
   @override
   State<DepartmentFormDialog> createState() => _DepartmentFormDialogState();
@@ -30,6 +32,7 @@ class _DepartmentFormDialogState extends State<DepartmentFormDialog> {
   late final TextEditingController _nameController;
   late final TextEditingController _buildingController;
   late final TextEditingController _notesController;
+  late final TextEditingController _hexController;
 
   late Color _selectedColor;
 
@@ -50,6 +53,9 @@ class _DepartmentFormDialogState extends State<DepartmentFormDialog> {
     _notesController = TextEditingController(text: d?.notes ?? '');
     _selectedColor =
         tryParseDepartmentHex(d?.color) ?? const Color(0xFF1976D2);
+    _hexController = TextEditingController(
+      text: colorToDepartmentHex(_selectedColor),
+    );
     if (widget.isClone) {
       _nameController.text = '${d?.name ?? ''} (αντίγραφο)'.trim();
     }
@@ -76,6 +82,7 @@ class _DepartmentFormDialogState extends State<DepartmentFormDialog> {
   void dispose() {
     _nameController.dispose();
     _buildingController.dispose();
+    _hexController.dispose();
     _notesController.dispose();
     _nameFocus.dispose();
     _buildingFocus.dispose();
@@ -90,7 +97,8 @@ class _DepartmentFormDialogState extends State<DepartmentFormDialog> {
     if (name.isEmpty) return;
 
     final building = _buildingController.text.trim();
-    final color = colorToDepartmentHex(_selectedColor);
+    final parsedHex = tryParseDepartmentHex(_hexController.text.trim());
+    final color = colorToDepartmentHex(parsedHex ?? _selectedColor);
     final notes = _notesController.text.trim();
 
     final model = DepartmentModel(
@@ -128,7 +136,8 @@ class _DepartmentFormDialogState extends State<DepartmentFormDialog> {
         );
       }
       if (!mounted) return;
-      Navigator.of(context).pop();
+      widget.onSaved?.call();
+      Navigator.of(context).pop(true);
     } on DepartmentExistsException catch (e) {
       if (!mounted) return;
       if (e.isDeleted) {
@@ -164,7 +173,8 @@ class _DepartmentFormDialogState extends State<DepartmentFormDialog> {
               notes: notes.isEmpty ? null : notes,
             );
             if (!mounted) return;
-            Navigator.of(context).pop();
+            widget.onSaved?.call();
+            Navigator.of(context).pop(true);
           } catch (err) {
             if (!mounted) return;
             ScaffoldMessenger.of(context).showSnackBar(
@@ -247,11 +257,94 @@ class _DepartmentFormDialogState extends State<DepartmentFormDialog> {
                   spellCheckConfiguration: platformSpellCheckConfiguration,
                 ),
                 const SizedBox(height: 12),
-                DepartmentColorPalette(
-                  compact: true,
-                  selected: _selectedColor,
-                  focusNode: _colorFocus,
-                  onColorSelected: (c) => setState(() => _selectedColor = c),
+                Text(
+                  'Χρώμα',
+                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        color: Theme.of(context).colorScheme.onSurface,
+                      ),
+                ),
+                const SizedBox(height: 6),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: DepartmentColorPalette(
+                        compact: true,
+                        showHeading: false,
+                        selected: _selectedColor,
+                        onColorSelected: (c) {
+                          setState(() {
+                            _selectedColor = c;
+                            _hexController.text = colorToDepartmentHex(c);
+                          });
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    SizedBox(
+                      width: 156,
+                      child: Builder(
+                        builder: (context) {
+                          final rawHex = _hexController.text.trim();
+                          final parsedHex = tryParseDepartmentHex(rawHex);
+                          final hasInvalidHex =
+                              rawHex.isNotEmpty && parsedHex == null;
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              TextFormField(
+                                controller: _hexController,
+                                focusNode: _colorFocus,
+                                decoration: const InputDecoration(
+                                  labelText: 'Δεκαεξαδικός (Hex)',
+                                  hintText: '#RRGGBB',
+                                  border: OutlineInputBorder(),
+                                  isDense: true,
+                                ),
+                                style: TextStyle(
+                                  color: hasInvalidHex
+                                      ? Theme.of(context).colorScheme.error
+                                      : null,
+                                ),
+                                textCapitalization: TextCapitalization.characters,
+                                onChanged: (_) => setState(() {}),
+                                validator: (v) {
+                                  if (v == null || v.trim().isEmpty) {
+                                    return 'Εισάγετε hex χρώματος';
+                                  }
+                                  if (tryParseDepartmentHex(v.trim()) == null) {
+                                    return 'Μη έγκυρο (π.χ. #1976D2)';
+                                  }
+                                  return null;
+                                },
+                              ),
+                              const SizedBox(height: 6),
+                              Container(
+                                height: 22,
+                                decoration: BoxDecoration(
+                                  color: parsedHex ?? Colors.transparent,
+                                  border: Border.all(
+                                    color: hasInvalidHex
+                                        ? Theme.of(context).colorScheme.error
+                                        : Theme.of(context).colorScheme.outlineVariant,
+                                  ),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                alignment: Alignment.center,
+                                child: hasInvalidHex
+                                    ? Icon(
+                                        Icons.error_outline,
+                                        size: 14,
+                                        color: Theme.of(context).colorScheme.error,
+                                      )
+                                    : null,
+                              ),
+                            ],
+                          );
+                        },
+                      ),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 12),
                 TextFormField(

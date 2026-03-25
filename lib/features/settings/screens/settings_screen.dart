@@ -43,7 +43,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   bool _showImportExcelButton = false;
   bool _showActiveTimer = true;
   bool _showAnyDeskRemote = true;
-  bool _showTasksBadge = true;
   bool _vncPasswordObscure = true;
 
   final TextEditingController _vncPathController = TextEditingController();
@@ -110,7 +109,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       final showImport = await _settings.getShowImportExcelButton();
       final showActiveTimer = await _settings.getShowActiveTimer();
       final showAnyDeskRemote = await _settings.getShowAnyDeskRemote();
-      final showTasksBadge = await _settings.getShowTasksBadge();
       final vncPath = await _settings.getVncPath();
       final vncPassword = await _settings.getVncPassword();
       final anydeskPath = await _settings.getAnydeskPath();
@@ -136,7 +134,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           _showImportExcelButton = showImport;
           _showActiveTimer = showActiveTimer;
           _showAnyDeskRemote = showAnyDeskRemote;
-          _showTasksBadge = showTasksBadge;
           _isLoadingPath = false;
         });
       }
@@ -838,20 +835,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               title: const Text('Εμφάνιση κουμπιού AnyDesk'),
               subtitle: const Text(
                 'Χρησιμοποιείται σπάνια (1 φορά ανά 2 μήνες) – απενεργοποίησέ το για καθαρότερη διεπαφή.',
-              ),
-            ),
-            SwitchListTile(
-              value: _showTasksBadge,
-              onChanged: (value) async {
-                await _settings.setShowTasksBadge(value);
-                if (mounted) setState(() => _showTasksBadge = value);
-                ref.invalidate(showTasksBadgeProvider);
-              },
-              title: const Text(
-                'Εμφάνιση μετρητή στο μενού Εκκρεμοτήτων (Badge)',
-              ),
-              subtitle: const Text(
-                'Εμφανίζει στο πλαϊνό μενού το πλήθος ανοιχτών και αναβεβλημένων εκκρεμοτήτων.',
               ),
             ),
             SwitchListTile(

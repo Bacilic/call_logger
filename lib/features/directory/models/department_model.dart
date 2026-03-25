@@ -11,6 +11,7 @@ class DepartmentModel {
     this.mapY,
     this.mapWidth,
     this.mapHeight,
+    this.directPhones,
     this.isDeleted = false,
   });
 
@@ -24,9 +25,28 @@ class DepartmentModel {
   final double? mapY;
   final double? mapWidth;
   final double? mapHeight;
+  /// “Ορφανά” τηλέφωνα που ανήκουν απευθείας στο τμήμα (δεν είναι των χρηστών).
+  /// Δεν αποθηκεύονται μέσα στον πίνακα `departments`· φορτώνονται από `department_phones`.
+  final List<String>? directPhones;
   final bool isDeleted;
 
   factory DepartmentModel.fromMap(Map<String, dynamic> map) {
+    List<String>? parseDirectPhones(dynamic v) {
+      if (v == null) return null;
+      if (v is List) {
+        final list = v.map((e) => e.toString().trim()).where((s) => s.isNotEmpty).toList();
+        return list.isEmpty ? null : list;
+      }
+      if (v is String) {
+        final parts = v
+            .split(',')
+            .map((e) => e.trim())
+            .where((s) => s.isNotEmpty)
+            .toList();
+        return parts.isEmpty ? null : parts;
+      }
+      return null;
+    }
     return DepartmentModel(
       id: map['id'] as int?,
       name: map['name'] as String? ?? '',
@@ -38,7 +58,38 @@ class DepartmentModel {
       mapY: (map['map_y'] as num?)?.toDouble(),
       mapWidth: (map['map_width'] as num?)?.toDouble(),
       mapHeight: (map['map_height'] as num?)?.toDouble(),
+      directPhones: parseDirectPhones(map['direct_phones']),
       isDeleted: (map['is_deleted'] as int?) == 1,
+    );
+  }
+
+  DepartmentModel copyWith({
+    int? id,
+    String? name,
+    String? building,
+    String? color,
+    String? notes,
+    String? mapFloor,
+    double? mapX,
+    double? mapY,
+    double? mapWidth,
+    double? mapHeight,
+    List<String>? directPhones,
+    bool? isDeleted,
+  }) {
+    return DepartmentModel(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      building: building ?? this.building,
+      color: color ?? this.color,
+      notes: notes ?? this.notes,
+      mapFloor: mapFloor ?? this.mapFloor,
+      mapX: mapX ?? this.mapX,
+      mapY: mapY ?? this.mapY,
+      mapWidth: mapWidth ?? this.mapWidth,
+      mapHeight: mapHeight ?? this.mapHeight,
+      directPhones: directPhones ?? this.directPhones,
+      isDeleted: isDeleted ?? this.isDeleted,
     );
   }
 

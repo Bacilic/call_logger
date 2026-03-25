@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import '../models/task.dart';
+import '../models/task_settings_config.dart';
+import '../providers/task_settings_config_provider.dart';
+import '../providers/tasks_provider.dart';
 
 /// Περιγραφή εκκρεμότητας: δυναμικό ύψος έως 5 γραμμές, πάνω από 5 → κυλιώμενο πλαίσιο.
 class _TaskDescription extends StatelessWidget {
@@ -41,7 +45,7 @@ class _TaskDescription extends StatelessWidget {
   }
 }
 
-class TaskCard extends StatefulWidget {
+class TaskCard extends ConsumerStatefulWidget {
   const TaskCard({
     super.key,
     required this.task,
@@ -49,6 +53,9 @@ class TaskCard extends StatefulWidget {
     this.onSnooze,
     this.onDelete,
     this.onComplete,
+    this.onEditCaller,
+    this.onEditDepartment,
+    this.onEditEquipment,
   });
 
   final Task task;
@@ -56,6 +63,9 @@ class TaskCard extends StatefulWidget {
   final VoidCallback? onSnooze;
   final VoidCallback? onDelete;
   final VoidCallback? onComplete;
+  final Future<bool> Function()? onEditCaller;
+  final Future<bool> Function()? onEditDepartment;
+  final Future<bool> Function()? onEditEquipment;
 
   /// Χρωματική κωδικοποίηση: κόκκινο (καθυστέρηση), πορτοκαλί (υψηλή προτεραιότητα), πράσινο (&lt; 1 ώρα).
   static Color? _cardColor(Task task, ColorScheme scheme) {
@@ -155,10 +165,10 @@ class TaskCard extends StatefulWidget {
   }
 
   @override
-  State<TaskCard> createState() => _TaskCardState();
+  ConsumerState<TaskCard> createState() => _TaskCardState();
 }
 
-class _TaskCardState extends State<TaskCard> {
+class _TaskCardState extends ConsumerState<TaskCard> {
   bool _showSolution = false;
 
   static bool _nonEmptyText(String? value) =>
@@ -222,6 +232,111 @@ class _TaskCardState extends State<TaskCard> {
     );
   }
 
+  Widget _buildQuickActions(ThemeData theme) {
+    final task = widget.task;
+    final actions = <Widget>[
+      if (task.callerId != null && widget.onEditCaller != null)
+        OutlinedButton.icon(
+          onPressed: () async {
+            final result = await widget.onEditCaller!.call();
+            if (!result || !mounted) return;
+            await _handleQuickAddPostSave();
+          },
+          icon: const Icon(Icons.person_outline, size: 16),
+          label: const Text('Επεξεργασία Χρήστη'),
+        ),
+      if (task.departmentId != null && widget.onEditDepartment != null)
+        OutlinedButton.icon(
+          onPressed: () async {
+            final result = await widget.onEditDepartment!.call();
+            if (!result || !mounted) return;
+            await _handleQuickAddPostSave();
+          },
+          icon: const Icon(Icons.domain_outlined, size: 16),
+          label: const Text('Επεξεργασία Τμήματος'),
+        ),
+      if (task.equipmentId != null && widget.onEditEquipment != null)
+        OutlinedButton.icon(
+          onPressed: () async {
+            final result = await widget.onEditEquipment!.call();
+            if (!result || !mounted) return;
+            await _handleQuickAddPostSave();
+          },
+          icon: const Icon(Icons.computer_outlined, size: 16),
+          label: const Text('Επεξεργασία Εξοπλισμού'),
+        ),
+    ];
+
+    if (actions.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Divider(
+            height: 10,
+            thickness: 0.5,
+            color: theme.colorScheme.outlineVariant,
+          ),
+          Wrap(spacing: 8, runSpacing: 8, children: actions),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _handleQuickAddPostSave() async {
+    final task = widget.task;
+    if (!task.isQuickAdd || task.id == null || !mounted) return;
+
+    final settings = ref.read(taskSettingsConfigProvider).maybeWhen(
+          data: (c) => c,
+          orElse: () => TaskSettingsConfig.defaultConfig(),
+        );
+    if (settings.autoCloseQuickAdds) {
+      await _closeQuickAddTask(task);
+      return;
+    }
+
+    final shouldClose = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Επιτυχής Αποθήκευση'),
+        content: const Text(
+          'Η εγγραφή ενημερώθηκε. Θέλετε να κλείσει η εκκρεμότητα;',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Όχι'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Ναι'),
+          ),
+        ],
+      ),
+    );
+    if (!mounted || shouldClose != true) return;
+    await _closeQuickAddTask(task);
+  }
+
+  Future<void> _closeQuickAddTask(Task task) async {
+    final id = task.id;
+    if (id == null) return;
+    final notes = task.solutionNotes?.trim().isNotEmpty == true
+        ? task.solutionNotes!.trim()
+        : 'Κλείσιμο μετά από επιτυχή επεξεργασία οντότητας';
+    await ref.read(tasksProvider.notifier).updateTask(
+          task.copyWith(
+            status: TaskStatus.closed.toDbValue,
+            solutionNotes: notes,
+          ),
+        );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -255,7 +370,7 @@ class _TaskCardState extends State<TaskCard> {
               children: [
                 Expanded(
                   child: Text(
-                    task.title,
+                    task.displayTitle,
                     style: theme.textTheme.titleMedium?.copyWith(
                       fontWeight: FontWeight.bold,
                     ),
@@ -320,10 +435,17 @@ class _TaskCardState extends State<TaskCard> {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                if (task.description != null && task.description!.isNotEmpty)
-                  _TaskDescription(description: task.description!),
-                if (task.description != null &&
-                    task.description!.isNotEmpty &&
+                if ((task.isQuickAdd ? task.cleanDescription : task.description)
+                        ?.isNotEmpty ==
+                    true)
+                  _TaskDescription(
+                    description: task.isQuickAdd
+                        ? task.cleanDescription
+                        : task.description!,
+                  ),
+                if ((task.isQuickAdd ? task.cleanDescription : task.description)
+                        ?.isNotEmpty ==
+                    true &&
                     _hasEntityMetadata())
                   const SizedBox(height: 8),
                 _buildEntityMetadata(theme),
@@ -404,6 +526,7 @@ class _TaskCardState extends State<TaskCard> {
                 ],
               ),
             ),
+          if (task.isQuickAdd) _buildQuickActions(theme),
         ],
       ),
     );

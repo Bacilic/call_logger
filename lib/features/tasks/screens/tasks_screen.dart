@@ -4,16 +4,23 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
+import '../../calls/provider/lookup_provider.dart';
+import '../../directory/providers/department_directory_provider.dart';
+import '../../directory/providers/directory_provider.dart';
+import '../../directory/providers/equipment_directory_provider.dart';
+import '../../directory/screens/widgets/department_form_dialog.dart';
+import '../../directory/screens/widgets/equipment_form_dialog.dart';
+import '../../directory/screens/widgets/user_form_dialog.dart';
 import '../models/task.dart';
-import '../models/task_snooze_config.dart';
+import '../models/task_settings_config.dart';
 import '../providers/task_service_provider.dart';
-import '../providers/task_snooze_config_provider.dart';
+import '../providers/task_settings_config_provider.dart';
 import '../providers/tasks_provider.dart';
 import 'task_card.dart';
 import 'task_close_dialog.dart';
 import 'task_filter_bar.dart';
 import 'task_form_dialog.dart';
-import 'task_snooze_settings_dialog.dart';
+import 'task_settings_dialog.dart';
 
 enum _ClosedEditMode {
   recreate,
@@ -27,15 +34,15 @@ class TasksScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final asyncTasks = ref.watch(tasksProvider);
-    ref.watch(taskSnoozeConfigProvider);
+    ref.watch(taskSettingsConfigProvider);
     return Scaffold(
       appBar: AppBar(
         title: const Text('Εκκρεμότητες'),
         actions: [
           IconButton(
             icon: const Icon(Icons.schedule),
-            tooltip: 'Ρυθμίσεις αναβολών & εργάσιμων ωρών',
-            onPressed: () => _openSnoozeSettings(context, ref),
+            tooltip: 'Ρυθμίσεις εκκρεμοτήτων',
+            onPressed: () => _openTaskSettings(context, ref),
           ),
         ],
       ),
@@ -129,6 +136,12 @@ class TasksScreen extends ConsumerWidget {
                               onSnooze: () => _onSnooze(context, ref, task),
                               onDelete: () => _onDelete(context, ref, task),
                               onComplete: () => _onComplete(context, ref, task),
+                              onEditCaller: () =>
+                                  _onEditCaller(context, ref, task),
+                              onEditDepartment: () =>
+                                  _onEditDepartment(context, ref, task),
+                              onEditEquipment: () =>
+                                  _onEditEquipment(context, ref, task),
                             );
                           },
                         ),
@@ -172,10 +185,10 @@ class TasksScreen extends ConsumerWidget {
     );
   }
 
-  static Future<void> _openSnoozeSettings(BuildContext context, WidgetRef ref) async {
+  static Future<void> _openTaskSettings(BuildContext context, WidgetRef ref) async {
     await showDialog<void>(
       context: context,
-      builder: (context) => const TaskSnoozeSettingsDialog(),
+      builder: (context) => const TaskSettingsDialog(),
     );
   }
 
@@ -354,11 +367,11 @@ class TasksScreen extends ConsumerWidget {
 
   static Future<void> _onSnooze(BuildContext context, WidgetRef ref, Task task) async {
     final service = ref.read(taskServiceProvider);
-    final config = ref.read(taskSnoozeConfigProvider).maybeWhen(
+    final config = ref.read(taskSettingsConfigProvider).maybeWhen(
           data: (c) => c,
           orElse: () => null,
         ) ??
-        TaskSnoozeConfig.defaultConfig();
+        TaskSettingsConfig.defaultConfig();
     final maxRangeText = config.maxSnoozeDays == 1
         ? 'Μέγιστο εύρος: 1 ημέρα'
         : 'Μέγιστο εύρος: ${config.maxSnoozeDays} ημέρες';
@@ -379,19 +392,19 @@ class TasksScreen extends ConsumerWidget {
               const SizedBox(height: 8),
               FilledButton.tonal(
                 onPressed: () =>
-                    Navigator.of(ctx).pop(TaskSnoozeConfig.kOneHour),
+                    Navigator.of(ctx).pop(TaskSettingsConfig.kOneHour),
                 child: const Text('+1 ώρα'),
               ),
               const SizedBox(height: 8),
               FilledButton.tonal(
                 onPressed: () =>
-                    Navigator.of(ctx).pop(TaskSnoozeConfig.kDayEnd),
+                    Navigator.of(ctx).pop(TaskSettingsConfig.kDayEnd),
                 child: const Text('Μέσα στην ημέρα'),
               ),
               const SizedBox(height: 8),
               FilledButton.tonal(
                 onPressed: () =>
-                    Navigator.of(ctx).pop(TaskSnoozeConfig.kNextBusiness),
+                    Navigator.of(ctx).pop(TaskSettingsConfig.kNextBusiness),
                 child: const Text('Επόμενη εργάσιμη'),
               ),
               const SizedBox(height: 16),
@@ -576,6 +589,100 @@ class TasksScreen extends ConsumerWidget {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Εκκρεμότητα ολοκληρώθηκε.')),
     );
+  }
+
+  static Future<bool> _onEditCaller(
+    BuildContext context,
+    WidgetRef ref,
+    Task task,
+  ) async {
+    final callerId = task.callerId;
+    if (callerId == null) return false;
+    final lookupBundle = await ref.read(lookupServiceProvider.future);
+    final user = lookupBundle.service.findUserById(callerId);
+    if (user == null) return false;
+
+    final notifier = ref.read(directoryProvider.notifier);
+    await notifier.loadUsers();
+    if (!context.mounted) return false;
+    var saved = false;
+    await showDialog<bool>(
+      context: context,
+      builder: (_) => UserFormDialog(
+        initialUser: user,
+        notifier: notifier,
+        onSaved: () => saved = true,
+      ),
+    );
+    if (!context.mounted) return false;
+    ref.invalidate(tasksProvider);
+    return saved;
+  }
+
+  static Future<bool> _onEditDepartment(
+    BuildContext context,
+    WidgetRef ref,
+    Task task,
+  ) async {
+    final departmentId = task.departmentId;
+    if (departmentId == null) return false;
+
+    final notifier = ref.read(departmentDirectoryProvider.notifier);
+    await notifier.loadDepartments();
+    final state = ref.read(departmentDirectoryProvider);
+    final matchingDepartments = state.allDepartments
+        .where((d) => d.id == departmentId)
+        .toList();
+    final department = matchingDepartments.isEmpty
+        ? null
+        : matchingDepartments.first;
+    if (department == null || !context.mounted) return false;
+
+    var saved = false;
+    await showDialog<bool>(
+      context: context,
+      builder: (_) => DepartmentFormDialog(
+        initialDepartment: department,
+        notifier: notifier,
+        onSaved: () => saved = true,
+      ),
+    );
+    if (!context.mounted) return false;
+    ref.invalidate(tasksProvider);
+    return saved;
+  }
+
+  static Future<bool> _onEditEquipment(
+    BuildContext context,
+    WidgetRef ref,
+    Task task,
+  ) async {
+    final equipmentId = task.equipmentId;
+    if (equipmentId == null) return false;
+
+    final notifier = ref.read(equipmentDirectoryProvider.notifier);
+    await notifier.load();
+    final equipmentState = ref.read(equipmentDirectoryProvider);
+    final matchingRows = equipmentState.allItems
+        .where((r) => r.$1.id == equipmentId)
+        .toList();
+    final row = matchingRows.isEmpty ? null : matchingRows.first;
+    if (row == null || !context.mounted) return false;
+
+    var saved = false;
+    await showDialog<bool>(
+      context: context,
+      builder: (_) => EquipmentFormDialog(
+        initialEquipment: row.$1,
+        initialOwner: row.$2,
+        notifier: notifier,
+        ref: ref,
+        onSaved: () => saved = true,
+      ),
+    );
+    if (!context.mounted) return false;
+    ref.invalidate(tasksProvider);
+    return saved;
   }
 }
 

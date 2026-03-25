@@ -8,7 +8,7 @@ import '../../../core/database/database_helper.dart';
 import '../../../core/utils/search_text_normalizer.dart';
 import '../models/task.dart';
 import '../models/task_filter.dart' show TaskFilter, TaskSortOption;
-import '../models/task_snooze_config.dart';
+import '../models/task_settings_config.dart';
 
 /// Κλήση με status pending που δεν έχει αντίστοιχο task.
 class OrphanCall {
@@ -43,50 +43,51 @@ class TaskService {
     return has;
   }
 
-  /// Ρυθμίσεις αναβολών / εργάσιμων ωρών από `app_settings` (JSON).
-  Future<TaskSnoozeConfig> getSnoozeConfig() async {
-    final raw = await DatabaseHelper.instance.getSetting(
-      TaskSnoozeConfig.appSettingsKey,
-    );
+  /// Γενικές ρυθμίσεις εκκρεμοτήτων από `app_settings` (JSON).
+  ///
+  /// - Διαβάζει πρώτα από [TaskSettingsConfig.appSettingsKey].
+  /// - Αν λείπει, κάνει fallback στο [TaskSettingsConfig.legacyAppSettingsKey].
+  Future<TaskSettingsConfig> getTaskSettingsConfig() async {
+    final db = DatabaseHelper.instance;
+    final raw =
+        await db.getSetting(TaskSettingsConfig.appSettingsKey) ??
+        await db.getSetting(TaskSettingsConfig.legacyAppSettingsKey);
     if (raw == null || raw.trim().isEmpty) {
-      return TaskSnoozeConfig.defaultConfig();
+      return TaskSettingsConfig.defaultConfig();
     }
     try {
       final decoded = jsonDecode(raw);
       if (decoded is Map<String, dynamic>) {
-        return TaskSnoozeConfig.fromMap(decoded);
+        return TaskSettingsConfig.fromMap(decoded);
       }
       if (decoded is Map) {
-        return TaskSnoozeConfig.fromMap(Map<String, dynamic>.from(decoded));
+        return TaskSettingsConfig.fromMap(Map<String, dynamic>.from(decoded));
       }
     } catch (_) {}
-    return TaskSnoozeConfig.defaultConfig();
+    return TaskSettingsConfig.defaultConfig();
   }
-
-  /// Συμβατότητα: ίδιο με [getSnoozeConfig].
-  Future<TaskSnoozeConfig> getTaskSnoozeConfig() => getSnoozeConfig();
 
   /// Επόμενη προτεινόμενη ημερομηνία/ώρα λήξης βάσει ρυθμίσεων.
   ///
-  /// [option]: `TaskSnoozeConfig.kOptionDefault` → χρήση [TaskSnoozeConfig.defaultSnoozeOption],
+  /// [option]: `TaskSettingsConfig.kOptionDefault` → χρήση [TaskSettingsConfig.defaultSnoozeOption],
   /// αλλιώς `one_hour` / `day_end` / `next_business`.
   DateTime calculateNextDueDate(
-    TaskSnoozeConfig config, {
-    String option = TaskSnoozeConfig.kOptionDefault,
+    TaskSettingsConfig config, {
+    String option = TaskSettingsConfig.kOptionDefault,
     DateTime? fromDate,
   }) {
     final base = fromDate ?? DateTime.now();
     final resolved =
-        (option == TaskSnoozeConfig.kOptionDefault || option.isEmpty)
+        (option == TaskSettingsConfig.kOptionDefault || option.isEmpty)
         ? config.defaultSnoozeOption
-        : TaskSnoozeConfig.normalizeSnoozeOption(option);
+        : TaskSettingsConfig.normalizeSnoozeOption(option);
 
     switch (resolved) {
-      case TaskSnoozeConfig.kOneHour:
+      case TaskSettingsConfig.kOneHour:
         return base.add(const Duration(hours: 1));
-      case TaskSnoozeConfig.kDayEnd:
+      case TaskSettingsConfig.kDayEnd:
         return _nextDayEndDateTime(config, base);
-      case TaskSnoozeConfig.kNextBusiness:
+      case TaskSettingsConfig.kNextBusiness:
         return _nextBusinessMorningDateTime(config, base);
       default:
         return base.add(const Duration(hours: 1));
@@ -104,7 +105,7 @@ class TaskService {
   }
 
   /// Τέλος «μέσα στην ημέρα»: σήμερα στο [dayEndTime] αν ακόμα μετά το [base], αλλιώς επόμενες ημέρες (+ Σ/Κ αν [skipWeekends]).
-  DateTime _nextDayEndDateTime(TaskSnoozeConfig config, DateTime base) {
+  DateTime _nextDayEndDateTime(TaskSettingsConfig config, DateTime base) {
     var day = DateTime(base.year, base.month, base.day);
     var candidate = _atTimeOnDay(day, config.dayEndTime);
     if (!candidate.isAfter(base)) {
@@ -123,7 +124,7 @@ class TaskService {
 
   /// Επόμενη ημέρα (ημερολογιακά μετά την ημέρα του [base]) στην [nextBusinessHour], με παράλειψη Σ/Κ αν [skipWeekends].
   DateTime _nextBusinessMorningDateTime(
-    TaskSnoozeConfig config,
+    TaskSettingsConfig config,
     DateTime base,
   ) {
     var day = DateTime(base.year, base.month, base.day);
@@ -139,10 +140,10 @@ class TaskService {
     return candidate;
   }
 
-  /// Αποθήκευση ρυθμίσεων αναβολών στο `app_settings`.
-  Future<void> saveTaskSnoozeConfig(TaskSnoozeConfig config) async {
+  /// Αποθήκευση ρυθμίσεων εκκρεμοτήτων στο `app_settings`.
+  Future<void> saveTaskSettingsConfig(TaskSettingsConfig config) async {
     await DatabaseHelper.instance.setSetting(
-      TaskSnoozeConfig.appSettingsKey,
+      TaskSettingsConfig.appSettingsKey,
       jsonEncode(config.toMap()),
     );
   }
@@ -157,7 +158,9 @@ class TaskService {
     required DateTime titleAt,
     String? callerFallback,
   }) {
-    final notesRaw = description;
+    final notesRaw = description.contains(Task.quickAddTag)
+        ? description.replaceAll(Task.quickAddTag, '').trim()
+        : description;
     String snippet = '';
     if (notesRaw.isNotEmpty) {
       var line = notesRaw.replaceAll(RegExp(r'[\r\n]+'), ' ').trim();
@@ -203,6 +206,7 @@ class TaskService {
     String? departmentText,
     String? categoryName,
     DateTime? titleTimestamp,
+    int? priority,
   }) async {
     final titleAt = titleTimestamp ?? callDate;
     final title = smartTaskTitleFromCallContext(
@@ -211,10 +215,10 @@ class TaskService {
       titleAt: titleAt,
       callerFallback: callerName,
     );
-    final config = await getSnoozeConfig();
+    final config = await getTaskSettingsConfig();
     final dueDate = calculateNextDueDate(
       config,
-      option: TaskSnoozeConfig.kOptionDefault,
+      option: TaskSettingsConfig.kOptionDefault,
       fromDate: DateTime.now(),
     );
     final db = await _db;
@@ -224,6 +228,7 @@ class TaskService {
       'description': description,
       'due_date': dueDate.toIso8601String(),
       'status': 'open',
+      'priority': priority,
       'caller_id': callerId,
       'equipment_id': equipmentId,
       'department_id': departmentId,

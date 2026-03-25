@@ -625,8 +625,7 @@ class DirectoryNotifier extends Notifier<DirectoryState> {
   }
 }
 
-final directoryProvider =
-    NotifierProvider.autoDispose<DirectoryNotifier, DirectoryState>(
+final directoryProvider = NotifierProvider<DirectoryNotifier, DirectoryState>(
   DirectoryNotifier.new,
 );
 

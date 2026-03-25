@@ -11,6 +11,8 @@ import '../models/equipment_model.dart';
 import '../models/user_model.dart';
 import '../../directory/models/department_model.dart';
 import '../../tasks/models/task.dart';
+import '../../tasks/providers/task_service_provider.dart';
+import '../../tasks/providers/tasks_provider.dart';
 
 /// Κατάσταση έξυπνου επιλογέα οντοτήτων (τηλέφωνο, καλών, εξοπλισμός, τμήμα).
 /// FocusNodes ΔΕΝ αποθηκεύονται εδώ — ζουν στο widget State.
@@ -142,24 +144,43 @@ class SmartEntitySelectorState {
   }
 
   /// True όταν δεν υπάρχει επιλεγμένος χρήστης από τη βάση, υπάρχει ρητό όνομα καλούντα
-  /// και υπάρχει τουλάχιστον ένα στοιχείο προς καταχώρηση (τηλέφωνο ή εξοπλισμός).
+  /// και υπάρχει τουλάχιστον ένα στοιχείο προς καταχώρηση (τηλέφωνο ή εξοπλισμός ή τμήμα).
   bool get needsNewCallerCreation =>
       selectedCaller == null &&
       hasExplicitCallerText &&
+      (hasPhoneInput || hasEquipmentInput || departmentText.trim().isNotEmpty);
+
+  bool get needsOrphanDepartmentQuickAdd =>
+      selectedCaller == null &&
+      !hasExplicitCallerText &&
+      departmentText.trim().isNotEmpty &&
       (hasPhoneInput || hasEquipmentInput);
 
   /// Το κουμπί `+` εμφανίζεται είτε για νέα συσχέτιση σε υπάρχοντα χρήστη είτε για δημιουργία νέου καλούντα.
   bool needsAssociation(LookupService? lookup) =>
       needsExistingCallerAssociation(lookup) ||
       needsNewCallerCreation ||
+      needsOrphanDepartmentQuickAdd ||
       hasPendingDepartmentChange;
 
   bool get hasPendingDepartmentChange {
     final caller = selectedCaller;
     if (caller?.id == null) return false;
+    final nextText = departmentText.trim();
+    if (nextText.isEmpty) return false;
+
     final nextDepartmentId = selectedDepartmentId;
-    if (nextDepartmentId == null) return false;
-    return nextDepartmentId != caller!.departmentId;
+    if (nextDepartmentId != null) {
+      return nextDepartmentId != caller!.departmentId;
+    }
+
+    // Επιτρέπει “νέο” τμήμα που δεν υπάρχει στη βάση (άρα δεν έχει id ακόμη).
+    // Αποφεύγουμε false positives με κανονικοποίηση.
+    final oldText = (caller!.departmentName ?? '').trim();
+    final oldNorm = SearchTextNormalizer.normalizeForSearch(oldText);
+    final nextNorm = SearchTextNormalizer.normalizeForSearch(nextText);
+    if (nextNorm.isEmpty) return false;
+    return nextNorm != oldNorm;
   }
 
   String? get pendingDepartmentChangeTooltip {
@@ -176,19 +197,18 @@ class SmartEntitySelectorState {
     return 'Αλλαγή τμήματος ($oldText -> $nextDepartmentText) για $callerName';
   }
 
-  /// Πράσινο: μία πλήρης συσχέτιση ή και τα δύο μη συσχετισμένα. Πορτοκαλί: μερική ενημέρωση (και τα δύο συμπληρωμένα, μόνο το ένα συσχετισμένο).
+  /// Πράσινο: νέος καλούντας ή orphans σε τμήμα που δεν υπάρχει ακόμη στη βάση (όλα νέα).
+  /// Πορτοκαλί: υπάρχων καλούντας (ενημέρωση/συσχέτιση/αλλαγή τμήματος) ή νέα καταχώρηση που «δένει»
+  /// σε υπάρχον τμήμα (εμπλουτισμός τμήματος με τηλέφωνο/εξοπλισμό).
   Color associationColor(LookupService? lookup) {
-    if (needsNewCallerCreation) {
-      return Colors.green;
-    }
-    final phoneFilled = selectedPhone?.trim().isNotEmpty == true;
-    final equipmentFilled = equipmentText.trim().isNotEmpty;
-
-    final needsPhone = phoneFilled && !hasPhoneAssociation;
-    final needsEquipment = equipmentFilled && !hasEquipmentAssociation(lookup);
-
-    if (phoneFilled && equipmentFilled && (needsPhone != needsEquipment)) {
+    if (selectedCaller != null) {
       return Colors.orange;
+    }
+    if (needsOrphanDepartmentQuickAdd || needsNewCallerCreation) {
+      final d = departmentText.trim();
+      final deptExists =
+          d.isNotEmpty && lookup?.findDepartmentByName(d)?.id != null;
+      return deptExists ? Colors.orange : Colors.green;
     }
     return Colors.green;
   }
@@ -216,6 +236,13 @@ class SmartEntitySelectorState {
         return 'Προσθήκη νέου καλούντα: $normalizedCallerDisplayText';
       }
       return 'Προσθήκη νέου καλούντα: $normalizedCallerDisplayText με ${parts.join(' και ')}';
+    }
+
+    if (needsOrphanDepartmentQuickAdd) {
+      final parts = <String>[];
+      if (phoneFilled) parts.add('τηλέφωνο: ${selectedPhone!.trim()}');
+      if (equipmentFilled) parts.add('εξοπλισμό: ${equipmentText.trim()}');
+      return 'Προσθήκη στο τμήμα ${departmentText.trim()}: ${parts.join(' και ')}';
     }
 
     final name = selectedCaller?.name ?? 'άγνωστος';
@@ -344,10 +371,147 @@ class SmartEntitySelectorState {
   }
 }
 
+class OrphanQuickAddResult {
+  const OrphanQuickAddResult({
+    required this.requiresConfirmation,
+    required this.message,
+    this.successMessage,
+  });
+
+  final bool requiresConfirmation;
+  final String message;
+  final String? successMessage;
+}
+
 /// Notifier για τον έξυπνο επιλογέα: update/clear, recentPhones, clearAfterSubmit.
 /// Focus και controllers ανήκουν στο widget· το notifier δουλεύει μόνο με state.
 class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
   bool _isFillingFromLookup = false;
+  static const int _criticalTaskPriority = 2;
+
+  Future<OrphanQuickAddResult?> quickAddOrphanToDepartment({
+    bool forceSharedOnConflict = false,
+  }) async {
+    final s = state;
+    if (!s.needsOrphanDepartmentQuickAdd) return null;
+    final lookup = (await ref.read(lookupServiceProvider.future)).service;
+    final deptText = s.departmentText.trim();
+    var departmentId = s.selectedDepartmentId;
+    DepartmentModel? selectedDepartment;
+    if (departmentId != null) {
+      for (final d in lookup.departments) {
+        if (d.id == departmentId && !d.isDeleted) {
+          selectedDepartment = d;
+          break;
+        }
+      }
+    } else {
+      selectedDepartment = lookup.findDepartmentByName(deptText);
+      departmentId = selectedDepartment?.id;
+    }
+    final phone = s.selectedPhone?.trim();
+    final equipmentCode = s.equipmentText.trim().isEmpty ? null : s.equipmentText.trim();
+
+    final phoneUsage = (phone != null && phone.isNotEmpty)
+        ? lookup.checkPhoneUsage(phone)
+        : null;
+    final equipmentUsage = (equipmentCode != null)
+        ? lookup.checkEquipmentUsage(equipmentCode)
+        : null;
+
+    final phoneConflict = phoneUsage != null &&
+        (phoneUsage.hasUserOwners ||
+            (phoneUsage.departmentId != null &&
+                departmentId != null &&
+                phoneUsage.departmentId != departmentId));
+    final equipmentConflict = equipmentUsage != null &&
+        (equipmentUsage.hasUserOwners ||
+            (equipmentUsage.departmentId != null &&
+                departmentId != null &&
+                equipmentUsage.departmentId != departmentId));
+    final hasConflict = phoneConflict || equipmentConflict;
+
+    if (hasConflict && !forceSharedOnConflict) {
+      final lines = <String>[
+        'Εντοπίστηκαν πιθανές συγκρούσεις για Shared Policy.',
+      ];
+      if (phoneConflict) {
+        if (phoneUsage.hasUserOwners) {
+          lines.add(
+            'Το τηλέφωνο ${phoneUsage.phone} ανήκει ήδη στους: ${phoneUsage.userNames.join(', ')}.',
+          );
+        }
+        if (phoneUsage.departmentId != null && phoneUsage.departmentName != null) {
+          lines.add(
+            'Το τηλέφωνο ${phoneUsage.phone} έχει ήδη τοποθεσία τμήμα: ${phoneUsage.departmentName}.',
+          );
+        }
+      }
+      if (equipmentConflict) {
+        if (equipmentUsage.hasUserOwners) {
+          lines.add(
+            'Ο εξοπλισμός ${equipmentUsage.code} ανήκει ήδη στους: ${equipmentUsage.userNames.join(', ')}.',
+          );
+        }
+        if (equipmentUsage.departmentId != null &&
+            equipmentUsage.departmentName != null) {
+          lines.add(
+            'Ο εξοπλισμός ${equipmentUsage.code} έχει ήδη τοποθεσία τμήμα: ${equipmentUsage.departmentName}.',
+          );
+        }
+      }
+      lines.add(
+        'Θέλετε να καταχωρηθούν ΚΑΙ ως κοινόχρηστα στο τμήμα ${deptText.isEmpty ? '—' : deptText};',
+      );
+      return OrphanQuickAddResult(
+        requiresConfirmation: true,
+        message: lines.join('\n'),
+      );
+    }
+
+    departmentId ??= await DatabaseHelper.instance.getOrCreateDepartmentIdByName(
+      deptText,
+    );
+    if (departmentId == null) {
+      return const OrphanQuickAddResult(
+        requiresConfirmation: false,
+        message: 'Δεν βρέθηκε/δημιουργήθηκε τμήμα.',
+      );
+    }
+
+    if (phone != null && phone.isNotEmpty) {
+      await DatabaseHelper.instance.updatePhoneDepartment(phone, departmentId);
+    }
+    if (equipmentCode != null) {
+      await DatabaseHelper.instance.updateEquipmentDepartment(
+        equipmentCode,
+        departmentId,
+      );
+    }
+
+    ref.invalidate(lookupServiceProvider);
+    final refreshed = (await ref.read(lookupServiceProvider.future)).service;
+    final finalDepartment = refreshed.findDepartmentByName(deptText);
+    state = state.copyWith(
+      selectedDepartmentId: finalDepartment?.id ?? departmentId,
+      departmentText: finalDepartment?.name ?? deptText,
+      departmentIsManual: true,
+      callerNoMatch: false,
+      equipmentNoMatch: false,
+    );
+
+    final added = <String>[];
+    if (phone != null && phone.isNotEmpty) added.add('τηλέφωνο');
+    if (equipmentCode != null) added.add('εξοπλισμός');
+    final success = added.isEmpty
+        ? 'Δεν υπήρχε στοιχείο προς καταχώρηση.'
+        : 'Καταχωρήθηκε ${added.join(' και ')} ως κοινόχρηστο στο τμήμα ${state.departmentText.trim()}.';
+    return OrphanQuickAddResult(
+      requiresConfirmation: false,
+      message: success,
+      successMessage: success,
+    );
+  }
 
   bool _computeHasAnyContent({
     String? phoneText,
@@ -725,6 +889,10 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
     try {
       final users = lookup.findUsersByPhone(digits);
       if (users.isEmpty) {
+        final orphanDept = lookup.getDepartmentByPhone(digits);
+        final canAutofillDepartment =
+            (!state.departmentIsManual || state.departmentText.trim().isEmpty) &&
+                state.selectedDepartmentId == null;
         state = state.copyWith(
           clearPhoneCandidates: true,
           callerCandidates: [],
@@ -735,6 +903,15 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
           isEquipmentAmbiguous: false,
           callerNoMatch: true,
           equipmentNoMatch: false,
+          departmentText: (orphanDept != null && canAutofillDepartment)
+              ? orphanDept.name
+              : state.departmentText,
+          selectedDepartmentId: (orphanDept != null && canAutofillDepartment)
+              ? orphanDept.id
+              : state.selectedDepartmentId,
+          departmentIsManual: (orphanDept != null && canAutofillDepartment)
+              ? false
+              : state.departmentIsManual,
         );
         return;
       }
@@ -1208,11 +1385,25 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
       final equipmentCode = state.equipmentText.trim();
       final parsed = NameParserUtility.parse(name);
       final lookup = ref.read(lookupServiceProvider).value?.service;
-      final departmentId =
+      final deptTextRaw = state.departmentText.trim();
+      final departmentExistedBefore = deptTextRaw.isNotEmpty &&
+          (lookup?.findDepartmentByName(deptTextRaw)?.id != null);
+      final phoneExistedBefore = (phone != null && phone.isNotEmpty)
+          ? await DatabaseHelper.instance.phoneNumberExists(phone)
+          : false;
+      final equipmentExistedBefore = equipmentCode.isNotEmpty
+          ? await DatabaseHelper.instance.equipmentCodeExists(equipmentCode)
+          : false;
+
+      var departmentId =
           state.selectedDepartmentId ??
           (state.departmentText.trim().isNotEmpty && lookup != null
               ? lookup.findDepartmentByName(state.departmentText)?.id
               : null);
+      if (departmentId == null && state.departmentText.trim().isNotEmpty) {
+        departmentId = await DatabaseHelper.instance
+            .getOrCreateDepartmentIdByName(state.departmentText.trim());
+      }
       try {
         final parsedPhones = PhoneListParser.splitPhones(phone);
         final userId = await DatabaseHelper.instance.insertUser(
@@ -1256,8 +1447,63 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
           equipmentIsManual: false,
         );
         ref.invalidate(lookupServiceProvider);
-        await ref.read(lookupServiceProvider.future);
-        return msg ?? 'Προστέθηκε.';
+        final refreshedLookup = (await ref.read(lookupServiceProvider.future)).service;
+        final matchedNewCallerEquipment = equipTrim.isEmpty
+            ? const <EquipmentModel>[]
+            : refreshedLookup.findEquipmentsByCode(equipTrim);
+        final resolvedEquipmentId = matchedNewCallerEquipment.isEmpty
+            ? null
+            : matchedNewCallerEquipment.first.id;
+        final resolvedDepartmentId = departmentIdNow ??
+            (s.departmentText.trim().isNotEmpty
+                ? refreshedLookup.findDepartmentByName(s.departmentText)?.id
+                : null);
+        await _createQuickAddTask(
+          callerName: state.selectedCaller?.name ?? state.callerDisplayText.trim(),
+          summaryText: msg,
+          callerId: userId,
+          departmentId: resolvedDepartmentId,
+          equipmentId: resolvedEquipmentId,
+          phoneText: s.selectedPhone?.trim(),
+          userText: s.callerDisplayText.trim().isEmpty
+              ? null
+              : s.callerDisplayText.trim(),
+          equipmentText: equipTrim.isEmpty ? null : equipTrim,
+          departmentText: s.departmentText.trim().isEmpty
+              ? null
+              : s.departmentText.trim(),
+        );
+        ref.invalidate(tasksProvider);
+        final createdDeptNow = deptTextRaw.isNotEmpty && !departmentExistedBefore;
+        final lines = <String>[];
+        final fullName =
+            (state.selectedCaller?.name ?? state.callerDisplayText).trim();
+        final deptSuffix =
+            deptTextRaw.isNotEmpty ? ' στο τμήμα: $deptTextRaw' : '';
+        lines.add('Δημιουργήθηκε νέος χρήστης $fullName$deptSuffix');
+        if (createdDeptNow) {
+          lines.add('Δημιουργήθηκε νέο τμήμα: $deptTextRaw');
+        }
+        if (phone != null && phone.isNotEmpty) {
+          lines.add(
+            phoneExistedBefore
+                ? 'Συσχετίστηκε τηλέφωνο: $phone'
+                : 'Δημιουργήθηκε νέο τηλέφωνο: $phone',
+          );
+        }
+        if (equipmentCode.isNotEmpty) {
+          lines.add(
+            equipmentExistedBefore
+                ? 'Συσχετίστηκε εξοπλισμός: $equipmentCode'
+                : 'Δημιουργήθηκε νέος εξοπλισμός: $equipmentCode',
+          );
+        }
+        // Αν υπάρχει επιπλέον "τεχνικό" tooltip μήνυμα, το αφήνουμε στο τέλος ως περίληψη.
+        final summary = msg?.trim();
+        if (summary != null && summary.isNotEmpty) {
+          lines.add(summary);
+        }
+        return lines.join('\n');
       } catch (e) {
         return 'Σφάλμα αποθήκευσης: $e';
       }
@@ -1280,12 +1526,20 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
       );
 
       final lookup = ref.read(lookupServiceProvider).value?.service;
-      final selectedDepartmentId =
+      var selectedDepartmentId =
           state.selectedDepartmentId ??
           (state.departmentText.trim().isNotEmpty && lookup != null
               ? lookup.findDepartmentByName(state.departmentText)?.id
               : null);
       var updatedDepartmentId = state.selectedCaller?.departmentId;
+      if (updatePrimaryDepartment &&
+          state.departmentText.trim().isNotEmpty &&
+          state.selectedCaller?.id != null) {
+        // Αν το τμήμα δεν υπάρχει ακόμα στη βάση, το δημιουργούμε ώστε να πάρουμε id.
+        selectedDepartmentId ??= await DatabaseHelper.instance
+            .getOrCreateDepartmentIdByName(state.departmentText.trim());
+      }
+
       if (updatePrimaryDepartment &&
           selectedDepartmentId != null &&
           selectedDepartmentId != state.selectedCaller?.departmentId &&
@@ -1334,11 +1588,72 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
       );
 
       ref.invalidate(lookupServiceProvider);
-      await ref.read(lookupServiceProvider.future);
+      final refreshedLookup = (await ref.read(lookupServiceProvider.future)).service;
+      final matchedEquipment = eqCode?.isNotEmpty == true
+          ? refreshedLookup.findEquipmentsByCode(eqCode!)
+          : const <EquipmentModel>[];
+      final resolvedEquipmentId = matchedEquipment.isNotEmpty
+          ? matchedEquipment.first.id
+          : s.selectedEquipment?.id;
+      final resolvedDepartmentId = selectedDepartmentId ??
+          (s.departmentText.trim().isNotEmpty
+              ? refreshedLookup.findDepartmentByName(s.departmentText)?.id
+              : null);
+      await _createQuickAddTask(
+        callerName: s.selectedCaller?.name ?? s.callerDisplayText.trim(),
+        summaryText: msg,
+        callerId: s.selectedCaller?.id,
+        departmentId: resolvedDepartmentId,
+        equipmentId: resolvedEquipmentId,
+        phoneText: s.selectedPhone?.trim(),
+        userText: s.callerDisplayText.trim().isEmpty
+            ? null
+            : s.callerDisplayText.trim(),
+        equipmentText: s.equipmentText.trim().isEmpty ? null : s.equipmentText.trim(),
+        departmentText: s.departmentText.trim().isEmpty
+            ? null
+            : s.departmentText.trim(),
+      );
+      ref.invalidate(tasksProvider);
       return msg ?? 'Προστέθηκε.';
     } catch (e) {
       return 'Σφάλμα αποθήκευσης: $e';
     }
+  }
+
+  Future<void> _createQuickAddTask({
+    required String? callerName,
+    required String? summaryText,
+    required int? callerId,
+    required int? departmentId,
+    required int? equipmentId,
+    String? phoneText,
+    String? userText,
+    String? equipmentText,
+    String? departmentText,
+  }) async {
+    final cleanSummary = summaryText?.trim();
+    final caller = callerName?.trim();
+    final descriptionCore = cleanSummary?.isNotEmpty == true
+        ? cleanSummary!
+        : (caller?.isNotEmpty == true ? 'Ενημερώθηκε οντότητα καλούντα' : 'Quick add');
+    final quickDescription = '${Task.quickAddTag} $descriptionCore';
+    await ref.read(taskServiceProvider).createFromCall(
+      callId: null,
+      callerName: caller,
+      description: quickDescription,
+      callDate: DateTime.now(),
+      callerId: callerId,
+      equipmentId: equipmentId,
+      departmentId: departmentId,
+      phoneId: null,
+      phoneText: phoneText?.isEmpty == true ? null : phoneText,
+      userText: userText?.isEmpty == true ? null : userText,
+      equipmentText: equipmentText?.isEmpty == true ? null : equipmentText,
+      departmentText: departmentText?.isEmpty == true ? null : departmentText,
+      priority: _criticalTaskPriority,
+      categoryName: Task.quickAddCategoryEl,
+    );
   }
 }
 

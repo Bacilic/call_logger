@@ -487,7 +487,7 @@ class DepartmentDirectoryNotifier
   }
 }
 
-final departmentDirectoryProvider = NotifierProvider.autoDispose<
+final departmentDirectoryProvider = NotifierProvider<
     DepartmentDirectoryNotifier, DepartmentDirectoryState>(
   DepartmentDirectoryNotifier.new,
 );

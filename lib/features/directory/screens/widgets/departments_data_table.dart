@@ -51,7 +51,7 @@ const _defaultWidthsByKey = <String, double>{
   'id': 56.0,
   'name': 180.0,
   'building': 120.0,
-  'color': 100.0,
+  'color': 56.0,
   'notes': 180.0,
 };
 
@@ -785,33 +785,24 @@ class _DepartmentsTableSource extends DataTableSource {
       case 'color':
         final parsed = _parseHexColor(d.color);
         return DataCell(
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (parsed != null)
-                Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        color: parsed,
-                        border: Border.all(color: Colors.black26),
-                        borderRadius: BorderRadius.circular(2),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: parsed != null
+                ? Tooltip(
+                    message: d.color ?? '',
+                    child: SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          color: parsed,
+                          border: Border.all(color: Colors.black26),
+                          borderRadius: BorderRadius.circular(2),
+                        ),
                       ),
                     ),
-                  ),
-                ),
-              Expanded(
-                child: Text(
-                  d.color ?? '',
-                  maxLines: 1,
-                  softWrap: false,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            ],
+                  )
+                : const SizedBox.shrink(),
           ),
           onTap: () => _onRowTap?.call(rowIndex),
           onDoubleTap: () => _onDoubleTap(d, col),

@@ -27,12 +27,14 @@ class CallStatusBar extends ConsumerWidget {
     final durationSeconds = ref.watch(
       callEntryProvider.select((s) => s.durationSeconds),
     );
+    final isTimerRunning = ref.watch(
+      callEntryProvider.select((s) => s.isCallTimerRunning),
+    );
     final notesNonEmpty = ref.watch(
       callEntryProvider.select((s) => s.notes.trim().isNotEmpty),
     );
     final notifier = ref.read(callEntryProvider.notifier);
     final showTimerAsync = ref.watch(showActiveTimerProvider);
-    final isTimerRunning = notifier.isTimerRunning;
     final showPlayPause = durationSeconds > 0 || isTimerRunning;
 
     return Column(
@@ -47,7 +49,7 @@ class CallStatusBar extends ConsumerWidget {
               .read(notesFieldHintTickProvider.notifier)
               .requestHintFlash(),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 0),
         showTimerAsync.when(
           data: (showActiveTimer) {
             Widget timerContent;
@@ -88,25 +90,32 @@ class CallStatusBar extends ConsumerWidget {
             }
             return Row(
               mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 timerContent,
-                if (showPlayPause) ...[
-                  const SizedBox(width: 8),
-                  IconButton(
+                const SizedBox(width: 8),
+                // Δεσμεύει χώρο ώστε να μη μετακινείται η διάταξη όταν εμφανίζεται το Play/Pause.
+                Visibility(
+                  visible: showPlayPause,
+                  maintainSize: true,
+                  maintainAnimation: true,
+                  maintainState: true,
+                  child: IconButton(
                     icon: Icon(
                       isTimerRunning ? Icons.pause : Icons.play_arrow,
                       size: 24,
                     ),
                     onPressed: () {
-                      if (isTimerRunning) {
-                        notifier.stopTimer();
+                      final n = ref.read(callEntryProvider.notifier);
+                      if (n.isTimerRunning) {
+                        n.stopTimer();
                       } else {
-                        notifier.startTimerOnce();
+                        n.startTimerOnce();
                       }
                     },
                     tooltip: isTimerRunning ? 'Παύση χρονομέτρου' : 'Συνέχιση χρονομέτρου',
                   ),
-                ],
+                ),
               ],
             );
           },
@@ -181,7 +190,7 @@ class _PendingCheckboxRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final row = Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         Checkbox(
           value: isPending,

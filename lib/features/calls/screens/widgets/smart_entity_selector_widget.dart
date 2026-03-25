@@ -795,7 +795,6 @@ class _PhoneFieldState extends State<_PhoneField> {
                           autofocus: true,
                           spellCheckConfiguration: platformSpellCheckConfiguration,
                           decoration: InputDecoration(
-                            hintText: 'π.χ. 2345',
                             hintStyle: TextStyle(
                               color: Theme.of(context).hintColor,
                             ),

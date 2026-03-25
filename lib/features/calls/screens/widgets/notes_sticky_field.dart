@@ -73,7 +73,7 @@ class NotesStickyFieldState extends ConsumerState<NotesStickyField> {
         return AnimatedContainer(
           duration: const Duration(milliseconds: 120),
           curve: Curves.easeInOut,
-          padding: const EdgeInsets.all(12),
+          padding: const EdgeInsets.all(6), // Το ανοιχτό κίτρινο «δαχτυλίδι» γύρω από το πιο σκούρο μέρος του πεδίου σημειώσεων
           decoration: BoxDecoration(
             color: const Color(0xFFFFF9C4),
             borderRadius: BorderRadius.circular(4),
@@ -97,6 +97,10 @@ class NotesStickyFieldState extends ConsumerState<NotesStickyField> {
               controller: _controller,
               decoration: const InputDecoration(
                 hintText: 'Σημειώσεις...',
+                hintStyle: TextStyle(
+                  color: Colors.grey,
+                  fontStyle: FontStyle.italic,
+                ),
                 border: InputBorder.none,
                 enabledBorder: InputBorder.none,
                 focusedBorder: InputBorder.none,

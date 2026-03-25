@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../provider/call_entry_provider.dart';
 import '../../provider/call_header_provider.dart';
 import '../../provider/lookup_provider.dart';
+import '../../../../core/utils/search_text_normalizer.dart';
 import 'smart_entity_selector_widget.dart';
 
 /// Ελάχιστο πλάτος γραμμής πεδίων ώστε να χωράει Τηλ. + Καλών. + Τμήμα + Εξοπλισμός + × + +.
@@ -166,6 +167,53 @@ class _CallHeaderFormState extends ConsumerState<CallHeaderForm> {
                     onPressed: () async {
                       final messenger = ScaffoldMessenger.of(context);
                       final currentHeader = ref.read(callHeaderProvider);
+                      final notifier = ref.read(callHeaderProvider.notifier);
+
+                      if (currentHeader.needsOrphanDepartmentQuickAdd) {
+                        final preview = await notifier.quickAddOrphanToDepartment();
+                        if (preview == null) return;
+                        if (preview.requiresConfirmation) {
+                          if (!context.mounted) return;
+                          final approve = await showDialog<bool>(
+                            context: context,
+                            builder: (dialogContext) {
+                              return AlertDialog(
+                                title: const Text('Σύγκρουση δεδομένων'),
+                                content: Text(preview.message),
+                                actions: [
+                                  TextButton(
+                                    onPressed: () =>
+                                        Navigator.of(dialogContext).pop(false),
+                                    child: const Text('Ακύρωση'),
+                                  ),
+                                  FilledButton(
+                                    onPressed: () =>
+                                        Navigator.of(dialogContext).pop(true),
+                                    child: const Text('Ναι, Προσθήκη'),
+                                  ),
+                                ],
+                              );
+                            },
+                          );
+                          if (approve != true) return;
+                          final applied = await notifier.quickAddOrphanToDepartment(
+                            forceSharedOnConflict: true,
+                          );
+                          if (context.mounted && applied?.successMessage != null) {
+                            messenger.showSnackBar(
+                              SnackBar(content: Text(applied!.successMessage!)),
+                            );
+                          }
+                          return;
+                        }
+                        if (context.mounted && preview.successMessage != null) {
+                          messenger.showSnackBar(
+                            SnackBar(content: Text(preview.successMessage!)),
+                          );
+                        }
+                        return;
+                      }
+
                       final caller = currentHeader.selectedCaller;
                       final departmentText = currentHeader.departmentText
                           .trim();
@@ -174,17 +222,26 @@ class _CallHeaderFormState extends ConsumerState<CallHeaderForm> {
                           : null;
                       var updatePrimaryDepartment = false;
 
-                      if (caller?.id != null &&
-                          selectedDepartment?.id != null &&
-                          selectedDepartment!.id != caller!.departmentId) {
+                      final oldDeptText = (caller?.departmentName ?? '')
+                          .trim();
+                      final nextDeptNorm =
+                          SearchTextNormalizer.normalizeForSearch(departmentText);
+                      final oldDeptNorm =
+                          SearchTextNormalizer.normalizeForSearch(oldDeptText);
+                      final wantsDeptChange = caller?.id != null &&
+                          departmentText.isNotEmpty &&
+                          (selectedDepartment?.id != caller?.departmentId) &&
+                          (nextDeptNorm.isNotEmpty && nextDeptNorm != oldDeptNorm);
+
+                      if (wantsDeptChange) {
                         final askUpdate = await showDialog<bool>(
                           context: context,
                           builder: (dialogContext) {
                             return AlertDialog(
                               title: const Text('Αλλαγή κύριου τμήματος'),
                               content: Text(
-                                'Ο χρήστης έχει κύριο τμήμα "${caller.departmentName ?? 'Χωρίς τμήμα'}". '
-                                'Να γίνει νέο κύριο τμήμα του χρήστη το "${selectedDepartment.name}";',
+                                'Ο χρήστης έχει κύριο τμήμα "${caller!.departmentName ?? 'Χωρίς τμήμα'}". '
+                                'Να γίνει νέο κύριο τμήμα του χρήστη το "${selectedDepartment?.name ?? departmentText}";',
                               ),
                               actions: [
                                 TextButton(
@@ -204,7 +261,6 @@ class _CallHeaderFormState extends ConsumerState<CallHeaderForm> {
                         updatePrimaryDepartment = askUpdate ?? false;
                       }
 
-                      final notifier = ref.read(callHeaderProvider.notifier);
                       final msg = await notifier.associateCurrentIfNeeded(
                         updatePrimaryDepartment: updatePrimaryDepartment,
                       );

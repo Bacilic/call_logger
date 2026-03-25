@@ -625,6 +625,5 @@ class EquipmentDirectoryNotifier extends Notifier<EquipmentDirectoryState> {
   }
 }
 
-final equipmentDirectoryProvider =
-    NotifierProvider.autoDispose<EquipmentDirectoryNotifier,
-        EquipmentDirectoryState>(EquipmentDirectoryNotifier.new);
+final equipmentDirectoryProvider = NotifierProvider<EquipmentDirectoryNotifier,
+    EquipmentDirectoryState>(EquipmentDirectoryNotifier.new);

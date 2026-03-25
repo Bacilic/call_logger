@@ -22,6 +22,7 @@ class UserFormDialog extends ConsumerStatefulWidget {
     required this.notifier,
     this.isClone = false,
     this.focusedField,
+    this.onSaved,
   });
 
   final UserModel? initialUser;
@@ -30,6 +31,7 @@ class UserFormDialog extends ConsumerStatefulWidget {
   /// True = αντίγραφο: φόρμα προ-συμπληρωμένη, κουμπί «Προσθήκη».
   final bool isClone;
   final String? focusedField;
+  final VoidCallback? onSaved;
 
   @override
   ConsumerState<UserFormDialog> createState() => _UserFormDialogState();
@@ -310,7 +312,8 @@ class _UserFormDialogState extends ConsumerState<UserFormDialog> {
       ref.invalidate(lookupServiceProvider);
       await ref.read(lookupServiceProvider.future);
       if (!mounted) return;
-      Navigator.of(context).pop();
+      widget.onSaved?.call();
+      Navigator.of(context).pop(true);
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
@@ -335,7 +338,8 @@ class _UserFormDialogState extends ConsumerState<UserFormDialog> {
       ref.invalidate(lookupServiceProvider);
       await ref.read(lookupServiceProvider.future);
       if (!mounted) return;
-      Navigator.of(context).pop();
+      widget.onSaved?.call();
+      Navigator.of(context).pop(true);
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('Αποθηκεύτηκε')));
@@ -350,7 +354,8 @@ class _UserFormDialogState extends ConsumerState<UserFormDialog> {
     ref.invalidate(lookupServiceProvider);
     await ref.read(lookupServiceProvider.future);
     if (!mounted) return;
-    Navigator.of(context).pop();
+    widget.onSaved?.call();
+    Navigator.of(context).pop(true);
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Αποθηκεύτηκε')),
     );

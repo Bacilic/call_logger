@@ -33,6 +33,10 @@ extension TaskStatusX on TaskStatus {
 
 /// Μοντέλο εργασίας (πίνακας tasks).
 class Task {
+  static const String quickAddTag = '[QUICK_ADD]';
+  static const String quickAddCategoryEn = 'Quick Add';
+  static const String quickAddCategoryEl = 'Γρήγορη προσθήκη';
+
   Task({
     this.id,
     this.callId,
@@ -255,6 +259,25 @@ class Task {
   bool get isSnoozed =>
       snoozeUntil != null &&
       (_parseDateTime(snoozeUntil)?.isAfter(DateTime.now()) ?? false);
+
+  bool get isQuickAdd => description?.contains(quickAddTag) ?? false;
+
+  String get cleanDescription {
+    final raw = description;
+    if (raw == null) return '';
+    return raw.replaceAll(quickAddTag, '').replaceAll(RegExp(r'\s+'), ' ').trim();
+  }
+
+  String get displayTitle {
+    var t = title;
+    if (t.contains(quickAddTag)) {
+      t = t.replaceAll(quickAddTag, '');
+    }
+    if (t.contains(quickAddCategoryEn)) {
+      t = t.replaceAll(quickAddCategoryEn, quickAddCategoryEl);
+    }
+    return t.replaceAll(RegExp(r'\s+'), ' ').trim();
+  }
 }
 
 class TaskSnoozeEntry {

@@ -1,23 +1,27 @@
 import 'package:flutter/material.dart';
 
-/// Ρυθμίσεις αναβολών και εργάσιμων ωρών (αποθήκευση σε `app_settings`).
-class TaskSnoozeConfig {
-  const TaskSnoozeConfig({
+/// Γενικές ρυθμίσεις εκκρεμοτήτων (αποθήκευση σε `app_settings`).
+class TaskSettingsConfig {
+  const TaskSettingsConfig({
     required this.dayEndTime,
     required this.nextBusinessHour,
     required this.skipWeekends,
     required this.defaultSnoozeOption,
     required this.maxSnoozeDays,
+    this.autoCloseQuickAdds = true,
   });
 
-  /// Κλειδί πίνακα `app_settings` για JSON ρυθμίσεων.
-  static const String appSettingsKey = 'task_snooze_config';
+  /// Νέο κλειδί πίνακα `app_settings` για JSON ρυθμίσεων.
+  static const String appSettingsKey = 'task_settings_config';
+
+  /// Παλαιό κλειδί (συμβατότητα με υπάρχοντα installations).
+  static const String legacyAppSettingsKey = 'task_snooze_config';
 
   static const String kOneHour = 'one_hour';
   static const String kDayEnd = 'day_end';
   static const String kNextBusiness = 'next_business';
 
-  /// Όρισμα `option` στο [TaskService.calculateNextDueDate]: χρήση [defaultSnoozeOption].
+  /// Όρισμα `option` στο `TaskService.calculateNextDueDate`: χρήση [defaultSnoozeOption].
   static const String kOptionDefault = 'default';
 
   final TimeOfDay dayEndTime;
@@ -28,13 +32,17 @@ class TaskSnoozeConfig {
   final String defaultSnoozeOption;
   final int maxSnoozeDays;
 
-  factory TaskSnoozeConfig.defaultConfig() {
-    return TaskSnoozeConfig(
-      dayEndTime: const TimeOfDay(hour: 13, minute: 0),
-      nextBusinessHour: const TimeOfDay(hour: 8, minute: 0),
+  /// Αυτόματο κλείσιμο εκκρεμοτήτων γρήγορης προσθήκης μετά από επιτυχή επεξεργασία.
+  final bool autoCloseQuickAdds;
+
+  factory TaskSettingsConfig.defaultConfig() {
+    return const TaskSettingsConfig(
+      dayEndTime: TimeOfDay(hour: 13, minute: 0),
+      nextBusinessHour: TimeOfDay(hour: 8, minute: 0),
       skipWeekends: true,
       defaultSnoozeOption: kOneHour,
       maxSnoozeDays: 365,
+      autoCloseQuickAdds: true,
     );
   }
 
@@ -45,13 +53,16 @@ class TaskSnoozeConfig {
       'skipWeekends': skipWeekends,
       'defaultSnoozeOption': defaultSnoozeOption,
       'maxSnoozeDays': maxSnoozeDays,
+      'autoCloseQuickAdds': autoCloseQuickAdds,
     };
   }
 
-  factory TaskSnoozeConfig.fromMap(Map<String, dynamic> map) {
+  factory TaskSettingsConfig.fromMap(Map<String, dynamic> map) {
     final option = map['defaultSnoozeOption'] as String? ?? kOneHour;
     final validOption = _normalizeOption(option);
-    return TaskSnoozeConfig(
+    final rawAuto = map['autoCloseQuickAdds'];
+    final autoClose = rawAuto is bool ? rawAuto : true;
+    return TaskSettingsConfig(
       dayEndTime: _timeFromMap(map['dayEndTime']) ??
           const TimeOfDay(hour: 13, minute: 0),
       nextBusinessHour: _timeFromMap(map['nextBusinessHour']) ??
@@ -61,17 +72,19 @@ class TaskSnoozeConfig {
           : true,
       defaultSnoozeOption: validOption,
       maxSnoozeDays: _clampMaxDays(_readInt(map['maxSnoozeDays'], 365)),
+      autoCloseQuickAdds: autoClose,
     );
   }
 
-  TaskSnoozeConfig copyWith({
+  TaskSettingsConfig copyWith({
     TimeOfDay? dayEndTime,
     TimeOfDay? nextBusinessHour,
     bool? skipWeekends,
     String? defaultSnoozeOption,
     int? maxSnoozeDays,
+    bool? autoCloseQuickAdds,
   }) {
-    return TaskSnoozeConfig(
+    return TaskSettingsConfig(
       dayEndTime: dayEndTime ?? this.dayEndTime,
       nextBusinessHour: nextBusinessHour ?? this.nextBusinessHour,
       skipWeekends: skipWeekends ?? this.skipWeekends,
@@ -81,6 +94,7 @@ class TaskSnoozeConfig {
       maxSnoozeDays: maxSnoozeDays != null
           ? _clampMaxDays(maxSnoozeDays)
           : this.maxSnoozeDays,
+      autoCloseQuickAdds: autoCloseQuickAdds ?? this.autoCloseQuickAdds,
     );
   }
 
@@ -121,3 +135,4 @@ class TaskSnoozeConfig {
   /// Για επιλογή αναβολής από UI (επιτρέπει και άγνωστα strings → [kOneHour]).
   static String normalizeSnoozeOption(String v) => _normalizeOption(v);
 }
+

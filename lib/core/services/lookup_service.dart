@@ -15,6 +15,40 @@ class LookupResult {
   final List<EquipmentModel> equipment;
 }
 
+class PhoneUsageCheck {
+  const PhoneUsageCheck({
+    required this.phone,
+    required this.userNames,
+    this.departmentId,
+    this.departmentName,
+  });
+
+  final String phone;
+  final List<String> userNames;
+  final int? departmentId;
+  final String? departmentName;
+
+  bool get hasUserOwners => userNames.isNotEmpty;
+  bool get hasDepartmentLocation => departmentId != null;
+}
+
+class EquipmentUsageCheck {
+  const EquipmentUsageCheck({
+    required this.code,
+    required this.userNames,
+    this.departmentId,
+    this.departmentName,
+  });
+
+  final String code;
+  final List<String> userNames;
+  final int? departmentId;
+  final String? departmentName;
+
+  bool get hasUserOwners => userNames.isNotEmpty;
+  bool get hasDepartmentLocation => departmentId != null;
+}
+
 /// Υπηρεσία in-memory lookup: φορτώνει Users/Equipment μία φορά, search στη μνήμη.
 /// Singleton ώστε UserModel.departmentName να χρησιμοποιεί το ίδιο φορτωμένο cache.
 class LookupService {
@@ -36,6 +70,8 @@ class LookupService {
 
   List<DepartmentModel> departments = [];
   Map<int, String> departmentIdToName = {};
+  Map<int, List<String>> _departmentDirectPhones = {};
+  final Map<String, int?> _phoneDepartmentByNumber = {};
 
   /// Λίστα χρηστών (μετά loadFromDatabase). Για dropdown κατόχου σε φόρμες.
   List<UserModel> get users => List.unmodifiable(_users);
@@ -44,6 +80,8 @@ class LookupService {
   void resetForReload() {
     _loaded = false;
     _loadedDepartments = false;
+    _departmentDirectPhones = {};
+    _phoneDepartmentByNumber.clear();
   }
 
   /// Φόρτωση από βάση ΜΟΝΟ μία φορά κατά το init (ή μετά resetForReload).
@@ -92,10 +130,20 @@ class LookupService {
     if (_loadedDepartments) return;
     final db = await DatabaseHelper.instance.database;
     final maps = await db.query('departments');
+    _departmentDirectPhones =
+        await DatabaseHelper.instance.getDepartmentDirectPhonesMap();
+    _phoneDepartmentByNumber
+      ..clear()
+      ..addAll(_buildPhoneDepartmentIndex(_departmentDirectPhones));
     departments.clear();
     departmentIdToName.clear();
     for (final map in maps) {
-      final dep = DepartmentModel.fromMap(map);
+      final base = DepartmentModel.fromMap(map);
+      final did = base.id;
+      final direct = did != null ? _departmentDirectPhones[did] : null;
+      final dep = (direct != null && direct.isNotEmpty)
+          ? base.copyWith(directPhones: List<String>.from(direct))
+          : base;
       departments.add(dep);
       if (dep.id != null) {
         departmentIdToName[dep.id!] = dep.isDeleted
@@ -366,12 +414,127 @@ class LookupService {
         }
       }
     }
+    final direct = _departmentDirectPhones[departmentId] ?? const <String>[];
+    for (final phone in direct) {
+      final trimmed = phone.trim();
+      if (trimmed.isEmpty) continue;
+      if (seen.add(trimmed)) {
+        phones.add(trimmed);
+      }
+    }
     phones.sort((a, b) => a.compareTo(b));
     return phones;
   }
 
+  /// Βρίσκει τμήμα από “ορφανό” τηλέφωνο που έχει ανατεθεί απευθείας σε τμήμα.
+  /// - Επιστρέφει null σε μηδενικό ή αμφίσημο ταίριασμα (π.χ. πολλά τμήματα).
+  DepartmentModel? getDepartmentByPhone(String phone) {
+    final digits = _digitsOnly(phone);
+    if (digits.length < 3) return null;
+    final matchedDeptIds = <int>{};
+    _departmentDirectPhones.forEach((deptId, list) {
+      for (final p in list) {
+        final pd = _digitsOnly(p);
+        if (pd.isEmpty) continue;
+        if (pd.contains(digits) || pd.startsWith(digits)) {
+          matchedDeptIds.add(deptId);
+          break;
+        }
+      }
+    });
+    if (matchedDeptIds.length != 1) return null;
+    final id = matchedDeptIds.first;
+    for (final d in departments) {
+      if (d.id == id && !d.isDeleted) return d;
+    }
+    return null;
+  }
+
   static String _digitsOnly(String s) {
     return s.replaceAll(RegExp(r'[^0-9]'), '');
+  }
+
+  Map<String, int?> _buildPhoneDepartmentIndex(
+    Map<int, List<String>> byDepartment,
+  ) {
+    final out = <String, int?>{};
+    byDepartment.forEach((deptId, phones) {
+      for (final raw in phones) {
+        final key = raw.trim();
+        if (key.isEmpty) continue;
+        final existing = out[key];
+        if (existing == null) {
+          out[key] = deptId;
+        } else if (existing != deptId) {
+          // Αμφίσημο: ίδιο τηλέφωνο σε πολλαπλά τμήματα.
+          out[key] = null;
+        }
+      }
+    });
+    return out;
+  }
+
+  PhoneUsageCheck checkPhoneUsage(String phone) {
+    final raw = phone.trim();
+    final digits = _digitsOnly(raw);
+    final owners = <String>[];
+    for (final u in _users) {
+      if (u.isDeleted) continue;
+      final has = u.phones.any((p) {
+        final pt = p.trim();
+        if (pt.isEmpty) return false;
+        if (pt == raw) return true;
+        final pd = _digitsOnly(pt);
+        return digits.isNotEmpty && pd.isNotEmpty && pd == digits;
+      });
+      if (!has) continue;
+      final name = (u.name ?? '').trim();
+      if (name.isNotEmpty) owners.add(name);
+    }
+    int? depId = _phoneDepartmentByNumber[raw];
+    if (depId == null && digits.isNotEmpty) {
+      for (final entry in _phoneDepartmentByNumber.entries) {
+        final d = _digitsOnly(entry.key);
+        if (d.isNotEmpty && d == digits) {
+          depId = entry.value;
+          break;
+        }
+      }
+    }
+    return PhoneUsageCheck(
+      phone: raw,
+      userNames: owners,
+      departmentId: depId,
+      departmentName: departmentIdToName[depId],
+    );
+  }
+
+  EquipmentUsageCheck checkEquipmentUsage(String code) {
+    final raw = code.trim();
+    final target = SearchTextNormalizer.normalizeForSearch(raw);
+    EquipmentModel? match;
+    for (final e in _equipment) {
+      if (e.isDeleted) continue;
+      final c = SearchTextNormalizer.normalizeForSearch(e.code ?? '');
+      if (c.isNotEmpty && c == target) {
+        match = e;
+        break;
+      }
+    }
+    final owners = <String>[];
+    if (match?.id != null) {
+      for (final u in findUsersForEquipment(match!.id!)) {
+        final name = (u.name ?? '').trim();
+        if (name.isNotEmpty) owners.add(name);
+      }
+    }
+    final depId = match?.departmentId;
+    return EquipmentUsageCheck(
+      code: raw,
+      userNames: owners,
+      departmentId: depId,
+      departmentName: departmentIdToName[depId],
+    );
   }
 
   /// Συνενωμένα ψηφία όλων των τηλεφώνων χρήστη (για ταίριασμα prefix / contains).

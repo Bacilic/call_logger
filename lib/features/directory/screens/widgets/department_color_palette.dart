@@ -56,7 +56,7 @@ const List<Color> kDepartmentPaletteColors = [
   Color(0xFFFFFFFF),
 ];
 
-/// Οπτική επιλογή χρώματος τμήματος (χωρίς χειροκίνητο hex).
+/// Οπτική επιλογή χρώματος τμήματος· το hex (αν χρειάζεται) μπαίνει στη γονική φόρμα.
 class DepartmentColorPalette extends StatelessWidget {
   const DepartmentColorPalette({
     super.key,

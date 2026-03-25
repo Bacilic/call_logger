@@ -24,6 +24,7 @@ class CallEntryState {
     this.category = '',
     this.isPending = false,
     this.durationSeconds = 0,
+    this.isCallTimerRunning = false,
   });
 
   final String internalDigits;
@@ -33,6 +34,8 @@ class CallEntryState {
   final String category;
   final bool isPending;
   final int durationSeconds;
+  /// Συγχρονισμένο με το ενεργό `Timer` — για `ref.watch(select(...))` όταν η διάρκεια δεν αλλάζει (παύση).
+  final bool isCallTimerRunning;
 
   CallEntryState copyWith({
     String? internalDigits,
@@ -42,6 +45,7 @@ class CallEntryState {
     String? category,
     bool? isPending,
     int? durationSeconds,
+    bool? isCallTimerRunning,
   }) {
     return CallEntryState(
       internalDigits: internalDigits ?? this.internalDigits,
@@ -51,6 +55,7 @@ class CallEntryState {
       category: category ?? this.category,
       isPending: isPending ?? this.isPending,
       durationSeconds: durationSeconds ?? this.durationSeconds,
+      isCallTimerRunning: isCallTimerRunning ?? this.isCallTimerRunning,
     );
   }
 }
@@ -82,13 +87,19 @@ class CallEntryNotifier extends Notifier<CallEntryState> {
       if (!ref.mounted) return;
       state = state.copyWith(durationSeconds: state.durationSeconds + 1);
     });
-    state = state.copyWith(durationSeconds: state.durationSeconds);
+    state = state.copyWith(
+      durationSeconds: state.durationSeconds,
+      isCallTimerRunning: true,
+    );
   }
 
   void stopTimer() {
     _timer?.cancel();
     _timer = null;
-    state = state.copyWith(durationSeconds: state.durationSeconds);
+    state = state.copyWith(
+      durationSeconds: state.durationSeconds,
+      isCallTimerRunning: false,
+    );
   }
 
   void setDurationManually(int seconds) {
@@ -135,7 +146,18 @@ class CallEntryNotifier extends Notifier<CallEntryState> {
     if (!ref.read(callHeaderProvider).canSubmitCall) {
       return false;
     }
-    final header = ref.read(callHeaderProvider);
+    var header = ref.read(callHeaderProvider);
+    final lookupForAssociation = ref.read(lookupServiceProvider).value?.service;
+    if (header.needsAssociation(lookupForAssociation)) {
+      final associationMessage = await ref
+          .read(callHeaderProvider.notifier)
+          .associateCurrentIfNeeded();
+      if (associationMessage != null &&
+          associationMessage.startsWith('Σφάλμα αποθήκευσης:')) {
+        debugPrint('submitCall association error: $associationMessage');
+      }
+      header = ref.read(callHeaderProvider);
+    }
     final user = header.selectedCaller;
     final notes = state.notes.trim();
     final callerId = header.selectedCaller?.id;
@@ -246,7 +268,18 @@ class CallEntryNotifier extends Notifier<CallEntryState> {
 
   /// Καταχώρηση μόνο εκκρεμότητας (task) χωρίς εισαγωγή κλήσης.
   Future<bool> submitOnlyPending() async {
-    final header = ref.read(callHeaderProvider);
+    var header = ref.read(callHeaderProvider);
+    final lookupForAssociation = ref.read(lookupServiceProvider).value?.service;
+    if (header.needsAssociation(lookupForAssociation)) {
+      final associationMessage = await ref
+          .read(callHeaderProvider.notifier)
+          .associateCurrentIfNeeded();
+      if (associationMessage != null &&
+          associationMessage.startsWith('Σφάλμα αποθήκευσης:')) {
+        debugPrint('submitOnlyPending association error: $associationMessage');
+      }
+      header = ref.read(callHeaderProvider);
+    }
     final user = header.selectedCaller;
     final callerTextRaw = header.callerDisplayText.trim();
     final callerName =
@@ -302,6 +335,7 @@ class CallEntryNotifier extends Notifier<CallEntryState> {
       category: '',
       isPending: false,
       durationSeconds: 0,
+      isCallTimerRunning: false,
     );
   }
 }
