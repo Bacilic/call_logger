@@ -75,6 +75,7 @@ flutter:
 
   assets:
     - assets/
+    - assets/dictionaries/greek_core_60k.txt
     - assets/anydesk_seeklogo.png
     - assets/vnc_viewer.png
     # Inter για widget tests με GoogleFonts.config.allowRuntimeFetching = false

@@ -7,6 +7,7 @@ import 'package:path/path.dart' as p;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import '../config/app_config.dart';
+import '../services/dictionary_service.dart';
 import '../services/settings_service.dart';
 import '../utils/department_display_utils.dart';
 import '../utils/name_parser.dart';
@@ -326,6 +327,18 @@ class DatabaseHelper {
     if (oldVersion < 5 && newVersion >= 5) {
       await _migratePhonesDepartmentColumn(db);
     }
+    if (oldVersion < 6 && newVersion >= 6) {
+      await _migrateUserDictionaryTable(db);
+    }
+  }
+
+  /// Πίνακας προσωπικών λέξεων ορθογραφίας (Windows / custom lexicon).
+  static Future<void> _migrateUserDictionaryTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS user_dictionary (
+        word TEXT PRIMARY KEY
+      )
+    ''');
   }
 
   /// Προσθέτει στήλες τμήμα/τοποθεσία στον πίνακα `equipment` αν λείπουν (idempotent).
@@ -914,6 +927,34 @@ class DatabaseHelper {
       'key': key,
       'value': value,
     }, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  /// Προσθήκη λέξης στο προσωπικό λεξικό ορθογραφίας ([DictionaryService.canonicalLexiconKey]).
+  Future<void> insertUserWord(String word) async {
+    final key = DictionaryService.canonicalLexiconKey(word);
+    if (key.length < 2) return;
+    final db = await database;
+    await db.insert(
+      AppConfig.userDictionaryTable,
+      {'word': key},
+      conflictAlgorithm: ConflictAlgorithm.ignore,
+    );
+  }
+
+  Future<void> addUserWord(String word) => insertUserWord(word);
+
+  /// Όλες οι προσωπικές λέξεις (κανονικοποιημένα κλειδιά), ταξινομημένες.
+  Future<List<String>> getUserWords() async {
+    final db = await database;
+    final rows = await db.query(
+      AppConfig.userDictionaryTable,
+      columns: ['word'],
+      orderBy: 'word COLLATE NOCASE',
+    );
+    return rows
+        .map((r) => (r['word'] as String?)?.trim() ?? '')
+        .where((w) => w.isNotEmpty)
+        .toList();
   }
 
   /// True αν υπάρχει ενεργό τμήμα με ίδιο κανονικοποιημένο όνομα

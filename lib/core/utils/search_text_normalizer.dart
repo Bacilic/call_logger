@@ -25,6 +25,27 @@ class SearchTextNormalizer {
         .trim();
   }
 
+  /// Κανονικοποίηση λεξικής μορφής: πεζά, χωρίς ελληνικά διακριτικά, trim.
+  ///
+  /// Δεν μετατρέπει `underscore` σε κενό (σε αντίθεση με [normalizeForSearch])·
+  /// για λεξικό / IT όρους όπως `snake_case`.
+  static String normalizeDictionaryForm(String value) {
+    return value
+        .toLowerCase()
+        .replaceAll('ά', 'α')
+        .replaceAll('έ', 'ε')
+        .replaceAll('ή', 'η')
+        .replaceAll('ί', 'ι')
+        .replaceAll('ϊ', 'ι')
+        .replaceAll('ΐ', 'ι')
+        .replaceAll('ό', 'ο')
+        .replaceAll('ύ', 'υ')
+        .replaceAll('ϋ', 'υ')
+        .replaceAll('ΰ', 'υ')
+        .replaceAll('ώ', 'ω')
+        .trim();
+  }
+
   /// Ελέγχει αν ένα κείμενο ταιριάζει με ήδη κανονικοποιημένο query.
   ///
   /// Κανόνες:

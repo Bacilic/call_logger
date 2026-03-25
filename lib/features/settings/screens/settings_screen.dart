@@ -43,6 +43,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   bool _showImportExcelButton = false;
   bool _showActiveTimer = true;
   bool _showAnyDeskRemote = true;
+  bool _enableSpellCheck = true;
   bool _vncPasswordObscure = true;
 
   final TextEditingController _vncPathController = TextEditingController();
@@ -109,6 +110,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       final showImport = await _settings.getShowImportExcelButton();
       final showActiveTimer = await _settings.getShowActiveTimer();
       final showAnyDeskRemote = await _settings.getShowAnyDeskRemote();
+      final enableSpellCheck = await _settings.getEnableSpellCheck();
       final vncPath = await _settings.getVncPath();
       final vncPassword = await _settings.getVncPassword();
       final anydeskPath = await _settings.getAnydeskPath();
@@ -134,6 +136,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           _showImportExcelButton = showImport;
           _showActiveTimer = showActiveTimer;
           _showAnyDeskRemote = showAnyDeskRemote;
+          _enableSpellCheck = enableSpellCheck;
           _isLoadingPath = false;
         });
       }
@@ -835,6 +838,18 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               title: const Text('Εμφάνιση κουμπιού AnyDesk'),
               subtitle: const Text(
                 'Χρησιμοποιείται σπάνια (1 φορά ανά 2 μήνες) – απενεργοποίησέ το για καθαρότερη διεπαφή.',
+              ),
+            ),
+            SwitchListTile(
+              value: _enableSpellCheck,
+              onChanged: (value) async {
+                await _settings.setEnableSpellCheck(value);
+                if (mounted) setState(() => _enableSpellCheck = value);
+                ref.invalidate(enableSpellCheckProvider);
+              },
+              title: const Text('Ορθογραφικός έλεγχος σημειώσεων'),
+              subtitle: const Text(
+                'Ενσωματωμένο λεξικό (ελληνικά + IT)· σημαντικό σε Windows όπου δεν υπάρχει εγγενής έλεγχος.',
               ),
             ),
             SwitchListTile(

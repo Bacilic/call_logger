@@ -15,3 +15,7 @@ final showAnyDeskRemoteProvider =
 /// Εμφάνιση badge πλήθους εκκρεμοτήτων στο μενού. Invalidate μετά από Ρυθμίσεις.
 final showTasksBadgeProvider =
     FutureProvider<bool>((ref) => SettingsService().getShowTasksBadge());
+
+/// Ορθογραφικός έλεγχος πεδίου σημειώσεων. Invalidate μετά από Ρυθμίσεις.
+final enableSpellCheckProvider =
+    FutureProvider<bool>((ref) => SettingsService().getEnableSpellCheck());

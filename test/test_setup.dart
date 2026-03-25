@@ -174,6 +174,7 @@ List<Override> callLoggerTestProviderOverrides() {
       (ref) async => AppInitResult(
         result: DatabaseInitResult.success(),
         isLocalDevMode: true,
+        spellCheckReady: true,
       ),
     ),
     lookupServiceProvider.overrideWith((ref) async {

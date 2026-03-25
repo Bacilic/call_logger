@@ -1,0 +1,899 @@
+# IT Support & υποδομή — συμπληρώματα λεξικού (ένα token ανά γραμμή, # σχόλιο)
+domain
+controller
+εκκρεμότητα
+εκκρεμότητες
+vnc
+VNC
+active directory
+activedirectory
+ActiveDirectory
+rdp
+RDP
+vpn
+VPN
+dhcp
+DHCP
+dns
+DNS
+ldap
+LDAP
+sso
+SSO
+firewall
+switches
+switch
+router
+routers
+vlan
+WLAN
+wlan
+lan
+WAN
+wan
+nat
+NAT
+tcpip
+tcp
+udp
+ip
+ipv4
+ipv6
+subnet
+gateway
+προεπιλογή
+proxy
+reverse-proxy
+reverse_proxy
+loadbalancer
+load balancer
+kubernetes
+docker
+container
+hypervisor
+vmware
+esxi
+proxmox
+hyper-v
+hyperv
+azure
+aws
+gcp
+saas
+paas
+iaas
+sla
+slo
+rto
+rpo
+backup
+restore
+replication
+snapshot
+clone
+ticketing
+ticket
+escalation
+remedy
+jira
+servicenow
+confluence
+sharepoint
+exchange
+outlook
+teams
+skype
+onedrive
+intune
+entra
+azuread
+okta
+mfa
+2fa
+totp
+otp
+rbac
+acl
+permissions
+credential
+credentials
+παραβίαση
+patching
+patch
+rollup
+kb
+CVE
+vulnerability
+malware
+antivirus
+defender
+edr
+siem
+soar
+ids
+ips
+waf
+dmz
+pkcs
+tls
+ssl
+https
+http
+cert
+certificate
+letsencrypt
+κεραία
+wifi
+access point
+accesspoint
+cabling
+rack
+PDU
+ups
+προβολέας
+printer
+εκτυπωτής
+scanner
+MFP
+workstation
+laptop
+desktop
+thin client
+thinclient
+BYOD
+mobile
+tablet
+smartphone
+iphone
+android
+mdm
+uem
+BIOS
+UEFI
+imaging
+clonezilla
+PXE
+WDS
+MECM
+sccm
+gpo
+group policy
+grouppolicy
+admx
+OU
+forest
+trust
+kerberos
+ntlm
+sid
+san
+nas
+iscsi
+fibre channel
+fibrechannel
+SAN
+raid
+jbod
+ssd
+hdd
+nvme
+ram
+επεξεργαστής
+μνήμη
+motherboard
+psu
+bios update
+chipset
+driver
+drivers
+firmware
+bios
+bluescreen
+BSOD
+dmp
+minidump
+windbg
+συμβάν
+συμβάντα
+eventviewer
+event viewer
+performance monitor
+perfmon
+taskmanager
+cmd
+powershell
+pwsh
+wsl
+bash
+registry
+regedit
+χρήστης
+τοπικός
+τοπικά
+domain user
+κωδικός
+κωδικοί
+αλλαγή κωδικού
+λήξη κωδικού
+account lockout
+lockout
+MIM
+pam
+bastion
+jump host
+jumphost
+bastion host
+ssh
+telnet
+ρυθμιστής
+Switch
+Stack
+stacking
+LACP
+LAG
+port-channel
+trunk
+access port
+voice vlan
+QoS
+DSCP
+CoS
+MTU
+jumboframe
+STP
+RSTP
+MSTP
+OSPF
+BGP
+routing
+static route
+ασύρματο
+καλώδιο
+πριζοδιακόπτης
+patch panel
+patchpanel
+fiber
+μονοκάναλο
+πολύπλεξη
+ονοματολογία
+hostname
+FQDN
+reverse dns
+nslookup
+dig
+traceroute
+tracert
+ping
+pathping
+netsh
+ipconfig
+ifconfig
+netstat
+wireshark
+tcpdump
+pcap
+διακόπτης
+switchport
+PoE
+console
+serial
+usb
+δίσκος
+εικόνα δίσκου
+επαναφορά
+restore point
+safe mode
+ασφαλής λειτουργία
+chkdsk
+sfc
+dism
+Windows Update
+wsus
+SUS
+antimalware
+quarantine
+false positive
+whitelist
+blacklist
+allowlist
+blocklist
+IOC
+IOA
+TTP
+phishing
+spearphishing
+ransomware
+tabletop
+DRP
+bcp
+failover
+cluster
+always on
+availability group
+replica
+συγχρονισμός
+replication lag
+lag
+latency
+throughput
+bandwidth
+χωρητικότητα
+quota
+throttling
+rate limit
+κωδικοποίηση
+encryption
+BitLocker
+Bitlocker
+EFS
+EFS recovery
+GPG
+PGP
+SMIME
+SMTP
+IMAP
+POP3
+SPF
+DKIM
+DMARC
+spam
+blackhole
+relay
+open relay
+greylisting
+διαχειριζόμενος
+απομακρυσμένη
+απομακρυσμένη σύνδεση
+anydesk
+AnyDesk
+teamviewer
+TeamViewer
+bomgar
+beyondtrust
+citrix
+xenapp
+xendesktop
+horizon
+vmware horizon
+parallels
+πύλη
+portal
+intranet
+extranet
+reverse proxy
+nginx
+apache
+iis
+tomcat
+java
+dotnet
+netcore
+aspnet
+sql server
+sqlserver
+mysql
+mariadb
+postgres
+postgresql
+oracle
+mongodb
+redis
+kafka
+rabbitmq
+mqtt
+api
+rest
+graphql
+soap
+json
+xml
+yaml
+swagger
+openapi
+oauth
+oidc
+saml
+jwt
+jwks
+cors
+csrf
+xss
+sqli
+buffer overflow
+zero-day
+zeroday
+pentest
+χαρτογράφηση
+asset
+assets
+CMDB
+cmdb
+discovery
+inventory
+απογραφή
+lifecycle
+EOL
+EOS
+παραταση
+επέκταση
+επέκτασης
+license
+licensing
+CAL
+subscription
+perpetual
+capacity
+per core
+per socket
+vendor
+δέσμευση
+δεσμεύσεις
+CR
+change request
+RFC
+CAB
+maintenance window
+παράθυρο συντήρησης
+downtime
+outage
+incident
+major incident
+περιστατικό
+postmortem
+RCA
+root cause
+υπαιτιότητα
+correlation
+monitoring
+observability
+metrics
+logs
+traces
+dashboard
+grafana
+prometheus
+elk
+elastic
+kibana
+splunk
+zabbix
+nagios
+snmp
+OID
+MIB
+trap
+syslog
+netflow
+ipfix
+endpoint
+agent
+client
+server
+middleware
+microservice
+monolith
+runbook
+playbook
+ansible
+terraform
+pulumi
+gitops
+cicd
+jenkins
+gitlab
+github
+actions
+artifact
+nexus
+artifactory
+JFrog
+sonarqube
+dependency scan
+sast
+dast
+iast
+container scan
+sbom
+cyclonedx
+spdx
+cve scan
+patch tuesday
+zero touch
+imaging
+autopilot
+intune
+enrollment
+compliance
+conditional access
+risky sign-in
+sign-in
+MAM
+WIP
+DLP
+IRM
+AIP
+labels
+retention
+eDiscovery
+litigation hold
+archiving
+journaling
+δικαιώματα
+δικαιώματα ntfs
+share
+ntfs
+smb
+cifs
+nfs
+afp
+ρόλος
+role
+policy
+πολιτική
+audit
+auditing
+object access
+privileged access
+PIM
+PAM
+break-glass
+emergency access
+cabinet
+datacenter
+ψύξη
+redundant
+UPS test
+bypass
+PDU outlet
+ipmi
+idrac
+ilo
+bmc
+serial-over-lan
+sol
+kvm
+διπλή οθόνη
+dock
+docking
+usb-c
+thunderbolt
+dock station
+bluetooth
+headset
+webcam
+μικρόφωνο
+ηχείο
+σαρωτής
+barcode
+qr
+label printer
+zebra
+κωδικός εξοπλισμού
+εξοπλισμός
+καταχώρηση
+καταχωρήσεις
+υποστήριξη
+τεχνικό
+τεχνική
+παραλήπτης
+αιτών
+αιτήματος
+αιτημάτων
+επίλυση
+χρονοκαθυστέρηση
+χρονοκαθυστερήσεις
+SLA breach
+μετεγκατάσταση
+migration
+cutover
+rollback
+preprod
+prod
+staging
+uat
+dev
+feature flag
+canary
+bluegreen
+canary release
+αρχειοθέτηση
+backup verification
+checksum
+hash
+sha256
+md5
+integrity
+bitrot
+encryption at rest
+encryption in transit
+DAR
+DIT
+απομαγνητοποίηση
+wiping
+sanitize
+disk wipe
+certified destruction
+smart data
+SMART
+bad sector
+reallocated
+pending sector
+temperature
+throttle
+thermal
+bios battery
+cmos
+jumper
+POST
+beep code
+diagnostic
+stress test
+memtest
+benchmark
+baseline
+καλωδίωση
+δομημένη
+patching
+cross-connect
+fiber patch
+LC
+SC
+ST
+SFP
+QSFP
+transceiver
+module
+gbic
+DAC
+AOC
+cat5
+cat6
+cat6a
+cat7
+cat8
+utp
+ftp
+sftp
+scp
+rsync
+robocopy
+xcopy
+dfs
+dfs-r
+replication group
+namespace
+προσωρινά
+cache
+caching
+cdn
+akamai
+cloudflare
+fastly
+waf rule
+bot protection
+rate-based
+geo block
+tenant
+multitenancy
+isolation
+sandbox
+namespace k8s
+helm
+chart
+operator
+CRD
+kubectl
+kubelet
+etcd
+ingress
+service mesh
+istio
+linkerd
+sidecar
+mutual tls
+mtls
+service account
+RBAC k8s
+RBAC
+admission controller
+pod security
+seccomp
+apparmor
+selinux
+auditd
+falco
+sysdig
+trivy
+grype
+cosign
+sigstore
+supply chain
+dependency confusion
+typosquatting
+hardening
+CIS
+benchmarks
+DISA
+STIG
+hardening baseline
+group policy preference
+gpp
+log4j
+spring4shell
+heartbleed
+shellshock
+eternalblue
+mit kerberos
+pass the hash
+Pth
+pass the ticket
+PtT
+golden ticket
+silver ticket
+kerberoasting
+asreproast
+bloodhound
+sharphound
+mimikatz
+lolbins
+living off the land
+phishing-resistant
+FIDO2
+WebAuthn
+yubikey
+smartcard
+PIV
+CAC
+HSM
+KMS
+key vault
+secret manager
+rotation
+short-lived
+JIT access
+just-in-time
+access package
+access review
+recertification
+offboarding
+onboarding
+joiner
+mover
+leaver
+lifecycle hr
+hr sync
+scim
+provisioning
+deprovisioning
+orphan account
+service account rotation
+gMSA
+sMSA
+SPN
+delegation
+constrained delegation
+resource-based
+unconstrained
+double hop
+runas
+elevated
+admin split
+tiering
+PAW
+privileged workstation
+jump server
+segmentation
+micro-segmentation
+zero trust
+ztna
+sdp
+reverse tunnel
+split tunnel
+full tunnel
+DNS leak
+split dns
+always on vpn
+device tunnel
+user tunnel
+nac
+802.1x
+eap-tls
+peap
+machine auth
+user auth
+supplicant
+radius
+tacacs
+nac policy
+posture assessment
+remediation
+compliance scan
+CIS benchmark
+cis-cat
+openvas
+nessus
+qualys
+tenable
+rapid7
+nexpose
+insightvm
+crowdstrike
+carbon black
+defender atp
+sentinel one
+sentinelone
+sophos
+mcafee
+trend micro
+kaspersky
+χρωματικός εκτυπωτής
+plotter
+3d εκτυπωτής
+thinprint
+universal printing
+direct ip printing
+ipp
+ipps
+airprint
+pull print
+follow-me
+papercut
+uniflow
+print queue
+σφάλμα εκτύπωσης
+spooler
+συντήρηση εκτυπωτή
+toner
+drum
+fuser
+maintenance kit
+κιτ συντήρησης
+εγγύηση
+warranty
+RMA
+DOA
+advance replacement
+onsite
+next business day
+NBD
+critical
+sev1
+sev2
+severity
+priority
+impact
+urgency
+war room
+bridge
+conference bridge
+χρονοδιάγραμμα
+αναφορά
+αναφορές
+KPI
+metrics review
+capacity planning
+forecast
+tech debt
+refactor
+hotfix
+rollup update
+cu
+lcu
+ssu
+feature update
+version upgrade
+rollback plan
+backout
+communication plan
+shoutouts
+announcement
+διακοπή
+διακοπές παροχής
+διαθεσιμότητα
+uptime
+MTTR
+MTBF
+MTTD
+ανάλυση
+λόγοι
+αιτία

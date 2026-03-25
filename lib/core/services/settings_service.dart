@@ -15,6 +15,7 @@ class SettingsService {
   static const String _keyNavRailShowLabels = 'nav_rail_show_labels';
   static const String _keyEquipmentLocationShowBuilding =
       'equipment_location_show_building';
+  static const String _keyEnableSpellCheck = 'enable_spell_check';
   static const int _maxRecentPaths = 3;
 
   /// Κλειδιά για ρυθμίσεις απομακρυσμένης σύνδεσης (πίνακας app_settings).
@@ -156,6 +157,17 @@ class SettingsService {
   Future<void> setEquipmentLocationShowBuilding(bool value) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_keyEquipmentLocationShowBuilding, value);
+  }
+
+  /// Ενεργοποίηση ενσωματωμένου ορθογραφικού ελέγχου σημειώσεων (Windows). Προεπιλογή: true.
+  Future<bool> getEnableSpellCheck() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_keyEnableSpellCheck) ?? true;
+  }
+
+  Future<void> setEnableSpellCheck(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_keyEnableSpellCheck, value);
   }
 
   // --- Ρυθμίσεις απομακρυσμένης σύνδεσης (app_settings) ---

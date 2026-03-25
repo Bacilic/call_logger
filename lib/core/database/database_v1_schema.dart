@@ -3,7 +3,8 @@ import 'package:sqflite_common/sqlite_api.dart';
 /// User-visible schema version (squashed v1· v2 = στήλες τμήμα/τοποθεσία στον εξοπλισμό).
 /// v4: departments.name = display, departments.name_key = normalized unique key.
 /// v5: phones.department_id for shared-location policy.
-const int databaseSchemaVersionV1 = 5;
+/// v6: user_dictionary για προσωπικό λεξικό ορθογραφίας.
+const int databaseSchemaVersionV1 = 6;
 
 /// Δημιουργία σχήματος v1 + seed `remote_tool_args`.
 /// Χωρίς εξαρτήσεις Flutter — ασφαλές για `dart run tool/migrate_to_v1.dart`.
@@ -178,6 +179,12 @@ Future<void> applyDatabaseV1Schema(Database db) async {
       )
     ''');
   await seedRemoteToolArgsIfEmpty(db);
+
+  await db.execute('''
+      CREATE TABLE IF NOT EXISTS user_dictionary (
+        word TEXT PRIMARY KEY
+      )
+    ''');
 }
 
 /// Προεπιλεγμένα ορίσματα VNC/AnyDesk αν ο πίνακας είναι άδειος.

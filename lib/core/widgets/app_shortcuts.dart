@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../database/database_helper.dart';
 import '../database/database_init_result.dart';
 import '../database/database_init_runner.dart';
+import '../providers/greek_dictionary_provider.dart';
 import 'main_shell.dart';
 
 /// Intent για γρήγορη καταγραφή κλήσης (εστίαση στο πεδίο εσωτερικού).
@@ -50,6 +51,10 @@ class _AppShortcutsState extends ConsumerState<AppShortcuts>
     WidgetsBinding.instance.addObserver(this);
     _databaseResult = widget.initialDatabaseResult;
     _isLocalDevMode = widget.initialIsLocalDevMode;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      unawaited(ref.read(greekDictionaryServiceProvider.future));
+    });
   }
 
   @override
