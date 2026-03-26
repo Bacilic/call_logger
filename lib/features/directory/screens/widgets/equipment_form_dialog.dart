@@ -7,6 +7,8 @@ import '../../../../core/services/settings_service.dart';
 import '../../../../core/utils/name_parser.dart';
 import '../../../../core/utils/search_text_normalizer.dart';
 import '../../../../core/utils/spell_check.dart';
+import '../../../../core/widgets/lexicon_spell_text_form_field.dart';
+import '../../../../core/widgets/spell_check_controller.dart';
 import '../../../calls/models/equipment_model.dart';
 import '../../../calls/models/user_model.dart';
 import '../../../calls/provider/lookup_provider.dart';
@@ -41,7 +43,7 @@ class EquipmentFormDialog extends StatefulWidget {
 class _EquipmentFormDialogState extends State<EquipmentFormDialog> {
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _codeController;
-  late final TextEditingController _notesController;
+  late final SpellCheckController _notesController;
   late final TextEditingController _customIpController;
   late final TextEditingController _anydeskIdController;
   late final TextEditingController _ownerController;
@@ -71,7 +73,7 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog> {
     super.initState();
     final e = widget.initialEquipment;
     _codeController = TextEditingController(text: e?.code ?? '');
-    _notesController = TextEditingController(text: e?.notes ?? '');
+    _notesController = SpellCheckController()..text = (e?.notes ?? '');
     _customIpController = TextEditingController(text: e?.customIp ?? '');
     _anydeskIdController = TextEditingController(text: e?.anydeskId ?? '');
     _ownerController = TextEditingController();
@@ -328,15 +330,16 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog> {
                 },
               ),
               const SizedBox(height: 12),
-              TextFormField(
+              LexiconSpellTextFormField(
                 controller: _notesController,
+                focusNode: null,
                 decoration: const InputDecoration(
                   labelText: 'Σημειώσεις',
                   border: OutlineInputBorder(),
                   alignLabelWithHint: true,
                 ),
                 maxLines: 3,
-                spellCheckConfiguration: platformSpellCheckConfiguration,
+                onChanged: (_) => setState(() {}),
               ),
               const SizedBox(height: 12),
               TextFormField(

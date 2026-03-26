@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import '../config/app_config.dart';
 import '../database/database_init_result.dart';
 import '../database/database_init_runner.dart';
@@ -42,11 +44,14 @@ class AppInitializer {
           final dict = DictionaryService(
             assetPath: AppConfig.greekDictionaryAsset,
           );
-          await dict.load();
+          await dict.load().timeout(const Duration(seconds: 8));
           final spell = LexiconSpellCheckService();
-          await spell.init(lexiconMap: dict.stripKeyToDisplayMap);
+          await spell
+              .init(lexiconMap: dict.stripKeyToDisplayMap)
+              .timeout(const Duration(seconds: 8));
           spellCheckReady = true;
         } catch (_) {
+          // Soft-fail: η εφαρμογή συνεχίζει χωρίς spell-check, ποτέ χωρίς τερματισμό εκκίνησης.
           spellCheckReady = false;
         }
       }

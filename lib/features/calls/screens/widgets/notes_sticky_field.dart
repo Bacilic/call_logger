@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -23,6 +24,7 @@ class NotesStickyFieldState extends ConsumerState<NotesStickyField> {
   final FocusNode _focusNode = FocusNode();
   bool _flashHighlight = false;
   bool _flashPlaying = false;
+  Offset? _lastSecondaryPointerGlobal;
 
   @override
   void initState() {
@@ -65,6 +67,17 @@ class NotesStickyFieldState extends ConsumerState<NotesStickyField> {
     var offset = v.selection.extentOffset;
     if (offset < 0) offset = 0;
     if (offset > v.text.length) offset = v.text.length;
+    final global = _lastSecondaryPointerGlobal;
+    if (global != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || !state.mounted) return;
+        state.renderEditable.selectPositionAt(
+          from: global,
+          cause: SelectionChangedCause.tap,
+        );
+      });
+    }
+    _lastSecondaryPointerGlobal = null;
 
     final extras = <ContextMenuButtonItem>[];
     final spellOn = ref.read(enableSpellCheckProvider).value ?? true;
@@ -267,29 +280,37 @@ class NotesStickyFieldState extends ConsumerState<NotesStickyField> {
           ),
           child: ConstrainedBox(
             constraints: BoxConstraints(maxWidth: maxW),
-            child: TextField(
-              focusNode: _focusNode,
-              controller: _controller,
-              decoration: const InputDecoration(
-                hintText: 'Σημειώσεις...',
-                hintStyle: TextStyle(
-                  color: Colors.grey,
-                  fontStyle: FontStyle.italic,
+            child: Listener(
+              onPointerDown: (event) {
+                if (event.kind == PointerDeviceKind.mouse &&
+                    event.buttons == kSecondaryMouseButton) {
+                  _lastSecondaryPointerGlobal = event.position;
+                }
+              },
+              child: TextField(
+                focusNode: _focusNode,
+                controller: _controller,
+                decoration: const InputDecoration(
+                  hintText: 'Σημειώσεις...',
+                  hintStyle: TextStyle(
+                    color: Colors.grey,
+                    fontStyle: FontStyle.italic,
+                  ),
+                  border: InputBorder.none,
+                  enabledBorder: InputBorder.none,
+                  focusedBorder: InputBorder.none,
+                  filled: true,
+                  fillColor: Colors.transparent,
+                  isDense: true,
+                  contentPadding: EdgeInsets.zero,
                 ),
-                border: InputBorder.none,
-                enabledBorder: InputBorder.none,
-                focusedBorder: InputBorder.none,
-                filled: true,
-                fillColor: Colors.transparent,
-                isDense: true,
-                contentPadding: EdgeInsets.zero,
+                minLines: 2,
+                maxLines: 5,
+                spellCheckConfiguration: const SpellCheckConfiguration.disabled(),
+                contextMenuBuilder: _contextMenuBuilder,
+                onChanged: (value) =>
+                    ref.read(callEntryProvider.notifier).setNotes(value),
               ),
-              minLines: 2,
-              maxLines: 5,
-              spellCheckConfiguration: const SpellCheckConfiguration.disabled(),
-              contextMenuBuilder: _contextMenuBuilder,
-              onChanged: (value) =>
-                  ref.read(callEntryProvider.notifier).setNotes(value),
             ),
           ),
         );

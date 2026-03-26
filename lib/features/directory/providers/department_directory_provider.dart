@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/database/database_helper.dart';
 import '../../../core/errors/department_exists_exception.dart';
+import '../../../core/services/lookup_service.dart';
 import '../../../core/utils/search_text_normalizer.dart';
 import '../../calls/provider/lookup_provider.dart';
 import '../models/department_directory_column.dart';
@@ -199,11 +200,28 @@ class DepartmentDirectoryNotifier
     var list = state.allDepartments;
     if (q.isNotEmpty) {
       list = list.where((d) {
+        final did = d.id;
+        final phonesText = did == null
+            ? ''
+            : LookupService.instance.getPhonesByDepartment(did).join(' ');
+        final equipmentText = did == null
+            ? ''
+            : LookupService.instance
+                .getAllEquipmentByDepartment(did)
+                .map((e) {
+                  final code = e.code?.trim();
+                  if (code != null && code.isNotEmpty) return code;
+                  return e.displayLabel.trim();
+                })
+                .where((v) => v.isNotEmpty)
+                .join(' ');
         final blob = [
           d.name,
           d.building ?? '',
           d.notes ?? '',
           d.color ?? '',
+          phonesText,
+          equipmentText,
           '${d.id ?? ''}',
           if (d.isDeleted) 'Διεγραμμένο',
         ].join(' ');
@@ -231,6 +249,32 @@ class DepartmentDirectoryNotifier
             break;
           case 'notes':
             cmp = (a.notes ?? '').compareTo(b.notes ?? '');
+            break;
+          case 'phones':
+            final aPhones = LookupService.instance
+                .getPhonesByDepartment(a.id ?? -1)
+                .join(', ');
+            final bPhones = LookupService.instance
+                .getPhonesByDepartment(b.id ?? -1)
+                .join(', ');
+            cmp = aPhones.compareTo(bPhones);
+            break;
+          case 'equipment':
+            final aEquipment = LookupService.instance
+                .getAllEquipmentByDepartment(a.id ?? -1)
+                .map((e) => e.code?.trim().isNotEmpty == true
+                    ? e.code!.trim()
+                    : e.displayLabel.trim())
+                .where((v) => v.isNotEmpty)
+                .join(', ');
+            final bEquipment = LookupService.instance
+                .getAllEquipmentByDepartment(b.id ?? -1)
+                .map((e) => e.code?.trim().isNotEmpty == true
+                    ? e.code!.trim()
+                    : e.displayLabel.trim())
+                .where((v) => v.isNotEmpty)
+                .join(', ');
+            cmp = aEquipment.compareTo(bEquipment);
             break;
           default:
             cmp = 0;
@@ -407,6 +451,61 @@ class DepartmentDirectoryNotifier
       throw StateError('Υπάρχει ήδη άλλο τμήμα με αυτό το όνομα.');
     }
     await DatabaseHelper.instance.updateDepartment(d.id!, d.toMap());
+    await _refreshLookupCache();
+    await loadDepartments();
+  }
+
+  Future<void> updateDepartmentSharedAssets(
+    int departmentId, {
+    required List<String> sharedPhones,
+    required List<String> sharedEquipmentCodes,
+    Set<String> phonesToMoveFromUsers = const {},
+    Set<String> equipmentToMoveFromUsers = const {},
+  }) async {
+    final lookup = LookupService.instance;
+    final existingPhones = lookup.getDirectPhonesByDepartment(departmentId).toSet();
+    final nextPhones = sharedPhones
+        .map((v) => v.trim())
+        .where((v) => v.isNotEmpty)
+        .toSet();
+
+    for (final p in nextPhones.difference(existingPhones)) {
+      if (phonesToMoveFromUsers.contains(p)) {
+        await DatabaseHelper.instance.removePhoneFromAllUsers(p);
+      }
+      await DatabaseHelper.instance.addDepartmentDirectPhone(departmentId, p);
+    }
+    for (final p in existingPhones.difference(nextPhones)) {
+      await DatabaseHelper.instance.removeDepartmentDirectPhone(departmentId, p);
+    }
+
+    final existingEq = lookup
+        .getSharedEquipmentCodesByDepartment(departmentId)
+        .map((v) => v.trim())
+        .where((v) => v.isNotEmpty)
+        .toSet();
+    final nextEq = sharedEquipmentCodes
+        .map((v) => v.trim())
+        .where((v) => v.isNotEmpty)
+        .toSet();
+
+    for (final code in nextEq.difference(existingEq)) {
+      if (equipmentToMoveFromUsers.contains(code)) {
+        await DatabaseHelper.instance.removeEquipmentFromAllUsers(code);
+      }
+      await DatabaseHelper.instance.updateEquipmentDepartment(code, departmentId);
+    }
+    final db = await DatabaseHelper.instance.database;
+    for (final code in existingEq.difference(nextEq)) {
+      await db.update(
+        'equipment',
+        {'department_id': null},
+        where:
+            'code_equipment = ? AND department_id = ? AND COALESCE(is_deleted, 0) = 0',
+        whereArgs: [code, departmentId],
+      );
+    }
+
     await _refreshLookupCache();
     await loadDepartments();
   }

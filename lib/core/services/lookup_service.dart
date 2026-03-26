@@ -400,6 +400,44 @@ class LookupService {
     return out;
   }
 
+  /// Όλος ο εξοπλισμός τμήματος:
+  /// - εξοπλισμός καλούντων (μέσω user_equipment)
+  /// - κοινόχρηστος εξοπλισμός με άμεσο department_id
+  /// Χωρίς διπλότυπα και με σταθερή αλφαβητική σειρά.
+  List<EquipmentModel> getAllEquipmentByDepartment(int departmentId) {
+    final byId = <int, EquipmentModel>{};
+    final byCodeFallback = <String, EquipmentModel>{};
+
+    void addEquipment(EquipmentModel e) {
+      if (e.isDeleted) return;
+      final eid = e.id;
+      if (eid != null) {
+        byId[eid] = e;
+        return;
+      }
+      final codeKey = SearchTextNormalizer.normalizeForSearch(e.code ?? '');
+      if (codeKey.isNotEmpty) {
+        byCodeFallback[codeKey] = e;
+      }
+    }
+
+    for (final e in getEquipmentByDepartment(departmentId)) {
+      addEquipment(e);
+    }
+    for (final e in _equipment) {
+      if (e.departmentId == departmentId) {
+        addEquipment(e);
+      }
+    }
+
+    final merged = <EquipmentModel>[
+      ...byId.values,
+      ...byCodeFallback.values,
+    ];
+    merged.sort((a, b) => a.displayLabel.compareTo(b.displayLabel));
+    return merged;
+  }
+
   /// Όλα τα τηλέφωνα χρηστών τμήματος (split/trim/dedupe), σε σταθερή αλφαβητική σειρά.
   List<String> getPhonesByDepartment(int departmentId) {
     final users = getUsersByDepartment(departmentId);
@@ -424,6 +462,110 @@ class LookupService {
     }
     phones.sort((a, b) => a.compareTo(b));
     return phones;
+  }
+
+  /// Όλα τα γνωστά τηλέφωνα για autocomplete (χρήστες + κοινόχρηστα τμημάτων).
+  List<String> getAllKnownPhones() {
+    final seen = <String>{};
+    final out = <String>[];
+    for (final u in _users) {
+      if (u.isDeleted) continue;
+      for (final p in u.phones) {
+        final t = p.trim();
+        if (t.isEmpty) continue;
+        if (seen.add(t)) out.add(t);
+      }
+    }
+    for (final list in _departmentDirectPhones.values) {
+      for (final p in list) {
+        final t = p.trim();
+        if (t.isEmpty) continue;
+        if (seen.add(t)) out.add(t);
+      }
+    }
+    out.sort((a, b) => a.compareTo(b));
+    return out;
+  }
+
+  /// Όλοι οι γνωστοί κωδικοί εξοπλισμού για autocomplete.
+  List<String> getAllKnownEquipmentCodes() {
+    final seen = <String>{};
+    final out = <String>[];
+    for (final e in _equipment) {
+      if (e.isDeleted) continue;
+      final code = e.code?.trim() ?? '';
+      if (code.isEmpty) continue;
+      if (seen.add(code)) out.add(code);
+    }
+    out.sort((a, b) => a.compareTo(b));
+    return out;
+  }
+
+  /// Τηλέφωνα που ανήκουν σε καλούντες του τμήματος:
+  /// αριθμός -> ονόματα καλούντων (χωρίς διπλότυπα).
+  Map<String, List<String>> getCallerOwnedPhonesByDepartment(int departmentId) {
+    final out = <String, List<String>>{};
+    for (final u in getUsersByDepartment(departmentId)) {
+      final owner = (u.name ?? '').trim();
+      if (owner.isEmpty) continue;
+      for (final phone in u.phones) {
+        final t = phone.trim();
+        if (t.isEmpty) continue;
+        final list = out.putIfAbsent(t, () => <String>[]);
+        if (!list.contains(owner)) list.add(owner);
+      }
+    }
+    final sortedKeys = out.keys.toList()..sort((a, b) => a.compareTo(b));
+    return {
+      for (final k in sortedKeys) k: (out[k]!..sort((a, b) => a.compareTo(b))),
+    };
+  }
+
+  /// Εξοπλισμός που ανήκει σε καλούντες του τμήματος:
+  /// code -> ονόματα καλούντων (χωρίς διπλότυπα).
+  Map<String, List<String>> getCallerOwnedEquipmentByDepartment(
+    int departmentId,
+  ) {
+    final out = <String, List<String>>{};
+    for (final u in getUsersByDepartment(departmentId)) {
+      final uid = u.id;
+      final owner = (u.name ?? '').trim();
+      if (uid == null || owner.isEmpty) continue;
+      for (final e in findEquipmentsForUser(uid)) {
+        final code = e.code?.trim() ?? '';
+        if (code.isEmpty) continue;
+        final list = out.putIfAbsent(code, () => <String>[]);
+        if (!list.contains(owner)) list.add(owner);
+      }
+    }
+    final sortedKeys = out.keys.toList()..sort((a, b) => a.compareTo(b));
+    return {
+      for (final k in sortedKeys) k: (out[k]!..sort((a, b) => a.compareTo(b))),
+    };
+  }
+
+  /// Κοινόχρηστα (απευθείας στο τμήμα) τηλέφωνα, ταξινομημένα.
+  List<String> getDirectPhonesByDepartment(int departmentId) {
+    final list = List<String>.from(
+      _departmentDirectPhones[departmentId] ?? const <String>[],
+    )
+      ..removeWhere((p) => p.trim().isEmpty)
+      ..sort((a, b) => a.compareTo(b));
+    return list;
+  }
+
+  /// Κοινόχρηστος εξοπλισμός (equipment.department_id) του τμήματος.
+  List<String> getSharedEquipmentCodesByDepartment(int departmentId) {
+    final seen = <String>{};
+    final out = <String>[];
+    for (final e in _equipment) {
+      if (e.isDeleted || e.departmentId != departmentId) continue;
+      final code = e.code?.trim() ?? '';
+      if (code.isEmpty) continue;
+      if (seen.add(code)) out.add(code);
+    }
+    out.sort((a, b) => a.compareTo(b));
+    return out;
   }
 
   /// Βρίσκει τμήμα από “ορφανό” τηλέφωνο που έχει ανατεθεί απευθείας σε τμήμα.

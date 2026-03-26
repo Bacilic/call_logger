@@ -1,0 +1,12 @@
+{
+  "total_input_lines": 60738,
+  "comment_lines_kept": 2,
+  "blank_lines_skipped": 0,
+  "normalized_unicode": 0,
+  "mixed_script_fixed": 1284,
+  "proper_nouns_capitalized": 289,
+  "invalid_removed": 27841,
+  "duplicates_removed": 1168,
+  "words_changed_total": 1210,
+  "total_output_lines": 31729
+}

@@ -16,6 +16,10 @@ class DepartmentDirectoryColumn {
       DepartmentDirectoryColumn._('building', 'Κτίριο', 'building');
   static const color =
       DepartmentDirectoryColumn._('color', 'Χρώμα', 'color');
+  static const phones =
+      DepartmentDirectoryColumn._('phones', 'Τηλέφωνα', 'phones');
+  static const equipment =
+      DepartmentDirectoryColumn._('equipment', 'Εξοπλισμός', 'equipment');
   static const notes =
       DepartmentDirectoryColumn._('notes', 'Σημειώσεις', 'notes');
 
@@ -25,6 +29,8 @@ class DepartmentDirectoryColumn {
     name,
     building,
     color,
+    phones,
+    equipment,
     notes,
   ];
 
@@ -58,6 +64,10 @@ class DepartmentDirectoryColumn {
         return 'building';
       case 'color':
         return 'color';
+      case 'phones':
+        return 'phones';
+      case 'equipment':
+        return 'equipment';
       case 'notes':
         return 'notes';
       default:
@@ -79,6 +89,9 @@ class DepartmentDirectoryColumn {
         return d.color ?? '';
       case 'notes':
         return d.notes ?? '';
+      case 'phones':
+      case 'equipment':
+        return '';
       default:
         return '';
     }

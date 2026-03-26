@@ -5,7 +5,8 @@ import '../../../../core/database/database_helper.dart';
 import '../../../../core/utils/search_text_normalizer.dart';
 import '../../../../core/utils/user_identity_normalizer.dart';
 import '../../../../core/utils/phone_list_parser.dart';
-import '../../../../core/utils/spell_check.dart';
+import '../../../../core/widgets/lexicon_spell_text_form_field.dart';
+import '../../../../core/widgets/spell_check_controller.dart';
 import '../../../calls/models/user_model.dart';
 import '../../../calls/provider/lookup_provider.dart';
 import '../../providers/directory_provider.dart';
@@ -51,7 +52,7 @@ class _UserFormDialogState extends ConsumerState<UserFormDialog> {
   late final TextEditingController _firstNameController;
   late final TextEditingController _phoneController;
   late final TextEditingController _departmentController;
-  late final TextEditingController _notesController;
+  late final SpellCheckController _notesController;
 
   final FocusNode _lastNameFocusNode = FocusNode();
   final FocusNode _firstNameFocusNode = FocusNode();
@@ -99,7 +100,7 @@ class _UserFormDialogState extends ConsumerState<UserFormDialog> {
       text: PhoneListParser.joinPhones(u?.phones ?? const []),
     );
     _departmentController = TextEditingController(text: _initialDepartmentText);
-    _notesController = TextEditingController(text: u?.notes ?? '');
+    _notesController = SpellCheckController()..text = (u?.notes ?? '');
 
     _lastNameController.addListener(_onFieldChanged);
     _firstNameController.addListener(_onFieldChanged);
@@ -596,7 +597,7 @@ class _UserFormDialogState extends ConsumerState<UserFormDialog> {
                 },
               ),
               const SizedBox(height: 12),
-              UserFormSmartTextField(
+              LexiconSpellTextFormField(
                 controller: _notesController,
                 focusNode: _notesFocusNode,
                 decoration: const InputDecoration(
@@ -605,7 +606,7 @@ class _UserFormDialogState extends ConsumerState<UserFormDialog> {
                   alignLabelWithHint: true,
                 ),
                 maxLines: 3,
-                spellCheckConfiguration: platformSpellCheckConfiguration,
+                onChanged: (_) => _onFieldChanged(),
               ),
             ],
           ),

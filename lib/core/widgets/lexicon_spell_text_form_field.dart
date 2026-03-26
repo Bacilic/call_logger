@@ -1,5 +1,5 @@
 import 'dart:async';
-
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -18,6 +18,7 @@ class LexiconSpellTextFormField extends ConsumerStatefulWidget {
     this.maxLines = 1,
     this.minLines,
     this.onChanged,
+    this.focusNode,
   });
 
   final SpellCheckController controller;
@@ -27,6 +28,7 @@ class LexiconSpellTextFormField extends ConsumerStatefulWidget {
   final int? maxLines;
   final int? minLines;
   final ValueChanged<String>? onChanged;
+  final FocusNode? focusNode;
 
   @override
   ConsumerState<LexiconSpellTextFormField> createState() =>
@@ -35,11 +37,24 @@ class LexiconSpellTextFormField extends ConsumerStatefulWidget {
 
 class _LexiconSpellTextFormFieldState
     extends ConsumerState<LexiconSpellTextFormField> {
-  void _replaceWordAtCursor(TextEditingValue v, String replacement) {
-    var offset = v.selection.extentOffset;
+  Offset? _lastSecondaryPointerGlobal;
+
+  int _resolveCursorOffsetForContextMenu(
+    EditableTextState state,
+  ) {
+    final value = state.textEditingValue;
+    return value.selection.extentOffset.clamp(0, value.text.length);
+  }
+
+  void _replaceWordAtOffset(
+    TextEditingValue value,
+    int rawOffset,
+    String replacement,
+  ) {
+    var offset = rawOffset;
     if (offset < 0) offset = 0;
-    if (offset > v.text.length) offset = v.text.length;
-    final t = v.text;
+    if (offset > value.text.length) offset = value.text.length;
+    final t = value.text;
     for (final m in SpellCheckController.wordPattern.allMatches(t)) {
       if (offset >= m.start && offset <= m.end) {
         final nt = t.replaceRange(m.start, m.end, replacement);
@@ -58,9 +73,18 @@ class _LexiconSpellTextFormFieldState
 
   Widget _contextMenuBuilder(BuildContext context, EditableTextState state) {
     final v = state.textEditingValue;
-    var offset = v.selection.extentOffset;
-    if (offset < 0) offset = 0;
-    if (offset > v.text.length) offset = v.text.length;
+    final offset = _resolveCursorOffsetForContextMenu(state);
+    final global = _lastSecondaryPointerGlobal;
+    if (global != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || !state.mounted) return;
+        state.renderEditable.selectPositionAt(
+          from: global,
+          cause: SelectionChangedCause.tap,
+        );
+      });
+    }
+    _lastSecondaryPointerGlobal = null;
 
     final extras = <ContextMenuButtonItem>[];
     final spellOn = ref.read(enableSpellCheckProvider).value ?? true;
@@ -79,7 +103,7 @@ class _LexiconSpellTextFormFieldState
               label: sug,
               onPressed: () {
                 state.hideToolbar();
-                _replaceWordAtCursor(v, sug);
+                _replaceWordAtOffset(widget.controller.value, offset, sug);
               },
             ),
           );
@@ -193,29 +217,33 @@ class _LexiconSpellTextFormFieldState
 
   @override
   Widget build(BuildContext context) {
-    ref.listen(spellCheckServiceProvider, (prev, next) {
-      next.whenData((s) {
-        if (mounted) widget.controller.attachSpellService(s);
-      });
-    });
-    ref.listen(enableSpellCheckProvider, (prev, next) {
-      next.whenData((enabled) {
-        if (mounted) widget.controller.setSpellCheckEnabled(enabled);
-      });
-    });
-    ref.watch(spellCheckServiceProvider);
-    ref.watch(enableSpellCheckProvider);
+    final spellAsync = ref.watch(spellCheckServiceProvider);
+    final spellEnabledAsync = ref.watch(enableSpellCheckProvider);
 
-    return TextFormField(
-      controller: widget.controller,
-      decoration: widget.decoration,
-      validator: widget.validator,
-      textCapitalization: widget.textCapitalization,
-      maxLines: widget.maxLines,
-      minLines: widget.minLines,
-      spellCheckConfiguration: const SpellCheckConfiguration.disabled(),
-      contextMenuBuilder: _contextMenuBuilder,
-      onChanged: widget.onChanged,
+    // Άμεσο sync του controller με την τρέχουσα τιμή των providers,
+    // ώστε το spell check να ενεργοποιείται σωστά από το πρώτο render.
+    spellAsync.whenData(widget.controller.attachSpellService);
+    spellEnabledAsync.whenData(widget.controller.setSpellCheckEnabled);
+
+    return Listener(
+      onPointerDown: (event) {
+        if (event.kind == PointerDeviceKind.mouse &&
+            event.buttons == kSecondaryMouseButton) {
+          _lastSecondaryPointerGlobal = event.position;
+        }
+      },
+      child: TextFormField(
+        controller: widget.controller,
+        focusNode: widget.focusNode,
+        decoration: widget.decoration,
+        validator: widget.validator,
+        textCapitalization: widget.textCapitalization,
+        maxLines: widget.maxLines,
+        minLines: widget.minLines,
+        spellCheckConfiguration: const SpellCheckConfiguration.disabled(),
+        contextMenuBuilder: _contextMenuBuilder,
+        onChanged: widget.onChanged,
+      ),
     );
   }
 }

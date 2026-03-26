@@ -761,6 +761,54 @@ class DatabaseHelper {
     });
   }
 
+  /// Αφαιρεί το τηλέφωνο από όλους τους κατόχους (`user_phones`) με βάση τον αριθμό.
+  Future<void> removePhoneFromAllUsers(String phoneNumber) async {
+    final t = phoneNumber.trim();
+    if (t.isEmpty) return;
+    final db = await database;
+    await db.transaction((txn) async {
+      final rows = await txn.query(
+        'phones',
+        columns: ['id'],
+        where: 'number = ?',
+        whereArgs: [t],
+        limit: 1,
+      );
+      if (rows.isEmpty) return;
+      final pid = rows.first['id'] as int?;
+      if (pid == null) return;
+      await txn.delete(
+        'user_phones',
+        where: 'phone_id = ?',
+        whereArgs: [pid],
+      );
+    });
+  }
+
+  /// Αφαιρεί τον εξοπλισμό από όλους τους κατόχους (`user_equipment`) με βάση τον κωδικό.
+  Future<void> removeEquipmentFromAllUsers(String equipmentCode) async {
+    final code = equipmentCode.trim();
+    if (code.isEmpty) return;
+    final db = await database;
+    await db.transaction((txn) async {
+      final rows = await txn.query(
+        'equipment',
+        columns: ['id'],
+        where: 'code_equipment = ? AND COALESCE(is_deleted, 0) = 0',
+        whereArgs: [code],
+        limit: 1,
+      );
+      if (rows.isEmpty) return;
+      final eid = rows.first['id'] as int?;
+      if (eid == null) return;
+      await txn.delete(
+        'user_equipment',
+        where: 'equipment_id = ?',
+        whereArgs: [eid],
+      );
+    });
+  }
+
   /// Αντικαθιστά πλήρως τα τηλέφωνα του χρήστη [userId] (κανονικοποιημένα).
   Future<void> replaceUserPhones(int userId, List<String> numbers) async {
     final db = await database;

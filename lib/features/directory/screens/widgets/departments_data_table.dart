@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../../../core/services/lookup_service.dart';
 import '../../../../core/utils/department_display_utils.dart';
 import '../../models/department_directory_column.dart';
 import '../../models/department_model.dart';
@@ -52,6 +53,8 @@ const _defaultWidthsByKey = <String, double>{
   'name': 180.0,
   'building': 120.0,
   'color': 56.0,
+  'phones': 140.0,
+  'equipment': 140.0,
   'notes': 180.0,
 };
 
@@ -688,6 +691,28 @@ class _DepartmentsTableSource extends DataTableSource {
   List<DepartmentDirectoryColumn> _visibleColumns = [];
   bool _selectionVisible = true;
 
+  String _phonesTextForDepartment(DepartmentModel d) {
+    final id = d.id;
+    if (id == null) return '';
+    final phones = LookupService.instance.getPhonesByDepartment(id);
+    return phones.join(', ');
+  }
+
+  String _equipmentTextForDepartment(DepartmentModel d) {
+    final id = d.id;
+    if (id == null) return '';
+    final equipment = LookupService.instance.getAllEquipmentByDepartment(id);
+    final labels = equipment
+        .map((e) {
+          final code = e.code?.trim();
+          if (code != null && code.isNotEmpty) return code;
+          return e.displayLabel.trim();
+        })
+        .where((v) => v.isNotEmpty)
+        .toList();
+    return labels.join(', ');
+  }
+
   void update(
     List<DepartmentModel> departments,
     Set<int> selectedIds,
@@ -811,6 +836,28 @@ class _DepartmentsTableSource extends DataTableSource {
         return DataCell(
           Text(
             d.notes ?? '',
+            maxLines: 1,
+            softWrap: false,
+            overflow: TextOverflow.ellipsis,
+          ),
+          onTap: () => _onRowTap?.call(rowIndex),
+          onDoubleTap: () => _onDoubleTap(d, col),
+        );
+      case 'phones':
+        return DataCell(
+          Text(
+            _phonesTextForDepartment(d),
+            maxLines: 1,
+            softWrap: false,
+            overflow: TextOverflow.ellipsis,
+          ),
+          onTap: () => _onRowTap?.call(rowIndex),
+          onDoubleTap: () => _onDoubleTap(d, col),
+        );
+      case 'equipment':
+        return DataCell(
+          Text(
+            _equipmentTextForDepartment(d),
             maxLines: 1,
             softWrap: false,
             overflow: TextOverflow.ellipsis,
