@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/utils/spell_check.dart';
+import '../../../core/widgets/lexicon_spell_text_form_field.dart';
+import '../../../core/widgets/spell_check_controller.dart';
 import '../../calls/provider/smart_entity_selector_provider.dart';
 import '../../calls/screens/widgets/smart_entity_selector_widget.dart';
 import '../models/task.dart';
@@ -35,8 +36,8 @@ class _TaskFormDialogState extends ConsumerState<_TaskFormDialog> {
       GlobalKey<SmartEntitySelectorWidgetState>();
   /// Για ασφαλές `invalidate` στο `dispose` — το `ref` εκεί δεν επιτρέπεται.
   ProviderContainer? _providerContainer;
-  late final TextEditingController _titleController;
-  late final TextEditingController _descriptionController;
+  late final SpellCheckController _titleController;
+  late final SpellCheckController _descriptionController;
   late int _priority;
   late DateTime _dueDate;
   bool _userPickedDue = false;
@@ -54,8 +55,9 @@ class _TaskFormDialogState extends ConsumerState<_TaskFormDialog> {
       });
     }
     final t = widget.task;
-    _titleController = TextEditingController(text: t?.title ?? '');
-    _descriptionController = TextEditingController(text: t?.description ?? '');
+    _titleController = SpellCheckController()..text = t?.title ?? '';
+    _descriptionController = SpellCheckController()
+      ..text = t?.description ?? '';
     _priority = t?.priority ?? 0;
     _userPickedDue = t != null;
     _dueDate = t?.dueDateTime ??
@@ -298,7 +300,7 @@ class _TaskFormDialogState extends ConsumerState<_TaskFormDialog> {
                   ),
                 ),
                 const SizedBox(height: 12),
-                TextFormField(
+                LexiconSpellTextFormField(
                   controller: _titleController,
                   decoration: const InputDecoration(
                     labelText: 'Τίτλος',
@@ -307,10 +309,9 @@ class _TaskFormDialogState extends ConsumerState<_TaskFormDialog> {
                   validator: (v) =>
                       (v == null || v.trim().isEmpty) ? 'Υποχρεωτικό πεδίο' : null,
                   textCapitalization: TextCapitalization.sentences,
-                  spellCheckConfiguration: platformSpellCheckConfiguration,
                 ),
                 const SizedBox(height: 12),
-                TextFormField(
+                LexiconSpellTextFormField(
                   controller: _descriptionController,
                   decoration: const InputDecoration(
                     labelText: 'Περιγραφή',
@@ -319,7 +320,6 @@ class _TaskFormDialogState extends ConsumerState<_TaskFormDialog> {
                   ),
                   maxLines: 3,
                   textCapitalization: TextCapitalization.sentences,
-                  spellCheckConfiguration: platformSpellCheckConfiguration,
                 ),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<int>(

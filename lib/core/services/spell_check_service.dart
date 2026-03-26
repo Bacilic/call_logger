@@ -51,7 +51,17 @@ class LexiconSpellCheckService {
     final key = DictionaryService.canonicalLexiconKey(word);
     if (key.length < 2) return true;
     if (_shouldSkipToken(key)) return true;
-    return _lexicon.containsKey(key);
+    final display = _lexicon[key];
+    if (display == null) return false;
+
+    // Αν η λεξική μορφή περιέχει τόνο, απαιτούμε και το input να έχει
+    // τονισμένη επιφανειακή μορφή που ταιριάζει (case-insensitive).
+    if (_hasGreekTonos(display)) {
+      final normalizedInput = word.trim().toLowerCase();
+      final normalizedDisplay = display.trim().toLowerCase();
+      return normalizedInput == normalizedDisplay;
+    }
+    return true;
   }
 
   /// Έως 5 προτάσεις (μορφή εμφάνισης με τόνους) με απόσταση Levenshtein ≤ 2 στα κλειδιά.
@@ -102,6 +112,14 @@ class LexiconSpellCheckService {
       }
     }
     return !hasLetter;
+  }
+
+  static bool _hasGreekTonos(String s) {
+    const ton = 'άέήίόύώϊΐϋΰΆΈΉΊΌΎΏ';
+    for (var i = 0; i < s.length; i++) {
+      if (ton.contains(s[i])) return true;
+    }
+    return false;
   }
 }
 

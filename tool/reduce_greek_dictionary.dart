@@ -83,12 +83,12 @@ Future<void> _run(List<String> args) async {
   print('  Μοναδικά κλειδιά μετά συγχώνευση: ${merged.length}');
 
   final entries =
-      merged.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
+      merged.entries.toList()..sort((a, b) => b.value.score.compareTo(a.value.score));
 
-  final picked = <String>{};
+  final picked = <String, String>{};
   for (final e in entries) {
     if (!_isAcceptableDictionaryToken(e.key)) continue;
-    picked.add(e.key);
+    picked[e.key] = e.value.display;
     if (picked.length >= target) break;
   }
   print('  Επιλογή top-$target (αποδεκτά): ${picked.length}');
@@ -99,11 +99,17 @@ Future<void> _run(List<String> args) async {
     for (final e in gl) {
       if (added >= greekLexExtra) break;
       final key = SearchTextNormalizer.normalizeDictionaryForm(e.word);
-      if (!_isAcceptableDictionaryToken(key) || picked.contains(key)) {
+      if (!_isAcceptableDictionaryToken(key)) {
         continue;
       }
-      picked.add(key);
-      added++;
+      final display = e.word.trim().toLowerCase();
+      final existing = picked[key];
+      if (existing == null) {
+        picked[key] = display;
+        added++;
+      } else if (_preferDisplay(display, existing)) {
+        picked[key] = display;
+      }
     }
     print('  GreekLex επιπλέον: $added');
   }
@@ -115,15 +121,16 @@ Future<void> _run(List<String> args) async {
     print('  Προειδοποίηση: δεν βρέθηκε $itPath');
   }
 
-  final sortedOut = picked.toList()..sort();
+  final sortedOut = picked.entries.toList()
+    ..sort((a, b) => a.key.compareTo(b.key));
   Directory(p.dirname(outPath)).createSync(recursive: true);
   final sink = File(outPath).openWrite(mode: FileMode.writeOnly);
   sink.writeln(
     '# greek_core — merged SUBTLEX-GR_CD (rank=$rank) + GreekLex + IT terms',
   );
-  sink.writeln('# Γραμμές λεξικού (normalizeDictionaryForm): ${sortedOut.length}');
-  for (final w in sortedOut) {
-    sink.writeln(w);
+  sink.writeln('# Γραμμές λεξικού (display forms): ${sortedOut.length}');
+  for (final e in sortedOut) {
+    sink.writeln(e.value);
   }
   await sink.close();
   print('Έγγραφο: $outPath (${sortedOut.length} λέξεις)');
@@ -144,12 +151,13 @@ Map<String, String> _parseArgs(List<String> args) {
   return m;
 }
 
-Map<String, int> _loadSubtlexMerged(String path, {required String rank}) {
+Map<String, _RankedWord> _loadSubtlexMerged(String path, {required String rank}) {
   final lines = File(path).readAsLinesSync(encoding: utf8);
   var pastHeader = false;
   final freqSum = <String, int>{};
   final cdSum = <String, int>{};
   final lg10cdMax = <String, double>{};
+  final displayByKey = <String, String>{};
 
   for (final line in lines) {
     if (line.isEmpty) continue;
@@ -169,6 +177,7 @@ Map<String, int> _loadSubtlexMerged(String path, {required String rank}) {
 
     final key = SearchTextNormalizer.normalizeDictionaryForm(extracted);
     if (key.isEmpty) continue;
+    final display = extracted.trim().toLowerCase();
 
     final f = int.tryParse(_stripQuotes(fields[2]).replaceAll(',', ''));
     final cd = int.tryParse(_stripQuotes(fields[3]).replaceAll(',', ''));
@@ -183,21 +192,26 @@ Map<String, int> _loadSubtlexMerged(String path, {required String rank}) {
         if (prev == null || l10 > prev) lg10cdMax[key] = l10;
       }
     }
+    final existingDisplay = displayByKey[key];
+    if (existingDisplay == null || _preferDisplay(display, existingDisplay)) {
+      displayByKey[key] = display;
+    }
   }
 
-  final score = <String, int>{};
+  final score = <String, _RankedWord>{};
   for (final k in freqSum.keys) {
+    final display = displayByKey[k] ?? k;
     switch (rank) {
       case 'cd':
-        score[k] = cdSum[k] ?? 0;
+        score[k] = _RankedWord(score: cdSum[k] ?? 0, display: display);
         break;
       case 'lg10cd':
         final v = lg10cdMax[k] ?? 0;
-        score[k] = (v * 1000000).round();
+        score[k] = _RankedWord(score: (v * 1000000).round(), display: display);
         break;
       case 'freq':
       default:
-        score[k] = freqSum[k] ?? 0;
+        score[k] = _RankedWord(score: freqSum[k] ?? 0, display: display);
         break;
     }
   }
@@ -297,7 +311,7 @@ List<_GreekLexEntry> _loadGreekLexSorted(String path) {
   return list;
 }
 
-int _mergeItTerms(File file, Set<String> picked) {
+int _mergeItTerms(File file, Map<String, String> picked) {
   var n = 0;
   for (final line in file.readAsLinesSync(encoding: utf8)) {
     var t = line.trim();
@@ -309,10 +323,40 @@ int _mergeItTerms(File file, Set<String> picked) {
       final key = SearchTextNormalizer.normalizeDictionaryForm(raw);
       if (key.length < 2) continue;
       if (!_isAcceptableDictionaryToken(key)) continue;
-      if (picked.add(key)) n++;
+      final display = raw.trim().toLowerCase();
+      final existing = picked[key];
+      if (existing == null) {
+        picked[key] = display;
+        n++;
+      } else if (_preferDisplay(display, existing)) {
+        picked[key] = display;
+      }
     }
   }
   return n;
+}
+
+bool _preferDisplay(String candidate, String existing) {
+  final cTon = _hasGreekTonos(candidate);
+  final eTon = _hasGreekTonos(existing);
+  if (cTon != eTon) return cTon;
+  if (candidate.length != existing.length) return candidate.length > existing.length;
+  return candidate.compareTo(existing) < 0;
+}
+
+bool _hasGreekTonos(String s) {
+  const ton = 'άέήίόύώϊΐϋΰΆΈΉΊΌΎΏ';
+  for (var i = 0; i < s.length; i++) {
+    if (ton.contains(s[i])) return true;
+  }
+  return false;
+}
+
+class _RankedWord {
+  _RankedWord({required this.score, required this.display});
+
+  final int score;
+  final String display;
 }
 
 Future<void> _download(String url, String destPath) async {
