@@ -430,13 +430,13 @@ class _DepartmentFormDialogState extends State<DepartmentFormDialog> {
                                         ),
                                       ),
                                       const SizedBox(height: 2),
-                                      const RadioListTile<
-                                          _ConflictResolutionChoice>(
+                                      RadioListTile<_ConflictResolutionChoice>(
                                         dense: true,
                                         value: _ConflictResolutionChoice
                                             .keepCurrentOwnership,
                                         title: Text(
-                                          'Να μην προστεθεί στο τμήμα (παραμονή στην τωρινή συσχέτιση)',
+                                          'Να ΜΗΝ προστεθεί στο τμήμα «$targetDepartmentName» '
+                                          '(παραμονή στο «${item.sourceForMoveText}»)',
                                         ),
                                       ),
                                     ],
