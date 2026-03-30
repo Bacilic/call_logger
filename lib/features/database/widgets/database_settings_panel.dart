@@ -10,7 +10,14 @@ import '../models/database_backup_settings.dart';
 import '../providers/database_backup_settings_provider.dart';
 import '../services/database_backup_service.dart';
 import '../utils/backup_destination_folder_validator.dart';
+import '../utils/backup_destination_location_warnings.dart';
 import '../utils/backup_location_hints.dart';
+import '../utils/backup_schedule_utils.dart';
+
+String _weekdayChipLabel(int weekday) {
+  const labels = ['Δε', 'Τρ', 'Τε', 'Πε', 'Πα', 'Σα', 'Κυ'];
+  return labels[weekday - 1];
+}
 
 /// Πάνελ ρυθμίσεων βάσης δεδομένων (προς το παρόν: αντίγραφα ασφαλείας).
 class DatabaseSettingsPanel extends ConsumerStatefulWidget {
@@ -27,6 +34,8 @@ class _DatabaseSettingsPanelState extends ConsumerState<DatabaseSettingsPanel> {
   late final TextEditingController _maxAgeController;
   late final ScrollController _panelScrollController;
   late final Future<List<BackupCaptionSegment>> _locationCaptionSegmentsFuture;
+  late final Future<({String dbPath, int eligibleWindowsVolumeCount})>
+      _backupDestinationWarningContextFuture;
   final FocusNode _destinationFocus = FocusNode();
   final FocusNode _maxCopiesFocus = FocusNode();
   final FocusNode _maxAgeFocus = FocusNode();
@@ -41,6 +50,8 @@ class _DatabaseSettingsPanelState extends ConsumerState<DatabaseSettingsPanel> {
     _maxAgeController = TextEditingController();
     _panelScrollController = ScrollController();
     _locationCaptionSegmentsFuture = _loadLocationCaptionSegments();
+    _backupDestinationWarningContextFuture =
+        _loadBackupDestinationWarningContext();
     _destinationFocus.addListener(_onDestinationFocusChanged);
     _destinationController.addListener(_onDestinationTextChanged);
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -100,9 +111,12 @@ class _DatabaseSettingsPanelState extends ConsumerState<DatabaseSettingsPanel> {
   }
 
   void _onDestinationTextChanged() {
-    if (_destinationFolderError != null && mounted) {
-      setState(() => _destinationFolderError = null);
-    }
+    if (!mounted) return;
+    setState(() {
+      if (_destinationFolderError != null) {
+        _destinationFolderError = null;
+      }
+    });
   }
 
   Future<void> _validateAndPersistDestination() async {
@@ -154,6 +168,17 @@ class _DatabaseSettingsPanelState extends ConsumerState<DatabaseSettingsPanel> {
     return BackupLocationHints.composeLocationCaptionSegments(
       driveLabels: drives,
       configuredDatabasePath: dbPath,
+    );
+  }
+
+  Future<({String dbPath, int eligibleWindowsVolumeCount})>
+      _loadBackupDestinationWarningContext() async {
+    final dbPath = await SettingsService().getDatabasePath();
+    final eligibleWindowsVolumeCount =
+        BackupLocationHints.eligibleWindowsBackupVolumeCount();
+    return (
+      dbPath: dbPath,
+      eligibleWindowsVolumeCount: eligibleWindowsVolumeCount,
     );
   }
 
@@ -260,6 +285,27 @@ class _DatabaseSettingsPanelState extends ConsumerState<DatabaseSettingsPanel> {
               ),
             ),
             const SizedBox(height: 12),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Αυτόματα αντίγραφα ασφαλείας'),
+              subtitle: const Text(
+                'Ενεργοποίηση\\Απενεργοποίηση Αυτόματων Αντιγράφων ασφαλείας της εφαρμογής.',
+              ),
+              value: settings.backupOnExit,
+              onChanged: (v) => ref
+                  .read(databaseBackupSettingsProvider.notifier)
+                  .setBackupOnExit(v),
+            ),
+            if (!settings.backupOnExit) ...[
+              const SizedBox(height: 8),
+              Text(
+                'Ενεργοποιήστε το διακόπτη για να εμφανιστούν όλες οι σχετικές ρυθμίσεις.',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
+            if (settings.backupOnExit) ...[
             FutureBuilder<List<BackupCaptionSegment>>(
               future: _locationCaptionSegmentsFuture,
               builder: (context, snapshot) {
@@ -359,24 +405,105 @@ class _DatabaseSettingsPanelState extends ConsumerState<DatabaseSettingsPanel> {
                   ),
                 ),
                 const SizedBox(width: 8),
-                Padding(
-                  padding: const EdgeInsets.only(top: 8),
-                  child: SizedBox(
-                    height: 48,
-                    child: FilledButton.tonalIcon(
-                      onPressed: _pickFolder,
-                      style: FilledButton.styleFrom(
-                        minimumSize: const Size(0, 48),
-                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        visualDensity: VisualDensity.compact,
-                      ),
-                      icon: const Icon(Icons.folder_open, size: 20),
-                      label: const Text('Αναζήτηση'),
+                SizedBox(
+                  height: 38,
+                  child: FilledButton.tonalIcon(
+                    onPressed: _pickFolder,
+                    style: FilledButton.styleFrom(
+                      minimumSize: const Size(0, 38),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      visualDensity: VisualDensity.compact,
                     ),
+                    icon: const Icon(Icons.folder_open, size: 18),
+                    label: const Text('Αναζήτηση'),
                   ),
                 ),
               ],
+            ),
+            FutureBuilder<({String dbPath, int eligibleWindowsVolumeCount})>(
+              future: _backupDestinationWarningContextFuture,
+              builder: (context, snapshot) {
+                if (!snapshot.hasData) {
+                  return const SizedBox.shrink();
+                }
+                final dest = _destinationController.text.trim();
+                if (dest.isEmpty || _destinationFolderError != null) {
+                  return const SizedBox.shrink();
+                }
+                final ctx = snapshot.data!;
+                final colocated =
+                    BackupDestinationLocationWarnings.colocatedWithDatabase(
+                  databaseFilePath: ctx.dbPath,
+                  destinationDirectory: dest,
+                );
+                final sameVolume =
+                    BackupDestinationLocationWarnings.sameWindowsVolume(
+                  databasePath: ctx.dbPath,
+                  destinationDirectory: dest,
+                );
+                final showSameVolume =
+                    sameVolume && ctx.eligibleWindowsVolumeCount >= 2;
+                if (!colocated && !showSameVolume) {
+                  return const SizedBox.shrink();
+                }
+                final orange = Colors.deepOrange.shade800;
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    if (colocated) ...[
+                      const SizedBox(height: 8),
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Icon(
+                            Icons.warning_amber_rounded,
+                            size: 20,
+                            color: orange,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Ο φάκελος προορισμού του αντιγράφου ασφαλείας '
+                              '(backup) βρίσκεται στον ίδιο χώρο με τα αρχεία '
+                              'της βάσης (ίδιος φάκελος ή υποφάκελός του). Σε '
+                              'απώλεια, διαγραφή ή βλάβη του μέσου ενδέχεται '
+                              'να χαθούν μαζί τα δεδομένα και το αντίγραφο.',
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: orange,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                    if (showSameVolume) ...[
+                      const SizedBox(height: 8),
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Icon(
+                            Icons.warning_amber_rounded,
+                            size: 20,
+                            color: orange,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Το αντίγραφο αποθηκεύεται στον ίδιο τόμο '
+                              '(volume) με τη βάση. Σε βλάβη δίσκου '
+                              'ενδέχεται να επηρεαστούν και τα δύο.',
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: orange,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ],
+                );
+              },
             ),
             if (cWarning) ...[
               const SizedBox(height: 8),
@@ -439,50 +566,76 @@ class _DatabaseSettingsPanelState extends ConsumerState<DatabaseSettingsPanel> {
                   .setZipOutput(v),
             ),
             const Divider(height: 24),
+            const SizedBox(height: 12),
             Text(
-              'Αυτοματοποίηση',
+              'Πρόγραμμα ημερών & ώρας',
               style: theme.textTheme.labelLarge?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
               ),
             ),
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              title: const Text('Αυτόματο backup κατά την έξοδο'),
-              subtitle: const Text('Αθόρυβα πριν κλείσει το παράθυρο (Windows)'),
-              value: settings.backupOnExit,
-              onChanged: (v) => ref
-                  .read(databaseBackupSettingsProvider.notifier)
-                  .setBackupOnExit(v),
-            ),
-            DropdownButtonFormField<DatabaseBackupInterval>(
-              key: ValueKey(settings.interval),
-              initialValue: settings.interval,
-              isExpanded: true,
-              decoration: const InputDecoration(
-                labelText: 'Αυτόματο backup ανά χρονικό διάστημα',
-                helperText:
-                    'Ισχύει όσο τρέχει η εφαρμογή· χρειάζεται ορισμένος φάκελος.',
-                border: OutlineInputBorder(),
-                isDense: true,
+            const SizedBox(height: 4),
+            Text(
+              'Επιλέξτε ημέρες και ώρα για αυτόματο αντίγραφο ασφαλείας όσο η εφαρμογή είναι ανοιχτή.',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
               ),
-              items: const [
-                DropdownMenuItem(
-                  value: DatabaseBackupInterval.never,
-                  child: Text('Ποτέ'),
-                ),
-                DropdownMenuItem(
-                  value: DatabaseBackupInterval.every4Hours,
-                  child: Text('Κάθε 4 ώρες'),
-                ),
-                DropdownMenuItem(
-                  value: DatabaseBackupInterval.daily,
-                  child: Text('Μία φορά την ημέρα'),
-                ),
+            ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: [
+                for (var i = 0; i < 7; i++)
+                  FilterChip(
+                    label: Text(_weekdayChipLabel(i + 1)),
+                    selected: settings.backupDays.contains(i + 1),
+                    onSelected: settings.backupOnExit
+                        ? (selected) {
+                            final wd = i + 1;
+                            final next = List<int>.from(settings.backupDays);
+                            if (selected) {
+                              if (!next.contains(wd)) next.add(wd);
+                            } else {
+                              next.remove(wd);
+                            }
+                            unawaited(
+                              ref
+                                  .read(databaseBackupSettingsProvider.notifier)
+                                  .setBackupScheduleDays(next),
+                            );
+                          }
+                        : null,
+                  ),
               ],
-              onChanged: (v) {
-                if (v == null) return;
-                ref.read(databaseBackupSettingsProvider.notifier).setInterval(v);
-              },
+            ),
+            const SizedBox(height: 8),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Ώρα προγράμματος'),
+              subtitle: Text(settings.backupTime),
+              trailing: TextButton(
+                onPressed: settings.backupOnExit
+                    ? () async {
+                        final p =
+                            BackupScheduleUtils.parseTime(settings.backupTime);
+                        final initial = TimeOfDay(
+                          hour: p?.hour ?? 9,
+                          minute: p?.minute ?? 0,
+                        );
+                        final picked = await showTimePicker(
+                          context: context,
+                          initialTime: initial,
+                        );
+                        if (picked == null || !mounted) return;
+                        final h = picked.hour.toString().padLeft(2, '0');
+                        final m = picked.minute.toString().padLeft(2, '0');
+                        await ref
+                            .read(databaseBackupSettingsProvider.notifier)
+                            .setBackupTime('$h:$m');
+                      }
+                    : null,
+                child: const Text('Επιλογή'),
+              ),
             ),
             const Divider(height: 24),
             Text(
@@ -611,6 +764,7 @@ class _DatabaseSettingsPanelState extends ConsumerState<DatabaseSettingsPanel> {
               icon: const Icon(Icons.save_alt_outlined),
               label: const Text('Δημιουργία αντιγράφου τώρα'),
             ),
+            ],
               ],
             ),
           ),
@@ -619,3 +773,5 @@ class _DatabaseSettingsPanelState extends ConsumerState<DatabaseSettingsPanel> {
     );
   }
 }
+
+

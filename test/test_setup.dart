@@ -1,6 +1,8 @@
 import 'dart:io';
 
 import 'package:call_logger/core/database/database_helper.dart';
+import 'package:call_logger/core/utils/search_text_normalizer.dart';
+import 'package:flutter/material.dart';
 import 'package:call_logger/core/database/database_init_result.dart';
 import 'package:call_logger/core/init/app_init_provider.dart';
 import 'package:call_logger/core/init/app_initializer.dart';
@@ -25,6 +27,18 @@ const String kTestCategoryName = 'Δοκιμαστική Κατηγορία';
 const String kTestHistorySearchMarker = 'TEST_ELL_MARKER';
 
 Directory? _testTempDir;
+
+/// Πεδίο εσωτερικού τηλεφώνου — μοναδικό `TextInputType.number` στη γραμμή κεφαλίδας.
+Finder callLoggerPhoneTextField() {
+  return find.byWidgetPredicate(
+    (w) => w is TextField && w.keyboardType == TextInputType.number,
+  );
+}
+
+/// Πεδίο καλούντος — δεύτερο TextField στην οθόνη Κλήσεων (μετά το τηλέφωνο).
+Finder callLoggerCallerTextField() {
+  return find.byType(TextField).at(1);
+}
 
 /// Προώθηση UI χωρίς [pumpAndSettle]: στην οθόνη Κλήσεων το χρονόμετρο κλήσης
 /// ([Timer.periodic]) κρατά πάντα pending frame, οπότε το `pumpAndSettle` θα έληγε
@@ -98,6 +112,7 @@ Future<void> seedIsolatedTestDatabase() async {
 
   final deptId = await db.insert('departments', {
     'name': kTestDepartmentName,
+    'name_key': SearchTextNormalizer.normalizeForSearch(kTestDepartmentName),
     'building': '',
     'is_deleted': 0,
   });

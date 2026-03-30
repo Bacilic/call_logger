@@ -1,0 +1,4 @@
+Building Windows application...                                 
+C:\Program Files\Microsoft Visual Studio\18\Community\MSBuild\Microsoft\VC\v180\Microsoft.CppCommon.targets(254,5): error MSB8066: Custom build for 'E:\call_logger\build\windows\x64\CMakeFiles\5a23472ef489b38450630a65014049b7\flutter_windows.dll.rule;E:\call_logger\build\windows\x64\CMakeFiles\db2414c6effd2cf50c3b9dc3e0e692a2\flutter_assemble.rule' exited with code 1. [E:\call_logger\build\windows\x64\flutter\flutter_assemble.vcxproj]
+Building Windows application...                                    18,7s
+Build process failed.

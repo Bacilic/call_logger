@@ -53,9 +53,13 @@ class _AppShortcutsState extends ConsumerState<AppShortcuts>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     if (Platform.isWindows) {
-      windowManager.addListener(this);
+      try {
+        windowManager.addListener(this);
+      } on MissingPluginException catch (_) {}
       WidgetsBinding.instance.addPostFrameCallback((_) async {
-        await windowManager.setPreventClose(true);
+        try {
+          await windowManager.setPreventClose(true);
+        } on MissingPluginException catch (_) {}
       });
     }
     _databaseResult = widget.initialDatabaseResult;
@@ -69,7 +73,9 @@ class _AppShortcutsState extends ConsumerState<AppShortcuts>
   @override
   void dispose() {
     if (Platform.isWindows) {
-      windowManager.removeListener(this);
+      try {
+        windowManager.removeListener(this);
+      } on MissingPluginException catch (_) {}
     }
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
@@ -89,7 +95,9 @@ class _AppShortcutsState extends ConsumerState<AppShortcuts>
       // Αθόρυβο· το παράθυρο πρέπει να κλείσει.
     } finally {
       if (Platform.isWindows) {
-        await windowManager.destroy();
+        try {
+          await windowManager.destroy();
+        } on MissingPluginException catch (_) {}
       }
     }
   }

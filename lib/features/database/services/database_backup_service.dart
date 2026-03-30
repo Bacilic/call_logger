@@ -20,6 +20,15 @@ class DatabaseBackupResult {
   final String? message;
 }
 
+/// Αφαιρετική κλάση εκτέλεσης αντιγράφου: φάκελος προορισμού, μορφή ονομασίας, zip (μέσω [DatabaseBackupService]).
+class DatabaseBackupFileOperation {
+  DatabaseBackupFileOperation._();
+
+  /// Εκτελεί το αντίγραφο και επιστρέφει [DatabaseBackupResult] (επιτυχία / μήνυμα σφάλματος).
+  static Future<DatabaseBackupResult> run(DatabaseBackupSettings settings) =>
+      DatabaseBackupService.runBackup(settings);
+}
+
 /// Δημιουργία αντιγράφων με `VACUUM INTO` (ατομικό, ενσωματώνει WAL/SHM),
 /// προαιρετική συμπίεση zip και εφαρμογή πολιτικής διατήρησης.
 class DatabaseBackupService {
@@ -40,6 +49,14 @@ class DatabaseBackupService {
     DatabaseBackupSettings settings, {
     bool requireDestination = true,
   }) async {
+    if (!settings.backupOnExit) {
+      return const DatabaseBackupResult(
+        success: false,
+        message:
+            'Η λειτουργία αντιγράφων ασφαλείας είναι απενεργοποιημένη στις ρυθμίσεις.',
+      );
+    }
+
     final dest = settings.destinationDirectory.trim();
     if (dest.isEmpty) {
       if (requireDestination) {

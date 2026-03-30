@@ -68,11 +68,7 @@ void main() {
           reason: greekExpectMsg('Οθόνη Κλήσεων για πρόσβαση στο callHeaderProvider'),
         );
 
-        final phoneField = find.byWidgetPredicate(
-          (w) =>
-              w is TextField &&
-              (w.decoration?.hintText?.contains('2345') ?? false),
-        );
+        final phoneField = callLoggerPhoneTextField();
         expect(
           phoneField,
           findsOneWidget,

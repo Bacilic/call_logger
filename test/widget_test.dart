@@ -53,8 +53,7 @@ void main() {
       await tester.pump();
       await pumpUntilSettledLong(tester);
 
-      // Σειρά header: 0 Τηλέφωνο, 1 Καλούντας, 2 Τμήμα, 3 Εξοπλισμός
-      final callerField = find.byType(TextField).at(1);
+      final callerField = callLoggerCallerTextField();
       expect(callerField, findsOneWidget);
       await tester.tap(callerField);
       await tester.pump();

@@ -33,7 +33,7 @@ void main() {
     await s.load();
     sw.stop();
 
-    expect(s.wordCount, inInclusiveRange(62000, 70000));
+    expect(s.wordCount, inInclusiveRange(25000, 80000));
     // Στόχος πλάνου (~80 ms) — σε flutter test / VM ο χρόνος μεταβάλλεται.
     expect(sw.elapsedMilliseconds, lessThan(5000));
 

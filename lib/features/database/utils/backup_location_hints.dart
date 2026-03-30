@@ -52,14 +52,39 @@ class BackupLocationHints {
         .toList();
   }
 
+  /// Πλήθος «επιλέξιμων» τόμων Windows (ίδια κριτήρια με τις ετικέτες backup).
+  /// Εκτός Windows επιστρέφει 0.
+  static int eligibleWindowsBackupVolumeCount() {
+    if (!Platform.isWindows) return 0;
+    var n = 0;
+    for (final _ in _iterEligibleWindowsDriveMeta()) {
+      n++;
+    }
+    return n;
+  }
+
   /// Επιστρέφει ετικέτες τόμων με γράμμα (π.χ. `D`, `F (USB)`, `H (δικτυακός)`).
   /// Εξαιρούνται CD/DVD και άκυροι τόμοι. Κενή λίστα εκτός Windows.
   static List<String> eligibleWindowsBackupDriveLabels() {
     if (!Platform.isWindows) return [];
 
-    final mask = GetLogicalDrives();
     final out = <String>[];
+    for (final meta in _iterEligibleWindowsDriveMeta()) {
+      final letter = meta.letter;
+      final t = meta.driveType;
+      if (t == DRIVE_REMOVABLE) {
+        out.add('$letter (USB)');
+      } else if (t == DRIVE_REMOTE) {
+        out.add('$letter (δικτυακός)');
+      } else {
+        out.add(letter);
+      }
+    }
+    return out;
+  }
 
+  static Iterable<({String letter, int driveType})> _iterEligibleWindowsDriveMeta() sync* {
+    final mask = GetLogicalDrives();
     for (var i = 0; i < 26; i++) {
       if ((mask & (1 << i)) == 0) continue;
       final letter = String.fromCharCode(0x41 + i);
@@ -71,18 +96,11 @@ class BackupLocationHints {
             t == DRIVE_NO_ROOT_DIR) {
           continue;
         }
-        if (t == DRIVE_REMOVABLE) {
-          out.add('$letter (USB)');
-        } else if (t == DRIVE_REMOTE) {
-          out.add('$letter (δικτυακός)');
-        } else {
-          out.add(letter);
-        }
+        yield (letter: letter, driveType: t);
       } finally {
         calloc.free(rootPtr);
       }
     }
-    return out;
   }
 
   /// Παράγραφος ως τμήματα: έντονο μόνο το γράμμα τόμου (π.χ. C, F σε «F (USB)»).

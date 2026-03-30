@@ -10,7 +10,7 @@ import '../../features/calls/provider/lookup_provider.dart';
 import '../../features/calls/screens/calls_screen.dart';
 import '../../features/calls/screens/widgets/import_console_widget.dart';
 import '../../features/database/screens/database_browser_screen.dart';
-import '../../features/database/widgets/database_backup_lifecycle_hook.dart';
+
 import '../../features/database/widgets/database_settings_panel.dart';
 import '../../features/tasks/screens/tasks_screen.dart';
 import '../../features/directory/screens/directory_screen.dart';
@@ -229,7 +229,7 @@ class _MainShellState extends ConsumerState<MainShell> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const DatabaseBackupLifecycleHook(),
+
                 if (widget.isLocalDevMode)
                   Container(
                     width: double.infinity,

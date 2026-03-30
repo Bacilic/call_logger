@@ -72,15 +72,11 @@ void main() {
           reason: greekExpectMsg('Κύρια οθόνη κλήσεων'),
         );
 
-        final phoneField = find.byWidgetPredicate(
-          (w) =>
-              w is TextField &&
-              (w.decoration?.hintText?.contains('2345') ?? false),
-        );
+        final phoneField = callLoggerPhoneTextField();
         expect(
           phoneField,
           findsOneWidget,
-          reason: greekExpectMsg('Πεδίο τηλεφώνου (hint π.χ. 2345)'),
+          reason: greekExpectMsg('Πεδίο τηλεφώνου (Semantics: Αριθμός τηλεφώνου)'),
         );
         reporter.logStep('Αυτόματη πληκτρολόγηση εσωτερικού τηλεφώνου');
         await tester.tap(phoneField);

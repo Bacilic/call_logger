@@ -43,11 +43,7 @@ void main() {
         await tester.pump();
         await pumpUntilSettledLong(tester);
 
-        final phoneField = find.byWidgetPredicate(
-          (w) =>
-              w is TextField &&
-              (w.decoration?.hintText?.contains('2345') ?? false),
-        );
+        final phoneField = callLoggerPhoneTextField();
         reporter.logStep('Πληκτρολόγηση τηλεφώνου και lookup');
         await tester.tap(phoneField);
         await pumpUntilSettled(tester);

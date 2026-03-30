@@ -1,5 +1,9 @@
 import 'dart:async';
 
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../features/database/providers/backup_scheduler_provider.dart';
+import '../../features/database/providers/database_backup_settings_provider.dart';
 import '../config/app_config.dart';
 import '../database/database_init_result.dart';
 import '../database/database_init_runner.dart';
@@ -30,6 +34,13 @@ class AppInitResult {
 /// Χωρίς migrations ή flags παλιού σχήματος στο startup· μόνο έλεγχοι διαδρομής, σύνδεσης και υγείας (v1).
 class AppInitializer {
   AppInitializer._();
+
+  /// Μετά από επιτυχή αρχικοποίηση βάσης: φόρτωση ρυθμίσεων backup και
+  /// `checkStartupStatus` + εκκίνηση χρονόμετρου προγράμματος.
+  static Future<void> activateBackupSchedulingAfterDatabaseReady(Ref ref) async {
+    await ref.read(databaseBackupSettingsProvider.notifier).load();
+    await ref.read(backupSchedulerProvider.notifier).checkStartupAndStart();
+  }
 
   /// Εκτελεί τους ελέγχους βάσης (διαδρομή, ύπαρξη, δικαιώματα, σύνδεση, υγεία)
   /// και επιστρέφει [AppInitResult]. Δεν πετάει exception — τα σφάλματα επιστρέφονται στο result.

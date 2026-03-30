@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
+import '../../../core/widgets/nexus_calendar_picker.dart';
 import '../models/task.dart';
 import '../models/task_filter.dart';
 import '../providers/tasks_provider.dart';
@@ -74,11 +75,9 @@ class _TaskFilterBarState extends ConsumerState<TaskFilterBar> {
     final now = DateTime.now();
     final initialStart = filter.startDate ?? now;
     final initialEnd = filter.endDate ?? now.add(const Duration(days: 7));
-    final range = await showDateRangePicker(
-      context: context,
-      firstDate: DateTime(now.year - 1),
-      lastDate: DateTime(now.year + 2),
-      initialDateRange: DateTimeRange(start: initialStart, end: initialEnd),
+    final range = await showNexusDateRangePickerDialog(
+      context,
+      initialValue: DateTimeRange(start: initialStart, end: initialEnd),
     );
     if (!mounted || range == null) return;
     ref.read(taskFilterProvider.notifier).update((s) => s.copyWith(
