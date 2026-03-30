@@ -1,207 +1,26 @@
-# Nexus Calendar Picker - Οδηγός Μεταφοράς σε Άλλη Εφαρμογή
-
-Αυτός ο οδηγός περιγράφει πώς να μεταφέρεις το custom ημερολόγιο (`NexusCalendarPicker`) σε άλλη εφαρμογή Flutter και να αντικαταστήσεις το full-screen picker (`showDateRangePicker`), με τους εξής σταθερούς κανόνες:
-
-- Αρχή εβδομάδας: **Δευτέρα** (Monday, `DateTime.monday`)
-- Η αρχή εβδομάδας **δεν αλλάζει** από τον χρήστη
-- **Δεν υπάρχουν** προκαθορισμένα εύρη (preset ranges): τρέχουσα/προηγούμενη/επόμενη εβδομάδα
-
----
-
-## 1) Τι να προσθέσεις στο νέο project
-
-### Εξάρτηση (dependency)
-
-Στο `pubspec.yaml` βεβαιώσου ότι υπάρχει η βιβλιοθήκη:
-
-```yaml
-dependencies:
-  flutter:
-    sdk: flutter
-  intl: ^0.20.2
-```
-
-### Αρχεία
-
-Δημιούργησε τα παρακάτω αρχεία:
-
-- `lib/utils/date_parser_util.dart`
-- `lib/widgets/nexus_calendar_picker.dart`
-
-με τον κώδικα που ακολουθεί.
-
----
-
-## 2) Κώδικας αρχείου `lib/utils/date_parser_util.dart`
-
-```dart
-import 'package:flutter/material.dart';
-
-/// Αποτέλεσμα από parseSmartInput: είτε εύρος είτε μήνυμα σφάλματος.
-typedef DateParseResult = (DateTimeRange? range, String? errorMessage);
-
-/// Έξυπνος parser ημερομηνιών: μία ημέρα ή εύρος με expansion (d/m/y) και validation.
-class DateParserUtil {
-  DateParserUtil._();
-
-  static const _rangeSeparatorRegex = r'[^0-9/\\\-]+';
-  static const _datePartSeparatorRegex = r'[/\\\-]+';
-
-  /// Αναλύει input σε ημερομηνία ή εύρος. Κενό input -> (null, null).
-  /// Algorithm: + -> σήμερα; split σε clusters με [^0-9/\\\-]+; πάρε 2 clusters max;
-  /// ανά cluster split με /,\,-; expansion 1/2/3 parts; validation; swap αν start > end.
-  static DateParseResult parseSmartInput(String input) {
-    final trimmed = input.trim();
-    if (trimmed.isEmpty) return (null, null);
-
-    // a. Ειδική περίπτωση "+"
-    if (trimmed == '+') {
-      final now = DateTime.now();
-      final today = DateTime(now.year, now.month, now.day);
-      return (DateTimeRange(start: today, end: today), null);
-    }
-
-    // b. Clusters: split by anything that is NOT digit, /, \, -
-    final clusters = trimmed
-        .split(RegExp(_rangeSeparatorRegex))
-        .map((s) => s.trim())
-        .where((s) => s.isNotEmpty)
-        .toList();
-
-    // c. Πρώτα 2 clusters
-    if (clusters.isEmpty) return (null, null);
-    final cluster1 = clusters[0];
-    final cluster2 = clusters.length > 1 ? clusters[1] : null;
-
-    final now = DateTime.now();
-    final currentYear = now.year;
-    final currentMonth = now.month;
-
-    // d.–e. Parse first cluster
-    final first = _parseCluster(cluster1, currentYear, currentMonth);
-    if (first.$1 == null) {
-      return (null, first.$2 ?? 'Δεν υπάρχει αυτή η μέρα');
-    }
-    final DateTime start = first.$1!;
-
-    if (cluster2 == null) {
-      return (DateTimeRange(start: start, end: start), null);
-    }
-
-    final second = _parseCluster(cluster2, currentYear, currentMonth);
-    if (second.$1 == null) {
-      return (null, second.$2 ?? 'Δεν υπάρχει αυτή η μέρα');
-    }
-    final DateTime end = second.$1!;
-
-    // g. Swap logic
-    final actualStart = start.isAfter(end) ? end : start;
-    final actualEnd = start.isAfter(end) ? start : end;
-    return (DateTimeRange(start: actualStart, end: actualEnd), null);
-  }
-
-  /// Επιστρέφει (DateTime?, errorMessage?).
-  /// 3 ψηφία έτους -> "Μη έγκυρο έτος".
-  /// Άκυρη ημέρα -> "Δεν υπάρχει αυτή η μέρα".
-  static (DateTime?, String?) _parseCluster(
-    String cluster,
-    int currentYear,
-    int currentMonth,
-  ) {
-    final parts = cluster
-        .split(RegExp(_datePartSeparatorRegex))
-        .map((s) => s.trim())
-        .where((s) => s.isNotEmpty)
-        .toList();
-
-    if (parts.isEmpty) return (null, null);
-
-    int day;
-    int month;
-    int year;
-
-    if (parts.length == 1) {
-      final d = int.tryParse(parts[0]);
-      if (d == null) return (null, 'Δεν υπάρχει αυτή η μέρα');
-      day = d;
-      month = currentMonth;
-      year = currentYear;
-    } else if (parts.length == 2) {
-      final d = int.tryParse(parts[0]);
-      final m = int.tryParse(parts[1]);
-      if (d == null || m == null) return (null, 'Δεν υπάρχει αυτή η μέρα');
-      day = d;
-      month = m;
-      year = currentYear;
-    } else if (parts.length == 3) {
-      final d = int.tryParse(parts[0]);
-      final m = int.tryParse(parts[1]);
-      final yearStr = parts[2];
-      if (d == null || m == null) return (null, 'Δεν υπάρχει αυτή η μέρα');
-
-      final yearLen = yearStr.length;
-      if (yearLen == 3) return (null, 'Μη έγκυρο έτος');
-
-      final y = int.tryParse(yearStr);
-      if (y == null) return (null, 'Δεν υπάρχει αυτή η μέρα');
-
-      if (yearLen == 1) {
-        year = 2020 + y; // 6 -> 2026
-      } else if (yearLen == 2) {
-        year = 2000 + y; // 26 -> 2026
-      } else if (yearLen == 4) {
-        year = y;
-      } else {
-        return (null, 'Μη έγκυρο έτος');
-      }
-
-      day = d;
-      month = m;
-    } else {
-      return (null, 'Δεν υπάρχει αυτή η μέρα');
-    }
-
-    // f. Validation: DateTime και έλεγχος ότι δεν διορθώθηκε
-    try {
-      final res = DateTime(year, month, day);
-      if (res.day != day || res.month != month) {
-        return (null, 'Δεν υπάρχει αυτή η μέρα');
-      }
-      return (res, null);
-    } catch (_) {
-      return (null, 'Δεν υπάρχει αυτή η μέρα');
-    }
-  }
-}
-```
-
----
-
-## 3) Κώδικας αρχείου `lib/widgets/nexus_calendar_picker.dart`
-
-```dart
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
+
 import '../utils/date_parser_util.dart';
 
 /// Custom desktop-style date/range picker με επεξεργάσιμο πεδίο και popup ημερολόγιο.
 /// Η αρχή εβδομάδας είναι σταθερή στη Δευτέρα και δεν αλλάζει από τον χρήστη.
-class NexusCalendarPicker extends StatefulWidget {
+class CalendarRangePicker extends StatefulWidget {
   final DateTimeRange? value;
   final ValueChanged<DateTimeRange?> onChanged;
 
-  const NexusCalendarPicker({
+  const CalendarRangePicker({
     super.key,
     this.value,
     required this.onChanged,
   });
 
   @override
-  State<NexusCalendarPicker> createState() => _NexusCalendarPickerState();
+  State<CalendarRangePicker> createState() => _CalendarRangePickerState();
 }
 
-class _NexusCalendarPickerState extends State<NexusCalendarPicker> {
+class _CalendarRangePickerState extends State<CalendarRangePicker> {
   static final DateFormat _dateFormat = DateFormat('dd/MM/yyyy');
   static const int _firstDayOfWeek = DateTime.monday;
 
@@ -215,6 +34,7 @@ class _NexusCalendarPickerState extends State<NexusCalendarPicker> {
   String? _lastProcessedText;
   DateTime? _rangeStart;
   DateTime? _rangeEnd;
+  bool _isSelectingEnd = false;
 
   @override
   void initState() {
@@ -232,7 +52,7 @@ class _NexusCalendarPickerState extends State<NexusCalendarPicker> {
   }
 
   @override
-  void didUpdateWidget(NexusCalendarPicker oldWidget) {
+  void didUpdateWidget(CalendarRangePicker oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.value != widget.value) _syncControllerFromValue();
   }
@@ -256,6 +76,20 @@ class _NexusCalendarPickerState extends State<NexusCalendarPicker> {
     _lastProcessedText = _controller.text;
   }
 
+  void _syncControllerFromDraftRange() {
+    final start = _rangeStart;
+    final end = _rangeEnd ?? _rangeStart;
+    if (start == null || end == null) return;
+
+    final from = start.isBefore(end) ? start : end;
+    final to = start.isBefore(end) ? end : start;
+    if (from.year == to.year && from.month == to.month && from.day == to.day) {
+      _controller.text = _dateFormat.format(from);
+      return;
+    }
+    _controller.text = '${_dateFormat.format(from)} - ${_dateFormat.format(to)}';
+  }
+
   @override
   void dispose() {
     _focusNode.removeListener(_onFocusChange);
@@ -266,14 +100,33 @@ class _NexusCalendarPickerState extends State<NexusCalendarPicker> {
   }
 
   void _handleSubmitted(String text) {
+    final normalizedText = text.trim();
+    final lastProcessedNormalized = _lastProcessedText?.trim();
+    if (normalizedText == lastProcessedNormalized) return;
+
+    if (normalizedText.isEmpty) {
+      setState(() {
+        _errorText = null;
+        _rangeStart = null;
+        _rangeEnd = null;
+        _isSelectingEnd = false;
+      });
+      _controller.clear();
+      _lastProcessedText = '';
+      widget.onChanged(null);
+      return;
+    }
+
     if (text == _lastProcessedText) return;
     _lastProcessedText = text;
     final (range, errorMessage) = DateParserUtil.parseSmartInput(text);
+
     if (!mounted) return;
     if (errorMessage != null) {
       setState(() => _errorText = errorMessage);
       return;
     }
+
     if (range != null) {
       setState(() => _errorText = null);
       final start = range.start;
@@ -286,6 +139,10 @@ class _NexusCalendarPickerState extends State<NexusCalendarPicker> {
         _controller.text =
             '${_dateFormat.format(start)} - ${_dateFormat.format(end)}';
       }
+      // Keep dedupe token in sync with normalized text to prevent a second
+      // submit cycle (focus-loss after Enter) from re-triggering onChanged.
+      _lastProcessedText = _controller.text;
+
       widget.onChanged(range);
     } else {
       setState(() => _errorText = null);
@@ -297,6 +154,7 @@ class _NexusCalendarPickerState extends State<NexusCalendarPicker> {
     setState(() {
       _rangeStart = null;
       _rangeEnd = null;
+      _isSelectingEnd = false;
     });
 
     final box = context.findRenderObject() as RenderBox?;
@@ -325,19 +183,24 @@ class _NexusCalendarPickerState extends State<NexusCalendarPicker> {
           if (!mounted) return;
           final d = DateTime(date.year, date.month, date.day);
           setState(() {
-            if (_rangeStart == null) {
+            if (_rangeStart == null || !_isSelectingEnd) {
               _rangeStart = d;
               _rangeEnd = d;
+              _isSelectingEnd = true;
             } else {
               _rangeEnd = d;
+              _isSelectingEnd = false;
             }
           });
+          _syncControllerFromDraftRange();
           _overlayEntry?.markNeedsBuild();
         },
         onRangeEndChanged: (date) {
           if (!mounted) return;
           final d = DateTime(date.year, date.month, date.day);
+          if (!_isSelectingEnd || _rangeStart == null) return;
           setState(() => _rangeEnd = d);
+          _syncControllerFromDraftRange();
           _overlayEntry?.markNeedsBuild();
         },
         onApply: () {
@@ -360,6 +223,7 @@ class _NexusCalendarPickerState extends State<NexusCalendarPicker> {
             _errorText = null;
             _rangeStart = null;
             _rangeEnd = null;
+            _isSelectingEnd = false;
           });
           _removeOverlay();
         },
@@ -382,10 +246,11 @@ class _NexusCalendarPickerState extends State<NexusCalendarPicker> {
         mainAxisSize: MainAxisSize.min,
         children: [
           SizedBox(
-            width: 230,
+            width: 280,
             child: TextFormField(
               controller: _controller,
               focusNode: _focusNode,
+              style: const TextStyle(fontSize: 13),
               decoration: InputDecoration(
                 labelText: 'Ημερομηνίες',
                 hintText: 'ΗΗ/ΜΜ/ΕΕΕΕ - ΗΗ/ΜΜ/ΕΕΕΕ',
@@ -395,37 +260,65 @@ class _NexusCalendarPickerState extends State<NexusCalendarPicker> {
                       BorderSide(color: Theme.of(context).colorScheme.error),
                 ),
                 errorText: _errorText,
-                suffixIcon: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    Tooltip(
-                      message: 'Οδηγός Εισαγωγής\n'
-                          '• "7" -> Ημέρα τρέχοντος μηνός\n'
-                          '• "1/2" -> Ημερομηνία τρέχοντος έτους\n'
-                          '• "1/2\\26" -> Έτος 2026 (1, 2 ή 4 ψηφία)\n'
-                          '• "1/1 έως 5/1" -> Εύρος (οποιοδήποτε γράμμα ανάμεσα)\n'
-                          '• "+" -> Σημερινή ημερομηνία',
-                      preferBelow: false,
-                      child: Icon(
-                        Icons.info_outline,
-                        size: 18,
-                        color: Theme.of(context).colorScheme.primary,
-                      ),
-                    ),
-                    if (_errorText != null) ...[
-                      const SizedBox(width: 4),
-                      Tooltip(
-                        message: _errorText!,
-                        preferBelow: false,
-                        child: Icon(
-                          Icons.error_outline,
-                          size: 18,
-                          color: Theme.of(context).colorScheme.error,
+                suffixIcon: ValueListenableBuilder<TextEditingValue>(
+                  valueListenable: _controller,
+                  builder: (context, value, _) {
+                    final hasText = value.text.trim().isNotEmpty;
+                    return Row(
+                      mainAxisSize: MainAxisSize.min,
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        Tooltip(
+                          message: 'Οδηγός Εισαγωγής\n'
+                              '• "7" -> Ημέρα τρέχοντος μηνός\n'
+                              '• "1/2" -> Ημερομηνία τρέχοντος έτους\n'
+                              '• "1/2\\26" -> Έτος 2026 (1, 2 ή 4 ψηφία)\n'
+                              '• "1/1 έως 5/1" -> Εύρος (οποιοδήποτε γράμμα ανάμεσα)\n'
+                              '• "+" -> Σημερινή ημερομηνία',
+                          preferBelow: false,
+                          child: Icon(
+                            Icons.info_outline,
+                            size: 18,
+                            color: Theme.of(context).colorScheme.primary,
+                          ),
                         ),
-                      ),
-                    ],
-                  ],
+                        if (hasText) ...[
+                          const SizedBox(width: 2),
+                          IconButton(
+                            tooltip: 'Καθαρισμός εύρους ημερομηνιών',
+                            constraints: const BoxConstraints(
+                              minWidth: 24,
+                              minHeight: 24,
+                            ),
+                            padding: EdgeInsets.zero,
+                            icon: const Icon(Icons.close, size: 16),
+                            onPressed: () {
+                              setState(() {
+                                _errorText = null;
+                                _rangeStart = null;
+                                _rangeEnd = null;
+                                _isSelectingEnd = false;
+                              });
+                              _controller.clear();
+                              _lastProcessedText = '';
+                            },
+                          ),
+                        ],
+                        if (_errorText != null) ...[
+                          const SizedBox(width: 4),
+                          Tooltip(
+                            message: _errorText!,
+                            preferBelow: false,
+                            child: Icon(
+                              Icons.error_outline,
+                              size: 18,
+                              color: Theme.of(context).colorScheme.error,
+                            ),
+                          ),
+                        ],
+                      ],
+                    );
+                  },
                 ),
               ),
               onFieldSubmitted: (_) => _handleSubmitted(_controller.text),
@@ -622,6 +515,7 @@ class _CalendarOverlay extends StatelessWidget {
     final rangeMax = (rangeStartNorm != null && rangeEndNorm != null)
         ? (rangeStartNorm.isBefore(rangeEndNorm) ? rangeEndNorm : rangeStartNorm)
         : rangeEndNorm ?? rangeStartNorm;
+    final isPreviewingSelection = rangeMin != null;
 
     final gridContent = Column(
       mainAxisSize: MainAxisSize.min,
@@ -632,7 +526,8 @@ class _CalendarOverlay extends StatelessWidget {
             final idx = row * 7 + col;
             final date = dates[idx];
             final isCurrentMonth = date.month == month && date.year == year;
-            final isSelected = selectedStart != null &&
+            final isSelected = !isPreviewingSelection &&
+                selectedStart != null &&
                 selectedEnd != null &&
                 !date.isBefore(selectedStart) &&
                 !date.isAfter(selectedEnd);
@@ -651,9 +546,9 @@ class _CalendarOverlay extends StatelessWidget {
             final textOpacity = isCurrentMonth ? 1.0 : 0.3;
             return Expanded(
               child: Padding(
-                padding: const EdgeInsets.all(2),
-                child: AspectRatio(
-                  aspectRatio: 1,
+                padding: const EdgeInsets.all(1),
+                child: SizedBox(
+                  height: 28,
                   child: InkWell(
                     onTap: () => onDayTapped(date),
                     borderRadius: BorderRadius.circular(4),
@@ -683,20 +578,20 @@ class _CalendarOverlay extends StatelessWidget {
       }),
     );
 
+    const double cellHeight = 30; // 28 + 2 padding
     return LayoutBuilder(
       builder: (context, constraints) {
-        final w = constraints.maxWidth;
-        final cellSize = w / 7;
+        final cellWidth = constraints.maxWidth / 7;
         return GestureDetector(
           onPanStart: (d) {
-            final col = (d.localPosition.dx / cellSize).floor().clamp(0, 6);
-            final row = (d.localPosition.dy / cellSize).floor().clamp(0, 5);
+            final col = (d.localPosition.dx / cellWidth).floor().clamp(0, 6);
+            final row = (d.localPosition.dy / cellHeight).floor().clamp(0, 5);
             final idx = row * 7 + col;
             if (idx >= 0 && idx < 42) onDayTapped(dates[idx]);
           },
           onPanUpdate: (d) {
-            final col = (d.localPosition.dx / cellSize).floor().clamp(0, 6);
-            final row = (d.localPosition.dy / cellSize).floor().clamp(0, 5);
+            final col = (d.localPosition.dx / cellWidth).floor().clamp(0, 6);
+            final row = (d.localPosition.dy / cellHeight).floor().clamp(0, 5);
             final idx = row * 7 + col;
             if (idx >= 0 && idx < 42) onRangeEndChanged(dates[idx]);
           },
@@ -706,64 +601,67 @@ class _CalendarOverlay extends StatelessWidget {
     );
   }
 }
-```
 
----
+/// Απόσταση από την κορυφή της ασφαλούς περιοχής (μετά το system UI) ώστε το παράθυρο
+/// να πέφτει στο ύψος της σειράς φίλτρων (κουμπί ημερολογίου) κάτω από την [AppBar].
+const double _kDateRangeDialogTopInset = kToolbarHeight + 20;
 
-## 4) Prompt που μπορείς να δώσεις στον Cursor στην άλλη εφαρμογή
+class CalendarRangePickerDialogResult {
+  const CalendarRangePickerDialogResult.selected(this.range) : wasCleared = false;
 
-```text
-Ενσωμάτωσε το custom date/range picker με βάση τα παρακάτω αρχεία:
-- lib/widgets/nexus_calendar_picker.dart
-- lib/utils/date_parser_util.dart
+  const CalendarRangePickerDialogResult.cleared()
+      : range = null,
+        wasCleared = true;
 
-Αντικατάστησε κάθε χρήση του showDateRangePicker με το NexusCalendarPicker.
+  final DateTimeRange? range;
+  final bool wasCleared;
+}
 
-Απαιτήσεις:
-1) Η αρχή εβδομάδας να είναι σταθερή στη Δευτέρα (DateTime.monday) και να ΜΗΝ είναι παραμετροποιήσιμη από τον χρήστη.
-2) Να μην υπάρχουν καθόλου preset ranges (τρέχουσα εβδομάδα / προηγούμενη / επόμενη), ούτε στη λογική ούτε στο UI.
-3) Να μην υπάρχει εξάρτηση από app-specific services (π.χ. SettingsService).
-4) Να διατηρηθούν:
-   - text input parsing μέσω DateParserUtil
-   - popup overlay ημερολογίου
-   - επιλογή range με click/drag
-   - Apply button για επιβεβαίωση επιλογής
-5) Αν λείπει το intl, πρόσθεσέ το στο pubspec.yaml.
-6) Στο τέλος τρέξε ανάλυση και διόρθωσε imports/types αν χρειάζονται.
-
-Δώσε μου τελική αναφορά με:
-- λίστα αρχείων που άλλαξαν
-- σύντομη περιγραφή ανά αρχείο
-- πού ακριβώς αντικαταστάθηκε το showDateRangePicker.
-```
-
----
-
-## 5) Παράδειγμα χρήσης σε StatefulWidget
-
-```dart
-DateTimeRange? selectedRange;
-
-@override
-Widget build(BuildContext context) {
-  return NexusCalendarPicker(
-    value: selectedRange,
-    onChanged: (range) {
-      setState(() {
-        selectedRange = range;
-      });
+/// Πλαίσιο.dialog για desktop:
+/// - null: ακύρωση
+/// - [CalendarRangePickerDialogResult.cleared]: ρητός καθαρισμός φίλτρου
+/// - [CalendarRangePickerDialogResult.selected]: επιβεβαιωμένο εύρος
+Future<CalendarRangePickerDialogResult?> showCalendarRangePickerDialog(
+  BuildContext context, {
+  DateTimeRange? initialValue,
+}) {
+  return showDialog<CalendarRangePickerDialogResult>(
+    context: context,
+    builder: (dialogContext) {
+      return AlertDialog(
+        alignment: Alignment.topCenter,
+        insetPadding: const EdgeInsets.only(
+          top: _kDateRangeDialogTopInset,
+          left: 40,
+          right: 40,
+        ),
+        title: const Text('Εύρος ημερομηνιών'),
+        content: SizedBox(
+          width: 360,
+          child: SingleChildScrollView(
+            child: CalendarRangePicker(
+              value: initialValue,
+              onChanged: (range) {
+                if (range == null) {
+                  Navigator.of(
+                    dialogContext,
+                  ).pop(const CalendarRangePickerDialogResult.cleared());
+                  return;
+                }
+                Navigator.of(
+                  dialogContext,
+                ).pop(CalendarRangePickerDialogResult.selected(range));
+              },
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Άκυρο'),
+          ),
+        ],
+      );
     },
   );
 }
-```
-
----
-
-## 6) Acceptance criteria (κριτήρια αποδοχής)
-
-- Δεν υπάρχει χρήση `showDateRangePicker` στο codebase.
-- Το ημερολόγιο εμφανίζει εβδομάδα με αρχή **Δευτέρα**.
-- Δεν υπάρχει UI/λογική για `current/prev/next week`.
-- Το widget υποστηρίζει single day και range.
-- Δεν υπάρχουν εξαρτήσεις από `SettingsService`.
-

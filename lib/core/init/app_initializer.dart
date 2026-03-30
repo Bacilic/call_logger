@@ -5,9 +5,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../features/database/providers/backup_scheduler_provider.dart';
 import '../../features/database/providers/database_backup_settings_provider.dart';
 import '../config/app_config.dart';
+import '../database/database_init_progress_provider.dart';
 import '../database/database_init_result.dart';
 import '../database/database_init_runner.dart';
+import '../database/database_path_resolution.dart';
+import '../database/lock_diagnostic_service.dart';
 import '../services/dictionary_service.dart';
+import '../services/settings_service.dart';
 import '../services/spell_check_service.dart';
 
 /// Αποτέλεσμα αρχικοποίησης εφαρμογής (βάση δεδομένων + τρόπος λειτουργίας).
@@ -37,25 +41,32 @@ class AppInitializer {
 
   /// Μετά από επιτυχή αρχικοποίηση βάσης: φόρτωση ρυθμίσεων backup και
   /// `checkStartupStatus` + εκκίνηση χρονόμετρου προγράμματος.
-  static Future<void> activateBackupSchedulingAfterDatabaseReady(Ref ref) async {
+  static Future<void> activateBackupSchedulingAfterDatabaseReady(
+    Ref ref,
+  ) async {
     await ref.read(databaseBackupSettingsProvider.notifier).load();
     await ref.read(backupSchedulerProvider.notifier).checkStartupAndStart();
   }
 
   /// Εκτελεί τους ελέγχους βάσης (διαδρομή, ύπαρξη, δικαιώματα, σύνδεση, υγεία)
   /// και επιστρέφει [AppInitResult]. Δεν πετάει exception — τα σφάλματα επιστρέφονται στο result.
-  static Future<AppInitResult> initialize() async {
+  static Future<AppInitResult> initialize({
+    DatabaseInitProgressNotifier? progressNotifier,
+  }) async {
     try {
       final runnerResult = await runDatabaseInitChecks(
         closeConnectionFirst: false,
+        progressNotifier: progressNotifier,
       );
       var spellCheckReady = false;
       if (runnerResult.result.isSuccess) {
         try {
+          progressNotifier?.setStep('Φόρτωση λεξικού ορθογραφίας');
           final dict = DictionaryService(
             assetPath: AppConfig.greekDictionaryAsset,
           );
           await dict.load().timeout(const Duration(seconds: 8));
+          progressNotifier?.setStep('Αρχικοποίηση ορθογραφικού ελέγχου');
           final spell = LexiconSpellCheckService();
           await spell
               .init(lexiconMap: dict.stripKeyToDisplayMap)
@@ -66,14 +77,36 @@ class AppInitializer {
           spellCheckReady = false;
         }
       }
+      progressNotifier?.setStep(
+        'Ολοκλήρωση εκκίνησης',
+        clearSecondsRemaining: true,
+      );
       return AppInitResult(
         result: runnerResult.result,
         isLocalDevMode: runnerResult.isLocalDevMode,
         spellCheckReady: spellCheckReady,
       );
     } catch (e, st) {
+      var result = DatabaseInitResult.fromException(e, null, st);
+      if (e is TimeoutException || e is DatabaseInitException) {
+        try {
+          progressNotifier?.setStep('Εντοπισμός διεργασίας');
+          final configured = await SettingsService().getDatabasePath();
+          final resolved = await resolveEffectiveDatabasePath(configured);
+          final diagnostic = await const LockDiagnosticService()
+              .detectLockingProcess(resolved.path);
+          if (diagnostic.trim().isNotEmpty) {
+            final details = result.details?.trim();
+            final merged = (details == null || details.isEmpty)
+                ? diagnostic
+                : '$details\n\n--- Lock diagnostics ---\n$diagnostic';
+            result = result.copyWith(details: merged);
+            progressNotifier?.setDiagnostic(diagnostic);
+          }
+        } catch (_) {}
+      }
       return AppInitResult(
-        result: DatabaseInitResult.fromException(e, null, st),
+        result: result,
         isLocalDevMode: false,
         spellCheckReady: false,
       );

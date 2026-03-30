@@ -90,26 +90,19 @@ class DatabaseInitResult {
     }
 
     final codeLabel = _formatOsErrorCode(osErrCode, winCodeFromText);
-    final pathLine = (path != null && path.trim().isNotEmpty)
-        ? 'Πλήρης διαδρομή: ${path.trim()}'
-        : null;
 
     DatabaseInitResult build({
       required DatabaseStatus status,
       required String message,
       String? details,
     }) {
-      final detailParts = <String>[];
-      if (details != null && details.trim().isNotEmpty) {
-        detailParts.add(details.trim());
-      }
-      if (pathLine != null) detailParts.add(pathLine);
-      if (codeLabel != null) detailParts.add(codeLabel);
-      detailParts.add('Αρχικό μήνυμα (runtime): $original');
+      final advice = (details != null && details.trim().isNotEmpty)
+          ? details.trim()
+          : null;
       return DatabaseInitResult(
         status: status,
         message: message,
-        details: detailParts.join('\n'),
+        details: advice,
         path: path,
         originalExceptionText: original,
         stackTraceText: stackStr.isEmpty ? null : stackStr,
@@ -235,6 +228,32 @@ class DatabaseInitResult {
       );
     }
 
+    if (DatabaseInitResult._isDatabaseLayerException(error) &&
+        DatabaseInitResult._isMigrationError(lower)) {
+      final causing = DatabaseInitResult._extractCausingStatement(raw);
+      late final String msg;
+      if (DatabaseInitResult._isNoSuchTableError(lower) ||
+          DatabaseInitResult._isNoSuchColumnError(lower)) {
+        msg = DatabaseInitResult._getUserFriendlyMessage(lower, raw);
+      } else if (DatabaseInitResult._isSqliteLogicErrorCode1(lower)) {
+        msg =
+            'Προέκυψε πρόβλημα κατά την αναβάθμιση της βάσης δεδομένων.';
+      } else {
+        msg =
+            'Προέκυψε πρόβλημα κατά την αναβάθμιση του σχήματος της βάσης δεδομένων.';
+      }
+      final suggested = DatabaseInitResult._getSuggestedAction(lower, raw);
+      final composed = DatabaseInitResult._composeDetailsWithCausing(
+        suggested,
+        causing,
+      );
+      return build(
+        status: DatabaseStatus.applicationError,
+        message: msg,
+        details: composed,
+      );
+    }
+
     if (lower.contains('no such file') ||
         lower.contains('cannot open file') ||
         lower.contains('system cannot find the file') ||
@@ -317,20 +336,152 @@ class DatabaseInitResult {
       );
     }
 
+    if (DatabaseInitResult._isDatabaseLayerException(error)) {
+      return build(
+        status: DatabaseStatus.applicationError,
+        message:
+            'Προέκυψε πρόβλημα κατά την πρόσβαση ή την ενημέρωση της βάσης δεδομένων (SQLite).',
+        details:
+            'Ελέγξτε τη διαδρομή στις ρυθμίσεις, τα δικαιώματα και αν άλλη εφαρμογή κρατά το ίδιο αρχείο .db. '
+            'Αν το αρχείο φαίνεται κατεστραμμένο ή ασύμβατο, δοκιμάστε νέα βάση από τις ρυθμίσεις.',
+      );
+    }
+
     return DatabaseInitResult(
       status: DatabaseStatus.applicationError,
       message:
-          'Προέκυψε σφάλμα (${error.runtimeType}). Δείτε τις λεπτομέρειες και το αρχικό μήνυμα παρακάτω.',
-      details: [
-        ?pathLine,
-        ?codeLabel,
-        'Αρχικό μήνυμα (runtime): $original',
-      ].join('\n'),
+          'Προέκυψε σφάλμα (${error.runtimeType}). Δείτε διαδρομή, τεχνικά στοιχεία και αντιγραφή πλήρους αναφοράς αν χρειάζεται.',
+      details: null,
       path: path,
       originalExceptionText: original,
       stackTraceText: stackStr.isEmpty ? null : stackStr,
       technicalCode: codeLabel,
     );
+  }
+
+  static bool _isDatabaseLayerException(Object error) {
+    final t = error.runtimeType.toString();
+    final s = error.toString();
+    if (t.contains('Sqflite') || t.contains('DatabaseException')) return true;
+    if (s.contains('SqfliteFfiException')) return true;
+    if (s.contains('SqliteException')) return true;
+    if (s.contains('sqlite_error:')) return true;
+    if (s.contains('DatabaseException(')) return true;
+    if (s.contains('no such table:')) return true;
+    if (s.contains('no such column:')) return true;
+    return false;
+  }
+
+  static bool _isNoSuchTableError(String lower) =>
+      lower.contains('no such table');
+
+  static bool _isNoSuchColumnError(String lower) =>
+      lower.contains('no such column');
+
+  static bool _isMigrationError(String lower) {
+    if (_isNoSuchTableError(lower) || _isNoSuchColumnError(lower)) {
+      return true;
+    }
+    if (lower.contains('sql logic error') &&
+        (lower.contains('alter table') ||
+            lower.contains('duplicate column') ||
+            lower.contains('cannot add a ') ||
+            lower.contains('has no column named'))) {
+      return true;
+    }
+    return false;
+  }
+
+  static String? _extractTableNameFromError(String raw) {
+    final m = RegExp(
+      r'no such table:\s*(\S+)',
+      caseSensitive: false,
+    ).firstMatch(raw);
+    if (m != null) {
+      var name = m.group(1)?.trim() ?? '';
+      name = name.replaceAll(RegExp(r'[,;)\]]+$'), '');
+      if (name.isNotEmpty) return name;
+    }
+    final m2 = RegExp(
+      r'Causing statement:\s*ALTER\s+TABLE\s+(\S+)\s+',
+      caseSensitive: false,
+    ).firstMatch(raw);
+    if (m2 != null) {
+      var name = m2.group(1)?.trim() ?? '';
+      name = name.replaceAll(RegExp(r'[,;)\]]+$'), '');
+      if (name.isNotEmpty) return name;
+    }
+    return null;
+  }
+
+  static String? _extractColumnNameFromError(String raw) {
+    final m = RegExp(
+      r'no such column:\s*(\S+)',
+      caseSensitive: false,
+    ).firstMatch(raw);
+    if (m == null) return null;
+    var name = m.group(1)?.trim() ?? '';
+    name = name.replaceAll(RegExp(r'[,;)\]]+$'), '');
+    return name.isEmpty ? null : name;
+  }
+
+  static String? _extractCausingStatement(String raw) {
+    final m = RegExp(
+      r'Causing statement:\s*([^\n}]+)',
+      caseSensitive: false,
+    ).firstMatch(raw);
+    var s = m?.group(1)?.trim();
+    if (s == null || s.isEmpty) return null;
+    s = s.replaceAll(RegExp(r'[}\],]+$'), '').trim();
+    return s.isEmpty ? null : s;
+  }
+
+  static bool _isSqliteLogicErrorCode1(String lower) =>
+      lower.contains('sql logic error') && lower.contains('code 1');
+
+  static String _getUserFriendlyMessage(String lower, String raw) {
+    if (_isNoSuchTableError(lower)) {
+      final t = _extractTableNameFromError(raw);
+      if (t != null && t.isNotEmpty) {
+        return 'Η βάση δεδομένων είναι κατεστραμμένη ή βρίσκεται σε παλιά μορφή.\n'
+            'Λείπει ο πίνακας «$t».';
+      }
+      return 'Η βάση δεδομένων είναι κατεστραμμένη ή βρίσκεται σε παλιά μορφή.\n'
+          'Λείπει αναμενόμενος πίνακας.';
+    }
+    if (_isNoSuchColumnError(lower)) {
+      final c = _extractColumnNameFromError(raw);
+      if (c != null && c.isNotEmpty) {
+        return 'Η βάση δεδομένων είναι κατεστραμμένη ή σε ασύμβατη μορφή.\n'
+            'Λείπει η στήλη «$c».';
+      }
+      return 'Η βάση δεδομένων είναι κατεστραμμένη ή σε ασύμβατη μορφή.\n'
+          'Λείπει αναμενόμενη στήλη.';
+    }
+    return 'Προέκυψε πρόβλημα κατά την αναβάθμιση της βάσης δεδομένων.';
+  }
+
+  static String _getSuggestedAction(String lower, String raw) {
+    if (_isNoSuchTableError(lower) || _isNoSuchColumnError(lower)) {
+      return 'Δοκιμάστε να διαγράψετε το αρχείο της βάσης δεδομένων '
+          '(βρίσκεται στο φάκελο «Data Base») και να ξεκινήσετε ξανά την εφαρμογή. '
+          'Θα δημιουργηθεί νέα καθαρή βάση.';
+    }
+    if (_isSqliteLogicErrorCode1(lower) || _isMigrationError(lower)) {
+      return 'Το αρχείο της βάσης μπορεί να είναι κατεστραμμένο. '
+          'Διαγράψτε το και επανεκκινήστε.';
+    }
+    return '';
+  }
+
+  static String? _composeDetailsWithCausing(String suggested, String? causing) {
+    final parts = <String>[];
+    if (suggested.trim().isNotEmpty) parts.add(suggested.trim());
+    if (causing != null && causing.trim().isNotEmpty) {
+      parts.add('Εντολή SQL (Causing statement): ${causing.trim()}');
+    }
+    if (parts.isEmpty) return null;
+    return parts.join('\n\n');
   }
 
   /// Επιτυχής αρχικοποίηση.

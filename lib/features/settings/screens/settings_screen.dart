@@ -7,6 +7,9 @@ import 'package:path/path.dart' as path;
 
 import '../../../core/config/app_config.dart';
 import '../../../core/database/database_helper.dart';
+import '../../../core/database/database_init_result.dart';
+import '../../../core/database/database_init_runner.dart';
+import '../../../core/init/app_init_provider.dart';
 import '../../../core/providers/settings_provider.dart';
 import '../../../core/services/settings_service.dart';
 import '../../calls/provider/remote_paths_provider.dart';
@@ -168,9 +171,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         fileResult.files.isNotEmpty &&
         fileResult.files.single.path != null) {
       final p = fileResult.files.single.path!;
-      if (mounted) {
-        setState(() => _selectedNewPath = p);
-      }
+      await _validateApplyAndFinishPick(p);
       return;
     }
 
@@ -181,12 +182,132 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
     if (dirPath != null && dirPath.trim().isNotEmpty) {
       final fullDbPath = path.join(dirPath, 'call_logger.db');
-      if (mounted) {
-        setState(() => _selectedNewPath = fullDbPath);
-      }
+      await _validateApplyAndFinishPick(fullDbPath);
     } else {
       if (mounted) {
         setState(() => _errorMessage = 'Δεν επιλέχθηκε αρχείο ή φάκελος.');
+      }
+    }
+  }
+
+  /// Επαληθεύει το αρχείο βάσης (ίδια ροή με εκκίνηση), αποθηκεύει διαδρομή αν OK,
+  /// επαναφέρει την προηγούμενη σε αποτυχία. Από `openFindDatabaseOnStart`: κλείνει τις Ρυθμίσεις με `pop(true)`.
+  Future<void> _validateApplyAndFinishPick(String newPath) async {
+    final trimmed = newPath.trim();
+    if (trimmed.isEmpty || !mounted) return;
+
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => const AlertDialog(
+        content: Row(
+          children: [
+            SizedBox(
+              height: 48,
+              width: 48,
+              child: CircularProgressIndicator(strokeWidth: 3),
+            ),
+            SizedBox(width: 24),
+            Expanded(
+              child: Text(
+                'Έλεγχος βάσης δεδομένων…',
+                style: TextStyle(fontSize: 16),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    final previous = await _settings.getDatabasePath();
+    late DatabaseInitRunnerResult runner;
+    try {
+      try {
+        await DatabaseHelper.instance.closeConnection();
+      } catch (_) {}
+      await _settings.setDatabasePath(trimmed);
+      runner = await runDatabaseInitChecks(closeConnectionFirst: true);
+    } catch (e, st) {
+      runner = DatabaseInitRunnerResult(
+        result: DatabaseInitResult.fromException(e, trimmed, st),
+        isLocalDevMode: false,
+      );
+    } finally {
+      if (mounted) {
+        Navigator.of(context, rootNavigator: true).pop();
+      }
+    }
+
+    if (!mounted) return;
+
+    if (!runner.result.isSuccess) {
+      try {
+        await DatabaseHelper.instance.closeConnection();
+      } catch (_) {}
+      try {
+        await _settings.setDatabasePath(previous);
+      } catch (_) {}
+      if (!mounted) return;
+      final msg = runner.result.message ?? 'Η βάση δεν πέρασε τον έλεγχο.';
+      final det = runner.result.details?.trim();
+      await showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Η βάση δεν είναι έγκυρη'),
+          content: SingleChildScrollView(
+            child: Text(
+              det != null && det.isNotEmpty ? '$msg\n\n$det' : msg,
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('Εντάξει'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Βάση έτοιμη'),
+        content: const Text(
+          'Η διαδρομή αποθηκεύτηκε και η βάση επαληθεύτηκε.\n\n'
+          'Για πλήρη εφαρμογή αλλαγών, κλείστε την εφαρμογή (π.χ. Alt+F4) και ανοίξτε την ξανά.',
+        ),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Εντάξει'),
+          ),
+        ],
+      ),
+    );
+
+    if (!mounted) return;
+    setState(() {
+      _currentPath = trimmed;
+      _selectedNewPath = null;
+      _errorMessage = null;
+    });
+    await _loadCurrentPath();
+
+    if (!mounted) return;
+    if (widget.openFindDatabaseOnStart) {
+      Navigator.of(context).pop(true);
+    } else {
+      ref.invalidate(appInitProvider);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Η νέα βάση ορίστηκε και επαληθεύτηκε.'),
+          ),
+        );
       }
     }
   }
@@ -930,6 +1051,7 @@ class _CreateNewDatabaseDialogState extends State<_CreateNewDatabaseDialog> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final hasFolder = _selectedFolder?.trim().isNotEmpty ?? false;
     return AlertDialog(
       title: const Text('Δημιουργία νέου αρχείου βάσης'),
       content: SingleChildScrollView(
@@ -949,9 +1071,9 @@ class _CreateNewDatabaseDialogState extends State<_CreateNewDatabaseDialog> {
                     _selectedFolder ?? 'Δεν έχει επιλεγεί φάκελος',
                     style: theme.textTheme.bodySmall?.copyWith(
                       fontFamily: 'monospace',
-                      color: _selectedFolder != null
+                      color: hasFolder
                           ? theme.colorScheme.onSurface
-                          : theme.colorScheme.onSurfaceVariant,
+                          : theme.colorScheme.error,
                     ),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
@@ -993,7 +1115,7 @@ class _CreateNewDatabaseDialogState extends State<_CreateNewDatabaseDialog> {
           child: const Text('Ακύρωση'),
         ),
         FilledButton(
-          onPressed: _submit,
+          onPressed: hasFolder ? _submit : null,
           child: const Text('Δημιουργία'),
         ),
       ],

@@ -16,6 +16,9 @@ import '../utils/search_text_normalizer.dart';
 import '../../features/calls/models/call_model.dart';
 import '../errors/department_exists_exception.dart';
 import 'database_init_result.dart';
+import 'database_init_progress_provider.dart';
+import 'lock_diagnostic_service.dart';
+import 'database_path_resolution.dart';
 import 'database_v1_schema.dart';
 
 /// Αποτέλεσμα ελέγχου σύνδεσης (success + αν χρησιμοποιείται τοπική βάση).
@@ -80,12 +83,21 @@ class DatabaseHelper {
 
   /// Επιστρέφει την ενεργή σύνδεση. Κάνει αρχικοποίηση αν χρειάζεται.
   Future<Database> get database async {
+    return initializeDatabase();
+  }
+
+  /// Αρχικοποιεί βάση με προαιρετικό notifier προόδου.
+  Future<Database> initializeDatabase({
+    DatabaseInitProgressNotifier? progressNotifier,
+  }) async {
     if (_database != null && _database!.isOpen) return _database!;
     final inFlight = _databaseInitializingFuture;
     if (inFlight != null) {
       return await inFlight;
     }
-    _databaseInitializingFuture = _initDatabase();
+    _databaseInitializingFuture = _initDatabase(
+      progressNotifier: progressNotifier,
+    );
     try {
       _database = await _databaseInitializingFuture!;
     } finally {
@@ -105,7 +117,10 @@ class DatabaseHelper {
     _isUsingLocalDb = false;
   }
 
-  Future<Database> _openTestOverrideDatabase(String dbPath) async {
+  Future<Database> _openTestOverrideDatabase(
+    String dbPath, {
+    DatabaseInitProgressNotifier? progressNotifier,
+  }) async {
     final file = File(dbPath);
     final parent = file.parent;
     if (!await parent.exists()) {
@@ -115,28 +130,17 @@ class DatabaseHelper {
       await createNewDatabaseFile(dbPath);
     }
     _isUsingLocalDb = true;
-    Future<Database> openWithTimeout({
-      required String targetPath,
-      required bool singleInstance,
-    }) async {
-      return openDatabase(
-        targetPath,
-        version: _kDatabaseSchemaVersion,
-        onCreate: _onCreate,
-        onUpgrade: _onUpgradeSquashed,
-        onDowngrade: _onDowngradeSquashed,
-        singleInstance: singleInstance,
-      ).timeout(
-        const Duration(seconds: 8),
-        onTimeout: () {
-          throw TimeoutException('openDatabase timed out after 8s');
-        },
-      );
-    }
-
+    final timeoutSeconds = await _resolveDatabaseOpenTimeoutSeconds();
     Database db;
     try {
-      db = await openWithTimeout(targetPath: dbPath, singleInstance: false);
+      db = await _openWithTimeout(
+        targetPath: dbPath,
+        singleInstance: false,
+        timeoutSeconds: timeoutSeconds,
+        progressNotifier: progressNotifier,
+        attempt: 1,
+        maxAttempts: 1,
+      );
     } catch (e, st) {
       throw DatabaseInitException(
         DatabaseInitResult.fromException(e, dbPath, st),
@@ -153,62 +157,200 @@ class DatabaseHelper {
     return db;
   }
 
-  /// Best-effort WAL checkpoint (passive) ώστε να μειώνεται η έκθεση σε απροσδόκητο κλείσιμο.
-  Future<void> tryWalCheckpoint() async {
+  /// Best-effort WAL checkpoint για μείωση pending WAL writes.
+  Future<void> tryWalCheckpoint({String mode = 'PASSIVE'}) async {
     final db = _database;
     if (db == null || !db.isOpen) return;
     try {
-      await db.rawQuery('PRAGMA wal_checkpoint(PASSIVE)');
+      final normalized = mode.trim().toUpperCase();
+      final effective = normalized.isEmpty ? 'PASSIVE' : normalized;
+      await db.rawQuery('PRAGMA wal_checkpoint($effective)');
     } catch (_) {}
   }
 
-  /// Ελέγχει αν η διαδρομή δικτύου είναι προσβάσιμη (με timeout 2 s).
-  Future<bool> _isNetworkPathAccessible(String dbPath) async {
+  Future<String> forceReleaseLock(
+    String dbPath, {
+    DatabaseInitProgressNotifier? progressNotifier,
+  }) async {
+    final buffer = StringBuffer();
     try {
-      final exists = await File(
-        dbPath,
-      ).exists().timeout(const Duration(seconds: 2), onTimeout: () => false);
-      return exists;
-    } on TimeoutException {
-      return false;
-    } catch (_) {
-      return false;
-    }
-  }
-
-  /// Αρχικοποίηση βάσης: έλεγχος δικτύου, ύπαρξη αρχείου, WAL, σχήμα (fail-fast).
-  /// Δεν δημιουργεί αυτόματα αρχείο· ρίχνει [DatabaseInitException] σε αποτυχία.
-  /// Σε δοκιμές με [bindTestDatabaseFile] δημιουργείται το αρχείο αν λείπει.
-  Future<Database> _initDatabase() async {
-    if (_testOverrideDatabasePath != null) {
-      return _openTestOverrideDatabase(_testOverrideDatabasePath!);
+      progressNotifier?.setStep('Απελευθέρωση lock');
+      await tryWalCheckpoint(mode: 'FULL');
+      await closeConnection();
+    } catch (e) {
+      buffer.writeln('Checkpoint/close warning: $e');
     }
 
-    String dbPath = await SettingsService().getDatabasePath();
-    if (dbPath.trim().isEmpty) {
-      dbPath = AppConfig.defaultDbPath;
+    try {
+      progressNotifier?.setStep('Εντοπισμός διεργασίας');
+      final diagnostic = await const LockDiagnosticService()
+          .detectLockingProcess(dbPath);
+      if (diagnostic.trim().isNotEmpty) {
+        buffer.writeln(diagnostic.trim());
+      }
+    } catch (e) {
+      buffer.writeln('Lock diagnostic warning: $e');
     }
 
-    final accessible = await _isNetworkPathAccessible(dbPath);
-    if (!accessible) {
-      dbPath = AppConfig.localDevDbPath;
-      _isUsingLocalDb = true;
-      final dir = File(dbPath).parent;
-      if (!await dir.exists()) {
-        await dir.create(recursive: true);
+    for (final suffix in const <String>['-wal', '-shm']) {
+      final sidecarPath = '$dbPath$suffix';
+      try {
+        final f = File(sidecarPath);
+        if (await f.exists()) {
+          await f.delete();
+          buffer.writeln('Deleted sidecar file: $sidecarPath');
+        }
+      } catch (e) {
+        buffer.writeln('Failed to delete $sidecarPath: $e');
       }
     }
+
+    final message = buffer.toString().trim();
+    return message.isEmpty
+        ? 'Δεν προέκυψε επιπλέον διαγνωστική πληροφορία.'
+        : message;
+  }
+
+  Future<String> aggressiveCleanupBeforeOpen(
+    String dbPath, {
+    DatabaseInitProgressNotifier? progressNotifier,
+  }) async {
+    progressNotifier?.setStep('Απελευθέρωση lock');
+    final diagnostic = await forceReleaseLock(
+      dbPath,
+      progressNotifier: progressNotifier,
+    );
+    progressNotifier?.setDiagnostic(diagnostic);
+    return diagnostic;
+  }
+
+  /// Αρχικοποίηση βάσης: επίλυση διαδρομής (UNC fallback), ύπαρξη αρχείου, WAL, σχήμα (fail-fast).
+  /// Δεν δημιουργεί αυτόματα αρχείο· ρίχνει [DatabaseInitException] σε αποτυχία.
+  /// Σε δοκιμές με [bindTestDatabaseFile] δημιουργείται το αρχείο αν λείπει.
+  Future<Database> _initDatabase({
+    DatabaseInitProgressNotifier? progressNotifier,
+  }) async {
+    if (_testOverrideDatabasePath != null) {
+      return _openTestOverrideDatabase(
+        _testOverrideDatabasePath!,
+        progressNotifier: progressNotifier,
+      );
+    }
+
+    progressNotifier?.setStep('Έλεγχος διαδρομής');
+    final configured = await SettingsService().getDatabasePath();
+    final resolved = await resolveEffectiveDatabasePath(configured);
+    final dbPath = resolved.path;
+    _isUsingLocalDb = resolved.usedUncFallback;
 
     if (!await File(dbPath).exists()) {
       throw DatabaseInitException(DatabaseInitResult.fileNotFound(dbPath));
     }
 
-    Future<Database> openWithTimeout({
-      required String targetPath,
-      required bool singleInstance,
-      required String attempt,
-    }) async {
-      final opened = await openDatabase(
+    final timeoutSeconds = await _resolveDatabaseOpenTimeoutSeconds();
+    const maxAttempts = 3;
+    String? lastDiagnostic;
+    Object? lastError;
+    StackTrace? lastStack;
+
+    for (var attempt = 1; attempt <= maxAttempts; attempt++) {
+      if (attempt > 1) {
+        await Future<void>.delayed(const Duration(milliseconds: 450));
+        lastDiagnostic = await aggressiveCleanupBeforeOpen(
+          dbPath,
+          progressNotifier: progressNotifier,
+        );
+      }
+
+      try {
+        final db = await _openWithTimeout(
+          targetPath: dbPath,
+          singleInstance: false,
+          timeoutSeconds: timeoutSeconds,
+          progressNotifier: progressNotifier,
+          attempt: attempt,
+          maxAttempts: maxAttempts,
+        );
+        try {
+          await _validateSchema(db, dbPath);
+        } catch (_) {
+          await db.close();
+          _database = null;
+          rethrow;
+        }
+        await db.execute('PRAGMA journal_mode = WAL;');
+        progressNotifier?.setStep(
+          'Η βάση άνοιξε επιτυχώς',
+          clearSecondsRemaining: true,
+        );
+        return db;
+      } catch (e, st) {
+        lastError = e;
+        lastStack = st;
+        final retriable = e is TimeoutException || _looksLikeLockError(e);
+        if (!retriable || attempt >= maxAttempts) {
+          var result = DatabaseInitResult.fromException(e, dbPath, st);
+          if (lastDiagnostic != null && lastDiagnostic.trim().isNotEmpty) {
+            result = result.copyWith(
+              details: _mergeDetails(result.details, lastDiagnostic),
+            );
+          }
+          throw DatabaseInitException(result);
+        }
+      }
+    }
+
+    final fallbackResult = DatabaseInitResult.fromException(
+      lastError ?? TimeoutException('Unknown database open timeout'),
+      dbPath,
+      lastStack,
+    );
+    throw DatabaseInitException(fallbackResult);
+  }
+
+  Future<int> _resolveDatabaseOpenTimeoutSeconds() async {
+    try {
+      final value = await SettingsService().getDatabaseOpenTimeoutSeconds();
+      if (value <= 0) return AppConfig.databaseOpenTimeoutSeconds;
+      return value;
+    } catch (_) {
+      return AppConfig.databaseOpenTimeoutSeconds;
+    }
+  }
+
+  Future<Database> _openWithTimeout({
+    required String targetPath,
+    required bool singleInstance,
+    required int timeoutSeconds,
+    required int attempt,
+    required int maxAttempts,
+    DatabaseInitProgressNotifier? progressNotifier,
+  }) async {
+    final safeTimeout = timeoutSeconds <= 0
+        ? AppConfig.databaseOpenTimeoutSeconds
+        : timeoutSeconds;
+    var remaining = safeTimeout;
+    progressNotifier?.setStep(
+      'Άνοιγμα βάσης... ($remaining s)',
+      secondsRemaining: remaining,
+    );
+
+    Timer? countdownTimer;
+    if (safeTimeout > 1 && progressNotifier != null) {
+      countdownTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+        remaining -= 1;
+        if (remaining < 0) {
+          remaining = 0;
+        }
+        progressNotifier.setStep(
+          'Άνοιγμα βάσης... ($remaining s)',
+          secondsRemaining: remaining,
+        );
+      });
+    }
+
+    try {
+      return await openDatabase(
         targetPath,
         version: _kDatabaseSchemaVersion,
         onCreate: _onCreate,
@@ -216,45 +358,34 @@ class DatabaseHelper {
         onDowngrade: _onDowngradeSquashed,
         singleInstance: singleInstance,
       ).timeout(
-        const Duration(seconds: 8),
+        Duration(seconds: safeTimeout),
         onTimeout: () {
-          throw TimeoutException('openDatabase timed out after 8s');
+          throw TimeoutException(
+            'openDatabase timed out after ${safeTimeout}s '
+            '(attempt $attempt/$maxAttempts)',
+          );
         },
       );
-      return opened;
+    } finally {
+      countdownTimer?.cancel();
+      progressNotifier?.clearCountdown();
     }
+  }
 
-    Database db;
-    try {
-      db = await openWithTimeout(
-        targetPath: dbPath,
-        singleInstance: false,
-        attempt: 'primary',
-      );
-    } on DatabaseInitException {
-      rethrow;
-    } catch (e, st) {
-      if (e is TimeoutException) {
-        throw DatabaseInitException(
-          DatabaseInitResult.fromException(e, dbPath, st),
-        );
-      } else {
-        throw DatabaseInitException(
-          DatabaseInitResult.fromException(e, dbPath, st),
-        );
-      }
-    }
+  bool _looksLikeLockError(Object error) {
+    final lower = error.toString().toLowerCase();
+    return lower.contains('database is locked') ||
+        lower.contains('sqlite_busy') ||
+        lower.contains('sharing violation') ||
+        lower.contains('unable to open database file');
+  }
 
-    try {
-      await _validateSchema(db, dbPath);
-    } catch (_) {
-      await db.close();
-      _database = null;
-      rethrow;
-    }
-
-    await db.execute('PRAGMA journal_mode = WAL;');
-    return db;
+  String _mergeDetails(String? current, String diagnostic) {
+    final c = current?.trim() ?? '';
+    final d = diagnostic.trim();
+    if (d.isEmpty) return c;
+    if (c.isEmpty) return d;
+    return '$c\n\n--- Lock diagnostics ---\n$d';
   }
 
   /// Επαληθεύει ότι υπάρχει ο πίνακας [calls]. Αλλιώς ρίχνει [DatabaseInitException].
@@ -373,10 +504,24 @@ class DatabaseHelper {
   /// Προσθέτει `departments.name_key` και το γεμίζει για υπάρχουσες εγγραφές.
   /// Στόχος: `name` = εμφανίσιμο, `name_key` = κανονικοποιημένο μοναδικό κλειδί.
   static Future<void> _migrateDepartmentNameKey(Database db) async {
-    final info = await db.rawQuery('PRAGMA table_info(departments)');
+    const tableName = 'departments';
+    final info = await db.rawQuery('PRAGMA table_info($tableName)');
+    if (info.isEmpty) {
+      throw Exception(
+        'Μετάβαση σχήματος: δεν υπάρχει ο πίνακας `$tableName` (PRAGMA table_info '
+        'επέστρεψε κενό). no such table: $tableName',
+      );
+    }
     final names = info.map((r) => r['name'] as String).toSet();
     if (!names.contains(_kDepartmentsNameKeyColumn)) {
-      await db.execute('ALTER TABLE departments ADD COLUMN name_key TEXT');
+      const stmt = 'ALTER TABLE departments ADD COLUMN name_key TEXT';
+      try {
+        await db.execute(stmt);
+      } catch (e) {
+        throw Exception(
+          'Μετάβαση σχήματος απέτυχε: πίνακας `$tableName`, εντολή: `$stmt`. $e',
+        );
+      }
     }
 
     // Backfill name_key για παλιές εγγραφές.
@@ -536,11 +681,9 @@ class DatabaseHelper {
     for (final raw in numbers) {
       final t = raw.trim();
       if (t.isEmpty) continue;
-      await txn.insert(
-        'phones',
-        {'number': t},
-        conflictAlgorithm: ConflictAlgorithm.ignore,
-      );
+      await txn.insert('phones', {
+        'number': t,
+      }, conflictAlgorithm: ConflictAlgorithm.ignore);
       final r = await txn.query(
         'phones',
         columns: ['id'],
@@ -550,11 +693,10 @@ class DatabaseHelper {
       );
       if (r.isEmpty) continue;
       final pid = r.first['id'] as int;
-      await txn.insert(
-        'user_phones',
-        {'user_id': userId, 'phone_id': pid},
-        conflictAlgorithm: ConflictAlgorithm.ignore,
-      );
+      await txn.insert('user_phones', {
+        'user_id': userId,
+        'phone_id': pid,
+      }, conflictAlgorithm: ConflictAlgorithm.ignore);
     }
   }
 
@@ -565,11 +707,9 @@ class DatabaseHelper {
   ) async {
     final t = phoneNumber.trim();
     if (t.isEmpty) return;
-    await txn.insert(
-      'phones',
-      {'number': t},
-      conflictAlgorithm: ConflictAlgorithm.ignore,
-    );
+    await txn.insert('phones', {
+      'number': t,
+    }, conflictAlgorithm: ConflictAlgorithm.ignore);
     final r = await txn.query(
       'phones',
       columns: ['id'],
@@ -590,11 +730,10 @@ class DatabaseHelper {
       where: 'phone_id = ?',
       whereArgs: [pid],
     );
-    await txn.insert(
-      'department_phones',
-      {'department_id': departmentId, 'phone_id': pid},
-      conflictAlgorithm: ConflictAlgorithm.ignore,
-    );
+    await txn.insert('department_phones', {
+      'department_id': departmentId,
+      'phone_id': pid,
+    }, conflictAlgorithm: ConflictAlgorithm.ignore);
   }
 
   /// Προσθέτει “ορφανό” τηλέφωνο σε τμήμα (M2M: `department_phones` ↔ `phones`).
@@ -691,17 +830,19 @@ class DatabaseHelper {
   }
 
   /// Θέτει/ενημερώνει το `phones.department_id` χωρίς να αγγίζει `user_phones`.
-  Future<void> updatePhoneDepartment(String phoneNumber, int departmentId) async {
+  Future<void> updatePhoneDepartment(
+    String phoneNumber,
+    int departmentId,
+  ) async {
     final t = phoneNumber.trim();
     if (t.isEmpty) return;
     final db = await database;
     await db.transaction((txn) async {
       await _ensurePhonesDepartmentColumn(txn);
-      await txn.insert(
-        'phones',
-        {'number': t, 'department_id': departmentId},
-        conflictAlgorithm: ConflictAlgorithm.ignore,
-      );
+      await txn.insert('phones', {
+        'number': t,
+        'department_id': departmentId,
+      }, conflictAlgorithm: ConflictAlgorithm.ignore);
       final rows = await txn.query(
         'phones',
         columns: ['id'],
@@ -722,16 +863,18 @@ class DatabaseHelper {
         where: 'phone_id = ?',
         whereArgs: [pid],
       );
-      await txn.insert(
-        'department_phones',
-        {'department_id': departmentId, 'phone_id': pid},
-        conflictAlgorithm: ConflictAlgorithm.ignore,
-      );
+      await txn.insert('department_phones', {
+        'department_id': departmentId,
+        'phone_id': pid,
+      }, conflictAlgorithm: ConflictAlgorithm.ignore);
     });
   }
 
   /// Θέτει/ενημερώνει το `equipment.department_id` χωρίς να αγγίζει `user_equipment`.
-  Future<void> updateEquipmentDepartment(String equipmentCode, int departmentId) async {
+  Future<void> updateEquipmentDepartment(
+    String equipmentCode,
+    int departmentId,
+  ) async {
     final code = equipmentCode.trim();
     if (code.isEmpty) return;
     final db = await database;
@@ -777,11 +920,7 @@ class DatabaseHelper {
       if (rows.isEmpty) return;
       final pid = rows.first['id'] as int?;
       if (pid == null) return;
-      await txn.delete(
-        'user_phones',
-        where: 'phone_id = ?',
-        whereArgs: [pid],
-      );
+      await txn.delete('user_phones', where: 'phone_id = ?', whereArgs: [pid]);
     });
   }
 
@@ -982,11 +1121,9 @@ class DatabaseHelper {
     final key = DictionaryService.canonicalLexiconKey(word);
     if (key.length < 2) return;
     final db = await database;
-    await db.insert(
-      AppConfig.userDictionaryTable,
-      {'word': key},
-      conflictAlgorithm: ConflictAlgorithm.ignore,
-    );
+    await db.insert(AppConfig.userDictionaryTable, {
+      'word': key,
+    }, conflictAlgorithm: ConflictAlgorithm.ignore);
   }
 
   Future<void> addUserWord(String word) => insertUserWord(word);
@@ -1060,10 +1197,7 @@ class DatabaseHelper {
   /// Όλα τα τμήματα (ενεργά και soft-deleted), ταξινόμηση κατά όνομα.
   Future<List<Map<String, dynamic>>> getDepartments() async {
     final db = await database;
-    return db.query(
-      'departments',
-      orderBy: 'name COLLATE NOCASE ASC',
-    );
+    return db.query('departments', orderBy: 'name COLLATE NOCASE ASC');
   }
 
   /// Εισαγωγή τμήματος. Αφαιρεί [id] πριν το insert.
@@ -1236,7 +1370,10 @@ class DatabaseHelper {
 
   /// True αν υπάρχει **άλλο** ενεργό τμήμα με ίδιο κανονικοποιημένο όνομα
   /// (εξαιρείται το [excludeId] για φόρμα επεξεργασίας).
-  Future<bool> departmentNameExistsExcluding(String? name, int excludeId) async {
+  Future<bool> departmentNameExistsExcluding(
+    String? name,
+    int excludeId,
+  ) async {
     final trimmed = stripDepartmentDeletedDisplaySuffix(name);
     if (trimmed.isEmpty) return false;
     final key = SearchTextNormalizer.normalizeForSearch(trimmed);
@@ -1284,20 +1421,16 @@ class DatabaseHelper {
       for (final r in rows) {
         final eid = r['equipment_id'] as int?;
         if (eid == null) continue;
-        await txn.insert(
-          'user_equipment',
-          {'user_id': toUserId, 'equipment_id': eid},
-          conflictAlgorithm: ConflictAlgorithm.ignore,
-        );
+        await txn.insert('user_equipment', {
+          'user_id': toUserId,
+          'equipment_id': eid,
+        }, conflictAlgorithm: ConflictAlgorithm.ignore);
       }
     });
   }
 
   /// Αντικαθιστά πλήρως τους χρήστες που συνδέονται με τον εξοπλισμό [equipmentId].
-  Future<void> replaceEquipmentUsers(
-    int equipmentId,
-    List<int> userIds,
-  ) async {
+  Future<void> replaceEquipmentUsers(int equipmentId, List<int> userIds) async {
     final db = await database;
     final unique = userIds.toSet().toList();
     await db.transaction((txn) async {
@@ -1307,11 +1440,10 @@ class DatabaseHelper {
         whereArgs: [equipmentId],
       );
       for (final uid in unique) {
-        await txn.insert(
-          'user_equipment',
-          {'user_id': uid, 'equipment_id': equipmentId},
-          conflictAlgorithm: ConflictAlgorithm.ignore,
-        );
+        await txn.insert('user_equipment', {
+          'user_id': uid,
+          'equipment_id': equipmentId,
+        }, conflictAlgorithm: ConflictAlgorithm.ignore);
       }
     });
   }
@@ -1480,11 +1612,10 @@ class DatabaseHelper {
           'is_deleted': 0,
         });
         if (userId != null) {
-          await txn.insert(
-            'user_equipment',
-            {'user_id': userId, 'equipment_id': eqId},
-            conflictAlgorithm: ConflictAlgorithm.ignore,
-          );
+          await txn.insert('user_equipment', {
+            'user_id': userId,
+            'equipment_id': eqId,
+          }, conflictAlgorithm: ConflictAlgorithm.ignore);
         }
         equipmentInserted++;
       }
@@ -1576,11 +1707,10 @@ class DatabaseHelper {
           } else {
             equipmentId = existing.first['id'] as int;
           }
-          await txn.insert(
-            'user_equipment',
-            {'user_id': userId, 'equipment_id': equipmentId},
-            conflictAlgorithm: ConflictAlgorithm.ignore,
-          );
+          await txn.insert('user_equipment', {
+            'user_id': userId,
+            'equipment_id': equipmentId,
+          }, conflictAlgorithm: ConflictAlgorithm.ignore);
         }
       }
     });
@@ -1659,8 +1789,9 @@ class DatabaseHelper {
     for (final row in info) {
       final colName = row['name'] as String? ?? '';
       final rawType = (row['type'] as String?)?.trim();
-      final typeSuffix =
-          (rawType == null || rawType.isEmpty) ? '' : ' $rawType';
+      final typeSuffix = (rawType == null || rawType.isEmpty)
+          ? ''
+          : ' $rawType';
       parts.add('$colName$typeSuffix');
     }
     return parts.join(', ');
@@ -1684,9 +1815,7 @@ class DatabaseHelper {
         .toList());
     if (columns.isEmpty) return TablePreviewResult(columns: [], rows: []);
 
-    final rows = await db.rawQuery(
-      'SELECT * FROM $quoted LIMIT $rowLimit',
-    );
+    final rows = await db.rawQuery('SELECT * FROM $quoted LIMIT $rowLimit');
     return TablePreviewResult(columns: columns, rows: rows);
   }
 
@@ -1813,19 +1942,15 @@ class DatabaseHelper {
     return db.rawQuery(sql, args);
   }
 
-  /// Επαληθεύει αν η διαδρομή είναι προσβάσιμη. Fallback σε τοπική όπως στο _initDatabase.
+  /// Επαληθεύει αν η διαδρομή είναι προσβάσιμη (ίδιο UNC fallback με το [_initDatabase]).
   Future<ConnectionCheckResult> checkConnection() async {
     String dbPath = AppConfig.defaultDbPath;
     try {
-      dbPath = await SettingsService().getDatabasePath();
-      if (dbPath.trim().isEmpty) {
-        dbPath = AppConfig.defaultDbPath;
-      }
-
-      final accessible = await _isNetworkPathAccessible(dbPath);
-      if (!accessible) {
-        debugPrint('Δίκτυο μη διαθέσιμο. Ενεργοποίηση Dev Mode (Τοπική Βάση).');
-        dbPath = AppConfig.localDevDbPath;
+      final configured = await SettingsService().getDatabasePath();
+      final resolved = await resolveEffectiveDatabasePath(configured);
+      dbPath = resolved.path;
+      if (!await File(dbPath).exists()) {
+        return const ConnectionCheckResult(success: false, isLocalDev: false);
       }
 
       final db = await openDatabase(
@@ -1836,8 +1961,10 @@ class DatabaseHelper {
       );
       await db.rawQuery('PRAGMA quick_check;');
       await db.close();
-      final isLocal = dbPath == AppConfig.localDevDbPath;
-      return ConnectionCheckResult(success: true, isLocalDev: isLocal);
+      return ConnectionCheckResult(
+        success: true,
+        isLocalDev: resolved.usedUncFallback,
+      );
     } catch (e, st) {
       debugPrint(
         '[DatabaseHelper] Δεν είναι δυνατή η σύνδεση με τη βάση: $dbPath',
@@ -1847,5 +1974,4 @@ class DatabaseHelper {
       return const ConnectionCheckResult(success: false, isLocalDev: false);
     }
   }
-
 }

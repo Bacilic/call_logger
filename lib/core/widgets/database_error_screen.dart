@@ -37,14 +37,50 @@ class _DatabaseErrorScreenState extends State<DatabaseErrorScreen> {
   bool get _isFileNotFound =>
       widget.result.status == DatabaseStatus.fileNotFound;
 
+  /// Μόνο τα σφάλματα με φιλικά κείμενα μετανάστευσης/SQLite από [DatabaseInitResult]
+  /// (όχι γενικά applicationError όπως δίκτυο, timeout, «SQLite)» fallback κ.λπ.).
+  bool get _isSchemaMigrationRecoveryMessage {
+    if (_shouldOfferRestart) return false;
+    if (widget.result.status != DatabaseStatus.applicationError) return false;
+    final msg = widget.result.message ?? '';
+    if (msg.contains('Προέκυψε πρόβλημα κατά την πρόσβαση ή την ενημέρωση') &&
+        msg.contains('SQLite')) {
+      return false;
+    }
+    if (msg.contains('Λείπει ο πίνακας') ||
+        msg.contains('Λείπει αναμενόμενος πίνακας') ||
+        msg.contains('Λείπει η στήλη') ||
+        msg.contains('Λείπει αναμενόμενη στήλη')) {
+      return true;
+    }
+    if (msg.contains('κατεστραμμένη ή βρίσκεται σε παλιά μορφή') ||
+        msg.contains('κατεστραμμένη ή σε ασύμβατη μορφή')) {
+      return true;
+    }
+    if (msg.contains('αναβάθμιση της βάσης δεδομένων') ||
+        msg.contains('αναβάθμιση του σχήματος της βάσης δεδομένων')) {
+      return true;
+    }
+    final det = widget.result.details ?? '';
+    if (det.contains('Δοκιμάστε να διαγράψετε') &&
+        det.contains('Data Base') &&
+        det.contains('Εντολή SQL (Causing statement)')) {
+      return true;
+    }
+    return false;
+  }
+
+  String? get _databaseFilePath =>
+      (widget.result.path ?? widget.dbPath)?.trim();
+
   static const Color _solutionPhraseBlue = Color(0xFF1565C0);
 
   Future<void> _openSettingsForDatabaseIssue({
     required bool openFindDatabaseOnStart,
     required bool openCreateDatabaseOnStart,
   }) async {
-    await Navigator.of(context).push<void>(
-      MaterialPageRoute<void>(
+    await Navigator.of(context).push<bool?>(
+      MaterialPageRoute<bool?>(
         builder: (_) => SettingsScreen(
           openFindDatabaseOnStart: openFindDatabaseOnStart,
           openCreateDatabaseOnStart: openCreateDatabaseOnStart,
@@ -134,6 +170,37 @@ class _DatabaseErrorScreenState extends State<DatabaseErrorScreen> {
         behavior: SnackBarBehavior.floating,
       ),
     );
+  }
+
+  /// Άνοιγμα του Windows Explorer στο προβληματικό αρχείο .db (`/select,`).
+  Future<void> _openFolderContainingDatabaseFile() async {
+    final full = _databaseFilePath;
+    if (full == null || full.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Δεν υπάρχει γνωστή διαδρομή αρχείου βάσης για εντοπισμό.',
+          ),
+        ),
+      );
+      return;
+    }
+    if (!Platform.isWindows) {
+      try {
+        final dir = Directory(full).parent.path;
+        await Process.run('explorer', [dir]);
+      } catch (_) {}
+      return;
+    }
+    try {
+      final normalized = full.replaceAll('/', r'\');
+      await Process.run('explorer.exe', ['/select,', normalized]);
+    } catch (_) {
+      try {
+        await Process.run('explorer.exe', [Directory(full).parent.path]);
+      } catch (_) {}
+    }
   }
 
   Future<void> _restartApplication(BuildContext context) async {
@@ -228,7 +295,7 @@ class _DatabaseErrorScreenState extends State<DatabaseErrorScreen> {
                           const SizedBox(height: 6),
                           SelectableText(
                             path,
-                            style: theme.textTheme.bodyMedium?.copyWith(
+                            style: theme.textTheme.bodySmall?.copyWith(
                               fontFamily: 'monospace',
                               color: theme.colorScheme.onSurfaceVariant,
                               height: 1.35,
@@ -238,17 +305,22 @@ class _DatabaseErrorScreenState extends State<DatabaseErrorScreen> {
                         if (widget.result.technicalCode != null &&
                             widget.result.technicalCode!.trim().isNotEmpty) ...[
                           const SizedBox(height: 12),
+                          Text(
+                            'Κωδικός / αναγνωριστικό',
+                            style: theme.textTheme.labelLarge?.copyWith(
+                              color: theme.colorScheme.onSurface,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
                           SelectableText(
                             widget.result.technicalCode!.trim(),
-                            style: theme.textTheme.bodyMedium?.copyWith(
+                            style: theme.textTheme.bodySmall?.copyWith(
                               color: theme.colorScheme.onSurfaceVariant,
                               height: 1.35,
                             ),
                           ),
                         ],
-                        if (original != null &&
-                            original.isNotEmpty &&
-                            original != _primaryMessage) ...[
+                        if (original != null && original.isNotEmpty) ...[
                           const SizedBox(height: 16),
                           Text(
                             'Αρχικό μήνυμα σφάλματος (runtime)',
@@ -296,18 +368,20 @@ class _DatabaseErrorScreenState extends State<DatabaseErrorScreen> {
                 label: const Text('Αντιγραφή πλήρους σφάλματος'),
               ),
               const SizedBox(height: 12),
-              FilledButton.icon(
-                onPressed: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute<void>(
-                      builder: (_) => const SettingsScreen(),
-                    ),
-                  );
-                },
-                icon: const Icon(Icons.settings),
-                label: const Text('Ρυθμίσεις'),
-              ),
-              const SizedBox(height: 12),
+              if (!_isSchemaMigrationRecoveryMessage) ...[
+                FilledButton.icon(
+                  onPressed: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => const SettingsScreen(),
+                      ),
+                    );
+                  },
+                  icon: const Icon(Icons.settings),
+                  label: const Text('Ρυθμίσεις'),
+                ),
+                const SizedBox(height: 12),
+              ],
               if (_isFileNotFound && !_shouldOfferRestart)
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -332,6 +406,43 @@ class _DatabaseErrorScreenState extends State<DatabaseErrorScreen> {
                         icon: const Icon(Icons.add_circle_outline),
                         label: const Text('Δημιουργία νέας βάσης'),
                       ),
+                    ),
+                  ],
+                )
+              else if (_isSchemaMigrationRecoveryMessage && !_shouldOfferRestart)
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: _openFolderContainingDatabaseFile,
+                            icon: const Icon(Icons.folder_open_outlined),
+                            label: const Text('Εντοπισμός βάσης'),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: () => _openSettingsForDatabaseIssue(
+                              openFindDatabaseOnStart: false,
+                              openCreateDatabaseOnStart: true,
+                            ),
+                            icon: const Icon(Icons.add_circle_outline),
+                            label: const Text('Δημιουργία νέας βάσης'),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    OutlinedButton.icon(
+                      onPressed: () async {
+                        await widget.onRetry();
+                      },
+                      icon: const Icon(Icons.refresh),
+                      label: const Text('Επαναδοκιμή'),
                     ),
                   ],
                 )

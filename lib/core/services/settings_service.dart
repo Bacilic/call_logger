@@ -16,6 +16,8 @@ class SettingsService {
   static const String _keyEquipmentLocationShowBuilding =
       'equipment_location_show_building';
   static const String _keyEnableSpellCheck = 'enable_spell_check';
+  static const String _keyDatabaseOpenTimeoutSeconds =
+      'database_open_timeout_seconds';
   static const int _maxRecentPaths = 3;
 
   /// Κλειδιά για ρυθμίσεις απομακρυσμένης σύνδεσης (πίνακας app_settings).
@@ -27,10 +29,12 @@ class SettingsService {
   static const String _keyEquipmentTypes = 'equipment_types';
 
   /// Προεπιλεγμένη διαδρομή TightVNC Viewer (μία μόνο).
-  static const String _defaultVncPath = r'C:\Program Files\TightVNC\tvnviewer.exe';
+  static const String _defaultVncPath =
+      r'C:\Program Files\TightVNC\tvnviewer.exe';
 
   /// Προεπιλεγμένη διαδρομή AnyDesk.
-  static const String _defaultAnydeskPath = r'C:\Program Files (x86)\AnyDesk\AnyDesk.exe';
+  static const String _defaultAnydeskPath =
+      r'C:\Program Files (x86)\AnyDesk\AnyDesk.exe';
 
   /// Πρόσβαση σε ρυθμίσεις από πίνακα app_settings (ορίζεται μετά το άνοιγμα βάσης).
   static Future<String?> Function(String key)? _getAppSetting;
@@ -46,7 +50,8 @@ class SettingsService {
   }
 
   /// Επιστρέφει την αποθηκευμένη διαδρομή βάσης δεδομένων.
-  /// Αν δεν υπάρχει ή είναι κενή, επιστρέφει την [AppConfig.defaultDbPath].
+  /// Αν δεν υπάρχει ή είναι κενή, επιστρέφει το [AppConfig.defaultDbPath]
+  /// (`..\Data Base\call_logger.db` δίπλα στο εκτελέσιμο).
   Future<String> getDatabasePath() async {
     final prefs = await SharedPreferences.getInstance();
     final path = prefs.getString(_keyDatabasePath);
@@ -77,7 +82,10 @@ class SettingsService {
 
   Future<void> _addToRecentPaths(SharedPreferences prefs, String path) async {
     final list = prefs.getStringList(_keyRecentPaths) ?? [];
-    final updated = [path, ...list.where((p) => p != path)].take(_maxRecentPaths).toList();
+    final updated = [
+      path,
+      ...list.where((p) => p != path),
+    ].take(_maxRecentPaths).toList();
     await prefs.setStringList(_keyRecentPaths, updated);
   }
 
@@ -170,79 +178,127 @@ class SettingsService {
     await prefs.setBool(_keyEnableSpellCheck, value);
   }
 
+  /// Timeout ανοίγματος βάσης σε δευτερόλεπτα. Προεπιλογή: [AppConfig.databaseOpenTimeoutSeconds].
+  Future<int> getDatabaseOpenTimeoutSeconds() async {
+    final prefs = await SharedPreferences.getInstance();
+    final value = prefs.getInt(_keyDatabaseOpenTimeoutSeconds);
+    if (value == null || value <= 0) {
+      return AppConfig.databaseOpenTimeoutSeconds;
+    }
+    return value;
+  }
+
+  Future<void> setDatabaseOpenTimeoutSeconds(int value) async {
+    final prefs = await SharedPreferences.getInstance();
+    final normalized = value <= 0
+        ? AppConfig.databaseOpenTimeoutSeconds
+        : value;
+    await prefs.setInt(_keyDatabaseOpenTimeoutSeconds, normalized);
+  }
+
   // --- Ρυθμίσεις απομακρυσμένης σύνδεσης (app_settings) ---
 
   /// Επιστρέφει τη μοναδική διαδρομή για TightVNC Viewer.
   /// Αν δεν υπάρχει τιμή στη βάση, επιστρέφει την προεπιλεγμένη.
   /// Υποστηρίζει και παλιά αποθηκευμένη λίστα (JSON array): χρησιμοποιεί το πρώτο στοιχείο.
   Future<String> getVncPath() async {
-    final raw = _getAppSetting != null ? await _getAppSetting!(_keyVncPaths) : null;
-    if (raw == null || raw.trim().isEmpty) return _defaultVncPath;
+    final raw = _getAppSetting != null
+        ? await _getAppSetting!(_keyVncPaths)
+        : null;
+    if (raw == null || raw.trim().isEmpty) {
+      return _defaultVncPath;
+    }
     try {
       final decoded = jsonDecode(raw);
-      if (decoded is List && decoded.isNotEmpty) return decoded.first.toString().trim();
-      if (decoded is String && decoded.trim().isNotEmpty) return decoded.trim();
+      if (decoded is List && decoded.isNotEmpty) {
+        return decoded.first.toString().trim();
+      }
+      if (decoded is String && decoded.trim().isNotEmpty) {
+        return decoded.trim();
+      }
     } catch (_) {}
     return _defaultVncPath;
   }
 
   /// Αποθηκεύει τη διαδρομή VNC στη βάση (JSON array με ένα στοιχείο για συμβατότητα).
   Future<void> setVncPath(String path) async {
-    if (_setAppSetting != null) await _setAppSetting!(_keyVncPaths, jsonEncode([path.trim()]));
+    if (_setAppSetting != null) {
+      await _setAppSetting!(_keyVncPaths, jsonEncode([path.trim()]));
+    }
   }
 
   /// Επιστρέφει τον αποθηκευμένο κωδικό VNC. Προεπιλογή: κενό string.
   Future<String> getVncPassword() async {
-    final value = _getAppSetting != null ? await _getAppSetting!(_keyVncPassword) : null;
+    final value = _getAppSetting != null
+        ? await _getAppSetting!(_keyVncPassword)
+        : null;
     return value ?? '';
   }
 
   /// Αποθηκεύει τον κωδικό VNC στη βάση.
   Future<void> setVncPassword(String password) async {
-    if (_setAppSetting != null) await _setAppSetting!(_keyVncPassword, password);
+    if (_setAppSetting != null) {
+      await _setAppSetting!(_keyVncPassword, password);
+    }
   }
 
   /// Επιστρέφει την αποθηκευμένη διαδρομή AnyDesk. Αν δεν υπάρχει ή είναι κενή, η προεπιλογή.
   Future<String> getAnydeskPath() async {
-    final value = _getAppSetting != null ? await _getAppSetting!(_keyAnydeskPath) : null;
+    final value = _getAppSetting != null
+        ? await _getAppSetting!(_keyAnydeskPath)
+        : null;
     if (value == null || value.trim().isEmpty) return _defaultAnydeskPath;
     return value.trim();
   }
 
   /// Αποθηκεύει τη διαδρομή AnyDesk στη βάση.
   Future<void> setAnydeskPath(String path) async {
-    if (_setAppSetting != null) await _setAppSetting!(_keyAnydeskPath, path.trim());
+    if (_setAppSetting != null) {
+      await _setAppSetting!(_keyAnydeskPath, path.trim());
+    }
   }
 
   /// Επιστρέφει τη δοκιμαστική IP/hostname για έλεγχο παραμέτρων (Test). Κενό string αν δεν οριστεί.
   Future<String> getTestTargetIp() async {
-    final value = _getAppSetting != null ? await _getAppSetting!(_keyTestTargetIp) : null;
+    final value = _getAppSetting != null
+        ? await _getAppSetting!(_keyTestTargetIp)
+        : null;
     return value ?? '';
   }
 
   /// Αποθηκεύει τη δοκιμαστική IP/hostname για Test (VNC/AnyDesk).
   Future<void> setTestTargetIp(String value) async {
-    if (_setAppSetting != null) await _setAppSetting!(_keyTestTargetIp, value.trim());
+    if (_setAppSetting != null) {
+      await _setAppSetting!(_keyTestTargetIp, value.trim());
+    }
   }
 
   /// Επιστρέφει το ακατέργαστο string επιλογών εφαρμογής απομακρυσμένης επιφάνειας (διαχωρισμένα με κόμμα).
   /// Χρήση στο UI ρυθμίσεων. Προεπιλογή: "AnyDesk, VNC".
   Future<String> getRemoteSurfaceAppsRaw() async {
-    final value = _getAppSetting != null ? await _getAppSetting!(_keyRemoteSurfaceApps) : null;
+    final value = _getAppSetting != null
+        ? await _getAppSetting!(_keyRemoteSurfaceApps)
+        : null;
     if (value == null || value.trim().isEmpty) return 'AnyDesk, VNC';
     return value.trim();
   }
 
   /// Αποθηκεύει τις επιλογές εφαρμογής απομακρυσμένης επιφάνειας (comma-separated).
   Future<void> setRemoteSurfaceApps(String value) async {
-    if (_setAppSetting != null) await _setAppSetting!(_keyRemoteSurfaceApps, value.trim());
+    if (_setAppSetting != null) {
+      await _setAppSetting!(_keyRemoteSurfaceApps, value.trim());
+    }
   }
 
   /// Επιστρέφει λίστα επιλογών για dropdown (split by comma, trim, μη κενά). Τελευταία επιλογή "Κανένα" προστίθεται στα dialogs.
   /// Αν η ρύθμιση είναι κενή, επιστρέφει ["AnyDesk", "VNC"].
   Future<List<String>> getRemoteSurfaceAppsList() async {
     final raw = await getRemoteSurfaceAppsRaw();
-    final list = raw.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
+    final list = raw
+        .split(',')
+        .map((s) => s.trim())
+        .where((s) => s.isNotEmpty)
+        .toList();
     if (list.isEmpty) return ['AnyDesk', 'VNC'];
     return list;
   }
@@ -252,20 +308,28 @@ class SettingsService {
   /// Επιστρέφει το ακατέργαστο string τύπων εξοπλισμού (διαχωρισμένα με κόμμα).
   /// Χρήση στο UI ρυθμίσεων. Προεπιλογή: "Υπολογιστής, Εκτυπωτής".
   Future<String> getEquipmentTypesRaw() async {
-    final value = _getAppSetting != null ? await _getAppSetting!(_keyEquipmentTypes) : null;
+    final value = _getAppSetting != null
+        ? await _getAppSetting!(_keyEquipmentTypes)
+        : null;
     if (value == null || value.trim().isEmpty) return 'Υπολογιστής, Εκτυπωτής';
     return value.trim();
   }
 
   /// Αποθηκεύει τους τύπους εξοπλισμού (comma-separated).
   Future<void> setEquipmentTypes(String value) async {
-    if (_setAppSetting != null) await _setAppSetting!(_keyEquipmentTypes, value.trim());
+    if (_setAppSetting != null) {
+      await _setAppSetting!(_keyEquipmentTypes, value.trim());
+    }
   }
 
   /// Επιστρέφει λίστα τύπων για dropdown. Αν η ρύθμιση είναι κενή, επιστρέφει ["Υπολογιστής", "Εκτυπωτής"].
   Future<List<String>> getEquipmentTypesList() async {
     final raw = await getEquipmentTypesRaw();
-    final list = raw.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
+    final list = raw
+        .split(',')
+        .map((s) => s.trim())
+        .where((s) => s.isNotEmpty)
+        .toList();
     if (list.isEmpty) return ['Υπολογιστής', 'Εκτυπωτής'];
     return list;
   }

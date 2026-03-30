@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
-import '../../../core/widgets/nexus_calendar_picker.dart';
+import '../../../core/widgets/calendar_range_picker.dart';
 import '../providers/history_provider.dart';
 
 /// Επίπεδο μεγέθυνσης πίνακα ιστορικού (0.5–2.0).
@@ -69,13 +69,20 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
   Future<void> _pickDateRange() async {
     final filter = ref.read(historyFilterProvider);
     final now = DateTime.now();
-    final initialStart = filter.dateFrom ?? now.subtract(const Duration(days: 30));
-    final initialEnd = filter.dateTo ?? now;
-    final range = await showNexusDateRangePickerDialog(
+    final today = DateTime(now.year, now.month, now.day);
+    final initialStart = filter.dateFrom ?? today;
+    final initialEnd = filter.dateTo ?? today;
+    final result = await showCalendarRangePickerDialog(
       context,
       initialValue: DateTimeRange(start: initialStart, end: initialEnd),
     );
-    if (!mounted || range == null) return;
+    if (!mounted || result == null) return;
+    if (result.wasCleared) {
+      _clearDateRange();
+      return;
+    }
+    final range = result.range;
+    if (range == null) return;
     ref.read(historyFilterProvider.notifier).update(
           (s) => s.copyWith(dateFrom: range.start, dateTo: range.end),
         );

@@ -2,7 +2,7 @@
 // Τρέξιμο από τη ρίζα του project: dart run tool/add_tasks_columns.dart
 //
 // Διαδρομές (με σειρά προτίμησης):
-// 1) Data Base/call_logger.db — ίδια με AppConfig.localDevDbPath
+// 1) Data Base/call_logger.db — CLI: AppConfig.localDevDbPath · εφαρμογή: portable defaultDbPath
 // 2) local_dev_db/call_logger_dev.db — εναλλακτικό dev path
 
 import 'dart:io';
