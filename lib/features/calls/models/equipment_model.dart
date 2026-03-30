@@ -1,3 +1,5 @@
+import '../utils/vnc_remote_target.dart';
+
 /// Μοντέλο εξοπλισμού (πίνακας equipment): id, code_equipment, type, notes,
 /// custom_ip, anydesk_id, default_remote_tool (απομακρυσμένες συνδέσεις),
 /// department_id / location (κοινόχρηστα μηχανήματα χωρίς κάτοχο· fallback στο UI).
@@ -40,12 +42,16 @@ class EquipmentModel {
     return t.isEmpty ? c : (c.isEmpty ? t : '$c ($t)');
   }
 
-  /// Στόχος για VNC: custom IP αν υπάρχει, αλλιώς 'PC{code}', αλλιώς 'Άγνωστο'.
+  /// Στόχος για VNC: custom IP αν υπάρχει, αλλιώς απευθείας IPv4 στον κωδικό, αλλιώς 'PC{code}', αλλιώς 'Άγνωστο'.
   String get vncTarget {
     final ip = customIp?.trim();
     if (ip != null && ip.isNotEmpty) return ip;
     final c = code?.trim();
-    if (c != null && c.isNotEmpty) return 'PC$c';
+    if (c != null && c.isNotEmpty) {
+      final asIpv4 = VncRemoteTarget.tryParseIpv4Host(c);
+      if (asIpv4 != null) return asIpv4;
+      return 'PC$c';
+    }
     return 'Άγνωστο';
   }
 

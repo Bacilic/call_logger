@@ -1,9 +1,12 @@
 import 'dart:async';
+import 'dart:io' show Platform;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:window_manager/window_manager.dart';
 
+import '../../features/database/services/database_exit_backup.dart';
 import '../database/database_helper.dart';
 import '../database/database_init_result.dart';
 import '../database/database_init_runner.dart';
@@ -33,7 +36,7 @@ class AppShortcuts extends ConsumerStatefulWidget {
 }
 
 class _AppShortcutsState extends ConsumerState<AppShortcuts>
-    with WidgetsBindingObserver {
+    with WidgetsBindingObserver, WindowListener {
   late DatabaseInitResult _databaseResult;
   late bool _isLocalDevMode;
 
@@ -49,6 +52,12 @@ class _AppShortcutsState extends ConsumerState<AppShortcuts>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    if (Platform.isWindows) {
+      windowManager.addListener(this);
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        await windowManager.setPreventClose(true);
+      });
+    }
     _databaseResult = widget.initialDatabaseResult;
     _isLocalDevMode = widget.initialIsLocalDevMode;
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -59,8 +68,30 @@ class _AppShortcutsState extends ConsumerState<AppShortcuts>
 
   @override
   void dispose() {
+    if (Platform.isWindows) {
+      windowManager.removeListener(this);
+    }
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
+  }
+
+  @override
+  void onWindowClose() {
+    if (!Platform.isWindows) return;
+    unawaited(_handleWindowsClose());
+  }
+
+  Future<void> _handleWindowsClose() async {
+    try {
+      await DatabaseHelper.instance.tryWalCheckpoint();
+      await DatabaseExitBackup.runIfEnabled();
+    } catch (_) {
+      // Αθόρυβο· το παράθυρο πρέπει να κλείσει.
+    } finally {
+      if (Platform.isWindows) {
+        await windowManager.destroy();
+      }
+    }
   }
 
   @override

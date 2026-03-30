@@ -13,6 +13,7 @@ import '../../models/equipment_model.dart';
 import '../../models/user_model.dart';
 import '../../provider/lookup_provider.dart';
 import '../../provider/smart_entity_selector_provider.dart';
+import '../../utils/vnc_remote_target.dart';
 
 part 'smart_entity_selector_caller_presentational.dart';
 part 'smart_entity_selector_phone_presentational.dart';
@@ -2389,6 +2390,9 @@ class _EquipmentFieldState extends State<_EquipmentField> {
                           controller: textController,
                           focusNode: focusNodeParam,
                           spellCheckConfiguration: platformSpellCheckConfiguration,
+                          inputFormatters: [
+                            CommaToDotDecimalSeparatorFormatter(),
+                          ],
                           decoration: InputDecoration(
                             hintText: hintText,
                             hintStyle: theme.textTheme.bodyMedium?.copyWith(

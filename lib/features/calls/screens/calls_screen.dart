@@ -57,6 +57,13 @@ class CallsScreen extends ConsumerWidget {
                           equipmentCodeText: header.equipmentText.isNotEmpty
                               ? header.equipmentText
                               : (header.selectedEquipment?.code ?? ''),
+                          resolvedAnyDeskTarget: header.resolvedAnyDeskTarget,
+                          canConnectAnyDesk: header.canConnectAnyDesk,
+                          resolvedVncTarget: header.resolvedVncTarget,
+                          canConnectVnc: header.canConnectVnc,
+                          anydeskTargetDisplay: header.anydeskTargetDisplay,
+                          bypassHideAnyDeskRemoteSetting:
+                              header.bypassHideAnyDeskRemoteSetting,
                         ),
                     ],
                   ),

@@ -8,16 +8,31 @@ import '../../models/equipment_model.dart';
 import '../../provider/remote_paths_provider.dart';
 
 /// Widget κουμπιών απομακρυσμένης σύνδεσης (AnyDesk, VNC) και launcher icons.
-/// Εμφανίζεται όταν υπάρχει κωδικός εξοπλισμού· στόχοι από [equipment] ή PC{equipmentCodeText}.
+/// Οι στόχοι και τα `canConnect*` προέρχονται από [SmartEntitySelectorState] (ή ισοδύναμο)·
+/// εδώ δεν γίνεται επικύρωση κειμένου.
 class RemoteConnectionButtons extends ConsumerStatefulWidget {
   const RemoteConnectionButtons({
     super.key,
     required this.equipment,
     required this.equipmentCodeText,
+    required this.resolvedAnyDeskTarget,
+    required this.canConnectAnyDesk,
+    required this.resolvedVncTarget,
+    required this.canConnectVnc,
+    required this.anydeskTargetDisplay,
+    required this.bypassHideAnyDeskRemoteSetting,
   });
 
   final EquipmentModel? equipment;
   final String equipmentCodeText;
+  final String? resolvedAnyDeskTarget;
+  final bool canConnectAnyDesk;
+  final String resolvedVncTarget;
+  final bool canConnectVnc;
+  /// Γραμμή υπό το κουμπί AnyDesk (ίδια λογική με [SmartEntitySelectorState.anydeskTargetDisplay]).
+  final String anydeskTargetDisplay;
+  /// Βλ. [SmartEntitySelectorState.bypassHideAnyDeskRemoteSetting].
+  final bool bypassHideAnyDeskRemoteSetting;
 
   @override
   ConsumerState<RemoteConnectionButtons> createState() =>
@@ -28,46 +43,22 @@ class _RemoteConnectionButtonsState
     extends ConsumerState<RemoteConnectionButtons> {
   bool _isConnecting = false;
 
-  /// Έγκυρο AnyDesk target: 9 ή 10 ψηφία, ή μορφή name@namespace (μέχρι 25 χαρακτήρες).
-  static bool _isValidAnyDeskTarget(String t) {
-    final trimmed = t.trim();
-    if (trimmed.length == 9 || trimmed.length == 10) {
-      return RegExp(r'^\d+$').hasMatch(trimmed);
-    }
-    if (trimmed.contains('@')) {
-      final parts = trimmed.split('@');
-      if (parts.length != 2) return false;
-      final regex = RegExp(r'^[a-zA-Z0-9\-._]+$');
-      return parts[0].isNotEmpty &&
-          parts[1].isNotEmpty &&
-          regex.hasMatch(parts[0]) &&
-          regex.hasMatch(parts[1]) &&
-          trimmed.length <= 25;
-    }
-    return false;
-  }
-
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final pathsAsync = ref.watch(validRemotePathsProvider);
     final remoteService = ref.read(remoteConnectionServiceProvider);
     final launcherService = ref.read(remoteLauncherServiceProvider);
-    final showAnyDesk = ref.watch(showAnyDeskRemoteProvider).value ?? true;
+    final settingShowAnyDesk =
+        ref.watch(showAnyDeskRemoteProvider).value ?? true;
+    final showAnyDeskUi =
+        settingShowAnyDesk || widget.bypassHideAnyDeskRemoteSetting;
 
-    final anydeskTarget = widget.equipment?.anydeskTarget?.trim();
-    final vncTargetRaw = widget.equipment != null
-        ? widget.equipment!.vncTarget.trim()
-        : '';
-    final vncTarget = widget.equipment != null
-        ? vncTargetRaw
-        : 'PC${widget.equipmentCodeText.trim()}';
-    final hasValidAnydesk = anydeskTarget != null &&
-        anydeskTarget.isNotEmpty &&
-        _isValidAnyDeskTarget(anydeskTarget);
-    final hasValidVnc = widget.equipment != null
-        ? vncTargetRaw != 'Άγνωστο' && vncTargetRaw.isNotEmpty
-        : widget.equipmentCodeText.trim().isNotEmpty;
+    final anydeskDisplay = widget.anydeskTargetDisplay;
+    final vncTarget = widget.resolvedVncTarget;
+
+    final hasValidAnydesk = widget.canConnectAnyDesk && showAnyDeskUi;
+    final hasValidVnc = widget.canConnectVnc;
 
     return Card(
       elevation: 1,
@@ -92,14 +83,14 @@ class _RemoteConnectionButtonsState
                     : null,
                 tooltipDisabled: _vncTooltipDisabled(paths.vncPath != null),
               ),
-              if (showAnyDesk) ...[
+              if (showAnyDeskUi) ...[
                 const SizedBox(width: 12),
                 _buildConnectionButton(
                   context: context,
                   theme: theme,
                   isAnydesk: true,
                   label: 'AnyDesk',
-                  targetDisplay: anydeskTarget ?? '—',
+                  targetDisplay: anydeskDisplay,
                   enabled: hasValidAnydesk &&
                       paths.anydeskPath != null &&
                       !_isConnecting,
@@ -109,26 +100,30 @@ class _RemoteConnectionButtonsState
                           !_isConnecting
                       ? () => _handleConnection(remoteService, isAnydesk: true)
                       : null,
-                  tooltipDisabled: _anydeskTooltipDisabled(paths.anydeskPath != null),
+                  tooltipDisabled: _anydeskTooltipDisabled(
+                    settingShowAnyDesk,
+                    showAnyDeskUi,
+                    paths.anydeskPath != null,
+                  ),
                 ),
               ],
               const SizedBox(width: 16),
               ref.watch(remoteLauncherStatusProvider).when(
                     data: (status) => _buildLauncherButtons(
                       theme,
-                      showAnyDesk,
+                      showAnyDeskUi,
                       status,
                       launcherService,
                     ),
                     loading: () => _buildLauncherButtons(
                       theme,
-                      showAnyDesk,
+                      showAnyDeskUi,
                       null,
                       launcherService,
                     ),
                     error: (_, _) => _buildLauncherButtons(
                       theme,
-                      showAnyDesk,
+                      showAnyDeskUi,
                       null,
                       launcherService,
                     ),
@@ -147,19 +142,19 @@ class _RemoteConnectionButtonsState
           },
           loading: () => _buildLoadingRow(
             theme,
-            showAnyDesk,
+            showAnyDeskUi,
             hasValidAnydesk,
             hasValidVnc,
-            anydeskTarget ?? '—',
+            anydeskDisplay,
             vncTarget,
             launcherService,
           ),
           error: (err, _) => _buildErrorRow(
             theme,
-            showAnyDesk,
+            showAnyDeskUi,
             hasValidAnydesk,
             hasValidVnc,
-            anydeskTarget ?? '—',
+            anydeskDisplay,
             vncTarget,
             err.toString(),
             launcherService,
@@ -169,10 +164,28 @@ class _RemoteConnectionButtonsState
     );
   }
 
-  String _anydeskTooltipDisabled(bool pathValid) {
-    if (!pathValid) return 'Διαδρομή AnyDesk δεν βρέθηκε.';
+  String _anydeskTooltipDisabled(
+    bool settingShowAnyDesk,
+    bool showAnyDeskUi,
+    bool pathValid,
+  ) {
+    if (!showAnyDeskUi) {
+      return 'Το AnyDesk δεν εμφανίζεται (ρυθμίσεις· χωρίς παράκαμψη).';
+    }
+    if (!pathValid) {
+      if (!settingShowAnyDesk && widget.bypassHideAnyDeskRemoteSetting) {
+        return 'Διαδρομή AnyDesk δεν βρέθηκε (εμφάνιση λόγω εξαίρεσης).';
+      }
+      return 'Διαδρομή AnyDesk δεν βρέθηκε.';
+    }
     if (_isConnecting) return 'Γίνεται σύνδεση...';
-    return 'AnyDesk target κενό / μη έγκυρο (9-10 ψηφία ή όνομα@namespace) / χωρίς διαδρομή / φόρτωση / σύνδεση...';
+    if (!settingShowAnyDesk && widget.bypassHideAnyDeskRemoteSetting) {
+      return 'AnyDesk (εξαίρεση ρύθμισης): έλεγξε στόχο ή περίμενε φόρτωση.';
+    }
+    if (!settingShowAnyDesk) {
+      return 'Η εμφάνιση AnyDesk είναι απενεργοποιημένη στις ρυθμίσεις.';
+    }
+    return 'AnyDesk: δεν υπάρχει έγκυρος στόχος / χωρίς διαδρομή / φόρτωση / σύνδεση...';
   }
 
   String _vncTooltipDisabled(bool pathValid) {
@@ -483,22 +496,19 @@ class _RemoteConnectionButtonsState
     setState(() => _isConnecting = true);
     try {
       if (isAnydesk) {
-        final targetId = widget.equipment?.anydeskTarget ?? '';
+        final targetId = widget.resolvedAnyDeskTarget ?? '';
         if (targetId.isEmpty) {
           if (!mounted) return;
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-                content: Text(
-                    'Δεν υπάρχει AnyDesk ID για αυτόν τον εξοπλισμό.')),
+              content: Text('Δεν υπάρχει έγκυρος στόχος AnyDesk.'),
+            ),
           );
           return;
         }
         await remoteService.launchAnydesk(targetId);
       } else {
-        final target = widget.equipment != null
-            ? widget.equipment!.vncTarget
-            : 'PC${widget.equipmentCodeText.trim()}';
-        await remoteService.launchVnc(target);
+        await remoteService.launchVnc(widget.resolvedVncTarget);
       }
     } catch (e) {
       if (!mounted) return;

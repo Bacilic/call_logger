@@ -37,6 +37,13 @@ void _routeFatalErrorToUi(Object exception, StackTrace stack) {
   );
 }
 
+bool _isIgnorableHardwareKeyboardAssertion(Object exception) {
+  final msg = exception.toString();
+  return msg.contains('hardware_keyboard.dart') &&
+      msg.contains('A KeyDownEvent is dispatched') &&
+      msg.contains("!_pressedKeys.containsKey(event.physicalKey)");
+}
+
 bool _platformAsyncErrorHandler(Object error, StackTrace stack) {
   _routeFatalErrorToUi(error, stack);
   return true;
@@ -53,6 +60,10 @@ void main() {
 
       FlutterError.onError = (FlutterErrorDetails details) {
         final st = details.stack ?? StackTrace.empty;
+        if (_isIgnorableHardwareKeyboardAssertion(details.exception)) {
+          FlutterError.presentError(details);
+          return;
+        }
         _routeFatalErrorToUi(details.exception, st);
       };
 

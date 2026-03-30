@@ -10,6 +10,8 @@ import '../../features/calls/provider/lookup_provider.dart';
 import '../../features/calls/screens/calls_screen.dart';
 import '../../features/calls/screens/widgets/import_console_widget.dart';
 import '../../features/database/screens/database_browser_screen.dart';
+import '../../features/database/widgets/database_backup_lifecycle_hook.dart';
+import '../../features/database/widgets/database_settings_panel.dart';
 import '../../features/tasks/screens/tasks_screen.dart';
 import '../../features/directory/screens/directory_screen.dart';
 import '../../features/history/screens/history_screen.dart';
@@ -79,6 +81,27 @@ class _MainShellState extends ConsumerState<MainShell> {
       isLabelVisible: showBadge && pendingCount > 0,
       label: Text(pendingCount.toString()),
       child: core,
+    );
+  }
+
+  Future<void> _openDatabaseSettingsDialog() async {
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return Dialog(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(
+              maxWidth: 920,
+              maxHeight: 640,
+            ),
+            child: const Padding(
+              padding: EdgeInsets.all(8),
+              child: DatabaseSettingsPanel(),
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -193,8 +216,9 @@ class _MainShellState extends ConsumerState<MainShell> {
                   waitDuration: const Duration(milliseconds: 600),
                   showDuration: const Duration(seconds: 4),
                   message:
-                      'Εργαλεία διαχείρισης & εποπτείας βάσης\nΑντίγραφα ασφαλείας, εγγραφές, προβολή πινάκων (για προχωρημένους χρήστες)',
-                  child: const Icon(Icons.storage, key: ValueKey('nav_rail_database')),
+                      'Εργαλεία διαχείρισης & εποπτείας βάσης\nΡυθμίσεις βάσης, αντίγραφα ασφαλείας, προβολή πινάκων',
+                  child: const Icon(Icons.storage,
+                      key: ValueKey('nav_rail_database')),
                 ),
                 label: const Text('Βάση Δεδομένων'),
               ),
@@ -205,6 +229,7 @@ class _MainShellState extends ConsumerState<MainShell> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                const DatabaseBackupLifecycleHook(),
                 if (widget.isLocalDevMode)
                   Container(
                     width: double.infinity,
@@ -222,41 +247,54 @@ class _MainShellState extends ConsumerState<MainShell> {
                 if (_selectedIndex == 4)
                   Padding(
                     padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-                    child: Column(
+                    child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        Text(
-                          widget.databaseResult.isSuccess
-                              ? (widget.databaseResult.message ??
-                                  'Η σύνδεση με τη βάση δεδομένων πέτυχε.')
-                              : (widget.databaseResult.message ??
-                                  'Άγνωστο σφάλμα με τη βάση δεδομένων.'),
-                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                color: widget.databaseResult.isSuccess
-                                    ? Colors.green.shade700
-                                    : Colors.red.shade700,
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                widget.databaseResult.isSuccess
+                                    ? (widget.databaseResult.message ??
+                                        'Η σύνδεση με τη βάση δεδομένων πέτυχε.')
+                                    : (widget.databaseResult.message ??
+                                        'Άγνωστο σφάλμα με τη βάση δεδομένων.'),
+                                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                      color: widget.databaseResult.isSuccess
+                                          ? Colors.green.shade700
+                                          : Colors.red.shade700,
+                                    ),
                               ),
-                        ),
-                        if (widget.databaseResult.details != null &&
-                            !widget.databaseResult.isSuccess) ...[
-                          const SizedBox(height: 4),
-                          Tooltip(
-                            message: widget.databaseResult.details!,
-                            child: Text(
-                              widget.databaseResult.details!,
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .bodySmall
-                                  ?.copyWith(
-                                    color: Colors.red.shade300,
-                                    fontSize: 11,
+                              if (widget.databaseResult.details != null &&
+                                  !widget.databaseResult.isSuccess) ...[
+                                const SizedBox(height: 4),
+                                Tooltip(
+                                  message: widget.databaseResult.details!,
+                                  child: Text(
+                                    widget.databaseResult.details!,
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .bodySmall
+                                        ?.copyWith(
+                                          color: Colors.red.shade300,
+                                          fontSize: 11,
+                                        ),
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
                                   ),
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                            ),
+                                ),
+                              ],
+                            ],
                           ),
-                        ],
+                        ),
+                        const SizedBox(width: 8),
+                        IconButton(
+                          tooltip: 'Ρυθμίσεις βάσης δεδομένων',
+                          icon: const Icon(Icons.dataset_linked),
+                          onPressed: _openDatabaseSettingsDialog,
+                        ),
                       ],
                     ),
                   ),

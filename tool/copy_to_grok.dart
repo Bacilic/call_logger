@@ -99,6 +99,8 @@ void main(List<String> arguments) {
       hadAmbiguous: ambiguousList.isNotEmpty,
       hadFuzzy: missing.isNotEmpty,
     );
+
+    _openOrFocusGrokInExplorer(grokDir);
   } on IOException catch (e) {
     print('Σφάλμα I/O: $e');
     exit(1);
@@ -841,4 +843,76 @@ String _displaySourceForLog(String sourceAbsolute, String projectRootAbsolute) {
 
   final withBackslashes = relativePart.replaceAll(RegExp(r'[/\\]'), r'\');
   return '\\$withBackslashes';
+}
+
+/// Windows: άνοιγμα του φακέλου Grok στην Εξερεύνηση αρχείων (File Explorer), ή αν υπάρχει
+/// ήδη παράθυρο για την ίδια διαδρομή — ανανέωση (refresh) και εστίαση (foreground)
+/// ώστε να μην πολλαπλασιάζονται παράθυρα για τον ίδιο φάκελο.
+void _openOrFocusGrokInExplorer(Directory grokDir) {
+  if (!Platform.isWindows) return;
+
+  final rawPath = grokDir.absolute.path;
+  final psEscapedPath = rawPath.replaceAll("'", "''");
+
+  final script = r'''
+Add-Type @"
+using System;
+using System.Runtime.InteropServices;
+public class _GrokExplorerNative {
+  [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
+  [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+}
+"@
+$target = [System.IO.Path]::GetFullPath('PLACEHOLDER')
+$targetLower = $target.ToLowerInvariant()
+$shell = New-Object -ComObject Shell.Application
+$hwndLast = [IntPtr]::Zero
+foreach ($w in @($shell.Windows())) {
+  try {
+    $doc = $w.Document
+    if ($null -eq $doc) { continue }
+    $folder = $doc.Folder
+    if ($null -eq $folder) { continue }
+    $self = $folder.Self
+    if ($null -eq $self) { continue }
+    $p = [System.IO.Path]::GetFullPath($self.Path)
+    if ($p.ToLowerInvariant() -ne $targetLower) { continue }
+    $w.Refresh()
+    try { $folder.Refresh() } catch { }
+    $hwndLast = [IntPtr]$w.HWND
+  } catch { }
+}
+if ($hwndLast -ne [IntPtr]::Zero) {
+  [void][_GrokExplorerNative]::ShowWindow($hwndLast, 9)
+  [void][_GrokExplorerNative]::SetForegroundWindow($hwndLast)
+} else {
+  Start-Process explorer.exe -ArgumentList $target
+}
+'''.replaceAll('PLACEHOLDER', psEscapedPath);
+
+  try {
+    final r = Process.runSync(
+      'powershell.exe',
+      [
+        '-NoProfile',
+        '-NonInteractive',
+        '-ExecutionPolicy',
+        'Bypass',
+        '-Command',
+        script,
+      ],
+      runInShell: false,
+    );
+    if (r.exitCode != 0) {
+      print(
+        '[Grok] Προειδοποίηση: άνοιγμα φακέλου στην Εξερεύνηση — κωδικός ${r.exitCode}.',
+      );
+      final err = String.fromCharCodes(r.stderr).trim();
+      if (err.isNotEmpty) {
+        print(err);
+      }
+    }
+  } on Object catch (e) {
+    print('[Grok] Προειδοποίηση: δεν ήταν δυνατή η κλήση powershell.exe ($e).');
+  }
 }
