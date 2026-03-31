@@ -11,6 +11,7 @@ class DatabaseExitBackup {
         .getSetting(DatabaseBackupSettings.appSettingsKey);
     final settings = DatabaseBackupSettings.fromJsonString(raw);
     if (!settings.backupOnExit) return;
+    if (!settings.usesCustomSchedule) return;
     await DatabaseBackupService.runBackup(
       settings,
       requireDestination: true,

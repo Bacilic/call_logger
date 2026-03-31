@@ -240,8 +240,10 @@ class NotesStickyFieldState extends ConsumerState<NotesStickyField> {
       });
     });
 
-    ref.watch(spellCheckServiceProvider);
-    ref.watch(enableSpellCheckProvider);
+    final spellAsync = ref.watch(spellCheckServiceProvider);
+    final spellEnabledAsync = ref.watch(enableSpellCheckProvider);
+    spellAsync.whenData(_controller.attachSpellService);
+    spellEnabledAsync.whenData(_controller.setSpellCheckEnabled);
 
     final notes = ref.watch(callEntryProvider.select((s) => s.notes));
     ref.listen<int>(notesFieldHintTickProvider, (prev, next) {

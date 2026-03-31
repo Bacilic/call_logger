@@ -29,12 +29,15 @@ class MainShell extends ConsumerStatefulWidget {
     required this.databaseResult,
     required this.isLocalDevMode,
     this.onReturnFromSettings,
+    this.onDatabaseReopened,
   });
 
   final DatabaseInitResult databaseResult;
   final bool isLocalDevMode;
   /// Κλήση όταν ο χρήστης κλείνει την οθόνη Ρυθμίσεων· ξανατρέχουν οι έλεγχοι βάσης.
   final Future<void> Function()? onReturnFromSettings;
+  /// Μετά από συντήρηση (νέα βάση κ.λπ.)· επανασύνδεση/έλεγχοι όπως με Ρυθμίσεις.
+  final Future<void> Function()? onDatabaseReopened;
 
   @override
   ConsumerState<MainShell> createState() => _MainShellState();
@@ -127,7 +130,10 @@ class _MainShellState extends ConsumerState<MainShell> {
               if (!context.mounted) return;
               await Navigator.of(context).push<void>(
                 MaterialPageRoute<void>(
-                  builder: (context) => const SettingsScreen(),
+                  builder: (context) => SettingsScreen(
+                    onAfterDatabaseChanged:
+                        widget.onDatabaseReopened ?? widget.onReturnFromSettings,
+                  ),
                 ),
               );
               if (!context.mounted) return;
@@ -244,9 +250,9 @@ class _MainShellState extends ConsumerState<MainShell> {
                           ),
                     ),
                   ),
-                if (_selectedIndex == 4)
+                if (_selectedIndex == 4 && !widget.databaseResult.isSuccess)
                   Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -256,19 +262,16 @@ class _MainShellState extends ConsumerState<MainShell> {
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               Text(
-                                widget.databaseResult.isSuccess
-                                    ? (widget.databaseResult.message ??
-                                        'Η σύνδεση με τη βάση δεδομένων πέτυχε.')
-                                    : (widget.databaseResult.message ??
-                                        'Άγνωστο σφάλμα με τη βάση δεδομένων.'),
-                                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                      color: widget.databaseResult.isSuccess
-                                          ? Colors.green.shade700
-                                          : Colors.red.shade700,
+                                widget.databaseResult.message ??
+                                    'Άγνωστο σφάλμα με τη βάση δεδομένων.',
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .bodySmall
+                                    ?.copyWith(
+                                      color: Colors.red.shade700,
                                     ),
                               ),
-                              if (widget.databaseResult.details != null &&
-                                  !widget.databaseResult.isSuccess) ...[
+                              if (widget.databaseResult.details != null) ...[
                                 const SizedBox(height: 4),
                                 Tooltip(
                                   message: widget.databaseResult.details!,
@@ -289,7 +292,6 @@ class _MainShellState extends ConsumerState<MainShell> {
                             ],
                           ),
                         ),
-                        const SizedBox(width: 8),
                         IconButton(
                           tooltip: 'Ρυθμίσεις βάσης δεδομένων',
                           icon: const Icon(Icons.dataset_linked),
@@ -303,7 +305,11 @@ class _MainShellState extends ConsumerState<MainShell> {
                     1 => const TasksScreen(),
                     2 => const DirectoryScreen(),
                     3 => const HistoryScreen(),
-                    4 => const DatabaseBrowserScreen(),
+                    4 => DatabaseBrowserScreen(
+                        databaseResult: widget.databaseResult,
+                        onOpenDatabaseSettings: _openDatabaseSettingsDialog,
+                        onDatabaseReopened: widget.onDatabaseReopened,
+                      ),
                     _ => const CallsScreen(),
                   },
                 ),

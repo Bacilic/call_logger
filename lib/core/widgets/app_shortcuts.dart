@@ -154,6 +154,7 @@ class _AppShortcutsState extends ConsumerState<AppShortcuts>
           databaseResult: _databaseResult,
           isLocalDevMode: _isLocalDevMode,
           onReturnFromSettings: _recheckDatabase,
+          onDatabaseReopened: _recheckDatabase,
         ),
       ),
     );

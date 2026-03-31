@@ -609,34 +609,46 @@ class _DatabaseSettingsPanelState extends ConsumerState<DatabaseSettingsPanel> {
               ],
             ),
             const SizedBox(height: 8),
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              title: const Text('Ώρα προγράμματος'),
-              subtitle: Text(settings.backupTime),
-              trailing: TextButton(
-                onPressed: settings.backupOnExit
-                    ? () async {
-                        final p =
-                            BackupScheduleUtils.parseTime(settings.backupTime);
-                        final initial = TimeOfDay(
-                          hour: p?.hour ?? 9,
-                          minute: p?.minute ?? 0,
-                        );
-                        final picked = await showTimePicker(
-                          context: context,
-                          initialTime: initial,
-                        );
-                        if (picked == null || !mounted) return;
-                        final h = picked.hour.toString().padLeft(2, '0');
-                        final m = picked.minute.toString().padLeft(2, '0');
-                        await ref
-                            .read(databaseBackupSettingsProvider.notifier)
-                            .setBackupTime('$h:$m');
-                      }
-                    : null,
-                child: const Text('Επιλογή'),
+            if (settings.backupDays.isEmpty) ...[
+              Padding(
+                padding: const EdgeInsets.only(top: 4, bottom: 4),
+                child: Text(
+                  'Επιλέξτε τουλάχιστον μία ημέρα για τη λειτουργία των '
+                  'προγραμματισμένων αντιγράφων ασφαλείας.',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.error,
+                  ),
+                ),
               ),
-            ),
+            ] else ...[
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Προγραμματισμένη Ώρα:'),
+                subtitle: Text(settings.backupTime),
+                trailing: TextButton.icon(
+                  onPressed: () async {
+                    final p =
+                        BackupScheduleUtils.parseTime(settings.backupTime);
+                    final initial = TimeOfDay(
+                      hour: p?.hour ?? 9,
+                      minute: p?.minute ?? 0,
+                    );
+                    final picked = await showTimePicker(
+                      context: context,
+                      initialTime: initial,
+                    );
+                    if (picked == null || !mounted) return;
+                    final h = picked.hour.toString().padLeft(2, '0');
+                    final m = picked.minute.toString().padLeft(2, '0');
+                    await ref
+                        .read(databaseBackupSettingsProvider.notifier)
+                        .setBackupTime('$h:$m');
+                  },
+                  icon: const Icon(Icons.access_time, size: 20),
+                  label: const Text('Επιλογή'),
+                ),
+              ),
+            ],
             const Divider(height: 24),
             Text(
               'Πολιτική διατήρησης',

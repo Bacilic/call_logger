@@ -2,8 +2,14 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart' hide TextDirection;
 
 import '../../../core/database/database_helper.dart';
+import '../../../core/database/database_init_result.dart';
+import '../models/database_stats.dart';
+import '../providers/database_browser_stats_provider.dart';
+import '../services/database_stats_service.dart';
+import '../widgets/database_maintenance_panel.dart';
 
 /// Κλειδί `app_settings` για JSON `{ "όνομα_πίνακα": zoom, ... }` (zoom 0.5–2.0).
 const String _kDatabaseBrowserZoomByTableSettingsKey =
@@ -151,7 +157,17 @@ List<String> _orderedTableNames(List<String> raw) {
 
 /// Οθόνη Βάσης Δεδομένων: λίστα πινάκων και προεπισκόπηση σε μορφή πίνακα (Excel-like).
 class DatabaseBrowserScreen extends ConsumerStatefulWidget {
-  const DatabaseBrowserScreen({super.key});
+  const DatabaseBrowserScreen({
+    super.key,
+    required this.databaseResult,
+    required this.onOpenDatabaseSettings,
+    this.onDatabaseReopened,
+  });
+
+  final DatabaseInitResult databaseResult;
+  final VoidCallback onOpenDatabaseSettings;
+  /// Μετά από νέα βάση / επανασύνδεση — ίδιο με `MainShell.onDatabaseReopened`.
+  final Future<void> Function()? onDatabaseReopened;
 
   @override
   ConsumerState<DatabaseBrowserScreen> createState() =>
@@ -193,6 +209,7 @@ class _DatabaseBrowserScreenState extends ConsumerState<DatabaseBrowserScreen> {
           _tableNames = names;
           _loading = false;
         });
+        ref.invalidate(databaseBrowserStatsProvider);
       }
     } catch (e) {
       if (mounted) {
@@ -243,10 +260,241 @@ class _DatabaseBrowserScreenState extends ConsumerState<DatabaseBrowserScreen> {
     });
   }
 
+  Future<void> _openDatabaseMaintenance() async {
+    await DatabaseMaintenancePanel.show(
+      context,
+      onDatabaseReopened: widget.onDatabaseReopened ?? () async {},
+    );
+  }
+
+  /// Κουμπιά ρυθμίσεων και συντήρησης (δεξιά στην κάρτα στατιστικών / προβολή πίνακα).
+  Widget _databaseToolbarActions() {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        IconButton(
+          tooltip: 'Ρυθμίσεις βάσης δεδομένων',
+          icon: const Icon(Icons.dataset_linked),
+          padding: const EdgeInsets.only(left: 4, top: 2),
+          constraints: const BoxConstraints(
+            minWidth: 40,
+            minHeight: 40,
+          ),
+          alignment: Alignment.topCenter,
+          onPressed: widget.onOpenDatabaseSettings,
+        ),
+        IconButton(
+          tooltip: 'Συντήρηση',
+          icon: const Icon(Icons.cleaning_services_outlined),
+          padding: const EdgeInsets.only(left: 4),
+          constraints: const BoxConstraints(
+            minWidth: 40,
+            minHeight: 40,
+          ),
+          alignment: Alignment.topCenter,
+          onPressed: _openDatabaseMaintenance,
+        ),
+      ],
+    );
+  }
+
+  String _recordCountPhrase(int count) {
+    final unit = count == 1 ? 'εγγραφή' : 'εγγραφές';
+    return '${DatabaseStatsService.formatIntegerEl(count)} $unit';
+  }
+
+  Widget _buildStatsErrorBanner(
+    BuildContext context,
+    ThemeData theme,
+    AsyncValue<DatabaseStats> statsAsync,
+  ) {
+    if (!statsAsync.hasError) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Material(
+        color: theme.colorScheme.errorContainer
+            .withValues(alpha: theme.brightness == Brightness.dark ? 0.45 : 0.95),
+        borderRadius: BorderRadius.circular(8),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(
+                Icons.warning_amber_rounded,
+                size: 22,
+                color: theme.colorScheme.onErrorContainer,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Δεν ήταν δυνατή η φόρτωση στατιστικών: ${statsAsync.error}',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onErrorContainer,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDatabaseStatsCard(
+    BuildContext context,
+    ThemeData theme,
+    AsyncValue<DatabaseStats> statsAsync,
+  ) {
+    final r = widget.databaseResult;
+    final stats = statsAsync.asData?.value;
+    final connOk = r.isSuccess;
+    final connText = connOk
+        ? (r.message ?? 'Η σύνδεση με τη βάση δεδομένων πέτυχε.')
+        : (r.message ?? 'Άγνωστο σφάλμα με τη βάση δεδομένων.');
+
+    final backupText = stats != null
+        ? (stats.lastBackupTime != null
+            ? DateFormat.yMMMd('el').add_Hm().format(
+                  stats.lastBackupTime!.toLocal(),
+                )
+            : 'Δεν έχει γίνει ακόμα')
+        : (statsAsync.isLoading ? '…' : '—');
+
+    final sizeLabel = stats != null
+        ? DatabaseStatsService.formatFileSizeBytes(stats.fileSizeBytes)
+        : (statsAsync.isLoading ? '…' : '—');
+
+    final pathText = stats?.dbPath ?? (statsAsync.isLoading ? '…' : '—');
+
+    Widget statRow(String label, String value, {TextStyle? valueStyle}) {
+      return Padding(
+        padding: const EdgeInsets.only(top: 6),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(
+              width: 200,
+              child: Text(
+                label,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ),
+            Expanded(
+              child: Text(
+                value,
+                style: valueStyle ?? theme.textTheme.bodyMedium,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Card(
+      margin: EdgeInsets.zero,
+      elevation: 0,
+      color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(
+          color: theme.colorScheme.outlineVariant.withValues(alpha: 0.5),
+        ),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Στατιστικά Βάσης Δεδομένων',
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              connText,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: connOk
+                    ? Colors.green.shade700
+                    : theme.colorScheme.error,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            if (!connOk && r.details != null && r.details!.trim().isNotEmpty) ...[
+              const SizedBox(height: 4),
+              Text(
+                r.details!,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.error.withValues(alpha: 0.85),
+                ),
+              ),
+            ],
+            if (statsAsync.isLoading) ...[
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  SizedBox(
+                    width: 22,
+                    height: 22,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: theme.colorScheme.primary,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Text(
+                    'Φόρτωση στατιστικών…',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+            statRow('Μέγεθος αρχείου', sizeLabel),
+            statRow('Τελευταίο αντίγραφο ασφαλείας', backupText),
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SizedBox(
+                    width: 200,
+                    child: Text(
+                      'Διαδρομή βάσης',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                  Expanded(
+                    child: SelectableText(
+                      pathText,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        fontFamily: 'monospace',
+                        fontFamilyFallback: const ['Consolas', 'monospace'],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final zoomByTable = ref.watch(databaseBrowserZoomByTableProvider);
+    final statsAsync = ref.watch(databaseBrowserStatsProvider);
 
     if (_loading) {
       return const Center(
@@ -297,8 +545,9 @@ class _DatabaseBrowserScreenState extends ConsumerState<DatabaseBrowserScreen> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
             child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 IconButton(
                   icon: const Icon(Icons.arrow_back),
@@ -324,6 +573,7 @@ class _DatabaseBrowserScreenState extends ConsumerState<DatabaseBrowserScreen> {
                     ],
                   ),
                 ),
+                _databaseToolbarActions(),
               ],
             ),
           ),
@@ -444,22 +694,42 @@ class _DatabaseBrowserScreenState extends ConsumerState<DatabaseBrowserScreen> {
     final right = ordered.sublist(mid);
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Expanded(
-            child: ListView(
-              children: [
-                for (final name in left) _buildTableListTile(name),
-              ],
-            ),
+          _buildStatsErrorBanner(context, theme, statsAsync),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: _buildDatabaseStatsCard(context, theme, statsAsync),
+              ),
+              _databaseToolbarActions(),
+            ],
           ),
-          const SizedBox(width: 16),
+          const SizedBox(height: 16),
           Expanded(
-            child: ListView(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                for (final name in right) _buildTableListTile(name),
+                Expanded(
+                  child: ListView(
+                    children: [
+                      for (final name in left)
+                        _buildTableListTile(context, name, statsAsync),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: ListView(
+                    children: [
+                      for (final name in right)
+                        _buildTableListTile(context, name, statsAsync),
+                    ],
+                  ),
+                ),
               ],
             ),
           ),
@@ -468,11 +738,37 @@ class _DatabaseBrowserScreenState extends ConsumerState<DatabaseBrowserScreen> {
     );
   }
 
-  Widget _buildTableListTile(String name) {
+  Widget _buildTableListTile(
+    BuildContext context,
+    String name,
+    AsyncValue<DatabaseStats> statsAsync,
+  ) {
+    final theme = Theme.of(context);
     final display = _displayNameForTable(name);
+    final stats = statsAsync.asData?.value;
+    final count = stats?.rowCountsByTable[name];
+    final grey = theme.colorScheme.onSurfaceVariant.withValues(
+      alpha: theme.brightness == Brightness.dark ? 0.78 : 0.62,
+    );
+
     return ListTile(
       leading: const Icon(Icons.table_chart),
-      title: Text(display),
+      title: Text.rich(
+        TextSpan(
+          style: theme.textTheme.titleMedium,
+          children: [
+            TextSpan(text: display),
+            if (count != null)
+              TextSpan(
+                text: ' (${_recordCountPhrase(count)})',
+                style: theme.textTheme.titleMedium?.copyWith(
+                  color: grey,
+                  fontWeight: FontWeight.w400,
+                ),
+              ),
+          ],
+        ),
+      ),
       subtitle: Text(
         display != name ? name : 'Πάτα για προεπισκόπηση',
       ),
