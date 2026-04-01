@@ -3,12 +3,11 @@ import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:path/path.dart' as path;
 
 import '../../../core/config/app_config.dart';
 import '../../../core/database/database_helper.dart';
-import '../../../core/database/database_init_result.dart';
 import '../../../core/database/database_init_runner.dart';
+import '../../../core/database/database_path_pick_flow.dart';
 import '../../../core/init/app_init_provider.dart';
 import '../../../core/providers/settings_provider.dart';
 import '../../../core/services/settings_service.dart';
@@ -21,13 +20,9 @@ import '../widgets/remote_args_editor.dart';
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({
     super.key,
-    this.openFindDatabaseOnStart = false,
     this.openCreateDatabaseOnStart = false,
     this.onAfterDatabaseChanged,
   });
-
-  /// Μετά το πρώτο frame ανοίγει αμέσως ο διάλογος επιλογής αρχείου/φακέλου βάσης.
-  final bool openFindDatabaseOnStart;
 
   /// Μετά το πρώτο frame ανοίγει ο διάλογος δημιουργίας νέου αρχείου βάσης.
   final bool openCreateDatabaseOnStart;
@@ -72,11 +67,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   void initState() {
     super.initState();
     _loadCurrentPath();
-    if (widget.openFindDatabaseOnStart) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _pickDatabasePath();
-      });
-    } else if (widget.openCreateDatabaseOnStart) {
+    if (widget.openCreateDatabaseOnStart) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) _runCreateNewDatabaseFlow();
       });
@@ -165,29 +156,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       _selectedNewPath = null;
     });
 
-    // Πρώτα προσπάθεια επιλογής αρχείου .db
-    final fileResult = await FilePicker.platform.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: ['db'],
-      dialogTitle: 'Επιλογή αρχείου βάσης δεδομένων (.db)',
-    );
-
-    if (fileResult != null &&
-        fileResult.files.isNotEmpty &&
-        fileResult.files.single.path != null) {
-      final p = fileResult.files.single.path!;
-      await _validateApplyAndFinishPick(p);
-      return;
-    }
-
-    // Εναλλακτικά: επιλογή φακέλου (θα χρησιμοποιηθεί call_logger.db μέσα)
-    final dirPath = await FilePicker.platform.getDirectoryPath(
-      dialogTitle: 'Επιλογή φακέλου βάσης δεδομένων',
-    );
-
-    if (dirPath != null && dirPath.trim().isNotEmpty) {
-      final fullDbPath = path.join(dirPath, 'call_logger.db');
-      await _validateApplyAndFinishPick(fullDbPath);
+    final picked = await pickDatabasePathWithSystemPicker();
+    if (picked != null && picked.isNotEmpty) {
+      await _validateApplyAndFinishPick(picked);
     } else {
       if (mounted) {
         setState(() => _errorMessage = 'Δεν επιλέχθηκε αρχείο ή φάκελος.');
@@ -196,7 +167,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   }
 
   /// Επαληθεύει το αρχείο βάσης (ίδια ροή με εκκίνηση), αποθηκεύει διαδρομή αν OK,
-  /// επαναφέρει την προηγούμενη σε αποτυχία. Από `openFindDatabaseOnStart`: κλείνει τις Ρυθμίσεις με `pop(true)`.
+  /// επαναφέρει την προηγούμενη σε αποτυχία.
   Future<void> _validateApplyAndFinishPick(String newPath) async {
     final trimmed = newPath.trim();
     if (trimmed.isEmpty || !mounted) return;
@@ -224,19 +195,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       ),
     );
 
-    final previous = await _settings.getDatabasePath();
-    late DatabaseInitRunnerResult runner;
+    late ({bool ok, DatabaseInitRunnerResult runner}) outcome;
     try {
-      try {
-        await DatabaseHelper.instance.closeConnection();
-      } catch (_) {}
-      await _settings.setDatabasePath(trimmed);
-      runner = await runDatabaseInitChecks(closeConnectionFirst: true);
-    } catch (e, st) {
-      runner = DatabaseInitRunnerResult(
-        result: DatabaseInitResult.fromException(e, trimmed, st),
-        isLocalDevMode: false,
-      );
+      outcome = await setAndVerifyDatabasePath(trimmed);
     } finally {
       if (mounted) {
         Navigator.of(context, rootNavigator: true).pop();
@@ -245,16 +206,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
     if (!mounted) return;
 
-    if (!runner.result.isSuccess) {
-      try {
-        await DatabaseHelper.instance.closeConnection();
-      } catch (_) {}
-      try {
-        await _settings.setDatabasePath(previous);
-      } catch (_) {}
+    if (!outcome.ok) {
       if (!mounted) return;
-      final msg = runner.result.message ?? 'Η βάση δεν πέρασε τον έλεγχο.';
-      final det = runner.result.details?.trim();
+      final msg = outcome.runner.result.message ?? 'Η βάση δεν πέρασε τον έλεγχο.';
+      final det = outcome.runner.result.details?.trim();
       await showDialog<void>(
         context: context,
         builder: (ctx) => AlertDialog(
@@ -303,17 +258,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     await _loadCurrentPath();
 
     if (!mounted) return;
-    if (widget.openFindDatabaseOnStart) {
-      Navigator.of(context).pop(true);
-    } else {
-      ref.invalidate(appInitProvider);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Η νέα βάση ορίστηκε και επαληθεύτηκε.'),
-          ),
-        );
-      }
+    ref.invalidate(appInitProvider);
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Η νέα βάση ορίστηκε και επαληθεύτηκε.'),
+        ),
+      );
     }
   }
 

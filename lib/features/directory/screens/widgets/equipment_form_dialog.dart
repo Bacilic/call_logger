@@ -12,6 +12,7 @@ import '../../../../core/widgets/spell_check_controller.dart';
 import '../../../calls/models/equipment_model.dart';
 import '../../../calls/models/user_model.dart';
 import '../../../calls/provider/lookup_provider.dart';
+import '../../../calls/utils/vnc_remote_target.dart';
 import '../../providers/equipment_directory_provider.dart';
 
 /// Διάλογος φόρμας για δημιουργία/επεξεργασία/αντίγραφο εξοπλισμού.
@@ -213,9 +214,11 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog> {
       notes: _notesController.text.trim().isEmpty
           ? null
           : _notesController.text.trim(),
-      customIp: _customIpController.text.trim().isEmpty
-          ? null
-          : _customIpController.text.trim(),
+      customIp: () {
+        final t = _customIpController.text.trim();
+        if (t.isEmpty) return null;
+        return t.replaceAll(',', '.');
+      }(),
       anydeskId: _anydeskIdController.text.trim().isEmpty
           ? null
           : _anydeskIdController.text.trim(),
@@ -348,6 +351,11 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog> {
                   labelText: 'Προσαρμοσμένη IP',
                   border: OutlineInputBorder(),
                 ),
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                  signed: false,
+                ),
+                inputFormatters: [CommaToDotDecimalSeparatorFormatter()],
               ),
               const SizedBox(height: 12),
               TextFormField(

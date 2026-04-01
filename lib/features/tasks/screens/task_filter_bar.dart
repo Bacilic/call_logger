@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -95,6 +96,15 @@ class _TaskFilterBarState extends ConsumerState<TaskFilterBar> {
 
   void _clearDateRange() {
     ref.read(taskFilterProvider.notifier).update((s) => s.copyWith(clearDateRange: true));
+  }
+
+  /// Αποφυγή «Build scheduled during frame» όταν η ενημέρωση Riverpod γίνεται
+  /// ενώ κλείνει overlay (π.χ. PopupMenuButton μετά την επιλογή ταξινόμησης).
+  void _deferProviderUpdate(VoidCallback fn) {
+    SchedulerBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      fn();
+    });
   }
 
   Widget _statusChipLabel(
@@ -248,9 +258,11 @@ class _TaskFilterBarState extends ConsumerState<TaskFilterBar> {
                 PopupMenuButton<TaskSortOption>(
                   tooltip: 'Ταξινόμηση',
                   onSelected: (value) {
-                    ref
-                        .read(taskFilterProvider.notifier)
-                        .update((s) => s.copyWith(sortBy: value));
+                    _deferProviderUpdate(() {
+                      ref
+                          .read(taskFilterProvider.notifier)
+                          .update((s) => s.copyWith(sortBy: value));
+                    });
                   },
                   itemBuilder: (context) => TaskSortOption.values
                       .map(
@@ -277,9 +289,11 @@ class _TaskFilterBarState extends ConsumerState<TaskFilterBar> {
                       ? 'Αύξουσα ταξινόμηση'
                       : 'Φθίνουσα ταξινόμηση',
                   onPressed: () {
-                    ref.read(taskFilterProvider.notifier).update(
-                          (s) => s.copyWith(sortAscending: !s.sortAscending),
-                        );
+                    _deferProviderUpdate(() {
+                      ref.read(taskFilterProvider.notifier).update(
+                            (s) => s.copyWith(sortAscending: !s.sortAscending),
+                          );
+                    });
                   },
                   icon: Icon(
                     filter.sortAscending

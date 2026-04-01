@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'dart:io';
 
 import '../database/database_init_result.dart';
+import '../database/database_path_pick_flow.dart';
 import '../../features/settings/screens/settings_screen.dart';
 
 /// Οθόνη σφάλματος βάσης / γενικού σφάλματος.
@@ -75,19 +76,90 @@ class _DatabaseErrorScreenState extends State<DatabaseErrorScreen> {
 
   static const Color _solutionPhraseBlue = Color(0xFF1565C0);
 
-  Future<void> _openSettingsForDatabaseIssue({
-    required bool openFindDatabaseOnStart,
-    required bool openCreateDatabaseOnStart,
-  }) async {
-    await Navigator.of(context).push<bool?>(
-      MaterialPageRoute<bool?>(
-        builder: (_) => SettingsScreen(
-          openFindDatabaseOnStart: openFindDatabaseOnStart,
-          openCreateDatabaseOnStart: openCreateDatabaseOnStart,
+  Future<void> _openSettingsForCreateDatabase() async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => const SettingsScreen(
+          openCreateDatabaseOnStart: true,
         ),
       ),
     );
     if (!context.mounted) return;
+    await widget.onRetry();
+  }
+
+  /// Άμεσο άνοιγμα διαλόγου αρχείου/φακέλου· αποθήκευση διαδρομής μέσω [SettingsService] και επανασύνδεση.
+  Future<void> _findDatabaseViaPicker() async {
+    final picked = await pickDatabasePathWithSystemPicker();
+    if (!mounted) return;
+    if (picked == null || picked.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Δεν επιλέχθηκε αρχείο ή φάκελος.'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => const AlertDialog(
+        content: Row(
+          children: [
+            SizedBox(
+              height: 48,
+              width: 48,
+              child: CircularProgressIndicator(strokeWidth: 3),
+            ),
+            SizedBox(width: 24),
+            Expanded(
+              child: Text(
+                'Έλεγχος βάσης δεδομένων…',
+                style: TextStyle(fontSize: 16),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    final outcome = await setAndVerifyDatabasePath(picked);
+    if (!mounted) return;
+    Navigator.of(context, rootNavigator: true).pop();
+
+    if (!outcome.ok) {
+      final msg =
+          outcome.runner.result.message ?? 'Η βάση δεν πέρασε τον έλεγχο.';
+      final det = outcome.runner.result.details?.trim();
+      await showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Η βάση δεν είναι έγκυρη'),
+          content: SingleChildScrollView(
+            child: Text(
+              det != null && det.isNotEmpty ? '$msg\n\n$det' : msg,
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('Εντάξει'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Η διαδρομή αποθηκεύτηκε. Γίνεται επανασύνδεση…'),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
     await widget.onRetry();
   }
 
@@ -388,10 +460,7 @@ class _DatabaseErrorScreenState extends State<DatabaseErrorScreen> {
                   children: [
                     Expanded(
                       child: OutlinedButton.icon(
-                        onPressed: () => _openSettingsForDatabaseIssue(
-                          openFindDatabaseOnStart: true,
-                          openCreateDatabaseOnStart: false,
-                        ),
+                        onPressed: _findDatabaseViaPicker,
                         icon: const Icon(Icons.folder_open_outlined),
                         label: const Text('Εύρεση βάσης'),
                       ),
@@ -399,10 +468,7 @@ class _DatabaseErrorScreenState extends State<DatabaseErrorScreen> {
                     const SizedBox(width: 12),
                     Expanded(
                       child: OutlinedButton.icon(
-                        onPressed: () => _openSettingsForDatabaseIssue(
-                          openFindDatabaseOnStart: false,
-                          openCreateDatabaseOnStart: true,
-                        ),
+                        onPressed: _openSettingsForCreateDatabase,
                         icon: const Icon(Icons.add_circle_outline),
                         label: const Text('Δημιουργία νέας βάσης'),
                       ),
@@ -426,10 +492,7 @@ class _DatabaseErrorScreenState extends State<DatabaseErrorScreen> {
                         const SizedBox(width: 12),
                         Expanded(
                           child: OutlinedButton.icon(
-                            onPressed: () => _openSettingsForDatabaseIssue(
-                              openFindDatabaseOnStart: false,
-                              openCreateDatabaseOnStart: true,
-                            ),
+                            onPressed: _openSettingsForCreateDatabase,
                             icon: const Icon(Icons.add_circle_outline),
                             label: const Text('Δημιουργία νέας βάσης'),
                           ),

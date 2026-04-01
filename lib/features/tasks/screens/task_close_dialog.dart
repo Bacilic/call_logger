@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/utils/spell_check.dart';
+import '../../../core/widgets/lexicon_spell_text_form_field.dart';
+import '../../../core/widgets/spell_check_controller.dart';
 
-/// Δialόγιο κλεισίματος εκκρεμότητας με υποχρεωτικό πεδίο "Λύση / Σημειώσεις Κλεισίματος".
+/// Διάλογος κλεισίματος εκκρεμότητας με υποχρεωτικό πεδίο "Λύση / Σημειώσεις Κλεισίματος".
 /// Επιστρέφει τα solutionNotes αν ο χρήστης επιβεβαιώσει, αλλιώς null.
 Future<String?> showTaskCloseDialog(
   BuildContext context, {
@@ -16,23 +18,24 @@ Future<String?> showTaskCloseDialog(
   );
 }
 
-class _TaskCloseDialog extends StatefulWidget {
+class _TaskCloseDialog extends ConsumerStatefulWidget {
   const _TaskCloseDialog({this.initialSolutionNotes});
 
   final String? initialSolutionNotes;
 
   @override
-  State<_TaskCloseDialog> createState() => _TaskCloseDialogState();
+  ConsumerState<_TaskCloseDialog> createState() => _TaskCloseDialogState();
 }
 
-class _TaskCloseDialogState extends State<_TaskCloseDialog> {
+class _TaskCloseDialogState extends ConsumerState<_TaskCloseDialog> {
   final _formKey = GlobalKey<FormState>();
-  final _controller = TextEditingController();
+  late final SpellCheckController _controller;
 
   @override
   void initState() {
     super.initState();
-    _controller.text = widget.initialSolutionNotes?.trim() ?? '';
+    _controller = SpellCheckController()
+      ..text = widget.initialSolutionNotes?.trim() ?? '';
   }
 
   @override
@@ -54,7 +57,7 @@ class _TaskCloseDialogState extends State<_TaskCloseDialog> {
       title: const Text('Ολοκλήρωση εκκρεμότητας'),
       content: Form(
         key: _formKey,
-        child: TextFormField(
+        child: LexiconSpellTextFormField(
           controller: _controller,
           decoration: const InputDecoration(
             labelText: 'Λύση / Σημειώσεις Κλεισίματος',
@@ -70,7 +73,6 @@ class _TaskCloseDialogState extends State<_TaskCloseDialog> {
             return null;
           },
           textCapitalization: TextCapitalization.sentences,
-          spellCheckConfiguration: platformSpellCheckConfiguration,
         ),
       ),
       actions: [
