@@ -9,6 +9,7 @@ import '../models/task.dart';
 import '../models/task_settings_config.dart';
 import '../providers/task_service_provider.dart';
 import '../providers/task_settings_config_provider.dart';
+import '../ui/task_due_option_tooltips.dart';
 
 /// Επιστρέφει το Task που δημιουργήθηκε/τροποποιήθηκε ή null αν ακυρώθηκε.
 Future<Task?> showTaskFormDialog(
@@ -355,18 +356,34 @@ class _TaskFormDialogState extends ConsumerState<_TaskFormDialog> {
                   spacing: 8,
                   runSpacing: 8,
                   children: [
-                    FilledButton.tonal(
-                      onPressed: () => _applyQuickDue(TaskSettingsConfig.kOneHour),
-                      child: const Text('+1 ώρα'),
+                    Tooltip(
+                      message: TaskDueOptionTooltips.plusOneHour(),
+                      child: FilledButton.tonal(
+                        onPressed: () =>
+                            _applyQuickDue(TaskSettingsConfig.kOneHour),
+                        child: const Text('+1 ώρα'),
+                      ),
                     ),
-                    FilledButton.tonal(
-                      onPressed: () => _applyQuickDue(TaskSettingsConfig.kDayEnd),
-                      child: const Text('Μέσα στην ημέρα'),
+                    Tooltip(
+                      message: TaskDueOptionTooltips.withinSchedule(
+                        cfg.nextBusinessHour,
+                        cfg.dayEndTime,
+                      ),
+                      child: FilledButton.tonal(
+                        onPressed: () =>
+                            _applyQuickDue(TaskSettingsConfig.kDayEnd),
+                        child: const Text('Μέσα στο ωράριο'),
+                      ),
                     ),
-                    FilledButton.tonal(
-                      onPressed: () =>
-                          _applyQuickDue(TaskSettingsConfig.kNextBusiness),
-                      child: const Text('Επόμενη εργάσιμη'),
+                    Tooltip(
+                      message: TaskDueOptionTooltips.nextBusiness(
+                        cfg.nextBusinessHour,
+                      ),
+                      child: FilledButton.tonal(
+                        onPressed: () =>
+                            _applyQuickDue(TaskSettingsConfig.kNextBusiness),
+                        child: const Text('Επόμενη εργάσιμη'),
+                      ),
                     ),
                     FilledButton.tonal(
                       onPressed: () {

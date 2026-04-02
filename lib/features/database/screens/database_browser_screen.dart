@@ -803,10 +803,27 @@ class _TablePreviewGridState extends State<_TablePreviewGrid> {
   static const double _rowHeight = 40.0;
   static const double _headerHeight = 44.0;
 
+  final ScrollController _verticalScrollController = ScrollController();
+  /// Οδηγεί το οριζόντιο scroll του **πραγματικού** πίνακα.
+  final ScrollController _horizontalScrollController = ScrollController();
+  /// «Φάντασμα» controller για την ορατή οριζόντια μπάρα (κάτω του viewport).
+  final ScrollController _ghostHScrollController = ScrollController();
+  bool _hSyncing = false;
+
   List<double> _columnWidths = [];
   bool _widthsInitialized = false;
 
   TablePreviewResult get preview => widget.preview;
+
+  /// Συνολικό πλάτος διάταξης πίνακα (στήλη + χερούλι resize ανά στήλη) — ίδιο με `FixedColumnWidth`.
+  double get _totalTableLayoutWidth {
+    if (_columnWidths.isEmpty) return 0;
+    var sum = 0.0;
+    for (final w in _columnWidths) {
+      sum += w + _resizeHandleWidth;
+    }
+    return sum;
+  }
 
   void _ensureColumnWidths(BuildContext context) {
     if (_widthsInitialized && _columnWidths.length == preview.columns.length) {
@@ -850,11 +867,48 @@ class _TablePreviewGridState extends State<_TablePreviewGrid> {
   }
 
   @override
+  void initState() {
+    super.initState();
+    _horizontalScrollController.addListener(_onTableHScroll);
+    _ghostHScrollController.addListener(_onGhostHScroll);
+  }
+
+  void _onTableHScroll() {
+    if (_hSyncing || !_ghostHScrollController.hasClients) return;
+    _hSyncing = true;
+    final target = _horizontalScrollController.offset;
+    if ((_ghostHScrollController.offset - target).abs() > 0.5) {
+      _ghostHScrollController.jumpTo(target);
+    }
+    _hSyncing = false;
+  }
+
+  void _onGhostHScroll() {
+    if (_hSyncing || !_horizontalScrollController.hasClients) return;
+    _hSyncing = true;
+    final target = _ghostHScrollController.offset;
+    if ((_horizontalScrollController.offset - target).abs() > 0.5) {
+      _horizontalScrollController.jumpTo(target);
+    }
+    _hSyncing = false;
+  }
+
+  @override
   void didUpdateWidget(covariant _TablePreviewGrid oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.preview != widget.preview) {
       _widthsInitialized = false;
     }
+  }
+
+  @override
+  void dispose() {
+    _horizontalScrollController.removeListener(_onTableHScroll);
+    _ghostHScrollController.removeListener(_onGhostHScroll);
+    _verticalScrollController.dispose();
+    _horizontalScrollController.dispose();
+    _ghostHScrollController.dispose();
+    super.dispose();
   }
 
   @override
@@ -961,17 +1015,62 @@ class _TablePreviewGridState extends State<_TablePreviewGrid> {
       ],
     );
 
-    return SingleChildScrollView(
-      scrollDirection: Axis.vertical,
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Transform.scale(
-          scale: widget.zoom,
-          alignment: Alignment.topLeft,
-          filterQuality: FilterQuality.medium,
-          child: table,
-        ),
-      ),
+    // Διάταξη: Column
+    //  ├ Expanded → κάθετη μπάρα δεξιά viewport + οριζόντιο scroll εσωτερικά (χωρίς μπάρα)
+    //  └ ghost οριζόντια μπάρα σταθερά κάτω στο viewport, συγχρονισμένη μέσω _ghostHScrollController
+    final layoutWidth = _totalTableLayoutWidth;
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return Column(
+          children: [
+            Expanded(
+              child: Scrollbar(
+                controller: _verticalScrollController,
+                thumbVisibility: true,
+                trackVisibility: true,
+                child: SingleChildScrollView(
+                  controller: _verticalScrollController,
+                  scrollDirection: Axis.vertical,
+                  primary: false,
+                  child: SingleChildScrollView(
+                    controller: _horizontalScrollController,
+                    scrollDirection: Axis.horizontal,
+                    primary: false,
+                    child: Transform.scale(
+                      scale: widget.zoom,
+                      alignment: Alignment.topLeft,
+                      filterQuality: FilterQuality.medium,
+                      child: SizedBox(
+                        width: layoutWidth,
+                        child: table,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            // Ghost οριζόντια μπάρα: σταθερή θέση κάτω, συγχρονισμένη μέσω _ghostHScrollController.
+            // Ύψος 14px ώστε το hit-test να καλύπτει ολόκληρη τη μπάρα (παλαιό height:1 → 1px hit area).
+            if (layoutWidth > constraints.maxWidth)
+              SizedBox(
+                height: 14,
+                child: Scrollbar(
+                  controller: _ghostHScrollController,
+                  thumbVisibility: true,
+                  trackVisibility: true,
+                  scrollbarOrientation: ScrollbarOrientation.bottom,
+                  child: SingleChildScrollView(
+                    controller: _ghostHScrollController,
+                    scrollDirection: Axis.horizontal,
+                    primary: false,
+                    child: SizedBox(height: 14, width: layoutWidth),
+                  ),
+                ),
+              ),
+          ],
+        );
+      },
     );
   }
 }

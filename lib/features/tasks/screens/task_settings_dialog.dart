@@ -5,6 +5,7 @@ import '../../../core/providers/settings_provider.dart';
 import '../../../core/services/settings_service.dart';
 import '../models/task_settings_config.dart';
 import '../providers/task_settings_config_provider.dart';
+import '../ui/task_due_option_tooltips.dart';
 
 /// Διάλογος γενικών ρυθμίσεων εκκρεμοτήτων (`app_settings`).
 class TaskSettingsDialog extends ConsumerStatefulWidget {
@@ -69,7 +70,7 @@ class _TaskSettingsDialogState extends ConsumerState<TaskSettingsDialog> {
       case TaskSettingsConfig.kOneHour:
         return '+1 ώρα';
       case TaskSettingsConfig.kDayEnd:
-        return 'Μέσα στην ημέρα';
+        return 'Μέσα στο ωράριο';
       case TaskSettingsConfig.kNextBusiness:
         return 'Επόμενη εργάσιμη';
       default:
@@ -256,7 +257,7 @@ class _TaskSettingsDialogState extends ConsumerState<TaskSettingsDialog> {
       child: AlertDialog(
         title: const Text('Ρυθμίσεις εκκρεμοτήτων'),
         content: SizedBox(
-          width: 420,
+          width: 440,
           child: Form(
             key: _formKey,
             child: SingleChildScrollView(
@@ -264,23 +265,29 @@ class _TaskSettingsDialogState extends ConsumerState<TaskSettingsDialog> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  _sectionTitle('Εργάσιμες ώρες'),
+                  _sectionTitle('Ωράριο εκκρεμοτήτων'),
                   ListTile(
                     contentPadding: EdgeInsets.zero,
-                    title: const Text(
-                      'Ώρα τελευταίας εκκρεμότητας\n(«μέσα στην ημέρα»)',
+                    title: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        'Ώρα τελευταίας εκκρεμότητας («μέσα στο ωράριο»)',
+                        maxLines: 1,
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
                     ),
                     subtitle: Text(_formatTime(d.dayEndTime)),
                     trailing: const Icon(Icons.access_time),
                     onTap: () => _pickTime(
-                      'Όριο μέσα στην ημέρα',
+                      'Όριο τέλους ωραρίου',
                       d.dayEndTime,
                       (t) => setState(() => _draft = d.copyWith(dayEndTime: t)),
                     ),
                   ),
                   ListTile(
                     contentPadding: EdgeInsets.zero,
-                    title: const Text('Ώρα έναρξης επόμενης εργάσιμης'),
+                    title: const Text('Ώρα έναρξης ωραρίου'),
                     subtitle: Text(_formatTime(d.nextBusinessHour)),
                     trailing: const Icon(Icons.wb_sunny_outlined),
                     onTap: () => _pickTime(
@@ -296,9 +303,9 @@ class _TaskSettingsDialogState extends ConsumerState<TaskSettingsDialog> {
                     onChanged: (v) =>
                         setState(() => _draft = d.copyWith(skipWeekends: v)),
                   ),
-                  _sectionTitle('Νέα εκκρεμότητα'),
+                  _sectionTitle('Ολοκλήρωση εκκρεμοτήτας μέσα σε:'),
                   Text(
-                    'Προεπιλεγμένη αναβολή (νέα εκκρεμότητα)',
+                    'Προεπιλεγμένη ώρα ολοκλήρωσης μίας νέας εκκρεμότητας',
                     style: Theme.of(context).textTheme.labelLarge,
                   ),
                   const SizedBox(height: 8),
@@ -306,32 +313,50 @@ class _TaskSettingsDialogState extends ConsumerState<TaskSettingsDialog> {
                     scrollDirection: Axis.horizontal,
                     child: Row(
                       children: [
-                        ChoiceChip(
-                          label: const Text('+1 ώρα'),
-                          selected: d.defaultSnoozeOption == TaskSettingsConfig.kOneHour,
-                          onSelected: (_) => setState(
-                            () => _draft = d.copyWith(
-                              defaultSnoozeOption: TaskSettingsConfig.kOneHour,
+                        Tooltip(
+                          message: TaskDueOptionTooltips.plusOneHour(),
+                          child: ChoiceChip(
+                            label: const Text('+1 ώρα'),
+                            selected:
+                                d.defaultSnoozeOption == TaskSettingsConfig.kOneHour,
+                            onSelected: (_) => setState(
+                              () => _draft = d.copyWith(
+                                defaultSnoozeOption: TaskSettingsConfig.kOneHour,
+                              ),
                             ),
                           ),
                         ),
                         const SizedBox(width: 8),
-                        ChoiceChip(
-                          label: const Text('Μέσα στην ημέρα'),
-                          selected: d.defaultSnoozeOption == TaskSettingsConfig.kDayEnd,
-                          onSelected: (_) => setState(
-                            () => _draft = d.copyWith(
-                              defaultSnoozeOption: TaskSettingsConfig.kDayEnd,
+                        Tooltip(
+                          message: TaskDueOptionTooltips.withinSchedule(
+                            d.nextBusinessHour,
+                            d.dayEndTime,
+                          ),
+                          child: ChoiceChip(
+                            label: const Text('Μέσα στο ωράριο'),
+                            selected:
+                                d.defaultSnoozeOption == TaskSettingsConfig.kDayEnd,
+                            onSelected: (_) => setState(
+                              () => _draft = d.copyWith(
+                                defaultSnoozeOption: TaskSettingsConfig.kDayEnd,
+                              ),
                             ),
                           ),
                         ),
                         const SizedBox(width: 8),
-                        ChoiceChip(
-                          label: const Text('Επόμενη εργάσιμη'),
-                          selected: d.defaultSnoozeOption == TaskSettingsConfig.kNextBusiness,
-                          onSelected: (_) => setState(
-                            () => _draft = d.copyWith(
-                              defaultSnoozeOption: TaskSettingsConfig.kNextBusiness,
+                        Tooltip(
+                          message: TaskDueOptionTooltips.nextBusiness(
+                            d.nextBusinessHour,
+                          ),
+                          child: ChoiceChip(
+                            label: const Text('Επόμενη εργάσιμη'),
+                            selected: d.defaultSnoozeOption ==
+                                TaskSettingsConfig.kNextBusiness,
+                            onSelected: (_) => setState(
+                              () => _draft = d.copyWith(
+                                defaultSnoozeOption:
+                                    TaskSettingsConfig.kNextBusiness,
+                              ),
                             ),
                           ),
                         ),

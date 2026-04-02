@@ -70,7 +70,7 @@ class TaskService {
   /// Επόμενη προτεινόμενη ημερομηνία/ώρα λήξης βάσει ρυθμίσεων.
   ///
   /// [option]: `TaskSettingsConfig.kOptionDefault` → χρήση [TaskSettingsConfig.defaultSnoozeOption],
-  /// αλλιώς `one_hour` / `day_end` / `next_business`.
+  /// αλλιώς `one_hour` / `day_end` («Μέσα στο ωράριο») / `next_business`.
   DateTime calculateNextDueDate(
     TaskSettingsConfig config, {
     String option = TaskSettingsConfig.kOptionDefault,
@@ -82,16 +82,14 @@ class TaskService {
         ? config.defaultSnoozeOption
         : TaskSettingsConfig.normalizeSnoozeOption(option);
 
-    switch (resolved) {
-      case TaskSettingsConfig.kOneHour:
-        return base.add(const Duration(hours: 1));
-      case TaskSettingsConfig.kDayEnd:
-        return _nextDayEndDateTime(config, base);
-      case TaskSettingsConfig.kNextBusiness:
-        return _nextBusinessMorningDateTime(config, base);
-      default:
-        return base.add(const Duration(hours: 1));
-    }
+    return switch (resolved) {
+      TaskSettingsConfig.kOneHour => base.add(const Duration(hours: 1)),
+      TaskSettingsConfig.kDayEnd =>
+        _withinScheduleOrNextBusinessDue(config, base),
+      TaskSettingsConfig.kNextBusiness =>
+        _nextBusinessMorningDateTime(config, base),
+      _ => base.add(const Duration(hours: 1)),
+    };
   }
 
   DateTime _atTimeOnDay(DateTime dayStart, TimeOfDay t) {
@@ -104,22 +102,24 @@ class TaskService {
     );
   }
 
-  /// Τέλος «μέσα στην ημέρα»: σήμερα στο [dayEndTime] αν ακόμα μετά το [base], αλλιώς επόμενες ημέρες (+ Σ/Κ αν [skipWeekends]).
-  DateTime _nextDayEndDateTime(TaskSettingsConfig config, DateTime base) {
-    var day = DateTime(base.year, base.month, base.day);
-    var candidate = _atTimeOnDay(day, config.dayEndTime);
-    if (!candidate.isAfter(base)) {
-      day = day.add(const Duration(days: 1));
-      candidate = _atTimeOnDay(day, config.dayEndTime);
+  /// Επιλογή «Μέσα στο ωράριο» (`kDayEnd`): αν η [base] την ίδια ημερολογιακή ημέρα
+  /// βρίσκεται από [nextBusinessHour] έως [dayEndTime] (συμπεριλαμβανομένων), +1 ώρα·
+  /// αλλιώς επόμενη εργάσιμη στην [nextBusinessHour]. Αν το ωράριο δεν είναι έγκυρο
+  /// (λήξη πριν την έναρξη), εφαρμόζεται +1 ώρα.
+  DateTime _withinScheduleOrNextBusinessDue(
+    TaskSettingsConfig config,
+    DateTime base,
+  ) {
+    final dayStart = DateTime(base.year, base.month, base.day);
+    final startToday = _atTimeOnDay(dayStart, config.nextBusinessHour);
+    final endToday = _atTimeOnDay(dayStart, config.dayEndTime);
+    if (!endToday.isAfter(startToday)) {
+      return base.add(const Duration(hours: 1));
     }
-    if (config.skipWeekends) {
-      while (candidate.weekday == DateTime.saturday ||
-          candidate.weekday == DateTime.sunday) {
-        day = day.add(const Duration(days: 1));
-        candidate = _atTimeOnDay(day, config.dayEndTime);
-      }
+    if (!base.isBefore(startToday) && !base.isAfter(endToday)) {
+      return base.add(const Duration(hours: 1));
     }
-    return candidate;
+    return _nextBusinessMorningDateTime(config, base);
   }
 
   /// Επόμενη ημέρα (ημερολογιακά μετά την ημέρα του [base]) στην [nextBusinessHour], με παράλειψη Σ/Κ αν [skipWeekends].
@@ -222,8 +222,11 @@ class TaskService {
       fromDate: DateTime.now(),
     );
     final db = await _db;
+    final nowIso = DateTime.now().toIso8601String();
     final row = <String, dynamic>{
       'call_id': callId,
+      'created_at': nowIso,
+      'updated_at': nowIso,
       'title': title,
       'description': description,
       'due_date': dueDate.toIso8601String(),

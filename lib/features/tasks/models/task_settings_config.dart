@@ -24,6 +24,7 @@ class TaskSettingsConfig {
   /// Όρισμα `option` στο `TaskService.calculateNextDueDate`: χρήση [defaultSnoozeOption].
   static const String kOptionDefault = 'default';
 
+  /// Ώρα λήξης του παραθύρου ωραρίου για την επιλογή «Μέσα στο ωράριο» (`kDayEnd`).
   final TimeOfDay dayEndTime;
   final TimeOfDay nextBusinessHour;
   final bool skipWeekends;

@@ -16,6 +16,7 @@ import '../models/task_settings_config.dart';
 import '../providers/task_service_provider.dart';
 import '../providers/task_settings_config_provider.dart';
 import '../providers/tasks_provider.dart';
+import '../ui/task_due_option_tooltips.dart';
 import 'task_card.dart';
 import 'task_close_dialog.dart';
 import 'task_filter_bar.dart';
@@ -390,22 +391,36 @@ class TasksScreen extends ConsumerWidget {
                 style: Theme.of(ctx).textTheme.titleSmall,
               ),
               const SizedBox(height: 8),
-              FilledButton.tonal(
-                onPressed: () =>
-                    Navigator.of(ctx).pop(TaskSettingsConfig.kOneHour),
-                child: const Text('+1 ώρα'),
+              Tooltip(
+                message: TaskDueOptionTooltips.plusOneHour(),
+                child: FilledButton.tonal(
+                  onPressed: () =>
+                      Navigator.of(ctx).pop(TaskSettingsConfig.kOneHour),
+                  child: const Text('+1 ώρα'),
+                ),
               ),
               const SizedBox(height: 8),
-              FilledButton.tonal(
-                onPressed: () =>
-                    Navigator.of(ctx).pop(TaskSettingsConfig.kDayEnd),
-                child: const Text('Μέσα στην ημέρα'),
+              Tooltip(
+                message: TaskDueOptionTooltips.withinSchedule(
+                  config.nextBusinessHour,
+                  config.dayEndTime,
+                ),
+                child: FilledButton.tonal(
+                  onPressed: () =>
+                      Navigator.of(ctx).pop(TaskSettingsConfig.kDayEnd),
+                  child: const Text('Μέσα στο ωράριο'),
+                ),
               ),
               const SizedBox(height: 8),
-              FilledButton.tonal(
-                onPressed: () =>
-                    Navigator.of(ctx).pop(TaskSettingsConfig.kNextBusiness),
-                child: const Text('Επόμενη εργάσιμη'),
+              Tooltip(
+                message: TaskDueOptionTooltips.nextBusiness(
+                  config.nextBusinessHour,
+                ),
+                child: FilledButton.tonal(
+                  onPressed: () =>
+                      Navigator.of(ctx).pop(TaskSettingsConfig.kNextBusiness),
+                  child: const Text('Επόμενη εργάσιμη'),
+                ),
               ),
               const SizedBox(height: 16),
               Row(
