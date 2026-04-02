@@ -1405,6 +1405,54 @@ class DatabaseHelper {
     return db.query('user_equipment');
   }
 
+  /// Πλήθος χρηστών συνδεδεμένων με τον εξοπλισμό [equipmentId] (M2M).
+  Future<int> countUsersLinkedToEquipment(int equipmentId) async {
+    final db = await database;
+    final rows = await db.rawQuery(
+      'SELECT COUNT(*) AS c FROM user_equipment WHERE equipment_id = ?',
+      [equipmentId],
+    );
+    if (rows.isEmpty) return 0;
+    final raw = rows.first['c'];
+    if (raw is int) return raw;
+    if (raw is num) return raw.toInt();
+    return int.tryParse('$raw') ?? 0;
+  }
+
+  /// Αφαιρεί μόνο τη συσχέτιση χρήστη–εξοπλισμού (χωρίς soft delete εγγραφής equipment).
+  Future<void> unlinkUserFromEquipment(int userId, int equipmentId) async {
+    final db = await database;
+    await db.delete(
+      'user_equipment',
+      where: 'user_id = ? AND equipment_id = ?',
+      whereArgs: [userId, equipmentId],
+    );
+  }
+
+  /// Επαναφορά συσχέτισης (π.χ. μετά από αναίρεση αφαίρεσης μόνο από χρήστη).
+  Future<void> linkUserToEquipment(int userId, int equipmentId) async {
+    final db = await database;
+    await db.insert(
+      'user_equipment',
+      {'user_id': userId, 'equipment_id': equipmentId},
+      conflictAlgorithm: ConflictAlgorithm.ignore,
+    );
+  }
+
+  /// Όνομα τμήματος για εμφάνιση (μη διαγραμμένα).
+  Future<String?> getDepartmentNameById(int departmentId) async {
+    final db = await database;
+    final rows = await db.query(
+      'departments',
+      columns: ['name'],
+      where: 'id = ? AND COALESCE(is_deleted, 0) = 0',
+      whereArgs: [departmentId],
+      limit: 1,
+    );
+    if (rows.isEmpty) return null;
+    return rows.first['name'] as String?;
+  }
+
   /// Αντιγράφει συνδέσεις `user_equipment` από [fromUserId] στον [toUserId]
   /// (ίδια `equipment_id`, χωρίς αφαίρεση από την πηγή).
   Future<void> copyUserEquipmentLinks(int fromUserId, int toUserId) async {

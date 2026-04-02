@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 
 import '../models/task.dart';
 import '../models/task_settings_config.dart';
+import '../providers/pending_task_delete_provider.dart';
 import '../providers/task_settings_config_provider.dart';
 import '../providers/tasks_provider.dart';
 
@@ -356,8 +357,13 @@ class _TaskCardState extends ConsumerState<TaskCard> {
         : dueFormatted;
     final statusLabel = isSnoozed ? 'Αναβληθείσα' : status.displayLabelEl;
     final statusTooltip = TaskCard._buildStatusTooltip(task, status);
+    final pendingDeleteTaskId = ref.watch(pendingTaskDeleteProvider);
+    final deleteMenuEnabled = pendingDeleteTaskId == null;
+    final isPendingDeleteSelf = pendingDeleteTaskId != null &&
+        task.id != null &&
+        pendingDeleteTaskId == task.id;
 
-    return Card(
+    Widget card = Card(
       elevation: 1,
       color: cardColor,
       margin: const EdgeInsets.only(bottom: 8),
@@ -365,142 +371,181 @@ class _TaskCardState extends ConsumerState<TaskCard> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         mainAxisSize: MainAxisSize.min,
         children: [
-          ListTile(
-            title: Row(
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 12, 8),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Expanded(
-                  child: Text(
-                    task.displayTitle,
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Tooltip(
-                      message: statusTooltip,
-                      child: Chip(
-                        backgroundColor:
-                            TaskCard._statusChipColor(status, theme.colorScheme),
-                        label: Text(
-                          statusLabel,
-                          style: theme.textTheme.labelSmall,
-                        ),
-                        padding:
-                            const EdgeInsets.symmetric(horizontal: 6, vertical: 0),
-                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      ),
-                    ),
-                    if (hasSolution)
-                      Align(
-                        alignment: Alignment.centerRight,
-                        child: TextButton(
-                          style: TextButton.styleFrom(
-                            minimumSize: Size.zero,
-                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 4,
-                              vertical: 2,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            child: Text(
+                              task.displayTitle,
+                              style: theme.textTheme.titleMedium?.copyWith(
+                                fontWeight: FontWeight.bold,
+                              ),
                             ),
-                            visualDensity: VisualDensity.compact,
                           ),
-                          onPressed: () {
-                            setState(() => _showSolution = !_showSolution);
-                          },
-                          child: Row(
+                          const SizedBox(width: 8),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.end,
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Text(_showSolution ? 'Απόκρυψη λύσης' : 'Λύση'),
-                              const SizedBox(width: 2),
-                              Icon(
-                                _showSolution
-                                    ? Icons.arrow_drop_up
-                                    : Icons.arrow_drop_down,
-                                size: 18,
+                              Tooltip(
+                                message: statusTooltip,
+                                child: Chip(
+                                  backgroundColor: TaskCard._statusChipColor(
+                                    status,
+                                    theme.colorScheme,
+                                  ),
+                                  label: Text(
+                                    statusLabel,
+                                    style: theme.textTheme.labelSmall,
+                                  ),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 6,
+                                    vertical: 0,
+                                  ),
+                                  materialTapTargetSize:
+                                      MaterialTapTargetSize.shrinkWrap,
+                                ),
                               ),
+                              if (hasSolution)
+                                Align(
+                                  alignment: Alignment.centerRight,
+                                  child: TextButton(
+                                    style: TextButton.styleFrom(
+                                      minimumSize: Size.zero,
+                                      tapTargetSize:
+                                          MaterialTapTargetSize.shrinkWrap,
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 4,
+                                        vertical: 2,
+                                      ),
+                                      visualDensity: VisualDensity.compact,
+                                    ),
+                                    onPressed: () {
+                                      setState(() => _showSolution = !_showSolution);
+                                    },
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Text(
+                                          _showSolution
+                                              ? 'Απόκρυψη λύσης'
+                                              : 'Λύση',
+                                        ),
+                                        const SizedBox(width: 2),
+                                        Icon(
+                                          _showSolution
+                                              ? Icons.arrow_drop_up
+                                              : Icons.arrow_drop_down,
+                                          size: 18,
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              if (hasSolution) const SizedBox(height: 6),
                             ],
                           ),
-                        ),
+                        ],
                       ),
-                    if (hasSolution) const SizedBox(height: 6),
-                  ],
-                ),
-              ],
-            ),
-            subtitle: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if ((task.isQuickAdd ? task.cleanDescription : task.description)
-                        ?.isNotEmpty ==
-                    true)
-                  _TaskDescription(
-                    description: task.isQuickAdd
-                        ? task.cleanDescription
-                        : task.description!,
+                      const SizedBox(height: 8),
+                      if ((task.isQuickAdd
+                                  ? task.cleanDescription
+                                  : task.description)
+                              ?.isNotEmpty ==
+                          true)
+                        _TaskDescription(
+                          description: task.isQuickAdd
+                              ? task.cleanDescription
+                              : task.description!,
+                        ),
+                      if ((task.isQuickAdd
+                                  ? task.cleanDescription
+                                  : task.description)
+                              ?.isNotEmpty ==
+                          true &&
+                          _hasEntityMetadata())
+                        const SizedBox(height: 8),
+                      _buildEntityMetadata(theme),
+                    ],
                   ),
-                if ((task.isQuickAdd ? task.cleanDescription : task.description)
-                        ?.isNotEmpty ==
-                    true &&
-                    _hasEntityMetadata())
-                  const SizedBox(height: 8),
-                _buildEntityMetadata(theme),
-              ],
-            ),
-            trailing: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.end,
+                ),
+                const SizedBox(width: 12),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      status == TaskStatus.closed ? completedFormatted : dueFormatted,
-                      style: theme.textTheme.bodySmall,
-                    ),
-                    if (task.priority != null && task.priority! > 0)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 2),
-                        child: Text(
-                          task.priority == 1 ? 'Υψηλή' : 'Κρίσιμη',
-                          style: theme.textTheme.labelSmall?.copyWith(
-                            color: task.priority == 1
-                                ? Colors.orange.shade700
-                                : theme.colorScheme.error,
-                          ),
+                    Column(
+                      mainAxisAlignment: MainAxisAlignment.start,
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          status == TaskStatus.closed
+                              ? completedFormatted
+                              : dueFormatted,
+                          style: theme.textTheme.bodySmall,
                         ),
+                        if (task.priority != null && task.priority! > 0)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 2),
+                            child: Text(
+                              task.priority == 1 ? 'Υψηλή' : 'Κρίσιμη',
+                              style: theme.textTheme.labelSmall?.copyWith(
+                                color: task.priority == 1
+                                    ? Colors.orange.shade700
+                                    : theme.colorScheme.error,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                    if (widget.onComplete != null && status != TaskStatus.closed)
+                      IconButton(
+                        icon: const Icon(Icons.check_circle_outline),
+                        tooltip: 'Ολοκλήρωση',
+                        onPressed: widget.onComplete,
                       ),
-                  ],
-                ),
-                if (widget.onComplete != null && status != TaskStatus.closed)
-                  IconButton(
-                    icon: const Icon(Icons.check_circle_outline),
-                    tooltip: 'Ολοκλήρωση',
-                    onPressed: widget.onComplete,
-                  ),
-                PopupMenuButton<String>(
-                  tooltip: 'Ενέργειες',
-                  onSelected: (value) {
-                    switch (value) {
-                      case 'edit':
-                        widget.onEdit?.call();
-                        break;
-                      case 'snooze':
-                        widget.onSnooze?.call();
-                        break;
-                      case 'delete':
-                        widget.onDelete?.call();
-                        break;
-                    }
-                  },
-                  itemBuilder: (context) => [
-                    const PopupMenuItem(value: 'edit', child: Text('Επεξεργασία')),
-                    const PopupMenuItem(value: 'snooze', child: Text('Αναβολή')),
-                    const PopupMenuItem(value: 'delete', child: Text('Διαγραφή')),
+                    PopupMenuButton<String>(
+                      tooltip: 'Ενέργειες',
+                      onSelected: (value) {
+                        switch (value) {
+                          case 'edit':
+                            widget.onEdit?.call();
+                            break;
+                          case 'snooze':
+                            widget.onSnooze?.call();
+                            break;
+                          case 'delete':
+                            widget.onDelete?.call();
+                            break;
+                        }
+                      },
+                      itemBuilder: (context) => [
+                        const PopupMenuItem(
+                          value: 'edit',
+                          child: Text('Επεξεργασία'),
+                        ),
+                        const PopupMenuItem(
+                          value: 'snooze',
+                          child: Text('Αναβολή'),
+                        ),
+                        PopupMenuItem<String>(
+                          value: 'delete',
+                          enabled: deleteMenuEnabled,
+                          child: const Text('Διαγραφή'),
+                        ),
+                      ],
+                    ),
                   ],
                 ),
               ],
@@ -530,5 +575,21 @@ class _TaskCardState extends ConsumerState<TaskCard> {
         ],
       ),
     );
+
+    if (isPendingDeleteSelf) {
+      card = Tooltip(
+        message:
+            'Εκκρεμεί η διαγραφή· πατήστε «Αναίρεση» στο μήνυμα κάτω για επαναφορά',
+        child: AbsorbPointer(
+          absorbing: true,
+          child: Opacity(
+            opacity: 0.5,
+            child: card,
+          ),
+        ),
+      );
+    }
+
+    return card;
   }
 }

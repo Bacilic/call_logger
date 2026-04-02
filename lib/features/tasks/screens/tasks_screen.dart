@@ -13,6 +13,7 @@ import '../../directory/screens/widgets/equipment_form_dialog.dart';
 import '../../directory/screens/widgets/user_form_dialog.dart';
 import '../models/task.dart';
 import '../models/task_settings_config.dart';
+import '../providers/pending_task_delete_provider.dart';
 import '../providers/task_service_provider.dart';
 import '../providers/task_settings_config_provider.dart';
 import '../providers/tasks_provider.dart';
@@ -570,6 +571,10 @@ class TasksScreen extends ConsumerWidget {
     if (confirm != true || !context.mounted) return;
 
     final messenger = ScaffoldMessenger.of(context);
+    final tasksNotifier = ref.read(tasksProvider.notifier);
+    final pendingDelete = ref.read(pendingTaskDeleteProvider.notifier);
+    final taskId = task.id!;
+    pendingDelete.begin(taskId);
     messenger.hideCurrentSnackBar();
     messenger.showSnackBar(
       SnackBar(
@@ -577,16 +582,22 @@ class TasksScreen extends ConsumerWidget {
         duration: const Duration(days: 1),
         content: _TaskDeleteCountdownSnackContent(
           taskTitle: task.title,
-          onUndo: messenger.hideCurrentSnackBar,
-          onExpired: () async {
-            if (!context.mounted) return;
+          onUndo: () {
+            pendingDelete.clear();
             messenger.hideCurrentSnackBar();
-            await ref.read(tasksProvider.notifier).deleteTask(task.id!);
-            if (!context.mounted) return;
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Η εκκρεμότητα διαγράφηκε.')),
-            );
           },
+          onExpired: () async {
+            messenger.hideCurrentSnackBar();
+            try {
+              await tasksNotifier.deleteTask(taskId);
+              messenger.showSnackBar(
+                const SnackBar(content: Text('Η εκκρεμότητα διαγράφηκε.')),
+              );
+            } finally {
+              pendingDelete.clear();
+            }
+          },
+          onAbortedExternally: pendingDelete.clear,
         ),
       ),
     );
@@ -707,11 +718,15 @@ class _TaskDeleteCountdownSnackContent extends StatefulWidget {
     required this.taskTitle,
     required this.onUndo,
     required this.onExpired,
+    this.onAbortedExternally,
   });
 
   final String taskTitle;
   final VoidCallback onUndo;
   final Future<void> Function() onExpired;
+
+  /// Όταν το SnackBar αφαιρεθεί χωρίς αναίρεση/λήξη (π.χ. αλλαγή οθόνης).
+  final VoidCallback? onAbortedExternally;
 
   @override
   State<_TaskDeleteCountdownSnackContent> createState() =>
@@ -724,6 +739,7 @@ class _TaskDeleteCountdownSnackContentState
   int _remaining = _initialSeconds;
   Timer? _timer;
   bool _undone = false;
+  bool _expireCallbackStarted = false;
 
   @override
   void initState() {
@@ -733,6 +749,7 @@ class _TaskDeleteCountdownSnackContentState
       if (_remaining <= 1) {
         _timer?.cancel();
         _timer = null;
+        _expireCallbackStarted = true;
         widget.onExpired();
         return;
       }
@@ -743,6 +760,9 @@ class _TaskDeleteCountdownSnackContentState
   @override
   void dispose() {
     _timer?.cancel();
+    if (!_undone && !_expireCallbackStarted) {
+      widget.onAbortedExternally?.call();
+    }
     super.dispose();
   }
 

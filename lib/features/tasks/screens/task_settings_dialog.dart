@@ -313,7 +313,7 @@ class _TaskSettingsDialogState extends ConsumerState<TaskSettingsDialog> {
                     scrollDirection: Axis.horizontal,
                     child: Row(
                       children: [
-                        Tooltip(
+                        TaskDueOptionTooltip(
                           message: TaskDueOptionTooltips.plusOneHour(),
                           child: ChoiceChip(
                             label: const Text('+1 ώρα'),
@@ -327,7 +327,7 @@ class _TaskSettingsDialogState extends ConsumerState<TaskSettingsDialog> {
                           ),
                         ),
                         const SizedBox(width: 8),
-                        Tooltip(
+                        TaskDueOptionTooltip(
                           message: TaskDueOptionTooltips.withinSchedule(
                             d.nextBusinessHour,
                             d.dayEndTime,
@@ -344,7 +344,7 @@ class _TaskSettingsDialogState extends ConsumerState<TaskSettingsDialog> {
                           ),
                         ),
                         const SizedBox(width: 8),
-                        Tooltip(
+                        TaskDueOptionTooltip(
                           message: TaskDueOptionTooltips.nextBusiness(
                             d.nextBusinessHour,
                           ),

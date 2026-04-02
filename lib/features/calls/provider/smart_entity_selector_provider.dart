@@ -1511,6 +1511,13 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
             (s.departmentText.trim().isNotEmpty
                 ? refreshedLookup.findDepartmentByName(s.departmentText)?.id
                 : null);
+        // Πλήρες EquipmentModel με id — αλλιώς το hasEquipmentAssociation μείνει false
+        // και το submit κλήσης ξανατρέχει συσχέτιση + δεύτερη γρήγορη εκκρεμότητα.
+        if (matchedNewCallerEquipment.isNotEmpty) {
+          state = state.copyWith(
+            selectedEquipment: matchedNewCallerEquipment.first,
+          );
+        }
         await _createQuickAddTask(
           callerName: state.selectedCaller?.name ?? state.callerDisplayText.trim(),
           summaryText: msg,
@@ -1570,6 +1577,8 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
     final eqCode = state.hasEquipmentAssociation(lookupForAssoc)
         ? null
         : state.equipmentText.trim();
+    final hadPhoneWork = phone != null && phone.isNotEmpty;
+    final hadEqWork = eqCode != null && eqCode.isNotEmpty;
 
     try {
       await DatabaseHelper.instance.updateAssociationsIfNeeded(
@@ -1585,6 +1594,7 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
               ? lookup.findDepartmentByName(state.departmentText)?.id
               : null);
       var updatedDepartmentId = state.selectedCaller?.departmentId;
+      var primaryDepartmentChanged = false;
       if (updatePrimaryDepartment &&
           state.departmentText.trim().isNotEmpty &&
           state.selectedCaller?.id != null) {
@@ -1606,6 +1616,7 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
           updatedMap,
         );
         updatedDepartmentId = selectedDepartmentId;
+        primaryDepartmentChanged = true;
       }
 
       final s = state;
@@ -1652,23 +1663,34 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
           (s.departmentText.trim().isNotEmpty
               ? refreshedLookup.findDepartmentByName(s.departmentText)?.id
               : null);
-      await _createQuickAddTask(
-        callerName: s.selectedCaller?.name ?? s.callerDisplayText.trim(),
-        summaryText: msg,
-        callerId: s.selectedCaller?.id,
-        departmentId: resolvedDepartmentId,
-        equipmentId: resolvedEquipmentId,
-        phoneText: s.selectedPhone?.trim(),
-        userText: s.callerDisplayText.trim().isEmpty
-            ? null
-            : s.callerDisplayText.trim(),
-        equipmentText: s.equipmentText.trim().isEmpty ? null : s.equipmentText.trim(),
-        departmentText: s.departmentText.trim().isEmpty
-            ? null
-            : s.departmentText.trim(),
-      );
-      ref.invalidate(tasksProvider);
-      return msg ?? 'Προστέθηκε.';
+      if (matchedEquipment.isNotEmpty) {
+        state = state.copyWith(selectedEquipment: matchedEquipment.first);
+      }
+      // Μία γρήγορη εκκρεμότητα μόνο όταν έγινε πραγματική αλλαγή (όχι επανάληψη
+      // μετά από ήδη ολοκληρωμένη συσχέτιση νέου χρήστη).
+      if (hadPhoneWork || hadEqWork || primaryDepartmentChanged) {
+        await _createQuickAddTask(
+          callerName: s.selectedCaller?.name ?? s.callerDisplayText.trim(),
+          summaryText: msg,
+          callerId: s.selectedCaller?.id,
+          departmentId: resolvedDepartmentId,
+          equipmentId: resolvedEquipmentId,
+          phoneText: s.selectedPhone?.trim(),
+          userText: s.callerDisplayText.trim().isEmpty
+              ? null
+              : s.callerDisplayText.trim(),
+          equipmentText: s.equipmentText.trim().isEmpty
+              ? null
+              : s.equipmentText.trim(),
+          departmentText: s.departmentText.trim().isEmpty
+              ? null
+              : s.departmentText.trim(),
+        );
+        ref.invalidate(tasksProvider);
+      }
+      return (hadPhoneWork || hadEqWork || primaryDepartmentChanged)
+          ? (msg ?? 'Προστέθηκε.')
+          : null;
     } catch (e) {
       return 'Σφάλμα αποθήκευσης: $e';
     }

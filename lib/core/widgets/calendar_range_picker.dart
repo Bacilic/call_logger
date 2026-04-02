@@ -17,10 +17,10 @@ class CalendarRangePicker extends StatefulWidget {
   });
 
   @override
-  State<CalendarRangePicker> createState() => _CalendarRangePickerState();
+  State<CalendarRangePicker> createState() => CalendarRangePickerState();
 }
 
-class _CalendarRangePickerState extends State<CalendarRangePicker> {
+class CalendarRangePickerState extends State<CalendarRangePicker> {
   static final DateFormat _dateFormat = DateFormat('dd/MM/yyyy');
   static const int _firstDayOfWeek = DateTime.monday;
 
@@ -49,6 +49,13 @@ class _CalendarRangePickerState extends State<CalendarRangePicker> {
 
   void _onFocusChange() {
     if (!_focusNode.hasFocus) _handleSubmitted(_controller.text);
+  }
+
+  /// Επιβεβαίωση του τρέχοντος κειμένου (ίδια λογική με Enter).
+  /// Με [force]: εφαρμόζει ακόμη κι αν το πεδίο δεν άλλαξε — χρήσιμο στον διάλογο
+  /// όταν η προεπιλογή είναι ήδη η σωστή ημερομηνία.
+  void applyCurrentInput({bool force = false}) {
+    _handleSubmitted(_controller.text, force: force);
   }
 
   @override
@@ -99,10 +106,10 @@ class _CalendarRangePickerState extends State<CalendarRangePicker> {
     super.dispose();
   }
 
-  void _handleSubmitted(String text) {
+  void _handleSubmitted(String text, {bool force = false}) {
     final normalizedText = text.trim();
     final lastProcessedNormalized = _lastProcessedText?.trim();
-    if (normalizedText == lastProcessedNormalized) return;
+    if (!force && normalizedText == lastProcessedNormalized) return;
 
     if (normalizedText.isEmpty) {
       setState(() {
@@ -117,7 +124,7 @@ class _CalendarRangePickerState extends State<CalendarRangePicker> {
       return;
     }
 
-    if (text == _lastProcessedText) return;
+    if (!force && text == _lastProcessedText) return;
     _lastProcessedText = text;
     final (range, errorMessage) = DateParserUtil.parseSmartInput(text);
 
@@ -617,6 +624,65 @@ class CalendarRangePickerDialogResult {
   final bool wasCleared;
 }
 
+class _CalendarRangePickerDialogBody extends StatefulWidget {
+  const _CalendarRangePickerDialogBody({this.initialValue});
+
+  final DateTimeRange? initialValue;
+
+  @override
+  State<_CalendarRangePickerDialogBody> createState() =>
+      _CalendarRangePickerDialogBodyState();
+}
+
+class _CalendarRangePickerDialogBodyState extends State<_CalendarRangePickerDialogBody> {
+  final GlobalKey<CalendarRangePickerState> _pickerKey =
+      GlobalKey<CalendarRangePickerState>();
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      alignment: Alignment.topCenter,
+      insetPadding: const EdgeInsets.only(
+        top: _kDateRangeDialogTopInset,
+        left: 40,
+        right: 40,
+      ),
+      title: const Text('Εύρος ημερομηνιών'),
+      content: SizedBox(
+        width: 360,
+        child: SingleChildScrollView(
+          child: CalendarRangePicker(
+            key: _pickerKey,
+            value: widget.initialValue,
+            onChanged: (range) {
+              if (range == null) {
+                Navigator.of(context).pop(
+                  const CalendarRangePickerDialogResult.cleared(),
+                );
+                return;
+              }
+              Navigator.of(context).pop(
+                CalendarRangePickerDialogResult.selected(range),
+              );
+            },
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Άκυρο'),
+        ),
+        FilledButton(
+          onPressed: () =>
+              _pickerKey.currentState?.applyCurrentInput(force: true),
+          child: const Text('Εφαρμογή'),
+        ),
+      ],
+    );
+  }
+}
+
 /// Πλαίσιο.dialog για desktop:
 /// - null: ακύρωση
 /// - [CalendarRangePickerDialogResult.cleared]: ρητός καθαρισμός φίλτρου
@@ -627,41 +693,8 @@ Future<CalendarRangePickerDialogResult?> showCalendarRangePickerDialog(
 }) {
   return showDialog<CalendarRangePickerDialogResult>(
     context: context,
-    builder: (dialogContext) {
-      return AlertDialog(
-        alignment: Alignment.topCenter,
-        insetPadding: const EdgeInsets.only(
-          top: _kDateRangeDialogTopInset,
-          left: 40,
-          right: 40,
-        ),
-        title: const Text('Εύρος ημερομηνιών'),
-        content: SizedBox(
-          width: 360,
-          child: SingleChildScrollView(
-            child: CalendarRangePicker(
-              value: initialValue,
-              onChanged: (range) {
-                if (range == null) {
-                  Navigator.of(
-                    dialogContext,
-                  ).pop(const CalendarRangePickerDialogResult.cleared());
-                  return;
-                }
-                Navigator.of(
-                  dialogContext,
-                ).pop(CalendarRangePickerDialogResult.selected(range));
-              },
-            ),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(),
-            child: const Text('Άκυρο'),
-          ),
-        ],
-      );
-    },
+    builder: (dialogContext) => _CalendarRangePickerDialogBody(
+      initialValue: initialValue,
+    ),
   );
 }

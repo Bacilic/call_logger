@@ -353,7 +353,8 @@ class TaskService {
       if (raw == null) continue;
       final status = TaskStatusX.fromString(raw);
       final n = row['count'];
-      final c = n is int ? n : (n is num ? n.toInt() : int.tryParse('$n') ?? 0);
+      final c =
+          n is int ? n : (n is num ? n.toInt() : int.tryParse('$n') ?? 0);
       result[status] = c;
     }
     return result;

@@ -12,25 +12,27 @@ class DirectoryScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return DefaultTabController(
       length: 3,
-      child: Scaffold(
-        appBar: AppBar(
-          title: const SizedBox.shrink(),
-          toolbarHeight: 0,
-          titleSpacing: 0,
-          bottom: const TabBar(
-            tabs: [
-              Tab(text: 'Χρήστες'),
-              Tab(text: 'Τμήματα'),
-              Tab(text: 'Εξοπλισμός'),
+      child: ScaffoldMessenger(
+        child: Scaffold(
+          appBar: AppBar(
+            title: const SizedBox.shrink(),
+            toolbarHeight: 0,
+            titleSpacing: 0,
+            bottom: const TabBar(
+              tabs: [
+                Tab(text: 'Χρήστες'),
+                Tab(text: 'Τμήματα'),
+                Tab(text: 'Εξοπλισμός'),
+              ],
+            ),
+          ),
+          body: const TabBarView(
+            children: [
+              UsersTab(),
+              DepartmentsTab(),
+              EquipmentTab(),
             ],
           ),
-        ),
-        body: const TabBarView(
-          children: [
-            UsersTab(),
-            DepartmentsTab(),
-            EquipmentTab(),
-          ],
         ),
       ),
     );

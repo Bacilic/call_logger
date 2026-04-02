@@ -1,5 +1,4 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-
 import '../models/task.dart';
 import '../models/task_filter.dart';
 import '../services/task_service.dart';

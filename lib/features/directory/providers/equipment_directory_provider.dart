@@ -20,6 +20,57 @@ typedef _EquipmentColumnLayout = ({
   bool sortAscending,
 });
 
+/// Μία εγγραφή για αναίρεση διαγραφής ή αφαίρεσης συσχέτισης εξοπλισμού–χρήστη.
+class EquipmentDeleteUndoEntry {
+  const EquipmentDeleteUndoEntry({
+    required this.equipmentId,
+    required this.equipmentSnapshot,
+    this.ownerSnapshot,
+    this.unlinkedUserId,
+    required this.feedbackLine,
+  });
+
+  final int equipmentId;
+  final EquipmentModel equipmentSnapshot;
+  final UserModel? ownerSnapshot;
+
+  /// Μη null όταν η ενέργεια ήταν μόνο αφαίρεση συσχέτισης (όχι soft delete εξοπλισμού).
+  final int? unlinkedUserId;
+  final String feedbackLine;
+
+  bool get wasUnlinkOnly => unlinkedUserId != null;
+}
+
+String _equipmentCodeForMessage(EquipmentModel equipment) {
+  final raw = (equipment.code ?? '').trim();
+  return raw.isEmpty ? '(χωρίς κωδικό)' : raw;
+}
+
+String _equipmentDeleteFeedbackLine({
+  required bool unlinkOnly,
+  required EquipmentModel equipment,
+  required UserModel? owner,
+  String? departmentName,
+}) {
+  final code = _equipmentCodeForMessage(equipment);
+  if (unlinkOnly) {
+    final n = (owner?.name ?? '').trim().isEmpty
+        ? 'χρήστη'
+        : owner!.name!.trim();
+    return 'Αφαιρέθηκε ο εξοπλισμός: $code από τον $n';
+  }
+  if (owner != null) {
+    final n = (owner.name ?? '').trim().isEmpty
+        ? 'χρήστη'
+        : owner.name!.trim();
+    return 'Διαγράφηκε οριστικά ο εξοπλισμός: $code από τον $n και τον οργανισμό σας';
+  }
+  final dept = (departmentName ?? '').trim().isEmpty
+      ? 'τμήμα'
+      : departmentName!.trim();
+  return 'Διαγράφηκε οριστικά ο εξοπλισμός: $code από το $dept';
+}
+
 /// Ενσωματώνει νέα σειρά ορατών στηλών (π.χ. chips) στη [columnOrder] χωρίς να ανακατεύει τις κρυφές.
 List<EquipmentColumn> mergeEquipmentVisibleOrderIntoColumnOrder(
   List<EquipmentColumn> columnOrder,
@@ -93,7 +144,7 @@ class EquipmentDirectoryState {
   final EquipmentColumn? sortColumn;
   final bool sortAscending;
   final Set<int> selectedIds;
-  final List<EquipmentRow>? lastDeleted;
+  final List<EquipmentDeleteUndoEntry>? lastDeleted;
   final List<EquipmentRow>? lastBulkUpdated;
   final int? focusedRowIndex;
   /// Πλήρης σειρά όλων των στηλών (κρυφές παραμένουν στη λίστα).
@@ -116,7 +167,8 @@ class EquipmentDirectoryState {
     Object? sortColumn = _kUnsetSort,
     bool? sortAscending,
     Set<int>? selectedIds,
-    List<EquipmentRow>? lastDeleted,
+    bool clearLastDeleted = false,
+    List<EquipmentDeleteUndoEntry>? lastDeleted,
     List<EquipmentRow>? lastBulkUpdated,
     int? focusedRowIndex,
     bool? showBuildingInLocationColumn,
@@ -132,7 +184,9 @@ class EquipmentDirectoryState {
           : sortColumn as EquipmentColumn?,
       sortAscending: sortAscending ?? this.sortAscending,
       selectedIds: selectedIds ?? this.selectedIds,
-      lastDeleted: lastDeleted ?? this.lastDeleted,
+      lastDeleted: clearLastDeleted
+          ? null
+          : (lastDeleted ?? this.lastDeleted),
       lastBulkUpdated: lastBulkUpdated ?? this.lastBulkUpdated,
       focusedRowIndex: focusedRowIndex ?? this.focusedRowIndex,
       showBuildingInLocationColumn:
@@ -555,14 +609,80 @@ class EquipmentDirectoryNotifier extends Notifier<EquipmentDirectoryState> {
 
   Future<void> deleteSelected() async {
     if (state.selectedIds.isEmpty) return;
-    final toDelete = state.allItems
+    final toProcess = state.allItems
         .where((row) =>
             row.$1.id != null && state.selectedIds.contains(row.$1.id))
         .toList();
-    await DatabaseHelper.instance.deleteEquipments(state.selectedIds.toList());
+    final undo = <EquipmentDeleteUndoEntry>[];
+
+    for (final row in toProcess) {
+      final eq = row.$1;
+      final owner = row.$2;
+      final eid = eq.id;
+      if (eid == null) continue;
+
+      final linkCount =
+          await DatabaseHelper.instance.countUsersLinkedToEquipment(eid);
+      String? deptName;
+      if (owner == null && eq.departmentId != null) {
+        deptName = await DatabaseHelper.instance
+            .getDepartmentNameById(eq.departmentId!);
+      }
+
+      if (linkCount > 1 && owner?.id == null) {
+        await DatabaseHelper.instance.deleteEquipments([eid]);
+        final code = _equipmentCodeForMessage(eq);
+        undo.add(
+          EquipmentDeleteUndoEntry(
+            equipmentId: eid,
+            equipmentSnapshot: eq,
+            ownerSnapshot: null,
+            unlinkedUserId: null,
+            feedbackLine:
+                'Διαγράφηκε οριστικά ο εξοπλισμός: $code από τον οργανισμό σας',
+          ),
+        );
+        continue;
+      }
+
+      if (linkCount > 1 && owner?.id != null) {
+        await DatabaseHelper.instance.unlinkUserFromEquipment(owner!.id!, eid);
+        undo.add(
+          EquipmentDeleteUndoEntry(
+            equipmentId: eid,
+            equipmentSnapshot: eq,
+            ownerSnapshot: owner,
+            unlinkedUserId: owner.id,
+            feedbackLine: _equipmentDeleteFeedbackLine(
+              unlinkOnly: true,
+              equipment: eq,
+              owner: owner,
+              departmentName: deptName,
+            ),
+          ),
+        );
+      } else {
+        await DatabaseHelper.instance.deleteEquipments([eid]);
+        undo.add(
+          EquipmentDeleteUndoEntry(
+            equipmentId: eid,
+            equipmentSnapshot: eq,
+            ownerSnapshot: owner,
+            unlinkedUserId: null,
+            feedbackLine: _equipmentDeleteFeedbackLine(
+              unlinkOnly: false,
+              equipment: eq,
+              owner: owner,
+              departmentName: deptName,
+            ),
+          ),
+        );
+      }
+    }
+
     state = state.copyWith(
       selectedIds: {},
-      lastDeleted: toDelete,
+      lastDeleted: undo,
     );
     await load();
     _invalidateLookupCache();
@@ -571,9 +691,17 @@ class EquipmentDirectoryNotifier extends Notifier<EquipmentDirectoryState> {
   Future<void> undoLastDelete() async {
     final list = state.lastDeleted;
     if (list == null || list.isEmpty) return;
-    final ids = list.map((row) => row.$1.id).whereType<int>().toList();
-    await DatabaseHelper.instance.restoreEquipment(ids);
-    state = state.copyWith(lastDeleted: null);
+    for (final e in list.reversed) {
+      if (e.wasUnlinkOnly) {
+        await DatabaseHelper.instance.linkUserToEquipment(
+          e.unlinkedUserId!,
+          e.equipmentId,
+        );
+      } else {
+        await DatabaseHelper.instance.restoreEquipment([e.equipmentId]);
+      }
+    }
+    state = state.copyWith(clearLastDeleted: true);
     await load();
     _invalidateLookupCache();
   }

@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'dart:ui' show PlatformDispatcher;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -30,11 +31,20 @@ final double _kMinWindowWidth =
 const double _kMinWindowHeight = 640;
 
 void _routeFatalErrorToUi(Object exception, StackTrace stack) {
-  globalFatalErrorNotifier.value = DatabaseInitResult.fromException(
+  final result = DatabaseInitResult.fromException(
     exception,
     null,
     stack,
   );
+  final phase = WidgetsBinding.instance.schedulerPhase;
+  if (phase == SchedulerPhase.persistentCallbacks ||
+      phase == SchedulerPhase.midFrameMicrotasks) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      globalFatalErrorNotifier.value = result;
+    });
+    return;
+  }
+  globalFatalErrorNotifier.value = result;
 }
 
 bool _isIgnorableHardwareKeyboardAssertion(Object exception) {

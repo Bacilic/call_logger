@@ -295,17 +295,51 @@ class _EquipmentTabState extends ConsumerState<EquipmentTab> {
     final notifier = ref.read(equipmentDirectoryProvider.notifier);
     await notifier.deleteSelected();
     if (!context.mounted) return;
-    final deletedCount =
-        ref.read(equipmentDirectoryProvider).lastDeleted?.length ?? count;
-    ScaffoldMessenger.of(context).showSnackBar(
+    final entries = ref.read(equipmentDirectoryProvider).lastDeleted;
+    final bodyText = entries == null || entries.isEmpty
+        ? 'Η διαγραφή ολοκληρώθηκε.'
+        : entries.map((e) => e.feedbackLine).join('\n');
+
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.hideCurrentSnackBar();
+    messenger.showSnackBar(
       SnackBar(
-        content: Text('Διαγράφηκαν $deletedCount εγγραφές εξοπλισμού.'),
-        duration: const Duration(seconds: 5),
-        action: SnackBarAction(
-          label: 'Αναίρεση',
-          onPressed: () async {
-            await ref.read(equipmentDirectoryProvider.notifier).undoLastDelete();
-          },
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 8),
+        dismissDirection: DismissDirection.horizontal,
+        showCloseIcon: false,
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 160),
+              child: SingleChildScrollView(
+                child: Text(bodyText),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Wrap(
+              alignment: WrapAlignment.end,
+              spacing: 4,
+              runSpacing: 4,
+              children: [
+                TextButton(
+                  onPressed: () => messenger.hideCurrentSnackBar(),
+                  child: const Text('Επιβεβαίωση'),
+                ),
+                TextButton(
+                  onPressed: () async {
+                    messenger.hideCurrentSnackBar();
+                    await ref
+                        .read(equipmentDirectoryProvider.notifier)
+                        .undoLastDelete();
+                  },
+                  child: const Text('Αναίρεση'),
+                ),
+              ],
+            ),
+          ],
         ),
       ),
     );
