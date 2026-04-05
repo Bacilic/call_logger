@@ -1,9 +1,11 @@
 import 'package:call_logger/core/services/dictionary_service.dart';
 import 'package:call_logger/core/utils/search_text_normalizer.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  SharedPreferences.setMockInitialValues(<String, Object>{});
 
   test('DictionaryService.stripDiacritics removes Greek tonos only', () {
     expect(

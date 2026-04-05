@@ -37,6 +37,7 @@ void main() {
       // Τηλέφωνο, Καλών, Τμήμα, Εξοπλισμός, Σημειώσεις, Κατηγορία (κ.ά.)
       expect(find.byType(TextField), findsAtLeastNWidgets(4));
     },
+    semanticsEnabled: false,
   );
 
   // Ελέγχει ότι στο πεδίο Καλούντας το κενό (space) δεν αντικαθιστά όλο το κείμενο (focus + keyDown/keyUp).
@@ -77,5 +78,6 @@ void main() {
       await tester.pump(const Duration(milliseconds: 300));
       await pumpUntilSettled(tester);
     },
+    semanticsEnabled: false,
   );
 }

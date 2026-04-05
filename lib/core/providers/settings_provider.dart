@@ -19,3 +19,11 @@ final showTasksBadgeProvider =
 /// Ορθογραφικός έλεγχος πεδίου σημειώσεων. Invalidate μετά από Ρυθμίσεις.
 final enableSpellCheckProvider =
     FutureProvider<bool>((ref) => SettingsService().getEnableSpellCheck());
+
+/// Εμφάνιση προορισμού Βάση Δεδομένων στο NavigationRail. Invalidate μετά από Ρυθμίσεις.
+final showDatabaseNavProvider =
+    FutureProvider<bool>((ref) => SettingsService().getShowDatabaseNav());
+
+/// Εμφάνιση προορισμού Λεξικό στο NavigationRail. Invalidate μετά από Ρυθμίσεις.
+final showDictionaryNavProvider =
+    FutureProvider<bool>((ref) => SettingsService().getShowDictionaryNav());

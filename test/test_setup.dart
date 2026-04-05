@@ -201,6 +201,8 @@ List<Override> callLoggerTestProviderOverrides() {
     showActiveTimerProvider.overrideWith((ref) async => true),
     showAnyDeskRemoteProvider.overrideWith((ref) async => true),
     showTasksBadgeProvider.overrideWith((ref) async => true),
+    showDatabaseNavProvider.overrideWith((ref) async => true),
+    showDictionaryNavProvider.overrideWith((ref) async => true),
   ];
 }
 

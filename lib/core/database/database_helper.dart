@@ -12,6 +12,7 @@ import '../services/settings_service.dart';
 import '../utils/department_display_utils.dart';
 import '../utils/name_parser.dart';
 import '../utils/phone_list_parser.dart';
+import '../utils/lexicon_word_metrics.dart';
 import '../utils/search_text_normalizer.dart';
 import '../../features/calls/models/call_model.dart';
 import '../errors/department_exists_exception.dart';
@@ -357,6 +358,7 @@ class DatabaseHelper {
         onUpgrade: _onUpgradeSquashed,
         onDowngrade: _onDowngradeSquashed,
         singleInstance: singleInstance,
+        onOpen: (db) => _applyLexiconOpenNormalizations(db),
       ).timeout(
         Duration(seconds: safeTimeout),
         onTimeout: () {
@@ -401,6 +403,39 @@ class DatabaseHelper {
     }
   }
 
+  static Future<void> _applyLexiconOpenNormalizations(Database db) async {
+    await _normalizeLexiconSourceOnOpen(db);
+    await _normalizeLexiconCategoryLegacyOnOpen(db);
+  }
+
+  /// Παλιά τιμή πηγής `system` (asset) → `imported` (ίδια κατηγορία με TXT).
+  static Future<void> _normalizeLexiconSourceOnOpen(Database db) async {
+    try {
+      await db.rawUpdate(
+        'UPDATE ${AppConfig.fullDictionaryTable} SET source = ? WHERE source = ?',
+        ['imported', 'system'],
+      );
+    } catch (_) {
+      // Πίνακας μπορεί να λείπει σε ασυνήθιστα σενάρια.
+    }
+  }
+
+  /// Παλιές ετικέτες κατηγορίας `general` / `user` → `Γενική`.
+  static Future<void> _normalizeLexiconCategoryLegacyOnOpen(Database db) async {
+    try {
+      await db.rawUpdate(
+        'UPDATE ${AppConfig.fullDictionaryTable} SET category = ? WHERE category = ?',
+        ['Γενική', 'general'],
+      );
+      await db.rawUpdate(
+        'UPDATE ${AppConfig.fullDictionaryTable} SET category = ? WHERE category = ?',
+        ['Γενική', 'user'],
+      );
+    } catch (_) {
+      // Πίνακας μπορεί να λείπει σε ασυνήθιστα σενάρια.
+    }
+  }
+
   /// Δημιουργεί νέο αρχείο βάσης στο [filePath] με το τρέχον σχήμα.
   /// Δεν αλλάζει την ενεργή σύνδεση (_database). Για χρήση από Ρυθμίσεις (δημιουργία από μηδέν).
   Future<void> createNewDatabaseFile(String filePath) async {
@@ -411,6 +446,7 @@ class DatabaseHelper {
       onUpgrade: _onUpgradeSquashed,
       onDowngrade: _onDowngradeSquashed,
       singleInstance: false,
+      onOpen: (db) => _applyLexiconOpenNormalizations(db),
     );
     await db.execute('PRAGMA journal_mode = WAL;');
     await db.close();
@@ -461,6 +497,15 @@ class DatabaseHelper {
     if (oldVersion < 6 && newVersion >= 6) {
       await _migrateUserDictionaryTable(db);
     }
+    if (oldVersion < 7 && newVersion >= 7) {
+      await _migrateFullDictionaryTable(db);
+    }
+    if (oldVersion < 8 && newVersion >= 8) {
+      await _migrateUserDictionaryLanguageColumn(db);
+    }
+    if (oldVersion < 9 && newVersion >= 9) {
+      await _migrateLexiconWordMetricsColumns(db);
+    }
   }
 
   /// Πίνακας προσωπικών λέξεων ορθογραφίας (Windows / custom lexicon).
@@ -470,6 +515,136 @@ class DatabaseHelper {
         word TEXT PRIMARY KEY
       )
     ''');
+  }
+
+  /// v8: στήλη `language` + backfill με [detectDictionaryLanguage].
+  static Future<void> _migrateUserDictionaryLanguageColumn(Database db) async {
+    final info = await db.rawQuery(
+      'PRAGMA table_info(${AppConfig.userDictionaryTable})',
+    );
+    final names = info.map((r) => r['name'] as String).toSet();
+    if (!names.contains('language')) {
+      await db.execute(
+        'ALTER TABLE ${AppConfig.userDictionaryTable} ADD COLUMN language TEXT',
+      );
+    }
+    final rows = await db.query(
+      AppConfig.userDictionaryTable,
+      columns: ['word', 'language'],
+    );
+    final batch = db.batch();
+    var pending = 0;
+    for (final r in rows) {
+      final w = (r['word'] as String?)?.trim() ?? '';
+      if (w.isEmpty) continue;
+      final next = detectDictionaryLanguage(w);
+      final cur = r['language'] as String? ?? '';
+      if (cur == next) continue;
+      batch.update(
+        AppConfig.userDictionaryTable,
+        {'language': next},
+        where: 'word = ?',
+        whereArgs: [w],
+      );
+      pending++;
+    }
+    if (pending > 0) await batch.commit(noResult: true);
+  }
+
+  /// v9: `letters_count`, `diacritic_mark_count` + backfill + ευρετήρια.
+  static Future<void> _migrateLexiconWordMetricsColumns(Database db) async {
+    Future<void> ensureColumns(String table) async {
+      final info = await db.rawQuery('PRAGMA table_info($table)');
+      final names = info.map((r) => r['name'] as String).toSet();
+      if (!names.contains('letters_count')) {
+        await db.execute(
+          'ALTER TABLE $table ADD COLUMN letters_count INTEGER NOT NULL DEFAULT 0',
+        );
+      }
+      if (!names.contains('diacritic_mark_count')) {
+        await db.execute(
+          'ALTER TABLE $table ADD COLUMN diacritic_mark_count INTEGER NOT NULL DEFAULT 0',
+        );
+      }
+    }
+
+    await ensureColumns(AppConfig.fullDictionaryTable);
+    await ensureColumns(AppConfig.userDictionaryTable);
+
+    Future<void> backfillTable(
+      String table, {
+      required bool hasRowId,
+    }) async {
+      final rows = await db.query(
+        table,
+        columns: hasRowId ? ['id', 'word'] : ['word'],
+      );
+      const chunk = 400;
+      for (var i = 0; i < rows.length; i += chunk) {
+        final end = (i + chunk > rows.length) ? rows.length : i + chunk;
+        final slice = rows.sublist(i, end);
+        final batch = db.batch();
+        for (final r in slice) {
+          final w = (r['word'] as String?) ?? '';
+          final m = LexiconWordMetrics.compute(w);
+          if (hasRowId) {
+            final idRaw = r['id'];
+            final id = idRaw is int ? idRaw : (idRaw as num).toInt();
+            batch.update(
+              table,
+              {
+                'letters_count': m.lettersCount,
+                'diacritic_mark_count': m.diacriticMarkCount,
+              },
+              where: 'id = ?',
+              whereArgs: [id],
+            );
+          } else {
+            batch.update(
+              table,
+              {
+                'letters_count': m.lettersCount,
+                'diacritic_mark_count': m.diacriticMarkCount,
+              },
+              where: 'word = ?',
+              whereArgs: [w],
+            );
+          }
+        }
+        await batch.commit(noResult: true);
+      }
+    }
+
+    await backfillTable(AppConfig.fullDictionaryTable, hasRowId: true);
+    await backfillTable(AppConfig.userDictionaryTable, hasRowId: false);
+
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_full_dictionary_letters_count ON ${AppConfig.fullDictionaryTable}(letters_count)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_full_dictionary_diacritic_mark_count ON ${AppConfig.fullDictionaryTable}(diacritic_mark_count)',
+    );
+  }
+
+  /// Πίνακας master λεξικού (v7).
+  static Future<void> _migrateFullDictionaryTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS full_dictionary (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        word TEXT NOT NULL UNIQUE,
+        normalized_word TEXT NOT NULL,
+        source TEXT NOT NULL,
+        language TEXT NOT NULL,
+        category TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      )
+    ''');
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_full_dictionary_norm ON full_dictionary(normalized_word)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_full_dictionary_filters ON full_dictionary(language, source, category)',
+    );
   }
 
   /// Προσθέτει στήλες τμήμα/τοποθεσία στον πίνακα `equipment` αν λείπουν (idempotent).
@@ -1121,8 +1296,12 @@ class DatabaseHelper {
     final key = DictionaryService.canonicalLexiconKey(word);
     if (key.length < 2) return;
     final db = await database;
+    final m = LexiconWordMetrics.compute(key);
     await db.insert(AppConfig.userDictionaryTable, {
       'word': key,
+      'language': detectDictionaryLanguage(key),
+      'letters_count': m.lettersCount,
+      'diacritic_mark_count': m.diacriticMarkCount,
     }, conflictAlgorithm: ConflictAlgorithm.ignore);
   }
 
@@ -1140,6 +1319,513 @@ class DatabaseHelper {
         .map((r) => (r['word'] as String?)?.trim() ?? '')
         .where((w) => w.isNotEmpty)
         .toList();
+  }
+
+  /// Διαγραφή λέξης από προσωπικό πρόχειρο.
+  Future<void> deleteUserDictionaryWord(String normalizedKey) async {
+    final db = await database;
+    await db.delete(
+      AppConfig.userDictionaryTable,
+      where: 'word = ?',
+      whereArgs: [normalizedKey],
+    );
+  }
+
+  /// Μετονομασία κλειδιού στο `user_dictionary` (π.χ. διόρθωση ορθογραφίας).
+  Future<void> updateUserDictionaryWordKey(String oldKey, String newKey) async {
+    if (oldKey == newKey) return;
+    final db = await database;
+    await db.transaction((txn) async {
+      await txn.delete(
+        AppConfig.userDictionaryTable,
+        where: 'word = ?',
+        whereArgs: [newKey],
+      );
+      final m = LexiconWordMetrics.compute(newKey);
+      await txn.update(
+        AppConfig.userDictionaryTable,
+        {
+          'word': newKey,
+          'language': detectDictionaryLanguage(newKey),
+          'letters_count': m.lettersCount,
+          'diacritic_mark_count': m.diacriticMarkCount,
+        },
+        where: 'word = ?',
+        whereArgs: [oldKey],
+      );
+    });
+  }
+
+  /// Κενό `user_dictionary` (μετά επιτυχές Compile).
+  Future<void> clearUserDictionary() async {
+    final db = await database;
+    await db.delete(AppConfig.userDictionaryTable);
+  }
+
+  // --- full_dictionary (master lexicon) ---
+
+  /// Συνολικό πλήθος γραμμών στο `full_dictionary`.
+  Future<int> countFullDictionaryTotal() async {
+    final db = await database;
+    final r = await db.rawQuery(
+      'SELECT COUNT(*) AS c FROM ${AppConfig.fullDictionaryTable}',
+    );
+    if (r.isEmpty) return 0;
+    return (r.first['c'] as int?) ?? 0;
+  }
+
+  /// Πλήθος εγγραφών με ακριβή ταύτιση στη στήλη `word` (διακρίνει τόνους).
+  Future<int> countFullDictionaryExactWord(String word) async {
+    final db = await database;
+    final r = await db.rawQuery(
+      'SELECT COUNT(*) AS c FROM ${AppConfig.fullDictionaryTable} WHERE word = ?',
+      [word],
+    );
+    if (r.isEmpty) return 0;
+    return (r.first['c'] as int?) ?? 0;
+  }
+
+  /// Μόνιμη διαγραφή γραμμής master λεξικού.
+  Future<void> hardDeleteFullDictionaryById(int id) async {
+    final db = await database;
+    await db.delete(
+      AppConfig.fullDictionaryTable,
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
+  /// `DELETE FROM full_dictionary` (λειτουργία Replace import — **όχι** `user_dictionary`).
+  Future<void> clearFullDictionary() async {
+    final db = await database;
+    await db.delete(AppConfig.fullDictionaryTable);
+  }
+
+  /// Εισαγωγή πολλών γραμμών με ignore σε διπλότυπο `word`.
+  Future<void> batchInsertFullDictionaryRows(
+    List<Map<String, dynamic>> rows, {
+    int chunkSize = 800,
+  }) async {
+    if (rows.isEmpty) return;
+    final db = await database;
+    for (var i = 0; i < rows.length; i += chunkSize) {
+      final end = (i + chunkSize > rows.length) ? rows.length : i + chunkSize;
+      final slice = rows.sublist(i, end);
+      await db.transaction((txn) async {
+        final batch = txn.batch();
+        for (final row in slice) {
+          final copy = Map<String, dynamic>.from(row);
+          final w = (copy['word'] as String?)?.trim() ?? '';
+          final m = LexiconWordMetrics.compute(w);
+          copy['letters_count'] = m.lettersCount;
+          copy['diacritic_mark_count'] = m.diacriticMarkCount;
+          batch.insert(
+            AppConfig.fullDictionaryTable,
+            copy,
+            conflictAlgorithm: ConflictAlgorithm.ignore,
+          );
+        }
+        await batch.commit(noResult: true);
+      });
+    }
+  }
+
+  /// Ενημέρωση κατηγορίας (και προαιρετικά εμφάνισης λέξης) στο master.
+  Future<void> upsertFullDictionaryCategory({
+    required int id,
+    required String category,
+    String? newDisplayWord,
+  }) async {
+    final db = await database;
+    final row = <String, dynamic>{'category': category};
+    if (newDisplayWord != null && newDisplayWord.trim().isNotEmpty) {
+      final w = newDisplayWord.trim();
+      row['word'] = w;
+      row['normalized_word'] = DictionaryService.canonicalLexiconKey(w);
+      final m = LexiconWordMetrics.compute(w);
+      row['letters_count'] = m.lettersCount;
+      row['diacritic_mark_count'] = m.diacriticMarkCount;
+      final dupRows = await db.rawQuery(
+        'SELECT id, word FROM ${AppConfig.fullDictionaryTable} WHERE word = ? AND id != ? LIMIT 2',
+        [w, id],
+      );
+      if (dupRows.isNotEmpty) {
+        throw Exception(
+          'Η λέξη "$w" υπάρχει ήδη στο λεξικό. Χρησιμοποίησε διαφορετική μορφή ή διέγραψε πρώτα την υπάρχουσα εγγραφή.',
+        );
+      }
+    }
+    await db.update(
+      AppConfig.fullDictionaryTable,
+      row,
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
+  /// Micro-merge: εγγραφή/ενημέρωση metadata στο `full_dictionary` για κλειδί πρόχειρου.
+  /// Το `user_dictionary` παραμένει με την ίδια λέξη-κλειδί (εκτός αν αλλάζει το κείμενο).
+  Future<void> upsertFullFromUserDraft({
+    required String normalizedKey,
+    required String displayWord,
+    required String category,
+    required String language,
+    String source = 'user',
+  }) async {
+    final db = await database;
+    final w = displayWord.trim();
+    final m = LexiconWordMetrics.compute(w);
+    await db.insert(
+      AppConfig.fullDictionaryTable,
+      {
+        'word': w,
+        'normalized_word': normalizedKey,
+        'source': source,
+        'language': language,
+        'category': category,
+        'letters_count': m.lettersCount,
+        'diacritic_mark_count': m.diacriticMarkCount,
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  /// Γραμμές εξόδου TXT (μία εμφάνιση ανά canonical κλειδί), ταξινόμηση `normalized_word`.
+  Future<List<String>> getDictionaryExportDisplayLinesOrdered() async {
+    final db = await database;
+    final fullRows = await db.query(
+      AppConfig.fullDictionaryTable,
+      columns: ['word', 'normalized_word'],
+      orderBy: 'normalized_word COLLATE NOCASE',
+    );
+    final userRows = await db.query(
+      AppConfig.userDictionaryTable,
+      columns: ['word'],
+      orderBy: 'word COLLATE NOCASE',
+    );
+    final byNorm = <String, String>{};
+    for (final r in fullRows) {
+      final nw = (r['normalized_word'] as String?)?.trim() ?? '';
+      final w = (r['word'] as String?)?.trim() ?? '';
+      if (nw.isEmpty || w.isEmpty) continue;
+      byNorm[nw] = w;
+    }
+    for (final r in userRows) {
+      final w = (r['word'] as String?)?.trim() ?? '';
+      if (w.isEmpty || w.length < 2) continue;
+      final canon = DictionaryService.canonicalLexiconKey(w);
+      byNorm.putIfAbsent(canon, () => w);
+    }
+    final keys = byNorm.keys.toList()..sort((a, b) => a.compareTo(b));
+    return keys.map((k) => byNorm[k]!).toList();
+  }
+
+  /// Μέσα σε transaction: upsert κάθε `user_dictionary.word` στο `full_dictionary` με source user.
+  Future<void> mergeAllUserDictionaryIntoFullWithinTransaction(Transaction txn) async {
+    final userRows = await txn.query(AppConfig.userDictionaryTable, columns: ['word']);
+    for (final r in userRows) {
+      final key = (r['word'] as String?)?.trim() ?? '';
+      if (key.length < 2) continue;
+      final norm = DictionaryService.canonicalLexiconKey(key);
+      final lang = detectDictionaryLanguage(key);
+      final m = LexiconWordMetrics.compute(key);
+      await txn.insert(
+        AppConfig.fullDictionaryTable,
+        {
+          'word': key,
+          'normalized_word': norm,
+          'source': 'user',
+          'language': lang,
+          'category': AppConfig.lexiconCategoryUnspecified,
+          'letters_count': m.lettersCount,
+          'diacritic_mark_count': m.diacriticMarkCount,
+        },
+        conflictAlgorithm: ConflictAlgorithm.ignore,
+      );
+    }
+    await txn.delete(AppConfig.userDictionaryTable);
+  }
+
+  /// Heuristic γλώσσας λέξης για πίνακα λεξικού.
+  ///
+  /// Επιστρέφει `el` (αμιγώς ελληνικά), `en` (αμιγώς λατινικά ASCII), ή `mix`
+  /// (μίξη, ψηφία, στίξη, κ.λπ.). Το Dart δεν υποστηρίζει `\p{Greek}` μέσα σε
+  /// character class· χρησιμοποιούνται ρητά εύρη Unicode (μονοτονικά + Greek Extended
+  /// έως U+1FFC, εξαιρούνται τα σύμβολα U+1FFD–U+1FFF).
+  static String detectDictionaryLanguage(String word) {
+    final s = word.trim();
+    if (s.isEmpty) return kLexiconLanguageMix;
+    if (_reLexiconGreekOnly.hasMatch(s)) return 'el';
+    if (_reLexiconLatinAsciiOnly.hasMatch(s)) return 'en';
+    return kLexiconLanguageMix;
+  }
+
+  /// Αμιγώς ελληνικά γράμματα (συμπ. τόνων/διαλυτικών σε προσυνθεμένη μορφή) + κενά.
+  static final RegExp _reLexiconGreekOnly = RegExp(
+    r'^['
+    r'\u0391-\u03A9\u03B1-\u03C9'
+    r'\u0386\u0388-\u038A\u038C\u038E-\u038F'
+    r'\u0390\u03AA\u03AB\u03AC-\u03CE'
+    r'\u03CA\u03CB'
+    r'\u1F00-\u1FFC'
+    r'\s'
+    r']+$',
+    unicode: true,
+  );
+
+  /// Αμιγώς λατινικά γράμματα (ASCII) + κενά.
+  static final RegExp _reLexiconLatinAsciiOnly = RegExp(r'^[a-zA-Z\s]+$');
+
+  /// Φίλτρα για ενωμένη λίστα λεξικού (UI).
+  static const String kLexiconSourceDraft = 'draft';
+  static const String kLexiconPendingFilter = '__pending__';
+  /// Λέξεις με τουλάχιστον ένα ελληνικό και ένα λατινικό γράμμα (π.χ. poντίκι).
+  static const String kLexiconMixedScriptsFilter = '__mixed_scripts__';
+  /// Τιμή στήλης `language` για λέξεις που δεν είναι αμιγώς el/en ([detectDictionaryLanguage]).
+  static const String kLexiconLanguageMix = 'mix';
+
+  /// Ετικέτα στήλης «Πηγή» στο UI (ίδιες λέξεις με το φίλτρο πηγής στη διαχείριση λεξικού).
+  static String lexiconSourceUiLabel(String? src) {
+    switch (src ?? '') {
+      case kLexiconSourceDraft:
+        return 'Πρόχειρο';
+      case 'user':
+        return 'Χρήστης';
+      case 'imported':
+      case 'system':
+        return 'Εισαγωγή';
+      default:
+        final s = src ?? '';
+        return s.isEmpty ? '—' : s;
+    }
+  }
+
+  /// Πλήθος γραμμών για σελιδοποίηση (CTE + UNION ALL).
+  ///
+  /// [lettersCountOp] + [lettersCountValue]: φίλτρο `letters_count` (`>=`, `<=`, `=`) όταν το value είναι 1–100.
+  /// [diacriticMarksFilter]: `none` (0), `1`…`3`, `gt3` (>3)· null = χωρίς φίλτρο.
+  Future<int> countCombinedLexiconRows({
+    String? language,
+    String? source,
+    String? category,
+    String? normalizedSearch,
+    bool pendingOnly = false,
+    String? lettersCountOp,
+    int? lettersCountValue,
+    String? diacriticMarksFilter,
+  }) async {
+    final db = await database;
+    final (sql, args) = _buildCombinedLexiconSql(
+      language: language,
+      source: source,
+      category: category,
+      normalizedSearch: normalizedSearch,
+      pendingOnly: pendingOnly,
+      lettersCountOp: lettersCountOp,
+      lettersCountValue: lettersCountValue,
+      diacriticMarksFilter: diacriticMarksFilter,
+      limit: null,
+      offset: null,
+      countOnly: true,
+    );
+    final rows = await db.rawQuery(sql, args);
+    if (rows.isEmpty) return 0;
+    return (rows.first['c'] as int?) ?? 0;
+  }
+
+  /// Σελίδα ενωμένης λίστας.
+  Future<List<Map<String, dynamic>>> queryCombinedLexiconPage({
+    String? language,
+    String? source,
+    String? category,
+    String? normalizedSearch,
+    bool pendingOnly = false,
+    String? lettersCountOp,
+    int? lettersCountValue,
+    String? diacriticMarksFilter,
+    required int limit,
+    required int offset,
+  }) async {
+    final db = await database;
+    final (sql, args) = _buildCombinedLexiconSql(
+      language: language,
+      source: source,
+      category: category,
+      normalizedSearch: normalizedSearch,
+      pendingOnly: pendingOnly,
+      lettersCountOp: lettersCountOp,
+      lettersCountValue: lettersCountValue,
+      diacriticMarksFilter: diacriticMarksFilter,
+      limit: limit,
+      offset: offset,
+      countOnly: false,
+    );
+    final rows = await db.rawQuery(sql, args);
+    return rows;
+  }
+
+  (String, List<Object?>) _buildCombinedLexiconSql({
+    String? language,
+    String? source,
+    String? category,
+    String? normalizedSearch,
+    required bool pendingOnly,
+    String? lettersCountOp,
+    int? lettersCountValue,
+    String? diacriticMarksFilter,
+    int? limit,
+    int? offset,
+    required bool countOnly,
+  }) {
+    final args = <Object?>[];
+    final fullWhere = StringBuffer('1=1');
+    if (normalizedSearch != null && normalizedSearch.trim().isNotEmpty) {
+      fullWhere.write(' AND f.normalized_word LIKE ?');
+      args.add('%${normalizedSearch.trim()}%');
+    }
+
+    final draftWhere = StringBuffer('1=1');
+    if (normalizedSearch != null && normalizedSearch.trim().isNotEmpty) {
+      draftWhere.write(' AND u.word LIKE ?');
+      args.add('%${normalizedSearch.trim()}%');
+    }
+
+    var innerSelect = '''
+WITH full_part AS (
+  SELECT
+    f.id AS entry_id,
+    f.word AS display_word,
+    f.normalized_word AS norm_key,
+    f.source AS src,
+    f.language AS lang,
+    f.category AS cat,
+    f.created_at AS created_ts,
+    CASE WHEN EXISTS (SELECT 1 FROM ${AppConfig.userDictionaryTable} u WHERE u.word = f.normalized_word)
+      THEN 1 ELSE 0 END AS pending_user,
+    f.letters_count AS letters_count,
+    f.diacritic_mark_count AS diacritic_mark_count
+  FROM ${AppConfig.fullDictionaryTable} f
+  WHERE $fullWhere
+),
+draft_part AS (
+  SELECT
+    CAST(NULL AS INTEGER) AS entry_id,
+    u.word AS display_word,
+    u.word AS norm_key,
+    '$kLexiconSourceDraft' AS src,
+    COALESCE(u.language, 'en') AS lang,
+    '${AppConfig.lexiconCategoryUnspecified.replaceAll("'", "''")}' AS cat,
+    CAST(NULL AS TEXT) AS created_ts,
+    1 AS pending_user,
+    COALESCE(u.letters_count, 0) AS letters_count,
+    COALESCE(u.diacritic_mark_count, 0) AS diacritic_mark_count
+  FROM ${AppConfig.userDictionaryTable} u
+  WHERE NOT EXISTS (SELECT 1 FROM ${AppConfig.fullDictionaryTable} f WHERE f.normalized_word = u.word)
+    AND $draftWhere
+),
+combined AS (
+  SELECT * FROM full_part
+  UNION ALL
+  SELECT * FROM draft_part
+)
+SELECT * FROM combined WHERE 1=1
+''';
+
+    if (source == kLexiconSourceDraft) {
+      innerSelect += ' AND src = ?';
+      args.add(kLexiconSourceDraft);
+    } else if (source != null &&
+        source.isNotEmpty &&
+        source != kLexiconPendingFilter) {
+      innerSelect += ' AND src = ?';
+      args.add(source);
+    }
+    if (pendingOnly || source == kLexiconPendingFilter) {
+      innerSelect += ' AND pending_user = 1';
+    }
+    if (language == kLexiconMixedScriptsFilter) {
+      innerSelect += '''
+ AND (
+  (
+   EXISTS (
+    WITH RECURSIVE idx(i) AS (
+      SELECT 1
+      UNION ALL
+      SELECT i + 1 FROM idx WHERE i < length(display_word)
+    )
+    SELECT 1 FROM idx
+    WHERE (unicode(substr(display_word, i, 1)) BETWEEN 880 AND 1023)
+       OR (unicode(substr(display_word, i, 1)) BETWEEN 7936 AND 8191)
+    LIMIT 1
+  )
+  AND EXISTS (
+    WITH RECURSIVE idx(i) AS (
+      SELECT 1
+      UNION ALL
+      SELECT i + 1 FROM idx WHERE i < length(display_word)
+    )
+    SELECT 1 FROM idx
+    WHERE (unicode(substr(display_word, i, 1)) BETWEEN 65 AND 90)
+       OR (unicode(substr(display_word, i, 1)) BETWEEN 97 AND 122)
+    LIMIT 1
+  )
+  )
+  OR lang = '$kLexiconLanguageMix'
+)''';
+    } else if (language != null && language.isNotEmpty) {
+      /// Χωρίς `OR src = draft`: αλλιώς κάθε πρόχειρη γραμμή εμφανιζόταν και στο el
+      /// και στο en (το draft CTE δίνει σταθερά `lang = 'en'`).
+      /// Πρόχειρα: φίλτρο γλώσσας «Όλες» ή πηγή «πρόχειρο».
+      innerSelect += ' AND lang = ?';
+      args.add(language);
+    }
+    if (category != null && category.isNotEmpty) {
+      innerSelect += ' AND cat = ?';
+      args.add(category);
+    }
+
+    final lcOp = lettersCountOp;
+    final lcVal = lettersCountValue;
+    if (lcOp != null &&
+        (lcOp == '>=' || lcOp == '<=' || lcOp == '=') &&
+        lcVal != null &&
+        lcVal >= 1 &&
+        lcVal <= 100) {
+      innerSelect += ' AND letters_count $lcOp ?';
+      args.add(lcVal);
+    }
+
+    switch (diacriticMarksFilter) {
+      case 'none':
+        innerSelect += ' AND diacritic_mark_count = 0';
+        break;
+      case '1':
+        innerSelect += ' AND diacritic_mark_count = 1';
+        break;
+      case '2':
+        innerSelect += ' AND diacritic_mark_count = 2';
+        break;
+      case '3':
+        innerSelect += ' AND diacritic_mark_count = 3';
+        break;
+      case 'gt3':
+        innerSelect += ' AND diacritic_mark_count > 3';
+        break;
+      default:
+        break;
+    }
+
+    if (countOnly) {
+      return (
+        'SELECT COUNT(*) AS c FROM ($innerSelect) AS cnt',
+        args,
+      );
+    }
+
+    final limArgs = <Object?>[...args, limit, offset];
+    final dataSql =
+        '$innerSelect ORDER BY norm_key COLLATE NOCASE LIMIT ? OFFSET ?';
+    return (dataSql, limArgs);
   }
 
   /// True αν υπάρχει ενεργό τμήμα με ίδιο κανονικοποιημένο όνομα

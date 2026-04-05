@@ -10,13 +10,18 @@ import '../../features/calls/provider/lookup_provider.dart';
 import '../../features/calls/screens/calls_screen.dart';
 import '../../features/calls/screens/widgets/import_console_widget.dart';
 import '../../features/database/screens/database_browser_screen.dart';
+import '../../features/dictionary/screens/dictionary_manager_screen.dart';
 
 import '../../features/database/widgets/database_settings_panel.dart';
 import '../../features/tasks/screens/tasks_screen.dart';
 import '../../features/directory/screens/directory_screen.dart';
 import '../../features/history/screens/history_screen.dart';
 import '../../features/settings/screens/settings_screen.dart';
+import '../providers/greek_dictionary_provider.dart';
+import '../providers/lexicon_full_mode_provider.dart';
 import '../providers/settings_provider.dart';
+import '../providers/shell_navigation_intent_provider.dart';
+import 'main_nav_destination.dart';
 import '../services/import_service.dart';
 import '../services/import_types.dart';
 import '../services/settings_service.dart';
@@ -46,8 +51,7 @@ class MainShell extends ConsumerStatefulWidget {
 class _MainShellState extends ConsumerState<MainShell> {
   /// True αν άλλαξε η διαδρομή βάσης από Ρυθμίσεις και απαιτείται επανεκκίνηση.
   bool _pendingRestartDueToPathChange = false;
-  /// Επιλεγμένο στοιχείο πλοήγησης: 0=Κλήσεις, 1=Εκκρεμότητες, 2=Κατάλογος, 3=Ιστορικό, 4=Βάση Δεδομένων.
-  int _selectedIndex = 0;
+  MainNavDestination _selectedDestination = MainNavDestination.calls;
   /// Εμφάνιση κουμπιού Import Excel (ρύθμιση από Ρυθμίσεις· προεπιλογή false).
   bool _showImportExcelButton = false;
   /// Λεζάντες πλευρικής μπάρας (όταν το πλάτος παραθύρου επιτρέπει extended rail).
@@ -87,6 +91,113 @@ class _MainShellState extends ConsumerState<MainShell> {
     );
   }
 
+  static List<MainNavDestination> _visibleDestinations(
+    bool showDatabaseNav,
+    bool showDictionaryNav,
+  ) {
+    return [
+      MainNavDestination.calls,
+      MainNavDestination.tasks,
+      MainNavDestination.directory,
+      MainNavDestination.history,
+      if (showDatabaseNav) MainNavDestination.database,
+      if (showDictionaryNav) MainNavDestination.dictionary,
+    ];
+  }
+
+  NavigationRailDestination _railDestination(
+    MainNavDestination dest,
+    bool showBadge,
+    int pendingCount,
+  ) {
+    switch (dest) {
+      case MainNavDestination.calls:
+        return NavigationRailDestination(
+          icon: Tooltip(
+            waitDuration: const Duration(milliseconds: 600),
+            showDuration: const Duration(seconds: 4),
+            message:
+                'Καταγραφή νέας κλήσης τεχνικής υποστήριξης\nΚύρια οθόνη – πατήστε εδώ όταν χτυπά τηλέφωνο',
+            child: const Icon(Icons.phone_in_talk, key: ValueKey('nav_rail_calls')),
+          ),
+          label: const Text('Κλήσεις'),
+        );
+      case MainNavDestination.tasks:
+        return NavigationRailDestination(
+          icon: _tasksNavigationIcon(showBadge, pendingCount),
+          selectedIcon: _tasksNavigationIcon(showBadge, pendingCount),
+          label: const Text('Εκκρεμότητες'),
+        );
+      case MainNavDestination.directory:
+        return NavigationRailDestination(
+          icon: Tooltip(
+            waitDuration: const Duration(milliseconds: 600),
+            showDuration: const Duration(seconds: 4),
+            message:
+                'Διαχείριση χρηστών και εξοπλισμού\nΠροσθήκη / διόρθωση ονομάτων, τμημάτων, υπολογιστών',
+            child: const Icon(Icons.contacts, key: ValueKey('nav_rail_directory')),
+          ),
+          label: const Text('Κατάλογος'),
+        );
+      case MainNavDestination.history:
+        return NavigationRailDestination(
+          icon: Tooltip(
+            waitDuration: const Duration(milliseconds: 600),
+            showDuration: const Duration(seconds: 4),
+            message:
+                'Προηγούμενες κλήσεις & αναζήτηση\nΕμφάνιση, τροποποίηση ή διαγραφή παλιών καταγραφών',
+            child: const Icon(Icons.history, key: ValueKey('nav_rail_history')),
+          ),
+          label: const Text('Ιστορικό'),
+        );
+      case MainNavDestination.database:
+        return NavigationRailDestination(
+          icon: Tooltip(
+            waitDuration: const Duration(milliseconds: 600),
+            showDuration: const Duration(seconds: 4),
+            message:
+                'Εργαλεία διαχείρισης & εποπτείας βάσης\nΡυθμίσεις βάσης, αντίγραφα ασφαλείας, προβολή πινάκων',
+            child: const Icon(Icons.storage, key: ValueKey('nav_rail_database')),
+          ),
+          label: const Text('Βάση Δεδομένων'),
+        );
+      case MainNavDestination.dictionary:
+        return NavigationRailDestination(
+          icon: Tooltip(
+            waitDuration: const Duration(milliseconds: 600),
+            showDuration: const Duration(seconds: 4),
+            message:
+                'Διαχείριση λεξικού ορθογραφίας\nΕισαγωγές, συγχώνευση και εξαγωγή (compile) σε αρχείο',
+            child: const Icon(Icons.menu_book, key: ValueKey('nav_rail_dictionary')),
+          ),
+          label: const Text('Λεξικό'),
+        );
+    }
+  }
+
+  Widget _contentForDestination(MainNavDestination dest) {
+    switch (dest) {
+      case MainNavDestination.calls:
+        return const CallsScreen();
+      case MainNavDestination.tasks:
+        return const TasksScreen();
+      case MainNavDestination.directory:
+        return const DirectoryScreen();
+      case MainNavDestination.history:
+        return const HistoryScreen();
+      case MainNavDestination.database:
+        return DatabaseBrowserScreen(
+          databaseResult: widget.databaseResult,
+          onOpenDatabaseSettings: _openDatabaseSettingsDialog,
+          onDatabaseReopened: widget.onDatabaseReopened,
+        );
+      case MainNavDestination.dictionary:
+        return DictionaryManagerScreen(
+          databaseResult: widget.databaseResult,
+        );
+    }
+  }
+
   Future<void> _openDatabaseSettingsDialog() async {
     if (!mounted) return;
     await showDialog<void>(
@@ -108,15 +219,188 @@ class _MainShellState extends ConsumerState<MainShell> {
     );
   }
 
+  /// Περιεχόμενο προορισμού με μπάνερ dev/βάσης και επανεκκίνησης (χωρίς rail).
+  Widget _destinationContentColumn(MainNavDestination dest) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (widget.isLocalDevMode)
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 6),
+            color: Colors.amber,
+            child: Text(
+              'ΛΕΙΤΟΥΡΓΙΑ ΑΝΑΠΤΥΞΗΣ - Τοπική Βάση Δεδομένων',
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                    color: Colors.black87,
+                    fontWeight: FontWeight.w600,
+                  ),
+            ),
+          ),
+        if (dest == MainNavDestination.database &&
+            !widget.databaseResult.isSuccess)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        widget.databaseResult.message ??
+                            'Άγνωστο σφάλμα με τη βάση δεδομένων.',
+                        style: Theme.of(context)
+                            .textTheme
+                            .bodySmall
+                            ?.copyWith(
+                              color: Colors.red.shade700,
+                            ),
+                      ),
+                      if (widget.databaseResult.details != null) ...[
+                        const SizedBox(height: 4),
+                        Tooltip(
+                          message: widget.databaseResult.details!,
+                          child: Text(
+                            widget.databaseResult.details!,
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodySmall
+                                ?.copyWith(
+                                  color: Colors.red.shade300,
+                                  fontSize: 11,
+                                ),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                IconButton(
+                  tooltip: 'Ρυθμίσεις βάσης δεδομένων',
+                  icon: const Icon(Icons.dataset_linked),
+                  onPressed: _openDatabaseSettingsDialog,
+                ),
+              ],
+            ),
+          ),
+        Expanded(child: _contentForDestination(dest)),
+        if (_pendingRestartDueToPathChange)
+          Material(
+            color: Colors.grey.shade800,
+            child: SafeArea(
+              top: false,
+              child: Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: RichText(
+                        text: TextSpan(
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 13,
+                          ),
+                          children: [
+                            const TextSpan(
+                              text:
+                                  'Έγινε αλλαγή διαδρομής βάσης. Παρακαλώ επανεκκινήστε την εφαρμογή για να ισχύσει πλήρως. ',
+                            ),
+                            TextSpan(
+                              text: 'Επανεκκίνηση...',
+                              style: TextStyle(
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .primaryContainer,
+                                fontWeight: FontWeight.w600,
+                                decoration: TextDecoration.underline,
+                              ),
+                              recognizer: TapGestureRecognizer()
+                                ..onTap = () {
+                                  exit(0);
+                                },
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final showBadgeAsync = ref.watch(showTasksBadgeProvider);
     final pendingCountAsync = ref.watch(globalPendingTasksCountProvider);
     final showBadge = showBadgeAsync.value ?? true;
     final pendingCount = pendingCountAsync.value ?? 0;
+    final showDatabaseNav = ref.watch(showDatabaseNavProvider).maybeWhen(
+      data: (v) => v,
+      orElse: () => true,
+    );
+    final showDictionaryNav = ref.watch(showDictionaryNavProvider).maybeWhen(
+      data: (v) => v,
+      orElse: () => true,
+    );
+    final visibleDestinations =
+        _visibleDestinations(showDatabaseNav, showDictionaryNav);
+    final effectiveDestination = visibleDestinations.contains(_selectedDestination)
+        ? _selectedDestination
+        : MainNavDestination.calls;
+    final selectedRailIndex =
+        visibleDestinations.indexOf(effectiveDestination);
+    if (effectiveDestination != _selectedDestination) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _selectedDestination != effectiveDestination) {
+          setState(() {
+            _selectedDestination = effectiveDestination;
+            if (effectiveDestination != MainNavDestination.dictionary) {
+              ref.read(lexiconFullModeProvider.notifier).setFalse();
+            }
+          });
+        }
+      });
+    }
+
+    final lexiconFullMode = ref.watch(lexiconFullModeProvider);
+    final dictionaryImmersive = lexiconFullMode &&
+        effectiveDestination == MainNavDestination.dictionary;
+
+    ref.listen<bool>(lexiconFullModeProvider, (previous, next) {
+      if (previous == true && next == false && mounted) {
+        final pending = ref
+            .read(shellNavigationIntentProvider.notifier)
+            .takePending();
+        setState(() {
+          _selectedDestination = pending ?? MainNavDestination.calls;
+        });
+      }
+    });
     final wideEnoughForExtendedRail =
         MediaQuery.sizeOf(context).width >= _kNavRailWideBreakpoint;
     final railExtended = wideEnoughForExtendedRail && _navRailShowLabels;
+
+    if (dictionaryImmersive) {
+      return Scaffold(
+        appBar: null,
+        floatingActionButton: null,
+        body: SafeArea(
+          child: _destinationContentColumn(MainNavDestination.dictionary),
+        ),
+      );
+    }
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Καταγραφή Κλήσεων'),
@@ -144,6 +428,9 @@ class _MainShellState extends ConsumerState<MainShell> {
               if (pathBefore != pathAfter) {
                 setState(() => _pendingRestartDueToPathChange = true);
               }
+              ref.invalidate(showDatabaseNavProvider);
+              ref.invalidate(showDictionaryNavProvider);
+              ref.invalidate(greekDictionaryServiceProvider);
               await _loadShowImportExcelSetting();
               if (mounted) setState(() {});
             },
@@ -161,9 +448,15 @@ class _MainShellState extends ConsumerState<MainShell> {
         children: [
           NavigationRail(
             extended: railExtended,
-            selectedIndex: _selectedIndex,
+            selectedIndex: selectedRailIndex,
             onDestinationSelected: (index) {
-              setState(() => _selectedIndex = index);
+              final d = visibleDestinations[index];
+              setState(() => _selectedDestination = d);
+              if (d == MainNavDestination.dictionary) {
+                ref.read(lexiconFullModeProvider.notifier).setTrue();
+              } else {
+                ref.read(lexiconFullModeProvider.notifier).setFalse();
+              }
             },
             leading: wideEnoughForExtendedRail
                 ? IconButton(
@@ -182,184 +475,13 @@ class _MainShellState extends ConsumerState<MainShell> {
                   )
                 : null,
             destinations: [
-              NavigationRailDestination(
-                icon: Tooltip(
-                  waitDuration: const Duration(milliseconds: 600),
-                  showDuration: const Duration(seconds: 4),
-                  message:
-                      'Καταγραφή νέας κλήσης τεχνικής υποστήριξης\nΚύρια οθόνη – πατήστε εδώ όταν χτυπά τηλέφωνο',
-                  child: const Icon(Icons.phone_in_talk, key: ValueKey('nav_rail_calls')),
-                ),
-                label: const Text('Κλήσεις'),
-              ),
-              NavigationRailDestination(
-                icon: _tasksNavigationIcon(showBadge, pendingCount),
-                selectedIcon: _tasksNavigationIcon(showBadge, pendingCount),
-                label: const Text('Εκκρεμότητες'),
-              ),
-              NavigationRailDestination(
-                icon: Tooltip(
-                  waitDuration: const Duration(milliseconds: 600),
-                  showDuration: const Duration(seconds: 4),
-                  message:
-                      'Διαχείριση χρηστών και εξοπλισμού\nΠροσθήκη / διόρθωση ονομάτων, τμημάτων, υπολογιστών',
-                  child: const Icon(Icons.contacts, key: ValueKey('nav_rail_directory')),
-                ),
-                label: const Text('Κατάλογος'),
-              ),
-              NavigationRailDestination(
-                icon: Tooltip(
-                  waitDuration: const Duration(milliseconds: 600),
-                  showDuration: const Duration(seconds: 4),
-                  message:
-                      'Προηγούμενες κλήσεις & αναζήτηση\nΕμφάνιση, τροποποίηση ή διαγραφή παλιών καταγραφών',
-                  child: const Icon(Icons.history, key: ValueKey('nav_rail_history')),
-                ),
-                label: const Text('Ιστορικό'),
-              ),
-              NavigationRailDestination(
-                icon: Tooltip(
-                  waitDuration: const Duration(milliseconds: 600),
-                  showDuration: const Duration(seconds: 4),
-                  message:
-                      'Εργαλεία διαχείρισης & εποπτείας βάσης\nΡυθμίσεις βάσης, αντίγραφα ασφαλείας, προβολή πινάκων',
-                  child: const Icon(Icons.storage,
-                      key: ValueKey('nav_rail_database')),
-                ),
-                label: const Text('Βάση Δεδομένων'),
-              ),
+              for (final d in visibleDestinations)
+                _railDestination(d, showBadge, pendingCount),
             ],
           ),
           const VerticalDivider(thickness: 1, width: 1),
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-
-                if (widget.isLocalDevMode)
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(vertical: 6),
-                    color: Colors.amber,
-                    child: Text(
-                      'ΛΕΙΤΟΥΡΓΙΑ ΑΝΑΠΤΥΞΗΣ - Τοπική Βάση Δεδομένων',
-                      textAlign: TextAlign.center,
-                      style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                            color: Colors.black87,
-                            fontWeight: FontWeight.w600,
-                          ),
-                    ),
-                  ),
-                if (_selectedIndex == 4 && !widget.databaseResult.isSuccess)
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                widget.databaseResult.message ??
-                                    'Άγνωστο σφάλμα με τη βάση δεδομένων.',
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .bodySmall
-                                    ?.copyWith(
-                                      color: Colors.red.shade700,
-                                    ),
-                              ),
-                              if (widget.databaseResult.details != null) ...[
-                                const SizedBox(height: 4),
-                                Tooltip(
-                                  message: widget.databaseResult.details!,
-                                  child: Text(
-                                    widget.databaseResult.details!,
-                                    style: Theme.of(context)
-                                        .textTheme
-                                        .bodySmall
-                                        ?.copyWith(
-                                          color: Colors.red.shade300,
-                                          fontSize: 11,
-                                        ),
-                                    maxLines: 2,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                              ],
-                            ],
-                          ),
-                        ),
-                        IconButton(
-                          tooltip: 'Ρυθμίσεις βάσης δεδομένων',
-                          icon: const Icon(Icons.dataset_linked),
-                          onPressed: _openDatabaseSettingsDialog,
-                        ),
-                      ],
-                    ),
-                  ),
-                Expanded(
-                  child: switch (_selectedIndex) {
-                    1 => const TasksScreen(),
-                    2 => const DirectoryScreen(),
-                    3 => const HistoryScreen(),
-                    4 => DatabaseBrowserScreen(
-                        databaseResult: widget.databaseResult,
-                        onOpenDatabaseSettings: _openDatabaseSettingsDialog,
-                        onDatabaseReopened: widget.onDatabaseReopened,
-                      ),
-                    _ => const CallsScreen(),
-                  },
-                ),
-                if (_pendingRestartDueToPathChange)
-                  Material(
-                    color: Colors.grey.shade800,
-                    child: SafeArea(
-                      top: false,
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 16, vertical: 12),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: RichText(
-                                text: TextSpan(
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 13,
-                                  ),
-                                  children: [
-                                    const TextSpan(
-                                      text:
-                                          'Έγινε αλλαγή διαδρομής βάσης. Παρακαλώ επανεκκινήστε την εφαρμογή για να ισχύσει πλήρως. ',
-                                    ),
-                                    TextSpan(
-                                      text: 'Επανεκκίνηση...',
-                                      style: TextStyle(
-                                        color: Theme.of(context)
-                                            .colorScheme
-                                            .primaryContainer,
-                                        fontWeight: FontWeight.w600,
-                                        decoration: TextDecoration.underline,
-                                      ),
-                                      recognizer: TapGestureRecognizer()
-                                        ..onTap = () {
-                                          exit(0);
-                                        },
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-              ],
-            ),
+            child: _destinationContentColumn(effectiveDestination),
           ),
         ],
       ),

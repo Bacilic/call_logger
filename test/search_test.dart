@@ -77,6 +77,8 @@ void main() {
           reason: greekExpectMsg('Ο πίνακας ιστορικού πρέπει να εμφανίζει το σημείο αναζήτησης'),
         );
         reporter.recordPass('Αναζήτηση στο Ιστορικό');
+        // Χρονοδιακόπτες sqflite (κλείδωμα ~10s) — αποφυγή pending timers στο tearDown.
+        await tester.pump(const Duration(seconds: 11));
       },
       semanticsEnabled: false,
     );
@@ -131,6 +133,7 @@ void main() {
           reason: greekExpectMsg('Ο πίνακας πρέπει να εμφανίζει το όνομα χρήστη από το seed'),
         );
         reporter.recordPass('Αναζήτηση στον Κατάλογο (Χρήστες)');
+        await tester.pump(const Duration(seconds: 11));
       },
       semanticsEnabled: false,
     );

@@ -47,4 +47,11 @@ class AppConfig {
 
   /// Πίνακας SQLite προσωπικών λέξεων ορθογραφίας.
   static const String userDictionaryTable = 'user_dictionary';
+
+  /// Πίνακας master λεξικού (συσσωρευτής / Compile).
+  static const String fullDictionaryTable = 'full_dictionary';
+
+  /// Κατηγορία μόνο για αυτόματη ανάθεση (εισαγωγή TXT, πρόχειρο, compile).
+  /// Δεν εμφανίζεται σε dropdowns επιλογής χρήστη ούτε στη λίστα ρυθμίσεων (κόμματα).
+  static const String lexiconCategoryUnspecified = 'Χωρίς κατηγορία';
 }

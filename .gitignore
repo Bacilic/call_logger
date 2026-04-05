@@ -39,7 +39,6 @@ out/
 .vscode/ipch/
 
 # Cursor
-.cursor/
 .cursorignore
 
 # Grok (αγνοείται σε @ suggestions και στο git)

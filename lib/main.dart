@@ -1,8 +1,8 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:math' as math;
-import 'dart:ui' show PlatformDispatcher;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -51,10 +51,23 @@ bool _isIgnorableHardwareKeyboardAssertion(Object exception) {
   final msg = exception.toString();
   return msg.contains('hardware_keyboard.dart') &&
       msg.contains('A KeyDownEvent is dispatched') &&
-      msg.contains("!_pressedKeys.containsKey(event.physicalKey)");
+      msg.contains('!_pressedKeys.containsKey(event.physicalKey)');
+}
+
+/// True αν το σφάλμα δεν πρέπει να εμφανιστεί ως «κατάρρευση» εφαρμογής / βάσης.
+bool _isNonFatalFrameworkNoise(Object error) {
+  return _isIgnorableHardwareKeyboardAssertion(error);
 }
 
 bool _platformAsyncErrorHandler(Object error, StackTrace stack) {
+  if (_isNonFatalFrameworkNoise(error)) {
+    if (kDebugMode) {
+      debugPrint(
+        'Αγνοήθηκε γνωστό desync πληκτρολογίου Flutter/Windows (όχι σφάλμα εφαρμογής).',
+      );
+    }
+    return true;
+  }
   _routeFatalErrorToUi(error, stack);
   return true;
 }
@@ -71,7 +84,13 @@ void main() {
       FlutterError.onError = (FlutterErrorDetails details) {
         final st = details.stack ?? StackTrace.empty;
         if (_isIgnorableHardwareKeyboardAssertion(details.exception)) {
-          FlutterError.presentError(details);
+          // Δεν καλούμε presentError: αποφεύγει πλημμύρα στην κονσόλα· γνωστό ζήτημα
+          // Flutter + Windows (π.χ. ελληνικό layout / IME). Δες flutter/flutter #141091.
+          if (kDebugMode) {
+            debugPrint(
+              'HardwareKeyboard assertion (αγνοήθηκε): ${details.exceptionAsString()}',
+            );
+          }
           return;
         }
         _routeFatalErrorToUi(details.exception, st);

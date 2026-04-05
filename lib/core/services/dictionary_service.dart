@@ -1,10 +1,12 @@
 import 'dart:collection';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 import '../config/app_config.dart';
+import 'settings_service.dart';
 
 /// Φόρτωση συμπαγούς ελληνικού λεξικού από asset.
 ///
@@ -58,7 +60,22 @@ class DictionaryService {
   Future<void> load() async {
     if (_loaded) return;
     final sw = Stopwatch()..start();
-    final text = await rootBundle.loadString(assetPath);
+    String text;
+    final customPath = await SettingsService().getDictionarySourcePath();
+    if (customPath != null && customPath.isNotEmpty) {
+      final f = File(customPath);
+      if (await f.exists()) {
+        try {
+          text = await f.readAsString();
+        } catch (_) {
+          text = await rootBundle.loadString(assetPath);
+        }
+      } else {
+        text = await rootBundle.loadString(assetPath);
+      }
+    } else {
+      text = await rootBundle.loadString(assetPath);
+    }
     final lines = const LineSplitter().convert(text);
     for (final line in lines) {
       final display = line.trim();

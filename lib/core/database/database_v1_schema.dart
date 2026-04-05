@@ -4,7 +4,10 @@ import 'package:sqflite_common/sqlite_api.dart';
 /// v4: departments.name = display, departments.name_key = normalized unique key.
 /// v5: phones.department_id for shared-location policy.
 /// v6: user_dictionary για προσωπικό λεξικό ορθογραφίας.
-const int databaseSchemaVersionV1 = 6;
+/// v7: full_dictionary master λεξικό.
+/// v8: user_dictionary.language για φίλτρο γλώσσας στα πρόχειρα (combined lexicon).
+/// v9: letters_count + diacritic_mark_count σε full_dictionary και user_dictionary.
+const int databaseSchemaVersionV1 = 9;
 
 /// Δημιουργία σχήματος v1 + seed `remote_tool_args`.
 /// Χωρίς εξαρτήσεις Flutter — ασφαλές για `dart run tool/migrate_to_v1.dart`.
@@ -182,9 +185,38 @@ Future<void> applyDatabaseV1Schema(Database db) async {
 
   await db.execute('''
       CREATE TABLE IF NOT EXISTS user_dictionary (
-        word TEXT PRIMARY KEY
+        word TEXT PRIMARY KEY,
+        language TEXT,
+        letters_count INTEGER NOT NULL DEFAULT 0,
+        diacritic_mark_count INTEGER NOT NULL DEFAULT 0
       )
     ''');
+
+  await db.execute('''
+      CREATE TABLE IF NOT EXISTS full_dictionary (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        word TEXT NOT NULL UNIQUE,
+        normalized_word TEXT NOT NULL,
+        source TEXT NOT NULL,
+        language TEXT NOT NULL,
+        category TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        letters_count INTEGER NOT NULL DEFAULT 0,
+        diacritic_mark_count INTEGER NOT NULL DEFAULT 0
+      )
+    ''');
+  await db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_full_dictionary_norm ON full_dictionary(normalized_word)',
+  );
+  await db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_full_dictionary_filters ON full_dictionary(language, source, category)',
+  );
+  await db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_full_dictionary_letters_count ON full_dictionary(letters_count)',
+  );
+  await db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_full_dictionary_diacritic_mark_count ON full_dictionary(diacritic_mark_count)',
+  );
 }
 
 /// Προεπιλεγμένα ορίσματα VNC/AnyDesk αν ο πίνακας είναι άδειος.

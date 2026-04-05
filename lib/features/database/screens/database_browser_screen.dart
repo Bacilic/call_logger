@@ -109,6 +109,7 @@ const Map<String, String> _kTableDisplayNames = {
   'knowledge_base': 'Βάση γνώσεων',
   'remote_tool_args': 'Ορίσματα απομακρυσμένου εργαλείου',
   'user_dictionary': 'Προσωπικό λεξικό',
+  'full_dictionary': 'Πλήρες λεξικό (συσσωρευτής)',
 };
 
 String _displayNameForTable(String tableName) =>
@@ -136,6 +137,7 @@ const List<String> _kMenuTableOrder = [
   'knowledge_base',
   'remote_tool_args',
   'user_dictionary',
+  'full_dictionary',
 ];
 
 List<String> _orderedTableNames(List<String> raw) {

@@ -47,6 +47,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   bool _showActiveTimer = true;
   bool _showAnyDeskRemote = true;
   bool _enableSpellCheck = true;
+  bool _showDatabaseNav = true;
+  bool _showDictionaryNav = true;
   bool _vncPasswordObscure = true;
 
   final TextEditingController _vncPathController = TextEditingController();
@@ -110,6 +112,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       final showActiveTimer = await _settings.getShowActiveTimer();
       final showAnyDeskRemote = await _settings.getShowAnyDeskRemote();
       final enableSpellCheck = await _settings.getEnableSpellCheck();
+      final showDatabaseNav = await _settings.getShowDatabaseNav();
+      final showDictionaryNav = await _settings.getShowDictionaryNav();
       final vncPath = await _settings.getVncPath();
       final vncPassword = await _settings.getVncPassword();
       final anydeskPath = await _settings.getAnydeskPath();
@@ -136,6 +140,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           _showActiveTimer = showActiveTimer;
           _showAnyDeskRemote = showAnyDeskRemote;
           _enableSpellCheck = enableSpellCheck;
+          _showDatabaseNav = showDatabaseNav;
+          _showDictionaryNav = showDictionaryNav;
           _isLoadingPath = false;
         });
       }
@@ -828,6 +834,32 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               title: const Text('Ορθογραφικός έλεγχος σημειώσεων'),
               subtitle: const Text(
                 'Ενσωματωμένο λεξικό (ελληνικά + IT)· σημαντικό σε Windows όπου δεν υπάρχει εγγενής έλεγχος.',
+              ),
+            ),
+            SwitchListTile(
+              value: !_showDatabaseNav,
+              onChanged: (value) async {
+                final show = !value;
+                await _settings.setShowDatabaseNav(show);
+                if (mounted) setState(() => _showDatabaseNav = show);
+                ref.invalidate(showDatabaseNavProvider);
+              },
+              title: const Text('Απόκρυψη Βάσης Δεδομένων'),
+              subtitle: const Text(
+                'Κρύβει το στοιχείο πλοήγησης «Βάση Δεδομένων». Οι ρυθμίσεις λεξικού είναι στην οθόνη Λεξικό.',
+              ),
+            ),
+            SwitchListTile(
+              value: !_showDictionaryNav,
+              onChanged: (value) async {
+                final show = !value;
+                await _settings.setShowDictionaryNav(show);
+                if (mounted) setState(() => _showDictionaryNav = show);
+                ref.invalidate(showDictionaryNavProvider);
+              },
+              title: const Text('Απόκρυψη Λεξικού'),
+              subtitle: const Text(
+                'Κρύβει το στοιχείο πλοήγησης «Λεξικό».',
               ),
             ),
             SwitchListTile(

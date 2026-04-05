@@ -18,6 +18,10 @@ class SettingsService {
   static const String _keyEnableSpellCheck = 'enable_spell_check';
   static const String _keyDatabaseOpenTimeoutSeconds =
       'database_open_timeout_seconds';
+  static const String _keyDictionarySourcePath = 'dictionary_source_path';
+  static const String _keyDictionaryExportPath = 'dictionary_export_path';
+  static const String _keyShowDatabaseNav = 'show_database_nav';
+  static const String _keyShowDictionaryNav = 'show_dictionary_nav';
   static const int _maxRecentPaths = 3;
 
   /// Κλειδιά για ρυθμίσεις απομακρυσμένης σύνδεσης (πίνακας app_settings).
@@ -27,6 +31,19 @@ class SettingsService {
   static const String _keyTestTargetIp = 'test_target_ip';
   static const String _keyRemoteSurfaceApps = 'remote_surface_apps';
   static const String _keyEquipmentTypes = 'equipment_types';
+  static const String _keyLexiconCategories = 'lexicon_categories';
+
+  /// Προεπιλεγμένες κατηγορίες λεξικού (CSV για ρυθμίσεις / dropdown).
+  static const String defaultLexiconCategoriesCsv =
+      'Γενική, Τεχνικός Όρος, Όνομα';
+
+  static List<String> get defaultLexiconCategoriesList {
+    return defaultLexiconCategoriesCsv
+        .split(',')
+        .map((s) => s.trim())
+        .where((s) => s.isNotEmpty)
+        .toList();
+  }
 
   /// Προεπιλεγμένη διαδρομή TightVNC Viewer (μία μόνο).
   static const String _defaultVncPath =
@@ -196,6 +213,65 @@ class SettingsService {
     await prefs.setInt(_keyDatabaseOpenTimeoutSeconds, normalized);
   }
 
+  /// Διαδρομή αρχείου TXT που φορτώνει το runtime λεξικό ορθογραφίας (μετά το Compile).
+  /// Κενό/null = χρήση bundled asset.
+  Future<String?> getDictionarySourcePath() async {
+    final prefs = await SharedPreferences.getInstance();
+    final s = prefs.getString(_keyDictionarySourcePath);
+    if (s == null) return null;
+    final t = s.trim();
+    return t.isEmpty ? null : t;
+  }
+
+  Future<void> setDictionarySourcePath(String? path) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (path == null || path.trim().isEmpty) {
+      await prefs.remove(_keyDictionarySourcePath);
+    } else {
+      await prefs.setString(_keyDictionarySourcePath, path.trim());
+    }
+  }
+
+  /// Διαδρομή εξόδου για Compile (`exportToTxt`).
+  Future<String?> getDictionaryExportPath() async {
+    final prefs = await SharedPreferences.getInstance();
+    final s = prefs.getString(_keyDictionaryExportPath);
+    if (s == null) return null;
+    final t = s.trim();
+    return t.isEmpty ? null : t;
+  }
+
+  Future<void> setDictionaryExportPath(String? path) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (path == null || path.trim().isEmpty) {
+      await prefs.remove(_keyDictionaryExportPath);
+    } else {
+      await prefs.setString(_keyDictionaryExportPath, path.trim());
+    }
+  }
+
+  /// Εμφάνιση στοιχείου πλοήγησης «Βάση Δεδομένων». Προεπιλογή: true.
+  Future<bool> getShowDatabaseNav() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_keyShowDatabaseNav) ?? true;
+  }
+
+  Future<void> setShowDatabaseNav(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_keyShowDatabaseNav, value);
+  }
+
+  /// Εμφάνιση στοιχείου πλοήγησης «Λεξικό». Προεπιλογή: true.
+  Future<bool> getShowDictionaryNav() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_keyShowDictionaryNav) ?? true;
+  }
+
+  Future<void> setShowDictionaryNav(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_keyShowDictionaryNav, value);
+  }
+
   // --- Ρυθμίσεις απομακρυσμένης σύνδεσης (app_settings) ---
 
   /// Επιστρέφει τη μοναδική διαδρομή για TightVNC Viewer.
@@ -331,6 +407,54 @@ class SettingsService {
         .where((s) => s.isNotEmpty)
         .toList();
     if (list.isEmpty) return ['Υπολογιστής', 'Εκτυπωτής'];
+    return list;
+  }
+
+  // --- Κατηγορίες λεξικού (app_settings, comma-separated) ---
+
+  /// Ακατέργαστο string κατηγοριών λεξικού (διαχωρισμένα με κόμμα).
+  /// Αφαιρεί [AppConfig.lexiconCategoryUnspecified] από την εμφάνιση/αποθήκευση λίστας.
+  Future<String> getLexiconCategoriesRaw() async {
+    final value = _getAppSetting != null
+        ? await _getAppSetting!(_keyLexiconCategories)
+        : null;
+    if (value == null || value.trim().isEmpty) {
+      return defaultLexiconCategoriesCsv;
+    }
+    final filtered = value
+        .split(',')
+        .map((s) => s.trim())
+        .where((s) =>
+            s.isNotEmpty && s != AppConfig.lexiconCategoryUnspecified)
+        .join(', ');
+    return filtered.isEmpty ? defaultLexiconCategoriesCsv : filtered;
+  }
+
+  /// Αποθήκευση κατηγοριών λεξικού (comma-separated).
+  /// Αφαιρεί την εσωτερική τιμή [AppConfig.lexiconCategoryUnspecified] (δεν ορίζεται από τον χρήστη).
+  Future<void> setLexiconCategories(String value) async {
+    if (_setAppSetting != null) {
+      final filtered = value
+          .split(',')
+          .map((s) => s.trim())
+          .where((s) =>
+              s.isNotEmpty && s != AppConfig.lexiconCategoryUnspecified)
+          .join(', ');
+      await _setAppSetting!(_keyLexiconCategories, filtered);
+    }
+  }
+
+  /// Λίστα κατηγοριών για dropdown. Κενό μετά το split → [defaultLexiconCategoriesList].
+  /// Εξαιρεί [AppConfig.lexiconCategoryUnspecified].
+  Future<List<String>> getLexiconCategoriesList() async {
+    final raw = await getLexiconCategoriesRaw();
+    final list = raw
+        .split(',')
+        .map((s) => s.trim())
+        .where((s) =>
+            s.isNotEmpty && s != AppConfig.lexiconCategoryUnspecified)
+        .toList();
+    if (list.isEmpty) return defaultLexiconCategoriesList;
     return list;
   }
 }

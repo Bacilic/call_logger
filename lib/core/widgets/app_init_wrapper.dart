@@ -4,9 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../database/database_init_result.dart';
 import '../database/database_init_progress_provider.dart';
 import '../database/database_helper.dart';
-import '../init/app_initializer.dart';
-import '../../features/database/providers/backup_scheduler_provider.dart';
-import '../../features/database/providers/database_backup_settings_provider.dart';
+import '../init/app_init_provider.dart';
 import 'app_shortcuts.dart';
 import 'database_error_screen.dart';
 
@@ -19,55 +17,18 @@ class AppInitWrapper extends ConsumerStatefulWidget {
 }
 
 class _AppInitWrapperState extends ConsumerState<AppInitWrapper> {
-  AsyncValue<AppInitResult> _state = const AsyncLoading<AppInitResult>();
-
-  @override
-  void initState() {
-    super.initState();
-    Future<void>.microtask(_startInitialization);
-  }
-
-  Future<void> _startInitialization() async {
-    final progressNotifier = ref.read(databaseInitProgressProvider.notifier);
-    progressNotifier.reset();
-
-    if (mounted) {
-      setState(() {
-        _state = const AsyncLoading<AppInitResult>();
-      });
-    }
-
-    try {
-      final initResult = await AppInitializer.initialize(
-        progressNotifier: progressNotifier,
-      );
-      if (initResult.success) {
-        await ref.read(databaseBackupSettingsProvider.notifier).load();
-        await ref.read(backupSchedulerProvider.notifier).checkStartupAndStart();
-      }
-      if (!mounted) return;
-      setState(() {
-        _state = AsyncData<AppInitResult>(initResult);
-      });
-    } catch (e, st) {
-      if (!mounted) return;
-      setState(() {
-        _state = AsyncError<AppInitResult>(e, st);
-      });
-    }
-  }
-
   Future<void> _retryAppInitialization() async {
     try {
       await DatabaseHelper.instance.closeConnection();
     } catch (_) {}
     if (!mounted) return;
-    await _startInitialization();
+    ref.invalidate(appInitProvider);
   }
 
   @override
   Widget build(BuildContext context) {
-    return _state.when(
+    final asyncInit = ref.watch(appInitProvider);
+    return asyncInit.when(
       loading: () => const _InitLoadingScreen(),
       error: (err, st) {
         final result = DatabaseInitResult.fromException(err, null, st);
