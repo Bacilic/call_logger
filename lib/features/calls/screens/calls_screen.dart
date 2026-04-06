@@ -87,8 +87,10 @@ class CallsScreen extends ConsumerWidget {
                 ),
                 const SizedBox(height: 16),
                 CategoryAutocompleteField(
-                  onCategorySelected: (selected) {
-                    ref.read(callEntryProvider.notifier).setCategory(selected);
+                  onCategoryChanged: (text, categoryId) {
+                    ref
+                        .read(callEntryProvider.notifier)
+                        .setCategory(text, categoryId: categoryId);
                   },
                 ),
                 const SizedBox(height: 16),

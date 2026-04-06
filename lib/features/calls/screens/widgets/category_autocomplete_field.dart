@@ -9,14 +9,29 @@ import '../../../../core/utils/spell_check.dart';
 import '../../../history/providers/history_provider.dart';
 import '../../provider/call_entry_provider.dart';
 
-/// Πεδίο αυτόματης συμπλήρωσης κατηγορίας (πίνακας categories) με δυνατότητα προσθήκης νέας.
+/// Επιστρέφει ενεργή κατηγορία αν το [text] ταιριάζει normalized, αλλιώς null.
+({int id, String name})? categoryEntryMatchingNormalized(
+  String text,
+  List<({int id, String name})> entries,
+) {
+  final key = DatabaseHelper.normalizeCategoryNameForLookup(text.trim());
+  if (key.isEmpty) return null;
+  for (final e in entries) {
+    if (DatabaseHelper.normalizeCategoryNameForLookup(e.name) == key) {
+      return e;
+    }
+  }
+  return null;
+}
+
+/// Πεδίο αυτόματης συμπλήρωσης κατηγορίας (`categories`) με `category_id` όταν ταιριάζει.
 class CategoryAutocompleteField extends ConsumerStatefulWidget {
   const CategoryAutocompleteField({
     super.key,
-    required this.onCategorySelected,
+    required this.onCategoryChanged,
   });
 
-  final ValueChanged<String> onCategorySelected;
+  final void Function(String text, int? categoryId) onCategoryChanged;
 
   @override
   ConsumerState<CategoryAutocompleteField> createState() =>
@@ -29,6 +44,7 @@ class _CategoryAutocompleteFieldState
   late final FocusNode _focusNode;
   int _keyboardOptionIndex = -1;
   bool _suppressOptionsUntilTyping = false;
+  bool _suppressCategoryNotify = false;
 
   @override
   void initState() {
@@ -60,28 +76,52 @@ class _CategoryAutocompleteFieldState
   }
 
   void _setControllerText(TextEditingController controller, String value) {
+    _suppressCategoryNotify = true;
     controller.value = TextEditingValue(
       text: value,
       selection: TextSelection.collapsed(offset: value.length),
     );
+    _suppressCategoryNotify = false;
+  }
+
+  void _pushCategoryState(String rawText, List<({int id, String name})> entries) {
+    if (_suppressCategoryNotify) return;
+    final trimmed = rawText.trim();
+    if (trimmed.isEmpty) {
+      widget.onCategoryChanged('', null);
+      return;
+    }
+    final m = categoryEntryMatchingNormalized(rawText, entries);
+    if (m != null) {
+      widget.onCategoryChanged(m.name, m.id);
+    } else {
+      widget.onCategoryChanged(rawText, null);
+    }
   }
 
   Future<void> _onAddNew(String raw) async {
     final value = raw.trim();
     if (value.isEmpty) return;
     try {
-      await DatabaseHelper.instance.insertCategoryAndGetId(value);
+      final insert = await DatabaseHelper.instance.insertCategoryAndGetId(value);
+      final newId = insert.id;
       if (!mounted) return;
       ref.invalidate(historyCategoriesProvider);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Η κατηγορία "$value" προστέθηκε'),
-        ),
-      );
-      _controller.text = value;
-      _controller.selection = TextSelection.collapsed(offset: value.length);
+      ref.invalidate(historyCategoryEntriesProvider);
+      if (insert.restored) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(kCategoryRestoredFromDeletedUserMessage)),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Η κατηγορία "$value" προστέθηκε'),
+          ),
+        );
+      }
+      _setControllerText(_controller, value);
       _keyboardOptionIndex = -1;
-      widget.onCategorySelected(value);
+      widget.onCategoryChanged(value, newId);
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -92,13 +132,15 @@ class _CategoryAutocompleteFieldState
 
   @override
   Widget build(BuildContext context) {
-    final asyncCats = ref.watch(historyCategoriesProvider);
-    final allCategories =
-        asyncCats.hasValue ? asyncCats.value! : <String>[];
-    final categoriesReady = asyncCats.hasValue;
+    final asyncEntries = ref.watch(historyCategoryEntriesProvider);
+    final entries = switch (asyncEntries) {
+      AsyncData(:final value) => value,
+      _ => const <({int id, String name})>[],
+    };
+    final allCategoryNames = entries.map((e) => e.name).toList();
+    final categoriesReady = asyncEntries.hasValue;
 
     final entryCategory = ref.watch(callEntryProvider.select((s) => s.category));
-    // Μετά από επιτυχή υποβολή το state καθαρίζει την κατηγορία· ευθυγράμμιση πεδίου.
     if (entryCategory.isEmpty && _controller.text.isNotEmpty) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) _controller.clear();
@@ -108,12 +150,11 @@ class _CategoryAutocompleteFieldState
     final trimmed = _controller.text.trim();
     final showAdd = categoriesReady &&
         trimmed.isNotEmpty &&
-        !allCategories.contains(trimmed);
+        categoryEntryMatchingNormalized(trimmed, entries) == null;
     final hasText = _controller.text.isNotEmpty;
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        // Ίδιο πλάτος με [NotesStickyField]: εσωτερικό max 400 / διαθέσιμο + padding 12×2.
         final maxInner = constraints.maxWidth.isFinite && constraints.maxWidth > 0
             ? math.min(400.0, constraints.maxWidth)
             : 400.0;
@@ -128,7 +169,7 @@ class _CategoryAutocompleteFieldState
               textEditingController: _controller,
               displayStringForOption: (option) => option,
               optionsBuilder: (TextEditingValue tev) {
-                final options = _sortedOptions(allCategories, tev.text);
+                final options = _sortedOptions(allCategoryNames, tev.text);
                 final blocked =
                     _suppressOptionsUntilTyping &&
                     tev.text.trim() == _controller.text.trim();
@@ -139,7 +180,12 @@ class _CategoryAutocompleteFieldState
                   _keyboardOptionIndex = -1;
                   _suppressOptionsUntilTyping = true;
                 });
-                widget.onCategorySelected(selection);
+                final m = categoryEntryMatchingNormalized(selection, entries);
+                if (m != null) {
+                  widget.onCategoryChanged(m.name, m.id);
+                } else {
+                  widget.onCategoryChanged(selection, null);
+                }
               },
               fieldViewBuilder: (
                 BuildContext context,
@@ -153,7 +199,7 @@ class _CategoryAutocompleteFieldState
                       return KeyEventResult.ignored;
                     }
                     final options = _sortedOptions(
-                      allCategories,
+                      allCategoryNames,
                       textEditingController.text,
                     );
                     if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
@@ -186,7 +232,12 @@ class _CategoryAutocompleteFieldState
                         _suppressOptionsUntilTyping = true;
                       });
                       _setControllerText(textEditingController, selected);
-                      widget.onCategorySelected(selected);
+                      final m = categoryEntryMatchingNormalized(selected, entries);
+                      if (m != null) {
+                        widget.onCategoryChanged(m.name, m.id);
+                      } else {
+                        widget.onCategoryChanged(selected, null);
+                      }
                       _keyboardOptionIndex = -1;
                       return KeyEventResult.handled;
                     }
@@ -217,7 +268,7 @@ class _CategoryAutocompleteFieldState
                                       setState(() {
                                         _keyboardOptionIndex = -1;
                                       });
-                                      widget.onCategorySelected('');
+                                      widget.onCategoryChanged('', null);
                                     },
                                   ),
                                 if (showAdd)
@@ -238,10 +289,19 @@ class _CategoryAutocompleteFieldState
                         _keyboardOptionIndex = -1;
                         _suppressOptionsUntilTyping = false;
                       });
-                      widget.onCategorySelected(value);
+                      final m = categoryEntryMatchingNormalized(value, entries);
+                      if (m != null && value.trim() != m.name) {
+                        WidgetsBinding.instance.addPostFrameCallback((_) {
+                          if (!mounted) return;
+                          _setControllerText(textEditingController, m.name);
+                          widget.onCategoryChanged(m.name, m.id);
+                        });
+                        return;
+                      }
+                      _pushCategoryState(value, entries);
                     },
                     onSubmitted: (value) {
-                      final options = _sortedOptions(allCategories, value);
+                      final options = _sortedOptions(allCategoryNames, value);
                       if (options.isNotEmpty &&
                           _keyboardOptionIndex >= 0 &&
                           _keyboardOptionIndex < options.length) {
@@ -250,14 +310,19 @@ class _CategoryAutocompleteFieldState
                           _suppressOptionsUntilTyping = true;
                         });
                         _setControllerText(textEditingController, selected);
-                        widget.onCategorySelected(selected);
+                        final m = categoryEntryMatchingNormalized(selected, entries);
+                        if (m != null) {
+                          widget.onCategoryChanged(m.name, m.id);
+                        } else {
+                          widget.onCategoryChanged(selected, null);
+                        }
                         setState(() {
                           _keyboardOptionIndex = -1;
                         });
                         return;
                       }
                       onFieldSubmitted();
-                      widget.onCategorySelected(value.trim());
+                      _pushCategoryState(value.trim(), entries);
                     },
                   ),
                 );

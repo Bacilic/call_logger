@@ -13,6 +13,7 @@ class CallModel {
     this.issue,
     this.solution,
     this.category,
+    this.categoryId,
     this.status,
     this.duration,
     this.isPriority,
@@ -31,6 +32,7 @@ class CallModel {
   final String? issue;
   final String? solution;
   final String? category;
+  final int? categoryId;
   final String? status;
   final int? duration;
   final int? isPriority;
@@ -50,6 +52,7 @@ class CallModel {
       issue: map['issue'] as String?,
       solution: map['solution'] as String?,
       category: map['category'] as String? ?? map['category_text'] as String?,
+      categoryId: map['category_id'] as int?,
       status: map['status'] as String?,
       duration: map['duration'] as int?,
       isPriority: map['is_priority'] as int?,
@@ -71,6 +74,7 @@ class CallModel {
       if (issue != null) 'issue': issue,
       if (solution != null) 'solution': solution,
       if (category != null) 'category_text': category,
+      if (categoryId != null) 'category_id': categoryId,
       if (status != null) 'status': status,
       if (duration != null) 'duration': duration,
       if (isPriority != null) 'is_priority': isPriority,

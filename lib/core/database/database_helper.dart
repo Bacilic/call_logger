@@ -759,7 +759,7 @@ class DatabaseHelper {
 
   /// Συγκεντρώνει κείμενα κλήσης + συσχετισμένου χρήστη/εξοπλισμού για `search_index` (σχήμα v1).
   Future<String> _buildCallSearchIndex(
-    Database db,
+    DatabaseExecutor db,
     Map<String, dynamic> callMap,
   ) async {
     void addNonEmpty(List<String> parts, dynamic v) {
@@ -772,6 +772,7 @@ class DatabaseHelper {
 
     addNonEmpty(parts, callMap['issue']);
     addNonEmpty(parts, callMap['solution']);
+    addNonEmpty(parts, callMap['category_text']);
     addNonEmpty(parts, callMap['caller_text']);
     addNonEmpty(parts, callMap['phone_text']);
     addNonEmpty(parts, callMap['department_text']);
@@ -824,6 +825,27 @@ class DatabaseHelper {
     }
 
     return SearchTextNormalizer.normalizeForSearch(parts.join(' '));
+  }
+
+  Future<void> _rebuildSearchIndexForCallsByCategoryId(
+    DatabaseExecutor db,
+    int categoryId,
+  ) async {
+    final rows = await db.query(
+      'calls',
+      where: 'category_id = ?',
+      whereArgs: [categoryId],
+    );
+    for (final row in rows) {
+      final map = Map<String, dynamic>.from(row);
+      final si = await _buildCallSearchIndex(db, map);
+      await db.update(
+        'calls',
+        {'search_index': si},
+        where: 'id = ?',
+        whereArgs: [row['id']],
+      );
+    }
   }
 
   Future<String> _auditPerformingUser(Database db) async {
@@ -2466,7 +2488,7 @@ SELECT * FROM combined WHERE 1=1
       'issue': call.issue,
       'solution': call.solution,
       'category_text': call.category,
-      'category_id': null,
+      'category_id': call.categoryId,
       'status': call.status ?? 'completed',
       'duration': call.duration,
       'is_priority': call.isPriority ?? 0,
@@ -2495,6 +2517,7 @@ SELECT * FROM combined WHERE 1=1
       'issue': call.issue,
       'solution': call.solution,
       'category_text': call.category,
+      'category_id': call.categoryId,
       'status': call.status,
       'duration': call.duration,
       'is_priority': call.isPriority ?? 0,
@@ -2590,10 +2613,193 @@ SELECT * FROM combined WHERE 1=1
         .toList();
   }
 
-  /// Εισάγει νέα κατηγορία και επιστρέφει το row id (sqlite rowid).
-  Future<int> insertCategoryAndGetId(String name) async {
+  /// Κανονικοποίηση ονόματος κατηγορίας για σύγκριση διπλοτύπων (τόνοι/κεφαλαία).
+  static String normalizeCategoryNameForLookup(String value) =>
+      SearchTextNormalizer.normalizeForSearch(value);
+
+  /// Ενεργές εγγραφές κατηγοριών (`id`, `name`), ταξινόμηση κατά όνομα.
+  Future<List<Map<String, dynamic>>> getActiveCategoryRows() async {
     final db = await database;
-    return db.insert('categories', {'name': name.trim(), 'is_deleted': 0});
+    return db.query(
+      'categories',
+      columns: ['id', 'name'],
+      where: 'COALESCE(is_deleted, 0) = 0',
+      orderBy: 'name COLLATE NOCASE ASC',
+    );
+  }
+
+  /// Ενεργή κατηγορία με ίδιο κανονικοποιημένο όνομα με το [input], αλλιώς null.
+  Future<({int id, String name})?> findActiveCategoryByNormalizedName(
+    String input,
+  ) async {
+    final key = normalizeCategoryNameForLookup(input);
+    if (key.isEmpty) return null;
+    final rows = await getActiveCategoryRows();
+    for (final r in rows) {
+      final n = (r['name'] as String?)?.trim() ?? '';
+      if (normalizeCategoryNameForLookup(n) == key) {
+        return (id: r['id'] as int, name: n);
+      }
+    }
+    return null;
+  }
+
+  /// Υπάρχει ενεργή κατηγορία (εκτός προαιρετικά [excludeId]) με ίδιο normalized όνομα.
+  Future<bool> categoryNormalizedNameTaken(
+    String name, {
+    int? excludeId,
+  }) async {
+    final key = normalizeCategoryNameForLookup(name);
+    if (key.isEmpty) return false;
+    final rows = await getActiveCategoryRows();
+    for (final r in rows) {
+      if (excludeId != null && r['id'] == excludeId) continue;
+      final n = (r['name'] as String?)?.trim() ?? '';
+      if (normalizeCategoryNameForLookup(n) == key) return true;
+    }
+    return false;
+  }
+
+  /// Soft-deleted γραμμή με ίδιο normalized όνομα (πιο πρόσφατο `id` πρώτα).
+  Future<({int id, String name})?> _findSoftDeletedCategoryRowByNormalizedName(
+    String input,
+  ) async {
+    final key = normalizeCategoryNameForLookup(input);
+    if (key.isEmpty) return null;
+    final db = await database;
+    final rows = await db.query(
+      'categories',
+      columns: ['id', 'name'],
+      where: 'COALESCE(is_deleted, 0) = ?',
+      whereArgs: [1],
+      orderBy: 'id DESC',
+    );
+    for (final r in rows) {
+      final n = (r['name'] as String?)?.trim() ?? '';
+      if (normalizeCategoryNameForLookup(n) == key) {
+        return (id: r['id'] as int, name: n);
+      }
+    }
+    return null;
+  }
+
+  /// Εισάγει νέα κατηγορία ή επαναφέρει soft-deleted με ίδιο normalized όνομα.
+  /// Ρίχνει [StateError] αν υπάρχει **ενεργή** κατηγορία με ισοδύναμο όνομα.
+  Future<({int id, bool restored})> insertCategoryAndGetId(String name) async {
+    final t = name.trim();
+    if (t.isEmpty) {
+      throw StateError('Κενό όνομα κατηγορίας.');
+    }
+    if (await categoryNormalizedNameTaken(t)) {
+      throw StateError('Υπάρχει ήδη κατηγορία με ισοδύναμο όνομα.');
+    }
+    final db = await database;
+    final soft = await _findSoftDeletedCategoryRowByNormalizedName(t);
+    if (soft != null) {
+      final id = soft.id;
+      final user = await _auditPerformingUser(db);
+      await db.transaction((txn) async {
+        await txn.update(
+          'categories',
+          {'is_deleted': 0, 'name': t},
+          where: 'id = ?',
+          whereArgs: [id],
+        );
+        await txn.rawUpdate(
+          'UPDATE calls SET category_text = ? WHERE category_id = ?',
+          [t, id],
+        );
+        await _appendAuditLog(
+          txn,
+          user,
+          auditActionRestore,
+          'categories id=$id (επαναφορά από διαγραμμένη)',
+        );
+        await _rebuildSearchIndexForCallsByCategoryId(txn, id);
+      });
+      return (id: id, restored: true);
+    }
+    final newId = await db.insert('categories', {'name': t, 'is_deleted': 0});
+    return (id: newId, restored: false);
+  }
+
+  /// Μετονομασία κατηγορίας και μαζικό `category_text` στις κλήσεις με αυτό το `category_id`.
+  Future<void> updateCategoryNameAndSyncCalls({
+    required int id,
+    required String newCanonicalName,
+  }) async {
+    final t = newCanonicalName.trim();
+    if (t.isEmpty) throw ArgumentError('empty name');
+    if (await categoryNormalizedNameTaken(t, excludeId: id)) {
+      throw StateError('Υπάρχει ήδη κατηγορία με ισοδύναμο όνομα.');
+    }
+    final db = await database;
+    final user = await _auditPerformingUser(db);
+    await db.transaction((txn) async {
+      await txn.update(
+        'categories',
+        {'name': t},
+        where: 'id = ?',
+        whereArgs: [id],
+      );
+      await txn.rawUpdate(
+        'UPDATE calls SET category_text = ? WHERE category_id = ?',
+        [t, id],
+      );
+      await _appendAuditLog(
+        txn,
+        user,
+        'ΤΡΟΠΟΠΟΙΗΣΗ',
+        'categories id=$id',
+      );
+      await _rebuildSearchIndexForCallsByCategoryId(txn, id);
+    });
+  }
+
+  /// Soft delete κατηγοριών + audit (`calls.category_id` παραμένει).
+  Future<void> softDeleteCategories(List<int> ids) async {
+    if (ids.isEmpty) return;
+    final db = await database;
+    final user = await _auditPerformingUser(db);
+    await db.transaction((txn) async {
+      for (final id in ids) {
+        await txn.update(
+          'categories',
+          {'is_deleted': 1},
+          where: 'id = ?',
+          whereArgs: [id],
+        );
+        await _appendAuditLog(
+          txn,
+          user,
+          auditActionDelete,
+          'categories id=$id',
+        );
+      }
+    });
+  }
+
+  /// Επαναφορά soft-deleted κατηγοριών + audit.
+  Future<void> restoreCategories(List<int> ids) async {
+    if (ids.isEmpty) return;
+    final db = await database;
+    final user = await _auditPerformingUser(db);
+    await db.transaction((txn) async {
+      for (final id in ids) {
+        await txn.update(
+          'categories',
+          {'is_deleted': 0},
+          where: 'id = ?',
+          whereArgs: [id],
+        );
+        await _appendAuditLog(
+          txn,
+          user,
+          auditActionRestore,
+          'categories id=$id',
+        );
+      }
+    });
   }
 
   /// Soft delete εργασίας (`tasks`) + audit.
@@ -2652,13 +2858,14 @@ SELECT * FROM combined WHERE 1=1
         '''
       SELECT calls.id, calls.date, calls.time, calls.caller_id, calls.equipment_id,
              calls.issue, calls.solution, calls.caller_text, calls.phone_text, calls.department_text, calls.equipment_text,
-             calls.category_text AS category, calls.status, calls.duration, calls.is_priority,
+             COALESCE(cat.name, calls.category_text, '') AS category, calls.status, calls.duration, calls.is_priority,
              COALESCE(users.first_name, calls.caller_text, '') AS user_first_name,
              COALESCE(users.last_name, '') AS user_last_name,
              $userPhoneExpr AS user_phone,
              COALESCE(departments.name, calls.department_text, '-') AS user_department,
              COALESCE(equipment.code_equipment, calls.equipment_text, '-') AS equipment_code
       FROM calls
+      LEFT JOIN categories cat ON cat.id = calls.category_id
       LEFT JOIN users ON calls.caller_id = users.id
       LEFT JOIN (
         SELECT up.user_id AS uid,
@@ -2709,3 +2916,7 @@ SELECT * FROM combined WHERE 1=1
     }
   }
 }
+
+/// Μήνυμα SnackBar όταν επαναφέρεται διαγραμμένη κατηγορία αντί νέας εγγραφής.
+const String kCategoryRestoredFromDeletedUserMessage =
+    'Η κατηγορία επαναφέρθηκε (υπήρχε ήδη ως διαγραμμένη).';

@@ -22,6 +22,7 @@ class CallEntryState {
     this.selectedEquipment,
     this.notes = '',
     this.category = '',
+    this.categoryId,
     this.isPending = false,
     this.durationSeconds = 0,
     this.isCallTimerRunning = false,
@@ -32,6 +33,7 @@ class CallEntryState {
   final EquipmentModel? selectedEquipment;
   final String notes;
   final String category;
+  final int? categoryId;
   final bool isPending;
   final int durationSeconds;
   /// Συγχρονισμένο με το ενεργό `Timer` — για `ref.watch(select(...))` όταν η διάρκεια δεν αλλάζει (παύση).
@@ -43,6 +45,7 @@ class CallEntryState {
     EquipmentModel? selectedEquipment,
     String? notes,
     String? category,
+    int? categoryId,
     bool? isPending,
     int? durationSeconds,
     bool? isCallTimerRunning,
@@ -53,6 +56,7 @@ class CallEntryState {
       selectedEquipment: selectedEquipment ?? this.selectedEquipment,
       notes: notes ?? this.notes,
       category: category ?? this.category,
+      categoryId: categoryId ?? this.categoryId,
       isPending: isPending ?? this.isPending,
       durationSeconds: durationSeconds ?? this.durationSeconds,
       isCallTimerRunning: isCallTimerRunning ?? this.isCallTimerRunning,
@@ -132,8 +136,18 @@ class CallEntryNotifier extends Notifier<CallEntryState> {
     state = state.copyWith(notes: value);
   }
 
-  void setCategory(String value) {
-    state = state.copyWith(category: value);
+  void setCategory(String value, {int? categoryId}) {
+    state = CallEntryState(
+      internalDigits: state.internalDigits,
+      selectedUser: state.selectedUser,
+      selectedEquipment: state.selectedEquipment,
+      notes: state.notes,
+      category: value,
+      categoryId: categoryId,
+      isPending: state.isPending,
+      durationSeconds: state.durationSeconds,
+      isCallTimerRunning: state.isCallTimerRunning,
+    );
   }
 
   /// Υποβολή κλήσης: διαβάζει caller/equipment από call_header_provider.
@@ -208,6 +222,7 @@ class CallEntryNotifier extends Notifier<CallEntryState> {
           issue: notes.isEmpty ? null : notes,
           solution: null,
           category: state.category.isEmpty ? null : state.category,
+          categoryId: state.categoryId,
           status: state.isPending ? 'pending' : 'completed',
           duration: state.durationSeconds,
         ),
@@ -333,6 +348,7 @@ class CallEntryNotifier extends Notifier<CallEntryState> {
       selectedEquipment: null,
       notes: '',
       category: '',
+      categoryId: null,
       isPending: false,
       durationSeconds: 0,
       isCallTimerRunning: false,

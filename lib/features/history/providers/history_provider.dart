@@ -86,3 +86,16 @@ final historyCategoriesProvider =
     FutureProvider.autoDispose<List<String>>((ref) async {
   return DatabaseHelper.instance.getCategoryNames();
 });
+
+/// Ενεργές κατηγορίες (id + όνομα) για φόρμα κλήσης / επίλυση category_id.
+final historyCategoryEntriesProvider =
+    FutureProvider.autoDispose<List<({int id, String name})>>((ref) async {
+  final rows = await DatabaseHelper.instance.getActiveCategoryRows();
+  return rows
+      .map((m) => (
+            id: m['id'] as int,
+            name: (m['name'] as String?)?.trim() ?? '',
+          ))
+      .where((e) => e.name.isNotEmpty)
+      .toList();
+});
