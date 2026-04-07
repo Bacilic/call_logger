@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/database/database_helper.dart';
+import '../../../../core/providers/settings_provider.dart';
+import '../../../../core/providers/spell_check_provider.dart';
 import '../../../../core/utils/search_text_normalizer.dart';
 import '../../../../core/utils/user_identity_normalizer.dart';
 import '../../../../core/utils/phone_list_parser.dart';
@@ -40,8 +42,10 @@ class UserFormDialog extends ConsumerStatefulWidget {
 
 class _UserFormDialogState extends ConsumerState<UserFormDialog> {
   final _formKey = GlobalKey<FormState>();
+
   /// Αρχικό κείμενο τμήματος όπως στη βάση (εμφάνιση· επαναφορά στον διάλογο μεταφοράς).
   late final String _initialDepartmentText;
+
   /// Κανονικοποιημένο κλειδί αρχικού τμήματος μόνο για σύγκριση dirty / διάλογο.
   late final String _snapDepartmentNorm;
   late final String _snapLastName;
@@ -49,9 +53,9 @@ class _UserFormDialogState extends ConsumerState<UserFormDialog> {
   late final String _snapPhone;
   late final String _snapNotes;
   late final TextEditingController _lastNameController;
-  late final TextEditingController _firstNameController;
+  late final SpellCheckController _firstNameController;
   late final TextEditingController _phoneController;
-  late final TextEditingController _departmentController;
+  late final SpellCheckController _departmentController;
   late final SpellCheckController _notesController;
 
   final FocusNode _lastNameFocusNode = FocusNode();
@@ -91,15 +95,17 @@ class _UserFormDialogState extends ConsumerState<UserFormDialog> {
     _snapPhone = PhoneListParser.joinPhones(u?.phones ?? const []);
     _snapNotes = (u?.notes ?? '').trim();
     _initialDepartmentText = (u?.departmentName ?? '').trim();
-    _snapDepartmentNorm =
-        SearchTextNormalizer.normalizeForSearch(_initialDepartmentText);
+    _snapDepartmentNorm = SearchTextNormalizer.normalizeForSearch(
+      _initialDepartmentText,
+    );
 
     _lastNameController = TextEditingController(text: u?.lastName ?? '');
-    _firstNameController = TextEditingController(text: u?.firstName ?? '');
+    _firstNameController = SpellCheckController()..text = u?.firstName ?? '';
     _phoneController = TextEditingController(
       text: PhoneListParser.joinPhones(u?.phones ?? const []),
     );
-    _departmentController = TextEditingController(text: _initialDepartmentText);
+    _departmentController = SpellCheckController()
+      ..text = _initialDepartmentText;
     _notesController = SpellCheckController()..text = (u?.notes ?? '');
 
     _lastNameController.addListener(_onFieldChanged);
@@ -200,8 +206,8 @@ class _UserFormDialogState extends ConsumerState<UserFormDialog> {
       _lastNameController.text,
     );
     if (key.isEmpty) return null;
-    final int? excludeId = widget.initialUser != null &&
-            (_isEdit || widget.isClone)
+    final int? excludeId =
+        widget.initialUser != null && (_isEdit || widget.isClone)
         ? widget.initialUser!.id
         : null;
     for (final u in widget.notifier.allUsersForUi) {
@@ -252,19 +258,21 @@ class _UserFormDialogState extends ConsumerState<UserFormDialog> {
       }
     }
 
-    final initialDeptNorm =
-        SearchTextNormalizer.normalizeForSearch(_initialDepartmentText);
-    final currentDeptNorm =
-        SearchTextNormalizer.normalizeForSearch(_departmentController.text);
+    final initialDeptNorm = SearchTextNormalizer.normalizeForSearch(
+      _initialDepartmentText,
+    );
+    final currentDeptNorm = SearchTextNormalizer.normalizeForSearch(
+      _departmentController.text,
+    );
     if (initialDeptNorm != currentDeptNorm) {
       final existsInOrg = currentDeptNorm.isEmpty
           ? true
-          : await DatabaseHelper.instance
-              .departmentNameExists(_departmentController.text);
+          : await DatabaseHelper.instance.departmentNameExists(
+              _departmentController.text,
+            );
       if (!mounted) return;
-      final useAddToDepartmentMessage = !_isEdit ||
-          widget.isClone ||
-          _initialDepartmentText.trim().isEmpty;
+      final useAddToDepartmentMessage =
+          !_isEdit || widget.isClone || _initialDepartmentText.trim().isEmpty;
       final result = await showDepartmentTransferConfirmDialog(
         context: context,
         userDisplayName: _buildUserDisplayName(),
@@ -273,8 +281,7 @@ class _UserFormDialogState extends ConsumerState<UserFormDialog> {
         newDepartmentExistsInOrg: existsInOrg,
         useAddToDepartmentMessage: useAddToDepartmentMessage,
       );
-      final effective =
-          result ?? DepartmentTransferDialogResult.cancelTransfer;
+      final effective = result ?? DepartmentTransferDialogResult.cancelTransfer;
       if (effective == DepartmentTransferDialogResult.cancelTransfer) {
         _departmentController.text = _initialDepartmentText;
         return;
@@ -302,9 +309,9 @@ class _UserFormDialogState extends ConsumerState<UserFormDialog> {
       final sourceId = widget.initialUser?.id;
       if (sourceId == null) return;
       if (widget.notifier.hasDuplicateUser(
-            user,
-            mirrorEquipmentFromUserId: sourceId,
-          )) {
+        user,
+        mirrorEquipmentFromUserId: sourceId,
+      )) {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(_duplicateSnack);
         return;
@@ -327,10 +334,7 @@ class _UserFormDialogState extends ConsumerState<UserFormDialog> {
 
     if (_isEdit) {
       if (user.id != null &&
-          widget.notifier.hasDuplicateUser(
-            user,
-            excludeId: user.id,
-          )) {
+          widget.notifier.hasDuplicateUser(user, excludeId: user.id)) {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(_duplicateSnack);
         return;
@@ -357,9 +361,9 @@ class _UserFormDialogState extends ConsumerState<UserFormDialog> {
     if (!mounted) return;
     widget.onSaved?.call();
     Navigator.of(context).pop(true);
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Αποθηκεύτηκε')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Αποθηκεύτηκε')));
   }
 
   String get _title {
@@ -381,17 +385,19 @@ class _UserFormDialogState extends ConsumerState<UserFormDialog> {
     }
     final list = byKey.values.toList();
     list.sort(
-      (a, b) => SearchTextNormalizer.normalizeForSearch(a).compareTo(
-            SearchTextNormalizer.normalizeForSearch(b),
-          ),
+      (a, b) => SearchTextNormalizer.normalizeForSearch(
+        a,
+      ).compareTo(SearchTextNormalizer.normalizeForSearch(b)),
     );
     return list;
   }
 
   /// Μοναδικά ονόματα μόνο από χρήστες με ίδιο κανονικοποιημένο επώνυμο με το πεδίο επωνύμου.
   List<String> _catalogFirstNameOptionsSortedForLast(String lastFieldText) {
-    final lastKey =
-        UserIdentityNormalizer.identityKeyForPerson('', lastFieldText);
+    final lastKey = UserIdentityNormalizer.identityKeyForPerson(
+      '',
+      lastFieldText,
+    );
     if (lastKey.isEmpty) return const [];
     final byKey = <String, String>{};
     for (final u in widget.notifier.allUsersForUi) {
@@ -408,9 +414,9 @@ class _UserFormDialogState extends ConsumerState<UserFormDialog> {
     }
     final list = byKey.values.toList();
     list.sort(
-      (a, b) => SearchTextNormalizer.normalizeForSearch(a).compareTo(
-            SearchTextNormalizer.normalizeForSearch(b),
-          ),
+      (a, b) => SearchTextNormalizer.normalizeForSearch(
+        a,
+      ).compareTo(SearchTextNormalizer.normalizeForSearch(b)),
     );
     return list;
   }
@@ -425,10 +431,7 @@ class _UserFormDialogState extends ConsumerState<UserFormDialog> {
       child: Material(
         elevation: 4,
         child: ConstrainedBox(
-          constraints: const BoxConstraints(
-            maxWidth: 360,
-            maxHeight: 220,
-          ),
+          constraints: const BoxConstraints(maxWidth: 360, maxHeight: 220),
           child: ListView.builder(
             padding: EdgeInsets.zero,
             shrinkWrap: true,
@@ -449,6 +452,19 @@ class _UserFormDialogState extends ConsumerState<UserFormDialog> {
 
   @override
   Widget build(BuildContext context) {
+    ref
+        .watch(spellCheckServiceProvider)
+        .whenData(_firstNameController.attachSpellService);
+    ref
+        .watch(enableSpellCheckProvider)
+        .whenData(_firstNameController.setSpellCheckEnabled);
+    ref
+        .watch(spellCheckServiceProvider)
+        .whenData(_departmentController.attachSpellService);
+    ref
+        .watch(enableSpellCheckProvider)
+        .whenData(_departmentController.setSpellCheckEnabled);
+
     final lookupAsync = ref.watch(lookupServiceProvider);
     final departmentNames = lookupAsync.maybeWhen(
       data: (bundle) => bundle.service.departments
@@ -458,8 +474,9 @@ class _UserFormDialogState extends ConsumerState<UserFormDialog> {
       orElse: () => const <String>[],
     );
     final lastNameOptions = _catalogLastNameOptionsSorted();
-    final firstNameOptions =
-        _catalogFirstNameOptionsSortedForLast(_lastNameController.text);
+    final firstNameOptions = _catalogFirstNameOptionsSortedForLast(
+      _lastNameController.text,
+    );
     return AlertDialog(
       title: Text(_title),
       content: Form(
@@ -538,6 +555,8 @@ class _UserFormDialogState extends ConsumerState<UserFormDialog> {
                     ),
                     validator: _requiredValidator,
                     textCapitalization: TextCapitalization.words,
+                    lexiconSpellAssist: true,
+                    onChanged: (_) => _onFieldChanged(),
                   );
                 },
                 optionsViewBuilder: (context, onSelected, options) {
@@ -586,6 +605,8 @@ class _UserFormDialogState extends ConsumerState<UserFormDialog> {
                       border: OutlineInputBorder(),
                     ),
                     textCapitalization: TextCapitalization.none,
+                    lexiconSpellAssist: true,
+                    onChanged: (_) => _onFieldChanged(),
                   );
                 },
                 optionsViewBuilder: (context, onSelected, options) {

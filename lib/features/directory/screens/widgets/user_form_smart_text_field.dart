@@ -1,11 +1,20 @@
 import 'dart:async';
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../../../core/widgets/lexicon_spell_menu_helper.dart';
+import '../../../../core/widgets/spell_check_controller.dart';
 
 /// Πεδίο φόρμας χρήστη: πρώτο κλικ μετά το focus = επιλογή όλου, μετά κανονικό κλικ,
 /// γρήγορο διπλό κλικ = λέξη, τριπλό = όλο. Μενού επιλογής με πλάτος περιεχομένου.
-class UserFormSmartTextField extends StatefulWidget {
+///
+/// Με [lexiconSpellAssist] χρησιμοποιείται ο ίδιος ορθογραφικός έλεγχος λεξικού
+/// όπως στις Σημειώσεις (desktop κ.λπ.)· ο [controller] πρέπει να είναι
+/// [SpellCheckController].
+class UserFormSmartTextField extends ConsumerStatefulWidget {
   const UserFormSmartTextField({
     super.key,
     required this.controller,
@@ -16,6 +25,8 @@ class UserFormSmartTextField extends StatefulWidget {
     this.textCapitalization = TextCapitalization.none,
     this.maxLines = 1,
     this.spellCheckConfiguration,
+    this.lexiconSpellAssist = false,
+    this.onChanged,
     this.onEditingComplete,
   });
 
@@ -27,19 +38,31 @@ class UserFormSmartTextField extends StatefulWidget {
   final TextCapitalization textCapitalization;
   final int maxLines;
   final SpellCheckConfiguration? spellCheckConfiguration;
+
+  /// Ορθογραφικός έλεγχος μέσω εσωτερικού λεξικού ([SpellCheckController]).
+  final bool lexiconSpellAssist;
+  final ValueChanged<String>? onChanged;
   final VoidCallback? onEditingComplete;
 
   @override
-  State<UserFormSmartTextField> createState() => _UserFormSmartTextFieldState();
+  ConsumerState<UserFormSmartTextField> createState() =>
+      _UserFormSmartTextFieldState();
 }
 
-class _UserFormSmartTextFieldState extends State<UserFormSmartTextField> {
+class _UserFormSmartTextFieldState
+    extends ConsumerState<UserFormSmartTextField> {
   final GlobalKey _fieldKey = GlobalKey();
   bool _selectAllOnNextTap = true;
   Timer? _multiTapTimer;
   DateTime? _previousPointerDown;
   int _tapChain = 0;
   Offset? _lastPointerGlobal;
+  Offset? _lastSecondaryPointerGlobal;
+
+  SpellCheckController? get _spellController =>
+      widget.lexiconSpellAssist && widget.controller is SpellCheckController
+      ? widget.controller as SpellCheckController
+      : null;
 
   static const _multiTapWindow = Duration(milliseconds: 420);
 
@@ -64,8 +87,10 @@ class _UserFormSmartTextFieldState extends State<UserFormSmartTextField> {
 
   void _selectAll() {
     final t = widget.controller.text;
-    widget.controller.selection =
-        TextSelection(baseOffset: 0, extentOffset: t.length);
+    widget.controller.selection = TextSelection(
+      baseOffset: 0,
+      extentOffset: t.length,
+    );
   }
 
   bool _isWs(String text, int i) {
@@ -120,6 +145,13 @@ class _UserFormSmartTextFieldState extends State<UserFormSmartTextField> {
   }
 
   void _handlePointerDown(PointerDownEvent event) {
+    if (event.kind == PointerDeviceKind.mouse &&
+        event.buttons == kSecondaryMouseButton) {
+      if (_spellController != null) {
+        _lastSecondaryPointerGlobal = event.position;
+      }
+      return;
+    }
     final now = DateTime.now();
     if (_previousPointerDown == null ||
         now.difference(_previousPointerDown!) > _multiTapWindow) {
@@ -148,10 +180,31 @@ class _UserFormSmartTextFieldState extends State<UserFormSmartTextField> {
   }
 
   Widget _contextMenu(BuildContext context, EditableTextState state) {
-    final items =
-        state.contextMenuButtonItems.where((e) => e.onPressed != null).toList();
+    final sc = _spellController;
+    if (sc != null) {
+      LexiconSpellMenuHelper.positionCursorFromSecondaryClick(
+        global: _lastSecondaryPointerGlobal,
+        state: state,
+        isMounted: () => mounted,
+      );
+      _lastSecondaryPointerGlobal = null;
+    }
+
+    final defaults = state.contextMenuButtonItems
+        .where((e) => e.onPressed != null)
+        .toList();
+    final spellExtras = sc != null
+        ? LexiconSpellMenuHelper.spellButtonItems(
+            ref: ref,
+            controller: sc,
+            state: state,
+            onFieldChanged: widget.onChanged,
+          )
+        : <ContextMenuButtonItem>[];
+    final items = [...spellExtras, ...defaults];
     final platform = Theme.of(context).platform;
-    final useDesktopLayout = platform == TargetPlatform.windows ||
+    final useDesktopLayout =
+        platform == TargetPlatform.windows ||
         platform == TargetPlatform.linux ||
         platform == TargetPlatform.fuchsia ||
         platform == TargetPlatform.macOS;
@@ -206,9 +259,10 @@ class _UserFormSmartTextFieldState extends State<UserFormSmartTextField> {
     final paddingAbove =
         MediaQuery.paddingOf(context).top + kToolbarScreenPadding;
     final localAdjustment = Offset(kToolbarScreenPadding, paddingAbove);
-    final buttonWidgets =
-        AdaptiveTextSelectionToolbar.getAdaptiveButtons(context, items)
-            .toList();
+    final buttonWidgets = AdaptiveTextSelectionToolbar.getAdaptiveButtons(
+      context,
+      items,
+    ).toList();
 
     return Padding(
       padding: EdgeInsets.fromLTRB(
@@ -251,9 +305,12 @@ class _UserFormSmartTextFieldState extends State<UserFormSmartTextField> {
         keyboardType: widget.keyboardType,
         textCapitalization: widget.textCapitalization,
         maxLines: widget.maxLines,
-        spellCheckConfiguration: widget.spellCheckConfiguration,
+        spellCheckConfiguration: widget.lexiconSpellAssist
+            ? const SpellCheckConfiguration.disabled()
+            : widget.spellCheckConfiguration,
         contextMenuBuilder: _contextMenu,
         onEditingComplete: widget.onEditingComplete,
+        onChanged: widget.onChanged,
         onTap: () {
           if (_selectAllOnNextTap) {
             _selectAll();

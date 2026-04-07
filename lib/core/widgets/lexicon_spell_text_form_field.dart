@@ -1,10 +1,10 @@
-import 'dart:async';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../providers/settings_provider.dart';
 import '../providers/spell_check_provider.dart';
+import 'lexicon_spell_menu_helper.dart';
 import 'spell_check_controller.dart';
 
 /// TextFormField με custom ορθογραφικό έλεγχο από εσωτερικό λεξικό.
@@ -39,89 +39,21 @@ class _LexiconSpellTextFormFieldState
     extends ConsumerState<LexiconSpellTextFormField> {
   Offset? _lastSecondaryPointerGlobal;
 
-  int _resolveCursorOffsetForContextMenu(
-    EditableTextState state,
-  ) {
-    final value = state.textEditingValue;
-    return value.selection.extentOffset.clamp(0, value.text.length);
-  }
-
-  void _replaceWordAtOffset(
-    TextEditingValue value,
-    int rawOffset,
-    String replacement,
-  ) {
-    var offset = rawOffset;
-    if (offset < 0) offset = 0;
-    if (offset > value.text.length) offset = value.text.length;
-    final t = value.text;
-    for (final m in SpellCheckController.wordPattern.allMatches(t)) {
-      if (offset >= m.start && offset <= m.end) {
-        final nt = t.replaceRange(m.start, m.end, replacement);
-        widget.controller.value = TextEditingValue(
-          text: nt,
-          selection: TextSelection.collapsed(
-            offset: m.start + replacement.length,
-          ),
-        );
-        widget.onChanged?.call(nt);
-        widget.controller.refreshSpellDecorations();
-        return;
-      }
-    }
-  }
-
   Widget _contextMenuBuilder(BuildContext context, EditableTextState state) {
-    final v = state.textEditingValue;
-    final offset = _resolveCursorOffsetForContextMenu(state);
     final global = _lastSecondaryPointerGlobal;
-    if (global != null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted || !state.mounted) return;
-        state.renderEditable.selectPositionAt(
-          from: global,
-          cause: SelectionChangedCause.tap,
-        );
-      });
-    }
+    LexiconSpellMenuHelper.positionCursorFromSecondaryClick(
+      global: global,
+      state: state,
+      isMounted: () => mounted,
+    );
     _lastSecondaryPointerGlobal = null;
 
-    final extras = <ContextMenuButtonItem>[];
-    final spellOn = ref.read(enableSpellCheckProvider).value ?? true;
-    final spell = switch (ref.read(spellCheckServiceProvider)) {
-      AsyncData(:final value) => value,
-      _ => null,
-    };
-    if (spellOn &&
-        spell != null &&
-        widget.controller.isWordMisspelledAt(v, offset)) {
-      final raw = widget.controller.wordAtCursorOffset(v, offset);
-      if (raw != null) {
-        for (final sug in spell.getSuggestions(raw)) {
-          extras.add(
-            ContextMenuButtonItem(
-              label: sug,
-              onPressed: () {
-                state.hideToolbar();
-                _replaceWordAtOffset(widget.controller.value, offset, sug);
-              },
-            ),
-          );
-        }
-        extras.add(
-          ContextMenuButtonItem(
-            label: 'Προσθήκη στο λεξικό μου',
-            onPressed: () {
-              state.hideToolbar();
-              unawaited(() async {
-                await spell.insertUserWord(raw);
-                if (mounted) widget.controller.refreshSpellDecorations();
-              }());
-            },
-          ),
-        );
-      }
-    }
+    final extras = LexiconSpellMenuHelper.spellButtonItems(
+      ref: ref,
+      controller: widget.controller,
+      state: state,
+      onFieldChanged: widget.onChanged,
+    );
 
     final defaults = state.contextMenuButtonItems
         .where((e) => e.onPressed != null)
@@ -132,7 +64,8 @@ class _LexiconSpellTextFormFieldState
       return const SizedBox.shrink();
     }
     final platform = Theme.of(context).platform;
-    final useDesktopLayout = platform == TargetPlatform.windows ||
+    final useDesktopLayout =
+        platform == TargetPlatform.windows ||
         platform == TargetPlatform.linux ||
         platform == TargetPlatform.fuchsia ||
         platform == TargetPlatform.macOS;
@@ -183,9 +116,10 @@ class _LexiconSpellTextFormFieldState
     final paddingAbove =
         MediaQuery.paddingOf(context).top + kToolbarScreenPadding;
     final localAdjustment = Offset(kToolbarScreenPadding, paddingAbove);
-    final buttonWidgets =
-        AdaptiveTextSelectionToolbar.getAdaptiveButtons(context, items)
-            .toList();
+    final buttonWidgets = AdaptiveTextSelectionToolbar.getAdaptiveButtons(
+      context,
+      items,
+    ).toList();
 
     return Padding(
       padding: EdgeInsets.fromLTRB(
