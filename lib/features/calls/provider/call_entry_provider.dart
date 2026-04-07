@@ -3,7 +3,9 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/database/calls_repository.dart';
 import '../../../core/database/database_helper.dart';
+import '../../../core/database/directory_repository.dart';
 import '../../../core/services/lookup_service.dart';
 import '../../tasks/models/task_filter.dart';
 import '../../tasks/providers/task_service_provider.dart';
@@ -194,13 +196,15 @@ class CallEntryNotifier extends Notifier<CallEntryState> {
       if (userId == null) return false;
       final updatedMap = Map<String, dynamic>.from(user.toMap());
       updatedMap['department_id'] = selectedDepartmentId;
-      await DatabaseHelper.instance.updateUser(userId, updatedMap);
+      final db = await DatabaseHelper.instance.database;
+      await DirectoryRepository(db).updateUser(userId, updatedMap);
       ref.invalidate(lookupServiceProvider);
     }
 
     try {
       stopTimer();
-      final callId = await DatabaseHelper.instance.insertCall(
+      final dbCalls = await DatabaseHelper.instance.database;
+      final callId = await CallsRepository(dbCalls).insertCall(
         CallModel(
           date: null,
           time: null,
@@ -404,7 +408,8 @@ final recentCallsProvider = FutureProvider.family<List<CallModel>, int>((
   ref,
   callerId,
 ) async {
-  final maps = await DatabaseHelper.instance.getRecentCallsByCallerId(
+  final db = await DatabaseHelper.instance.database;
+  final maps = await CallsRepository(db).getRecentCallsByCallerId(
     callerId,
     limit: 3,
   );

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/database/database_helper.dart';
+import '../../../../core/database/directory_repository.dart';
 import '../../../../core/providers/settings_provider.dart';
 import '../../../../core/providers/spell_check_provider.dart';
 import '../../../../core/utils/search_text_normalizer.dart';
@@ -267,7 +268,8 @@ class _UserFormDialogState extends ConsumerState<UserFormDialog> {
     if (initialDeptNorm != currentDeptNorm) {
       final existsInOrg = currentDeptNorm.isEmpty
           ? true
-          : await DatabaseHelper.instance.departmentNameExists(
+          : await DirectoryRepository(await DatabaseHelper.instance.database)
+              .departmentNameExists(
               _departmentController.text,
             );
       if (!mounted) return;
@@ -292,7 +294,8 @@ class _UserFormDialogState extends ConsumerState<UserFormDialog> {
   }
 
   Future<void> _persistUser({bool cloneAsNewEmployee = false}) async {
-    final departmentId = await DatabaseHelper.instance
+    final departmentId = await DirectoryRepository(
+            await DatabaseHelper.instance.database)
         .getOrCreateDepartmentIdByName(_departmentController.text);
     final user = UserModel(
       id: (_isEdit && !cloneAsNewEmployee) ? widget.initialUser?.id : null,

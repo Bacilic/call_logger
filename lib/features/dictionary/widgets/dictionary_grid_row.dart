@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/config/app_config.dart';
-import '../../../core/database/database_helper.dart';
+import '../../../core/database/dictionary_repository.dart';
 import '../../../core/services/settings_service.dart';
 
 const double kDictionaryGridActionsWidth = 108;
@@ -20,7 +20,7 @@ String _lexiconLangTooltipLabel(String lang) {
     case 'el':
     case 'en':
       return '';
-    case DatabaseHelper.kLexiconLanguageMix:
+    case DictionaryRepository.kLexiconLanguageMix:
       return 'Μικτή γραφή';
     default:
       return lang.isEmpty ? '' : lang;
@@ -33,7 +33,7 @@ String _lexiconLangTooltipAsset(String lang) {
       return _kLexiconTooltipAssetEl;
     case 'en':
       return _kLexiconTooltipAssetEn;
-    case DatabaseHelper.kLexiconLanguageMix:
+    case DictionaryRepository.kLexiconLanguageMix:
       return _kLexiconTooltipAssetMix;
     default:
       return _kLexiconTooltipAssetFallback;
@@ -380,7 +380,7 @@ class _DictionaryGridRowState extends State<DictionaryGridRow> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final src = widget.row['src'] as String? ?? '';
-    final srcLabel = DatabaseHelper.lexiconSourceUiLabel(src);
+    final srcLabel = DictionaryRepository.lexiconSourceUiLabel(src);
     final lang = widget.row['lang'] as String? ?? '';
     final pending = (widget.row['pending_user'] as int? ?? 0) == 1;
 

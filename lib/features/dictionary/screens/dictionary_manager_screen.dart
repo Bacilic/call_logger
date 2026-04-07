@@ -10,6 +10,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/config/app_config.dart';
 import '../../../core/database/database_helper.dart';
 import '../../../core/database/database_init_result.dart';
+import '../../../core/database/dictionary_repository.dart';
+import '../../../core/database/directory_repository.dart';
 import '../../../core/errors/dictionary_export_exception.dart';
 import '../../../core/models/dictionary_import_mode.dart';
 import '../../../core/providers/greek_dictionary_provider.dart';
@@ -380,13 +382,16 @@ class _DictionaryManagerScreenState extends ConsumerState<DictionaryManagerScree
         }
       }
 
+      final dbLex = await DatabaseHelper.instance.database;
+      final dictLex = DictionaryRepository(dbLex);
+
       if (append) {
-        final rows = await DatabaseHelper.instance.queryCombinedLexiconPage(
+        final rows = await dictLex.queryCombinedLexiconPage(
           language: _langFilter,
           source: _sourceFilter,
           category: _categoryFilter,
           normalizedSearch: search.isEmpty ? null : search,
-          pendingOnly: _sourceFilter == DatabaseHelper.kLexiconPendingFilter,
+          pendingOnly: _sourceFilter == DictionaryRepository.kLexiconPendingFilter,
           lettersCountOp: lettersOp,
           lettersCountValue: lettersVal,
           diacriticMarksFilter: _diacriticMarksFilter,
@@ -404,23 +409,23 @@ class _DictionaryManagerScreenState extends ConsumerState<DictionaryManagerScree
           });
         }
       } else {
-        final count = await DatabaseHelper.instance.countCombinedLexiconRows(
+        final count = await dictLex.countCombinedLexiconRows(
           language: _langFilter,
           source: _sourceFilter,
           category: _categoryFilter,
           normalizedSearch: search.isEmpty ? null : search,
-          pendingOnly: _sourceFilter == DatabaseHelper.kLexiconPendingFilter,
+          pendingOnly: _sourceFilter == DictionaryRepository.kLexiconPendingFilter,
           lettersCountOp: lettersOp,
           lettersCountValue: lettersVal,
           diacriticMarksFilter: _diacriticMarksFilter,
         );
         final offset = continuous ? 0 : _page * pageSize;
-        final rows = await DatabaseHelper.instance.queryCombinedLexiconPage(
+        final rows = await dictLex.queryCombinedLexiconPage(
           language: _langFilter,
           source: _sourceFilter,
           category: _categoryFilter,
           normalizedSearch: search.isEmpty ? null : search,
-          pendingOnly: _sourceFilter == DatabaseHelper.kLexiconPendingFilter,
+          pendingOnly: _sourceFilter == DictionaryRepository.kLexiconPendingFilter,
           lettersCountOp: lettersOp,
           lettersCountValue: lettersVal,
           diacriticMarksFilter: _diacriticMarksFilter,
@@ -531,7 +536,9 @@ class _DictionaryManagerScreenState extends ConsumerState<DictionaryManagerScree
     );
     if (mode == null || !mounted) return;
     if (mode == DictionaryImportMode.replace) {
-      final existing = await DatabaseHelper.instance.countFullDictionaryTotal();
+      final existing =
+          await DictionaryRepository(await DatabaseHelper.instance.database)
+              .countFullDictionaryTotal();
       final lines = await File(path).readAsLines();
       var newCount = 0;
       for (final line in lines) {
@@ -619,7 +626,7 @@ class _DictionaryManagerScreenState extends ConsumerState<DictionaryManagerScree
     final normKey = row['norm_key'] as String? ?? '';
     final display = row['display_word'] as String? ?? '';
     final src = row['src'] as String? ?? '';
-    final isDraft = entryId == null || src == DatabaseHelper.kLexiconSourceDraft;
+    final isDraft = entryId == null || src == DictionaryRepository.kLexiconSourceDraft;
     final lang = row['lang'] as String? ?? 'el';
     final prevCat = row['cat'] as String? ?? 'Γενική';
 
@@ -635,7 +642,9 @@ class _DictionaryManagerScreenState extends ConsumerState<DictionaryManagerScree
         );
       } else {
         final newWord = displayWord;
-        await DatabaseHelper.instance.upsertFullDictionaryCategory(
+        final dictUp =
+            DictionaryRepository(await DatabaseHelper.instance.database);
+        await dictUp.upsertFullDictionaryCategory(
           id: entryId,
           category: category,
           newDisplayWord: newWord != display ? newWord : null,
@@ -643,7 +652,7 @@ class _DictionaryManagerScreenState extends ConsumerState<DictionaryManagerScree
         if ((row['pending_user'] as int? ?? 0) == 1 && newWord != display) {
           final newKey = DictionaryService.canonicalLexiconKey(newWord);
           if (newKey != normKey) {
-            await DatabaseHelper.instance.updateUserDictionaryWordKey(normKey, newKey);
+            await dictUp.updateUserDictionaryWordKey(normKey, newKey);
           }
         }
       }
@@ -671,7 +680,7 @@ class _DictionaryManagerScreenState extends ConsumerState<DictionaryManagerScree
     final entryId = row['entry_id'] as int?;
     final normKey = row['norm_key'] as String? ?? '';
     final src = row['src'] as String? ?? '';
-    final isDraft = entryId == null || src == DatabaseHelper.kLexiconSourceDraft;
+    final isDraft = entryId == null || src == DictionaryRepository.kLexiconSourceDraft;
 
     final ok = await showDialog<bool>(
       context: context,
@@ -693,11 +702,13 @@ class _DictionaryManagerScreenState extends ConsumerState<DictionaryManagerScree
     if (ok != true) return;
 
     try {
+      final dictDel =
+          DictionaryRepository(await DatabaseHelper.instance.database);
       if (isDraft) {
-        await DatabaseHelper.instance.deleteUserDictionaryWord(normKey);
+        await dictDel.deleteUserDictionaryWord(normKey);
       } else {
-        await DatabaseHelper.instance.hardDeleteFullDictionaryById(entryId);
-        await DatabaseHelper.instance.deleteUserDictionaryWord(normKey);
+        await dictDel.hardDeleteFullDictionaryById(entryId);
+        await dictDel.deleteUserDictionaryWord(normKey);
       }
       await _refreshList();
     } catch (e) {
@@ -982,7 +993,7 @@ class _DictionaryManagerScreenState extends ConsumerState<DictionaryManagerScree
                       ),
                     ),
                     DropdownMenuItem<String?>(
-                      value: DatabaseHelper.kLexiconMixedScriptsFilter,
+                      value: DictionaryRepository.kLexiconMixedScriptsFilter,
                       child: _lexiconLangFilterMenuItem(
                         tooltip: 'Λέξεις με ελληνικά και λατινικά γράμματα',
                         icon: Image.asset(
@@ -1037,11 +1048,11 @@ class _DictionaryManagerScreenState extends ConsumerState<DictionaryManagerScree
                     DropdownMenuItem(value: 'imported', child: Text('Εισαγωγή')),
                     DropdownMenuItem(value: 'user', child: Text('Χρήστης')),
                     DropdownMenuItem(
-                      value: DatabaseHelper.kLexiconSourceDraft,
+                      value: DictionaryRepository.kLexiconSourceDraft,
                       child: Text('Πρόχειρο'),
                     ),
                     DropdownMenuItem(
-                      value: DatabaseHelper.kLexiconPendingFilter,
+                      value: DictionaryRepository.kLexiconPendingFilter,
                       child: Text('Διπλές'),
                     ),
                   ],
@@ -1511,7 +1522,8 @@ class _DictionaryManagerScreenState extends ConsumerState<DictionaryManagerScree
                                         .value ??
                                     true;
                                 final newVal = !cur;
-                                await DatabaseHelper.instance.setSetting(
+                                final dbSet = await DatabaseHelper.instance.database;
+                                await DirectoryRepository(dbSet).setSetting(
                                   'lexicon_continuous_scroll',
                                   newVal.toString(),
                                 );
@@ -1587,7 +1599,9 @@ class _DictionaryManagerScreenState extends ConsumerState<DictionaryManagerScree
                                 tooltip: 'Λέξεις ανά σελίδα',
                                 icon: const Icon(Icons.numbers),
                                 onSelected: (v) async {
-                                  await DatabaseHelper.instance.setSetting(
+                                  final dbPs =
+                                      await DatabaseHelper.instance.database;
+                                  await DirectoryRepository(dbPs).setSetting(
                                     'lexicon_page_size',
                                     '$v',
                                   );

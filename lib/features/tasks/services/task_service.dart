@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import '../../../core/database/database_helper.dart';
+import '../../../core/database/directory_repository.dart';
 import '../../../core/utils/search_text_normalizer.dart';
 import '../models/task.dart';
 import '../models/task_filter.dart' show TaskFilter, TaskSortOption;
@@ -48,10 +49,11 @@ class TaskService {
   /// - Διαβάζει πρώτα από [TaskSettingsConfig.appSettingsKey].
   /// - Αν λείπει, κάνει fallback στο [TaskSettingsConfig.legacyAppSettingsKey].
   Future<TaskSettingsConfig> getTaskSettingsConfig() async {
-    final db = DatabaseHelper.instance;
+    final dbConn = await DatabaseHelper.instance.database;
+    final dir = DirectoryRepository(dbConn);
     final raw =
-        await db.getSetting(TaskSettingsConfig.appSettingsKey) ??
-        await db.getSetting(TaskSettingsConfig.legacyAppSettingsKey);
+        await dir.getSetting(TaskSettingsConfig.appSettingsKey) ??
+        await dir.getSetting(TaskSettingsConfig.legacyAppSettingsKey);
     if (raw == null || raw.trim().isEmpty) {
       return TaskSettingsConfig.defaultConfig();
     }
@@ -142,7 +144,8 @@ class TaskService {
 
   /// Αποθήκευση ρυθμίσεων εκκρεμοτήτων στο `app_settings`.
   Future<void> saveTaskSettingsConfig(TaskSettingsConfig config) async {
-    await DatabaseHelper.instance.setSetting(
+    final dbSave = await DatabaseHelper.instance.database;
+    await DirectoryRepository(dbSave).setSetting(
       TaskSettingsConfig.appSettingsKey,
       jsonEncode(config.toMap()),
     );
@@ -421,9 +424,10 @@ class TaskService {
     await db.update('tasks', map, where: 'id = ?', whereArgs: [task.id]);
   }
 
-  /// Soft delete εγγραφής βάσει ID (audit στο [DatabaseHelper]).
+  /// Soft delete εγγραφής βάσει ID (audit στο [DirectoryRepository]).
   Future<void> deleteTask(int id) async {
-    await DatabaseHelper.instance.softDeleteTask(id);
+    final dbDel = await DatabaseHelper.instance.database;
+    await DirectoryRepository(dbDel).softDeleteTask(id);
   }
 
   /// Ορίζει status = closed, solution_notes και updated_at.

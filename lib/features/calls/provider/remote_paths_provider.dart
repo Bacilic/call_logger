@@ -11,6 +11,12 @@ final remoteArgsServiceProvider = Provider<RemoteArgsService>((ref) {
   return RemoteArgsService(DatabaseHelper.instance);
 });
 
+/// Λίστα ονομάτων εργαλείων απομακρυσμένης επιφάνειας (ρυθμίσεις · comma-separated).
+/// Χρησιμοποιείται στη φόρμα εξοπλισμού για δυναμικά FilterChips παραμέτρων.
+final remotePathsProvider = FutureProvider<List<String>>((ref) async {
+  return SettingsService().getRemoteSurfaceAppsList();
+});
+
 /// Επιστρέφει τις έγκυρες διαδρομές VNC και AnyDesk (null αν η ρυθμισμένη διαδρομή δεν υπάρχει).
 /// Χρησιμοποιείται στην αρχική οθόνη κλήσεων για απενεργοποίηση κουμπιών και tooltip.
 final validRemotePathsProvider = FutureProvider<({String? vncPath, String? anydeskPath})>((ref) async {

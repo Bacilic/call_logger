@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../../core/errors/department_exists_exception.dart';
 import '../../../../core/services/lookup_service.dart';
 import '../../../../core/database/database_helper.dart';
+import '../../../../core/database/directory_repository.dart';
 import '../../../../core/utils/search_text_normalizer.dart';
 import '../../../../core/utils/spell_check.dart';
 import '../../../../core/widgets/lexicon_spell_text_form_field.dart';
@@ -593,7 +594,8 @@ class _DepartmentFormDialogState extends State<DepartmentFormDialog> {
             isDeleted: false,
           ),
         );
-        final did = await DatabaseHelper.instance.getOrCreateDepartmentIdByName(
+        final dbDid = await DatabaseHelper.instance.database;
+        final did = await DirectoryRepository(dbDid).getOrCreateDepartmentIdByName(
           name,
         );
         if (did != null) {

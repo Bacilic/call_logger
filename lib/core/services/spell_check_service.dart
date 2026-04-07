@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import '../database/database_helper.dart';
+import '../database/dictionary_repository.dart';
 import 'dictionary_service.dart';
 
 /// Ελαφρύς ορθογραφικός έλεγχος: στατικό λεξικό (strip→εμφάνιση) + προσωπικές λέξεις.
@@ -22,7 +23,8 @@ class LexiconSpellCheckService {
       ..clear()
       ..addAll(lexiconMap);
     try {
-      final user = await DatabaseHelper.instance.getUserWords();
+      final db = await DatabaseHelper.instance.database;
+      final user = await DictionaryRepository(db).getUserWords();
       for (final w in user) {
         final k = DictionaryService.canonicalLexiconKey(w);
         if (k.length < 2) continue;
@@ -40,7 +42,8 @@ class LexiconSpellCheckService {
     if (k.length < 2) return;
     _lexicon[k] = word.trim().isEmpty ? k : word.trim();
     try {
-      await DatabaseHelper.instance.insertUserWord(word);
+      final db = await DatabaseHelper.instance.database;
+      await DictionaryRepository(db).insertUserWord(word);
     } catch (_) {}
   }
 

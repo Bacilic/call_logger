@@ -136,14 +136,14 @@ class EquipmentColumn {
   static final customIp = EquipmentColumn(
     'customIp',
     'Προσαρμοσμένη IP',
-    (row) => row.$1.customIp ?? '–',
-    (row) => row.$1.customIp ?? '',
+    (row) => row.$1.displayCustomIp ?? '–',
+    (row) => row.$1.displayCustomIp ?? '',
   );
   static final anydeskId = EquipmentColumn(
     'anydeskId',
     'AnyDesk ID',
-    (row) => row.$1.anydeskId ?? '–',
-    (row) => row.$1.anydeskId ?? '',
+    (row) => row.$1.displayAnydeskId ?? '–',
+    (row) => row.$1.displayAnydeskId ?? '',
   );
   static final defaultRemote = EquipmentColumn(
     'defaultRemote',

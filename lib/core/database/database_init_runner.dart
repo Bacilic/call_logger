@@ -2,10 +2,21 @@ import 'dart:io';
 
 import '../services/settings_service.dart';
 import 'database_helper.dart';
+import 'directory_repository.dart';
 import 'database_init_result.dart';
 import 'database_init_progress_provider.dart';
 import 'lock_diagnostic_service.dart';
 import 'database_path_resolution.dart';
+
+Future<String?> _appSettingsGet(String key) async {
+  final db = await DatabaseHelper.instance.database;
+  return DirectoryRepository(db).getSetting(key);
+}
+
+Future<void> _appSettingsSet(String key, String value) async {
+  final db = await DatabaseHelper.instance.database;
+  return DirectoryRepository(db).setSetting(key, value);
+}
 
 /// Αποτέλεσμα ελέγχου αρχικοποίησης (αποτέλεσμα + τρόπος λειτουργίας).
 class DatabaseInitRunnerResult {
@@ -55,8 +66,8 @@ Future<DatabaseInitRunnerResult> runDatabaseInitChecks({
             progressNotifier: progressNotifier,
           );
           SettingsService.registerAppSettingsProvider(
-            DatabaseHelper.instance.getSetting,
-            DatabaseHelper.instance.setSetting,
+            _appSettingsGet,
+            _appSettingsSet,
           );
           isLocalDevMode = DatabaseHelper.instance.isUsingLocalDb;
           progressNotifier?.setStep('Έλεγχος υγείας βάσης');

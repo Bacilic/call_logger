@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/database/database_helper.dart';
+import '../../../core/database/directory_repository.dart';
 import '../../../core/services/lookup_service.dart';
 import '../../../core/utils/name_parser.dart';
 import '../../../core/utils/phone_list_parser.dart';
@@ -522,7 +523,9 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
       );
     }
 
-    departmentId ??= await DatabaseHelper.instance.getOrCreateDepartmentIdByName(
+    final dbOrphan = await DatabaseHelper.instance.database;
+    final dirOrphan = DirectoryRepository(dbOrphan);
+    departmentId ??= await dirOrphan.getOrCreateDepartmentIdByName(
       deptText,
     );
     if (departmentId == null) {
@@ -533,10 +536,10 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
     }
 
     if (phone != null && phone.isNotEmpty) {
-      await DatabaseHelper.instance.updatePhoneDepartment(phone, departmentId);
+      await dirOrphan.updatePhoneDepartment(phone, departmentId);
     }
     if (equipmentCode != null) {
-      await DatabaseHelper.instance.updateEquipmentDepartment(
+      await dirOrphan.updateEquipmentDepartment(
         equipmentCode,
         departmentId,
       );
@@ -1430,6 +1433,7 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
     if (!state.needsAssociation(lookupForAssoc)) return null;
 
     final msg = state.associationTooltip(lookupForAssoc);
+    final directory = DirectoryRepository(await DatabaseHelper.instance.database);
     if (state.needsNewCallerCreation) {
       final name = NameParserUtility.stripParentheticalSuffix(
         state.normalizedCallerDisplayText,
@@ -1442,10 +1446,10 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
       final departmentExistedBefore = deptTextRaw.isNotEmpty &&
           (lookup?.findDepartmentByName(deptTextRaw)?.id != null);
       final phoneExistedBefore = (phone != null && phone.isNotEmpty)
-          ? await DatabaseHelper.instance.phoneNumberExists(phone)
+          ? await directory.phoneNumberExists(phone)
           : false;
       final equipmentExistedBefore = equipmentCode.isNotEmpty
-          ? await DatabaseHelper.instance.equipmentCodeExists(equipmentCode)
+          ? await directory.equipmentCodeExists(equipmentCode)
           : false;
 
       var departmentId =
@@ -1454,19 +1458,19 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
               ? lookup.findDepartmentByName(state.departmentText)?.id
               : null);
       if (departmentId == null && state.departmentText.trim().isNotEmpty) {
-        departmentId = await DatabaseHelper.instance
+        departmentId = await directory
             .getOrCreateDepartmentIdByName(state.departmentText.trim());
       }
       try {
         final parsedPhones = PhoneListParser.splitPhones(phone);
-        final userId = await DatabaseHelper.instance.insertUser(
+        final userId = await directory.insertUser(
           firstName: parsed.firstName,
           lastName: parsed.lastName,
           phones: parsedPhones.isEmpty ? null : parsedPhones,
           departmentId: departmentId,
         );
 
-        await DatabaseHelper.instance.updateAssociationsIfNeeded(
+        await directory.updateAssociationsIfNeeded(
           userId,
           phone,
           equipmentCode.isNotEmpty ? equipmentCode : null,
@@ -1581,7 +1585,7 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
     final hadEqWork = eqCode != null && eqCode.isNotEmpty;
 
     try {
-      await DatabaseHelper.instance.updateAssociationsIfNeeded(
+      await directory.updateAssociationsIfNeeded(
         userId,
         phone,
         eqCode?.isNotEmpty == true ? eqCode : null,
@@ -1599,7 +1603,7 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
           state.departmentText.trim().isNotEmpty &&
           state.selectedCaller?.id != null) {
         // Αν το τμήμα δεν υπάρχει ακόμα στη βάση, το δημιουργούμε ώστε να πάρουμε id.
-        selectedDepartmentId ??= await DatabaseHelper.instance
+        selectedDepartmentId ??= await directory
             .getOrCreateDepartmentIdByName(state.departmentText.trim());
       }
 
@@ -1611,7 +1615,7 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
           state.selectedCaller!.toMap(),
         );
         updatedMap['department_id'] = selectedDepartmentId;
-        await DatabaseHelper.instance.updateUser(
+        await directory.updateUser(
           state.selectedCaller!.id!,
           updatedMap,
         );

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/database/database_helper.dart';
+import '../../../../core/database/directory_repository.dart';
 import '../../../../core/services/lookup_service.dart';
 import '../../../../core/services/settings_service.dart';
 import '../../../../core/utils/name_parser.dart';
@@ -12,6 +13,8 @@ import '../../../../core/widgets/spell_check_controller.dart';
 import '../../../calls/models/equipment_model.dart';
 import '../../../calls/models/user_model.dart';
 import '../../../calls/provider/lookup_provider.dart';
+import '../../../calls/provider/remote_paths_provider.dart';
+import '../../../calls/utils/equipment_remote_param_key.dart';
 import '../../../calls/utils/vnc_remote_target.dart';
 import '../../providers/equipment_directory_provider.dart';
 
@@ -45,8 +48,6 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog> {
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _codeController;
   late final SpellCheckController _notesController;
-  late final TextEditingController _customIpController;
-  late final TextEditingController _anydeskIdController;
   late final TextEditingController _ownerController;
   late final FocusNode _ownerFocusNode;
   bool _ownerTextInitialized = false;
@@ -67,16 +68,112 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog> {
   /// Επιλογή εργαλείου απομακρυσμένης· null ή κενό ή "Κανένα" = κανένα.
   String? _selectedRemoteTool;
 
+  /// Τιμές παραμέτρων ανά κλειδί εργαλείου (συγχρονίζεται με `remote_params`).
+  final Map<String, String> _remoteParamValues = {};
+  /// Εργαλεία με ανοιχτό πεδίο επεξεργασίας (επιλεγμένο FilterChip).
+  final Set<String> _expandedRemoteKeys = {};
+  final Map<String, TextEditingController> _remoteParamControllers = {};
+
   bool get _isEdit => widget.initialEquipment != null && !widget.isClone;
+
+  void _initRemoteParamsFromEquipment(EquipmentModel? e) {
+    _remoteParamValues.clear();
+    _expandedRemoteKeys.clear();
+    if (e == null) return;
+    for (final entry in e.remoteParams.entries) {
+      final t = entry.value.trim();
+      if (t.isNotEmpty) {
+        _remoteParamValues[entry.key] = entry.value;
+        _expandedRemoteKeys.add(entry.key);
+      }
+    }
+    final ad = e.anydeskId?.trim();
+    if (ad != null && ad.isNotEmpty) {
+      final k = EquipmentRemoteParamKey.anydesk;
+      if (!_remoteParamValues.containsKey(k) ||
+          _remoteParamValues[k]!.trim().isEmpty) {
+        _remoteParamValues[k] = ad;
+      }
+      _expandedRemoteKeys.add(k);
+    }
+    final ip = e.customIp?.trim();
+    if (ip != null && ip.isNotEmpty) {
+      final k = EquipmentRemoteParamKey.vnc;
+      if (!_remoteParamValues.containsKey(k) ||
+          _remoteParamValues[k]!.trim().isEmpty) {
+        _remoteParamValues[k] = ip;
+      }
+      _expandedRemoteKeys.add(k);
+    }
+  }
+
+  List<({String label, String key})> _toolLabelKeyPairs(List<String> labels) {
+    final seen = <String>{};
+    final out = <({String label, String key})>[];
+    for (final l in labels) {
+      final trimmed = l.trim();
+      if (trimmed.isEmpty) continue;
+      final k = EquipmentRemoteParamKey.forToolLabel(trimmed);
+      if (seen.contains(k)) continue;
+      seen.add(k);
+      out.add((label: trimmed, key: k));
+    }
+    return out;
+  }
+
+  void _ensureRemoteController(String key) {
+    if (_remoteParamControllers.containsKey(key)) return;
+    _remoteParamControllers[key] = TextEditingController(
+      text: _remoteParamValues[key] ?? '',
+    );
+  }
+
+  void _disposeRemoteController(String key) {
+    final c = _remoteParamControllers.remove(key);
+    c?.dispose();
+  }
+
+  void _syncRemoteValueFromController(String key) {
+    final c = _remoteParamControllers[key];
+    if (c == null) return;
+    final t = c.text.trim();
+    if (t.isEmpty) {
+      _remoteParamValues.remove(key);
+    } else {
+      _remoteParamValues[key] = c.text;
+    }
+  }
+
+  Map<String, String> _remoteParamsForSave(List<String> toolLabels) {
+    final pairs = _toolLabelKeyPairs(toolLabels);
+    final out = <String, String>{};
+    for (final p in pairs) {
+      final c = _remoteParamControllers[p.key];
+      final raw = (c?.text ?? _remoteParamValues[p.key] ?? '').trim();
+      if (raw.isNotEmpty) {
+        out[p.key] = p.key == EquipmentRemoteParamKey.vnc
+            ? raw.replaceAll(',', '.')
+            : raw;
+      }
+    }
+    for (final entry in _remoteParamValues.entries) {
+      final v = entry.value.trim();
+      if (v.isEmpty) continue;
+      if (out.containsKey(entry.key)) continue;
+      out[entry.key] = entry.key == EquipmentRemoteParamKey.vnc
+          ? v.replaceAll(',', '.')
+          : v;
+    }
+    return out;
+  }
 
   @override
   void initState() {
     super.initState();
     final e = widget.initialEquipment;
+    _initRemoteParamsFromEquipment(e);
     _codeController = TextEditingController(text: e?.code ?? '');
     _notesController = SpellCheckController()..text = (e?.notes ?? '');
-    _customIpController = TextEditingController(text: e?.customIp ?? '');
-    _anydeskIdController = TextEditingController(text: e?.anydeskId ?? '');
     _ownerController = TextEditingController();
     _ownerFocusNode = FocusNode();
     _departmentController = TextEditingController();
@@ -96,8 +193,10 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog> {
   void dispose() {
     _codeController.dispose();
     _notesController.dispose();
-    _customIpController.dispose();
-    _anydeskIdController.dispose();
+    for (final c in _remoteParamControllers.values) {
+      c.dispose();
+    }
+    _remoteParamControllers.clear();
     _ownerController.dispose();
     _ownerFocusNode.dispose();
     _departmentController.dispose();
@@ -173,7 +272,8 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog> {
       if (users.first.id != null) return users.first.id;
     }
     final parsed = NameParserUtility.parse(textForSearch);
-    final newId = await DatabaseHelper.instance.insertUser(
+    final dbOwn = await DatabaseHelper.instance.database;
+    final newId = await DirectoryRepository(dbOwn).insertUser(
       firstName: parsed.firstName,
       lastName: parsed.lastName,
     );
@@ -192,6 +292,9 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog> {
 
   Future<void> _save() async {
     if (!(_formKey.currentState?.validate() ?? false)) return;
+    for (final k in _expandedRemoteKeys.toList()) {
+      _syncRemoteValueFromController(k);
+    }
     final asyncLookup = widget.ref.read(lookupServiceProvider);
     final lookup = asyncLookup.value?.service;
     final ownerText = _ownerController.text.trim();
@@ -203,10 +306,15 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog> {
     if (deptText.isEmpty) {
       equipmentDepartmentId = null;
     } else {
-      equipmentDepartmentId = await DatabaseHelper.instance
+      final dbDept = await DatabaseHelper.instance.database;
+      equipmentDepartmentId = await DirectoryRepository(dbDept)
           .getOrCreateDepartmentIdByName(deptText);
     }
     final locTrim = _locationController.text.trim();
+    final toolsList = await SettingsService().getRemoteSurfaceAppsList();
+    final remoteParams = _remoteParamsForSave(toolsList);
+    final vncSaved = remoteParams[EquipmentRemoteParamKey.vnc]?.trim();
+    final anydeskSaved = remoteParams[EquipmentRemoteParamKey.anydesk]?.trim();
     final equipment = EquipmentModel(
       id: _isEdit ? widget.initialEquipment?.id : null,
       code: code.isEmpty ? null : code,
@@ -214,14 +322,11 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog> {
       notes: _notesController.text.trim().isEmpty
           ? null
           : _notesController.text.trim(),
-      customIp: () {
-        final t = _customIpController.text.trim();
-        if (t.isEmpty) return null;
-        return t.replaceAll(',', '.');
-      }(),
-      anydeskId: _anydeskIdController.text.trim().isEmpty
-          ? null
-          : _anydeskIdController.text.trim(),
+      customIp: vncSaved != null && vncSaved.isNotEmpty ? vncSaved : null,
+      anydeskId: anydeskSaved != null && anydeskSaved.isNotEmpty
+          ? anydeskSaved
+          : null,
+      remoteParams: remoteParams,
       defaultRemoteTool: _normalizedRemoteToolValue(_selectedRemoteTool),
       departmentId: equipmentDepartmentId,
       location: locTrim.isEmpty ? null : locTrim,
@@ -276,6 +381,138 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog> {
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(const SnackBar(content: Text('Αποθηκεύτηκε')));
+  }
+
+  static const Duration _remoteAnimDuration = Duration(milliseconds: 240);
+
+  Widget _buildRemoteParamsChipsSection(List<String> labels) {
+    final pairs = _toolLabelKeyPairs(labels);
+    final theme = Theme.of(context);
+    if (pairs.isEmpty) {
+      return Text(
+        'Δεν ορίστηκαν εργαλεία απομακρυσμένης στις ρυθμίσεις.',
+        style: theme.textTheme.bodySmall?.copyWith(
+          color: theme.colorScheme.onSurfaceVariant,
+        ),
+      );
+    }
+    for (final k in _expandedRemoteKeys) {
+      _ensureRemoteController(k);
+    }
+    final orderedExpanded = <String>[];
+    final seen = <String>{};
+    for (final p in pairs) {
+      if (_expandedRemoteKeys.contains(p.key) && seen.add(p.key)) {
+        orderedExpanded.add(p.key);
+      }
+    }
+    for (final k in _expandedRemoteKeys) {
+      if (!seen.contains(k)) {
+        orderedExpanded.add(k);
+        seen.add(k);
+      }
+    }
+    String labelForKey(String key) {
+      for (final p in pairs) {
+        if (p.key == key) return p.label;
+      }
+      return key;
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          'Παράμετροι απομακρυσμένης',
+          style: theme.textTheme.titleSmall,
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (final p in pairs)
+              FilterChip(
+                label: Text(p.label),
+                selected: _expandedRemoteKeys.contains(p.key),
+                showCheckmark: true,
+                onSelected: (sel) {
+                  setState(() {
+                    if (sel) {
+                      _expandedRemoteKeys.add(p.key);
+                      _ensureRemoteController(p.key);
+                    } else {
+                      _syncRemoteValueFromController(p.key);
+                      _expandedRemoteKeys.remove(p.key);
+                      _disposeRemoteController(p.key);
+                      _remoteParamValues.remove(p.key);
+                    }
+                  });
+                },
+              ),
+          ],
+        ),
+        AnimatedSize(
+          duration: _remoteAnimDuration,
+          curve: Curves.easeInOutCubic,
+          alignment: Alignment.topCenter,
+          child: orderedExpanded.isEmpty
+              ? const SizedBox.shrink()
+              : Padding(
+                  padding: const EdgeInsets.only(top: 12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      for (var i = 0; i < orderedExpanded.length; i++) ...[
+                        if (i > 0) const SizedBox(height: 10),
+                        AnimatedSwitcher(
+                          duration: _remoteAnimDuration,
+                          switchInCurve: Curves.easeOutCubic,
+                          switchOutCurve: Curves.easeInCubic,
+                          transitionBuilder: (child, anim) => FadeTransition(
+                            opacity: anim,
+                            child: SlideTransition(
+                              position: Tween<Offset>(
+                                begin: const Offset(0, -0.04),
+                                end: Offset.zero,
+                              ).animate(anim),
+                              child: child,
+                            ),
+                          ),
+                          child: KeyedSubtree(
+                            key: ValueKey<String>(orderedExpanded[i]),
+                            child: _buildRemoteParamField(
+                              orderedExpanded[i],
+                              labelForKey(orderedExpanded[i]),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildRemoteParamField(String paramKey, String toolLabel) {
+    final c = _remoteParamControllers[paramKey];
+    if (c == null) return const SizedBox.shrink();
+    final isVnc = paramKey == EquipmentRemoteParamKey.vnc;
+    return TextFormField(
+      controller: c,
+      decoration: InputDecoration(
+        labelText: 'Παράμετρος · $toolLabel',
+        border: const OutlineInputBorder(),
+        hintText: isVnc ? 'IP ή hostname' : null,
+      ),
+      keyboardType: isVnc
+          ? const TextInputType.numberWithOptions(decimal: true, signed: false)
+          : TextInputType.text,
+      inputFormatters:
+          isVnc ? [CommaToDotDecimalSeparatorFormatter()] : null,
+      onChanged: (_) => _syncRemoteValueFromController(paramKey),
+    );
   }
 
   String get _title {
@@ -345,25 +582,26 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog> {
                 onChanged: (_) => setState(() {}),
               ),
               const SizedBox(height: 12),
-              TextFormField(
-                controller: _customIpController,
-                decoration: const InputDecoration(
-                  labelText: 'Προσαρμοσμένη IP',
-                  border: OutlineInputBorder(),
-                ),
-                keyboardType: const TextInputType.numberWithOptions(
-                  decimal: true,
-                  signed: false,
-                ),
-                inputFormatters: [CommaToDotDecimalSeparatorFormatter()],
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _anydeskIdController,
-                decoration: const InputDecoration(
-                  labelText: 'AnyDesk ID',
-                  border: OutlineInputBorder(),
-                ),
+              Consumer(
+                builder: (context, ref, _) {
+                  final asyncTools = ref.watch(remotePathsProvider);
+                  return asyncTools.when(
+                    data: (labels) => _buildRemoteParamsChipsSection(labels),
+                    loading: () => const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 8),
+                      child: LinearProgressIndicator(minHeight: 2),
+                    ),
+                    error: (err, _) => Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      child: Text(
+                        'Δεν φορτώθηκαν εργαλεία: $err',
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.error,
+                        ),
+                      ),
+                    ),
+                  );
+                },
               ),
               const SizedBox(height: 12),
               FutureBuilder<List<String>>(

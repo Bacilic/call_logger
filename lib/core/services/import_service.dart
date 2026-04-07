@@ -1,6 +1,7 @@
 import 'package:file_picker/file_picker.dart';
 
 import '../database/database_helper.dart';
+import '../database/directory_repository.dart';
 import 'excel_parser.dart';
 import 'import_types.dart';
 
@@ -37,9 +38,11 @@ class ImportService {
 
       if (owners.isNotEmpty || equipment.isNotEmpty) {
         onLog('Εκκαθάριση υπαρχόντων δεδομένων...', ImportLogLevel.info);
-        await DatabaseHelper.instance.clearImportedData();
+        final dbImp = await DatabaseHelper.instance.database;
+        final dirImp = DirectoryRepository(dbImp);
+        await dirImp.clearImportedData();
         onLog('Εισαγωγή δεδομένων στη βάση...');
-        final r = await DatabaseHelper.instance.importPreparedData(owners, equipment);
+        final r = await dirImp.importPreparedData(owners, equipment);
         usersInserted = r.usersInserted;
         equipmentInserted = r.equipmentInserted;
         onLog(

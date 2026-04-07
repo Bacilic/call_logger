@@ -7,7 +7,8 @@ import 'package:sqflite_common/sqlite_api.dart';
 /// v7: full_dictionary master λεξικό.
 /// v8: user_dictionary.language για φίλτρο γλώσσας στα πρόχειρα (combined lexicon).
 /// v9: letters_count + diacritic_mark_count σε full_dictionary και user_dictionary.
-const int databaseSchemaVersionV1 = 9;
+/// v10: equipment.remote_params (JSON παραμέτρων απομακρυσμένης σύνδεσης).
+const int databaseSchemaVersionV1 = 10;
 
 /// Δημιουργία σχήματος v1 + seed `remote_tool_args`.
 /// Χωρίς εξαρτήσεις Flutter — ασφαλές για `dart run tool/migrate_to_v1.dart`.
@@ -79,6 +80,7 @@ Future<void> applyDatabaseV1Schema(Database db) async {
         notes TEXT,
         custom_ip TEXT,
         anydesk_id TEXT,
+        remote_params TEXT,
         default_remote_tool TEXT,
         department_id INTEGER,
         location TEXT,

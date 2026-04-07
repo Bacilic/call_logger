@@ -5,18 +5,26 @@ import 'dart:math' as math;
 import 'package:flutter/services.dart';
 import '../config/app_config.dart';
 import '../database/database_helper.dart';
+import '../database/dictionary_repository.dart';
 import '../utils/lexicon_word_metrics.dart';
 import '../errors/dictionary_export_exception.dart';
 import '../models/dictionary_import_mode.dart';
 import 'dictionary_service.dart';
 import 'settings_service.dart';
 
-/// Εισαγωγές στο `full_dictionary` και Compile (εξαγωγή TXT) — χωρίς κυκλικό import με [DatabaseHelper].
+/// Εισαγωγές στο `full_dictionary` και Compile (εξαγωγή TXT).
 class MasterDictionaryService {
-  MasterDictionaryService({DatabaseHelper? db})
-      : _db = db ?? DatabaseHelper.instance;
+  MasterDictionaryService({DictionaryRepository? dictionaryRepository})
+      : _dictionaryRepository = dictionaryRepository;
 
-  final DatabaseHelper _db;
+  final DictionaryRepository? _dictionaryRepository;
+
+  Future<DictionaryRepository> _dict() async {
+    final injected = _dictionaryRepository;
+    if (injected != null) return injected;
+    final sqlite = await DatabaseHelper.instance.database;
+    return DictionaryRepository(sqlite);
+  }
 
   /// Εισαγωγή από bundled asset (ίδια κατηγορία πηγής με αρχείο TXT: `imported`).
   Future<void> importFromAsset(DictionaryImportMode mode) async {
@@ -38,8 +46,9 @@ class MasterDictionaryService {
     DictionaryImportMode mode, {
     required String source,
   }) async {
+    final dict = await _dict();
     if (mode == DictionaryImportMode.replace) {
-      await _db.clearFullDictionary();
+      await dict.clearFullDictionary();
     }
     final lines = const LineSplitter().convert(text);
     final batch = <Map<String, dynamic>>[];
@@ -48,7 +57,7 @@ class MasterDictionaryService {
       if (display.isEmpty || display.startsWith('#')) continue;
       final norm = DictionaryService.canonicalLexiconKey(display);
       if (norm.length < 2) continue;
-      final lang = DatabaseHelper.detectDictionaryLanguage(display);
+      final lang = DictionaryRepository.detectDictionaryLanguage(display);
       batch.add({
         'word': display,
         'normalized_word': norm,
@@ -57,7 +66,7 @@ class MasterDictionaryService {
         'category': AppConfig.lexiconCategoryUnspecified,
       });
     }
-    await _db.batchInsertFullDictionaryRows(batch);
+    await dict.batchInsertFullDictionaryRows(batch);
   }
 
   /// Write-ahead Compile: γράφει `.tmp`, μετά transaction merge user→full + clear user, τέλος rename.
@@ -71,7 +80,7 @@ class MasterDictionaryService {
 
     List<String> lines;
     try {
-      lines = await _db.getDictionaryExportDisplayLinesOrdered();
+      lines = await (await _dict()).getDictionaryExportDisplayLinesOrdered();
     } catch (e, st) {
       Error.throwWithStackTrace(e, st);
     }
@@ -95,10 +104,7 @@ class MasterDictionaryService {
     }
 
     try {
-      final db = await _db.database;
-      await db.transaction((txn) async {
-        await _db.mergeAllUserDictionaryIntoFullWithinTransaction(txn);
-      });
+      await (await _dict()).mergeUserToFullDictionary();
     } catch (e) {
       try {
         if (await tmp.exists()) await tmp.delete();
@@ -151,6 +157,7 @@ class MasterDictionaryService {
     }
     final errors = <String>[];
     final rows = <Map<String, dynamic>>[];
+    final dictAdd = await _dict();
 
     for (final display in unique) {
       if (display.length < 2) {
@@ -159,14 +166,14 @@ class MasterDictionaryService {
         );
         continue;
       }
-      final lang = DatabaseHelper.detectDictionaryLanguage(display);
-      if (lang == DatabaseHelper.kLexiconLanguageMix) {
+      final lang = DictionaryRepository.detectDictionaryLanguage(display);
+      if (lang == DictionaryRepository.kLexiconLanguageMix) {
         errors.add(
           "Η λέξη '$display' περιέχει μη αποδεκτούς χαρακτήρες.",
         );
         continue;
       }
-      final existing = await _db.countFullDictionaryExactWord(display);
+      final existing = await dictAdd.countFullDictionaryExactWord(display);
       if (existing > 0) {
         errors.add("Η λέξη '$display' υπάρχει ήδη στο λεξικό.");
         continue;
@@ -194,8 +201,7 @@ class MasterDictionaryService {
       throw Exception(errors.join('\n'));
     }
 
-    final db = await _db.database;
-    await db.transaction((txn) async {
+    await dictAdd.db.transaction((txn) async {
       for (final row in rows) {
         await txn.insert(AppConfig.fullDictionaryTable, row);
       }
@@ -210,8 +216,9 @@ class MasterDictionaryService {
     String? language,
   }) async {
     final lang = language ??
-        DatabaseHelper.detectDictionaryLanguage(displayWord);
-    await _db.upsertFullFromUserDraft(
+        DictionaryRepository.detectDictionaryLanguage(displayWord);
+    final d = await _dict();
+    await d.upsertFullFromUserDraft(
       normalizedKey: normalizedKey,
       displayWord: displayWord,
       category: category,
@@ -219,7 +226,7 @@ class MasterDictionaryService {
       source: 'user',
     );
     if (DictionaryService.canonicalLexiconKey(displayWord) != normalizedKey) {
-      await _db.updateUserDictionaryWordKey(
+      await d.updateUserDictionaryWordKey(
         normalizedKey,
         DictionaryService.canonicalLexiconKey(displayWord),
       );
@@ -235,7 +242,7 @@ class MasterDictionaryService {
     int batchSize = 1500,
   }) async {
     onProgress?.call(0);
-    final db = await _db.database;
+    final db = (await _dict()).db;
 
     final userUpdates = <({String word, String lang})>[];
     final userRows = await db.query(
@@ -246,7 +253,7 @@ class MasterDictionaryService {
       final word = (r['word'] as String?)?.trim() ?? '';
       if (word.isEmpty) continue;
       final current = r['language'] as String? ?? '';
-      final next = DatabaseHelper.detectDictionaryLanguage(word);
+      final next = DictionaryRepository.detectDictionaryLanguage(word);
       if (current != next) {
         userUpdates.add((word: word, lang: next));
       }
@@ -262,7 +269,7 @@ class MasterDictionaryService {
       final id = idRaw is int ? idRaw : (idRaw as num).toInt();
       final word = r['word'] as String? ?? '';
       final current = r['language'] as String? ?? '';
-      final next = DatabaseHelper.detectDictionaryLanguage(word);
+      final next = DictionaryRepository.detectDictionaryLanguage(word);
       if (current != next) {
         fullUpdates.add((id: id, lang: next));
       }

@@ -2,7 +2,9 @@ import 'dart:convert';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/database/calls_repository.dart';
 import '../../../core/database/database_helper.dart';
+import '../../../core/database/directory_repository.dart';
 import '../../../core/utils/search_text_normalizer.dart';
 import '../../history/providers/history_provider.dart';
 import '../models/category_directory_column.dart';
@@ -130,8 +132,9 @@ class CategoryDirectoryNotifier extends Notifier<CategoryDirectoryState> {
   }
 
   Future<_CategoryColumnLayout?> _readColumnLayoutFromSettings() async {
-    final raw = await DatabaseHelper.instance
-        .getSetting(_catalogCategoriesVisibleColumnsKey);
+    final db = await DatabaseHelper.instance.database;
+    final raw =
+        await DirectoryRepository(db).getSetting(_catalogCategoriesVisibleColumnsKey);
     if (raw == null || raw.trim().isEmpty) return null;
     return _parseColumnLayoutFromJson(raw);
   }
@@ -146,7 +149,8 @@ class CategoryDirectoryNotifier extends Notifier<CategoryDirectoryState> {
           if (vis.contains(c.key)) c.key
       ],
     });
-    await DatabaseHelper.instance.setSetting(
+    final dbSet = await DatabaseHelper.instance.database;
+    await DirectoryRepository(dbSet).setSetting(
       _catalogCategoriesVisibleColumnsKey,
       payload,
     );
@@ -158,7 +162,8 @@ class CategoryDirectoryNotifier extends Notifier<CategoryDirectoryState> {
       parsed = await _readColumnLayoutFromSettings();
       _columnLayoutHydrated = true;
     }
-    final rows = await DatabaseHelper.instance.getActiveCategoryRows();
+    final dbLoad = await DatabaseHelper.instance.database;
+    final rows = await DirectoryRepository(dbLoad).getActiveCategoryRows();
     if (!ref.mounted) return;
     final list = rows.map(CategoryModel.fromMap).toList();
     state = CategoryDirectoryState(
@@ -340,16 +345,26 @@ class CategoryDirectoryNotifier extends Notifier<CategoryDirectoryState> {
 
   /// Επιστρέφει `true` αν επαναφέρθηκε soft-deleted κατηγορία (ίδιο normalized όνομα).
   Future<bool> addCategory(String name) async {
-    final r = await DatabaseHelper.instance.insertCategoryAndGetId(name);
+    final db = await DatabaseHelper.instance.database;
+    final dir = DirectoryRepository(db);
+    final calls = CallsRepository(db);
+    final r = await dir.insertCategoryAndGetId(
+      name,
+      rebuildSearchIndexInTxn: calls.rebuildSearchIndexForCallsByCategoryId,
+    );
     _invalidateCategoryLists();
     await loadCategories();
     return r.restored;
   }
 
   Future<void> renameCategory(int id, String newCanonicalName) async {
-    await DatabaseHelper.instance.updateCategoryNameAndSyncCalls(
+    final db = await DatabaseHelper.instance.database;
+    final dir = DirectoryRepository(db);
+    final calls = CallsRepository(db);
+    await dir.updateCategoryNameAndSyncCalls(
       id: id,
       newCanonicalName: newCanonicalName,
+      rebuildSearchIndexInTxn: calls.rebuildSearchIndexForCallsByCategoryId,
     );
     _invalidateCategoryLists();
     await loadCategories();
@@ -365,7 +380,8 @@ class CategoryDirectoryNotifier extends Notifier<CategoryDirectoryState> {
     final toDelete = state.allCategories
         .where((c) => c.id != null && ids.contains(c.id))
         .toList();
-    await DatabaseHelper.instance.softDeleteCategories(ids);
+    final dbDel = await DatabaseHelper.instance.database;
+    await DirectoryRepository(dbDel).softDeleteCategories(ids);
     _invalidateCategoryLists();
     if (!ref.mounted) return;
     state = CategoryDirectoryState(
@@ -387,7 +403,8 @@ class CategoryDirectoryNotifier extends Notifier<CategoryDirectoryState> {
     final list = state.lastDeleted;
     if (list == null || list.isEmpty) return;
     final ids = list.map((c) => c.id).whereType<int>().toList();
-    await DatabaseHelper.instance.restoreCategories(ids);
+    final dbRest = await DatabaseHelper.instance.database;
+    await DirectoryRepository(dbRest).restoreCategories(ids);
     _invalidateCategoryLists();
     if (!ref.mounted) return;
     _patch(lastDeleted: null);

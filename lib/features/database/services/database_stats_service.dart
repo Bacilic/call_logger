@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:path/path.dart' as p;
 
 import '../../../core/database/database_helper.dart';
+import '../../../core/database/directory_repository.dart';
 import '../models/database_backup_settings.dart';
 import '../models/database_stats.dart';
 
@@ -97,7 +98,7 @@ class DatabaseStatsService {
     DateTime? lastBackup;
 
     try {
-      final raw = await DatabaseHelper.instance
+      final raw = await DirectoryRepository(db)
           .getSetting(DatabaseBackupSettings.appSettingsKey);
       final settings = DatabaseBackupSettings.fromJsonString(raw);
       lastBackup = await latestBackupFileModified(

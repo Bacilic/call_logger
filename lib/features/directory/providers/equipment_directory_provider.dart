@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/database/database_helper.dart';
+import '../../../core/database/directory_repository.dart';
 import '../../../core/services/settings_service.dart';
 import '../../../core/utils/search_text_normalizer.dart';
 import '../../calls/models/equipment_model.dart';
@@ -306,8 +307,9 @@ class EquipmentDirectoryNotifier extends Notifier<EquipmentDirectoryState> {
   }
 
   Future<_EquipmentColumnLayout?> _readEquipmentLayoutFromSettings() async {
+    final dbLayout = await DatabaseHelper.instance.database;
     final raw =
-        await DatabaseHelper.instance.getSetting(_catalogEquipmentLayoutKey);
+        await DirectoryRepository(dbLayout).getSetting(_catalogEquipmentLayoutKey);
     if (raw == null || raw.trim().isEmpty) return null;
     return _parseEquipmentLayoutFromJson(raw);
   }
@@ -323,7 +325,8 @@ class EquipmentDirectoryNotifier extends Notifier<EquipmentDirectoryState> {
       'sortColumn': s.sortColumn?.key,
       'sortAscending': s.sortAscending,
     });
-    await DatabaseHelper.instance.setSetting(
+    final dbPersist = await DatabaseHelper.instance.database;
+    await DirectoryRepository(dbPersist).setSetting(
       _catalogEquipmentLayoutKey,
       payload,
     );
@@ -343,12 +346,14 @@ class EquipmentDirectoryNotifier extends Notifier<EquipmentDirectoryState> {
     return initial;
   }
 
-  Future<List<Map<String, dynamic>>> getEquipmentRows() {
-    return DatabaseHelper.instance.getAllEquipment();
+  Future<List<Map<String, dynamic>>> getEquipmentRows() async {
+    final db = await DatabaseHelper.instance.database;
+    return DirectoryRepository(db).getAllEquipment();
   }
 
-  Future<List<Map<String, dynamic>>> getUserRows() {
-    return DatabaseHelper.instance.getAllUsers();
+  Future<List<Map<String, dynamic>>> getUserRows() async {
+    final db = await DatabaseHelper.instance.database;
+    return DirectoryRepository(db).getAllUsers();
   }
 
   Future<void> load() async {
@@ -363,7 +368,9 @@ class EquipmentDirectoryNotifier extends Notifier<EquipmentDirectoryState> {
 
     final equipmentRows = await getEquipmentRows();
     final userRows = await getUserRows();
-    final linkRows = await DatabaseHelper.instance.getAllUserEquipmentLinks();
+    final dbLoad = await DatabaseHelper.instance.database;
+    final linkRows =
+        await DirectoryRepository(dbLoad).getAllUserEquipmentLinks();
 
     final usersMap = <int, UserModel>{};
     for (final map in userRows) {
@@ -588,9 +595,11 @@ class EquipmentDirectoryNotifier extends Notifier<EquipmentDirectoryState> {
   }
 
   Future<void> addEquipment(EquipmentModel eq, {int? ownerUserId}) async {
-    final id = await DatabaseHelper.instance.insertEquipmentFromMap(eq.toMap());
+    final dbEq = await DatabaseHelper.instance.database;
+    final dirEq = DirectoryRepository(dbEq);
+    final id = await dirEq.insertEquipmentFromMap(eq.toMap());
     if (ownerUserId != null) {
-      await DatabaseHelper.instance.replaceEquipmentUsers(id, [ownerUserId]);
+      await dirEq.replaceEquipmentUsers(id, [ownerUserId]);
     }
     await load();
     _invalidateLookupCache();
@@ -598,8 +607,10 @@ class EquipmentDirectoryNotifier extends Notifier<EquipmentDirectoryState> {
 
   Future<void> updateEquipment(EquipmentModel eq, {int? ownerUserId}) async {
     if (eq.id == null) return;
-    await DatabaseHelper.instance.updateEquipment(eq.id!, eq.toMap());
-    await DatabaseHelper.instance.replaceEquipmentUsers(
+    final dbUp = await DatabaseHelper.instance.database;
+    final dirUp = DirectoryRepository(dbUp);
+    await dirUp.updateEquipment(eq.id!, eq.toMap());
+    await dirUp.replaceEquipmentUsers(
       eq.id!,
       ownerUserId != null ? [ownerUserId] : [],
     );
@@ -615,6 +626,8 @@ class EquipmentDirectoryNotifier extends Notifier<EquipmentDirectoryState> {
         .toList();
     final undo = <EquipmentDeleteUndoEntry>[];
 
+    final dbDel = await DatabaseHelper.instance.database;
+    final dirDel = DirectoryRepository(dbDel);
     for (final row in toProcess) {
       final eq = row.$1;
       final owner = row.$2;
@@ -622,15 +635,15 @@ class EquipmentDirectoryNotifier extends Notifier<EquipmentDirectoryState> {
       if (eid == null) continue;
 
       final linkCount =
-          await DatabaseHelper.instance.countUsersLinkedToEquipment(eid);
+          await dirDel.countUsersLinkedToEquipment(eid);
       String? deptName;
       if (owner == null && eq.departmentId != null) {
-        deptName = await DatabaseHelper.instance
+        deptName = await dirDel
             .getDepartmentNameById(eq.departmentId!);
       }
 
       if (linkCount > 1 && owner?.id == null) {
-        await DatabaseHelper.instance.deleteEquipments([eid]);
+        await dirDel.deleteEquipments([eid]);
         final code = _equipmentCodeForMessage(eq);
         undo.add(
           EquipmentDeleteUndoEntry(
@@ -646,7 +659,7 @@ class EquipmentDirectoryNotifier extends Notifier<EquipmentDirectoryState> {
       }
 
       if (linkCount > 1 && owner?.id != null) {
-        await DatabaseHelper.instance.unlinkUserFromEquipment(owner!.id!, eid);
+        await dirDel.unlinkUserFromEquipment(owner!.id!, eid);
         undo.add(
           EquipmentDeleteUndoEntry(
             equipmentId: eid,
@@ -662,7 +675,7 @@ class EquipmentDirectoryNotifier extends Notifier<EquipmentDirectoryState> {
           ),
         );
       } else {
-        await DatabaseHelper.instance.deleteEquipments([eid]);
+        await dirDel.deleteEquipments([eid]);
         undo.add(
           EquipmentDeleteUndoEntry(
             equipmentId: eid,
@@ -691,14 +704,16 @@ class EquipmentDirectoryNotifier extends Notifier<EquipmentDirectoryState> {
   Future<void> undoLastDelete() async {
     final list = state.lastDeleted;
     if (list == null || list.isEmpty) return;
+    final dbUndo = await DatabaseHelper.instance.database;
+    final dirUndo = DirectoryRepository(dbUndo);
     for (final e in list.reversed) {
       if (e.wasUnlinkOnly) {
-        await DatabaseHelper.instance.linkUserToEquipment(
+        await dirUndo.linkUserToEquipment(
           e.unlinkedUserId!,
           e.equipmentId,
         );
       } else {
-        await DatabaseHelper.instance.restoreEquipment([e.equipmentId]);
+        await dirUndo.restoreEquipment([e.equipmentId]);
       }
     }
     state = state.copyWith(clearLastDeleted: true);
@@ -717,12 +732,14 @@ class EquipmentDirectoryNotifier extends Notifier<EquipmentDirectoryState> {
     final map = Map<String, dynamic>.from(changes);
     final ownerUpdate = map.containsKey('user_id');
     final ownerId = map.remove('user_id') as int?;
+    final dbBulk = await DatabaseHelper.instance.database;
+    final dirBulk = DirectoryRepository(dbBulk);
     if (map.isNotEmpty) {
-      await DatabaseHelper.instance.bulkUpdateEquipments(ids, map);
+      await dirBulk.bulkUpdateEquipments(ids, map);
     }
     if (ownerUpdate) {
       for (final id in ids) {
-        await DatabaseHelper.instance.replaceEquipmentUsers(
+        await dirBulk.replaceEquipmentUsers(
           id,
           ownerId != null ? [ownerId] : [],
         );
@@ -736,12 +753,14 @@ class EquipmentDirectoryNotifier extends Notifier<EquipmentDirectoryState> {
   Future<void> undoLastBulkUpdate() async {
     final list = state.lastBulkUpdated;
     if (list == null || list.isEmpty) return;
+    final dbUb = await DatabaseHelper.instance.database;
+    final dirUb = DirectoryRepository(dbUb);
     for (final row in list) {
       if (row.$1.id != null) {
-        await DatabaseHelper.instance.updateEquipment(
+        await dirUb.updateEquipment(
             row.$1.id!, row.$1.toMap());
         final uid = row.$2?.id;
-        await DatabaseHelper.instance.replaceEquipmentUsers(
+        await dirUb.replaceEquipmentUsers(
           row.$1.id!,
           uid != null ? [uid] : [],
         );

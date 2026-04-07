@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:path/path.dart' as p;
 
 import '../../../core/database/database_helper.dart';
+import '../../../core/database/directory_repository.dart';
 import '../../../core/services/settings_service.dart';
 import '../../tasks/models/task.dart';
 import '../models/database_backup_settings.dart';
@@ -82,7 +83,8 @@ class DatabaseMaintenanceService {
   Future<({MaintenanceBackupPrecheck kind, String? message})>
       runPreMaintenanceBackup() async {
     try {
-      final raw = await DatabaseHelper.instance
+      final dbBk = await DatabaseHelper.instance.database;
+      final raw = await DirectoryRepository(dbBk)
           .getSetting(DatabaseBackupSettings.appSettingsKey);
       final settings = DatabaseBackupSettings.fromJsonString(raw);
       if (!settings.backupOnExit ||

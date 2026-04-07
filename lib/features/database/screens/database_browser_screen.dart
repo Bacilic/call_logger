@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart' hide TextDirection;
 
 import '../../../core/database/database_helper.dart';
+import '../../../core/database/directory_repository.dart';
 import '../../../core/database/database_init_result.dart';
 import '../models/database_stats.dart';
 import '../providers/database_browser_stats_provider.dart';
@@ -28,7 +29,8 @@ class DatabaseBrowserZoomByTableNotifier extends Notifier<Map<String, double>> {
   /// Φόρτωση από `app_settings` (καλείται κατά το άνοιγμα της οθόνης).
   Future<void> load() async {
     try {
-      final raw = await DatabaseHelper.instance
+      final dbZoom = await DatabaseHelper.instance.database;
+      final raw = await DirectoryRepository(dbZoom)
           .getSetting(_kDatabaseBrowserZoomByTableSettingsKey);
       if (raw == null || raw.trim().isEmpty) {
         state = {};
@@ -53,7 +55,8 @@ class DatabaseBrowserZoomByTableNotifier extends Notifier<Map<String, double>> {
   double zoomFor(String tableName) => state[tableName] ?? 1.0;
 
   Future<void> _persist() async {
-    await DatabaseHelper.instance.setSetting(
+    final dbZoom = await DatabaseHelper.instance.database;
+    await DirectoryRepository(dbZoom).setSetting(
       _kDatabaseBrowserZoomByTableSettingsKey,
       jsonEncode(state),
     );

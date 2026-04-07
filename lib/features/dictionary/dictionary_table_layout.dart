@@ -2,7 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
-import '../../core/database/database_helper.dart';
+import '../../core/database/dictionary_repository.dart';
 import 'widgets/dictionary_grid_row.dart';
 
 /// Πλάτη στηλών πίνακα λεξικού (τρέχουσα σελίδα + επικεφαλίδες).
@@ -71,7 +71,7 @@ DictionaryTableLayout computeDictionaryTableLayout({
     wSrc = math.max(
       wSrc,
       dictionaryMeasureTextWidth(
-            DatabaseHelper.lexiconSourceUiLabel(src),
+            DictionaryRepository.lexiconSourceUiLabel(src),
             smallStyle,
           ) +
           padSrc,

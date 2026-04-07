@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/config/app_config.dart';
 import '../../../core/database/database_helper.dart';
+import '../../../core/database/directory_repository.dart';
 import '../../../core/database/database_init_runner.dart';
 import '../../../core/database/database_path_pick_flow.dart';
 import '../../../core/init/app_init_provider.dart';
@@ -865,7 +866,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             SwitchListTile(
               value: ref.watch(catalogContinuousScrollProvider).value ?? true,
               onChanged: (bool val) async {
-                await DatabaseHelper.instance.setSetting(
+                final db = await DatabaseHelper.instance.database;
+                await DirectoryRepository(db).setSetting(
                   'catalog_continuous_scroll',
                   val.toString(),
                 );

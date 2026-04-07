@@ -1,6 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/database/calls_repository.dart';
 import '../../../core/database/database_helper.dart';
+import '../../../core/database/directory_repository.dart';
 import '../../../core/utils/search_text_normalizer.dart';
 
 /// Μοντέλο φίλτρων για το ιστορικό κλήσεων.
@@ -71,7 +73,9 @@ final historyCallsProvider =
   final keyword = filter.keyword.trim();
   final normalizedKeyword = SearchTextNormalizer.normalizeForSearch(keyword);
 
-  return DatabaseHelper.instance.getHistoryCalls(
+  final db = await DatabaseHelper.instance.database;
+  final calls = CallsRepository(db);
+  return calls.getHistoryCalls(
     dateFrom: filter.dateFromSql,
     dateTo: filter.dateToSql,
     category: filter.category != null && filter.category!.isEmpty
@@ -84,13 +88,15 @@ final historyCallsProvider =
 /// Λίστα ονομάτων κατηγοριών για το dropdown φίλτρου.
 final historyCategoriesProvider =
     FutureProvider.autoDispose<List<String>>((ref) async {
-  return DatabaseHelper.instance.getCategoryNames();
+  final db = await DatabaseHelper.instance.database;
+  return DirectoryRepository(db).getCategoryNames();
 });
 
 /// Ενεργές κατηγορίες (id + όνομα) για φόρμα κλήσης / επίλυση category_id.
 final historyCategoryEntriesProvider =
     FutureProvider.autoDispose<List<({int id, String name})>>((ref) async {
-  final rows = await DatabaseHelper.instance.getActiveCategoryRows();
+  final db = await DatabaseHelper.instance.database;
+  final rows = await DirectoryRepository(db).getActiveCategoryRows();
   return rows
       .map((m) => (
             id: m['id'] as int,

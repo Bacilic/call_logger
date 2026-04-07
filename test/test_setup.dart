@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:call_logger/core/database/calls_repository.dart';
 import 'package:call_logger/core/database/database_helper.dart';
 import 'package:call_logger/core/utils/search_text_normalizer.dart';
 import 'package:flutter/material.dart';
@@ -150,7 +151,8 @@ Future<void> seedIsolatedTestDatabase() async {
 
 /// Επιπλέον εγγραφή κλήσης για δοκιμές αναζήτησης στο Ιστορικό (μετά το [seedIsolatedTestDatabase]).
 Future<void> seedTestCallRowForHistorySearch() async {
-  await DatabaseHelper.instance.insertCall(
+  final db = await DatabaseHelper.instance.database;
+  await CallsRepository(db).insertCall(
     CallModel(
       phoneText: kTestPhoneDigits,
       issue: '$kTestHistorySearchMarker ιστορικό αναζήτηση',
