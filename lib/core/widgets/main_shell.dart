@@ -18,9 +18,15 @@ import '../../features/directory/screens/directory_screen.dart';
 import '../../features/history/screens/history_screen.dart';
 import '../../features/settings/screens/settings_screen.dart';
 import '../providers/greek_dictionary_provider.dart';
+import '../providers/directory_tab_intent_provider.dart';
+import '../providers/equipment_focus_intent_provider.dart';
+import '../providers/history_audit_immersive_provider.dart';
 import '../providers/lexicon_full_mode_provider.dart';
+import '../../features/history/providers/history_application_audit_view_provider.dart';
+import '../providers/main_nav_request_provider.dart';
 import '../providers/settings_provider.dart';
 import '../providers/shell_navigation_intent_provider.dart';
+import '../providers/task_focus_intent_provider.dart';
 import 'main_nav_destination.dart';
 import '../services/import_service.dart';
 import '../services/import_types.dart';
@@ -74,6 +80,56 @@ class _MainShellState extends ConsumerState<MainShell> {
   Future<void> _loadNavRailShowLabels() async {
     final value = await SettingsService().getNavRailShowLabels();
     if (mounted) setState(() => _navRailShowLabels = value);
+  }
+
+  /// Ίδια λογική με [NavigationRail.onDestinationSelected] (λεξικό, ιστορικό immersive).
+  void _selectDestination(MainNavDestination d) {
+    setState(() => _selectedDestination = d);
+    if (d == MainNavDestination.dictionary) {
+      ref.read(lexiconFullModeProvider.notifier).setTrue();
+      ref.read(historyAuditImmersiveProvider.notifier).setFalse();
+      ref.read(historyApplicationAuditViewProvider.notifier).setFalse();
+    } else {
+      ref.read(lexiconFullModeProvider.notifier).setFalse();
+    }
+    if (d != MainNavDestination.history) {
+      ref.read(historyAuditImmersiveProvider.notifier).setFalse();
+      ref.read(historyApplicationAuditViewProvider.notifier).setFalse();
+    }
+  }
+
+  void _dispatchFollowUpNavIntents(MainNavRequest req) {
+    final tab = req.directoryTabIndex;
+    final equipId = req.equipmentFocusEntityId;
+    final taskId = req.taskFocusEntityId;
+    final callId = req.callFocusEntityId;
+
+    if (req.destination == MainNavDestination.history && callId != null) {
+      ref.read(historyApplicationAuditViewProvider.notifier).setFalse();
+      ref.read(historyAuditImmersiveProvider.notifier).setFalse();
+    }
+
+    if (tab != null) {
+      ref.read(directoryTabIntentProvider.notifier).jumpTo(tab);
+    }
+    if (taskId != null) {
+      ref.read(taskFocusIntentProvider.notifier).focus(taskId);
+    }
+
+    void focusEquipment() {
+      if (equipId != null) {
+        ref.read(equipmentFocusIntentProvider.notifier).focus(equipId);
+      }
+    }
+
+    if (equipId != null && tab == 2) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        focusEquipment();
+      });
+    } else {
+      focusEquipment();
+    }
   }
 
   Widget _tasksNavigationIcon(bool showBadge, int pendingCount) {
@@ -368,6 +424,10 @@ class _MainShellState extends ConsumerState<MainShell> {
             if (effectiveDestination != MainNavDestination.dictionary) {
               ref.read(lexiconFullModeProvider.notifier).setFalse();
             }
+            if (effectiveDestination != MainNavDestination.history) {
+              ref.read(historyAuditImmersiveProvider.notifier).setFalse();
+              ref.read(historyApplicationAuditViewProvider.notifier).setFalse();
+            }
           });
         }
       });
@@ -377,7 +437,15 @@ class _MainShellState extends ConsumerState<MainShell> {
     final dictionaryImmersive = lexiconFullMode &&
         effectiveDestination == MainNavDestination.dictionary;
 
+    final historyAuditImmersive = ref.watch(historyAuditImmersiveProvider);
+    final historyImmersive = historyAuditImmersive &&
+        effectiveDestination == MainNavDestination.history;
+
     ref.listen<bool>(lexiconFullModeProvider, (previous, next) {
+      if (next == true) {
+        ref.read(historyAuditImmersiveProvider.notifier).setFalse();
+        ref.read(historyApplicationAuditViewProvider.notifier).setFalse();
+      }
       if (previous == true && next == false && mounted) {
         final pending = ref
             .read(shellNavigationIntentProvider.notifier)
@@ -387,16 +455,45 @@ class _MainShellState extends ConsumerState<MainShell> {
         });
       }
     });
+
+    ref.listen<bool>(historyAuditImmersiveProvider, (previous, next) {
+      if (next == true) {
+        ref.read(lexiconFullModeProvider.notifier).setFalse();
+      }
+      if (previous == true && next == false && mounted) {
+        final pending = ref
+            .read(shellNavigationIntentProvider.notifier)
+            .takePending();
+        if (pending != null) {
+          setState(() => _selectedDestination = pending);
+        }
+      }
+    });
+
+    ref.listen<MainNavRequest?>(mainNavRequestProvider, (previous, req) {
+      if (req == null || !mounted) return;
+      ref.read(mainNavRequestProvider.notifier).clear();
+      _selectDestination(req.destination);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _dispatchFollowUpNavIntents(req);
+      });
+    });
+
     final wideEnoughForExtendedRail =
         MediaQuery.sizeOf(context).width >= _kNavRailWideBreakpoint;
     final railExtended = wideEnoughForExtendedRail && _navRailShowLabels;
 
-    if (dictionaryImmersive) {
+    if (dictionaryImmersive || historyImmersive) {
       return Scaffold(
         appBar: null,
         floatingActionButton: null,
         body: SafeArea(
-          child: _destinationContentColumn(MainNavDestination.dictionary),
+          child: _destinationContentColumn(
+            dictionaryImmersive
+                ? MainNavDestination.dictionary
+                : MainNavDestination.history,
+          ),
         ),
       );
     }
@@ -450,13 +547,7 @@ class _MainShellState extends ConsumerState<MainShell> {
             extended: railExtended,
             selectedIndex: selectedRailIndex,
             onDestinationSelected: (index) {
-              final d = visibleDestinations[index];
-              setState(() => _selectedDestination = d);
-              if (d == MainNavDestination.dictionary) {
-                ref.read(lexiconFullModeProvider.notifier).setTrue();
-              } else {
-                ref.read(lexiconFullModeProvider.notifier).setFalse();
-              }
+              _selectDestination(visibleDestinations[index]);
             },
             leading: wideEnoughForExtendedRail
                 ? IconButton(

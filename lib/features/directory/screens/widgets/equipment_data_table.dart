@@ -3,6 +3,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../../../core/services/default_remote_tool_display.dart';
 import '../../models/equipment_column.dart';
 
 const _minColumnWidth = 40.0;
@@ -42,6 +43,7 @@ class EquipmentDataTable extends StatefulWidget {
     this.onRequestDelete,
     this.onRequestBulkEdit,
     this.continuousScroll = true,
+    this.defaultRemoteDisplay,
   });
 
   final List<EquipmentRow> items;
@@ -59,6 +61,8 @@ class EquipmentDataTable extends StatefulWidget {
   final VoidCallback? onRequestDelete;
   final VoidCallback? onRequestBulkEdit;
   final bool continuousScroll;
+  /// Όταν δίνεται, επίλυση id → όνομα και στυλ για ανενεργά/διαγραμμένα εργαλεία.
+  final DefaultRemoteToolDisplay Function(EquipmentRow row)? defaultRemoteDisplay;
 
   @override
   State<EquipmentDataTable> createState() => _EquipmentDataTableState();
@@ -123,8 +127,23 @@ class _EquipmentDataTableState extends State<EquipmentDataTable> {
       _selectionVisible,
       _styleForEmptyOwnerCell(context),
       widget.showBuildingInLocationColumn,
+      widget.defaultRemoteDisplay,
+      Theme.of(context).textTheme.bodyMedium?.copyWith(
+            fontStyle: FontStyle.italic,
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
     );
     if (!widget.continuousScroll) {
+      final newFocus = widget.focusedRowIndex;
+      if (newFocus != null && newFocus != oldWidget.focusedRowIndex) {
+        final n = widget.items.length;
+        if (n > 0 && newFocus >= 0 && newFocus < n) {
+          final pageStart = (newFocus ~/ _rowsPerPage) * _rowsPerPage;
+          if (pageStart != _pagedFirstRowIndex) {
+            setState(() => _pagedFirstRowIndex = pageStart);
+          }
+        }
+      }
       _clampPagedFirstRowIndex();
     }
   }
@@ -531,6 +550,11 @@ class _EquipmentDataTableState extends State<EquipmentDataTable> {
       _selectionVisible,
       _styleForEmptyOwnerCell(context),
       widget.showBuildingInLocationColumn,
+      widget.defaultRemoteDisplay,
+      theme.textTheme.bodyMedium?.copyWith(
+        fontStyle: FontStyle.italic,
+        color: theme.colorScheme.onSurfaceVariant,
+      ),
     );
 
     final columns = _buildEquipmentDataColumns(theme);
@@ -693,6 +717,8 @@ class _EquipmentTableSource extends DataTableSource {
   bool _selectionVisible = true;
   TextStyle? _emptyOwnerTextStyle;
   bool _showBuildingInLocationColumn = true;
+  DefaultRemoteToolDisplay Function(EquipmentRow row)? _defaultRemoteDisplay;
+  TextStyle? _defaultRemoteMutedStyle;
 
   void update(
     List<EquipmentRow> items,
@@ -706,6 +732,8 @@ class _EquipmentTableSource extends DataTableSource {
     bool selectionVisible,
     TextStyle emptyOwnerTextStyle,
     bool showBuildingInLocationColumn,
+    DefaultRemoteToolDisplay Function(EquipmentRow row)? defaultRemoteDisplay,
+    TextStyle? defaultRemoteMutedStyle,
   ) {
     _items = items;
     _selectedIds = selectedIds;
@@ -718,6 +746,8 @@ class _EquipmentTableSource extends DataTableSource {
     _selectionVisible = selectionVisible;
     _emptyOwnerTextStyle = emptyOwnerTextStyle;
     _showBuildingInLocationColumn = showBuildingInLocationColumn;
+    _defaultRemoteDisplay = defaultRemoteDisplay;
+    _defaultRemoteMutedStyle = defaultRemoteMutedStyle;
     notifyListeners();
   }
 
@@ -764,6 +794,21 @@ class _EquipmentTableSource extends DataTableSource {
           onDoubleTap: () => _onDoubleTap(row, 'id'),
         );
       default:
+        if (col.key == EquipmentColumn.defaultRemote.key &&
+            _defaultRemoteDisplay != null) {
+          final d = _defaultRemoteDisplay!(row);
+          return DataCell(
+            Text(
+              d.label,
+              maxLines: 1,
+              softWrap: false,
+              overflow: TextOverflow.ellipsis,
+              style: d.useMutedItalic ? _defaultRemoteMutedStyle : null,
+            ),
+            onTap: () => _onRowTap?.call(rowIndex),
+            onDoubleTap: () => _onDoubleTap(row, col.key),
+          );
+        }
         final cellText = col.key == EquipmentColumn.location.key
             ? equipmentRowLocationFormattedLine(
                 row,

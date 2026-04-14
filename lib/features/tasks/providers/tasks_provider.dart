@@ -66,6 +66,7 @@ class TasksNotifier extends AsyncNotifier<List<Task>> {
     final service = ref.read(taskServiceProvider);
     await service.deleteTask(id);
     await refresh();
+    ref.invalidate(orphanCallsProvider);
   }
 
   Future<void> closeTask(int id, String solutionNotes) async {

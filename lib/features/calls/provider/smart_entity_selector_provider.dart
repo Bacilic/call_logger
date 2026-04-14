@@ -120,19 +120,6 @@ class SmartEntitySelectorState {
 
   bool get canConnectAnyDesk => resolvedAnyDeskTarget != null;
 
-  /// Παράκαμψη «κρύψε AnyDesk» όταν η ρύθμιση UI είναι OFF: ελεύθερο κείμενο σαν AnyDesk ID
-  /// (χωρίς επιλεγμένο εξοπλισμό από βάση) ή εξοπλισμός με `default_remote_tool` = AnyDesk και έγκυρο id.
-  bool get bypassHideAnyDeskRemoteSetting {
-    if (selectedEquipment != null) {
-      final tool = selectedEquipment!.defaultRemoteTool?.trim() ?? '';
-      if (tool.isEmpty || tool.toLowerCase() != 'anydesk') {
-        return false;
-      }
-      return canConnectAnyDesk;
-    }
-    return RemoteTargetRules.parseAnyDeskFromFreeText(equipmentText) != null;
-  }
-
   /// Στόχος για κλήση VNC ([EquipmentModel.vncTarget] ή IPv4 χωρίς `PC` ή `PC` + κείμενο).
   String get resolvedVncTarget {
     if (selectedEquipment != null) {
@@ -443,6 +430,13 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
   bool _isFillingFromLookup = false;
   static const int _criticalTaskPriority = 2;
 
+  /// Έως ένα quick task ανά κύκλο φόρμας· set μόνο μετά επιτυχή insert.
+  int? _associationQuickTaskId;
+
+  void _resetAssociationQuickTaskCycle() {
+    _associationQuickTaskId = null;
+  }
+
   Future<OrphanQuickAddResult?> quickAddOrphanToDepartment({
     bool forceSharedOnConflict = false,
   }) async {
@@ -465,6 +459,17 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
     }
     final phone = s.selectedPhone?.trim();
     final equipmentCode = s.equipmentText.trim().isEmpty ? null : s.equipmentText.trim();
+
+    final dbOrphan = await DatabaseHelper.instance.database;
+    final dirOrphan = DirectoryRepository(dbOrphan);
+    final deptExistedBefore =
+        deptText.isNotEmpty && await dirOrphan.departmentNameExists(deptText);
+    final phoneExistedBefore = (phone != null && phone.isNotEmpty)
+        ? await dirOrphan.phoneNumberExists(phone)
+        : true;
+    final equipmentExistedBefore = (equipmentCode != null)
+        ? await dirOrphan.equipmentCodeExists(equipmentCode)
+        : true;
 
     final phoneUsage = (phone != null && phone.isNotEmpty)
         ? lookup.checkPhoneUsage(phone)
@@ -523,8 +528,6 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
       );
     }
 
-    final dbOrphan = await DatabaseHelper.instance.database;
-    final dirOrphan = DirectoryRepository(dbOrphan);
     departmentId ??= await dirOrphan.getOrCreateDepartmentIdByName(
       deptText,
     );
@@ -559,9 +562,44 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
     final added = <String>[];
     if (phone != null && phone.isNotEmpty) added.add('τηλέφωνο');
     if (equipmentCode != null) added.add('εξοπλισμός');
+    final associationWorkDone = added.isNotEmpty;
     final success = added.isEmpty
         ? 'Δεν υπήρχε στοιχείο προς καταχώρηση.'
         : 'Καταχωρήθηκε ${added.join(' και ')} ως κοινόχρηστο στο τμήμα ${state.departmentText.trim()}.';
+
+    final newEntityEligible = (deptText.isNotEmpty && !deptExistedBefore) ||
+        (phone != null && phone.isNotEmpty && !phoneExistedBefore) ||
+        (equipmentCode != null && !equipmentExistedBefore);
+
+    final resolvedDeptId = finalDepartment?.id ?? departmentId;
+    final equipResolved = (equipmentCode != null && equipmentCode.isNotEmpty)
+        ? refreshed.findEquipmentsByCode(equipmentCode)
+        : const <EquipmentModel>[];
+    final resolvedEquipmentId =
+        equipResolved.isNotEmpty ? equipResolved.first.id : null;
+
+    if (newEntityEligible || _associationQuickTaskId != null) {
+      try {
+        await _syncAssociationQuickTask(
+          newEntityEligible: newEntityEligible,
+          associationWorkDone: associationWorkDone,
+          summaryText: success,
+          callerName: null,
+          callerId: null,
+          departmentId: resolvedDeptId,
+          equipmentId: resolvedEquipmentId,
+          phoneText: phone,
+          userText: null,
+          equipmentText: equipmentCode,
+          departmentText: state.departmentText.trim().isEmpty
+              ? null
+              : state.departmentText.trim(),
+        );
+      } catch (e, st) {
+        debugPrint('Orphan quick task: $e\n$st');
+      }
+    }
+
     return OrphanQuickAddResult(
       requiresConfirmation: false,
       message: success,
@@ -771,12 +809,14 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
   }
 
   void clearPhone() {
+    _resetAssociationQuickTaskCycle();
     state = state.copyWithClearSelections();
   }
 
   /// Μηδενίζει selectedPhone, selectedCaller, selectedEquipment, phoneError, candidates.
   /// Ο καθαρισμός των πεδίων κειμένου γίνεται από το UI.
   void clearAll() {
+    _resetAssociationQuickTaskCycle();
     state = state.copyWithClearSelections();
   }
 
@@ -1421,6 +1461,7 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
   }
 
   void clearAfterSubmit() {
+    _resetAssociationQuickTaskCycle();
     state = state.copyWithClearSelections();
   }
 
@@ -1441,10 +1482,9 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
       final phone = state.selectedPhone?.trim();
       final equipmentCode = state.equipmentText.trim();
       final parsed = NameParserUtility.parse(name);
-      final lookup = ref.read(lookupServiceProvider).value?.service;
       final deptTextRaw = state.departmentText.trim();
       final departmentExistedBefore = deptTextRaw.isNotEmpty &&
-          (lookup?.findDepartmentByName(deptTextRaw)?.id != null);
+          await directory.departmentNameExists(deptTextRaw);
       final phoneExistedBefore = (phone != null && phone.isNotEmpty)
           ? await directory.phoneNumberExists(phone)
           : false;
@@ -1452,6 +1492,7 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
           ? await directory.equipmentCodeExists(equipmentCode)
           : false;
 
+      final lookup = ref.read(lookupServiceProvider).value?.service;
       var departmentId =
           state.selectedDepartmentId ??
           (state.departmentText.trim().isNotEmpty && lookup != null
@@ -1522,9 +1563,11 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
             selectedEquipment: matchedNewCallerEquipment.first,
           );
         }
-        await _createQuickAddTask(
-          callerName: state.selectedCaller?.name ?? state.callerDisplayText.trim(),
+        await _syncAssociationQuickTask(
+          newEntityEligible: true,
+          associationWorkDone: true,
           summaryText: msg,
+          callerName: state.selectedCaller?.name ?? state.callerDisplayText.trim(),
           callerId: userId,
           departmentId: resolvedDepartmentId,
           equipmentId: resolvedEquipmentId,
@@ -1537,7 +1580,6 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
               ? null
               : s.departmentText.trim(),
         );
-        ref.invalidate(tasksProvider);
         final createdDeptNow = deptTextRaw.isNotEmpty && !departmentExistedBefore;
         final lines = <String>[];
         final fullName =
@@ -1583,6 +1625,17 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
         : state.equipmentText.trim();
     final hadPhoneWork = phone != null && phone.isNotEmpty;
     final hadEqWork = eqCode != null && eqCode.isNotEmpty;
+    final newPhoneRow =
+        hadPhoneWork && !await directory.phoneNumberExists(phone);
+    final newEquipmentRow =
+        hadEqWork && !await directory.equipmentCodeExists(eqCode);
+    final deptTrimAssoc = state.departmentText.trim();
+    final willCreateDept =
+        updatePrimaryDepartment && deptTrimAssoc.isNotEmpty;
+    final newDepartmentRow =
+        willCreateDept && !await directory.departmentNameExists(deptTrimAssoc);
+    final newEntityEligible =
+        newPhoneRow || newEquipmentRow || newDepartmentRow;
 
     try {
       await directory.updateAssociationsIfNeeded(
@@ -1670,28 +1723,26 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
       if (matchedEquipment.isNotEmpty) {
         state = state.copyWith(selectedEquipment: matchedEquipment.first);
       }
-      // Μία γρήγορη εκκρεμότητα μόνο όταν έγινε πραγματική αλλαγή (όχι επανάληψη
-      // μετά από ήδη ολοκληρωμένη συσχέτιση νέου χρήστη).
-      if (hadPhoneWork || hadEqWork || primaryDepartmentChanged) {
-        await _createQuickAddTask(
-          callerName: s.selectedCaller?.name ?? s.callerDisplayText.trim(),
-          summaryText: msg,
-          callerId: s.selectedCaller?.id,
-          departmentId: resolvedDepartmentId,
-          equipmentId: resolvedEquipmentId,
-          phoneText: s.selectedPhone?.trim(),
-          userText: s.callerDisplayText.trim().isEmpty
-              ? null
-              : s.callerDisplayText.trim(),
-          equipmentText: s.equipmentText.trim().isEmpty
-              ? null
-              : s.equipmentText.trim(),
-          departmentText: s.departmentText.trim().isEmpty
-              ? null
-              : s.departmentText.trim(),
-        );
-        ref.invalidate(tasksProvider);
-      }
+      await _syncAssociationQuickTask(
+        newEntityEligible: newEntityEligible,
+        associationWorkDone:
+            hadPhoneWork || hadEqWork || primaryDepartmentChanged,
+        summaryText: msg,
+        callerName: s.selectedCaller?.name ?? s.callerDisplayText.trim(),
+        callerId: s.selectedCaller?.id,
+        departmentId: resolvedDepartmentId,
+        equipmentId: resolvedEquipmentId,
+        phoneText: s.selectedPhone?.trim(),
+        userText: s.callerDisplayText.trim().isEmpty
+            ? null
+            : s.callerDisplayText.trim(),
+        equipmentText: s.equipmentText.trim().isEmpty
+            ? null
+            : s.equipmentText.trim(),
+        departmentText: s.departmentText.trim().isEmpty
+            ? null
+            : s.departmentText.trim(),
+      );
       return (hadPhoneWork || hadEqWork || primaryDepartmentChanged)
           ? (msg ?? 'Προστέθηκε.')
           : null;
@@ -1700,7 +1751,67 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
     }
   }
 
-  Future<void> _createQuickAddTask({
+  /// Μία γρήγορη εκκρεμότητα ανά κύκλο: δημιουργία ή append/merge στην υπάρχουσα.
+  Future<void> _syncAssociationQuickTask({
+    required bool newEntityEligible,
+    required bool associationWorkDone,
+    required String? summaryText,
+    required String? callerName,
+    required int? callerId,
+    required int? departmentId,
+    required int? equipmentId,
+    String? phoneText,
+    String? userText,
+    String? equipmentText,
+    String? departmentText,
+  }) async {
+    final taskService = ref.read(taskServiceProvider);
+    final summary = summaryText?.trim();
+    final hasSummary = summary != null && summary.isNotEmpty;
+    final existingId = _associationQuickTaskId;
+
+    if (existingId != null) {
+      var touched = false;
+      if (hasSummary && (newEntityEligible || associationWorkDone)) {
+        final appended = await taskService.appendToQuickAddDescription(
+          existingId,
+          summary,
+        );
+        if (appended) touched = true;
+      }
+      final merged = await taskService.mergeQuickAddEntitySnapshot(
+        taskId: existingId,
+        callerId: callerId,
+        departmentId: departmentId,
+        equipmentId: equipmentId,
+        phoneText: phoneText,
+        userText: userText,
+        equipmentText: equipmentText,
+        departmentText: departmentText,
+      );
+      if (merged) touched = true;
+      if (touched) ref.invalidate(tasksProvider);
+      return;
+    }
+
+    if (!newEntityEligible) return;
+
+    final id = await _insertQuickAddTask(
+      callerName: callerName,
+      summaryText: summaryText,
+      callerId: callerId,
+      departmentId: departmentId,
+      equipmentId: equipmentId,
+      phoneText: phoneText,
+      userText: userText,
+      equipmentText: equipmentText,
+      departmentText: departmentText,
+    );
+    _associationQuickTaskId = id;
+    ref.invalidate(tasksProvider);
+  }
+
+  Future<int> _insertQuickAddTask({
     required String? callerName,
     required String? summaryText,
     required int? callerId,
@@ -1715,9 +1826,11 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
     final caller = callerName?.trim();
     final descriptionCore = cleanSummary?.isNotEmpty == true
         ? cleanSummary!
-        : (caller?.isNotEmpty == true ? 'Ενημερώθηκε οντότητα καλούντα' : 'Quick add');
+        : (caller?.isNotEmpty == true
+              ? 'Ενημερώθηκε οντότητα καλούντα'
+              : 'Quick add');
     final quickDescription = '${Task.quickAddTag} $descriptionCore';
-    await ref.read(taskServiceProvider).createFromCall(
+    return ref.read(taskServiceProvider).createFromCall(
       callId: null,
       callerName: caller,
       description: quickDescription,

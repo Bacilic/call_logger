@@ -503,6 +503,30 @@ class DatabaseHelper {
     if (oldVersion < 10 && newVersion >= 10) {
       await _migrateEquipmentRemoteParamsColumn(db);
     }
+    if (oldVersion < 11 && newVersion >= 11) {
+      await migrateDatabaseToV11(db);
+    }
+    if (oldVersion < 12 && newVersion >= 12) {
+      await migrateDatabaseToV12(db);
+    }
+    if (oldVersion < 13 && newVersion >= 13) {
+      await migrateDatabaseToV13(db);
+    }
+    if (oldVersion < 14 && newVersion >= 14) {
+      await migrateDatabaseToV14(db);
+    }
+    if (oldVersion < 15 && newVersion >= 15) {
+      await migrateDatabaseToV15(db);
+    }
+    if (oldVersion < 16 && newVersion >= 16) {
+      await migrateDatabaseToV16(db);
+    }
+    if (oldVersion < 17 && newVersion >= 17) {
+      await migrateDatabaseToV17(db);
+    }
+    if (oldVersion < 18 && newVersion >= 18) {
+      await migrateDatabaseToV18(db);
+    }
   }
 
   /// Πίνακας προσωπικών λέξεων ορθογραφίας (Windows / custom lexicon).

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'widgets/categories_tab.dart';
+import '../../../core/providers/directory_tab_intent_provider.dart';
+import 'widgets/miscellaneous_tab.dart';
 import 'widgets/departments_tab.dart';
 import 'widgets/equipment_tab.dart';
 import 'widgets/users_tab.dart';
@@ -9,14 +11,14 @@ import 'widgets/users_tab.dart';
 const int kDirectoryCategoriesTabIndex = 3;
 
 /// Οθόνη Κατάλογου: TabBar Χρήστες | Τμήματα | Εξοπλισμός | Διάφορα.
-class DirectoryScreen extends StatefulWidget {
+class DirectoryScreen extends ConsumerStatefulWidget {
   const DirectoryScreen({super.key});
 
   @override
-  State<DirectoryScreen> createState() => _DirectoryScreenState();
+  ConsumerState<DirectoryScreen> createState() => _DirectoryScreenState();
 }
 
-class _DirectoryScreenState extends State<DirectoryScreen>
+class _DirectoryScreenState extends ConsumerState<DirectoryScreen>
     with SingleTickerProviderStateMixin {
   late final TabController _tabController;
 
@@ -44,6 +46,15 @@ class _DirectoryScreenState extends State<DirectoryScreen>
 
   @override
   Widget build(BuildContext context) {
+    ref.listen<int?>(directoryTabIntentProvider, (previous, next) {
+      if (next == null || !mounted) return;
+      final i = next.clamp(0, 3);
+      if (_tabController.index != i) {
+        _tabController.animateTo(i);
+      }
+      ref.read(directoryTabIntentProvider.notifier).clear();
+    });
+
     return ScaffoldMessenger(
       child: Scaffold(
         appBar: AppBar(
@@ -66,7 +77,7 @@ class _DirectoryScreenState extends State<DirectoryScreen>
             UsersTab(),
             DepartmentsTab(),
             EquipmentTab(),
-            CategoriesTab(),
+            MiscellaneousTab(),
           ],
         ),
       ),

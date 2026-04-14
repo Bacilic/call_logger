@@ -8,7 +8,10 @@ import '../../../../core/services/settings_service.dart';
 import '../../../../core/utils/name_parser.dart';
 import '../../../../core/utils/search_text_normalizer.dart';
 import '../../../../core/utils/spell_check.dart';
+import '../../../../core/database/remote_tools_repository.dart';
+import '../../../../core/models/remote_tool.dart';
 import '../../../calls/provider/lookup_provider.dart';
+import '../../../calls/provider/remote_paths_provider.dart';
 import '../../models/equipment_column.dart';
 import '../../providers/equipment_directory_provider.dart';
 
@@ -62,7 +65,9 @@ class _BulkEquipmentEditDialogState extends State<BulkEquipmentEditDialog> {
   bool _ownerTextInitialized = false;
   int? _selectedUserId;
   String? _selectedType;
-  String? _selectedRemoteTool;
+  /// Κλειδιά id εργαλείου (string) για chips προεπιλογής.
+  final Set<String> _defaultRemoteChipKeys = {};
+  int? _bulkDefaultRemoteId;
 
   @override
   void initState() {
@@ -78,14 +83,39 @@ class _BulkEquipmentEditDialogState extends State<BulkEquipmentEditDialog> {
     _selectedUserId = _commonOwnerId();
     final typeRaw = _commonValue('type').trim();
     _selectedType = typeRaw.isEmpty ? null : typeRaw;
-    final raw = _commonValue('defaultRemoteTool').trim();
-    _selectedRemoteTool = raw.isEmpty ? null : raw;
+    if (!_hasDifferentValues('defaultRemoteTool')) {
+      final id = RemoteToolsRepository.parseDefaultRemoteToolId(
+        _commonValue('defaultRemoteTool'),
+      );
+      if (id != null) {
+        _defaultRemoteChipKeys.add('$id');
+        _bulkDefaultRemoteId = id;
+      }
+    }
   }
 
-  static String? _normalizedRemoteToolValue(String? v) {
-    final t = v?.trim() ?? '';
-    if (t.isEmpty || t == 'Κανένα') return null;
-    return t;
+  void _recomputeBulkDefaultRemote(
+    List<RemoteTool> catalog,
+    List<RemoteToolFormPair> pairs,
+  ) {
+    final selected = <RemoteTool>[];
+    for (final p in pairs) {
+      if (!_defaultRemoteChipKeys.contains(p.key)) continue;
+      final id = int.tryParse(p.key);
+      if (id == null) continue;
+      for (final c in catalog) {
+        if (c.id == id) {
+          selected.add(c);
+          break;
+        }
+      }
+    }
+    selected.sort((a, b) {
+      final cmp = a.sortOrder.compareTo(b.sortOrder);
+      if (cmp != 0) return cmp;
+      return a.name.compareTo(b.name);
+    });
+    _bulkDefaultRemoteId = selected.isEmpty ? null : selected.first.id;
   }
 
   Future<int?> _resolveOwnerToUserId(
@@ -197,7 +227,9 @@ class _BulkEquipmentEditDialogState extends State<BulkEquipmentEditDialog> {
           lookup,
         );
       } else if (fieldKey == 'defaultRemoteTool') {
-        changes[dbKey] = _normalizedRemoteToolValue(_selectedRemoteTool);
+        changes[dbKey] = RemoteToolsRepository.defaultRemoteToolIdToDbString(
+          _bulkDefaultRemoteId,
+        );
       } else if (fieldKey == 'type') {
         final v = _selectedType?.trim() ?? '';
         changes[dbKey] = v.isEmpty ? null : v;
@@ -435,35 +467,113 @@ class _BulkEquipmentEditDialogState extends State<BulkEquipmentEditDialog> {
                             },
                           )
                         : _fieldKeys[i] == 'defaultRemoteTool'
-                        ? FutureBuilder<List<String>>(
-                            future: SettingsService()
-                                .getRemoteSurfaceAppsList(),
-                            builder: (context, snapshot) {
-                              final options =
-                                  snapshot.data ?? ['AnyDesk', 'VNC'];
-                              return DropdownButtonFormField<String?>(
-                                initialValue: _selectedRemoteTool,
-                                decoration: InputDecoration(
-                                  hintText:
-                                      _hasDifferentValues('defaultRemoteTool')
-                                      ? '(Διαφορετικές τιμές)'
-                                      : null,
-                                  border: const OutlineInputBorder(),
-                                ),
-                                items: [
-                                  ...options.map(
-                                    (o) => DropdownMenuItem<String?>(
-                                      value: o,
-                                      child: Text(o),
+                        ? Consumer(
+                            builder: (context, ref, _) {
+                              final pairsAsync =
+                                  ref.watch(remoteToolFormPairsProvider);
+                              final catalogAsync =
+                                  ref.watch(remoteToolsCatalogProvider);
+                              return pairsAsync.when(
+                                data: (pairs) => catalogAsync.when(
+                                  data: (catalog) {
+                                    final ambiguous = _hasDifferentValues(
+                                      'defaultRemoteTool',
+                                    );
+                                    final defaultLabel = _bulkDefaultRemoteId ==
+                                            null
+                                        ? 'Κανένα'
+                                        : () {
+                                            for (final c in catalog) {
+                                              if (c.id == _bulkDefaultRemoteId) {
+                                                return c.name;
+                                              }
+                                            }
+                                            return '#$_bulkDefaultRemoteId';
+                                          }();
+                                    return Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.stretch,
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        if (ambiguous)
+                                          Padding(
+                                            padding: const EdgeInsets.only(
+                                              bottom: 8,
+                                            ),
+                                            child: Text(
+                                              '(Διαφορετικές τιμές — επιλέξτε συγκεκριμένη προεπιλογή με τα chips)',
+                                              style: Theme.of(context)
+                                                  .textTheme
+                                                  .bodySmall
+                                                  ?.copyWith(
+                                                    color: Theme.of(context)
+                                                        .colorScheme
+                                                        .onSurfaceVariant,
+                                                  ),
+                                            ),
+                                          ),
+                                        Text(
+                                          'Προεπιλεγμένο: $defaultLabel',
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .bodySmall,
+                                        ),
+                                        const SizedBox(height: 8),
+                                        if (pairs.isEmpty)
+                                          const Text(
+                                            'Δεν υπάρχουν ενεργά εργαλεία.',
+                                          )
+                                        else
+                                          Wrap(
+                                            spacing: 8,
+                                            runSpacing: 8,
+                                            children: [
+                                              for (final p in pairs)
+                                                FilterChip(
+                                                  label: Text(p.label),
+                                                  showCheckmark: true,
+                                                  selected: _defaultRemoteChipKeys
+                                                      .contains(p.key),
+                                                  onSelected: (sel) {
+                                                    setState(() {
+                                                      if (sel) {
+                                                        _defaultRemoteChipKeys
+                                                            .add(p.key);
+                                                      } else {
+                                                        _defaultRemoteChipKeys
+                                                            .remove(p.key);
+                                                      }
+                                                      _recomputeBulkDefaultRemote(
+                                                        catalog,
+                                                        pairs,
+                                                      );
+                                                    });
+                                                  },
+                                                ),
+                                            ],
+                                          ),
+                                      ],
+                                    );
+                                  },
+                                  loading: () => const SizedBox(
+                                    height: 48,
+                                    child: Center(
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                      ),
                                     ),
                                   ),
-                                  const DropdownMenuItem<String?>(
-                                    value: null,
-                                    child: Text('Κανένα'),
+                                  error: (e, _) => Text('Κατάλογος: $e'),
+                                ),
+                                loading: () => const SizedBox(
+                                  height: 48,
+                                  child: Center(
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
                                   ),
-                                ],
-                                onChanged: (v) =>
-                                    setState(() => _selectedRemoteTool = v),
+                                ),
+                                error: (e, _) => Text('Εργαλεία: $e'),
                               );
                             },
                           )

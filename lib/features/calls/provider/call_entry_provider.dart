@@ -5,7 +5,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/database/calls_repository.dart';
 import '../../../core/database/database_helper.dart';
-import '../../../core/database/directory_repository.dart';
 import '../../../core/services/lookup_service.dart';
 import '../../tasks/models/task_filter.dart';
 import '../../tasks/providers/task_service_provider.dart';
@@ -14,7 +13,6 @@ import '../models/call_model.dart';
 import '../models/equipment_model.dart';
 import '../models/user_model.dart';
 import 'call_header_provider.dart';
-import 'lookup_provider.dart';
 
 /// Κατάσταση φόρμας εισαγωγής κλήσης.
 class CallEntryState {
@@ -153,7 +151,15 @@ class CallEntryNotifier extends Notifier<CallEntryState> {
   }
 
   /// Υποβολή κλήσης: διαβάζει caller/equipment από call_header_provider.
-  /// Αν τροποποιήθηκε τμήμα σε υπάρχοντα καλούντα, ενημερώνει το department_id πριν την εισαγωγή κλήσης.
+  ///
+  /// CONTRACT (μην αλλοιωθεί):
+  /// - Η submit ροή ΠΟΤΕ δεν δημιουργεί/ενημερώνει οντότητες καταλόγου (users/phones/equipment/departments).
+  /// - Γράφει μόνο ιστορικό κλήσης στον πίνακα `calls` (και προαιρετικά task όταν είναι pending).
+  /// - Αν δεν υπάρχει FK οντότητα, κρατά snapshot στα text πεδία (`caller_text`, `phone_text`, κ.λπ.).
+  ///
+  /// Η δημιουργία/συσχέτιση οντοτήτων επιτρέπεται αποκλειστικά από τη ροή του κουμπιού `+`
+  /// μέσω `associateCurrentIfNeeded()` στον smart entity selector provider.
+  ///
   /// Μετά επιτυχία: markPhoneUsed, reset notes, clearAll (focus τηλεφώνου: UI / SmartEntitySelectorWidget).
   ///
   /// Χρησιμοποιεί το [Notifier.ref] (όχι εξωτερικό [WidgetRef]) ώστε το async να ολοκληρώνεται
@@ -162,18 +168,7 @@ class CallEntryNotifier extends Notifier<CallEntryState> {
     if (!ref.read(callHeaderProvider).canSubmitCall) {
       return false;
     }
-    var header = ref.read(callHeaderProvider);
-    final lookupForAssociation = ref.read(lookupServiceProvider).value?.service;
-    if (header.needsAssociation(lookupForAssociation)) {
-      final associationMessage = await ref
-          .read(callHeaderProvider.notifier)
-          .associateCurrentIfNeeded();
-      if (associationMessage != null &&
-          associationMessage.startsWith('Σφάλμα αποθήκευσης:')) {
-        debugPrint('submitCall association error: $associationMessage');
-      }
-      header = ref.read(callHeaderProvider);
-    }
+    final header = ref.read(callHeaderProvider);
     final user = header.selectedCaller;
     final notes = state.notes.trim();
     final callerId = header.selectedCaller?.id;
@@ -181,25 +176,6 @@ class CallEntryNotifier extends Notifier<CallEntryState> {
     final callerText = callerId != null
         ? null
         : (callerTextRaw.isEmpty ? 'Άγνωστος' : callerTextRaw);
-
-    final lookupService = ref.read(lookupServiceProvider).value?.service;
-    final selectedDepartmentId =
-        header.selectedDepartmentId ??
-        (header.departmentText.trim().isNotEmpty && lookupService != null
-            ? lookupService.findDepartmentByName(header.departmentText)?.id
-            : null);
-    if (user != null &&
-        user.id != null &&
-        selectedDepartmentId != null &&
-        selectedDepartmentId != user.departmentId) {
-      final userId = user.id;
-      if (userId == null) return false;
-      final updatedMap = Map<String, dynamic>.from(user.toMap());
-      updatedMap['department_id'] = selectedDepartmentId;
-      final db = await DatabaseHelper.instance.database;
-      await DirectoryRepository(db).updateUser(userId, updatedMap);
-      ref.invalidate(lookupServiceProvider);
-    }
 
     try {
       stopTimer();
@@ -286,19 +262,12 @@ class CallEntryNotifier extends Notifier<CallEntryState> {
   }
 
   /// Καταχώρηση μόνο εκκρεμότητας (task) χωρίς εισαγωγή κλήσης.
+  ///
+  /// CONTRACT (μην αλλοιωθεί):
+  /// - Δεν επιτρέπεται καμία δημιουργία/συσχέτιση οντοτήτων καταλόγου από αυτή τη ροή.
+  /// - Η ροή του `+` είναι η μοναδική πύλη για directory mutations.
   Future<bool> submitOnlyPending() async {
-    var header = ref.read(callHeaderProvider);
-    final lookupForAssociation = ref.read(lookupServiceProvider).value?.service;
-    if (header.needsAssociation(lookupForAssociation)) {
-      final associationMessage = await ref
-          .read(callHeaderProvider.notifier)
-          .associateCurrentIfNeeded();
-      if (associationMessage != null &&
-          associationMessage.startsWith('Σφάλμα αποθήκευσης:')) {
-        debugPrint('submitOnlyPending association error: $associationMessage');
-      }
-      header = ref.read(callHeaderProvider);
-    }
+    final header = ref.read(callHeaderProvider);
     final user = header.selectedCaller;
     final callerTextRaw = header.callerDisplayText.trim();
     final callerName =

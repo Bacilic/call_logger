@@ -29,6 +29,7 @@ const _tablesCopyOrder = <String>[
   'knowledge_base',
   'audit_log',
   'app_settings',
+  'remote_tools',
   'remote_tool_args',
 ];
 

@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:sqflite_common/sqlite_api.dart';
 
 /// User-visible schema version (squashed v1· v2 = στήλες τμήμα/τοποθεσία στον εξοπλισμό).
@@ -8,7 +10,29 @@ import 'package:sqflite_common/sqlite_api.dart';
 /// v8: user_dictionary.language για φίλτρο γλώσσας στα πρόχειρα (combined lexicon).
 /// v9: letters_count + diacritic_mark_count σε full_dictionary και user_dictionary.
 /// v10: equipment.remote_params (JSON παραμέτρων απομακρυσμένης σύνδεσης).
-const int databaseSchemaVersionV1 = 10;
+/// v11: πίνακας remote_tools, στήλη remote_tool_args.remote_tool_id.
+/// v12: remote_tools.arguments_json, remote_tools.test_target_ip (ορίσματα JSON ανά εργαλείο).
+/// v13: remote_tools.password (κωδικός ανά εργαλείο για {PASSWORD}).
+/// v14: αφαίρεση remote_tools.use_global_password (το {PASSWORD} ακολουθεί πάντα το πεδίο password).
+/// v15: remote_tools.deleted_at (soft delete) + equipment.default_remote_tool ως id (TEXT).
+/// v16: remote_tools.slug + detection_kind → στήλη role (ToolRole).
+/// v17: remote_tools.is_exclusive (αποκλειστική εμφάνιση στο UI κλήσεων).
+/// v18: audit_log entity columns + indexes για φίλτρα/side panel.
+const int databaseSchemaVersionV1 = 18;
+
+/// Προεπιλογές διαδρομών (ίδιες με SettingsService — χωρίς εξάρτηση Flutter εδώ).
+const String kDefaultVncExecutablePath =
+    r'C:\Program Files\TightVNC\tvnviewer.exe';
+const String kDefaultAnydeskExecutablePath =
+    r'C:\Program Files (x86)\AnyDesk\AnyDesk.exe';
+const String kDefaultMstscExecutablePath =
+    r'C:\Windows\System32\mstsc.exe';
+
+/// Πρότυπο `.rdp` seed (placeholders `{server_ip}`, `{username}`).
+const String kDefaultRdpConfigTemplate = ''
+    'full address:s:{server_ip}\r\n'
+    'prompt for credentials:i:0\r\n'
+    'username:s:{username}\r\n';
 
 /// Δημιουργία σχήματος v1 + seed `remote_tool_args`.
 /// Χωρίς εξαρτήσεις Flutter — ασφαλές για `dart run tool/migrate_to_v1.dart`.
@@ -163,9 +187,23 @@ Future<void> applyDatabaseV1Schema(Database db) async {
         action TEXT,
         timestamp TEXT,
         user_performing TEXT,
-        details TEXT
+        details TEXT,
+        entity_type TEXT,
+        entity_id INTEGER,
+        entity_name TEXT,
+        old_values_json TEXT,
+        new_values_json TEXT
       )
     ''');
+  await db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_audit_log_timestamp ON audit_log(timestamp)',
+  );
+  await db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_audit_log_action ON audit_log(action)',
+  );
+  await db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_audit_log_entity_type_entity_id ON audit_log(entity_type, entity_id)',
+  );
 
   await db.execute('''
       CREATE TABLE app_settings (
@@ -175,15 +213,42 @@ Future<void> applyDatabaseV1Schema(Database db) async {
     ''');
 
   await db.execute('''
+      CREATE TABLE IF NOT EXISTS remote_tools (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        role TEXT NOT NULL,
+        executable_path TEXT NOT NULL,
+        launch_mode TEXT NOT NULL,
+        config_template TEXT,
+        sort_order INTEGER NOT NULL DEFAULT 0,
+        is_active INTEGER NOT NULL DEFAULT 1,
+        vnc_host_prefix TEXT,
+        suggested_values TEXT,
+        icon_asset_key TEXT,
+        default_username TEXT,
+        password TEXT,
+        arguments_json TEXT,
+        test_target_ip TEXT,
+        is_exclusive INTEGER NOT NULL DEFAULT 0,
+        deleted_at TEXT
+      )
+    ''');
+  await db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_remote_tools_role ON remote_tools(role)',
+  );
+
+  await db.execute('''
       CREATE TABLE IF NOT EXISTS remote_tool_args (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
+        remote_tool_id INTEGER,
         tool_name TEXT,
         arg_flag TEXT,
         description TEXT,
-        is_active INTEGER DEFAULT 0
+        is_active INTEGER DEFAULT 0,
+        FOREIGN KEY (remote_tool_id) REFERENCES remote_tools(id)
       )
     ''');
-  await seedRemoteToolArgsIfEmpty(db);
+  await seedRemoteToolsAndArgsIfEmpty(db);
 
   await db.execute('''
       CREATE TABLE IF NOT EXISTS user_dictionary (
@@ -221,53 +286,400 @@ Future<void> applyDatabaseV1Schema(Database db) async {
   );
 }
 
-/// Προεπιλεγμένα ορίσματα VNC/AnyDesk αν ο πίνακας είναι άδειος.
-Future<void> seedRemoteToolArgsIfEmpty(Database db) async {
-  final result = await db.rawQuery(
-    'SELECT COUNT(*) AS c FROM remote_tool_args',
-  );
+/// Σύνδεση `remote_tool_args` με `remote_tools` όταν υπάρχουν γραμμές.
+/// Δεν γίνεται πλέον αυτόματο seed εγγραφών `remote_tools` — προστίθενται από τις ρυθμίσεις.
+Future<void> seedRemoteToolsAndArgsIfEmpty(Database db) async {
+  final result = await db.rawQuery('SELECT COUNT(*) AS c FROM remote_tools');
   final count = result.isNotEmpty ? (result.first['c'] as int? ?? 0) : 0;
-  if (count > 0) return;
+  if (count == 0) return;
 
-  final defaults = <Map<String, dynamic>>[
-    {
-      'tool_name': 'vnc',
-      'arg_flag': '-host={TARGET}',
-      'description': 'Host/IP στόχου',
-      'is_active': 1,
-    },
-    {
-      'tool_name': 'vnc',
-      'arg_flag': '-password={PASSWORD}',
-      'description': 'Κωδικός VNC',
-      'is_active': 1,
-    },
-    {
-      'tool_name': 'vnc',
-      'arg_flag': '-fullscreen',
-      'description': 'Πλήρης οθόνη',
-      'is_active': 0,
-    },
-    {
-      'tool_name': 'vnc',
-      'arg_flag': '-viewonly',
-      'description': 'Μόνο προβολή',
-      'is_active': 0,
-    },
-    {
-      'tool_name': 'anydesk',
-      'arg_flag': '{TARGET}',
-      'description': 'AnyDesk ID στόχου',
-      'is_active': 1,
-    },
-    {
-      'tool_name': 'anydesk',
-      'arg_flag': '--fullscreen',
-      'description': 'Πλήρης οθόνη',
-      'is_active': 0,
-    },
-  ];
-  for (final row in defaults) {
-    await db.insert('remote_tool_args', row);
+  final argsCount = await db.rawQuery('SELECT COUNT(*) AS c FROM remote_tool_args');
+  final ac = argsCount.isNotEmpty ? (argsCount.first['c'] as int? ?? 0) : 0;
+  if (ac > 0) {
+    await db.rawUpdate('''
+UPDATE remote_tool_args
+SET remote_tool_id = (
+  SELECT id FROM remote_tools WHERE role = remote_tool_args.tool_name LIMIT 1
+)
+WHERE remote_tool_id IS NULL AND tool_name IS NOT NULL
+''');
   }
+}
+
+/// Κλειδιά `app_settings` (ίδια με SettingsService).
+const String kAppSettingKeyVncPaths = 'vnc_paths';
+const String kAppSettingKeyAnydeskPath = 'anydesk_path';
+const String kAppSettingKeyRemoteSurfaceApps = 'remote_surface_apps';
+
+/// Αναβάθμιση σε v11: πίνακας `remote_tools`, στήλη `remote_tool_args.remote_tool_id`, μεταφορά διαδρομών.
+Future<void> migrateDatabaseToV11(Database db) async {
+  await db.execute('''
+CREATE TABLE IF NOT EXISTS remote_tools (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  slug TEXT NOT NULL UNIQUE,
+  executable_path TEXT NOT NULL,
+  launch_mode TEXT NOT NULL,
+  config_template TEXT,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  is_active INTEGER NOT NULL DEFAULT 1,
+  detection_kind TEXT,
+  vnc_host_prefix TEXT,
+  suggested_values TEXT,
+  icon_asset_key TEXT,
+  default_username TEXT
+)
+''');
+
+  final argInfo = await db.rawQuery('PRAGMA table_info(remote_tool_args)');
+  final argNames = argInfo.map((r) => r['name'] as String).toSet();
+  if (!argNames.contains('remote_tool_id')) {
+    await db.execute(
+      'ALTER TABLE remote_tool_args ADD COLUMN remote_tool_id INTEGER',
+    );
+  }
+
+  await seedRemoteToolsAndArgsIfEmpty(db);
+
+  Future<String?> appSetting(String key) async {
+    final rows = await db.query(
+      'app_settings',
+      columns: ['value'],
+      where: 'key = ?',
+      whereArgs: [key],
+      limit: 1,
+    );
+    if (rows.isEmpty) return null;
+    final v = rows.first['value'];
+    if (v == null) return null;
+    final s = v.toString().trim();
+    return s.isEmpty ? null : s;
+  }
+
+  final vncJson = await appSetting(kAppSettingKeyVncPaths);
+  if (vncJson != null) {
+    try {
+      final decoded = jsonDecode(vncJson);
+      if (decoded is List && decoded.isNotEmpty) {
+        final first = decoded.first?.toString().trim();
+        if (first != null && first.isNotEmpty) {
+          await db.update(
+            'remote_tools',
+            {'executable_path': first},
+            where: 'slug = ?',
+            whereArgs: ['vnc'],
+          );
+        }
+      }
+    } catch (_) {}
+  }
+
+  final anydeskPath = await appSetting(kAppSettingKeyAnydeskPath);
+  if (anydeskPath != null && anydeskPath.isNotEmpty) {
+    await db.update(
+      'remote_tools',
+      {'executable_path': anydeskPath},
+      where: 'slug = ?',
+      whereArgs: ['anydesk'],
+    );
+  }
+
+  final csvRaw = await appSetting(kAppSettingKeyRemoteSurfaceApps);
+  if (csvRaw != null && csvRaw.isNotEmpty) {
+    final parts = csvRaw
+        .split(',')
+        .map((s) => s.trim().toLowerCase())
+        .where((s) => s.isNotEmpty)
+        .toList();
+    if (parts.isNotEmpty) {
+      await db.update('remote_tools', {'is_active': 0});
+      final tools = await db.query('remote_tools', columns: ['id', 'name']);
+      for (final row in tools) {
+        final name = (row['name'] as String?)?.trim().toLowerCase() ?? '';
+        if (name.isEmpty) continue;
+        if (parts.contains(name)) {
+          await db.update(
+            'remote_tools',
+            {'is_active': 1},
+            where: 'id = ?',
+            whereArgs: [row['id']],
+          );
+        }
+      }
+      final stillActive = await db.rawQuery(
+        'SELECT COUNT(*) AS c FROM remote_tools WHERE is_active = 1',
+      );
+      final n = stillActive.isNotEmpty
+          ? (stillActive.first['c'] as int? ?? 0)
+          : 0;
+      if (n == 0) {
+        await db.update('remote_tools', {'is_active': 1});
+      }
+    }
+  }
+}
+
+/// Αναβάθμιση σε v12: στήλες `arguments_json`, `test_target_ip` + backfill από `remote_tool_args`.
+Future<void> migrateDatabaseToV12(Database db) async {
+  final info = await db.rawQuery('PRAGMA table_info(remote_tools)');
+  final names = info.map((r) => r['name'] as String).toSet();
+  if (!names.contains('arguments_json')) {
+    await db.execute(
+      'ALTER TABLE remote_tools ADD COLUMN arguments_json TEXT',
+    );
+  }
+  if (!names.contains('test_target_ip')) {
+    await db.execute(
+      'ALTER TABLE remote_tools ADD COLUMN test_target_ip TEXT',
+    );
+  }
+
+  final tools = await db.query('remote_tools');
+  for (final row in tools) {
+    final id = row['id'] as int;
+    final existing = row['arguments_json'] as String?;
+    if (existing != null && existing.trim().isNotEmpty) continue;
+
+    final args = await db.query(
+      'remote_tool_args',
+      where: 'remote_tool_id = ?',
+      whereArgs: [id],
+      orderBy: 'id ASC',
+    );
+    if (args.isEmpty) continue;
+    final list = <Map<String, dynamic>>[];
+    for (final a in args) {
+      list.add({
+        'value': a['arg_flag']?.toString() ?? '',
+        'description': a['description']?.toString() ?? '',
+        'is_active': ((a['is_active'] as int?) ?? 0) == 1,
+      });
+    }
+    await db.update(
+      'remote_tools',
+      {'arguments_json': jsonEncode(list)},
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+}
+
+/// Αναβάθμιση σε v13: στήλη `password` (ανά εργαλείο, NULL για υπάρχοντα rows).
+Future<void> migrateDatabaseToV13(Database db) async {
+  final info = await db.rawQuery('PRAGMA table_info(remote_tools)');
+  final names = info.map((r) => r['name'] as String).toSet();
+  if (!names.contains('password')) {
+    await db.execute('ALTER TABLE remote_tools ADD COLUMN password TEXT');
+  }
+}
+
+/// Αναβάθμιση σε v14: αφαίρεση `use_global_password` (αν υπάρχει).
+Future<void> migrateDatabaseToV14(Database db) async {
+  final info = await db.rawQuery('PRAGMA table_info(remote_tools)');
+  final names = info.map((r) => r['name'] as String).toSet();
+  if (!names.contains('use_global_password')) return;
+  try {
+    await db.execute(
+      'ALTER TABLE remote_tools DROP COLUMN use_global_password',
+    );
+  } catch (_) {
+    // Παλιό SQLite χωρίς DROP COLUMN: η στήλη παραμένει αχρησιμοποίητη.
+  }
+}
+
+/// Αναβάθμιση σε v15: `remote_tools.deleted_at` + μετατροπή `equipment.default_remote_tool` σε id.
+Future<void> migrateDatabaseToV15(Database db) async {
+  final info = await db.rawQuery('PRAGMA table_info(remote_tools)');
+  final rtNames = info.map((r) => r['name'] as String).toSet();
+  if (!rtNames.contains('deleted_at')) {
+    await db.execute(
+      'ALTER TABLE remote_tools ADD COLUMN deleted_at TEXT',
+    );
+  }
+
+  final tools = await db.query('remote_tools', columns: ['id', 'name', 'slug']);
+  final toolById = {for (final r in tools) r['id'] as int: r};
+  final equipmentRows =
+      await db.query('equipment', columns: ['id', 'default_remote_tool']);
+
+  int? resolveDefaultToId(String raw) {
+    final t = raw.trim();
+    if (t.isEmpty) return null;
+    final asInt = int.tryParse(t);
+    if (asInt != null) {
+      return toolById.containsKey(asInt) ? asInt : null;
+    }
+    final lower = t.toLowerCase();
+    for (final r in tools) {
+      final id = r['id'] as int;
+      final name = (r['name'] as String?)?.trim().toLowerCase() ?? '';
+      final slug = (r['slug'] as String?)?.trim().toLowerCase() ?? '';
+      if (name == lower || slug == lower) return id;
+    }
+    for (final r in tools) {
+      final name = (r['name'] as String?)?.toLowerCase() ?? '';
+      if (name.contains(lower) && lower.length >= 3) {
+        final id = r['id'] as int;
+        if (lower.contains('anydesk') && name.contains('anydesk')) return id;
+        if (lower.contains('vnc') && name.contains('vnc')) return id;
+        if ((lower.contains('rdp') || lower.contains('remote desktop')) &&
+            (name.contains('rdp') || name.contains('remote'))) {
+          return id;
+        }
+      }
+    }
+    return null;
+  }
+
+  for (final row in equipmentRows) {
+    final idEq = row['id'] as int?;
+    final raw = row['default_remote_tool'] as String?;
+    if (idEq == null) continue;
+    if (raw == null || raw.trim().isEmpty) continue;
+    final newId = resolveDefaultToId(raw);
+    await db.update(
+      'equipment',
+      {
+        'default_remote_tool': newId != null ? '$newId' : null,
+      },
+      where: 'id = ?',
+      whereArgs: [idEq],
+    );
+  }
+}
+
+/// v16: `slug` + `detection_kind` → `role`· αναδημιουργία `remote_tools` με διατήρηση ids.
+Future<void> migrateDatabaseToV16(Database db) async {
+  final info = await db.rawQuery('PRAGMA table_info(remote_tools)');
+  final names = info.map((r) => r['name'] as String).toSet();
+  if (names.contains('role') && !names.contains('slug')) {
+    return;
+  }
+  if (!names.contains('slug')) {
+    return;
+  }
+
+  final oldRows = await db.query('remote_tools');
+
+  String mapRole(String? slug, String? detectionKind) {
+    final s = slug?.trim().toLowerCase() ?? '';
+    if (s == 'vnc' || s == 'rdp' || s == 'anydesk') {
+      return s;
+    }
+    final dk = detectionKind?.trim().toLowerCase() ?? '';
+    if (dk == 'anydesk_like') {
+      return 'anydesk';
+    }
+    if (dk == 'vnc_host') {
+      return 'vnc';
+    }
+    if (dk == 'rdp_host') {
+      return 'rdp';
+    }
+    return 'generic';
+  }
+
+  await db.execute('PRAGMA foreign_keys = OFF');
+  await db.execute('DROP TABLE IF EXISTS remote_tools');
+  await db.execute('''
+CREATE TABLE remote_tools (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  role TEXT NOT NULL,
+  executable_path TEXT NOT NULL,
+  launch_mode TEXT NOT NULL,
+  config_template TEXT,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  is_active INTEGER NOT NULL DEFAULT 1,
+  vnc_host_prefix TEXT,
+  suggested_values TEXT,
+  icon_asset_key TEXT,
+  default_username TEXT,
+  password TEXT,
+  arguments_json TEXT,
+  test_target_ip TEXT,
+  is_exclusive INTEGER NOT NULL DEFAULT 0,
+  deleted_at TEXT
+)
+''');
+  await db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_remote_tools_role ON remote_tools(role)',
+  );
+
+  for (final row in oldRows) {
+    final idRaw = row['id'];
+    final id = idRaw is int ? idRaw : (idRaw as num).toInt();
+    final role = mapRole(
+      row['slug'] as String?,
+      row['detection_kind'] as String?,
+    );
+    await db.insert(
+      'remote_tools',
+      {
+        'id': id,
+        'name': row['name'] ?? '',
+        'role': role,
+        'executable_path': row['executable_path'] ?? '',
+        'launch_mode': (row['launch_mode'] as String?)?.trim().isNotEmpty == true
+            ? row['launch_mode']
+            : 'direct_exec',
+        'config_template': row['config_template'],
+        'sort_order': row['sort_order'] ?? 0,
+        'is_active': row['is_active'] ?? 1,
+        'vnc_host_prefix': row['vnc_host_prefix'],
+        'suggested_values': row['suggested_values'],
+        'icon_asset_key': row['icon_asset_key'],
+        'default_username': row['default_username'],
+        'password': row['password'],
+        'arguments_json': row['arguments_json'],
+        'test_target_ip': row['test_target_ip'],
+        'is_exclusive': row['is_exclusive'] ?? 0,
+        'deleted_at': row['deleted_at'],
+      },
+    );
+  }
+
+  await db.execute('PRAGMA foreign_keys = ON');
+  await seedRemoteToolsAndArgsIfEmpty(db);
+}
+
+/// v17: `remote_tools.is_exclusive` (0/1) για καταστολή μη αποκλειστικών εργαλείων.
+Future<void> migrateDatabaseToV17(Database db) async {
+  final info = await db.rawQuery('PRAGMA table_info(remote_tools)');
+  final names = info.map((r) => r['name'] as String).toSet();
+  if (!names.contains('is_exclusive')) {
+    await db.execute(
+      'ALTER TABLE remote_tools ADD COLUMN is_exclusive INTEGER NOT NULL DEFAULT 0',
+    );
+  }
+}
+
+/// v18: στήλες οντότητας + JSON στο `audit_log` και ευρετήρια απόδοσης.
+Future<void> migrateDatabaseToV18(Database db) async {
+  final info = await db.rawQuery('PRAGMA table_info(audit_log)');
+  final names = info.map((r) => r['name'] as String).toSet();
+  if (!names.contains('entity_type')) {
+    await db.execute('ALTER TABLE audit_log ADD COLUMN entity_type TEXT');
+  }
+  if (!names.contains('entity_id')) {
+    await db.execute('ALTER TABLE audit_log ADD COLUMN entity_id INTEGER');
+  }
+  if (!names.contains('entity_name')) {
+    await db.execute('ALTER TABLE audit_log ADD COLUMN entity_name TEXT');
+  }
+  if (!names.contains('old_values_json')) {
+    await db.execute('ALTER TABLE audit_log ADD COLUMN old_values_json TEXT');
+  }
+  if (!names.contains('new_values_json')) {
+    await db.execute('ALTER TABLE audit_log ADD COLUMN new_values_json TEXT');
+  }
+  await db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_audit_log_timestamp ON audit_log(timestamp)',
+  );
+  await db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_audit_log_action ON audit_log(action)',
+  );
+  await db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_audit_log_entity_type_entity_id ON audit_log(entity_type, entity_id)',
+  );
 }

@@ -2,6 +2,8 @@ import 'dart:io';
 
 import 'package:call_logger/core/database/calls_repository.dart';
 import 'package:call_logger/core/database/database_helper.dart';
+import 'package:call_logger/core/database/database_v1_schema.dart';
+import 'package:call_logger/core/models/remote_tool.dart';
 import 'package:call_logger/core/utils/search_text_normalizer.dart';
 import 'package:flutter/material.dart';
 import 'package:call_logger/core/database/database_init_result.dart';
@@ -11,6 +13,7 @@ import 'package:call_logger/core/providers/settings_provider.dart';
 import 'package:call_logger/core/services/lookup_service.dart';
 import 'package:call_logger/features/calls/models/call_model.dart';
 import 'package:call_logger/features/calls/provider/lookup_provider.dart';
+import 'package:call_logger/features/calls/provider/remote_paths_provider.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:riverpod/misc.dart' show Override;
@@ -90,6 +93,7 @@ Future<void> _ensureDepartmentsTable() async {
 /// Γεμίζει την απομονωμένη βάση με ελάχιστο κατάλογο για ροές κλήσεων/ιστορικού.
 Future<void> seedIsolatedTestDatabase() async {
   final db = await DatabaseHelper.instance.database;
+  await migrateDatabaseToV11(db);
   await _ensureDepartmentsTable();
   await db.delete('tasks');
   await db.delete('calls');
@@ -201,10 +205,28 @@ List<Override> callLoggerTestProviderOverrides() {
       return LookupLoadResult(service: service);
     }),
     showActiveTimerProvider.overrideWith((ref) async => true),
-    showAnyDeskRemoteProvider.overrideWith((ref) async => true),
     showTasksBadgeProvider.overrideWith((ref) async => true),
     showDatabaseNavProvider.overrideWith((ref) async => true),
     showDictionaryNavProvider.overrideWith((ref) async => true),
+    // Αποφυγή επιπλέον async queries στο `remote_tools` κατά widget tests (locks / timers).
+    remoteToolsCatalogProvider.overrideWith((ref) async => const <RemoteTool>[]),
+    remoteToolsAllCatalogProvider.overrideWith((ref) async => const <RemoteTool>[]),
+    remoteToolFormPairsProvider.overrideWith(
+      (ref) async => const <RemoteToolFormPair>[],
+    ),
+    validRemoteToolPathsByIdProvider.overrideWith(
+      (ref) async => <int, String?>{},
+    ),
+    remoteLauncherStatusesByIdProvider.overrideWith(
+      (ref) async => <int, LauncherStatus>{},
+    ),
+    callsRemoteUiConfigProvider.overrideWith(
+      (ref) async => (
+        primaryToolId: null,
+        showSecondaryInOverflow: true,
+        showEmptyRemoteLaunchers: true,
+      ),
+    ),
   ];
 }
 

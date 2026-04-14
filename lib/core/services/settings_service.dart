@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../config/app_config.dart';
+import '../config/audit_retention_config.dart';
 
 /// Υπηρεσία αποθήκευσης και ανάκτησης ρυθμίσεων (key-value) τοπικά.
 class SettingsService {
@@ -10,9 +11,10 @@ class SettingsService {
   static const String _keyRecentPaths = 'recent_database_paths';
   static const String _keyShowImportExcelButton = 'show_import_excel_button';
   static const String _keyShowActiveTimer = 'show_active_timer';
-  static const String _keyShowAnyDeskRemote = 'show_anydesk_remote';
   static const String _keyShowTasksBadge = 'show_tasks_badge';
   static const String _keyNavRailShowLabels = 'nav_rail_show_labels';
+  static const String _keyDatabaseBrowserStatsCardExpanded =
+      'database_browser_stats_card_expanded';
   static const String _keyEquipmentLocationShowBuilding =
       'equipment_location_show_building';
   static const String _keyEnableSpellCheck = 'enable_spell_check';
@@ -22,16 +24,22 @@ class SettingsService {
   static const String _keyDictionaryExportPath = 'dictionary_export_path';
   static const String _keyShowDatabaseNav = 'show_database_nav';
   static const String _keyShowDictionaryNav = 'show_dictionary_nav';
+  static const String _keyRemoteToolPrioritySwapMode =
+      'remote_tool_priority_swap_mode';
   static const int _maxRecentPaths = 3;
 
   /// Κλειδιά για ρυθμίσεις απομακρυσμένης σύνδεσης (πίνακας app_settings).
   static const String _keyVncPaths = 'vnc_paths';
-  static const String _keyVncPassword = 'vnc_password';
   static const String _keyAnydeskPath = 'anydesk_path';
-  static const String _keyTestTargetIp = 'test_target_ip';
   static const String _keyRemoteSurfaceApps = 'remote_surface_apps';
+  static const String _keyCallsPrimaryToolId = 'calls_primary_tool_id';
+  static const String _keyCallsShowSecondaryRemoteActions =
+      'calls_show_secondary_remote_actions';
+  static const String _keyCallsShowEmptyRemoteLaunchers =
+      'calls_show_empty_remote_launchers';
   static const String _keyEquipmentTypes = 'equipment_types';
   static const String _keyLexiconCategories = 'lexicon_categories';
+  static const String _keyAuditRetentionConfig = 'audit_retention_config_v1';
 
   /// Προεπιλεγμένες κατηγορίες λεξικού (CSV για ρυθμίσεις / dropdown).
   static const String defaultLexiconCategoriesCsv =
@@ -138,18 +146,6 @@ class SettingsService {
     await prefs.setBool(_keyShowActiveTimer, value);
   }
 
-  /// Εμφάνιση κουμπιού AnyDesk στη φόρμα κλήσεων. Προεπιλογή: true.
-  Future<bool> getShowAnyDeskRemote() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool(_keyShowAnyDeskRemote) ?? true;
-  }
-
-  /// Ορίζει αν θα εμφανίζεται το κουμπί AnyDesk για απομακρυσμένη σύνδεση.
-  Future<void> setShowAnyDeskRemote(bool value) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_keyShowAnyDeskRemote, value);
-  }
-
   /// Εμφάνιση μετρητή (badge) εκκρεμοτήτων στο κεντρικό μενού. Προεπιλογή: true.
   Future<bool> getShowTasksBadge() async {
     final prefs = await SharedPreferences.getInstance();
@@ -171,6 +167,18 @@ class SettingsService {
   Future<void> setNavRailShowLabels(bool value) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_keyNavRailShowLabels, value);
+  }
+
+  /// Κάρτα «Στατιστικά Βάσης Δεδομένων» στην οθόνη περιήγησης βάσης — ανοιχτή/κλειστή.
+  /// Προεπιλογή: false (συμπτυγμένη).
+  Future<bool> getDatabaseBrowserStatsCardExpanded() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_keyDatabaseBrowserStatsCardExpanded) ?? false;
+  }
+
+  Future<void> setDatabaseBrowserStatsCardExpanded(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_keyDatabaseBrowserStatsCardExpanded, value);
   }
 
   /// Εμφάνιση κωδικού κτιρίου `[...]` στη στήλη Τοποθεσία (πίνακας εξοπλισμού). Προεπιλογή: true.
@@ -272,6 +280,34 @@ class SettingsService {
     await prefs.setBool(_keyShowDictionaryNav, value);
   }
 
+  /// Πολιτική εκκαθάρισης audit log (ηλικία / max rows).
+  Future<AuditRetentionConfig> getAuditRetentionConfig() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_keyAuditRetentionConfig);
+    return AuditRetentionConfig.fromJsonString(raw);
+  }
+
+  Future<void> setAuditRetentionConfig(AuditRetentionConfig config) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+      _keyAuditRetentionConfig,
+      jsonEncode(config.toJson()),
+    );
+  }
+
+  /// Καθολική λειτουργία πεδίου «Προτεραιότητα» στη φόρμα εργαλείου:
+  /// `false` = ταξινόμιση (ολίσθηση), `true` = αντιμετάθεση θέσεων.
+  /// Δεν αποθηκεύεται ανά εργαλείο· κοινή για όλα τα διαλόγους.
+  Future<bool> getRemoteToolPrioritySwapMode() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_keyRemoteToolPrioritySwapMode) ?? false;
+  }
+
+  Future<void> setRemoteToolPrioritySwapMode(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_keyRemoteToolPrioritySwapMode, value);
+  }
+
   // --- Ρυθμίσεις απομακρυσμένης σύνδεσης (app_settings) ---
 
   /// Επιστρέφει τη μοναδική διαδρομή για TightVNC Viewer.
@@ -303,21 +339,6 @@ class SettingsService {
     }
   }
 
-  /// Επιστρέφει τον αποθηκευμένο κωδικό VNC. Προεπιλογή: κενό string.
-  Future<String> getVncPassword() async {
-    final value = _getAppSetting != null
-        ? await _getAppSetting!(_keyVncPassword)
-        : null;
-    return value ?? '';
-  }
-
-  /// Αποθηκεύει τον κωδικό VNC στη βάση.
-  Future<void> setVncPassword(String password) async {
-    if (_setAppSetting != null) {
-      await _setAppSetting!(_keyVncPassword, password);
-    }
-  }
-
   /// Επιστρέφει την αποθηκευμένη διαδρομή AnyDesk. Αν δεν υπάρχει ή είναι κενή, η προεπιλογή.
   Future<String> getAnydeskPath() async {
     final value = _getAppSetting != null
@@ -331,21 +352,6 @@ class SettingsService {
   Future<void> setAnydeskPath(String path) async {
     if (_setAppSetting != null) {
       await _setAppSetting!(_keyAnydeskPath, path.trim());
-    }
-  }
-
-  /// Επιστρέφει τη δοκιμαστική IP/hostname για έλεγχο παραμέτρων (Test). Κενό string αν δεν οριστεί.
-  Future<String> getTestTargetIp() async {
-    final value = _getAppSetting != null
-        ? await _getAppSetting!(_keyTestTargetIp)
-        : null;
-    return value ?? '';
-  }
-
-  /// Αποθηκεύει τη δοκιμαστική IP/hostname για Test (VNC/AnyDesk).
-  Future<void> setTestTargetIp(String value) async {
-    if (_setAppSetting != null) {
-      await _setAppSetting!(_keyTestTargetIp, value.trim());
     }
   }
 
@@ -364,6 +370,61 @@ class SettingsService {
     if (_setAppSetting != null) {
       await _setAppSetting!(_keyRemoteSurfaceApps, value.trim());
     }
+  }
+
+  /// Προεπιλεγμένο κύριο εργαλείο στην οθόνη κλήσεων (`remote_tools.id`)· null = πρώτο ενεργό.
+  Future<int?> getCallsPrimaryToolId() async {
+    final value = _getAppSetting != null
+        ? await _getAppSetting!(_keyCallsPrimaryToolId)
+        : null;
+    if (value == null || value.trim().isEmpty) return null;
+    return int.tryParse(value.trim());
+  }
+
+  Future<void> setCallsPrimaryToolId(int? id) async {
+    if (_setAppSetting == null) return;
+    if (id == null) {
+      await _setAppSetting!(_keyCallsPrimaryToolId, '');
+    } else {
+      await _setAppSetting!(_keyCallsPrimaryToolId, id.toString());
+    }
+  }
+
+  /// Αν false, τα δευτερεύοντα εργαλεία μπαίνουν σε overflow menu.
+  Future<bool> getCallsShowSecondaryRemoteActions() async {
+    final value = _getAppSetting != null
+        ? await _getAppSetting!(_keyCallsShowSecondaryRemoteActions)
+        : null;
+    if (value == null || value.trim().isEmpty) return true;
+    final lower = value.trim().toLowerCase();
+    return lower != '0' && lower != 'false' && lower != 'no';
+  }
+
+  Future<void> setCallsShowSecondaryRemoteActions(bool value) async {
+    if (_setAppSetting == null) return;
+    await _setAppSetting!(
+      _keyCallsShowSecondaryRemoteActions,
+      value ? '1' : '0',
+    );
+  }
+
+  /// Εμφάνιση κουμπιών «εκκίνηση χωρίς παραμέτρους» δίπλα στα εργαλεία κλήσεων.
+  /// Προεπιλογή: true.
+  Future<bool> getCallsShowEmptyRemoteLaunchers() async {
+    final value = _getAppSetting != null
+        ? await _getAppSetting!(_keyCallsShowEmptyRemoteLaunchers)
+        : null;
+    if (value == null || value.trim().isEmpty) return true;
+    final lower = value.trim().toLowerCase();
+    return lower != '0' && lower != 'false' && lower != 'no';
+  }
+
+  Future<void> setCallsShowEmptyRemoteLaunchers(bool value) async {
+    if (_setAppSetting == null) return;
+    await _setAppSetting!(
+      _keyCallsShowEmptyRemoteLaunchers,
+      value ? '1' : '0',
+    );
   }
 
   /// Επιστρέφει λίστα επιλογών για dropdown (split by comma, trim, μη κενά). Τελευταία επιλογή "Κανένα" προστίθεται στα dialogs.

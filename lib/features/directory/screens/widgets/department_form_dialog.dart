@@ -760,10 +760,12 @@ class _DepartmentFormDialogState extends State<DepartmentFormDialog> {
         child: Form(
           key: _formKey,
           child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
+            child: Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
                 TextFormField(
                   controller: _nameController,
                   focusNode: _nameFocus,
@@ -1070,7 +1072,8 @@ class _DepartmentFormDialogState extends State<DepartmentFormDialog> {
                   maxLines: 3,
                   onChanged: (_) => _onFieldChanged(),
                 ),
-              ],
+                ],
+              ),
             ),
           ),
         ),

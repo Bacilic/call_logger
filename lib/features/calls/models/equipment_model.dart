@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import '../../../core/models/remote_tool.dart';
+import '../../../core/models/remote_tool_role.dart';
 import '../utils/equipment_remote_param_key.dart';
 import '../utils/vnc_remote_target.dart';
 
@@ -62,27 +64,135 @@ class EquipmentModel {
   /// Στόχος VNC (host/IP): προτεραιότητα [remoteParams][vnc], αλλιώς [customIp].
   String? get displayCustomIp {
     final fromJson = remoteParams[EquipmentRemoteParamKey.vnc]?.trim();
-    if (fromJson != null && fromJson.isNotEmpty) return fromJson;
+    if (fromJson != null && fromJson.isNotEmpty) {
+      final resolved = VncRemoteTarget.resolveValidVncHost(fromJson);
+      if (resolved != null) return resolved;
+    }
     final leg = customIp?.trim();
-    if (leg != null && leg.isNotEmpty) return leg;
+    if (leg != null && leg.isNotEmpty) {
+      final resolved = VncRemoteTarget.resolveValidVncHost(leg);
+      if (resolved != null) return resolved;
+    }
     return null;
   }
 
   /// Στόχος για VNC: προσαρμοσμένη IP αν υπάρχει, αλλιώς απευθείας IPv4 στον κωδικό, αλλιώς 'PC{code}', αλλιώς 'Άγνωστο'.
+  /// Δεν διαβάζει κλειδιά numeric `remote_tools.id` — χρησιμοποιήστε [vncTargetResolved].
   String get vncTarget {
     final ip = displayCustomIp;
     if (ip != null && ip.isNotEmpty) return ip;
     final c = code?.trim();
     if (c != null && c.isNotEmpty) {
-      final asIpv4 = VncRemoteTarget.tryParseIpv4Host(c);
-      if (asIpv4 != null) return asIpv4;
-      return 'PC$c';
+      final resolved = VncRemoteTarget.resolveValidVncHost(c);
+      if (resolved != null) return resolved;
     }
     return 'Άγνωστο';
   }
 
+  /// VNC / `vnc_host`: dual-read τιμής + πρόθεμα host από το συγκεκριμένο [forTool] (ή προεπιλογή `PC`).
+  String vncLikeTargetResolved(RemoteTool? forTool) {
+    if (forTool != null) {
+      final byId = remoteParams[forTool.id.toString()]?.trim();
+      if (byId != null && byId.isNotEmpty) {
+        final resolved = VncRemoteTarget.resolveValidVncHost(
+          byId,
+          prefix: (forTool.vncHostPrefix?.trim().isNotEmpty ?? false)
+              ? forTool.vncHostPrefix!.trim()
+              : 'PC',
+        );
+        if (resolved != null) return resolved;
+      }
+    }
+    if (forTool == null || forTool.role == ToolRole.vnc) {
+      final legacy = displayCustomIp;
+      if (legacy != null && legacy.isNotEmpty) return legacy;
+    }
+    final c = code?.trim();
+    if (c != null && c.isNotEmpty) {
+      final prefix = (forTool?.vncHostPrefix?.trim().isNotEmpty ?? false)
+          ? forTool!.vncHostPrefix!.trim()
+          : 'PC';
+      final resolved = VncRemoteTarget.resolveValidVncHost(c, prefix: prefix);
+      if (resolved != null) return resolved;
+    }
+    return 'Άγνωστο';
+  }
+
+  /// VNC host με dual-read: `remote_params[vncTool.id]`, μετά legacy, μετά κωδικός + πρόθεμα από ορισμό εργαλείου VNC.
+  String vncTargetResolved(List<RemoteTool> tools) {
+    RemoteTool? vncTool;
+    final prefId = int.tryParse(defaultRemoteTool?.trim() ?? '');
+    if (prefId != null) {
+      for (final t in tools) {
+        if (t.id == prefId && t.role == ToolRole.vnc) {
+          vncTool = t;
+          break;
+        }
+      }
+    }
+    vncTool ??= () {
+      for (final t in tools) {
+        if (t.role == ToolRole.vnc) return t;
+      }
+      return null;
+    }();
+    return vncLikeTargetResolved(vncTool);
+  }
+
+  /// Στόχος RDP (διακομιστής): `remote_params[rdp.id]` μετά legacy `rdp`.
+  String? rdpHostResolved(List<RemoteTool> tools) {
+    RemoteTool? rdpTool;
+    final prefId = int.tryParse(defaultRemoteTool?.trim() ?? '');
+    if (prefId != null) {
+      for (final t in tools) {
+        if (t.id == prefId && t.role == ToolRole.rdp) {
+          rdpTool = t;
+          break;
+        }
+      }
+    }
+    rdpTool ??= () {
+      for (final t in tools) {
+        if (t.role == ToolRole.rdp) return t;
+      }
+      return null;
+    }();
+    if (rdpTool != null) {
+      final byId = remoteParams[rdpTool.id.toString()]?.trim();
+      if (byId != null && byId.isNotEmpty) return byId;
+    }
+    final leg = remoteParams[EquipmentRemoteParamKey.rdp]?.trim();
+    if (leg != null && leg.isNotEmpty) return leg;
+    return null;
+  }
+
   /// Στόχος για AnyDesk: επιστρέφει το ID (null αν μη διαθέσιμο).
   String? get anydeskTarget => displayAnydeskId;
+
+  /// AnyDesk ID με dual-read: `remote_params[anydeskTool.id]` μετά legacy στήλες/κλειδιά.
+  String? anydeskIdResolved(List<RemoteTool> tools) {
+    RemoteTool? adTool;
+    final prefId = int.tryParse(defaultRemoteTool?.trim() ?? '');
+    if (prefId != null) {
+      for (final t in tools) {
+        if (t.id == prefId && t.role == ToolRole.anydesk) {
+          adTool = t;
+          break;
+        }
+      }
+    }
+    adTool ??= () {
+      for (final t in tools) {
+        if (t.role == ToolRole.anydesk) return t;
+      }
+      return null;
+    }();
+    if (adTool != null) {
+      final byId = remoteParams[adTool.id.toString()]?.trim();
+      if (byId != null && byId.isNotEmpty) return byId;
+    }
+    return displayAnydeskId;
+  }
 
   static Map<String, String> _parseRemoteParamsColumn(Object? raw) {
     if (raw == null) return {};

@@ -11,9 +11,17 @@ import '../../../core/utils/user_identity_normalizer.dart';
 import '../../calls/models/equipment_model.dart';
 import '../../calls/models/user_model.dart';
 import '../../calls/provider/lookup_provider.dart';
+import '../models/non_user_phone_entry.dart';
+import '../models/user_catalog_mode.dart';
 import '../models/user_directory_column.dart';
 
 const _catalogUsersVisibleColumnsKey = 'catalog_users_visible_columns';
+
+class _UnsetFocus {
+  const _UnsetFocus();
+}
+
+const _kUnsetFocus = _UnsetFocus();
 
 /// Αποτέλεσμα ανάγνωσης ρυθμίσεων στηλών χρηστών (σειρά πλήρους λίστας + ποια κλειδιά είναι ορατά).
 typedef _UserColumnLayout = ({
@@ -26,6 +34,9 @@ class DirectoryState {
   DirectoryState({
     this.allUsers = const [],
     this.filteredUsers = const [],
+    this.allNonUserPhones = const [],
+    this.filteredNonUserPhones = const [],
+    this.catalogMode = UserCatalogMode.personal,
     this.searchQuery = '',
     this.sortColumn,
     this.sortAscending = true,
@@ -46,6 +57,10 @@ class DirectoryState {
 
   final List<UserModel> allUsers;
   final List<UserModel> filteredUsers;
+  /// Τηλέφωνα στη βάση χωρίς `user_phones` (λειτουργία «Κοινόχρηστα»).
+  final List<NonUserPhoneEntry> allNonUserPhones;
+  final List<NonUserPhoneEntry> filteredNonUserPhones;
+  final UserCatalogMode catalogMode;
   final String searchQuery;
   final String? sortColumn;
   final bool sortAscending;
@@ -66,6 +81,43 @@ class DirectoryState {
       for (final c in columnOrder)
         if (visibleColumnKeys.contains(c.key)) c
     ];
+  }
+
+  DirectoryState copyWith({
+    List<UserModel>? allUsers,
+    List<UserModel>? filteredUsers,
+    List<NonUserPhoneEntry>? allNonUserPhones,
+    List<NonUserPhoneEntry>? filteredNonUserPhones,
+    UserCatalogMode? catalogMode,
+    String? searchQuery,
+    String? sortColumn,
+    bool? sortAscending,
+    Set<int>? selectedIds,
+    List<UserModel>? lastDeleted,
+    List<UserModel>? lastBulkUpdatedUsers,
+    Object? focusedRowIndex = _kUnsetFocus,
+    List<UserDirectoryColumn>? columnOrder,
+    Set<String>? visibleColumnKeys,
+  }) {
+    final nextFocus = identical(focusedRowIndex, _kUnsetFocus)
+        ? this.focusedRowIndex
+        : focusedRowIndex as int?;
+    return DirectoryState(
+      allUsers: allUsers ?? this.allUsers,
+      filteredUsers: filteredUsers ?? this.filteredUsers,
+      allNonUserPhones: allNonUserPhones ?? this.allNonUserPhones,
+      filteredNonUserPhones: filteredNonUserPhones ?? this.filteredNonUserPhones,
+      catalogMode: catalogMode ?? this.catalogMode,
+      searchQuery: searchQuery ?? this.searchQuery,
+      sortColumn: sortColumn ?? this.sortColumn,
+      sortAscending: sortAscending ?? this.sortAscending,
+      selectedIds: selectedIds ?? this.selectedIds,
+      lastDeleted: lastDeleted ?? this.lastDeleted,
+      lastBulkUpdatedUsers: lastBulkUpdatedUsers ?? this.lastBulkUpdatedUsers,
+      focusedRowIndex: nextFocus,
+      columnOrder: columnOrder ?? this.columnOrder,
+      visibleColumnKeys: visibleColumnKeys ?? this.visibleColumnKeys,
+    );
   }
 }
 
@@ -184,11 +236,31 @@ class DirectoryNotifier extends Notifier<DirectoryState> {
       _columnLayoutHydrated = true;
     }
     final dbUsers = await DatabaseHelper.instance.database;
-    final rows = await DirectoryRepository(dbUsers).getAllUsers();
+    final repo = DirectoryRepository(dbUsers);
+    final rows = await repo.getAllUsers();
+    final nonUserRows = await repo.getNonUserPhonesCatalogRows();
     if (!ref.mounted) return;
     final list = rows.map((m) => UserModel.fromMap(m)).toList();
+    final nonUserList = <NonUserPhoneEntry>[];
+    for (final m in nonUserRows) {
+      final pid = m['phone_id'];
+      final rawNum = (m['number'] as String?)?.trim() ?? '';
+      if (pid is! int || rawNum.isEmpty) continue;
+      final deptNames = m['dept_names'] as String?;
+      final primary = m['primary_department_id'];
+      nonUserList.add(
+        NonUserPhoneEntry(
+          phoneId: pid,
+          number: rawNum,
+          departmentNamesDisplay:
+              deptNames != null && deptNames.trim().isNotEmpty ? deptNames : null,
+          primaryDepartmentId: primary is int ? primary : null,
+        ),
+      );
+    }
     state = DirectoryState(
       allUsers: list,
+      allNonUserPhones: nonUserList,
       searchQuery: state.searchQuery,
       sortColumn: state.sortColumn,
       sortAscending: state.sortAscending,
@@ -196,6 +268,7 @@ class DirectoryNotifier extends Notifier<DirectoryState> {
       lastDeleted: state.lastDeleted,
       lastBulkUpdatedUsers: state.lastBulkUpdatedUsers,
       focusedRowIndex: state.focusedRowIndex,
+      catalogMode: state.catalogMode,
       columnOrder: parsed != null
           ? List<UserDirectoryColumn>.from(parsed.order)
           : List<UserDirectoryColumn>.from(state.columnOrder),
@@ -211,6 +284,21 @@ class DirectoryNotifier extends Notifier<DirectoryState> {
   /// Όλα τα tokens του query πρέπει να περιέχονται στο κανονικοποιημένο blob
   /// ([SearchTextNormalizer.containsAllTokens]).
   void filterAndSort() {
+    final users = _filterAndSortPersonalUsers();
+    final shared = _filterAndSortSharedPhones();
+    final len = state.catalogMode == UserCatalogMode.shared
+        ? shared.length
+        : users.length;
+    final idx = state.focusedRowIndex;
+    final clamped = idx != null && idx >= len ? (len > 0 ? len - 1 : null) : idx;
+    state = state.copyWith(
+      filteredUsers: users,
+      filteredNonUserPhones: shared,
+      focusedRowIndex: clamped,
+    );
+  }
+
+  List<UserModel> _filterAndSortPersonalUsers() {
     final q = SearchTextNormalizer.normalizeForSearch(state.searchQuery);
     var list = state.allUsers;
     if (q.isNotEmpty) {
@@ -257,79 +345,84 @@ class DirectoryNotifier extends Notifier<DirectoryState> {
         return asc ? cmp : -cmp;
       });
     }
-    final len = list.length;
-    final idx = state.focusedRowIndex;
-    final clamped = idx != null && idx >= len ? (len > 0 ? len - 1 : null) : idx;
-    state = DirectoryState(
-      allUsers: state.allUsers,
-      filteredUsers: list,
-      searchQuery: state.searchQuery,
-      sortColumn: state.sortColumn,
-      sortAscending: state.sortAscending,
-      selectedIds: state.selectedIds,
-      lastDeleted: state.lastDeleted,
-      lastBulkUpdatedUsers: state.lastBulkUpdatedUsers,
-      focusedRowIndex: clamped,
-      columnOrder: state.columnOrder,
-      visibleColumnKeys: state.visibleColumnKeys,
+    return list;
+  }
+
+  List<NonUserPhoneEntry> _filterAndSortSharedPhones() {
+    var list = state.allNonUserPhones;
+    final q = state.searchQuery;
+    if (q.trim().isNotEmpty) {
+      list = list.where((e) {
+        final blob = '${e.number} ${e.departmentLabel}';
+        return SearchTextNormalizer.containsAllTokens(blob, q);
+      }).toList();
+    }
+    final col = state.sortColumn;
+    final asc = state.sortAscending;
+    if (col != null && col.isNotEmpty) {
+      list = List<NonUserPhoneEntry>.from(list);
+      list.sort((a, b) {
+        int cmp;
+        switch (col) {
+          case 'phone':
+            cmp = a.number.toLowerCase().compareTo(b.number.toLowerCase());
+            break;
+          case 'department':
+            cmp = a.departmentLabel.toLowerCase().compareTo(
+                  b.departmentLabel.toLowerCase(),
+                );
+            break;
+          default:
+            cmp = a.number.toLowerCase().compareTo(b.number.toLowerCase());
+        }
+        return asc ? cmp : -cmp;
+      });
+    }
+    return list;
+  }
+
+  /// Προσωπικά (χρήστες) vs κοινόχρηστα τηλέφωνα χωρίς σύνδεση χρήστη.
+  void setCatalogMode(UserCatalogMode mode) {
+    if (mode == state.catalogMode) return;
+    String? col = state.sortColumn;
+    if (mode == UserCatalogMode.shared) {
+      if (col != 'phone' && col != 'department') {
+        col = 'phone';
+      }
+    }
+    state = state.copyWith(
+      catalogMode: mode,
+      selectedIds: {},
+      focusedRowIndex: null,
+      sortColumn: col,
     );
+    filterAndSort();
   }
 
   void setFocusedRowIndex(int? index) {
-    final len = state.filteredUsers.length;
+    final len = state.catalogMode == UserCatalogMode.shared
+        ? state.filteredNonUserPhones.length
+        : state.filteredUsers.length;
     final clamped = index == null || len == 0
         ? null
         : index.clamp(0, len - 1);
-    state = DirectoryState(
-      allUsers: state.allUsers,
-      filteredUsers: state.filteredUsers,
-      searchQuery: state.searchQuery,
-      sortColumn: state.sortColumn,
-      sortAscending: state.sortAscending,
-      selectedIds: state.selectedIds,
-      lastDeleted: state.lastDeleted,
-      lastBulkUpdatedUsers: state.lastBulkUpdatedUsers,
-      focusedRowIndex: clamped,
-      columnOrder: state.columnOrder,
-      visibleColumnKeys: state.visibleColumnKeys,
-    );
+    state = state.copyWith(focusedRowIndex: clamped);
   }
 
   void setSearchQuery(String q) {
-    state = DirectoryState(
-      allUsers: state.allUsers,
-      filteredUsers: state.filteredUsers,
-      searchQuery: q,
-      sortColumn: state.sortColumn,
-      sortAscending: state.sortAscending,
-      selectedIds: state.selectedIds,
-      lastDeleted: state.lastDeleted,
-      lastBulkUpdatedUsers: state.lastBulkUpdatedUsers,
-      focusedRowIndex: state.focusedRowIndex,
-      columnOrder: state.columnOrder,
-      visibleColumnKeys: state.visibleColumnKeys,
-    );
+    state = state.copyWith(searchQuery: q);
     filterAndSort();
   }
 
   void setSort(String? column, bool ascending) {
-    state = DirectoryState(
-      allUsers: state.allUsers,
-      filteredUsers: state.filteredUsers,
-      searchQuery: state.searchQuery,
-      sortColumn: column,
-      sortAscending: ascending,
-      selectedIds: state.selectedIds,
-      lastDeleted: state.lastDeleted,
-      lastBulkUpdatedUsers: state.lastBulkUpdatedUsers,
-      focusedRowIndex: state.focusedRowIndex,
-      columnOrder: state.columnOrder,
-      visibleColumnKeys: state.visibleColumnKeys,
-    );
+    state = state.copyWith(sortColumn: column, sortAscending: ascending);
     filterAndSort();
   }
 
   void toggleSelection(int id) {
+    if (state.catalogMode == UserCatalogMode.shared) {
+      return;
+    }
     if (!state.visibleColumnKeys.contains(UserDirectoryColumn.selection.key)) {
       return;
     }
@@ -339,35 +432,11 @@ class DirectoryNotifier extends Notifier<DirectoryState> {
     } else {
       next.add(id);
     }
-    state = DirectoryState(
-      allUsers: state.allUsers,
-      filteredUsers: state.filteredUsers,
-      searchQuery: state.searchQuery,
-      sortColumn: state.sortColumn,
-      sortAscending: state.sortAscending,
-      selectedIds: next,
-      lastDeleted: state.lastDeleted,
-      lastBulkUpdatedUsers: state.lastBulkUpdatedUsers,
-      focusedRowIndex: state.focusedRowIndex,
-      columnOrder: state.columnOrder,
-      visibleColumnKeys: state.visibleColumnKeys,
-    );
+    state = state.copyWith(selectedIds: next);
   }
 
   void clearSelection() {
-    state = DirectoryState(
-      allUsers: state.allUsers,
-      filteredUsers: state.filteredUsers,
-      searchQuery: state.searchQuery,
-      sortColumn: state.sortColumn,
-      sortAscending: state.sortAscending,
-      selectedIds: {},
-      lastDeleted: state.lastDeleted,
-      lastBulkUpdatedUsers: state.lastBulkUpdatedUsers,
-      focusedRowIndex: state.focusedRowIndex,
-      columnOrder: state.columnOrder,
-      visibleColumnKeys: state.visibleColumnKeys,
-    );
+    state = state.copyWith(selectedIds: {});
   }
 
   /// Αλλαγή σειράς στο διάλογος Στήλες (δείκτες χωρίς τη στήλη [UserDirectoryColumn.selection]).
@@ -379,19 +448,7 @@ class DirectoryNotifier extends Notifier<DirectoryState> {
     final item = rest.removeAt(oldIndex);
     rest.insert(newIndex, item);
     final newOrder = UserDirectoryColumn.pinSelectionFirst([sel, ...rest]);
-    state = DirectoryState(
-      allUsers: state.allUsers,
-      filteredUsers: state.filteredUsers,
-      searchQuery: state.searchQuery,
-      sortColumn: state.sortColumn,
-      sortAscending: state.sortAscending,
-      selectedIds: state.selectedIds,
-      lastDeleted: state.lastDeleted,
-      lastBulkUpdatedUsers: state.lastBulkUpdatedUsers,
-      focusedRowIndex: state.focusedRowIndex,
-      columnOrder: newOrder,
-      visibleColumnKeys: state.visibleColumnKeys,
-    );
+    state = state.copyWith(columnOrder: newOrder);
     await _persistUserColumnLayout(state);
   }
 
@@ -410,16 +467,8 @@ class DirectoryNotifier extends Notifier<DirectoryState> {
     if (!keys.contains(UserDirectoryColumn.selection.key)) {
       selectedIds = {};
     }
-    state = DirectoryState(
-      allUsers: state.allUsers,
-      filteredUsers: state.filteredUsers,
-      searchQuery: state.searchQuery,
-      sortColumn: state.sortColumn,
-      sortAscending: state.sortAscending,
+    state = state.copyWith(
       selectedIds: selectedIds,
-      lastDeleted: state.lastDeleted,
-      lastBulkUpdatedUsers: state.lastBulkUpdatedUsers,
-      focusedRowIndex: state.focusedRowIndex,
       columnOrder: UserDirectoryColumn.pinSelectionFirst(
         List<UserDirectoryColumn>.from(state.columnOrder),
       ),
@@ -541,18 +590,9 @@ class DirectoryNotifier extends Notifier<DirectoryState> {
     await DirectoryRepository(dbDel).deleteUsers(state.selectedIds.toList());
     await _refreshLookupCache();
     if (!ref.mounted) return;
-    state = DirectoryState(
-      allUsers: state.allUsers,
-      filteredUsers: state.filteredUsers,
-      searchQuery: state.searchQuery,
-      sortColumn: state.sortColumn,
-      sortAscending: state.sortAscending,
+    state = state.copyWith(
       selectedIds: {},
       lastDeleted: toDelete,
-      lastBulkUpdatedUsers: state.lastBulkUpdatedUsers,
-      focusedRowIndex: state.focusedRowIndex,
-      columnOrder: state.columnOrder,
-      visibleColumnKeys: state.visibleColumnKeys,
     );
     await loadUsers();
   }
@@ -565,19 +605,7 @@ class DirectoryNotifier extends Notifier<DirectoryState> {
     await DirectoryRepository(dbRestore).restoreUsers(ids);
     await _refreshLookupCache();
     if (!ref.mounted) return;
-    state = DirectoryState(
-      allUsers: state.allUsers,
-      filteredUsers: state.filteredUsers,
-      searchQuery: state.searchQuery,
-      sortColumn: state.sortColumn,
-      sortAscending: state.sortAscending,
-      selectedIds: state.selectedIds,
-      lastDeleted: null,
-      lastBulkUpdatedUsers: state.lastBulkUpdatedUsers,
-      focusedRowIndex: state.focusedRowIndex,
-      columnOrder: state.columnOrder,
-      visibleColumnKeys: state.visibleColumnKeys,
-    );
+    state = state.copyWith(lastDeleted: null);
     await loadUsers();
   }
 
@@ -592,19 +620,7 @@ class DirectoryNotifier extends Notifier<DirectoryState> {
     await DirectoryRepository(dbBulk).bulkUpdateUsers(ids, changes);
     await _refreshLookupCache();
     if (!ref.mounted) return;
-    state = DirectoryState(
-      allUsers: state.allUsers,
-      filteredUsers: state.filteredUsers,
-      searchQuery: state.searchQuery,
-      sortColumn: state.sortColumn,
-      sortAscending: state.sortAscending,
-      selectedIds: state.selectedIds,
-      lastDeleted: state.lastDeleted,
-      lastBulkUpdatedUsers: toUpdate,
-      focusedRowIndex: state.focusedRowIndex,
-      columnOrder: state.columnOrder,
-      visibleColumnKeys: state.visibleColumnKeys,
-    );
+    state = state.copyWith(lastBulkUpdatedUsers: toUpdate);
     await loadUsers();
   }
 
@@ -615,23 +631,15 @@ class DirectoryNotifier extends Notifier<DirectoryState> {
     for (final u in list) {
       if (u.id != null) {
         final dbUndo = await DatabaseHelper.instance.database;
-        await DirectoryRepository(dbUndo).updateUser(u.id!, u.toMap());
+        await DirectoryRepository(dbUndo).updateUser(
+          u.id!,
+          u.toMap(),
+          recordAudit: false,
+        );
         if (!ref.mounted) return;
       }
     }
-    state = DirectoryState(
-      allUsers: state.allUsers,
-      filteredUsers: state.filteredUsers,
-      searchQuery: state.searchQuery,
-      sortColumn: state.sortColumn,
-      sortAscending: state.sortAscending,
-      selectedIds: state.selectedIds,
-      lastDeleted: state.lastDeleted,
-      lastBulkUpdatedUsers: null,
-      focusedRowIndex: state.focusedRowIndex,
-      columnOrder: state.columnOrder,
-      visibleColumnKeys: state.visibleColumnKeys,
-    );
+    state = state.copyWith(lastBulkUpdatedUsers: null);
     await _refreshLookupCache();
     await loadUsers();
   }

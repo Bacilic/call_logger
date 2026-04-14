@@ -4,6 +4,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../calls/models/equipment_model.dart';
+import '../../../calls/provider/remote_paths_provider.dart';
+import '../../../../core/models/remote_tool.dart';
+import '../../../../core/providers/equipment_focus_intent_provider.dart';
+import '../../../../core/services/default_remote_tool_display.dart';
 import '../../../calls/models/user_model.dart';
 import '../../models/equipment_column.dart';
 import '../../providers/directory_provider.dart';
@@ -12,6 +16,7 @@ import 'bulk_equipment_edit_dialog.dart';
 import 'catalog_column_selector_shell.dart';
 import 'equipment_data_table.dart';
 import 'equipment_form_dialog.dart';
+import 'equipment_settings_dialog.dart';
 
 /// Καρτέλα εξοπλισμού: mirror του UsersTab – αναζήτηση, πίνακας, επιλογή, διαγραφή με undo, προσθήκη, μαζική επεξεργασία.
 class EquipmentTab extends ConsumerStatefulWidget {
@@ -40,12 +45,23 @@ class _EquipmentTabState extends ConsumerState<EquipmentTab> {
 
   @override
   Widget build(BuildContext context) {
+    ref.listen<int?>(equipmentFocusIntentProvider, (previous, next) {
+      if (next == null) return;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        ref.read(equipmentDirectoryProvider.notifier).focusEquipmentById(next);
+        ref.read(equipmentFocusIntentProvider.notifier).clear();
+      });
+    });
+
     final theme = Theme.of(context);
     final state = ref.watch(equipmentDirectoryProvider);
     final notifier = ref.read(equipmentDirectoryProvider.notifier);
     final visibleColumns = state.orderedVisibleColumns;
     final continuousScrollAsync = ref.watch(catalogContinuousScrollProvider);
     final continuousScroll = continuousScrollAsync.value ?? true;
+    final allToolsCatalog =
+        ref.watch(remoteToolsAllCatalogProvider).value ?? const <RemoteTool>[];
 
     if (_searchController.text != state.searchQuery) {
       _searchController.text = state.searchQuery;
@@ -85,6 +101,28 @@ class _EquipmentTabState extends ConsumerState<EquipmentTab> {
                 onPressed: () => _openForm(context, ref, null),
                 icon: const Icon(Icons.add),
                 label: const Text('Προσθήκη'),
+              ),
+              const SizedBox(width: 4),
+              IconButton(
+                tooltip: 'Ρυθμίσεις εξοπλισμού',
+                onPressed: () async {
+                  final saved = await showEquipmentSettingsDialog(context);
+                  if (!context.mounted) return;
+                  if (saved) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Οι τύποι εξοπλισμού αποθηκεύτηκαν.'),
+                      ),
+                    );
+                  }
+                },
+                icon: Image.asset(
+                  'assets/equipment_settings_icon.png',
+                  width: 28,
+                  height: 28,
+                  fit: BoxFit.contain,
+                  filterQuality: FilterQuality.medium,
+                ),
               ),
             ],
           ),
@@ -165,6 +203,10 @@ class _EquipmentTabState extends ConsumerState<EquipmentTab> {
             onRequestDelete: () => _confirmAndDeleteSelected(context, ref),
             onRequestBulkEdit: () => _openBulkEdit(context, ref),
             continuousScroll: continuousScroll,
+            defaultRemoteDisplay: (row) => DefaultRemoteToolDisplay.resolve(
+              row.$1.defaultRemoteTool,
+              allToolsCatalog,
+            ),
           ),
         ),
         if (state.selectedIds.isNotEmpty) ...[

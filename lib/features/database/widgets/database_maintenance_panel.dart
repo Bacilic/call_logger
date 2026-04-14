@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/config/audit_retention_config.dart';
+import '../../../core/services/audit_retention_runner.dart';
+import '../../../core/services/settings_service.dart';
+import '../../audit/providers/audit_providers.dart';
 import '../../calls/provider/lookup_provider.dart';
 import '../../settings/widgets/create_new_database_dialog.dart';
 import '../../tasks/providers/tasks_provider.dart';
@@ -48,6 +52,95 @@ class _DatabaseMaintenancePanelState
   String? _banner;
   bool _bannerError = false;
   int _auditMonths = 6;
+
+  AuditRetentionConfig _retentionCfg = const AuditRetentionConfig();
+  final TextEditingController _retentionDaysController = TextEditingController();
+  final TextEditingController _retentionRowsController = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    _loadRetentionConfig();
+  }
+
+  @override
+  void dispose() {
+    _retentionDaysController.dispose();
+    _retentionRowsController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadRetentionConfig() async {
+    final c = await SettingsService().getAuditRetentionConfig();
+    if (!mounted) return;
+    setState(() {
+      _retentionCfg = c;
+      _retentionDaysController.text =
+          c.maxAgeDays != null ? '${c.maxAgeDays}' : '';
+      _retentionRowsController.text =
+          c.maxRows != null ? '${c.maxRows}' : '';
+    });
+  }
+
+  AuditRetentionConfig _retentionFromForm() {
+    final dRaw = _retentionDaysController.text.trim();
+    final rRaw = _retentionRowsController.text.trim();
+    final d = dRaw.isEmpty ? null : int.tryParse(dRaw);
+    final r = rRaw.isEmpty ? null : int.tryParse(rRaw);
+    return _retentionCfg.copyWith(
+      maxAgeDays: d,
+      maxRows: r,
+      clearMaxAgeDays: dRaw.isEmpty,
+      clearMaxRows: rRaw.isEmpty,
+    );
+  }
+
+  Future<void> _onSaveRetentionConfig() async {
+    final next = _retentionFromForm();
+    await _runGuarded(() async {
+      try {
+        await SettingsService().setAuditRetentionConfig(next);
+        if (mounted) {
+          setState(() => _retentionCfg = next);
+        }
+        _showBanner('Οι ρυθμίσεις retention audit αποθηκεύτηκαν.');
+      } catch (e) {
+        _showBanner('Σφάλμα αποθήκευσης: $e', error: true);
+      }
+    });
+  }
+
+  Future<void> _onPurgeAuditRetentionNow(BuildContext context) async {
+    final cfg = _retentionFromForm();
+    if (cfg.maxAgeDays == null && cfg.maxRows == null) {
+      _showBanner(
+        'Ορίστε τουλάχιστον ημέρες ή μέγιστο πλήθος γραμμών.',
+        error: true,
+      );
+      return;
+    }
+    final ok = await _doubleConfirm(
+      context,
+      title: 'Εκκαθάριση audit (retention)',
+      body:
+          'Θα εφαρμοστεί η τρέχουσα πολιτική (ηλικία / μέγιστο πλήθος) στον πίνακα audit_log.',
+    );
+    if (!ok || !context.mounted) return;
+    await _runGuarded(() async {
+      try {
+        final r = await AuditRetentionRunner.applyWithConfig(
+          cfg,
+          ignoreEnabledGate: true,
+        );
+        ref.invalidate(auditListProvider);
+        _showBanner(
+          'Διαγράφηκαν ${r.byAge} εγγραφές (ηλικία) και ${r.byTrim} (όριο πλήθους).',
+        );
+      } catch (e) {
+        _showBanner('Σφάλμα: $e', error: true);
+      }
+    });
+  }
 
   Future<void> _runGuarded(Future<void> Function() fn) async {
     setState(() {
@@ -374,6 +467,81 @@ class _DatabaseMaintenancePanelState
                     ),
                     const SizedBox(height: 12),
                   ],
+                  _sectionTitle(theme, 'Αυτόματη εκκαθάριση audit (retention)'),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Περιορισμός μεγέθους πίνακα audit_log (τοπικές ρυθμίσεις· όχι στο λεξικό).',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Ενεργή πολιτική retention'),
+                    subtitle: const Text(
+                      'Χρησιμοποιείται για αυτόματη εκκαθάριση κατά την εκκίνηση (αν είναι ενεργό παρακάτω).',
+                    ),
+                    value: _retentionCfg.enabled,
+                    onChanged: _busy
+                        ? null
+                        : (v) => setState(() => _retentionCfg = _retentionCfg.copyWith(enabled: v)),
+                  ),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Εκκαθάριση κατά την εκκίνηση εφαρμογής'),
+                    value: _retentionCfg.purgeOnAppStart,
+                    onChanged: _busy || !_retentionCfg.enabled
+                        ? null
+                        : (v) => setState(
+                              () => _retentionCfg =
+                                  _retentionCfg.copyWith(purgeOnAppStart: v),
+                            ),
+                  ),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: _retentionDaysController,
+                    enabled: !_busy,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                      labelText: 'Μέγιστη ηλικία (ημέρες)',
+                      hintText: 'Κενό = χωρίς όριο ηλικίας',
+                      border: OutlineInputBorder(),
+                      isDense: true,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: _retentionRowsController,
+                    enabled: !_busy,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                      labelText: 'Μέγιστο πλήθος γραμμών audit',
+                      hintText: 'Κενό = χωρίς όριο πλήθους',
+                      border: OutlineInputBorder(),
+                      isDense: true,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      FilledButton.icon(
+                        onPressed: _busy ? null : _onSaveRetentionConfig,
+                        icon: const Icon(Icons.save_outlined),
+                        label: const Text('Αποθήκευση ρυθμίσεων'),
+                      ),
+                      FilledButton.tonalIcon(
+                        onPressed: _busy
+                            ? null
+                            : () => _onPurgeAuditRetentionNow(context),
+                        icon: const Icon(Icons.auto_delete_outlined),
+                        label: const Text('Εκκαθάριση τώρα'),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 24),
                   _sectionTitle(theme, 'Εκκαθάριση'),
                   const SizedBox(height: 8),
                   ...DatabaseMaintenanceService.purgeableTablesUiOrder

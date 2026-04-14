@@ -9,15 +9,15 @@ import 'categories_data_table.dart';
 import 'category_form_dialog.dart';
 import 'category_undo_snackbar.dart';
 
-/// Καρτέλα «Διάφορα»: κατηγορίες κλήσεων.
-class CategoriesTab extends ConsumerStatefulWidget {
-  const CategoriesTab({super.key});
+/// Προβολή κατηγοριών προβλήματος (χρήση από hub «Διάφορα» ή αλλού).
+class CategoriesView extends ConsumerStatefulWidget {
+  const CategoriesView({super.key});
 
   @override
-  ConsumerState<CategoriesTab> createState() => _CategoriesTabState();
+  ConsumerState<CategoriesView> createState() => _CategoriesViewState();
 }
 
-class _CategoriesTabState extends ConsumerState<CategoriesTab> {
+class _CategoriesViewState extends ConsumerState<CategoriesView> {
   final TextEditingController _searchController = TextEditingController();
 
   @override

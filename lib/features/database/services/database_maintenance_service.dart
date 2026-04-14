@@ -4,6 +4,7 @@ import 'package:path/path.dart' as p;
 
 import '../../../core/database/database_helper.dart';
 import '../../../core/database/directory_repository.dart';
+import '../../../core/services/audit_service.dart';
 import '../../../core/services/settings_service.dart';
 import '../../tasks/models/task.dart';
 import '../models/database_backup_settings.dart';
@@ -110,11 +111,31 @@ class DatabaseMaintenanceService {
   Future<void> runVacuum() async {
     final db = await DatabaseHelper.instance.database;
     await db.execute('VACUUM');
+    try {
+      final user = await AuditService.performingUser(db);
+      await AuditService.log(
+        db,
+        action: 'VACUUM ΒΑΣΗΣ',
+        userPerforming: user,
+        entityType: AuditEntityTypes.maintenance,
+        details: 'VACUUM',
+      );
+    } catch (_) {}
   }
 
   Future<void> runReindex() async {
     final db = await DatabaseHelper.instance.database;
     await db.execute('REINDEX');
+    try {
+      final user = await AuditService.performingUser(db);
+      await AuditService.log(
+        db,
+        action: 'REINDEX ΒΑΣΗΣ',
+        userPerforming: user,
+        entityType: AuditEntityTypes.maintenance,
+        details: 'REINDEX',
+      );
+    } catch (_) {}
   }
 
   /// Πλήρες άδειασμα επιτρεπτού πίνακα (`DELETE FROM`, όχι `DROP`).
@@ -123,7 +144,21 @@ class DatabaseMaintenanceService {
       throw ArgumentError('Ο πίνακας δεν επιτρέπεται για εκκαθάριση: $tableName');
     }
     final db = await DatabaseHelper.instance.database;
-    return db.delete(tableName);
+    final n = await db.delete(tableName);
+    if (tableName != 'audit_log') {
+      try {
+        final user = await AuditService.performingUser(db);
+        await AuditService.log(
+          db,
+          action: 'ΠΛΗΡΗΣ ΕΚΚΑΘΑΡΙΣΗ ΠΙΝΑΚΑ',
+          userPerforming: user,
+          entityType: AuditEntityTypes.maintenance,
+          details: 'table=$tableName',
+          newValues: {'table': tableName, 'rows_deleted': n},
+        );
+      } catch (_) {}
+    }
+    return n;
   }
 
   /// Διαγραφή εγγραφών audit με `timestamp` (ISO) παλαιότερες από [cutoff].
@@ -133,11 +168,23 @@ class DatabaseMaintenanceService {
     }
     final db = await DatabaseHelper.instance.database;
     final iso = cutoff.toIso8601String();
-    return db.delete(
+    final n = await db.delete(
       'audit_log',
       where: 'timestamp < ?',
       whereArgs: [iso],
     );
+    try {
+      final user = await AuditService.performingUser(db);
+      await AuditService.log(
+        db,
+        action: 'ΕΚΚΑΘΑΡΙΣΗ ΠΑΛΑΙΩΝ ΕΓΓΡΑΦΩΝ AUDIT',
+        userPerforming: user,
+        entityType: AuditEntityTypes.maintenance,
+        details: 'deleteAuditLogOlderThan',
+        newValues: {'removed': n, 'cutoff': iso},
+      );
+    } catch (_) {}
+    return n;
   }
 
   /// Διαγραφή μόνο κλειστών εκκρεμοτήτων με `updated_at` πριν το [cutoff].
@@ -148,13 +195,27 @@ class DatabaseMaintenanceService {
     final db = await DatabaseHelper.instance.database;
     final closed = TaskStatus.closed.toDbValue;
     final iso = cutoff.toIso8601String();
-    return db.delete(
+    final n = await db.delete(
       'tasks',
       where:
           'status = ? AND COALESCE(is_deleted, 0) = 0 AND COALESCE(updated_at, created_at) IS NOT NULL '
           'AND COALESCE(updated_at, created_at) < ?',
       whereArgs: [closed, iso],
     );
+    if (n > 0) {
+      try {
+        final user = await AuditService.performingUser(db);
+        await AuditService.log(
+          db,
+          action: 'ΔΙΑΓΡΑΦΗ ΠΑΛΑΙΩΝ ΚΛΕΙΣΤΩΝ ΕΚΚΡΕΜΟΤΗΤΩΝ',
+          userPerforming: user,
+          entityType: AuditEntityTypes.maintenance,
+          details: 'deleteClosedTasksOlderThan',
+          newValues: {'removed': n, 'cutoff': iso},
+        );
+      } catch (_) {}
+    }
+    return n;
   }
 
   /// Αφαίρεση ημερολογιακών μηνών (π.χ. audit «παλαιότερα από N μήνες»).
@@ -296,6 +357,19 @@ class DatabaseMaintenanceService {
       );
     }
 
+    try {
+      final dbLog = await DatabaseHelper.instance.database;
+      final user = await AuditService.performingUser(dbLog);
+      await AuditService.log(
+        dbLog,
+        action: 'ΝΕΑ ΒΑΣΗ ΣΕ ΕΠΙΛΕΓΜΕΝΗ ΔΙΑΔΡΟΜΗ',
+        userPerforming: user,
+        entityType: AuditEntityTypes.maintenance,
+        details: 'createNewDatabaseAtChosenPath',
+        newValues: {'path': normTarget, 'previous_renamed_to': oldName},
+      );
+    } catch (_) {}
+
     return const ReplaceDatabaseResult.success();
   }
 
@@ -354,6 +428,22 @@ class DatabaseMaintenanceService {
         'Η νέα βάση δημιουργήθηκε αλλά απέτυχε το άνοιγμα: $e',
       );
     }
+
+    try {
+      final dbLog = await DatabaseHelper.instance.database;
+      final user = await AuditService.performingUser(dbLog);
+      await AuditService.log(
+        dbLog,
+        action: 'ΑΝΤΙΚΑΤΑΣΤΑΣΗ ΤΡΕΧΟΥΣΑΣ ΒΑΣΗΣ ΜΕ ΝΕΑ',
+        userPerforming: user,
+        entityType: AuditEntityTypes.maintenance,
+        details: 'replaceCurrentDatabaseWithNew',
+        newValues: {
+          'path': dbPath,
+          'previous_bundle_renamed_to': oldName,
+        },
+      );
+    } catch (_) {}
 
     return const ReplaceDatabaseResult.success();
   }

@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../database/database_init_progress_provider.dart';
+import '../services/audit_retention_runner.dart';
 import 'app_initializer.dart';
 
 /// Provider αρχικοποίησης εφαρμογής. Τρέχει μία φορά στην εκκίνηση.
@@ -15,6 +16,11 @@ final appInitProvider = FutureProvider<AppInitResult>((ref) async {
   );
   if (result.success) {
     await AppInitializer.activateBackupSchedulingAfterDatabaseReady(ref);
+    try {
+      await AuditRetentionRunner.applyIfConfiguredOnStartup();
+    } catch (_) {
+      // Soft-fail: η εκκίνηση δεν μπλοκάρεται από retention.
+    }
   }
   return result;
 });

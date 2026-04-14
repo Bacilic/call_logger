@@ -4,8 +4,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
+import '../../../core/providers/history_audit_immersive_provider.dart';
+import '../../../core/providers/lexicon_full_mode_provider.dart';
+import '../../../core/providers/shell_navigation_intent_provider.dart';
 import '../../../core/widgets/calendar_range_picker.dart';
+import '../../../core/providers/settings_provider.dart';
+import '../../../core/widgets/main_nav_destination.dart';
+import '../providers/history_application_audit_view_provider.dart';
 import '../providers/history_provider.dart';
+import '../widgets/application_audit_tab.dart';
 
 /// Επίπεδο μεγέθυνσης πίνακα ιστορικού (0.5–2.0).
 final historyTableZoomProvider =
@@ -94,6 +101,105 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
         );
   }
 
+  void _toggleApplicationAuditView() {
+    final next = !ref.read(historyApplicationAuditViewProvider);
+    ref.read(historyApplicationAuditViewProvider.notifier).set(next);
+    if (next) {
+      ref.read(historyAuditImmersiveProvider.notifier).setTrue();
+      ref.read(lexiconFullModeProvider.notifier).setFalse();
+    } else {
+      ref.read(historyAuditImmersiveProvider.notifier).setFalse();
+    }
+  }
+
+  void _navigateFromImmersiveHistory(MainNavDestination destination) {
+    ref.read(shellNavigationIntentProvider.notifier).setPending(destination);
+    ref.read(historyAuditImmersiveProvider.notifier).setFalse();
+    ref.read(historyApplicationAuditViewProvider.notifier).setFalse();
+  }
+
+  static Widget _navMenuRow(IconData icon, String label) {
+    return Row(
+      children: [
+        Icon(icon, size: 22),
+        const SizedBox(width: 12),
+        Expanded(child: Text(label)),
+      ],
+    );
+  }
+
+  Widget _immersiveNavigationMenuButton() {
+    final showDb = ref.watch(showDatabaseNavProvider).maybeWhen(
+          data: (v) => v,
+          orElse: () => true,
+        );
+    return PopupMenuButton<MainNavDestination>(
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+      ),
+      tooltip: 'Μετάβαση σε άλλη οθόνη',
+      icon: const Icon(Icons.menu),
+      padding: EdgeInsets.zero,
+      constraints: const BoxConstraints(
+        minWidth: 40,
+        minHeight: 40,
+      ),
+      onSelected: _navigateFromImmersiveHistory,
+      itemBuilder: (context) {
+        return <PopupMenuEntry<MainNavDestination>>[
+          PopupMenuItem(
+            value: MainNavDestination.calls,
+            child: _navMenuRow(Icons.phone_in_talk, 'Κλήσεις'),
+          ),
+          PopupMenuItem(
+            value: MainNavDestination.tasks,
+            child: _navMenuRow(Icons.task_alt, 'Εκκρεμότητες'),
+          ),
+          PopupMenuItem(
+            value: MainNavDestination.directory,
+            child: _navMenuRow(Icons.contacts, 'Κατάλογος'),
+          ),
+          PopupMenuItem(
+            value: MainNavDestination.history,
+            child: _navMenuRow(Icons.history, 'Ιστορικό (κλήσεις)'),
+          ),
+          if (showDb)
+            PopupMenuItem(
+              value: MainNavDestination.database,
+              child: _navMenuRow(Icons.storage, 'Βάση Δεδομένων'),
+            ),
+        ];
+      },
+    );
+  }
+
+  Widget _auditToggleButton({
+    required String tooltip,
+    required bool backToCallHistory,
+  }) {
+    final asset = backToCallHistory
+        ? 'assets/back_to_call_history.png'
+        : 'assets/audit_log_icon.png';
+    final fallbackIcon = backToCallHistory
+        ? Icons.history
+        : Icons.fact_check_outlined;
+    return Tooltip(
+      message: tooltip,
+      child: IconButton(
+        padding: const EdgeInsets.all(8),
+        constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
+        onPressed: _toggleApplicationAuditView,
+        icon: Image.asset(
+          asset,
+          width: 24,
+          height: 24,
+          errorBuilder: (context, error, stackTrace) =>
+              Icon(fallbackIcon, size: 24),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -101,6 +207,8 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
     final asyncCalls = ref.watch(historyCallsProvider);
     final asyncCategories = ref.watch(historyCategoriesProvider);
     final tableZoom = ref.watch(historyTableZoomProvider);
+    final appAudit = ref.watch(historyApplicationAuditViewProvider);
+    final immersive = ref.watch(historyAuditImmersiveProvider);
 
     String dateRangeLabel = '';
     if (filter.dateFrom != null && filter.dateTo != null) {
@@ -113,9 +221,45 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
     }
     final hasDateRange = filter.dateFrom != null || filter.dateTo != null;
 
+    if (appAudit) {
+      return Scaffold(
+        appBar: AppBar(
+          leading: immersive ? _immersiveNavigationMenuButton() : null,
+          title: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'Ιστορικό Εφαρμογής',
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              _auditToggleButton(
+                tooltip: 'Εναλλαγή σε ιστορικό κλήσεων',
+                backToCallHistory: true,
+              ),
+            ],
+          ),
+        ),
+        body: const ApplicationAuditTab(),
+      );
+    }
+
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Ιστορικό Κλήσεων'),
+        title: Row(
+          children: [
+            const Expanded(
+              child: Text(
+                'Ιστορικό Κλήσεων',
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            _auditToggleButton(
+              tooltip: 'Εναλλαγή σε ιστορικό εφαρμογής (audit)',
+              backToCallHistory: false,
+            ),
+          ],
+        ),
       ),
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -379,6 +523,35 @@ class _HistoryDataTableState extends ConsumerState<_HistoryDataTable> {
 
   String _str(dynamic v) => v?.toString().trim() ?? '';
 
+  static final DateFormat _callDateParse = DateFormat('yyyy-MM-dd');
+  static final DateFormat _callDateTimeParse = DateFormat('yyyy-MM-dd HH:mm');
+  static final DateFormat _callDateTimeDisplay = DateFormat('dd-MM-yyyy HH:mm');
+
+  /// Ανάλυση ημ/νίας & ώρας όπως αποθηκεύονται στη βάση (date: yyyy-MM-dd, time: HH:mm).
+  DateTime? _parseCallDateTime(Map<String, dynamic> row) {
+    final d = _str(row['date']);
+    final t = _str(row['time']);
+    if (d.isEmpty) return null;
+    try {
+      if (t.isEmpty) {
+        return _callDateParse.parseStrict(d);
+      }
+      return _callDateTimeParse.parseStrict('$d $t');
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Εμφάνιση ως "ηη-μμ-εεεε ωω:λλ" (dd-MM-yyyy HH:mm).
+  String _formatCallDateTimeDisplay(Map<String, dynamic> row) {
+    final dt = _parseCallDateTime(row);
+    if (dt != null) {
+      return _callDateTimeDisplay.format(dt);
+    }
+    final raw = '${_str(row['date'])} ${_str(row['time'])}'.trim();
+    return raw.isEmpty ? '—' : raw;
+  }
+
   /// Μορφοποίηση διάρκειας (δευτερόλεπτα) ως "λλ:δδ". Null → "—".
   String _formatDuration(dynamic duration) {
     if (duration == null) return '—';
@@ -393,9 +566,8 @@ class _HistoryDataTableState extends ConsumerState<_HistoryDataTable> {
   Comparable<Object> _valueForSort(Map<String, dynamic> row, int columnIndex) {
     switch (columnIndex) {
       case 0:
-        final d = _str(row['date']);
-        final t = _str(row['time']);
-        return '$d $t'.trim();
+        final dt = _parseCallDateTime(row);
+        return dt?.millisecondsSinceEpoch ?? -1;
       case 1:
         return _userDisplay(row);
       case 2:
@@ -465,8 +637,8 @@ class _HistoryDataTableState extends ConsumerState<_HistoryDataTable> {
                   dataRowMinHeight: 48.0 * zoomLevel,
                   dataRowMaxHeight: 48.0 * zoomLevel,
                   headingRowHeight: 56.0 * zoomLevel,
-                  columnSpacing: 56.0 * zoomLevel,
-                  horizontalMargin: 24.0 * zoomLevel,
+                  columnSpacing: 28.0 * zoomLevel,
+                  horizontalMargin: 12.0 * zoomLevel,
                   sortColumnIndex: _sortColumnIndex,
                   sortAscending: _sortAscending,
                 columns: [
@@ -521,9 +693,7 @@ class _HistoryDataTableState extends ConsumerState<_HistoryDataTable> {
                   ),
                 ],
                 rows: rowsToShow.map((row) {
-                  final date = _str(row['date']);
-                  final time = _str(row['time']);
-                  final dateTime = '$date $time'.trim();
+                  final dateTime = _formatCallDateTimeDisplay(row);
                   final user = _userDisplay(row);
                   final phone = row['user_phone']?.toString().trim() ?? '—';
                   final department = _str(row['user_department']);
@@ -532,7 +702,7 @@ class _HistoryDataTableState extends ConsumerState<_HistoryDataTable> {
                   final durationStr = _formatDuration(row['duration']);
                   return DataRow(
                     cells: [
-                      DataCell(Text(dateTime.isEmpty ? '—' : dateTime)),
+                      DataCell(Text(dateTime)),
                       DataCell(ConstrainedBox(
                         constraints: const BoxConstraints(maxWidth: 180),
                         child: Text(user, overflow: TextOverflow.ellipsis),

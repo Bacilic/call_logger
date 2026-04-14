@@ -6,6 +6,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import '../../../core/database/database_helper.dart';
 import '../../../core/database/directory_repository.dart';
+import '../../../core/services/audit_service.dart';
 import '../../../core/utils/search_text_normalizer.dart';
 import '../models/task.dart';
 import '../models/task_filter.dart' show TaskFilter, TaskSortOption;
@@ -34,6 +35,79 @@ class OrphanCall {
 class TaskService {
   Future<Database> get _db => DatabaseHelper.instance.database;
   bool? _hasSnoozeHistoryColumnCache;
+
+  static const List<String> _kTaskAuditKeys = [
+    'call_id',
+    'caller_id',
+    'equipment_id',
+    'department_id',
+    'phone_id',
+    'phone_text',
+    'user_text',
+    'equipment_text',
+    'department_text',
+    'title',
+    'description',
+    'due_date',
+    'snooze_until',
+    'status',
+    'priority',
+    'solution_notes',
+    'is_deleted',
+  ];
+
+  Future<void> _auditTaskCreate(Database db, int id, Map<String, dynamic> row) async {
+    try {
+      final user = await AuditService.performingUser(db);
+      final nv = <String, dynamic>{};
+      for (final k in _kTaskAuditKeys) {
+        if (row.containsKey(k) && row[k] != null) nv[k] = row[k];
+      }
+      await AuditService.log(
+        db,
+        action: 'ΔΗΜΙΟΥΡΓΙΑ ΕΚΚΡΕΜΟΤΗΤΑΣ',
+        userPerforming: user,
+        details: 'tasks id=$id',
+        entityType: AuditEntityTypes.task,
+        entityId: id,
+        entityName: row['title']?.toString(),
+        newValues: nv.isEmpty ? null : nv,
+      );
+    } catch (_) {}
+  }
+
+  Future<void> _auditTaskUpdate(
+    Database db,
+    int id,
+    Map<String, dynamic> oldRow,
+    Map<String, dynamic> newMap,
+  ) async {
+    try {
+      final oldDiff = <String, dynamic>{};
+      final newDiff = <String, dynamic>{};
+      for (final k in _kTaskAuditKeys) {
+        final a = oldRow[k];
+        final b = newMap[k];
+        if ('${a ?? ''}' != '${b ?? ''}') {
+          oldDiff[k] = a;
+          newDiff[k] = b;
+        }
+      }
+      if (newDiff.isEmpty) return;
+      final user = await AuditService.performingUser(db);
+      await AuditService.log(
+        db,
+        action: 'ΤΡΟΠΟΠΟΙΗΣΗ ΕΚΚΡΕΜΟΤΗΤΑΣ',
+        userPerforming: user,
+        details: 'tasks id=$id',
+        entityType: AuditEntityTypes.task,
+        entityId: id,
+        entityName: newMap['title']?.toString() ?? oldRow['title']?.toString(),
+        oldValues: oldDiff,
+        newValues: newDiff,
+      );
+    } catch (_) {}
+  }
 
   Future<bool> _hasSnoozeHistoryColumn(Database db) async {
     final cached = _hasSnoozeHistoryColumnCache;
@@ -256,7 +330,102 @@ class TaskService {
       ),
     };
     final id = await db.insert('tasks', row);
+    await _auditTaskCreate(db, id, row);
     return id;
+  }
+
+  /// Προσθέτει γραμμή στην περιγραφή ανοιχτής γρήγορης εκκρεμότητας (ίδιο [taskId]).
+  /// Επιστρέφει false αν λείπει η εγγραφή, είναι διαγραμμένη/κλειστή ή δεν είναι quick-add.
+  Future<bool> appendToQuickAddDescription(int taskId, String addition) async {
+    final a = addition.trim();
+    if (a.isEmpty) return false;
+    final db = await _db;
+    final rows = await db.query(
+      'tasks',
+      where: 'id = ?',
+      whereArgs: [taskId],
+      limit: 1,
+    );
+    if (rows.isEmpty) return false;
+    final task = Task.fromMap(rows.first);
+    if (task.isDeleted || !task.isQuickAdd) return false;
+    if (task.status == TaskStatus.closed.toDbValue) return false;
+    final desc = (task.description ?? '').trim();
+    final newDesc = desc.isEmpty ? '${Task.quickAddTag} $a' : '$desc\n$a';
+    await updateTask(task.copyWith(description: newDesc));
+    return true;
+  }
+
+  /// Συμπληρώνει κενά FK/snapshot πεδία σε γρήγορη εκκρεμότητα (χωρίς αντικατάσταση μη κενών).
+  Future<bool> mergeQuickAddEntitySnapshot({
+    required int taskId,
+    int? callerId,
+    int? departmentId,
+    int? equipmentId,
+    String? phoneText,
+    String? userText,
+    String? equipmentText,
+    String? departmentText,
+  }) async {
+    final db = await _db;
+    final rows = await db.query(
+      'tasks',
+      where: 'id = ?',
+      whereArgs: [taskId],
+      limit: 1,
+    );
+    if (rows.isEmpty) return false;
+    var task = Task.fromMap(rows.first);
+    if (task.isDeleted || !task.isQuickAdd) return false;
+
+    var next = task;
+    var changed = false;
+
+    if (task.callerId == null && callerId != null) {
+      next = next.copyWith(callerId: callerId);
+      changed = true;
+    }
+    if (task.departmentId == null && departmentId != null) {
+      next = next.copyWith(departmentId: departmentId);
+      changed = true;
+    }
+    if (task.equipmentId == null && equipmentId != null) {
+      next = next.copyWith(equipmentId: equipmentId);
+      changed = true;
+    }
+
+    String? pickText(String? current, String? incoming) {
+      final inc = incoming?.trim();
+      if (inc == null || inc.isEmpty) return null;
+      final cur = current?.trim() ?? '';
+      if (cur.isEmpty) return inc;
+      return null;
+    }
+
+    final u = pickText(next.userText, userText);
+    if (u != null) {
+      next = next.copyWith(userText: u);
+      changed = true;
+    }
+    final p = pickText(next.phoneText, phoneText);
+    if (p != null) {
+      next = next.copyWith(phoneText: p);
+      changed = true;
+    }
+    final e = pickText(next.equipmentText, equipmentText);
+    if (e != null) {
+      next = next.copyWith(equipmentText: e);
+      changed = true;
+    }
+    final d = pickText(next.departmentText, departmentText);
+    if (d != null) {
+      next = next.copyWith(departmentText: d);
+      changed = true;
+    }
+
+    if (!changed) return false;
+    await updateTask(next);
+    return true;
   }
 
   Future<List<Task>> getOpenTasks() async {
@@ -405,13 +574,24 @@ class TaskService {
     map['search_index'] = SearchTextNormalizer.normalizeForSearch(
       task.combinedSearchText,
     );
-    return db.insert('tasks', map);
+    final id = await db.insert('tasks', map);
+    await _auditTaskCreate(db, id, map);
+    return id;
   }
 
   /// Ενημερώνει μια υπάρχουσα εγγραφή στον πίνακα tasks.
   Future<void> updateTask(Task task) async {
     if (task.id == null) return;
     final db = await _db;
+    final tid = task.id!;
+    final oldRows = await db.query(
+      'tasks',
+      where: 'id = ?',
+      whereArgs: [tid],
+      limit: 1,
+    );
+    final oldRow = oldRows.isEmpty ? null : Map<String, dynamic>.from(oldRows.first);
+
     final map = task.toMap();
     map.remove('id');
     if (!await _hasSnoozeHistoryColumn(db)) {
@@ -421,7 +601,10 @@ class TaskService {
     map['search_index'] = SearchTextNormalizer.normalizeForSearch(
       task.combinedSearchText,
     );
-    await db.update('tasks', map, where: 'id = ?', whereArgs: [task.id]);
+    final n = await db.update('tasks', map, where: 'id = ?', whereArgs: [tid]);
+    if (n > 0 && oldRow != null) {
+      await _auditTaskUpdate(db, tid, oldRow, map);
+    }
   }
 
   /// Soft delete εγγραφής βάσει ID (audit στο [DirectoryRepository]).
@@ -433,6 +616,14 @@ class TaskService {
   /// Ορίζει status = closed, solution_notes και updated_at.
   Future<void> closeTask(int id, String solutionNotes) async {
     final db = await _db;
+    final oldRows = await db.query(
+      'tasks',
+      where: 'id = ?',
+      whereArgs: [id],
+      limit: 1,
+    );
+    final oldStatus =
+        oldRows.isEmpty ? null : oldRows.first['status'] as String?;
     final now = DateTime.now().toIso8601String();
     await db.update(
       'tasks',
@@ -440,16 +631,35 @@ class TaskService {
       where: 'id = ?',
       whereArgs: [id],
     );
+    try {
+      final user = await AuditService.performingUser(db);
+      await AuditService.log(
+        db,
+        action: 'ΚΛΕΙΣΙΜΟ ΕΚΚΡΕΜΟΤΗΤΑΣ',
+        userPerforming: user,
+        details: 'tasks id=$id',
+        entityType: AuditEntityTypes.task,
+        entityId: id,
+        oldValues: oldStatus != null ? {'status': oldStatus} : null,
+        newValues: {
+          'status': 'closed',
+          'solution_notes': solutionNotes,
+        },
+      );
+    } catch (_) {}
   }
 
   /// Κλήσεις με status pending που δεν έχουν αντίστοιχο task.
   Future<List<OrphanCall>> getCallsWithoutTask() async {
     final db = await _db;
+    // Ορφανή = pending κλήση χωρίς καμία εγγραφή στο `tasks` για αυτό το `call_id`.
+    // Αν υπήρχε task (ακόμη και soft-deleted), δεν ξαναπροτείνουμε μαζική δημιουργία.
     final rows = await db.rawQuery('''
       SELECT c.id, c.date, c.time, c.caller_id, c.caller_text, c.issue
       FROM calls c
-      LEFT JOIN tasks t ON t.call_id = c.id AND COALESCE(t.is_deleted, 0) = 0
-      WHERE t.id IS NULL AND c.status = 'pending' AND COALESCE(c.is_deleted, 0) = 0
+      WHERE c.status = 'pending'
+        AND COALESCE(c.is_deleted, 0) = 0
+        AND NOT EXISTS (SELECT 1 FROM tasks t WHERE t.call_id = c.id)
       ORDER BY c.id
     ''');
     return rows

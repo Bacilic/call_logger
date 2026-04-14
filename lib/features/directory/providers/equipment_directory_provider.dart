@@ -485,6 +485,18 @@ class EquipmentDirectoryNotifier extends Notifier<EquipmentDirectoryState> {
     state = state.copyWith(focusedRowIndex: clamped);
   }
 
+  /// Εστιάζει γραμμή στον τρέχοντα φιλτραρισμένο πίνακα αν υπάρχει `equipment.id`.
+  void focusEquipmentById(int equipmentId) {
+    final items = state.filteredItems;
+    for (var i = 0; i < items.length; i++) {
+      final id = items[i].$1.id;
+      if (id != null && id == equipmentId) {
+        setFocusedRowIndex(i);
+        return;
+      }
+    }
+  }
+
   void setSearchQuery(String q) {
     state = state.copyWith(searchQuery: q);
     filterAndSort();

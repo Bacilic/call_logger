@@ -7,6 +7,7 @@ import 'package:intl/intl.dart' hide TextDirection;
 import '../../../core/database/database_helper.dart';
 import '../../../core/database/directory_repository.dart';
 import '../../../core/database/database_init_result.dart';
+import '../../../core/services/settings_service.dart';
 import '../models/database_stats.dart';
 import '../providers/database_browser_stats_provider.dart';
 import '../services/database_stats_service.dart';
@@ -110,6 +111,7 @@ const Map<String, String> _kTableDisplayNames = {
   'department_phones': 'Συσχέτιση τμήματος–τηλεφώνου',
   'user_equipment': 'Συσχέτιση χρήστη–εξοπλισμού',
   'knowledge_base': 'Βάση γνώσεων',
+  'remote_tools': 'Εργαλεία απομακρυσμένης επιφάνειας',
   'remote_tool_args': 'Ορίσματα απομακρυσμένου εργαλείου',
   'user_dictionary': 'Προσωπικό λεξικό',
   'full_dictionary': 'Πλήρες λεξικό (συσσωρευτής)',
@@ -138,6 +140,7 @@ const List<String> _kMenuTableOrder = [
   'app_settings',
   'audit_log',
   'knowledge_base',
+  'remote_tools',
   'remote_tool_args',
   'user_dictionary',
   'full_dictionary',
@@ -187,11 +190,25 @@ class _DatabaseBrowserScreenState extends ConsumerState<DatabaseBrowserScreen> {
   TablePreviewResult? _preview;
   String _tableSchema = '';
   bool _previewLoading = false;
+  /// Κάρτα στατιστικών: false = συμπτυγμένη (προεπιλογή μέχρι φόρτωση ρύθμισης).
+  bool _statsCardExpanded = false;
 
   @override
   void initState() {
     super.initState();
     _loadTables();
+    _loadStatsCardExpandedPref();
+  }
+
+  Future<void> _loadStatsCardExpandedPref() async {
+    final v = await SettingsService().getDatabaseBrowserStatsCardExpanded();
+    if (mounted) setState(() => _statsCardExpanded = v);
+  }
+
+  Future<void> _toggleStatsCardExpanded() async {
+    final next = !_statsCardExpanded;
+    setState(() => _statsCardExpanded = next);
+    await SettingsService().setDatabaseBrowserStatsCardExpanded(next);
   }
 
   Future<void> _loadTables() async {
@@ -412,82 +429,127 @@ class _DatabaseBrowserScreenState extends ConsumerState<DatabaseBrowserScreen> {
       child: Padding(
         padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text(
-              'Στατιστικά Βάσης Δεδομένων',
-              style: theme.textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            const SizedBox(height: 10),
-            Text(
-              connText,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: connOk
-                    ? Colors.green.shade700
-                    : theme.colorScheme.error,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-            if (!connOk && r.details != null && r.details!.trim().isNotEmpty) ...[
-              const SizedBox(height: 4),
-              Text(
-                r.details!,
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.error.withValues(alpha: 0.85),
-                ),
-              ),
-            ],
-            if (statsAsync.isLoading) ...[
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  SizedBox(
-                    width: 22,
-                    height: 22,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: theme.colorScheme.primary,
+            InkWell(
+              onTap: _toggleStatsCardExpanded,
+              borderRadius: BorderRadius.circular(8),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 2),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        'Στατιστικά Βάσης Δεδομένων',
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 12),
-                  Text(
-                    'Φόρτωση στατιστικών…',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                ],
-              ),
-            ],
-            statRow('Μέγεθος αρχείου', sizeLabel),
-            statRow('Τελευταίο αντίγραφο ασφαλείας', backupText),
-            Padding(
-              padding: const EdgeInsets.only(top: 6),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  SizedBox(
-                    width: 200,
-                    child: Text(
-                      'Διαδρομή βάσης',
-                      style: theme.textTheme.bodySmall?.copyWith(
+                    Tooltip(
+                      message: _statsCardExpanded
+                          ? 'Σύμπτυξη'
+                          : 'Επέκταση',
+                      child: Icon(
+                        _statsCardExpanded
+                            ? Icons.expand_less
+                            : Icons.expand_more,
                         color: theme.colorScheme.onSurfaceVariant,
                       ),
                     ),
-                  ),
-                  Expanded(
-                    child: SelectableText(
-                      pathText,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        fontFamily: 'monospace',
-                        fontFamilyFallback: const ['Consolas', 'monospace'],
-                      ),
-                    ),
-                  ),
-                ],
+                  ],
+                ),
               ),
+            ),
+            AnimatedSize(
+              duration: const Duration(milliseconds: 220),
+              curve: Curves.easeInOut,
+              alignment: Alignment.topCenter,
+              child: _statsCardExpanded
+                  ? Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const SizedBox(height: 10),
+                        Text(
+                          connText,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: connOk
+                                ? Colors.green.shade700
+                                : theme.colorScheme.error,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        if (!connOk &&
+                            r.details != null &&
+                            r.details!.trim().isNotEmpty) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            r.details!,
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: theme.colorScheme.error
+                                  .withValues(alpha: 0.85),
+                            ),
+                          ),
+                        ],
+                        if (statsAsync.isLoading) ...[
+                          const SizedBox(height: 12),
+                          Row(
+                            children: [
+                              SizedBox(
+                                width: 22,
+                                height: 22,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: theme.colorScheme.primary,
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Text(
+                                'Φόρτωση στατιστικών…',
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: theme.colorScheme.onSurfaceVariant,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                        statRow('Μέγεθος αρχείου', sizeLabel),
+                        statRow(
+                          'Τελευταίο αντίγραφο ασφαλείας',
+                          backupText,
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.only(top: 6),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              SizedBox(
+                                width: 200,
+                                child: Text(
+                                  'Διαδρομή βάσης',
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    color: theme.colorScheme.onSurfaceVariant,
+                                  ),
+                                ),
+                              ),
+                              Expanded(
+                                child: SelectableText(
+                                  pathText,
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    fontFamily: 'monospace',
+                                    fontFamilyFallback: const [
+                                      'Consolas',
+                                      'monospace',
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    )
+                  : const SizedBox.shrink(),
             ),
           ],
         ),

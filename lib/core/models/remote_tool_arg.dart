@@ -3,6 +3,7 @@
 class RemoteToolArg {
   RemoteToolArg({
     this.id,
+    this.remoteToolId,
     required this.toolName,
     required this.argFlag,
     required this.description,
@@ -10,6 +11,7 @@ class RemoteToolArg {
   });
 
   final int? id;
+  final int? remoteToolId;
   final String toolName;
   final String argFlag;
   final String description;
@@ -18,6 +20,7 @@ class RemoteToolArg {
   factory RemoteToolArg.fromMap(Map<String, dynamic> map) {
     return RemoteToolArg(
       id: map['id'] as int?,
+      remoteToolId: map['remote_tool_id'] as int?,
       toolName: map['tool_name'] as String? ?? '',
       argFlag: map['arg_flag'] as String? ?? '',
       description: map['description'] as String? ?? '',
@@ -28,6 +31,7 @@ class RemoteToolArg {
   Map<String, dynamic> toMap() {
     return {
       if (id != null) 'id': id,
+      if (remoteToolId != null) 'remote_tool_id': remoteToolId,
       'tool_name': toolName,
       'arg_flag': argFlag,
       'description': description,
@@ -37,6 +41,7 @@ class RemoteToolArg {
 
   RemoteToolArg copyWith({
     int? id,
+    int? remoteToolId,
     String? toolName,
     String? argFlag,
     String? description,
@@ -44,6 +49,7 @@ class RemoteToolArg {
   }) {
     return RemoteToolArg(
       id: id ?? this.id,
+      remoteToolId: remoteToolId ?? this.remoteToolId,
       toolName: toolName ?? this.toolName,
       argFlag: argFlag ?? this.argFlag,
       description: description ?? this.description,

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
+import '../../../core/providers/task_focus_intent_provider.dart';
 import '../../calls/provider/lookup_provider.dart';
 import '../../directory/providers/department_directory_provider.dart';
 import '../../directory/providers/directory_provider.dart';
@@ -30,11 +31,38 @@ enum _ClosedEditMode {
   snooze,
 }
 
-class TasksScreen extends ConsumerWidget {
+class TasksScreen extends ConsumerStatefulWidget {
   const TasksScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<TasksScreen> createState() => _TasksScreenState();
+}
+
+class _TasksScreenState extends ConsumerState<TasksScreen> {
+  final Map<int, GlobalKey> _taskScrollKeys = {};
+
+  GlobalKey _keyForTaskId(int id) =>
+      _taskScrollKeys.putIfAbsent(id, GlobalKey.new);
+
+  @override
+  Widget build(BuildContext context) {
+    ref.listen<int?>(taskFocusIntentProvider, (previous, next) {
+      if (next == null) return;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        final ctx = _taskScrollKeys[next]?.currentContext;
+        if (ctx != null) {
+          Scrollable.ensureVisible(
+            ctx,
+            duration: const Duration(milliseconds: 280),
+            curve: Curves.easeInOut,
+            alignment: 0.15,
+          );
+        }
+        ref.read(taskFocusIntentProvider.notifier).clear();
+      });
+    });
+
     final asyncTasks = ref.watch(tasksProvider);
     ref.watch(taskSettingsConfigProvider);
     return Scaffold(
@@ -132,18 +160,25 @@ class TasksScreen extends ConsumerWidget {
                           itemCount: tasks.length,
                           itemBuilder: (context, index) {
                             final task = tasks[index];
-                            return TaskCard(
-                              task: task,
-                              onEdit: () => _onEdit(context, ref, task),
-                              onSnooze: () => _onSnooze(context, ref, task),
-                              onDelete: () => _onDelete(context, ref, task),
-                              onComplete: () => _onComplete(context, ref, task),
-                              onEditCaller: () =>
-                                  _onEditCaller(context, ref, task),
-                              onEditDepartment: () =>
-                                  _onEditDepartment(context, ref, task),
-                              onEditEquipment: () =>
-                                  _onEditEquipment(context, ref, task),
+                            final Key scrollKey = task.id != null
+                                ? _keyForTaskId(task.id!)
+                                : ValueKey<int>(index);
+                            return KeyedSubtree(
+                              key: scrollKey,
+                              child: TaskCard(
+                                task: task,
+                                onEdit: () => _onEdit(context, ref, task),
+                                onSnooze: () => _onSnooze(context, ref, task),
+                                onDelete: () => _onDelete(context, ref, task),
+                                onComplete: () =>
+                                    _onComplete(context, ref, task),
+                                onEditCaller: () =>
+                                    _onEditCaller(context, ref, task),
+                                onEditDepartment: () =>
+                                    _onEditDepartment(context, ref, task),
+                                onEditEquipment: () =>
+                                    _onEditEquipment(context, ref, task),
+                              ),
                             );
                           },
                         ),

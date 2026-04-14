@@ -7,11 +7,6 @@ import '../services/settings_service.dart';
 final showActiveTimerProvider =
     FutureProvider<bool>((ref) => SettingsService().getShowActiveTimer());
 
-/// Provider για εμφάνιση κουμπιού AnyDesk στη φόρμα κλήσεων. Προεπιλογή: true.
-/// Invalidate μετά αλλαγή από την οθόνη ρυθμίσεων.
-final showAnyDeskRemoteProvider =
-    FutureProvider<bool>((ref) => SettingsService().getShowAnyDeskRemote());
-
 /// Εμφάνιση badge πλήθους εκκρεμοτήτων στο μενού. Invalidate μετά από Ρυθμίσεις.
 final showTasksBadgeProvider =
     FutureProvider<bool>((ref) => SettingsService().getShowTasksBadge());

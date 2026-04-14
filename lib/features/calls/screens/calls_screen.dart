@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/models/remote_tool.dart';
 import '../provider/call_entry_provider.dart';
 import '../provider/call_header_provider.dart';
+import '../provider/remote_paths_provider.dart';
+import '../utils/call_remote_targets.dart';
 import 'widgets/call_header_form.dart';
 import 'widgets/call_status_bar.dart';
 import 'widgets/recent_calls_list.dart';
@@ -21,6 +24,15 @@ class CallsScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final header = ref.watch(callHeaderProvider);
+    final tools = ref.watch(remoteToolsCatalogProvider).value ?? <RemoteTool>[];
+    final allToolsAsync = ref.watch(remoteToolsAllCatalogProvider);
+    final hideRemoteButtons = allToolsAsync.maybeWhen(
+      data: (all) => CallRemoteTargets.shouldHideRemoteConnectionButtons(
+        header.selectedEquipment,
+        all,
+      ),
+      orElse: () => false,
+    );
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
@@ -50,20 +62,12 @@ class CallsScreen extends ConsumerWidget {
                           equipment: header.selectedEquipment,
                           equipmentCodeText: header.equipmentText,
                         ),
-                      if (header.equipmentText.trim().isNotEmpty ||
-                          header.selectedEquipment != null)
+                      if (!hideRemoteButtons &&
+                          (header.equipmentText.trim().isNotEmpty ||
+                              header.selectedEquipment != null))
                         RemoteConnectionButtons(
-                          equipment: header.selectedEquipment,
-                          equipmentCodeText: header.equipmentText.isNotEmpty
-                              ? header.equipmentText
-                              : (header.selectedEquipment?.code ?? ''),
-                          resolvedAnyDeskTarget: header.resolvedAnyDeskTarget,
-                          canConnectAnyDesk: header.canConnectAnyDesk,
-                          resolvedVncTarget: header.resolvedVncTarget,
-                          canConnectVnc: header.canConnectVnc,
-                          anydeskTargetDisplay: header.anydeskTargetDisplay,
-                          bypassHideAnyDeskRemoteSetting:
-                              header.bypassHideAnyDeskRemoteSetting,
+                          header: header,
+                          tools: tools,
                         ),
                     ],
                   ),

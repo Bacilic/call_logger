@@ -14,6 +14,9 @@ import '../../../calls/models/equipment_model.dart';
 import '../../../calls/models/user_model.dart';
 import '../../../calls/provider/lookup_provider.dart';
 import '../../../calls/provider/remote_paths_provider.dart';
+import '../../../../core/database/remote_tools_repository.dart';
+import '../../../../core/models/remote_tool.dart';
+import '../../../../core/models/remote_tool_role.dart';
 import '../../../calls/utils/equipment_remote_param_key.dart';
 import '../../../calls/utils/vnc_remote_target.dart';
 import '../../providers/equipment_directory_provider.dart';
@@ -65,8 +68,8 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog> {
   /// Επιλογή τύπου εξοπλισμού· null = Κανένας.
   String? _selectedType;
 
-  /// Επιλογή εργαλείου απομακρυσμένης· null ή κενό ή "Κανένα" = κανένα.
-  String? _selectedRemoteTool;
+  /// Προεπιλεγμένο εργαλείο (id)· υπολογίζεται από τα επιλεγμένα chips κατά `sort_order`.
+  int? _defaultRemoteToolId;
 
   /// Τιμές παραμέτρων ανά κλειδί εργαλείου (συγχρονίζεται με `remote_params`).
   final Map<String, String> _remoteParamValues = {};
@@ -107,18 +110,28 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog> {
     }
   }
 
-  List<({String label, String key})> _toolLabelKeyPairs(List<String> labels) {
-    final seen = <String>{};
-    final out = <({String label, String key})>[];
-    for (final l in labels) {
-      final trimmed = l.trim();
-      if (trimmed.isEmpty) continue;
-      final k = EquipmentRemoteParamKey.forToolLabel(trimmed);
-      if (seen.contains(k)) continue;
-      seen.add(k);
-      out.add((label: trimmed, key: k));
+  bool _isVncLikeParamKey(String key, List<RemoteTool> catalog) {
+    if (key == EquipmentRemoteParamKey.vnc) return true;
+    final id = int.tryParse(key);
+    if (id == null) return false;
+    for (final t in catalog) {
+      if (t.id == id) {
+        return t.role == ToolRole.vnc;
+      }
     }
-    return out;
+    return false;
+  }
+
+  bool _isAnydeskParamKey(String key, List<RemoteTool> catalog) {
+    if (key == EquipmentRemoteParamKey.anydesk) return true;
+    final id = int.tryParse(key);
+    if (id == null) return false;
+    for (final t in catalog) {
+      if (t.id == id) {
+        return t.role == ToolRole.anydesk;
+      }
+    }
+    return false;
   }
 
   void _ensureRemoteController(String key) {
@@ -144,27 +157,46 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog> {
     }
   }
 
-  Map<String, String> _remoteParamsForSave(List<String> toolLabels) {
-    final pairs = _toolLabelKeyPairs(toolLabels);
-    final out = <String, String>{};
-    for (final p in pairs) {
-      final c = _remoteParamControllers[p.key];
-      final raw = (c?.text ?? _remoteParamValues[p.key] ?? '').trim();
-      if (raw.isNotEmpty) {
-        out[p.key] = p.key == EquipmentRemoteParamKey.vnc
-            ? raw.replaceAll(',', '.')
-            : raw;
-      }
+  Map<String, String> _remoteParamsForSave(
+    List<RemoteToolFormPair> pairs,
+    List<RemoteTool> catalog,
+  ) {
+    for (final k in _expandedRemoteKeys.toList()) {
+      _syncRemoteValueFromController(k);
     }
+    final out = <String, String>{};
     for (final entry in _remoteParamValues.entries) {
       final v = entry.value.trim();
       if (v.isEmpty) continue;
-      if (out.containsKey(entry.key)) continue;
-      out[entry.key] = entry.key == EquipmentRemoteParamKey.vnc
+      out[entry.key] = _isVncLikeParamKey(entry.key, catalog)
           ? v.replaceAll(',', '.')
           : v;
     }
     return out;
+  }
+
+  void _recomputeDefaultRemoteFromChips(
+    List<RemoteToolFormPair> pairs,
+    List<RemoteTool> catalog,
+  ) {
+    final selected = <RemoteTool>[];
+    for (final p in pairs) {
+      if (!_expandedRemoteKeys.contains(p.key)) continue;
+      final id = int.tryParse(p.key);
+      if (id == null) continue;
+      for (final c in catalog) {
+        if (c.id == id) {
+          selected.add(c);
+          break;
+        }
+      }
+    }
+    selected.sort((a, b) {
+      final cmp = a.sortOrder.compareTo(b.sortOrder);
+      if (cmp != 0) return cmp;
+      return a.name.compareTo(b.name);
+    });
+    _defaultRemoteToolId = selected.isEmpty ? null : selected.first.id;
   }
 
   @override
@@ -185,8 +217,8 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog> {
     _selectedUserId = widget.initialOwner?.id;
     final typeRaw = e?.type?.trim() ?? '';
     _selectedType = typeRaw.isEmpty ? null : typeRaw;
-    final raw = e?.defaultRemoteTool?.trim() ?? '';
-    _selectedRemoteTool = raw.isEmpty ? null : raw;
+    _defaultRemoteToolId =
+        RemoteToolsRepository.parseDefaultRemoteToolId(e?.defaultRemoteTool);
   }
 
   @override
@@ -281,12 +313,6 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog> {
   }
 
   /// null, κενό ή "Κανένα" → null· αλλιώς επιστρέφει το trim string.
-  static String? _normalizedRemoteToolValue(String? v) {
-    final t = v?.trim() ?? '';
-    if (t.isEmpty || t == 'Κανένα') return null;
-    return t;
-  }
-
   String? _requiredValidator(String? v) =>
       (v?.trim().isEmpty ?? true) ? 'Υποχρεωτικό' : null;
 
@@ -311,10 +337,21 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog> {
           .getOrCreateDepartmentIdByName(deptText);
     }
     final locTrim = _locationController.text.trim();
-    final toolsList = await SettingsService().getRemoteSurfaceAppsList();
-    final remoteParams = _remoteParamsForSave(toolsList);
-    final vncSaved = remoteParams[EquipmentRemoteParamKey.vnc]?.trim();
-    final anydeskSaved = remoteParams[EquipmentRemoteParamKey.anydesk]?.trim();
+    final pairs = await widget.ref.read(remoteToolFormPairsProvider.future);
+    final catalog = await widget.ref.read(remoteToolsCatalogProvider.future);
+    final remoteParams = _remoteParamsForSave(pairs, catalog);
+    String? vncSaved;
+    String? anydeskSaved;
+    for (final e in remoteParams.entries) {
+      final v = e.value.trim();
+      if (v.isEmpty) continue;
+      if (_isVncLikeParamKey(e.key, catalog)) {
+        vncSaved ??= v;
+      }
+      if (_isAnydeskParamKey(e.key, catalog)) {
+        anydeskSaved ??= v;
+      }
+    }
     final equipment = EquipmentModel(
       id: _isEdit ? widget.initialEquipment?.id : null,
       code: code.isEmpty ? null : code,
@@ -327,7 +364,9 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog> {
           ? anydeskSaved
           : null,
       remoteParams: remoteParams,
-      defaultRemoteTool: _normalizedRemoteToolValue(_selectedRemoteTool),
+      defaultRemoteTool: RemoteToolsRepository.defaultRemoteToolIdToDbString(
+        _defaultRemoteToolId,
+      ),
       departmentId: equipmentDepartmentId,
       location: locTrim.isEmpty ? null : locTrim,
     );
@@ -385,12 +424,14 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog> {
 
   static const Duration _remoteAnimDuration = Duration(milliseconds: 240);
 
-  Widget _buildRemoteParamsChipsSection(List<String> labels) {
-    final pairs = _toolLabelKeyPairs(labels);
+  Widget _buildRemoteParamsChipsSection(
+    List<RemoteToolFormPair> pairs,
+    List<RemoteTool> catalog,
+  ) {
     final theme = Theme.of(context);
     if (pairs.isEmpty) {
       return Text(
-        'Δεν ορίστηκαν εργαλεία απομακρυσμένης στις ρυθμίσεις.',
+        'Δεν υπάρχουν ενεργά εργαλεία απομακρυσμένης — δεν μπορείτε να επιλέξετε παραμέτρους μέσω chips.',
         style: theme.textTheme.bodySmall?.copyWith(
           color: theme.colorScheme.onSurfaceVariant,
         ),
@@ -418,12 +459,27 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog> {
       }
       return key;
     }
+    final defaultLabel = _defaultRemoteToolId == null
+        ? 'Κανένα'
+        : () {
+            for (final c in catalog) {
+              if (c.id == _defaultRemoteToolId) return c.name;
+            }
+            return '#$_defaultRemoteToolId';
+          }();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Text(
           'Παράμετροι απομακρυσμένης',
           style: theme.textTheme.titleSmall,
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'Προεπιλεγμένο εργαλείο (πρώτο κατά σειρά ταξινόμησης μεταξύ επιλεγμένων): $defaultLabel',
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
         ),
         const SizedBox(height: 8),
         Wrap(
@@ -444,8 +500,8 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog> {
                       _syncRemoteValueFromController(p.key);
                       _expandedRemoteKeys.remove(p.key);
                       _disposeRemoteController(p.key);
-                      _remoteParamValues.remove(p.key);
                     }
+                    _recomputeDefaultRemoteFromChips(pairs, catalog);
                   });
                 },
               ),
@@ -483,6 +539,7 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog> {
                             child: _buildRemoteParamField(
                               orderedExpanded[i],
                               labelForKey(orderedExpanded[i]),
+                              catalog,
                             ),
                           ),
                         ),
@@ -495,10 +552,14 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog> {
     );
   }
 
-  Widget _buildRemoteParamField(String paramKey, String toolLabel) {
+  Widget _buildRemoteParamField(
+    String paramKey,
+    String toolLabel,
+    List<RemoteTool> catalog,
+  ) {
     final c = _remoteParamControllers[paramKey];
     if (c == null) return const SizedBox.shrink();
-    final isVnc = paramKey == EquipmentRemoteParamKey.vnc;
+    final isVnc = _isVncLikeParamKey(paramKey, catalog);
     return TextFormField(
       controller: c,
       decoration: InputDecoration(
@@ -528,9 +589,11 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog> {
       content: Form(
         key: _formKey,
         child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
+          child: Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
               TextFormField(
                 controller: _codeController,
                 decoration: const InputDecoration(
@@ -584,9 +647,26 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog> {
               const SizedBox(height: 12),
               Consumer(
                 builder: (context, ref, _) {
-                  final asyncTools = ref.watch(remotePathsProvider);
-                  return asyncTools.when(
-                    data: (labels) => _buildRemoteParamsChipsSection(labels),
+                  final pairsAsync = ref.watch(remoteToolFormPairsProvider);
+                  final catalogAsync = ref.watch(remoteToolsCatalogProvider);
+                  return pairsAsync.when(
+                    data: (pairs) => catalogAsync.when(
+                      data: (catalog) =>
+                          _buildRemoteParamsChipsSection(pairs, catalog),
+                      loading: () => const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 8),
+                        child: LinearProgressIndicator(minHeight: 2),
+                      ),
+                      error: (err, _) => Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        child: Text(
+                          'Κατάλογος εργαλείων: $err',
+                          style: TextStyle(
+                            color: Theme.of(context).colorScheme.error,
+                          ),
+                        ),
+                      ),
+                    ),
                     loading: () => const Padding(
                       padding: EdgeInsets.symmetric(vertical: 8),
                       child: LinearProgressIndicator(minHeight: 2),
@@ -600,31 +680,6 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog> {
                         ),
                       ),
                     ),
-                  );
-                },
-              ),
-              const SizedBox(height: 12),
-              FutureBuilder<List<String>>(
-                future: SettingsService().getRemoteSurfaceAppsList(),
-                builder: (context, snapshot) {
-                  final options = snapshot.data ?? ['AnyDesk', 'VNC'];
-                  return DropdownButtonFormField<String?>(
-                    initialValue: _selectedRemoteTool,
-                    decoration: const InputDecoration(
-                      labelText: 'Εργαλείο απομακρυσμένης',
-                      border: OutlineInputBorder(),
-                    ),
-                    items: [
-                      ...options.map(
-                        (o) =>
-                            DropdownMenuItem<String?>(value: o, child: Text(o)),
-                      ),
-                      const DropdownMenuItem<String?>(
-                        value: null,
-                        child: Text('Κανένα'),
-                      ),
-                    ],
-                    onChanged: (v) => setState(() => _selectedRemoteTool = v),
                   );
                 },
               ),
@@ -930,7 +985,8 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog> {
                   );
                 },
               ),
-            ],
+              ],
+            ),
           ),
         ),
       ),

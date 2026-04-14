@@ -1,6 +1,9 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/database/database_helper.dart';
+import '../../../core/database/remote_tools_repository.dart';
+import '../../../core/models/remote_tool.dart';
+import '../../../core/models/remote_tool_role.dart';
 import '../../../core/services/remote_args_service.dart';
 import '../../../core/services/remote_connection_service.dart';
 import '../../../core/services/remote_launcher_service.dart';
@@ -11,47 +14,144 @@ final remoteArgsServiceProvider = Provider<RemoteArgsService>((ref) {
   return RemoteArgsService(DatabaseHelper.instance);
 });
 
-/// Λίστα ονομάτων εργαλείων απομακρυσμένης επιφάνειας (ρυθμίσεις · comma-separated).
-/// Χρησιμοποιείται στη φόρμα εξοπλισμού για δυναμικά FilterChips παραμέτρων.
+/// Repository `remote_tools`.
+final remoteToolsRepositoryProvider = Provider<RemoteToolsRepository>((ref) {
+  return RemoteToolsRepository(DatabaseHelper.instance);
+});
+
+/// Ενεργά εργαλεία (για κλήσεις, dropdowns).
+final remoteToolsCatalogProvider = FutureProvider<List<RemoteTool>>((ref) async {
+  final repo = ref.read(remoteToolsRepositoryProvider);
+  try {
+    final list = await repo.getActiveTools();
+    if (list.isNotEmpty) return list;
+  } catch (_) {}
+  return const [];
+});
+
+/// Όλα τα εργαλεία (CRUD / ρυθμίσεις).
+final remoteToolsAllCatalogProvider = FutureProvider<List<RemoteTool>>((ref) async {
+  final repo = ref.read(remoteToolsRepositoryProvider);
+  return repo.getAllTools();
+});
+
+/// Ζεύγη (εμφανιζόμενο όνομα, κλειδί JSON) για φόρμες εξοπλισμού — μόνο ενεργά `remote_tools` με μη κενό `name`.
+typedef RemoteToolFormPair = ({String label, String key});
+
+final remoteToolFormPairsProvider =
+    FutureProvider<List<RemoteToolFormPair>>((ref) async {
+  final repo = ref.read(remoteToolsRepositoryProvider);
+  try {
+    final tools = await repo.getActiveTools();
+    return [
+      for (final t in tools)
+        if (t.name.trim().isNotEmpty)
+          (label: t.name.trim(), key: t.id.toString()),
+    ];
+  } catch (_) {
+    return const [];
+  }
+});
+
+/// Ονόματα εργαλείων για dropdown εξοπλισμού· κενή λίστα όταν δεν υπάρχει επιλογή (μόνο «Κανένα» στο UI).
 final remotePathsProvider = FutureProvider<List<String>>((ref) async {
-  return SettingsService().getRemoteSurfaceAppsList();
+  final pairs = await ref.watch(remoteToolFormPairsProvider.future);
+  return pairs.map((p) => p.label).toList();
 });
 
-/// Επιστρέφει τις έγκυρες διαδρομές VNC και AnyDesk (null αν η ρυθμισμένη διαδρομή δεν υπάρχει).
-/// Χρησιμοποιείται στην αρχική οθόνη κλήσεων για απενεργοποίηση κουμπιών και tooltip.
-final validRemotePathsProvider = FutureProvider<({String? vncPath, String? anydeskPath})>((ref) async {
-  final service = ref.read(remoteConnectionServiceProvider);
-  final vncPath = await service.getValidVncPath();
-  final anydeskPath = await service.getValidAnydeskPath();
-  return (vncPath: vncPath, anydeskPath: anydeskPath);
+/// Έγκυρες διαδρομές ανά id εργαλείου (μόνο ενεργά εργαλεία όταν η λίστα δεν είναι κενή).
+final validRemoteToolPathsByIdProvider =
+    FutureProvider<Map<int, String?>>((ref) async {
+  final repo = ref.read(remoteToolsRepositoryProvider);
+  final conn = ref.read(remoteConnectionServiceProvider);
+  try {
+    final tools = await repo.getActiveTools();
+    final map = <int, String?>{};
+    for (final t in tools) {
+      map[t.id] = await conn.getValidPathForTool(t);
+    }
+    return map;
+  } catch (_) {
+    return {};
+  }
 });
 
-/// Κατάσταση για τα κουμπιά εκκίνησης χωρίς παραμέτρους: διαδρομή + ακριβές μήνυμα σφάλματος όταν απενεργό.
+/// VNC / AnyDesk / RDP paths για συμβατότητα με παλιό UI.
+final validRemotePathsProvider =
+    FutureProvider<({String? vncPath, String? anydeskPath, String? rdpPath})>(
+        (ref) async {
+  final conn = ref.read(remoteConnectionServiceProvider);
+  return (
+    vncPath: await conn.getValidVncPath(),
+    anydeskPath: await conn.getValidAnydeskPath(),
+    rdpPath: await conn.getValidRdpPath(),
+  );
+});
+
 typedef LauncherStatus = ({String? path, String? errorReason});
 
-/// Επιστρέφει για AnyDesk και VNC την έγκυρη διαδρομή (αν υπάρχει) και το ακριβές μήνυμα σφάλματος όταν απενεργό.
-final remoteLauncherStatusProvider = FutureProvider<({
-  LauncherStatus anydesk,
-  LauncherStatus vnc,
-})>((ref) async {
+/// Κατάσταση launcher ανά id εργαλείου.
+final remoteLauncherStatusesByIdProvider =
+    FutureProvider<Map<int, LauncherStatus>>((ref) async {
   final launcher = ref.read(remoteLauncherServiceProvider);
-  final anydesk = await launcher.getAnydeskStatus();
-  final vnc = await launcher.getVncStatus();
-  return (anydesk: anydesk, vnc: vnc);
+  final repo = ref.read(remoteToolsRepositoryProvider);
+  try {
+    final tools = await repo.getActiveTools();
+    final map = <int, LauncherStatus>{};
+    for (final t in tools) {
+      map[t.id] = await launcher.getStatusForTool(t);
+    }
+    return map;
+  } catch (_) {
+    return {};
+  }
 });
 
-/// Provider για το [RemoteConnectionService] (εκκίνηση VNC/AnyDesk).
+/// Συμβατότητα: μόνο VNC + AnyDesk.
+final remoteLauncherStatusProvider = FutureProvider<
+    ({
+      LauncherStatus anydesk,
+      LauncherStatus vnc,
+    })>((ref) async {
+  final launcher = ref.read(remoteLauncherServiceProvider);
+  final ad = await launcher.getStatusForRole(ToolRole.anydesk);
+  final vn = await launcher.getStatusForRole(ToolRole.vnc);
+  return (
+    anydesk: ad.path != null
+        ? ad
+        : (path: null, errorReason: RemoteLauncherService.errorPathNotSet),
+    vnc: vn.path != null
+        ? vn
+        : (path: null, errorReason: RemoteLauncherService.errorPathNotSet),
+  );
+});
+
 final remoteConnectionServiceProvider = Provider<RemoteConnectionService>((ref) {
   return RemoteConnectionService(
     SettingsService(),
     ref.read(remoteArgsServiceProvider),
+    ref.read(remoteToolsRepositoryProvider),
   );
 });
 
-/// Provider για το [RemoteLauncherService] (εκκίνηση χωρίς παραμέτρους).
 final remoteLauncherServiceProvider = Provider<RemoteLauncherService>((ref) {
   return RemoteLauncherService(
     SettingsService(),
-    ref.read(remoteArgsServiceProvider),
+    ref.read(remoteToolsRepositoryProvider),
+  );
+});
+
+/// Ρυθμίσεις UI κλήσεων (κύριο εργαλείο + overflow + κενές εκκινήσεις).
+final callsRemoteUiConfigProvider = FutureProvider<
+    ({
+      int? primaryToolId,
+      bool showSecondaryInOverflow,
+      bool showEmptyRemoteLaunchers,
+    })>((ref) async {
+  final s = SettingsService();
+  return (
+    primaryToolId: await s.getCallsPrimaryToolId(),
+    showSecondaryInOverflow: await s.getCallsShowSecondaryRemoteActions(),
+    showEmptyRemoteLaunchers: await s.getCallsShowEmptyRemoteLaunchers(),
   );
 });
