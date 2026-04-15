@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../provider/call_entry_provider.dart';
+import '../../provider/calls_dashboard_providers.dart';
 
 /// Λίστα τελευταίων 3 κλήσεων για τον επιλεγμένο καλούντα (calls.caller_id).
 class RecentCallsList extends ConsumerWidget {
@@ -17,17 +17,14 @@ class RecentCallsList extends ConsumerWidget {
         if (calls.isEmpty) return const SizedBox.shrink();
         final theme = Theme.of(context);
         return Card(
-          margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          margin: const EdgeInsets.symmetric(vertical: 8),
           child: Padding(
             padding: const EdgeInsets.all(12),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(
-                  'Πρόσφατο ιστορικό',
-                  style: theme.textTheme.titleSmall,
-                ),
+                Text('Πρόσφατο ιστορικό', style: theme.textTheme.titleSmall),
                 const SizedBox(height: 8),
                 ...calls.map(
                   (c) => Padding(

@@ -85,9 +85,7 @@ class NotesStickyFieldState extends ConsumerState<NotesStickyField> {
       AsyncData(:final value) => value,
       _ => null,
     };
-    if (spellOn &&
-        spell != null &&
-        _controller.isWordMisspelledAt(v, offset)) {
+    if (spellOn && spell != null && _controller.isWordMisspelledAt(v, offset)) {
       final raw = _controller.wordAtCursorOffset(v, offset);
       if (raw != null) {
         for (final sug in spell.getSuggestions(raw)) {
@@ -126,7 +124,8 @@ class NotesStickyFieldState extends ConsumerState<NotesStickyField> {
     }
 
     final platform = Theme.of(context).platform;
-    final useDesktopLayout = platform == TargetPlatform.windows ||
+    final useDesktopLayout =
+        platform == TargetPlatform.windows ||
         platform == TargetPlatform.linux ||
         platform == TargetPlatform.fuchsia ||
         platform == TargetPlatform.macOS;
@@ -177,9 +176,10 @@ class NotesStickyFieldState extends ConsumerState<NotesStickyField> {
     final paddingAbove =
         MediaQuery.paddingOf(context).top + kToolbarScreenPadding;
     final localAdjustment = Offset(kToolbarScreenPadding, paddingAbove);
-    final buttonWidgets =
-        AdaptiveTextSelectionToolbar.getAdaptiveButtons(context, items)
-            .toList();
+    final buttonWidgets = AdaptiveTextSelectionToolbar.getAdaptiveButtons(
+      context,
+      items,
+    ).toList();
 
     return Padding(
       padding: EdgeInsets.fromLTRB(
@@ -260,6 +260,7 @@ class NotesStickyFieldState extends ConsumerState<NotesStickyField> {
         final maxW = c.maxWidth.isFinite && c.maxWidth > 0
             ? math.min(400.0, c.maxWidth)
             : 400.0;
+
         return AnimatedContainer(
           duration: const Duration(milliseconds: 120),
           curve: Curves.easeInOut,
@@ -308,7 +309,26 @@ class NotesStickyFieldState extends ConsumerState<NotesStickyField> {
                 ),
                 minLines: 2,
                 maxLines: 5,
-                spellCheckConfiguration: const SpellCheckConfiguration.disabled(),
+                // Guardrail for future text-snippet expansion (e.g. .pwd):
+                // expansion logic must respect remaining characters.
+                maxLength: 500,
+                buildCounter:
+                    (
+                      BuildContext context, {
+                      required int currentLength,
+                      required bool isFocused,
+                      required int? maxLength,
+                    }) {
+                      return Text(
+                        '$currentLength / ${maxLength ?? 500}',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      );
+                    },
+                spellCheckConfiguration:
+                    const SpellCheckConfiguration.disabled(),
                 contextMenuBuilder: _contextMenuBuilder,
                 onChanged: (value) =>
                     ref.read(callEntryProvider.notifier).setNotes(value),

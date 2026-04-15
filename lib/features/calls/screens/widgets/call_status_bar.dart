@@ -7,7 +7,9 @@ import '../../provider/notes_field_hint_provider.dart';
 
 /// Μπάρα κατάστασης κλήσης: εκκρεμότητα (checkbox) και χρονόμετρο (MM:SS ή εικονίδιο) με Play/Pause και χειροκίνητη εισαγωγή.
 class CallStatusBar extends ConsumerWidget {
-  const CallStatusBar({super.key});
+  const CallStatusBar({super.key, this.showPendingToggle = true});
+
+  final bool showPendingToggle;
 
   static String _formatDuration(int seconds) {
     final m = seconds ~/ 60;
@@ -30,32 +32,38 @@ class CallStatusBar extends ConsumerWidget {
     final isTimerRunning = ref.watch(
       callEntryProvider.select((s) => s.isCallTimerRunning),
     );
+    final retainPlayPauseAfterManualZero = ref.watch(
+      callEntryProvider.select((s) => s.retainPlayPauseAfterManualZero),
+    );
     final notesNonEmpty = ref.watch(
       callEntryProvider.select((s) => s.notes.trim().isNotEmpty),
     );
     final notifier = ref.read(callEntryProvider.notifier);
     final showTimerAsync = ref.watch(showActiveTimerProvider);
-    final showPlayPause = durationSeconds > 0 || isTimerRunning;
+    final showPlayPause =
+        durationSeconds > 0 || isTimerRunning || retainPlayPauseAfterManualZero;
 
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _PendingCheckboxRow(
-          isPending: isPending,
-          notesNonEmpty: notesNonEmpty,
-          onTogglePending: () => notifier.togglePending(),
-          onDisabledTap: () => ref
-              .read(notesFieldHintTickProvider.notifier)
-              .requestHintFlash(),
-        ),
-        const SizedBox(height: 0),
+        if (showPendingToggle)
+          _PendingCheckboxRow(
+            isPending: isPending,
+            notesNonEmpty: notesNonEmpty,
+            onTogglePending: () => notifier.togglePending(),
+            onDisabledTap: () => ref
+                .read(notesFieldHintTickProvider.notifier)
+                .requestHintFlash(),
+          ),
+        if (showPendingToggle) const SizedBox(height: 0),
         showTimerAsync.when(
           data: (showActiveTimer) {
             Widget timerContent;
             if (showActiveTimer) {
               timerContent = Tooltip(
-                message: 'Διπλό κλικ για προσαρμοσμένο χρόνο. Σταματήστε το χρονόμετρο',
+                message:
+                    'Διπλό κλικ για προσαρμοσμένο χρόνο. Σταματήστε το χρονόμετρο',
                 child: GestureDetector(
                   onDoubleTap: () {
                     if (!isTimerRunning && durationSeconds > 0) {
@@ -65,15 +73,16 @@ class CallStatusBar extends ConsumerWidget {
                   child: Text(
                     _formatDuration(durationSeconds),
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          color: _durationColor(durationSeconds),
-                          fontWeight: FontWeight.w600,
-                        ),
+                      color: _durationColor(durationSeconds),
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ),
               );
             } else {
               timerContent = Tooltip(
-                message: 'Διπλό κλικ για προσαρμοσμένο χρόνο. Σταματήστε το χρονόμετρο',
+                message:
+                    'Διπλό κλικ για προσαρμοσμένο χρόνο. Σταματήστε το χρονόμετρο',
                 child: GestureDetector(
                   onDoubleTap: () {
                     if (!isTimerRunning && durationSeconds > 0) {
@@ -113,7 +122,9 @@ class CallStatusBar extends ConsumerWidget {
                         n.startTimerOnce();
                       }
                     },
-                    tooltip: isTimerRunning ? 'Παύση χρονομέτρου' : 'Συνέχιση χρονομέτρου',
+                    tooltip: isTimerRunning
+                        ? 'Παύση χρονομέτρου'
+                        : 'Συνέχιση χρονομέτρου',
                   ),
                 ),
               ],
@@ -122,7 +133,13 @@ class CallStatusBar extends ConsumerWidget {
           loading: () => const SizedBox(
             width: 60,
             height: 32,
-            child: Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))),
+            child: Center(
+              child: SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+            ),
           ),
           error: (e, s) => const SizedBox.shrink(),
         ),
@@ -130,46 +147,131 @@ class CallStatusBar extends ConsumerWidget {
     );
   }
 
-  static Future<void> _showManualDurationDialog(BuildContext context, WidgetRef ref) async {
+  /// Μέγιστη χειροκίνητη διάρκεια: μία βάρδια (8 ώρες).
+  static const int _maxManualDurationSeconds = 8 * 60 * 60;
+
+  static const String _invalidDurationMessage =
+      'Η τιμή δεν είναι έγκυρη. Διορθώστε ή πατήστε: Ακύρωση.';
+
+  static const String _exceedsShiftMessage =
+      'Δεν μπορείτε να ορίσετε διάρκεια μεγαλύτερη από μία βάρδια (8 ώρες).';
+
+  /// Επιστρέφει λεπτά ως [double] ή null αν η μορφή δεν επιτρέπει ασφαλή ανάλυση.
+  static double? _parseMinutesInput(String raw) {
+    final s = raw.trim();
+    if (s.isEmpty) return null;
+    if (s.contains(',') && s.contains('.')) return null;
+    final commaCount = ','.allMatches(s).length;
+    final dotCount = '.'.allMatches(s).length;
+    if (commaCount > 1 || dotCount > 1) return null;
+    final normalized = s.replaceAll(',', '.');
+    final value = double.tryParse(normalized);
+    if (value == null || !value.isFinite || value < 0) return null;
+    return value;
+  }
+
+  static Future<void> _showManualDurationDialog(
+    BuildContext context,
+    WidgetRef ref,
+  ) async {
     final controller = TextEditingController();
     final notifier = ref.read(callEntryProvider.notifier);
     final result = await showDialog<int>(
       context: context,
       builder: (ctx) {
-        return AlertDialog(
-          title: const Text('Χρόνος χειροκίνητα (λεπτά)'),
-          content: TextField(
-            controller: controller,
-            keyboardType: TextInputType.number,
-            decoration: const InputDecoration(
-              labelText: 'Λεπτά',
-              border: OutlineInputBorder(),
-              hintText: 'π.χ. 5',
-            ),
-            autofocus: true,
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(),
-              child: const Text('Ακύρωση'),
-            ),
-            FilledButton(
-              onPressed: () {
-                final text = controller.text.trim();
-                final minutes = int.tryParse(text);
-                if (minutes != null && minutes >= 0) {
-                  Navigator.of(ctx).pop(minutes);
-                }
-              },
-              child: const Text('Εντάξει'),
-            ),
-          ],
+        String? errorText;
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            final errorStyle = Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: Theme.of(context).colorScheme.error,
+            );
+            return AlertDialog(
+              title: const Text('Προσαρμογή χρόνου (λεπτά)'),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    TextField(
+                      controller: controller,
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
+                      decoration: const InputDecoration(
+                        labelText: 'Λεπτά',
+                        border: OutlineInputBorder(),
+                        hintText: 'π.χ. 5 ή 1,5',
+                      ),
+                      autofocus: true,
+                      onChanged: (_) {
+                        setDialogState(() => errorText = null);
+                      },
+                    ),
+                    if (errorText != null) ...[
+                      const SizedBox(height: 8),
+                      Text(errorText!, style: errorStyle),
+                    ],
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(ctx).pop(),
+                  child: const Text('Ακύρωση'),
+                ),
+                FilledButton(
+                  onPressed: () async {
+                    final minutes = _parseMinutesInput(controller.text);
+                    if (minutes == null) {
+                      setDialogState(() => errorText = _invalidDurationMessage);
+                      return;
+                    }
+                    final seconds = (minutes * 60).round();
+                    if (seconds > _maxManualDurationSeconds) {
+                      setDialogState(() => errorText = _exceedsShiftMessage);
+                      return;
+                    }
+                    if (seconds == 0) {
+                      final confirmed = await showDialog<bool>(
+                        context: ctx,
+                        builder: (confirmCtx) => AlertDialog(
+                          content: const Text(
+                            'Η διάρκεια κλήσης θα μηδενιστεί. Συνέχεια;',
+                          ),
+                          actions: [
+                            TextButton(
+                              onPressed: () =>
+                                  Navigator.of(confirmCtx).pop(false),
+                              child: const Text('Όχι'),
+                            ),
+                            FilledButton(
+                              onPressed: () =>
+                                  Navigator.of(confirmCtx).pop(true),
+                              child: const Text('Ναι'),
+                            ),
+                          ],
+                        ),
+                      );
+                      if (confirmed != true) return;
+                    }
+                    if (ctx.mounted) {
+                      Navigator.of(ctx).pop(seconds);
+                    }
+                  },
+                  child: const Text('Αλλαγή'),
+                ),
+              ],
+            );
+          },
         );
       },
     );
     controller.dispose();
     if (result != null && context.mounted) {
-      notifier.setDurationManually(result * 60);
+      notifier.setDurationManually(
+        result,
+        retainPlayPauseAfterManualZero: result == 0,
+      );
     }
   }
 }
@@ -202,13 +304,12 @@ class _PendingCheckboxRow extends StatelessWidget {
           child: Text(
             'Εκκρεμότητα',
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: notesNonEmpty
-                      ? null
-                      : Theme.of(context)
-                          .colorScheme
-                          .onSurface
-                          .withValues(alpha: 0.38),
-                ),
+              color: notesNonEmpty
+                  ? null
+                  : Theme.of(
+                      context,
+                    ).colorScheme.onSurface.withValues(alpha: 0.38),
+            ),
             softWrap: true,
           ),
         ),

@@ -37,25 +37,177 @@ class _CallHeaderFormState extends ConsumerState<CallHeaderForm> {
     );
     final theme = Theme.of(context);
 
+    Future<void> onAddAssociationPressed() async {
+      final messenger = ScaffoldMessenger.of(context);
+      final currentHeader = ref.read(callHeaderProvider);
+      final notifier = ref.read(callHeaderProvider.notifier);
+
+      if (currentHeader.needsOrphanDepartmentQuickAdd) {
+        final preview = await notifier.quickAddOrphanToDepartment();
+        if (preview == null) return;
+        if (preview.requiresConfirmation) {
+          if (!context.mounted) return;
+          final approve = await showDialog<bool>(
+            context: context,
+            builder: (dialogContext) {
+              return AlertDialog(
+                title: const Text('Σύγκρουση δεδομένων'),
+                content: Text(preview.message),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.of(dialogContext).pop(false),
+                    child: const Text('Ακύρωση'),
+                  ),
+                  FilledButton(
+                    onPressed: () => Navigator.of(dialogContext).pop(true),
+                    child: const Text('Ναι, Προσθήκη'),
+                  ),
+                ],
+              );
+            },
+          );
+          if (approve != true) return;
+          final applied = await notifier.quickAddOrphanToDepartment(
+            forceSharedOnConflict: true,
+          );
+          if (context.mounted && applied?.successMessage != null) {
+            messenger.showSnackBar(
+              SnackBar(content: Text(applied!.successMessage!)),
+            );
+          }
+          return;
+        }
+        if (context.mounted && preview.successMessage != null) {
+          messenger.showSnackBar(
+            SnackBar(content: Text(preview.successMessage!)),
+          );
+        }
+        return;
+      }
+
+      final caller = currentHeader.selectedCaller;
+      final departmentText = currentHeader.departmentText.trim();
+      final selectedDepartment = departmentText.isNotEmpty
+          ? lookupService?.findDepartmentByName(departmentText)
+          : null;
+      var updatePrimaryDepartment = false;
+
+      final oldDeptText = (caller?.departmentName ?? '').trim();
+      final nextDeptNorm = SearchTextNormalizer.normalizeForSearch(
+        departmentText,
+      );
+      final oldDeptNorm = SearchTextNormalizer.normalizeForSearch(oldDeptText);
+      final wantsDeptChange =
+          caller?.id != null &&
+          departmentText.isNotEmpty &&
+          (selectedDepartment?.id != caller?.departmentId) &&
+          (nextDeptNorm.isNotEmpty && nextDeptNorm != oldDeptNorm);
+
+      if (wantsDeptChange) {
+        final askUpdate = await showDialog<bool>(
+          context: context,
+          builder: (dialogContext) {
+            return AlertDialog(
+              title: const Text('Αλλαγή κύριου τμήματος'),
+              content: Text(
+                'Ο χρήστης έχει κύριο τμήμα "${caller!.departmentName ?? 'Χωρίς τμήμα'}". '
+                'Να γίνει νέο κύριο τμήμα του χρήστη το "${selectedDepartment?.name ?? departmentText}";',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(false),
+                  child: const Text('Όχι'),
+                ),
+                FilledButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(true),
+                  child: const Text('Ναι'),
+                ),
+              ],
+            );
+          },
+        );
+        updatePrimaryDepartment = askUpdate ?? false;
+      }
+
+      final msg = await notifier.associateCurrentIfNeeded(
+        updatePrimaryDepartment: updatePrimaryDepartment,
+      );
+      if (context.mounted && msg != null) {
+        messenger.showSnackBar(SnackBar(content: Text(msg)));
+      }
+    }
+
     return LayoutBuilder(
       builder: (context, constraints) {
         final mw = constraints.maxWidth.isFinite && constraints.maxWidth > 0
             ? constraints.maxWidth
             : MediaQuery.sizeOf(context).width;
 
-        // Διαθέσιμο πλάτος μείον κενά και κουμπιά ×/+ ώστε η γραμμή να χωράει πάντα (όχι overflow).
-        const gapsAndIcons = 12.0 + 12.0 + 12.0 + 4.0 + 40.0 + 40.0; // 120
+        // Διαθέσιμο πλάτος μείον κενά και κουμπί × ώστε η γραμμή να χωράει πάντα (όχι overflow).
+        const gapsAndIcons = 12.0 + 12.0 + 12.0 + 4.0 + 40.0; // 80
         final available = (mw - gapsAndIcons).clamp(200.0, double.infinity);
         // Αναλογία 18:34:24:20 (άθροισμα 96%) ώστε το σύνολο να μην ξεπερνά το available.
         final w1 = (available * 0.18).clamp(0.0, 170.0);
         final w2 = (available * 0.34).clamp(0.0, 300.0);
         final wDept = (available * 0.24).clamp(0.0, 240.0);
         final w3 = (available * 0.20).clamp(0.0, 185.0);
+        final equipmentColumnOffset = w1 + 12.0 + w2 + 12.0 + wDept + 12.0;
 
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           mainAxisSize: MainAxisSize.min,
           children: [
+            SizedBox(
+              height: 34,
+              child: Stack(
+                children: [
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      'Νέα Κλήση',
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                  if (header.needsAssociation(lookupService))
+                    Positioned(
+                      left: equipmentColumnOffset,
+                      width: w3,
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: Tooltip(
+                          message:
+                              header.associationTooltip(lookupService) ?? '',
+                          child: TextButton(
+                            onPressed: onAddAssociationPressed,
+                            style: TextButton.styleFrom(
+                              foregroundColor: header.associationColor(
+                                lookupService,
+                              ),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 6,
+                              ),
+                              minimumSize: Size.zero,
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                              visualDensity: VisualDensity.compact,
+                            ),
+                            child: Text(
+                              'Προσθήκη',
+                              style: theme.textTheme.labelLarge?.copyWith(
+                                color: header.associationColor(lookupService),
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 8),
             if (lookupLoadError != null && lookupLoadError.isNotEmpty)
               Material(
                 color: theme.colorScheme.errorContainer,
@@ -155,120 +307,6 @@ class _CallHeaderFormState extends ConsumerState<CallHeaderForm> {
                     ),
                   ),
                 ),
-                if (header.needsAssociation(lookupService))
-                  IconButton(
-                    icon: Icon(Icons.add, color: header.associationColor(lookupService)),
-                    tooltip: header.associationTooltip(lookupService) ?? '',
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(
-                      minWidth: 40,
-                      minHeight: 40,
-                    ),
-                    onPressed: () async {
-                      final messenger = ScaffoldMessenger.of(context);
-                      final currentHeader = ref.read(callHeaderProvider);
-                      final notifier = ref.read(callHeaderProvider.notifier);
-
-                      if (currentHeader.needsOrphanDepartmentQuickAdd) {
-                        final preview = await notifier.quickAddOrphanToDepartment();
-                        if (preview == null) return;
-                        if (preview.requiresConfirmation) {
-                          if (!context.mounted) return;
-                          final approve = await showDialog<bool>(
-                            context: context,
-                            builder: (dialogContext) {
-                              return AlertDialog(
-                                title: const Text('Σύγκρουση δεδομένων'),
-                                content: Text(preview.message),
-                                actions: [
-                                  TextButton(
-                                    onPressed: () =>
-                                        Navigator.of(dialogContext).pop(false),
-                                    child: const Text('Ακύρωση'),
-                                  ),
-                                  FilledButton(
-                                    onPressed: () =>
-                                        Navigator.of(dialogContext).pop(true),
-                                    child: const Text('Ναι, Προσθήκη'),
-                                  ),
-                                ],
-                              );
-                            },
-                          );
-                          if (approve != true) return;
-                          final applied = await notifier.quickAddOrphanToDepartment(
-                            forceSharedOnConflict: true,
-                          );
-                          if (context.mounted && applied?.successMessage != null) {
-                            messenger.showSnackBar(
-                              SnackBar(content: Text(applied!.successMessage!)),
-                            );
-                          }
-                          return;
-                        }
-                        if (context.mounted && preview.successMessage != null) {
-                          messenger.showSnackBar(
-                            SnackBar(content: Text(preview.successMessage!)),
-                          );
-                        }
-                        return;
-                      }
-
-                      final caller = currentHeader.selectedCaller;
-                      final departmentText = currentHeader.departmentText
-                          .trim();
-                      final selectedDepartment = departmentText.isNotEmpty
-                          ? lookupService?.findDepartmentByName(departmentText)
-                          : null;
-                      var updatePrimaryDepartment = false;
-
-                      final oldDeptText = (caller?.departmentName ?? '')
-                          .trim();
-                      final nextDeptNorm =
-                          SearchTextNormalizer.normalizeForSearch(departmentText);
-                      final oldDeptNorm =
-                          SearchTextNormalizer.normalizeForSearch(oldDeptText);
-                      final wantsDeptChange = caller?.id != null &&
-                          departmentText.isNotEmpty &&
-                          (selectedDepartment?.id != caller?.departmentId) &&
-                          (nextDeptNorm.isNotEmpty && nextDeptNorm != oldDeptNorm);
-
-                      if (wantsDeptChange) {
-                        final askUpdate = await showDialog<bool>(
-                          context: context,
-                          builder: (dialogContext) {
-                            return AlertDialog(
-                              title: const Text('Αλλαγή κύριου τμήματος'),
-                              content: Text(
-                                'Ο χρήστης έχει κύριο τμήμα "${caller!.departmentName ?? 'Χωρίς τμήμα'}". '
-                                'Να γίνει νέο κύριο τμήμα του χρήστη το "${selectedDepartment?.name ?? departmentText}";',
-                              ),
-                              actions: [
-                                TextButton(
-                                  onPressed: () =>
-                                      Navigator.of(dialogContext).pop(false),
-                                  child: const Text('Όχι'),
-                                ),
-                                FilledButton(
-                                  onPressed: () =>
-                                      Navigator.of(dialogContext).pop(true),
-                                  child: const Text('Ναι'),
-                                ),
-                              ],
-                            );
-                          },
-                        );
-                        updatePrimaryDepartment = askUpdate ?? false;
-                      }
-
-                      final msg = await notifier.associateCurrentIfNeeded(
-                        updatePrimaryDepartment: updatePrimaryDepartment,
-                      );
-                      if (context.mounted && msg != null) {
-                        messenger.showSnackBar(SnackBar(content: Text(msg)));
-                      }
-                    },
-                  ),
               ],
             ),
           ],
@@ -294,8 +332,9 @@ class _CallHeaderFormState extends ConsumerState<CallHeaderForm> {
     }
     final before = message.substring(0, i);
     final after = message.substring(i + key.length);
-    final tip =
-        details.length > 2500 ? '${details.substring(0, 2500)}…' : details;
+    final tip = details.length > 2500
+        ? '${details.substring(0, 2500)}…'
+        : details;
     return Text.rich(
       TextSpan(
         style: style,

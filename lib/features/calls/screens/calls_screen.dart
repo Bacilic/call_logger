@@ -4,12 +4,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/models/remote_tool.dart';
 import '../provider/call_entry_provider.dart';
 import '../provider/call_header_provider.dart';
+import '../provider/notes_field_hint_provider.dart';
 import '../provider/remote_paths_provider.dart';
 import '../utils/call_remote_targets.dart';
 import 'widgets/call_header_form.dart';
 import 'widgets/call_status_bar.dart';
 import 'widgets/recent_calls_list.dart';
 import 'widgets/equipment_info_card.dart';
+import 'widgets/equipment_recent_calls_panel.dart';
+import 'widgets/global_recent_calls_list.dart';
 import 'widgets/notes_sticky_field.dart';
 import 'widgets/category_autocomplete_field.dart';
 import 'widgets/remote_connection_buttons.dart';
@@ -20,6 +23,8 @@ import 'widgets/user_info_card.dart';
 /// ώστε να μην συμπέσει με autofocus ή rebuild (βλ. docs/KEYBOARD_AND_FOCUS.md).
 class CallsScreen extends ConsumerWidget {
   const CallsScreen({super.key});
+  static const double _kSharedAxisMaxWidth = 424;
+  static const double _kSharedAxisMaxWidthWithRemote = 340;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -33,7 +38,6 @@ class CallsScreen extends ConsumerWidget {
       ),
       orElse: () => false,
     );
-
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: LayoutBuilder(
@@ -41,64 +45,147 @@ class CallsScreen extends ConsumerWidget {
           final width = constraints.maxWidth.isFinite
               ? constraints.maxWidth
               : MediaQuery.sizeOf(context).width;
+          final selectedEquipmentCode =
+              header.selectedEquipment?.code?.trim() ??
+              header.equipmentText.trim();
+          final showEquipmentHistoryPanel = selectedEquipmentCode.isNotEmpty;
+          final showRemoteButtons =
+              !hideRemoteButtons &&
+              (header.equipmentText.trim().isNotEmpty ||
+                  header.selectedEquipment != null);
           return SizedBox(
             width: width,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 const CallHeaderForm(),
-                Padding(
-                  padding: const EdgeInsets.only(top: 16),
-                  child: Wrap(
-                    spacing: 16.0,
-                    runSpacing: 16.0,
-                    crossAxisAlignment: WrapCrossAlignment.start,
-                    children: [
-                      if (header.selectedCaller != null)
-                        UserInfoCard(user: header.selectedCaller!),
-                      if (header.selectedEquipment != null ||
-                          header.equipmentText.trim().isNotEmpty)
-                        EquipmentInfoCard(
-                          equipment: header.selectedEquipment,
-                          equipmentCodeText: header.equipmentText,
-                        ),
-                      if (!hideRemoteButtons &&
-                          (header.equipmentText.trim().isNotEmpty ||
-                              header.selectedEquipment != null))
-                        RemoteConnectionButtons(
-                          header: header,
-                          tools: tools,
-                        ),
-                    ],
-                  ),
-                ),
-                if (header.selectedCaller?.id != null) ...[
-                  RecentCallsList(callerId: header.selectedCaller!.id!),
-                ],
                 const SizedBox(height: 16),
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      child: Align(
-                        alignment: Alignment.centerLeft,
-                        child: const NotesStickyField(),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Flexible(fit: FlexFit.loose, child: CallStatusBar()),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                CategoryAutocompleteField(
-                  onCategoryChanged: (text, categoryId) {
-                    ref
-                        .read(callEntryProvider.notifier)
-                        .setCategory(text, categoryId: categoryId);
+                LayoutBuilder(
+                  builder: (context, middleConstraints) {
+                    final compact = middleConstraints.maxWidth < 980;
+                    final sharedAxisCap = showRemoteButtons
+                        ? _kSharedAxisMaxWidthWithRemote
+                        : _kSharedAxisMaxWidth;
+                    final sharedAxisWidth = middleConstraints.maxWidth
+                        .clamp(180.0, sharedAxisCap)
+                        .toDouble();
+                    final leftContent = Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(
+                              child: Align(
+                                alignment: Alignment.centerLeft,
+                                child: SizedBox(
+                                  width: sharedAxisWidth,
+                                  child: const NotesStickyField(),
+                                ),
+                              ),
+                            ),
+                            if (showRemoteButtons) ...[
+                              const SizedBox(width: 12),
+                              Flexible(
+                                fit: FlexFit.loose,
+                                child: RemoteConnectionButtons(
+                                  header: header,
+                                  tools: tools,
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        _buildActionsRow(
+                          context,
+                          ref,
+                          header,
+                          sharedAxisWidth: sharedAxisWidth,
+                        ),
+                      ],
+                    );
+
+                    if (compact || !showEquipmentHistoryPanel) {
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          leftContent,
+                          if (showEquipmentHistoryPanel) ...[
+                            const SizedBox(height: 12),
+                            EquipmentRecentCallsPanel(
+                              equipmentCode: selectedEquipmentCode,
+                            ),
+                          ],
+                        ],
+                      );
+                    }
+
+                    return Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(flex: 3, child: leftContent),
+                        const SizedBox(width: 10),
+                        SizedBox(
+                          width: 300,
+                          child: EquipmentRecentCallsPanel(
+                            equipmentCode: selectedEquipmentCode,
+                          ),
+                        ),
+                      ],
+                    );
                   },
                 ),
                 const SizedBox(height: 16),
-                _buildSubmitButton(context, ref, header),
+                LayoutBuilder(
+                  builder: (context, bottomConstraints) {
+                    final compact = bottomConstraints.maxWidth < 980;
+                    final leftBottom = Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Wrap(
+                          spacing: 16.0,
+                          runSpacing: 16.0,
+                          crossAxisAlignment: WrapCrossAlignment.start,
+                          children: [
+                            if (header.selectedCaller != null)
+                              UserInfoCard(user: header.selectedCaller!),
+                            if (header.selectedEquipment != null ||
+                                header.equipmentText.trim().isNotEmpty)
+                              EquipmentInfoCard(
+                                equipment: header.selectedEquipment,
+                                equipmentCodeText: header.equipmentText,
+                              ),
+                          ],
+                        ),
+                        if (header.selectedCaller?.id != null) ...[
+                          const SizedBox(height: 10),
+                          RecentCallsList(callerId: header.selectedCaller!.id!),
+                        ],
+                      ],
+                    );
+
+                    if (compact) {
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          leftBottom,
+                          const SizedBox(height: 12),
+                          const GlobalRecentCallsList(),
+                        ],
+                      );
+                    }
+
+                    return Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(flex: 5, child: leftBottom),
+                        const SizedBox(width: 16),
+                        const Expanded(flex: 6, child: GlobalRecentCallsList()),
+                      ],
+                    );
+                  },
+                ),
               ],
             ),
           );
@@ -108,18 +195,21 @@ class CallsScreen extends ConsumerWidget {
   }
 }
 
-Widget _buildSubmitButton(
+Widget _buildActionsRow(
   BuildContext context,
   WidgetRef ref,
-  CallHeaderState header,
-) {
+  CallHeaderState header, {
+  required double sharedAxisWidth,
+}) {
+  final notifier = ref.read(callEntryProvider.notifier);
   final isPending = ref.watch(callEntryProvider.select((s) => s.isPending));
-  final elevated = ElevatedButton(
+  final notesNonEmpty = ref.watch(
+    callEntryProvider.select((s) => s.notes.trim().isNotEmpty),
+  );
+  final primarySubmit = ElevatedButton.icon(
     onPressed: header.canSubmitCall
         ? () async {
-            final ok = await ref
-                .read(callEntryProvider.notifier)
-                .submitCall();
+            final ok = await notifier.submitCall();
             if (context.mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
@@ -132,60 +222,130 @@ Widget _buildSubmitButton(
           }
         : null,
     style: ElevatedButton.styleFrom(
-      backgroundColor: header.canSubmitCall
-          ? Theme.of(context).colorScheme.primary
-          : Colors.grey,
-      foregroundColor: header.canSubmitCall
-          ? Theme.of(context).colorScheme.onPrimary
-          : Colors.grey[700],
-      padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 24),
-      minimumSize: const Size(double.infinity, 48),
+      padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 14),
     ),
-    child: const Text('Καταγραφή Κλήσης'),
+    icon: const Icon(Icons.save_alt),
+    label: const Text('Ολοκλήρωση'),
   );
   final mainSubmit = header.canSubmitCall
-      ? elevated
+      ? primarySubmit
       : Tooltip(
           message:
               'Συμπληρώστε εσωτερικό αριθμό και πρέπει να βρεθεί ο καλώντας',
-          child: elevated,
+          child: primarySubmit,
         );
 
-  final pendingBtn = OutlinedButton.icon(
-    icon: const Icon(Icons.task_alt),
-    label: const Text('Εκκρεμότητα'),
-    style: OutlinedButton.styleFrom(
-      padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
+  final pendingToggle = SizedBox(
+    height: 48,
+    child: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Checkbox(
+          value: isPending,
+          onChanged: notesNonEmpty ? (_) => notifier.togglePending() : null,
+          tristate: false,
+        ),
+        const SizedBox(width: 4),
+        MouseRegion(
+          cursor: notesNonEmpty ? MouseCursor.defer : SystemMouseCursors.click,
+          child: GestureDetector(
+            behavior: HitTestBehavior.translucent,
+            onTap: notesNonEmpty
+                ? notifier.togglePending
+                : () => ref
+                      .read(notesFieldHintTickProvider.notifier)
+                      .requestHintFlash(),
+            child: Text(
+              'Εκκρεμότητα',
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: notesNonEmpty
+                    ? null
+                    : Theme.of(
+                        context,
+                      ).colorScheme.onSurface.withValues(alpha: 0.38),
+              ),
+            ),
+          ),
+        ),
+      ],
     ),
-    onPressed: () async {
-      final ok = await ref
-          .read(callEntryProvider.notifier)
-                .submitOnlyPending();
-      if (context.mounted && ok) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Η εκκρεμότητα καταχωρήθηκε')),
-        );
-      }
+  );
+
+  final newCallButton = OutlinedButton.icon(
+    icon: const Icon(Icons.add_call),
+    label: const Text('Νέα Κλήση'),
+    style: OutlinedButton.styleFrom(
+      padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
+    ),
+    onPressed: () {
+      ref.read(callHeaderProvider.notifier).clearAll();
+      ref.read(callEntryProvider.notifier).reset();
     },
   );
 
   return LayoutBuilder(
     builder: (context, constraints) {
-      final narrow = constraints.maxWidth < 520 && isPending;
+      final axisWidth = constraints.maxWidth.isFinite
+          ? sharedAxisWidth.clamp(180.0, constraints.maxWidth).toDouble()
+          : sharedAxisWidth;
+      const actionsMinWidth = 360.0;
+      final keepSingleLineWidth = axisWidth + 16.0 + actionsMinWidth;
+      final narrow = constraints.maxWidth < keepSingleLineWidth;
+
+      final category = SizedBox(
+        child: CategoryAutocompleteField(
+          onCategoryChanged: (text, categoryId) {
+            ref
+                .read(callEntryProvider.notifier)
+                .setCategory(text, categoryId: categoryId);
+          },
+        ),
+      );
+      final categoryAndStatus = SizedBox(
+        width: axisWidth,
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(child: category),
+            const SizedBox(width: 6),
+            SizedBox(
+              width: 156,
+              child: Align(
+                alignment: Alignment.centerRight,
+                child: Padding(
+                  padding: const EdgeInsets.only(left: 6),
+                  child: pendingToggle,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+      final actionsRow = Wrap(
+        spacing: 4,
+        runSpacing: 10,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          const CallStatusBar(showPendingToggle: false),
+          mainSubmit,
+          newCallButton,
+        ],
+      );
+
       if (narrow) {
         return Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [mainSubmit, const SizedBox(height: 12), pendingBtn],
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [categoryAndStatus, const SizedBox(height: 10), actionsRow],
         );
       }
       return Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(child: mainSubmit),
-          if (isPending) ...[
-            const SizedBox(width: 16),
-            Flexible(fit: FlexFit.loose, child: pendingBtn),
-          ],
+          categoryAndStatus,
+          const SizedBox(width: 16),
+          Expanded(
+            child: Align(alignment: Alignment.topLeft, child: actionsRow),
+          ),
         ],
       );
     },

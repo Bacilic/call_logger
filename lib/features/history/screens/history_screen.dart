@@ -13,6 +13,7 @@ import '../../../core/widgets/main_nav_destination.dart';
 import '../providers/history_application_audit_view_provider.dart';
 import '../providers/history_provider.dart';
 import '../widgets/application_audit_tab.dart';
+import 'dashboard_screen.dart';
 
 /// Επίπεδο μεγέθυνσης πίνακα ιστορικού (0.5–2.0).
 final historyTableZoomProvider =
@@ -253,6 +254,17 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
                 'Ιστορικό Κλήσεων',
                 overflow: TextOverflow.ellipsis,
               ),
+            ),
+            IconButton(
+              tooltip: 'Στατιστικά κλήσεων / Αναφορές',
+              onPressed: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => const DashboardScreen(),
+                  ),
+                );
+              },
+              icon: const Icon(Icons.analytics_outlined),
             ),
             _auditToggleButton(
               tooltip: 'Εναλλαγή σε ιστορικό εφαρμογής (audit)',

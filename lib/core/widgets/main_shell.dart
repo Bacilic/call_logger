@@ -45,8 +45,10 @@ class MainShell extends ConsumerStatefulWidget {
 
   final DatabaseInitResult databaseResult;
   final bool isLocalDevMode;
+
   /// Κλήση όταν ο χρήστης κλείνει την οθόνη Ρυθμίσεων· ξανατρέχουν οι έλεγχοι βάσης.
   final Future<void> Function()? onReturnFromSettings;
+
   /// Μετά από συντήρηση (νέα βάση κ.λπ.)· επανασύνδεση/έλεγχοι όπως με Ρυθμίσεις.
   final Future<void> Function()? onDatabaseReopened;
 
@@ -58,8 +60,10 @@ class _MainShellState extends ConsumerState<MainShell> {
   /// True αν άλλαξε η διαδρομή βάσης από Ρυθμίσεις και απαιτείται επανεκκίνηση.
   bool _pendingRestartDueToPathChange = false;
   MainNavDestination _selectedDestination = MainNavDestination.calls;
+
   /// Εμφάνιση κουμπιού Import Excel (ρύθμιση από Ρυθμίσεις· προεπιλογή false).
   bool _showImportExcelButton = false;
+
   /// Λεζάντες πλευρικής μπάρας (όταν το πλάτος παραθύρου επιτρέπει extended rail).
   bool _navRailShowLabels = true;
 
@@ -174,7 +178,10 @@ class _MainShellState extends ConsumerState<MainShell> {
             showDuration: const Duration(seconds: 4),
             message:
                 'Καταγραφή νέας κλήσης τεχνικής υποστήριξης\nΚύρια οθόνη – πατήστε εδώ όταν χτυπά τηλέφωνο',
-            child: const Icon(Icons.phone_in_talk, key: ValueKey('nav_rail_calls')),
+            child: const Icon(
+              Icons.phone_in_talk,
+              key: ValueKey('nav_rail_calls'),
+            ),
           ),
           label: const Text('Κλήσεις'),
         );
@@ -191,7 +198,10 @@ class _MainShellState extends ConsumerState<MainShell> {
             showDuration: const Duration(seconds: 4),
             message:
                 'Διαχείριση χρηστών και εξοπλισμού\nΠροσθήκη / διόρθωση ονομάτων, τμημάτων, υπολογιστών',
-            child: const Icon(Icons.contacts, key: ValueKey('nav_rail_directory')),
+            child: const Icon(
+              Icons.contacts,
+              key: ValueKey('nav_rail_directory'),
+            ),
           ),
           label: const Text('Κατάλογος'),
         );
@@ -213,7 +223,10 @@ class _MainShellState extends ConsumerState<MainShell> {
             showDuration: const Duration(seconds: 4),
             message:
                 'Εργαλεία διαχείρισης & εποπτείας βάσης\nΡυθμίσεις βάσης, αντίγραφα ασφαλείας, προβολή πινάκων',
-            child: const Icon(Icons.storage, key: ValueKey('nav_rail_database')),
+            child: const Icon(
+              Icons.storage,
+              key: ValueKey('nav_rail_database'),
+            ),
           ),
           label: const Text('Βάση Δεδομένων'),
         );
@@ -224,7 +237,10 @@ class _MainShellState extends ConsumerState<MainShell> {
             showDuration: const Duration(seconds: 4),
             message:
                 'Διαχείριση λεξικού ορθογραφίας\nΕισαγωγές, συγχώνευση και εξαγωγή (compile) σε αρχείο',
-            child: const Icon(Icons.menu_book, key: ValueKey('nav_rail_dictionary')),
+            child: const Icon(
+              Icons.menu_book,
+              key: ValueKey('nav_rail_dictionary'),
+            ),
           ),
           label: const Text('Λεξικό'),
         );
@@ -248,9 +264,7 @@ class _MainShellState extends ConsumerState<MainShell> {
           onDatabaseReopened: widget.onDatabaseReopened,
         );
       case MainNavDestination.dictionary:
-        return DictionaryManagerScreen(
-          databaseResult: widget.databaseResult,
-        );
+        return DictionaryManagerScreen(databaseResult: widget.databaseResult);
     }
   }
 
@@ -261,10 +275,7 @@ class _MainShellState extends ConsumerState<MainShell> {
       builder: (dialogContext) {
         return Dialog(
           child: ConstrainedBox(
-            constraints: const BoxConstraints(
-              maxWidth: 920,
-              maxHeight: 640,
-            ),
+            constraints: const BoxConstraints(maxWidth: 920, maxHeight: 640),
             child: const Padding(
               padding: EdgeInsets.all(8),
               child: DatabaseSettingsPanel(),
@@ -273,6 +284,31 @@ class _MainShellState extends ConsumerState<MainShell> {
         );
       },
     );
+  }
+
+  Future<void> _openSettingsScreen() async {
+    final pathBefore = await SettingsService().getDatabasePath();
+    if (!mounted) return;
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (context) => SettingsScreen(
+          onAfterDatabaseChanged:
+              widget.onDatabaseReopened ?? widget.onReturnFromSettings,
+        ),
+      ),
+    );
+    if (!mounted) return;
+    await widget.onReturnFromSettings?.call();
+    if (!mounted) return;
+    final pathAfter = await SettingsService().getDatabasePath();
+    if (pathBefore != pathAfter) {
+      setState(() => _pendingRestartDueToPathChange = true);
+    }
+    ref.invalidate(showDatabaseNavProvider);
+    ref.invalidate(showDictionaryNavProvider);
+    ref.invalidate(greekDictionaryServiceProvider);
+    await _loadShowImportExcelSetting();
+    if (mounted) setState(() {});
   }
 
   /// Περιεχόμενο προορισμού με μπάνερ dev/βάσης και επανεκκίνησης (χωρίς rail).
@@ -289,9 +325,9 @@ class _MainShellState extends ConsumerState<MainShell> {
               'ΛΕΙΤΟΥΡΓΙΑ ΑΝΑΠΤΥΞΗΣ - Τοπική Βάση Δεδομένων',
               textAlign: TextAlign.center,
               style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                    color: Colors.black87,
-                    fontWeight: FontWeight.w600,
-                  ),
+                color: Colors.black87,
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ),
         if (dest == MainNavDestination.database &&
@@ -309,12 +345,9 @@ class _MainShellState extends ConsumerState<MainShell> {
                       Text(
                         widget.databaseResult.message ??
                             'Άγνωστο σφάλμα με τη βάση δεδομένων.',
-                        style: Theme.of(context)
-                            .textTheme
-                            .bodySmall
-                            ?.copyWith(
-                              color: Colors.red.shade700,
-                            ),
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Colors.red.shade700,
+                        ),
                       ),
                       if (widget.databaseResult.details != null) ...[
                         const SizedBox(height: 4),
@@ -322,9 +355,7 @@ class _MainShellState extends ConsumerState<MainShell> {
                           message: widget.databaseResult.details!,
                           child: Text(
                             widget.databaseResult.details!,
-                            style: Theme.of(context)
-                                .textTheme
-                                .bodySmall
+                            style: Theme.of(context).textTheme.bodySmall
                                 ?.copyWith(
                                   color: Colors.red.shade300,
                                   fontSize: 11,
@@ -352,8 +383,10 @@ class _MainShellState extends ConsumerState<MainShell> {
             child: SafeArea(
               top: false,
               child: Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 12,
+                ),
                 child: Row(
                   children: [
                     Expanded(
@@ -371,9 +404,9 @@ class _MainShellState extends ConsumerState<MainShell> {
                             TextSpan(
                               text: 'Επανεκκίνηση...',
                               style: TextStyle(
-                                color: Theme.of(context)
-                                    .colorScheme
-                                    .primaryContainer,
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.primaryContainer,
                                 fontWeight: FontWeight.w600,
                                 decoration: TextDecoration.underline,
                               ),
@@ -401,21 +434,21 @@ class _MainShellState extends ConsumerState<MainShell> {
     final pendingCountAsync = ref.watch(globalPendingTasksCountProvider);
     final showBadge = showBadgeAsync.value ?? true;
     final pendingCount = pendingCountAsync.value ?? 0;
-    final showDatabaseNav = ref.watch(showDatabaseNavProvider).maybeWhen(
-      data: (v) => v,
-      orElse: () => true,
+    final showDatabaseNav = ref
+        .watch(showDatabaseNavProvider)
+        .maybeWhen(data: (v) => v, orElse: () => true);
+    final showDictionaryNav = ref
+        .watch(showDictionaryNavProvider)
+        .maybeWhen(data: (v) => v, orElse: () => true);
+    final visibleDestinations = _visibleDestinations(
+      showDatabaseNav,
+      showDictionaryNav,
     );
-    final showDictionaryNav = ref.watch(showDictionaryNavProvider).maybeWhen(
-      data: (v) => v,
-      orElse: () => true,
-    );
-    final visibleDestinations =
-        _visibleDestinations(showDatabaseNav, showDictionaryNav);
-    final effectiveDestination = visibleDestinations.contains(_selectedDestination)
+    final effectiveDestination =
+        visibleDestinations.contains(_selectedDestination)
         ? _selectedDestination
         : MainNavDestination.calls;
-    final selectedRailIndex =
-        visibleDestinations.indexOf(effectiveDestination);
+    final selectedRailIndex = visibleDestinations.indexOf(effectiveDestination);
     if (effectiveDestination != _selectedDestination) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted && _selectedDestination != effectiveDestination) {
@@ -434,11 +467,13 @@ class _MainShellState extends ConsumerState<MainShell> {
     }
 
     final lexiconFullMode = ref.watch(lexiconFullModeProvider);
-    final dictionaryImmersive = lexiconFullMode &&
+    final dictionaryImmersive =
+        lexiconFullMode &&
         effectiveDestination == MainNavDestination.dictionary;
 
     final historyAuditImmersive = ref.watch(historyAuditImmersiveProvider);
-    final historyImmersive = historyAuditImmersive &&
+    final historyImmersive =
+        historyAuditImmersive &&
         effectiveDestination == MainNavDestination.history;
 
     ref.listen<bool>(lexiconFullModeProvider, (previous, next) {
@@ -498,42 +533,11 @@ class _MainShellState extends ConsumerState<MainShell> {
       );
     }
 
+    final showAppBar = effectiveDestination != MainNavDestination.calls;
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Καταγραφή Κλήσεων'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.settings),
-            tooltip: 'Ρυθμίσεις',
-            onPressed: () async {
-              final pathBefore =
-                  await SettingsService().getDatabasePath();
-              if (!context.mounted) return;
-              await Navigator.of(context).push<void>(
-                MaterialPageRoute<void>(
-                  builder: (context) => SettingsScreen(
-                    onAfterDatabaseChanged:
-                        widget.onDatabaseReopened ?? widget.onReturnFromSettings,
-                  ),
-                ),
-              );
-              if (!context.mounted) return;
-              await widget.onReturnFromSettings?.call();
-              if (!context.mounted) return;
-              final pathAfter =
-                  await SettingsService().getDatabasePath();
-              if (pathBefore != pathAfter) {
-                setState(() => _pendingRestartDueToPathChange = true);
-              }
-              ref.invalidate(showDatabaseNavProvider);
-              ref.invalidate(showDictionaryNavProvider);
-              ref.invalidate(greekDictionaryServiceProvider);
-              await _loadShowImportExcelSetting();
-              if (mounted) setState(() {});
-            },
-          ),
-        ],
-      ),
+      appBar: showAppBar
+          ? AppBar(title: const Text('Καταγραφή Κλήσεων'))
+          : null,
       floatingActionButton: _showImportExcelButton
           ? FloatingActionButton(
               onPressed: _onImportExcel,
@@ -565,15 +569,26 @@ class _MainShellState extends ConsumerState<MainShell> {
                     },
                   )
                 : null,
+            trailing: Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.settings),
+                    tooltip: 'Ρυθμίσεις',
+                    onPressed: _openSettingsScreen,
+                  ),
+                ],
+              ),
+            ),
             destinations: [
               for (final d in visibleDestinations)
                 _railDestination(d, showBadge, pendingCount),
             ],
           ),
           const VerticalDivider(thickness: 1, width: 1),
-          Expanded(
-            child: _destinationContentColumn(effectiveDestination),
-          ),
+          Expanded(child: _destinationContentColumn(effectiveDestination)),
         ],
       ),
     );
@@ -616,14 +631,14 @@ class _MainShellState extends ConsumerState<MainShell> {
     await Future.delayed(const Duration(milliseconds: 100));
     try {
       final result = await ImportService().importFromExcel(
-        onLog: (msg, [level]) =>
-            ref.read(importLogProvider.notifier).addLog(msg, level ?? ImportLogLevel.info),
+        onLog: (msg, [level]) => ref
+            .read(importLogProvider.notifier)
+            .addLog(msg, level ?? ImportLogLevel.info),
       );
       if (!result.success && result.errorMessage != null) {
-        messenger.showSnackBar(
-          SnackBar(content: Text(result.errorMessage!)),
-        );
-      } else if (result.success && (result.usersInserted > 0 || result.equipmentInserted > 0)) {
+        messenger.showSnackBar(SnackBar(content: Text(result.errorMessage!)));
+      } else if (result.success &&
+          (result.usersInserted > 0 || result.equipmentInserted > 0)) {
         ref.invalidate(lookupServiceProvider);
         messenger.showSnackBar(
           SnackBar(
@@ -634,9 +649,7 @@ class _MainShellState extends ConsumerState<MainShell> {
         );
       }
     } catch (e) {
-      messenger.showSnackBar(
-        SnackBar(content: Text('Σφάλμα: $e')),
-      );
+      messenger.showSnackBar(SnackBar(content: Text('Σφάλμα: $e')));
     }
   }
 }

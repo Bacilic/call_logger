@@ -18,6 +18,7 @@ class SettingsService {
   static const String _keyEquipmentLocationShowBuilding =
       'equipment_location_show_building';
   static const String _keyEnableSpellCheck = 'enable_spell_check';
+  static const String _keyShowGlobalCallsDashboard = 'show_global_calls_dashboard';
   static const String _keyDatabaseOpenTimeoutSeconds =
       'database_open_timeout_seconds';
   static const String _keyDictionarySourcePath = 'dictionary_source_path';
@@ -201,6 +202,17 @@ class SettingsService {
   Future<void> setEnableSpellCheck(bool value) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_keyEnableSpellCheck, value);
+  }
+
+  /// Εμφάνιση κάρτας «Τελευταίες 7 Κλήσεις» στην οθόνη κλήσεων. Προεπιλογή: true.
+  Future<bool> getShowGlobalCalls() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_keyShowGlobalCallsDashboard) ?? true;
+  }
+
+  Future<void> setShowGlobalCalls(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_keyShowGlobalCallsDashboard, value);
   }
 
   /// Timeout ανοίγματος βάσης σε δευτερόλεπτα. Προεπιλογή: [AppConfig.databaseOpenTimeoutSeconds].

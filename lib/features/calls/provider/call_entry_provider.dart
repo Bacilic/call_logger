@@ -13,6 +13,7 @@ import '../models/call_model.dart';
 import '../models/equipment_model.dart';
 import '../models/user_model.dart';
 import 'call_header_provider.dart';
+import 'calls_dashboard_providers.dart';
 
 /// Κατάσταση φόρμας εισαγωγής κλήσης.
 class CallEntryState {
@@ -26,6 +27,7 @@ class CallEntryState {
     this.isPending = false,
     this.durationSeconds = 0,
     this.isCallTimerRunning = false,
+    this.retainPlayPauseAfterManualZero = false,
   });
 
   final String internalDigits;
@@ -36,8 +38,12 @@ class CallEntryState {
   final int? categoryId;
   final bool isPending;
   final int durationSeconds;
+
   /// Συγχρονισμένο με το ενεργό `Timer` — για `ref.watch(select(...))` όταν η διάρκεια δεν αλλάζει (παύση).
   final bool isCallTimerRunning;
+
+  /// Όταν η διάρκεια μηδενίστηκε από τον διάλογο προσαρμογής, κρατά ορατό το Play/Pause στο `CallStatusBar`.
+  final bool retainPlayPauseAfterManualZero;
 
   CallEntryState copyWith({
     String? internalDigits,
@@ -49,6 +55,7 @@ class CallEntryState {
     bool? isPending,
     int? durationSeconds,
     bool? isCallTimerRunning,
+    bool? retainPlayPauseAfterManualZero,
   }) {
     return CallEntryState(
       internalDigits: internalDigits ?? this.internalDigits,
@@ -60,6 +67,8 @@ class CallEntryState {
       isPending: isPending ?? this.isPending,
       durationSeconds: durationSeconds ?? this.durationSeconds,
       isCallTimerRunning: isCallTimerRunning ?? this.isCallTimerRunning,
+      retainPlayPauseAfterManualZero:
+          retainPlayPauseAfterManualZero ?? this.retainPlayPauseAfterManualZero,
     );
   }
 }
@@ -89,7 +98,13 @@ class CallEntryNotifier extends Notifier<CallEntryState> {
     if (_timer != null) return;
     _timer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (!ref.mounted) return;
-      state = state.copyWith(durationSeconds: state.durationSeconds + 1);
+      final next = state.durationSeconds + 1;
+      state = state.copyWith(
+        durationSeconds: next,
+        retainPlayPauseAfterManualZero: next > 0
+            ? false
+            : state.retainPlayPauseAfterManualZero,
+      );
     });
     state = state.copyWith(
       durationSeconds: state.durationSeconds,
@@ -106,15 +121,25 @@ class CallEntryNotifier extends Notifier<CallEntryState> {
     );
   }
 
-  void setDurationManually(int seconds) {
+  void setDurationManually(
+    int seconds, {
+    bool retainPlayPauseAfterManualZero = false,
+  }) {
     stopTimer();
-    state = state.copyWith(durationSeconds: seconds);
+    state = state.copyWith(
+      durationSeconds: seconds,
+      retainPlayPauseAfterManualZero:
+          seconds == 0 && retainPlayPauseAfterManualZero,
+    );
   }
 
   /// Επαναφορά χρονομέτρου σε αναμονή (stop + duration 0) όταν το πεδίο τηλεφώνου γίνεται κενό.
   void resetTimerToStandby() {
     stopTimer();
-    state = state.copyWith(durationSeconds: 0);
+    state = state.copyWith(
+      durationSeconds: 0,
+      retainPlayPauseAfterManualZero: false,
+    );
   }
 
   void setInternalDigits(String value, LookupService? lookupService) {
@@ -147,6 +172,7 @@ class CallEntryNotifier extends Notifier<CallEntryState> {
       isPending: state.isPending,
       durationSeconds: state.durationSeconds,
       isCallTimerRunning: state.isCallTimerRunning,
+      retainPlayPauseAfterManualZero: state.retainPlayPauseAfterManualZero,
     );
   }
 
@@ -211,11 +237,14 @@ class CallEntryNotifier extends Notifier<CallEntryState> {
       if (userId != null) {
         ref.invalidate(recentCallsProvider(userId));
       }
+      final equipmentCode = header.selectedEquipment?.code?.trim();
+      if (equipmentCode != null && equipmentCode.isNotEmpty) {
+        ref.invalidate(recentCallsByEquipmentProvider(equipmentCode));
+      }
+      ref.invalidate(globalRecentCallsProvider);
       final selectedPhone = header.selectedPhone;
       if (selectedPhone != null) {
-        ref
-            .read(callHeaderProvider.notifier)
-            .markPhoneUsed(selectedPhone);
+        ref.read(callHeaderProvider.notifier).markPhoneUsed(selectedPhone);
       }
       if (state.isPending) {
         final callerName =
@@ -325,6 +354,7 @@ class CallEntryNotifier extends Notifier<CallEntryState> {
       isPending: false,
       durationSeconds: 0,
       isCallTimerRunning: false,
+      retainPlayPauseAfterManualZero: false,
     );
   }
 }
@@ -344,10 +374,7 @@ final callEntryProvider = NotifierProvider<CallEntryNotifier, CallEntryState>(
   String? equipmentText,
   String? departmentText,
 })
-callsFormPendingTaskFields(
-  Ref ref, {
-  required String internalDigits,
-}) {
+callsFormPendingTaskFields(Ref ref, {required String internalDigits}) {
   final smart = ref.read(callSmartEntityProvider);
   final digitsOnly = internalDigits.replaceAll(RegExp(r'[^0-9]'), '');
   final phoneId = digitsOnly.isEmpty ? null : int.tryParse(digitsOnly);
@@ -371,16 +398,3 @@ callsFormPendingTaskFields(
     departmentText: departmentText,
   );
 }
-
-/// Τελευταίες κλήσεις ανά caller_id (limit 3).
-final recentCallsProvider = FutureProvider.family<List<CallModel>, int>((
-  ref,
-  callerId,
-) async {
-  final db = await DatabaseHelper.instance.database;
-  final maps = await CallsRepository(db).getRecentCallsByCallerId(
-    callerId,
-    limit: 3,
-  );
-  return maps.map((m) => CallModel.fromMap(m)).toList();
-});
