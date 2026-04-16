@@ -1,9 +1,10 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 
 import '../../../../core/errors/department_exists_exception.dart';
 import '../../../../core/services/lookup_service.dart';
 import '../../../../core/database/database_helper.dart';
 import '../../../../core/database/directory_repository.dart';
+import '../../../../core/widgets/database_persistence_error_snackbar.dart';
 import '../../../../core/utils/search_text_normalizer.dart';
 import '../../../../core/utils/spell_check.dart';
 import '../../../../core/widgets/lexicon_spell_text_form_field.dart';
@@ -648,11 +649,9 @@ class _DepartmentFormDialogState extends State<DepartmentFormDialog> {
             if (!mounted) return;
             widget.onSaved?.call();
             Navigator.of(context).pop(true);
-          } catch (err) {
+          } catch (err, st) {
             if (!mounted) return;
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('$err')),
-            );
+            showDatabasePersistenceErrorSnackBar(context, err, st);
           }
         }
       } else {
@@ -678,11 +677,9 @@ class _DepartmentFormDialogState extends State<DepartmentFormDialog> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(e.message)),
       );
-    } catch (e) {
+    } catch (e, st) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Σφάλμα: $e')),
-      );
+      showDatabasePersistenceErrorSnackBar(context, e, st);
     }
   }
 

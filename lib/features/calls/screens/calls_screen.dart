@@ -206,6 +206,10 @@ Widget _buildActionsRow(
   final notesNonEmpty = ref.watch(
     callEntryProvider.select((s) => s.notes.trim().isNotEmpty),
   );
+  final theme = Theme.of(context);
+  final scheme = theme.colorScheme;
+  final submitPadding =
+      const EdgeInsets.symmetric(vertical: 14, horizontal: 14);
   final primarySubmit = ElevatedButton.icon(
     onPressed: header.canSubmitCall
         ? () async {
@@ -221,11 +225,22 @@ Widget _buildActionsRow(
             }
           }
         : null,
-    style: ElevatedButton.styleFrom(
-      padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 14),
-    ),
+    style: header.canSubmitCall
+        ? ElevatedButton.styleFrom(
+            padding: submitPadding,
+            backgroundColor: scheme.primary,
+            foregroundColor: Colors.white,
+            elevation: 1,
+            textStyle: theme.textTheme.labelLarge?.copyWith(
+              fontWeight: FontWeight.w700,
+              color: Colors.white,
+            ),
+          )
+        : ElevatedButton.styleFrom(
+            padding: submitPadding,
+          ),
     icon: const Icon(Icons.save_alt),
-    label: const Text('Ολοκλήρωση'),
+    label: const Text('Καταγραφή'),
   );
   final mainSubmit = header.canSubmitCall
       ? primarySubmit

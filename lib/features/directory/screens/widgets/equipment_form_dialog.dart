@@ -1,8 +1,9 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/database/database_helper.dart';
 import '../../../../core/database/directory_repository.dart';
+import '../../../../core/widgets/database_persistence_error_snackbar.dart';
 import '../../../../core/services/lookup_service.dart';
 import '../../../../core/services/settings_service.dart';
 import '../../../../core/utils/name_parser.dart';
@@ -321,6 +322,15 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog> {
     for (final k in _expandedRemoteKeys.toList()) {
       _syncRemoteValueFromController(k);
     }
+    try {
+      await _savePersist();
+    } catch (e, st) {
+      if (!mounted) return;
+      showDatabasePersistenceErrorSnackBar(context, e, st);
+    }
+  }
+
+  Future<void> _savePersist() async {
     final asyncLookup = widget.ref.read(lookupServiceProvider);
     final lookup = asyncLookup.value?.service;
     final ownerText = _ownerController.text.trim();

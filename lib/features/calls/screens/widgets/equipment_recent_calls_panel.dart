@@ -1,19 +1,67 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/providers/main_nav_request_provider.dart';
+import '../../../../core/widgets/main_nav_destination.dart';
+import '../../../history/providers/history_provider.dart';
+import '../../models/call_model.dart';
 import '../../provider/calls_dashboard_providers.dart';
+
+DateTime? _equipmentRecentParseSqlDateOnly(String? raw) {
+  final s = raw?.trim();
+  if (s == null || s.isEmpty) return null;
+  final parts = s.split('-');
+  if (parts.length != 3) return null;
+  final y = int.tryParse(parts[0]);
+  final m = int.tryParse(parts[1]);
+  final d = int.tryParse(parts[2]);
+  if (y == null || m == null || d == null) return null;
+  if (m < 1 || m > 12 || d < 1 || d > 31) return null;
+  return DateTime(y, m, d);
+}
+
+/// Πρώτη στήλη: `ηη-μμ-εε ώρα` (αν υπάρχει `date`), αλλιώς μόνο ώρα / `--:--`.
+String _equipmentRecentDateTimeLabel(CallModel c) {
+  final t = (c.time ?? '').trim();
+  final timePart = t.isEmpty ? '--:--' : t;
+  final d = _equipmentRecentParseSqlDateOnly(c.date);
+  if (d == null) return timePart;
+  final dd = d.day.toString().padLeft(2, '0');
+  final mm = d.month.toString().padLeft(2, '0');
+  final yy = (d.year % 100).toString().padLeft(2, '0');
+  return '$dd-$mm-$yy $timePart';
+}
+
+/// Κατηγορία· αν κενή → σημειώσεις (`issue`)· αν και αυτό κενό → παύλα.
+String _equipmentRecentCategoryOrNotesLine(CallModel c) {
+  final category = (c.category ?? '').trim();
+  if (category.isNotEmpty) return category;
+  final notes = (c.issue ?? '').trim();
+  if (notes.isNotEmpty) return notes;
+  return '—';
+}
+
+String _equipmentRecentCardClipboardText(
+  String equipmentCode,
+  List<CallModel> calls,
+) {
+  final buf = StringBuffer()
+    ..writeln('Ιστορικό Εξοπλισμού: $equipmentCode');
+  for (final c in calls) {
+    buf.writeln(
+      '${_equipmentRecentDateTimeLabel(c)}\t${_equipmentRecentCategoryOrNotesLine(c)}',
+    );
+  }
+  return buf.toString().trimRight();
+}
+
+enum _EquipmentRecentTitleMenu { copyAll, openHistory }
 
 class EquipmentRecentCallsPanel extends ConsumerWidget {
   const EquipmentRecentCallsPanel({super.key, required this.equipmentCode});
 
   final String equipmentCode;
-
-  Color _statusColor(BuildContext context, String status) {
-    final v = status.toLowerCase();
-    if (v == 'pending') return Colors.orange.shade600;
-    if (v == 'completed') return Colors.green.shade600;
-    return Theme.of(context).colorScheme.outline;
-  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -31,7 +79,86 @@ class EquipmentRecentCallsPanel extends ConsumerWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Ιστορικό Εξοπλισμού', style: theme.textTheme.titleSmall),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        'Ιστορικό Εξοπλισμού',
+                        style: theme.textTheme.titleSmall,
+                      ),
+                    ),
+                    PopupMenuButton<_EquipmentRecentTitleMenu>(
+                      tooltip: 'Ενέργειες',
+                      icon: const Icon(Icons.more_vert, size: 22),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(
+                        minWidth: 40,
+                        minHeight: 36,
+                      ),
+                      onSelected: (action) {
+                        switch (action) {
+                          case _EquipmentRecentTitleMenu.copyAll:
+                            final text = _equipmentRecentCardClipboardText(
+                              code,
+                              calls,
+                            );
+                            Clipboard.setData(ClipboardData(text: text));
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text(
+                                    'Το κείμενο αντιγράφηκε στο πρόχειρο.',
+                                  ),
+                                ),
+                              );
+                            }
+                          case _EquipmentRecentTitleMenu.openHistory:
+                            ref
+                                .read(historyFilterProvider.notifier)
+                                .update(
+                                  (s) => s.copyWith(keyword: code),
+                                );
+                            ref
+                                .read(mainNavRequestProvider.notifier)
+                                .request(
+                                  const MainNavRequest(
+                                    destination: MainNavDestination.history,
+                                  ),
+                                );
+                        }
+                      },
+                      itemBuilder: (ctx) => [
+                        const PopupMenuItem(
+                          value: _EquipmentRecentTitleMenu.copyAll,
+                          child: ListTile(
+                            dense: true,
+                            contentPadding: EdgeInsets.zero,
+                            leading: Icon(Icons.copy),
+                            title: Text('Αντιγραφή κειμένου'),
+                            subtitle: Text(
+                              'Αντιγράφει όλες τις γραμμές για επικόλληση',
+                              style: TextStyle(fontSize: 12),
+                            ),
+                          ),
+                        ),
+                        const PopupMenuItem(
+                          value: _EquipmentRecentTitleMenu.openHistory,
+                          child: ListTile(
+                            dense: true,
+                            contentPadding: EdgeInsets.zero,
+                            leading: Icon(Icons.history),
+                            title: Text('Μετάβαση στο ιστορικό'),
+                            subtitle: Text(
+                              'Φίλτρο αναζήτησης με τον κωδικό εξοπλισμού',
+                              style: TextStyle(fontSize: 12),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
                 const SizedBox(height: 10),
                 for (final c in calls)
                   Padding(
@@ -40,43 +167,20 @@ class EquipmentRecentCallsPanel extends ConsumerWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         SizedBox(
-                          width: 56,
+                          width: 132,
                           child: Text(
-                            c.time ?? '--:--',
+                            _equipmentRecentDateTimeLabel(c),
                             style: theme.textTheme.bodySmall,
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
-                            () {
-                              final issueText = (c.issue ?? '').trim();
-                              return issueText.isEmpty ? '—' : issueText;
-                            }(),
+                            _equipmentRecentCategoryOrNotesLine(c),
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                             style: theme.textTheme.bodyMedium,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 3,
-                          ),
-                          decoration: BoxDecoration(
-                            color: _statusColor(
-                              context,
-                              c.status ?? '',
-                            ).withValues(alpha: 0.12),
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: Text(
-                            (c.status ?? '—').toUpperCase(),
-                            style: theme.textTheme.labelSmall?.copyWith(
-                              color: _statusColor(context, c.status ?? ''),
-                              fontWeight: FontWeight.w700,
-                            ),
                           ),
                         ),
                       ],

@@ -74,7 +74,7 @@ class _UserNameChangeConfirmDialogState
               selected: _choice == UserNameChangeDialogChoice.newEmployee,
               title: 'Νέος υπάλληλος',
               subtitle:
-                  'Δημιουργείται νέος χρήστης με τα νέα στοιχεία· αντιγράφονται οι συνδέσεις εξοπλισμού. Ο παλιός παραμένει ορατός· οι παλιές κλήσεις δεν αλλάζουν caller.',
+                  'Δημιουργείται νέος χρήστης με τα νέα στοιχεία· αντιγράφονται οι συνδέσεις εξοπλισμού.\nΟ παλιός παραμένει ορατός· οι παλιές κλήσεις δεν αλλάζουν Καλών.',
               onTap: () =>
                   setState(() => _choice = UserNameChangeDialogChoice.newEmployee),
             ),

@@ -1,6 +1,7 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/providers/user_form_edit_intent_provider.dart';
 import '../../../../core/database/database_helper.dart';
 import '../../../../core/database/directory_repository.dart';
 import '../../../calls/models/user_model.dart';
@@ -34,6 +35,11 @@ class _UsersTabState extends ConsumerState<UsersTab> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(directoryProvider.notifier).loadUsers();
+      final pending = ref.read(userFormEditIntentProvider);
+      if (pending != null && mounted) {
+        ref.read(userFormEditIntentProvider.notifier).clear();
+        _openForm(context, ref, pending);
+      }
     });
   }
 
@@ -46,6 +52,11 @@ class _UsersTabState extends ConsumerState<UsersTab> {
   @override
   Widget build(BuildContext context) {
     ref.watch(lookupServiceProvider);
+    ref.listen<UserModel?>(userFormEditIntentProvider, (previous, next) {
+      if (next == null || !mounted) return;
+      ref.read(userFormEditIntentProvider.notifier).clear();
+      _openForm(context, ref, next);
+    });
     final state = ref.watch(directoryProvider);
     final notifier = ref.read(directoryProvider.notifier);
     final visibleColumns = state.orderedVisibleColumns;

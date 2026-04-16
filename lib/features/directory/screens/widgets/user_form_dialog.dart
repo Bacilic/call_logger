@@ -1,8 +1,9 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/database/database_helper.dart';
 import '../../../../core/database/directory_repository.dart';
+import '../../../../core/widgets/database_persistence_error_snackbar.dart';
 import '../../../../core/providers/settings_provider.dart';
 import '../../../../core/providers/spell_check_provider.dart';
 import '../../../../core/utils/search_text_normalizer.dart';
@@ -259,38 +260,44 @@ class _UserFormDialogState extends ConsumerState<UserFormDialog> {
       }
     }
 
-    final initialDeptNorm = SearchTextNormalizer.normalizeForSearch(
-      _initialDepartmentText,
-    );
-    final currentDeptNorm = SearchTextNormalizer.normalizeForSearch(
-      _departmentController.text,
-    );
-    if (initialDeptNorm != currentDeptNorm) {
-      final existsInOrg = currentDeptNorm.isEmpty
-          ? true
-          : await DirectoryRepository(await DatabaseHelper.instance.database)
-              .departmentNameExists(
-              _departmentController.text,
-            );
-      if (!mounted) return;
-      final useAddToDepartmentMessage =
-          !_isEdit || widget.isClone || _initialDepartmentText.trim().isEmpty;
-      final result = await showDepartmentTransferConfirmDialog(
-        context: context,
-        userDisplayName: _buildUserDisplayName(),
-        oldDepartment: _initialDepartmentText,
-        newDepartment: _departmentController.text,
-        newDepartmentExistsInOrg: existsInOrg,
-        useAddToDepartmentMessage: useAddToDepartmentMessage,
+    try {
+      final initialDeptNorm = SearchTextNormalizer.normalizeForSearch(
+        _initialDepartmentText,
       );
-      final effective = result ?? DepartmentTransferDialogResult.cancelTransfer;
-      if (effective == DepartmentTransferDialogResult.cancelTransfer) {
-        _departmentController.text = _initialDepartmentText;
-        return;
+      final currentDeptNorm = SearchTextNormalizer.normalizeForSearch(
+        _departmentController.text,
+      );
+      if (initialDeptNorm != currentDeptNorm) {
+        final existsInOrg = currentDeptNorm.isEmpty
+            ? true
+            : await DirectoryRepository(await DatabaseHelper.instance.database)
+                .departmentNameExists(
+                _departmentController.text,
+              );
+        if (!mounted) return;
+        final useAddToDepartmentMessage =
+            !_isEdit || widget.isClone || _initialDepartmentText.trim().isEmpty;
+        final result = await showDepartmentTransferConfirmDialog(
+          context: context,
+          userDisplayName: _buildUserDisplayName(),
+          oldDepartment: _initialDepartmentText,
+          newDepartment: _departmentController.text,
+          newDepartmentExistsInOrg: existsInOrg,
+          useAddToDepartmentMessage: useAddToDepartmentMessage,
+        );
+        final effective =
+            result ?? DepartmentTransferDialogResult.cancelTransfer;
+        if (effective == DepartmentTransferDialogResult.cancelTransfer) {
+          _departmentController.text = _initialDepartmentText;
+          return;
+        }
       }
-    }
 
-    await _persistUser(cloneAsNewEmployee: cloneAsNewEmployee);
+      await _persistUser(cloneAsNewEmployee: cloneAsNewEmployee);
+    } catch (e, st) {
+      if (!mounted) return;
+      showDatabasePersistenceErrorSnackBar(context, e, st);
+    }
   }
 
   Future<void> _persistUser({bool cloneAsNewEmployee = false}) async {

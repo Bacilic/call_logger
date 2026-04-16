@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 import 'dart:convert';
 
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -34,8 +34,11 @@ class DirectoryRepository {
     }
   }
 
-  Future<String> _auditPerformingUser() async {
-    final v = await getSetting(DatabaseHelper.auditUserPerformingSettingsKey);
+  Future<String> _auditPerformingUser({DatabaseExecutor? executor}) async {
+    final v = await getSetting(
+      DatabaseHelper.auditUserPerformingSettingsKey,
+      executor: executor,
+    );
     final t = v?.trim();
     if (t != null && t.isNotEmpty) return t;
     return '—';
@@ -230,7 +233,7 @@ class DirectoryRepository {
       );
       if (pr.isEmpty) return;
       final pid = pr.first['id'] as int;
-      final ap = await _auditPerformingUser();
+      final ap = await _auditPerformingUser(executor: txn);
       await AuditService.log(
         txn,
         action: 'ΤΡΟΠΟΠΟΙΗΣΗ',
@@ -273,7 +276,7 @@ class DirectoryRepository {
         where: 'department_id = ? AND phone_id = ?',
         whereArgs: [departmentId, pid],
       );
-      final ap = await _auditPerformingUser();
+      final ap = await _auditPerformingUser(executor: txn);
       await AuditService.log(
         txn,
         action: 'ΤΡΟΠΟΠΟΙΗΣΗ',
@@ -419,7 +422,7 @@ class DirectoryRepository {
           dp.isNotEmpty) {
         return;
       }
-      final ap = await _auditPerformingUser();
+      final ap = await _auditPerformingUser(executor: txn);
       await AuditService.log(
         txn,
         action: 'ΤΡΟΠΟΠΟΙΗΣΗ',
@@ -448,7 +451,7 @@ class DirectoryRepository {
         whereArgs: [code],
         limit: 1,
       );
-      final ap = await _auditPerformingUser();
+      final ap = await _auditPerformingUser(executor: txn);
       if (rows.isEmpty) {
         final id = await txn.insert('equipment', {
           'code_equipment': code,
@@ -513,7 +516,7 @@ class DirectoryRepository {
       );
       if (userRows.isEmpty) return;
       await txn.delete('user_phones', where: 'phone_id = ?', whereArgs: [pid]);
-      final ap = await _auditPerformingUser();
+      final ap = await _auditPerformingUser(executor: txn);
       for (final ur in userRows) {
         final uid = ur['user_id'] as int?;
         if (uid == null) continue;
@@ -553,7 +556,7 @@ class DirectoryRepository {
         where: 'equipment_id = ?',
         whereArgs: [eid],
       );
-      final ap = await _auditPerformingUser();
+      final ap = await _auditPerformingUser(executor: txn);
       await AuditService.log(
         txn,
         action: 'ΤΡΟΠΟΠΟΙΗΣΗ ΕΞΟΠΛΙΣΜΟΥ',
@@ -646,7 +649,7 @@ class DirectoryRepository {
         await _replaceUserPhonesInTxn(txn, id, phones);
       }
       final afterPhoneIds = await _userPhoneIds(txn, id);
-      final ap = await _auditPerformingUser();
+      final ap = await _auditPerformingUser(executor: txn);
       final rowSnap = await _userRowById(txn, id);
       final nv = _userRowAuditValues(rowSnap ?? {});
       final nums = await _userPhoneNumbersOrdered(txn, id);
@@ -811,7 +814,7 @@ class DirectoryRepository {
 
       final newRow = await _userRowById(txn, id);
       final afterPhoneIds = await _userPhoneIds(txn, id);
-      final ap = await _auditPerformingUser();
+      final ap = await _auditPerformingUser(executor: txn);
       final oldAudit = oldRow == null
           ? <String, dynamic>{}
           : _userRowAuditValues(oldRow);
@@ -874,7 +877,7 @@ class DirectoryRepository {
     final phoneBulk = map.remove('phone') as String?;
     if (map.isEmpty && phoneBulk == null) return;
     await db.transaction((txn) async {
-      final apPhone = await _auditPerformingUser();
+      final apPhone = await _auditPerformingUser(executor: txn);
       if (map.isNotEmpty) {
         for (final id in ids) {
           await txn.update('users', map, where: 'id = ?', whereArgs: [id]);
@@ -895,7 +898,7 @@ class DirectoryRepository {
           );
         }
       }
-      final user = await _auditPerformingUser();
+      final user = await _auditPerformingUser(executor: txn);
       final fields = Map<String, dynamic>.from(map);
       if (phoneBulk != null) {
         fields['phone'] = phoneBulk;
@@ -990,8 +993,12 @@ class DirectoryRepository {
     });
   }
 
-  Future<String?> getSetting(String key) async {
-    final rows = await db.query(
+  Future<String?> getSetting(
+    String key, {
+    DatabaseExecutor? executor,
+  }) async {
+    final e = executor ?? db;
+    final rows = await e.query(
       'app_settings',
       columns: ['value'],
       where: 'key = ?',
@@ -1055,7 +1062,7 @@ class DirectoryRepository {
 
       final newId = await findId();
       if (newId != null && recordAudit) {
-        final ap = await _auditPerformingUser();
+        final ap = await _auditPerformingUser(executor: txn);
         await AuditService.log(
           txn,
           action: 'ΔΗΜΙΟΥΡΓΙΑ ΤΜΗΜΑΤΟΣ',
@@ -1301,7 +1308,7 @@ ORDER BY p.number COLLATE NOCASE ASC
       for (final id in ids) {
         await txn.update('departments', map, where: 'id = ?', whereArgs: [id]);
       }
-      final user = await _auditPerformingUser();
+      final user = await _auditPerformingUser(executor: txn);
       await AuditService.logBulk(
         txn,
         action: 'ΜΑΖΙΚΗ ΕΝΗΜΕΡΩΣΗ',
@@ -1416,7 +1423,7 @@ ORDER BY p.number COLLATE NOCASE ASC
         where: 'user_id = ? AND equipment_id = ?',
         whereArgs: [userId, equipmentId],
       );
-      final ap = await _auditPerformingUser();
+      final ap = await _auditPerformingUser(executor: txn);
       final uSnap = await _linkedEquipmentSnapshotsForUser(txn, userId);
       final eSnap = await _linkedUserSnapshotsForEquipment(txn, equipmentId);
       final uRow = await _userRowById(txn, userId);
@@ -1476,7 +1483,7 @@ ORDER BY p.number COLLATE NOCASE ASC
         limit: 1,
       );
       if (post.isEmpty) return;
-      final ap = await _auditPerformingUser();
+      final ap = await _auditPerformingUser(executor: txn);
       final uSnap = await _linkedEquipmentSnapshotsForUser(txn, userId);
       final eSnap = await _linkedUserSnapshotsForEquipment(txn, equipmentId);
       final uRow = await _userRowById(txn, userId);
@@ -1551,7 +1558,7 @@ ORDER BY p.number COLLATE NOCASE ASC
     final added = afterEq.difference(beforeEq);
     if (added.isEmpty) return;
     await db.transaction((txn) async {
-      final ap = await _auditPerformingUser();
+      final ap = await _auditPerformingUser(executor: txn);
       final uSnap = await _linkedEquipmentSnapshotsForUser(txn, toUserId);
       final uRow = await _userRowById(txn, toUserId);
       await AuditService.log(
@@ -1609,7 +1616,7 @@ ORDER BY p.number COLLATE NOCASE ASC
       }
       final newU = await _linkedUserSnapshotsForEquipment(txn, equipmentId);
       if (jsonEncode(oldU) == jsonEncode(newU)) return;
-      final ap = await _auditPerformingUser();
+      final ap = await _auditPerformingUser(executor: txn);
       final eRows = await txn.query(
         'equipment',
         columns: ['code_equipment'],
@@ -1725,7 +1732,7 @@ ORDER BY p.number COLLATE NOCASE ASC
       for (final id in ids) {
         await txn.update('equipment', map, where: 'id = ?', whereArgs: [id]);
       }
-      final user = await _auditPerformingUser();
+      final user = await _auditPerformingUser(executor: txn);
       await AuditService.logBulk(
         txn,
         action: 'ΜΑΖΙΚΗ ΕΝΗΜΕΡΩΣΗ',
@@ -1964,7 +1971,7 @@ ORDER BY p.number COLLATE NOCASE ASC
           await _replaceUserPhonesInTxn(txn, userId, [...existing, trimmedPhone]);
           final afterIds = await _userPhoneIds(txn, userId);
           phoneChanged = true;
-          final apPhones = await _auditPerformingUser();
+          final apPhones = await _auditPerformingUser(executor: txn);
           await _auditPhoneUserLinkDeltaInTxn(
             txn,
             apPhones,
@@ -2034,7 +2041,7 @@ ORDER BY p.number COLLATE NOCASE ASC
         equipmentPart: equipmentLinked && eqTrim.isNotEmpty ? eqTrim : null,
       );
 
-      final ap = await _auditPerformingUser();
+      final ap = await _auditPerformingUser(executor: txn);
       final nv = <String, dynamic>{};
       if (phoneChanged) nv['phone_associated'] = trimmedPhone;
       if (equipmentLinked && equipmentIdForAudit != null) {
