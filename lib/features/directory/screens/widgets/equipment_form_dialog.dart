@@ -77,6 +77,8 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog> {
   /// Εργαλεία με ανοιχτό πεδίο επεξεργασίας (επιλεγμένο FilterChip).
   final Set<String> _expandedRemoteKeys = {};
   final Map<String, TextEditingController> _remoteParamControllers = {};
+  /// Μία φορά μετά φόρτωση καταλόγου: αφαίρεση διπλών slug (`vnc`/`anydesk`/`rdp`) όταν υπάρχει ήδη chip ανά id.
+  bool _didCollapseLegacyRemoteKeys = false;
 
   bool get _isEdit => widget.initialEquipment != null && !widget.isClone;
 
@@ -133,6 +135,74 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog> {
       }
     }
     return false;
+  }
+
+  bool _isRdpParamKey(String key, List<RemoteTool> catalog) {
+    if (key == EquipmentRemoteParamKey.rdp) return true;
+    final id = int.tryParse(key);
+    if (id == null) return false;
+    for (final t in catalog) {
+      if (t.id == id) {
+        return t.role == ToolRole.rdp;
+      }
+    }
+    return false;
+  }
+
+  /// Αφαιρεί από το UI/κατάσταση τα legacy κλειδιά JSON όταν το ίδιο εργαλείο είναι ήδη ανοιχτό ως chip (κλειδί `tool.id`).
+  void _collapseRedundantLegacyRemoteParamKeys(
+    List<RemoteTool> catalog,
+    List<RemoteToolFormPair> pairs,
+  ) {
+    for (final k in _expandedRemoteKeys.toList()) {
+      _syncRemoteValueFromController(k);
+    }
+    String? primaryIdKeyForRole(bool Function(String k) role) {
+      for (final p in pairs) {
+        final k = p.key;
+        if (!_expandedRemoteKeys.contains(k)) continue;
+        if (role(k)) return k;
+      }
+      return null;
+    }
+
+    void foldLegacy(String legacyKey, bool Function(String k) role) {
+      if (!_expandedRemoteKeys.contains(legacyKey)) return;
+      final primary = primaryIdKeyForRole(role);
+      if (primary == null) return;
+      _syncRemoteValueFromController(legacyKey);
+      final leg = (_remoteParamValues[legacyKey] ?? '').trim();
+      final pri = (_remoteParamValues[primary] ?? '').trim();
+      if (pri.isEmpty && leg.isNotEmpty) {
+        _remoteParamValues[primary] = _remoteParamValues[legacyKey] ?? '';
+        final pc = _remoteParamControllers[primary];
+        if (pc != null) {
+          pc.text = _remoteParamValues[primary] ?? '';
+        }
+      }
+      _expandedRemoteKeys.remove(legacyKey);
+      _remoteParamValues.remove(legacyKey);
+      _disposeRemoteController(legacyKey);
+    }
+
+    foldLegacy(EquipmentRemoteParamKey.vnc, (k) => _isVncLikeParamKey(k, catalog));
+    foldLegacy(
+      EquipmentRemoteParamKey.anydesk,
+      (k) => _isAnydeskParamKey(k, catalog),
+    );
+    foldLegacy(EquipmentRemoteParamKey.rdp, (k) => _isRdpParamKey(k, catalog));
+  }
+
+  Future<void> _collapseLegacyRemoteParamsAfterCatalogLoad() async {
+    if (!mounted || _didCollapseLegacyRemoteKeys) return;
+    final pairs = await widget.ref.read(remoteToolFormPairsProvider.future);
+    final catalog = await widget.ref.read(remoteToolsCatalogProvider.future);
+    if (!mounted || _didCollapseLegacyRemoteKeys) return;
+    _didCollapseLegacyRemoteKeys = true;
+    setState(() {
+      _collapseRedundantLegacyRemoteParamKeys(catalog, pairs);
+      _recomputeDefaultRemoteFromChips(pairs, catalog);
+    });
   }
 
   void _ensureRemoteController(String key) {
@@ -220,6 +290,11 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog> {
     _selectedType = typeRaw.isEmpty ? null : typeRaw;
     _defaultRemoteToolId =
         RemoteToolsRepository.parseDefaultRemoteToolId(e?.defaultRemoteTool);
+    if (e != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _collapseLegacyRemoteParamsAfterCatalogLoad();
+      });
+    }
   }
 
   @override

@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/models/calls_screen_cards_visibility.dart';
 import '../../../core/models/remote_tool.dart';
+import '../../../core/providers/settings_provider.dart';
 import '../provider/call_entry_provider.dart';
 import '../provider/call_header_provider.dart';
 import '../provider/notes_field_hint_provider.dart';
@@ -39,6 +41,12 @@ class CallsScreen extends ConsumerWidget {
       ),
       orElse: () => false,
     );
+    final cardsVis = ref
+        .watch(callsScreenCardsVisibilityProvider)
+        .maybeWhen(
+          data: (v) => v,
+          orElse: () => CallsScreenCardsVisibility.defaults,
+        );
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: LayoutBuilder(
@@ -50,6 +58,8 @@ class CallsScreen extends ConsumerWidget {
               header.selectedEquipment?.code?.trim() ??
               header.equipmentText.trim();
           final showEquipmentHistoryPanel = selectedEquipmentCode.isNotEmpty;
+          final showEquipmentRecentPanel =
+              showEquipmentHistoryPanel && cardsVis.showEquipmentRecentPanel;
           final showRemoteButtons =
               !hideRemoteButtons &&
               (header.equipmentText.trim().isNotEmpty ||
@@ -108,6 +118,29 @@ class CallsScreen extends ConsumerWidget {
                       ],
                     );
 
+                    if (!showEquipmentRecentPanel) {
+                      if (compact) {
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [leftContent],
+                        );
+                      }
+                      return Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Flexible(
+                            fit: FlexFit.loose,
+                            child: ConstrainedBox(
+                              constraints: BoxConstraints(
+                                maxWidth: leftContentMaxWidth,
+                              ),
+                              child: leftContent,
+                            ),
+                          ),
+                        ],
+                      );
+                    }
+
                     if (compact || !showEquipmentHistoryPanel) {
                       return Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -154,34 +187,34 @@ class CallsScreen extends ConsumerWidget {
                         : MediaQuery.sizeOf(context).width;
                     final compactBottom = wrapMaxWidth < 980;
                     final hasUserCard = header.selectedCaller != null;
-                    final hasEquipmentCard = header.selectedEquipment != null ||
+                    final hasEquipmentCard =
+                        header.selectedEquipment != null ||
                         header.equipmentText.trim().isNotEmpty;
-                    final hasRecentCallsCard = header.selectedCaller?.id != null;
+                    final hasRecentCallsCard =
+                        header.selectedCaller?.id != null;
                     if (compactBottom) {
                       return Wrap(
                         spacing: 16.0,
                         runSpacing: 16.0,
                         crossAxisAlignment: WrapCrossAlignment.start,
                         children: [
-                          if (hasUserCard)
-                            UserInfoCard(
-                              user: header.selectedCaller!,
-                            ),
-                          if (hasEquipmentCard)
+                          if (hasUserCard && cardsVis.showUserCard)
+                            UserInfoCard(user: header.selectedCaller!),
+                          if (hasEquipmentCard && cardsVis.showEquipmentCard)
                             EquipmentInfoCard(
                               equipment: header.selectedEquipment,
                               equipmentCodeText: header.equipmentText,
                             ),
-                          if (hasRecentCallsCard)
-                            RecentCallsList(
-                              user: header.selectedCaller!,
+                          if (hasRecentCallsCard &&
+                              cardsVis.showEmployeeRecentCard)
+                            RecentCallsList(user: header.selectedCaller!),
+                          if (cardsVis.showGlobalRecentCard)
+                            ConstrainedBox(
+                              constraints: const BoxConstraints(
+                                maxWidth: _kGlobalRecentCardMaxWidth,
+                              ),
+                              child: const GlobalRecentCallsList(),
                             ),
-                          ConstrainedBox(
-                            constraints: const BoxConstraints(
-                              maxWidth: _kGlobalRecentCardMaxWidth,
-                            ),
-                            child: const GlobalRecentCallsList(),
-                          ),
                         ],
                       );
                     }
@@ -200,31 +233,31 @@ class CallsScreen extends ConsumerWidget {
                                 runSpacing: 16.0,
                                 crossAxisAlignment: WrapCrossAlignment.start,
                                 children: [
-                                  if (hasUserCard)
-                                    UserInfoCard(
-                                      user: header.selectedCaller!,
-                                    ),
-                                  if (hasEquipmentCard)
+                                  if (hasUserCard && cardsVis.showUserCard)
+                                    UserInfoCard(user: header.selectedCaller!),
+                                  if (hasEquipmentCard &&
+                                      cardsVis.showEquipmentCard)
                                     EquipmentInfoCard(
                                       equipment: header.selectedEquipment,
                                       equipmentCodeText: header.equipmentText,
                                     ),
                                 ],
                               ),
-                              if (hasRecentCallsCard)
-                                RecentCallsList(
-                                  user: header.selectedCaller!,
-                                ),
+                              if (hasRecentCallsCard &&
+                                  cardsVis.showEmployeeRecentCard)
+                                RecentCallsList(user: header.selectedCaller!),
                             ],
                           ),
                         ),
-                        const SizedBox(width: 16),
-                        ConstrainedBox(
-                          constraints: const BoxConstraints(
-                            maxWidth: _kGlobalRecentCardMaxWidth,
+                        if (cardsVis.showGlobalRecentCard) ...[
+                          const SizedBox(width: 16),
+                          ConstrainedBox(
+                            constraints: const BoxConstraints(
+                              maxWidth: _kGlobalRecentCardMaxWidth,
+                            ),
+                            child: const GlobalRecentCallsList(),
                           ),
-                          child: const GlobalRecentCallsList(),
-                        ),
+                        ],
                       ],
                     );
                   },

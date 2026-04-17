@@ -1,5 +1,6 @@
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+﻿import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../models/calls_screen_cards_visibility.dart';
 import '../services/settings_service.dart';
 
 /// Provider για ρύθμιση εμφάνισης ενεργού χρονομέτρου στη φόρμα κλήσεων.
@@ -22,3 +23,9 @@ final showDatabaseNavProvider =
 /// Εμφάνιση προορισμού Λεξικό στο NavigationRail. Invalidate μετά από Ρυθμίσεις.
 final showDictionaryNavProvider =
     FutureProvider<bool>((ref) => SettingsService().getShowDictionaryNav());
+
+/// Ορατότητα καρτελών οθόνης κλήσεων. Invalidate μετά από Ρυθμίσεις.
+final callsScreenCardsVisibilityProvider =
+    FutureProvider<CallsScreenCardsVisibility>(
+  (ref) => SettingsService().getCallsScreenCardsVisibility(),
+);

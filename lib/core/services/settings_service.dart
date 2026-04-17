@@ -1,9 +1,10 @@
-import 'dart:convert';
+﻿import 'dart:convert';
 
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../config/app_config.dart';
 import '../config/audit_retention_config.dart';
+import '../models/calls_screen_cards_visibility.dart';
 
 /// Υπηρεσία αποθήκευσης και ανάκτησης ρυθμίσεων (key-value) τοπικά.
 class SettingsService {
@@ -25,6 +26,8 @@ class SettingsService {
   static const String _keyDictionaryExportPath = 'dictionary_export_path';
   static const String _keyShowDatabaseNav = 'show_database_nav';
   static const String _keyShowDictionaryNav = 'show_dictionary_nav';
+  static const String _keyCallsScreenCardsVisibility =
+      'calls_screen_cards_visibility_v1';
   static const String _keyRemoteToolPrioritySwapMode =
       'remote_tool_priority_swap_mode';
   static const int _maxRecentPaths = 3;
@@ -290,6 +293,23 @@ class SettingsService {
   Future<void> setShowDictionaryNav(bool value) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_keyShowDictionaryNav, value);
+  }
+
+  /// Ποια κάρτες εμφανίζονται στην οθόνη κλήσεων. Προεπιλογή: όλες ορατές.
+  Future<CallsScreenCardsVisibility> getCallsScreenCardsVisibility() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_keyCallsScreenCardsVisibility);
+    return CallsScreenCardsVisibility.fromJsonString(raw);
+  }
+
+  Future<void> setCallsScreenCardsVisibility(
+    CallsScreenCardsVisibility value,
+  ) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+      _keyCallsScreenCardsVisibility,
+      value.toJsonString(),
+    );
   }
 
   /// Πολιτική εκκαθάρισης audit log (ηλικία / max rows).
