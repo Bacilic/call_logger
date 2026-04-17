@@ -2,12 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../../core/providers/main_nav_request_provider.dart';
-import '../../../../core/providers/user_form_edit_intent_provider.dart';
-import '../../../../core/widgets/main_nav_destination.dart';
-import '../../../directory/models/user_catalog_mode.dart';
+import '../../../../core/utils/search_text_normalizer.dart';
+import '../../../directory/models/department_model.dart';
+import '../../../directory/providers/department_directory_provider.dart';
 import '../../../directory/providers/directory_provider.dart';
-import '../../../history/providers/history_provider.dart';
+import '../../../directory/screens/widgets/department_form_dialog.dart';
+import '../../../directory/screens/widgets/user_form_dialog.dart';
 import '../../models/user_model.dart';
 
 String _userInfoCardClipboardText(UserModel user) {
@@ -23,32 +23,71 @@ String _userInfoCardClipboardText(UserModel user) {
   return buf.toString().trimRight();
 }
 
-/// Λέξη-κλειδί για αναζήτηση ιστορικού: όνομα, αλλιώς πρώτο μη κενό τηλέφωνο.
-String _userInfoHistorySearchKeyword(UserModel user) {
-  final n = user.name?.trim() ?? '';
-  if (n.isNotEmpty) return n;
-  for (final p in user.phones) {
-    final t = p.trim();
-    if (t.isNotEmpty) return t;
+Future<void> _openDepartmentCatalogForm(
+  BuildContext context,
+  WidgetRef ref,
+  UserModel user,
+) async {
+  final notifier = ref.read(departmentDirectoryProvider.notifier);
+  await notifier.loadDepartments();
+  if (!context.mounted) return;
+  final state = ref.read(departmentDirectoryProvider);
+  DepartmentModel? department;
+  final deptId = user.departmentId;
+  if (deptId != null) {
+    for (final d in state.allDepartments) {
+      if (d.isDeleted) continue;
+      if (d.id == deptId) {
+        department = d;
+        break;
+      }
+    }
   }
-  return '';
+  if (department == null) {
+    final name = (user.departmentName ?? '').trim();
+    if (name.isNotEmpty) {
+      final norm = SearchTextNormalizer.normalizeForSearch(name);
+      for (final d in state.allDepartments) {
+        if (d.isDeleted) continue;
+        final dn = SearchTextNormalizer.normalizeForSearch(d.name);
+        if (dn == norm) {
+          department = d;
+          break;
+        }
+      }
+    }
+  }
+  if (department == null) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Δεν βρέθηκε το τμήμα στον κατάλογο (ή δεν έχει οριστεί τμήμα για τον υπάλληλο).',
+          ),
+        ),
+      );
+    }
+    return;
+  }
+  if (!context.mounted) return;
+  await showDialog<void>(
+    context: context,
+    builder: (ctx) =>
+        DepartmentFormDialog(initialDepartment: department, notifier: notifier),
+  );
 }
 
-enum _UserInfoCardTitleMenu { copyAll, openHistory, openUserEdit }
+enum _UserInfoCardTitleMenu { copyAll, openUserEdit, openDepartmentEdit }
 
 /// Κάρτα στοιχείων χρήστη (όνομα, τμήμα, τηλέφωνο).
 class UserInfoCard extends ConsumerWidget {
-  const UserInfoCard({
-    super.key,
-    required this.user,
-  });
+  const UserInfoCard({super.key, required this.user});
 
   final UserModel user;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    final searchKeyword = _userInfoHistorySearchKeyword(user);
 
     return Card(
       margin: EdgeInsets.zero,
@@ -96,34 +135,16 @@ class UserInfoCard extends ConsumerWidget {
                               ),
                             );
                           }
-                        case _UserInfoCardTitleMenu.openHistory:
-                          ref
-                              .read(historyFilterProvider.notifier)
-                              .update(
-                                (s) => s.copyWith(keyword: searchKeyword),
-                              );
-                          ref.read(mainNavRequestProvider.notifier).request(
-                                const MainNavRequest(
-                                  destination: MainNavDestination.history,
-                                ),
-                              );
                         case _UserInfoCardTitleMenu.openUserEdit:
-                          ref
-                              .read(directoryProvider.notifier)
-                              .setCatalogMode(UserCatalogMode.personal);
-                          ref.read(mainNavRequestProvider.notifier).request(
-                                const MainNavRequest(
-                                  destination: MainNavDestination.directory,
-                                  directoryTabIndex: 0,
-                                ),
-                              );
-                          WidgetsBinding.instance.addPostFrameCallback((_) {
-                            WidgetsBinding.instance.addPostFrameCallback((_) {
-                              ref
-                                  .read(userFormEditIntentProvider.notifier)
-                                  .requestEdit(user);
-                            });
-                          });
+                          showDialog<void>(
+                            context: context,
+                            builder: (ctx) => UserFormDialog(
+                              initialUser: user,
+                              notifier: ref.read(directoryProvider.notifier),
+                            ),
+                          );
+                        case _UserInfoCardTitleMenu.openDepartmentEdit:
+                          _openDepartmentCatalogForm(context, ref, user);
                       }
                     },
                     itemBuilder: (ctx) => [
@@ -141,19 +162,6 @@ class UserInfoCard extends ConsumerWidget {
                         ),
                       ),
                       const PopupMenuItem(
-                        value: _UserInfoCardTitleMenu.openHistory,
-                        child: ListTile(
-                          dense: true,
-                          contentPadding: EdgeInsets.zero,
-                          leading: Icon(Icons.history),
-                          title: Text('Μετάβαση στο ιστορικό'),
-                          subtitle: Text(
-                            'Φίλτρο αναζήτησης με όνομα ή τηλέφωνο',
-                            style: TextStyle(fontSize: 12),
-                          ),
-                        ),
-                      ),
-                      const PopupMenuItem(
                         value: _UserInfoCardTitleMenu.openUserEdit,
                         child: ListTile(
                           dense: true,
@@ -161,7 +169,20 @@ class UserInfoCard extends ConsumerWidget {
                           leading: Icon(Icons.edit_outlined),
                           title: Text('Άνοιγμα καρτέλας χρήστη'),
                           subtitle: Text(
-                            'Κατάλογος → Χρήστες και φόρμα επεξεργασίας',
+                            'Φόρμα επεξεργασίας υπαλλήλου',
+                            style: TextStyle(fontSize: 12),
+                          ),
+                        ),
+                      ),
+                      const PopupMenuItem(
+                        value: _UserInfoCardTitleMenu.openDepartmentEdit,
+                        child: ListTile(
+                          dense: true,
+                          contentPadding: EdgeInsets.zero,
+                          leading: Icon(Icons.apartment_outlined),
+                          title: Text('Άνοιγμα καρτέλας τμήματος'),
+                          subtitle: Text(
+                            'Φόρμα επεξεργασίας τμήματος',
                             style: TextStyle(fontSize: 12),
                           ),
                         ),
@@ -175,7 +196,12 @@ class UserInfoCard extends ConsumerWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  _row(theme, Icons.business, 'Τμήμα', user.departmentName ?? '–'),
+                  _row(
+                    theme,
+                    Icons.business,
+                    'Τμήμα',
+                    user.departmentName ?? '–',
+                  ),
                   _row(theme, Icons.phone, 'Τηλ.', user.phoneJoined),
                   if (user.notes != null && user.notes!.trim().isNotEmpty)
                     Padding(

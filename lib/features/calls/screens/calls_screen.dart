@@ -25,6 +25,7 @@ class CallsScreen extends ConsumerWidget {
   const CallsScreen({super.key});
   static const double _kSharedAxisMaxWidth = 424;
   static const double _kSharedAxisMaxWidthWithRemote = 340;
+  static const double _kGlobalRecentCardMaxWidth = 560;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -53,6 +54,7 @@ class CallsScreen extends ConsumerWidget {
               !hideRemoteButtons &&
               (header.equipmentText.trim().isNotEmpty ||
                   header.selectedEquipment != null);
+          final leftContentMaxWidth = showRemoteButtons ? 760.0 : 700.0;
           return SizedBox(
             width: width,
             child: Column(
@@ -124,7 +126,15 @@ class CallsScreen extends ConsumerWidget {
                     return Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Expanded(flex: 3, child: leftContent),
+                        Flexible(
+                          fit: FlexFit.loose,
+                          child: ConstrainedBox(
+                            constraints: BoxConstraints(
+                              maxWidth: leftContentMaxWidth,
+                            ),
+                            child: leftContent,
+                          ),
+                        ),
                         const SizedBox(width: 10),
                         SizedBox(
                           width: 300,
@@ -139,39 +149,39 @@ class CallsScreen extends ConsumerWidget {
                 const SizedBox(height: 16),
                 LayoutBuilder(
                   builder: (context, bottomConstraints) {
-                    final compact = bottomConstraints.maxWidth < 980;
-                    final leftBottom = Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Wrap(
-                          spacing: 16.0,
-                          runSpacing: 16.0,
-                          crossAxisAlignment: WrapCrossAlignment.start,
-                          children: [
-                            if (header.selectedCaller != null)
-                              UserInfoCard(user: header.selectedCaller!),
-                            if (header.selectedEquipment != null ||
-                                header.equipmentText.trim().isNotEmpty)
-                              EquipmentInfoCard(
-                                equipment: header.selectedEquipment,
-                                equipmentCodeText: header.equipmentText,
-                              ),
-                          ],
-                        ),
-                        if (header.selectedCaller?.id != null) ...[
-                          const SizedBox(height: 10),
-                          RecentCallsList(callerId: header.selectedCaller!.id!),
-                        ],
-                      ],
-                    );
-
-                    if (compact) {
-                      return Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                    final wrapMaxWidth = bottomConstraints.maxWidth.isFinite
+                        ? bottomConstraints.maxWidth
+                        : MediaQuery.sizeOf(context).width;
+                    final compactBottom = wrapMaxWidth < 980;
+                    final hasUserCard = header.selectedCaller != null;
+                    final hasEquipmentCard = header.selectedEquipment != null ||
+                        header.equipmentText.trim().isNotEmpty;
+                    final hasRecentCallsCard = header.selectedCaller?.id != null;
+                    if (compactBottom) {
+                      return Wrap(
+                        spacing: 16.0,
+                        runSpacing: 16.0,
+                        crossAxisAlignment: WrapCrossAlignment.start,
                         children: [
-                          leftBottom,
-                          const SizedBox(height: 12),
-                          const GlobalRecentCallsList(),
+                          if (hasUserCard)
+                            UserInfoCard(
+                              user: header.selectedCaller!,
+                            ),
+                          if (hasEquipmentCard)
+                            EquipmentInfoCard(
+                              equipment: header.selectedEquipment,
+                              equipmentCodeText: header.equipmentText,
+                            ),
+                          if (hasRecentCallsCard)
+                            RecentCallsList(
+                              user: header.selectedCaller!,
+                            ),
+                          ConstrainedBox(
+                            constraints: const BoxConstraints(
+                              maxWidth: _kGlobalRecentCardMaxWidth,
+                            ),
+                            child: const GlobalRecentCallsList(),
+                          ),
                         ],
                       );
                     }
@@ -179,9 +189,42 @@ class CallsScreen extends ConsumerWidget {
                     return Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Expanded(flex: 5, child: leftBottom),
+                        Flexible(
+                          fit: FlexFit.loose,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Wrap(
+                                spacing: 16.0,
+                                runSpacing: 16.0,
+                                crossAxisAlignment: WrapCrossAlignment.start,
+                                children: [
+                                  if (hasUserCard)
+                                    UserInfoCard(
+                                      user: header.selectedCaller!,
+                                    ),
+                                  if (hasEquipmentCard)
+                                    EquipmentInfoCard(
+                                      equipment: header.selectedEquipment,
+                                      equipmentCodeText: header.equipmentText,
+                                    ),
+                                ],
+                              ),
+                              if (hasRecentCallsCard)
+                                RecentCallsList(
+                                  user: header.selectedCaller!,
+                                ),
+                            ],
+                          ),
+                        ),
                         const SizedBox(width: 16),
-                        const Expanded(flex: 6, child: GlobalRecentCallsList()),
+                        ConstrainedBox(
+                          constraints: const BoxConstraints(
+                            maxWidth: _kGlobalRecentCardMaxWidth,
+                          ),
+                          child: const GlobalRecentCallsList(),
+                        ),
                       ],
                     );
                   },
@@ -208,8 +251,10 @@ Widget _buildActionsRow(
   );
   final theme = Theme.of(context);
   final scheme = theme.colorScheme;
-  final submitPadding =
-      const EdgeInsets.symmetric(vertical: 14, horizontal: 14);
+  final submitPadding = const EdgeInsets.symmetric(
+    vertical: 14,
+    horizontal: 14,
+  );
   final primarySubmit = ElevatedButton.icon(
     onPressed: header.canSubmitCall
         ? () async {
@@ -236,9 +281,7 @@ Widget _buildActionsRow(
               color: Colors.white,
             ),
           )
-        : ElevatedButton.styleFrom(
-            padding: submitPadding,
-          ),
+        : ElevatedButton.styleFrom(padding: submitPadding),
     icon: const Icon(Icons.save_alt),
     label: const Text('Καταγραφή'),
   );

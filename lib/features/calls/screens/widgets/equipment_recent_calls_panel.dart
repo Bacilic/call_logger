@@ -4,8 +4,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/providers/main_nav_request_provider.dart';
 import '../../../../core/widgets/main_nav_destination.dart';
+import '../../../directory/providers/equipment_directory_provider.dart';
+import '../../../directory/screens/widgets/equipment_form_dialog.dart';
 import '../../../history/providers/history_provider.dart';
 import '../../models/call_model.dart';
+import '../../models/equipment_model.dart';
+import '../../models/user_model.dart';
 import '../../provider/calls_dashboard_providers.dart';
 
 DateTime? _equipmentRecentParseSqlDateOnly(String? raw) {
@@ -56,7 +60,51 @@ String _equipmentRecentCardClipboardText(
   return buf.toString().trimRight();
 }
 
-enum _EquipmentRecentTitleMenu { copyAll, openHistory }
+enum _EquipmentRecentTitleMenu { copyAll, openHistory, openEquipmentEdit }
+
+Future<void> _openEquipmentCatalogForm(
+  BuildContext context,
+  WidgetRef ref,
+  String equipmentCode,
+) async {
+  final code = equipmentCode.trim();
+  if (code.isEmpty) return;
+  final notifier = ref.read(equipmentDirectoryProvider.notifier);
+  await notifier.load();
+  if (!context.mounted) return;
+  final rows = ref.read(equipmentDirectoryProvider).allItems;
+  final codeNorm = code.toLowerCase();
+  EquipmentModel? equipment;
+  UserModel? owner;
+  for (final row in rows) {
+    final c = (row.$1.code ?? '').trim().toLowerCase();
+    if (c == codeNorm) {
+      equipment = row.$1;
+      owner = row.$2;
+      break;
+    }
+  }
+  if (equipment == null) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Δεν βρέθηκε εξοπλισμός με κωδικό $code στον κατάλογο.'),
+        ),
+      );
+    }
+    return;
+  }
+  if (!context.mounted) return;
+  await showDialog<void>(
+    context: context,
+    builder: (ctx) => EquipmentFormDialog(
+      initialEquipment: equipment,
+      initialOwner: owner,
+      notifier: notifier,
+      ref: ref,
+    ),
+  );
+}
 
 class EquipmentRecentCallsPanel extends ConsumerWidget {
   const EquipmentRecentCallsPanel({super.key, required this.equipmentCode});
@@ -126,6 +174,8 @@ class EquipmentRecentCallsPanel extends ConsumerWidget {
                                     destination: MainNavDestination.history,
                                   ),
                                 );
+                          case _EquipmentRecentTitleMenu.openEquipmentEdit:
+                            _openEquipmentCatalogForm(context, ref, code);
                         }
                       },
                       itemBuilder: (ctx) => [
@@ -151,6 +201,19 @@ class EquipmentRecentCallsPanel extends ConsumerWidget {
                             title: Text('Μετάβαση στο ιστορικό'),
                             subtitle: Text(
                               'Φίλτρο αναζήτησης με τον κωδικό εξοπλισμού',
+                              style: TextStyle(fontSize: 12),
+                            ),
+                          ),
+                        ),
+                        const PopupMenuItem(
+                          value: _EquipmentRecentTitleMenu.openEquipmentEdit,
+                          child: ListTile(
+                            dense: true,
+                            contentPadding: EdgeInsets.zero,
+                            leading: Icon(Icons.edit_outlined),
+                            title: Text('Άνοιγμα καρτέλας εξοπλισμού'),
+                            subtitle: Text(
+                              'Άμεσο άνοιγμα φόρμας επεξεργασίας εξοπλισμού',
                               style: TextStyle(fontSize: 12),
                             ),
                           ),

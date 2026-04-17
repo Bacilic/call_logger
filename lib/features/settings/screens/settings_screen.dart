@@ -552,7 +552,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 if (mounted) setState(() => _showEmptyRemoteLaunchers = value);
                 ref.invalidate(callsRemoteUiConfigProvider);
               },
-              title: const Text('Εμφάνιση εκκίνησης χωρίς παραμέτρους'),
+              title: const Text('Εμφάνιση απομακρυσμένης σύνδεσης χωρίς παραμέτρους'),
               subtitle: const Text(
                 'Μικρά εικονίδια δίπλα στα εργαλεία απομακρυσμένης σύνδεσης για άνοιγμα της εφαρμογής χωρίς στόχο από την κλήση.',
               ),
