@@ -4,7 +4,7 @@ import '../../../core/database/database_helper.dart';
 import '../../../core/database/directory_repository.dart';
 
 /// Ρύθμιση «συνεχής κύλιση + φόρτωση ακόμα γραμμών» για τον πίνακα λεξικού.
-/// Δεν συνδέεται με τον Κατάλογο (`catalog_continuous_scroll`).
+/// Δεν συνδέεται με τους πίνακες Καταλόγου (ξεχωριστά κλειδιά ανά καρτέλα).
 /// Default: true (όπως ο Κατάλογος).
 final lexiconContinuousScrollProvider = FutureProvider.autoDispose<bool>((ref) async {
   final db = await DatabaseHelper.instance.database;

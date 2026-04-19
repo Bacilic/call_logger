@@ -76,7 +76,7 @@ void main() {
         await tester.tap(checkboxFinder.first);
         await pumpUntilSettled(tester);
 
-        final submitFinder = find.widgetWithText(ElevatedButton, 'Καταγραφή Κλήσης');
+        final submitFinder = find.widgetWithText(ElevatedButton, 'Καταγραφή');
         expect(
           tester.widget<ElevatedButton>(submitFinder).onPressed,
           isNotNull,

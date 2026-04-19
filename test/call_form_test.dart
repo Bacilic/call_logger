@@ -67,9 +67,9 @@ void main() {
         sw.reset();
 
         expect(
-          find.text('Καταγραφή Κλήσεων'),
+          find.byType(NavigationRail),
           findsOneWidget,
-          reason: greekExpectMsg('Κύρια οθόνη κλήσεων'),
+          reason: greekExpectMsg('Κύριο κέλυφος με πλευρική πλοήγηση (οθόνη Κλήσεων χωρίς AppBar τίτλου)'),
         );
 
         final phoneField = callLoggerPhoneTextField();
@@ -150,7 +150,7 @@ void main() {
         );
         await pumpUntilSettled(tester);
 
-        final submitFinder = find.widgetWithText(ElevatedButton, 'Καταγραφή Κλήσης');
+        final submitFinder = find.widgetWithText(ElevatedButton, 'Καταγραφή');
         expect(
           tester.widget<ElevatedButton>(submitFinder).onPressed,
           isNotNull,
@@ -182,7 +182,7 @@ void main() {
       semanticsEnabled: false,
     );
 
-    // Χωρίς τηλέφωνο (μόνο σημειώσεις) το κουμπί «Καταγραφή Κλήσης» πρέπει να έχει onPressed == null.
+    // Χωρίς τηλέφωνο (μόνο σημειώσεις) το κουμπί «Καταγραφή» πρέπει να έχει onPressed == null.
     //   flutter test test/call_form_test.dart --plain-name "Unhappy path: απενεργοποιημένο κουμπί χωρίς τηλέφωνο"
     testWidgets(
       'Unhappy path: απενεργοποιημένο κουμπί χωρίς τηλέφωνο',
@@ -224,7 +224,7 @@ void main() {
         await pumpUntilSettled(tester);
 
         final btn = tester.widget<ElevatedButton>(
-          find.widgetWithText(ElevatedButton, 'Καταγραφή Κλήσης'),
+          find.widgetWithText(ElevatedButton, 'Καταγραφή'),
         );
         expect(
           btn.onPressed,

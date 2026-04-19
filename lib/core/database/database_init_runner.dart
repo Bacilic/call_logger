@@ -2,6 +2,7 @@ import 'dart:io';
 
 import '../services/settings_service.dart';
 import 'database_helper.dart';
+import 'remote_tools_repository.dart';
 import 'directory_repository.dart';
 import 'database_init_result.dart';
 import 'database_init_progress_provider.dart';
@@ -69,6 +70,11 @@ Future<DatabaseInitRunnerResult> runDatabaseInitChecks({
             _appSettingsGet,
             _appSettingsSet,
           );
+          try {
+            await RemoteToolsRepository(
+              DatabaseHelper.instance,
+            ).migrateLegacyFieldsToArguments();
+          } catch (_) {}
           isLocalDevMode = DatabaseHelper.instance.isUsingLocalDb;
           progressNotifier?.setStep('Έλεγχος υγείας βάσης');
           final health = await DatabaseHelper.instance.checkDatabaseHealth();

@@ -11,6 +11,14 @@ class DepartmentModel {
     this.mapY,
     this.mapWidth,
     this.mapHeight,
+    this.mapRotation = 0.0,
+    this.mapLabelOffsetX,
+    this.mapLabelOffsetY,
+    this.mapAnchorOffsetX,
+    this.mapAnchorOffsetY,
+    this.mapCustomName,
+    this.groupName,
+    this.floorId,
     this.directPhones,
     this.isDeleted = false,
   });
@@ -20,15 +28,41 @@ class DepartmentModel {
   final String? building;
   final String? color;
   final String? notes;
+  /// Ομαδοποίηση στο HUD επιλογής τμήματος στον χάρτη (κατηγορία ομάδας).
+  final String? groupName;
+  /// Αναφορά σε `building_map_floors.id` για ομαδοποίηση «ανά όροφο» στο HUD.
+  final int? floorId;
   final String? mapFloor;
   final double? mapX;
   final double? mapY;
   final double? mapWidth;
   final double? mapHeight;
+  final double mapRotation;
+  final double? mapLabelOffsetX;
+  final double? mapLabelOffsetY;
+  final double? mapAnchorOffsetX;
+  final double? mapAnchorOffsetY;
+  final String? mapCustomName;
   /// “Ορφανά” τηλέφωνα που ανήκουν απευθείας στο τμήμα (δεν είναι των χρηστών).
   /// Δεν αποθηκεύονται μέσα στον πίνακα `departments`· φορτώνονται από `department_phones`.
   final List<String>? directPhones;
   final bool isDeleted;
+
+  String get displayName {
+    final custom = mapCustomName?.trim();
+    if (custom != null && custom.isNotEmpty) return custom;
+    return name;
+  }
+
+  /// Έχει ήδη αποθηκευμένο ορθογώνιο στο χάρτη (επί κάποιου φύλλου).
+  bool get isMapped {
+    final mf = mapFloor?.trim();
+    if (mf == null || mf.isEmpty) return false;
+    final w = mapWidth ?? 0;
+    final h = mapHeight ?? 0;
+    if (w <= 0 || h <= 0) return false;
+    return mapX != null && mapY != null;
+  }
 
   factory DepartmentModel.fromMap(Map<String, dynamic> map) {
     List<String>? parseDirectPhones(dynamic v) {
@@ -58,6 +92,14 @@ class DepartmentModel {
       mapY: (map['map_y'] as num?)?.toDouble(),
       mapWidth: (map['map_width'] as num?)?.toDouble(),
       mapHeight: (map['map_height'] as num?)?.toDouble(),
+      mapRotation: (map['map_rotation'] as num?)?.toDouble() ?? 0.0,
+      mapLabelOffsetX: (map['map_label_offset_x'] as num?)?.toDouble(),
+      mapLabelOffsetY: (map['map_label_offset_y'] as num?)?.toDouble(),
+      mapAnchorOffsetX: (map['map_anchor_offset_x'] as num?)?.toDouble(),
+      mapAnchorOffsetY: (map['map_anchor_offset_y'] as num?)?.toDouble(),
+      mapCustomName: map['map_custom_name'] as String?,
+      groupName: map['group_name'] as String?,
+      floorId: (map['floor_id'] as num?)?.toInt(),
       directPhones: parseDirectPhones(map['direct_phones']),
       isDeleted: (map['is_deleted'] as int?) == 1,
     );
@@ -74,6 +116,14 @@ class DepartmentModel {
     double? mapY,
     double? mapWidth,
     double? mapHeight,
+    double? mapRotation,
+    double? mapLabelOffsetX,
+    double? mapLabelOffsetY,
+    double? mapAnchorOffsetX,
+    double? mapAnchorOffsetY,
+    String? mapCustomName,
+    String? groupName,
+    int? floorId,
     List<String>? directPhones,
     bool? isDeleted,
   }) {
@@ -83,11 +133,19 @@ class DepartmentModel {
       building: building ?? this.building,
       color: color ?? this.color,
       notes: notes ?? this.notes,
+      groupName: groupName ?? this.groupName,
+      floorId: floorId ?? this.floorId,
       mapFloor: mapFloor ?? this.mapFloor,
       mapX: mapX ?? this.mapX,
       mapY: mapY ?? this.mapY,
       mapWidth: mapWidth ?? this.mapWidth,
       mapHeight: mapHeight ?? this.mapHeight,
+      mapRotation: mapRotation ?? this.mapRotation,
+      mapLabelOffsetX: mapLabelOffsetX ?? this.mapLabelOffsetX,
+      mapLabelOffsetY: mapLabelOffsetY ?? this.mapLabelOffsetY,
+      mapAnchorOffsetX: mapAnchorOffsetX ?? this.mapAnchorOffsetX,
+      mapAnchorOffsetY: mapAnchorOffsetY ?? this.mapAnchorOffsetY,
+      mapCustomName: mapCustomName ?? this.mapCustomName,
       directPhones: directPhones ?? this.directPhones,
       isDeleted: isDeleted ?? this.isDeleted,
     );
@@ -105,6 +163,14 @@ class DepartmentModel {
       if (mapY != null) 'map_y': mapY,
       if (mapWidth != null) 'map_width': mapWidth,
       if (mapHeight != null) 'map_height': mapHeight,
+      'map_rotation': mapRotation,
+      if (mapLabelOffsetX != null) 'map_label_offset_x': mapLabelOffsetX,
+      if (mapLabelOffsetY != null) 'map_label_offset_y': mapLabelOffsetY,
+      if (mapAnchorOffsetX != null) 'map_anchor_offset_x': mapAnchorOffsetX,
+      if (mapAnchorOffsetY != null) 'map_anchor_offset_y': mapAnchorOffsetY,
+      if (mapCustomName != null) 'map_custom_name': mapCustomName,
+      if (groupName != null) 'group_name': groupName,
+      if (floorId != null) 'floor_id': floorId,
       'is_deleted': isDeleted ? 1 : 0,
     };
   }

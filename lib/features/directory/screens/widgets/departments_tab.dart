@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/database/database_helper.dart';
+import '../../../../core/database/directory_repository.dart';
 import '../../../calls/provider/lookup_provider.dart';
 import '../../models/department_directory_column.dart';
 import '../../models/department_model.dart';
@@ -10,6 +12,7 @@ import 'bulk_department_edit_dialog.dart';
 import 'catalog_column_selector_shell.dart';
 import 'department_form_dialog.dart';
 import 'departments_data_table.dart';
+import '../../building_map/screens/building_map_dialog.dart';
 
 /// Καρτέλα τμημάτων: αναζήτηση, πίνακας, επιλογή, διαγραφή με undo, προσθήκη.
 class DepartmentsTab extends ConsumerStatefulWidget {
@@ -42,7 +45,8 @@ class _DepartmentsTabState extends ConsumerState<DepartmentsTab> {
     final state = ref.watch(departmentDirectoryProvider);
     final notifier = ref.read(departmentDirectoryProvider.notifier);
     final visibleColumns = state.orderedVisibleColumns;
-    final continuousScrollAsync = ref.watch(catalogContinuousScrollProvider);
+    final continuousScrollAsync =
+        ref.watch(catalogDepartmentsContinuousScrollProvider);
     final continuousScroll = continuousScrollAsync.value ?? true;
     if (_searchController.text != state.searchQuery) {
       _searchController.text = state.searchQuery;
@@ -81,6 +85,12 @@ class _DepartmentsTabState extends ConsumerState<DepartmentsTab> {
                 tooltip: 'Στήλες πίνακα',
                 icon: const Icon(Icons.view_column_outlined),
                 onPressed: () => _openColumnSelector(context, ref),
+              ),
+              const SizedBox(width: 8),
+              OutlinedButton.icon(
+                onPressed: () => showBuildingMapDialog(context, ref),
+                icon: const Icon(Icons.map_outlined),
+                label: const Text('Χάρτης'),
               ),
               const SizedBox(width: 12),
               FilledButton.icon(
@@ -301,6 +311,9 @@ class _DepartmentColumnSelectorOverlay extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(departmentDirectoryProvider);
     final notifier = ref.read(departmentDirectoryProvider.notifier);
+    final continuousScrollAsync =
+        ref.watch(catalogDepartmentsContinuousScrollProvider);
+    final continuousScroll = continuousScrollAsync.value ?? true;
     final theme = Theme.of(context);
     final order = state.columnOrder;
     final keys = state.visibleColumnKeys;
@@ -377,6 +390,29 @@ class _DepartmentColumnSelectorOverlay extends ConsumerWidget {
                 );
               },
             ),
+          ),
+          const Divider(height: 1),
+          SwitchListTile(
+            contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+            title: const Text(
+              'Συνεχής κύλιση πίνακα',
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+            subtitle: const Text(
+              'Mouse wheel γραμμή-γραμμή αντί για αλλαγή σελίδας.',
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+            value: continuousScroll,
+            onChanged: (bool val) async {
+              final db = await DatabaseHelper.instance.database;
+              await DirectoryRepository(db).setSetting(
+                kCatalogContinuousScrollDepartmentsKey,
+                val.toString(),
+              );
+              ref.invalidate(catalogDepartmentsContinuousScrollProvider);
+            },
           ),
         ],
       ),

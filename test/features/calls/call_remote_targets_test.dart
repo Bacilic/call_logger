@@ -9,7 +9,6 @@ import 'package:flutter_test/flutter_test.dart';
 RemoteTool _tool({
   required int id,
   required ToolRole role,
-  String? vncHostPrefix,
   bool isExclusive = false,
 }) {
   return RemoteTool(
@@ -20,7 +19,6 @@ RemoteTool _tool({
     launchMode: 'direct_exec',
     sortOrder: 0,
     isActive: true,
-    vncHostPrefix: vncHostPrefix,
     isExclusive: isExclusive,
   );
 }
@@ -35,7 +33,7 @@ void main() {
 
     test('visibleRemoteToolsForCallState: προεπιλεγμένο + παράμετρος anydesk', () {
       final eq = EquipmentModel(
-        code: 'X',
+        code: '12',
         remoteParams: {'anydesk': '123456789'},
         defaultRemoteTool: '2',
       );
@@ -102,17 +100,16 @@ void main() {
       );
     });
 
-    test('vncLikeTargetResolved χρησιμοποιεί vnc_host_prefix από ορισμό εργαλείου', () {
+    test('vncLikeTargetResolved χρησιμοποιεί σταθερό πρόθεμα PC για ψηφιακό κωδικό', () {
       final eq = EquipmentModel(
-        code: '99',
+        code: '2850',
         remoteParams: const {},
       );
       final vnc = _tool(
         id: 1,
         role: ToolRole.vnc,
-        vncHostPrefix: 'PC',
       );
-      expect(eq.vncLikeTargetResolved(vnc), 'PC99');
+      expect(eq.vncLikeTargetResolved(vnc), 'PC2850');
     });
   });
 }

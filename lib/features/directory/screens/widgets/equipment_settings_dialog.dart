@@ -1,6 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/providers/settings_provider.dart';
+import '../../../../core/providers/spell_check_provider.dart';
 import '../../../../core/services/settings_service.dart';
+import '../../../../core/widgets/lexicon_spell_text_form_field.dart';
+import '../../../../core/widgets/spell_check_controller.dart';
 
 /// Εμφανίζει διάλογο ρυθμίσεων εξοπλισμού (τύποι ως CSV στο `app_settings`).
 /// Επιστρέφει `true` αν έγινε επιτυχής αποθήκευση.
@@ -13,17 +18,18 @@ Future<bool> showEquipmentSettingsDialog(BuildContext context) async {
   return result ?? false;
 }
 
-class _EquipmentSettingsDialog extends StatefulWidget {
+class _EquipmentSettingsDialog extends ConsumerStatefulWidget {
   const _EquipmentSettingsDialog();
 
   @override
-  State<_EquipmentSettingsDialog> createState() =>
+  ConsumerState<_EquipmentSettingsDialog> createState() =>
       _EquipmentSettingsDialogState();
 }
 
-class _EquipmentSettingsDialogState extends State<_EquipmentSettingsDialog> {
+class _EquipmentSettingsDialogState
+    extends ConsumerState<_EquipmentSettingsDialog> {
   final SettingsService _settings = SettingsService();
-  final TextEditingController _controller = TextEditingController();
+  late final SpellCheckController _controller;
 
   bool _loading = true;
   String _initial = '';
@@ -31,6 +37,7 @@ class _EquipmentSettingsDialogState extends State<_EquipmentSettingsDialog> {
   @override
   void initState() {
     super.initState();
+    _controller = SpellCheckController();
     _load();
   }
 
@@ -73,6 +80,10 @@ class _EquipmentSettingsDialogState extends State<_EquipmentSettingsDialog> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final spellAsync = ref.watch(spellCheckServiceProvider);
+    final spellEnabledAsync = ref.watch(enableSpellCheckProvider);
+    spellAsync.whenData(_controller.attachSpellService);
+    spellEnabledAsync.whenData(_controller.setSpellCheckEnabled);
 
     if (_loading) {
       return AlertDialog(
@@ -101,11 +112,11 @@ class _EquipmentSettingsDialogState extends State<_EquipmentSettingsDialog> {
                 ),
               ),
               const SizedBox(height: 16),
-              TextField(
+              LexiconSpellTextFormField(
                 controller: _controller,
-                onChanged: (_) => setState(() {}),
                 maxLines: 6,
                 minLines: 3,
+                onChanged: (_) => setState(() {}),
                 decoration: const InputDecoration(
                   labelText: 'Τύποι εξοπλισμού',
                   hintText:

@@ -86,12 +86,30 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog> {
     _remoteParamValues.clear();
     _expandedRemoteKeys.clear();
     if (e == null) return;
+    final stashOnlyKeys = <String>{};
+    final nonStashEntries = <MapEntry<String, String>>[];
+    final stashEntries = <MapEntry<String, String>>[];
     for (final entry in e.remoteParams.entries) {
       final t = entry.value.trim();
-      if (t.isNotEmpty) {
-        _remoteParamValues[entry.key] = entry.value;
-        _expandedRemoteKeys.add(entry.key);
+      if (t.isEmpty) continue;
+      final real = EquipmentRemoteParamKey.remoteParamStashRealKeyOrNull(
+        entry.key,
+      );
+      if (real != null) {
+        stashEntries.add(MapEntry(real, entry.value));
+      } else {
+        nonStashEntries.add(entry);
       }
+    }
+    for (final entry in nonStashEntries) {
+      _remoteParamValues[entry.key] = entry.value;
+      _expandedRemoteKeys.add(entry.key);
+    }
+    for (final entry in stashEntries) {
+      final k = entry.key;
+      if (_expandedRemoteKeys.contains(k)) continue;
+      _remoteParamValues[k] = entry.value;
+      stashOnlyKeys.add(k);
     }
     final ad = e.anydeskId?.trim();
     if (ad != null && ad.isNotEmpty) {
@@ -100,7 +118,9 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog> {
           _remoteParamValues[k]!.trim().isEmpty) {
         _remoteParamValues[k] = ad;
       }
-      _expandedRemoteKeys.add(k);
+      if (!stashOnlyKeys.contains(k)) {
+        _expandedRemoteKeys.add(k);
+      }
     }
     final ip = e.customIp?.trim();
     if (ip != null && ip.isNotEmpty) {
@@ -109,7 +129,9 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog> {
           _remoteParamValues[k]!.trim().isEmpty) {
         _remoteParamValues[k] = ip;
       }
-      _expandedRemoteKeys.add(k);
+      if (!stashOnlyKeys.contains(k)) {
+        _expandedRemoteKeys.add(k);
+      }
     }
   }
 
@@ -236,12 +258,23 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog> {
       _syncRemoteValueFromController(k);
     }
     final out = <String, String>{};
-    for (final entry in _remoteParamValues.entries) {
-      final v = entry.value.trim();
+    for (final k in _expandedRemoteKeys) {
+      final v = (_remoteParamValues[k] ?? '').trim();
       if (v.isEmpty) continue;
-      out[entry.key] = _isVncLikeParamKey(entry.key, catalog)
+      final norm = _isVncLikeParamKey(k, catalog)
           ? v.replaceAll(',', '.')
           : v;
+      out[k] = norm;
+    }
+    for (final entry in _remoteParamValues.entries) {
+      if (_expandedRemoteKeys.contains(entry.key)) continue;
+      if (EquipmentRemoteParamKey.isRemoteParamStashKey(entry.key)) continue;
+      final v = entry.value.trim();
+      if (v.isEmpty) continue;
+      final norm = _isVncLikeParamKey(entry.key, catalog)
+          ? v.replaceAll(',', '.')
+          : v;
+      out[EquipmentRemoteParamKey.remoteParamStashKeyFor(entry.key)] = norm;
     }
     return out;
   }
@@ -679,43 +712,56 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-              TextFormField(
-                controller: _codeController,
-                decoration: const InputDecoration(
-                  labelText: 'Κωδικός',
-                  border: OutlineInputBorder(),
-                ),
-                validator: _requiredValidator,
-              ),
-              const SizedBox(height: 12),
-              FutureBuilder<List<String>>(
-                future: SettingsService().getEquipmentTypesList(),
-                builder: (context, snapshot) {
-                  var options = snapshot.data ?? ['Υπολογιστής', 'Εκτυπωτής'];
-                  if (_selectedType != null &&
-                      _selectedType!.trim().isNotEmpty &&
-                      !options.contains(_selectedType)) {
-                    options = [_selectedType!, ...options];
-                  }
-                  return DropdownButtonFormField<String?>(
-                    initialValue: _selectedType,
-                    decoration: const InputDecoration(
-                      labelText: 'Τύπος',
-                      border: OutlineInputBorder(),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: TextFormField(
+                      controller: _codeController,
+                      decoration: const InputDecoration(
+                        labelText: 'Κωδικός',
+                        border: OutlineInputBorder(),
+                      ),
+                      validator: _requiredValidator,
                     ),
-                    items: [
-                      ...options.map(
-                        (o) =>
-                            DropdownMenuItem<String?>(value: o, child: Text(o)),
-                      ),
-                      const DropdownMenuItem<String?>(
-                        value: null,
-                        child: Text('Κανένας'),
-                      ),
-                    ],
-                    onChanged: (v) => setState(() => _selectedType = v),
-                  );
-                },
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: FutureBuilder<List<String>>(
+                      future: SettingsService().getEquipmentTypesList(),
+                      builder: (context, snapshot) {
+                        var options =
+                            snapshot.data ?? ['Υπολογιστής', 'Εκτυπωτής'];
+                        if (_selectedType != null &&
+                            _selectedType!.trim().isNotEmpty &&
+                            !options.contains(_selectedType)) {
+                          options = [_selectedType!, ...options];
+                        }
+                        return DropdownButtonFormField<String?>(
+                          initialValue: _selectedType,
+                          decoration: const InputDecoration(
+                            labelText: 'Τύπος',
+                            border: OutlineInputBorder(),
+                          ),
+                          items: [
+                            ...options.map(
+                              (o) => DropdownMenuItem<String?>(
+                                value: o,
+                                child: Text(o),
+                              ),
+                            ),
+                            const DropdownMenuItem<String?>(
+                              value: null,
+                              child: Text('Κανένας'),
+                            ),
+                          ],
+                          onChanged: (v) =>
+                              setState(() => _selectedType = v),
+                        );
+                      },
+                    ),
+                  ),
+                ],
               ),
               const SizedBox(height: 12),
               LexiconSpellTextFormField(
@@ -726,7 +772,8 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog> {
                   border: OutlineInputBorder(),
                   alignLabelWithHint: true,
                 ),
-                maxLines: 3,
+                minLines: 2,
+                maxLines: null,
                 onChanged: (_) => setState(() {}),
               ),
               const SizedBox(height: 12),

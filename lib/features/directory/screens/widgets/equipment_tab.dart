@@ -5,6 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../calls/models/equipment_model.dart';
 import '../../../calls/provider/remote_paths_provider.dart';
+import '../../../../core/database/database_helper.dart';
+import '../../../../core/database/directory_repository.dart';
 import '../../../../core/models/remote_tool.dart';
 import '../../../../core/providers/equipment_focus_intent_provider.dart';
 import '../../../../core/services/default_remote_tool_display.dart';
@@ -58,7 +60,8 @@ class _EquipmentTabState extends ConsumerState<EquipmentTab> {
     final state = ref.watch(equipmentDirectoryProvider);
     final notifier = ref.read(equipmentDirectoryProvider.notifier);
     final visibleColumns = state.orderedVisibleColumns;
-    final continuousScrollAsync = ref.watch(catalogContinuousScrollProvider);
+    final continuousScrollAsync =
+        ref.watch(catalogEquipmentContinuousScrollProvider);
     final continuousScroll = continuousScrollAsync.value ?? true;
     final allToolsCatalog =
         ref.watch(remoteToolsAllCatalogProvider).value ?? const <RemoteTool>[];
@@ -398,6 +401,9 @@ class _EquipmentColumnSelectorOverlay extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(equipmentDirectoryProvider);
     final notifier = ref.read(equipmentDirectoryProvider.notifier);
+    final continuousScrollAsync =
+        ref.watch(catalogEquipmentContinuousScrollProvider);
+    final continuousScroll = continuousScrollAsync.value ?? true;
     final order = state.columnOrder;
     final keys = state.visibleColumnKeys;
     final theme = Theme.of(context);
@@ -495,6 +501,28 @@ class _EquipmentColumnSelectorOverlay extends ConsumerWidget {
             value: state.showBuildingInLocationColumn,
             onChanged: (v) {
               notifier.setEquipmentLocationShowBuilding(v);
+            },
+          ),
+          SwitchListTile(
+            contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+            title: const Text(
+              'Συνεχής κύλιση πίνακα',
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+            subtitle: const Text(
+              'Mouse wheel γραμμή-γραμμή αντί για αλλαγή σελίδας.',
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+            value: continuousScroll,
+            onChanged: (bool val) async {
+              final db = await DatabaseHelper.instance.database;
+              await DirectoryRepository(db).setSetting(
+                kCatalogContinuousScrollEquipmentKey,
+                val.toString(),
+              );
+              ref.invalidate(catalogEquipmentContinuousScrollProvider);
             },
           ),
         ],

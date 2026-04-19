@@ -66,7 +66,7 @@ class _UsersTabState extends ConsumerState<UsersTab> {
         (!personal && hasQuery) ? state.filteredUsers.length : 0;
     final sharedBadgeCount =
         (personal && hasQuery) ? state.filteredNonUserPhones.length : 0;
-    final continuousScrollAsync = ref.watch(catalogContinuousScrollProvider);
+    final continuousScrollAsync = ref.watch(catalogUsersContinuousScrollProvider);
     final continuousScroll = continuousScrollAsync.value ?? true;
     if (_searchController.text != state.searchQuery) {
       _searchController.text = state.searchQuery;
@@ -510,6 +510,9 @@ class _UserColumnSelectorOverlay extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(directoryProvider);
     final notifier = ref.read(directoryProvider.notifier);
+    final continuousScrollAsync =
+        ref.watch(catalogUsersContinuousScrollProvider);
+    final continuousScroll = continuousScrollAsync.value ?? true;
     final theme = Theme.of(context);
     final order = state.columnOrder;
     final keys = state.visibleColumnKeys;
@@ -586,6 +589,29 @@ class _UserColumnSelectorOverlay extends ConsumerWidget {
                 );
               },
             ),
+          ),
+          const Divider(height: 1),
+          SwitchListTile(
+            contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+            title: const Text(
+              'Συνεχής κύλιση πίνακα',
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+            subtitle: const Text(
+              'Mouse wheel γραμμή-γραμμή αντί για αλλαγή σελίδας.',
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+            value: continuousScroll,
+            onChanged: (bool val) async {
+              final db = await DatabaseHelper.instance.database;
+              await DirectoryRepository(db).setSetting(
+                kCatalogContinuousScrollUsersKey,
+                val.toString(),
+              );
+              ref.invalidate(catalogUsersContinuousScrollProvider);
+            },
           ),
         ],
       ),

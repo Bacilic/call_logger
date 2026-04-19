@@ -222,6 +222,7 @@ class DepartmentDirectoryNotifier
         final blob = [
           d.name,
           d.building ?? '',
+          d.groupName ?? '',
           d.notes ?? '',
           d.color ?? '',
           phonesText,

@@ -197,147 +197,152 @@ class _RemoteConnectionButtonsState extends ConsumerState<RemoteConnectionButton
                   toolsForTargets,
                 );
 
-                return Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
+                return LayoutBuilder(
+                  builder: (context, constraints) {
+                    return Column(
                       mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        _buildToolButton(
-                          context: context,
-                          theme: theme,
-                          tool: primary,
-                          pathValid: primaryPath != null,
-                          enabled: canPrimary &&
-                              primaryPath != null &&
-                              !_isConnecting,
-                          subtitle: CallRemoteTargets.targetSubtitle(
-                            widget.header,
-                            primary,
-                            toolsForTargets,
-                          ),
-                          onPressed: canPrimary &&
-                                  primaryPath != null &&
-                                  !_isConnecting
-                              ? () => _connect(
-                                    remoteService,
-                                    primary,
-                                    targetPrimary,
-                                  )
-                              : null,
-                          tooltipDisabled: _tooltipForTool(
-                            primary,
-                            primaryPath != null,
-                            canPrimary,
-                          ),
-                        ),
-                        if (useOverflow) ...[
-                          const SizedBox(width: 8),
-                          PopupMenuButton<RemoteTool>(
-                            tooltip: 'Περισσότερα εργαλεία',
-                            enabled: !_isConnecting,
-                            itemBuilder: (ctx) => [
-                              for (final t in secondary)
-                                PopupMenuItem(
-                                  value: t,
-                                  enabled: pathMap[t.id] !=
-                                          null &&
-                                      CallRemoteTargets.canConnectForTool(
-                                        widget.header,
-                                        t,
-                                        toolsForTargets,
-                                      ),
-                                  child: Text(t.name),
-                                ),
-                            ],
-                            onSelected: (t) {
-                              final p = pathMap[t.id];
-                              final tgt = CallRemoteTargets.resolvedLaunchTarget(
-                                widget.header,
-                                t,
-                                toolsForTargets,
-                              );
-                              if (p != null && tgt != null) {
-                                _connect(remoteService, t, tgt);
-                              }
-                            },
-                            child: Icon(
-                              Icons.more_horiz,
-                              color: theme.colorScheme.primary,
-                            ),
-                          ),
-                        ] else
-                          for (final t in secondary) ...[
-                            const SizedBox(width: 12),
+                        Wrap(
+                          spacing: 12,
+                          runSpacing: 8,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: [
                             _buildToolButton(
                               context: context,
                               theme: theme,
-                              tool: t,
-                              pathValid:
-                                  pathMap[t.id] != null,
-                              enabled: CallRemoteTargets.canConnectForTool(
-                                    widget.header,
-                                    t,
-                                    toolsForTargets,
-                                  ) &&
-                                  pathMap[t.id] != null &&
+                              tool: primary,
+                              pathValid: primaryPath != null,
+                              enabled: canPrimary &&
+                                  primaryPath != null &&
                                   !_isConnecting,
                               subtitle: CallRemoteTargets.targetSubtitle(
                                 widget.header,
-                                t,
+                                primary,
                                 toolsForTargets,
                               ),
-                              onPressed: CallRemoteTargets.canConnectForTool(
+                              onPressed: canPrimary &&
+                                      primaryPath != null &&
+                                      !_isConnecting
+                                  ? () => _connect(
+                                        remoteService,
+                                        primary,
+                                        targetPrimary,
+                                      )
+                                  : null,
+                              tooltipDisabled: _tooltipForTool(
+                                primary,
+                                primaryPath != null,
+                                canPrimary,
+                              ),
+                            ),
+                            if (useOverflow) ...[
+                              PopupMenuButton<RemoteTool>(
+                                tooltip: 'Περισσότερα εργαλεία',
+                                enabled: !_isConnecting,
+                                itemBuilder: (ctx) => [
+                                  for (final t in secondary)
+                                    PopupMenuItem(
+                                      value: t,
+                                      enabled: pathMap[t.id] !=
+                                              null &&
+                                          CallRemoteTargets.canConnectForTool(
+                                            widget.header,
+                                            t,
+                                            toolsForTargets,
+                                          ),
+                                      child: Text(t.name),
+                                    ),
+                                ],
+                                onSelected: (t) {
+                                  final p = pathMap[t.id];
+                                  final tgt = CallRemoteTargets
+                                      .resolvedLaunchTarget(
+                                    widget.header,
+                                    t,
+                                    toolsForTargets,
+                                  );
+                                  if (p != null && tgt != null) {
+                                    _connect(remoteService, t, tgt);
+                                  }
+                                },
+                                child: Icon(
+                                  Icons.more_horiz,
+                                  color: theme.colorScheme.primary,
+                                ),
+                              ),
+                            ] else
+                              for (final t in secondary) ...[
+                                _buildToolButton(
+                                  context: context,
+                                  theme: theme,
+                                  tool: t,
+                                  pathValid: pathMap[t.id] != null,
+                                  enabled: CallRemoteTargets.canConnectForTool(
                                         widget.header,
                                         t,
                                         toolsForTargets,
                                       ) &&
                                       pathMap[t.id] != null &&
-                                      !_isConnecting
-                                  ? () => _connect(
-                                        remoteService,
-                                        t,
-                                        CallRemoteTargets.resolvedLaunchTarget(
-                                          widget.header,
-                                          t,
-                                          toolsForTargets,
-                                        ),
-                                      )
-                                  : null,
-                              tooltipDisabled: _tooltipForTool(
-                                t,
-                                pathMap[t.id] != null,
-                                CallRemoteTargets.canConnectForTool(
-                                  widget.header,
-                                  t,
-                                  toolsForTargets,
-                                ),
-                              ),
-                            ),
-                          ],
-                        if (cfg.showEmptyRemoteLaunchers) ...[
-                          const SizedBox(width: 16),
-                          ref.watch(remoteLauncherStatusesByIdProvider).when(
-                                data: (statusMap) => _buildLauncherRow(
-                                  theme,
-                                  visible,
-                                  statusMap,
-                                  launcherService,
-                                ),
-                                loading: () => const SizedBox(
-                                  width: 24,
-                                  height: 24,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
+                                      !_isConnecting,
+                                  subtitle: CallRemoteTargets.targetSubtitle(
+                                    widget.header,
+                                    t,
+                                    toolsForTargets,
+                                  ),
+                                  onPressed: CallRemoteTargets
+                                              .canConnectForTool(
+                                            widget.header,
+                                            t,
+                                            toolsForTargets,
+                                          ) &&
+                                          pathMap[t.id] != null &&
+                                          !_isConnecting
+                                      ? () => _connect(
+                                            remoteService,
+                                            t,
+                                            CallRemoteTargets
+                                                .resolvedLaunchTarget(
+                                              widget.header,
+                                              t,
+                                              toolsForTargets,
+                                            ),
+                                          )
+                                      : null,
+                                  tooltipDisabled: _tooltipForTool(
+                                    t,
+                                    pathMap[t.id] != null,
+                                    CallRemoteTargets.canConnectForTool(
+                                      widget.header,
+                                      t,
+                                      toolsForTargets,
+                                    ),
                                   ),
                                 ),
-                                error: (_, _) => const SizedBox.shrink(),
-                              ),
-                        ],
+                              ],
+                            if (cfg.showEmptyRemoteLaunchers) ...[
+                              ref.watch(remoteLauncherStatusesByIdProvider).when(
+                                    data: (statusMap) => _buildLauncherRow(
+                                      theme,
+                                      visible,
+                                      statusMap,
+                                      launcherService,
+                                    ),
+                                    loading: () => const SizedBox(
+                                      width: 24,
+                                      height: 24,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                      ),
+                                    ),
+                                    error: (_, _) => const SizedBox.shrink(),
+                                  ),
+                            ],
+                          ],
+                        ),
                       ],
-                    ),
-                  ],
+                    );
+                  },
                 );
               },
               loading: () => const Center(
@@ -389,8 +394,10 @@ class _RemoteConnectionButtonsState extends ConsumerState<RemoteConnectionButton
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          mainAxisSize: MainAxisSize.min,
+        Wrap(
+          spacing: 12,
+          runSpacing: 8,
+          crossAxisAlignment: WrapCrossAlignment.center,
           children: [
             _buildToolButton(
               context: context,
@@ -408,7 +415,6 @@ class _RemoteConnectionButtonsState extends ConsumerState<RemoteConnectionButton
                   ? 'Διαδρομή VNC δεν βρέθηκε.'
                   : 'VNC: δεν υπάρχει έγκυρος στόχος.',
             ),
-            const SizedBox(width: 12),
             _buildToolButton(
               context: context,
               theme: theme,
@@ -430,7 +436,6 @@ class _RemoteConnectionButtonsState extends ConsumerState<RemoteConnectionButton
               tooltipDisabled: 'AnyDesk…',
             ),
             if (showEmptyRemoteLaunchers) ...[
-              const SizedBox(width: 16),
               ref.watch(remoteLauncherStatusProvider).when(
                     data: (status) => _buildLegacyLaunchers(
                       theme,
@@ -793,6 +798,7 @@ class _RemoteConnectionButtonsState extends ConsumerState<RemoteConnectionButton
         tool: tool,
         resolvedTarget: target,
         remoteParams: Map<String, String>.from(params),
+        equipmentCode: widget.header.selectedEquipment?.code?.trim(),
       );
     } catch (e) {
       if (mounted) {

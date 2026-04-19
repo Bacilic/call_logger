@@ -6,6 +6,7 @@ class DatabaseInitProgressState {
     required this.currentStep,
     this.secondsRemaining,
     this.diagnosticInfo,
+    this.isOpeningAttemptActive = false,
   });
 
   factory DatabaseInitProgressState.initial() {
@@ -13,12 +14,14 @@ class DatabaseInitProgressState {
       currentStep: 'Εκκίνηση...',
       secondsRemaining: null,
       diagnosticInfo: null,
+      isOpeningAttemptActive: false,
     );
   }
 
   final String currentStep;
   final int? secondsRemaining;
   final String? diagnosticInfo;
+  final bool isOpeningAttemptActive;
 
   DatabaseInitProgressState copyWith({
     String? currentStep,
@@ -26,6 +29,7 @@ class DatabaseInitProgressState {
     bool clearSecondsRemaining = false,
     String? diagnosticInfo,
     bool clearDiagnosticInfo = false,
+    bool? isOpeningAttemptActive,
   }) {
     return DatabaseInitProgressState(
       currentStep: currentStep ?? this.currentStep,
@@ -35,6 +39,8 @@ class DatabaseInitProgressState {
       diagnosticInfo: clearDiagnosticInfo
           ? null
           : (diagnosticInfo ?? this.diagnosticInfo),
+      isOpeningAttemptActive:
+          isOpeningAttemptActive ?? this.isOpeningAttemptActive,
     );
   }
 }
@@ -61,11 +67,17 @@ class DatabaseInitProgressNotifier extends Notifier<DatabaseInitProgressState> {
       clearSecondsRemaining: clearSecondsRemaining,
       diagnosticInfo: diagnosticInfo,
       clearDiagnosticInfo: clearDiagnosticInfo,
+      isOpeningAttemptActive: clearSecondsRemaining
+          ? false
+          : (secondsRemaining != null ? true : state.isOpeningAttemptActive),
     );
   }
 
   void clearCountdown() {
-    state = state.copyWith(clearSecondsRemaining: true);
+    state = state.copyWith(
+      clearSecondsRemaining: true,
+      isOpeningAttemptActive: false,
+    );
   }
 
   void setDiagnostic(String? diagnosticInfo) {

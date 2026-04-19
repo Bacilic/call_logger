@@ -19,6 +19,9 @@ class _FakeEquipmentDirectoryNotifier extends EquipmentDirectoryNotifier {
   EquipmentDirectoryState build() => _initialState;
 
   @override
+  bool get shouldPersistEquipmentLayout => false;
+
+  @override
   Future<void> load() async {}
 }
 
@@ -91,7 +94,20 @@ void main() {
       find.byTooltip('Προσθήκη / αφαίρεση στηλών'),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Τοποθεσία'));
+    // Το ReorderableListView χτίζει τεμπέλικα στοιχεία· η «Τοποθεσία» μπορεί να χρειάζεται κύλιση.
+    final reorderList = find.byType(ReorderableListView);
+    for (var i = 0; i < 20 && find.text('Τοποθεσία').evaluate().isEmpty; i++) {
+      await tester.drag(reorderList.last, const Offset(0, -120));
+      await tester.pump();
+    }
+    await tester.pumpAndSettle();
+    final locationTile = find.ancestor(
+      of: find.text('Τοποθεσία'),
+      matching: find.byType(ListTile),
+    );
+    await tester.ensureVisible(locationTile.first);
+    await tester.pumpAndSettle();
+    await tester.tap(locationTile.first);
     await tester.pumpAndSettle();
 
     expect(find.widgetWithText(Chip, 'Τοποθεσία'), findsOneWidget);

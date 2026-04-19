@@ -5,9 +5,11 @@ import 'package:path/path.dart' as p;
 import '../database/remote_tools_repository.dart';
 import '../models/remote_tool.dart';
 import '../models/remote_tool_role.dart';
-import 'rdp_temp_file_launcher.dart';
 import 'remote_tools_paths_helper.dart';
 import 'settings_service.dart';
+
+/// Dummy διαδρομή για προεπισκόπηση/δοκιμή όταν το όρισμα περιέχει `{FILE}`.
+const String kPreviewRdpFilePath = r'C:\call_logger_preview.rdp';
 
 /// Εκκίνηση εργαλείων χωρίς παραμέτρους και δοκιμή ορισμάτων.
 class RemoteLauncherService {
@@ -16,23 +18,54 @@ class RemoteLauncherService {
   final SettingsService _settings;
   final RemoteToolsRepository _toolsRepo;
 
+  /// Αντικατάσταση placeholders: `{EQUIPMENT_CODE}` → [equipmentCode], `{TARGET}` →
+  /// [resolvedTarget] αν μη κενό αλλιώς [equipmentCode], `{FILE}` → [filePath] (ή κενό).
+  static String replaceAllPlaceholders(
+    String input, {
+    required String? equipmentCode,
+    required String? resolvedTarget,
+    String? filePath,
+  }) {
+    final code = equipmentCode?.trim() ?? '';
+    final target = (resolvedTarget != null && resolvedTarget.trim().isNotEmpty)
+        ? resolvedTarget.trim()
+        : code;
+    return input
+        .replaceAll('{EQUIPMENT_CODE}', code)
+        .replaceAll('{TARGET}', target)
+        .replaceAll('{FILE}', filePath?.trim() ?? '');
+  }
+
   /// Ίδια λογική με [testRemoteTool] για ενεργά ορίσματα + placeholders.
-  static List<String> testArgumentList(RemoteTool tool, String testIp) {
+  static List<String> testArgumentList(
+    RemoteTool tool,
+    String testIp, {
+    String equipmentCodeForTest = 'TEST',
+    String? filePathForTest,
+  }) {
     final ip = testIp.trim();
-    final password = tool.password?.trim() ?? '';
+    final fp = filePathForTest ??
+        (tool.arguments.any(
+          (a) => a.isActive && a.value.contains('{FILE}'),
+        )
+            ? kPreviewRdpFilePath
+            : null);
     return tool.arguments
         .where((a) => a.isActive)
         .map((a) => a.value)
         .map(
-          (flag) => flag
-              .replaceAll('{TARGET}', ip)
-              .replaceAll('{PASSWORD}', password),
+          (v) => replaceAllPlaceholders(
+            v,
+            equipmentCode: equipmentCodeForTest,
+            resolvedTarget: ip,
+            filePath: fp,
+          ),
         )
+        .where((s) => s.isNotEmpty)
         .toList();
   }
 
   /// Προεπισκόπηση κειμένου για UI (ίδια ουσία με την εκτέλεση δοκιμής).
-  /// Για `template_file` το δεύτερο «όρισμα» είναι δυναμική διαδρομή `.rdp` στο temp.
   static String formatTestCommandPreview(RemoteTool tool) {
     final testIp = tool.testTargetIp?.trim() ?? '';
     if (testIp.isEmpty) {
@@ -44,13 +77,25 @@ class RemoteLauncherService {
       if (exe.isEmpty) {
         return 'Δοκιμή: (συμπληρώστε διαδρομή εκτελέσιμου — π.χ. mstsc.exe)';
       }
-      final user = tool.defaultUsername?.trim() ?? '';
-      final userNote = user.isNotEmpty ? ' · χρήστης στο .rdp: $user' : '';
-      final rdpName =
-          '%TEMP%\\${RdpTempFileLauncher.fileNamePrefix}<μοναδικό>.rdp';
+      final hasFile =
+          tool.arguments.any((a) => a.isActive && a.value.contains('{FILE}'));
+      final fileNote = hasFile
+          ? ' · {FILE} → $kPreviewRdpFilePath (προεπισκόπηση)'
+          : '';
+      final args = testArgumentList(tool, testIp);
       final exeName = _executableDisplayName(exe);
-      return 'Δοκιμή: ${_shellQuoteDisplay(exeName)} ${_shellQuoteDisplay(rdpName)}\n'
-          'Το .rdp περιέχει διακομιστή (full address): $testIp$userNote';
+      final buf = StringBuffer(
+        'Δοκιμή: ${_shellQuoteDisplay(exeName)}$fileNote\n',
+      );
+      if (args.isEmpty) {
+        buf.write('(χωρίς επιπλέον ορίσματα)');
+      } else {
+        for (var i = 0; i < args.length; i++) {
+          if (i > 0) buf.write(' ');
+          buf.write(_shellQuoteDisplay(args[i]));
+        }
+      }
+      return buf.toString();
     }
     if (exe.isEmpty) {
       return 'Δοκιμή: (συμπληρώστε διαδρομή εκτελέσιμου)';
@@ -189,7 +234,7 @@ class RemoteLauncherService {
     await Process.start(status.path!, [], mode: ProcessStartMode.detached);
   }
 
-  /// Δοκιμή: `direct_exec` με placeholders ή `template_file` με δοκιμαστική IP.
+  /// Δοκιμή: `direct_exec` με placeholders ή `template_file` με ίδια ανάλυση ορισμάτων.
   /// Η IP/hostname πρέπει να είναι ορισμένα στο πεδίο δοκιμής του εργαλείου (`test_target_ip`).
   Future<void> testToolArguments(String toolName) async {
     final role = toolRoleFromDb(toolName);
@@ -210,29 +255,6 @@ class RemoteLauncherService {
     }
 
     final roleLabel = tool.role.dbValue;
-    final mode = tool.launchMode.trim().toLowerCase();
-
-    if (mode == 'template_file') {
-      final path = tool.executablePath.trim();
-      if (path.isEmpty) {
-        throw Exception('Δεν ορίστηκε εκτελέσιμο για δοκιμή ($roleLabel).');
-      }
-      try {
-        if (!File(path).existsSync()) {
-          throw Exception(errorPathOrFileInvalid);
-        }
-      } catch (_) {
-        throw Exception(errorAccessDenied);
-      }
-      await RdpTempFileLauncher.launch(
-        mstscPath: path,
-        serverIp: testIp,
-        username: tool.defaultUsername,
-        configTemplate: tool.configTemplate,
-      );
-      return;
-    }
-
     final path = tool.executablePath.trim();
     if (path.isEmpty) {
       throw Exception('Δεν ορίστηκε εκτελέσιμο για δοκιμή ($roleLabel).');
@@ -245,7 +267,16 @@ class RemoteLauncherService {
       throw Exception(errorAccessDenied);
     }
 
-    final arguments = testArgumentList(tool, testIp);
+    final fp = tool.arguments.any(
+          (a) => a.isActive && a.value.contains('{FILE}'),
+        )
+        ? kPreviewRdpFilePath
+        : null;
+    final arguments = testArgumentList(
+      tool,
+      testIp,
+      filePathForTest: fp,
+    );
     await Process.start(path, arguments, mode: ProcessStartMode.detached);
   }
 }

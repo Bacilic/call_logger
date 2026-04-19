@@ -18,7 +18,11 @@ import 'package:sqflite_common/sqlite_api.dart';
 /// v16: remote_tools.slug + detection_kind → στήλη role (ToolRole).
 /// v17: remote_tools.is_exclusive (αποκλειστική εμφάνιση στο UI κλήσεων).
 /// v18: audit_log entity columns + indexes για φίλτρα/side panel.
-const int databaseSchemaVersionV1 = 18;
+/// v19: remote_tools — αφαίρεση legacy στηλών (placeholders σε arguments_json).
+/// v20: πίνακας `building_map_floors` (φύλλα κατόψης κτιρίου).
+/// v21: `departments.group_name`, `departments.floor_id` (ομαδοποίηση στον χάρτη).
+/// v22: `departments.map_label_offset_*`, `departments.map_anchor_offset_*`, `departments.map_custom_name`.
+const int databaseSchemaVersionV1 = 22;
 
 /// Προεπιλογές διαδρομών (ίδιες με SettingsService — χωρίς εξάρτηση Flutter εδώ).
 const String kDefaultVncExecutablePath =
@@ -27,12 +31,6 @@ const String kDefaultAnydeskExecutablePath =
     r'C:\Program Files (x86)\AnyDesk\AnyDesk.exe';
 const String kDefaultMstscExecutablePath =
     r'C:\Windows\System32\mstsc.exe';
-
-/// Πρότυπο `.rdp` seed (placeholders `{server_ip}`, `{username}`).
-const String kDefaultRdpConfigTemplate = ''
-    'full address:s:{server_ip}\r\n'
-    'prompt for credentials:i:0\r\n'
-    'username:s:{username}\r\n';
 
 /// Δημιουργία σχήματος v1 + seed `remote_tool_args`.
 /// Χωρίς εξαρτήσεις Flutter — ασφαλές για `dart run tool/migrate_to_v1.dart`.
@@ -133,7 +131,26 @@ Future<void> applyDatabaseV1Schema(Database db) async {
         map_y REAL DEFAULT 0.0,
         map_width REAL DEFAULT 0.0,
         map_height REAL DEFAULT 0.0,
+        map_rotation REAL DEFAULT 0.0,
+        map_label_offset_x REAL,
+        map_label_offset_y REAL,
+        map_anchor_offset_x REAL,
+        map_anchor_offset_y REAL,
+        map_custom_name TEXT,
+        group_name TEXT,
+        floor_id INTEGER,
         is_deleted INTEGER DEFAULT 0
+      )
+    ''');
+
+  await db.execute('''
+      CREATE TABLE building_map_floors (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        sort_order INTEGER NOT NULL DEFAULT 0,
+        label TEXT NOT NULL,
+        floor_group TEXT,
+        image_path TEXT NOT NULL,
+        rotation_degrees REAL NOT NULL DEFAULT 0
       )
     ''');
 
@@ -219,14 +236,10 @@ Future<void> applyDatabaseV1Schema(Database db) async {
         role TEXT NOT NULL,
         executable_path TEXT NOT NULL,
         launch_mode TEXT NOT NULL,
-        config_template TEXT,
         sort_order INTEGER NOT NULL DEFAULT 0,
         is_active INTEGER NOT NULL DEFAULT 1,
-        vnc_host_prefix TEXT,
         suggested_values TEXT,
         icon_asset_key TEXT,
-        default_username TEXT,
-        password TEXT,
         arguments_json TEXT,
         test_target_ip TEXT,
         is_exclusive INTEGER NOT NULL DEFAULT 0,
@@ -682,4 +695,89 @@ Future<void> migrateDatabaseToV18(Database db) async {
   await db.execute(
     'CREATE INDEX IF NOT EXISTS idx_audit_log_entity_type_entity_id ON audit_log(entity_type, entity_id)',
   );
+}
+
+/// v19: αφαίρεση legacy στηλών από `remote_tools` (μετά migration σε arguments_json).
+Future<void> migrateDatabaseToV19(Database db) async {
+  try {
+    Future<void> dropColumnIfExists(String column) async {
+      final info = await db.rawQuery('PRAGMA table_info(remote_tools)');
+      final names = info.map((r) => r['name'] as String).toSet();
+      if (!names.contains(column)) return;
+      await db.execute('ALTER TABLE remote_tools DROP COLUMN $column');
+    }
+
+    await dropColumnIfExists('vnc_host_prefix');
+    await dropColumnIfExists('default_username');
+    await dropColumnIfExists('password');
+    await dropColumnIfExists('config_template');
+  } catch (_) {
+    // Παλαιότερο SQLite χωρίς DROP COLUMN: οι στήλες μπορεί να παραμείνουν· το [RemoteTool.fromMap] τις αγνοεί.
+  }
+}
+
+/// v20: φύλλα κατόψης για χάρτη κτιρίου (`departments.map_floor` → `building_map_floors.id`).
+Future<void> migrateDatabaseToV20(Database db) async {
+  await db.execute('''
+CREATE TABLE IF NOT EXISTS building_map_floors (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  label TEXT NOT NULL,
+  floor_group TEXT,
+  image_path TEXT NOT NULL,
+  rotation_degrees REAL NOT NULL DEFAULT 0
+)
+''');
+  await ensureDepartmentsMapRotationColumn(db);
+}
+
+Future<void> ensureDepartmentsMapRotationColumn(Database db) async {
+  final info = await db.rawQuery('PRAGMA table_info(departments)');
+  final names = info.map((r) => r['name'] as String).toSet();
+  if (!names.contains('map_rotation')) {
+    await db.execute(
+      'ALTER TABLE departments ADD COLUMN map_rotation REAL DEFAULT 0.0',
+    );
+  }
+}
+
+/// v21: ομαδοποίηση τμημάτων στο HUD επιλογής (`group_name`, `floor_id` → `building_map_floors`).
+Future<void> migrateDatabaseToV21(Database db) async {
+  final info = await db.rawQuery('PRAGMA table_info(departments)');
+  final names = info.map((r) => r['name'] as String).toSet();
+  if (!names.contains('group_name')) {
+    await db.execute('ALTER TABLE departments ADD COLUMN group_name TEXT');
+  }
+  if (!names.contains('floor_id')) {
+    await db.execute('ALTER TABLE departments ADD COLUMN floor_id INTEGER');
+  }
+}
+
+/// v22: offsets ετικέτας/anchor και προσαρμοσμένο όνομα ετικέτας στον χάρτη.
+Future<void> migrateDatabaseToV22(Database db) async {
+  final info = await db.rawQuery('PRAGMA table_info(departments)');
+  final names = info.map((r) => r['name'] as String).toSet();
+  if (!names.contains('map_label_offset_x')) {
+    await db.execute(
+      'ALTER TABLE departments ADD COLUMN map_label_offset_x REAL',
+    );
+  }
+  if (!names.contains('map_label_offset_y')) {
+    await db.execute(
+      'ALTER TABLE departments ADD COLUMN map_label_offset_y REAL',
+    );
+  }
+  if (!names.contains('map_anchor_offset_x')) {
+    await db.execute(
+      'ALTER TABLE departments ADD COLUMN map_anchor_offset_x REAL',
+    );
+  }
+  if (!names.contains('map_anchor_offset_y')) {
+    await db.execute(
+      'ALTER TABLE departments ADD COLUMN map_anchor_offset_y REAL',
+    );
+  }
+  if (!names.contains('map_custom_name')) {
+    await db.execute('ALTER TABLE departments ADD COLUMN map_custom_name TEXT');
+  }
 }

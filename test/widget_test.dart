@@ -31,7 +31,7 @@ void main() {
       await pumpUntilSettledLong(tester);
 
       expect(
-        find.text('Καταγραφή Κλήσεων'),
+        find.byType(NavigationRail),
         findsOneWidget,
       );
       // Τηλέφωνο, Καλών, Τμήμα, Εξοπλισμός, Σημειώσεις, Κατηγορία (κ.ά.)

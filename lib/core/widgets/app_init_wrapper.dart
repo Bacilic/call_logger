@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../database/database_init_result.dart';
@@ -61,6 +62,7 @@ class _InitLoadingScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final progress = ref.watch(databaseInitProgressProvider);
+    final theme = Theme.of(context);
 
     return Scaffold(
       body: Center(
@@ -73,19 +75,53 @@ class _InitLoadingScreen extends ConsumerWidget {
               const SizedBox(height: 24),
               const Text('Φόρτωση εφαρμογής...'),
               const SizedBox(height: 10),
-              Text(
-                progress.currentStep,
-                textAlign: TextAlign.center,
-              ),
+              if (progress.secondsRemaining != null)
+                Text(
+                  'Προσπάθεια άνοιγμα βάσης σε ${progress.secondsRemaining} δευτερόλεπτα',
+                  textAlign: TextAlign.center,
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              if (progress.secondsRemaining != null) const SizedBox(height: 10),
+              Text(progress.currentStep, textAlign: TextAlign.center),
+              if (progress.isOpeningAttemptActive) ...[
+                const SizedBox(height: 16),
+                FilledButton.tonalIcon(
+                  onPressed: DatabaseHelper.instance.requestOpeningAbort,
+                  icon: const Icon(Icons.stop_circle_outlined),
+                  label: const Text('Διακοπή τώρα'),
+                ),
+              ],
               if (progress.diagnosticInfo != null &&
                   progress.diagnosticInfo!.trim().isNotEmpty) ...[
                 const SizedBox(height: 14),
-                Text(
+                SelectableText(
                   progress.diagnosticInfo!,
                   textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.bodySmall,
-                  maxLines: 4,
-                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    fontFamily: 'monospace',
+                    height: 1.35,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                OutlinedButton.icon(
+                  onPressed: () async {
+                    await Clipboard.setData(
+                      ClipboardData(text: progress.diagnosticInfo!.trim()),
+                    );
+                    if (!context.mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text(
+                          'Τα διαγνωστικά αντιγράφηκαν στο πρόχειρο.',
+                        ),
+                        behavior: SnackBarBehavior.floating,
+                      ),
+                    );
+                  },
+                  icon: const Icon(Icons.copy_outlined),
+                  label: const Text('Αντιγραφή διαγνωστικών'),
                 ),
               ],
             ],

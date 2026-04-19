@@ -9,12 +9,25 @@ import '../config/app_config.dart';
 import '../services/settings_service.dart';
 import '../utils/lexicon_word_metrics.dart';
 import '../utils/search_text_normalizer.dart';
+import 'database_access_probe.dart';
 import 'database_init_result.dart';
 import 'database_init_progress_provider.dart';
 import 'lock_diagnostic_service.dart';
 import 'database_path_resolution.dart';
 import 'database_v1_schema.dart';
 import 'dictionary_repository.dart';
+
+class DatabaseOpeningAbortedException implements Exception {
+  const DatabaseOpeningAbortedException([
+    this.message =
+        'Η προσπάθεια ανοίγματος της βάσης ακυρώθηκε από τον χρήστη.',
+  ]);
+
+  final String message;
+
+  @override
+  String toString() => message;
+}
 
 /// Αποτέλεσμα ελέγχου σύνδεσης (success + αν χρησιμοποιείται τοπική βάση).
 class ConnectionCheckResult {
@@ -71,10 +84,21 @@ class DatabaseHelper {
 
   Database? _database;
   Future<Database>? _databaseInitializingFuture;
+  Completer<Never>? _userAbortCompleter;
   bool _isUsingLocalDb = false;
 
   /// True αν η εφαρμογή χρησιμοποιεί την τοπική βάση (Dev Mode).
   bool get isUsingLocalDb => _isUsingLocalDb;
+
+  /// True όταν εκτελείται προσπάθεια ανοίγματος βάσης.
+  bool get isOpening => _databaseInitializingFuture != null;
+
+  /// Ζητά άμεση διακοπή της τρέχουσας προσπάθειας ανοίγματος.
+  void requestOpeningAbort() {
+    final completer = _userAbortCompleter;
+    if (completer == null || completer.isCompleted) return;
+    completer.completeError(const DatabaseOpeningAbortedException());
+  }
 
   /// Επιστρέφει την ενεργή σύνδεση. Κάνει αρχικοποίηση αν χρειάζεται.
   Future<Database> get database async {
@@ -97,6 +121,7 @@ class DatabaseHelper {
       _database = await _databaseInitializingFuture!;
     } finally {
       _databaseInitializingFuture = null;
+      _userAbortCompleter = null;
     }
     return _database!;
   }
@@ -104,11 +129,13 @@ class DatabaseHelper {
   /// Κλείνει την τρέχουσα σύνδεση και επαναφέρει την κατάσταση.
   /// Στην επόμενη κλήση [database] θα γίνει νέα σύνδεση (π.χ. με νέα διαδρομή από ρυθμίσεις).
   Future<void> closeConnection() async {
+    requestOpeningAbort();
     if (_database != null) {
       await _database!.close();
       _database = null;
     }
     _databaseInitializingFuture = null;
+    _userAbortCompleter = null;
     _isUsingLocalDb = false;
   }
 
@@ -243,10 +270,39 @@ class DatabaseHelper {
     }
 
     final timeoutSeconds = await _resolveDatabaseOpenTimeoutSeconds();
-    const maxAttempts = 3;
+    final maxAttempts = await _resolveDatabaseOpenMaxAttempts();
     String? lastDiagnostic;
+    String? probeDiagnostic;
     Object? lastError;
     StackTrace? lastStack;
+
+    _userAbortCompleter = Completer<Never>();
+
+    progressNotifier?.setStep('Διαγνωστικός έλεγχος πρόσβασης');
+    final probeReport = await const DatabaseAccessProbe().probe(dbPath);
+    if (probeReport.hasFindings) {
+      probeDiagnostic = probeReport.humanReadable;
+      progressNotifier?.setDiagnostic(probeDiagnostic);
+    }
+    final fatalProbeResult = probeReport.fatalResult;
+    if (fatalProbeResult != null) {
+      var result = fatalProbeResult;
+      if (probeDiagnostic != null && probeDiagnostic.trim().isNotEmpty) {
+        result = result.copyWith(
+          details: _mergeDetails(result.details, probeDiagnostic),
+        );
+      }
+      throw DatabaseInitException(result);
+    }
+    final staleCleanupDiagnostic = await _cleanStaleSidecarsIfSafe(
+      dbPath,
+      progressNotifier: progressNotifier,
+    );
+    if (staleCleanupDiagnostic != null &&
+        staleCleanupDiagnostic.trim().isNotEmpty) {
+      probeDiagnostic = _mergeDetails(probeDiagnostic, staleCleanupDiagnostic);
+      progressNotifier?.setDiagnostic(probeDiagnostic);
+    }
 
     for (var attempt = 1; attempt <= maxAttempts; attempt++) {
       if (attempt > 1) {
@@ -282,9 +338,41 @@ class DatabaseHelper {
       } catch (e, st) {
         lastError = e;
         lastStack = st;
+        if (e is DatabaseOpeningAbortedException) {
+          final abortDiagnostic = await forceReleaseLock(
+            dbPath,
+            progressNotifier: progressNotifier,
+          );
+          var result = DatabaseInitResult(
+            status: DatabaseStatus.applicationError,
+            message:
+                'Η προσπάθεια ανοίγματος της βάσης ακυρώθηκε άμεσα από τον χρήστη.',
+            details:
+                'Η λειτουργία σταμάτησε πριν ολοκληρωθεί το timeout της τρέχουσας προσπάθειας.',
+            path: dbPath,
+            originalExceptionText: e.toString(),
+            stackTraceText: st.toString(),
+          );
+          if (probeDiagnostic != null && probeDiagnostic.trim().isNotEmpty) {
+            result = result.copyWith(
+              details: _mergeDetails(result.details, probeDiagnostic),
+            );
+          }
+          if (abortDiagnostic.trim().isNotEmpty) {
+            result = result.copyWith(
+              details: _mergeDetails(result.details, abortDiagnostic),
+            );
+          }
+          throw DatabaseInitException(result);
+        }
         final retriable = e is TimeoutException || _looksLikeLockError(e);
         if (!retriable || attempt >= maxAttempts) {
           var result = DatabaseInitResult.fromException(e, dbPath, st);
+          if (probeDiagnostic != null && probeDiagnostic.trim().isNotEmpty) {
+            result = result.copyWith(
+              details: _mergeDetails(result.details, probeDiagnostic),
+            );
+          }
           if (lastDiagnostic != null && lastDiagnostic.trim().isNotEmpty) {
             result = result.copyWith(
               details: _mergeDetails(result.details, lastDiagnostic),
@@ -295,11 +383,16 @@ class DatabaseHelper {
       }
     }
 
-    final fallbackResult = DatabaseInitResult.fromException(
+    var fallbackResult = DatabaseInitResult.fromException(
       lastError ?? TimeoutException('Unknown database open timeout'),
       dbPath,
       lastStack,
     );
+    if (probeDiagnostic != null && probeDiagnostic.trim().isNotEmpty) {
+      fallbackResult = fallbackResult.copyWith(
+        details: _mergeDetails(fallbackResult.details, probeDiagnostic),
+      );
+    }
     throw DatabaseInitException(fallbackResult);
   }
 
@@ -311,6 +404,54 @@ class DatabaseHelper {
     } catch (_) {
       return AppConfig.databaseOpenTimeoutSeconds;
     }
+  }
+
+  Future<int> _resolveDatabaseOpenMaxAttempts() async {
+    try {
+      final value = await SettingsService().getDatabaseOpenMaxAttempts();
+      if (value <= 0) return AppConfig.databaseOpenMaxAttempts;
+      return value;
+    } catch (_) {
+      return AppConfig.databaseOpenMaxAttempts;
+    }
+  }
+
+  Future<String?> _cleanStaleSidecarsIfSafe(
+    String dbPath, {
+    DatabaseInitProgressNotifier? progressNotifier,
+  }) async {
+    if (AppConfig.isUncDatabasePath(dbPath)) return null;
+    progressNotifier?.setStep('Προληπτικός καθαρισμός WAL');
+    final messages = <String>[];
+    for (final suffix in const <String>['-wal', '-shm']) {
+      final sidecarPath = '$dbPath$suffix';
+      final file = File(sidecarPath);
+      try {
+        if (!await file.exists()) continue;
+        final stat = await file.stat();
+        if (stat.size <= 0) continue;
+
+        RandomAccessFile? raf;
+        try {
+          raf = await file.open(mode: FileMode.append);
+          await raf.close();
+          raf = null;
+        } catch (_) {
+          await raf?.close();
+          messages.add(
+            'Παραλείφθηκε διαγραφή $sidecarPath: το αρχείο φαίνεται ενεργά κλειδωμένο.',
+          );
+          continue;
+        }
+
+        await file.delete();
+        messages.add('Διαγράφηκε stale sidecar: $sidecarPath');
+      } catch (e) {
+        messages.add('Αποτυχία καθαρισμού $sidecarPath: $e');
+      }
+    }
+    if (messages.isEmpty) return null;
+    return messages.join('\n');
   }
 
   Future<Database> _openWithTimeout({
@@ -326,7 +467,7 @@ class DatabaseHelper {
         : timeoutSeconds;
     var remaining = safeTimeout;
     progressNotifier?.setStep(
-      'Άνοιγμα βάσης... ($remaining s)',
+      'Προσπάθεια άνοιγμα βάσης σε $remaining δευτερόλεπτα',
       secondsRemaining: remaining,
     );
 
@@ -338,14 +479,14 @@ class DatabaseHelper {
           remaining = 0;
         }
         progressNotifier.setStep(
-          'Άνοιγμα βάσης... ($remaining s)',
+          'Προσπάθεια άνοιγμα βάσης σε $remaining δευτερόλεπτα',
           secondsRemaining: remaining,
         );
       });
     }
 
     try {
-      return await openDatabase(
+      final openFuture = openDatabase(
         targetPath,
         version: _kDatabaseSchemaVersion,
         onCreate: _onCreate,
@@ -353,7 +494,8 @@ class DatabaseHelper {
         onDowngrade: _onDowngradeSquashed,
         singleInstance: singleInstance,
         onOpen: (db) => _applyLexiconOpenNormalizations(db),
-      ).timeout(
+      );
+      final timeoutFuture = openFuture.timeout(
         Duration(seconds: safeTimeout),
         onTimeout: () {
           throw TimeoutException(
@@ -362,6 +504,11 @@ class DatabaseHelper {
           );
         },
       );
+      final abortFuture = (_userAbortCompleter ??= Completer<Never>()).future;
+      return await Future.any<Database>(<Future<Database>>[
+        timeoutFuture,
+        abortFuture,
+      ]);
     } finally {
       countdownTimer?.cancel();
       progressNotifier?.clearCountdown();
@@ -381,7 +528,7 @@ class DatabaseHelper {
     final d = diagnostic.trim();
     if (d.isEmpty) return c;
     if (c.isEmpty) return d;
-    return '$c\n\n--- Lock diagnostics ---\n$d';
+    return '$c\n\n--- Diagnostics ---\n$d';
   }
 
   /// Επαληθεύει ότι υπάρχει ο πίνακας `calls`. Αλλιώς ρίχνει [DatabaseInitException].
@@ -400,6 +547,7 @@ class DatabaseHelper {
   static Future<void> _applyLexiconOpenNormalizations(Database db) async {
     await _normalizeLexiconSourceOnOpen(db);
     await _normalizeLexiconCategoryLegacyOnOpen(db);
+    await ensureDepartmentsMapRotationColumn(db);
   }
 
   /// Παλιά τιμή πηγής `system` (asset) → `imported` (ίδια κατηγορία με TXT).
@@ -527,6 +675,18 @@ class DatabaseHelper {
     if (oldVersion < 18 && newVersion >= 18) {
       await migrateDatabaseToV18(db);
     }
+    if (oldVersion < 19 && newVersion >= 19) {
+      await migrateDatabaseToV19(db);
+    }
+    if (oldVersion < 20 && newVersion >= 20) {
+      await migrateDatabaseToV20(db);
+    }
+    if (oldVersion < 21 && newVersion >= 21) {
+      await migrateDatabaseToV21(db);
+    }
+    if (oldVersion < 22 && newVersion >= 22) {
+      await migrateDatabaseToV22(db);
+    }
   }
 
   /// Πίνακας προσωπικών λέξεων ορθογραφίας (Windows / custom lexicon).
@@ -592,10 +752,7 @@ class DatabaseHelper {
     await ensureColumns(AppConfig.fullDictionaryTable);
     await ensureColumns(AppConfig.userDictionaryTable);
 
-    Future<void> backfillTable(
-      String table, {
-      required bool hasRowId,
-    }) async {
+    Future<void> backfillTable(String table, {required bool hasRowId}) async {
       final rows = await db.query(
         table,
         columns: hasRowId ? ['id', 'word'] : ['word'],
@@ -673,9 +830,7 @@ class DatabaseHelper {
     final info = await db.rawQuery('PRAGMA table_info(equipment)');
     final names = info.map((r) => r['name'] as String).toSet();
     if (!names.contains('remote_params')) {
-      await db.execute(
-        'ALTER TABLE equipment ADD COLUMN remote_params TEXT',
-      );
+      await db.execute('ALTER TABLE equipment ADD COLUMN remote_params TEXT');
     }
   }
 

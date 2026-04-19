@@ -649,9 +649,50 @@ final directoryProvider = NotifierProvider<DirectoryNotifier, DirectoryState>(
   DirectoryNotifier.new,
 );
 
-/// Ρύθμιση «Συνεχής κύλιση πίνακα Καταλόγου». Default: true (συνεχής κύλιση).
-final catalogContinuousScrollProvider = FutureProvider.autoDispose<bool>((ref) async {
+/// Παλαιό global κλειδί· αν λείπει το per-tab, διαβάζεται για συμβατότητα.
+const kCatalogContinuousScrollLegacyKey = 'catalog_continuous_scroll';
+
+const kCatalogContinuousScrollEquipmentKey = 'catalog_continuous_scroll_equipment';
+const kCatalogContinuousScrollUsersKey = 'catalog_continuous_scroll_users';
+const kCatalogContinuousScrollDepartmentsKey = 'catalog_continuous_scroll_departments';
+
+Future<bool> _readCatalogContinuousScrollPerTable(
+  DirectoryRepository repo,
+  String perTableKey,
+) async {
+  final specific = await repo.getSetting(perTableKey);
+  if (specific != null) return specific == 'true';
+  final legacy = await repo.getSetting(kCatalogContinuousScrollLegacyKey);
+  if (legacy != null) return legacy == 'true';
+  return true;
+}
+
+/// Συνεχής κύλιση πίνακα εξοπλισμού (ανά καρτέλα). Default: true.
+final catalogEquipmentContinuousScrollProvider =
+    FutureProvider.autoDispose<bool>((ref) async {
   final db = await DatabaseHelper.instance.database;
-  final value = await DirectoryRepository(db).getSetting('catalog_continuous_scroll');
-  return value == null || value == 'true';
+  return _readCatalogContinuousScrollPerTable(
+    DirectoryRepository(db),
+    kCatalogContinuousScrollEquipmentKey,
+  );
+});
+
+/// Συνεχής κύλιση πινάκων χρηστών (προσωπικά / κοινόχρηστα). Default: true.
+final catalogUsersContinuousScrollProvider =
+    FutureProvider.autoDispose<bool>((ref) async {
+  final db = await DatabaseHelper.instance.database;
+  return _readCatalogContinuousScrollPerTable(
+    DirectoryRepository(db),
+    kCatalogContinuousScrollUsersKey,
+  );
+});
+
+/// Συνεχής κύλιση πίνακα τμημάτων. Default: true.
+final catalogDepartmentsContinuousScrollProvider =
+    FutureProvider.autoDispose<bool>((ref) async {
+  final db = await DatabaseHelper.instance.database;
+  return _readCatalogContinuousScrollPerTable(
+    DirectoryRepository(db),
+    kCatalogContinuousScrollDepartmentsKey,
+  );
 });

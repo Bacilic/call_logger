@@ -12,6 +12,78 @@ class RemoteToolsRepository {
 
   Future<Database> get _database => _db.database;
 
+  static const String _appKeyRemoteToolsV2Migrated = 'remote_tools_v2_migrated';
+
+  /// One-shot migration: legacy στήλες → `arguments_json`· idempotent μέσω `app_settings`.
+  Future<void> migrateLegacyFieldsToArguments() async {
+    final db = await _database;
+    final fr = await db.query(
+      'app_settings',
+      columns: ['value'],
+      where: 'key = ?',
+      whereArgs: [_appKeyRemoteToolsV2Migrated],
+      limit: 1,
+    );
+    if (fr.isNotEmpty && ((fr.first['value'] as String?)?.trim() == '1')) {
+      return;
+    }
+
+    final rows = await db.query('remote_tools');
+    for (final row in rows) {
+      final t = RemoteTool.fromMap(row);
+      final updated = _migrateSingleToolArguments(t, row);
+      if (updated != null) {
+        await updateTool(updated);
+      }
+    }
+
+    await db.execute(
+      'INSERT OR REPLACE INTO app_settings (key, value) VALUES (?, ?)',
+      [_appKeyRemoteToolsV2Migrated, '1'],
+    );
+  }
+
+  RemoteTool? _migrateSingleToolArguments(
+    RemoteTool t,
+    Map<String, dynamic> rawRow,
+  ) {
+    var args = List<RemoteToolArgument>.from(t.arguments);
+    var changed = false;
+
+    final hasRdpRow = args.any((a) => a.description.trim() == '__rdp_file__');
+    final ct = (rawRow['config_template'] as String?)?.trim();
+    if (ct != null && ct.isNotEmpty && !hasRdpRow) {
+      args.add(
+        RemoteToolArgument(
+          value: ct,
+          description: '__rdp_file__',
+          isActive: true,
+        ),
+      );
+      changed = true;
+    }
+
+    final rawPrefix = rawRow['vnc_host_prefix'] as String?;
+    if (t.role == ToolRole.vnc && rawPrefix != null) {
+      final p = rawPrefix.trim().isNotEmpty ? rawPrefix.trim() : 'PC';
+      final hostArg = '-host=$p{EQUIPMENT_CODE}';
+      final hasHost = args.any(
+        (a) =>
+            a.value.contains('{EQUIPMENT_CODE}') &&
+            (a.value.startsWith('-host=') || a.value.contains('host=')),
+      );
+      if (!hasHost) {
+        args.add(
+          RemoteToolArgument(value: hostArg, description: '', isActive: true),
+        );
+        changed = true;
+      }
+    }
+
+    if (!changed) return null;
+    return t.copyWith(arguments: args);
+  }
+
   /// `equipment.default_remote_tool` αποθηκεύεται ως TEXT· επιστρέφει null αν δεν είναι έγκυρο ακέραιο id.
   static int? parseDefaultRemoteToolId(String? stored) {
     final t = stored?.trim() ?? '';
@@ -114,15 +186,13 @@ class RemoteToolsRepository {
     return null;
   }
 
-  /// Προαιρετικό username: `<id>_user` ή `default_username` από ορισμό εργαλείου.
+  /// Προαιρετικό username: μόνο `remote_params['<id>_user']` (plaintext credentials live in arguments).
   String? resolveUsername({
     required Map<String, String> remoteParams,
     required RemoteTool tool,
   }) {
     final u = remoteParams['${tool.id}_user']?.trim();
     if (u != null && u.isNotEmpty) return u;
-    final du = tool.defaultUsername?.trim();
-    if (du != null && du.isNotEmpty) return du;
     return null;
   }
 

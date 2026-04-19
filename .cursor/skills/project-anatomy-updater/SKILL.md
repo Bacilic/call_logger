@@ -25,7 +25,7 @@ disable-model-invocation: true
 
 ## 1) DIRTREE (lib/)
 
-Δώσε ένα καθαρό text tree μόνο του φακέλου lib/ (αγνόησε build, android, windows, .git κλπ.).
+Δώσε ένα καθαρό text tree μόνο του φακέλου lib/ (αγνόησε build, android, windows, .git κλπ.). Συμπεριλαμβάνεις και τα ονόματα των αρχείων του φακέλου lib
 
 ## 2) DATABASE SCHEMA (SQLite)
 
@@ -36,10 +36,12 @@ disable-model-invocation: true
 ## 3) MODELS
 
 Διάβασε όλα τα models από:
+- lib/features/audit/models/
 - lib/features/calls/models/
-- lib/features/directory/models/
-- lib/features/tasks/models/
 - lib/features/database/models/
+- lib/features/directory/models/
+- lib/features/history/models/
+- lib/features/tasks/models/
 - lib/core/models/
 
 Γράψε σύντομη λίστα με τα πεδία του κάθε μοντέλου (μόνο ιδιότητες, χωρίς raw κώδικα).

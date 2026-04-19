@@ -89,16 +89,15 @@ class EquipmentModel {
     return 'Άγνωστο';
   }
 
-  /// VNC / `vnc_host`: dual-read τιμής + πρόθεμα host από το συγκεκριμένο [forTool] (ή προεπιλογή `PC`).
+  /// VNC / `vnc_host`: dual-read τιμής· πρόθεμα ψηφιακού κωδικού σταθερό `PC` (το prefix του εργαλείου ζει στα arguments).
   String vncLikeTargetResolved(RemoteTool? forTool) {
+    const prefix = 'PC';
     if (forTool != null) {
       final byId = remoteParams[forTool.id.toString()]?.trim();
       if (byId != null && byId.isNotEmpty) {
         final resolved = VncRemoteTarget.resolveValidVncHost(
           byId,
-          prefix: (forTool.vncHostPrefix?.trim().isNotEmpty ?? false)
-              ? forTool.vncHostPrefix!.trim()
-              : 'PC',
+          prefix: prefix,
         );
         if (resolved != null) return resolved;
       }
@@ -109,9 +108,6 @@ class EquipmentModel {
     }
     final c = code?.trim();
     if (c != null && c.isNotEmpty) {
-      final prefix = (forTool?.vncHostPrefix?.trim().isNotEmpty ?? false)
-          ? forTool!.vncHostPrefix!.trim()
-          : 'PC';
       final resolved = VncRemoteTarget.resolveValidVncHost(c, prefix: prefix);
       if (resolved != null) return resolved;
     }
@@ -237,8 +233,9 @@ class EquipmentModel {
       if (code != null) 'code_equipment': code,
       if (type != null) 'type': type,
       if (notes != null) 'notes': notes,
-      if (customIp != null) 'custom_ip': customIp,
-      if (anydeskId != null) 'anydesk_id': anydeskId,
+      // Πάντα ώστε το UPDATE να μπορεί να μηδενίζει τις στήλες όταν αφαιρείται ενεργός στόχος.
+      'custom_ip': customIp,
+      'anydesk_id': anydeskId,
       if (defaultRemoteTool != null) 'default_remote_tool': defaultRemoteTool,
       'department_id': departmentId,
       'location': location,

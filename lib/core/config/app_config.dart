@@ -7,7 +7,10 @@ class AppConfig {
   AppConfig._();
 
   /// Προεπιλεγμένο timeout ανοίγματος βάσης δεδομένων (δευτερόλεπτα).
-  static const int databaseOpenTimeoutSeconds = 15;
+  static const int databaseOpenTimeoutSeconds = 8;
+
+  /// Προεπιλεγμένος μέγιστος αριθμός προσπαθειών ανοίγματος βάσης.
+  static const int databaseOpenMaxAttempts = 2;
 
   /// True αν η διαδρομή μοιάζει με UNC δικτύου (Windows).
   static bool isUncDatabasePath(String dbPath) {

@@ -3,8 +3,8 @@ import 'dart:io';
 import '../database/remote_tools_repository.dart';
 import '../models/remote_tool.dart';
 import '../models/remote_tool_role.dart';
-import 'rdp_temp_file_launcher.dart';
 import 'remote_args_service.dart';
+import 'remote_launcher_service.dart';
 import 'remote_tools_paths_helper.dart';
 import 'settings_service.dart';
 
@@ -16,15 +16,39 @@ class RemoteConnectionService {
   final RemoteArgsService _argsService;
   final RemoteToolsRepository _toolsRepo;
 
-  List<String> _resolveArgs(
-    List<String> argFlags, {
-    required String target,
-    String password = '',
+  /// Πρώτο υπαρκτό `.rdp` path από ενεργά ορίσματα (εκτός `__rdp_file__` template body).
+  static String? firstExistingRdpPathFromArguments(RemoteTool tool) {
+    for (final a in tool.arguments.where((x) => x.isActive)) {
+      if (a.description.trim() == '__rdp_file__') continue;
+      final v = a.value.trim();
+      if (v.toLowerCase().endsWith('.rdp')) {
+        try {
+          if (File(v).existsSync()) return v;
+        } catch (_) {}
+      }
+    }
+    return null;
+  }
+
+  List<String> _resolvedLaunchArguments(
+    RemoteTool tool, {
+    required String? equipmentCode,
+    required String resolvedTarget,
   }) {
-    return argFlags
-        .map((flag) => flag
-            .replaceAll('{TARGET}', target)
-            .replaceAll('{PASSWORD}', password))
+    final fp = firstExistingRdpPathFromArguments(tool);
+    return tool.arguments
+        .where(
+          (a) => a.isActive && a.description.trim() != '__rdp_file__',
+        )
+        .map(
+          (a) => RemoteLauncherService.replaceAllPlaceholders(
+            a.value,
+            equipmentCode: equipmentCode,
+            resolvedTarget: resolvedTarget,
+            filePath: fp,
+          ),
+        )
+        .where((s) => s.isNotEmpty)
         .toList();
   }
 
@@ -89,10 +113,19 @@ class RemoteConnectionService {
         'Ο υπολογιστής $target δεν απαντά ή το VNC δεν τρέχει (Port 5900).',
       );
     }
-    const password = '';
     final activeArgs = await _argsService.getActiveArgsForRole(ToolRole.vnc);
     final argFlags = activeArgs.map((a) => a.argFlag).toList();
-    final arguments = _resolveArgs(argFlags, target: target, password: password);
+    final arguments = argFlags
+        .map(
+          (f) => RemoteLauncherService.replaceAllPlaceholders(
+            f,
+            equipmentCode: null,
+            resolvedTarget: target,
+            filePath: null,
+          ),
+        )
+        .where((s) => s.isNotEmpty)
+        .toList();
     await Process.start(path, arguments, mode: ProcessStartMode.detached);
   }
 
@@ -112,15 +145,26 @@ class RemoteConnectionService {
     }
     final activeArgs = await _argsService.getActiveArgsForRole(ToolRole.anydesk);
     final argFlags = activeArgs.map((a) => a.argFlag).toList();
-    final arguments = _resolveArgs(argFlags, target: targetId);
+    final arguments = argFlags
+        .map(
+          (f) => RemoteLauncherService.replaceAllPlaceholders(
+            f,
+            equipmentCode: null,
+            resolvedTarget: targetId,
+            filePath: null,
+          ),
+        )
+        .where((s) => s.isNotEmpty)
+        .toList();
     await Process.start(path, arguments, mode: ProcessStartMode.detached);
   }
 
-  /// Γενική εκκίνηση: `direct_exec` ή `template_file` (RDP).
+  /// Γενική εκκίνηση: `direct_exec` ή `template_file` (ίδια ανάλυση ορισμάτων).
   Future<void> launchRemoteTool({
     required RemoteTool tool,
     required String resolvedTarget,
     required Map<String, String> remoteParams,
+    String? equipmentCode,
   }) async {
     final path = await validExecutablePathForTool(
       repo: _toolsRepo,
@@ -134,21 +178,6 @@ class RemoteConnectionService {
       );
     }
 
-    final mode = tool.launchMode.trim().toLowerCase();
-    if (mode == 'template_file') {
-      final user = _toolsRepo.resolveUsername(
-        remoteParams: remoteParams,
-        tool: tool,
-      );
-      await RdpTempFileLauncher.launch(
-        mstscPath: path,
-        serverIp: resolvedTarget,
-        username: user,
-        configTemplate: tool.configTemplate,
-      );
-      return;
-    }
-
     final needsVncPort = tool.role == ToolRole.vnc;
     if (needsVncPort) {
       final portOpen = await _isVncPortOpen(resolvedTarget);
@@ -159,13 +188,10 @@ class RemoteConnectionService {
       }
     }
 
-    final password = tool.password?.trim() ?? '';
-    final argFlags =
-        tool.arguments.where((a) => a.isActive).map((a) => a.value).toList();
-    final arguments = _resolveArgs(
-      argFlags,
-      target: resolvedTarget,
-      password: password,
+    final arguments = _resolvedLaunchArguments(
+      tool,
+      equipmentCode: equipmentCode,
+      resolvedTarget: resolvedTarget,
     );
     await Process.start(path, arguments, mode: ProcessStartMode.detached);
   }

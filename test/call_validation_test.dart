@@ -57,7 +57,7 @@ void main() {
         });
 
         expect(
-          find.text('Καταγραφή Κλήσεων'),
+          find.byType(NavigationRail),
           findsOneWidget,
           reason: greekExpectMsg('Κύριο κέλυφος / οθόνη Κλήσεων'),
         );
@@ -92,7 +92,7 @@ void main() {
         await pumpUntilSettled(tester);
 
         final submitFinder =
-            find.widgetWithText(ElevatedButton, 'Καταγραφή Κλήσης');
+            find.widgetWithText(ElevatedButton, 'Καταγραφή');
         expect(
           submitFinder,
           findsOneWidget,

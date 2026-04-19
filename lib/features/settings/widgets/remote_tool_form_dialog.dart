@@ -73,11 +73,7 @@ class _ArgRow {
 class _RemoteToolFormDialogState extends ConsumerState<RemoteToolFormDialog> {
   late final TextEditingController _nameC;
   late final TextEditingController _pathC;
-  late final TextEditingController _templateC;
   late final TextEditingController _iconC;
-  late final TextEditingController _prefixC;
-  late final TextEditingController _userC;
-  late final TextEditingController _passwordC;
   late final TextEditingController _suggC;
   late final TextEditingController _testIpC;
 
@@ -87,7 +83,6 @@ class _RemoteToolFormDialogState extends ConsumerState<RemoteToolFormDialog> {
   ToolRole _role = ToolRole.generic;
   bool _isActive = true;
   bool _isExclusive = false;
-  bool _passwordObscure = true;
   bool _saving = false;
 
   /// Καθρέφτης της καθολικής ρύθμισης [SettingsService] (όχι μέρος του εργαλείου).
@@ -147,15 +142,7 @@ class _RemoteToolFormDialogState extends ConsumerState<RemoteToolFormDialog> {
       ..write('\u001e')
       ..write(_pathC.text)
       ..write('\u001e')
-      ..write(_templateC.text)
-      ..write('\u001e')
       ..write(_iconC.text)
-      ..write('\u001e')
-      ..write(_prefixC.text)
-      ..write('\u001e')
-      ..write(_userC.text)
-      ..write('\u001e')
-      ..write(_passwordC.text)
       ..write('\u001e')
       ..write(_suggC.text)
       ..write('\u001e')
@@ -190,14 +177,10 @@ class _RemoteToolFormDialogState extends ConsumerState<RemoteToolFormDialog> {
     final t = widget.initialTool;
     _nameC = TextEditingController(text: t?.name ?? '');
     _pathC = TextEditingController(text: t?.executablePath ?? '');
-    _templateC = TextEditingController(text: t?.configTemplate ?? '');
     _iconC = TextEditingController(text: t?.iconAssetKey ?? '');
     _priorityOneBased = t?.sortOrder ?? 1;
     if (_priorityOneBased < 1) _priorityOneBased = 1;
     _role = t?.role ?? ToolRole.generic;
-    _prefixC = TextEditingController(text: t?.vncHostPrefix ?? '');
-    _userC = TextEditingController(text: t?.defaultUsername ?? '');
-    _passwordC = TextEditingController(text: t?.password ?? '');
     _suggC = TextEditingController(text: t?.suggestedValuesJson ?? '');
     _testIpC = TextEditingController(text: t?.testTargetIp ?? '');
     _launchMode = t?.launchMode ?? 'direct_exec';
@@ -230,11 +213,7 @@ class _RemoteToolFormDialogState extends ConsumerState<RemoteToolFormDialog> {
     for (final c in [
       _nameC,
       _pathC,
-      _templateC,
       _iconC,
-      _prefixC,
-      _userC,
-      _passwordC,
       _suggC,
       _testIpC,
     ]) {
@@ -250,11 +229,7 @@ class _RemoteToolFormDialogState extends ConsumerState<RemoteToolFormDialog> {
     for (final c in [
       _nameC,
       _pathC,
-      _templateC,
       _iconC,
-      _prefixC,
-      _userC,
-      _passwordC,
       _suggC,
       _testIpC,
     ]) {
@@ -282,11 +257,7 @@ class _RemoteToolFormDialogState extends ConsumerState<RemoteToolFormDialog> {
     _nameFocus.dispose();
     _nameC.dispose();
     _pathC.dispose();
-    _templateC.dispose();
     _iconC.dispose();
-    _prefixC.dispose();
-    _userC.dispose();
-    _passwordC.dispose();
     _suggC.dispose();
     _testIpC.dispose();
     for (final r in _argRows) {
@@ -316,17 +287,13 @@ class _RemoteToolFormDialogState extends ConsumerState<RemoteToolFormDialog> {
       role: _role,
       executablePath: _pathC.text.trim(),
       launchMode: _launchMode,
-      configTemplate: _templateC.text.trim().isEmpty ? null : _templateC.text,
       sortOrder: sort,
       isActive: _isActive,
-      vncHostPrefix: _prefixC.text.trim().isEmpty ? null : _prefixC.text.trim(),
       suggestedValuesJson:
           _suggC.text.trim().isEmpty ? null : _suggC.text.trim(),
       iconAssetKey: _iconC.text.trim().isEmpty ? null : _iconC.text.trim(),
-      defaultUsername: _userC.text.trim().isEmpty ? null : _userC.text.trim(),
       arguments: _collectArguments(),
       testTargetIp: _testIpC.text.trim().isEmpty ? null : _testIpC.text.trim(),
-      password: _passwordC.text.trim().isEmpty ? null : _passwordC.text.trim(),
       isExclusive: _isExclusive,
     );
   }
@@ -650,6 +617,80 @@ class _RemoteToolFormDialogState extends ConsumerState<RemoteToolFormDialog> {
     });
   }
 
+  Future<void> _onRoleChanged(ToolRole v) async {
+    final prev = _role;
+    setState(() => _role = v);
+    if (prev == v || !mounted) return;
+    final offer = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Προτεινόμενα ορίσματα'),
+        content: Text(
+          'Να προστεθούν τυπικά ορίσματα για τον ρόλο «${v.dbValue}»;',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Όχι'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Ναι'),
+          ),
+        ],
+      ),
+    );
+    if (offer == true && mounted) {
+      _applyRolePreset(v);
+    }
+  }
+
+  void _applyRolePreset(ToolRole presetRole) {
+    if (_saving) return;
+    final String line;
+    switch (presetRole) {
+      case ToolRole.vnc:
+        line = '-host=PC{EQUIPMENT_CODE}';
+      case ToolRole.rdp:
+        line = '/v:{TARGET}';
+      case ToolRole.anydesk:
+        line = '-id {TARGET}';
+      case ToolRole.generic:
+        return;
+    }
+    if (_argRows.any((r) => r.valueC.text.trim() == line)) return;
+    setState(() {
+      final row = _ArgRow(
+        stableId: _nextArgId++,
+        valueC: TextEditingController(text: line),
+        descC: TextEditingController(),
+        active: true,
+      );
+      row.valueC.addListener(_markFormChanged);
+      row.descC.addListener(_markFormChanged);
+      _argRows.add(row);
+    });
+  }
+
+  void _insertPlaceholder(String token) {
+    setState(() {
+      if (_argRows.isEmpty) {
+        final row = _ArgRow(
+          stableId: _nextArgId++,
+          valueC: TextEditingController(text: token),
+          descC: TextEditingController(),
+          active: true,
+        );
+        row.valueC.addListener(_markFormChanged);
+        row.descC.addListener(_markFormChanged);
+        _argRows.add(row);
+      } else {
+        final c = _argRows.last.valueC;
+        c.text = c.text.isEmpty ? token : '${c.text}$token';
+      }
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -823,10 +864,6 @@ class _RemoteToolFormDialogState extends ConsumerState<RemoteToolFormDialog> {
                                 ? null
                                 : (v) => setState(() => _launchMode = v),
                           ),
-                          if (_launchMode == 'template_file') ...[
-                            const SizedBox(height: 12),
-                            _TemplateField(controller: _templateC),
-                          ],
                           const SizedBox(height: 16),
                           _sectionTitle(theme, 'Εικονίδιο εργαλείου'),
                           const Divider(),
@@ -836,55 +873,55 @@ class _RemoteToolFormDialogState extends ConsumerState<RemoteToolFormDialog> {
                             enabled: !_saving,
                           ),
                           const SizedBox(height: 16),
-                          _sectionTitle(theme, 'Σύνδεση και στόχος'),
+                          _sectionTitle(theme, 'Συμπεριφορά και Ρόλος'),
                           const Divider(),
                           _RoleDropdown(
                             value: _role,
                             onChanged: _saving
                                 ? null
-                                : (v) => setState(() => _role = v),
+                                : (v) => _onRoleChanged(v),
                           ),
                           const SizedBox(height: 8),
-                          TextFormField(
-                            controller: _prefixC,
-                            decoration: const InputDecoration(
-                              labelText: 'Πρόθεμα κεντρικού VNC (host prefix)',
-                              helperText:
-                                  'Προαιρετικό· πρόθεμα πριν το hostname/IP για VNC.',
-                              border: OutlineInputBorder(),
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          TextFormField(
-                            controller: _userC,
-                            decoration: const InputDecoration(
-                              labelText: 'Προεπιλεγμένο όνομα χρήστη (RDP κ.λπ.)',
-                              border: OutlineInputBorder(),
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          TextFormField(
-                            controller: _passwordC,
-                            obscureText: _passwordObscure,
-                            onChanged: (_) => setState(() {}),
-                            decoration: InputDecoration(
-                              labelText: 'Κωδικός πρόσβασης (VNC / RDP κ.λπ.)',
-                              helperText:
-                                  'Για placeholders {PASSWORD} στα ορίσματα.',
-                              hintText: 'Αφήστε κενό αν δεν απαιτείται',
-                              border: const OutlineInputBorder(),
-                              suffixIcon: IconButton(
-                                icon: Icon(
-                                  _passwordObscure
-                                      ? Icons.visibility_off
-                                      : Icons.visibility,
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: PopupMenuButton<ToolRole>(
+                              enabled: !_saving,
+                              tooltip: 'Προεπιλογές ρόλου',
+                              onSelected: (r) {
+                                if (!_saving) _applyRolePreset(r);
+                              },
+                              itemBuilder: (ctx) => [
+                                const PopupMenuItem(
+                                  value: ToolRole.vnc,
+                                  child: Text('VNC: -host=PC{EQUIPMENT_CODE}'),
                                 ),
-                                onPressed: () => setState(
-                                  () => _passwordObscure = !_passwordObscure,
+                                const PopupMenuItem(
+                                  value: ToolRole.rdp,
+                                  child: Text('RDP: /v:{TARGET}'),
                                 ),
-                                tooltip: _passwordObscure
-                                    ? 'Εμφάνιση κωδικού'
-                                    : 'Απόκρυψη κωδικού',
+                                const PopupMenuItem(
+                                  value: ToolRole.anydesk,
+                                  child: Text('AnyDesk: -id {TARGET}'),
+                                ),
+                              ],
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(vertical: 4),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      Icons.auto_fix_high_outlined,
+                                      size: 20,
+                                      color: theme.colorScheme.primary,
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      'Προεπιλογές ρόλου',
+                                      style: theme.textTheme.labelLarge,
+                                    ),
+                                    const Icon(Icons.arrow_drop_down),
+                                  ],
+                                ),
                               ),
                             ),
                           ),
@@ -917,11 +954,29 @@ class _RemoteToolFormDialogState extends ConsumerState<RemoteToolFormDialog> {
                           _sectionTitle(theme, 'Ορίσματα γραμμής εντολών'),
                           const Divider(),
                           Text(
-                            'Placeholders: {TARGET}, {PASSWORD} (από το πεδίο κωδικού). '
+                            'Placeholders: {TARGET}, {EQUIPMENT_CODE}, {FILE}. '
+                            'Κωδικοί/χρήστης ως απλό κείμενο στο value (π.χ. /p:…). '
                             'Κενό value παραλείπεται στην αποθήκευση.',
                             style: theme.textTheme.bodySmall?.copyWith(
                               color: theme.colorScheme.onSurfaceVariant,
                             ),
+                          ),
+                          const SizedBox(height: 8),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: [
+                              for (final ph in [
+                                '{TARGET}',
+                                '{EQUIPMENT_CODE}',
+                                '{FILE}',
+                              ])
+                                FilledButton.tonal(
+                                  onPressed:
+                                      _saving ? null : () => _insertPlaceholder(ph),
+                                  child: Text(ph),
+                                ),
+                            ],
                           ),
                           const SizedBox(height: 8),
                           FilledButton.tonalIcon(
@@ -1244,41 +1299,13 @@ class _LaunchModeSelector extends StatelessWidget {
         ),
         const SizedBox(height: 4),
         Text(
-          '«Άμεση εκτέλεση» χρησιμοποιεί το εκτελέσιμο. «Αρχείο προτύπου» δημιουργεί προσωρινό αρχείο (π.χ. .rdp) από το παρακάτω κείμενο.',
+          '«Άμεση εκτέλεση» περνά τα ορίσματα στο εκτελέσιμο. «Αρχείο προτύπου» = ίδια ροή· '
+          'χρησιμοποιήστε {FILE} σε ενεργό όρισμα για σταθερή διαδρομή υπάρχοντος .rdp (π.χ. το αρχείο στο δίσκο).',
           style: theme.textTheme.bodySmall?.copyWith(
             color: theme.colorScheme.onSurfaceVariant,
           ),
         ),
       ],
-    );
-  }
-}
-
-class _TemplateField extends StatelessWidget {
-  const _TemplateField({required this.controller});
-
-  final TextEditingController controller;
-
-  @override
-  Widget build(BuildContext context) {
-    return TextFormField(
-      controller: controller,
-      maxLines: 3,
-      decoration: InputDecoration(
-        labelText: 'Πρότυπο ρυθμίσεων (config template)',
-        alignLabelWithHint: true,
-        suffixIcon: Tooltip(
-          message:
-              'Πρότυπο αρχείου ρυθμίσεων (π.χ. .rdp) που θα χρησιμοποιηθεί για τη σύνδεση. '
-              'Μπορεί να περιέχει placeholders όπως {host}, {user} κ.λπ.',
-          child: Icon(
-            Icons.info_outline,
-            size: 22,
-            color: Theme.of(context).colorScheme.primary,
-          ),
-        ),
-        border: const OutlineInputBorder(),
-      ),
     );
   }
 }
@@ -1423,7 +1450,7 @@ class _RoleDropdown extends StatelessWidget {
           key: ValueKey(value),
           initialValue: value,
           decoration: const InputDecoration(
-            labelText: 'Τύπος ανίχνευσης στόχου (role)',
+            labelText: 'Ρόλος',
             border: OutlineInputBorder(),
           ),
           items: [

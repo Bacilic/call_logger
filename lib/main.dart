@@ -13,7 +13,6 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:window_manager/window_manager.dart';
 
 import 'core/database/database_init_result.dart';
-import 'core/services/rdp_temp_file_launcher.dart';
 import 'core/widgets/app_init_wrapper.dart';
 import 'core/widgets/app_shell_with_global_fatal_error.dart';
 import 'core/widgets/global_fatal_error_notifier.dart';
@@ -142,7 +141,6 @@ Future<void> _bootstrapAndRunApp() async {
       }
       await wm.center();
     } catch (_) {}
-    RdpTempFileLauncher.sweepOrphanTempRdpFiles();
   }
 
   runApp(const ProviderScope(child: MyApp()));

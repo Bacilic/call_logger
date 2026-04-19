@@ -38,6 +38,7 @@ class RemoteToolArgument {
 }
 
 /// Ορισμός εργαλείου απομακρυσμένης σύνδεσης (πίνακας `remote_tools`).
+/// // Migrated to placeholders – data-driven (credentials ως plaintext στα `arguments` όπου χρειάζεται).
 class RemoteTool {
   const RemoteTool({
     required this.id,
@@ -45,17 +46,13 @@ class RemoteTool {
     required this.role,
     required this.executablePath,
     required this.launchMode,
-    this.configTemplate,
     required this.sortOrder,
     required this.isActive,
     this.deletedAt,
-    this.vncHostPrefix,
     this.suggestedValuesJson,
     this.iconAssetKey,
-    this.defaultUsername,
     this.arguments = const [],
     this.testTargetIp,
-    this.password,
     this.isExclusive = false,
   });
 
@@ -65,15 +62,12 @@ class RemoteTool {
   final String executablePath;
   /// `direct_exec` | `template_file`
   final String launchMode;
-  final String? configTemplate;
   final int sortOrder;
   final bool isActive;
   /// Soft delete: όταν μη null, το εργαλείο δεν εμφανίζεται στα ενεργά chips· παραμένει για επιλύσεις id.
   final DateTime? deletedAt;
-  final String? vncHostPrefix;
   final String? suggestedValuesJson;
   final String? iconAssetKey;
-  final String? defaultUsername;
 
   /// Ορίσματα γραμμής εντολών (εναλλακτικά του παλιού πίνακα `remote_tool_args`).
   final List<RemoteToolArgument> arguments;
@@ -81,8 +75,6 @@ class RemoteTool {
   /// Δοκιμαστικός στόχος (IP/hostname) για δοκιμή από τη φόρμα· αν είναι κενό, χρησιμοποιούνται οι γενικές ρυθμίσεις ή προεπιλογή.
   final String? testTargetIp;
 
-  /// Προαιρετικός κωδικός ανά εργαλείο (αντικατάσταση `{PASSWORD}` στα ορίσματα).
-  final String? password;
   /// Όταν true, αν είναι έγκυρο στην κλήση κρύβει τα μη αποκλειστικά εργαλεία.
   final bool isExclusive;
 
@@ -125,17 +117,13 @@ class RemoteTool {
       role: toolRoleFromDb(map['role']),
       executablePath: (map['executable_path'] as String?) ?? '',
       launchMode: (map['launch_mode'] as String?) ?? 'direct_exec',
-      configTemplate: map['config_template'] as String?,
       sortOrder: (map['sort_order'] as int?) ?? 0,
       isActive: ((map['is_active'] as int?) ?? 0) == 1,
       deletedAt: _parseDeletedAt(map['deleted_at']),
-      vncHostPrefix: map['vnc_host_prefix'] as String?,
       suggestedValuesJson: map['suggested_values'] as String?,
       iconAssetKey: map['icon_asset_key'] as String?,
-      defaultUsername: map['default_username'] as String?,
       arguments: _parseArgumentsJson(map['arguments_json']),
       testTargetIp: map['test_target_ip'] as String?,
-      password: map['password'] as String?,
       isExclusive: ((map['is_exclusive'] as int?) ?? 0) == 1,
     );
   }
@@ -147,17 +135,13 @@ class RemoteTool {
       'role': role.dbValue,
       'executable_path': executablePath,
       'launch_mode': launchMode,
-      'config_template': configTemplate,
       'sort_order': sortOrder,
       'is_active': isActive ? 1 : 0,
       'deleted_at': deletedAt?.toIso8601String(),
-      'vnc_host_prefix': vncHostPrefix,
       'suggested_values': suggestedValuesJson,
       'icon_asset_key': iconAssetKey,
-      'default_username': defaultUsername,
       'arguments_json': _argumentsJsonString(),
       'test_target_ip': testTargetIp,
-      'password': password,
       'is_exclusive': isExclusive ? 1 : 0,
     };
   }
@@ -178,20 +162,15 @@ class RemoteTool {
     ToolRole? role,
     String? executablePath,
     String? launchMode,
-    String? configTemplate,
     int? sortOrder,
     bool? isActive,
     DateTime? deletedAt,
     bool clearDeletedAt = false,
-    String? vncHostPrefix,
     String? suggestedValuesJson,
     String? iconAssetKey,
-    String? defaultUsername,
     List<RemoteToolArgument>? arguments,
     String? testTargetIp,
     bool clearTestTargetIp = false,
-    String? password,
-    bool clearPassword = false,
     bool? isExclusive,
   }) {
     return RemoteTool(
@@ -200,18 +179,14 @@ class RemoteTool {
       role: role ?? this.role,
       executablePath: executablePath ?? this.executablePath,
       launchMode: launchMode ?? this.launchMode,
-      configTemplate: configTemplate ?? this.configTemplate,
       sortOrder: sortOrder ?? this.sortOrder,
       isActive: isActive ?? this.isActive,
       deletedAt: clearDeletedAt ? null : (deletedAt ?? this.deletedAt),
-      vncHostPrefix: vncHostPrefix ?? this.vncHostPrefix,
       suggestedValuesJson: suggestedValuesJson ?? this.suggestedValuesJson,
       iconAssetKey: iconAssetKey ?? this.iconAssetKey,
-      defaultUsername: defaultUsername ?? this.defaultUsername,
       arguments: arguments ?? this.arguments,
       testTargetIp:
           clearTestTargetIp ? null : (testTargetIp ?? this.testTargetIp),
-      password: clearPassword ? null : (password ?? this.password),
       isExclusive: isExclusive ?? this.isExclusive,
     );
   }
@@ -242,16 +217,12 @@ class RemoteTool {
         other.role == role &&
         other.executablePath == executablePath &&
         other.launchMode == launchMode &&
-        other.configTemplate == configTemplate &&
         other.sortOrder == sortOrder &&
         other.isActive == isActive &&
         other.deletedAt == deletedAt &&
-        other.vncHostPrefix == vncHostPrefix &&
         other.suggestedValuesJson == suggestedValuesJson &&
         other.iconAssetKey == iconAssetKey &&
-        other.defaultUsername == defaultUsername &&
         other.testTargetIp == testTargetIp &&
-        other.password == password &&
         other.isExclusive == isExclusive &&
         _argumentsEqual(other.arguments, arguments);
   }
@@ -263,16 +234,12 @@ class RemoteTool {
         role,
         executablePath,
         launchMode,
-        configTemplate,
         sortOrder,
         isActive,
         deletedAt,
-        vncHostPrefix,
         suggestedValuesJson,
         iconAssetKey,
-        defaultUsername,
         testTargetIp,
-        password,
         isExclusive,
         Object.hashAll(
           arguments.map(

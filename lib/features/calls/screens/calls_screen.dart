@@ -400,7 +400,7 @@ Widget _buildActionsRow(
             Expanded(child: category),
             const SizedBox(width: 6),
             SizedBox(
-              width: 156,
+              width: 220,
               child: Align(
                 alignment: Alignment.centerRight,
                 child: Padding(

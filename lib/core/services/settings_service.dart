@@ -1,4 +1,4 @@
-﻿import 'dart:convert';
+import 'dart:convert';
 
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -19,9 +19,12 @@ class SettingsService {
   static const String _keyEquipmentLocationShowBuilding =
       'equipment_location_show_building';
   static const String _keyEnableSpellCheck = 'enable_spell_check';
-  static const String _keyShowGlobalCallsDashboard = 'show_global_calls_dashboard';
+  static const String _keyShowGlobalCallsDashboard =
+      'show_global_calls_dashboard';
   static const String _keyDatabaseOpenTimeoutSeconds =
       'database_open_timeout_seconds';
+  static const String _keyDatabaseOpenMaxAttempts =
+      'database_open_max_attempts';
   static const String _keyDictionarySourcePath = 'dictionary_source_path';
   static const String _keyDictionaryExportPath = 'dictionary_export_path';
   static const String _keyShowDatabaseNav = 'show_database_nav';
@@ -41,6 +44,9 @@ class SettingsService {
       'calls_show_secondary_remote_actions';
   static const String _keyCallsShowEmptyRemoteLaunchers =
       'calls_show_empty_remote_launchers';
+
+  /// Μία φορά: migration legacy remote_tools → arguments_json (placeholders v2).
+  static const String _keyRemoteToolsV2Migrated = 'remote_tools_v2_migrated';
   static const String _keyEquipmentTypes = 'equipment_types';
   static const String _keyLexiconCategories = 'lexicon_categories';
   static const String _keyAuditRetentionConfig = 'audit_retention_config_v1';
@@ -236,6 +242,24 @@ class SettingsService {
     await prefs.setInt(_keyDatabaseOpenTimeoutSeconds, normalized);
   }
 
+  /// Μέγιστες προσπάθειες ανοίγματος βάσης. Προεπιλογή: [AppConfig.databaseOpenMaxAttempts].
+  Future<int> getDatabaseOpenMaxAttempts() async {
+    final prefs = await SharedPreferences.getInstance();
+    final value = prefs.getInt(_keyDatabaseOpenMaxAttempts);
+    if (value == null || value <= 0) {
+      return AppConfig.databaseOpenMaxAttempts;
+    }
+    return value.clamp(1, 5);
+  }
+
+  Future<void> setDatabaseOpenMaxAttempts(int value) async {
+    final prefs = await SharedPreferences.getInstance();
+    final normalized = value <= 0
+        ? AppConfig.databaseOpenMaxAttempts
+        : value.clamp(1, 5);
+    await prefs.setInt(_keyDatabaseOpenMaxAttempts, normalized);
+  }
+
   /// Διαδρομή αρχείου TXT που φορτώνει το runtime λεξικό ορθογραφίας (μετά το Compile).
   /// Κενό/null = χρήση bundled asset.
   Future<String?> getDictionarySourcePath() async {
@@ -306,10 +330,7 @@ class SettingsService {
     CallsScreenCardsVisibility value,
   ) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(
-      _keyCallsScreenCardsVisibility,
-      value.toJsonString(),
-    );
+    await prefs.setString(_keyCallsScreenCardsVisibility, value.toJsonString());
   }
 
   /// Πολιτική εκκαθάρισης audit log (ηλικία / max rows).
@@ -453,10 +474,22 @@ class SettingsService {
 
   Future<void> setCallsShowEmptyRemoteLaunchers(bool value) async {
     if (_setAppSetting == null) return;
-    await _setAppSetting!(
-      _keyCallsShowEmptyRemoteLaunchers,
-      value ? '1' : '0',
-    );
+    await _setAppSetting!(_keyCallsShowEmptyRemoteLaunchers, value ? '1' : '0');
+  }
+
+  /// Έχει ολοκληρωθεί το one-shot migration legacy remote_tools → arguments_json.
+  Future<bool> getRemoteToolsV2Migrated() async {
+    final value = _getAppSetting != null
+        ? await _getAppSetting!(_keyRemoteToolsV2Migrated)
+        : null;
+    if (value == null || value.trim().isEmpty) return false;
+    final lower = value.trim().toLowerCase();
+    return lower == '1' || lower == 'true';
+  }
+
+  Future<void> setRemoteToolsV2Migrated(bool value) async {
+    if (_setAppSetting == null) return;
+    await _setAppSetting!(_keyRemoteToolsV2Migrated, value ? '1' : '0');
   }
 
   /// Επιστρέφει λίστα επιλογών για dropdown (split by comma, trim, μη κενά). Τελευταία επιλογή "Κανένα" προστίθεται στα dialogs.
@@ -517,8 +550,7 @@ class SettingsService {
     final filtered = value
         .split(',')
         .map((s) => s.trim())
-        .where((s) =>
-            s.isNotEmpty && s != AppConfig.lexiconCategoryUnspecified)
+        .where((s) => s.isNotEmpty && s != AppConfig.lexiconCategoryUnspecified)
         .join(', ');
     return filtered.isEmpty ? defaultLexiconCategoriesCsv : filtered;
   }
@@ -530,8 +562,9 @@ class SettingsService {
       final filtered = value
           .split(',')
           .map((s) => s.trim())
-          .where((s) =>
-              s.isNotEmpty && s != AppConfig.lexiconCategoryUnspecified)
+          .where(
+            (s) => s.isNotEmpty && s != AppConfig.lexiconCategoryUnspecified,
+          )
           .join(', ');
       await _setAppSetting!(_keyLexiconCategories, filtered);
     }
@@ -544,8 +577,7 @@ class SettingsService {
     final list = raw
         .split(',')
         .map((s) => s.trim())
-        .where((s) =>
-            s.isNotEmpty && s != AppConfig.lexiconCategoryUnspecified)
+        .where((s) => s.isNotEmpty && s != AppConfig.lexiconCategoryUnspecified)
         .toList();
     if (list.isEmpty) return defaultLexiconCategoriesList;
     return list;

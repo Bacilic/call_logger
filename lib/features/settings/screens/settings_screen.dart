@@ -5,15 +5,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/models/calls_screen_cards_visibility.dart';
 import '../../../core/config/app_config.dart';
-import '../../../core/database/database_helper.dart';
-import '../../../core/database/directory_repository.dart';
 import '../../../core/database/database_init_runner.dart';
 import '../../../core/database/database_path_pick_flow.dart';
 import '../../../core/init/app_init_provider.dart';
 import '../../../core/providers/settings_provider.dart';
 import '../../../core/services/settings_service.dart';
 import '../../calls/provider/remote_paths_provider.dart';
-import '../../directory/providers/directory_provider.dart';
 import '../widgets/create_new_database_dialog.dart';
 
 /// Οθόνη ρυθμίσεων: διαδρομή βάσης δεδομένων και άλλες επιλογές.
@@ -49,6 +46,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   bool _enableSpellCheck = true;
   bool _showDatabaseNav = true;
   bool _showDictionaryNav = true;
+  int _databaseOpenTimeoutSeconds = AppConfig.databaseOpenTimeoutSeconds;
+  int _databaseOpenMaxAttempts = AppConfig.databaseOpenMaxAttempts;
   CallsScreenCardsVisibility _callsCardsVisibility =
       CallsScreenCardsVisibility.defaults;
 
@@ -91,6 +90,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       final enableSpellCheck = await _settings.getEnableSpellCheck();
       final showDatabaseNav = await _settings.getShowDatabaseNav();
       final showDictionaryNav = await _settings.getShowDictionaryNav();
+      final dbOpenTimeout = await _settings.getDatabaseOpenTimeoutSeconds();
+      final dbOpenMaxAttempts = await _settings.getDatabaseOpenMaxAttempts();
       final callsCardsVisibility = await _settings
           .getCallsScreenCardsVisibility();
       if (mounted) {
@@ -104,6 +105,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           _enableSpellCheck = enableSpellCheck;
           _showDatabaseNav = showDatabaseNav;
           _showDictionaryNav = showDictionaryNav;
+          _databaseOpenTimeoutSeconds = dbOpenTimeout;
+          _databaseOpenMaxAttempts = dbOpenMaxAttempts;
           _callsCardsVisibility = callsCardsVisibility;
           _isLoadingPath = false;
         });
@@ -115,6 +118,127 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           _isLoadingPath = false;
         });
       }
+    }
+  }
+
+  Future<void> _editDatabaseOpenSettings() async {
+    final timeoutController = TextEditingController(
+      text: _databaseOpenTimeoutSeconds.toString(),
+    );
+    final attemptsController = TextEditingController(
+      text: _databaseOpenMaxAttempts.toString(),
+    );
+
+    String? timeoutError;
+    String? attemptsError;
+
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setLocalState) => AlertDialog(
+            title: const Text('Άνοιγμα βάσης δεδομένων'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                TextField(
+                  controller: timeoutController,
+                  keyboardType: TextInputType.number,
+                  decoration: InputDecoration(
+                    labelText: 'Timeout (δευτερόλεπτα)',
+                    helperText:
+                        'Εύρος: 3-60. Προεπιλογή: ${AppConfig.databaseOpenTimeoutSeconds}',
+                    errorText: timeoutError,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: attemptsController,
+                  keyboardType: TextInputType.number,
+                  decoration: InputDecoration(
+                    labelText: 'Μέγιστες προσπάθειες',
+                    helperText:
+                        'Εύρος: 1-5. Προεπιλογή: ${AppConfig.databaseOpenMaxAttempts}',
+                    errorText: attemptsError,
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () async {
+                  await _settings.setDatabaseOpenTimeoutSeconds(
+                    AppConfig.databaseOpenTimeoutSeconds,
+                  );
+                  await _settings.setDatabaseOpenMaxAttempts(
+                    AppConfig.databaseOpenMaxAttempts,
+                  );
+                  if (!mounted) return;
+                  setState(() {
+                    _databaseOpenTimeoutSeconds =
+                        AppConfig.databaseOpenTimeoutSeconds;
+                    _databaseOpenMaxAttempts =
+                        AppConfig.databaseOpenMaxAttempts;
+                  });
+                  if (!ctx.mounted) return;
+                  Navigator.of(ctx).pop(true);
+                },
+                child: const Text('Επαναφορά προεπιλογών'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(false),
+                child: const Text('Ακύρωση'),
+              ),
+              FilledButton(
+                onPressed: () async {
+                  final timeout = int.tryParse(timeoutController.text.trim());
+                  final attempts = int.tryParse(attemptsController.text.trim());
+                  String? timeoutValidation;
+                  String? attemptsValidation;
+                  if (timeout == null || timeout < 3 || timeout > 60) {
+                    timeoutValidation = 'Δώστε έγκυρη τιμή 3-60 δευτερόλεπτα.';
+                  }
+                  if (attempts == null || attempts < 1 || attempts > 5) {
+                    attemptsValidation = 'Δώστε έγκυρο πλήθος 1-5.';
+                  }
+                  if (timeoutValidation != null || attemptsValidation != null) {
+                    setLocalState(() {
+                      timeoutError = timeoutValidation;
+                      attemptsError = attemptsValidation;
+                    });
+                    return;
+                  }
+                  final timeoutValue = timeout!;
+                  final attemptsValue = attempts!;
+                  await _settings.setDatabaseOpenTimeoutSeconds(timeoutValue);
+                  await _settings.setDatabaseOpenMaxAttempts(attemptsValue);
+                  if (!mounted) return;
+                  setState(() {
+                    _databaseOpenTimeoutSeconds = timeoutValue;
+                    _databaseOpenMaxAttempts = attemptsValue;
+                  });
+                  if (!ctx.mounted) return;
+                  Navigator.of(ctx).pop(true);
+                },
+                child: const Text('Αποθήκευση'),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+
+    timeoutController.dispose();
+    attemptsController.dispose();
+
+    if (saved == true && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Οι ρυθμίσεις ανοίγματος βάσης αποθηκεύτηκαν.'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
     }
   }
 
@@ -515,7 +639,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 ),
               ),
             ],
-            const SizedBox(height: 28),
+            const SizedBox(height: 24),
             Text(
               'Δημιουργία νέου αρχείου βάσης',
               style: theme.textTheme.titleMedium?.copyWith(
@@ -537,6 +661,27 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   : _runCreateNewDatabaseFlow,
               icon: const Icon(Icons.add_circle_outline),
               label: const Text('Δημιουργία νέου αρχείου βάσης'),
+            ),
+            const SizedBox(height: 28),
+            Text(
+              'Αναμονή βάσης δεδομένων',
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 8),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: Icon(
+                Icons.timer_outlined,
+                color: theme.colorScheme.primary,
+              ),
+              title: const Text('Αναμονή και Προσπάθειες'),
+              subtitle: Text(
+                'Αναμονή: $_databaseOpenTimeoutSeconds δευτ. • Προσπάθειες: $_databaseOpenMaxAttempts',
+              ),
+              trailing: const Icon(Icons.edit_outlined),
+              onTap: _editDatabaseOpenSettings,
             ),
             const SizedBox(height: 32),
             const Divider(),
@@ -637,20 +782,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               },
               title: const Text('Απόκρυψη Λεξικού'),
               subtitle: const Text('Κρύβει το στοιχείο πλοήγησης «Λεξικό».'),
-            ),
-            SwitchListTile(
-              value: ref.watch(catalogContinuousScrollProvider).value ?? true,
-              onChanged: (bool val) async {
-                final db = await DatabaseHelper.instance.database;
-                await DirectoryRepository(
-                  db,
-                ).setSetting('catalog_continuous_scroll', val.toString());
-                ref.invalidate(catalogContinuousScrollProvider);
-              },
-              title: const Text('Συνεχής κύλιση πίνακα Καταλόγου'),
-              subtitle: const Text(
-                'Mouse wheel γραμμή-γραμμή αντί για αλλαγή σελίδας.',
-              ),
             ),
           ],
         ),
