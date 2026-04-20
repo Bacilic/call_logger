@@ -64,7 +64,7 @@ class CallsScreen extends ConsumerWidget {
               !hideRemoteButtons &&
               (header.equipmentText.trim().isNotEmpty ||
                   header.selectedEquipment != null);
-          final leftContentMaxWidth = showRemoteButtons ? 760.0 : 700.0;
+          final leftContentMaxWidth = showRemoteButtons ? 760.0 : 840.0;
           return SizedBox(
             width: width,
             child: Column(
@@ -376,10 +376,18 @@ Widget _buildActionsRow(
 
   return LayoutBuilder(
     builder: (context, constraints) {
-      final axisWidth = constraints.maxWidth.isFinite
+      final rawAxisWidth = constraints.maxWidth.isFinite
           ? sharedAxisWidth.clamp(180.0, constraints.maxWidth).toDouble()
           : sharedAxisWidth;
-      const actionsMinWidth = 360.0;
+      const actionsMinWidth = 320.0;
+      final maxCategoryWidthForSingleLine = constraints.maxWidth.isFinite
+          ? (constraints.maxWidth - 16.0 - actionsMinWidth)
+                .clamp(180.0, rawAxisWidth)
+                .toDouble()
+          : rawAxisWidth;
+      final axisWidth = rawAxisWidth > maxCategoryWidthForSingleLine
+          ? maxCategoryWidthForSingleLine
+          : rawAxisWidth;
       final keepSingleLineWidth = axisWidth + 16.0 + actionsMinWidth;
       final narrow = constraints.maxWidth < keepSingleLineWidth;
 
@@ -399,14 +407,11 @@ Widget _buildActionsRow(
           children: [
             Expanded(child: category),
             const SizedBox(width: 6),
-            SizedBox(
-              width: 220,
-              child: Align(
-                alignment: Alignment.centerRight,
-                child: Padding(
-                  padding: const EdgeInsets.only(left: 6),
-                  child: pendingToggle,
-                ),
+            Align(
+              alignment: Alignment.centerRight,
+              child: Padding(
+                padding: const EdgeInsets.only(left: 6),
+                child: pendingToggle,
               ),
             ),
           ],

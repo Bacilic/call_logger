@@ -166,7 +166,7 @@ class _CategoryAutocompleteFieldState
         final maxInner = constraints.maxWidth.isFinite && constraints.maxWidth > 0
             ? math.min(400.0, constraints.maxWidth)
             : 400.0;
-        final notesOuterWidth = maxInner + 24;
+        final notesOuterWidth = maxInner;
 
         return Align(
           alignment: Alignment.centerLeft,

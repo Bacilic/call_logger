@@ -9,6 +9,7 @@ import '../utils/department_display_utils.dart';
 import '../utils/name_parser.dart';
 import '../utils/phone_list_parser.dart';
 import '../utils/search_text_normalizer.dart';
+import '../utils/department_floor_sync.dart';
 import '../services/audit_service.dart';
 import 'database_helper.dart';
 import 'directory_audit_helpers.dart';
@@ -1255,6 +1256,40 @@ ORDER BY p.number COLLATE NOCASE ASC
     });
   }
 
+  /// Ενημέρωση τμήματος με προαιρετικό συγχρονισμό ορόφου: προτεραιότητα [drawingFloorId],
+  /// αλλιώς [manualFloorId]. Όταν υπάρχει τελικός όροφος, γράφονται `floor_id` και `map_floor`.
+  Future<int> saveDepartmentWithFloorContext(
+    int departmentId,
+    Map<String, dynamic> updates, {
+    int? drawingFloorId,
+    int? manualFloorId,
+  }) async {
+    final merged = DepartmentFloorSync.mergeFloorContext(
+      Map<String, dynamic>.from(updates),
+      drawingFloorId: drawingFloorId,
+      manualFloorId: manualFloorId,
+    );
+    return updateDepartment(departmentId, merged);
+  }
+
+  /// One-time / συντήρηση: γεμίζει `floor_id` από αριθμητικό `map_floor` όπου λείπει (χωρίς αλλαγή `building`).
+  Future<int> backfillDepartmentFloorIdsFromMapFloor() async {
+    final rows = await db.query(
+      'departments',
+      columns: ['id', 'map_floor'],
+      where: 'floor_id IS NULL',
+    );
+    var count = 0;
+    for (final r in rows) {
+      final mf = r['map_floor'] as String?;
+      final fid = int.tryParse(mf?.trim() ?? '');
+      if (fid == null) continue;
+      await updateDepartment(r['id'] as int, {'floor_id': fid});
+      count++;
+    }
+    return count;
+  }
+
   Future<int> updateDepartment(int id, Map<String, dynamic> values) async {
     final map = Map<String, dynamic>.from(values);
     map.remove('id');
@@ -2412,6 +2447,7 @@ ORDER BY p.number COLLATE NOCASE ASC
     );
     final cleared = <String, dynamic>{
       'map_floor': null,
+      'floor_id': null,
       'map_x': 0.0,
       'map_y': 0.0,
       'map_width': 0.0,

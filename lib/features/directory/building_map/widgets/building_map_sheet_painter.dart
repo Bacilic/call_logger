@@ -34,17 +34,21 @@ class BuildingMapSheetPainter extends CustomPainter {
   final int? mapLabelOverrideDepartmentId;
   final String? mapLabelOverrideText;
 
-  static Color _parseColor(String? hex, Color fallback) {
+  static const double _kMapFillOpacity = 0.78;
+  static const double _kMapFillOpacityHovered = 0.86;
+
+  /// RGB χωρίς διαφάνεια — η διαφάνεια εφαρμόζεται στο [Paint].
+  static Color _parseOpaqueFillColor(String? hex, Color fallback) {
     if (hex == null || hex.trim().isEmpty) return fallback;
     var h = hex.trim();
     if (h.startsWith('#')) h = h.substring(1);
     if (h.length == 6) {
       final v = int.tryParse(h, radix: 16);
       if (v != null) {
-        return Color(0xFF000000 | v).withValues(alpha: 0.35);
+        return Color(0xFF000000 | v);
       }
     }
-    return fallback.withValues(alpha: 0.35);
+    return fallback;
   }
 
   static Offset _rotateAroundCenter(Offset p, Offset center, double radians) {
@@ -148,12 +152,14 @@ class BuildingMapSheetPainter extends CustomPainter {
         nh * size.height,
       );
       final isHovered = toolMode == MapToolMode.select && hoveredDepartmentId == d.id;
-      final fill = _parseColor(d.color, Colors.blue);
+      final opaqueFill = _parseOpaqueFillColor(d.color, const Color(0xFF1976D2));
+      final fillOpacity =
+          isHovered ? _kMapFillOpacityHovered : _kMapFillOpacity;
       final strokeW = highlightDepartmentId == d.id
           ? 3.0
           : (isHovered ? 2.6 : 1.5);
       final paint = Paint()
-        ..color = isHovered ? fill.withValues(alpha: 0.43) : fill
+        ..color = opaqueFill.withValues(alpha: fillOpacity)
         ..style = PaintingStyle.fill;
       final border = Paint()
         ..color = Colors.black.withValues(alpha: 0.55)

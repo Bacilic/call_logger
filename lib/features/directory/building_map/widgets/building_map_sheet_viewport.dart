@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:math' as math;
 
@@ -6,10 +7,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../models/department_model.dart';
+import '../../screens/widgets/department_color_palette.dart';
 import '../building_map_geometry.dart';
 import '../building_map_label_layout.dart';
 import '../controllers/building_map_controller.dart';
 import '../providers/building_map_providers.dart';
+import 'building_map_fill_color_dialog.dart';
 import 'building_map_sheet_painter.dart';
 
 /// Καμβάς χάρτη με [InteractiveViewer], σχεδίαση και χειρισμό draft (επεξεργασία).
@@ -227,6 +230,24 @@ class _BuildingMapSheetViewportState
       _mapDisplayNameEditing = false;
       _scheduleDisposeMapNameField(c, f);
     }
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _changeMapFillColorForDepartment(DepartmentModel dept) async {
+    if (!mounted || dept.id == null || widget.currentSheetId == null) return;
+    final initial =
+        tryParseDepartmentHex(dept.color) ?? const Color(0xFF1976D2);
+    final picked = await showBuildingMapFillColorPicker(
+      context,
+      initialColor: initial,
+    );
+    if (!mounted || picked == null) return;
+    await ref.read(buildingMapControllerProvider).applyDepartmentMapFillColor(
+          context: context,
+          dept: dept,
+          floorId: widget.currentSheetId!,
+          newColor: picked,
+        );
     if (mounted) setState(() {});
   }
 
@@ -502,6 +523,19 @@ class _BuildingMapSheetViewportState
     final local = event.localPosition;
     final normalized = _localToNormalized(local, imageSize, rotationRad);
 
+    if (event.buttons == kSecondaryMouseButton &&
+        widget.currentSheetId != null) {
+      final hitDepartment = _hitTestDepartmentAtLocalPosition(
+        localPosition: local,
+        imageSize: imageSize,
+        rotationRad: rotationRad,
+      );
+      if (hitDepartment?.id != null) {
+        unawaited(_changeMapFillColorForDepartment(hitDepartment!));
+      }
+      return;
+    }
+
     if (toolMode == MapToolMode.select) {
       final hitDepartment = _hitTestDepartmentAtLocalPosition(
         localPosition: local,
@@ -639,16 +673,25 @@ class _BuildingMapSheetViewportState
     switch (_activeHandle) {
       case EditHandleType.move:
         final delta = currentNorm - _editPointerStart!;
+        final newX = (startDraft.x + delta.dx)
+            .clamp(0.0, 1.0 - startDraft.width)
+            .toDouble();
+        final newY = (startDraft.y + delta.dy)
+            .clamp(0.0, 1.0 - startDraft.height)
+            .toDouble();
+        // Διατηρούμε σταθερή την απόλυτη θέση ετικέτας στον καμβά: offset − εφαρμοσμένη μετατόπιση.
+        final appliedDx = newX - startDraft.x;
+        final appliedDy = newY - startDraft.y;
         ref
             .read(buildingMapDraftShapeProvider.notifier)
             .setDraft(
               startDraft.copyWith(
-                x: (startDraft.x + delta.dx)
-                    .clamp(0.0, 1.0 - startDraft.width)
-                    .toDouble(),
-                y: (startDraft.y + delta.dy)
-                    .clamp(0.0, 1.0 - startDraft.height)
-                    .toDouble(),
+                x: newX,
+                y: newY,
+                labelOffsetX:
+                    ((startDraft.labelOffsetX ?? 0) - appliedDx).clamp(-4.0, 4.0),
+                labelOffsetY:
+                    ((startDraft.labelOffsetY ?? 0) - appliedDy).clamp(-4.0, 4.0),
               ),
             );
         break;
@@ -1095,6 +1138,27 @@ class _BuildingMapSheetViewportState
                                           ? MapToolMode.select
                                           : MapToolMode.draw,
                                     );
+                              },
+                            ),
+                            IconButton(
+                              tooltip: 'Χρώμα περιοχής στο χάρτη',
+                              visualDensity: VisualDensity.compact,
+                              icon: const Icon(Icons.palette_outlined),
+                              onPressed: () async {
+                                DepartmentModel? selectedDept;
+                                for (final dep in w.activeDepartments) {
+                                  if (dep.id == deptToMap) {
+                                    selectedDept = dep;
+                                    break;
+                                  }
+                                }
+                                if (selectedDept?.id == null ||
+                                    w.currentSheetId == null) {
+                                  return;
+                                }
+                                await _changeMapFillColorForDepartment(
+                                  selectedDept!,
+                                );
                               },
                             ),
                             IconButton(

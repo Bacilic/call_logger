@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../database/database_init_progress_provider.dart';
+import '../database/department_floor_migration.dart';
 import '../services/audit_retention_runner.dart';
 import 'app_initializer.dart';
 
@@ -20,6 +21,11 @@ final appInitProvider = FutureProvider<AppInitResult>((ref) async {
       await AuditRetentionRunner.applyIfConfiguredOnStartup();
     } catch (_) {
       // Soft-fail: η εκκίνηση δεν μπλοκάρεται από retention.
+    }
+    try {
+      await DepartmentFloorMigrationRunner.runIfNeeded();
+    } catch (_) {
+      // Soft-fail: συμπλήρωση floor_id δεν πρέπει να μπλοκάρει την εκκίνηση.
     }
   }
   return result;

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../../core/models/building_map_floor.dart';
 import '../../../../core/utils/search_text_normalizer.dart';
+import '../../models/department_floor_display_extension.dart';
 import '../../models/department_model.dart';
 import 'building_map_floor_menu_button.dart';
 
@@ -47,16 +48,16 @@ class _DepartmentSelectionOverlayState extends State<DepartmentSelectionOverlay>
 
   String _searchBlob(DepartmentModel d, Map<int, BuildingMapFloor> floorById) {
     final parts = <String>[d.name, d.groupName ?? '', d.building ?? ''];
-    final fid = d.floorId;
-    if (fid != null) {
-      final fl = floorById[fid];
-      if (fl != null) {
-        parts.add(buildingMapFloorDisplayLabel(fl));
-      } else {
-        parts.add('$fid');
-      }
+    final disp = d.floorDisplayWithCatalog(floorById);
+    if (disp != null && disp.isNotEmpty) {
+      parts.add(disp);
     }
     return parts.join(' ');
+  }
+
+  int? _effectiveFloorId(DepartmentModel d) {
+    if (d.floorId != null) return d.floorId;
+    return int.tryParse(d.mapFloor?.trim() ?? '');
   }
 
   List<DepartmentModel> _filtered() {
@@ -80,7 +81,7 @@ class _DepartmentSelectionOverlayState extends State<DepartmentSelectionOverlay>
     if (_groupByFloor) {
       final buckets = <int?, List<DepartmentModel>>{};
       for (final d in filtered) {
-        buckets.putIfAbsent(d.floorId, () => []).add(d);
+        buckets.putIfAbsent(_effectiveFloorId(d), () => []).add(d);
       }
       for (final entry in buckets.entries) {
         entry.value.sort(

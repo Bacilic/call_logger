@@ -7,6 +7,7 @@ import '../../../core/database/directory_repository.dart';
 import '../../../core/errors/department_exists_exception.dart';
 import '../../../core/services/lookup_service.dart';
 import '../../../core/utils/search_text_normalizer.dart';
+import '../../../core/utils/department_floor_sync.dart';
 import '../../calls/provider/lookup_provider.dart';
 import '../models/department_directory_column.dart';
 import '../models/department_model.dart';
@@ -225,6 +226,7 @@ class DepartmentDirectoryNotifier
           d.groupName ?? '',
           d.notes ?? '',
           d.color ?? '',
+          d.floorDisplay ?? '',
           phonesText,
           equipmentText,
           '${d.id ?? ''}',
@@ -450,7 +452,10 @@ class DepartmentDirectoryNotifier
     await loadDepartments();
   }
 
-  Future<void> updateDepartment(DepartmentModel d) async {
+  Future<void> updateDepartment(
+    DepartmentModel d, {
+    bool clearFloorIdInDb = false,
+  }) async {
     if (d.id == null) return;
     final dbUpd = await DatabaseHelper.instance.database;
     final dirUpd = DirectoryRepository(dbUpd);
@@ -459,7 +464,16 @@ class DepartmentDirectoryNotifier
     if (nameTaken) {
       throw StateError('Υπάρχει ήδη άλλο τμήμα με αυτό το όνομα.');
     }
-    await dirUpd.updateDepartment(d.id!, d.toMap());
+    var map = Map<String, dynamic>.from(d.toMap());
+    if (d.floorId != null) {
+      map = DepartmentFloorSync.mergeFloorContext(
+        map,
+        manualFloorId: d.floorId,
+      );
+    } else if (clearFloorIdInDb) {
+      map['floor_id'] = null;
+    }
+    await dirUpd.updateDepartment(d.id!, map);
     await _refreshLookupCache();
     await loadDepartments();
   }

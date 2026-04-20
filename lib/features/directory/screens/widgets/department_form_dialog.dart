@@ -1,6 +1,7 @@
 ﻿import 'package:flutter/material.dart';
 
 import '../../../../core/errors/department_exists_exception.dart';
+import '../../../../core/models/building_map_floor.dart';
 import '../../../../core/services/lookup_service.dart';
 import '../../../../core/database/database_helper.dart';
 import '../../../../core/database/directory_repository.dart';
@@ -9,6 +10,8 @@ import '../../../../core/utils/search_text_normalizer.dart';
 import '../../../../core/utils/spell_check.dart';
 import '../../../../core/widgets/lexicon_spell_text_form_field.dart';
 import '../../../../core/widgets/spell_check_controller.dart';
+import '../../building_map/widgets/building_map_floor_menu_button.dart';
+import '../../models/department_floor_display_extension.dart';
 import '../../models/department_model.dart';
 import '../../providers/department_directory_provider.dart';
 import 'department_color_palette.dart';
@@ -80,8 +83,55 @@ class _DepartmentFormDialogState extends State<DepartmentFormDialog> {
   late final List<String> _snapSharedPhones;
   late final List<String> _snapSharedEquipmentCodes;
 
+  List<BuildingMapFloor> _floors = const [];
+  int? _selectedFloorId;
+  int? _snapFloorId;
+  /// True μετά την πρώτη ολοκλήρωση `_loadFloors` (ώστε το dropdown να μη δέχεται `value` πριν υπάρχουν items).
+  bool _floorListLoadCompleted = false;
+
   bool get _isEdit =>
       widget.initialDepartment != null && !widget.isClone;
+
+  /// Τιμή που επιτρέπεται στο `DropdownButtonFormField` χωρίς να σπάει το invariant των items.
+  int? _effectiveFloorDropdownValue() {
+    final sel = _selectedFloorId;
+    if (sel == null) return null;
+    if (!_floorListLoadCompleted) return null;
+    if (_floors.any((f) => f.id == sel)) return sel;
+    return sel;
+  }
+
+  List<DropdownMenuItem<int?>> _floorDropdownItems() {
+    final items = <DropdownMenuItem<int?>>[
+      const DropdownMenuItem<int?>(
+        value: null,
+        child: Text('— χωρίς —'),
+      ),
+      for (final f in _floors)
+        DropdownMenuItem<int?>(
+          value: f.id,
+          child: Text(
+            buildingMapFloorDisplayLabel(f),
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+    ];
+    final sel = _selectedFloorId;
+    if (_floorListLoadCompleted &&
+        sel != null &&
+        !_floors.any((f) => f.id == sel)) {
+      items.add(
+        DropdownMenuItem<int?>(
+          value: sel,
+          child: Text(
+            'Όροφος #$sel (δεν βρέθηκε κατόψη)',
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      );
+    }
+    return items;
+  }
 
   bool get _isDirty {
     if (_nameController.text.trim() != _snapName) return true;
@@ -107,6 +157,7 @@ class _DepartmentFormDialogState extends State<DepartmentFormDialog> {
     if (currentEquipment.join('|') != _snapSharedEquipmentCodes.join('|')) {
       return true;
     }
+    if (_selectedFloorId != _snapFloorId) return true;
     return false;
   }
 
@@ -146,6 +197,9 @@ class _DepartmentFormDialogState extends State<DepartmentFormDialog> {
         .toSet()
         .toList()
       ..sort((a, b) => a.compareTo(b));
+    final initDept = widget.initialDepartment;
+    _selectedFloorId = initDept?.floorId;
+    _snapFloorId = initDept?.floorId;
     _nameController.addListener(_onFieldChanged);
     _buildingController.addListener(_onFieldChanged);
     _notesController.addListener(_onFieldChanged);
@@ -155,7 +209,9 @@ class _DepartmentFormDialogState extends State<DepartmentFormDialog> {
     if (widget.isClone) {
       _nameController.text = '${d?.name ?? ''} (αντίγραφο)'.trim();
     }
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+      await _loadFloors();
       if (!mounted) return;
       switch (widget.focusedField) {
         case 'building':
@@ -205,6 +261,93 @@ class _DepartmentFormDialogState extends State<DepartmentFormDialog> {
 
   void _onFieldChanged() {
     if (mounted) setState(() {});
+  }
+
+  Future<void> _loadFloors() async {
+    try {
+      final db = await DatabaseHelper.instance.database;
+      final list = await DirectoryRepository(db).listBuildingMapFloors();
+      if (!mounted) return;
+      setState(() {
+        _floors = list;
+        _floorListLoadCompleted = true;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _floors = const [];
+        _floorListLoadCompleted = true;
+      });
+    }
+  }
+
+  Future<void> _persistManualFloorSelection(int? floorId) async {
+    final did = widget.initialDepartment?.id;
+    if (did == null) return;
+    try {
+      final db = await DatabaseHelper.instance.database;
+      final repo = DirectoryRepository(db);
+      if (floorId != null) {
+        await repo.saveDepartmentWithFloorContext(
+          did,
+          {},
+          manualFloorId: floorId,
+        );
+      } else {
+        await repo.updateDepartment(did, {'floor_id': null});
+      }
+      await widget.notifier.loadDepartments();
+      if (!mounted) return;
+      setState(() {
+        _snapFloorId = floorId;
+        _selectedFloorId = floorId;
+      });
+    } catch (e, st) {
+      if (!mounted) return;
+      showDatabasePersistenceErrorSnackBar(context, e, st);
+    }
+  }
+
+  String? _floorSubtitleText() {
+    final sel = _selectedFloorId;
+    if (sel != null) {
+      BuildingMapFloor? hit;
+      for (final f in _floors) {
+        if (f.id == sel) {
+          hit = f;
+          break;
+        }
+      }
+      if (hit != null) return buildingMapFloorDisplayLabel(hit);
+    }
+    final d = widget.initialDepartment;
+    if (d == null) return null;
+    final byId = {for (final f in _floors) f.id: f};
+    return d.floorDisplayWithCatalog(byId);
+  }
+
+  Future<void> _onFloorDropdownChanged(int? value) async {
+    if (!_isEdit || widget.initialDepartment?.id == null) {
+      setState(() => _selectedFloorId = value);
+      return;
+    }
+    await _persistManualFloorSelection(value);
+    if (!mounted) return;
+    final manualFromMap =
+        int.tryParse(widget.initialDepartment?.mapFloor?.trim() ?? '');
+    if (value != null &&
+        manualFromMap != null &&
+        manualFromMap != value) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          behavior: SnackBarBehavior.floating,
+          content: Text(
+            'Ο όροφος στη φόρμα διαφέρει από τη θέση στο χάρτη — '
+            'η αποθήκευση από τον χάρτη παραμένει η κύρια για το σχήμα.',
+          ),
+        ),
+      );
+    }
   }
 
   void _onSharedPhoneFocusChanged() {
@@ -528,18 +671,30 @@ class _DepartmentFormDialogState extends State<DepartmentFormDialog> {
     var phonesToMoveFromUsers = <String>{};
     var equipmentToMoveFromUsers = <String>{};
 
+    final ini = widget.initialDepartment;
     final model = DepartmentModel(
-      id: _isEdit ? widget.initialDepartment!.id : null,
+      id: _isEdit ? ini?.id : null,
       name: name,
       building: building.isEmpty ? null : building,
       color: color,
       notes: notes.isEmpty ? null : notes,
-      mapFloor: widget.initialDepartment?.mapFloor,
-      mapX: widget.initialDepartment?.mapX,
-      mapY: widget.initialDepartment?.mapY,
-      mapWidth: widget.initialDepartment?.mapWidth,
-      mapHeight: widget.initialDepartment?.mapHeight,
-      isDeleted: widget.initialDepartment?.isDeleted ?? false,
+      floorId: _selectedFloorId,
+      groupName: ini?.groupName,
+      mapFloor: _selectedFloorId != null
+          ? _selectedFloorId!.toString()
+          : ini?.mapFloor,
+      mapX: ini?.mapX,
+      mapY: ini?.mapY,
+      mapWidth: ini?.mapWidth,
+      mapHeight: ini?.mapHeight,
+      mapRotation: ini?.mapRotation ?? 0.0,
+      mapLabelOffsetX: ini?.mapLabelOffsetX,
+      mapLabelOffsetY: ini?.mapLabelOffsetY,
+      mapAnchorOffsetX: ini?.mapAnchorOffsetX,
+      mapAnchorOffsetY: ini?.mapAnchorOffsetY,
+      mapCustomName: ini?.mapCustomName,
+      directPhones: ini?.directPhones,
+      isDeleted: ini?.isDeleted ?? false,
     );
 
     try {
@@ -558,7 +713,11 @@ class _DepartmentFormDialogState extends State<DepartmentFormDialog> {
           phonesToMoveFromUsers = resolved.phonesToMoveFromUsers;
           equipmentToMoveFromUsers = resolved.equipmentToMoveFromUsers;
         }
-        await widget.notifier.updateDepartment(model);
+        await widget.notifier.updateDepartment(
+          model,
+          clearFloorIdInDb:
+              _snapFloorId != null && _selectedFloorId == null,
+        );
         if (did != null) {
           await widget.notifier.updateDepartmentSharedAssets(
             did,
@@ -587,11 +746,19 @@ class _DepartmentFormDialogState extends State<DepartmentFormDialog> {
             building: model.building,
             color: model.color,
             notes: model.notes,
+            floorId: model.floorId,
+            groupName: model.groupName,
             mapFloor: model.mapFloor,
             mapX: model.mapX,
             mapY: model.mapY,
             mapWidth: model.mapWidth,
             mapHeight: model.mapHeight,
+            mapRotation: model.mapRotation,
+            mapLabelOffsetX: model.mapLabelOffsetX,
+            mapLabelOffsetY: model.mapLabelOffsetY,
+            mapAnchorOffsetX: model.mapAnchorOffsetX,
+            mapAnchorOffsetY: model.mapAnchorOffsetY,
+            mapCustomName: model.mapCustomName,
             isDeleted: false,
           ),
         );
@@ -959,15 +1126,48 @@ class _DepartmentFormDialogState extends State<DepartmentFormDialog> {
                     ),
                   ),
                 const SizedBox(height: 12),
-                TextFormField(
-                  controller: _buildingController,
-                  focusNode: _buildingFocus,
-                  decoration: const InputDecoration(
-                    labelText: 'Κτίριο',
-                    border: OutlineInputBorder(),
-                  ),
-                  spellCheckConfiguration: platformSpellCheckConfiguration,
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: TextFormField(
+                        controller: _buildingController,
+                        focusNode: _buildingFocus,
+                        decoration: const InputDecoration(
+                          labelText: 'Κτίριο',
+                          border: OutlineInputBorder(),
+                        ),
+                        spellCheckConfiguration: platformSpellCheckConfiguration,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: DropdownButtonFormField<int?>(
+                        // ignore: deprecated_member_use — controlled selection (Flutter 3.33+ προτείνει initialValue μόνο για uncontrolled)
+                        value: _effectiveFloorDropdownValue(),
+                        isExpanded: true,
+                        decoration: const InputDecoration(
+                          labelText: 'Όροφος (κατόψη)',
+                          border: OutlineInputBorder(),
+                          isDense: true,
+                        ),
+                        items: _floorDropdownItems(),
+                        onChanged: (v) => _onFloorDropdownChanged(v),
+                      ),
+                    ),
+                  ],
                 ),
+                if (_floorSubtitleText() != null) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    _floorSubtitleText()!,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Theme.of(context)
+                              .colorScheme
+                              .onSurfaceVariant,
+                        ),
+                  ),
+                ],
                 const SizedBox(height: 12),
                 Text(
                   'Χρώμα',

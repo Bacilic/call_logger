@@ -1,4 +1,9 @@
 /// Μοντέλο τμήματος (πίνακας departments): id, name, building, color, notes, map_*.
+///
+/// Το πεδίο [color] είναι hex `#RRGGBB` (κεφαλαία)· χρησιμοποιείται στον κατάλογο
+/// τμημάτων και ως χρώμα γεμίσματος (fill) της περιοχής στον χάρτη κτιρίου.
+/// Αν είναι null/κενό, το χρώμα περιοχής στον χάρτη μπορεί να ανατεθεί αυτόματα
+/// κατά την πρώτη αποθήκευση στο φύλλο κατόψης.
 class DepartmentModel {
   DepartmentModel({
     this.id,
@@ -26,6 +31,7 @@ class DepartmentModel {
   final int? id;
   final String name;
   final String? building;
+  /// Hex `#RRGGBB` — κατάλογος τμημάτων και γέμισμα περιοχής στον χάρτη κτιρίου.
   final String? color;
   final String? notes;
   /// Ομαδοποίηση στο HUD επιλογής τμήματος στον χάρτη (κατηγορία ομάδας).
@@ -55,13 +61,27 @@ class DepartmentModel {
   }
 
   /// Έχει ήδη αποθηκευμένο ορθογώνιο στο χάρτη (επί κάποιου φύλλου).
+  /// Προτεραιότητα: [floorId]· αλλιώς fallback στο `map_floor` (legacy).
   bool get isMapped {
-    final mf = mapFloor?.trim();
-    if (mf == null || mf.isEmpty) return false;
     final w = mapWidth ?? 0;
     final h = mapHeight ?? 0;
     if (w <= 0 || h <= 0) return false;
-    return mapX != null && mapY != null;
+    if (mapX == null || mapY == null) return false;
+    if (floorId != null) {
+      final mf = int.tryParse(mapFloor?.trim() ?? '');
+      if (mf != null) return mf == floorId;
+      return true;
+    }
+    final mf = mapFloor?.trim();
+    if (mf == null || mf.isEmpty) return false;
+    return true;
+  }
+
+  /// Φιλικό κείμενο για τον όροφο όταν υπάρχει `floor_id`
+  /// (λεπτομέρεια φύλλου από `building_map_floors` στο UI όταν διατίθεται λίστα).
+  String? get floorDisplay {
+    if (floorId == null) return null;
+    return 'Όροφος #$floorId';
   }
 
   factory DepartmentModel.fromMap(Map<String, dynamic> map) {

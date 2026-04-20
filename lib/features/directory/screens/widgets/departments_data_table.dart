@@ -111,6 +111,7 @@ class _DepartmentsDataTableState extends State<DepartmentsDataTable> {
   @override
   void didUpdateWidget(DepartmentsDataTable oldWidget) {
     super.didUpdateWidget(oldWidget);
+    final theme = Theme.of(context);
     _source.update(
       widget.departments,
       widget.selectedIds,
@@ -121,6 +122,9 @@ class _DepartmentsDataTableState extends State<DepartmentsDataTable> {
       _onRowTap,
       widget.visibleColumns,
       _selectionVisible,
+      theme.textTheme.bodySmall?.copyWith(
+        color: theme.colorScheme.onSurfaceVariant,
+      ),
     );
     if (!widget.continuousScroll) {
       _clampPagedFirstRowIndex();
@@ -521,6 +525,7 @@ class _DepartmentsDataTableState extends State<DepartmentsDataTable> {
 
   @override
   Widget build(BuildContext context) {
+    final themeForSource = Theme.of(context);
     _source.update(
       widget.departments,
       widget.selectedIds,
@@ -531,6 +536,9 @@ class _DepartmentsDataTableState extends State<DepartmentsDataTable> {
       _onRowTap,
       widget.visibleColumns,
       _selectionVisible,
+      themeForSource.textTheme.bodySmall?.copyWith(
+        color: themeForSource.colorScheme.onSurfaceVariant,
+      ),
     );
 
     return LayoutBuilder(
@@ -690,6 +698,7 @@ class _DepartmentsTableSource extends DataTableSource {
   void Function(int index)? _onRowTap;
   List<DepartmentDirectoryColumn> _visibleColumns = [];
   bool _selectionVisible = true;
+  TextStyle? _secondaryMetaStyle;
 
   String _phonesTextForDepartment(DepartmentModel d) {
     final id = d.id;
@@ -723,6 +732,7 @@ class _DepartmentsTableSource extends DataTableSource {
     void Function(int index)? onRowTap,
     List<DepartmentDirectoryColumn> visibleColumns,
     bool selectionVisible,
+    TextStyle? secondaryMetaStyle,
   ) {
     _departments = departments;
     _selectedIds = selectedIds;
@@ -733,6 +743,7 @@ class _DepartmentsTableSource extends DataTableSource {
     _onRowTap = onRowTap;
     _visibleColumns = visibleColumns;
     _selectionVisible = selectionVisible;
+    _secondaryMetaStyle = secondaryMetaStyle;
     notifyListeners();
   }
 
@@ -797,12 +808,27 @@ class _DepartmentsTableSource extends DataTableSource {
           onDoubleTap: () => _onDoubleTap(d, col),
         );
       case 'building':
+        final floorTxt = d.floorDisplay;
         return DataCell(
-          Text(
-            d.building ?? '',
-            maxLines: 1,
-            softWrap: false,
-            overflow: TextOverflow.ellipsis,
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                d.building ?? '',
+                maxLines: 1,
+                softWrap: false,
+                overflow: TextOverflow.ellipsis,
+              ),
+              if (floorTxt != null && floorTxt.isNotEmpty)
+                Text(
+                  floorTxt,
+                  maxLines: 1,
+                  softWrap: false,
+                  overflow: TextOverflow.ellipsis,
+                  style: _secondaryMetaStyle,
+                ),
+            ],
           ),
           onTap: () => _onRowTap?.call(rowIndex),
           onDoubleTap: () => _onDoubleTap(d, col),

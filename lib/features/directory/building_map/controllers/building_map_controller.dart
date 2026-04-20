@@ -9,9 +9,12 @@ import '../../../../core/database/database_helper.dart';
 import '../../../../core/database/directory_repository.dart';
 import '../../../../core/models/building_map_floor.dart';
 import '../../../../core/services/building_map_storage.dart';
+import '../../../floor_map/services/floor_color_assignment_service.dart';
 import '../../models/department_model.dart';
 import '../../providers/department_directory_provider.dart';
+import '../../screens/widgets/department_color_palette.dart';
 import '../providers/building_map_providers.dart';
+import '../widgets/building_map_commit_color_dialog.dart';
 
 final buildingMapControllerProvider = Provider<BuildingMapController>(
   (ref) => BuildingMapController(ref),
@@ -148,6 +151,52 @@ class BuildingMapController {
     return go ?? false;
   }
 
+  List<Color> _distinctMapFillColorsOnSheet(
+    List<DepartmentModel> all,
+    String sheetStr,
+    int? excludeDepartmentId,
+  ) {
+    final out = <Color>[];
+    final seen = <String>{};
+    for (final d in all) {
+      if (d.isDeleted) continue;
+      if ((d.mapFloor ?? '') != sheetStr) continue;
+      if (excludeDepartmentId != null && d.id == excludeDepartmentId) continue;
+      final c = tryParseDepartmentHex(d.color);
+      if (c == null) continue;
+      final key = colorToDepartmentHex(c);
+      if (seen.add(key)) {
+        out.add(c);
+      }
+    }
+    return out;
+  }
+
+  /// Ενημέρωση χρώματος γεμίσματος περιοχής στο χάρτη + cache ανάθεσης χρωμάτων.
+  Future<void> applyDepartmentMapFillColor({
+    required BuildContext context,
+    required DepartmentModel dept,
+    required int floorId,
+    required Color newColor,
+  }) async {
+    if (dept.id == null) return;
+    final old = tryParseDepartmentHex(dept.color);
+    final hex = colorToDepartmentHex(newColor);
+    final db = await DatabaseHelper.instance.database;
+    await DirectoryRepository(db).updateDepartment(dept.id!, {'color': hex});
+    FloorColorAssignmentService.instance.overrideColor(
+      floorId,
+      newColor,
+      replaceUsed: old,
+    );
+    await _ref.read(departmentDirectoryProvider.notifier).loadDepartments();
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Ενημερώθηκε το χρώμα περιοχής στο χάρτη.')),
+      );
+    }
+  }
+
   Future<void> commitDraftToDatabase({
     required BuildContext context,
     required DraftDepartmentShape draft,
@@ -159,6 +208,108 @@ class BuildingMapController {
     if (!await confirmOverlapIfNeeded(context, draftRect, sheetStr, dept.id!)) {
       return;
     }
+    if (!context.mounted) return;
+
+    final manualFloorId = dept.floorId;
+    if (manualFloorId != null &&
+        manualFloorId != floorId &&
+        context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          behavior: SnackBarBehavior.floating,
+          content: Text(
+            'Ο όροφος στη φόρμα τμήματος (#$manualFloorId) διαφέρει από το τρέχον φύλλο '
+            '(#$floorId). Θα αποθηκευτεί η θέση στο τρέχον φύλλο (προτεραιότητα χάρτη).',
+          ),
+        ),
+      );
+    }
+
+    final allDepts = _ref.read(departmentDirectoryProvider).allDepartments;
+    final additionalUsed = _distinctMapFillColorsOnSheet(
+      allDepts,
+      sheetStr,
+      dept.id,
+    );
+    final previousFloorStr = dept.mapFloor?.trim();
+    final previousFloorId = int.tryParse(previousFloorStr ?? '');
+    final movingToNewFloor =
+        previousFloorStr != null && previousFloorStr != sheetStr;
+    final existingColor = dept.color?.trim();
+    final shouldKeepCurrentColor =
+        previousFloorStr == sheetStr &&
+        dept.isMapped &&
+        existingColor != null &&
+        existingColor.isNotEmpty;
+
+    void removeOldFloorColorIfMoved() {
+      if (movingToNewFloor && previousFloorId != null) {
+        final oldColor = tryParseDepartmentHex(existingColor);
+        if (oldColor != null) {
+          FloorColorAssignmentService.instance.removeColorFromFloor(
+            previousFloorId,
+            oldColor,
+          );
+        }
+      }
+    }
+
+    String? colorHex;
+
+    if (shouldKeepCurrentColor) {
+      colorHex = null;
+    } else if (existingColor == null || existingColor.isEmpty) {
+      final picked = FloorColorAssignmentService.instance.getNextDistinctColor(
+        floorId,
+        additionalUsed: additionalUsed,
+      );
+      colorHex = colorToDepartmentHex(picked);
+      removeOldFloorColorIfMoved();
+    } else {
+      final currentParsed = tryParseDepartmentHex(existingColor);
+      if (currentParsed == null) {
+        final picked = FloorColorAssignmentService.instance.getNextDistinctColor(
+          floorId,
+          additionalUsed: additionalUsed,
+        );
+        colorHex = colorToDepartmentHex(picked);
+        removeOldFloorColorIfMoved();
+      } else {
+        final suggested =
+            FloorColorAssignmentService.instance.peekNextDistinctColor(
+          floorId,
+          additionalUsed: additionalUsed,
+        );
+        if (!context.mounted) return;
+        final choice = await showBuildingMapCommitColorDialog(
+          context,
+          departmentName: dept.name,
+          currentColor: currentParsed,
+          suggestedColor: suggested,
+        );
+        if (!context.mounted) return;
+        if (choice == null) {
+          return;
+        }
+        if (choice) {
+          final picked =
+              FloorColorAssignmentService.instance.getNextDistinctColor(
+            floorId,
+            additionalUsed: additionalUsed,
+          );
+          colorHex = colorToDepartmentHex(picked);
+          removeOldFloorColorIfMoved();
+        } else {
+          colorHex = null;
+          FloorColorAssignmentService.instance.overrideColor(
+            floorId,
+            currentParsed,
+          );
+          removeOldFloorColorIfMoved();
+        }
+      }
+    }
+
     _ref
         .read(buildingMapUndoProvider.notifier)
         .captureFromValues(
@@ -175,8 +326,7 @@ class BuildingMapController {
         mapAnchorOffsetY: dept.mapAnchorOffsetY,
         );
     final db = await DatabaseHelper.instance.database;
-    await DirectoryRepository(db).updateDepartment(dept.id!, {
-      'map_floor': sheetStr,
+    final updates = <String, dynamic>{
       'map_x': draft.x,
       'map_y': draft.y,
       'map_width': draft.width,
@@ -186,7 +336,21 @@ class BuildingMapController {
       'map_label_offset_y': draft.labelOffsetY,
       'map_anchor_offset_x': draft.anchorOffsetX,
       'map_anchor_offset_y': draft.anchorOffsetY,
-    });
+    };
+    if (colorHex != null) {
+      updates['color'] = colorHex;
+    }
+    await DirectoryRepository(db).saveDepartmentWithFloorContext(
+      dept.id!,
+      updates,
+      drawingFloorId: floorId,
+    );
+    if (shouldKeepCurrentColor) {
+      final keep = tryParseDepartmentHex(existingColor);
+      if (keep != null) {
+        FloorColorAssignmentService.instance.overrideColor(floorId, keep);
+      }
+    }
     await _ref.read(departmentDirectoryProvider.notifier).loadDepartments();
     final backToSelection = _ref.read(buildingMapEditFromSelectionTapProvider);
     _ref.read(buildingMapDraftShapeProvider.notifier).clear();
@@ -283,6 +447,7 @@ class BuildingMapController {
         mapAnchorOffsetY: dept.mapAnchorOffsetY,
         );
     final db = await DatabaseHelper.instance.database;
+    final removedColor = tryParseDepartmentHex(dept.color);
     await DirectoryRepository(db).updateDepartment(dept.id!, {
       'map_floor': null,
       'map_x': 0.0,
@@ -295,7 +460,12 @@ class BuildingMapController {
       'map_anchor_offset_x': null,
       'map_anchor_offset_y': null,
       'map_custom_name': null,
+      'color': null,
     });
+    final fid = int.tryParse(sheetStr);
+    if (fid != null && removedColor != null) {
+      FloorColorAssignmentService.instance.removeColorFromFloor(fid, removedColor);
+    }
     await _ref.read(departmentDirectoryProvider.notifier).loadDepartments();
     final fromSelection = _ref.read(buildingMapEditFromSelectionTapProvider);
     _ref.read(buildingMapDraftShapeProvider.notifier).clear();
