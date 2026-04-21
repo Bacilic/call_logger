@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../../../core/models/building_map_floor.dart';
 import '../../../../core/services/lookup_service.dart';
 import '../../../../core/utils/department_display_utils.dart';
 import '../../models/department_directory_column.dart';
+import '../../models/department_floor_display_extension.dart';
 import '../../models/department_model.dart';
 
 /// Πίνακας τμημάτων: sort, επιλογή, πληκτρολόγιο όπως οι χρήστες.
@@ -23,8 +25,11 @@ class DepartmentsDataTable extends StatefulWidget {
     this.onRequestDelete,
     this.onRequestBulkEdit,
     this.continuousScroll = true,
+    this.floorsById = const {},
   });
 
+  /// Ετικέτες από `building_map_floors` ανά id· για υπότιτλο στήλης κτιρίου/ορόφου.
+  final Map<int, BuildingMapFloor> floorsById;
   final List<DepartmentModel> departments;
   final Set<int> selectedIds;
   final String? sortColumn;
@@ -122,6 +127,7 @@ class _DepartmentsDataTableState extends State<DepartmentsDataTable> {
       _onRowTap,
       widget.visibleColumns,
       _selectionVisible,
+      widget.floorsById,
       theme.textTheme.bodySmall?.copyWith(
         color: theme.colorScheme.onSurfaceVariant,
       ),
@@ -536,6 +542,7 @@ class _DepartmentsDataTableState extends State<DepartmentsDataTable> {
       _onRowTap,
       widget.visibleColumns,
       _selectionVisible,
+      widget.floorsById,
       themeForSource.textTheme.bodySmall?.copyWith(
         color: themeForSource.colorScheme.onSurfaceVariant,
       ),
@@ -698,6 +705,7 @@ class _DepartmentsTableSource extends DataTableSource {
   void Function(int index)? _onRowTap;
   List<DepartmentDirectoryColumn> _visibleColumns = [];
   bool _selectionVisible = true;
+  Map<int, BuildingMapFloor> _floorsById = {};
   TextStyle? _secondaryMetaStyle;
 
   String _phonesTextForDepartment(DepartmentModel d) {
@@ -732,6 +740,7 @@ class _DepartmentsTableSource extends DataTableSource {
     void Function(int index)? onRowTap,
     List<DepartmentDirectoryColumn> visibleColumns,
     bool selectionVisible,
+    Map<int, BuildingMapFloor> floorsById,
     TextStyle? secondaryMetaStyle,
   ) {
     _departments = departments;
@@ -743,6 +752,7 @@ class _DepartmentsTableSource extends DataTableSource {
     _onRowTap = onRowTap;
     _visibleColumns = visibleColumns;
     _selectionVisible = selectionVisible;
+    _floorsById = floorsById;
     _secondaryMetaStyle = secondaryMetaStyle;
     notifyListeners();
   }
@@ -808,7 +818,7 @@ class _DepartmentsTableSource extends DataTableSource {
           onDoubleTap: () => _onDoubleTap(d, col),
         );
       case 'building':
-        final floorTxt = d.floorDisplay;
+        final floorTxt = d.floorDisplayWithCatalog(_floorsById);
         return DataCell(
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,

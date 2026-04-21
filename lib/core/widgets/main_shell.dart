@@ -31,6 +31,7 @@ import 'main_nav_destination.dart';
 import '../services/import_service.dart';
 import '../services/import_types.dart';
 import '../services/settings_service.dart';
+import '../about/widgets/version_chip.dart';
 import '../../features/tasks/providers/tasks_provider.dart';
 
 /// Κύριο κέλυφος εφαρμογής: πλευρική πλοήγηση και περιοχή περιεχομένου.
@@ -547,44 +548,52 @@ class _MainShellState extends ConsumerState<MainShell> {
           : null,
       body: Row(
         children: [
-          NavigationRail(
-            extended: railExtended,
-            selectedIndex: selectedRailIndex,
-            onDestinationSelected: (index) {
-              _selectDestination(visibleDestinations[index]);
-            },
-            leading: wideEnoughForExtendedRail
-                ? IconButton(
-                    key: const ValueKey('nav_rail_toggle'),
-                    icon: Icon(
-                      railExtended ? Icons.chevron_left : Icons.chevron_right,
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Expanded(
+                child: NavigationRail(
+                  extended: railExtended,
+                  selectedIndex: selectedRailIndex,
+                  onDestinationSelected: (index) {
+                    _selectDestination(visibleDestinations[index]);
+                  },
+                  leading: wideEnoughForExtendedRail
+                      ? IconButton(
+                          key: const ValueKey('nav_rail_toggle'),
+                          icon: Icon(
+                            railExtended
+                                ? Icons.chevron_left
+                                : Icons.chevron_right,
+                          ),
+                          tooltip: railExtended
+                              ? 'Σύμπτυξη πλοήγησης'
+                              : 'Επέκταση πλοήγησης',
+                          onPressed: () async {
+                            final next = !_navRailShowLabels;
+                            setState(() => _navRailShowLabels = next);
+                            await SettingsService().setNavRailShowLabels(next);
+                          },
+                        )
+                      : null,
+                  trailing: Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: IconButton(
+                      icon: const Icon(Icons.settings),
+                      tooltip: 'Ρυθμίσεις',
+                      onPressed: _openSettingsScreen,
                     ),
-                    tooltip: railExtended
-                        ? 'Σύμπτυξη πλοήγησης'
-                        : 'Επέκταση πλοήγησης',
-                    onPressed: () async {
-                      final next = !_navRailShowLabels;
-                      setState(() => _navRailShowLabels = next);
-                      await SettingsService().setNavRailShowLabels(next);
-                    },
-                  )
-                : null,
-            trailing: Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  IconButton(
-                    icon: const Icon(Icons.settings),
-                    tooltip: 'Ρυθμίσεις',
-                    onPressed: _openSettingsScreen,
                   ),
-                ],
+                  destinations: [
+                    for (final d in visibleDestinations)
+                      _railDestination(d, showBadge, pendingCount),
+                  ],
+                ),
               ),
-            ),
-            destinations: [
-              for (final d in visibleDestinations)
-                _railDestination(d, showBadge, pendingCount),
+              Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: VersionChip(extended: railExtended),
+              ),
             ],
           ),
           const VerticalDivider(thickness: 1, width: 1),

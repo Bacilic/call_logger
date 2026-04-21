@@ -37,6 +37,8 @@ class BuildingMapSheetPainter extends CustomPainter {
   static const double _kMapFillOpacity = 0.78;
   static const double _kMapFillOpacityHovered = 0.86;
 
+  static const Offset _kHoverLiftOffset = Offset(0, -3);
+
   /// RGB χωρίς διαφάνεια — η διαφάνεια εφαρμόζεται στο [Paint].
   static Color _parseOpaqueFillColor(String? hex, Color fallback) {
     if (hex == null || hex.trim().isEmpty) return fallback;
@@ -112,6 +114,13 @@ class BuildingMapSheetPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final cx = size.width / 2;
     final cy = size.height / 2;
+    final sheetCenter = Offset(cx, cy);
+    final labelsToPaint = <({
+      String text,
+      Offset labelCenter,
+      Offset anchorPoint,
+    })>[];
+
     canvas.save();
     canvas.translate(cx, cy);
     canvas.rotate(rotationRadians);
@@ -165,9 +174,10 @@ class BuildingMapSheetPainter extends CustomPainter {
         ..color = Colors.black.withValues(alpha: 0.55)
         ..style = PaintingStyle.stroke
         ..strokeWidth = strokeW;
+      final hoverOffset = isHovered ? _kHoverLiftOffset : Offset.zero;
       canvas.save();
       if (isHovered) {
-        canvas.translate(0, -3);
+        canvas.translate(_kHoverLiftOffset.dx, _kHoverLiftOffset.dy);
         final shadow = Paint()
           ..color = Colors.black.withValues(alpha: 0.22)
           ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6);
@@ -198,31 +208,6 @@ class BuildingMapSheetPainter extends CustomPainter {
                 d.id == mapLabelOverrideDepartmentId
             ? mapLabelOverrideText!
             : d.displayName;
-        final tp = TextPainter(
-          text: TextSpan(
-            text: override,
-            style: TextStyle(
-              color: Colors.black87,
-              fontSize: math.max(10, size.shortestSide * 0.018),
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-          textDirection: TextDirection.ltr,
-          maxLines: 2,
-          ellipsis: '…',
-        )..layout(maxWidth: math.max(72, size.width * 0.24));
-        final textTopLeft = Offset(
-          labelCenter.dx - (tp.width / 2),
-          labelCenter.dy - (tp.height / 2),
-        );
-        tp.paint(canvas, textTopLeft);
-
-        final underlineStart =
-            Offset(textTopLeft.dx, textTopLeft.dy + tp.height + 2);
-        final underlineEnd = Offset(
-          textTopLeft.dx + tp.width,
-          textTopLeft.dy + tp.height + 2,
-        );
         final anchorPoint =
             effectiveAnchorOffsetX != null && effectiveAnchorOffsetY != null
             ? Offset(
@@ -234,19 +219,69 @@ class BuildingMapSheetPainter extends CustomPainter {
                 effectiveRotation,
                 labelCenter,
               );
-        final connectToLeft = labelCenter.dx >= anchorPoint.dx;
-        final leaderTarget = connectToLeft ? underlineStart : underlineEnd;
-        final annotationStroke = Paint()
-          ..color = Colors.black.withValues(alpha: 0.75)
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 1.35;
-        canvas.drawLine(underlineStart, underlineEnd, annotationStroke);
-        canvas.drawLine(anchorPoint, leaderTarget, annotationStroke);
+        labelsToPaint.add(
+          (
+            text: override,
+            labelCenter: labelCenter + hoverOffset,
+            anchorPoint: anchorPoint + hoverOffset,
+          ),
+        );
       }
       canvas.restore();
     }
 
+    canvas.restore();
+
+    for (final label in labelsToPaint) {
+      final labelCenter = _rotateAroundCenter(
+        label.labelCenter,
+        sheetCenter,
+        rotationRadians,
+      );
+      final anchorPoint = _rotateAroundCenter(
+        label.anchorPoint,
+        sheetCenter,
+        rotationRadians,
+      );
+      final tp = TextPainter(
+        text: TextSpan(
+          text: label.text,
+          style: TextStyle(
+            color: Colors.black87,
+            fontSize: math.max(10, size.shortestSide * 0.018),
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        textDirection: TextDirection.ltr,
+        maxLines: 2,
+        ellipsis: '…',
+      )..layout(maxWidth: math.max(72, size.width * 0.24));
+      final textTopLeft = Offset(
+        labelCenter.dx - (tp.width / 2),
+        labelCenter.dy - (tp.height / 2),
+      );
+      tp.paint(canvas, textTopLeft);
+
+      final underlineStart = Offset(textTopLeft.dx, textTopLeft.dy + tp.height + 2);
+      final underlineEnd = Offset(
+        textTopLeft.dx + tp.width,
+        textTopLeft.dy + tp.height + 2,
+      );
+      final connectToLeft = labelCenter.dx >= anchorPoint.dx;
+      final leaderTarget = connectToLeft ? underlineStart : underlineEnd;
+      final annotationStroke = Paint()
+        ..color = Colors.black.withValues(alpha: 0.75)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.35;
+      canvas.drawLine(underlineStart, underlineEnd, annotationStroke);
+      canvas.drawLine(anchorPoint, leaderTarget, annotationStroke);
+    }
+
     if (draftShape != null) {
+      canvas.save();
+      canvas.translate(cx, cy);
+      canvas.rotate(rotationRadians);
+      canvas.translate(-cx, -cy);
       final dr = Rect.fromLTWH(
         draftShape!.x * size.width,
         draftShape!.y * size.height,
@@ -317,7 +352,11 @@ class BuildingMapSheetPainter extends CustomPainter {
                 dr.center.dx + (draftShape!.anchorOffsetX! * size.width),
                 dr.center.dy + (draftShape!.anchorOffsetY! * size.height),
               )
-            : _pointOnRotatedRectBoundaryToward(dr, draftShape!.rotation, labelCenter);
+            : _pointOnRotatedRectBoundaryToward(
+                dr,
+                draftShape!.rotation,
+                labelCenter,
+              );
         final labelHandlePaint = Paint()
           ..color = Colors.deepPurple
           ..style = PaintingStyle.fill;
@@ -329,9 +368,8 @@ class BuildingMapSheetPainter extends CustomPainter {
         canvas.drawCircle(anchorPoint, 7, anchorHandlePaint);
         canvas.drawCircle(anchorPoint, 7, handleStroke);
       }
+      canvas.restore();
     }
-
-    canvas.restore();
   }
 
   @override

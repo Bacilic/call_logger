@@ -1107,7 +1107,7 @@ class DirectoryRepository {
     await _ensurePhonesDepartmentColumn(db);
 
     final deptRows = await db.rawQuery('''
-      SELECT id, name
+      SELECT id, name, map_custom_name
       FROM departments
       WHERE COALESCE(is_deleted, 0) = 0
       ORDER BY name COLLATE NOCASE ASC
@@ -1176,19 +1176,27 @@ class DirectoryRepository {
     for (final row in deptRows) {
       final id = row['id'] as int?;
       final name = (row['name'] as String?)?.trim() ?? '';
+      final customName = (row['map_custom_name'] as String?)?.trim() ?? '';
       if (id == null || name.isEmpty) continue;
-      if (!SearchTextNormalizer.matchesNormalizedQuery(name, normalized)) {
+      
+      final searchableText = '$name $customName'.trim();
+      if (!SearchTextNormalizer.matchesNormalizedQuery(searchableText, normalized)) {
         continue;
       }
-      final rank = _omnisearchRank(query: normalized, fields: [name]);
+      
+      final title = customName.isNotEmpty && customName != name 
+          ? '$customName ($name)' 
+          : name;
+          
+      final rank = _omnisearchRank(query: normalized, fields: [name, customName]);
       hits.add((
         rank,
         0,
-        name.toLowerCase(),
+        title.toLowerCase(),
         BuildingMapOmnisearchHit(
           kind: BuildingMapOmnisearchEntityKind.department,
           entityId: id,
-          title: name,
+          title: title,
           departmentIds: [id],
         ),
       ));

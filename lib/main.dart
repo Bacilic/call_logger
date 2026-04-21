@@ -8,10 +8,12 @@ import 'package:flutter/scheduler.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:screen_retriever/screen_retriever.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:window_manager/window_manager.dart';
 
+import 'core/about/version_display.dart';
 import 'core/database/database_init_result.dart';
 import 'core/widgets/app_init_wrapper.dart';
 import 'core/widgets/app_shell_with_global_fatal_error.dart';
@@ -31,11 +33,7 @@ final double _kMinWindowWidth =
 const double _kMinWindowHeight = 640;
 
 void _routeFatalErrorToUi(Object exception, StackTrace stack) {
-  final result = DatabaseInitResult.fromException(
-    exception,
-    null,
-    stack,
-  );
+  final result = DatabaseInitResult.fromException(exception, null, stack);
   final phase = WidgetsBinding.instance.schedulerPhase;
   if (phase == SchedulerPhase.persistentCallbacks ||
       phase == SchedulerPhase.midFrameMicrotasks) {
@@ -123,6 +121,10 @@ Future<void> _bootstrapAndRunApp() async {
 
       final wm = WindowManager.instance;
       await wm.ensureInitialized();
+      try {
+        final pkg = await PackageInfo.fromPlatform();
+        await wm.setTitle(windowTitleWithVersionLabel(pkg.version));
+      } catch (_) {}
       final display = await ScreenRetriever.instance.getPrimaryDisplay();
       final screenWidth = display.size.width;
       final screenHeight = display.size.height;
@@ -153,7 +155,7 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     final textTheme = GoogleFonts.interTextTheme();
     return MaterialApp(
-      title: 'Καταγραφή Κλήσεων v1.0',
+      title: 'Καταγραφή Κλήσεων',
       locale: const Locale('el'),
       supportedLocales: const [Locale('el', 'GR'), Locale('en', 'US')],
       localizationsDelegates: const [

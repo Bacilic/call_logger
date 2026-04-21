@@ -40,6 +40,17 @@ class MapLabelLayout {
   }
 }
 
+Offset _rotateAroundCenter(Offset p, Offset center, double radians) {
+  final dx = p.dx - center.dx;
+  final dy = p.dy - center.dy;
+  final c = math.cos(radians);
+  final s = math.sin(radians);
+  return Offset(
+    center.dx + (dx * c) - (dy * s),
+    center.dy + (dx * s) + (dy * c),
+  );
+}
+
 /// Επιστρέφει null αν το τμήμα δεν σχεδιάζεται σε αυτό το φύλλο ή λείπει γεωμετρία.
 MapLabelLayout? computeMapLabelLayout({
   required DepartmentModel dep,
@@ -48,6 +59,7 @@ MapLabelLayout? computeMapLabelLayout({
   required MapToolMode toolMode,
   required int? highlightDepartmentId,
   required Size canvasSize,
+  required double sheetRotationRadians,
   /// Κείμενο ετικέτας (π.χ. τοπικό draft πριν την αποθήκευση στο ✓).
   String? labelTextOverride,
 }) {
@@ -79,9 +91,15 @@ MapLabelLayout? computeMapLabelLayout({
     nh * canvasSize.height,
   );
 
-  final labelCenter = Offset(
+  final labelCenterBeforeSheetRotation = Offset(
     r.center.dx + ((effectiveLabelOffsetX ?? 0.0) * canvasSize.width),
     r.center.dy + ((effectiveLabelOffsetY ?? 0.0) * canvasSize.height),
+  );
+  final canvasCenter = Offset(canvasSize.width / 2, canvasSize.height / 2);
+  final labelCenter = _rotateAroundCenter(
+    labelCenterBeforeSheetRotation,
+    canvasCenter,
+    sheetRotationRadians,
   );
 
   final fontSize = math.max(10.0, canvasSize.shortestSide * 0.018);

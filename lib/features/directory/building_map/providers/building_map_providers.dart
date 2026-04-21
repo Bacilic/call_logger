@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/database/database_helper.dart';
 import '../../../../core/database/directory_repository.dart';
+import '../../../../core/models/building_map_floor.dart';
 
 /// Undo ενός βήματος: στιγμιότυπο γεωμετρίας τμήματος πριν την τελευταία εγγραφή.
 @immutable
@@ -328,6 +329,14 @@ class BuildingMapFloorReloadSeqNotifier extends Notifier<int> {
     state = 0;
   }
 }
+
+/// Κατάλογος φύλλων κατόψης (`building_map_floors`) για ετικέτες ορόφου στο UI (π.χ. καρτέλα τμήματα).
+final buildingMapFloorsCatalogProvider =
+    FutureProvider<List<BuildingMapFloor>>((ref) async {
+  ref.watch(buildingMapFloorReloadSeqProvider);
+  final db = await DatabaseHelper.instance.database;
+  return DirectoryRepository(db).listBuildingMapFloors();
+});
 
 /// Αύξων αριθμός όταν η αναζήτηση χάρτη ζητά κεντράρισμα στο επιλεγμένο τμήμα (μόνο pan, ίδιο zoom).
 final buildingMapViewportCenterRequestSeqProvider =

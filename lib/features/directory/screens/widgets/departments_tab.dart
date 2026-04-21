@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/database/database_helper.dart';
+import '../../../../core/models/building_map_floor.dart';
 import '../../../../core/database/directory_repository.dart';
 import '../../../calls/provider/lookup_provider.dart';
 import '../../models/department_directory_column.dart';
 import '../../models/department_model.dart';
+import '../../building_map/providers/building_map_providers.dart';
 import '../../providers/department_directory_provider.dart';
 import '../../providers/directory_provider.dart';
 import 'bulk_department_edit_dialog.dart';
@@ -42,6 +44,11 @@ class _DepartmentsTabState extends ConsumerState<DepartmentsTab> {
   @override
   Widget build(BuildContext context) {
     ref.watch(lookupServiceProvider);
+    final floorsCatalogAsync = ref.watch(buildingMapFloorsCatalogProvider);
+    final floorsById = <int, BuildingMapFloor>{
+      for (final f in floorsCatalogAsync.value ?? <BuildingMapFloor>[])
+        f.id: f,
+    };
     final state = ref.watch(departmentDirectoryProvider);
     final notifier = ref.read(departmentDirectoryProvider.notifier);
     final visibleColumns = state.orderedVisibleColumns;
@@ -103,6 +110,7 @@ class _DepartmentsTabState extends ConsumerState<DepartmentsTab> {
         ),
         Expanded(
           child: DepartmentsDataTable(
+            floorsById: floorsById,
             departments: state.filteredDepartments,
             selectedIds: state.selectedIds,
             sortColumn: state.sortColumn,

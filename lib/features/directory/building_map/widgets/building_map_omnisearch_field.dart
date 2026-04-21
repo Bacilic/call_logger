@@ -137,7 +137,7 @@ class _BuildingMapOmnisearchFieldState extends State<BuildingMapOmnisearchField>
             onSubmit();
           },
           decoration: InputDecoration(
-            labelText: 'Omnisearch (Τμήμα/Υπάλληλος/Εξοπλισμός)',
+            labelText: 'Έξυπνη αναζήτηση (Τμήμα/Υπάλληλος/Εξοπλισμός)',
             border: const OutlineInputBorder(),
             prefixIcon: const Icon(Icons.travel_explore),
             suffixIcon: _loading
