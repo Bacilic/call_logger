@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/models/calls_screen_cards_visibility.dart';
@@ -12,7 +12,7 @@ import '../utils/call_remote_targets.dart';
 import 'widgets/call_header_form.dart';
 import 'widgets/call_status_bar.dart';
 import 'widgets/recent_calls_list.dart';
-import 'widgets/equipment_info_card.dart';
+import 'widgets/mini_map_card.dart';
 import 'widgets/equipment_recent_calls_panel.dart';
 import 'widgets/global_recent_calls_list.dart';
 import 'widgets/notes_sticky_field.dart';
@@ -187,9 +187,11 @@ class CallsScreen extends ConsumerWidget {
                         : MediaQuery.sizeOf(context).width;
                     final compactBottom = wrapMaxWidth < 980;
                     final hasUserCard = header.selectedCaller != null;
-                    final hasEquipmentCard =
+                    final hasMiniMapCard =
                         header.selectedEquipment != null ||
-                        header.equipmentText.trim().isNotEmpty;
+                        header.equipmentText.trim().isNotEmpty ||
+                        header.selectedCaller != null ||
+                        (header.selectedPhone?.trim().isNotEmpty ?? false);
                     final hasRecentCallsCard =
                         header.selectedCaller?.id != null;
                     if (compactBottom) {
@@ -200,10 +202,12 @@ class CallsScreen extends ConsumerWidget {
                         children: [
                           if (hasUserCard && cardsVis.showUserCard)
                             UserInfoCard(user: header.selectedCaller!),
-                          if (hasEquipmentCard && cardsVis.showEquipmentCard)
-                            EquipmentInfoCard(
+                          if (hasMiniMapCard && cardsVis.showEquipmentCard)
+                            MiniMapCard(
                               equipment: header.selectedEquipment,
                               equipmentCodeText: header.equipmentText,
+                              phoneText: header.selectedPhone ?? '',
+                              user: header.selectedCaller,
                             ),
                           if (hasRecentCallsCard &&
                               cardsVis.showEmployeeRecentCard)
@@ -235,11 +239,13 @@ class CallsScreen extends ConsumerWidget {
                                 children: [
                                   if (hasUserCard && cardsVis.showUserCard)
                                     UserInfoCard(user: header.selectedCaller!),
-                                  if (hasEquipmentCard &&
+                                  if (hasMiniMapCard &&
                                       cardsVis.showEquipmentCard)
-                                    EquipmentInfoCard(
+                                    MiniMapCard(
                                       equipment: header.selectedEquipment,
                                       equipmentCodeText: header.equipmentText,
+                                      phoneText: header.selectedPhone ?? '',
+                                      user: header.selectedCaller,
                                     ),
                                 ],
                               ),

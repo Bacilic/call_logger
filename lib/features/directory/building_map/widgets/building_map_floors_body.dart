@@ -1,4 +1,4 @@
-import 'dart:io';
+﻿import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -11,6 +11,7 @@ import '../controllers/building_map_controller.dart';
 import '../providers/building_map_providers.dart';
 import 'building_map_empty_canvas_message.dart';
 import 'building_map_floor_menu_button.dart';
+import 'building_map_omnisearch_field.dart';
 import 'building_map_sheet_viewport.dart';
 import 'map_rotation_pod.dart';
 import 'department_selection_overlay.dart';
@@ -30,12 +31,14 @@ class BuildingMapFloorsBody extends ConsumerStatefulWidget {
 
 class _BuildingMapFloorsBodyState extends ConsumerState<BuildingMapFloorsBody> {
   final TextEditingController _globalSearchController = TextEditingController();
+  final FocusNode _globalSearchFocusNode = FocusNode();
 
   String? _scheduledDecodePath;
 
   @override
   void dispose() {
     _globalSearchController.dispose();
+    _globalSearchFocusNode.dispose();
     super.dispose();
   }
 
@@ -156,18 +159,13 @@ class _BuildingMapFloorsBodyState extends ConsumerState<BuildingMapFloorsBody> {
                 },
               );
 
-        final globalSearchField = TextField(
+        final globalSearchField = BuildingMapOmnisearchField(
+          enabled: floors.isNotEmpty,
+          repo: widget.repo,
           controller: _globalSearchController,
-          decoration: const InputDecoration(
-            labelText: 'Αναζήτηση τμήματος (όλα τα φύλλα)',
-            prefixIcon: Icon(Icons.search),
-            border: OutlineInputBorder(),
-          ),
-          onSubmitted: (q) => controller.jumpToDepartmentFromSearch(
-            rawQuery: q,
-            floors: floors,
-            departments: activeDepartments,
-          ),
+          focusNode: _globalSearchFocusNode,
+          onResolveEntity: (entity) =>
+              controller.resolveAndJumpToEntity(context, entity),
         );
 
         void onFloorsMutated() {

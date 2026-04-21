@@ -15,10 +15,26 @@ import 'database_helper.dart';
 import 'directory_audit_helpers.dart';
 
 /// Callback από orchestrator: επαναδόμηση `search_index` στο ίδιο transaction (π.χ. [CallsRepository]).
-typedef RebuildCallSearchIndexForCategoryInTxn = Future<void> Function(
-  Transaction txn,
-  int categoryId,
-);
+typedef RebuildCallSearchIndexForCategoryInTxn =
+    Future<void> Function(Transaction txn, int categoryId);
+
+enum BuildingMapOmnisearchEntityKind { department, user, equipment }
+
+class BuildingMapOmnisearchHit {
+  const BuildingMapOmnisearchHit({
+    required this.kind,
+    required this.entityId,
+    required this.title,
+    required this.departmentIds,
+    this.subtitle,
+  });
+
+  final BuildingMapOmnisearchEntityKind kind;
+  final int entityId;
+  final String title;
+  final String? subtitle;
+  final List<int> departmentIds;
+}
 
 /// Persistence καταλόγου: χρήστες, τμήματα, εξοπλισμός, κατηγορίες, ρυθμίσεις, εισαγωγές.
 ///
@@ -32,7 +48,9 @@ class DirectoryRepository {
     final info = await executor.rawQuery('PRAGMA table_info(phones)');
     final names = info.map((r) => r['name'] as String).toSet();
     if (!names.contains('department_id')) {
-      await executor.execute('ALTER TABLE phones ADD COLUMN department_id INTEGER');
+      await executor.execute(
+        'ALTER TABLE phones ADD COLUMN department_id INTEGER',
+      );
     }
   }
 
@@ -62,10 +80,7 @@ class DirectoryRepository {
     return '$fn $ln'.trim();
   }
 
-  Future<Map<String, Object?>?> _userRowById(
-    DatabaseExecutor e,
-    int id,
-  ) async {
+  Future<Map<String, Object?>?> _userRowById(DatabaseExecutor e, int id) async {
     final rows = await e.query(
       'users',
       where: 'id = ?',
@@ -345,16 +360,14 @@ class DirectoryRepository {
 
   /// Πόσοι μη διαγραμμένοι εξοπλισμοί έχουν `default_remote_tool` = id εργαλείου (κείμενο).
   Future<Map<int, int>> getEquipmentDefaultRemoteToolUsageCounts() async {
-    final rows = await db.rawQuery(
-      '''
+    final rows = await db.rawQuery('''
       SELECT TRIM(default_remote_tool) AS tid, COUNT(*) AS c
       FROM equipment
       WHERE COALESCE(is_deleted, 0) = 0
         AND default_remote_tool IS NOT NULL
         AND TRIM(COALESCE(default_remote_tool, '')) != ''
       GROUP BY TRIM(default_remote_tool)
-      ''',
-    );
+      ''');
     final out = <int, int>{};
     for (final r in rows) {
       final id = int.tryParse((r['tid'] ?? '').toString().trim());
@@ -383,8 +396,9 @@ class DirectoryRepository {
       final beforeDept = beforeRows.isEmpty
           ? null
           : beforeRows.first['department_id'] as int?;
-      final beforeId =
-          beforeRows.isEmpty ? null : beforeRows.first['id'] as int?;
+      final beforeId = beforeRows.isEmpty
+          ? null
+          : beforeRows.first['id'] as int?;
       await txn.insert('phones', {
         'number': t,
         'department_id': departmentId,
@@ -419,9 +433,7 @@ class DirectoryRepository {
         whereArgs: [departmentId, pid],
         limit: 1,
       );
-      if (beforeDept == departmentId &&
-          beforeId != null &&
-          dp.isNotEmpty) {
+      if (beforeDept == departmentId && beforeId != null && dp.isNotEmpty) {
         return;
       }
       final ap = await _auditPerformingUser(executor: txn);
@@ -468,10 +480,7 @@ class DirectoryRepository {
           entityType: AuditEntityTypes.equipment,
           entityId: id,
           entityName: code,
-          newValues: {
-            'code_equipment': code,
-            'department_id': departmentId,
-          },
+          newValues: {'code_equipment': code, 'department_id': departmentId},
         );
         return;
       }
@@ -694,16 +703,10 @@ class DirectoryRepository {
       ''',
       [userId],
     );
-    return rows
-        .map((r) => r['number'] as String?)
-        .whereType<String>()
-        .toList();
+    return rows.map((r) => r['number'] as String?).whereType<String>().toList();
   }
 
-  Future<String?> _departmentNameForUserTxn(
-    Transaction txn,
-    int userId,
-  ) async {
+  Future<String?> _departmentNameForUserTxn(Transaction txn, int userId) async {
     final rows = await txn.rawQuery(
       '''
       SELECT d.name AS name FROM users u
@@ -720,20 +723,14 @@ class DirectoryRepository {
     return t;
   }
 
-  Future<Set<int>> _equipmentIdsForUser(
-    DatabaseExecutor e,
-    int userId,
-  ) async {
+  Future<Set<int>> _equipmentIdsForUser(DatabaseExecutor e, int userId) async {
     final rows = await e.query(
       'user_equipment',
       columns: ['equipment_id'],
       where: 'user_id = ?',
       whereArgs: [userId],
     );
-    return rows
-        .map((r) => r['equipment_id'] as int?)
-        .whereType<int>()
-        .toSet();
+    return rows.map((r) => r['equipment_id'] as int?).whereType<int>().toSet();
   }
 
   Future<List<Map<String, dynamic>>> _linkedEquipmentSnapshotsForUser(
@@ -751,12 +748,7 @@ class DirectoryRepository {
       [userId],
     );
     return rows
-        .map(
-          (r) => <String, dynamic>{
-            'id': r['id'],
-            'code': r['code'],
-          },
-        )
+        .map((r) => <String, dynamic>{'id': r['id'], 'code': r['code']})
         .toList();
   }
 
@@ -806,9 +798,9 @@ class DirectoryRepository {
       if (phonesRaw != null) {
         final phones = phonesRaw is List
             ? phonesRaw
-                .map((e) => e.toString().trim())
-                .where((s) => s.isNotEmpty)
-                .toList()
+                  .map((e) => e.toString().trim())
+                  .where((s) => s.isNotEmpty)
+                  .toList()
             : <String>[];
         await _replaceUserPhonesInTxn(txn, id, phones);
       }
@@ -824,11 +816,15 @@ class DirectoryRepository {
           ? <String, dynamic>{}
           : _userRowAuditValues(newRow);
       oldAudit['linked_phone_numbers'] = oldPhoneList;
-      newAudit['linked_phone_numbers'] =
-          await _userPhoneNumbersOrdered(txn, id);
+      newAudit['linked_phone_numbers'] = await _userPhoneNumbersOrdered(
+        txn,
+        id,
+      );
       oldAudit['linked_equipment'] = oldEq;
-      newAudit['linked_equipment'] =
-          await _linkedEquipmentSnapshotsForUser(txn, id);
+      newAudit['linked_equipment'] = await _linkedEquipmentSnapshotsForUser(
+        txn,
+        id,
+      );
 
       final oldDiff = <String, dynamic>{};
       final newDiff = <String, dynamic>{};
@@ -995,10 +991,7 @@ class DirectoryRepository {
     });
   }
 
-  Future<String?> getSetting(
-    String key, {
-    DatabaseExecutor? executor,
-  }) async {
+  Future<String?> getSetting(String key, {DatabaseExecutor? executor}) async {
     final e = executor ?? db;
     final rows = await e.query(
       'app_settings',
@@ -1082,6 +1075,213 @@ class DirectoryRepository {
 
   Future<List<Map<String, dynamic>>> getDepartments() async {
     return db.query('departments', orderBy: 'name COLLATE NOCASE ASC');
+  }
+
+  int _omnisearchRank({
+    required String query,
+    required List<String> fields,
+  }) {
+    var best = 3;
+    for (final raw in fields) {
+      final value = SearchTextNormalizer.normalizeForSearch(raw);
+      if (value.isEmpty) continue;
+      if (value == query) return 0;
+      if (value.startsWith(query) && best > 1) {
+        best = 1;
+        continue;
+      }
+      if (value.contains(query) && best > 2) {
+        best = 2;
+      }
+    }
+    return best;
+  }
+
+  Future<List<BuildingMapOmnisearchHit>> searchBuildingMapOmnisearch(
+    String query, {
+    int limit = 50,
+  }) async {
+    final normalized = SearchTextNormalizer.normalizeForSearch(query);
+    if (normalized.isEmpty || limit <= 0) return const [];
+
+    await _ensurePhonesDepartmentColumn(db);
+
+    final deptRows = await db.rawQuery('''
+      SELECT id, name
+      FROM departments
+      WHERE COALESCE(is_deleted, 0) = 0
+      ORDER BY name COLLATE NOCASE ASC
+    ''');
+
+    final userRows = await db.rawQuery('''
+      SELECT
+        u.id AS id,
+        u.first_name AS first_name,
+        u.last_name AS last_name,
+        u.department_id AS department_id,
+        d.name AS department_name,
+        GROUP_CONCAT(DISTINCT p.number) AS phones_csv
+      FROM users u
+      LEFT JOIN departments d ON d.id = u.department_id
+      LEFT JOIN user_phones up ON up.user_id = u.id
+      LEFT JOIN phones p ON p.id = up.phone_id
+      WHERE COALESCE(u.is_deleted, 0) = 0
+      GROUP BY u.id, u.first_name, u.last_name, u.department_id, d.name
+      ORDER BY u.last_name COLLATE NOCASE ASC, u.first_name COLLATE NOCASE ASC
+    ''');
+
+    final userPhoneDeptRows = await db.rawQuery('''
+      WITH phone_dept AS (
+        SELECT p.id AS phone_id, p.department_id AS department_id
+        FROM phones p
+        WHERE p.department_id IS NOT NULL
+        UNION
+        SELECT dp.phone_id AS phone_id, dp.department_id AS department_id
+        FROM department_phones dp
+      )
+      SELECT DISTINCT
+        up.user_id AS user_id,
+        pd.department_id AS department_id
+      FROM user_phones up
+      JOIN phone_dept pd ON pd.phone_id = up.phone_id
+      JOIN departments d ON d.id = pd.department_id
+      WHERE COALESCE(d.is_deleted, 0) = 0
+      ORDER BY up.user_id ASC, pd.department_id ASC
+    ''');
+
+    final equipmentRows = await db.rawQuery('''
+      SELECT
+        e.id AS id,
+        e.code_equipment AS code_equipment,
+        e.type AS type,
+        e.notes AS notes,
+        e.department_id AS department_id,
+        d.name AS department_name
+      FROM equipment e
+      LEFT JOIN departments d ON d.id = e.department_id
+      WHERE COALESCE(e.is_deleted, 0) = 0
+      ORDER BY e.code_equipment COLLATE NOCASE ASC, e.type COLLATE NOCASE ASC
+    ''');
+
+    final userPhoneDepartmentIds = <int, Set<int>>{};
+    for (final row in userPhoneDeptRows) {
+      final uid = row['user_id'] as int?;
+      final did = row['department_id'] as int?;
+      if (uid == null || did == null) continue;
+      userPhoneDepartmentIds.putIfAbsent(uid, () => <int>{}).add(did);
+    }
+
+    final hits = <(int rank, int kindOrder, String sortKey, BuildingMapOmnisearchHit hit)>[];
+
+    for (final row in deptRows) {
+      final id = row['id'] as int?;
+      final name = (row['name'] as String?)?.trim() ?? '';
+      if (id == null || name.isEmpty) continue;
+      if (!SearchTextNormalizer.matchesNormalizedQuery(name, normalized)) {
+        continue;
+      }
+      final rank = _omnisearchRank(query: normalized, fields: [name]);
+      hits.add((
+        rank,
+        0,
+        name.toLowerCase(),
+        BuildingMapOmnisearchHit(
+          kind: BuildingMapOmnisearchEntityKind.department,
+          entityId: id,
+          title: name,
+          departmentIds: [id],
+        ),
+      ));
+    }
+
+    for (final row in userRows) {
+      final id = row['id'] as int?;
+      if (id == null) continue;
+      final first = (row['first_name'] as String?)?.trim() ?? '';
+      final last = (row['last_name'] as String?)?.trim() ?? '';
+      final fullName = '$first $last'.trim();
+      final phonesCsv = (row['phones_csv'] as String?)?.trim() ?? '';
+      final deptName = (row['department_name'] as String?)?.trim() ?? '';
+      final searchableText = '$fullName $phonesCsv $deptName'.trim();
+      if (!SearchTextNormalizer.matchesNormalizedQuery(searchableText, normalized)) {
+        continue;
+      }
+      final departmentIds = <int>{};
+      final userDepartmentId = row['department_id'] as int?;
+      if (userDepartmentId != null) {
+        departmentIds.add(userDepartmentId);
+      }
+      departmentIds.addAll(userPhoneDepartmentIds[id] ?? const <int>{});
+      final title = fullName.isEmpty ? '(Χωρίς όνομα)' : fullName;
+      final subtitleParts = <String>[];
+      if (deptName.isNotEmpty) subtitleParts.add(deptName);
+      if (phonesCsv.isNotEmpty) subtitleParts.add(phonesCsv);
+      final rank = _omnisearchRank(
+        query: normalized,
+        fields: [title, deptName, phonesCsv],
+      );
+      hits.add((
+        rank,
+        1,
+        title.toLowerCase(),
+        BuildingMapOmnisearchHit(
+          kind: BuildingMapOmnisearchEntityKind.user,
+          entityId: id,
+          title: title,
+          subtitle: subtitleParts.isEmpty ? null : subtitleParts.join(' • '),
+          departmentIds: departmentIds.toList()..sort(),
+        ),
+      ));
+    }
+
+    for (final row in equipmentRows) {
+      final id = row['id'] as int?;
+      if (id == null) continue;
+      final code = (row['code_equipment'] as String?)?.trim() ?? '';
+      final type = (row['type'] as String?)?.trim() ?? '';
+      final notes = (row['notes'] as String?)?.trim() ?? '';
+      final deptName = (row['department_name'] as String?)?.trim() ?? '';
+      final searchableText = '$code $type $notes $deptName'.trim();
+      if (!SearchTextNormalizer.matchesNormalizedQuery(searchableText, normalized)) {
+        continue;
+      }
+      final title = code.isNotEmpty
+          ? code
+          : (type.isNotEmpty ? type : '(Χωρίς κωδικό)');
+      final subtitleParts = <String>[];
+      if (type.isNotEmpty && type != title) subtitleParts.add(type);
+      if (deptName.isNotEmpty) subtitleParts.add(deptName);
+      final equipmentDepartmentId = row['department_id'] as int?;
+      final departmentIds = <int>[
+        ?equipmentDepartmentId,
+      ];
+      final rank = _omnisearchRank(
+        query: normalized,
+        fields: [title, type, notes, deptName],
+      );
+      hits.add((
+        rank,
+        2,
+        title.toLowerCase(),
+        BuildingMapOmnisearchHit(
+          kind: BuildingMapOmnisearchEntityKind.equipment,
+          entityId: id,
+          title: title,
+          subtitle: subtitleParts.isEmpty ? null : subtitleParts.join(' • '),
+          departmentIds: departmentIds,
+        ),
+      ));
+    }
+
+    hits.sort((a, b) {
+      final byRank = a.$1.compareTo(b.$1);
+      if (byRank != 0) return byRank;
+      final byKind = a.$2.compareTo(b.$2);
+      if (byKind != 0) return byKind;
+      return a.$3.compareTo(b.$3);
+    });
+
+    return hits.take(limit).map((row) => row.$4).toList(growable: false);
   }
 
   /// Μία γραμμή `departments` για άνοιγμα φόρμας τμήματος (ή null).
@@ -1183,7 +1383,11 @@ ORDER BY p.number COLLATE NOCASE ASC
     return rows.first;
   }
 
-  Future<void> _restoreDepartmentsInTxn(Transaction txn, List<int> ids, String user) async {
+  Future<void> _restoreDepartmentsInTxn(
+    Transaction txn,
+    List<int> ids,
+    String user,
+  ) async {
     for (final id in ids) {
       final nameRows = await txn.query(
         'departments',
@@ -1251,7 +1455,12 @@ ORDER BY p.number COLLATE NOCASE ASC
     await db.transaction((txn) async {
       await _restoreDepartmentsInTxn(txn, [id], user);
       if (updates.isNotEmpty) {
-        await txn.update('departments', updates, where: 'id = ?', whereArgs: [id]);
+        await txn.update(
+          'departments',
+          updates,
+          where: 'id = ?',
+          whereArgs: [id],
+        );
       }
     });
   }
@@ -1290,6 +1499,36 @@ ORDER BY p.number COLLATE NOCASE ASC
     return count;
   }
 
+  /// Στήλες που μηδενίζουν την τοποθέτηση τμήματος στον χάρτη κτιρίου (`map_*`, `floor_id`).
+  ///
+  /// [clearFloorId]: `floor_id` → NULL (απόδεσμευση από φύλλο κατόψης στον κατάλογο).
+  /// [clearDepartmentHex]: `#RRGGBB` → NULL (χρώμα που χρησιμοποιούταν ως γέμισμα στο χάρτη).
+  static Map<String, dynamic> clearedBuildingMapPlacementColumns({
+    bool clearFloorId = false,
+    bool clearDepartmentHex = false,
+  }) {
+    final map = <String, dynamic>{
+      'map_floor': null,
+      'map_x': 0.0,
+      'map_y': 0.0,
+      'map_width': 0.0,
+      'map_height': 0.0,
+      'map_rotation': 0.0,
+      'map_label_offset_x': null,
+      'map_label_offset_y': null,
+      'map_anchor_offset_x': null,
+      'map_anchor_offset_y': null,
+      'map_custom_name': null,
+    };
+    if (clearFloorId) {
+      map['floor_id'] = null;
+    }
+    if (clearDepartmentHex) {
+      map['color'] = null;
+    }
+    return map;
+  }
+
   Future<int> updateDepartment(int id, Map<String, dynamic> values) async {
     final map = Map<String, dynamic>.from(values);
     map.remove('id');
@@ -1302,7 +1541,12 @@ ORDER BY p.number COLLATE NOCASE ASC
     );
     if (oldRows.isEmpty) return 0;
     final oldRow = oldRows.first;
-    final n = await db.update('departments', map, where: 'id = ?', whereArgs: [id]);
+    final n = await db.update(
+      'departments',
+      map,
+      where: 'id = ?',
+      whereArgs: [id],
+    );
     if (n <= 0) return 0;
     final oldDiff = <String, dynamic>{};
     final newDiff = <String, dynamic>{};
@@ -1507,11 +1751,10 @@ ORDER BY p.number COLLATE NOCASE ASC
         limit: 1,
       );
       if (pre.isNotEmpty) return;
-      await txn.insert(
-        'user_equipment',
-        {'user_id': userId, 'equipment_id': equipmentId},
-        conflictAlgorithm: ConflictAlgorithm.ignore,
-      );
+      await txn.insert('user_equipment', {
+        'user_id': userId,
+        'equipment_id': equipmentId,
+      }, conflictAlgorithm: ConflictAlgorithm.ignore);
       final post = await txn.query(
         'user_equipment',
         where: 'user_id = ? AND equipment_id = ?',
@@ -1726,7 +1969,12 @@ ORDER BY p.number COLLATE NOCASE ASC
     );
     if (oldRows.isEmpty) return 0;
     final oldRow = oldRows.first;
-    final n = await db.update('equipment', map, where: 'id = ?', whereArgs: [id]);
+    final n = await db.update(
+      'equipment',
+      map,
+      where: 'id = ?',
+      whereArgs: [id],
+    );
     if (n <= 0) return 0;
     final oldDiff = <String, dynamic>{};
     final newDiff = <String, dynamic>{};
@@ -1883,8 +2131,10 @@ ORDER BY p.number COLLATE NOCASE ASC
       }
     }
     for (final name in deptNameToId.keys.toList()) {
-      deptNameToId[name] =
-          await getOrCreateDepartmentIdByName(name, recordAudit: false);
+      deptNameToId[name] = await getOrCreateDepartmentIdByName(
+        name,
+        recordAudit: false,
+      );
     }
 
     await db.transaction((txn) async {
@@ -2004,7 +2254,10 @@ ORDER BY p.number COLLATE NOCASE ASC
             .toList();
         if (!existing.contains(trimmedPhone)) {
           final beforeIds = await _userPhoneIds(txn, userId);
-          await _replaceUserPhonesInTxn(txn, userId, [...existing, trimmedPhone]);
+          await _replaceUserPhonesInTxn(txn, userId, [
+            ...existing,
+            trimmedPhone,
+          ]);
           final afterIds = await _userPhoneIds(txn, userId);
           phoneChanged = true;
           final apPhones = await _auditPerformingUser(executor: txn);
@@ -2044,14 +2297,10 @@ ORDER BY p.number COLLATE NOCASE ASC
           limit: 1,
         );
         if (preLink.isEmpty) {
-          await txn.insert(
-            'user_equipment',
-            {
-              'user_id': userId,
-              'equipment_id': equipmentId,
-            },
-            conflictAlgorithm: ConflictAlgorithm.ignore,
-          );
+          await txn.insert('user_equipment', {
+            'user_id': userId,
+            'equipment_id': equipmentId,
+          }, conflictAlgorithm: ConflictAlgorithm.ignore);
           final postLink = await txn.query(
             'user_equipment',
             where: 'user_id = ? AND equipment_id = ?',
@@ -2097,8 +2346,10 @@ ORDER BY p.number COLLATE NOCASE ASC
       );
 
       if (equipmentLinked && equipmentIdForAudit != null && eqTrim.isNotEmpty) {
-        final usersSnap =
-            await _linkedUserSnapshotsForEquipment(txn, equipmentIdForAudit);
+        final usersSnap = await _linkedUserSnapshotsForEquipment(
+          txn,
+          equipmentIdForAudit,
+        );
         await AuditService.log(
           txn,
           action: 'ΤΡΟΠΟΠΟΙΗΣΗ ΕΞΟΠΛΙΣΜΟΥ',
@@ -2361,8 +2612,9 @@ ORDER BY p.number COLLATE NOCASE ASC
         details: 'tasks id=$id',
         entityType: AuditEntityTypes.task,
         entityId: id,
-        entityName:
-            taskTitle != null && taskTitle.isNotEmpty ? taskTitle : null,
+        entityName: taskTitle != null && taskTitle.isNotEmpty
+            ? taskTitle
+            : null,
       );
     });
   }
@@ -2418,12 +2670,7 @@ ORDER BY p.number COLLATE NOCASE ASC
       m['image_path'] = imagePath;
     }
     if (m.isEmpty) return;
-    await db.update(
-      'building_map_floors',
-      m,
-      where: 'id = ?',
-      whereArgs: [id],
-    );
+    await db.update('building_map_floors', m, where: 'id = ?', whereArgs: [id]);
   }
 
   Future<int> countDepartmentsReferencingMapFloor(int floorId) async {
@@ -2464,11 +2711,6 @@ ORDER BY p.number COLLATE NOCASE ASC
       if (deptId == null) continue;
       await updateDepartment(deptId, cleared);
     }
-    await db.delete(
-      'building_map_floors',
-      where: 'id = ?',
-      whereArgs: [id],
-    );
+    await db.delete('building_map_floors', where: 'id = ?', whereArgs: [id]);
   }
-
 }

@@ -1,7 +1,8 @@
-import 'dart:async';
+﻿import 'dart:async';
 import 'dart:io';
 import 'dart:math' as math;
 
+import 'package:custom_mouse_cursor/custom_mouse_cursor.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -49,9 +50,13 @@ class _BuildingMapSheetViewportState
     extends ConsumerState<BuildingMapSheetViewport> {
   final TransformationController _transform = TransformationController();
 
+  /// Τελευταίο μέγεθος οπτικού πεδίου [InteractiveViewer] — για κεντράρισμα μετά από αναζήτηση.
+  Size _viewportSize = Size.zero;
+
   static const double _kMinDraftSize = 0.005;
   static const Duration _kLabelDoubleTapGap = Duration(milliseconds: 400);
   static const double _kLabelDoubleTapSlopPx = 28;
+
   /// Απόκρυψη από hit-test διπλού κλικ περιοχής που επικαλύπτει το handle της ετικέτας.
   static const double _kLabelDragHandleExcludeRadiusPx = 14;
 
@@ -73,6 +78,10 @@ class _BuildingMapSheetViewportState
   int? _pendingMapDisplayNameDeptId;
   String? _pendingMapDisplayNameText;
 
+  /// Native κέρσορες (Windows/desktop)· το [custom_mouse_cursor] τους περνά στο σύστημα.
+  CustomMouseCursor? _nativeSelectHandCursor;
+  CustomMouseCursor? _nativeDrawCrossCursor;
+
   /// Δεν επιτρέπεται [FocusNode.dispose] μέσα στο [FocusNode.notifyListeners] (blur, ✓ που αρπάζει focus).
   void _scheduleDisposeMapNameField(TextEditingController? c, FocusNode? f) {
     if (c == null && f == null) return;
@@ -90,12 +99,110 @@ class _BuildingMapSheetViewportState
     super.dispose();
   }
 
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_preloadNativeToolCursors());
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    CustomMouseCursor.ensurePointersMatchDevicePixelRatio(context);
+  }
+
+  /// Φόρτωση κέρσορων από εικονίδια· αν αποτύχει, μένουν τα [SystemMouseCursors] ως fallback.
+  Future<void> _preloadNativeToolCursors() async {
+    try {
+      final hand = await CustomMouseCursor.icon(
+        Icons.pan_tool_alt_outlined,
+        size: 28,
+        hotX: 11,
+        hotY: 9,
+        color: const Color(0xFF212121),
+      );
+      final cross = await CustomMouseCursor.icon(
+        Icons.add,
+        size: 26,
+        hotX: 13,
+        hotY: 13,
+        color: const Color(0xFF212121),
+      );
+      if (!mounted) return;
+      setState(() {
+        _nativeSelectHandCursor = hand;
+        _nativeDrawCrossCursor = cross;
+      });
+    } catch (_) {
+      // Αφήνουμε null· χρησιμοποιείται το υπόλοιπο fallback στο build.
+    }
+  }
+
+  MouseCursor _mapViewportCursor({
+    required bool designModeActive,
+    required bool isSelectTool,
+  }) {
+    if (!designModeActive) return SystemMouseCursors.basic;
+    final nativeReady =
+        _nativeSelectHandCursor != null && _nativeDrawCrossCursor != null;
+    if (isSelectTool) {
+      return nativeReady
+          ? _nativeSelectHandCursor!
+          : SystemMouseCursors.grab;
+    }
+    return nativeReady
+        ? _nativeDrawCrossCursor!
+        : SystemMouseCursors.basic;
+  }
+
   DepartmentModel? _departmentById(List<DepartmentModel> deps, int? id) {
     if (id == null) return null;
     for (final d in deps) {
       if (d.id == id) return d;
     }
     return null;
+  }
+
+  /// Μετατοπίζει το [InteractiveViewer] ώστε το κέντρο της περιοχής τμήματος να συμπίπτει με το κέντρο προβολής· διατηρεί το τρέχον zoom.
+  void _panViewportToDepartmentCenter(Size viewportSize) {
+    if (!mounted) return;
+    if (viewportSize.width <= 0 || viewportSize.height <= 0) return;
+    if (widget.designModeActive) return;
+
+    final deptId = ref.read(buildingMapSelectedDepartmentIdToMapProvider);
+    if (deptId == null) return;
+
+    final dept = _departmentById(widget.activeDepartments, deptId);
+    if (dept == null) return;
+    if ((dept.mapFloor ?? '') != widget.sheetStr) return;
+
+    final nx = dept.mapX;
+    final ny = dept.mapY;
+    final nw = dept.mapWidth;
+    final nh = dept.mapHeight;
+    if (nx == null || ny == null || nw == null || nh == null) return;
+    if (nw <= 0 || nh <= 0) return;
+
+    final sz = widget.decodedSize;
+    if (sz == null) return;
+
+    final focal = Rect.fromLTWH(
+      nx * sz.width,
+      ny * sz.height,
+      nw * sz.width,
+      nh * sz.height,
+    ).center;
+
+    final Matrix4 m = _transform.value.clone();
+    final Offset inViewport = MatrixUtils.transformPoint(m, focal);
+    final Offset viewportCenter = Offset(
+      viewportSize.width / 2,
+      viewportSize.height / 2,
+    );
+    final Offset delta = viewportCenter - inViewport;
+    final Matrix4 pan =
+        Matrix4.translationValues(delta.dx, delta.dy, 0.0);
+    _transform.value = pan * m;
   }
 
   String _effectiveMapLabelTextForDepartment(DepartmentModel dep) {
@@ -198,7 +305,9 @@ class _BuildingMapSheetViewportState
   }
 
   /// Αποθήκευση επωνυμίας χάρτη στη βάση — καλείται μόνο από Επιβεβαίωση draft (✓).
-  Future<void> _persistMapDisplayNameForDraftDepartment(int departmentId) async {
+  Future<void> _persistMapDisplayNameForDraftDepartment(
+    int departmentId,
+  ) async {
     final dept = _departmentById(widget.activeDepartments, departmentId);
     if (dept == null) return;
     final canonical = dept.name;
@@ -213,7 +322,9 @@ class _BuildingMapSheetViewportState
     if (edited == null) {
       return;
     }
-    await ref.read(buildingMapControllerProvider).saveDepartmentMapDisplayName(
+    await ref
+        .read(buildingMapControllerProvider)
+        .saveDepartmentMapDisplayName(
           context: context,
           departmentId: departmentId,
           canonicalDepartmentName: canonical,
@@ -242,7 +353,9 @@ class _BuildingMapSheetViewportState
       initialColor: initial,
     );
     if (!mounted || picked == null) return;
-    await ref.read(buildingMapControllerProvider).applyDepartmentMapFillColor(
+    await ref
+        .read(buildingMapControllerProvider)
+        .applyDepartmentMapFillColor(
           context: context,
           dept: dept,
           floorId: widget.currentSheetId!,
@@ -461,8 +574,11 @@ class _BuildingMapSheetViewportState
       imageSize,
       rotationRad,
     );
-    final invPix =
-        inverseRotateAroundCenter(localPosition, imageSize, rotationRad);
+    final invPix = inverseRotateAroundCenter(
+      localPosition,
+      imageSize,
+      rotationRad,
+    );
     final deps = widget.activeDepartments.reversed;
     for (final dep in deps) {
       if ((dep.mapFloor ?? '') != widget.sheetStr) continue;
@@ -578,8 +694,7 @@ class _BuildingMapSheetViewportState
     if (toolMode == MapToolMode.edit && draft != null) {
       final deptToMap = ref.read(buildingMapSelectedDepartmentIdToMapProvider);
       final selectedDept = _departmentById(widget.activeDepartments, deptToMap);
-      final invPix =
-          inverseRotateAroundCenter(local, imageSize, rotationRad);
+      final invPix = inverseRotateAroundCenter(local, imageSize, rotationRad);
 
       if (!_mapDisplayNameEditing &&
           widget.designModeActive &&
@@ -593,15 +708,13 @@ class _BuildingMapSheetViewportState
           toolMode: toolMode,
           highlightDepartmentId: deptToMap,
           canvasSize: imageSize,
-          labelTextOverride:
-              _effectiveMapLabelTextForDepartment(selectedDept),
+          labelTextOverride: _effectiveMapLabelTextForDepartment(selectedDept),
         );
         if (labelLayout != null) {
-          final inText =
-              labelLayout.textAndUnderlineHitRect.contains(invPix);
+          final inText = labelLayout.textAndUnderlineHitRect.contains(invPix);
           final onPurpleHandle =
               (invPix - labelLayout.labelCenter).distance <=
-                  _kLabelDragHandleExcludeRadiusPx;
+              _kLabelDragHandleExcludeRadiusPx;
           if (inText && !onPurpleHandle) {
             if (_detectLabelDoubleTap(invPix)) {
               _beginMapDisplayNameEditing(selectedDept);
@@ -688,10 +801,10 @@ class _BuildingMapSheetViewportState
               startDraft.copyWith(
                 x: newX,
                 y: newY,
-                labelOffsetX:
-                    ((startDraft.labelOffsetX ?? 0) - appliedDx).clamp(-4.0, 4.0),
-                labelOffsetY:
-                    ((startDraft.labelOffsetY ?? 0) - appliedDy).clamp(-4.0, 4.0),
+                labelOffsetX: ((startDraft.labelOffsetX ?? 0) - appliedDx)
+                    .clamp(-4.0, 4.0),
+                labelOffsetY: ((startDraft.labelOffsetY ?? 0) - appliedDy)
+                    .clamp(-4.0, 4.0),
               ),
             );
         break;
@@ -702,8 +815,12 @@ class _BuildingMapSheetViewportState
             .read(buildingMapDraftShapeProvider.notifier)
             .setDraft(
               startDraft.copyWith(
-                labelOffsetX: (currentNorm.dx - centerX).clamp(-1.0, 1.0).toDouble(),
-                labelOffsetY: (currentNorm.dy - centerY).clamp(-1.0, 1.0).toDouble(),
+                labelOffsetX: (currentNorm.dx - centerX)
+                    .clamp(-1.0, 1.0)
+                    .toDouble(),
+                labelOffsetY: (currentNorm.dy - centerY)
+                    .clamp(-1.0, 1.0)
+                    .toDouble(),
               ),
             );
         break;
@@ -714,8 +831,12 @@ class _BuildingMapSheetViewportState
             .read(buildingMapDraftShapeProvider.notifier)
             .setDraft(
               startDraft.copyWith(
-                anchorOffsetX: (currentNorm.dx - centerX).clamp(-1.0, 1.0).toDouble(),
-                anchorOffsetY: (currentNorm.dy - centerY).clamp(-1.0, 1.0).toDouble(),
+                anchorOffsetX: (currentNorm.dx - centerX)
+                    .clamp(-1.0, 1.0)
+                    .toDouble(),
+                anchorOffsetY: (currentNorm.dy - centerY)
+                    .clamp(-1.0, 1.0)
+                    .toDouble(),
               ),
             );
         break;
@@ -832,11 +953,15 @@ class _BuildingMapSheetViewportState
     final effectiveRotationDegrees = dragRotation ?? w.rotRad * 180 / math.pi;
     final effectiveRotRad = effectiveRotationDegrees * math.pi / 180;
     final isSelectMode = toolMode == MapToolMode.select;
-    final cursor = !w.designModeActive
-        ? SystemMouseCursors.basic
-        : (isSelectMode ? SystemMouseCursors.grab : SystemMouseCursors.basic);
+    final cursor = _mapViewportCursor(
+      designModeActive: w.designModeActive,
+      isSelectTool: isSelectMode,
+    );
 
-    final selectedDeptForLabel = _departmentById(w.activeDepartments, deptToMap);
+    final selectedDeptForLabel = _departmentById(
+      w.activeDepartments,
+      deptToMap,
+    );
     MapLabelLayout? mapLabelLayout;
     if (w.designModeActive &&
         toolMode == MapToolMode.edit &&
@@ -851,13 +976,16 @@ class _BuildingMapSheetViewportState
         toolMode: toolMode,
         highlightDepartmentId: deptToMap,
         canvasSize: sz,
-        labelTextOverride:
-            _effectiveMapLabelTextForDepartment(selectedDeptForLabel),
+        labelTextOverride: _effectiveMapLabelTextForDepartment(
+          selectedDeptForLabel,
+        ),
       );
     }
 
-    final editingDept =
-        _departmentById(w.activeDepartments, _mapDisplayNameDeptId);
+    final editingDept = _departmentById(
+      w.activeDepartments,
+      _mapDisplayNameDeptId,
+    );
     MapLabelLayout? editingLabelLayout;
     if (_mapDisplayNameEditing &&
         editingDept != null &&
@@ -871,8 +999,7 @@ class _BuildingMapSheetViewportState
         toolMode: toolMode,
         highlightDepartmentId: deptToMap,
         canvasSize: sz,
-        labelTextOverride:
-            _effectiveMapLabelTextForDepartment(editingDept),
+        labelTextOverride: _effectiveMapLabelTextForDepartment(editingDept),
       );
     }
 
@@ -883,362 +1010,387 @@ class _BuildingMapSheetViewportState
       });
     }
 
+    ref.listen<int>(buildingMapViewportCenterRequestSeqProvider, (
+      int? previous,
+      int next,
+    ) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _panViewportToDepartmentCenter(_viewportSize);
+      });
+    });
+
     return MouseRegion(
       cursor: cursor,
       onExit: (_) => _setHoveredDepartmentId(null),
-      child: InteractiveViewer(
-        transformationController: _transform,
-        constrained: false,
-        boundaryMargin: const EdgeInsets.all(480),
-        minScale: 0.2,
-        maxScale: 6,
-        panEnabled: !w.designModeActive || toolMode == MapToolMode.select,
-        child: SizedBox(
-          width: sz.width,
-          height: sz.height,
-          child: Listener(
-            behavior: HitTestBehavior.translucent,
-            onPointerHover: (event) {
-              if (!w.designModeActive) return;
-              _handlePointerHover(
-                event: event,
-                imageSize: sz,
-                rotationRad: effectiveRotRad,
-                toolMode: toolMode,
-              );
-            },
-            onPointerDown: (event) {
-              if (!w.designModeActive) return;
-              _handlePointerDown(
-                event: event,
-                imageSize: sz,
-                rotationRad: effectiveRotRad,
-                toolMode: toolMode,
-                drawEnabled: drawEnabled,
-                draft: draftShape,
-              );
-            },
-            onPointerMove: (event) {
-              if (!w.designModeActive) return;
-              _handlePointerMove(
-                event: event,
-                imageSize: sz,
-                rotationRad: effectiveRotRad,
-                toolMode: toolMode,
-                drawEnabled: drawEnabled,
-              );
-            },
-            onPointerUp: (_) {
-              if (!w.designModeActive) return;
-              _handlePointerUp(toolMode: toolMode, drawEnabled: drawEnabled);
-            },
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                Transform.rotate(
-                  angle: effectiveRotRad,
-                  child: Image.file(
-                    w.imgFile,
-                    fit: BoxFit.fill,
-                    filterQuality: FilterQuality.medium,
-                    cacheWidth: sz.width > 4096 ? 4096 : null,
-                  ),
-                ),
-                CustomPaint(
-                  painter: BuildingMapSheetPainter(
-                    sheetIdString: w.sheetStr,
-                    departments: w.activeDepartments,
-                    rotationRadians: effectiveRotRad,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          _viewportSize = Size(constraints.maxWidth, constraints.maxHeight);
+          return InteractiveViewer(
+            transformationController: _transform,
+            constrained: false,
+            boundaryMargin: const EdgeInsets.all(480),
+            minScale: 0.2,
+            maxScale: 6,
+            panEnabled: !w.designModeActive || toolMode == MapToolMode.select,
+            child: SizedBox(
+              width: sz.width,
+              height: sz.height,
+              child: Listener(
+                behavior: HitTestBehavior.translucent,
+                onPointerHover: (event) {
+                  if (!w.designModeActive) return;
+                  _handlePointerHover(
+                    event: event,
+                    imageSize: sz,
+                    rotationRad: effectiveRotRad,
                     toolMode: toolMode,
-                    highlightDepartmentId: deptToMap,
-                    hoveredDepartmentId: _hoveredDepartmentId,
-                    draftShape: draftShape,
-                    suppressMapLabelForDepartmentId:
-                        _mapDisplayNameEditing ? _mapDisplayNameDeptId : null,
-                    mapLabelOverrideDepartmentId:
-                        (!_mapDisplayNameEditing &&
+                  );
+                },
+                onPointerDown: (event) {
+                  if (!w.designModeActive) return;
+                  _handlePointerDown(
+                    event: event,
+                    imageSize: sz,
+                    rotationRad: effectiveRotRad,
+                    toolMode: toolMode,
+                    drawEnabled: drawEnabled,
+                    draft: draftShape,
+                  );
+                },
+                onPointerMove: (event) {
+                  if (!w.designModeActive) return;
+                  _handlePointerMove(
+                    event: event,
+                    imageSize: sz,
+                    rotationRad: effectiveRotRad,
+                    toolMode: toolMode,
+                    drawEnabled: drawEnabled,
+                  );
+                },
+                onPointerUp: (_) {
+                  if (!w.designModeActive) return;
+                  _handlePointerUp(
+                    toolMode: toolMode,
+                    drawEnabled: drawEnabled,
+                  );
+                },
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    Transform.rotate(
+                      angle: effectiveRotRad,
+                      child: Image.file(
+                        w.imgFile,
+                        fit: BoxFit.fill,
+                        filterQuality: FilterQuality.medium,
+                        cacheWidth: sz.width > 4096 ? 4096 : null,
+                      ),
+                    ),
+                    CustomPaint(
+                      painter: BuildingMapSheetPainter(
+                        sheetIdString: w.sheetStr,
+                        departments: w.activeDepartments,
+                        rotationRadians: effectiveRotRad,
+                        toolMode: toolMode,
+                        highlightDepartmentId: deptToMap,
+                        hoveredDepartmentId: _hoveredDepartmentId,
+                        draftShape: draftShape,
+                        suppressMapLabelForDepartmentId: _mapDisplayNameEditing
+                            ? _mapDisplayNameDeptId
+                            : null,
+                        mapLabelOverrideDepartmentId:
+                            (!_mapDisplayNameEditing &&
                                 _pendingMapDisplayNameDeptId != null)
                             ? _pendingMapDisplayNameDeptId
                             : null,
-                    mapLabelOverrideText:
-                        (!_mapDisplayNameEditing &&
+                        mapLabelOverrideText:
+                            (!_mapDisplayNameEditing &&
                                 _pendingMapDisplayNameText != null)
                             ? _pendingMapDisplayNameText
                             : null,
-                  ),
-                  child: const SizedBox.expand(),
-                ),
-                if (!_mapDisplayNameEditing &&
-                    mapLabelLayout != null &&
-                    selectedDeptForLabel != null)
-                  Transform.rotate(
-                    alignment: Alignment.center,
-                    angle: effectiveRotRad,
-                    child: SizedBox(
-                      width: sz.width,
-                      height: sz.height,
-                      child: Stack(
-                        clipBehavior: Clip.none,
-                        fit: StackFit.expand,
-                        children: [
-                          Positioned(
-                            left: mapLabelLayout.pencilHitRect.left,
-                            top: mapLabelLayout.pencilHitRect.top,
-                            width: mapLabelLayout.pencilHitRect.width,
-                            height: mapLabelLayout.pencilHitRect.height,
-                            child: Tooltip(
-                              message:
-                                  'Επωνυμία χάρτη (ή διπλό κλικ στην ετικέτα)',
-                              child: IconButton(
-                                padding: EdgeInsets.zero,
-                                visualDensity: VisualDensity.compact,
-                                constraints: const BoxConstraints(
-                                  minWidth: 40,
-                                  minHeight: 40,
-                                ),
-                                icon: Icon(
-                                  Icons.edit_outlined,
-                                  size: 20,
-                                  color: Theme.of(context).colorScheme.primary,
-                                ),
-                                onPressed: () => _beginMapDisplayNameEditing(
-                                  selectedDeptForLabel,
+                      ),
+                      child: const SizedBox.expand(),
+                    ),
+                    if (!_mapDisplayNameEditing &&
+                        mapLabelLayout != null &&
+                        selectedDeptForLabel != null)
+                      Transform.rotate(
+                        alignment: Alignment.center,
+                        angle: effectiveRotRad,
+                        child: SizedBox(
+                          width: sz.width,
+                          height: sz.height,
+                          child: Stack(
+                            clipBehavior: Clip.none,
+                            fit: StackFit.expand,
+                            children: [
+                              Positioned(
+                                left: mapLabelLayout.pencilHitRect.left,
+                                top: mapLabelLayout.pencilHitRect.top,
+                                width: mapLabelLayout.pencilHitRect.width,
+                                height: mapLabelLayout.pencilHitRect.height,
+                                child: Tooltip(
+                                  message:
+                                      'Επωνυμία χάρτη (ή διπλό κλικ στην ετικέτα)',
+                                  child: IconButton(
+                                    padding: EdgeInsets.zero,
+                                    visualDensity: VisualDensity.compact,
+                                    constraints: const BoxConstraints(
+                                      minWidth: 40,
+                                      minHeight: 40,
+                                    ),
+                                    icon: Icon(
+                                      Icons.edit_outlined,
+                                      size: 20,
+                                      color: Theme.of(
+                                        context,
+                                      ).colorScheme.primary,
+                                    ),
+                                    onPressed: () =>
+                                        _beginMapDisplayNameEditing(
+                                          selectedDeptForLabel,
+                                        ),
+                                  ),
                                 ),
                               ),
-                            ),
+                            ],
                           ),
-                        ],
+                        ),
                       ),
-                    ),
-                  ),
-                if (_mapDisplayNameEditing &&
-                    editingLabelLayout != null &&
-                    _mapDisplayNameCtrl != null &&
-                    _mapDisplayNameFocus != null)
-                  Transform.rotate(
-                    alignment: Alignment.center,
-                    angle: effectiveRotRad,
-                    child: SizedBox(
-                      width: sz.width,
-                      height: sz.height,
-                      child: Stack(
-                        clipBehavior: Clip.none,
-                        fit: StackFit.expand,
-                        children: [
-                          Positioned(
-                            left: (editingLabelLayout.textTopLeft.dx - 4).clamp(
-                              0.0,
-                              sz.width - 120,
-                            ),
-                            top: (editingLabelLayout.textTopLeft.dy - 4).clamp(
-                              0.0,
-                              sz.height - 48,
-                            ),
-                            width: math
-                                .min(
-                                  sz.width -
-                                      (editingLabelLayout.textTopLeft.dx - 4).clamp(
-                                        0.0,
-                                        sz.width,
+                    if (_mapDisplayNameEditing &&
+                        editingLabelLayout != null &&
+                        _mapDisplayNameCtrl != null &&
+                        _mapDisplayNameFocus != null)
+                      Transform.rotate(
+                        alignment: Alignment.center,
+                        angle: effectiveRotRad,
+                        child: SizedBox(
+                          width: sz.width,
+                          height: sz.height,
+                          child: Stack(
+                            clipBehavior: Clip.none,
+                            fit: StackFit.expand,
+                            children: [
+                              Positioned(
+                                left: (editingLabelLayout.textTopLeft.dx - 4)
+                                    .clamp(0.0, sz.width - 120),
+                                top: (editingLabelLayout.textTopLeft.dy - 4)
+                                    .clamp(0.0, sz.height - 48),
+                                width: math
+                                    .min(
+                                      sz.width -
+                                          (editingLabelLayout.textTopLeft.dx -
+                                                  4)
+                                              .clamp(0.0, sz.width),
+                                      math.max(
+                                        200.0,
+                                        editingLabelLayout
+                                                .textPainterSize
+                                                .width +
+                                            160,
                                       ),
-                                  math.max(
-                                    200.0,
-                                    editingLabelLayout.textPainterSize.width +
-                                        160,
+                                    )
+                                    .clamp(120.0, sz.width),
+                                child: Material(
+                                  elevation: 6,
+                                  borderRadius: BorderRadius.circular(8),
+                                  child: TextField(
+                                    controller: _mapDisplayNameCtrl,
+                                    focusNode: _mapDisplayNameFocus,
+                                    autofocus: true,
+                                    style: TextStyle(
+                                      fontSize: editingLabelLayout.fontSize,
+                                      fontWeight: FontWeight.w500,
+                                      color: Colors.black87,
+                                    ),
+                                    decoration: InputDecoration(
+                                      isDense: true,
+                                      hintText:
+                                          'Επιβεβαίωση draft (✓) για αποθήκευση — κενό = όνομα τμήματος',
+                                      filled: true,
+                                      fillColor: Theme.of(
+                                        context,
+                                      ).colorScheme.surface,
+                                      contentPadding:
+                                          const EdgeInsets.symmetric(
+                                            horizontal: 10,
+                                            vertical: 8,
+                                          ),
+                                      border: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                    ),
+                                    maxLines: 2,
+                                    textInputAction: TextInputAction.done,
+                                    onSubmitted: (_) =>
+                                        _softEndMapDisplayNameEditing(),
                                   ),
-                                )
-                                .clamp(120.0, sz.width),
-                            child: Material(
-                              elevation: 6,
-                              borderRadius: BorderRadius.circular(8),
-                              child: TextField(
-                                controller: _mapDisplayNameCtrl,
-                                focusNode: _mapDisplayNameFocus,
-                                autofocus: true,
-                                style: TextStyle(
-                                  fontSize: editingLabelLayout.fontSize,
-                                  fontWeight: FontWeight.w500,
-                                  color: Colors.black87,
                                 ),
-                                decoration: InputDecoration(
-                                  isDense: true,
-                                  hintText:
-                                      'Επιβεβαίωση draft (✓) για αποθήκευση — κενό = όνομα τμήματος',
-                                  filled: true,
-                                  fillColor:
-                                      Theme.of(context).colorScheme.surface,
-                                  contentPadding: const EdgeInsets.symmetric(
-                                    horizontal: 10,
-                                    vertical: 8,
-                                  ),
-                                  border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                ),
-                                maxLines: 2,
-                                textInputAction: TextInputAction.done,
-                                onSubmitted: (_) =>
-                                    _softEndMapDisplayNameEditing(),
                               ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    if (toolMode == MapToolMode.edit && draftShape != null)
+                      Positioned(
+                        left: (draftShape.center.dx * sz.width + 80)
+                            .clamp(12.0, math.max(12.0, sz.width - 280.0))
+                            .toDouble(),
+                        top: ((draftShape.y * sz.height) - 56)
+                            .clamp(12.0, math.max(12.0, sz.height - 56.0))
+                            .toDouble(),
+                        child: Material(
+                          elevation: 4,
+                          borderRadius: BorderRadius.circular(10),
+                          color: Theme.of(
+                            context,
+                          ).colorScheme.surfaceContainerHigh,
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 4,
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                IconButton(
+                                  tooltip: 'Ακύρωση draft',
+                                  visualDensity: VisualDensity.compact,
+                                  icon: const Icon(Icons.close),
+                                  onPressed: () {
+                                    final mapDept = ref.read(
+                                      buildingMapSelectedDepartmentIdToMapProvider,
+                                    );
+                                    if (_pendingMapDisplayNameDeptId ==
+                                        mapDept) {
+                                      _pendingMapDisplayNameDeptId = null;
+                                      _pendingMapDisplayNameText = null;
+                                    }
+                                    final fromSelection = ref.read(
+                                      buildingMapEditFromSelectionTapProvider,
+                                    );
+                                    ref
+                                        .read(
+                                          buildingMapDraftShapeProvider
+                                              .notifier,
+                                        )
+                                        .clear();
+                                    ref
+                                        .read(
+                                          buildingMapEditFromSelectionTapProvider
+                                              .notifier,
+                                        )
+                                        .clear();
+                                    ref
+                                        .read(buildingMapToolProvider.notifier)
+                                        .setMode(
+                                          fromSelection
+                                              ? MapToolMode.select
+                                              : MapToolMode.draw,
+                                        );
+                                  },
+                                ),
+                                IconButton(
+                                  tooltip: 'Χρώμα περιοχής στο χάρτη',
+                                  visualDensity: VisualDensity.compact,
+                                  icon: const Icon(Icons.palette_outlined),
+                                  onPressed: () async {
+                                    DepartmentModel? selectedDept;
+                                    for (final dep in w.activeDepartments) {
+                                      if (dep.id == deptToMap) {
+                                        selectedDept = dep;
+                                        break;
+                                      }
+                                    }
+                                    if (selectedDept?.id == null ||
+                                        w.currentSheetId == null) {
+                                      return;
+                                    }
+                                    await _changeMapFillColorForDepartment(
+                                      selectedDept!,
+                                    );
+                                  },
+                                ),
+                                IconButton(
+                                  tooltip: 'Επιβεβαίωση draft',
+                                  visualDensity: VisualDensity.compact,
+                                  icon: const Icon(Icons.check),
+                                  onPressed: () async {
+                                    DepartmentModel? selectedDept;
+                                    for (final dep in w.activeDepartments) {
+                                      if (dep.id == deptToMap) {
+                                        selectedDept = dep;
+                                        break;
+                                      }
+                                    }
+                                    if (selectedDept?.id == null) return;
+                                    await _persistMapDisplayNameForDraftDepartment(
+                                      selectedDept!.id!,
+                                    );
+                                    if (!context.mounted) return;
+                                    await ref
+                                        .read(buildingMapControllerProvider)
+                                        .commitDraftToDatabase(
+                                          context: context,
+                                          draft: draftShape,
+                                          dept: selectedDept,
+                                          floorId: w.currentSheetId!,
+                                        );
+                                    if (context.mounted) {
+                                      setState(() {});
+                                    }
+                                  },
+                                ),
+                                Builder(
+                                  builder: (ctx) {
+                                    DepartmentModel? selectedDept;
+                                    for (final dep in w.activeDepartments) {
+                                      if (dep.id == deptToMap) {
+                                        selectedDept = dep;
+                                        break;
+                                      }
+                                    }
+                                    final mappedOnSheet =
+                                        selectedDept != null &&
+                                        (selectedDept.mapFloor ?? '') ==
+                                            w.sheetStr &&
+                                        selectedDept.isMapped;
+                                    return IconButton(
+                                      tooltip: mappedOnSheet
+                                          ? 'Αφαίρεση τμήματος από τον χάρτη'
+                                          : 'Δεν υπάρχει αποθηκευμένη θέση σε αυτό το φύλλο',
+                                      visualDensity: VisualDensity.compact,
+                                      icon: const Icon(Icons.delete_outline),
+                                      onPressed: !mappedOnSheet
+                                          ? null
+                                          : () async {
+                                              await ref
+                                                  .read(
+                                                    buildingMapControllerProvider,
+                                                  )
+                                                  .removeDepartmentFromFloorAfterConfirm(
+                                                    context: context,
+                                                    dept: selectedDept!,
+                                                    sheetStr: w.sheetStr,
+                                                  );
+                                              if (ctx.mounted) {
+                                                setState(() {});
+                                              }
+                                            },
+                                    );
+                                  },
+                                ),
+                              ],
                             ),
                           ),
-                        ],
-                      ),
-                    ),
-                  ),
-                if (toolMode == MapToolMode.edit && draftShape != null)
-                  Positioned(
-                    left: (draftShape.center.dx * sz.width + 80)
-                        .clamp(12.0, math.max(12.0, sz.width - 280.0))
-                        .toDouble(),
-                    top: ((draftShape.y * sz.height) - 56)
-                        .clamp(12.0, math.max(12.0, sz.height - 56.0))
-                        .toDouble(),
-                    child: Material(
-                      elevation: 4,
-                      borderRadius: BorderRadius.circular(10),
-                      color: Theme.of(context).colorScheme.surfaceContainerHigh,
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 4,
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            IconButton(
-                              tooltip: 'Ακύρωση draft',
-                              visualDensity: VisualDensity.compact,
-                              icon: const Icon(Icons.close),
-                              onPressed: () {
-                                final mapDept =
-                                    ref.read(buildingMapSelectedDepartmentIdToMapProvider);
-                                if (_pendingMapDisplayNameDeptId == mapDept) {
-                                  _pendingMapDisplayNameDeptId = null;
-                                  _pendingMapDisplayNameText = null;
-                                }
-                                final fromSelection = ref.read(
-                                  buildingMapEditFromSelectionTapProvider,
-                                );
-                                ref
-                                    .read(
-                                      buildingMapDraftShapeProvider.notifier,
-                                    )
-                                    .clear();
-                                ref
-                                    .read(
-                                      buildingMapEditFromSelectionTapProvider
-                                          .notifier,
-                                    )
-                                    .clear();
-                                ref
-                                    .read(buildingMapToolProvider.notifier)
-                                    .setMode(
-                                      fromSelection
-                                          ? MapToolMode.select
-                                          : MapToolMode.draw,
-                                    );
-                              },
-                            ),
-                            IconButton(
-                              tooltip: 'Χρώμα περιοχής στο χάρτη',
-                              visualDensity: VisualDensity.compact,
-                              icon: const Icon(Icons.palette_outlined),
-                              onPressed: () async {
-                                DepartmentModel? selectedDept;
-                                for (final dep in w.activeDepartments) {
-                                  if (dep.id == deptToMap) {
-                                    selectedDept = dep;
-                                    break;
-                                  }
-                                }
-                                if (selectedDept?.id == null ||
-                                    w.currentSheetId == null) {
-                                  return;
-                                }
-                                await _changeMapFillColorForDepartment(
-                                  selectedDept!,
-                                );
-                              },
-                            ),
-                            IconButton(
-                              tooltip: 'Επιβεβαίωση draft',
-                              visualDensity: VisualDensity.compact,
-                              icon: const Icon(Icons.check),
-                              onPressed: () async {
-                                DepartmentModel? selectedDept;
-                                for (final dep in w.activeDepartments) {
-                                  if (dep.id == deptToMap) {
-                                    selectedDept = dep;
-                                    break;
-                                  }
-                                }
-                                if (selectedDept?.id == null) return;
-                                await _persistMapDisplayNameForDraftDepartment(
-                                  selectedDept!.id!,
-                                );
-                                if (!context.mounted) return;
-                                await ref
-                                    .read(buildingMapControllerProvider)
-                                    .commitDraftToDatabase(
-                                      context: context,
-                                      draft: draftShape,
-                                      dept: selectedDept,
-                                      floorId: w.currentSheetId!,
-                                    );
-                                if (context.mounted) {
-                                  setState(() {});
-                                }
-                              },
-                            ),
-                            Builder(
-                              builder: (ctx) {
-                                DepartmentModel? selectedDept;
-                                for (final dep in w.activeDepartments) {
-                                  if (dep.id == deptToMap) {
-                                    selectedDept = dep;
-                                    break;
-                                  }
-                                }
-                                final mappedOnSheet =
-                                    selectedDept != null &&
-                                    (selectedDept.mapFloor ?? '') ==
-                                        w.sheetStr &&
-                                    selectedDept.isMapped;
-                                return IconButton(
-                                  tooltip: mappedOnSheet
-                                      ? 'Αφαίρεση τμήματος από τον χάρτη'
-                                      : 'Δεν υπάρχει αποθηκευμένη θέση σε αυτό το φύλλο',
-                                  visualDensity: VisualDensity.compact,
-                                  icon: const Icon(Icons.delete_outline),
-                                  onPressed: !mappedOnSheet
-                                      ? null
-                                      : () async {
-                                          await ref
-                                              .read(
-                                                buildingMapControllerProvider,
-                                              )
-                                              .removeDepartmentFromFloorAfterConfirm(
-                                                context: context,
-                                                dept: selectedDept!,
-                                                sheetStr: w.sheetStr,
-                                              );
-                                          if (ctx.mounted) {
-                                            setState(() {});
-                                          }
-                                        },
-                                );
-                              },
-                            ),
-                          ],
                         ),
                       ),
-                    ),
-                  ),
-              ],
+                  ],
+                ),
+              ),
             ),
-          ),
-        ),
+          );
+        },
       ),
     );
   }

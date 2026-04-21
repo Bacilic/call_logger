@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 import 'dart:io';
 import 'dart:math' as math;
 
@@ -510,7 +510,7 @@ class _DictionaryManagerScreenState extends ConsumerState<DictionaryManagerScree
   }
 
   Future<void> _importTxtFile() async {
-    final r = await FilePicker.platform.pickFiles(
+    final r = await FilePicker.pickFiles(
       type: FileType.custom,
       allowedExtensions: const ['txt'],
     );

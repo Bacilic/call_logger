@@ -1,14 +1,12 @@
-# Call Logger — Project Anatomy
+﻿# Call Logger — Project Anatomy
 
-**Ημερομηνία τροποποίησης εγγράφου:** 19 Απριλίου 2026
+**Ημερομηνία τροποποίησης εγγράφου:** 21 Απριλίου 2026
 
 Συμπυκνωμένη «ακτινογραφία» για εξωτερικό LLM (Καθοδηγητής): Flutter για Windows 11, δομή ανά features/, Riverpod, SQLite μέσω sqflite_common_ffi.
 
 ---
 
 ## 1) DIRTREE (lib/)
-
-Πλήρης λίστα αρχείων `.dart` (και `.gitkeep` όπου υπάρχουν) μέχρι τις επωνυμίες υποφακέλων· οι φάκελοι `core/debug/` και `lib/tool/` είναι κενοί placeholders και παραλείπονται.
 
 ```
 lib/
@@ -193,12 +191,25 @@ lib/
 │   ├── directory/
 │   │   ├── building_map/
 │   │   │   ├── building_map_geometry.dart
+│   │   │   ├── building_map_label_layout.dart
+│   │   │   ├── controllers/
+│   │   │   │   └── building_map_controller.dart
 │   │   │   ├── providers/
 │   │   │   │   └── building_map_providers.dart
 │   │   │   ├── screens/
 │   │   │   │   └── building_map_dialog.dart
 │   │   │   └── widgets/
-│   │   │       └── building_map_sheet_painter.dart
+│   │   │       ├── building_map_edit_toolbar.dart
+│   │   │       ├── building_map_empty_canvas_message.dart
+│   │   │       ├── building_map_floor_menu_button.dart
+│   │   │       ├── building_map_floors_body.dart
+│   │   │       ├── building_map_sheet_painter.dart
+│   │   │       ├── building_map_sheet_viewport.dart
+│   │   │       ├── department_selection_overlay.dart
+│   │   │       ├── map_rotation_pod.dart
+│   │   │       └── views/
+│   │   │           ├── building_map_edit_layout.dart
+│   │   │           └── building_map_view_layout.dart
 │   │   ├── models/
 │   │   │   ├── .gitkeep
 │   │   │   ├── category_directory_column.dart
@@ -303,11 +314,11 @@ lib/
 
 ## 2) DATABASE SCHEMA (SQLite)
 
-Πηγή: `database_v1_schema.dart` (δημιουργία αρχικού σχήματος / migrations) και `database_helper.dart` (squashed `onCreate` / `onUpgrade`, user_version = σταθερά `databaseSchemaVersionV1`).
+Πηγή: `database_v1_schema.dart` (`applyDatabaseV1Schema` για νέα εγκατάσταση) και `database_helper.dart` (`user_version` = σταθερά `databaseSchemaVersionV1`, με αναβάθμιση μέσω `_onUpgradeSquashed` για υπάρχοντα αρχεία).
 
-**Τρέχουσα έκδοση σχήματος (user_version):** 20 (`databaseSchemaVersionV1`).
+**Τρέχουσα έκδοση σχήματος (user_version):** 22 (`databaseSchemaVersionV1` στο `database_v1_schema.dart`).
 
-**Πίνακες και στήλες (όνομα → τύπος SQLite)** — κατά την **νέα εγκατάσταση** (`applyDatabaseV1Schema`), χωρίς τις legacy στήλες που αφαιρούνται σε αναβάθμιση v19 σε παλιές βάσεις:
+**Πίνακες και στήλες (όνομα → τύπος SQLite)** — κατά τη **νέα εγκατάσταση** (`applyDatabaseV1Schema`):
 
 - **calls** — id INTEGER PK AUTOINCREMENT, date TEXT, time TEXT, caller_id INTEGER, equipment_id INTEGER, caller_text TEXT, phone_text TEXT, department_text TEXT, equipment_text TEXT, issue TEXT, solution TEXT, category_text TEXT, category_id INTEGER, status TEXT, duration INTEGER, is_priority INTEGER DEFAULT 0, search_index TEXT, is_deleted INTEGER DEFAULT 0  
 - **users** — id INTEGER PK AUTOINCREMENT, last_name TEXT NOT NULL, first_name TEXT NOT NULL, department_id INTEGER, location TEXT, notes TEXT, is_deleted INTEGER DEFAULT 0  
@@ -316,7 +327,7 @@ lib/
 - **user_phones** — user_id INTEGER NOT NULL, phone_id INTEGER NOT NULL, PRIMARY KEY (user_id, phone_id)  
 - **equipment** — id INTEGER PK AUTOINCREMENT, code_equipment TEXT, type TEXT, notes TEXT, custom_ip TEXT, anydesk_id TEXT, remote_params TEXT, default_remote_tool TEXT, department_id INTEGER, location TEXT, is_deleted INTEGER DEFAULT 0  
 - **user_equipment** — user_id INTEGER NOT NULL, equipment_id INTEGER NOT NULL, PRIMARY KEY (user_id, equipment_id)  
-- **departments** — id INTEGER PK AUTOINCREMENT, name TEXT NOT NULL, name_key TEXT UNIQUE NOT NULL, building TEXT, color TEXT DEFAULT '#1976D2', notes TEXT, map_floor TEXT, map_x REAL DEFAULT 0.0, map_y REAL DEFAULT 0.0, map_width REAL DEFAULT 0.0, map_height REAL DEFAULT 0.0, map_rotation REAL DEFAULT 0.0, is_deleted INTEGER DEFAULT 0  
+- **departments** — id INTEGER PK AUTOINCREMENT, name TEXT NOT NULL, name_key TEXT UNIQUE NOT NULL, building TEXT, color TEXT DEFAULT '#1976D2', notes TEXT, map_floor TEXT, map_x REAL DEFAULT 0.0, map_y REAL DEFAULT 0.0, map_width REAL DEFAULT 0.0, map_height REAL DEFAULT 0.0, map_rotation REAL DEFAULT 0.0, map_label_offset_x REAL, map_label_offset_y REAL, map_anchor_offset_x REAL, map_anchor_offset_y REAL, map_custom_name TEXT, group_name TEXT, floor_id INTEGER, is_deleted INTEGER DEFAULT 0  
 - **building_map_floors** — id INTEGER PK AUTOINCREMENT, sort_order INTEGER NOT NULL DEFAULT 0, label TEXT NOT NULL, floor_group TEXT, image_path TEXT NOT NULL, rotation_degrees REAL NOT NULL DEFAULT 0  
 - **categories** — id INTEGER PK AUTOINCREMENT, name TEXT, is_deleted INTEGER DEFAULT 0  
 - **tasks** — id INTEGER PK AUTOINCREMENT, title TEXT, description TEXT, due_date TEXT, snooze_history_json TEXT, status TEXT, call_id INTEGER, priority INTEGER, solution_notes TEXT, snooze_until TEXT, caller_id INTEGER, equipment_id INTEGER, department_id INTEGER, phone_id INTEGER, phone_text TEXT, user_text TEXT, equipment_text TEXT, department_text TEXT, created_at TEXT, updated_at TEXT, search_index TEXT, is_deleted INTEGER DEFAULT 0  
@@ -331,7 +342,7 @@ lib/
 - **full_dictionary** — id INTEGER PK AUTOINCREMENT, word TEXT NOT NULL UNIQUE, normalized_word TEXT NOT NULL, source TEXT NOT NULL, language TEXT NOT NULL, category TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT (datetime('now')), letters_count INTEGER NOT NULL DEFAULT 0, diacritic_mark_count INTEGER NOT NULL DEFAULT 0  
   - Ευρετήρια: idx_full_dictionary_norm, idx_full_dictionary_filters, idx_full_dictionary_letters_count, idx_full_dictionary_diacritic_mark_count  
 
-**Σημείωση:** Σε βάσεις που πέρασαν από παλαιότερες εκδόσεις, ο πίνακας `remote_tools` μπορεί ακόμα να περιέχει επιπλέον στήλες (π.χ. legacy πριν το v19)· το μοντέλο εφαρμογής τις αγνοεί όπου χρειάζεται.
+**Σημείωση:** Σε βάσεις που πέρασαν από παλαιότερες εκδόσεις, ο πίνακας `remote_tools` μπορεί ακόμα να περιέχει επιπλέον στήλες (legacy πριν το v19)· το μοντέλο εφαρμογής τις αγνοεί όπου χρειάζεται.
 
 ---
 
@@ -345,7 +356,7 @@ lib/
 
 **features/directory/models/**
 
-- **DepartmentModel** — id, name, building, color, notes, mapFloor, mapX, mapY, mapWidth, mapHeight, mapRotation, directPhones, isDeleted  
+- **DepartmentModel** — id, name, building, color, notes, groupName, floorId, mapFloor, mapX, mapY, mapWidth, mapHeight, mapRotation, mapLabelOffsetX, mapLabelOffsetY, mapAnchorOffsetX, mapAnchorOffsetY, mapCustomName, directPhones, isDeleted (υπολογιζόμενα: displayName, isMapped)  
 - **CategoryModel** — id, name  
 - **NonUserPhoneEntry** — phoneId, number, departmentNamesDisplay, primaryDepartmentId  
 - **UserCatalogMode** (enum) — personal, shared  

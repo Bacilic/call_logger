@@ -1,4 +1,4 @@
-import 'package:file_picker/file_picker.dart';
+﻿import 'package:file_picker/file_picker.dart';
 import 'package:path/path.dart' as p;
 
 import '../services/settings_service.dart';
@@ -9,7 +9,7 @@ import 'database_init_runner.dart';
 /// Επιλογή αρχείου `.db` (προτίμηση) ή φακέλου → `call_logger.db` μέσα.
 /// Επιστρέφει `null` αν ακυρώθηκε η επιλογή.
 Future<String?> pickDatabasePathWithSystemPicker() async {
-  final fileResult = await FilePicker.platform.pickFiles(
+  final fileResult = await FilePicker.pickFiles(
     type: FileType.custom,
     allowedExtensions: ['db'],
     dialogTitle: 'Επιλογή αρχείου βάσης δεδομένων (.db)',
@@ -21,7 +21,7 @@ Future<String?> pickDatabasePathWithSystemPicker() async {
     return fileResult.files.single.path!.trim();
   }
 
-  final dirPath = await FilePicker.platform.getDirectoryPath(
+  final dirPath = await FilePicker.getDirectoryPath(
     dialogTitle: 'Επιλογή φακέλου βάσης δεδομένων',
   );
 

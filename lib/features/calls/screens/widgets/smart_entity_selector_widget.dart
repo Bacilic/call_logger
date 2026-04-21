@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/services/lookup_service.dart';
+import '../../../../core/utils/autocomplete_highlight_scroll.dart';
 import '../../../../core/utils/spell_check.dart';
 import '../../../../core/utils/name_parser.dart';
 import '../../../../core/utils/search_text_normalizer.dart';
@@ -31,32 +32,6 @@ bool _textOverflowsSingleLine({
     textDirection: textDirection,
   )..layout(maxWidth: double.infinity);
   return painter.width > maxWidth;
-}
-
-void _syncHighlightedListScroll({
-  required ScrollController controller,
-  required int highlightedIndex,
-  required double itemExtent,
-  required double viewportExtent,
-}) {
-  WidgetsBinding.instance.addPostFrameCallback((_) {
-    if (!controller.hasClients) return;
-    final currentOffset = controller.offset;
-    final firstVisible = (currentOffset / itemExtent).floor();
-    final lastVisible =
-        ((currentOffset + viewportExtent - itemExtent) / itemExtent).floor();
-    double targetOffset = currentOffset;
-    if (highlightedIndex < firstVisible) {
-      targetOffset = highlightedIndex * itemExtent;
-    } else if (highlightedIndex > lastVisible) {
-      targetOffset = (highlightedIndex + 1) * itemExtent - viewportExtent;
-    }
-    final maxExtent = controller.position.maxScrollExtent;
-    targetOffset = targetOffset.clamp(0.0, maxExtent);
-    if ((targetOffset - currentOffset).abs() > 0.5) {
-      controller.jumpTo(targetOffset);
-    }
-  });
 }
 
 List<String> _sortPhonesByRecent(
@@ -693,7 +668,7 @@ class _PhoneFieldState extends State<_PhoneField> {
                           if (isHighlighted && _isKeyboardPreview) {
                             if (_lastAutoScrollIndex != index) {
                               _lastAutoScrollIndex = index;
-                              _syncHighlightedListScroll(
+                              syncAutocompleteHighlightedListScroll(
                                 controller: _optionsScrollController,
                                 highlightedIndex: index,
                                 itemExtent: 48,
@@ -1297,7 +1272,7 @@ class _CallerFieldState extends State<_CallerField> {
                           if (isHighlighted && _isKeyboardPreview) {
                             if (_lastAutoScrollIndex != index) {
                               _lastAutoScrollIndex = index;
-                              _syncHighlightedListScroll(
+                              syncAutocompleteHighlightedListScroll(
                                 controller: _optionsScrollController,
                                 highlightedIndex: index,
                                 itemExtent: 48,
@@ -1782,7 +1757,7 @@ class _DepartmentFieldState extends State<_DepartmentField> {
                           if (isHighlighted && _isKeyboardPreview) {
                             if (_lastAutoScrollIndex != index) {
                               _lastAutoScrollIndex = index;
-                              _syncHighlightedListScroll(
+                              syncAutocompleteHighlightedListScroll(
                                 controller: _optionsScrollController,
                                 highlightedIndex: index,
                                 itemExtent: 48,
@@ -2305,7 +2280,7 @@ class _EquipmentFieldState extends State<_EquipmentField> {
                           if (isHighlighted && _isKeyboardPreview) {
                             if (_lastAutoScrollIndex != index) {
                               _lastAutoScrollIndex = index;
-                              _syncHighlightedListScroll(
+                              syncAutocompleteHighlightedListScroll(
                                 controller: _optionsScrollController,
                                 highlightedIndex: index,
                                 itemExtent: 48,

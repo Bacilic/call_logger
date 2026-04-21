@@ -1,4 +1,4 @@
-import 'dart:io';
+﻿import 'dart:io';
 import 'dart:ui' as ui;
 
 import 'package:file_picker/file_picker.dart';
@@ -8,6 +8,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/database/database_helper.dart';
 import '../../../../core/database/directory_repository.dart';
 import '../../../../core/models/building_map_floor.dart';
+import '../../../../core/services/lookup_service.dart';
+import '../../../calls/models/equipment_model.dart';
+import '../../../calls/models/user_model.dart';
 import '../../../../core/services/building_map_storage.dart';
 import '../../../floor_map/services/floor_color_assignment_service.dart';
 import '../../models/department_model.dart';
@@ -192,7 +195,9 @@ class BuildingMapController {
     await _ref.read(departmentDirectoryProvider.notifier).loadDepartments();
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Ενημερώθηκε το χρώμα περιοχής στο χάρτη.')),
+        const SnackBar(
+          content: Text('Ενημερώθηκε το χρώμα περιοχής στο χάρτη.'),
+        ),
       );
     }
   }
@@ -211,9 +216,7 @@ class BuildingMapController {
     if (!context.mounted) return;
 
     final manualFloorId = dept.floorId;
-    if (manualFloorId != null &&
-        manualFloorId != floorId &&
-        context.mounted) {
+    if (manualFloorId != null && manualFloorId != floorId && context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           behavior: SnackBarBehavior.floating,
@@ -268,18 +271,13 @@ class BuildingMapController {
     } else {
       final currentParsed = tryParseDepartmentHex(existingColor);
       if (currentParsed == null) {
-        final picked = FloorColorAssignmentService.instance.getNextDistinctColor(
-          floorId,
-          additionalUsed: additionalUsed,
-        );
+        final picked = FloorColorAssignmentService.instance
+            .getNextDistinctColor(floorId, additionalUsed: additionalUsed);
         colorHex = colorToDepartmentHex(picked);
         removeOldFloorColorIfMoved();
       } else {
-        final suggested =
-            FloorColorAssignmentService.instance.peekNextDistinctColor(
-          floorId,
-          additionalUsed: additionalUsed,
-        );
+        final suggested = FloorColorAssignmentService.instance
+            .peekNextDistinctColor(floorId, additionalUsed: additionalUsed);
         if (!context.mounted) return;
         final choice = await showBuildingMapCommitColorDialog(
           context,
@@ -292,11 +290,8 @@ class BuildingMapController {
           return;
         }
         if (choice) {
-          final picked =
-              FloorColorAssignmentService.instance.getNextDistinctColor(
-            floorId,
-            additionalUsed: additionalUsed,
-          );
+          final picked = FloorColorAssignmentService.instance
+              .getNextDistinctColor(floorId, additionalUsed: additionalUsed);
           colorHex = colorToDepartmentHex(picked);
           removeOldFloorColorIfMoved();
         } else {
@@ -320,10 +315,10 @@ class BuildingMapController {
           mapWidth: dept.mapWidth,
           mapHeight: dept.mapHeight,
           mapRotation: dept.mapRotation,
-        mapLabelOffsetX: dept.mapLabelOffsetX,
-        mapLabelOffsetY: dept.mapLabelOffsetY,
-        mapAnchorOffsetX: dept.mapAnchorOffsetX,
-        mapAnchorOffsetY: dept.mapAnchorOffsetY,
+          mapLabelOffsetX: dept.mapLabelOffsetX,
+          mapLabelOffsetY: dept.mapLabelOffsetY,
+          mapAnchorOffsetX: dept.mapAnchorOffsetX,
+          mapAnchorOffsetY: dept.mapAnchorOffsetY,
         );
     final db = await DatabaseHelper.instance.database;
     final updates = <String, dynamic>{
@@ -375,12 +370,11 @@ class BuildingMapController {
   }) async {
     final trimmed = editedText.trim();
     final canon = canonicalDepartmentName.trim();
-    final String? custom =
-        trimmed.isEmpty || trimmed == canon ? null : trimmed;
+    final String? custom = trimmed.isEmpty || trimmed == canon ? null : trimmed;
     final db = await DatabaseHelper.instance.database;
-    await DirectoryRepository(db).updateDepartment(departmentId, {
-      'map_custom_name': custom,
-    });
+    await DirectoryRepository(
+      db,
+    ).updateDepartment(departmentId, {'map_custom_name': custom});
     await _ref.read(departmentDirectoryProvider.notifier).loadDepartments();
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -441,30 +435,26 @@ class BuildingMapController {
           mapWidth: dept.mapWidth,
           mapHeight: dept.mapHeight,
           mapRotation: dept.mapRotation,
-        mapLabelOffsetX: dept.mapLabelOffsetX,
-        mapLabelOffsetY: dept.mapLabelOffsetY,
-        mapAnchorOffsetX: dept.mapAnchorOffsetX,
-        mapAnchorOffsetY: dept.mapAnchorOffsetY,
+          mapLabelOffsetX: dept.mapLabelOffsetX,
+          mapLabelOffsetY: dept.mapLabelOffsetY,
+          mapAnchorOffsetX: dept.mapAnchorOffsetX,
+          mapAnchorOffsetY: dept.mapAnchorOffsetY,
         );
     final db = await DatabaseHelper.instance.database;
     final removedColor = tryParseDepartmentHex(dept.color);
-    await DirectoryRepository(db).updateDepartment(dept.id!, {
-      'map_floor': null,
-      'map_x': 0.0,
-      'map_y': 0.0,
-      'map_width': 0.0,
-      'map_height': 0.0,
-      'map_rotation': 0.0,
-      'map_label_offset_x': null,
-      'map_label_offset_y': null,
-      'map_anchor_offset_x': null,
-      'map_anchor_offset_y': null,
-      'map_custom_name': null,
-      'color': null,
-    });
+    await DirectoryRepository(db).updateDepartment(
+      dept.id!,
+      DirectoryRepository.clearedBuildingMapPlacementColumns(
+        clearFloorId: true,
+        clearDepartmentHex: true,
+      ),
+    );
     final fid = int.tryParse(sheetStr);
     if (fid != null && removedColor != null) {
-      FloorColorAssignmentService.instance.removeColorFromFloor(fid, removedColor);
+      FloorColorAssignmentService.instance.removeColorFromFloor(
+        fid,
+        removedColor,
+      );
     }
     await _ref.read(departmentDirectoryProvider.notifier).loadDepartments();
     final fromSelection = _ref.read(buildingMapEditFromSelectionTapProvider);
@@ -530,7 +520,7 @@ class BuildingMapController {
   Future<void> addFloorSheet(BuildContext context) async {
     final labelCtrl = TextEditingController();
     final groupCtrl = TextEditingController();
-    final picked = await FilePicker.platform.pickFiles(
+    final picked = await FilePicker.pickFiles(
       type: FileType.image,
       withData: false,
     );
@@ -630,7 +620,7 @@ class BuildingMapController {
                 const SizedBox(height: 12),
                 OutlinedButton.icon(
                   onPressed: () async {
-                    final picked = await FilePicker.platform.pickFiles(
+                    final picked = await FilePicker.pickFiles(
                       type: FileType.image,
                       withData: false,
                     );
@@ -815,6 +805,337 @@ class BuildingMapController {
     }
   }
 
+  void _showMapSnack(BuildContext context, String message) {
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  Future<List<int>> _departmentIdsForUserId(int userId) async {
+    final db = await DatabaseHelper.instance.database;
+    final rows = await db.rawQuery(
+      '''
+      WITH phone_dept AS (
+        SELECT p.id AS phone_id, p.department_id AS department_id
+        FROM phones p
+        WHERE p.department_id IS NOT NULL
+        UNION
+        SELECT dp.phone_id AS phone_id, dp.department_id AS department_id
+        FROM department_phones dp
+      )
+      SELECT DISTINCT src.department_id AS department_id
+      FROM (
+        SELECT u.department_id AS department_id
+        FROM users u
+        WHERE u.id = ? AND u.department_id IS NOT NULL
+        UNION
+        SELECT pd.department_id AS department_id
+        FROM user_phones up
+        JOIN phone_dept pd ON pd.phone_id = up.phone_id
+        WHERE up.user_id = ?
+      ) src
+      JOIN departments d ON d.id = src.department_id
+      WHERE COALESCE(d.is_deleted, 0) = 0
+      ORDER BY src.department_id ASC
+      ''',
+      [userId, userId],
+    );
+    return rows
+        .map((row) => row['department_id'] as int?)
+        .whereType<int>()
+        .toList(growable: false);
+  }
+
+  Future<List<int>> _departmentIdsForPhone(String phoneText) async {
+    final trimmed = phoneText.trim();
+    if (trimmed.isEmpty) return const [];
+    final db = await DatabaseHelper.instance.database;
+    final rows = await db.rawQuery(
+      '''
+      WITH phone_dept AS (
+        SELECT p.id AS phone_id, p.department_id AS department_id
+        FROM phones p
+        WHERE p.department_id IS NOT NULL
+        UNION
+        SELECT dp.phone_id AS phone_id, dp.department_id AS department_id
+        FROM department_phones dp
+      )
+      SELECT DISTINCT pd.department_id AS department_id
+      FROM phones p
+      JOIN phone_dept pd ON pd.phone_id = p.id
+      JOIN departments d ON d.id = pd.department_id
+      WHERE COALESCE(d.is_deleted, 0) = 0
+        AND p.number = ?
+      ORDER BY pd.department_id ASC
+      ''',
+      [trimmed],
+    );
+    return rows
+        .map((row) => row['department_id'] as int?)
+        .whereType<int>()
+        .toList(growable: false);
+  }
+
+  Future<UserModel?> _pickUserForEquipment(
+    BuildContext context,
+    List<UserModel> users,
+  ) async {
+    if (users.isEmpty) return null;
+    if (users.length == 1) return users.first;
+    final selected = await showDialog<UserModel>(
+      context: context,
+      builder: (ctx) {
+        return SimpleDialog(
+          title: const Text('Επιλογή υπαλλήλου'),
+          children: [
+            for (final user in users)
+              SimpleDialogOption(
+                onPressed: () => Navigator.of(ctx).pop(user),
+                child: Text(user.name?.trim().isNotEmpty == true ? user.name! : 'Χωρίς όνομα'),
+              ),
+          ],
+        );
+      },
+    );
+    return selected;
+  }
+
+  Future<bool> _confirmJumpToUser(
+    BuildContext context,
+    String userDisplayName,
+  ) async {
+    final approved = await showDialog<bool>(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          title: const Text('Εντοπισμός μέσω υπαλλήλου'),
+          content: Text(
+            'Δεν έχει οριστεί τμήμα για τον εξοπλισμό. Επιθυμείτε εντοπισμό του υπαλλήλου $userDisplayName;',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Άκυρο'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: const Text('Συνέχεια'),
+            ),
+          ],
+        );
+      },
+    );
+    return approved ?? false;
+  }
+
+  Future<int?> _pickDepartmentIdIfNeeded(
+    BuildContext context,
+    List<int> departmentIds,
+    List<DepartmentModel> departments,
+  ) async {
+    final unique = departmentIds.toSet().toList()..sort();
+    if (unique.isEmpty) return null;
+    if (unique.length == 1) return unique.first;
+    final byId = <int, DepartmentModel>{
+      for (final d in departments)
+        if (d.id != null) d.id!: d,
+    };
+    final selected = await showDialog<int>(
+      context: context,
+      builder: (ctx) {
+        return SimpleDialog(
+          title: const Text('Επιλογή τμήματος'),
+          children: [
+            for (final deptId in unique)
+              SimpleDialogOption(
+                onPressed: () => Navigator.of(ctx).pop(deptId),
+                child: Text(byId[deptId]?.name ?? 'Τμήμα #$deptId'),
+              ),
+          ],
+        );
+      },
+    );
+    return selected;
+  }
+
+  Future<List<int>> _resolveDepartmentIdsFromEquipment(
+    BuildContext context,
+    EquipmentModel equipment,
+  ) async {
+    final directDeptId = equipment.departmentId;
+    if (directDeptId != null) return [directDeptId];
+
+    final equipmentId = equipment.id;
+    if (equipmentId == null) return const [];
+    final lookup = LookupService.instance;
+    await lookup.loadFromDatabase(forceRefresh: true);
+    if (!context.mounted) return const [];
+    final users = lookup.findUsersForEquipment(equipmentId);
+    final chosenUser = await _pickUserForEquipment(context, users);
+    if (chosenUser == null) return const [];
+    if (!context.mounted) return const [];
+    final name = (chosenUser.name ?? '').trim();
+    final userDisplayName = name.isEmpty ? 'χωρίς όνομα' : name;
+    final shouldContinue = await _confirmJumpToUser(context, userDisplayName);
+    if (!shouldContinue) return const [];
+    final userId = chosenUser.id;
+    if (userId == null) return const [];
+    return _departmentIdsForUserId(userId);
+  }
+
+  Future<void> _jumpToDepartmentWithFallback({
+    required int departmentId,
+    required List<DepartmentModel> departments,
+    required List<BuildingMapFloor> floors,
+  }) async {
+    final department = departments.cast<DepartmentModel?>().firstWhere(
+      (d) => d?.id == departmentId,
+      orElse: () => null,
+    );
+    if (department == null) return;
+
+    final mapFloor = department.mapFloor?.trim();
+    final mappedFloorId = mapFloor == null ? null : int.tryParse(mapFloor);
+    final isMapped =
+        department.mapX != null &&
+        department.mapY != null &&
+        (department.mapWidth ?? 0) > 0 &&
+        (department.mapHeight ?? 0) > 0 &&
+        mappedFloorId != null &&
+        floors.any((f) => f.id == mappedFloorId);
+
+    if (isMapped) {
+      await jumpToMappedDepartment(
+        department: department,
+        floors: floors,
+        departments: departments,
+      );
+      return;
+    }
+
+    int? fallbackFloorId;
+    final preferredFloorId = department.floorId;
+    if (preferredFloorId != null && floors.any((f) => f.id == preferredFloorId)) {
+      fallbackFloorId = preferredFloorId;
+    } else if (mappedFloorId != null && floors.any((f) => f.id == mappedFloorId)) {
+      fallbackFloorId = mappedFloorId;
+    } else if (floors.isNotEmpty) {
+      fallbackFloorId = floors.first.id;
+    }
+    if (fallbackFloorId == null) return;
+    await selectFloorFromList(
+      fallbackFloorId,
+      floors,
+      clearSelectedDepartment: false,
+    );
+    _ref
+        .read(buildingMapSelectedDepartmentIdToMapProvider.notifier)
+        .setDept(departmentId);
+  }
+
+  Future<void> resolveAndJumpToEntity(
+    BuildContext context,
+    dynamic entity,
+  ) async {
+    final repo = _ref.read(buildingMapDirectoryRepositoryProvider).asData?.value;
+    if (repo == null) {
+      _showMapSnack(context, 'Ο χάρτης δεν είναι έτοιμος ακόμη.');
+      return;
+    }
+    final floors = await repo.listBuildingMapFloors();
+    if (!context.mounted) return;
+    if (floors.isEmpty) {
+      _showMapSnack(context, 'Δεν υπάρχουν διαθέσιμα φύλλα χάρτη.');
+      return;
+    }
+
+    await _ref.read(departmentDirectoryProvider.notifier).loadDepartments();
+    if (!context.mounted) return;
+    final departments = _ref
+        .read(departmentDirectoryProvider)
+        .allDepartments
+        .where((d) => !d.isDeleted)
+        .toList(growable: false);
+
+    List<int> candidateDepartmentIds = const [];
+    if (entity is BuildingMapOmnisearchHit) {
+      switch (entity.kind) {
+        case BuildingMapOmnisearchEntityKind.department:
+          candidateDepartmentIds = [entity.entityId];
+          break;
+        case BuildingMapOmnisearchEntityKind.user:
+          candidateDepartmentIds = entity.departmentIds.isNotEmpty
+              ? entity.departmentIds
+              : await _departmentIdsForUserId(entity.entityId);
+          break;
+        case BuildingMapOmnisearchEntityKind.equipment:
+          if (entity.departmentIds.isNotEmpty) {
+            candidateDepartmentIds = entity.departmentIds;
+          } else {
+            final lookup = LookupService.instance;
+            await lookup.loadFromDatabase(forceRefresh: true);
+            if (!context.mounted) return;
+            final equipment = lookup
+                .findEquipmentsByCode(entity.title)
+                .firstWhere(
+                  (eq) => eq.id == entity.entityId,
+                  orElse: () => EquipmentModel(id: entity.entityId),
+                );
+            candidateDepartmentIds = await _resolveDepartmentIdsFromEquipment(
+              context,
+              equipment,
+            );
+          }
+          break;
+      }
+    } else if (entity is DepartmentModel) {
+      if (entity.id != null) candidateDepartmentIds = [entity.id!];
+    } else if (entity is UserModel) {
+      final userId = entity.id;
+      if (userId != null) {
+        candidateDepartmentIds = await _departmentIdsForUserId(userId);
+      }
+    } else if (entity is EquipmentModel) {
+      if (!context.mounted) return;
+      candidateDepartmentIds = await _resolveDepartmentIdsFromEquipment(
+        context,
+        entity,
+      );
+    } else if (entity is int) {
+      candidateDepartmentIds = [entity];
+    } else if (entity is String) {
+      candidateDepartmentIds = await _departmentIdsForPhone(entity);
+    } else if (entity is Map<String, dynamic>) {
+      final kind = (entity['kind'] as String?)?.trim().toLowerCase();
+      final id = entity['id'];
+      if (kind == 'department' && id is int) {
+        candidateDepartmentIds = [id];
+      } else if (kind == 'user' && id is int) {
+        candidateDepartmentIds = await _departmentIdsForUserId(id);
+      } else if (kind == 'phone' && entity['phone'] is String) {
+        candidateDepartmentIds = await _departmentIdsForPhone(
+          entity['phone'] as String,
+        );
+      }
+    }
+
+    if (!context.mounted) return;
+    final selectedDepartmentId = await _pickDepartmentIdIfNeeded(
+      context,
+      candidateDepartmentIds,
+      departments,
+    );
+    if (selectedDepartmentId == null) {
+      if (!context.mounted) return;
+      _showMapSnack(context, 'Δεν βρέθηκε τμήμα για την οντότητα.');
+      return;
+    }
+    await _jumpToDepartmentWithFallback(
+      departmentId: selectedDepartmentId,
+      departments: departments,
+      floors: floors,
+    );
+  }
+
   Future<void> jumpToDepartmentFromSearch({
     required String rawQuery,
     required List<BuildingMapFloor> floors,
@@ -843,7 +1164,33 @@ class BuildingMapController {
         departmentId: deptId,
         floorId: targetId,
       );
+      _ref.read(buildingMapViewportCenterRequestSeqProvider.notifier).bump();
       break;
     }
+  }
+
+  /// Μετάβαση στο φύλλο/τμήμα όταν είναι ήδη γνωστό το [DepartmentModel] (π.χ. από autocomplete).
+  Future<void> jumpToMappedDepartment({
+    required DepartmentModel department,
+    required List<BuildingMapFloor> floors,
+    required List<DepartmentModel> departments,
+  }) async {
+    final mf = department.mapFloor?.trim();
+    if (mf == null || mf.isEmpty) return;
+    final targetId = int.tryParse(mf);
+    if (targetId == null) return;
+    if (!floors.any((f) => f.id == targetId)) return;
+    final deptId = department.id;
+    if (deptId == null) return;
+    await selectFloorFromList(targetId, floors, clearSelectedDepartment: false);
+    _ref
+        .read(buildingMapSelectedDepartmentIdToMapProvider.notifier)
+        .setDept(deptId);
+    syncDraftWithSelectedDepartment(
+      departments: departments,
+      departmentId: deptId,
+      floorId: targetId,
+    );
+    _ref.read(buildingMapViewportCenterRequestSeqProvider.notifier).bump();
   }
 }

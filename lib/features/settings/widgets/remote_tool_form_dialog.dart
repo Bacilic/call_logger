@@ -1,4 +1,4 @@
-import 'dart:io';
+﻿import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -319,7 +319,7 @@ class _RemoteToolFormDialogState extends ConsumerState<RemoteToolFormDialog> {
 
   Future<void> _pickExecutable() async {
     final initial = initialDirectoryForFilePicker(_pathC.text);
-    final r = await FilePicker.platform.pickFiles(
+    final r = await FilePicker.pickFiles(
       type: FileType.any,
       dialogTitle: 'Εκτελέσιμο',
       initialDirectory: initial,
@@ -335,7 +335,7 @@ class _RemoteToolFormDialogState extends ConsumerState<RemoteToolFormDialog> {
 
   Future<void> _pickIcon() async {
     final initial = initialDirectoryForFilePicker(_iconC.text);
-    final r = await FilePicker.platform.pickFiles(
+    final r = await FilePicker.pickFiles(
       type: FileType.custom,
       allowedExtensions: ['png', 'svg', 'ico'],
       dialogTitle: 'Εικονίδιο εργαλείου',

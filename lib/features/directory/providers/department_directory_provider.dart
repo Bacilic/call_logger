@@ -41,14 +41,14 @@ class DepartmentDirectoryState {
     this.focusedRowIndex,
     List<DepartmentDirectoryColumn>? columnOrder,
     Set<String>? visibleColumnKeys,
-  })  : columnOrder = DepartmentDirectoryColumn.pinSelectionFirst(
-          List<DepartmentDirectoryColumn>.from(
-            columnOrder ?? DepartmentDirectoryColumn.all,
-          ),
-        ),
-        visibleColumnKeys = visibleColumnKeys != null
-            ? Set<String>.from(visibleColumnKeys)
-            : {for (final c in DepartmentDirectoryColumn.all) c.key};
+  }) : columnOrder = DepartmentDirectoryColumn.pinSelectionFirst(
+         List<DepartmentDirectoryColumn>.from(
+           columnOrder ?? DepartmentDirectoryColumn.all,
+         ),
+       ),
+       visibleColumnKeys = visibleColumnKeys != null
+           ? Set<String>.from(visibleColumnKeys)
+           : {for (final c in DepartmentDirectoryColumn.all) c.key};
 
   final List<DepartmentModel> allDepartments;
   final List<DepartmentModel> filteredDepartments;
@@ -65,14 +65,13 @@ class DepartmentDirectoryState {
   List<DepartmentDirectoryColumn> get orderedVisibleColumns {
     return [
       for (final c in columnOrder)
-        if (visibleColumnKeys.contains(c.key)) c
+        if (visibleColumnKeys.contains(c.key)) c,
     ];
   }
 }
 
 /// Notifier καταλόγου τμημάτων.
-class DepartmentDirectoryNotifier
-    extends Notifier<DepartmentDirectoryState> {
+class DepartmentDirectoryNotifier extends Notifier<DepartmentDirectoryState> {
   bool _columnLayoutHydrated = false;
 
   @override
@@ -148,27 +147,29 @@ class DepartmentDirectoryNotifier
 
   Future<_DepartmentColumnLayout?> _readColumnLayoutFromSettings() async {
     final dbCols = await DatabaseHelper.instance.database;
-    final raw = await DirectoryRepository(dbCols)
-        .getSetting(_catalogDepartmentsVisibleColumnsKey);
+    final raw = await DirectoryRepository(
+      dbCols,
+    ).getSetting(_catalogDepartmentsVisibleColumnsKey);
     if (raw == null || raw.trim().isEmpty) return null;
     return _parseColumnLayoutFromJson(raw);
   }
 
-  Future<void> _persistDepartmentColumnLayout(DepartmentDirectoryState s) async {
+  Future<void> _persistDepartmentColumnLayout(
+    DepartmentDirectoryState s,
+  ) async {
     final order = s.columnOrder;
     final vis = s.visibleColumnKeys;
     final payload = jsonEncode({
       'order': order.map((c) => c.key).toList(),
       'visible': [
         for (final c in order)
-          if (vis.contains(c.key)) c.key
+          if (vis.contains(c.key)) c.key,
       ],
     });
     final dbPersist = await DatabaseHelper.instance.database;
-    await DirectoryRepository(dbPersist).setSetting(
-      _catalogDepartmentsVisibleColumnsKey,
-      payload,
-    );
+    await DirectoryRepository(
+      dbPersist,
+    ).setSetting(_catalogDepartmentsVisibleColumnsKey, payload);
   }
 
   Future<void> loadDepartments() async {
@@ -212,14 +213,14 @@ class DepartmentDirectoryNotifier
         final equipmentText = did == null
             ? ''
             : LookupService.instance
-                .getAllEquipmentByDepartment(did)
-                .map((e) {
-                  final code = e.code?.trim();
-                  if (code != null && code.isNotEmpty) return code;
-                  return e.displayLabel.trim();
-                })
-                .where((v) => v.isNotEmpty)
-                .join(' ');
+                  .getAllEquipmentByDepartment(did)
+                  .map((e) {
+                    final code = e.code?.trim();
+                    if (code != null && code.isNotEmpty) return code;
+                    return e.displayLabel.trim();
+                  })
+                  .where((v) => v.isNotEmpty)
+                  .join(' ');
         final blob = [
           d.name,
           d.building ?? '',
@@ -269,16 +270,20 @@ class DepartmentDirectoryNotifier
           case 'equipment':
             final aEquipment = LookupService.instance
                 .getAllEquipmentByDepartment(a.id ?? -1)
-                .map((e) => e.code?.trim().isNotEmpty == true
-                    ? e.code!.trim()
-                    : e.displayLabel.trim())
+                .map(
+                  (e) => e.code?.trim().isNotEmpty == true
+                      ? e.code!.trim()
+                      : e.displayLabel.trim(),
+                )
                 .where((v) => v.isNotEmpty)
                 .join(', ');
             final bEquipment = LookupService.instance
                 .getAllEquipmentByDepartment(b.id ?? -1)
-                .map((e) => e.code?.trim().isNotEmpty == true
-                    ? e.code!.trim()
-                    : e.displayLabel.trim())
+                .map(
+                  (e) => e.code?.trim().isNotEmpty == true
+                      ? e.code!.trim()
+                      : e.displayLabel.trim(),
+                )
                 .where((v) => v.isNotEmpty)
                 .join(', ');
             cmp = aEquipment.compareTo(bEquipment);
@@ -291,7 +296,9 @@ class DepartmentDirectoryNotifier
     }
     final len = list.length;
     final idx = state.focusedRowIndex;
-    final clamped = idx != null && idx >= len ? (len > 0 ? len - 1 : null) : idx;
+    final clamped = idx != null && idx >= len
+        ? (len > 0 ? len - 1 : null)
+        : idx;
     state = DepartmentDirectoryState(
       allDepartments: state.allDepartments,
       filteredDepartments: list,
@@ -309,9 +316,7 @@ class DepartmentDirectoryNotifier
 
   void setFocusedRowIndex(int? index) {
     final len = state.filteredDepartments.length;
-    final clamped = index == null || len == 0
-        ? null
-        : index.clamp(0, len - 1);
+    final clamped = index == null || len == 0 ? null : index.clamp(0, len - 1);
     _patch(focusedRow: clamped, keepFocusedRow: false);
   }
 
@@ -351,18 +356,18 @@ class DepartmentDirectoryNotifier
           : lastDeleted as List<DepartmentModel>?,
       lastBulkUpdatedDepartments:
           identical(lastBulkUpdatedDepartments, _kPatchKeep)
-              ? state.lastBulkUpdatedDepartments
-              : lastBulkUpdatedDepartments as List<DepartmentModel>?,
-      focusedRowIndex:
-          keepFocusedRow ? state.focusedRowIndex : focusedRow,
+          ? state.lastBulkUpdatedDepartments
+          : lastBulkUpdatedDepartments as List<DepartmentModel>?,
+      focusedRowIndex: keepFocusedRow ? state.focusedRowIndex : focusedRow,
       columnOrder: columnOrder ?? state.columnOrder,
       visibleColumnKeys: visibleColumnKeys ?? state.visibleColumnKeys,
     );
   }
 
   void toggleSelection(int id) {
-    if (!state.visibleColumnKeys
-        .contains(DepartmentDirectoryColumn.selection.key)) {
+    if (!state.visibleColumnKeys.contains(
+      DepartmentDirectoryColumn.selection.key,
+    )) {
       return;
     }
     final next = Set<int>.from(state.selectedIds);
@@ -381,7 +386,10 @@ class DepartmentDirectoryNotifier
     if (oldIndex < newIndex) newIndex -= 1;
     final item = rest.removeAt(oldIndex);
     rest.insert(newIndex, item);
-    final newOrder = DepartmentDirectoryColumn.pinSelectionFirst([sel, ...rest]);
+    final newOrder = DepartmentDirectoryColumn.pinSelectionFirst([
+      sel,
+      ...rest,
+    ]);
     _patch(columnOrder: newOrder);
     await _persistDepartmentColumnLayout(state);
   }
@@ -454,13 +462,12 @@ class DepartmentDirectoryNotifier
 
   Future<void> updateDepartment(
     DepartmentModel d, {
-    bool clearFloorIdInDb = false,
+    bool clearBuildingMapPlacement = false,
   }) async {
     if (d.id == null) return;
     final dbUpd = await DatabaseHelper.instance.database;
     final dirUpd = DirectoryRepository(dbUpd);
-    final nameTaken = await dirUpd
-        .departmentNameExistsExcluding(d.name, d.id!);
+    final nameTaken = await dirUpd.departmentNameExistsExcluding(d.name, d.id!);
     if (nameTaken) {
       throw StateError('Υπάρχει ήδη άλλο τμήμα με αυτό το όνομα.');
     }
@@ -470,8 +477,16 @@ class DepartmentDirectoryNotifier
         map,
         manualFloorId: d.floorId,
       );
-    } else if (clearFloorIdInDb) {
+    } else {
       map['floor_id'] = null;
+      if (clearBuildingMapPlacement) {
+        map.addAll(
+          DirectoryRepository.clearedBuildingMapPlacementColumns(
+            clearFloorId: false,
+            clearDepartmentHex: false,
+          ),
+        );
+      }
     }
     await dirUpd.updateDepartment(d.id!, map);
     await _refreshLookupCache();
@@ -486,7 +501,9 @@ class DepartmentDirectoryNotifier
     Set<String> equipmentToMoveFromUsers = const {},
   }) async {
     final lookup = LookupService.instance;
-    final existingPhones = lookup.getDirectPhonesByDepartment(departmentId).toSet();
+    final existingPhones = lookup
+        .getDirectPhonesByDepartment(departmentId)
+        .toSet();
     final nextPhones = sharedPhones
         .map((v) => v.trim())
         .where((v) => v.isNotEmpty)
@@ -540,8 +557,9 @@ class DepartmentDirectoryNotifier
         .where((d) => d.id != null && state.selectedIds.contains(d.id))
         .toList();
     final dbDel = await DatabaseHelper.instance.database;
-    await DirectoryRepository(dbDel)
-        .softDeleteDepartments(state.selectedIds.toList());
+    await DirectoryRepository(
+      dbDel,
+    ).softDeleteDepartments(state.selectedIds.toList());
     await _refreshLookupCache();
     if (!ref.mounted) return;
     state = DepartmentDirectoryState(
@@ -604,7 +622,9 @@ class DepartmentDirectoryNotifier
     for (final d in list) {
       if (d.id != null) {
         final dbUndoBulk = await DatabaseHelper.instance.database;
-        await DirectoryRepository(dbUndoBulk).updateDepartment(d.id!, d.toMap());
+        await DirectoryRepository(
+          dbUndoBulk,
+        ).updateDepartment(d.id!, d.toMap());
         if (!ref.mounted) return;
       }
     }
@@ -614,7 +634,7 @@ class DepartmentDirectoryNotifier
   }
 }
 
-final departmentDirectoryProvider = NotifierProvider<
-    DepartmentDirectoryNotifier, DepartmentDirectoryState>(
-  DepartmentDirectoryNotifier.new,
-);
+final departmentDirectoryProvider =
+    NotifierProvider<DepartmentDirectoryNotifier, DepartmentDirectoryState>(
+      DepartmentDirectoryNotifier.new,
+    );

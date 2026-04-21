@@ -1,4 +1,4 @@
-import 'dart:io';
+﻿import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -43,7 +43,7 @@ class _CreateNewDatabaseDialogState extends State<CreateNewDatabaseDialog> {
   }
 
   Future<void> _pickFolder() async {
-    final dirPath = await FilePicker.platform.getDirectoryPath(
+    final dirPath = await FilePicker.getDirectoryPath(
       dialogTitle: 'Επιλογή φακέλου για νέο αρχείο βάσης',
     );
     if (dirPath != null && dirPath.trim().isNotEmpty && mounted) {

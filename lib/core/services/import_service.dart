@@ -1,4 +1,4 @@
-import 'package:file_picker/file_picker.dart';
+﻿import 'package:file_picker/file_picker.dart';
 
 import '../database/database_helper.dart';
 import '../database/directory_repository.dart';
@@ -13,7 +13,7 @@ class ImportService {
     required void Function(String message, [ImportLogLevel? level]) onLog,
   }) async {
     try {
-      final result = await FilePicker.platform.pickFiles(
+      final result = await FilePicker.pickFiles(
         type: FileType.custom,
         allowedExtensions: ['xlsx'],
         allowMultiple: false,

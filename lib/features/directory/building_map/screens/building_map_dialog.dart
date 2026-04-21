@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/database/directory_repository.dart';
@@ -7,7 +7,11 @@ import '../controllers/building_map_controller.dart';
 import '../providers/building_map_providers.dart';
 import '../widgets/building_map_floors_body.dart';
 
-Future<void> showBuildingMapDialog(BuildContext context, WidgetRef ref) async {
+Future<void> showBuildingMapDialog(
+  BuildContext context,
+  WidgetRef ref, {
+  dynamic pendingEntity,
+}) async {
   ref.read(buildingMapSelectedDepartmentIdToMapProvider.notifier).setDept(null);
   ref.read(buildingMapToolProvider.notifier).setMode(MapToolMode.select);
   ref.read(buildingMapDraftShapeProvider.notifier).clear();
@@ -19,6 +23,11 @@ Future<void> showBuildingMapDialog(BuildContext context, WidgetRef ref) async {
   ref
       .read(buildingMapDeptSelectionHudVisibleProvider.notifier)
       .setVisible(false);
+  final pendingJump = ref.read(buildingMapPendingJumpProvider.notifier);
+  pendingJump.clear();
+  if (pendingEntity != null) {
+    pendingJump.setEntity(pendingEntity);
+  }
   ref.read(buildingMapControllerProvider).resetSession();
   await showDialog<void>(
     context: context,
@@ -90,7 +99,18 @@ class BuildingMapDialog extends ConsumerWidget {
       body: floorsAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('Σφάλμα: $e')),
-        data: (repo) => BuildingMapFloorsBody(repo: repo),
+        data: (repo) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            final payload = ref
+                .read(buildingMapPendingJumpProvider.notifier)
+                .consume();
+            if (payload == null || !context.mounted) return;
+            ref
+                .read(buildingMapControllerProvider)
+                .resolveAndJumpToEntity(context, payload.entity);
+          });
+          return BuildingMapFloorsBody(repo: repo);
+        },
       ),
     );
   }

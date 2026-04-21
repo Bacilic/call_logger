@@ -1,4 +1,4 @@
-import 'package:file_picker/file_picker.dart';
+﻿import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -104,7 +104,7 @@ class _DictionarySettingsDialogState
   }
 
   Future<void> _pickSaveSourcePath() async {
-    final r = await FilePicker.platform.pickFiles(
+    final r = await FilePicker.pickFiles(
       dialogTitle: 'Αρχείο πηγής λεξικού (TXT)',
       type: FileType.custom,
       allowedExtensions: const ['txt'],
@@ -119,7 +119,7 @@ class _DictionarySettingsDialogState
   }
 
   Future<void> _pickSaveExportPath() async {
-    final p = await FilePicker.platform.saveFile(
+    final p = await FilePicker.saveFile(
       dialogTitle: 'Αρχείο εξαγωγής Compile (TXT)',
       type: FileType.custom,
       allowedExtensions: const ['txt'],

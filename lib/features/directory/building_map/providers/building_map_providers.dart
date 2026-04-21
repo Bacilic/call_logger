@@ -1,4 +1,4 @@
-import 'dart:math' as math;
+﻿import 'dart:math' as math;
 import 'dart:ui' show Offset, Rect, Size;
 
 import 'package:flutter/foundation.dart';
@@ -326,5 +326,55 @@ class BuildingMapFloorReloadSeqNotifier extends Notifier<int> {
 
   void reset() {
     state = 0;
+  }
+}
+
+/// Αύξων αριθμός όταν η αναζήτηση χάρτη ζητά κεντράρισμα στο επιλεγμένο τμήμα (μόνο pan, ίδιο zoom).
+final buildingMapViewportCenterRequestSeqProvider =
+    NotifierProvider<BuildingMapViewportCenterRequestNotifier, int>(
+      BuildingMapViewportCenterRequestNotifier.new,
+    );
+
+class BuildingMapViewportCenterRequestNotifier extends Notifier<int> {
+  @override
+  int build() => 0;
+
+  void bump() {
+    state = state + 1;
+  }
+}
+
+@immutable
+class BuildingMapPendingJumpPayload {
+  const BuildingMapPendingJumpPayload({
+    required this.entity,
+  });
+
+  final dynamic entity;
+}
+
+final buildingMapPendingJumpProvider =
+    NotifierProvider<
+      BuildingMapPendingJumpNotifier,
+      BuildingMapPendingJumpPayload?
+    >(BuildingMapPendingJumpNotifier.new);
+
+class BuildingMapPendingJumpNotifier
+    extends Notifier<BuildingMapPendingJumpPayload?> {
+  @override
+  BuildingMapPendingJumpPayload? build() => null;
+
+  void setEntity(dynamic entity) {
+    state = BuildingMapPendingJumpPayload(entity: entity);
+  }
+
+  BuildingMapPendingJumpPayload? consume() {
+    final current = state;
+    state = null;
+    return current;
+  }
+
+  void clear() {
+    state = null;
   }
 }
