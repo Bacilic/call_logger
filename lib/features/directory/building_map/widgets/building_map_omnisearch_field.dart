@@ -1,10 +1,11 @@
-﻿import 'dart:async';
-
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/database/directory_repository.dart';
+import '../../../../core/utils/search_debouncer.dart';
+import '../providers/building_map_providers.dart';
 
-class BuildingMapOmnisearchField extends StatefulWidget {
+class BuildingMapOmnisearchField extends ConsumerStatefulWidget {
   const BuildingMapOmnisearchField({
     super.key,
     required this.enabled,
@@ -21,13 +22,12 @@ class BuildingMapOmnisearchField extends StatefulWidget {
   final Future<void> Function(dynamic entity) onResolveEntity;
 
   @override
-  State<BuildingMapOmnisearchField> createState() =>
+  ConsumerState<BuildingMapOmnisearchField> createState() =>
       _BuildingMapOmnisearchFieldState();
 }
 
-class _BuildingMapOmnisearchFieldState extends State<BuildingMapOmnisearchField> {
-  Timer? _debounce;
-  int _requestSeq = 0;
+class _BuildingMapOmnisearchFieldState extends ConsumerState<BuildingMapOmnisearchField> {
+  final SearchDebouncer _debouncer = SearchDebouncer();
   bool _loading = false;
   List<BuildingMapOmnisearchHit> _hits = const [];
 
@@ -48,26 +48,29 @@ class _BuildingMapOmnisearchFieldState extends State<BuildingMapOmnisearchField>
 
   @override
   void dispose() {
-    _debounce?.cancel();
+    _debouncer.dispose();
     widget.controller.removeListener(_onTextChanged);
     super.dispose();
   }
 
   void _onTextChanged() {
-    _debounce?.cancel();
-    _debounce = Timer(const Duration(milliseconds: 220), () {
-      _search(widget.controller.text);
+    _debouncer.run(widget.controller.text, (q, isCurrent) async {
+      await _performSearch(q, isCurrent);
     });
   }
 
-  Future<void> _search(
-    String query, {
+  Future<void> _performSearch(
+    String query,
+    bool Function() isCurrent, {
     bool directFocusWhenSingle = false,
   }) async {
     final trimmed = query.trim();
     if (!widget.enabled) return;
     if (trimmed.isEmpty) {
       if (!mounted) return;
+      ref
+          .read(buildingMapSearchRevealedDepartmentIdProvider.notifier)
+          .clear();
       setState(() {
         _hits = const [];
         _loading = false;
@@ -75,12 +78,11 @@ class _BuildingMapOmnisearchFieldState extends State<BuildingMapOmnisearchField>
       return;
     }
 
-    final req = ++_requestSeq;
     if (mounted && !_loading) {
       setState(() => _loading = true);
     }
     final hits = await widget.repo.searchBuildingMapOmnisearch(trimmed);
-    if (!mounted || req != _requestSeq) return;
+    if (!mounted || !isCurrent()) return;
 
     setState(() {
       _hits = hits;
@@ -89,6 +91,12 @@ class _BuildingMapOmnisearchFieldState extends State<BuildingMapOmnisearchField>
     if (directFocusWhenSingle && hits.length == 1) {
       await widget.onResolveEntity(hits.first);
     }
+  }
+
+  Future<void> _searchImmediate(String query) async {
+    await _debouncer.runImmediate(query, (q, isCurrent) async {
+      await _performSearch(q, isCurrent, directFocusWhenSingle: true);
+    });
   }
 
   IconData _iconForHit(BuildingMapOmnisearchHit hit) {
@@ -133,7 +141,7 @@ class _BuildingMapOmnisearchFieldState extends State<BuildingMapOmnisearchField>
           focusNode: focusNode,
           enabled: widget.enabled,
           onSubmitted: (value) async {
-            await _search(value, directFocusWhenSingle: true);
+            await _searchImmediate(value);
             onSubmit();
           },
           decoration: InputDecoration(
@@ -153,10 +161,7 @@ class _BuildingMapOmnisearchFieldState extends State<BuildingMapOmnisearchField>
                     tooltip: 'Αναζήτηση',
                     onPressed: widget.enabled
                         ? () async {
-                            await _search(
-                              controller.text,
-                              directFocusWhenSingle: true,
-                            );
+                            await _searchImmediate(controller.text);
                           }
                         : null,
                     icon: const Icon(Icons.search),

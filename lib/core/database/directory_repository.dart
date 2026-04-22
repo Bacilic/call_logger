@@ -1507,7 +1507,36 @@ ORDER BY p.number COLLATE NOCASE ASC
     return count;
   }
 
-  /// Στήλες που μηδενίζουν την τοποθέτηση τμήματος στον χάρτη κτιρίου (`map_*`, `floor_id`).
+  /// Πυρήνας «τοποθέτησης χάρτη» (χωρίς `floor_id`, `color`): οι στήλες
+  /// με τις προεπιλογές τους όταν αφαιρείται εντελώς το τμήμα από τον χάρτη.
+  ///
+  /// Ομαδοποιημένο εδώ ώστε η προσθήκη νέας `map_*` στήλης να γίνεται σε ένα σημείο
+  /// και αυτόματα να συμπεριλαμβάνεται σε κάθε «full clear».
+  static const Map<String, Object?> _kBuildingMapPlacementClearedDefaults =
+      <String, Object?>{
+    'map_floor': null,
+    'map_x': 0.0,
+    'map_y': 0.0,
+    'map_width': 0.0,
+    'map_height': 0.0,
+    'map_rotation': 0.0,
+    'map_label_offset_x': null,
+    'map_label_offset_y': null,
+    'map_anchor_offset_x': null,
+    'map_anchor_offset_y': null,
+    'map_custom_name': null,
+    // Μηδενισμός ορατότητας: αν αργότερα το τμήμα ξαναχαρτογραφηθεί, ξεκινά ορατό.
+    'map_hidden': 0,
+  };
+
+  /// Ονόματα στηλών που επηρεάζονται από [clearedBuildingMapPlacementColumns].
+  /// Χρήσιμο για διαγνωστικά/ελέγχους σχήματος — δεν συμπεριλαμβάνει προαιρετικές
+  /// στήλες (`floor_id`, `color`) που ενεργοποιούνται από flags.
+  static Iterable<String> get buildingMapPlacementColumnNames =>
+      _kBuildingMapPlacementClearedDefaults.keys;
+
+  /// Στήλες που μηδενίζουν την τοποθέτηση τμήματος στον χάρτη κτιρίου (`map_*`,
+  /// προαιρετικά `floor_id`, `color`).
   ///
   /// [clearFloorId]: `floor_id` → NULL (απόδεσμευση από φύλλο κατόψης στον κατάλογο).
   /// [clearDepartmentHex]: `#RRGGBB` → NULL (χρώμα που χρησιμοποιούταν ως γέμισμα στο χάρτη).
@@ -1515,19 +1544,9 @@ ORDER BY p.number COLLATE NOCASE ASC
     bool clearFloorId = false,
     bool clearDepartmentHex = false,
   }) {
-    final map = <String, dynamic>{
-      'map_floor': null,
-      'map_x': 0.0,
-      'map_y': 0.0,
-      'map_width': 0.0,
-      'map_height': 0.0,
-      'map_rotation': 0.0,
-      'map_label_offset_x': null,
-      'map_label_offset_y': null,
-      'map_anchor_offset_x': null,
-      'map_anchor_offset_y': null,
-      'map_custom_name': null,
-    };
+    final map = Map<String, dynamic>.from(
+      _kBuildingMapPlacementClearedDefaults,
+    );
     if (clearFloorId) {
       map['floor_id'] = null;
     }

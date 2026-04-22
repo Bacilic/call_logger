@@ -353,6 +353,27 @@ class BuildingMapViewportCenterRequestNotifier extends Notifier<int> {
   }
 }
 
+/// Τμήμα που αποκαλύπτεται προσωρινά λόγω αναζήτησης, ενώ είναι κρυμμένο στον χάρτη
+/// (στήλη `departments.map_hidden = 1`). Καθαρίζεται όταν αδειάσει το πεδίο αναζήτησης
+/// ή όταν αλλάξει φύλλο κατόψης.
+final buildingMapSearchRevealedDepartmentIdProvider =
+    NotifierProvider<BuildingMapSearchRevealedDeptNotifier, int?>(
+      BuildingMapSearchRevealedDeptNotifier.new,
+    );
+
+class BuildingMapSearchRevealedDeptNotifier extends Notifier<int?> {
+  @override
+  int? build() => null;
+
+  void setRevealed(int? departmentId) {
+    state = departmentId;
+  }
+
+  void clear() {
+    state = null;
+  }
+}
+
 @immutable
 class BuildingMapPendingJumpPayload {
   const BuildingMapPendingJumpPayload({

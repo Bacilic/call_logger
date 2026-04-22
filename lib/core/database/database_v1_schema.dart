@@ -741,6 +741,19 @@ Future<void> ensureDepartmentsMapRotationColumn(Database db) async {
   }
 }
 
+/// Προσθέτει (idempotent) τη στήλη `departments.map_hidden` (0/1) για απόκρυψη
+/// τμήματος από τον χάρτη χωρίς απώλεια γεωμετρίας. Εκτελείται σε κάθε άνοιγμα
+/// βάσης — δεν απαιτεί αλλαγή [_kDatabaseSchemaVersion].
+Future<void> ensureDepartmentsMapHiddenColumn(Database db) async {
+  final info = await db.rawQuery('PRAGMA table_info(departments)');
+  final names = info.map((r) => r['name'] as String).toSet();
+  if (!names.contains('map_hidden')) {
+    await db.execute(
+      'ALTER TABLE departments ADD COLUMN map_hidden INTEGER NOT NULL DEFAULT 0',
+    );
+  }
+}
+
 /// v21: ομαδοποίηση τμημάτων στο HUD επιλογής (`group_name`, `floor_id` → `building_map_floors`).
 Future<void> migrateDatabaseToV21(Database db) async {
   final info = await db.rawQuery('PRAGMA table_info(departments)');

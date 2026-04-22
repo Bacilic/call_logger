@@ -11,6 +11,7 @@ import '../../models/department_model.dart';
 import '../../screens/widgets/department_color_palette.dart';
 import '../building_map_geometry.dart';
 import '../building_map_label_layout.dart';
+import '../building_map_sheet_export_key.dart';
 import '../controllers/building_map_controller.dart';
 import '../providers/building_map_providers.dart';
 import 'building_map_fill_color_dialog.dart';
@@ -76,6 +77,10 @@ class _BuildingMapSheetViewportState
   int? _mapDisplayNameDeptId;
   TextEditingController? _mapDisplayNameCtrl;
   FocusNode? _mapDisplayNameFocus;
+
+  /// Τμήματα που δεν πρέπει να σχεδιάζονται/πιάνονται από hit-test λόγω [`map_hidden`].
+  /// Ενημερώνεται στο `build` και διαβάζεται από `_hitTestDepartmentAtLocalPosition`.
+  Set<int> _currentHiddenIds = const <int>{};
 
   /// Τοπικό κείμενο επωνυμίας χάρτη μετά blur/Enter — αποθηκεύεται στη βάση μόνο με Επιβεβαίωση draft (✓).
   int? _pendingMapDisplayNameDeptId;
@@ -705,6 +710,7 @@ class _BuildingMapSheetViewportState
     final deps = widget.activeDepartments.reversed;
     for (final dep in deps) {
       if ((dep.mapFloor ?? '') != widget.sheetStr) continue;
+      if (dep.id != null && _currentHiddenIds.contains(dep.id)) continue;
       final nx = dep.mapX;
       final ny = dep.mapY;
       final nw = dep.mapWidth;
@@ -727,6 +733,7 @@ class _BuildingMapSheetViewportState
     }
     // Ετικέτα / γραμμές ονόματος (ίδια γεωμετρία με τον painter): ανύψωση στο hover όπως το ορθογώνιο.
     for (final dep in deps) {
+      if (dep.id != null && _currentHiddenIds.contains(dep.id)) continue;
       final labelLayout = computeMapLabelLayout(
         dep: dep,
         sheetIdString: widget.sheetStr,
@@ -1074,6 +1081,18 @@ class _BuildingMapSheetViewportState
         deptToMap != null &&
         deptToMap > 0;
 
+    final revealedDeptId =
+        ref.watch(buildingMapSearchRevealedDepartmentIdProvider);
+    final hiddenIds = <int>{};
+    for (final d in w.activeDepartments) {
+      if (d.id == null) continue;
+      if (!d.isHiddenOnMap) continue;
+      if ((d.mapFloor ?? '') != w.sheetStr) continue;
+      if (revealedDeptId != null && d.id == revealedDeptId) continue;
+      hiddenIds.add(d.id!);
+    }
+    _currentHiddenIds = hiddenIds;
+
     final dragRotation = ref.watch(buildingMapDragRotationProvider);
     final effectiveRotationDegrees = dragRotation ?? w.rotRad * 180 / math.pi;
     final effectiveRotRad = effectiveRotationDegrees * math.pi / 180;
@@ -1215,39 +1234,49 @@ class _BuildingMapSheetViewportState
                 child: Stack(
                   fit: StackFit.expand,
                   children: [
-                    Transform.rotate(
-                      angle: effectiveRotRad,
-                      child: Image.file(
-                        w.imgFile,
-                        fit: BoxFit.fill,
-                        filterQuality: FilterQuality.medium,
-                        cacheWidth: sz.width > 4096 ? 4096 : null,
+                    RepaintBoundary(
+                      key: buildingMapSheetExportRepaintKey,
+                      child: Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          Transform.rotate(
+                            angle: effectiveRotRad,
+                            child: Image.file(
+                              w.imgFile,
+                              fit: BoxFit.fill,
+                              filterQuality: FilterQuality.medium,
+                              cacheWidth: sz.width > 4096 ? 4096 : null,
+                            ),
+                          ),
+                          CustomPaint(
+                            painter: BuildingMapSheetPainter(
+                              sheetIdString: w.sheetStr,
+                              departments: w.activeDepartments,
+                              rotationRadians: effectiveRotRad,
+                              toolMode: toolMode,
+                              highlightDepartmentId: deptToMap,
+                              hoveredDepartmentId: _hoveredDepartmentId,
+                              draftShape: draftShape,
+                              hiddenDepartmentIds: hiddenIds,
+                              suppressMapLabelForDepartmentId:
+                                  _mapDisplayNameEditing
+                                  ? _mapDisplayNameDeptId
+                                  : null,
+                              mapLabelOverrideDepartmentId:
+                                  (!_mapDisplayNameEditing &&
+                                      _pendingMapDisplayNameDeptId != null)
+                                  ? _pendingMapDisplayNameDeptId
+                                  : null,
+                              mapLabelOverrideText:
+                                  (!_mapDisplayNameEditing &&
+                                      _pendingMapDisplayNameText != null)
+                                  ? _pendingMapDisplayNameText
+                                  : null,
+                            ),
+                            child: const SizedBox.expand(),
+                          ),
+                        ],
                       ),
-                    ),
-                    CustomPaint(
-                      painter: BuildingMapSheetPainter(
-                        sheetIdString: w.sheetStr,
-                        departments: w.activeDepartments,
-                        rotationRadians: effectiveRotRad,
-                        toolMode: toolMode,
-                        highlightDepartmentId: deptToMap,
-                        hoveredDepartmentId: _hoveredDepartmentId,
-                        draftShape: draftShape,
-                        suppressMapLabelForDepartmentId: _mapDisplayNameEditing
-                            ? _mapDisplayNameDeptId
-                            : null,
-                        mapLabelOverrideDepartmentId:
-                            (!_mapDisplayNameEditing &&
-                                _pendingMapDisplayNameDeptId != null)
-                            ? _pendingMapDisplayNameDeptId
-                            : null,
-                        mapLabelOverrideText:
-                            (!_mapDisplayNameEditing &&
-                                _pendingMapDisplayNameText != null)
-                            ? _pendingMapDisplayNameText
-                            : null,
-                      ),
-                      child: const SizedBox.expand(),
                     ),
                     if (!_mapDisplayNameEditing &&
                         mapLabelLayout != null &&

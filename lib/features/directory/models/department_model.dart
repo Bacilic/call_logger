@@ -1,3 +1,12 @@
+// Sentinel για [DepartmentModel.copyWith]: διακρίνει «άσε το παλιό» από «βάλε null»
+// σε nullable πεδία. Παράδειγμα: `d.copyWith(mapCustomName: null)` καθαρίζει την
+// επωνυμία χάρτη, ενώ χωρίς το `mapCustomName` η τιμή διατηρείται.
+class _Unset {
+  const _Unset();
+}
+
+const Object _unset = _Unset();
+
 /// Μοντέλο τμήματος (πίνακας departments): id, name, building, color, notes, map_*.
 ///
 /// Το πεδίο [color] είναι hex `#RRGGBB` (κεφαλαία)· χρησιμοποιείται στον κατάλογο
@@ -26,6 +35,7 @@ class DepartmentModel {
     this.floorId,
     this.directPhones,
     this.isDeleted = false,
+    this.isHiddenOnMap = false,
   });
 
   final int? id;
@@ -53,6 +63,9 @@ class DepartmentModel {
   /// Δεν αποθηκεύονται μέσα στον πίνακα `departments`· φορτώνονται από `department_phones`.
   final List<String>? directPhones;
   final bool isDeleted;
+  /// Απόκρυψη τμήματος από τον χάρτη κτιρίου (διατηρεί τη γεωμετρία). Per-department
+  /// — καθώς κάθε τμήμα χαρτογραφείται σε ένα μόνο φύλλο μέσω `mapFloor`.
+  final bool isHiddenOnMap;
 
   String get displayName {
     final custom = mapCustomName?.trim();
@@ -122,52 +135,77 @@ class DepartmentModel {
       floorId: (map['floor_id'] as num?)?.toInt(),
       directPhones: parseDirectPhones(map['direct_phones']),
       isDeleted: (map['is_deleted'] as int?) == 1,
+      isHiddenOnMap: (map['map_hidden'] as int?) == 1,
     );
   }
 
+  /// Αντίγραφο με επιλεκτικές αλλαγές. Για nullable πεδία, παράλειψη του παραμέτρου
+  /// κρατά την υπάρχουσα τιμή ενώ ρητή τιμή `null` την καθαρίζει. Για non-nullable
+  /// πεδία ([name], [mapRotation], [isDeleted], [isHiddenOnMap]), μόνο ρητή τιμή
+  /// τα αλλάζει.
   DepartmentModel copyWith({
-    int? id,
+    Object? id = _unset,
     String? name,
-    String? building,
-    String? color,
-    String? notes,
-    String? mapFloor,
-    double? mapX,
-    double? mapY,
-    double? mapWidth,
-    double? mapHeight,
+    Object? building = _unset,
+    Object? color = _unset,
+    Object? notes = _unset,
+    Object? mapFloor = _unset,
+    Object? mapX = _unset,
+    Object? mapY = _unset,
+    Object? mapWidth = _unset,
+    Object? mapHeight = _unset,
     double? mapRotation,
-    double? mapLabelOffsetX,
-    double? mapLabelOffsetY,
-    double? mapAnchorOffsetX,
-    double? mapAnchorOffsetY,
-    String? mapCustomName,
-    String? groupName,
-    int? floorId,
-    List<String>? directPhones,
+    Object? mapLabelOffsetX = _unset,
+    Object? mapLabelOffsetY = _unset,
+    Object? mapAnchorOffsetX = _unset,
+    Object? mapAnchorOffsetY = _unset,
+    Object? mapCustomName = _unset,
+    Object? groupName = _unset,
+    Object? floorId = _unset,
+    Object? directPhones = _unset,
     bool? isDeleted,
+    bool? isHiddenOnMap,
   }) {
     return DepartmentModel(
-      id: id ?? this.id,
+      id: identical(id, _unset) ? this.id : id as int?,
       name: name ?? this.name,
-      building: building ?? this.building,
-      color: color ?? this.color,
-      notes: notes ?? this.notes,
-      groupName: groupName ?? this.groupName,
-      floorId: floorId ?? this.floorId,
-      mapFloor: mapFloor ?? this.mapFloor,
-      mapX: mapX ?? this.mapX,
-      mapY: mapY ?? this.mapY,
-      mapWidth: mapWidth ?? this.mapWidth,
-      mapHeight: mapHeight ?? this.mapHeight,
+      building: identical(building, _unset) ? this.building : building as String?,
+      color: identical(color, _unset) ? this.color : color as String?,
+      notes: identical(notes, _unset) ? this.notes : notes as String?,
+      groupName:
+          identical(groupName, _unset) ? this.groupName : groupName as String?,
+      floorId: identical(floorId, _unset) ? this.floorId : floorId as int?,
+      mapFloor:
+          identical(mapFloor, _unset) ? this.mapFloor : mapFloor as String?,
+      mapX: identical(mapX, _unset) ? this.mapX : (mapX as num?)?.toDouble(),
+      mapY: identical(mapY, _unset) ? this.mapY : (mapY as num?)?.toDouble(),
+      mapWidth: identical(mapWidth, _unset)
+          ? this.mapWidth
+          : (mapWidth as num?)?.toDouble(),
+      mapHeight: identical(mapHeight, _unset)
+          ? this.mapHeight
+          : (mapHeight as num?)?.toDouble(),
       mapRotation: mapRotation ?? this.mapRotation,
-      mapLabelOffsetX: mapLabelOffsetX ?? this.mapLabelOffsetX,
-      mapLabelOffsetY: mapLabelOffsetY ?? this.mapLabelOffsetY,
-      mapAnchorOffsetX: mapAnchorOffsetX ?? this.mapAnchorOffsetX,
-      mapAnchorOffsetY: mapAnchorOffsetY ?? this.mapAnchorOffsetY,
-      mapCustomName: mapCustomName ?? this.mapCustomName,
-      directPhones: directPhones ?? this.directPhones,
+      mapLabelOffsetX: identical(mapLabelOffsetX, _unset)
+          ? this.mapLabelOffsetX
+          : (mapLabelOffsetX as num?)?.toDouble(),
+      mapLabelOffsetY: identical(mapLabelOffsetY, _unset)
+          ? this.mapLabelOffsetY
+          : (mapLabelOffsetY as num?)?.toDouble(),
+      mapAnchorOffsetX: identical(mapAnchorOffsetX, _unset)
+          ? this.mapAnchorOffsetX
+          : (mapAnchorOffsetX as num?)?.toDouble(),
+      mapAnchorOffsetY: identical(mapAnchorOffsetY, _unset)
+          ? this.mapAnchorOffsetY
+          : (mapAnchorOffsetY as num?)?.toDouble(),
+      mapCustomName: identical(mapCustomName, _unset)
+          ? this.mapCustomName
+          : mapCustomName as String?,
+      directPhones: identical(directPhones, _unset)
+          ? this.directPhones
+          : directPhones as List<String>?,
       isDeleted: isDeleted ?? this.isDeleted,
+      isHiddenOnMap: isHiddenOnMap ?? this.isHiddenOnMap,
     );
   }
 
@@ -192,6 +230,7 @@ class DepartmentModel {
       if (groupName != null) 'group_name': groupName,
       if (floorId != null) 'floor_id': floorId,
       'is_deleted': isDeleted ? 1 : 0,
+      'map_hidden': isHiddenOnMap ? 1 : 0,
     };
   }
 }

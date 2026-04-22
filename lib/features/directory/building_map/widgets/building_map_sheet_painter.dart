@@ -18,6 +18,7 @@ class BuildingMapSheetPainter extends CustomPainter {
     this.suppressMapLabelForDepartmentId,
     this.mapLabelOverrideDepartmentId,
     this.mapLabelOverrideText,
+    this.hiddenDepartmentIds = const <int>{},
   });
 
   final String sheetIdString;
@@ -33,6 +34,45 @@ class BuildingMapSheetPainter extends CustomPainter {
   /// Τοπικό κείμενο επωνυμίας χάρτη πριν Επιβεβαίωση draft (ίδιο τμήμα με [mapLabelOverrideDepartmentId]).
   final int? mapLabelOverrideDepartmentId;
   final String? mapLabelOverrideText;
+
+  /// Τμήματα που είναι κρυμμένα στον χάρτη και δεν πρέπει να σχεδιάζονται
+  /// (γεμίσματα, ετικέτες, leader lines). Εξαιρούνται όσα έχουν οριστεί
+  /// προσωρινώς «αποκαλυμμένα» από αναζήτηση.
+  final Set<int> hiddenDepartmentIds;
+
+  /// Lazy «αποτύπωμα» (fingerprint) μόνο των τμημάτων του τρέχοντος φύλλου. Εισάγεται
+  /// στο [shouldRepaint] ώστε αλλαγές σε άσχετα φύλλα (νέα reference της `departments`
+  /// με ίδιο περιεχόμενο για το τρέχον sheet) να μη προκαλούν repaint.
+  int? _cachedSheetFingerprint;
+  int get _sheetFingerprint =>
+      _cachedSheetFingerprint ??= _computeSheetFingerprint();
+
+  int _computeSheetFingerprint() {
+    var h = 17;
+    for (final d in departments) {
+      if ((d.mapFloor ?? '') != sheetIdString) continue;
+      h = Object.hash(
+        h,
+        d.id,
+        d.mapX,
+        d.mapY,
+        d.mapWidth,
+        d.mapHeight,
+        d.mapRotation,
+        d.mapLabelOffsetX,
+        d.mapLabelOffsetY,
+        d.mapAnchorOffsetX,
+        d.mapAnchorOffsetY,
+        Object.hash(
+          d.color,
+          d.mapCustomName,
+          d.isHiddenOnMap,
+          d.displayName,
+        ),
+      );
+    }
+    return h;
+  }
 
   static const double _kMapFillOpacity = 0.78;
   static const double _kMapFillOpacityHovered = 0.86;
@@ -128,6 +168,7 @@ class BuildingMapSheetPainter extends CustomPainter {
 
     for (final d in departments) {
       if ((d.mapFloor ?? '') != sheetIdString) continue;
+      if (d.id != null && hiddenDepartmentIds.contains(d.id)) continue;
       final isEditingSelectedDraft =
           toolMode == MapToolMode.edit &&
           draftShape != null &&
@@ -375,7 +416,7 @@ class BuildingMapSheetPainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant BuildingMapSheetPainter oldDelegate) {
     return oldDelegate.sheetIdString != sheetIdString ||
-        oldDelegate.departments != departments ||
+        oldDelegate._sheetFingerprint != _sheetFingerprint ||
         oldDelegate.rotationRadians != rotationRadians ||
         oldDelegate.toolMode != toolMode ||
         oldDelegate.highlightDepartmentId != highlightDepartmentId ||
@@ -385,6 +426,16 @@ class BuildingMapSheetPainter extends CustomPainter {
             suppressMapLabelForDepartmentId ||
         oldDelegate.mapLabelOverrideDepartmentId !=
             mapLabelOverrideDepartmentId ||
-        oldDelegate.mapLabelOverrideText != mapLabelOverrideText;
+        oldDelegate.mapLabelOverrideText != mapLabelOverrideText ||
+        !_setEquals(oldDelegate.hiddenDepartmentIds, hiddenDepartmentIds);
+  }
+
+  static bool _setEquals(Set<int> a, Set<int> b) {
+    if (identical(a, b)) return true;
+    if (a.length != b.length) return false;
+    for (final v in a) {
+      if (!b.contains(v)) return false;
+    }
+    return true;
   }
 }

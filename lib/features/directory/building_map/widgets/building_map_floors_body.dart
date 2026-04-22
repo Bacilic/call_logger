@@ -187,6 +187,9 @@ class _BuildingMapFloorsBodyState extends ConsumerState<BuildingMapFloorsBody> {
               BuildingMapViewLayout(
                 sheetPicker: sheetPickerControl,
                 globalSearchField: globalSearchField,
+                currentFloorLabel: current == null
+                    ? null
+                    : buildingMapFloorDisplayLabel(current),
               ),
             Expanded(
               child: floors.isEmpty

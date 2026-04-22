@@ -97,6 +97,9 @@ class BuildingMapController {
     }
     _ref.read(buildingMapDraftShapeProvider.notifier).clear();
     _ref.read(buildingMapEditFromSelectionTapProvider.notifier).clear();
+    _ref
+        .read(buildingMapSearchRevealedDepartmentIdProvider.notifier)
+        .clear();
     _ref.read(buildingMapToolProvider.notifier).setMode(MapToolMode.select);
     final path = floors
         .cast<BuildingMapFloor?>()
@@ -1128,6 +1131,25 @@ class BuildingMapController {
       if (!context.mounted) return;
       _showMapSnack(context, 'Δεν βρέθηκε τμήμα για την οντότητα.');
       return;
+    }
+    final selectedDept = departments.firstWhere(
+      (d) => d.id == selectedDepartmentId,
+      orElse: () => DepartmentModel(name: ''),
+    );
+    if (selectedDept.id != null && selectedDept.isHiddenOnMap) {
+      _ref
+          .read(buildingMapSearchRevealedDepartmentIdProvider.notifier)
+          .setRevealed(selectedDept.id);
+      if (context.mounted) {
+        _showMapSnack(
+          context,
+          'Το τμήμα «${selectedDept.displayName}» είναι κρυμμένο — εμφανίζεται προσωρινά.',
+        );
+      }
+    } else {
+      _ref
+          .read(buildingMapSearchRevealedDepartmentIdProvider.notifier)
+          .clear();
     }
     await _jumpToDepartmentWithFallback(
       departmentId: selectedDepartmentId,

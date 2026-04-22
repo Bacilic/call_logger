@@ -548,6 +548,7 @@ class DatabaseHelper {
     await _normalizeLexiconSourceOnOpen(db);
     await _normalizeLexiconCategoryLegacyOnOpen(db);
     await ensureDepartmentsMapRotationColumn(db);
+    await ensureDepartmentsMapHiddenColumn(db);
   }
 
   /// Παλιά τιμή πηγής `system` (asset) → `imported` (ίδια κατηγορία με TXT).

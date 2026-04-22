@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/models/building_map_floor.dart';
 import '../providers/building_map_providers.dart';
+import '../services/building_map_sheet_export.dart';
+import 'building_map_floor_departments_dialog.dart';
 import 'building_map_floor_menu_button.dart';
 
 /// Εναλλαγή Επιλογή / Σχεδίαση. Η [MapToolMode.edit] (λαβές, περιστροφή) μπαίνει
@@ -24,6 +26,16 @@ class BuildingMapEditToolbar extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final toolMode = ref.watch(buildingMapToolProvider);
     final deptToMap = ref.watch(buildingMapSelectedDepartmentIdToMapProvider);
+    final sheetId = ref.watch(buildingMapSelectedSheetIdProvider);
+    String? currentFloorLabel;
+    if (sheetId != null) {
+      for (final f in floors) {
+        if (f.id == sheetId) {
+          currentFloorLabel = buildingMapFloorDisplayLabel(f);
+          break;
+        }
+      }
+    }
 
     Widget toggles = ToggleButtons(
       isSelected: [
@@ -98,6 +110,24 @@ class BuildingMapEditToolbar extends ConsumerWidget {
           BuildingMapFloorsMenuButton(
             floors: floors,
             onFloorsChanged: onFloorsChanged,
+          ),
+          BuildingMapFloorDepartmentsButton(
+            mode: BuildingMapFloorDepartmentsDialogMode.edit,
+            floorTitle: currentFloorLabel,
+          ),
+          const Spacer(),
+          IconButton(
+            tooltip: 'Εξαγωγή χάρτη (PNG ή JPG)',
+            onPressed: !hasActiveCanvas || sheetId == null
+                ? null
+                : () async {
+                    await exportBuildingMapSheetToImageFile(
+                      context: context,
+                      defaultFloorBaseName:
+                          currentFloorLabel ?? 'Όροφος',
+                    );
+                  },
+            icon: const Icon(Icons.download_outlined),
           ),
         ],
       ),
