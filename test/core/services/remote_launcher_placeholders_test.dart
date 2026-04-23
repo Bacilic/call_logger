@@ -1,4 +1,4 @@
-import 'dart:convert';
+﻿import 'dart:convert';
 
 import 'package:call_logger/core/models/remote_tool.dart';
 import 'package:call_logger/core/models/remote_tool_role.dart';
@@ -67,6 +67,41 @@ void main() {
       expect((decoded.first as Map)['value'], tricky);
       final back = RemoteTool.fromMap(map);
       expect(back.arguments.first.value, tricky);
+    });
+  });
+
+  group('RemoteTool.acceptsFileParam', () {
+    test('αναγνωρίζει template_file με placeholder αρχείου ανεξάρτητα από πεζά/κεφαλαία', () {
+      final t = RemoteTool(
+        id: 10,
+        name: 'RDP Template',
+        role: ToolRole.rdp,
+        executablePath: r'C:\Windows\System32\mstsc.exe',
+        launchMode: 'template_file',
+        sortOrder: 1,
+        isActive: true,
+        arguments: const [
+          RemoteToolArgument(value: '{FILE}', isActive: true),
+        ],
+      );
+      expect(t.acceptsFileParam, isTrue);
+      expect(RemoteTool.containsFilePlaceholder('{file}'), isTrue);
+    });
+
+    test('δεν αναγνωρίζει άμεση εκτέλεση χωρίς template mode', () {
+      final t = RemoteTool(
+        id: 11,
+        name: 'RDP Direct',
+        role: ToolRole.rdp,
+        executablePath: r'C:\Windows\System32\mstsc.exe',
+        launchMode: 'direct_exec',
+        sortOrder: 1,
+        isActive: true,
+        arguments: const [
+          RemoteToolArgument(value: '{FILE}', isActive: true),
+        ],
+      );
+      expect(t.acceptsFileParam, isFalse);
     });
   });
 }

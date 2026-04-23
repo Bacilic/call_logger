@@ -1,4 +1,4 @@
-import '../../../core/database/remote_tools_repository.dart';
+﻿import '../../../core/database/remote_tools_repository.dart';
 import '../../../core/models/remote_tool.dart';
 import '../../../core/models/remote_tool_role.dart';
 import '../models/equipment_model.dart';
@@ -96,6 +96,19 @@ abstract final class CallRemoteTargets {
     return null;
   }
 
+  static String? _resolvedFileTargetForTool(
+    SmartEntitySelectorState s,
+    RemoteTool tool,
+  ) {
+    if (s.selectedEquipment == null) return null;
+    final p = s.selectedEquipment!.remoteParams;
+    final byId = p[tool.id.toString()]?.trim();
+    if (byId != null && byId.isNotEmpty) return byId;
+    final legacy = p[tool.role.dbValue]?.trim();
+    if (legacy != null && legacy.isNotEmpty) return legacy;
+    return null;
+  }
+
   static bool canConnectRdp(
     SmartEntitySelectorState s,
     List<RemoteTool> tools,
@@ -112,6 +125,9 @@ abstract final class CallRemoteTargets {
       case ToolRole.anydesk:
         return resolvedAnyDeskTarget(s, tools);
       case ToolRole.rdp:
+        if (tool.acceptsFileParam) {
+          return _resolvedFileTargetForTool(s, tool);
+        }
         return resolvedRdpHost(s, tools);
       case ToolRole.vnc:
         RemoteTool? vncDef;
@@ -153,6 +169,9 @@ abstract final class CallRemoteTargets {
       case ToolRole.anydesk:
         return anydeskTargetDisplay(s, tools);
       case ToolRole.rdp:
+        if (tool.acceptsFileParam) {
+          return _resolvedFileTargetForTool(s, tool) ?? '—';
+        }
         return resolvedRdpHost(s, tools) ?? '—';
       case ToolRole.vnc:
         return resolvedVncTarget(s, tools);

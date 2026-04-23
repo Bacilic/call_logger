@@ -1,8 +1,9 @@
-import 'dart:io';
+﻿import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:path/path.dart' as p;
 
 import '../../../../core/models/remote_tool.dart';
 import '../../../../core/models/remote_tool_role.dart';
@@ -504,6 +505,7 @@ class _RemoteConnectionButtonsState extends ConsumerState<RemoteConnectionButton
   }) {
     final displayLabel = label ?? tool?.name ?? '';
     final ic = icon ?? (tool != null ? _iconForTool(tool) : Icons.link);
+    final displaySubtitle = _formatSubtitleForDisplay(tool, subtitle);
     final buttonChild = _isConnecting
         ? SizedBox(
             width: 16,
@@ -530,13 +532,26 @@ class _RemoteConnectionButtonsState extends ConsumerState<RemoteConnectionButton
             : button,
         const SizedBox(height: 4),
         Text(
-          subtitle,
+          displaySubtitle,
           style: theme.textTheme.bodySmall?.copyWith(
             color: theme.colorScheme.onSurfaceVariant,
           ),
         ),
       ],
     );
+  }
+
+  String _formatSubtitleForDisplay(RemoteTool? tool, String subtitle) {
+    final t = subtitle.trim();
+    if (t.isEmpty || t == '—') return subtitle;
+    if (tool == null || !tool.acceptsFileParam) return subtitle;
+    final baseWin = p.windows.basename(t);
+    if (baseWin.isNotEmpty && baseWin != '.' && baseWin != '..') {
+      return baseWin;
+    }
+    final base = p.basename(t);
+    if (base.isNotEmpty && base != '.' && base != '..') return base;
+    return subtitle;
   }
 
   String _tooltipForTool(

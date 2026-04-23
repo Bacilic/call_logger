@@ -1,4 +1,4 @@
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+﻿import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/database/database_helper.dart';
 import '../../../core/database/remote_tools_repository.dart';
@@ -36,7 +36,11 @@ final remoteToolsAllCatalogProvider = FutureProvider<List<RemoteTool>>((ref) asy
 });
 
 /// Ζεύγη (εμφανιζόμενο όνομα, κλειδί JSON) για φόρμες εξοπλισμού — μόνο ενεργά `remote_tools` με μη κενό `name`.
-typedef RemoteToolFormPair = ({String label, String key});
+typedef RemoteToolFormPair = ({
+  String label,
+  String key,
+  bool acceptsFileParam,
+});
 
 final remoteToolFormPairsProvider =
     FutureProvider<List<RemoteToolFormPair>>((ref) async {
@@ -46,7 +50,11 @@ final remoteToolFormPairsProvider =
     return [
       for (final t in tools)
         if (t.name.trim().isNotEmpty)
-          (label: t.name.trim(), key: t.id.toString()),
+          (
+            label: t.name.trim(),
+            key: t.id.toString(),
+            acceptsFileParam: t.acceptsFileParam,
+          ),
     ];
   } catch (_) {
     return const [];

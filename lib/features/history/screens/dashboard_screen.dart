@@ -113,8 +113,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   }
 
   void _setDatePreset(int inclusiveDays) {
-    final now = DateTime.now();
-    final end = DateTime(now.year, now.month, now.day);
+    final filter = ref.read(dashboardFilterProvider);
+    final anchor = filter.dateTo ?? filter.dateFrom ?? DateTime.now();
+    final end = DateTime(anchor.year, anchor.month, anchor.day);
     final start = end.subtract(Duration(days: inclusiveDays - 1));
     ref
         .read(dashboardFilterProvider.notifier)

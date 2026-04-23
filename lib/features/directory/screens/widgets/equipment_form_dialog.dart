@@ -657,6 +657,7 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog> {
                             child: _buildRemoteParamField(
                               orderedExpanded[i],
                               labelForKey(orderedExpanded[i]),
+                              pairs,
                               catalog,
                             ),
                           ),
@@ -673,17 +674,21 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog> {
   Widget _buildRemoteParamField(
     String paramKey,
     String toolLabel,
+    List<RemoteToolFormPair> pairs,
     List<RemoteTool> catalog,
   ) {
     final c = _remoteParamControllers[paramKey];
     if (c == null) return const SizedBox.shrink();
     final isVnc = _isVncLikeParamKey(paramKey, catalog);
+    final acceptsFileParam = _toolAcceptsFileParam(paramKey, pairs);
     return TextFormField(
       controller: c,
       decoration: InputDecoration(
         labelText: 'Παράμετρος · $toolLabel',
         border: const OutlineInputBorder(),
-        hintText: isVnc ? 'IP ή hostname' : null,
+        hintText: acceptsFileParam
+            ? 'Αρχείο παραμέτρων πχ .rdp'
+            : (isVnc ? 'IP ή hostname' : null),
       ),
       keyboardType: isVnc
           ? const TextInputType.numberWithOptions(decimal: true, signed: false)
@@ -692,6 +697,16 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog> {
           isVnc ? [CommaToDotDecimalSeparatorFormatter()] : null,
       onChanged: (_) => _syncRemoteValueFromController(paramKey),
     );
+  }
+
+  bool _toolAcceptsFileParam(
+    String key,
+    List<RemoteToolFormPair> pairs,
+  ) {
+    for (final p in pairs) {
+      if (p.key == key) return p.acceptsFileParam;
+    }
+    return false;
   }
 
   String get _title {

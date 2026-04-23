@@ -1,4 +1,4 @@
-import 'dart:io';
+﻿import 'dart:io';
 
 import '../database/remote_tools_repository.dart';
 import '../models/remote_tool.dart';
@@ -30,12 +30,28 @@ class RemoteConnectionService {
     return null;
   }
 
+  String? _resolvedFilePathForLaunch(
+    RemoteTool tool,
+    Map<String, String> remoteParams,
+  ) {
+    if (tool.acceptsFileParam) {
+      final fromEquipment = _toolsRepo.resolveParamValue(
+        remoteParams: remoteParams,
+        tool: tool,
+      );
+      final v = fromEquipment?.trim();
+      if (v != null && v.isNotEmpty) return v;
+    }
+    return firstExistingRdpPathFromArguments(tool);
+  }
+
   List<String> _resolvedLaunchArguments(
     RemoteTool tool, {
     required String? equipmentCode,
     required String resolvedTarget,
+    required Map<String, String> remoteParams,
   }) {
-    final fp = firstExistingRdpPathFromArguments(tool);
+    final fp = _resolvedFilePathForLaunch(tool, remoteParams);
     return tool.arguments
         .where(
           (a) => a.isActive && a.description.trim() != '__rdp_file__',
@@ -192,6 +208,7 @@ class RemoteConnectionService {
       tool,
       equipmentCode: equipmentCode,
       resolvedTarget: resolvedTarget,
+      remoteParams: remoteParams,
     );
     await Process.start(path, arguments, mode: ProcessStartMode.detached);
   }

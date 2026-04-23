@@ -1,4 +1,4 @@
-import 'dart:convert';
+﻿import 'dart:convert';
 
 import 'remote_tool_role.dart';
 
@@ -77,6 +77,20 @@ class RemoteTool {
 
   /// Όταν true, αν είναι έγκυρο στην κλήση κρύβει τα μη αποκλειστικά εργαλεία.
   final bool isExclusive;
+
+  /// True όταν το εργαλείο τρέχει ως template file και υπάρχει ενεργό `{FILE}` placeholder.
+  bool get acceptsFileParam {
+    if (launchMode.trim().toLowerCase() != 'template_file') return false;
+    for (final a in arguments) {
+      if (!a.isActive) continue;
+      if (containsFilePlaceholder(a.value)) return true;
+    }
+    return false;
+  }
+
+  /// Έλεγχος placeholder αρχείου με ανοχή σε πεζά/κεφαλαία (`{FILE}` ή `{file}`).
+  static bool containsFilePlaceholder(String value) =>
+      value.toLowerCase().contains('{file}');
 
   static DateTime? _parseDeletedAt(dynamic v) {
     if (v == null) return null;

@@ -1,4 +1,4 @@
-import 'package:call_logger/core/database/remote_tools_repository.dart';
+﻿import 'package:call_logger/core/database/remote_tools_repository.dart';
 import 'package:call_logger/core/models/remote_tool.dart';
 import 'package:call_logger/core/models/remote_tool_role.dart';
 import 'package:call_logger/features/calls/models/equipment_model.dart';
@@ -10,16 +10,19 @@ RemoteTool _tool({
   required int id,
   required ToolRole role,
   bool isExclusive = false,
+  String launchMode = 'direct_exec',
+  List<RemoteToolArgument> arguments = const [],
 }) {
   return RemoteTool(
     id: id,
     name: role.dbValue.toUpperCase(),
     role: role,
     executablePath: r'C:\dummy.exe',
-    launchMode: 'direct_exec',
+    launchMode: launchMode,
     sortOrder: 0,
     isActive: true,
     isExclusive: isExclusive,
+    arguments: arguments,
   );
 }
 
@@ -30,6 +33,30 @@ void main() {
       final tools = [_tool(id: 3, role: ToolRole.rdp)];
       expect(CallRemoteTargets.resolvedRdpHost(s, tools), '192.168.0.10');
     });
+
+    test(
+      'resolvedLaunchTarget: RDP template_file με {file} επιστρέφει path αρχείου από equipment param',
+      () {
+        final eq = EquipmentModel(
+          code: 'PC-1',
+          remoteParams: const {'3': r'C:\templates\pc-1.rdp'},
+        );
+        final s = SmartEntitySelectorState(selectedEquipment: eq);
+        final rdpFileTool = _tool(
+          id: 3,
+          role: ToolRole.rdp,
+          launchMode: 'template_file',
+          arguments: const [
+            RemoteToolArgument(value: '{file}', isActive: true),
+          ],
+        );
+        expect(
+          CallRemoteTargets.resolvedLaunchTarget(s, rdpFileTool, [rdpFileTool]),
+          r'C:\templates\pc-1.rdp',
+        );
+        expect(CallRemoteTargets.canConnectForTool(s, rdpFileTool, [rdpFileTool]), isTrue);
+      },
+    );
 
     test('visibleRemoteToolsForCallState: προεπιλεγμένο + παράμετρος anydesk', () {
       final eq = EquipmentModel(

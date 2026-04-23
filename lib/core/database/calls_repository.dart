@@ -648,9 +648,9 @@ WHERE ${whereTrend.join(' AND ')}
       );
     });
 
-    final sparkStart = today.subtract(const Duration(days: 6));
+    final sparkStart = anchorDay.subtract(const Duration(days: 6));
     final sparkStartSql = DateFormat('yyyy-MM-dd').format(sparkStart);
-    final todaySql = DateFormat('yyyy-MM-dd').format(today);
+    final todaySql = DateFormat('yyyy-MM-dd').format(anchorDay);
     final whereSpark = List<String>.from(whereClausesBase)
       ..add('calls.date >= ?')
       ..add('calls.date <= ?');
