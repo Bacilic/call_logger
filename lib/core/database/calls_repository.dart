@@ -747,6 +747,106 @@ WHERE ${whereSpark.join(' AND ')}
     );
   }
 
+  /// Κλήσεις για αναφορά dashboard (Lansweeper) με τα ίδια φίλτρα των KPIs.
+  Future<List<CallModel>> getDashboardCalls(DashboardFilterModel filter) async {
+    const userPhoneExpr =
+        "COALESCE(NULLIF(TRIM(calls.phone_text), ''), upl.phone_list, '-')";
+    const deptExpr = "COALESCE(departments.name, calls.department_text, '-')";
+    const equipExpr =
+        "COALESCE(equipment.code_equipment, calls.equipment_text, '')";
+    const callerNameExpr =
+        "TRIM(COALESCE(users.first_name, '') || ' ' || COALESCE(users.last_name, ''))";
+    const callerLabelExpr =
+        "CASE WHEN TRIM($callerNameExpr) = '' "
+        "THEN COALESCE(NULLIF(TRIM(calls.caller_text), ''), '-') "
+        "ELSE TRIM($callerNameExpr) END";
+
+    final whereClauses = <String>['COALESCE(calls.is_deleted, 0) = 0'];
+    final args = <dynamic>[];
+
+    final dept = filter.department?.trim();
+    if (dept != null && dept.isNotEmpty) {
+      whereClauses.add('$deptExpr = ?');
+      args.add(dept);
+    }
+
+    final userQ = filter.userName?.trim();
+    if (userQ != null && userQ.isNotEmpty) {
+      whereClauses.add(
+        '($callerNameExpr LIKE ? OR calls.caller_text LIKE ? OR $userPhoneExpr LIKE ?)',
+      );
+      final p = '%$userQ%';
+      args.add(p);
+      args.add(p);
+      args.add(p);
+    }
+
+    final eqQ = filter.equipmentCode?.trim();
+    if (eqQ != null && eqQ.isNotEmpty) {
+      whereClauses.add('$equipExpr LIKE ?');
+      args.add('%$eqQ%');
+    }
+
+    final kw = filter.keyword.trim();
+    if (kw.isNotEmpty) {
+      final nk = SearchTextNormalizer.normalizeForSearch(kw);
+      if (nk.isNotEmpty) {
+        whereClauses.add('calls.search_index LIKE ?');
+        args.add('%$nk%');
+      }
+    }
+
+    final df = filter.dateFromSql;
+    final dt = filter.dateToSql;
+    if (df != null && df.isNotEmpty) {
+      whereClauses.add('calls.date >= ?');
+      args.add(df);
+    }
+    if (dt != null && dt.isNotEmpty) {
+      whereClauses.add('calls.date <= ?');
+      args.add(dt);
+    }
+
+    final rows = await db.rawQuery(
+      '''
+      SELECT
+        calls.id,
+        calls.date,
+        calls.time,
+        calls.caller_id,
+        calls.equipment_id,
+        $callerLabelExpr AS caller_text,
+        calls.phone_text,
+        calls.department_text,
+        calls.equipment_text,
+        calls.issue,
+        calls.solution,
+        calls.category_text,
+        calls.category_id,
+        calls.status,
+        calls.duration,
+        calls.is_priority,
+        calls.is_deleted
+      FROM calls
+      LEFT JOIN users ON calls.caller_id = users.id
+      LEFT JOIN (
+        SELECT up.user_id AS uid,
+               GROUP_CONCAT(p.number, ', ') AS phone_list
+        FROM user_phones up
+        JOIN phones p ON p.id = up.phone_id
+        GROUP BY up.user_id
+      ) upl ON upl.uid = users.id
+      LEFT JOIN equipment ON calls.equipment_id = equipment.id
+      LEFT JOIN departments ON users.department_id = departments.id
+      WHERE ${whereClauses.join(' AND ')}
+      ORDER BY calls.date DESC, calls.time DESC, calls.id DESC
+      ''',
+      args,
+    );
+
+    return rows.map(CallModel.fromMap).toList();
+  }
+
   /// Γραμμή «τηλέφωνο - καλούντας - τμήμα - εξοπλισμός» όπως στο ιστορικό κλήσεων
   /// ([getHistoryCalls]): κενά παραλείπονται, χωρίς placeholder `-`.
   static String formatCallAuditLineFromHistoryQueryRow(Map<String, Object?> r) {

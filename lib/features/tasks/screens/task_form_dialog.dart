@@ -12,10 +12,7 @@ import '../providers/task_settings_config_provider.dart';
 import '../ui/task_due_option_tooltips.dart';
 
 /// Επιστρέφει το Task που δημιουργήθηκε/τροποποιήθηκε ή null αν ακυρώθηκε.
-Future<Task?> showTaskFormDialog(
-  BuildContext context, {
-  Task? task,
-}) {
+Future<Task?> showTaskFormDialog(BuildContext context, {Task? task}) {
   return showDialog<Task?>(
     context: context,
     builder: (context) => _TaskFormDialog(task: task),
@@ -35,6 +32,7 @@ class _TaskFormDialogState extends ConsumerState<_TaskFormDialog> {
   final _formKey = GlobalKey<FormState>();
   final GlobalKey<SmartEntitySelectorWidgetState> _entitySelectorKey =
       GlobalKey<SmartEntitySelectorWidgetState>();
+
   /// Για ασφαλές `invalidate` στο `dispose` — το `ref` εκεί δεν επιτρέπεται.
   ProviderContainer? _providerContainer;
   late final SpellCheckController _titleController;
@@ -61,8 +59,11 @@ class _TaskFormDialogState extends ConsumerState<_TaskFormDialog> {
       ..text = t?.description ?? '';
     _priority = t?.priority ?? 0;
     _userPickedDue = t != null;
-    _dueDate = t?.dueDateTime ??
-        ref.read(taskServiceProvider).calculateNextDueDate(
+    _dueDate =
+        t?.dueDateTime ??
+        ref
+            .read(taskServiceProvider)
+            .calculateNextDueDate(
               TaskSettingsConfig.defaultConfig(),
               option: TaskSettingsConfig.kOptionDefault,
             );
@@ -72,7 +73,9 @@ class _TaskFormDialogState extends ConsumerState<_TaskFormDialog> {
       ref.read(taskSettingsConfigProvider.future).then((c) {
         if (!mounted || widget.task != null || _userPickedDue) return;
         setState(() {
-          _dueDate = ref.read(taskServiceProvider).calculateNextDueDate(
+          _dueDate = ref
+              .read(taskServiceProvider)
+              .calculateNextDueDate(
                 c,
                 option: TaskSettingsConfig.kOptionDefault,
               );
@@ -96,10 +99,9 @@ class _TaskFormDialogState extends ConsumerState<_TaskFormDialog> {
   }
 
   TaskSettingsConfig _readSnoozeConfig() =>
-      ref.read(taskSettingsConfigProvider).maybeWhen(
-            data: (c) => c,
-            orElse: () => null,
-          ) ??
+      ref
+          .read(taskSettingsConfigProvider)
+          .maybeWhen(data: (c) => c, orElse: () => null) ??
       TaskSettingsConfig.defaultConfig();
 
   Future<void> _pickDueDate() async {
@@ -107,11 +109,7 @@ class _TaskFormDialogState extends ConsumerState<_TaskFormDialog> {
     final now = DateTime.now();
     final firstDate = DateTime(now.year, now.month, now.day);
     final lastDate = firstDate.add(Duration(days: cfg.maxSnoozeDays));
-    var initialDate = DateTime(
-      _dueDate.year,
-      _dueDate.month,
-      _dueDate.day,
-    );
+    var initialDate = DateTime(_dueDate.year, _dueDate.month, _dueDate.day);
     if (initialDate.isBefore(firstDate)) {
       initialDate = firstDate;
     } else if (initialDate.isAfter(lastDate)) {
@@ -132,7 +130,13 @@ class _TaskFormDialogState extends ConsumerState<_TaskFormDialog> {
     if (!mounted || time == null) return;
     setState(() {
       _userPickedDue = true;
-      _dueDate = DateTime(date.year, date.month, date.day, time.hour, time.minute);
+      _dueDate = DateTime(
+        date.year,
+        date.month,
+        date.day,
+        time.hour,
+        time.minute,
+      );
     });
   }
 
@@ -155,14 +159,14 @@ class _TaskFormDialogState extends ConsumerState<_TaskFormDialog> {
     final dueDateStr = _dueDate.toIso8601String();
     final entityState = ref.read(taskSmartEntityProvider);
     final phoneRaw = entityState.phoneText?.trim();
-    final phoneText =
-        phoneRaw == null || phoneRaw.isEmpty ? null : phoneRaw;
+    final phoneText = phoneRaw == null || phoneRaw.isEmpty ? null : phoneRaw;
     String? trimOrNull(String s) {
       final t = s.trim();
       return t.isEmpty ? null : t;
     }
 
-    final result = widget.task?.copyWith(
+    final result =
+        widget.task?.copyWith(
           title: title,
           description: _descriptionController.text.trim().isEmpty
               ? null
@@ -189,6 +193,7 @@ class _TaskFormDialogState extends ConsumerState<_TaskFormDialog> {
           phoneText: phoneText,
           departmentText: trimOrNull(entityState.departmentText),
           equipmentText: trimOrNull(entityState.equipmentText),
+          origin: Task.originManualFab,
         );
     Navigator.of(context).pop(result);
   }
@@ -197,10 +202,10 @@ class _TaskFormDialogState extends ConsumerState<_TaskFormDialog> {
   Widget build(BuildContext context) {
     ref.watch(taskSettingsConfigProvider);
     final service = ref.read(taskServiceProvider);
-    final cfg = ref.watch(taskSettingsConfigProvider).maybeWhen(
-          data: (c) => c,
-          orElse: () => null,
-        ) ??
+    final cfg =
+        ref
+            .watch(taskSettingsConfigProvider)
+            .maybeWhen(data: (c) => c, orElse: () => null) ??
         TaskSettingsConfig.defaultConfig();
     final suggestedDefault = service.calculateNextDueDate(
       cfg,
@@ -216,7 +221,9 @@ class _TaskFormDialogState extends ConsumerState<_TaskFormDialog> {
     );
 
     return AlertDialog(
-      title: Text(widget.task == null ? 'Νέα εκκρεμότητα' : 'Επεξεργασία εκκρεμότητας'),
+      title: Text(
+        widget.task == null ? 'Νέα εκκρεμότητα' : 'Επεξεργασία εκκρεμότητας',
+      ),
       content: SizedBox(
         width: dialogWidth,
         child: Form(
@@ -235,13 +242,16 @@ class _TaskFormDialogState extends ConsumerState<_TaskFormDialog> {
                       builder: (context, constraints) {
                         const gapsAndTrailing = 120.0;
                         final mw = constraints.maxWidth;
-                        final available =
-                            (mw - gapsAndTrailing).clamp(200.0, double.infinity);
+                        final available = (mw - gapsAndTrailing).clamp(
+                          200.0,
+                          double.infinity,
+                        );
                         final w1 = (available * 0.18).clamp(0.0, 170.0);
                         final w2 = (available * 0.34).clamp(0.0, 300.0);
                         final wDept = (available * 0.24).clamp(0.0, 240.0);
                         final w3 = (available * 0.20).clamp(0.0, 185.0);
-                        final minRowWidth = w1 +
+                        final minRowWidth =
+                            w1 +
                             12 +
                             w2 +
                             12 +
@@ -307,8 +317,9 @@ class _TaskFormDialogState extends ConsumerState<_TaskFormDialog> {
                     labelText: 'Τίτλος',
                     border: OutlineInputBorder(),
                   ),
-                  validator: (v) =>
-                      (v == null || v.trim().isEmpty) ? 'Υποχρεωτικό πεδίο' : null,
+                  validator: (v) => (v == null || v.trim().isEmpty)
+                      ? 'Υποχρεωτικό πεδίο'
+                      : null,
                   textCapitalization: TextCapitalization.sentences,
                 ),
                 const SizedBox(height: 12),

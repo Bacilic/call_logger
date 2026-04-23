@@ -519,6 +519,9 @@ class _MainShellState extends ConsumerState<MainShell> {
     final wideEnoughForExtendedRail =
         MediaQuery.sizeOf(context).width >= _kNavRailWideBreakpoint;
     final railExtended = wideEnoughForExtendedRail && _navRailShowLabels;
+    final railLabelStyle =
+        NavigationRailTheme.of(context).unselectedLabelTextStyle ??
+        Theme.of(context).textTheme.labelMedium;
 
     if (dictionaryImmersive || historyImmersive) {
       return Scaffold(
@@ -577,11 +580,32 @@ class _MainShellState extends ConsumerState<MainShell> {
                         )
                       : null,
                   trailing: Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: IconButton(
-                      icon: const Icon(Icons.settings),
-                      tooltip: 'Ρυθμίσεις',
-                      onPressed: _openSettingsScreen,
+                    padding: const EdgeInsets.only(bottom: 8, left: 8, right: 8),
+                    child: Tooltip(
+                      waitDuration: const Duration(milliseconds: 600),
+                      showDuration: const Duration(seconds: 4),
+                      message: 'Γενικές ρυθμίσεις της εφαρμογής',
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(12),
+                        onTap: _openSettingsScreen,
+                        child: SizedBox(
+                          height: 48,
+                          width: railExtended ? 220 : 56,
+                          child: Row(
+                            mainAxisAlignment: railExtended
+                                ? MainAxisAlignment.start
+                                : MainAxisAlignment.center,
+                            children: [
+                              if (railExtended) const SizedBox(width: 12),
+                              const Icon(Icons.settings),
+                              if (railExtended) ...[
+                                const SizedBox(width: 16),
+                                Text('Ρυθμίσεις', style: railLabelStyle),
+                              ],
+                            ],
+                          ),
+                        ),
+                      ),
                     ),
                   ),
                   destinations: [

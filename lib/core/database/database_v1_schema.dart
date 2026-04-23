@@ -22,15 +22,15 @@ import 'package:sqflite_common/sqlite_api.dart';
 /// v20: πίνακας `building_map_floors` (φύλλα κατόψης κτιρίου).
 /// v21: `departments.group_name`, `departments.floor_id` (ομαδοποίηση στον χάρτη).
 /// v22: `departments.map_label_offset_*`, `departments.map_anchor_offset_*`, `departments.map_custom_name`.
-const int databaseSchemaVersionV1 = 22;
+/// v23: `tasks.origin` (πηγή δημιουργίας εκκρεμότητας).
+const int databaseSchemaVersionV1 = 23;
 
 /// Προεπιλογές διαδρομών (ίδιες με SettingsService — χωρίς εξάρτηση Flutter εδώ).
 const String kDefaultVncExecutablePath =
     r'C:\Program Files\TightVNC\tvnviewer.exe';
 const String kDefaultAnydeskExecutablePath =
     r'C:\Program Files (x86)\AnyDesk\AnyDesk.exe';
-const String kDefaultMstscExecutablePath =
-    r'C:\Windows\System32\mstsc.exe';
+const String kDefaultMstscExecutablePath = r'C:\Windows\System32\mstsc.exe';
 
 /// Δημιουργία σχήματος v1 + seed `remote_tool_args`.
 /// Χωρίς εξαρτήσεις Flutter — ασφαλές για `dart run tool/migrate_to_v1.dart`.
@@ -184,6 +184,7 @@ Future<void> applyDatabaseV1Schema(Database db) async {
         department_text TEXT,
         created_at TEXT,
         updated_at TEXT,
+        origin TEXT DEFAULT 'legacy',
         search_index TEXT,
         is_deleted INTEGER DEFAULT 0
       )
@@ -306,7 +307,9 @@ Future<void> seedRemoteToolsAndArgsIfEmpty(Database db) async {
   final count = result.isNotEmpty ? (result.first['c'] as int? ?? 0) : 0;
   if (count == 0) return;
 
-  final argsCount = await db.rawQuery('SELECT COUNT(*) AS c FROM remote_tool_args');
+  final argsCount = await db.rawQuery(
+    'SELECT COUNT(*) AS c FROM remote_tool_args',
+  );
   final ac = argsCount.isNotEmpty ? (argsCount.first['c'] as int? ?? 0) : 0;
   if (ac > 0) {
     await db.rawUpdate('''
@@ -437,14 +440,10 @@ Future<void> migrateDatabaseToV12(Database db) async {
   final info = await db.rawQuery('PRAGMA table_info(remote_tools)');
   final names = info.map((r) => r['name'] as String).toSet();
   if (!names.contains('arguments_json')) {
-    await db.execute(
-      'ALTER TABLE remote_tools ADD COLUMN arguments_json TEXT',
-    );
+    await db.execute('ALTER TABLE remote_tools ADD COLUMN arguments_json TEXT');
   }
   if (!names.contains('test_target_ip')) {
-    await db.execute(
-      'ALTER TABLE remote_tools ADD COLUMN test_target_ip TEXT',
-    );
+    await db.execute('ALTER TABLE remote_tools ADD COLUMN test_target_ip TEXT');
   }
 
   final tools = await db.query('remote_tools');
@@ -505,15 +504,15 @@ Future<void> migrateDatabaseToV15(Database db) async {
   final info = await db.rawQuery('PRAGMA table_info(remote_tools)');
   final rtNames = info.map((r) => r['name'] as String).toSet();
   if (!rtNames.contains('deleted_at')) {
-    await db.execute(
-      'ALTER TABLE remote_tools ADD COLUMN deleted_at TEXT',
-    );
+    await db.execute('ALTER TABLE remote_tools ADD COLUMN deleted_at TEXT');
   }
 
   final tools = await db.query('remote_tools', columns: ['id', 'name', 'slug']);
   final toolById = {for (final r in tools) r['id'] as int: r};
-  final equipmentRows =
-      await db.query('equipment', columns: ['id', 'default_remote_tool']);
+  final equipmentRows = await db.query(
+    'equipment',
+    columns: ['id', 'default_remote_tool'],
+  );
 
   int? resolveDefaultToId(String raw) {
     final t = raw.trim();
@@ -552,9 +551,7 @@ Future<void> migrateDatabaseToV15(Database db) async {
     final newId = resolveDefaultToId(raw);
     await db.update(
       'equipment',
-      {
-        'default_remote_tool': newId != null ? '$newId' : null,
-      },
+      {'default_remote_tool': newId != null ? '$newId' : null},
       where: 'id = ?',
       whereArgs: [idEq],
     );
@@ -626,30 +623,27 @@ CREATE TABLE remote_tools (
       row['slug'] as String?,
       row['detection_kind'] as String?,
     );
-    await db.insert(
-      'remote_tools',
-      {
-        'id': id,
-        'name': row['name'] ?? '',
-        'role': role,
-        'executable_path': row['executable_path'] ?? '',
-        'launch_mode': (row['launch_mode'] as String?)?.trim().isNotEmpty == true
-            ? row['launch_mode']
-            : 'direct_exec',
-        'config_template': row['config_template'],
-        'sort_order': row['sort_order'] ?? 0,
-        'is_active': row['is_active'] ?? 1,
-        'vnc_host_prefix': row['vnc_host_prefix'],
-        'suggested_values': row['suggested_values'],
-        'icon_asset_key': row['icon_asset_key'],
-        'default_username': row['default_username'],
-        'password': row['password'],
-        'arguments_json': row['arguments_json'],
-        'test_target_ip': row['test_target_ip'],
-        'is_exclusive': row['is_exclusive'] ?? 0,
-        'deleted_at': row['deleted_at'],
-      },
-    );
+    await db.insert('remote_tools', {
+      'id': id,
+      'name': row['name'] ?? '',
+      'role': role,
+      'executable_path': row['executable_path'] ?? '',
+      'launch_mode': (row['launch_mode'] as String?)?.trim().isNotEmpty == true
+          ? row['launch_mode']
+          : 'direct_exec',
+      'config_template': row['config_template'],
+      'sort_order': row['sort_order'] ?? 0,
+      'is_active': row['is_active'] ?? 1,
+      'vnc_host_prefix': row['vnc_host_prefix'],
+      'suggested_values': row['suggested_values'],
+      'icon_asset_key': row['icon_asset_key'],
+      'default_username': row['default_username'],
+      'password': row['password'],
+      'arguments_json': row['arguments_json'],
+      'test_target_ip': row['test_target_ip'],
+      'is_exclusive': row['is_exclusive'] ?? 0,
+      'deleted_at': row['deleted_at'],
+    });
   }
 
   await db.execute('PRAGMA foreign_keys = ON');
@@ -793,4 +787,16 @@ Future<void> migrateDatabaseToV22(Database db) async {
   if (!names.contains('map_custom_name')) {
     await db.execute('ALTER TABLE departments ADD COLUMN map_custom_name TEXT');
   }
+}
+
+/// v23: πηγή δημιουργίας εκκρεμότητας (`manual_fab`, `call_linked`, `quick_add`, `legacy`).
+Future<void> migrateDatabaseToV23(Database db) async {
+  final info = await db.rawQuery('PRAGMA table_info(tasks)');
+  final names = info.map((r) => r['name'] as String).toSet();
+  if (!names.contains('origin')) {
+    await db.execute('ALTER TABLE tasks ADD COLUMN origin TEXT');
+  }
+  await db.rawUpdate(
+    "UPDATE tasks SET origin = 'legacy' WHERE origin IS NULL OR TRIM(origin) = ''",
+  );
 }

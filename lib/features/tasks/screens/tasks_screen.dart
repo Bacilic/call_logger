@@ -25,11 +25,7 @@ import 'task_filter_bar.dart';
 import 'task_form_dialog.dart';
 import 'task_settings_dialog.dart';
 
-enum _ClosedEditMode {
-  recreate,
-  reopen,
-  snooze,
-}
+enum _ClosedEditMode { recreate, reopen, snooze }
 
 class TasksScreen extends ConsumerStatefulWidget {
   const TasksScreen({super.key});
@@ -87,106 +83,113 @@ class _TasksScreenState extends ConsumerState<TasksScreen> {
           Expanded(
             child: asyncTasks.when(
               loading: () => const Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              CircularProgressIndicator(),
-              SizedBox(height: 16),
-              Text('Φόρτωση εκκρεμοτήτων...'),
-            ],
-          ),
-        ),
-        error: (err, _) => Center(
-          child: Padding(
-            padding: const EdgeInsets.all(24.0),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(
-                  err.toString(),
-                  textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: Theme.of(context).colorScheme.error,
-                      ),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    CircularProgressIndicator(),
+                    SizedBox(height: 16),
+                    Text('Φόρτωση εκκρεμοτήτων...'),
+                  ],
                 ),
-                const SizedBox(height: 16),
-                FilledButton.icon(
-                  onPressed: () =>
-                      ref.read(tasksProvider.notifier).refresh(),
-                  icon: const Icon(Icons.refresh),
-                  label: const Text('Επανάληψη'),
-                ),
-              ],
-            ),
-          ),
-        ),
-        data: (tasks) {
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              _OrphanCallsBanner(
-                onCreateTasks: () => _createTasksForOrphans(context, ref),
               ),
-              Expanded(
-                child: tasks.isEmpty
-                    ? Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(
-                              Icons.task_alt_outlined,
-                              size: 64,
-                              color: Theme.of(context).colorScheme.outline,
-                            ),
-                            const SizedBox(height: 16),
-                            Text(
-                              'Δεν υπάρχουν εκκρεμότητες αυτή τη στιγμή',
-                              style: Theme.of(context).textTheme.bodyLarge,
-                            ),
-                          ],
+              error: (err, _) => Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(24.0),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        err.toString(),
+                        textAlign: TextAlign.center,
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: Theme.of(context).colorScheme.error,
                         ),
-                      )
-                    : RefreshIndicator(
-                        onRefresh: () =>
+                      ),
+                      const SizedBox(height: 16),
+                      FilledButton.icon(
+                        onPressed: () =>
                             ref.read(tasksProvider.notifier).refresh(),
-                        // Προσθήκη bottom padding για να μην επικαλύπτεται η τελευταία κάρτα από το FAB
-                        child: ListView.builder(
-                          padding: EdgeInsets.fromLTRB(
-                            16,
-                            8,
-                            16,
-                            88 + MediaQuery.of(context).viewPadding.bottom,
-                          ),
-                          itemCount: tasks.length,
-                          itemBuilder: (context, index) {
-                            final task = tasks[index];
-                            final Key scrollKey = task.id != null
-                                ? _keyForTaskId(task.id!)
-                                : ValueKey<int>(index);
-                            return KeyedSubtree(
-                              key: scrollKey,
-                              child: TaskCard(
-                                task: task,
-                                onEdit: () => _onEdit(context, ref, task),
-                                onSnooze: () => _onSnooze(context, ref, task),
-                                onDelete: () => _onDelete(context, ref, task),
-                                onComplete: () =>
-                                    _onComplete(context, ref, task),
-                                onEditCaller: () =>
-                                    _onEditCaller(context, ref, task),
-                                onEditDepartment: () =>
-                                    _onEditDepartment(context, ref, task),
-                                onEditEquipment: () =>
-                                    _onEditEquipment(context, ref, task),
-                              ),
-                            );
-                          },
-                        ),
+                        icon: const Icon(Icons.refresh),
+                        label: const Text('Επανάληψη'),
                       ),
+                    ],
+                  ),
+                ),
               ),
-            ],
-          );
-        },
+              data: (tasks) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _OrphanCallsBanner(
+                      onCreateTasks: () => _createTasksForOrphans(context, ref),
+                    ),
+                    Expanded(
+                      child: tasks.isEmpty
+                          ? Center(
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(
+                                    Icons.task_alt_outlined,
+                                    size: 64,
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.outline,
+                                  ),
+                                  const SizedBox(height: 16),
+                                  Text(
+                                    'Δεν υπάρχουν εκκρεμότητες αυτή τη στιγμή',
+                                    style: Theme.of(
+                                      context,
+                                    ).textTheme.bodyLarge,
+                                  ),
+                                ],
+                              ),
+                            )
+                          : RefreshIndicator(
+                              onRefresh: () =>
+                                  ref.read(tasksProvider.notifier).refresh(),
+                              // Προσθήκη bottom padding για να μην επικαλύπτεται η τελευταία κάρτα από το FAB
+                              child: ListView.builder(
+                                padding: EdgeInsets.fromLTRB(
+                                  16,
+                                  8,
+                                  16,
+                                  88 +
+                                      MediaQuery.of(context).viewPadding.bottom,
+                                ),
+                                itemCount: tasks.length,
+                                itemBuilder: (context, index) {
+                                  final task = tasks[index];
+                                  final Key scrollKey = task.id != null
+                                      ? _keyForTaskId(task.id!)
+                                      : ValueKey<int>(index);
+                                  return KeyedSubtree(
+                                    key: scrollKey,
+                                    child: TaskCard(
+                                      task: task,
+                                      onEdit: () => _onEdit(context, ref, task),
+                                      onSnooze: () =>
+                                          _onSnooze(context, ref, task),
+                                      onDelete: () =>
+                                          _onDelete(context, ref, task),
+                                      onComplete: () =>
+                                          _onComplete(context, ref, task),
+                                      onEditCaller: () =>
+                                          _onEditCaller(context, ref, task),
+                                      onEditDepartment: () =>
+                                          _onEditDepartment(context, ref, task),
+                                      onEditEquipment: () =>
+                                          _onEditEquipment(context, ref, task),
+                                    ),
+                                  );
+                                },
+                              ),
+                            ),
+                    ),
+                  ],
+                );
+              },
             ),
           ),
         ],
@@ -195,7 +198,9 @@ class _TasksScreenState extends ConsumerState<TasksScreen> {
   }
 
   static Future<void> _createTasksForOrphans(
-      BuildContext context, WidgetRef ref) async {
+    BuildContext context,
+    WidgetRef ref,
+  ) async {
     final service = ref.read(taskServiceProvider);
     final created = await service.createTasksForOrphanCalls();
     if (!context.mounted) return;
@@ -212,24 +217,36 @@ class _TasksScreenState extends ConsumerState<TasksScreen> {
     );
   }
 
-  static Future<void> _openNewTaskForm(BuildContext context, WidgetRef ref) async {
+  static Future<void> _openNewTaskForm(
+    BuildContext context,
+    WidgetRef ref,
+  ) async {
     final result = await showTaskFormDialog(context, task: null);
     if (!context.mounted || result == null) return;
-    await ref.read(tasksProvider.notifier).addTask(result);
+    await ref
+        .read(tasksProvider.notifier)
+        .addTask(result.copyWith(origin: Task.originManualFab));
     if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Εκκρεμότητα δημιουργήθηκε.')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Εκκρεμότητα δημιουργήθηκε.')));
   }
 
-  static Future<void> _openTaskSettings(BuildContext context, WidgetRef ref) async {
+  static Future<void> _openTaskSettings(
+    BuildContext context,
+    WidgetRef ref,
+  ) async {
     await showDialog<void>(
       context: context,
       builder: (context) => const TaskSettingsDialog(),
     );
   }
 
-  static Future<void> _onEdit(BuildContext context, WidgetRef ref, Task task) async {
+  static Future<void> _onEdit(
+    BuildContext context,
+    WidgetRef ref,
+    Task task,
+  ) async {
     _ClosedEditMode? closedMode;
     if (TaskStatusX.fromString(task.status) == TaskStatus.closed) {
       closedMode = await _pickClosedEditMode(context, task);
@@ -301,9 +318,9 @@ class _TasksScreenState extends ConsumerState<TasksScreen> {
       await ref.read(tasksProvider.notifier).addTask(result);
     }
     if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Εκκρεμότητα ενημερώθηκε.')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Εκκρεμότητα ενημερώθηκε.')));
   }
 
   static String _buildClosedInfoText(Task task) {
@@ -402,12 +419,16 @@ class _TasksScreenState extends ConsumerState<TasksScreen> {
     );
   }
 
-  static Future<void> _onSnooze(BuildContext context, WidgetRef ref, Task task) async {
+  static Future<void> _onSnooze(
+    BuildContext context,
+    WidgetRef ref,
+    Task task,
+  ) async {
     final service = ref.read(taskServiceProvider);
-    final config = ref.read(taskSettingsConfigProvider).maybeWhen(
-          data: (c) => c,
-          orElse: () => null,
-        ) ??
+    final config =
+        ref
+            .read(taskSettingsConfigProvider)
+            .maybeWhen(data: (c) => c, orElse: () => null) ??
         TaskSettingsConfig.defaultConfig();
     final maxRangeText = config.maxSnoozeDays == 1
         ? 'Μέγιστο εύρος: 1 ημέρα'
@@ -466,9 +487,9 @@ class _TasksScreenState extends ConsumerState<TasksScreen> {
                     child: Text(
                       maxRangeText,
                       style: Theme.of(ctx).textTheme.bodySmall?.copyWith(
-                            fontWeight: FontWeight.bold,
-                            color: Theme.of(ctx).colorScheme.onSurface,
-                          ),
+                        fontWeight: FontWeight.bold,
+                        color: Theme.of(ctx).colorScheme.onSurface,
+                      ),
                     ),
                   ),
                   TextButton.icon(
@@ -490,8 +511,8 @@ class _TasksScreenState extends ConsumerState<TasksScreen> {
               Text(
                 'Ο επιλογέας ημερομηνίας περιορίζεται στο παραπάνω εύρος.',
                 style: Theme.of(ctx).textTheme.bodySmall?.copyWith(
-                      color: Theme.of(ctx).colorScheme.onSurfaceVariant,
-                    ),
+                  color: Theme.of(ctx).colorScheme.onSurfaceVariant,
+                ),
               ),
             ],
           ),
@@ -519,9 +540,7 @@ class _TasksScreenState extends ConsumerState<TasksScreen> {
             status: TaskStatus.snoozed.toDbValue,
           )
           .addSnoozeEntry(newDue);
-      await ref.read(tasksProvider.notifier).updateTask(
-            updatedTask,
-          );
+      await ref.read(tasksProvider.notifier).updateTask(updatedTask);
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -557,16 +576,20 @@ class _TasksScreenState extends ConsumerState<TasksScreen> {
       initialTime: TimeOfDay.fromDateTime(task.dueDateTime ?? DateTime.now()),
     );
     if (!context.mounted || time == null) return;
-    final newDue = DateTime(date.year, date.month, date.day, time.hour, time.minute);
+    final newDue = DateTime(
+      date.year,
+      date.month,
+      date.day,
+      time.hour,
+      time.minute,
+    );
     final updatedTask = task
         .copyWith(
           dueDate: newDue.toIso8601String(),
           status: TaskStatus.snoozed.toDbValue,
         )
         .addSnoozeEntry(newDue);
-    await ref.read(tasksProvider.notifier).updateTask(
-          updatedTask,
-        );
+    await ref.read(tasksProvider.notifier).updateTask(updatedTask);
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -577,7 +600,11 @@ class _TasksScreenState extends ConsumerState<TasksScreen> {
     );
   }
 
-  static Future<void> _onDelete(BuildContext context, WidgetRef ref, Task task) async {
+  static Future<void> _onDelete(
+    BuildContext context,
+    WidgetRef ref,
+    Task task,
+  ) async {
     if (task.id == null) return;
     final created = task.createdAtDateTime;
     final createdLabel = created != null
@@ -638,7 +665,11 @@ class _TasksScreenState extends ConsumerState<TasksScreen> {
     );
   }
 
-  static Future<void> _onComplete(BuildContext context, WidgetRef ref, Task task) async {
+  static Future<void> _onComplete(
+    BuildContext context,
+    WidgetRef ref,
+    Task task,
+  ) async {
     final solutionNotes = await showTaskCloseDialog(
       context,
       initialSolutionNotes: task.solutionNotes,
@@ -647,9 +678,9 @@ class _TasksScreenState extends ConsumerState<TasksScreen> {
     if (task.id == null) return;
     await ref.read(tasksProvider.notifier).closeTask(task.id!, solutionNotes);
     if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Εκκρεμότητα ολοκληρώθηκε.')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Εκκρεμότητα ολοκληρώθηκε.')));
   }
 
   static Future<bool> _onEditCaller(
@@ -817,7 +848,8 @@ class _TaskDeleteCountdownSnackContentState
         Expanded(
           child: Text(
             'Η εκκρεμότητα: ${widget.taskTitle} θα διαγραφεί σε: $_remaining δευτ.',
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+            style:
+                Theme.of(context).textTheme.bodyMedium?.copyWith(
                   color: Colors.white,
                   fontWeight: FontWeight.w700,
                 ) ??
@@ -847,9 +879,7 @@ class _TaskDeleteCountdownSnackContentState
 }
 
 class _OrphanCallsBanner extends ConsumerWidget {
-  const _OrphanCallsBanner({
-    required this.onCreateTasks,
-  });
+  const _OrphanCallsBanner({required this.onCreateTasks});
 
   final VoidCallback onCreateTasks;
 
@@ -865,7 +895,9 @@ class _OrphanCallsBanner extends ConsumerWidget {
       return const SizedBox.shrink();
     }
     return Material(
-      color: Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.6),
+      color: Theme.of(
+        context,
+      ).colorScheme.primaryContainer.withValues(alpha: 0.6),
       child: SafeArea(
         bottom: false,
         child: Padding(
@@ -882,8 +914,8 @@ class _OrphanCallsBanner extends ConsumerWidget {
                 child: Text(
                   'Υπάρχουν $count κλήσεις χωρίς εκκρεμότητα.',
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: Theme.of(context).colorScheme.onPrimaryContainer,
-                      ),
+                    color: Theme.of(context).colorScheme.onPrimaryContainer,
+                  ),
                 ),
               ),
               FilledButton.tonal(

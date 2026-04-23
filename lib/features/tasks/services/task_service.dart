@@ -9,6 +9,7 @@ import '../../../core/database/directory_repository.dart';
 import '../../../core/services/audit_service.dart';
 import '../../../core/utils/search_text_normalizer.dart';
 import '../models/task.dart';
+import '../models/task_analytics_summary.dart';
 import '../models/task_filter.dart' show TaskFilter, TaskSortOption;
 import '../models/task_settings_config.dart';
 
@@ -51,12 +52,17 @@ class TaskService {
     'due_date',
     'snooze_until',
     'status',
+    'origin',
     'priority',
     'solution_notes',
     'is_deleted',
   ];
 
-  Future<void> _auditTaskCreate(Database db, int id, Map<String, dynamic> row) async {
+  Future<void> _auditTaskCreate(
+    Database db,
+    int id,
+    Map<String, dynamic> row,
+  ) async {
     try {
       final user = await AuditService.performingUser(db);
       final nv = <String, dynamic>{};
@@ -160,10 +166,14 @@ class TaskService {
 
     return switch (resolved) {
       TaskSettingsConfig.kOneHour => base.add(const Duration(hours: 1)),
-      TaskSettingsConfig.kDayEnd =>
-        _withinScheduleOrNextBusinessDue(config, base),
-      TaskSettingsConfig.kNextBusiness =>
-        _nextBusinessMorningDateTime(config, base),
+      TaskSettingsConfig.kDayEnd => _withinScheduleOrNextBusinessDue(
+        config,
+        base,
+      ),
+      TaskSettingsConfig.kNextBusiness => _nextBusinessMorningDateTime(
+        config,
+        base,
+      ),
       _ => base.add(const Duration(hours: 1)),
     };
   }
@@ -219,10 +229,9 @@ class TaskService {
   /// Αποθήκευση ρυθμίσεων εκκρεμοτήτων στο `app_settings`.
   Future<void> saveTaskSettingsConfig(TaskSettingsConfig config) async {
     final dbSave = await DatabaseHelper.instance.database;
-    await DirectoryRepository(dbSave).setSetting(
-      TaskSettingsConfig.appSettingsKey,
-      jsonEncode(config.toMap()),
-    );
+    await DirectoryRepository(
+      dbSave,
+    ).setSetting(TaskSettingsConfig.appSettingsKey, jsonEncode(config.toMap()));
   }
 
   /// Τίτλος εκκρεμότητας από σημειώσεις/κατηγορία (μορφή φόρμας κλήσης).
@@ -284,6 +293,7 @@ class TaskService {
     String? categoryName,
     DateTime? titleTimestamp,
     int? priority,
+    String? origin,
   }) async {
     final titleAt = titleTimestamp ?? callDate;
     final title = smartTaskTitleFromCallContext(
@@ -300,6 +310,9 @@ class TaskService {
     );
     final db = await _db;
     final nowIso = DateTime.now().toIso8601String();
+    final resolvedOrigin = Task.normalizeOrigin(
+      origin ?? (callId != null ? Task.originCallLinked : Task.originQuickAdd),
+    );
     final row = <String, dynamic>{
       'call_id': callId,
       'created_at': nowIso,
@@ -317,6 +330,7 @@ class TaskService {
       'user_text': userText,
       'equipment_text': equipmentText,
       'department_text': departmentText,
+      'origin': resolvedOrigin,
       'is_deleted': 0,
       'search_index': SearchTextNormalizer.normalizeForSearch(
         [
@@ -463,6 +477,371 @@ class TaskService {
     return n is int ? n : (n is num ? n.toInt() : int.tryParse('$n') ?? 0);
   }
 
+  Future<TaskAnalyticsSummary> getTaskAnalytics(DateTimeRange range) async {
+    final db = await _db;
+    final normalized = _normalizeRange(range);
+    final start = normalized.start;
+    final end = normalized.end;
+    final endExclusive = normalized.endExclusive;
+    final now = DateTime.now();
+    final nowIso = now.toIso8601String();
+    final startIso = start.toIso8601String();
+    final endExclusiveIso = endExclusive.toIso8601String();
+
+    Future<int> countByQuery(String sql, List<Object?> args) async {
+      final rows = await db.rawQuery(sql, args);
+      if (rows.isEmpty) return 0;
+      final n = rows.first['count'];
+      return n is int ? n : (n is num ? n.toInt() : int.tryParse('$n') ?? 0);
+    }
+
+    final activeNowCount = await countByQuery(
+      "SELECT COUNT(*) AS count FROM tasks "
+      "WHERE status IN ('open', 'snoozed') AND COALESCE(is_deleted, 0) = 0",
+      const [],
+    );
+    final createdInRangeCount = await countByQuery(
+      "SELECT COUNT(*) AS count FROM tasks "
+      "WHERE COALESCE(is_deleted, 0) = 0 "
+      "AND created_at >= ? AND created_at < ?",
+      [startIso, endExclusiveIso],
+    );
+    final activeCreatedInRangeCount = await countByQuery(
+      "SELECT COUNT(*) AS count FROM tasks "
+      "WHERE status IN ('open', 'snoozed') AND COALESCE(is_deleted, 0) = 0 "
+      "AND created_at >= ? AND created_at < ?",
+      [startIso, endExclusiveIso],
+    );
+    final closedInRangeCount = await countByQuery(
+      "SELECT COUNT(*) AS count FROM tasks "
+      "WHERE status = 'closed' AND COALESCE(is_deleted, 0) = 0 "
+      "AND updated_at >= ? AND updated_at < ?",
+      [startIso, endExclusiveIso],
+    );
+    final cancelledInRangeCount = await countByQuery(
+      "SELECT COUNT(*) AS count FROM audit_log "
+      "WHERE entity_type = ? AND action = ? "
+      "AND timestamp >= ? AND timestamp < ?",
+      [
+        AuditEntityTypes.task,
+        DatabaseHelper.auditActionDelete,
+        startIso,
+        endExclusiveIso,
+      ],
+    );
+    final overdueActiveCount = await countByQuery(
+      "SELECT COUNT(*) AS count FROM tasks "
+      "WHERE status IN ('open', 'snoozed') AND COALESCE(is_deleted, 0) = 0 "
+      "AND due_date < ?",
+      [nowIso],
+    );
+    final overdueInRangeCount = await countByQuery(
+      "SELECT COUNT(*) AS count FROM tasks "
+      "WHERE COALESCE(is_deleted, 0) = 0 "
+      "AND created_at >= ? AND created_at < ? "
+      "AND due_date < ?",
+      [startIso, endExclusiveIso, nowIso],
+    );
+
+    final avgCompletionRows = await db.rawQuery(
+      "SELECT AVG((julianday(updated_at) - julianday(created_at)) * 86400.0) AS avg_seconds "
+      "FROM tasks "
+      "WHERE status = 'closed' AND COALESCE(is_deleted, 0) = 0 "
+      "AND created_at IS NOT NULL AND updated_at IS NOT NULL "
+      "AND updated_at >= ? AND updated_at < ?",
+      [startIso, endExclusiveIso],
+    );
+    final avgCompletionSeconds = avgCompletionRows.isEmpty
+        ? 0.0
+        : ((avgCompletionRows.first['avg_seconds'] as num?)?.toDouble() ?? 0.0);
+
+    final originRows = await db.rawQuery(
+      "SELECT COALESCE(NULLIF(TRIM(origin), ''), ?) AS origin, COUNT(*) AS count "
+      "FROM tasks "
+      "WHERE COALESCE(is_deleted, 0) = 0 "
+      "AND created_at >= ? AND created_at < ? "
+      "GROUP BY COALESCE(NULLIF(TRIM(origin), ''), ?)",
+      [Task.originLegacy, startIso, endExclusiveIso, Task.originLegacy],
+    );
+    final originTotal = originRows.fold<int>(0, (sum, row) {
+      final n = row['count'];
+      return sum +
+          (n is int ? n : (n is num ? n.toInt() : int.tryParse('$n') ?? 0));
+    });
+    final originDistribution = originRows.map((row) {
+      final normalizedOrigin = Task.normalizeOrigin(row['origin'] as String?);
+      final n = row['count'];
+      final count = n is int
+          ? n
+          : (n is num ? n.toInt() : int.tryParse('$n') ?? 0);
+      final percent = originTotal == 0 ? 0.0 : (count / originTotal) * 100;
+      return TaskAnalyticsOriginSlice(
+        origin: normalizedOrigin,
+        label: _originLabel(normalizedOrigin),
+        count: count,
+        percent: percent,
+      );
+    }).toList()..sort((a, b) => b.count.compareTo(a.count));
+
+    final snoozeRows = await db.rawQuery(
+      "SELECT snooze_history_json FROM tasks "
+      "WHERE COALESCE(is_deleted, 0) = 0 "
+      "AND created_at >= ? AND created_at < ?",
+      [startIso, endExclusiveIso],
+    );
+    var snoozeEntriesTotal = 0;
+    for (final row in snoozeRows) {
+      snoozeEntriesTotal += _countSnoozeEntries(row['snooze_history_json']);
+    }
+    final avgSnoozesPerTask = snoozeRows.isEmpty
+        ? 0.0
+        : snoozeEntriesTotal / snoozeRows.length;
+
+    final createdByDayRows = await db.rawQuery(
+      "SELECT SUBSTR(created_at, 1, 10) AS day, COUNT(*) AS count "
+      "FROM tasks "
+      "WHERE COALESCE(is_deleted, 0) = 0 "
+      "AND created_at >= ? AND created_at < ? "
+      "GROUP BY SUBSTR(created_at, 1, 10)",
+      [startIso, endExclusiveIso],
+    );
+    final closedByDayRows = await db.rawQuery(
+      "SELECT SUBSTR(updated_at, 1, 10) AS day, COUNT(*) AS count "
+      "FROM tasks "
+      "WHERE status = 'closed' AND COALESCE(is_deleted, 0) = 0 "
+      "AND updated_at >= ? AND updated_at < ? "
+      "GROUP BY SUBSTR(updated_at, 1, 10)",
+      [startIso, endExclusiveIso],
+    );
+    final createdByDay = _countMapByDay(createdByDayRows);
+    final closedByDay = _countMapByDay(closedByDayRows);
+    final backlogGrowth = <TaskAnalyticsBacklogPoint>[];
+    var runningDelta = 0;
+    final totalDays = end.difference(start).inDays + 1;
+    for (var i = 0; i < totalDays; i++) {
+      final day = start.add(Duration(days: i));
+      final key = _dayKey(day);
+      final createdCount = createdByDay[key] ?? 0;
+      final closedCount = closedByDay[key] ?? 0;
+      final delta = createdCount - closedCount;
+      runningDelta += delta;
+      backlogGrowth.add(
+        TaskAnalyticsBacklogPoint(
+          date: day,
+          createdCount: createdCount,
+          closedCount: closedCount,
+          delta: delta,
+          runningDelta: runningDelta,
+        ),
+      );
+    }
+
+    final sparkEnd = DateTime(end.year, end.month, end.day);
+    final sparkStart = sparkEnd.subtract(const Duration(days: 6));
+    final sparkData = await _buildSparklines(
+      db,
+      start: sparkStart,
+      end: sparkEnd,
+    );
+
+    final overdueRateActive = activeNowCount == 0
+        ? 0.0
+        : (overdueActiveCount / activeNowCount) * 100;
+    final overdueRateRange = createdInRangeCount == 0
+        ? 0.0
+        : (overdueInRangeCount / createdInRangeCount) * 100;
+    final completionRateInRange = createdInRangeCount == 0
+        ? 0.0
+        : (closedInRangeCount / createdInRangeCount) * 100;
+    final cancellationRateInRange = createdInRangeCount == 0
+        ? 0.0
+        : (cancelledInRangeCount / createdInRangeCount) * 100;
+
+    return TaskAnalyticsSummary(
+      rangeStart: start,
+      rangeEnd: end,
+      activeNowCount: activeNowCount,
+      activeCreatedInRangeCount: activeCreatedInRangeCount,
+      createdInRangeCount: createdInRangeCount,
+      closedInRangeCount: closedInRangeCount,
+      cancelledInRangeCount: cancelledInRangeCount,
+      overdueActiveCount: overdueActiveCount,
+      overdueInRangeCount: overdueInRangeCount,
+      overdueRateActive: overdueRateActive,
+      overdueRateRange: overdueRateRange,
+      completionRateInRange: completionRateInRange,
+      cancellationRateInRange: cancellationRateInRange,
+      avgCompletionSeconds: avgCompletionSeconds,
+      avgSnoozesPerTask: avgSnoozesPerTask,
+      originDistribution: originDistribution,
+      backlogGrowth: backlogGrowth,
+      sparklineActive: sparkData.active,
+      sparklineClosed: sparkData.closed,
+      sparklineCancelled: sparkData.cancelled,
+      sparklineOverdue: sparkData.overdue,
+      sparklineCompletionRate: sparkData.completionRate,
+    );
+  }
+
+  ({DateTime start, DateTime end, DateTime endExclusive}) _normalizeRange(
+    DateTimeRange range,
+  ) {
+    var start = DateTime(range.start.year, range.start.month, range.start.day);
+    var end = DateTime(range.end.year, range.end.month, range.end.day);
+    if (end.isBefore(start)) {
+      final tmp = start;
+      start = end;
+      end = tmp;
+    }
+    final endExclusive = end.add(const Duration(days: 1));
+    return (start: start, end: end, endExclusive: endExclusive);
+  }
+
+  Map<String, int> _countMapByDay(List<Map<String, Object?>> rows) {
+    final map = <String, int>{};
+    for (final row in rows) {
+      final day = (row['day'] as String?)?.trim();
+      if (day == null || day.isEmpty) continue;
+      final n = row['count'];
+      final count = n is int
+          ? n
+          : (n is num ? n.toInt() : int.tryParse('$n') ?? 0);
+      map[day] = count;
+    }
+    return map;
+  }
+
+  String _dayKey(DateTime date) {
+    final y = date.year.toString().padLeft(4, '0');
+    final m = date.month.toString().padLeft(2, '0');
+    final d = date.day.toString().padLeft(2, '0');
+    return '$y-$m-$d';
+  }
+
+  int _countSnoozeEntries(Object? raw) {
+    final text = raw?.toString();
+    if (text == null || text.trim().isEmpty) return 0;
+    try {
+      final decoded = jsonDecode(text);
+      if (decoded is! List) return 0;
+      var count = 0;
+      for (final item in decoded) {
+        if (item is Map) {
+          final map = Map<String, dynamic>.from(item);
+          if (map['snoozedAt'] != null || map['dueAt'] != null) {
+            count++;
+          }
+          continue;
+        }
+        if (DateTime.tryParse(item.toString()) != null) {
+          count++;
+        }
+      }
+      return count;
+    } catch (_) {
+      return 0;
+    }
+  }
+
+  String _originLabel(String origin) {
+    return switch (origin) {
+      Task.originManualFab => 'Χειροκίνητη',
+      Task.originCallLinked => 'Από κλήση',
+      Task.originQuickAdd => 'Quick add',
+      _ => 'Legacy',
+    };
+  }
+
+  Future<
+    ({
+      List<double> active,
+      List<double> closed,
+      List<double> cancelled,
+      List<double> overdue,
+      List<double> completionRate,
+    })
+  >
+  _buildSparklines(
+    Database db, {
+    required DateTime start,
+    required DateTime end,
+  }) async {
+    final startIso = start.toIso8601String();
+    final endExclusiveIso = end.add(const Duration(days: 1)).toIso8601String();
+    final createdRows = await db.rawQuery(
+      "SELECT SUBSTR(created_at, 1, 10) AS day, COUNT(*) AS count "
+      "FROM tasks "
+      "WHERE COALESCE(is_deleted, 0) = 0 "
+      "AND created_at >= ? AND created_at < ? "
+      "GROUP BY SUBSTR(created_at, 1, 10)",
+      [startIso, endExclusiveIso],
+    );
+    final closedRows = await db.rawQuery(
+      "SELECT SUBSTR(updated_at, 1, 10) AS day, COUNT(*) AS count "
+      "FROM tasks "
+      "WHERE status = 'closed' AND COALESCE(is_deleted, 0) = 0 "
+      "AND updated_at >= ? AND updated_at < ? "
+      "GROUP BY SUBSTR(updated_at, 1, 10)",
+      [startIso, endExclusiveIso],
+    );
+    final cancelledRows = await db.rawQuery(
+      "SELECT SUBSTR(timestamp, 1, 10) AS day, COUNT(*) AS count "
+      "FROM audit_log "
+      "WHERE entity_type = ? AND action = ? "
+      "AND timestamp >= ? AND timestamp < ? "
+      "GROUP BY SUBSTR(timestamp, 1, 10)",
+      [
+        AuditEntityTypes.task,
+        DatabaseHelper.auditActionDelete,
+        startIso,
+        endExclusiveIso,
+      ],
+    );
+    final createdByDay = _countMapByDay(createdRows);
+    final closedByDay = _countMapByDay(closedRows);
+    final cancelledByDay = _countMapByDay(cancelledRows);
+
+    final active = <double>[];
+    final closed = <double>[];
+    final cancelled = <double>[];
+    final overdue = <double>[];
+    final completionRate = <double>[];
+    var running = 0.0;
+    final totalDays = end.difference(start).inDays + 1;
+    for (var i = 0; i < totalDays; i++) {
+      final day = start.add(Duration(days: i));
+      final dayEndIso = day.add(const Duration(days: 1)).toIso8601String();
+      final key = _dayKey(day);
+      final cCreated = (createdByDay[key] ?? 0).toDouble();
+      final cClosed = (closedByDay[key] ?? 0).toDouble();
+      final cCancelled = (cancelledByDay[key] ?? 0).toDouble();
+      running += cCreated - cClosed;
+      if (running < 0) running = 0;
+      active.add(running);
+      closed.add(cClosed);
+      cancelled.add(cCancelled);
+      completionRate.add(cCreated <= 0 ? 0 : (cClosed / cCreated) * 100);
+      final overdueRows = await db.rawQuery(
+        "SELECT COUNT(*) AS count FROM tasks "
+        "WHERE status IN ('open', 'snoozed') AND COALESCE(is_deleted, 0) = 0 "
+        "AND created_at < ? AND due_date < ?",
+        [dayEndIso, dayEndIso],
+      );
+      final n = overdueRows.isEmpty ? 0 : overdueRows.first['count'];
+      overdue.add(
+        (n is int ? n : (n is num ? n.toInt() : int.tryParse('$n') ?? 0))
+            .toDouble(),
+      );
+    }
+    return (
+      active: active,
+      closed: closed,
+      cancelled: cancelled,
+      overdue: overdue,
+      completionRate: completionRate,
+    );
+  }
+
   void _appendTaskFilterWhereParts(
     TaskFilter filter,
     List<String> conditions,
@@ -507,9 +886,13 @@ class TaskService {
     final db = await _db;
     final conditions = <String>[];
     final args = <Object?>[];
-    _appendTaskFilterWhereParts(filter, conditions, args, includeStatuses: false);
-    final where =
-        conditions.isEmpty ? '' : 'WHERE ${conditions.join(' AND ')}';
+    _appendTaskFilterWhereParts(
+      filter,
+      conditions,
+      args,
+      includeStatuses: false,
+    );
+    final where = conditions.isEmpty ? '' : 'WHERE ${conditions.join(' AND ')}';
 
     final rows = await db.rawQuery(
       'SELECT tasks.status AS status, COUNT(DISTINCT tasks.id) AS count '
@@ -517,16 +900,13 @@ class TaskService {
       args,
     );
 
-    final result = <TaskStatus, int>{
-      for (final s in TaskStatus.values) s: 0,
-    };
+    final result = <TaskStatus, int>{for (final s in TaskStatus.values) s: 0};
     for (final row in rows) {
       final raw = row['status'] as String?;
       if (raw == null) continue;
       final status = TaskStatusX.fromString(raw);
       final n = row['count'];
-      final c =
-          n is int ? n : (n is num ? n.toInt() : int.tryParse('$n') ?? 0);
+      final c = n is int ? n : (n is num ? n.toInt() : int.tryParse('$n') ?? 0);
       result[status] = c;
     }
     return result;
@@ -537,7 +917,12 @@ class TaskService {
     final db = await _db;
     final conditions = <String>[];
     final args = <Object?>[];
-    _appendTaskFilterWhereParts(filter, conditions, args, includeStatuses: true);
+    _appendTaskFilterWhereParts(
+      filter,
+      conditions,
+      args,
+      includeStatuses: true,
+    );
 
     final where = conditions.isEmpty ? '' : 'WHERE ${conditions.join(' AND ')}';
 
@@ -571,6 +956,7 @@ class TaskService {
     final now = DateTime.now().toIso8601String();
     map['created_at'] = now;
     map['updated_at'] = now;
+    map['origin'] = Task.normalizeOrigin(map['origin'] as String?);
     map['search_index'] = SearchTextNormalizer.normalizeForSearch(
       task.combinedSearchText,
     );
@@ -590,7 +976,9 @@ class TaskService {
       whereArgs: [tid],
       limit: 1,
     );
-    final oldRow = oldRows.isEmpty ? null : Map<String, dynamic>.from(oldRows.first);
+    final oldRow = oldRows.isEmpty
+        ? null
+        : Map<String, dynamic>.from(oldRows.first);
 
     final map = task.toMap();
     map.remove('id');
@@ -598,6 +986,7 @@ class TaskService {
       map.remove('snooze_history_json');
     }
     map['updated_at'] = DateTime.now().toIso8601String();
+    map['origin'] = Task.normalizeOrigin(map['origin'] as String?);
     map['search_index'] = SearchTextNormalizer.normalizeForSearch(
       task.combinedSearchText,
     );
@@ -622,8 +1011,9 @@ class TaskService {
       whereArgs: [id],
       limit: 1,
     );
-    final oldStatus =
-        oldRows.isEmpty ? null : oldRows.first['status'] as String?;
+    final oldStatus = oldRows.isEmpty
+        ? null
+        : oldRows.first['status'] as String?;
     final now = DateTime.now().toIso8601String();
     await db.update(
       'tasks',
@@ -641,10 +1031,7 @@ class TaskService {
         entityType: AuditEntityTypes.task,
         entityId: id,
         oldValues: oldStatus != null ? {'status': oldStatus} : null,
-        newValues: {
-          'status': 'closed',
-          'solution_notes': solutionNotes,
-        },
+        newValues: {'status': 'closed', 'solution_notes': solutionNotes},
       );
     } catch (_) {}
   }

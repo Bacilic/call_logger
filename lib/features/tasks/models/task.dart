@@ -36,6 +36,10 @@ class Task {
   static const String quickAddTag = '[QUICK_ADD]';
   static const String quickAddCategoryEn = 'Quick Add';
   static const String quickAddCategoryEl = 'Γρήγορη προσθήκη';
+  static const String originManualFab = 'manual_fab';
+  static const String originCallLinked = 'call_linked';
+  static const String originQuickAdd = 'quick_add';
+  static const String originLegacy = 'legacy';
 
   Task({
     this.id,
@@ -58,11 +62,13 @@ class Task {
     this.solutionNotes,
     this.createdAt,
     this.updatedAt,
+    this.origin = originLegacy,
     this.isDeleted = false,
   });
 
   final int? id;
   final int? callId;
+
   /// FK προς users.id (ο καλών της σχετικής κλήσης).
   final int? callerId;
   final int? equipmentId;
@@ -84,11 +90,23 @@ class Task {
   final String? solutionNotes;
   final String? createdAt;
   final String? updatedAt;
+  final String origin;
   final bool isDeleted;
 
   static DateTime? _parseDateTime(String? value) {
     if (value == null || value.isEmpty) return null;
     return DateTime.tryParse(value);
+  }
+
+  static String normalizeOrigin(String? value) {
+    final raw = (value ?? '').trim().toLowerCase();
+    if (raw == originManualFab ||
+        raw == originCallLinked ||
+        raw == originQuickAdd ||
+        raw == originLegacy) {
+      return raw;
+    }
+    return originLegacy;
   }
 
   factory Task.fromMap(Map<String, dynamic> map) {
@@ -113,6 +131,7 @@ class Task {
       solutionNotes: map['solution_notes'] as String?,
       createdAt: map['created_at'] as String?,
       updatedAt: map['updated_at'] as String?,
+      origin: normalizeOrigin(map['origin'] as String?),
       isDeleted: (map['is_deleted'] as int?) == 1,
     );
   }
@@ -139,6 +158,7 @@ class Task {
       if (solutionNotes != null) 'solution_notes': solutionNotes,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
+      'origin': normalizeOrigin(origin),
       'is_deleted': isDeleted ? 1 : 0,
     };
   }
@@ -164,6 +184,7 @@ class Task {
     String? solutionNotes,
     String? createdAt,
     String? updatedAt,
+    String? origin,
     bool? isDeleted,
   }) {
     return Task(
@@ -187,19 +208,20 @@ class Task {
       solutionNotes: solutionNotes ?? this.solutionNotes,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
+      origin: normalizeOrigin(origin ?? this.origin),
       isDeleted: isDeleted ?? this.isDeleted,
     );
   }
 
   /// Ενιαίο κείμενο για ευρετήριο αναζήτησης (τίτλος + πεδία κλήσης / περιγραφή).
   String get combinedSearchText => [
-        title,
-        description ?? '',
-        userText ?? '',
-        phoneText ?? '',
-        equipmentText ?? '',
-        departmentText ?? '',
-      ].join(' ');
+    title,
+    description ?? '',
+    userText ?? '',
+    phoneText ?? '',
+    equipmentText ?? '',
+    departmentText ?? '',
+  ].join(' ');
 
   DateTime? get dueDateTime => _parseDateTime(dueDate);
   DateTime? get snoozeUntilDateTime => _parseDateTime(snoozeUntil);
@@ -265,7 +287,10 @@ class Task {
   String get cleanDescription {
     final raw = description;
     if (raw == null) return '';
-    return raw.replaceAll(quickAddTag, '').replaceAll(RegExp(r'\s+'), ' ').trim();
+    return raw
+        .replaceAll(quickAddTag, '')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
   }
 
   String get displayTitle {

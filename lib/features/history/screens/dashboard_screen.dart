@@ -12,6 +12,7 @@ import '../models/dashboard_filter_model.dart';
 import '../models/dashboard_summary_model.dart';
 import '../providers/dashboard_provider.dart';
 import '../providers/history_provider.dart';
+import '../widgets/lansweeper_report_dialog.dart';
 
 enum _TopEntityMode { department, caller, issue }
 
@@ -31,8 +32,10 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   final TextEditingController _keywordController = TextEditingController();
   final TextEditingController _userController = TextEditingController();
   final TextEditingController _equipmentController = TextEditingController();
+  final TextEditingController _lansweeperUrlController = TextEditingController();
 
   Timer? _debounceTimer;
+  ProviderSubscription<String>? _lansweeperUrlSub;
   bool _isFilterOpen = false;
   bool _showMoreSection = false;
   _TopEntityMode _topEntityMode = _TopEntityMode.department;
@@ -47,15 +50,25 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       _keywordController.text = f.keyword;
       _userController.text = f.userName ?? '';
       _equipmentController.text = f.equipmentCode ?? '';
+      _lansweeperUrlController.text = ref.read(lansweeperUrlProvider);
+    });
+    _lansweeperUrlSub = ref.listenManual<String>(lansweeperUrlProvider, (
+      _,
+      next,
+    ) {
+      if (_lansweeperUrlController.text == next) return;
+      _lansweeperUrlController.text = next;
     });
   }
 
   @override
   void dispose() {
     _debounceTimer?.cancel();
+    _lansweeperUrlSub?.close();
     _keywordController.dispose();
     _userController.dispose();
     _equipmentController.dispose();
+    _lansweeperUrlController.dispose();
     super.dispose();
   }
 
@@ -70,6 +83,11 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   void _pushTextFiltersToProvider() {
     final u = _userController.text.trim();
     final e = _equipmentController.text.trim();
+    unawaited(
+      ref.read(lansweeperUrlProvider.notifier).setUrl(
+        _lansweeperUrlController.text,
+      ),
+    );
     ref
         .read(dashboardFilterProvider.notifier)
         .update(
@@ -86,6 +104,15 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   void _applyAllFilters() {
     _debounceTimer?.cancel();
     _pushTextFiltersToProvider();
+  }
+
+  Future<void> _openLansweeperReportDialog() async {
+    _applyAllFilters();
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (context) => const LansweeperReportDialog(),
+    );
   }
 
   Future<void> _pickDateRange() async {
@@ -322,6 +349,10 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                                     ),
                                   ],
                                   onCardTap: (index) async {
+                                    if (index == 0) {
+                                      await _openLansweeperReportDialog();
+                                      return;
+                                    }
                                     if (index != 3) return;
                                     final selected =
                                         await showModalBottomSheet<
@@ -508,6 +539,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                     keywordController: _keywordController,
                     userController: _userController,
                     equipmentController: _equipmentController,
+                    lansweeperUrlController: _lansweeperUrlController,
                     departmentsAsync: departmentsAsync,
                     selectedDepartment: filter.department,
                     onClose: () => setState(() => _isFilterOpen = false),
@@ -521,6 +553,12 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                       _keywordController.clear();
                       _userController.clear();
                       _equipmentController.clear();
+                      _lansweeperUrlController.clear();
+                      unawaited(
+                        ref
+                            .read(lansweeperUrlProvider.notifier)
+                            .resetToDefault(),
+                      );
                       ref
                           .read(dashboardFilterProvider.notifier)
                           .update((s) => const DashboardFilterModel());
@@ -1276,6 +1314,7 @@ class _FilterPane extends StatelessWidget {
     required this.keywordController,
     required this.userController,
     required this.equipmentController,
+    required this.lansweeperUrlController,
     required this.departmentsAsync,
     required this.selectedDepartment,
     required this.onClose,
@@ -1295,6 +1334,7 @@ class _FilterPane extends StatelessWidget {
   final TextEditingController keywordController;
   final TextEditingController userController;
   final TextEditingController equipmentController;
+  final TextEditingController lansweeperUrlController;
   final AsyncValue<List<String>> departmentsAsync;
   final String? selectedDepartment;
   final VoidCallback onClose;
@@ -1441,6 +1481,17 @@ class _FilterPane extends StatelessWidget {
                 onChanged: (_) => onChangedText(),
                 decoration: const InputDecoration(
                   labelText: 'Εξοπλισμός',
+                  border: OutlineInputBorder(),
+                  isDense: true,
+                ),
+              ),
+              const SizedBox(height: 8),
+              TextFormField(
+                controller: lansweeperUrlController,
+                onChanged: (_) => onChangedText(),
+                decoration: const InputDecoration(
+                  labelText: 'Lansweeper URL',
+                  hintText: 'http://.../NewTicket.aspx?...',
                   border: OutlineInputBorder(),
                   isDense: true,
                 ),

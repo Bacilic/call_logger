@@ -9,6 +9,7 @@ import '../../../core/widgets/calendar_range_picker.dart';
 import '../models/task.dart';
 import '../models/task_filter.dart';
 import '../providers/tasks_provider.dart';
+import '../widgets/task_analytics_bottom_sheet.dart';
 
 /// Μπάρα αναζήτησης και φίλτρων: κείμενο (debounce 300ms), status chips, εύρος ημερομηνιών.
 class TaskFilterBar extends ConsumerStatefulWidget {
@@ -55,7 +56,9 @@ class _TaskFilterBarState extends ConsumerState<TaskFilterBar> {
   void _onSearchChanged(String value) {
     _debounceTimer?.cancel();
     _debounceTimer = Timer(_debounceDuration, () {
-      ref.read(taskFilterProvider.notifier).update((s) => s.copyWith(searchQuery: value.trim()));
+      ref
+          .read(taskFilterProvider.notifier)
+          .update((s) => s.copyWith(searchQuery: value.trim()));
     });
   }
 
@@ -88,14 +91,15 @@ class _TaskFilterBarState extends ConsumerState<TaskFilterBar> {
     }
     final range = result.range;
     if (range == null) return;
-    ref.read(taskFilterProvider.notifier).update((s) => s.copyWith(
-          startDate: range.start,
-          endDate: range.end,
-        ));
+    ref
+        .read(taskFilterProvider.notifier)
+        .update((s) => s.copyWith(startDate: range.start, endDate: range.end));
   }
 
   void _clearDateRange() {
-    ref.read(taskFilterProvider.notifier).update((s) => s.copyWith(clearDateRange: true));
+    ref
+        .read(taskFilterProvider.notifier)
+        .update((s) => s.copyWith(clearDateRange: true));
   }
 
   /// Αποφυγή «Build scheduled during frame» όταν η ενημέρωση Riverpod γίνεται
@@ -113,7 +117,8 @@ class _TaskFilterBarState extends ConsumerState<TaskFilterBar> {
     TaskFilter filter,
   ) {
     final count = countsAsync.value?[status];
-    var showCount = count != null &&
+    var showCount =
+        count != null &&
         count > 0 &&
         !countsAsync.isLoading &&
         !countsAsync.hasError;
@@ -209,6 +214,25 @@ class _TaskFilterBarState extends ConsumerState<TaskFilterBar> {
                   tooltip: 'Εύρος ημερομηνιών',
                   icon: const Icon(Icons.date_range),
                 ),
+                const SizedBox(width: 8),
+                IconButton.filledTonal(
+                  onPressed: () {
+                    showModalBottomSheet<void>(
+                      context: context,
+                      isScrollControlled: true,
+                      useSafeArea: true,
+                      backgroundColor: Colors.transparent,
+                      constraints: const BoxConstraints(maxWidth: 1200),
+                      builder: (_) => const FractionallySizedBox(
+                        heightFactor: 0.96,
+                        widthFactor: 1,
+                        child: TaskAnalyticsBottomSheet(),
+                      ),
+                    );
+                  },
+                  tooltip: 'Στατιστικά εκκρεμοτήτων',
+                  icon: const Icon(Icons.analytics_outlined),
+                ),
               ],
             ),
             const SizedBox(height: 10),
@@ -222,24 +246,35 @@ class _TaskFilterBarState extends ConsumerState<TaskFilterBar> {
                   onSelected: (_) => _toggleStatus(TaskStatus.open),
                 ),
                 FilterChip(
-                  label: _statusChipLabel(TaskStatus.snoozed, countsAsync, filter),
+                  label: _statusChipLabel(
+                    TaskStatus.snoozed,
+                    countsAsync,
+                    filter,
+                  ),
                   selected: filter.statuses.contains(TaskStatus.snoozed),
                   onSelected: (_) => _toggleStatus(TaskStatus.snoozed),
                 ),
                 FilterChip(
-                  label: _statusChipLabel(TaskStatus.closed, countsAsync, filter),
+                  label: _statusChipLabel(
+                    TaskStatus.closed,
+                    countsAsync,
+                    filter,
+                  ),
                   selected: filter.statuses.contains(TaskStatus.closed),
                   onSelected: (_) => _toggleStatus(TaskStatus.closed),
                 ),
                 if (allFiltersOff)
                   Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 8,
+                    ),
                     child: Text(
                       'Εμφάνιση Όλων',
                       textAlign: TextAlign.center,
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: Colors.grey[600],
-                          ),
+                      style: Theme.of(
+                        context,
+                      ).textTheme.bodySmall?.copyWith(color: Colors.grey[600]),
                     ),
                   ),
                 if (hasDateRange) ...[
@@ -280,7 +315,10 @@ class _TaskFilterBarState extends ConsumerState<TaskFilterBar> {
                   ),
                 ),
                 IconButton.filledTonal(
-                  constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+                  constraints: const BoxConstraints(
+                    minWidth: 36,
+                    minHeight: 36,
+                  ),
                   padding: EdgeInsets.zero,
                   style: IconButton.styleFrom(
                     tapTargetSize: MaterialTapTargetSize.shrinkWrap,
@@ -290,7 +328,9 @@ class _TaskFilterBarState extends ConsumerState<TaskFilterBar> {
                       : 'Φθίνουσα ταξινόμηση',
                   onPressed: () {
                     _deferProviderUpdate(() {
-                      ref.read(taskFilterProvider.notifier).update(
+                      ref
+                          .read(taskFilterProvider.notifier)
+                          .update(
                             (s) => s.copyWith(sortAscending: !s.sortAscending),
                           );
                     });
