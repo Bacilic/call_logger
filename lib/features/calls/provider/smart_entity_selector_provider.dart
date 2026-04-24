@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/database/database_helper.dart';
@@ -197,11 +197,41 @@ class SmartEntitySelectorState {
       departmentText.trim().isNotEmpty &&
       (hasPhoneInput || hasEquipmentInput);
 
+  /// True μόνο όταν υπάρχει πραγματική ανάγκη shared καταχώρησης orphan
+  /// (όχι όταν τα στοιχεία υπάρχουν ήδη στο ίδιο τμήμα χωρίς σύγκρουση).
+  bool needsOrphanDepartmentQuickAddResolved(LookupService? lookup) {
+    if (!needsOrphanDepartmentQuickAdd) return false;
+    if (lookup == null) return true;
+    final deptText = departmentText.trim();
+    final departmentId = selectedDepartmentId ?? lookup.findDepartmentByName(deptText)?.id;
+    final phone = selectedPhone?.trim();
+    final equipmentCode = equipmentText.trim().isEmpty ? null : equipmentText.trim();
+
+    final phoneNeedsShared = phone != null &&
+        phone.isNotEmpty &&
+        (() {
+          final usage = lookup.checkPhoneUsage(phone);
+          if (usage.hasUserOwners) return true;
+          if (departmentId == null) return true;
+          return usage.departmentId != departmentId;
+        })();
+
+    final equipmentNeedsShared = equipmentCode != null &&
+        (() {
+          final usage = lookup.checkEquipmentUsage(equipmentCode);
+          if (usage.hasUserOwners) return true;
+          if (departmentId == null) return true;
+          return usage.departmentId != departmentId;
+        })();
+
+    return phoneNeedsShared || equipmentNeedsShared;
+  }
+
   /// Το κουμπί `+` εμφανίζεται είτε για νέα συσχέτιση σε υπάρχοντα χρήστη είτε για δημιουργία νέου καλούντα.
   bool needsAssociation(LookupService? lookup) =>
       needsExistingCallerAssociation(lookup) ||
       needsNewCallerCreation ||
-      needsOrphanDepartmentQuickAdd ||
+      needsOrphanDepartmentQuickAddResolved(lookup) ||
       hasPendingDepartmentChange;
 
   bool get hasPendingDepartmentChange {
@@ -279,7 +309,7 @@ class SmartEntitySelectorState {
       return 'Προσθήκη νέου καλούντα: $normalizedCallerDisplayText με ${parts.join(' και ')}';
     }
 
-    if (needsOrphanDepartmentQuickAdd) {
+    if (needsOrphanDepartmentQuickAddResolved(lookup)) {
       final parts = <String>[];
       if (phoneFilled) parts.add('τηλέφωνο: ${selectedPhone!.trim()}');
       if (equipmentFilled) parts.add('εξοπλισμό: ${equipmentText.trim()}');
@@ -489,7 +519,17 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
                 departmentId != null &&
                 equipmentUsage.departmentId != departmentId));
     final hasConflict = phoneConflict || equipmentConflict;
-
+    final phoneNeedsShared = phone != null &&
+        phone.isNotEmpty &&
+        (phoneUsage == null ||
+            phoneUsage.hasUserOwners ||
+            departmentId == null ||
+            phoneUsage.departmentId != departmentId);
+    final equipmentNeedsShared = equipmentCode != null &&
+        (equipmentUsage == null ||
+            equipmentUsage.hasUserOwners ||
+            departmentId == null ||
+            equipmentUsage.departmentId != departmentId);
     if (hasConflict && !forceSharedOnConflict) {
       final lines = <String>[
         'Εντοπίστηκαν πιθανές συγκρούσεις για Shared Policy.',
@@ -538,10 +578,10 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
       );
     }
 
-    if (phone != null && phone.isNotEmpty) {
+    if (phoneNeedsShared) {
       await dirOrphan.updatePhoneDepartment(phone, departmentId);
     }
-    if (equipmentCode != null) {
+    if (equipmentNeedsShared) {
       await dirOrphan.updateEquipmentDepartment(
         equipmentCode,
         departmentId,
@@ -560,8 +600,8 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
     );
 
     final added = <String>[];
-    if (phone != null && phone.isNotEmpty) added.add('τηλέφωνο');
-    if (equipmentCode != null) added.add('εξοπλισμός');
+    if (phoneNeedsShared) added.add('τηλέφωνο');
+    if (equipmentNeedsShared) added.add('εξοπλισμός');
     final associationWorkDone = added.isNotEmpty;
     final success = added.isEmpty
         ? 'Δεν υπήρχε στοιχείο προς καταχώρηση.'
@@ -1636,7 +1676,6 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
         willCreateDept && !await directory.departmentNameExists(deptTrimAssoc);
     final newEntityEligible =
         newPhoneRow || newEquipmentRow || newDepartmentRow;
-
     try {
       await directory.updateAssociationsIfNeeded(
         userId,
@@ -1769,7 +1808,6 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
     final summary = summaryText?.trim();
     final hasSummary = summary != null && summary.isNotEmpty;
     final existingId = _associationQuickTaskId;
-
     if (existingId != null) {
       var touched = false;
       if (hasSummary && (newEntityEligible || associationWorkDone)) {

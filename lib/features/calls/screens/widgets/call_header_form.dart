@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../provider/call_entry_provider.dart';
@@ -41,8 +41,7 @@ class _CallHeaderFormState extends ConsumerState<CallHeaderForm> {
       final messenger = ScaffoldMessenger.of(context);
       final currentHeader = ref.read(callHeaderProvider);
       final notifier = ref.read(callHeaderProvider.notifier);
-
-      if (currentHeader.needsOrphanDepartmentQuickAdd) {
+      if (currentHeader.needsOrphanDepartmentQuickAddResolved(lookupService)) {
         final preview = await notifier.quickAddOrphanToDepartment();
         if (preview == null) return;
         if (preview.requiresConfirmation) {

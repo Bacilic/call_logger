@@ -1,4 +1,4 @@
-name: call_logger
+﻿name: call_logger
 description: "Επαγγελματική εφαρμογή καταγραφής και διαχείρισης κλήσεων IT Support."
 
 # Η ακόλουθη γραμμή εμποδίζει την τυχαία δημοσίευση του πακέτου στο
@@ -16,7 +16,7 @@ publish_to: 'none' # Αφαιρέστε αυτή τη γραμμή αν θέλε
 # Δείτε: https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # Στο Windows, το build-name χρησιμοποιείται για τα τμήματα major, minor και patch
 # των εκδόσεων προϊόντος και αρχείου, ενώ το build-number για το επίθημα κατασκευής.
-version: 0.10.0+1
+version: 0.11.0+1
 
 environment:
   sdk: ^3.10.7

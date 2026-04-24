@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -30,6 +30,25 @@ class _LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
     if (issue.isNotEmpty) return issue;
     if (solution.isNotEmpty) return solution;
     return '-';
+  }
+
+  String _details(CallModel call) {
+    final parts = <String>[];
+    final equipmentCode = (call.equipmentText ?? '').trim();
+    final department = (call.departmentText ?? '').trim();
+    final problemCategory = (call.category ?? '').trim();
+
+    if (equipmentCode.isNotEmpty) {
+      parts.add('Κωδικός εξοπλισμού: $equipmentCode');
+    }
+    if (department.isNotEmpty) {
+      parts.add('Τμήμα: $department');
+    }
+    if (problemCategory.isNotEmpty) {
+      parts.add('Κατηγορία προβλήματος: $problemCategory');
+    }
+
+    return parts.join(' • ');
   }
 
   String _durationLabel(int seconds) {
@@ -72,6 +91,7 @@ class _LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
         call: call,
         caller: _callerLabel(call),
         notes: _notes(call),
+        details: _details(call),
         durationSeconds: call.duration ?? 0,
       );
     }).toList();
@@ -125,7 +145,10 @@ class _LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
     if (selected.isEmpty) return;
 
     final lines = selected
-        .map((e) => '${e.caller}: ${e.notes} [${_durationLabel(e.durationSeconds)}]')
+        .map((e) {
+          final details = e.details.isNotEmpty ? ' • ${e.details}' : '';
+          return '${e.caller}: ${e.notes}$details [${_durationLabel(e.durationSeconds)}]';
+        })
         .toList();
     await Clipboard.setData(ClipboardData(text: lines.join('\n')));
 
@@ -234,8 +257,10 @@ class _LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
                                   onChanged: (v) => _toggleItem(item, v),
                                   title: Text('$date • ${_durationLabel(item.durationSeconds)}'),
                                   subtitle: Text(
-                                    item.notes,
-                                    maxLines: 2,
+                                    item.details.isNotEmpty
+                                        ? '${item.notes}\n${item.details}'
+                                        : item.notes,
+                                    maxLines: 3,
                                     overflow: TextOverflow.ellipsis,
                                   ),
                                   contentPadding: const EdgeInsets.symmetric(
@@ -288,6 +313,7 @@ class _ReportCallItem {
     required this.call,
     required this.caller,
     required this.notes,
+    required this.details,
     required this.durationSeconds,
   });
 
@@ -295,5 +321,6 @@ class _ReportCallItem {
   final CallModel call;
   final String caller;
   final String notes;
+  final String details;
   final int durationSeconds;
 }
