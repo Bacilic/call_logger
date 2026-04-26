@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:sqflite_common/sqlite_api.dart';
+import '../utils/search_text_normalizer.dart';
 
 /// User-visible schema version (squashed v1· v2 = στήλες τμήμα/τοποθεσία στον εξοπλισμό).
 /// v4: departments.name = display, departments.name_key = normalized unique key.
@@ -23,7 +24,10 @@ import 'package:sqflite_common/sqlite_api.dart';
 /// v21: `departments.group_name`, `departments.floor_id` (ομαδοποίηση στον χάρτη).
 /// v22: `departments.map_label_offset_*`, `departments.map_anchor_offset_*`, `departments.map_custom_name`.
 /// v23: `tasks.origin` (πηγή δημιουργίας εκκρεμότητας).
-const int databaseSchemaVersionV1 = 23;
+/// v24: `audit_log.search_text` για αναζήτηση τίτλου χωρίς action.
+/// v25: backfill `search_text` με ρητές υποενέργειες (προσθήκη/αφαίρεση/αλλαγή).
+/// v26: πλήρης στοίχιση `search_text` με UI αλλαγών (1:1 κανονικοποιημένα).
+const int databaseSchemaVersionV1 = 26;
 
 /// Προεπιλογές διαδρομών (ίδιες με SettingsService — χωρίς εξάρτηση Flutter εδώ).
 const String kDefaultVncExecutablePath =
@@ -209,6 +213,7 @@ Future<void> applyDatabaseV1Schema(Database db) async {
         entity_type TEXT,
         entity_id INTEGER,
         entity_name TEXT,
+        search_text TEXT,
         old_values_json TEXT,
         new_values_json TEXT
       )
@@ -799,4 +804,439 @@ Future<void> migrateDatabaseToV23(Database db) async {
   await db.rawUpdate(
     "UPDATE tasks SET origin = 'legacy' WHERE origin IS NULL OR TRIM(origin) = ''",
   );
+}
+
+/// v24: `audit_log.search_text` για αναζήτηση σε subject/changes/details (χωρίς action).
+Future<void> migrateDatabaseToV24(Database db) async {
+  final info = await db.rawQuery('PRAGMA table_info(audit_log)');
+  final names = info.map((r) => r['name'] as String).toSet();
+  if (!names.contains('search_text')) {
+    await db.execute('ALTER TABLE audit_log ADD COLUMN search_text TEXT');
+  }
+
+  final rows = await db.query(
+    'audit_log',
+    columns: [
+      'id',
+      'details',
+      'entity_type',
+      'entity_name',
+      'old_values_json',
+      'new_values_json',
+      'search_text',
+    ],
+  );
+  if (rows.isEmpty) return;
+
+  final batch = db.batch();
+  for (final row in rows) {
+    final idRaw = row['id'];
+    if (idRaw == null) continue;
+    final id = idRaw is int ? idRaw : (idRaw as num).toInt();
+    final existing = (row['search_text'] as String?)?.trim() ?? '';
+    if (existing.isNotEmpty) continue;
+    final next = _buildAuditSearchTextForMigration(
+      details: row['details'] as String?,
+      entityType: row['entity_type'] as String?,
+      entityName: row['entity_name'] as String?,
+      oldValuesJson: row['old_values_json'] as String?,
+      newValuesJson: row['new_values_json'] as String?,
+    );
+    batch.update(
+      'audit_log',
+      {'search_text': next},
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+  await batch.commit(noResult: true);
+}
+
+String _buildAuditSearchTextForMigration({
+  String? details,
+  String? entityType,
+  String? entityName,
+  String? oldValuesJson,
+  String? newValuesJson,
+}) {
+  final parts = <String>[];
+  final normalizedEntityType = (entityType ?? '').trim();
+  void add(String? raw) {
+    final t = raw?.trim() ?? '';
+    if (t.isNotEmpty) parts.add(t);
+  }
+
+  add(entityName);
+  add(_entityTypeGreekForMigration(entityType));
+  add(details);
+
+  final oldMap =
+      _decodeMapForMigration(oldValuesJson) ?? const <String, dynamic>{};
+  final newMap =
+      _decodeMapForMigration(newValuesJson) ?? const <String, dynamic>{};
+  final keys = oldMap.keys.toSet().union(newMap.keys.toSet()).toList()..sort();
+  for (final key in keys) {
+    final oldValue = oldMap[key];
+    final newValue = newMap[key];
+    if (_valuesEqualForMigration(oldValue, newValue)) continue;
+    final label = _fieldLabelForMigration(normalizedEntityType, key);
+    if (label.isNotEmpty) add(label);
+    final oldText = _stringifyValueForMigration(key, oldValue);
+    final newText = _stringifyValueForMigration(key, newValue);
+    if (oldText.isNotEmpty) add(oldText);
+    if (newText.isNotEmpty) add(newText);
+    add(
+      _subactionSearchTextForMigration(
+        entityType: normalizedEntityType,
+        field: key,
+        label: label,
+        oldValue: oldValue,
+        oldText: oldText,
+        newValue: newValue,
+        newText: newText,
+      ),
+    );
+  }
+
+  return SearchTextNormalizer.normalizeForSearch(parts.join(' '));
+}
+
+/// v25: αναδόμηση `search_text` για όλες τις γραμμές ώστε να περιλαμβάνουν υποενέργειες.
+Future<void> migrateDatabaseToV25(Database db) async {
+  final info = await db.rawQuery('PRAGMA table_info(audit_log)');
+  final names = info.map((r) => r['name'] as String).toSet();
+  if (!names.contains('search_text')) {
+    await db.execute('ALTER TABLE audit_log ADD COLUMN search_text TEXT');
+  }
+
+  final rows = await db.query(
+    'audit_log',
+    columns: [
+      'id',
+      'details',
+      'entity_type',
+      'entity_name',
+      'old_values_json',
+      'new_values_json',
+      'search_text',
+    ],
+  );
+  if (rows.isEmpty) return;
+
+  final batch = db.batch();
+  for (final row in rows) {
+    final idRaw = row['id'];
+    if (idRaw == null) continue;
+    final id = idRaw is int ? idRaw : (idRaw as num).toInt();
+    final next = _buildAuditSearchTextForMigration(
+      details: row['details'] as String?,
+      entityType: row['entity_type'] as String?,
+      entityName: row['entity_name'] as String?,
+      oldValuesJson: row['old_values_json'] as String?,
+      newValuesJson: row['new_values_json'] as String?,
+    );
+    final current = SearchTextNormalizer.normalizeForSearch(
+      (row['search_text'] as String?) ?? '',
+    );
+    if (current == next) continue;
+    batch.update(
+      'audit_log',
+      {'search_text': next},
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+  await batch.commit(noResult: true);
+}
+
+/// v26: πλήρης αναδόμηση `search_text` ώστε να ταιριάζει με UI διατυπώσεις.
+Future<void> migrateDatabaseToV26(Database db) async {
+  final info = await db.rawQuery('PRAGMA table_info(audit_log)');
+  final names = info.map((r) => r['name'] as String).toSet();
+  if (!names.contains('search_text')) {
+    await db.execute('ALTER TABLE audit_log ADD COLUMN search_text TEXT');
+  }
+
+  final rows = await db.query(
+    'audit_log',
+    columns: [
+      'id',
+      'details',
+      'entity_type',
+      'entity_name',
+      'old_values_json',
+      'new_values_json',
+      'search_text',
+    ],
+  );
+  if (rows.isEmpty) return;
+
+  final batch = db.batch();
+  for (final row in rows) {
+    final idRaw = row['id'];
+    if (idRaw == null) continue;
+    final id = idRaw is int ? idRaw : (idRaw as num).toInt();
+    final next = _buildAuditSearchTextForMigration(
+      details: row['details'] as String?,
+      entityType: row['entity_type'] as String?,
+      entityName: row['entity_name'] as String?,
+      oldValuesJson: row['old_values_json'] as String?,
+      newValuesJson: row['new_values_json'] as String?,
+    );
+    final current = SearchTextNormalizer.normalizeForSearch(
+      (row['search_text'] as String?) ?? '',
+    );
+    if (current == next) continue;
+    batch.update(
+      'audit_log',
+      {'search_text': next},
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+  await batch.commit(noResult: true);
+}
+
+Map<String, dynamic>? _decodeMapForMigration(String? raw) {
+  if (raw == null || raw.trim().isEmpty) return null;
+  try {
+    final d = jsonDecode(raw);
+    if (d is Map<String, dynamic>) return d;
+    if (d is Map) return Map<String, dynamic>.from(d);
+  } catch (_) {}
+  return null;
+}
+
+String _entityTypeGreekForMigration(String? type) {
+  switch ((type ?? '').trim()) {
+    case 'user':
+      return 'χρηστης';
+    case 'department':
+      return 'τμημα';
+    case 'equipment':
+      return 'εξοπλισμος';
+    case 'category':
+      return 'κατηγορια';
+    case 'task':
+      return 'εκκρεμοτητα';
+    case 'call':
+      return 'κληση';
+    case 'bulk_users':
+      return 'μαζικη ενημερωση χρηστων';
+    case 'bulk_departments':
+      return 'μαζικη ενημερωση τμηματων';
+    case 'bulk_equipment':
+      return 'μαζικη ενημερωση εξοπλισμου';
+    case 'import_data':
+      return 'εισαγωγη δεδομενων';
+    case 'maintenance':
+      return 'συντηρηση βασης';
+    case 'phone':
+      return 'τηλεφωνο';
+    default:
+      return '';
+  }
+}
+
+String _fieldLabelForMigration(String entityType, String field) {
+  const labels = <String, String>{
+    'name': 'ονομα',
+    'email': 'email',
+    'phone': 'τηλεφωνο',
+    'status': 'κατασταση',
+    'priority': 'προτεραιοτητα',
+    'due_date': 'προθεσμια',
+    'title': 'τιτλος',
+    'description': 'περιγραφη',
+    'solution_notes': 'λυση',
+    'department_id': 'τμημα',
+    'department_text': 'τμημα',
+    'equipment_id': 'εξοπλισμος',
+    'equipment_text': 'εξοπλισμος',
+    'caller_id': 'χρηστης',
+    'caller_text': 'χρηστης',
+    'phone_text': 'τηλεφωνο',
+    'category_text': 'κατηγορια',
+    'category_id': 'κατηγορια',
+    'issue': 'θεμα',
+    'solution': 'λυση',
+    'type': 'τυπος',
+    'custom_ip': 'ip',
+    'linked_users': 'συνδεδεμενοι χρηστες',
+    'linked_equipment': 'συνδεδεμενος εξοπλισμος',
+    'linked_phone_numbers': 'τηλεφωνα',
+    'linked_user_id': 'χρηστης',
+    'color': 'χρωμα',
+    'building': 'κτηριο',
+    'map_floor': 'οροφος',
+    'floor_id': 'οροφος',
+    'notes': 'σημειωσεις',
+    'map_x': 'θεσης χ',
+    'map_y': 'θεσης υ',
+    'map_width': 'πλατους',
+    'map_height': 'υψους',
+    'map_rotation': 'περιστροφης',
+    'map_label_offset_x': 'μετατοπισης ετικετας χ',
+    'map_label_offset_y': 'μετατοπισης ετικετας υ',
+    'map_anchor_offset_x': 'μετατοπισης αγκυρας χ',
+    'map_anchor_offset_y': 'μετατοπισης αγκυρας υ',
+    'map_custom_name': 'προσαρμοσμενου ονοματος',
+    'map_hidden': 'ορατοτητας',
+  };
+  final label = labels[field];
+  if (label != null) return label;
+  if (entityType.trim().isEmpty) return 'πεδιου $field';
+  return 'πεδιου $field';
+}
+
+String _stringifyValueForMigration(String field, dynamic value) {
+  if (value == null) return '';
+  if (field == 'status') {
+    final raw = value.toString().trim().toLowerCase();
+    const map = <String, String>{
+      'pending': 'εκκρεμης',
+      'completed': 'ολοκληρωμενη',
+      'closed': 'κλειστη',
+      'open': 'ανοιχτη',
+      'in_progress': 'σε εξελιξη',
+    };
+    return map[raw] ?? raw;
+  }
+  if (field == 'priority') {
+    final raw = value.toString().trim().toLowerCase();
+    const map = <String, String>{
+      'low': 'χαμηλη',
+      'normal': 'κανονικη',
+      'medium': 'μεσαια',
+      'high': 'υψηλη',
+      'urgent': 'επειγουσα',
+    };
+    return map[raw] ?? raw;
+  }
+  if (field == 'color') {
+    return _friendlyColorForMigration(value.toString());
+  }
+  if (field == 'map_floor') {
+    return _formatFloorValueForMigration(value) ?? 'χωρις οροφο';
+  }
+  if (value is List) {
+    return '${value.length} στοιχεια';
+  }
+  if (value is Map) {
+    return 'δομημενα δεδομενα';
+  }
+  return '$value'.trim();
+}
+
+String _subactionSearchTextForMigration({
+  required String entityType,
+  required String field,
+  required String label,
+  required dynamic oldValue,
+  required String oldText,
+  required dynamic newValue,
+  required String newText,
+}) {
+  if (entityType == 'department' && field == 'map_floor') {
+    final oldFloor = _formatFloorValueForMigration(oldValue);
+    final newFloor = _formatFloorValueForMigration(newValue);
+    if ((oldFloor == null || oldFloor == 'χωρις οροφο') &&
+        newFloor != null &&
+        newFloor != 'χωρις οροφο') {
+      return 'προσθηκη στον οροφο $newFloor';
+    }
+    if (oldFloor != null &&
+        oldFloor != 'χωρις οροφο' &&
+        (newFloor == null || newFloor == 'χωρις οροφο')) {
+      return 'αφαιρεση απο οροφο $oldFloor';
+    }
+    if (oldFloor != null && newFloor != null) {
+      return 'αλλαγη οροφου απο $oldFloor σε $newFloor';
+    }
+  }
+
+  if (entityType == 'phone' && field == 'linked_user_id') {
+    final oldUser = _hasMeaningfulValueForMigration(oldValue)
+        ? '#$oldValue'
+        : null;
+    final newUser = _hasMeaningfulValueForMigration(newValue)
+        ? '#$newValue'
+        : null;
+    if (oldUser == null && newUser != null) return 'συνδεση σε χρηστη $newUser';
+    if (oldUser != null && newUser == null) {
+      return 'αποσυνδεση απο χρηστη $oldUser';
+    }
+    if (oldUser != null && newUser != null) {
+      return 'μεταφορα απο χρηστη $oldUser σε $newUser';
+    }
+  }
+  if (entityType == 'phone' && field == 'department_id') {
+    final oldDepartment = _hasMeaningfulValueForMigration(oldValue)
+        ? '#$oldValue'
+        : null;
+    final newDepartment = _hasMeaningfulValueForMigration(newValue)
+        ? '#$newValue'
+        : null;
+    if (oldDepartment == null && newDepartment != null) {
+      return 'συνδεση σε τμημα $newDepartment';
+    }
+    if (oldDepartment != null && newDepartment == null) {
+      return 'αποσυνδεση απο τμημα $oldDepartment';
+    }
+    if (oldDepartment != null && newDepartment != null) {
+      return 'μεταφορα απο τμημα $oldDepartment σε $newDepartment';
+    }
+  }
+
+  final hasOld = _hasMeaningfulValueForMigration(oldValue);
+  final hasNew = _hasMeaningfulValueForMigration(newValue);
+  if (!hasOld && hasNew) {
+    return 'προσθηκη $label $newText';
+  }
+  if (hasOld && !hasNew) {
+    return 'αφαιρεση $label $oldText';
+  }
+  if (hasOld && hasNew) {
+    return 'αλλαγη $label απο $oldText σε $newText';
+  }
+  return '';
+}
+
+bool _hasMeaningfulValueForMigration(dynamic value) {
+  if (value == null) return false;
+  if (value is String) return value.trim().isNotEmpty;
+  if (value is List) return value.isNotEmpty;
+  if (value is Map) return value.isNotEmpty;
+  return '$value'.trim().isNotEmpty;
+}
+
+bool _valuesEqualForMigration(dynamic a, dynamic b) {
+  if (a == null && b == null) return true;
+  if (a is List || a is Map || b is List || b is Map) {
+    try {
+      return jsonEncode(a) == jsonEncode(b);
+    } catch (_) {
+      return '$a' == '$b';
+    }
+  }
+  return '${a ?? ''}' == '${b ?? ''}';
+}
+
+String _friendlyColorForMigration(String raw) {
+  final normalized = raw.trim().toUpperCase();
+  const known = <String, String>{
+    '#1976D2': 'μπλε',
+    '#EF5350': 'κοκκινο',
+    '#4CAF50': 'πρασινο',
+    '#FFC107': 'κιτρινο',
+    '#9C27B0': 'μωβ',
+  };
+  return known[normalized] ?? raw.trim();
+}
+
+String? _formatFloorValueForMigration(dynamic value) {
+  if (value == null) return 'χωρις οροφο';
+  final text = value.toString().trim();
+  if (text.isEmpty) return 'χωρις οροφο';
+  return text;
 }

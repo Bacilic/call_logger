@@ -286,94 +286,126 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(
-                        flex: 2,
-                        child: TextField(
-                          controller: _searchController,
-                          onChanged: _onSearchChanged,
-                          decoration: InputDecoration(
-                            hintText: 'Αναζήτηση (Σε όλα τα πεδία, εκτός από ώρα και διάρκεια)',
-                            prefixIcon: const Icon(Icons.search),
-                            suffixIcon: ValueListenableBuilder<TextEditingValue>(
-                              valueListenable: _searchController,
-                              builder: (context, value, _) {
-                                if (value.text.isEmpty) return const SizedBox.shrink();
-                                return IconButton(
-                                  icon: const Icon(Icons.close),
-                                  onPressed: () {
-                                    _debounceTimer?.cancel();
-                                    _searchController.clear();
-                                    ref.read(historyFilterProvider.notifier).update(
-                                          (s) => s.copyWith(keyword: ''),
-                                        );
-                                  },
-                                  tooltip: 'Καθαρισμός αναζήτησης',
-                                );
-                              },
+                  LayoutBuilder(
+                    builder: (context, constraints) {
+                      final compact = constraints.maxWidth < 980;
+                      final keywordField = TextField(
+                        controller: _searchController,
+                        onChanged: _onSearchChanged,
+                        decoration: InputDecoration(
+                          hintText: compact
+                              ? 'Αναζήτηση ιστορικού'
+                              : 'Αναζήτηση (Σε όλα τα πεδία, εκτός από ώρα και διάρκεια)',
+                          hintMaxLines: 1,
+                          prefixIcon: const Icon(Icons.search),
+                          suffixIcon: ValueListenableBuilder<TextEditingValue>(
+                            valueListenable: _searchController,
+                            builder: (context, value, _) {
+                              if (value.text.isEmpty) {
+                                return const SizedBox.shrink();
+                              }
+                              return IconButton(
+                                icon: const Icon(Icons.close),
+                                onPressed: () {
+                                  _debounceTimer?.cancel();
+                                  _searchController.clear();
+                                  ref.read(historyFilterProvider.notifier).update(
+                                        (s) => s.copyWith(keyword: ''),
+                                      );
+                                },
+                                tooltip: 'Καθαρισμός αναζήτησης',
+                              );
+                            },
+                          ),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          isDense: true,
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 10,
+                          ),
+                        ),
+                      );
+                      final categoryDropdown = asyncCategories.when(
+                        data: (categories) {
+                          final options = <String?>[null, ...categories];
+                          final current = filter.category;
+                          return DropdownButtonFormField<String?>(
+                            initialValue: options.contains(current) ? current : null,
+                            decoration: InputDecoration(
+                              labelText: 'Κατηγορία',
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              isDense: true,
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 8,
+                              ),
                             ),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            isDense: true,
-                            contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 10,
+                            items: options.map((c) {
+                              return DropdownMenuItem<String?>(
+                                value: c,
+                                child: Text(c ?? '— Όλες —'),
+                              );
+                            }).toList(),
+                            onChanged: (v) {
+                              ref.read(historyFilterProvider.notifier).update(
+                                    (s) => s.copyWith(
+                                      category: v,
+                                      clearCategory: v == null,
+                                    ),
+                                  );
+                            },
+                          );
+                        },
+                        loading: () => const SizedBox(
+                          height: 48,
+                          child: Center(
+                            child: SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2),
                             ),
                           ),
                         ),
-                      ),
-                      const SizedBox(width: 12),
-                      IconButton.filled(
+                        error: (_, _) => const SizedBox.shrink(),
+                      );
+                      final dateButton = IconButton.filled(
                         onPressed: _pickDateRange,
                         tooltip: 'Εύρος ημερομηνιών',
                         icon: const Icon(Icons.date_range),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: asyncCategories.when(
-                          data: (categories) {
-                            final options = <String?>[null, ...categories];
-                            final current = filter.category;
-                            return DropdownButtonFormField<String?>(
-                              initialValue: options.contains(current) ? current : null,
-                              decoration: InputDecoration(
-                                labelText: 'Κατηγορία',
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                isDense: true,
-                                contentPadding: const EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                  vertical: 8,
-                                ),
-                              ),
-                              items: options.map((c) {
-                                return DropdownMenuItem<String?>(
-                                  value: c,
-                                  child: Text(c ?? '— Όλες —'),
-                                );
-                              }).toList(),
-                              onChanged: (v) {
-                                ref.read(historyFilterProvider.notifier).update(
-                                      (s) => s.copyWith(
-                                            category: v,
-                                            clearCategory: v == null,
-                                          ),
-                                    );
-                              },
-                            );
-                          },
-                          loading: () => const SizedBox(
-                            height: 48,
-                            child: Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))),
-                          ),
-                          error: (_, _) => const SizedBox.shrink(),
-                        ),
-                      ),
-                    ],
+                      );
+
+                      if (compact) {
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Row(
+                              children: [
+                                Expanded(child: keywordField),
+                                const SizedBox(width: 8),
+                                dateButton,
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            categoryDropdown,
+                          ],
+                        );
+                      }
+
+                      return Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(flex: 2, child: keywordField),
+                          const SizedBox(width: 12),
+                          dateButton,
+                          const SizedBox(width: 8),
+                          Expanded(child: categoryDropdown),
+                        ],
+                      );
+                    },
                   ),
                   const SizedBox(height: 8),
                   Row(

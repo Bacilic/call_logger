@@ -21,6 +21,21 @@ class AuditEntityPreviewResolver {
   final Database _db;
 
   static const AuditFormatterService _fmt = AuditFormatterService();
+  static const Set<String> _supportedEntityTypes = <String>{
+    AuditEntityTypes.call,
+    AuditEntityTypes.task,
+    AuditEntityTypes.user,
+    AuditEntityTypes.equipment,
+    AuditEntityTypes.phone,
+    AuditEntityTypes.department,
+    AuditEntityTypes.category,
+  };
+
+  static bool supportsEntityType(String? entityType) {
+    final t = entityType?.trim();
+    if (t == null || t.isEmpty) return false;
+    return _supportedEntityTypes.contains(t);
+  }
 
   Future<AuditEntityPreview?> resolve({
     required String entityType,
@@ -37,6 +52,10 @@ class AuditEntityPreviewResolver {
         return _equipment(entityId);
       case AuditEntityTypes.phone:
         return _phone(entityId);
+      case AuditEntityTypes.department:
+        return _department(entityId);
+      case AuditEntityTypes.category:
+        return _category(entityId);
       default:
         return null;
     }
@@ -167,6 +186,44 @@ class AuditEntityPreviewResolver {
         'IP: ${r['custom_ip'] ?? '—'}',
         'Id: $id',
       ],
+    );
+  }
+
+  Future<AuditEntityPreview?> _department(int id) async {
+    final rows = await _db.query(
+      'departments',
+      where: 'id = ?',
+      whereArgs: [id],
+      limit: 1,
+    );
+    if (rows.isEmpty) return null;
+    final r = rows.first;
+    final name = (r['name'] as String?)?.trim();
+    final building = (r['building'] as String?)?.trim();
+    final floor = (r['map_floor'] as String?)?.trim();
+    return AuditEntityPreview(
+      title: (name == null || name.isEmpty) ? 'Τμήμα #$id' : name,
+      lines: [
+        'Κτίριο: ${(building == null || building.isEmpty) ? '—' : building}',
+        'Όροφος: ${(floor == null || floor.isEmpty) ? '—' : floor}',
+        'Id: $id',
+      ],
+    );
+  }
+
+  Future<AuditEntityPreview?> _category(int id) async {
+    final rows = await _db.query(
+      'categories',
+      where: 'id = ?',
+      whereArgs: [id],
+      limit: 1,
+    );
+    if (rows.isEmpty) return null;
+    final r = rows.first;
+    final name = (r['name'] as String?)?.trim();
+    return AuditEntityPreview(
+      title: (name == null || name.isEmpty) ? 'Κατηγορία #$id' : name,
+      lines: ['Id: $id'],
     );
   }
 }

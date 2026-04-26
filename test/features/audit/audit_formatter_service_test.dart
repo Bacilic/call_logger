@@ -14,8 +14,8 @@ void main() {
           '{"fields":{"department_id":5},"affected_ids":[1,2,3]}',
     );
     final s = formatter.summaryLine(row, technical: false);
-    expect(s, contains('3'));
-    expect(s, contains('επηρεασμένες'));
+    expect(s, contains('Επηρέασε 3'));
+    expect(s, contains('τμήματος'));
   });
 
   test('summaryLine fallback όταν λείπει entity_type', () {
@@ -51,7 +51,7 @@ void main() {
       entityName: 'Δοκιμαστικός τίτλος',
     );
     final s = formatter.summaryLine(row);
-    expect(s, 'Διαγραφή · Εκκρεμότητας: Δοκιμαστικός τίτλος');
+    expect(s, 'Διαγραφή · Δοκιμαστικός τίτλος');
   });
 
   test('summaryLine από details tasks id= χωρίς entity_type', () {
@@ -61,6 +61,48 @@ void main() {
       details: 'tasks id=48',
     );
     final s = formatter.summaryLine(row);
-    expect(s, 'Διαγραφή · Εκκρεμότητας #48');
+    expect(s, 'Διαγραφή · Εκκρεμότητα #48');
+  });
+
+  test('summaryLine αλλαγής χρώματος τμήματος', () {
+    final row = AuditLogModel(
+      id: 3,
+      action: 'ΤΡΟΠΟΠΟΙΗΣΗ ΤΜΗΜΑΤΟΣ',
+      entityType: 'department',
+      entityName: 'Πληροφορική',
+      oldValuesJson: '{"color":"#1976D2"}',
+      newValuesJson: '{"color":"#EF5350"}',
+    );
+    final s = formatter.summaryLine(row);
+    expect(
+      s,
+      'ΤΡΟΠΟΠΟΙΗΣΗ ΤΜΗΜΑΤΟΣ · Πληροφορική - Αλλαγή χρώματος από Μπλε σε Κόκκινο',
+    );
+  });
+
+  test('describeChanges για map_floor null -> 2', () {
+    final row = AuditLogModel(
+      id: 4,
+      action: 'ΤΡΟΠΟΠΟΙΗΣΗ ΤΜΗΜΑΤΟΣ',
+      entityType: 'department',
+      entityName: 'Άδειες',
+      oldValuesJson: '{"map_floor":null}',
+      newValuesJson: '{"map_floor":"2"}',
+    );
+    final lines = formatter.describeChanges(row);
+    expect(lines.first, 'Προσθήκη στον όροφο 2');
+  });
+
+  test('describeChanges για σύνδεση τηλεφώνου σε χρήστη', () {
+    final row = AuditLogModel(
+      id: 5,
+      action: 'ΤΡΟΠΟΠΟΙΗΣΗ',
+      entityType: 'phone',
+      entityName: '2101234567',
+      oldValuesJson: '{"linked_user_id":null}',
+      newValuesJson: '{"linked_user_id":12}',
+    );
+    final lines = formatter.describeChanges(row);
+    expect(lines.first, 'Σύνδεση σε χρήστη #12');
   });
 }

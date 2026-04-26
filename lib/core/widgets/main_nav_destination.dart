@@ -6,4 +6,5 @@ enum MainNavDestination {
   history,
   database,
   dictionary,
+  lamp,
 }

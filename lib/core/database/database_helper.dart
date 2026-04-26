@@ -691,6 +691,15 @@ class DatabaseHelper {
     if (oldVersion < 23 && newVersion >= 23) {
       await migrateDatabaseToV23(db);
     }
+    if (oldVersion < 24 && newVersion >= 24) {
+      await migrateDatabaseToV24(db);
+    }
+    if (oldVersion < 25 && newVersion >= 25) {
+      await migrateDatabaseToV25(db);
+    }
+    if (oldVersion < 26 && newVersion >= 26) {
+      await migrateDatabaseToV26(db);
+    }
   }
 
   /// Πίνακας προσωπικών λέξεων ορθογραφίας (Windows / custom lexicon).

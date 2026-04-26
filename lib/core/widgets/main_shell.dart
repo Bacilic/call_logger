@@ -11,6 +11,7 @@ import '../../features/calls/screens/calls_screen.dart';
 import '../../features/calls/screens/widgets/import_console_widget.dart';
 import '../../features/database/screens/database_browser_screen.dart';
 import '../../features/dictionary/screens/dictionary_manager_screen.dart';
+import '../../features/lamp/screens/lamp_screen.dart';
 
 import '../../features/database/widgets/database_settings_panel.dart';
 import '../../features/tasks/screens/tasks_screen.dart';
@@ -22,6 +23,7 @@ import '../providers/directory_tab_intent_provider.dart';
 import '../providers/equipment_focus_intent_provider.dart';
 import '../providers/history_audit_immersive_provider.dart';
 import '../providers/lexicon_full_mode_provider.dart';
+import '../providers/lamp_open_settings_intent_provider.dart';
 import '../../features/history/providers/history_application_audit_view_provider.dart';
 import '../providers/main_nav_request_provider.dart';
 import '../providers/settings_provider.dart';
@@ -163,6 +165,7 @@ class _MainShellState extends ConsumerState<MainShell> {
       MainNavDestination.history,
       if (showDatabaseNav) MainNavDestination.database,
       if (showDictionaryNav) MainNavDestination.dictionary,
+      MainNavDestination.lamp,
     ];
   }
 
@@ -245,6 +248,20 @@ class _MainShellState extends ConsumerState<MainShell> {
           ),
           label: const Text('Λεξικό'),
         );
+      case MainNavDestination.lamp:
+        return NavigationRailDestination(
+          icon: Tooltip(
+            waitDuration: const Duration(milliseconds: 600),
+            showDuration: const Duration(seconds: 4),
+            message:
+                'Παλιά βάση εξοπλισμού\nΜετατροπή Excel, αναζήτηση και προβλήματα ETL',
+            child: const Icon(
+              Icons.lightbulb_outline,
+              key: ValueKey('nav_rail_lamp'),
+            ),
+          ),
+          label: const Text('Λάμπα'),
+        );
     }
   }
 
@@ -266,6 +283,8 @@ class _MainShellState extends ConsumerState<MainShell> {
         );
       case MainNavDestination.dictionary:
         return DictionaryManagerScreen(databaseResult: widget.databaseResult);
+      case MainNavDestination.lamp:
+        return const LampScreen();
     }
   }
 
@@ -538,9 +557,38 @@ class _MainShellState extends ConsumerState<MainShell> {
     }
 
     final showAppBar = effectiveDestination != MainNavDestination.calls;
+    final isLampDestination = effectiveDestination == MainNavDestination.lamp;
     return Scaffold(
       appBar: showAppBar
-          ? AppBar(title: const Text('Καταγραφή Κλήσεων'))
+          ? AppBar(
+              title: isLampDestination
+                  ? Row(
+                      children: [
+                        Icon(
+                          Icons.lightbulb_outline,
+                          color: Theme.of(context).colorScheme.primary,
+                        ),
+                        const SizedBox(width: 12),
+                        const Text('Λάμπα'),
+                      ],
+                    )
+                  : const Text('Καταγραφή Κλήσεων'),
+              actions: isLampDestination
+                  ? <Widget>[
+                      IconButton(
+                        icon: const Icon(Icons.settings),
+                        tooltip: 'Ρυθμίσεις Λάμπας',
+                        onPressed: () {
+                          ref
+                              .read(
+                                lampOpenSettingsRequestProvider.notifier,
+                              )
+                              .request();
+                        },
+                      ),
+                    ]
+                  : null,
+            )
           : null,
       floatingActionButton: _showImportExcelButton
           ? FloatingActionButton(
@@ -580,7 +628,11 @@ class _MainShellState extends ConsumerState<MainShell> {
                         )
                       : null,
                   trailing: Padding(
-                    padding: const EdgeInsets.only(bottom: 8, left: 8, right: 8),
+                    padding: const EdgeInsets.only(
+                      bottom: 8,
+                      left: 8,
+                      right: 8,
+                    ),
                     child: Tooltip(
                       waitDuration: const Duration(milliseconds: 600),
                       showDuration: const Duration(seconds: 4),

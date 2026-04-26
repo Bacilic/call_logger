@@ -145,6 +145,15 @@ class AuditEntitySidePanel extends ConsumerWidget {
         ),
       );
     }
+    final type = entry.entityType!.trim();
+    if (!AuditEntityPreviewResolver.supportsEntityType(type)) {
+      return Text(
+        'Δεν υπάρχει διαθέσιμη προεπισκόπηση για τον τύπο οντότητας "$type".',
+        style: theme.textTheme.bodySmall?.copyWith(
+          color: theme.colorScheme.onSurfaceVariant,
+        ),
+      );
+    }
 
     final previewAsync = ref.watch(
       auditEntityPreviewProvider(
@@ -160,7 +169,7 @@ class AuditEntitySidePanel extends ConsumerWidget {
       data: (data) {
         if (data == null) {
           return Text(
-            'Η οντότητα δεν βρέθηκε στη βάση (πιθανώς διαγράφηκε).',
+            'Η οντότητα δεν βρέθηκε στη βάση. Πιθανόν έχει διαγραφεί ή είναι μη διαθέσιμη στην τρέχουσα προβολή.',
             style: theme.textTheme.bodySmall?.copyWith(
               color: theme.colorScheme.onSurfaceVariant,
             ),

@@ -66,6 +66,19 @@ final auditListProvider =
   return AuditPageResult(items: items, totalCount: result.total);
 });
 
+/// Διαθέσιμες ενέργειες για dropdown φίλτρου, βάσει τρέχοντος τύπου οντότητας.
+final auditActionOptionsProvider = FutureProvider.autoDispose<List<String>>((
+  ref,
+) async {
+  final filter = ref.watch(auditFilterProvider);
+  final svc = await ref.watch(auditServiceAsyncProvider.future);
+  return svc.queryDistinctActions(
+    entityType: filter.entityType,
+    dateFromInclusiveIso: filter.dateFromInclusiveIso,
+    dateToExclusiveIso: filter.dateToExclusiveIso,
+  );
+});
+
 final selectedAuditEntryIdProvider =
     NotifierProvider<SelectedAuditEntryNotifier, int?>(
   SelectedAuditEntryNotifier.new,

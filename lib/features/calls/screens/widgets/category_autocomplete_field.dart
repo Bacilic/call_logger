@@ -151,7 +151,13 @@ class _CategoryAutocompleteFieldState
     final entryCategory = ref.watch(callEntryProvider.select((s) => s.category));
     if (entryCategory.isEmpty && _controller.text.isNotEmpty) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _controller.clear();
+        if (mounted) {
+          _controller.clear();
+          setState(() {
+            _keyboardOptionIndex = -1;
+            _suppressOptionsUntilTyping = false;
+          });
+        }
       });
     }
 

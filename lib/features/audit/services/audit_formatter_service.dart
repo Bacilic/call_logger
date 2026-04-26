@@ -51,46 +51,36 @@ class AuditFormatterService {
             : inferredName;
 
     if (type == 'call' && !technical) {
-      final parts = <String>[];
-      if (row.action != null && row.action!.trim().isNotEmpty) {
-        parts.add(_actionLabel(row.action!, technical));
-      }
+      final action = _actionLabel(row.action ?? '', technical);
       final dash = _callAuditDashContext(row);
-      if (dash != null && dash.isNotEmpty) {
-        parts.add(dash);
+      final subject = dash != null && dash.isNotEmpty ? dash : 'Κλήση';
+      final main = action.isEmpty ? subject : '$action · $subject';
+      final change = primaryChangeLine(row, technical: technical);
+      if (change != null && change.isNotEmpty) {
+        return '$main - $change';
       }
-      if (parts.isEmpty && row.details != null && row.details!.trim().isNotEmpty) {
+      if (main.trim().isNotEmpty) return main;
+      if (row.details != null && row.details!.trim().isNotEmpty) {
         return row.details!.trim();
       }
-      if (parts.isEmpty) {
-        return row.details?.trim().isNotEmpty == true
-            ? row.details!.trim()
-            : '—';
-      }
-      return parts.join(' · ');
+      return '—';
     }
 
-    final parts = <String>[];
-    if (row.action != null && row.action!.trim().isNotEmpty) {
-      parts.add(_actionLabel(row.action!, technical));
+    final action = _actionLabel(row.action ?? '', technical);
+    final subject = type != null && type.isNotEmpty
+        ? _entitySummarySubject(type, eid, effectiveName, technical: technical)
+        : (row.details?.trim() ?? '');
+    final base = [action, subject].where((e) => e.trim().isNotEmpty).join(' · ');
+    final change = primaryChangeLine(row, technical: technical);
+    if (change != null && change.isNotEmpty) {
+      if (base.isEmpty) return change;
+      return '$base - $change';
     }
-
-    if (type != null && type.isNotEmpty) {
-      parts.add(
-        _entityLabel(
-          type,
-          eid,
-          effectiveName,
-          technical: technical,
-        ),
-      );
-    } else if (row.details != null && row.details!.trim().isNotEmpty) {
-      parts.add(row.details!.trim());
-    }
-    if (parts.isEmpty && row.details != null) {
+    if (base.isNotEmpty) return base;
+    if (row.details != null) {
       return row.details!.trim();
     }
-    return parts.join(' · ');
+    return '—';
   }
 
   /// `entity_name` (νέες εγγραφές) ή συγχώνευση `old/new_values_json` (παλιές).
@@ -188,6 +178,7 @@ class AuditFormatterService {
   String _actionLabel(String action, bool technical) {
     if (technical) return action;
     final a = action.trim();
+    if (a.isEmpty) return '';
     if (a == DatabaseHelper.auditActionDelete) return 'Διαγραφή';
     if (a == DatabaseHelper.auditActionRestore) return 'Επαναφορά';
     if (a == DatabaseHelper.auditActionBulkDelete) return 'Μαζική διαγραφή';
@@ -195,8 +186,8 @@ class AuditFormatterService {
     return a;
   }
 
-  /// Ετικέτα οντότητας: τεχνικό `table id=` · φιλικό `Γενική πτώση: όνομα`.
-  String _entityLabel(
+  /// Συντομευμένο subject για μία γραμμή σύνοψης.
+  String _entitySummarySubject(
     String type,
     int? id,
     String? name, {
@@ -205,53 +196,64 @@ class AuditFormatterService {
     final t = type.trim();
     if (technical) {
       if (id != null && name != null && name.isNotEmpty) {
-        return '$t · $name (id $id)';
+        return '$name (id $id)';
       }
-      if (id != null) return '$t id=$id';
-      return t;
+      return name?.trim().isNotEmpty == true ? name!.trim() : _entityTypeGreek(t);
     }
-
-    final gen = _entityGenitiveHeading(t);
     final displayName = name?.trim();
-    if (displayName != null && displayName.isNotEmpty) {
-      return '$gen: $displayName';
-    }
-    if (id != null) {
-      return '$gen #$id';
-    }
-    return gen;
+    if (displayName != null && displayName.isNotEmpty) return displayName;
+    if (id != null) return '${_entityTypeGreek(t)} #$id';
+    return _entityTypeGreek(t);
   }
 
-  /// Κεφαλίδα σε γενική (για προτάσεις τύπου «Εκκρεμότητας: …»).
-  String _entityGenitiveHeading(String type) {
-    switch (type) {
-      case 'user':
-        return 'Χρήστη';
-      case 'department':
-        return 'Τμήματος';
-      case 'equipment':
-        return 'Εξοπλισμού';
-      case 'category':
-        return 'Κατηγορίας';
-      case 'task':
-        return 'Εκκρεμότητας';
-      case 'call':
-        return 'Κλήσης';
-      case 'bulk_users':
-        return 'Μαζικής ενημέρωσης χρηστών';
-      case 'bulk_departments':
-        return 'Μαζικής ενημέρωσης τμημάτων';
-      case 'bulk_equipment':
-        return 'Μαζικής ενημέρωσης εξοπλισμού';
-      case 'import_data':
-        return 'Δεδομένων εισαγωγής';
-      case 'maintenance':
-        return 'Συντήρησης βάσης';
-      case 'phone':
-        return 'Τηλεφώνου';
-      default:
-        return _entityTypeGreek(type);
+  List<String> describeChanges(
+    AuditLogModel row, {
+    bool technical = false,
+    String? skipIfEquals,
+  }) {
+    final oldMap = row.oldValuesMap ?? const <String, dynamic>{};
+    final newMap = row.newValuesMap ?? const <String, dynamic>{};
+    if (oldMap.isEmpty && newMap.isEmpty) return const <String>[];
+
+    var type = row.entityType?.trim();
+    if (type == null || type.isEmpty) {
+      final parsed = _parseDetailsTableId(row.details);
+      if (parsed != null) type = parsed.$1;
     }
+    final normalizedType = type == null ? '' : _normalizeEntityType(type);
+
+    final keys = _orderedDiffKeys(
+      normalizedType,
+      oldMap.keys.toSet().union(newMap.keys.toSet()),
+    );
+    final lines = <String>[];
+    for (final key in keys) {
+      final hasOld = oldMap.containsKey(key);
+      final hasNew = newMap.containsKey(key);
+      if (!hasOld && !hasNew) continue;
+      final oldValue = oldMap[key];
+      final newValue = newMap[key];
+      if (_valuesEqual(oldValue, newValue)) continue;
+      final line = _diffLineForField(
+        entityType: normalizedType,
+        field: key,
+        oldValue: oldValue,
+        hasOld: hasOld,
+        newValue: newValue,
+        hasNew: hasNew,
+        technical: technical,
+      );
+      if (line != null && line.trim().isNotEmpty) {
+        if (skipIfEquals != null && line == skipIfEquals) continue;
+        lines.add(line);
+      }
+    }
+    return lines;
+  }
+
+  String? primaryChangeLine(AuditLogModel row, {bool technical = false}) {
+    final lines = describeChanges(row, technical: technical);
+    return lines.isEmpty ? null : lines.first;
   }
 
   String _entityTypeGreek(String type) {
@@ -285,6 +287,258 @@ class AuditFormatterService {
     }
   }
 
+  List<String> _orderedDiffKeys(String entityType, Set<String> keys) {
+    final order = switch (entityType) {
+      'call' => const [
+          'status',
+          'category_text',
+          'category_id',
+          'caller_text',
+          'caller_id',
+          'phone_text',
+          'department_text',
+          'equipment_text',
+          'equipment_id',
+          'issue',
+          'solution',
+          'duration',
+          'is_priority',
+        ],
+      'task' => const [
+          'status',
+          'priority',
+          'due_date',
+          'solution_notes',
+          'title',
+          'description',
+          'department_text',
+          'user_text',
+          'equipment_text',
+          'phone_text',
+        ],
+      'department' => const [
+          'name',
+          'color',
+          'building',
+          'map_floor',
+          'floor_id',
+          'notes',
+          'map_x',
+          'map_y',
+          'map_width',
+          'map_height',
+          'map_rotation',
+        ],
+      'user' => const [
+          'department_id',
+          'department_text',
+          'email',
+          'phone',
+          'linked_phone_numbers',
+          'linked_equipment',
+        ],
+      'equipment' => const [
+          'department_id',
+          'type',
+          'custom_ip',
+          'linked_users',
+        ],
+      'phone' => const ['linked_user_id', 'department_id'],
+      _ => const <String>[],
+    };
+    final out = <String>[];
+    for (final k in order) {
+      if (keys.contains(k)) out.add(k);
+    }
+    final rest = keys.where((k) => !out.contains(k)).toList()..sort();
+    out.addAll(rest);
+    return out;
+  }
+
+  String? _diffLineForField({
+    required String entityType,
+    required String field,
+    required dynamic oldValue,
+    required bool hasOld,
+    required dynamic newValue,
+    required bool hasNew,
+    required bool technical,
+  }) {
+    if (entityType == 'department' && field == 'map_floor') {
+      final oldFloor = _fmtFloorValue(oldValue);
+      final newFloor = _fmtFloorValue(newValue);
+      if ((oldFloor == null || oldFloor == 'χωρίς όροφο') &&
+          newFloor != null &&
+          newFloor != 'χωρίς όροφο') {
+        return 'Προσθήκη στον όροφο $newFloor';
+      }
+      if (oldFloor != null &&
+          oldFloor != 'χωρίς όροφο' &&
+          (newFloor == null || newFloor == 'χωρίς όροφο')) {
+        return 'Αφαίρεση από όροφο $oldFloor';
+      }
+      if (oldFloor != null && newFloor != null) {
+        return 'Αλλαγή ορόφου από $oldFloor σε $newFloor';
+      }
+    }
+
+    if (entityType == 'phone' && field == 'linked_user_id') {
+      final o = oldValue == null ? null : '#$oldValue';
+      final n = newValue == null ? null : '#$newValue';
+      if (o == null && n != null) return 'Σύνδεση σε χρήστη $n';
+      if (o != null && n == null) return 'Αποσύνδεση από χρήστη $o';
+      if (o != null && n != null) return 'Μεταφορά από χρήστη $o σε $n';
+    }
+    if (entityType == 'phone' && field == 'department_id') {
+      final o = oldValue == null ? null : '#$oldValue';
+      final n = newValue == null ? null : '#$newValue';
+      if (o == null && n != null) return 'Σύνδεση σε τμήμα $n';
+      if (o != null && n == null) return 'Αποσύνδεση από τμήμα $o';
+      if (o != null && n != null) return 'Μεταφορά από τμήμα $o σε $n';
+    }
+
+    final label = _fieldLabel(entityType, field);
+    final oldFmt = _friendlyValue(entityType, field, oldValue, technical: technical);
+    final newFmt = _friendlyValue(entityType, field, newValue, technical: technical);
+    final hasOldValue = hasOld && !_isEmptyLike(oldValue);
+    final hasNewValue = hasNew && !_isEmptyLike(newValue);
+
+    if (!hasOldValue && hasNewValue) return 'Προσθήκη $label $newFmt';
+    if (hasOldValue && !hasNewValue) return 'Αφαίρεση $label $oldFmt';
+    return 'Αλλαγή $label από $oldFmt σε $newFmt';
+  }
+
+  String _fieldLabel(String entityType, String field) {
+    const common = <String, String>{
+      'name': 'ονόματος',
+      'email': 'email',
+      'phone': 'τηλεφώνου',
+      'status': 'κατάστασης',
+      'priority': 'προτεραιότητας',
+      'due_date': 'προθεσμίας',
+      'title': 'τίτλου',
+      'description': 'περιγραφής',
+      'solution_notes': 'λύσης',
+      'department_id': 'τμήματος',
+      'department_text': 'τμήματος',
+      'equipment_id': 'εξοπλισμού',
+      'equipment_text': 'εξοπλισμού',
+      'caller_id': 'χρήστη',
+      'caller_text': 'χρήστη',
+      'phone_text': 'τηλεφώνου',
+      'category_text': 'κατηγορίας',
+      'category_id': 'κατηγορίας',
+      'issue': 'θέματος',
+      'solution': 'λύσης',
+      'type': 'τύπου',
+      'custom_ip': 'IP',
+      'linked_users': 'συνδεδεμένων χρηστών',
+      'linked_equipment': 'συνδεδεμένου εξοπλισμού',
+      'linked_phone_numbers': 'τηλεφώνων',
+      'linked_user_id': 'χρήστη',
+      'color': 'χρώματος',
+      'building': 'κτιρίου',
+      'map_floor': 'ορόφου',
+      'floor_id': 'ορόφου',
+      'notes': 'σημειώσεων',
+      'map_x': 'θέσης Χ',
+      'map_y': 'θέσης Υ',
+      'map_width': 'πλάτους',
+      'map_height': 'ύψους',
+      'map_rotation': 'περιστροφής',
+    };
+    final label = common[field];
+    if (label != null) return label;
+    if (entityType.isEmpty) return 'πεδίου $field';
+    return 'πεδίου $field';
+  }
+
+  String _friendlyValue(
+    String entityType,
+    String field,
+    dynamic value, {
+    required bool technical,
+  }) {
+    if (value == null) return 'κενό';
+    if (field == 'status') {
+      final s = value.toString().trim().toLowerCase();
+      const map = <String, String>{
+        'pending': 'Εκκρεμής',
+        'completed': 'Ολοκληρωμένη',
+        'closed': 'Κλειστή',
+        'open': 'Ανοιχτή',
+        'in_progress': 'Σε εξέλιξη',
+      };
+      return map[s] ?? value.toString();
+    }
+    if (field == 'priority') {
+      final s = value.toString().trim().toLowerCase();
+      const map = <String, String>{
+        'low': 'Χαμηλή',
+        'normal': 'Κανονική',
+        'medium': 'Μεσαία',
+        'high': 'Υψηλή',
+        'urgent': 'Επείγουσα',
+      };
+      return map[s] ?? value.toString();
+    }
+    if (field == 'color') {
+      return _friendlyColor(value.toString());
+    }
+    if (field == 'map_floor') {
+      return _fmtFloorValue(value) ?? 'χωρίς όροφο';
+    }
+    if (value is List) {
+      if (technical) return 'λίστα ${value.length} στοιχείων';
+      return '${value.length} στοιχεία';
+    }
+    if (value is Map) {
+      if (technical) return 'δομή';
+      return 'δομημένα δεδομένα';
+    }
+    final t = value.toString().trim();
+    return t.isEmpty ? 'κενό' : t;
+  }
+
+  bool _valuesEqual(dynamic a, dynamic b) {
+    if (a == null && b == null) return true;
+    if (a is List || a is Map || b is List || b is Map) {
+      try {
+        return jsonEncode(a) == jsonEncode(b);
+      } catch (_) {
+        return '$a' == '$b';
+      }
+    }
+    return '${a ?? ''}' == '${b ?? ''}';
+  }
+
+  bool _isEmptyLike(dynamic value) {
+    if (value == null) return true;
+    if (value is String) return value.trim().isEmpty;
+    if (value is List) return value.isEmpty;
+    if (value is Map) return value.isEmpty;
+    return false;
+  }
+
+  String _friendlyColor(String raw) {
+    final r = raw.trim().toUpperCase();
+    const known = <String, String>{
+      '#1976D2': 'Μπλε',
+      '#EF5350': 'Κόκκινο',
+      '#4CAF50': 'Πράσινο',
+      '#FFC107': 'Κίτρινο',
+      '#9C27B0': 'Μωβ',
+    };
+    return known[r] ?? raw;
+  }
+
+  String? _fmtFloorValue(dynamic v) {
+    if (v == null) return 'χωρίς όροφο';
+    final t = v.toString().trim();
+    if (t.isEmpty) return 'χωρίς όροφο';
+    return t;
+  }
+
   Map<String, dynamic>? _parseBulk(String? json) {
     if (json == null || json.trim().isEmpty) return null;
     try {
@@ -305,15 +559,43 @@ class AuditFormatterService {
     final ids = bulk['affected_ids'];
     final fields = bulk['fields'];
     final n = ids is List ? ids.length : 0;
-    final fieldStr = fields is Map
-        ? fields.entries.map((e) => '${e.key}=${e.value}').join(', ')
-        : '';
+    final fieldNames = fields is Map
+        ? fields.keys
+            .map((k) => _fieldLabel(row.entityType ?? '', '$k'))
+            .toSet()
+            .toList()
+        : const <String>[];
+    final fieldStr = fieldNames.join(', ');
     final action = _actionLabel(row.action ?? '', technical);
-    final entity = _entityTypeGreek(row.entityType ?? '');
+    final entity = _entityTypeGreekPlural(row.entityType ?? '');
     if (technical) {
-      return '$action · $entity · ids=$n · {$fieldStr}';
+      return '$action · $entity · ids=$n${fieldStr.isNotEmpty ? ' · {$fieldStr}' : ''}';
     }
-    return '$action: $n επηρεασμένες εγγραφές${fieldStr.isNotEmpty ? ' ($fieldStr)' : ''}.';
+    return '$action · Επηρέασε $n $entity${fieldStr.isNotEmpty ? ' - Πεδία: $fieldStr' : ''}';
+  }
+
+  String _entityTypeGreekPlural(String type) {
+    switch (type) {
+      case 'call':
+        return 'κλήσεις';
+      case 'task':
+        return 'εκκρεμότητες';
+      case 'user':
+      case 'bulk_users':
+        return 'χρήστες';
+      case 'department':
+      case 'bulk_departments':
+        return 'τμήματα';
+      case 'equipment':
+      case 'bulk_equipment':
+        return 'εξοπλισμοί';
+      case 'phone':
+        return 'τηλέφωνα';
+      case 'category':
+        return 'κατηγορίες';
+      default:
+        return 'εγγραφές';
+    }
   }
 
   /// Ανάγνωση πεδίων για εμφάνιση «Πριν/Μετά».
