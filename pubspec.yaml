@@ -16,7 +16,7 @@ publish_to: 'none' # Αφαιρέστε αυτή τη γραμμή αν θέλε
 # Δείτε: https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # Στο Windows, το build-name χρησιμοποιείται για τα τμήματα major, minor και patch
 # των εκδόσεων προϊόντος και αρχείου, ενώ το build-number για το επίθημα κατασκευής.
-version: 0.12.0+1
+version: 0.13.0+1
 
 environment:
   sdk: ^3.10.7

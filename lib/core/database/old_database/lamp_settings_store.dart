@@ -8,6 +8,25 @@ class LampSettingsStore {
   static const String _readPathKey = 'lamp_old_db_read_path';
   static const String _outputPathKey = 'lamp_old_db_output_path';
   static const String _tablesPaneWidthKey = 'lamp_tables_left_pane_width_px';
+  static const String _maxSearchResultsKey = 'lamp_max_search_results';
+
+  /// Προεπιλογή: ίδιο με το προηγούμενο hardcoded όριο.
+  static const int defaultMaxSearchResults = 100;
+  static const int minMaxSearchResults = 1;
+  static const int maxMaxSearchResults = 10000;
+
+  Future<int> getMaxSearchResults() async {
+    final prefs = await SharedPreferences.getInstance();
+    final v = prefs.getInt(_maxSearchResultsKey);
+    if (v == null) return defaultMaxSearchResults;
+    return v.clamp(minMaxSearchResults, maxMaxSearchResults);
+  }
+
+  Future<void> setMaxSearchResults(int value) async {
+    final prefs = await SharedPreferences.getInstance();
+    final clamped = value.clamp(minMaxSearchResults, maxMaxSearchResults);
+    await prefs.setInt(_maxSearchResultsKey, clamped);
+  }
 
   /// Παλιό κλειδί: μονή διαδρομή. Μεταφέρεται αυτόματα σε [read] και [output].
   static const String _legacyDatabasePathKey = 'lamp_database_path';

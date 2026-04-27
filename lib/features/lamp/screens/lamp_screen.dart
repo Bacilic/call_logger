@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -9,7 +11,9 @@ import '../../../core/database/old_database/lamp_old_db_validator.dart';
 import '../../../core/database/old_database/lamp_settings_store.dart';
 import '../../../core/database/old_database/old_equipment_repository.dart';
 import '../../../core/database/old_database/old_excel_importer.dart';
+import '../../database/services/database_stats_service.dart';
 import '../widgets/lamp_db_tables_tab.dart';
+import '../widgets/lamp_result_card.dart';
 
 class LampScreen extends ConsumerStatefulWidget {
   const LampScreen({super.key});
@@ -35,6 +39,10 @@ class _LampScreenState extends ConsumerState<LampScreen> {
   final _ownerController = TextEditingController();
   final _officeController = TextEditingController();
   final _phoneController = TextEditingController();
+  final _maxSearchResultsController = TextEditingController();
+  int _maxSearchResults = LampSettingsStore.defaultMaxSearchResults;
+  Timer? _liveSearchDebounce;
+  bool _suppressLiveSearch = false;
 
   bool _loading = true;
   bool _importing = false;
@@ -50,6 +58,7 @@ class _LampScreenState extends ConsumerState<LampScreen> {
   @override
   void initState() {
     super.initState();
+    _attachSearchListeners();
     _loadSettings();
   }
 
@@ -64,6 +73,8 @@ class _LampScreenState extends ConsumerState<LampScreen> {
 
   @override
   void dispose() {
+    _detachSearchListeners();
+    _liveSearchDebounce?.cancel();
     _excelController.dispose();
     _readDbController.dispose();
     _outputDbController.dispose();
@@ -75,7 +86,109 @@ class _LampScreenState extends ConsumerState<LampScreen> {
     _ownerController.dispose();
     _officeController.dispose();
     _phoneController.dispose();
+    _maxSearchResultsController.dispose();
     super.dispose();
+  }
+
+  List<TextEditingController> get _fieldSearchControllers =>
+      <TextEditingController>[
+        _codeController,
+        _descriptionController,
+        _serialController,
+        _assetController,
+        _ownerController,
+        _officeController,
+        _phoneController,
+      ];
+
+  void _attachSearchListeners() {
+    _globalController.addListener(_onGlobalSearchInputChanged);
+    for (final c in _fieldSearchControllers) {
+      c.addListener(_onFieldSearchInputChanged);
+    }
+  }
+
+  void _detachSearchListeners() {
+    _globalController.removeListener(_onGlobalSearchInputChanged);
+    for (final c in _fieldSearchControllers) {
+      c.removeListener(_onFieldSearchInputChanged);
+    }
+  }
+
+  bool get _hasAnyFieldSearchInput =>
+      _fieldSearchControllers.any((c) => c.text.trim().isNotEmpty);
+
+  void _onGlobalSearchInputChanged() {
+    if (_suppressLiveSearch) return;
+    if (_globalController.text.trim().isNotEmpty && _hasAnyFieldSearchInput) {
+      _suppressLiveSearch = true;
+      for (final c in _fieldSearchControllers) {
+        if (c.text.isNotEmpty) c.clear();
+      }
+      _suppressLiveSearch = false;
+    }
+    _scheduleLiveSearch();
+  }
+
+  void _onFieldSearchInputChanged() {
+    if (_suppressLiveSearch) return;
+    if (_hasAnyFieldSearchInput && _globalController.text.trim().isNotEmpty) {
+      _suppressLiveSearch = true;
+      _globalController.clear();
+      _suppressLiveSearch = false;
+    }
+    _scheduleLiveSearch();
+  }
+
+  void _scheduleLiveSearch() {
+    _liveSearchDebounce?.cancel();
+    _liveSearchDebounce = Timer(const Duration(milliseconds: 320), () async {
+      await _runLiveSearch();
+    });
+  }
+
+  Future<void> _runLiveSearch() async {
+    if (!mounted) return;
+    final hasGlobal = _globalController.text.trim().isNotEmpty;
+    final hasFields = _hasAnyFieldSearchInput;
+    if (!hasGlobal && !hasFields) {
+      setState(() {
+        _results = const <Map<String, Object?>>[];
+        _message = null;
+      });
+      return;
+    }
+    if (hasGlobal) {
+      await _globalSearch(showProgressSnack: false);
+      return;
+    }
+    await _fieldSearch(showProgressSnack: false);
+  }
+
+  void _clearAllSearchInputs() {
+    _suppressLiveSearch = true;
+    _globalController.clear();
+    for (final c in _fieldSearchControllers) {
+      c.clear();
+    }
+    _suppressLiveSearch = false;
+    _liveSearchDebounce?.cancel();
+    setState(() {
+      _results = const <Map<String, Object?>>[];
+      _message = null;
+    });
+  }
+
+  Widget? _clearFieldSuffix({
+    required TextEditingController controller,
+    required String tooltip,
+  }) {
+    if (controller.text.isEmpty) return null;
+    return IconButton(
+      tooltip: tooltip,
+      onPressed: controller.clear,
+      icon: const Icon(Icons.close),
+    );
   }
 
   void _showSnack(
@@ -109,6 +222,8 @@ class _LampScreenState extends ConsumerState<LampScreen> {
       _readDbController.text = outRaw ?? '';
     }
     _outputDbController.text = outRaw ?? '';
+    _maxSearchResults = await _settings.getMaxSearchResults();
+    _maxSearchResultsController.text = _maxSearchResults.toString();
     await _applyPersistedReadAndValidate(announce: true, source: 'έναρξη');
     if (!mounted) return;
     setState(() => _loading = false);
@@ -132,6 +247,7 @@ class _LampScreenState extends ConsumerState<LampScreen> {
     setState(() => _readPathCheck = result);
     if (result.status == LampOldDbStatus.ok) {
       await _loadIssues();
+      await _repository.preloadSearchCache(read);
     } else {
       setState(() => _issues = const <Map<String, Object?>>[]);
     }
@@ -330,7 +446,7 @@ class _LampScreenState extends ConsumerState<LampScreen> {
   bool get _readPathReadyForQuery =>
       _readPathCheck?.status == LampOldDbStatus.ok;
 
-  Future<void> _fieldSearch() async {
+  Future<void> _fieldSearch({bool showProgressSnack = true}) async {
     if (!_readPathReadyForQuery) {
       _showSnack(
         _readPathCheck?.userMessageGreek ?? 'Η βάση προς ανάγνωση δεν είναι έτοιμη. Ανοίξτε τις ρυθμίσεις (γρανάζι).',
@@ -350,11 +466,13 @@ class _LampScreenState extends ConsumerState<LampScreen> {
           office: _officeController.text,
           phone: _phoneController.text,
         ),
+        maxDisplay: _maxSearchResults,
       ),
+      showProgressSnack: showProgressSnack,
     );
   }
 
-  Future<void> _globalSearch() async {
+  Future<void> _globalSearch({bool showProgressSnack = true}) async {
     if (!_readPathReadyForQuery) {
       _showSnack(
         _readPathCheck?.userMessageGreek ?? 'Η βάση προς ανάγνωση δεν είναι έτοιμη.',
@@ -366,12 +484,25 @@ class _LampScreenState extends ConsumerState<LampScreen> {
       () => _repository.globalSearch(
         _readDbController.text.trim(),
         _globalController.text,
+        maxDisplay: _maxSearchResults,
       ),
+      showProgressSnack: showProgressSnack,
     );
   }
 
+  String _searchOutcomeMessage(int totalCount) {
+    final xStr = DatabaseStatsService.formatIntegerEl(totalCount);
+    final n = _maxSearchResults;
+    if (totalCount > 0 && n < totalCount) {
+      final nStr = DatabaseStatsService.formatIntegerEl(n);
+      return 'Εμφάνιση των πρώτων $nStr αποτελεσμάτων από $xStr.';
+    }
+    return 'Βρέθηκαν $xStr αποτελέσματα.';
+  }
+
   Future<void> _runSearch(
-    Future<List<Map<String, Object?>>> Function() action,
+    Future<OldEquipmentSearchResult> Function() action,
+    {bool showProgressSnack = true,}
   ) async {
     final pth = _readDbController.text.trim();
     if (pth.isEmpty) {
@@ -382,13 +513,15 @@ class _LampScreenState extends ConsumerState<LampScreen> {
       return;
     }
     setState(() => _message = null);
-    _showSnack('Εκτέλεση αναζήτησης…', duration: const Duration(seconds: 2));
+    if (showProgressSnack) {
+      _showSnack('Εκτέλεση αναζήτησης…', duration: const Duration(seconds: 2));
+    }
     try {
-      final rows = await action();
+      final result = await action();
       if (!mounted) return;
       setState(() {
-        _results = rows;
-        _message = 'Βρέθηκαν ${rows.length} αποτελέσματα (βάση ανάγνωσης: ${p.basename(pth)}).';
+        _results = result.rows;
+        _message = _searchOutcomeMessage(result.totalCount);
       });
     } catch (e) {
       if (!mounted) return;
@@ -417,14 +550,53 @@ class _LampScreenState extends ConsumerState<LampScreen> {
     }
   }
 
+  Future<EquipmentSectionSaveResult> _saveEquipmentSection({
+    required int id,
+    required InfoSectionType sectionType,
+    required Map<String, Object?> updatedFields,
+  }) async {
+    final path = _readDbController.text.trim();
+    if (path.isEmpty) {
+      return const EquipmentSectionSaveResult(
+        success: false,
+        message: 'Δεν έχει οριστεί βάση προς ενημέρωση.',
+      );
+    }
+    final result = await _repository.updateSection(
+      databasePath: path,
+      id: id,
+      sectionType: sectionType.toRepositorySectionType(),
+      updatedFields: updatedFields,
+    );
+    return EquipmentSectionSaveResult(
+      success: result.success,
+      message: result.message,
+    );
+  }
+
   Future<void> _closeLampSettingsDialog(
     void Function() pop,
   ) async {
     if (_importing) return;
+    final parsedMax = int.tryParse(_maxSearchResultsController.text.trim());
+    if (parsedMax != null) {
+      await _settings.setMaxSearchResults(parsedMax);
+    }
+    if (mounted) {
+      final max = await _settings.getMaxSearchResults();
+      setState(() {
+        _maxSearchResults = max;
+        _maxSearchResultsController.text = max.toString();
+      });
+    }
     _showSnack('Αποθήκευση διαδρομών και έλεγχος βάσης…');
     await _refreshDataAfterReadPathChange(source: 'αποθήκευση ρυθμίσεων');
     if (!mounted) return;
     pop();
+    Future<void>.microtask(() async {
+      if (!mounted) return;
+      await _runLiveSearch();
+    });
   }
 
   void _openLampSettingsDialog() {
@@ -477,6 +649,20 @@ class _LampScreenState extends ConsumerState<LampScreen> {
                     Text(
                       'Μπορεί να δείχνει και σε άλλο αντίγραφο .db (δοκιμές).',
                       style: Theme.of(context).textTheme.labelSmall,
+                    ),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: _maxSearchResultsController,
+                      keyboardType: TextInputType.number,
+                      decoration: InputDecoration(
+                        labelText:
+                            'Μέγιστος αριθμός εμφανιζόμενων αποτελεσμάτων αναζήτησης (Ν)',
+                        border: const OutlineInputBorder(),
+                        helperText:
+                            'Εύρος ${LampSettingsStore.minMaxSearchResults}–'
+                            '${LampSettingsStore.maxMaxSearchResults} · προεπιλογή '
+                            '${LampSettingsStore.defaultMaxSearchResults}',
+                      ),
                     ),
                     const SizedBox(height: 8),
                     Align(
@@ -676,18 +862,17 @@ class _LampScreenState extends ConsumerState<LampScreen> {
               Expanded(
                 child: TextField(
                   controller: _globalController,
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     labelText: 'Αναζήτηση σαν Google',
-                    prefixIcon: Icon(Icons.search),
-                    border: OutlineInputBorder(),
+                    prefixIcon: const Icon(Icons.search),
+                    suffixIcon: _clearFieldSuffix(
+                      controller: _globalController,
+                      tooltip: 'Καθαρισμός καθολικής αναζήτησης',
+                    ),
+                    border: const OutlineInputBorder(),
                   ),
                   onSubmitted: (_) => _globalSearch(),
                 ),
-              ),
-              const SizedBox(width: 12),
-              FilledButton(
-                onPressed: _globalSearch,
-                child: const Text('Αναζήτηση'),
               ),
             ],
           ),
@@ -705,10 +890,10 @@ class _LampScreenState extends ConsumerState<LampScreen> {
               _smallField(_ownerController, 'Ιδιοκτήτης'),
               _smallField(_officeController, 'Τμήμα/Γραφείο'),
               _smallField(_phoneController, 'Τηλέφωνο'),
-              FilledButton.icon(
-                onPressed: _fieldSearch,
-                icon: const Icon(Icons.search),
-                label: const Text('Αναζήτηση'),
+              OutlinedButton.icon(
+                onPressed: _clearAllSearchInputs,
+                icon: const Icon(Icons.clear_all),
+                label: const Text('Καθαρισμός όλων'),
               ),
             ],
           ),
@@ -785,6 +970,10 @@ class _LampScreenState extends ConsumerState<LampScreen> {
           labelText: label,
           border: const OutlineInputBorder(),
           isDense: true,
+          suffixIcon: _clearFieldSuffix(
+            controller: controller,
+            tooltip: 'Καθαρισμός πεδίου',
+          ),
         ),
         onSubmitted: (_) => _fieldSearch(),
       ),
@@ -800,127 +989,22 @@ class _LampScreenState extends ConsumerState<LampScreen> {
     return ListView.builder(
       padding: const EdgeInsets.all(16),
       itemCount: _results.length,
-      itemBuilder: (context, index) =>
-          _EquipmentResultCard(row: _results[index]),
+      itemBuilder: (context, index) => EquipmentResultCard(
+        viewModel: EquipmentViewModel.fromRow(_results[index]),
+        onSaveSection: _saveEquipmentSection,
+      ),
     );
   }
 }
 
-class _EquipmentResultCard extends StatelessWidget {
-  const _EquipmentResultCard({required this.row});
-
-  final Map<String, Object?> row;
-
-  @override
-  Widget build(BuildContext context) {
-    final owner =
-        _joinName(row['last_name'], row['first_name']) ??
-        _text(row['owner_original_text']);
-    final office =
-        _text(row['office_name']) ??
-        _text(row['department_name']) ??
-        _text(row['office_original_text']);
-    final setMasterText = row['set_master'] == null
-        ? _text(row['set_master_original_text'])
-        : row['set_master'].toString();
-
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    '${row['code'] ?? '-'} · ${_text(row['description']) ?? 'Χωρίς περιγραφή'}',
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                ),
-                if (_text(row['state_name']) != null)
-                  Chip(label: Text(_text(row['state_name'])!)),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 24,
-              runSpacing: 8,
-              children: [
-                _Info(label: 'Serial', value: _text(row['serial_no'])),
-                _Info(label: 'Asset', value: _text(row['asset_no'])),
-                _Info(
-                  label: 'Μοντέλο',
-                  value:
-                      _text(row['model_name']) ??
-                      _text(row['model_original_text']),
-                ),
-                _Info(label: 'Ιδιοκτήτης', value: owner),
-                _Info(label: 'Γραφείο/Τμήμα', value: office),
-                _Info(
-                  label: 'Τηλέφωνα',
-                  value:
-                      _text(row['owner_phones']) ?? _text(row['office_phones']),
-                ),
-                _Info(
-                  label: 'Σύμβαση',
-                  value:
-                      _text(row['contract_name']) ??
-                      _text(row['contract_original_text']),
-                ),
-              ],
-            ),
-            if (setMasterText != null) ...[
-              const SizedBox(height: 8),
-              Text(
-                row['set_master'] == null
-                    ? 'Ανήκει σε (κείμενο): $setMasterText'
-                    : 'Ανήκει σε: $setMasterText',
-                style: TextStyle(
-                  color: row['set_master'] == null
-                      ? Theme.of(context).colorScheme.error
-                      : null,
-                ),
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-
-  static String? _text(Object? value) {
-    final text = value?.toString().trim();
-    return text == null || text.isEmpty ? null : text;
-  }
-
-  static String? _joinName(Object? lastName, Object? firstName) {
-    final parts = <String>[
-      if (_text(lastName) != null) _text(lastName)!,
-      if (_text(firstName) != null) _text(firstName)!,
-    ];
-    return parts.isEmpty ? null : parts.join(' ');
-  }
-}
-
-class _Info extends StatelessWidget {
-  const _Info({required this.label, required this.value});
-
-  final String label;
-  final String? value;
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: 190,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(label, style: Theme.of(context).textTheme.labelSmall),
-          Text(value ?? '-', overflow: TextOverflow.ellipsis),
-        ],
-      ),
-    );
+extension on InfoSectionType {
+  OldEquipmentSectionType toRepositorySectionType() {
+    return switch (this) {
+      InfoSectionType.equipment => OldEquipmentSectionType.equipment,
+      InfoSectionType.model => OldEquipmentSectionType.model,
+      InfoSectionType.contract => OldEquipmentSectionType.contract,
+      InfoSectionType.owner => OldEquipmentSectionType.owner,
+      InfoSectionType.department => OldEquipmentSectionType.department,
+    };
   }
 }

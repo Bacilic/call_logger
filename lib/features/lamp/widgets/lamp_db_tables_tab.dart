@@ -340,7 +340,7 @@ String _elSize(int? b) {
   return DatabaseStatsService.formatFileSizeBytes(b);
 }
 
-class _LampFileStatsCard extends StatelessWidget {
+class _LampFileStatsCard extends StatefulWidget {
   const _LampFileStatsCard({
     required this.fullPath,
     required this.sizeBytes,
@@ -353,12 +353,19 @@ class _LampFileStatsCard extends StatelessWidget {
   final DateTime? lastModified;
   final int? totalRowCount;
 
+  @override
+  State<_LampFileStatsCard> createState() => _LampFileStatsCardState();
+}
+
+class _LampFileStatsCardState extends State<_LampFileStatsCard> {
+  bool _isExpanded = false;
+
   String get _collapsedSummary {
-    final name = p.basename(fullPath.trim());
-    final sz = _elSize(sizeBytes);
-    final total = totalRowCount == null
+    final name = p.basename(widget.fullPath.trim());
+    final sz = _elSize(widget.sizeBytes);
+    final total = widget.totalRowCount == null
         ? '—'
-        : DatabaseStatsService.formatIntegerEl(totalRowCount!);
+        : DatabaseStatsService.formatIntegerEl(widget.totalRowCount!);
     return '$name · $sz · $total εγγραφές (συν.)';
   }
 
@@ -374,6 +381,9 @@ class _LampFileStatsCard extends StatelessWidget {
         child: ExpansionTile(
           initiallyExpanded: false,
           maintainState: true,
+          onExpansionChanged: (expanded) {
+            setState(() => _isExpanded = expanded);
+          },
           tilePadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
           childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
           title: Text(
@@ -382,40 +392,44 @@ class _LampFileStatsCard extends StatelessWidget {
               fontWeight: FontWeight.w600,
             ),
           ),
-          subtitle: Text(
-            _collapsedSummary,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: t.textTheme.bodySmall?.copyWith(
-              color: t.colorScheme.onSurfaceVariant,
-            ),
-          ),
+          subtitle: _isExpanded
+              ? null
+              : Text(
+                  _collapsedSummary,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: t.textTheme.bodySmall?.copyWith(
+                    color: t.colorScheme.onSurfaceVariant,
+                  ),
+                ),
           children: [
             Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 const SizedBox(height: 2),
-                _row(t, 'Διαδρομή (πλήρης):', fullPath),
+                _row(t, 'Διαδρομή (πλήρης):', widget.fullPath),
                 _row(
                   t,
                   'Μέγεθος αρχείου:',
-                  _elSize(sizeBytes),
+                  _elSize(widget.sizeBytes),
                 ),
                 _row(
                   t,
                   'Χρόνος αλλαγής αρχείου (τελευταίο modified):',
-                  lastModified == null
+                  widget.lastModified == null
                       ? '—'
                       : _kLampFileDateFmt.format(
-                          lastModified!.toLocal(),
+                          widget.lastModified!.toLocal(),
                         ),
                 ),
                 _row(
                   t,
                   'Άθροισμα εγγραφών (όλοι οι πίνακες):',
-                  totalRowCount == null
+                  widget.totalRowCount == null
                       ? '—'
-                      : DatabaseStatsService.formatIntegerEl(totalRowCount!),
+                      : DatabaseStatsService.formatIntegerEl(
+                          widget.totalRowCount!,
+                        ),
                 ),
                 const SizedBox(height: 4),
                 Text(
