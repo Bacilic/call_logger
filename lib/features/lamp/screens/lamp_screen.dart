@@ -704,15 +704,6 @@ class _LampScreenState extends ConsumerState<LampScreen> {
                         label: const Text('Δημιουργία/ενημέρωση βάσης από Excel'),
                       ),
                     ),
-                    if (_message != null) ...[
-                      const SizedBox(height: 16),
-                      Card(
-                        child: Padding(
-                          padding: const EdgeInsets.all(12),
-                          child: Text(_message!),
-                        ),
-                      ),
-                    ],
                   ],
                 ),
               ),

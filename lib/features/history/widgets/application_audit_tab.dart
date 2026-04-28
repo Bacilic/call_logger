@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -444,6 +444,7 @@ class _ApplicationAuditTabState extends ConsumerState<ApplicationAuditTab> {
                           final actionField = DropdownButtonFormField<String?>(
                             key: ValueKey('${filter.entityType}|${filter.action}'),
                             initialValue: selectedActionForField,
+                            isExpanded: true,
                             decoration: InputDecoration(
                               labelText: 'Ενέργεια',
                               border: OutlineInputBorder(
@@ -470,6 +471,7 @@ class _ApplicationAuditTabState extends ConsumerState<ApplicationAuditTab> {
                           final entityDropdown = DropdownButtonFormField<String?>(
                             key: ValueKey(filter.entityType),
                             initialValue: filter.entityType,
+                            isExpanded: true,
                             decoration: InputDecoration(
                               labelText: 'Τύπος οντότητας',
                               border: OutlineInputBorder(
@@ -584,6 +586,11 @@ class _ApplicationAuditTabState extends ConsumerState<ApplicationAuditTab> {
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           child: LayoutBuilder(
             builder: (context, constraints) {
+              final pageLabel = listAsync.maybeWhen(
+                data: (r) =>
+                    'Σελίδα ${pageIndex + 1} / $totalPages · ${r.totalCount} εγγραφές',
+                orElse: () => 'Φόρτωση…',
+              );
               return Row(
                 children: [
                   Checkbox(
@@ -608,11 +615,7 @@ class _ApplicationAuditTabState extends ConsumerState<ApplicationAuditTab> {
                     icon: const Icon(Icons.chevron_left),
                   ),
                   Text(
-                    listAsync.maybeWhen(
-                      data: (r) =>
-                          'Σελίδα ${pageIndex + 1} / $totalPages · ${r.totalCount} εγγραφές',
-                      orElse: () => 'Φόρτωση…',
-                    ),
+                    pageLabel,
                     style: theme.textTheme.bodySmall,
                   ),
                   IconButton(
