@@ -74,20 +74,35 @@ class EquipmentViewModel {
       recordId: _parseIntLike(row['code']),
       editableFields: <EditableInfoField>[
         EditableInfoField(
+          label: 'Κωδικός',
+          fieldKey: 'code',
+          value: _text(row['code']),
+          type: EditableFieldType.code,
+        ),
+        EditableInfoField(
           label: 'Περιγραφή',
           fieldKey: 'description',
           value: _text(row['description']),
           maxLines: 3,
           autofocus: true,
         ),
+        EditableInfoField(label: 'Κωδ. μοντέλου', fieldKey: 'model_id', value: _text(row['model_id']), type: EditableFieldType.code),
+        EditableInfoField(label: 'Μοντέλο (αρχικό)', fieldKey: 'model_original_text', value: _text(row['model_original_text'])),
         EditableInfoField(label: 'Serial No', fieldKey: 'serial_no', value: _text(row['serial_no'])),
         EditableInfoField(label: 'Αρ. Παγίου', fieldKey: 'asset_no', value: _text(row['asset_no'])),
+        EditableInfoField(label: 'Κωδ. κατάστασης', fieldKey: 'state_id', value: _text(row['state_id']), type: EditableFieldType.code),
+        EditableInfoField(label: 'Κατάσταση', fieldKey: 'state_name', value: _text(row['state_name'])),
+        EditableInfoField(label: 'Κατάσταση (αρχική)', fieldKey: 'state_original_text', value: _text(row['state_original_text'])),
         EditableInfoField(
           label: 'Συνδεδεμένο σε',
           fieldKey: 'set_master',
           value: _text(row['set_master']),
           type: EditableFieldType.code,
         ),
+        EditableInfoField(label: 'Σύνδεση (αρχική)', fieldKey: 'set_master_original_text', value: _text(row['set_master_original_text'])),
+        EditableInfoField(label: 'Κωδ. σύμβασης', fieldKey: 'contract_id', value: _text(row['contract_id']), type: EditableFieldType.code),
+        EditableInfoField(label: 'Σύμβαση (αρχική)', fieldKey: 'contract_original_text', value: _text(row['contract_original_text'])),
+        EditableInfoField(label: 'Συντήρηση', fieldKey: 'maintenance_contract', value: _text(row['maintenance_contract'])),
         EditableInfoField(
           label: 'Παραλαβή',
           fieldKey: 'receiving_date',
@@ -100,7 +115,12 @@ class EquipmentViewModel {
           value: _text(row['end_of_guarantee_date']),
           type: EditableFieldType.date,
         ),
-        EditableInfoField(label: 'Κόστος', fieldKey: 'cost', value: _text(row['cost']), type: EditableFieldType.number),
+        EditableInfoField(label: 'Κόστος', fieldKey: 'cost', value: _text(row['cost'])),
+        EditableInfoField(label: 'Κωδ. κατόχου', fieldKey: 'owner_id', value: _text(row['owner_id']), type: EditableFieldType.code),
+        EditableInfoField(label: 'Κάτοχος (αρχικός)', fieldKey: 'owner_original_text', value: _text(row['owner_original_text'])),
+        EditableInfoField(label: 'Κωδ. γραφείου', fieldKey: 'office_id', value: _text(row['office_id']), type: EditableFieldType.code),
+        EditableInfoField(label: 'Γραφείο (αρχικό)', fieldKey: 'office_original_text', value: _text(row['office_original_text'])),
+        EditableInfoField(label: 'Χαρακτ. εξοπλ.', fieldKey: 'equipment_attributes', value: _text(row['equipment_attributes']), maxLines: 3),
         EditableInfoField(
           label: 'Σχόλια',
           fieldKey: 'equipment_comments',
@@ -141,12 +161,21 @@ class EquipmentViewModel {
       type: InfoSectionType.model,
       recordId: _parseIntLike(row['model_id']),
       editableFields: <EditableInfoField>[
+        EditableInfoField(label: 'Κωδ. μοντέλου', fieldKey: 'model_id', value: _text(row['model_id']), type: EditableFieldType.code),
         EditableInfoField(label: 'Μοντέλο', fieldKey: 'model_name', value: _text(row['model_name']), autofocus: true),
+        EditableInfoField(label: 'Κωδ. κατηγορίας', fieldKey: 'category_code', value: _text(row['category_code']), type: EditableFieldType.code),
+        EditableInfoField(label: 'Κατηγ. (αρχική)', fieldKey: 'category_code_original_text', value: _text(row['category_code_original_text'])),
         EditableInfoField(label: 'Κατηγορία', fieldKey: 'category_name', value: _text(row['category_name'])),
+        EditableInfoField(label: 'Κωδ. υποκατηγ.', fieldKey: 'subcategory_code', value: _text(row['subcategory_code']), type: EditableFieldType.code),
+        EditableInfoField(label: 'Υποκατ. (αρχική)', fieldKey: 'subcategory_code_original_text', value: _text(row['subcategory_code_original_text'])),
         EditableInfoField(label: 'Υποκατηγ.', fieldKey: 'subcategory_name', value: _text(row['subcategory_name'])),
+        EditableInfoField(label: 'Κωδ. κατασκ.', fieldKey: 'manufacturer', value: _text(row['manufacturer']), type: EditableFieldType.code),
+        EditableInfoField(label: 'Κατασκ. (αρχικός)', fieldKey: 'manufacturer_original_text', value: _text(row['manufacturer_original_text'])),
         EditableInfoField(label: 'Κατασκευ.', fieldKey: 'manufacturer_name', value: _text(row['manufacturer_name'])),
+        EditableInfoField(label: 'Κωδικός κατασκ.', fieldKey: 'manufacturer_code', value: _text(row['manufacturer_code'])),
         EditableInfoField(label: 'Χαρακτ.', fieldKey: 'model_attributes', value: _text(row['model_attributes']), maxLines: 3),
         EditableInfoField(label: 'Αναλώσιμα', fieldKey: 'consumables', value: _text(row['consumables']), maxLines: 2),
+        EditableInfoField(label: 'Δικτύωση', fieldKey: 'network_connectivity', value: _text(row['network_connectivity']), type: EditableFieldType.code),
       ],
       items: _items(<InfoItem>[
         InfoItem(
@@ -176,11 +205,20 @@ class EquipmentViewModel {
       type: InfoSectionType.contract,
       recordId: _parseIntLike(row['contract_id']),
       editableFields: <EditableInfoField>[
+        EditableInfoField(label: 'Κωδ. σύμβασης', fieldKey: 'contract_id', value: _text(row['contract_id']), type: EditableFieldType.code),
         EditableInfoField(label: 'Σύμβαση', fieldKey: 'contract_name', value: _text(row['contract_name']), autofocus: true),
+        EditableInfoField(label: 'Κωδ. κατηγορίας', fieldKey: 'contract_category', value: _text(row['contract_category']), type: EditableFieldType.code),
+        EditableInfoField(label: 'Κατηγ. (αρχική)', fieldKey: 'contract_category_original_text', value: _text(row['contract_category_original_text'])),
         EditableInfoField(label: 'Κατηγορία', fieldKey: 'contract_category_name', value: _text(row['contract_category_name'])),
+        EditableInfoField(label: 'Κωδ. προμηθ.', fieldKey: 'supplier_id', value: _text(row['supplier_id']), type: EditableFieldType.code),
+        EditableInfoField(label: 'Προμηθ. (αρχικός)', fieldKey: 'supplier_original_text', value: _text(row['supplier_original_text'])),
         EditableInfoField(label: 'Προμηθ.', fieldKey: 'supplier_name', value: _text(row['supplier_name'])),
-        EditableInfoField(label: 'Ανάθεση', fieldKey: 'contract_award', value: _text(row['contract_award'])),
+        EditableInfoField(label: 'Έναρξη', fieldKey: 'contract_start_date', value: _text(row['contract_start_date']), type: EditableFieldType.date),
+        EditableInfoField(label: 'Λήξη', fieldKey: 'contract_end_date', value: _text(row['contract_end_date']), type: EditableFieldType.date),
         EditableInfoField(label: 'Διακήρυξη', fieldKey: 'contract_declaration', value: _text(row['contract_declaration'])),
+        EditableInfoField(label: 'Ανάθεση', fieldKey: 'contract_award', value: _text(row['contract_award'])),
+        EditableInfoField(label: 'Κόστος', fieldKey: 'contract_cost', value: _text(row['contract_cost'])),
+        EditableInfoField(label: 'Επιτροπή', fieldKey: 'contract_committee', value: _text(row['contract_committee'])),
         EditableInfoField(label: 'Σχόλια', fieldKey: 'contract_comments', value: _text(row['contract_comments']), maxLines: 3),
       ],
       items: _items(<InfoItem>[
@@ -205,8 +243,11 @@ class EquipmentViewModel {
       type: InfoSectionType.owner,
       recordId: _parseIntLike(row['owner_id'] ?? row['owner']),
       editableFields: <EditableInfoField>[
+        EditableInfoField(label: 'Κωδ. κατόχου', fieldKey: 'owner_id', value: _text(row['owner_id'] ?? row['owner']), type: EditableFieldType.code),
         EditableInfoField(label: 'Επώνυμο', fieldKey: 'last_name', value: _text(row['last_name']), autofocus: true),
         EditableInfoField(label: 'Όνομα', fieldKey: 'first_name', value: _text(row['first_name'])),
+        EditableInfoField(label: 'Κωδ. γραφείου', fieldKey: 'owner_office', value: _text(row['owner_office']), type: EditableFieldType.code),
+        EditableInfoField(label: 'Γραφείο (αρχικό)', fieldKey: 'owner_office_original_text', value: _text(row['owner_office_original_text'])),
         EditableInfoField(label: 'Email', fieldKey: 'owner_email', value: _text(row['owner_email']), type: EditableFieldType.email),
         EditableInfoField(label: 'Τηλέφωνα', fieldKey: 'owner_phones', value: _text(row['owner_phones']), type: EditableFieldType.phone, maxLines: 2),
       ],
@@ -230,9 +271,14 @@ class EquipmentViewModel {
       type: InfoSectionType.department,
       recordId: _parseIntLike(row['office_id'] ?? row['office']),
       editableFields: <EditableInfoField>[
+        EditableInfoField(label: 'Κωδ. γραφείου', fieldKey: 'office_id', value: _text(row['office_id'] ?? row['office']), type: EditableFieldType.code),
         EditableInfoField(label: 'Τμήμα', fieldKey: 'office_name', value: _text(row['office_name']), autofocus: true),
+        EditableInfoField(label: 'Κωδ. οργανισμού', fieldKey: 'organization', value: _text(row['organization']), type: EditableFieldType.code),
         EditableInfoField(label: 'Οργανισμός', fieldKey: 'organization_name', value: _text(row['organization_name'])),
+        EditableInfoField(label: 'Κωδ. υπηρεσίας', fieldKey: 'department', value: _text(row['department']), type: EditableFieldType.code),
         EditableInfoField(label: 'Υπηρεσία', fieldKey: 'department_name', value: _text(row['department_name'])),
+        EditableInfoField(label: 'Υπεύθυνος', fieldKey: 'responsible', value: _text(row['responsible']), type: EditableFieldType.code),
+        EditableInfoField(label: 'Υπεύθ. (αρχικός)', fieldKey: 'responsible_original_text', value: _text(row['responsible_original_text'])),
         EditableInfoField(label: 'Email', fieldKey: 'office_email', value: _text(row['office_email']), type: EditableFieldType.email),
         EditableInfoField(label: 'Τηλέφωνα', fieldKey: 'office_phones', value: _text(row['office_phones']), type: EditableFieldType.phone, maxLines: 2),
         EditableInfoField(label: 'Κτίριο', fieldKey: 'building', value: _text(row['building'])),
@@ -928,25 +974,25 @@ class _EditSectionDialogState<T> extends State<EditSectionDialog<T>> {
       EditableFieldType.code => int.tryParse(text),
       EditableFieldType.number when field.fieldKey == 'level' =>
         int.tryParse(text),
-      EditableFieldType.date => _formatIsoDate(_parseDate(text)!),
+      EditableFieldType.date => _parseDate(text) == null
+          ? text
+          : _formatIsoDate(_parseDate(text)!),
       _ => text,
     };
   }
 
   String? _validateField(EditableInfoField field, String? value) {
     final text = value?.trim() ?? '';
-    if (field.type == EditableFieldType.code && text.isEmpty) {
+    if (_isPrimaryKeyField(field.fieldKey) && text.isEmpty) {
       return 'Ο κωδικός δεν μπορεί να είναι κενός.';
     }
     if (text.isEmpty) return null;
     switch (field.type) {
       case EditableFieldType.email:
-        final ok = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(text);
-        return ok ? null : 'Μη έγκυρο email.';
+        return null;
       case EditableFieldType.date:
         final date = _parseDate(text);
-        if (date == null) return 'Μη έγκυρη ημερομηνία.';
-        if (field.fieldKey == 'end_of_guarantee_date') {
+        if (date != null && field.fieldKey == 'end_of_guarantee_date') {
           final start = _parseDate(currentData['receiving_date']);
           if (start != null && date.isBefore(start)) {
             return 'Η λήξη δεν μπορεί να προηγείται της παραλαβής.';
@@ -954,16 +1000,22 @@ class _EditSectionDialogState<T> extends State<EditSectionDialog<T>> {
         }
         return null;
       case EditableFieldType.number:
-        final normalized = text.replaceAll(',', '.');
-        return num.tryParse(normalized) == null ? 'Μη έγκυρος αριθμός.' : null;
+        return null;
       case EditableFieldType.phone:
-        final ok = RegExp(r'^[0-9\s+\-;/,()]+$').hasMatch(text);
-        return ok ? null : 'Επιτρέπονται μόνο αριθμοί και separators.';
+        return null;
       case EditableFieldType.code:
         return int.tryParse(text) == null ? 'Μη έγκυρος κωδικός.' : null;
       case EditableFieldType.text:
         return null;
     }
+  }
+
+  bool _isPrimaryKeyField(String fieldKey) {
+    return fieldKey == 'code' ||
+        (widget.section.type == InfoSectionType.model && fieldKey == 'model_id') ||
+        (widget.section.type == InfoSectionType.contract && fieldKey == 'contract_id') ||
+        (widget.section.type == InfoSectionType.owner && fieldKey == 'owner_id') ||
+        (widget.section.type == InfoSectionType.department && fieldKey == 'office_id');
   }
 
   DateTime? _parseDate(Object? value) {

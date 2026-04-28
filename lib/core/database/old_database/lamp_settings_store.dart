@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// Τοπικές ρυθμίσεις μόνο για τη «Λάμπα».
@@ -9,6 +11,8 @@ class LampSettingsStore {
   static const String _outputPathKey = 'lamp_old_db_output_path';
   static const String _tablesPaneWidthKey = 'lamp_tables_left_pane_width_px';
   static const String _maxSearchResultsKey = 'lamp_max_search_results';
+  static const String _integrityStepDurationsMsKey =
+      'lamp_integrity_step_durations_ms';
 
   /// Προεπιλογή: ίδιο με το προηγούμενο hardcoded όριο.
   static const int defaultMaxSearchResults = 100;
@@ -115,6 +119,41 @@ class LampSettingsStore {
     final prefs = await SharedPreferences.getInstance();
     final clamped = widthPx.clamp(120, 1200).toDouble();
     await prefs.setDouble(_tablesPaneWidthKey, clamped);
+  }
+
+  Future<Map<String, int>> getIntegrityStepDurationsMs() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_integrityStepDurationsMsKey);
+    if (raw == null || raw.trim().isEmpty) return const <String, int>{};
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map) return const <String, int>{};
+      return <String, int>{
+        for (final entry in decoded.entries)
+          if (entry.key is String && entry.value is num)
+            entry.key as String: (entry.value as num).toInt(),
+      };
+    } catch (_) {
+      return const <String, int>{};
+    }
+  }
+
+  Future<void> updateIntegrityStepDurationsMs(
+    Map<String, int> latestDurationsMs,
+  ) async {
+    if (latestDurationsMs.isEmpty) return;
+    final prefs = await SharedPreferences.getInstance();
+    final current = await getIntegrityStepDurationsMs();
+    final merged = <String, int>{...current};
+    for (final entry in latestDurationsMs.entries) {
+      final latest = entry.value;
+      if (latest <= 0) continue;
+      final previous = current[entry.key];
+      merged[entry.key] = previous == null
+          ? latest
+          : ((previous * 3 + latest) / 4).round();
+    }
+    await prefs.setString(_integrityStepDurationsMsKey, jsonEncode(merged));
   }
 
   /// [Deprecated] Χρήση μόνο εσωτερική για migration.
