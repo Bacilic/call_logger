@@ -1,12 +1,13 @@
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import '../../utils/search_text_normalizer.dart';
+import '../../utils/user_identity_normalizer.dart';
 import 'lamp_database_provider.dart';
+import 'lamp_excel_parse_int.dart';
 import 'old_database_schema.dart';
 
-const String oldOwnerOfficeActionField = '__owner_office_action';
-const String oldOwnerOfficeActionTransferEquipment = 'transfer_equipment';
-const String oldOwnerOfficeActionDetachEquipment = 'detach_equipment';
+const String oldDataIssueEntityTypeEquipment = 'equipment';
+const String oldDataIssueOriginIntegrityScan = 'integrity_scan';
 
 /// Αποτέλεσμα αναζήτησης: εμφανιζόμενες γραμμές + συνολικός αριθμός ταιριασμάτων.
 class OldEquipmentSearchResult {
@@ -28,14 +29,15 @@ class OldEquipmentUpdateResult {
   final String? message;
 }
 
-class OldOwnerOfficeChangePreview {
-  const OldOwnerOfficeChangePreview({
-    required this.affectedEquipment,
-    this.newOfficePhones,
+/// Αποτέλεσμα επαναδόμησης πίνακα `search_index` (Λάμπα).
+class OldSearchIndexRebuildResult {
+  const OldSearchIndexRebuildResult({
+    required this.previousRowCount,
+    required this.newRowCount,
   });
 
-  final List<Map<String, Object?>> affectedEquipment;
-  final String? newOfficePhones;
+  final int previousRowCount;
+  final int newRowCount;
 }
 
 class OldIntegrityScanResult {
@@ -317,8 +319,6 @@ class OldEquipmentRepository {
     required Map<String, Object?> updatedFields,
   }) async {
     final spec = _UpdateSectionSpec.forType(sectionType);
-    final ownerOfficeAction = updatedFields[oldOwnerOfficeActionField]
-        ?.toString();
     final dbFields = <String, Object?>{};
     for (final entry in updatedFields.entries) {
       final column = spec.allowedColumnsByField[entry.key];
@@ -345,7 +345,6 @@ class OldEquipmentRepository {
         id: id,
         spec: spec,
         dbFields: dbFields,
-        ownerOfficeAction: ownerOfficeAction,
       );
       if (validationMessage != null) {
         return OldEquipmentUpdateResult(
@@ -360,16 +359,6 @@ class OldEquipmentRepository {
           where: '${spec.idColumn} = ?',
           whereArgs: <Object?>[id],
         );
-        if (updated > 0 &&
-            sectionType == OldEquipmentSectionType.owner &&
-            dbFields.containsKey('office')) {
-          await _applyOwnerOfficeAction(
-            txn,
-            ownerId: (dbFields['owner'] as int?) ?? id,
-            newOffice: dbFields['office'] as int?,
-            action: ownerOfficeAction,
-          );
-        }
         return updated;
       });
       if (updatedCount == 0) {
@@ -388,47 +377,6 @@ class OldEquipmentRepository {
     }
   }
 
-  Future<OldOwnerOfficeChangePreview> previewOwnerOfficeChange({
-    required String databasePath,
-    required int ownerId,
-    required int? newOffice,
-  }) async {
-    final db = await _databaseProvider.open(
-      databasePath.trim(),
-      mode: LampDatabaseMode.read,
-    );
-    final affected = await db.rawQuery(
-      '''
-      SELECT code, description, serial_no, asset_no, office, office_original_text
-      FROM equipment
-      WHERE owner = ?
-        AND (
-          (? IS NULL AND office IS NOT NULL)
-          OR (? IS NOT NULL AND office IS NOT ?)
-        )
-      ORDER BY code
-      ''',
-      <Object?>[ownerId, newOffice, newOffice, newOffice],
-    );
-    String? officePhones;
-    if (newOffice != null) {
-      final phoneRows = await db.query(
-        'offices',
-        columns: <String>['phones'],
-        where: 'office = ?',
-        whereArgs: <Object?>[newOffice],
-        limit: 1,
-      );
-      officePhones = _normalizeText(
-        phoneRows.isEmpty ? null : phoneRows.first['phones'],
-      );
-    }
-    return OldOwnerOfficeChangePreview(
-      affectedEquipment: affected,
-      newOfficePhones: officePhones,
-    );
-  }
-
   Future<List<Map<String, Object?>>> dataIssues(
     String databasePath, {
     int limit = 10000,
@@ -441,6 +389,77 @@ class OldEquipmentRepository {
     final db = await _databaseProvider.open(databasePath);
     final rows = await db.rawQuery('SELECT COUNT(*) AS count FROM data_issues');
     return (rows.first['count'] as int?) ?? 0;
+  }
+
+  /// Διαγράφει όλες τις εγγραφές του πίνακα `data_issues`. Επιστρέφει το πλήθος διαγραφών.
+  Future<int> deleteAllDataIssues(String databasePath) async {
+    final path = databasePath.trim();
+    if (path.isEmpty) {
+      throw StateError('Κενή διαδρομή βάσης.');
+    }
+    try {
+      final db = await _databaseProvider.open(
+        path,
+        mode: LampDatabaseMode.write,
+      );
+      return db.delete('data_issues');
+    } catch (e) {
+      throw Exception(_friendlySqlError(e));
+    }
+  }
+
+  /// Πλήρης εκκαθάριση και επαναδόμηση του `search_index` από τον εξοπλισμό (ίδια λογική με την εσωτερική αναδόμηση).
+  Future<OldSearchIndexRebuildResult> rebuildLampSearchIndex(
+    String databasePath,
+  ) async {
+    final path = databasePath.trim();
+    if (path.isEmpty) {
+      throw StateError('Κενή διαδρομή βάσης.');
+    }
+    try {
+      await _ensureSearchIndexTable(path);
+      final db = await _databaseProvider.open(
+        path,
+        mode: LampDatabaseMode.write,
+      );
+      final before = await _countTable(db, 'search_index');
+      await _applyLampSearchIndexRebuild(db);
+      final after = await _countTable(db, 'search_index');
+      _cacheByPath.remove(_cacheKey(path));
+      return OldSearchIndexRebuildResult(
+        previousRowCount: before,
+        newRowCount: after,
+      );
+    } catch (e) {
+      throw Exception(_friendlySqlError(e));
+    }
+  }
+
+  Future<int> _countTable(Database db, String tableName) async {
+    final q = await db.rawQuery('SELECT COUNT(*) AS c FROM $tableName');
+    return (q.first['c'] as int?) ?? 0;
+  }
+
+  Future<void> _applyLampSearchIndexRebuild(Database db) async {
+    final rows = await _loadSourceRows(db);
+    await db.transaction((txn) async {
+      await txn.delete('search_index');
+      final batch = txn.batch();
+      for (final row in rows) {
+        final sourceId = _toInt(row['_source_id']) ?? 0;
+        final normalizedText = _buildNormalizedSearchText(row);
+        batch.insert(
+          'search_index',
+          <String, Object?>{
+            'source_table': 'equipment',
+            'source_id': sourceId,
+            'normalized_text': normalizedText,
+          },
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+      }
+      await batch.commit(noResult: true);
+    });
   }
 
   Future<OldIntegrityScanResult> scanIntegrityIssues(
@@ -458,7 +477,8 @@ class OldEquipmentRepository {
     final startedAt = DateTime.now();
     final findings = <Map<String, Object?>>[];
     final token = cancellationToken ?? OldIntegrityCancellationToken();
-    final specs = _integrityScanStepSpecs();
+    final existingFkFingerprints = await _loadExistingFkIssueFingerprints(db);
+    final specs = _integrityScanStepSpecs(existingFkFingerprints);
     var steps = <OldIntegrityScanStepState>[
       for (var i = 0; i < specs.length; i++)
         OldIntegrityScanStepState(
@@ -584,41 +604,50 @@ class OldEquipmentRepository {
     return result();
   }
 
-  List<_IntegrityScanStepSpec> _integrityScanStepSpecs() {
+  List<_IntegrityScanStepSpec> _integrityScanStepSpecs(
+    Set<String> existingFkFingerprints,
+  ) {
     return <_IntegrityScanStepSpec>[
       _IntegrityScanStepSpec(
+        id: 'import_parity_fk_raw',
+        label:
+            'Έλεγχος μη αριθμητικών / ασύμβατων κλειδιών (ίδιο με εισαγωγή Excel)',
+        weight: 2,
+        runner: (db, createdAt, token) => _scanImportParityForeignKeys(
+          db,
+          createdAt,
+          token,
+          existingFkFingerprints,
+        ),
+      ),
+      _IntegrityScanStepSpec(
         id: 'duplicate_asset_no',
-        label: 'Έλεγχος για διπλότυπα asset_no',
+        label: 'Έλεγχος διπλότυπων αριθμών παγίου',
         weight: 1,
         runner: _scanDuplicateAssets,
       ),
       _IntegrityScanStepSpec(
         id: 'duplicate_model_serial',
-        label: 'Έλεγχος για διπλότυπα model / serial_no',
+        label: 'Έλεγχος διπλότυπων συνδυασμών μοντέλου / σειριακού',
         weight: 1,
         runner: _scanDuplicateModelSerial,
       ),
       _IntegrityScanStepSpec(
-        id: 'owner_office_mismatch',
-        label: 'Έλεγχος ασυμφωνίας ιδιοκτήτη / γραφείου',
-        weight: 2,
-        runner: _scanOwnerOfficeMismatch,
-      ),
-      _IntegrityScanStepSpec(
         id: 'set_master_self_reference',
-        label: 'Έλεγχος set_master που δείχνει στον ίδιο εξοπλισμό',
+        label:
+            'Έλεγχος κύριου εξοπλισμού που δείχνει στον ίδιο εξοπλισμό',
         weight: 1,
         runner: _scanSelfMaster,
       ),
       _IntegrityScanStepSpec(
         id: 'set_master_missing_target',
-        label: 'Έλεγχος set_master χωρίς υπαρκτό στόχο',
+        label: 'Έλεγχος κύριου εξοπλισμού χωρίς υπαρκτό στόχο',
         weight: 1,
         runner: _scanMissingMaster,
       ),
       _IntegrityScanStepSpec(
         id: 'set_master_cycle',
-        label: 'Έλεγχος κύκλων ιεραρχίας set_master',
+        label: 'Έλεγχος κύκλων ιεραρχίας κύριου εξοπλισμού',
         weight: 4,
         runner: _scanSetMasterCycles,
       ),
@@ -683,6 +712,181 @@ class OldEquipmentRepository {
     ];
   }
 
+  Future<Set<String>> _loadExistingFkIssueFingerprints(Database db) async {
+    final rows = await db.query(
+      'data_issues',
+      columns: <String>['issue_type', 'column_name', 'raw_value'],
+      where: 'issue_type IN (?, ?)',
+      whereArgs: <Object?>['non_numeric_fk', 'unknown_id'],
+    );
+    return <String>{
+      for (final r in rows)
+        _fkIssueFingerprint(
+          r['issue_type'] as String? ?? '',
+          r['column_name'] as String? ?? '',
+          r['raw_value'] as String?,
+        ),
+    };
+  }
+
+  String _fkIssueFingerprint(
+    String issueType,
+    String columnName,
+    String? rawValue,
+  ) {
+    final t = issueType.trim();
+    final c = columnName.trim();
+    final r = (rawValue ?? '').trim();
+    return '$t|$c|$r';
+  }
+
+  String _fkIssueRowKey(
+    String issueType,
+    String? columnName,
+    String? rawValue,
+    int? rowNumber,
+  ) {
+    return '${issueType.trim()}|${(columnName ?? '').trim()}|'
+        '${(rawValue ?? '').trim()}|${rowNumber ?? 'null'}';
+  }
+
+  Future<Set<int>> _integerPrimaryKeys(
+    Database db,
+    String table,
+    String column,
+  ) async {
+    final rows = await db.query(table, columns: <String>[column]);
+    final result = <int>{};
+    for (final r in rows) {
+      final v = _toInt(r[column]);
+      if (v != null) result.add(v);
+    }
+    return result;
+  }
+
+  /// Ίδια λογική με [OldExcelImporter] για FK από κείμενο στήλης / *_original_text.
+  Future<List<Map<String, Object?>>> _scanImportParityForeignKeys(
+    Database db,
+    String createdAt,
+    OldIntegrityCancellationToken token,
+    Set<String> existingFkFingerprints,
+  ) async {
+    final out = <Map<String, Object?>>[];
+    final seenRowKeys = <String>{};
+
+    void addIfNew({
+      required String issueType,
+      required String message,
+      required int? rowNumber,
+      required String? columnName,
+      required String? rawValue,
+    }) {
+      final fpTriple = _fkIssueFingerprint(
+        issueType,
+        columnName ?? '',
+        rawValue,
+      );
+      if (existingFkFingerprints.contains(fpTriple)) return;
+      final rowKey = _fkIssueRowKey(
+        issueType,
+        columnName,
+        rawValue,
+        rowNumber,
+      );
+      if (seenRowKeys.contains(rowKey)) return;
+      seenRowKeys.add(rowKey);
+      out.add(
+        _scanIssue(
+          issueType: issueType,
+          message: message,
+          rowNumber: rowNumber,
+          columnName: columnName,
+          rawValue: rawValue,
+          createdAt: createdAt,
+        ),
+      );
+    }
+
+    final officeIds = await _integerPrimaryKeys(db, 'offices', 'office');
+    if (token.isCancelled) throw const _OldIntegrityScanCancelled();
+    final modelIds = await _integerPrimaryKeys(db, 'model', 'model');
+    if (token.isCancelled) throw const _OldIntegrityScanCancelled();
+    final contractIds = await _integerPrimaryKeys(db, 'contracts', 'contract');
+    if (token.isCancelled) throw const _OldIntegrityScanCancelled();
+    final ownerIds = await _integerPrimaryKeys(db, 'owners', 'owner');
+    if (token.isCancelled) throw const _OldIntegrityScanCancelled();
+    final equipmentCodes = await _integerPrimaryKeys(db, 'equipment', 'code');
+    if (token.isCancelled) throw const _OldIntegrityScanCancelled();
+
+    final ownerRows = await db.query('owners');
+    if (token.isCancelled) throw const _OldIntegrityScanCancelled();
+    for (final row in ownerRows) {
+      final raw = row['office_original_text']?.toString();
+      final hasRaw = raw != null && raw.trim().isNotEmpty;
+      if (!hasRaw) continue;
+      final parsed = lampParseExcelInt(raw);
+      if (parsed != null && officeIds.contains(parsed)) continue;
+      final ownerId = _toInt(row['owner']);
+      addIfNew(
+        issueType: parsed == null ? 'non_numeric_fk' : 'unknown_id',
+        message: 'Η τιμή δεν αντιστοιχεί σε έγκυρο ID για office.',
+        rowNumber: ownerId,
+        columnName: 'office',
+        rawValue: raw,
+      );
+    }
+
+    final equipmentRows = await db.query('equipment');
+    if (token.isCancelled) throw const _OldIntegrityScanCancelled();
+    var equipmentIndex = 0;
+    for (final row in equipmentRows) {
+      equipmentIndex++;
+      if (equipmentIndex % 200 == 0) {
+        if (token.isCancelled) throw const _OldIntegrityScanCancelled();
+        await Future<void>.delayed(Duration.zero);
+      }
+
+      final code = _toInt(row['code']);
+
+      final fkSpecs = <(String, Set<int>)>[
+        ('model', modelIds),
+        ('contract', contractIds),
+        ('owner', ownerIds),
+        ('office', officeIds),
+      ];
+      for (final (col, valid) in fkSpecs) {
+        final rawCol = '${col}_original_text';
+        final raw = row[rawCol]?.toString();
+        final hasRaw = raw != null && raw.trim().isNotEmpty;
+        if (!hasRaw) continue;
+        final parsed = lampParseExcelInt(raw);
+        if (parsed != null && valid.contains(parsed)) continue;
+        addIfNew(
+          issueType: parsed == null ? 'non_numeric_fk' : 'unknown_id',
+          message: 'Η τιμή δεν αντιστοιχεί σε έγκυρο ID για $col.',
+          rowNumber: code,
+          columnName: col,
+          rawValue: raw,
+        );
+      }
+
+      final smRaw = row['set_master_original_text']?.toString();
+      final smHasRaw = smRaw != null && smRaw.trim().isNotEmpty;
+      if (!smHasRaw) continue;
+      final smParsed = lampParseExcelInt(smRaw);
+      if (smParsed != null && equipmentCodes.contains(smParsed)) continue;
+      addIfNew(
+        issueType: smParsed == null ? 'non_numeric_fk' : 'unknown_id',
+        message: 'Το set_master δεν αντιστοιχεί σε έγκυρο code εξοπλισμού.',
+        rowNumber: code,
+        columnName: 'set_master',
+        rawValue: smRaw,
+      );
+    }
+
+    return out;
+  }
+
   Future<List<Map<String, Object?>>> _scanDuplicateAssets(
     Database db,
     String createdAt,
@@ -730,33 +934,6 @@ class OldEquipmentRepository {
               'Διπλότυπο (model, serial_no): (${row['model']}, ${row['serial_no']}) σε ${row['cnt']} εγγραφές.',
           columnName: 'serial_no',
           rawValue: row['serial_no'],
-          createdAt: createdAt,
-        ),
-    ];
-  }
-
-  Future<List<Map<String, Object?>>> _scanOwnerOfficeMismatch(
-    Database db,
-    String createdAt,
-    OldIntegrityCancellationToken token,
-  ) async {
-    final rows = await db.rawQuery('''
-      SELECT e.code, e.owner, e.office, o.office AS owner_office
-      FROM equipment e
-      JOIN owners o ON o.owner = e.owner
-      WHERE e.owner IS NOT NULL
-        AND (e.office IS NULL OR e.office <> o.office)
-      ''');
-    if (token.isCancelled) throw const _OldIntegrityScanCancelled();
-    return <Map<String, Object?>>[
-      for (final row in rows)
-        _scanIssue(
-          issueType: 'owner_office_mismatch',
-          message:
-              'Ασυμφωνία γραφείου εξοπλισμού/κατόχου για code=${row['code']}. equipment.office=${row['office']}, owners.office=${row['owner_office']}.',
-          rowNumber: _toInt(row['code']),
-          columnName: 'office',
-          rawValue: row['office'],
           createdAt: createdAt,
         ),
     ];
@@ -865,31 +1042,117 @@ class OldEquipmentRepository {
     ];
   }
 
+  /// Κλειδί σταθερό ανά «ίδιο» πρόβλημα (χωρίς `id` / `created_at`).
+  /// Δεν περιλαμβάνει το `message` ώστε αλλαγές διατύπωσης να μην
+  /// επανεισάγουν το ίδιο επιχειρησιακό εύρημα ως «νέο».
+  String _dataIssueIdentityKey(Map<String, Object?> issue) {
+    String normText(Object? o) {
+      if (o == null) return '';
+      return o.toString().trim();
+    }
+
+    String normRowNum(Object? o) {
+      if (o == null) return '';
+      if (o is int) return o.toString();
+      if (o is num) return o.truncate().toString();
+      final s = o.toString().trim();
+      final i = int.tryParse(s);
+      return i != null ? i.toString() : s;
+    }
+
+    final typRaw = normText(issue['issue_type']);
+    final typ = typRaw.isEmpty ? oldDataIssueOriginIntegrityScan : typRaw;
+    final entityType = _resolveDataIssueEntityType(issue, normText);
+    final origin = _resolveDataIssueOrigin(issue, normText);
+    final col = normText(issue['column_name']);
+    final raw = normText(issue['raw_value']);
+    final rn = normRowNum(issue['row_number']);
+    return '$typ|$entityType|$origin|$rn|$col|$raw';
+  }
+
+  Future<Set<String>> _loadDataIssueIdentityKeys(DatabaseExecutor db) async {
+    final columns = await _dataIssueColumnNames(db);
+    final hasEntityType = columns.contains('entity_type');
+    final hasOrigin = columns.contains('origin');
+    final rows = await db.query(
+      'data_issues',
+      columns: <String>[
+        'sheet',
+        if (hasEntityType) 'entity_type',
+        if (hasOrigin) 'origin',
+        'row_number',
+        'column_name',
+        'raw_value',
+        'issue_type',
+        'message',
+      ],
+    );
+    return <String>{for (final r in rows) _dataIssueIdentityKey(r)};
+  }
+
   Future<int> insertDataIssues(
     String databasePath,
     List<Map<String, Object?>> issues,
   ) async {
     if (issues.isEmpty) return 0;
+    final path = databasePath.trim();
     final db = await _databaseProvider.open(
-      databasePath.trim(),
+      path,
       mode: LampDatabaseMode.write,
     );
+    await _ensureDataIssueModelColumns(db);
     var inserted = 0;
     await db.transaction((txn) async {
+      final columns = await _dataIssueColumnNames(txn);
+      final hasEntityType = columns.contains('entity_type');
+      final hasOrigin = columns.contains('origin');
+      final existing = await _loadDataIssueIdentityKeys(txn);
       for (final issue in issues) {
-        await txn.insert('data_issues', <String, Object?>{
+        final key = _dataIssueIdentityKey(issue);
+        if (existing.contains(key)) continue;
+        final row = <String, Object?>{
           'sheet': issue['sheet'],
+          if (hasEntityType)
+            'entity_type': _resolveDataIssueEntityType(issue, _normalizeText) ??
+                oldDataIssueEntityTypeEquipment,
+          if (hasOrigin)
+            'origin': _resolveDataIssueOrigin(issue, _normalizeText) ??
+                oldDataIssueOriginIntegrityScan,
           'row_number': issue['row_number'],
           'column_name': issue['column_name'],
           'raw_value': issue['raw_value'],
-          'issue_type': issue['issue_type'] ?? 'integrity_scan',
+          'issue_type': issue['issue_type'] ?? oldDataIssueOriginIntegrityScan,
           'message': issue['message'],
           'created_at': issue['created_at'] ?? DateTime.now().toIso8601String(),
+        };
+        await txn.insert('data_issues', <String, Object?>{
+          ...row,
         });
+        existing.add(key);
         inserted++;
       }
     });
     return inserted;
+  }
+
+  /// Ευρήματα ελέγχου που **δεν** έχουν ήδη ίδιο κλειδί με εγγραφή στο `data_issues`.
+  Future<List<Map<String, Object?>>> filterToNewDataIssuesOnly(
+    String databasePath,
+    List<Map<String, Object?>> candidateIssues,
+  ) async {
+    if (candidateIssues.isEmpty) {
+      return const <Map<String, Object?>>[];
+    }
+    final path = databasePath.trim();
+    final db = await _databaseProvider.open(
+      path,
+      mode: LampDatabaseMode.read,
+    );
+    final existing = await _loadDataIssueIdentityKeys(db);
+    return <Map<String, Object?>>[
+      for (final issue in candidateIssues)
+        if (!existing.contains(_dataIssueIdentityKey(issue))) issue,
+    ];
   }
 
   Future<void> _ensureIntegrityArtifacts(Database db) async {
@@ -908,7 +1171,6 @@ class OldEquipmentRepository {
     required int id,
     required _UpdateSectionSpec spec,
     required Map<String, Object?> dbFields,
-    required String? ownerOfficeAction,
   }) async {
     final currentRows = await db.query(
       spec.table,
@@ -926,7 +1188,6 @@ class OldEquipmentRepository {
         id: id,
         merged: merged,
         changedFields: dbFields,
-        ownerOfficeAction: ownerOfficeAction,
       ),
       _ => _validatePrimaryKeyAvailability(db, spec, id, merged[spec.idColumn]),
     };
@@ -1006,10 +1267,6 @@ class OldEquipmentRepository {
       if (ownerRows.isEmpty) {
         return 'Ο κάτοχος δεν υπάρχει στον πίνακα ιδιοκτητών.';
       }
-      final ownerOffice = _toInt(ownerRows.first['office']);
-      if (ownerOffice != office) {
-        return 'Το γραφείο του εξοπλισμού πρέπει να ταιριάζει με το γραφείο του κατόχου.';
-      }
     }
 
     final setMaster = _toInt(row['set_master']);
@@ -1044,7 +1301,6 @@ class OldEquipmentRepository {
     required int id,
     required Map<String, Object?> merged,
     required Map<String, Object?> changedFields,
-    required String? ownerOfficeAction,
   }) async {
     final owner = _toInt(merged['owner']);
     if (owner == null) return 'Ο κωδικός ιδιοκτήτη είναι υποχρεωτικός.';
@@ -1060,6 +1316,31 @@ class OldEquipmentRepository {
     );
     if (pkMessage != null) return pkMessage;
 
+    if (changedFields.containsKey('first_name') ||
+        changedFields.containsKey('last_name')) {
+      final targetIdentityKey = UserIdentityNormalizer.identityKeyForPerson(
+        _normalizeText(merged['first_name']),
+        _normalizeText(merged['last_name']),
+      );
+      if (targetIdentityKey.isNotEmpty) {
+        final rows = await db.query(
+          'owners',
+          columns: <String>['owner', 'last_name', 'first_name'],
+          where: 'owner <> ?',
+          whereArgs: <Object?>[id],
+        );
+        for (final row in rows) {
+          final rowKey = UserIdentityNormalizer.identityKeyForPerson(
+            _normalizeText(row['first_name']),
+            _normalizeText(row['last_name']),
+          );
+          if (rowKey == targetIdentityKey) {
+            return 'Υπάρχει ήδη υπάλληλος με ισοδύναμο ονοματεπώνυμο.';
+          }
+        }
+      }
+    }
+
     if (!changedFields.containsKey('office')) return null;
     final newOffice = _toInt(merged['office']);
     if (newOffice != null) {
@@ -1073,17 +1354,7 @@ class OldEquipmentRepository {
       if (officeRows.isEmpty) return 'Το νέο γραφείο ιδιοκτήτη δεν υπάρχει.';
     }
 
-    final affected = await _affectedEquipmentForOwnerOffice(
-      db,
-      ownerId: id,
-      newOffice: newOffice,
-    );
-    if (affected.isEmpty) return null;
-    if (ownerOfficeAction == oldOwnerOfficeActionTransferEquipment ||
-        ownerOfficeAction == oldOwnerOfficeActionDetachEquipment) {
-      return null;
-    }
-    return 'Η αλλαγή γραφείου επηρεάζει ${affected.length} τεμάχια εξοπλισμού. Επιλέξτε μαζική μεταφορά ή αποσύνδεση κατόχου.';
+    return null;
   }
 
   Future<String?> _validatePrimaryKeyAvailability(
@@ -1145,52 +1416,6 @@ class OldEquipmentRepository {
     return rows.isNotEmpty;
   }
 
-  Future<List<Map<String, Object?>>> _affectedEquipmentForOwnerOffice(
-    DatabaseExecutor db, {
-    required int ownerId,
-    required int? newOffice,
-  }) {
-    return db.rawQuery(
-      '''
-      SELECT code, description, serial_no, asset_no, office
-      FROM equipment
-      WHERE owner = ?
-        AND (
-          (? IS NULL AND office IS NOT NULL)
-          OR (? IS NOT NULL AND office IS NOT ?)
-        )
-      ORDER BY code
-      ''',
-      <Object?>[ownerId, newOffice, newOffice, newOffice],
-    );
-  }
-
-  Future<void> _applyOwnerOfficeAction(
-    DatabaseExecutor db, {
-    required int ownerId,
-    required int? newOffice,
-    required String? action,
-  }) async {
-    if (action == oldOwnerOfficeActionTransferEquipment) {
-      await db.update(
-        'equipment',
-        <String, Object?>{'office': newOffice},
-        where: 'owner = ?',
-        whereArgs: <Object?>[ownerId],
-      );
-      return;
-    }
-    if (action == oldOwnerOfficeActionDetachEquipment) {
-      await db.update(
-        'equipment',
-        <String, Object?>{'owner': null},
-        where:
-            'owner = ? AND ((? IS NULL AND office IS NOT NULL) OR (? IS NOT NULL AND office IS NOT ?))',
-        whereArgs: <Object?>[ownerId, newOffice, newOffice, newOffice],
-      );
-    }
-  }
-
   Future<_SearchCacheEntry> _ensureCache(String databasePath) async {
     final path = databasePath.trim();
     final key = _cacheKey(path);
@@ -1242,25 +1467,7 @@ class OldEquipmentRepository {
         databasePath,
         mode: LampDatabaseMode.write,
       );
-      final rows = await _loadSourceRows(db);
-      await db.transaction((txn) async {
-        await txn.delete(
-          'search_index',
-          where: 'source_table = ?',
-          whereArgs: <Object?>['equipment'],
-        );
-        final batch = txn.batch();
-        for (final row in rows) {
-          final sourceId = _toInt(row['_source_id']) ?? 0;
-          final normalizedText = _buildNormalizedSearchText(row);
-          batch.insert('search_index', <String, Object?>{
-            'source_table': 'equipment',
-            'source_id': sourceId,
-            'normalized_text': normalizedText,
-          }, conflictAlgorithm: ConflictAlgorithm.replace);
-        }
-        await batch.commit(noResult: true);
-      });
+      await _applyLampSearchIndexRebuild(db);
     } catch (_) {
       // persisted search_index είναι βελτιστοποίηση. Η κύρια λειτουργία
       // συνεχίζει μέσω in-memory κανονικοποιημένου cache.
@@ -1497,12 +1704,18 @@ class OldEquipmentRepository {
     required String issueType,
     required String message,
     required String createdAt,
+    String entityType = oldDataIssueEntityTypeEquipment,
+    String origin = oldDataIssueOriginIntegrityScan,
     int? rowNumber,
     String? columnName,
     Object? rawValue,
   }) {
     return <String, Object?>{
-      'sheet': 'integrity_scan',
+      // Διατηρείται για legacy συμβατότητα/προβολές, αλλά η λογική επίλυσης
+      // βασίζεται πλέον στα `entity_type` + `origin`.
+      'sheet': entityType,
+      'entity_type': entityType,
+      'origin': origin,
       'row_number': rowNumber,
       'column_name': columnName,
       'raw_value': rawValue?.toString(),
@@ -1536,6 +1749,63 @@ class OldEquipmentRepository {
   int? _toInt(Object? value) =>
       value is int ? value : int.tryParse(value?.toString() ?? '');
 
+  String? _resolveDataIssueEntityType(
+    Map<String, Object?> issue,
+    String? Function(Object?) normalizeText,
+  ) {
+    final explicit = normalizeText(issue['entity_type']);
+    if (explicit != null && explicit.trim().isNotEmpty) return explicit;
+    final legacySheet = normalizeText(issue['sheet'])?.toLowerCase();
+    if (legacySheet == 'equipment') return oldDataIssueEntityTypeEquipment;
+    if (legacySheet == oldDataIssueOriginIntegrityScan) {
+      // Legacy records έγραφαν το origin στο `sheet`.
+      return oldDataIssueEntityTypeEquipment;
+    }
+    return legacySheet;
+  }
+
+  String? _resolveDataIssueOrigin(
+    Map<String, Object?> issue,
+    String? Function(Object?) normalizeText,
+  ) {
+    final explicit = normalizeText(issue['origin']);
+    if (explicit != null && explicit.trim().isNotEmpty) return explicit;
+    final legacySheet = normalizeText(issue['sheet'])?.toLowerCase();
+    if (legacySheet == oldDataIssueOriginIntegrityScan) {
+      return oldDataIssueOriginIntegrityScan;
+    }
+    return 'manual';
+  }
+
+  Future<Set<String>> _dataIssueColumnNames(DatabaseExecutor db) async {
+    final rows = await db.rawQuery("PRAGMA table_info('data_issues')");
+    return <String>{
+      for (final row in rows)
+        if ((row['name']?.toString().trim().isNotEmpty ?? false))
+          row['name'].toString(),
+    };
+  }
+
+  Future<void> _ensureDataIssueModelColumns(Database db) async {
+    final columns = await _dataIssueColumnNames(db);
+    if (!columns.contains('entity_type')) {
+      await db.execute("ALTER TABLE data_issues ADD COLUMN entity_type TEXT");
+    }
+    if (!columns.contains('origin')) {
+      await db.execute("ALTER TABLE data_issues ADD COLUMN origin TEXT");
+    }
+    await db.execute(
+      "UPDATE data_issues SET entity_type = COALESCE(entity_type, CASE "
+      "WHEN lower(trim(COALESCE(sheet,''))) IN ('equipment','integrity_scan') THEN 'equipment' "
+      "WHEN trim(COALESCE(sheet,'')) = '' THEN 'equipment' ELSE sheet END)",
+    );
+    await db.execute(
+      "UPDATE data_issues SET origin = COALESCE(origin, CASE "
+      "WHEN lower(trim(COALESCE(sheet,''))) = 'integrity_scan' THEN 'integrity_scan' "
+      "ELSE 'manual' END)",
+    );
+  }
+
   String _friendlySqlError(Object error) {
     final message = error.toString();
     final lower = message.toLowerCase();
@@ -1548,6 +1818,12 @@ class OldEquipmentRepository {
       }
       if (lower.contains('serial_no')) {
         return 'Ο συνδυασμός μοντέλου και σειριακού αριθμού υπάρχει ήδη.';
+      }
+      if (lower.contains('ux_owners_identity_key_clean') ||
+          (lower.contains('owners') &&
+              lower.contains('last_name') &&
+              lower.contains('first_name'))) {
+        return 'Υπάρχει ήδη υπάλληλος με ισοδύναμο ονοματεπώνυμο.';
       }
       return 'Η αποθήκευση παραβιάζει κανόνα μοναδικότητας ή ακεραιότητας.';
     }

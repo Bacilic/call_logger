@@ -84,7 +84,7 @@ void main() {
     expect(result.message, contains('παγίου'));
   });
 
-  test('αλλαγή owner.office μπορεί να μεταφέρει μαζικά τον εξοπλισμό', () async {
+  test('αλλαγή γραφείου ιδιοκτήτη ενημερώνει μόνο owners (όχι αυτόματα εξοπλισμό)', () async {
     final result = await repository.updateSection(
       databasePath: dbPath,
       id: 10,
@@ -92,7 +92,6 @@ void main() {
       updatedFields: <String, Object?>{
         'owner_office': 2,
         'owner_phones': null,
-        oldOwnerOfficeActionField: oldOwnerOfficeActionTransferEquipment,
       },
     );
 
@@ -115,22 +114,19 @@ void main() {
       );
       expect(owner.single['office'], 2);
       expect(owner.single['phones'], isNull);
-      expect(equipment.single['office'], 2);
+      expect(equipment.single['office'], 1);
       expect(equipment.single['owner'], 10);
     } finally {
       await db.close();
     }
   });
 
-  test('αλλαγή owner.office μπορεί να αποσυνδέσει εξοπλισμό που μένει αλλού', () async {
+  test('επιτρέπεται γραφείο εξοπλισμού διαφορετικό από το γραφείο του κατόχου', () async {
     final result = await repository.updateSection(
       databasePath: dbPath,
-      id: 10,
-      sectionType: OldEquipmentSectionType.owner,
-      updatedFields: <String, Object?>{
-        'owner_office': 2,
-        oldOwnerOfficeActionField: oldOwnerOfficeActionDetachEquipment,
-      },
+      id: 100,
+      sectionType: OldEquipmentSectionType.equipment,
+      updatedFields: <String, Object?>{'office_id': 2},
     );
 
     expect(result.success, isTrue);
@@ -138,14 +134,21 @@ void main() {
 
     final db = await openDatabase(dbPath, singleInstance: false);
     try {
+      final owner = await db.query(
+        'owners',
+        columns: <String>['office'],
+        where: 'owner = ?',
+        whereArgs: <Object?>[10],
+      );
       final equipment = await db.query(
         'equipment',
         columns: <String>['office', 'owner'],
         where: 'code = ?',
         whereArgs: <Object?>[100],
       );
-      expect(equipment.single['office'], 1);
-      expect(equipment.single['owner'], isNull);
+      expect(owner.single['office'], 1);
+      expect(equipment.single['office'], 2);
+      expect(equipment.single['owner'], 10);
     } finally {
       await db.close();
     }

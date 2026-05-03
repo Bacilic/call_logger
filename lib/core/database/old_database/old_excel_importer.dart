@@ -4,6 +4,7 @@ import 'package:excel/excel.dart';
 import 'package:path/path.dart' as p;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
+import 'lamp_excel_parse_int.dart';
 import 'old_database_schema.dart';
 
 class LampImportException implements Exception {
@@ -207,7 +208,7 @@ class OldExcelImporter {
 
       for (final fk in spec.foreignKeys) {
         final raw = rawValues[fk.column];
-        final parsed = _parseInt(raw);
+        final parsed = lampParseExcelInt(raw);
         final hasRaw = raw != null && raw.trim().isNotEmpty;
         if (fk.originalTextColumn != null) {
           values[fk.originalTextColumn!] = raw;
@@ -237,7 +238,7 @@ class OldExcelImporter {
         values[original.value] = rawValues[original.key];
       }
 
-      final id = _parseInt(rawValues[spec.primaryKey]);
+      final id = lampParseExcelInt(rawValues[spec.primaryKey]);
       if (id == null) {
         issues.add(
           _DataIssue(
@@ -303,7 +304,7 @@ class OldExcelImporter {
     for (final entry in records.entries) {
       final record = entry.value;
       final raw = record['set_master_original_text']?.toString();
-      final parsed = _parseInt(raw);
+      final parsed = lampParseExcelInt(raw);
       if (raw == null || raw.trim().isEmpty) {
         record['set_master'] = null;
         continue;
@@ -414,16 +415,6 @@ class OldExcelImporter {
     if (value is DateCellValue) return value.asDateTimeLocal();
     if (value is DateTimeCellValue) return value.asDateTimeLocal();
     return null;
-  }
-
-  int? _parseInt(String? value) {
-    if (value == null) return null;
-    final normalized = value.trim();
-    if (normalized.isEmpty || normalized == '-') return null;
-    return int.tryParse(normalized) ??
-        (double.tryParse(normalized)?.truncate() == double.tryParse(normalized)
-            ? double.tryParse(normalized)?.toInt()
-            : null);
   }
 
   String _formatDateTime(DateTime dt) {

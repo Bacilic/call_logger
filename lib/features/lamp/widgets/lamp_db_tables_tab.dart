@@ -9,6 +9,7 @@ import '../../../core/database/database_helper.dart' show TablePreviewResult;
 import '../../../core/database/old_database/lamp_table_browser_api.dart';
 import '../../../core/database/old_database/lamp_table_greek_names.dart';
 import '../../../core/database/old_database/lamp_settings_store.dart';
+import '../../../core/database/old_database/old_equipment_repository.dart';
 import '../../database/services/database_stats_service.dart';
 
 final _kLampFileDateFmt = DateFormat.yMMMd('el').add_Hm();
@@ -19,9 +20,16 @@ class LampDbTablesTab extends StatefulWidget {
   const LampDbTablesTab({
     super.key,
     required this.databasePath,
+    required this.repository,
+    this.onAfterDataIssuesPurge,
   });
 
   final String databasePath;
+  final OldEquipmentRepository repository;
+
+  /// Καλείται μετά επιτυχή `DELETE` στο `data_issues` ώστε η μητρική οθόνη να
+  /// ξαναφορτώσει τη λίστα προβλημάτων ETL.
+  final Future<void> Function()? onAfterDataIssuesPurge;
 
   @override
   State<LampDbTablesTab> createState() => _LampDbTablesTabState();
@@ -46,6 +54,8 @@ class _LampDbTablesTabState extends State<LampDbTablesTab> {
   TablePreviewResult? _preview;
   double _tablesPaneWidth = _kDefaultTablesPaneWidth;
   CustomMouseCursor? _splitterCursor;
+  /// `'data_issues'` ή `'search_index'` όταν τρέχει η αντίστοιχη ενέργεια.
+  String? _tableMaintenanceBusy;
 
   @override
   void initState() {
@@ -166,6 +176,195 @@ class _LampDbTablesTabState extends State<LampDbTablesTab> {
     }
   }
 
+  void _showSnack(String message, {bool isError = false}) {
+    if (!mounted) return;
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    if (messenger == null) return;
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: isError ? Theme.of(context).colorScheme.error : null,
+      ),
+    );
+  }
+
+  Future<void> _onDeleteAllDataIssuesPressed() async {
+    final path = widget.databasePath.trim();
+    if (path.isEmpty) return;
+    int count;
+    try {
+      count = await widget.repository.dataIssueCount(path);
+    } catch (e) {
+      _showSnack('Αποτυχία ανάγνωσης πλήθους εγγραφών: $e', isError: true);
+      return;
+    }
+    if (!mounted) return;
+    if (count == 0) {
+      _showSnack('Ο πίνακας data_issues είναι ήδη άδειος.');
+      return;
+    }
+    final countLabel = DatabaseStatsService.formatIntegerEl(count);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Διαγραφή όλων των προβλημάτων ETL'),
+        content: SingleChildScrollView(
+          child: Text(
+            'Πρόκειται να διαγραφούν οριστικά $countLabel εγγραφές από τον πίνακα '
+            'data_issues (προβλήματα εισαγωγής/ελέγχου).\n\n'
+            'Η ενέργεια δεν αναιρείται. Θέλετε να συνεχίσετε;',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Άκυρο'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Διαγραφή όλων'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    setState(() => _tableMaintenanceBusy = 'data_issues');
+    try {
+      final deleted = await widget.repository.deleteAllDataIssues(path);
+      if (!mounted) return;
+      await widget.onAfterDataIssuesPurge?.call();
+      if (!mounted) return;
+      final deletedLabel = DatabaseStatsService.formatIntegerEl(deleted);
+      _showSnack('Διαγράφηκαν $deletedLabel εγγραφές από τον πίνακα data_issues.');
+      await _load();
+      if (_selected == 'data_issues') {
+        await _onSelectTable('data_issues');
+      }
+    } catch (e) {
+      if (mounted) {
+        _showSnack('Αποτυχία διαγραφής: $e', isError: true);
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _tableMaintenanceBusy = null);
+      }
+    }
+  }
+
+  Future<void> _onRebuildSearchIndexPressed() async {
+    final path = widget.databasePath.trim();
+    if (path.isEmpty) return;
+    int indexCount;
+    int equipmentCount;
+    try {
+      indexCount = await _api.getTableRowCount(path, 'search_index');
+      equipmentCount = await _api.getTableRowCount(path, 'equipment');
+    } catch (e) {
+      _showSnack('Αποτυχία ανάγνωσης στατιστικών πινάκων: $e', isError: true);
+      return;
+    }
+    if (!mounted) return;
+    final indexLabel = DatabaseStatsService.formatIntegerEl(indexCount);
+    final equipLabel = DatabaseStatsService.formatIntegerEl(equipmentCount);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Αναδόμηση ευρετηρίου αναζήτησης'),
+        content: SingleChildScrollView(
+          child: Text(
+            'Ο πίνακας search_index περιέχει τώρα $indexLabel εγγραφές.\n\n'
+            'Όλες θα διαγραφούν· στη συνέχεια θα δημιουργηθούν ξανά $equipLabel '
+            'εγγραφές (μία ανά γραμμή εξοπλισμού), με την ισχύουσα λογική '
+            'κανονικοποιημένου κειμένου αναζήτησης.\n\n'
+            'Η λειτουργία αναζήτησης στη Λάμπα ενημερώνεται αμέσως μετά.\n\n'
+            'Να συνεχιστεί;',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Άκυρο'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Αναδόμηση'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    setState(() => _tableMaintenanceBusy = 'search_index');
+    try {
+      final r = await widget.repository.rebuildLampSearchIndex(path);
+      if (!mounted) return;
+      final prevLabel = DatabaseStatsService.formatIntegerEl(r.previousRowCount);
+      final newLabel = DatabaseStatsService.formatIntegerEl(r.newRowCount);
+      _showSnack(
+        'Αναδόμηση search_index: $prevLabel → $newLabel εγγραφές.',
+      );
+      await _load();
+      if (_selected == 'search_index') {
+        await _onSelectTable('search_index');
+      }
+    } catch (e) {
+      if (mounted) {
+        _showSnack('Αποτυχία αναδόμησης search_index: $e', isError: true);
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _tableMaintenanceBusy = null);
+      }
+    }
+  }
+
+  Widget? _buildTableTrailingActions(String tableName) {
+    if (tableName != 'data_issues' && tableName != 'search_index') {
+      return null;
+    }
+    final busyHere = _tableMaintenanceBusy == tableName;
+    final busyOther = _tableMaintenanceBusy != null && !busyHere;
+    final theme = Theme.of(context);
+    Widget iconButton({
+      required IconData icon,
+      required String tooltip,
+      required VoidCallback? onPressed,
+      required bool showSpinner,
+    }) {
+      return IconButton(
+        visualDensity: VisualDensity.compact,
+        constraints: const BoxConstraints(minWidth: 36, minHeight: 32),
+        padding: EdgeInsets.zero,
+        tooltip: tooltip,
+        onPressed: onPressed,
+        icon: showSpinner
+            ? SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: theme.colorScheme.primary,
+                ),
+              )
+            : Icon(icon, size: 20),
+      );
+    }
+
+    if (tableName == 'data_issues') {
+      return iconButton(
+        icon: Icons.delete_sweep_outlined,
+        tooltip: 'Διαγραφή όλων των εγγραφών data_issues',
+        showSpinner: busyHere,
+        onPressed: busyHere || busyOther ? null : _onDeleteAllDataIssuesPressed,
+      );
+    }
+    return iconButton(
+      icon: Icons.restart_alt_outlined,
+      tooltip: 'Αναδόμηση πίνακα search_index',
+      showSpinner: busyHere,
+      onPressed: busyHere || busyOther ? null : _onRebuildSearchIndexPressed,
+    );
+  }
+
   double _clampTablesPaneWidth(double requested, double maxTotalWidth) {
     final maxByPreview = (maxTotalWidth - _kSplitterWidth - _kMinPreviewPaneWidth)
         .clamp(_kMinTablesPaneWidth, maxTotalWidth)
@@ -270,16 +469,33 @@ class _LampDbTablesTabState extends State<LampDbTablesTab> {
                                   ? name
                                   : '$friendly - $name';
                               final isSel = _selected == name;
-                              return ListTile(
+                              final trailing = _buildTableTrailingActions(name);
+                              final tile = ListTile(
                                 selected: isSel,
                                 title: Text(titleText),
                                 subtitle: Text(
                                   _recordPhrase(count),
                                   style: theme.textTheme.bodySmall,
                                 ),
+                                trailing: trailing,
                                 onTap: () => _onSelectTable(name),
                                 dense: true,
                               );
+                              if (trailing != null) {
+                                return Padding(
+                                  padding:
+                                      const EdgeInsets.only(bottom: 4, top: 2),
+                                  child: Card(
+                                    margin: EdgeInsets.zero,
+                                    elevation: 0,
+                                    color: theme.colorScheme.surfaceContainerHighest
+                                        .withValues(alpha: 0.65),
+                                    clipBehavior: Clip.antiAlias,
+                                    child: tile,
+                                  ),
+                                );
+                              }
+                              return tile;
                             },
                           ),
                   ),

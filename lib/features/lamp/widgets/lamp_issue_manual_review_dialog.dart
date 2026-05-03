@@ -2,6 +2,24 @@ import 'package:flutter/material.dart';
 
 import '../../../core/database/old_database/lamp_issue_resolution_service.dart';
 
+String _lampIssueColumnLabelEl(String? column) {
+  if (column == null || column.isEmpty) return '-';
+  switch (column.trim().toLowerCase()) {
+    case 'office':
+      return 'γραφείο';
+    case 'owner':
+      return 'υπάλληλος';
+    case 'model':
+      return 'μοντέλο';
+    case 'contract':
+      return 'συμβόλαιο';
+    case 'set_master':
+      return 'κύριος εξοπλισμός';
+    default:
+      return column;
+  }
+}
+
 Future<List<LampIssueResolutionDecision>?> showLampIssueManualReviewDialog({
   required BuildContext context,
   required LampIssueType issueType,
@@ -151,6 +169,7 @@ class _ManualReviewCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final selectedRequiresInput = selectedOption?.requiresTextInput ?? false;
+    final rowContextLines = _proposalRowContextLines(proposal);
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(12),
@@ -162,9 +181,9 @@ class _ManualReviewCard extends StatelessWidget {
               runSpacing: 6,
               children: [
                 Text('#${index + 1}', style: theme.textTheme.labelLarge),
-                Text('row: ${proposal.row ?? '-'}'),
-                Text('column: ${proposal.column ?? '-'}'),
-                Text('confidence: ${proposal.confidence}%'),
+                Text('Γραμμή: ${proposal.row ?? '-'}'),
+                Text('Πεδίο: ${_lampIssueColumnLabelEl(proposal.column)}'),
+                Text('Βεβαιότητα: ${proposal.confidence}%'),
               ],
             ),
             const SizedBox(height: 8),
@@ -172,37 +191,49 @@ class _ManualReviewCard extends StatelessWidget {
               SelectableText('Αρχική τιμή: ${proposal.originalValue}'),
             if (proposal.proposedMatch != null)
               SelectableText('Πρόταση: ${proposal.proposedMatch}'),
+            if (rowContextLines.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Text('Στοιχεία εγγραφής', style: theme.textTheme.labelLarge),
+              const SizedBox(height: 4),
+              for (final line in rowContextLines)
+                SelectableText(line, style: theme.textTheme.bodySmall),
+            ],
             const SizedBox(height: 8),
             SelectableText(proposal.notes, style: theme.textTheme.bodySmall),
             const Divider(height: 20),
-            DropdownButtonFormField<LampIssueResolutionOption?>(
-              initialValue: selectedOption,
-              isExpanded: true,
-              decoration: const InputDecoration(
-                labelText: 'Ενέργεια',
-                border: OutlineInputBorder(),
-                isDense: true,
-              ),
-              items: <DropdownMenuItem<LampIssueResolutionOption?>>[
-                const DropdownMenuItem<LampIssueResolutionOption?>(
-                  value: null,
-                  child: Text('Παράλειψη / παραμένει ανοικτό'),
-                ),
-                for (final option in proposal.options)
-                  DropdownMenuItem<LampIssueResolutionOption?>(
-                    value: option,
-                    child: Text(option.label),
-                  ),
-              ],
+            Text('Ενέργεια', style: theme.textTheme.labelLarge),
+            const SizedBox(height: 4),
+            RadioGroup<LampIssueResolutionOption?>(
+              groupValue: selectedOption,
               onChanged: onChanged,
-            ),
-            if (selectedOption?.description != null) ...[
-              const SizedBox(height: 8),
-              Text(
-                selectedOption!.description!,
-                style: theme.textTheme.bodySmall,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  RadioListTile<LampIssueResolutionOption?>(
+                    title: const Text('Παράλειψη / παραμένει ανοικτό'),
+                    value: null,
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    visualDensity: VisualDensity.compact,
+                  ),
+                  for (final option in proposal.options)
+                    RadioListTile<LampIssueResolutionOption?>(
+                      title: Text(_displayResolutionOptionLabel(option.label)),
+                      subtitle: option.description != null &&
+                              option.description!.trim().isNotEmpty
+                          ? Text(
+                              option.description!,
+                              style: theme.textTheme.bodySmall,
+                            )
+                          : null,
+                      value: option,
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      visualDensity: VisualDensity.compact,
+                    ),
+                ],
               ),
-            ],
+            ),
             if (selectedRequiresInput) ...[
               const SizedBox(height: 8),
               TextField(
@@ -219,4 +250,60 @@ class _ManualReviewCard extends StatelessWidget {
       ),
     );
   }
+}
+
+List<String> _proposalRowContextLines(LampIssueResolutionProposal proposal) {
+  final metadata = proposal.metadata;
+  String? text(String key) {
+    final value = metadata[key]?.toString().trim();
+    if (value == null || value.isEmpty || value == 'null') return null;
+    return value;
+  }
+
+  final lines = <String>[];
+  final code = text('rowContextCode');
+  final description = text('rowContextDescription');
+  if (code != null || description != null) {
+    lines.add('Εξοπλισμός: ${code ?? '-'} · ${description ?? '-'}');
+  }
+  final stateName = text('rowContextStateName');
+  if (stateName != null) {
+    lines.add('Κατάσταση: $stateName');
+  }
+  final assetNo = text('rowContextAssetNo');
+  final serialNo = text('rowContextSerialNo');
+  if (assetNo != null || serialNo != null) {
+    lines.add('Asset: ${assetNo ?? '-'} · Serial: ${serialNo ?? '-'}');
+  }
+  final officeId = text('rowContextOfficeId');
+  final officeLabel = text('rowContextOfficeLabel');
+  if (officeId != null || officeLabel != null) {
+    lines.add('Τμήμα/Γραφείο: ${officeId ?? '-'} · ${officeLabel ?? '-'}');
+  }
+  final ownerId = text('rowContextOwnerId');
+  final ownerLabel = text('rowContextOwnerLabel');
+  if (ownerId != null || ownerLabel != null) {
+    lines.add('Υπάλληλος: ${ownerId ?? '-'} · ${ownerLabel ?? '-'}');
+  }
+  final modelId = text('rowContextModelId');
+  final modelLabel = text('rowContextModelLabel');
+  if (modelId != null || modelLabel != null) {
+    lines.add('Μοντέλο: ${modelId ?? '-'} · ${modelLabel ?? '-'}');
+  }
+  final contractId = text('rowContextContractId');
+  final contractLabel = text('rowContextContractLabel');
+  if (contractId != null || contractLabel != null) {
+    lines.add('Συμβόλαιο: ${contractId ?? '-'} · ${contractLabel ?? '-'}');
+  }
+  return lines;
+}
+
+String _displayResolutionOptionLabel(String rawLabel) {
+  var label = rawLabel.trim();
+  label = label.replaceAll('owner', 'υπάλληλος');
+  label = label.replaceAll('last_name', 'επώνυμο');
+  label = label.replaceAll('first_name', 'μικρό όνομα');
+  label = label.replaceAll('Νέος υπάλληλος:', 'Νέος υπάλληλος:');
+  label = label.replaceAll('Αλλαγή υπάλληλος', 'Αλλαγή υπαλλήλου');
+  return label;
 }

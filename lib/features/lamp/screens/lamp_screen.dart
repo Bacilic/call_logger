@@ -9,14 +9,18 @@ import 'package:path/path.dart' as p;
 
 import '../../../core/providers/lamp_open_settings_intent_provider.dart';
 import '../../../core/database/old_database/lamp_database_provider.dart';
+import '../../../core/database/old_database/lamp_data_issue_type_labels.dart';
 import '../../../core/database/old_database/lamp_issue_resolution_service.dart';
 import '../../../core/database/old_database/lamp_old_db_validator.dart';
+import '../../../core/database/old_database/resolution_log_entry.dart';
 import '../../../core/database/old_database/lamp_settings_store.dart';
 import '../../../core/database/old_database/old_equipment_repository.dart';
 import '../../../core/database/old_database/old_excel_importer.dart';
 import '../../database/services/database_stats_service.dart';
 import '../widgets/lamp_db_tables_tab.dart';
 import '../widgets/lamp_issue_manual_review_dialog.dart';
+import '../widgets/lamp_resolution_progress_dialog.dart';
+import '../widgets/lamp_unresolved_resolution_dialog.dart';
 import '../widgets/lamp_result_card.dart';
 
 class LampScreen extends ConsumerStatefulWidget {
@@ -574,10 +578,30 @@ class _LampScreenState extends ConsumerState<LampScreen> {
     }
   }
 
-  String _issueTypeLabel(Map<String, Object?> issue) {
-    final raw = issue['issue_type']?.toString().trim();
-    if (raw == null || raw.isEmpty) return 'Χωρίς κατηγορία';
-    return raw;
+  String _issueCategoryDisplayLabel(String rawIssueType) {
+    final t = rawIssueType.trim();
+    if (t.isEmpty) return 'Χωρίς κατηγορία';
+    return lampDataIssueTypeDisplayLabel(t);
+  }
+
+  LampIssueType? _lampIssueTypeForRaw(String rawIssueType) {
+    final raw = rawIssueType.trim();
+    if (raw.isEmpty) return null;
+    for (final v in LampIssueType.values) {
+      if (v.issueType == raw) return v;
+    }
+    return null;
+  }
+
+  IconData _resolveIssueIcon(LampIssueType issueType) {
+    return switch (issueType) {
+      LampIssueType.nonNumericFk => Icons.link_outlined,
+      LampIssueType.unknownId => Icons.tag_outlined,
+      LampIssueType.duplicateAssetNo => Icons.badge_outlined,
+      LampIssueType.duplicateModelSerial => Icons.memory_outlined,
+      LampIssueType.setMasterSelfReference => Icons.link_off_outlined,
+      LampIssueType.setMasterCycle => Icons.account_tree_outlined,
+    };
   }
 
   String _issueField(Map<String, Object?> issue, String key) {
@@ -587,13 +611,118 @@ class _LampScreenState extends ConsumerState<LampScreen> {
     return text.isEmpty ? '-' : text;
   }
 
+  String _issueEntityTypeValue(Map<String, Object?> issue) {
+    final explicit = _issueField(issue, 'entity_type');
+    if (explicit != '-') return explicit;
+    final legacySheet = _issueField(issue, 'sheet').toLowerCase();
+    if (legacySheet == '-' || legacySheet.isEmpty) return 'equipment';
+    if (legacySheet == 'integrity_scan') return 'equipment';
+    return legacySheet;
+  }
+
+  String _issueOriginValue(Map<String, Object?> issue) {
+    final explicit = _issueField(issue, 'origin');
+    if (explicit != '-') return explicit;
+    final legacySheet = _issueField(issue, 'sheet').toLowerCase();
+    if (legacySheet == 'integrity_scan') return 'integrity_scan';
+    return 'manual';
+  }
+
+  String _issueEntityTypeDisplayLabel(String value) {
+    switch (value.trim().toLowerCase()) {
+      case 'equipment':
+        return 'Εξοπλισμός';
+      default:
+        return value;
+    }
+  }
+
+  String _issueOriginDisplayLabel(String value) {
+    switch (value.trim().toLowerCase()) {
+      case 'integrity_scan':
+        return 'Έλεγχος ακεραιότητας';
+      case 'manual':
+        return 'Χειροκίνητη καταχώρηση';
+      default:
+        return value;
+    }
+  }
+
   Map<String, List<Map<String, Object?>>> _groupedIssuesByType() {
     final grouped = <String, List<Map<String, Object?>>>{};
     for (final issue in _issues) {
-      final type = _issueTypeLabel(issue);
-      grouped.putIfAbsent(type, () => <Map<String, Object?>>[]).add(issue);
+      final raw = issue['issue_type']?.toString().trim() ?? '';
+      grouped.putIfAbsent(raw, () => <Map<String, Object?>>[]).add(issue);
     }
     return grouped;
+  }
+
+  /// Σειρά εμφάνισης/επίλυσης: κλειδιά αναφοράς → διπλότυπα → set_master.
+  int _issueResolutionPriority(String rawIssueType) {
+    final raw = rawIssueType.trim();
+    if (raw.isEmpty) return 10000;
+    const order = <String>[
+      'non_numeric_fk',
+      'unknown_id',
+      'duplicate_asset_no',
+      'duplicate_model_serial',
+      'set_master_self_reference',
+      'set_master_missing_target',
+      'set_master_cycle',
+    ];
+    final i = order.indexOf(raw);
+    return i >= 0 ? i : 999;
+  }
+
+  List<MapEntry<String, List<Map<String, Object?>>>>
+  _sortedIssueGroupEntries() {
+    final grouped = _groupedIssuesByType();
+    final entries = grouped.entries.toList();
+    entries.sort((a, b) {
+      final pa = _issueResolutionPriority(a.key);
+      final pb = _issueResolutionPriority(b.key);
+      if (pa != pb) return pa.compareTo(pb);
+      return a.key.compareTo(b.key);
+    });
+    return entries;
+  }
+
+  Future<void> _showIssueResolutionOrderInfo(BuildContext context) {
+    return showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Σειρά επίλυσης προβλημάτων'),
+        content: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 520),
+          child: SingleChildScrollView(
+            child: SelectableText(
+              'Μη αριθμητικό κλειδί αναφοράς και ασύμβατο αναγνωριστικό\n'
+              'Στόχος: έγκυρα κλειδιά αναφοράς προς γραφεία, κατόχους, συμβόλαια και '
+              'μοντέλα. Έτσι κάθε γραμμή εξοπλισμού αποκτά σαφή νόημα πριν '
+              'συγκρίνεις γραφεία, κατόχους ή διπλότυπα.\n\n'
+              'Διπλότυποι αριθμοί παγίου και διπλότυποι συνδυασμοί μοντέλου / σειριακού\n'
+              'Στόχος: ένας ρόλος ανά παγίο και ανά συνδυασμό (μοντέλο, σειριακός)· '
+              'συχνά συγχώνευση ή διαγραφή διπλών γραμμών. Κατά τη διαγραφή, οι '
+              'δείκτες κύριου εξοπλισμού αναδρομολογούνται προς την εγγραφή που '
+              'διατηρείται.\n\n'
+              'Κύριος εξοπλισμός που δείχνει στον ίδιο εξοπλισμό\n'
+              'Στόχος: αφαίρεση αυτοαναφορών (ο δείκτης κύριου εξοπλισμού δείχνει '
+              'στον ίδιο κωδικό εξοπλισμού).\n\n'
+              'Κύκλοι ιεραρχίας κύριου εξοπλισμού\n'
+              'Στόχος: σπάσιμο κύκλων στην ιεραρχία (συχνά με καθαρισμό του δείκτη '
+              'κύριου εξοπλισμού σε επιλεγμένες γραμμές).',
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Κλείσιμο'),
+          ),
+        ],
+      ),
+    );
   }
 
   int _issueCountFor(LampIssueType issueType) {
@@ -627,7 +756,8 @@ class _LampScreenState extends ConsumerState<LampScreen> {
       if (!mounted) return;
       if (proposals.isEmpty) {
         _showSnack(
-          'Δεν υπάρχουν ανοικτές προτάσεις για ${issueType.issueType}.',
+          'Δεν υπάρχουν ανοικτές προτάσεις για '
+          '${lampDataIssueTypeDisplayLabel(issueType.issueType)}.',
         );
         return;
       }
@@ -635,52 +765,51 @@ class _LampScreenState extends ConsumerState<LampScreen> {
       final proceed = await _askResolutionPreview(issueType, proposals);
       if (proceed != true || !mounted) return;
 
-      final autoDecisions = <LampIssueResolutionDecision>[
-        for (final proposal in proposals)
-          if (proposal.canApplyAutomatically)
-            LampIssueResolutionDecision(proposal: proposal),
-      ];
-      final manualProposals = proposals
-          .where(
-            (proposal) =>
-                proposal.proposedAction ==
-                LampIssueResolutionAction.manualReview,
-          )
-          .toList(growable: false);
-
-      final manualDecisions = manualProposals.isEmpty
-          ? const <LampIssueResolutionDecision>[]
-          : await showLampIssueManualReviewDialog(
-              context: context,
-              issueType: issueType,
-              proposals: manualProposals,
-            );
-      if (manualDecisions == null || !mounted) return;
-
-      final decisions = <LampIssueResolutionDecision>[
-        ...autoDecisions,
-        ...manualDecisions,
-      ];
-      if (decisions.isEmpty) {
-        _showSnack('Δεν επιλέχθηκε καμία ενέργεια για εφαρμογή.');
-        return;
-      }
-      if (_containsDestructiveResolution(decisions)) {
+      final mayRunDestructive = proposals.any(
+        (proposal) =>
+            _proposalDefaultActionIsDestructive(proposal) ||
+            _proposalHasDestructiveOption(proposal),
+      );
+      if (mayRunDestructive) {
         final destructiveOk = await _askDestructiveResolutionConfirmation();
         if (destructiveOk != true || !mounted) return;
       }
 
-      final apply = await _issueResolutionService.applyDecisions(
-        databasePath: path,
-        decisions: decisions,
+      final cancelToken = ResolutionCancelToken();
+      final logController = ResolutionLogController();
+      final apply = await showDialog<LampIssueResolutionApplyResult>(
+        context: context,
+        barrierDismissible: false,
+        builder: (dialogContext) => LampResolutionProgressDialog(
+          title: issueType.label,
+          logController: logController,
+          cancelToken: cancelToken,
+          apply: () => _executeIssueResolutionOrchestration(
+            dialogContext: dialogContext,
+            databasePath: path,
+            issueType: issueType,
+            proposals: proposals,
+            logController: logController,
+            cancelToken: cancelToken,
+          ),
+        ),
       );
       await _loadIssues();
       if (!mounted) return;
+      if (apply == null) {
+        _showSnack(
+          'Η επίλυση δεν επέστρεψε τελικό αποτέλεσμα. Δείτε την αναφορά για λεπτομέρειες.',
+          isError: true,
+          duration: const Duration(seconds: 8),
+        );
+        return;
+      }
       final errorSuffix = apply.errors.isEmpty
           ? ''
           : ' · Σφάλματα: ${apply.errors.length}';
       _showSnack(
-        'Επίλυση ${issueType.issueType}: εφαρμόστηκαν ${apply.totalChanged} ενέργειες '
+        'Επίλυση ${lampDataIssueTypeDisplayLabel(issueType.issueType)}: '
+        'εφαρμόστηκαν ${apply.totalChanged} ενέργειες '
         '(auto: ${apply.resolved}, manual: ${apply.manualApplied}, νέες: ${apply.created})$errorSuffix.',
         isError: apply.errors.isNotEmpty,
         duration: const Duration(seconds: 8),
@@ -695,16 +824,207 @@ class _LampScreenState extends ConsumerState<LampScreen> {
     }
   }
 
-  bool _containsDestructiveResolution(
-    List<LampIssueResolutionDecision> decisions,
+  bool _proposalDefaultActionIsDestructive(
+    LampIssueResolutionProposal proposal,
   ) {
-    for (final decision in decisions) {
-      final operation = decision.option?.metadata['operation']?.toString();
+    final operation = proposal.metadata['operation']?.toString();
+    return operation != null && operation.startsWith('delete_duplicate');
+  }
+
+  bool _proposalHasDestructiveOption(LampIssueResolutionProposal proposal) {
+    for (final option in proposal.options) {
+      final operation = option.metadata['operation']?.toString();
       if (operation != null && operation.startsWith('delete_duplicate')) {
         return true;
       }
     }
     return false;
+  }
+
+  LampIssueResolutionApplyResult _emptyApplyResult() {
+    return LampIssueResolutionApplyResult(
+      resolved: 0,
+      manualApplied: 0,
+      created: 0,
+      unresolved: 0,
+      errors: <String>[],
+    );
+  }
+
+  LampIssueResolutionApplyResult _singleUnresolvedApplyResult() {
+    return LampIssueResolutionApplyResult(
+      resolved: 0,
+      manualApplied: 0,
+      created: 0,
+      unresolved: 1,
+      errors: <String>[],
+    );
+  }
+
+  LampIssueResolutionApplyResult _mergeApplyResults(
+    LampIssueResolutionApplyResult a,
+    LampIssueResolutionApplyResult b,
+  ) {
+    return LampIssueResolutionApplyResult(
+      resolved: a.resolved + b.resolved,
+      manualApplied: a.manualApplied + b.manualApplied,
+      created: a.created + b.created,
+      unresolved: a.unresolved + b.unresolved,
+      errors: <String>[...a.errors, ...b.errors],
+    );
+  }
+
+  /// Σειριακή εκτέλεση ανά πρόταση: αυτόματα, χειροκίνητα και ανεπίλυτα με διάλογο.
+  Future<LampIssueResolutionApplyResult> _executeIssueResolutionOrchestration({
+    required BuildContext dialogContext,
+    required String databasePath,
+    required LampIssueType issueType,
+    required List<LampIssueResolutionProposal> proposals,
+    required ResolutionLogController logController,
+    required ResolutionCancelToken cancelToken,
+  }) async {
+    var merged = _emptyApplyResult();
+    var skipRemainingUnresolved = false;
+
+    void emit(ResolutionLogEntry entry) => logController.add(entry);
+
+    emit(
+      ResolutionLogEntry.info(
+        'Σειριακή εκτέλεση ${proposals.length} προτάσεων: αυτόματες διορθώσεις '
+        'όπου είναι διαθέσιμες και διάλογος χρήστη όπου απαιτείται απόφαση.',
+      ),
+    );
+
+    for (final proposal in proposals) {
+      if (cancelToken.isCancelled) {
+        emit(
+          ResolutionLogEntry.warning(
+            'Η διαδικασία σταμάτησε πριν ολοκληρωθεί η σειρά προτάσεων.',
+          ),
+        );
+        break;
+      }
+      if (!dialogContext.mounted) {
+        break;
+      }
+
+      if (proposal.canApplyAutomatically) {
+        final step = await _issueResolutionService.applySingleDecision(
+          databasePath: databasePath,
+          decision: LampIssueResolutionDecision(proposal: proposal),
+          onLog: emit,
+          cancelToken: cancelToken,
+        );
+        merged = _mergeApplyResults(merged, step);
+        continue;
+      }
+
+      if (proposal.proposedAction == LampIssueResolutionAction.manualReview) {
+        final manualDecisions = await showLampIssueManualReviewDialog(
+          context: dialogContext,
+          issueType: issueType,
+          proposals: <LampIssueResolutionProposal>[proposal],
+        );
+        if (!dialogContext.mounted) {
+          break;
+        }
+
+        if (manualDecisions == null) {
+          cancelToken.cancel();
+          emit(
+            ResolutionLogEntry.warning(
+              'Ακυρώθηκε το χειροκίνητο βήμα — διακόπτεται η επίλυση.',
+            ),
+          );
+          break;
+        }
+        if (manualDecisions.isEmpty) {
+          emit(
+            ResolutionLogEntry.info(
+              'Παραβλήθηκε η χειροκίνητη πρόταση (γραμμή ${proposal.row ?? '-'}).',
+            ),
+          );
+          continue;
+        }
+
+        for (final decision in manualDecisions) {
+          final step = await _issueResolutionService.applySingleDecision(
+            databasePath: databasePath,
+            decision: decision,
+            onLog: emit,
+            cancelToken: cancelToken,
+          );
+          merged = _mergeApplyResults(merged, step);
+        }
+        continue;
+      }
+
+      if (proposal.proposedAction == LampIssueResolutionAction.unresolved) {
+        var shouldRecordUnresolved = true;
+        if (!skipRemainingUnresolved) {
+          final outcome = await showLampUnresolvedResolutionDialog(
+            context: dialogContext,
+            proposal: proposal,
+          );
+          if (!dialogContext.mounted) {
+            break;
+          }
+          switch (outcome) {
+            case null:
+            case LampUnresolvedCancelAll():
+              cancelToken.cancel();
+              shouldRecordUnresolved = false;
+              emit(
+                ResolutionLogEntry.warning(
+                  'Ακυρώθηκε η διαδικασία κατά την επισκόπηση ανεπίλυτων προτάσεων.',
+                ),
+              );
+              break;
+            case LampUnresolvedSkipAll():
+              skipRemainingUnresolved = true;
+              emit(
+                ResolutionLogEntry.info(
+                  'Ο χρήστης επέλεξε μαζική παράλειψη για τις υπόλοιπες ανεπίλυτες προτάσεις.',
+                ),
+              );
+              emit(
+                ResolutionLogEntry.info(
+                  'Παραλείφθηκε ανεπίλυτη πρόταση στη γραμμή ${proposal.row ?? '-'} '
+                  '(στήλη ${proposal.column ?? '-'}).',
+                ),
+              );
+              break;
+            case LampUnresolvedSkipCurrent():
+              emit(
+                ResolutionLogEntry.info(
+                  'Παραλείφθηκε ανεπίλυτη πρόταση στη γραμμή ${proposal.row ?? '-'} '
+                  '(στήλη ${proposal.column ?? '-'}).',
+                ),
+              );
+              break;
+          }
+        } else {
+          emit(
+            ResolutionLogEntry.info(
+              'Μαζική παράλειψη ανεπίλυτης πρότασης στη γραμμή ${proposal.row ?? '-'} '
+              '(στήλη ${proposal.column ?? '-'}).',
+            ),
+          );
+        }
+        if (shouldRecordUnresolved) {
+          merged = _mergeApplyResults(merged, _singleUnresolvedApplyResult());
+        }
+      }
+    }
+
+    if (cancelToken.isCancelled) {
+      emit(
+        ResolutionLogEntry.warning(
+          'Παραλείφθηκαν τα υπόλοιπα βήματα λόγω ακύρωσης.',
+        ),
+      );
+    }
+    return merged;
   }
 
   Future<bool?> _askDestructiveResolutionConfirmation() {
@@ -713,9 +1033,10 @@ class _LampScreenState extends ConsumerState<LampScreen> {
       builder: (context) => AlertDialog(
         title: const Text('Επιβεβαίωση διαγραφής διπλοεγγραφών'),
         content: const Text(
-          'Έχετε επιλέξει ενέργεια που διαγράφει δευτερεύουσες εγγραφές equipment. '
-          'Πριν τη διαγραφή θα μεταφερθούν τυχόν παιδιά set_master στην κύρια εγγραφή, '
-          'αλλά η ενέργεια δεν έχει άμεση αναίρεση από την εφαρμογή. Θέλετε να συνεχίσετε;',
+          'Έχετε επιλέξει ενέργεια που διαγράφει δευτερεύουσες εγγραφές εξοπλισμού. '
+          'Πριν τη διαγραφή θα μεταφερθούν τυχόν παιδιά του δείκτη κύριου εξοπλισμού '
+          'στην κύρια εγγραφή, αλλά η ενέργεια δεν έχει άμεση αναίρεση από την εφαρμογή. '
+          'Θέλετε να συνεχίσετε;',
         ),
         actions: [
           TextButton(
@@ -729,6 +1050,25 @@ class _LampScreenState extends ConsumerState<LampScreen> {
         ],
       ),
     );
+  }
+
+  /// Ονόματα στηλών για προεπισκόπηση (οι τιμές στη βάση παραμένουν στα αγγλικά).
+  String _issueColumnDisplayForPreview(String? column) {
+    if (column == null || column.isEmpty) return '-';
+    switch (column.trim().toLowerCase()) {
+      case 'office':
+        return 'γραφείο';
+      case 'owner':
+        return 'υπάλληλος';
+      case 'model':
+        return 'μοντέλο';
+      case 'contract':
+        return 'συμβόλαιο';
+      case 'set_master':
+        return 'κύριος εξοπλισμός';
+      default:
+        return column;
+    }
   }
 
   Future<bool?> _askResolutionPreview(
@@ -749,12 +1089,13 @@ class _LampScreenState extends ConsumerState<LampScreen> {
     final unresolvedCount = proposals
         .where((p) => p.proposedAction == LampIssueResolutionAction.unresolved)
         .length;
+    final applicableCount = autoCount + createCount + manualCount;
     final preview = proposals
         .take(8)
         .map(
           (p) =>
-              '- row=${p.row ?? '-'} column=${p.column ?? '-'} · '
-              '${p.proposedAction.jsonValue} · ${p.proposedMatch ?? p.notes}',
+              '- γραμμή=${p.row ?? '-'} στήλη=${_issueColumnDisplayForPreview(p.column)} · '
+              '${p.proposedAction.labelEl} · ${p.proposedMatch ?? p.notes}',
         )
         .join('\n');
     return showDialog<bool>(
@@ -764,16 +1105,33 @@ class _LampScreenState extends ConsumerState<LampScreen> {
         content: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 680),
           child: SingleChildScrollView(
-            child: SelectableText(
-              'Βρέθηκαν ${proposals.length} προτάσεις.\n\n'
-              '- auto_fix: $autoCount\n'
-              '- create_new: $createCount\n'
-              '- manual_review: $manualCount\n'
-              '- unresolved: $unresolvedCount\n\n'
-              'Δείγμα:\n$preview'
-              '${proposals.length > 8 ? '\n...και ${proposals.length - 8} ακόμα.' : ''}\n\n'
-              'Οι αυτόματες και create_new ενέργειες θα εφαρμοστούν μόνο μετά από αυτή την επιβεβαίωση. '
-              'Οι manual_review περιπτώσεις θα ανοίξουν σε επόμενο παράθυρο επιλογών.',
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SelectableText(
+                  'Βρέθηκαν ${proposals.length} προτάσεις.\n\n'
+                  '- Αυτόματη διόρθωση: $autoCount\n'
+                  '- Νέα εγγραφή: $createCount\n'
+                  '- Χειροκίνητη επισκόπηση: $manualCount\n'
+                  '- Ανεπίλυτο: $unresolvedCount\n\n'
+                  'Δείγμα:\n$preview'
+                  '${proposals.length > 8 ? '\n...και ${proposals.length - 8} ακόμα.' : ''}\n\n'
+                  'Οι ενέργειες αυτόματης διόρθωσης και νέας εγγραφής θα εφαρμοστούν μόνο μετά '
+                  'από αυτή την επιβεβαίωση. Οι περιπτώσεις χειροκίνητης ή ανεπίλυτης '
+                  'επισκόπησης θα ανοίξουν σειριακά σε επόμενα παράθυρα επιλογών.',
+                ),
+                if (applicableCount == 0) ...[
+                  const SizedBox(height: 16),
+                  Text(
+                    'Οι προτάσεις αυτής της ομάδας είναι μόνο «ανεπίλυτο». Η «Συνέχεια» '
+                    'θα ανοίξει τον οδηγό επίλυσης για επισκόπηση, χωρίς αυτόματες αλλαγές.',
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.error,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ],
             ),
           ),
         ),
@@ -792,7 +1150,6 @@ class _LampScreenState extends ConsumerState<LampScreen> {
   }
 
   String _buildIssuesClipboardText() {
-    final grouped = _groupedIssuesByType();
     final lines = <String>[
       '# LAMP ETL Issues',
       'Σύνολο προβλημάτων: ${_issues.length}',
@@ -801,11 +1158,17 @@ class _LampScreenState extends ConsumerState<LampScreen> {
           'βήματα επιδιόρθωσης και προτεραιότητες.',
       '',
     ];
-    for (final entry in grouped.entries) {
-      lines.add('## ${entry.key} (${entry.value.length})');
+    for (final entry in _sortedIssueGroupEntries()) {
+      lines.add(
+        '## ${_issueCategoryDisplayLabel(entry.key)} (${entry.value.length})',
+      );
       for (final issue in entry.value) {
+        final entityType = _issueEntityTypeDisplayLabel(
+          _issueEntityTypeValue(issue),
+        );
+        final origin = _issueOriginDisplayLabel(_issueOriginValue(issue));
         lines.add(
-          '- Sheet: ${_issueField(issue, 'sheet')} | Row: ${_issueField(issue, 'row_number')} | '
+          '- Entity type: $entityType | Origin: $origin | Row: ${_issueField(issue, 'row_number')} | '
           'Column: ${_issueField(issue, 'column_name')}',
         );
         lines.add('  Value: ${_issueField(issue, 'raw_value')}');
@@ -836,6 +1199,7 @@ class _LampScreenState extends ConsumerState<LampScreen> {
     final cancellationToken = OldIntegrityCancellationToken();
     final progressNotifier = ValueNotifier<OldIntegrityScanProgress?>(null);
     setState(() => _integrityChecking = true);
+    _lampSettingsDialogSetState?.call(() {});
     Future<void>? progressDialog;
     var progressDialogOpen = false;
 
@@ -875,20 +1239,33 @@ class _LampScreenState extends ConsumerState<LampScreen> {
       if (!mounted) return;
       await closeProgressDialog();
       await _saveIntegrityStepDurations(scan);
-      final persist = await _askPersistIntegrityIssues(scan);
+      final newIssues = await _repository.filterToNewDataIssuesOnly(
+        path,
+        scan.issues,
+      );
+      final reportScan = OldIntegrityScanResult(
+        issues: newIssues,
+        steps: scan.steps,
+        cancelled: scan.cancelled,
+        stoppedAfterError: scan.stoppedAfterError,
+      );
+      final persist = await _askPersistIntegrityIssues(
+        reportScan: reportScan,
+        rawTotalIssueCount: scan.issues.length,
+      );
       if (persist != true) {
         final suffix = scan.isPartial ? ' (μερική αναφορά)' : '';
         _showSnack(
-          'Ο έλεγχος ολοκληρώθηκε χωρίς καταχώρηση στο data_issues$suffix.',
+          'Ο έλεγχος ολοκληρώθηκε χωρίς καταχώρηση στον πίνακα ασυμφωνίας δεδομένων$suffix.',
         );
         return;
       }
-      final inserted = await _repository.insertDataIssues(path, scan.issues);
+      final inserted = await _repository.insertDataIssues(path, newIssues);
       await _loadIssues();
       if (!mounted) return;
       final suffix = scan.isPartial ? ' από μερικό έλεγχο' : '';
       _showSnack(
-        'Καταχωρήθηκαν $inserted νέα προβλήματα$suffix στο data_issues.',
+        'Καταχωρήθηκαν $inserted νέα προβλήματα$suffix στον πίνακα ασυμφωνίας δεδομένων.',
       );
     } catch (e) {
       if (!mounted) return;
@@ -899,6 +1276,7 @@ class _LampScreenState extends ConsumerState<LampScreen> {
       if (mounted) {
         setState(() => _integrityChecking = false);
       }
+      _lampSettingsDialogSetState?.call(() {});
     }
   }
 
@@ -951,39 +1329,88 @@ class _LampScreenState extends ConsumerState<LampScreen> {
     await _settings.updateIntegrityStepDurationsMs(completedDurations);
   }
 
-  Future<bool?> _askPersistIntegrityIssues(OldIntegrityScanResult scan) {
-    final breakdown = scan.countByType.entries
-        .map((e) => '- ${e.key}: ${e.value}')
+  Future<bool?> _askPersistIntegrityIssues({
+    required OldIntegrityScanResult reportScan,
+    required int rawTotalIssueCount,
+  }) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final breakdown = reportScan.countByType.entries
+        .map((e) => '- ${lampDataIssueTypeDisplayLabel(e.key)}: ${e.value}')
         .join('\n');
-    final stepReport = scan.steps.isEmpty
+    final stepReport = reportScan.steps.isEmpty
         ? ''
-        : '\n\nΒήματα:\n${scan.steps.map(_integrityStepReportLine).join('\n')}';
-    final partialPrefix = scan.cancelled
-        ? 'Ο έλεγχος ακυρώθηκε από τον χρήστη. Εμφανίζονται ευρήματα από ${scan.completedSteps} από ${scan.totalSteps} βήματα.\n\n'
-        : scan.stoppedAfterError
+        : '\n\nΒήματα:\n${reportScan.steps.map(_integrityStepReportLine).join('\n')}';
+    final partialPrefix = reportScan.cancelled
+        ? 'Ο έλεγχος ακυρώθηκε από τον χρήστη. Εμφανίζονται ευρήματα από ${reportScan.completedSteps} από ${reportScan.totalSteps} βήματα.\n\n'
+        : reportScan.stoppedAfterError
         ? 'Ο έλεγχος σταμάτησε μετά από σφάλμα. Εμφανίζονται τα ευρήματα που συλλέχθηκαν μέχρι εκείνο το σημείο.\n\n'
         : '';
-    final reportText = scan.totalCount == 0
-        ? '$partialPrefixΔεν εντοπίστηκαν προβληματικές εγγραφές με βάση τους κανόνες.'
-        : '$partialPrefixΕντοπίστηκαν ${scan.totalCount} προβλήματα σε ${scan.countByType.length} κατηγορίες.\n\n$breakdown';
+
+    final rawFmt = DatabaseStatsService.formatIntegerEl(rawTotalIssueCount);
+
     return showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         title: const Text('Αναφορά ελέγχου προβλημάτων'),
         content: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 560),
-          child: SelectableText('$reportText$stepReport'),
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (partialPrefix.isNotEmpty)
+                  SelectableText(
+                    partialPrefix,
+                    style: theme.textTheme.bodyMedium,
+                  ),
+                if (reportScan.totalCount == 0) ...[
+                  SelectableText(
+                    'Δεν εντοπίστηκαν νέα προβλήματα.',
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      color: const Color(0xFF2E7D32),
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  if (rawTotalIssueCount > 0) ...[
+                    const SizedBox(height: 10),
+                    SelectableText(
+                      'Ο έλεγχος επανέλεγξε $rawFmt ευρήματα συνολικά· όλα είναι '
+                      'ήδη καταγεγραμμένα στον πίνακα ασυμφωνίας δεδομένων.',
+                      style: theme.textTheme.bodyMedium,
+                    ),
+                  ],
+                ] else ...[
+                  SelectableText(
+                    'Εντοπίστηκαν ${reportScan.totalCount} νέα προβλήματα σε '
+                    '${reportScan.countByType.length} κατηγορίες.',
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      color: scheme.error,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  SelectableText(breakdown, style: theme.textTheme.bodyMedium),
+                ],
+                if (stepReport.isNotEmpty)
+                  SelectableText(
+                    stepReport,
+                    style: theme.textTheme.bodySmall,
+                  ),
+              ],
+            ),
+          ),
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
+            onPressed: () => Navigator.of(dialogContext).pop(false),
             child: const Text('Μόνο αναφορά'),
           ),
           FilledButton(
-            onPressed: scan.issues.isEmpty
+            onPressed: reportScan.issues.isEmpty
                 ? null
-                : () => Navigator.of(context).pop(true),
-            child: const Text('Καταχώρηση στο data_issues'),
+                : () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Καταχώρηση στον πίνακα ασυμφωνίας δεδομένων'),
           ),
         ],
       ),
@@ -1016,20 +1443,6 @@ class _LampScreenState extends ConsumerState<LampScreen> {
       );
     }
     final effectiveFields = Map<String, Object?>.from(updatedFields);
-    if (sectionType == InfoSectionType.owner &&
-        effectiveFields.containsKey('owner_office')) {
-      final ok = await _resolveOwnerOfficeChange(
-        ownerId: id,
-        newOffice: _toInt(effectiveFields['owner_office']),
-        updatedFields: effectiveFields,
-      );
-      if (!ok) {
-        return const EquipmentSectionSaveResult(
-          success: false,
-          message: 'Η αλλαγή γραφείου ακυρώθηκε.',
-        );
-      }
-    }
     final result = await _repository.updateSection(
       databasePath: path,
       id: id,
@@ -1042,118 +1455,6 @@ class _LampScreenState extends ConsumerState<LampScreen> {
     return EquipmentSectionSaveResult(
       success: result.success,
       message: result.message,
-    );
-  }
-
-  Future<bool> _resolveOwnerOfficeChange({
-    required int ownerId,
-    required int? newOffice,
-    required Map<String, Object?> updatedFields,
-  }) async {
-    final path = _readDbController.text.trim();
-    final preview = await _repository.previewOwnerOfficeChange(
-      databasePath: path,
-      ownerId: ownerId,
-      newOffice: newOffice,
-    );
-    if (!mounted) return false;
-
-    if (!updatedFields.containsKey('owner_phones')) {
-      final phoneChoice = await _askOwnerPhonePolicy(preview.newOfficePhones);
-      if (phoneChoice == null) return false;
-      updatedFields['owner_phones'] = phoneChoice;
-    }
-
-    if (preview.affectedEquipment.isEmpty) return true;
-    final action = await _askOwnerOfficeEquipmentAction(
-      preview.affectedEquipment,
-    );
-    if (action == null) return false;
-    updatedFields[oldOwnerOfficeActionField] = action;
-    return true;
-  }
-
-  Future<String?> _askOwnerPhonePolicy(String? newOfficePhones) async {
-    return showDialog<String?>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Τηλέφωνο ιδιοκτήτη'),
-        content: Text(
-          newOfficePhones == null
-              ? 'Το τηλέφωνο του ιδιοκτήτη θα μηδενιστεί μετά την αλλαγή γραφείου.'
-              : 'Το τηλέφωνο του ιδιοκτήτη θα μηδενιστεί. Θέλετε να αντιγραφεί το τηλέφωνο του νέου γραφείου ($newOfficePhones);',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(null),
-            child: const Text('Άκυρο'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(''),
-            child: const Text('Μηδενισμός'),
-          ),
-          if (newOfficePhones != null)
-            FilledButton(
-              onPressed: () => Navigator.of(context).pop(newOfficePhones),
-              child: const Text('Αντιγραφή'),
-            ),
-        ],
-      ),
-    );
-  }
-
-  Future<String?> _askOwnerOfficeEquipmentAction(
-    List<Map<String, Object?>> affectedEquipment,
-  ) async {
-    final count = affectedEquipment.length;
-    final preview = affectedEquipment
-        .take(8)
-        .map((row) {
-          final code = row['code']?.toString() ?? '—';
-          final description = row['description']?.toString().trim();
-          return description == null || description.isEmpty
-              ? code
-              : '$code · $description';
-        })
-        .join('\n');
-    return showDialog<String?>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Εξοπλισμός κατόχου'),
-        content: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 520),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Η αλλαγή γραφείου επηρεάζει $count ${count == 1 ? 'τεμάχιο' : 'τεμάχια'} εξοπλισμού.',
-              ),
-              const SizedBox(height: 12),
-              SelectableText(preview),
-              if (affectedEquipment.length > 8)
-                Text('...και ${affectedEquipment.length - 8} ακόμα.'),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(null),
-            child: const Text('Άκυρο'),
-          ),
-          TextButton(
-            onPressed: () =>
-                Navigator.of(context).pop(oldOwnerOfficeActionDetachEquipment),
-            child: const Text('Αποσύνδεση κατόχου'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(
-              context,
-            ).pop(oldOwnerOfficeActionTransferEquipment),
-            child: const Text('Μεταφορά εξοπλισμού'),
-          ),
-        ],
-      ),
     );
   }
 
@@ -1229,6 +1530,30 @@ class _LampScreenState extends ConsumerState<LampScreen> {
                     const SizedBox(height: 4),
                     Text(
                       'Μπορεί να δείχνει και σε άλλο αντίγραφο .db (δοκιμές).',
+                      style: Theme.of(context).textTheme.labelSmall,
+                    ),
+                    const SizedBox(height: 12),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: FilledButton.tonalIcon(
+                        onPressed: (_importing || _integrityChecking)
+                            ? null
+                            : () async {
+                                await _runIntegrityCheck();
+                                _lampSettingsDialogSetState?.call(() {});
+                              },
+                        icon: _integrityChecking
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : const Icon(Icons.rule_folder_outlined),
+                        label: const Text('Έλεγχος Προβλημάτων'),
+                      ),
+                    ),
+                    Text(
+                      'Ίδιος έλεγχος με την καρτέλα «Προβλήματα ETL» — χρήσιμο όταν η καρτέλα δεν εμφανίζεται ακόμα.',
                       style: Theme.of(context).textTheme.labelSmall,
                     ),
                     const SizedBox(height: 8),
@@ -1354,6 +1679,8 @@ class _LampScreenState extends ConsumerState<LampScreen> {
                       'lamp-tables-${_readDbController.text.trim()}',
                     ),
                     databasePath: _readDbController.text.trim(),
+                    repository: _repository,
+                    onAfterDataIssuesPurge: _loadIssues,
                   ),
               ],
             ),
@@ -1488,8 +1815,7 @@ class _LampScreenState extends ConsumerState<LampScreen> {
   }
 
   Widget _issuesTab(BuildContext context) {
-    final grouped = _groupedIssuesByType();
-    final groups = grouped.entries.toList(growable: false);
+    final groups = _sortedIssueGroupEntries();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -1510,41 +1836,26 @@ class _LampScreenState extends ConsumerState<LampScreen> {
                 icon: const Icon(Icons.copy_all_outlined),
                 label: const Text('Αντιγραφή όλων για ΤΝ'),
               ),
-              FilledButton.icon(
-                onPressed: _integrityChecking ? null : _runIntegrityCheck,
-                icon: _integrityChecking
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.rule_folder_outlined),
-                label: const Text('Έλεγχος για προβλήματα'),
-              ),
-              _resolveIssueButton(
-                LampIssueType.nonNumericFk,
-                Icons.link_outlined,
-              ),
-              _resolveIssueButton(LampIssueType.unknownId, Icons.tag_outlined),
-              _resolveIssueButton(
-                LampIssueType.duplicateAssetNo,
-                Icons.badge_outlined,
-              ),
-              _resolveIssueButton(
-                LampIssueType.duplicateModelSerial,
-                Icons.memory_outlined,
-              ),
-              _resolveIssueButton(
-                LampIssueType.ownerOfficeMismatch,
-                Icons.person_pin_circle_outlined,
-              ),
-              _resolveIssueButton(
-                LampIssueType.setMasterSelfReference,
-                Icons.link_off_outlined,
-              ),
-              _resolveIssueButton(
-                LampIssueType.setMasterCycle,
-                Icons.account_tree_outlined,
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  FilledButton.icon(
+                    onPressed: _integrityChecking ? null : _runIntegrityCheck,
+                    icon: _integrityChecking
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.rule_folder_outlined),
+                    label: const Text('Έλεγχος για προβλήματα'),
+                  ),
+                  IconButton(
+                    tooltip: 'Σειρά επίλυσης προβλημάτων',
+                    onPressed: () => _showIssueResolutionOrderInfo(context),
+                    icon: const Icon(Icons.info_outline),
+                  ),
+                ],
               ),
             ],
           ),
@@ -1557,29 +1868,72 @@ class _LampScreenState extends ConsumerState<LampScreen> {
             separatorBuilder: (context, index) => const SizedBox(height: 12),
             itemBuilder: (context, index) {
               final group = groups[index];
-              final type = group.key;
+              final rawIssueType = group.key;
               final issues = group.value;
+              final categoryLabel = _issueCategoryDisplayLabel(rawIssueType);
+              final lampIssueType = _lampIssueTypeForRaw(rawIssueType);
               return Card(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    ListTile(
-                      leading: const Icon(Icons.category_outlined),
-                      title: Text(type),
-                      trailing: Text(
+                clipBehavior: Clip.antiAlias,
+                child: ExpansionTile(
+                  leading: const Icon(Icons.category_outlined),
+                  title: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          categoryLabel,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
                         '${issues.length}',
                         style: Theme.of(context).textTheme.titleMedium,
                       ),
-                    ),
+                      if (lampIssueType != null) ...[
+                        const SizedBox(width: 4),
+                        IconButton(
+                          tooltip: '${lampIssueType.label} (${issues.length})',
+                          visualDensity: VisualDensity.compact,
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(
+                            minWidth: 36,
+                            minHeight: 36,
+                          ),
+                          onPressed: _canResolveIssueType(lampIssueType)
+                              ? () => _runIssueResolution(lampIssueType)
+                              : null,
+                          icon: _resolvingIssueType == lampIssueType
+                              ? const SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : Icon(_resolveIssueIcon(lampIssueType)),
+                        ),
+                      ],
+                    ],
+                  ),
+                  children: [
                     const Divider(height: 1),
                     ...List<Widget>.generate(issues.length, (issueIndex) {
                       final issue = issues[issueIndex];
+                      final entityType = _issueEntityTypeDisplayLabel(
+                        _issueEntityTypeValue(issue),
+                      );
+                      final origin = _issueOriginDisplayLabel(
+                        _issueOriginValue(issue),
+                      );
                       return Column(
                         children: [
                           ListTile(
                             leading: const Icon(Icons.warning_amber),
                             title: Text(
-                              'Φύλλο: ${_issueField(issue, 'sheet')} | '
+                              'Οντότητα: $entityType | '
+                              'Προέλευση: $origin | '
                               'Γραμμή: ${_issueField(issue, 'row_number')}',
                             ),
                             subtitle: Text(
@@ -1600,24 +1954,6 @@ class _LampScreenState extends ConsumerState<LampScreen> {
           ),
         ),
       ],
-    );
-  }
-
-  Widget _resolveIssueButton(LampIssueType issueType, IconData icon) {
-    final count = _issueCountFor(issueType);
-    final resolving = _resolvingIssueType == issueType;
-    return OutlinedButton.icon(
-      onPressed: _canResolveIssueType(issueType)
-          ? () => _runIssueResolution(issueType)
-          : null,
-      icon: resolving
-          ? const SizedBox(
-              width: 16,
-              height: 16,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            )
-          : Icon(icon),
-      label: Text('${issueType.label} ($count)'),
     );
   }
 
@@ -1847,6 +2183,7 @@ class _IntegrityProgressDialogState extends State<_IntegrityProgressDialog> {
       OldIntegrityStepStatus.cancelled => 'Ακυρώθηκε',
     };
   }
+
 }
 
 String _formatIntegrityDuration(Duration duration) {
@@ -1855,13 +2192,6 @@ String _formatIntegrityDuration(Duration duration) {
   final minutes = totalSeconds ~/ 60;
   final seconds = totalSeconds % 60;
   return '${minutes}m ${seconds.toString().padLeft(2, '0')}s';
-}
-
-int? _toInt(Object? value) {
-  if (value == null) return null;
-  if (value is int) return value;
-  if (value is num) return value.toInt();
-  return int.tryParse(value.toString().trim());
 }
 
 extension on InfoSectionType {

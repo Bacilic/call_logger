@@ -130,6 +130,8 @@ const List<String> oldDatabaseIndexStatements = <String>[
 ];
 
 const List<String> oldDatabaseIntegrityStatements = <String>[
+  'DROP TRIGGER IF EXISTS trg_equipment_owner_office_match_insert',
+  'DROP TRIGGER IF EXISTS trg_equipment_owner_office_match_update',
   '''
   CREATE UNIQUE INDEX IF NOT EXISTS ux_equipment_asset_no_clean
   ON equipment(asset_no)
@@ -139,6 +141,34 @@ const List<String> oldDatabaseIntegrityStatements = <String>[
   CREATE UNIQUE INDEX IF NOT EXISTS ux_equipment_model_serial_no_clean
   ON equipment(model, serial_no)
   WHERE model IS NOT NULL AND serial_no IS NOT NULL AND TRIM(serial_no) <> ''
+  ''',
+  '''
+  CREATE UNIQUE INDEX IF NOT EXISTS ux_owners_identity_key_clean
+  ON owners(
+    trim(
+      replace(replace(replace(
+        replace(replace(replace(replace(replace(replace(replace(replace(
+          replace(replace(
+            lower(
+              trim(COALESCE(first_name, '')) || ' ' || trim(COALESCE(last_name, ''))
+            ),
+            '_', ' '
+          ), 'ς', 'σ'),
+          'ά', 'α'),
+          'έ', 'ε'),
+          'ή', 'η'),
+          'ί', 'ι'),
+          'ϊ', 'ι'),
+          'ΐ', 'ι'),
+          'ό', 'ο'),
+          'ύ', 'υ'),
+          'ϋ', 'υ'),
+          'ΰ', 'υ'),
+          'ώ', 'ω'),
+        '  ', ' '), '  ', ' '), '  ', ' ')
+    )
+  )
+  WHERE TRIM(COALESCE(last_name, '') || COALESCE(first_name, '')) <> ''
   ''',
   '''
   CREATE TRIGGER IF NOT EXISTS trg_equipment_set_master_no_self_insert
@@ -192,34 +222,6 @@ const List<String> oldDatabaseIntegrityStatements = <String>[
       )
       SELECT 1 FROM chain WHERE code = NEW.code
     );
-  END
-  ''',
-  '''
-  CREATE TRIGGER IF NOT EXISTS trg_equipment_owner_office_match_insert
-  BEFORE INSERT ON equipment
-  WHEN NEW.owner IS NOT NULL
-    AND EXISTS (
-      SELECT 1
-      FROM owners o
-      WHERE o.owner = NEW.owner
-        AND (o.office IS NOT NEW.office)
-    )
-  BEGIN
-    SELECT RAISE(ABORT, 'Το γραφείο του εξοπλισμού πρέπει να ταιριάζει με το γραφείο του κατόχου.');
-  END
-  ''',
-  '''
-  CREATE TRIGGER IF NOT EXISTS trg_equipment_owner_office_match_update
-  BEFORE UPDATE OF owner, office ON equipment
-  WHEN NEW.owner IS NOT NULL
-    AND EXISTS (
-      SELECT 1
-      FROM owners o
-      WHERE o.owner = NEW.owner
-        AND (o.office IS NOT NEW.office)
-    )
-  BEGIN
-    SELECT RAISE(ABORT, 'Το γραφείο του εξοπλισμού πρέπει να ταιριάζει με το γραφείο του κατόχου.');
   END
   ''',
   '''
