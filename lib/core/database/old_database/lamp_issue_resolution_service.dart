@@ -178,6 +178,17 @@ class LampIssueResolutionService {
 
   final LampDatabaseProvider _databaseProvider;
 
+  /// Κοινή βαθμολόγηση ομοιότητας που επαναχρησιμοποιείται σε flows migration.
+  int similarityConfidenceScore(String source, String candidate) {
+    final a = _normalizeReferenceText(source);
+    final b = _normalizeReferenceText(candidate);
+    if (a.isEmpty || b.isEmpty) return 0;
+    if (a == b) return 100;
+    if (a.contains(b) || b.contains(a)) return 72;
+    final distance = _levenshtein(a, b);
+    return (100 - (distance * 20)).clamp(20, 95);
+  }
+
   Future<List<LampIssueResolutionProposal>> analyzeIssues({
     required String databasePath,
     required LampIssueType issueType,
@@ -415,7 +426,8 @@ class LampIssueResolutionService {
     };
     final ownerLabelById = <int, String>{
       for (final row in owners)
-        if (_toInt(row['owner']) != null) _toInt(row['owner'])!: _ownerLabel(row),
+        if (_toInt(row['owner']) != null)
+          _toInt(row['owner'])!: _ownerLabel(row),
     };
     final modelLabelById = <int, String>{
       for (final row in models)
@@ -457,8 +469,7 @@ class LampIssueResolutionService {
           base(
             action: LampIssueResolutionAction.unresolved,
             confidence: 0,
-            notes:
-                'Αποτυχία επιλεξιμότητας για επίλυση FK. $details',
+            notes: 'Αποτυχία επιλεξιμότητας για επίλυση FK. $details',
             metadata: <String, Object?>{
               'diagnosticType': 'fk_resolution_eligibility',
               'diagnosticEntityType': entityType ?? '(κενό)',
@@ -495,7 +506,8 @@ class LampIssueResolutionService {
           base(
             action: LampIssueResolutionAction.unresolved,
             confidence: 0,
-            notes: 'Αποτυχία επιλεξιμότητας για επίλυση FK. ${reasons.join(' ')}',
+            notes:
+                'Αποτυχία επιλεξιμότητας για επίλυση FK. ${reasons.join(' ')}',
             metadata: <String, Object?>{
               'diagnosticType': 'fk_resolution_unsupported_column',
               'diagnosticEntityType': entityType ?? '(κενό)',
@@ -528,6 +540,7 @@ class LampIssueResolutionService {
           contractLabelById: contractLabelById,
         );
       }
+
       if (issueType == LampIssueType.unknownId) {
         final unknownProposal = _resolveUnknownIdReference(
           issue: issue,
@@ -752,7 +765,9 @@ class LampIssueResolutionService {
       'rowContextSerialNo': serialNo,
       'rowContextStateName': stateName,
       'rowContextOfficeId': officeId,
-      'rowContextOfficeLabel': officeId == null ? null : officeLabelById[officeId],
+      'rowContextOfficeLabel': officeId == null
+          ? null
+          : officeLabelById[officeId],
       'rowContextOwnerId': ownerId,
       'rowContextOwnerLabel': ownerId == null ? null : ownerLabelById[ownerId],
       'rowContextModelId': modelId,
@@ -867,7 +882,9 @@ class LampIssueResolutionService {
                   ) >
                   0) {
             score += 20;
-            reasons.add('Ο ιδιοκτήτης εμφανίζεται σε εξοπλισμό του ίδιου μοντέλου.');
+            reasons.add(
+              'Ο ιδιοκτήτης εμφανίζεται σε εξοπλισμό του ίδιου μοντέλου.',
+            );
           }
           break;
         case 'contract':
@@ -881,7 +898,9 @@ class LampIssueResolutionService {
                   ) >
                   0) {
             score += 55;
-            reasons.add('Το συμβόλαιο χρησιμοποιείται σε εξοπλισμό του ίδιου μοντέλου.');
+            reasons.add(
+              'Το συμβόλαιο χρησιμοποιείται σε εξοπλισμό του ίδιου μοντέλου.',
+            );
           }
           if (equipmentOffice != null &&
               _coUsageCount(
@@ -893,7 +912,9 @@ class LampIssueResolutionService {
                   ) >
                   0) {
             score += 25;
-            reasons.add('Το συμβόλαιο χρησιμοποιείται στο ίδιο γραφείο εξοπλισμού.');
+            reasons.add(
+              'Το συμβόλαιο χρησιμοποιείται στο ίδιο γραφείο εξοπλισμού.',
+            );
           }
           break;
         case 'office':
@@ -916,7 +937,9 @@ class LampIssueResolutionService {
                   ) >
                   0) {
             score += 20;
-            reasons.add('Το γραφείο εμφανίζεται με ίδιο συμβόλαιο σε άλλες εγγραφές.');
+            reasons.add(
+              'Το γραφείο εμφανίζεται με ίδιο συμβόλαιο σε άλλες εγγραφές.',
+            );
           }
           break;
         case 'model':
@@ -930,7 +953,9 @@ class LampIssueResolutionService {
                   ) >
                   0) {
             score += 55;
-            reasons.add('Το μοντέλο χρησιμοποιείται σε εξοπλισμό του ίδιου συμβολαίου.');
+            reasons.add(
+              'Το μοντέλο χρησιμοποιείται σε εξοπλισμό του ίδιου συμβολαίου.',
+            );
           }
           if (equipmentOffice != null &&
               _coUsageCount(
@@ -942,7 +967,9 @@ class LampIssueResolutionService {
                   ) >
                   0) {
             score += 20;
-            reasons.add('Το μοντέλο χρησιμοποιείται στο ίδιο γραφείο εξοπλισμού.');
+            reasons.add(
+              'Το μοντέλο χρησιμοποιείται στο ίδιο γραφείο εξοπλισμού.',
+            );
           }
           break;
       }
@@ -961,10 +988,10 @@ class LampIssueResolutionService {
       }
 
       final finalLabel = column == 'contract'
-          ? _contractDisplayLabel(contractDetailsById[ref.id] ?? _ContractDetailRow(
-              id: ref.id,
-              contractName: ref.label,
-            ))
+          ? _contractDisplayLabel(
+              contractDetailsById[ref.id] ??
+                  _ContractDetailRow(id: ref.id, contractName: ref.label),
+            )
           : ref.label;
       candidates.add(
         _UnknownIdCandidate(
@@ -1077,7 +1104,10 @@ class LampIssueResolutionService {
       details.organizationName,
     );
     if (preferred != null) return preferred;
-    return details.officeName ?? details.departmentName ?? details.organizationName ?? '';
+    return details.officeName ??
+        details.departmentName ??
+        details.organizationName ??
+        '';
   }
 
   String _modelDisplayLabel(_ModelDetailRow details) {
@@ -1222,10 +1252,7 @@ class LampIssueResolutionService {
               action: LampIssueResolutionAction.autoFix,
               proposedId: ownerId,
               proposedMatch: _ownerLabel(owner),
-              metadata: <String, Object?>{
-                ...metadata,
-                'proposedId': ownerId,
-              },
+              metadata: <String, Object?>{...metadata, 'proposedId': ownerId},
             ),
           );
         }
@@ -2212,9 +2239,7 @@ class LampIssueResolutionService {
   }
 
   List<String> _ownerOriginalParts(String original) {
-    final cleaned = original
-        .replaceAll(RegExp(r'[-/()\\]+'), ' ')
-        .trim();
+    final cleaned = original.replaceAll(RegExp(r'[-/()\\]+'), ' ').trim();
     if (cleaned.isEmpty) return const <String>[];
     return cleaned
         .split(RegExp(r'\s+'))

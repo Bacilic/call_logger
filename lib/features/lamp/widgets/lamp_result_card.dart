@@ -11,29 +11,26 @@ const _kDesktopBreakpoint = 1200.0;
 const _kTabletBreakpoint = 800.0;
 const _kFallbackMinWidth = 360.0;
 
-typedef SaveEquipmentSection = Future<EquipmentSectionSaveResult> Function({
-  required int id,
-  required InfoSectionType sectionType,
-  required Map<String, Object?> updatedFields,
-});
+typedef SaveEquipmentSection =
+    Future<EquipmentSectionSaveResult> Function({
+      required int id,
+      required InfoSectionType sectionType,
+      required Map<String, Object?> updatedFields,
+    });
+typedef TransferSectionRequest =
+    Future<void> Function({
+      required InfoSectionType sectionType,
+      required Map<String, Object?> sourceRow,
+    });
 
 class EquipmentSectionSaveResult {
-  const EquipmentSectionSaveResult({
-    required this.success,
-    this.message,
-  });
+  const EquipmentSectionSaveResult({required this.success, this.message});
 
   final bool success;
   final String? message;
 }
 
-enum InfoSectionType {
-  equipment,
-  model,
-  contract,
-  owner,
-  department,
-}
+enum InfoSectionType { equipment, model, contract, owner, department }
 
 extension InfoSectionTypeSpec on InfoSectionType {
   String get title => switch (this) {
@@ -86,23 +83,70 @@ class EquipmentViewModel {
           maxLines: 3,
           autofocus: true,
         ),
-        EditableInfoField(label: 'Κωδ. μοντέλου', fieldKey: 'model_id', value: _text(row['model_id']), type: EditableFieldType.code),
-        EditableInfoField(label: 'Μοντέλο (αρχικό)', fieldKey: 'model_original_text', value: _text(row['model_original_text'])),
-        EditableInfoField(label: 'Serial No', fieldKey: 'serial_no', value: _text(row['serial_no'])),
-        EditableInfoField(label: 'Αρ. Παγίου', fieldKey: 'asset_no', value: _text(row['asset_no'])),
-        EditableInfoField(label: 'Κωδ. κατάστασης', fieldKey: 'state_id', value: _text(row['state_id']), type: EditableFieldType.code),
-        EditableInfoField(label: 'Κατάσταση', fieldKey: 'state_name', value: _text(row['state_name'])),
-        EditableInfoField(label: 'Κατάσταση (αρχική)', fieldKey: 'state_original_text', value: _text(row['state_original_text'])),
+        EditableInfoField(
+          label: 'Κωδ. μοντέλου',
+          fieldKey: 'model_id',
+          value: _text(row['model_id']),
+          type: EditableFieldType.code,
+        ),
+        EditableInfoField(
+          label: 'Μοντέλο (αρχικό)',
+          fieldKey: 'model_original_text',
+          value: _text(row['model_original_text']),
+        ),
+        EditableInfoField(
+          label: 'Serial No',
+          fieldKey: 'serial_no',
+          value: _text(row['serial_no']),
+        ),
+        EditableInfoField(
+          label: 'Αρ. Παγίου',
+          fieldKey: 'asset_no',
+          value: _text(row['asset_no']),
+        ),
+        EditableInfoField(
+          label: 'Κωδ. κατάστασης',
+          fieldKey: 'state_id',
+          value: _text(row['state_id']),
+          type: EditableFieldType.code,
+        ),
+        EditableInfoField(
+          label: 'Κατάσταση',
+          fieldKey: 'state_name',
+          value: _text(row['state_name']),
+        ),
+        EditableInfoField(
+          label: 'Κατάσταση (αρχική)',
+          fieldKey: 'state_original_text',
+          value: _text(row['state_original_text']),
+        ),
         EditableInfoField(
           label: 'Συνδεδεμένο σε',
           fieldKey: 'set_master',
           value: _text(row['set_master']),
           type: EditableFieldType.code,
         ),
-        EditableInfoField(label: 'Σύνδεση (αρχική)', fieldKey: 'set_master_original_text', value: _text(row['set_master_original_text'])),
-        EditableInfoField(label: 'Κωδ. σύμβασης', fieldKey: 'contract_id', value: _text(row['contract_id']), type: EditableFieldType.code),
-        EditableInfoField(label: 'Σύμβαση (αρχική)', fieldKey: 'contract_original_text', value: _text(row['contract_original_text'])),
-        EditableInfoField(label: 'Συντήρηση', fieldKey: 'maintenance_contract', value: _text(row['maintenance_contract'])),
+        EditableInfoField(
+          label: 'Σύνδεση (αρχική)',
+          fieldKey: 'set_master_original_text',
+          value: _text(row['set_master_original_text']),
+        ),
+        EditableInfoField(
+          label: 'Κωδ. σύμβασης',
+          fieldKey: 'contract_id',
+          value: _text(row['contract_id']),
+          type: EditableFieldType.code,
+        ),
+        EditableInfoField(
+          label: 'Σύμβαση (αρχική)',
+          fieldKey: 'contract_original_text',
+          value: _text(row['contract_original_text']),
+        ),
+        EditableInfoField(
+          label: 'Συντήρηση',
+          fieldKey: 'maintenance_contract',
+          value: _text(row['maintenance_contract']),
+        ),
         EditableInfoField(
           label: 'Παραλαβή',
           fieldKey: 'receiving_date',
@@ -115,12 +159,39 @@ class EquipmentViewModel {
           value: _text(row['end_of_guarantee_date']),
           type: EditableFieldType.date,
         ),
-        EditableInfoField(label: 'Κόστος', fieldKey: 'cost', value: _text(row['cost'])),
-        EditableInfoField(label: 'Κωδ. κατόχου', fieldKey: 'owner_id', value: _text(row['owner_id']), type: EditableFieldType.code),
-        EditableInfoField(label: 'Κάτοχος (αρχικός)', fieldKey: 'owner_original_text', value: _text(row['owner_original_text'])),
-        EditableInfoField(label: 'Κωδ. γραφείου', fieldKey: 'office_id', value: _text(row['office_id']), type: EditableFieldType.code),
-        EditableInfoField(label: 'Γραφείο (αρχικό)', fieldKey: 'office_original_text', value: _text(row['office_original_text'])),
-        EditableInfoField(label: 'Χαρακτ. εξοπλ.', fieldKey: 'equipment_attributes', value: _text(row['equipment_attributes']), maxLines: 3),
+        EditableInfoField(
+          label: 'Κόστος',
+          fieldKey: 'cost',
+          value: _text(row['cost']),
+        ),
+        EditableInfoField(
+          label: 'Κωδ. κατόχου',
+          fieldKey: 'owner_id',
+          value: _text(row['owner_id']),
+          type: EditableFieldType.code,
+        ),
+        EditableInfoField(
+          label: 'Κάτοχος (αρχικός)',
+          fieldKey: 'owner_original_text',
+          value: _text(row['owner_original_text']),
+        ),
+        EditableInfoField(
+          label: 'Κωδ. γραφείου',
+          fieldKey: 'office_id',
+          value: _text(row['office_id']),
+          type: EditableFieldType.code,
+        ),
+        EditableInfoField(
+          label: 'Γραφείο (αρχικό)',
+          fieldKey: 'office_original_text',
+          value: _text(row['office_original_text']),
+        ),
+        EditableInfoField(
+          label: 'Χαρακτ. εξοπλ.',
+          fieldKey: 'equipment_attributes',
+          value: _text(row['equipment_attributes']),
+          maxLines: 3,
+        ),
         EditableInfoField(
           label: 'Σχόλια',
           fieldKey: 'equipment_comments',
@@ -140,10 +211,7 @@ class EquipmentViewModel {
         InfoItem(label: 'Κατάσταση', value: _text(row['state_name'])),
         if (!_codeEqualsConnectedTo(row))
           InfoItem(label: 'Συνδεδεμένο σε', value: _setMasterText(row)),
-        InfoItem(
-          label: 'Παραλαβή',
-          value: _formatDate(row['receiving_date']),
-        ),
+        InfoItem(label: 'Παραλαβή', value: _formatDate(row['receiving_date'])),
         InfoItem(
           label: 'Εγγύηση',
           value: _formatDate(row['end_of_guarantee_date']),
@@ -161,21 +229,89 @@ class EquipmentViewModel {
       type: InfoSectionType.model,
       recordId: _parseIntLike(row['model_id']),
       editableFields: <EditableInfoField>[
-        EditableInfoField(label: 'Κωδ. μοντέλου', fieldKey: 'model_id', value: _text(row['model_id']), type: EditableFieldType.code),
-        EditableInfoField(label: 'Μοντέλο', fieldKey: 'model_name', value: _text(row['model_name']), autofocus: true),
-        EditableInfoField(label: 'Κωδ. κατηγορίας', fieldKey: 'category_code', value: _text(row['category_code']), type: EditableFieldType.code),
-        EditableInfoField(label: 'Κατηγ. (αρχική)', fieldKey: 'category_code_original_text', value: _text(row['category_code_original_text'])),
-        EditableInfoField(label: 'Κατηγορία', fieldKey: 'category_name', value: _text(row['category_name'])),
-        EditableInfoField(label: 'Κωδ. υποκατηγ.', fieldKey: 'subcategory_code', value: _text(row['subcategory_code']), type: EditableFieldType.code),
-        EditableInfoField(label: 'Υποκατ. (αρχική)', fieldKey: 'subcategory_code_original_text', value: _text(row['subcategory_code_original_text'])),
-        EditableInfoField(label: 'Υποκατηγ.', fieldKey: 'subcategory_name', value: _text(row['subcategory_name'])),
-        EditableInfoField(label: 'Κωδ. κατασκ.', fieldKey: 'manufacturer', value: _text(row['manufacturer']), type: EditableFieldType.code),
-        EditableInfoField(label: 'Κατασκ. (αρχικός)', fieldKey: 'manufacturer_original_text', value: _text(row['manufacturer_original_text'])),
-        EditableInfoField(label: 'Κατασκευ.', fieldKey: 'manufacturer_name', value: _text(row['manufacturer_name'])),
-        EditableInfoField(label: 'Κωδικός κατασκ.', fieldKey: 'manufacturer_code', value: _text(row['manufacturer_code'])),
-        EditableInfoField(label: 'Χαρακτ.', fieldKey: 'model_attributes', value: _text(row['model_attributes']), maxLines: 3),
-        EditableInfoField(label: 'Αναλώσιμα', fieldKey: 'consumables', value: _text(row['consumables']), maxLines: 2),
-        EditableInfoField(label: 'Δικτύωση', fieldKey: 'network_connectivity', value: _text(row['network_connectivity']), type: EditableFieldType.code),
+        EditableInfoField(
+          label: 'Κωδ. μοντέλου',
+          fieldKey: 'model_id',
+          value: _text(row['model_id']),
+          type: EditableFieldType.code,
+        ),
+        EditableInfoField(
+          label: 'Μοντέλο',
+          fieldKey: 'model_name',
+          value: _text(row['model_name']),
+          autofocus: true,
+        ),
+        EditableInfoField(
+          label: 'Κωδ. κατηγορίας',
+          fieldKey: 'category_code',
+          value: _text(row['category_code']),
+          type: EditableFieldType.code,
+        ),
+        EditableInfoField(
+          label: 'Κατηγ. (αρχική)',
+          fieldKey: 'category_code_original_text',
+          value: _text(row['category_code_original_text']),
+        ),
+        EditableInfoField(
+          label: 'Κατηγορία',
+          fieldKey: 'category_name',
+          value: _text(row['category_name']),
+        ),
+        EditableInfoField(
+          label: 'Κωδ. υποκατηγ.',
+          fieldKey: 'subcategory_code',
+          value: _text(row['subcategory_code']),
+          type: EditableFieldType.code,
+        ),
+        EditableInfoField(
+          label: 'Υποκατ. (αρχική)',
+          fieldKey: 'subcategory_code_original_text',
+          value: _text(row['subcategory_code_original_text']),
+        ),
+        EditableInfoField(
+          label: 'Υποκατηγ.',
+          fieldKey: 'subcategory_name',
+          value: _text(row['subcategory_name']),
+        ),
+        EditableInfoField(
+          label: 'Κωδ. κατασκ.',
+          fieldKey: 'manufacturer',
+          value: _text(row['manufacturer']),
+          type: EditableFieldType.code,
+        ),
+        EditableInfoField(
+          label: 'Κατασκ. (αρχικός)',
+          fieldKey: 'manufacturer_original_text',
+          value: _text(row['manufacturer_original_text']),
+        ),
+        EditableInfoField(
+          label: 'Κατασκευ.',
+          fieldKey: 'manufacturer_name',
+          value: _text(row['manufacturer_name']),
+        ),
+        EditableInfoField(
+          label: 'Κωδικός κατασκ.',
+          fieldKey: 'manufacturer_code',
+          value: _text(row['manufacturer_code']),
+        ),
+        EditableInfoField(
+          label: 'Χαρακτ.',
+          fieldKey: 'model_attributes',
+          value: _text(row['model_attributes']),
+          maxLines: 3,
+        ),
+        EditableInfoField(
+          label: 'Αναλώσιμα',
+          fieldKey: 'consumables',
+          value: _text(row['consumables']),
+          maxLines: 2,
+        ),
+        EditableInfoField(
+          label: 'Δικτύωση',
+          fieldKey: 'network_connectivity',
+          value: _text(row['network_connectivity']),
+          type: EditableFieldType.code,
+        ),
       ],
       items: _items(<InfoItem>[
         InfoItem(
@@ -183,14 +319,14 @@ class EquipmentViewModel {
           value: _firstText(row['model_name'], row['model_original_text']),
         ),
         InfoItem(label: 'Κατηγορία', value: _text(row['category_name'])),
-        InfoItem(
-          label: 'Υποκατηγ.',
-          value: _text(row['subcategory_name']),
-        ),
+        InfoItem(label: 'Υποκατηγ.', value: _text(row['subcategory_name'])),
         InfoItem(label: 'Κατασκευ.', value: _text(row['manufacturer_name'])),
         InfoItem(
           label: 'Χαρακτ.',
-          value: _firstText(row['model_attributes'], row['equipment_attributes']),
+          value: _firstText(
+            row['model_attributes'],
+            row['equipment_attributes'],
+          ),
           maxLines: 3,
         ),
         InfoItem(
@@ -205,28 +341,101 @@ class EquipmentViewModel {
       type: InfoSectionType.contract,
       recordId: _parseIntLike(row['contract_id']),
       editableFields: <EditableInfoField>[
-        EditableInfoField(label: 'Κωδ. σύμβασης', fieldKey: 'contract_id', value: _text(row['contract_id']), type: EditableFieldType.code),
-        EditableInfoField(label: 'Σύμβαση', fieldKey: 'contract_name', value: _text(row['contract_name']), autofocus: true),
-        EditableInfoField(label: 'Κωδ. κατηγορίας', fieldKey: 'contract_category', value: _text(row['contract_category']), type: EditableFieldType.code),
-        EditableInfoField(label: 'Κατηγ. (αρχική)', fieldKey: 'contract_category_original_text', value: _text(row['contract_category_original_text'])),
-        EditableInfoField(label: 'Κατηγορία', fieldKey: 'contract_category_name', value: _text(row['contract_category_name'])),
-        EditableInfoField(label: 'Κωδ. προμηθ.', fieldKey: 'supplier_id', value: _text(row['supplier_id']), type: EditableFieldType.code),
-        EditableInfoField(label: 'Προμηθ. (αρχικός)', fieldKey: 'supplier_original_text', value: _text(row['supplier_original_text'])),
-        EditableInfoField(label: 'Προμηθ.', fieldKey: 'supplier_name', value: _text(row['supplier_name'])),
-        EditableInfoField(label: 'Έναρξη', fieldKey: 'contract_start_date', value: _text(row['contract_start_date']), type: EditableFieldType.date),
-        EditableInfoField(label: 'Λήξη', fieldKey: 'contract_end_date', value: _text(row['contract_end_date']), type: EditableFieldType.date),
-        EditableInfoField(label: 'Διακήρυξη', fieldKey: 'contract_declaration', value: _text(row['contract_declaration'])),
-        EditableInfoField(label: 'Ανάθεση', fieldKey: 'contract_award', value: _text(row['contract_award'])),
-        EditableInfoField(label: 'Κόστος', fieldKey: 'contract_cost', value: _text(row['contract_cost'])),
-        EditableInfoField(label: 'Επιτροπή', fieldKey: 'contract_committee', value: _text(row['contract_committee'])),
-        EditableInfoField(label: 'Σχόλια', fieldKey: 'contract_comments', value: _text(row['contract_comments']), maxLines: 3),
+        EditableInfoField(
+          label: 'Κωδ. σύμβασης',
+          fieldKey: 'contract_id',
+          value: _text(row['contract_id']),
+          type: EditableFieldType.code,
+        ),
+        EditableInfoField(
+          label: 'Σύμβαση',
+          fieldKey: 'contract_name',
+          value: _text(row['contract_name']),
+          autofocus: true,
+        ),
+        EditableInfoField(
+          label: 'Κωδ. κατηγορίας',
+          fieldKey: 'contract_category',
+          value: _text(row['contract_category']),
+          type: EditableFieldType.code,
+        ),
+        EditableInfoField(
+          label: 'Κατηγ. (αρχική)',
+          fieldKey: 'contract_category_original_text',
+          value: _text(row['contract_category_original_text']),
+        ),
+        EditableInfoField(
+          label: 'Κατηγορία',
+          fieldKey: 'contract_category_name',
+          value: _text(row['contract_category_name']),
+        ),
+        EditableInfoField(
+          label: 'Κωδ. προμηθ.',
+          fieldKey: 'supplier_id',
+          value: _text(row['supplier_id']),
+          type: EditableFieldType.code,
+        ),
+        EditableInfoField(
+          label: 'Προμηθ. (αρχικός)',
+          fieldKey: 'supplier_original_text',
+          value: _text(row['supplier_original_text']),
+        ),
+        EditableInfoField(
+          label: 'Προμηθ.',
+          fieldKey: 'supplier_name',
+          value: _text(row['supplier_name']),
+        ),
+        EditableInfoField(
+          label: 'Έναρξη',
+          fieldKey: 'contract_start_date',
+          value: _text(row['contract_start_date']),
+          type: EditableFieldType.date,
+        ),
+        EditableInfoField(
+          label: 'Λήξη',
+          fieldKey: 'contract_end_date',
+          value: _text(row['contract_end_date']),
+          type: EditableFieldType.date,
+        ),
+        EditableInfoField(
+          label: 'Διακήρυξη',
+          fieldKey: 'contract_declaration',
+          value: _text(row['contract_declaration']),
+        ),
+        EditableInfoField(
+          label: 'Ανάθεση',
+          fieldKey: 'contract_award',
+          value: _text(row['contract_award']),
+        ),
+        EditableInfoField(
+          label: 'Κόστος',
+          fieldKey: 'contract_cost',
+          value: _text(row['contract_cost']),
+        ),
+        EditableInfoField(
+          label: 'Επιτροπή',
+          fieldKey: 'contract_committee',
+          value: _text(row['contract_committee']),
+        ),
+        EditableInfoField(
+          label: 'Σχόλια',
+          fieldKey: 'contract_comments',
+          value: _text(row['contract_comments']),
+          maxLines: 3,
+        ),
       ],
       items: _items(<InfoItem>[
         InfoItem(
           label: 'Σύμβαση',
-          value: _firstText(row['contract_name'], row['contract_original_text']),
+          value: _firstText(
+            row['contract_name'],
+            row['contract_original_text'],
+          ),
         ),
-        InfoItem(label: 'Κατηγορία', value: _text(row['contract_category_name'])),
+        InfoItem(
+          label: 'Κατηγορία',
+          value: _text(row['contract_category_name']),
+        ),
         InfoItem(label: 'Προμηθ.', value: _text(row['supplier_name'])),
         InfoItem(label: 'Ανάθεση', value: _text(row['contract_award'])),
         InfoItem(label: 'Διακήρυξη', value: _text(row['contract_declaration'])),
@@ -243,18 +452,53 @@ class EquipmentViewModel {
       type: InfoSectionType.owner,
       recordId: _parseIntLike(row['owner_id'] ?? row['owner']),
       editableFields: <EditableInfoField>[
-        EditableInfoField(label: 'Κωδ. κατόχου', fieldKey: 'owner_id', value: _text(row['owner_id'] ?? row['owner']), type: EditableFieldType.code),
-        EditableInfoField(label: 'Επώνυμο', fieldKey: 'last_name', value: _text(row['last_name']), autofocus: true),
-        EditableInfoField(label: 'Όνομα', fieldKey: 'first_name', value: _text(row['first_name'])),
-        EditableInfoField(label: 'Κωδ. γραφείου', fieldKey: 'owner_office', value: _text(row['owner_office']), type: EditableFieldType.code),
-        EditableInfoField(label: 'Γραφείο (αρχικό)', fieldKey: 'owner_office_original_text', value: _text(row['owner_office_original_text'])),
-        EditableInfoField(label: 'Email', fieldKey: 'owner_email', value: _text(row['owner_email']), type: EditableFieldType.email),
-        EditableInfoField(label: 'Τηλέφωνα', fieldKey: 'owner_phones', value: _text(row['owner_phones']), type: EditableFieldType.phone, maxLines: 2),
+        EditableInfoField(
+          label: 'Κωδ. κατόχου',
+          fieldKey: 'owner_id',
+          value: _text(row['owner_id'] ?? row['owner']),
+          type: EditableFieldType.code,
+        ),
+        EditableInfoField(
+          label: 'Επώνυμο',
+          fieldKey: 'last_name',
+          value: _text(row['last_name']),
+          autofocus: true,
+        ),
+        EditableInfoField(
+          label: 'Όνομα',
+          fieldKey: 'first_name',
+          value: _text(row['first_name']),
+        ),
+        EditableInfoField(
+          label: 'Κωδ. γραφείου',
+          fieldKey: 'owner_office',
+          value: _text(row['owner_office']),
+          type: EditableFieldType.code,
+        ),
+        EditableInfoField(
+          label: 'Γραφείο (αρχικό)',
+          fieldKey: 'owner_office_original_text',
+          value: _text(row['owner_office_original_text']),
+        ),
+        EditableInfoField(
+          label: 'Email',
+          fieldKey: 'owner_email',
+          value: _text(row['owner_email']),
+          type: EditableFieldType.email,
+        ),
+        EditableInfoField(
+          label: 'Τηλέφωνα',
+          fieldKey: 'owner_phones',
+          value: _text(row['owner_phones']),
+          type: EditableFieldType.phone,
+          maxLines: 2,
+        ),
       ],
       items: _items(<InfoItem>[
         InfoItem(
           label: 'Όνομα',
-          value: _joinName(row['last_name'], row['first_name']) ??
+          value:
+              _joinName(row['last_name'], row['first_name']) ??
               _text(row['owner_original_text']),
           maxLines: 2,
         ),
@@ -271,18 +515,75 @@ class EquipmentViewModel {
       type: InfoSectionType.department,
       recordId: _parseIntLike(row['office_id'] ?? row['office']),
       editableFields: <EditableInfoField>[
-        EditableInfoField(label: 'Κωδ. γραφείου', fieldKey: 'office_id', value: _text(row['office_id'] ?? row['office']), type: EditableFieldType.code),
-        EditableInfoField(label: 'Τμήμα', fieldKey: 'office_name', value: _text(row['office_name']), autofocus: true),
-        EditableInfoField(label: 'Κωδ. οργανισμού', fieldKey: 'organization', value: _text(row['organization']), type: EditableFieldType.code),
-        EditableInfoField(label: 'Οργανισμός', fieldKey: 'organization_name', value: _text(row['organization_name'])),
-        EditableInfoField(label: 'Κωδ. υπηρεσίας', fieldKey: 'department', value: _text(row['department']), type: EditableFieldType.code),
-        EditableInfoField(label: 'Υπηρεσία', fieldKey: 'department_name', value: _text(row['department_name'])),
-        EditableInfoField(label: 'Υπεύθυνος', fieldKey: 'responsible', value: _text(row['responsible']), type: EditableFieldType.code),
-        EditableInfoField(label: 'Υπεύθ. (αρχικός)', fieldKey: 'responsible_original_text', value: _text(row['responsible_original_text'])),
-        EditableInfoField(label: 'Email', fieldKey: 'office_email', value: _text(row['office_email']), type: EditableFieldType.email),
-        EditableInfoField(label: 'Τηλέφωνα', fieldKey: 'office_phones', value: _text(row['office_phones']), type: EditableFieldType.phone, maxLines: 2),
-        EditableInfoField(label: 'Κτίριο', fieldKey: 'building', value: _text(row['building'])),
-        EditableInfoField(label: 'Όροφος', fieldKey: 'level', value: _text(row['level']), type: EditableFieldType.number),
+        EditableInfoField(
+          label: 'Κωδ. γραφείου',
+          fieldKey: 'office_id',
+          value: _text(row['office_id'] ?? row['office']),
+          type: EditableFieldType.code,
+        ),
+        EditableInfoField(
+          label: 'Τμήμα',
+          fieldKey: 'office_name',
+          value: _text(row['office_name']),
+          autofocus: true,
+        ),
+        EditableInfoField(
+          label: 'Κωδ. οργανισμού',
+          fieldKey: 'organization',
+          value: _text(row['organization']),
+          type: EditableFieldType.code,
+        ),
+        EditableInfoField(
+          label: 'Οργανισμός',
+          fieldKey: 'organization_name',
+          value: _text(row['organization_name']),
+        ),
+        EditableInfoField(
+          label: 'Κωδ. υπηρεσίας',
+          fieldKey: 'department',
+          value: _text(row['department']),
+          type: EditableFieldType.code,
+        ),
+        EditableInfoField(
+          label: 'Υπηρεσία',
+          fieldKey: 'department_name',
+          value: _text(row['department_name']),
+        ),
+        EditableInfoField(
+          label: 'Υπεύθυνος',
+          fieldKey: 'responsible',
+          value: _text(row['responsible']),
+          type: EditableFieldType.code,
+        ),
+        EditableInfoField(
+          label: 'Υπεύθ. (αρχικός)',
+          fieldKey: 'responsible_original_text',
+          value: _text(row['responsible_original_text']),
+        ),
+        EditableInfoField(
+          label: 'Email',
+          fieldKey: 'office_email',
+          value: _text(row['office_email']),
+          type: EditableFieldType.email,
+        ),
+        EditableInfoField(
+          label: 'Τηλέφωνα',
+          fieldKey: 'office_phones',
+          value: _text(row['office_phones']),
+          type: EditableFieldType.phone,
+          maxLines: 2,
+        ),
+        EditableInfoField(
+          label: 'Κτίριο',
+          fieldKey: 'building',
+          value: _text(row['building']),
+        ),
+        EditableInfoField(
+          label: 'Όροφος',
+          fieldKey: 'level',
+          value: _text(row['level']),
+          type: EditableFieldType.number,
+        ),
       ],
       items: _items(<InfoItem>[
         InfoItem(
@@ -320,6 +621,7 @@ class EquipmentViewModel {
 
   final List<InfoSectionData> sections;
   final Map<String, Object?> _sourceRow;
+  Map<String, Object?> get sourceRow => Map<String, Object?>.from(_sourceRow);
 
   EquipmentViewModel copyWithUpdatedFields(Map<String, Object?> updatedFields) {
     return EquipmentViewModel.fromRow(<String, Object?>{
@@ -436,25 +738,14 @@ class InfoSectionData {
 }
 
 class InfoItem {
-  const InfoItem({
-    required this.label,
-    required this.value,
-    this.maxLines = 1,
-  });
+  const InfoItem({required this.label, required this.value, this.maxLines = 1});
 
   final String label;
   final String? value;
   final int maxLines;
 }
 
-enum EditableFieldType {
-  text,
-  email,
-  date,
-  number,
-  phone,
-  code,
-}
+enum EditableFieldType { text, email, date, number, phone, code }
 
 class EditableInfoField {
   const EditableInfoField({
@@ -479,10 +770,12 @@ class EquipmentResultCard extends StatefulWidget {
     super.key,
     required this.viewModel,
     this.onSaveSection,
+    this.onTransferSection,
   });
 
   final EquipmentViewModel viewModel;
   final SaveEquipmentSection? onSaveSection;
+  final TransferSectionRequest? onTransferSection;
 
   @override
   State<EquipmentResultCard> createState() => _EquipmentResultCardState();
@@ -538,15 +831,27 @@ class _EquipmentResultCardState extends State<EquipmentResultCard> {
                 return SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
                   child: ConstrainedBox(
-                    constraints: const BoxConstraints(minWidth: _kFallbackMinWidth),
-                    child: _VerticalSections(sections: sections),
+                    constraints: const BoxConstraints(
+                      minWidth: _kFallbackMinWidth,
+                    ),
+                    child: _VerticalSections(
+                      sections: sections,
+                      onTransferSection: widget.onTransferSection == null
+                          ? null
+                          : _transferSection,
+                    ),
                   ),
                 );
               }
               if (maxWidth >= _kDesktopBreakpoint) {
                 return _DesktopSections(
                   sections: sections,
-                  onEditSection: widget.onSaveSection == null ? null : _editSection,
+                  onEditSection: widget.onSaveSection == null
+                      ? null
+                      : _editSection,
+                  onTransferSection: widget.onTransferSection == null
+                      ? null
+                      : _transferSection,
                 );
               }
               if (maxWidth >= _kTabletBreakpoint) {
@@ -554,12 +859,22 @@ class _EquipmentResultCardState extends State<EquipmentResultCard> {
                   sections: sections,
                   columns: maxWidth >= 1000 ? 3 : 2,
                   maxWidth: maxWidth,
-                  onEditSection: widget.onSaveSection == null ? null : _editSection,
+                  onEditSection: widget.onSaveSection == null
+                      ? null
+                      : _editSection,
+                  onTransferSection: widget.onTransferSection == null
+                      ? null
+                      : _transferSection,
                 );
               }
               return _VerticalSections(
                 sections: sections,
-                onEditSection: widget.onSaveSection == null ? null : _editSection,
+                onEditSection: widget.onSaveSection == null
+                    ? null
+                    : _editSection,
+                onTransferSection: widget.onTransferSection == null
+                    ? null
+                    : _transferSection,
               );
             },
           ),
@@ -578,11 +893,8 @@ class _EquipmentResultCardState extends State<EquipmentResultCard> {
       barrierDismissible: false,
       builder: (context) => EditSectionDialog<InfoSectionData>(
         section: section,
-        onSave: (fields) => save(
-          id: id,
-          sectionType: section.type,
-          updatedFields: fields,
-        ),
+        onSave: (fields) =>
+            save(id: id, sectionType: section.type, updatedFields: fields),
       ),
     );
     if (updatedFields == null || updatedFields.isEmpty || !mounted) return;
@@ -590,13 +902,24 @@ class _EquipmentResultCardState extends State<EquipmentResultCard> {
       _viewModel = _viewModel.copyWithUpdatedFields(updatedFields);
     });
   }
+
+  Future<void> _transferSection(InfoSectionData section) async {
+    final transfer = widget.onTransferSection;
+    if (transfer == null) return;
+    await transfer(sectionType: section.type, sourceRow: _viewModel.sourceRow);
+  }
 }
 
 class _DesktopSections extends StatelessWidget {
-  const _DesktopSections({required this.sections, this.onEditSection});
+  const _DesktopSections({
+    required this.sections,
+    this.onEditSection,
+    this.onTransferSection,
+  });
 
   final List<InfoSectionData> sections;
   final ValueChanged<InfoSectionData>? onEditSection;
+  final ValueChanged<InfoSectionData>? onTransferSection;
 
   @override
   Widget build(BuildContext context) {
@@ -611,6 +934,7 @@ class _DesktopSections extends StatelessWidget {
               child: InfoColumnSection(
                 section: sections[index],
                 onEdit: onEditSection,
+                onTransfer: onTransferSection,
               ),
             ),
             if (index != sections.length - 1)
@@ -619,10 +943,9 @@ class _DesktopSections extends StatelessWidget {
                 child: VerticalDivider(
                   width: _kSectionSpacing,
                   thickness: 1,
-                  color: Theme.of(context)
-                      .colorScheme
-                      .outlineVariant
-                      .withValues(alpha: 0.55),
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.outlineVariant.withValues(alpha: 0.55),
                 ),
               ),
           ],
@@ -638,12 +961,14 @@ class _GridSections extends StatelessWidget {
     required this.columns,
     required this.maxWidth,
     this.onEditSection,
+    this.onTransferSection,
   });
 
   final List<InfoSectionData> sections;
   final int columns;
   final double maxWidth;
   final ValueChanged<InfoSectionData>? onEditSection;
+  final ValueChanged<InfoSectionData>? onTransferSection;
 
   @override
   Widget build(BuildContext context) {
@@ -655,7 +980,11 @@ class _GridSections extends StatelessWidget {
         for (final section in sections)
           SizedBox(
             width: itemWidth,
-            child: InfoColumnSection(section: section, onEdit: onEditSection),
+            child: InfoColumnSection(
+              section: section,
+              onEdit: onEditSection,
+              onTransfer: onTransferSection,
+            ),
           ),
       ],
     );
@@ -663,10 +992,15 @@ class _GridSections extends StatelessWidget {
 }
 
 class _VerticalSections extends StatelessWidget {
-  const _VerticalSections({required this.sections, this.onEditSection});
+  const _VerticalSections({
+    required this.sections,
+    this.onEditSection,
+    this.onTransferSection,
+  });
 
   final List<InfoSectionData> sections;
   final ValueChanged<InfoSectionData>? onEditSection;
+  final ValueChanged<InfoSectionData>? onTransferSection;
 
   @override
   Widget build(BuildContext context) {
@@ -674,15 +1008,18 @@ class _VerticalSections extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         for (var index = 0; index < sections.length; index++) ...[
-          InfoColumnSection(section: sections[index], onEdit: onEditSection),
+          InfoColumnSection(
+            section: sections[index],
+            onEdit: onEditSection,
+            onTransfer: onTransferSection,
+          ),
           if (index != sections.length - 1) ...[
             const SizedBox(height: _kSectionSpacing),
             Divider(
               height: 1,
-              color: Theme.of(context)
-                  .colorScheme
-                  .outlineVariant
-                  .withValues(alpha: 0.55),
+              color: Theme.of(
+                context,
+              ).colorScheme.outlineVariant.withValues(alpha: 0.55),
             ),
             const SizedBox(height: _kSectionSpacing),
           ],
@@ -697,10 +1034,12 @@ class InfoColumnSection extends StatelessWidget {
     super.key,
     required this.section,
     this.onEdit,
+    this.onTransfer,
   });
 
   final InfoSectionData section;
   final ValueChanged<InfoSectionData>? onEdit;
+  final ValueChanged<InfoSectionData>? onTransfer;
 
   @override
   Widget build(BuildContext context) {
@@ -746,6 +1085,16 @@ class InfoColumnSection extends StatelessWidget {
                     : null,
                 icon: const Icon(Icons.edit_outlined, size: 18),
               ),
+              if (onTransfer != null &&
+                  (section.type == InfoSectionType.equipment ||
+                      section.type == InfoSectionType.department ||
+                      section.type == InfoSectionType.owner))
+                IconButton(
+                  visualDensity: VisualDensity.compact,
+                  tooltip: 'Μεταφορά ${section.type.title}',
+                  onPressed: () => onTransfer!(section),
+                  icon: const Icon(Icons.publish_outlined, size: 18),
+                ),
             ],
           ),
           const SizedBox(height: 10),
@@ -784,7 +1133,8 @@ class EditSectionDialog<T> extends StatefulWidget {
   final InfoSectionData section;
   final Future<EquipmentSectionSaveResult> Function(
     Map<String, Object?> updatedFields,
-  ) onSave;
+  )
+  onSave;
 
   @override
   State<EditSectionDialog<T>> createState() => _EditSectionDialogState<T>();
@@ -808,15 +1158,14 @@ class _EditSectionDialogState<T> extends State<EditSectionDialog<T>> {
     };
     currentData = Map<String, Object?>.from(originalData);
     for (final field in widget.section.editableFields) {
-      _controllers[field.fieldKey] = TextEditingController(
-        text: field.value ?? '',
-      )..addListener(() {
-          currentData = <String, Object?>{
-            ...currentData,
-            field.fieldKey: _controllers[field.fieldKey]!.text,
-          };
-          if (mounted) setState(() {});
-        });
+      _controllers[field.fieldKey] =
+          TextEditingController(text: field.value ?? '')..addListener(() {
+            currentData = <String, Object?>{
+              ...currentData,
+              field.fieldKey: _controllers[field.fieldKey]!.text,
+            };
+            if (mounted) setState(() {});
+          });
     }
   }
 
@@ -863,7 +1212,8 @@ class _EditSectionDialogState<T> extends State<EditSectionDialog<T>> {
                       _EditField(
                         field: field,
                         controller: _controllers[field.fieldKey]!,
-                        changed: currentData[field.fieldKey] !=
+                        changed:
+                            currentData[field.fieldKey] !=
                             originalData[field.fieldKey],
                         validator: (value) => _validateField(field, value),
                         onPickDate: field.type == EditableFieldType.date
@@ -928,8 +1278,8 @@ class _EditSectionDialogState<T> extends State<EditSectionDialog<T>> {
   }
 
   Future<void> _pickDate(EditableInfoField field) async {
-    final initial = _parseDate(_controllers[field.fieldKey]?.text) ??
-        DateTime.now();
+    final initial =
+        _parseDate(_controllers[field.fieldKey]?.text) ?? DateTime.now();
     final picked = await showDatePicker(
       context: context,
       initialDate: initial,
@@ -972,11 +1322,11 @@ class _EditSectionDialogState<T> extends State<EditSectionDialog<T>> {
     if (text.isEmpty) return null;
     return switch (field.type) {
       EditableFieldType.code => int.tryParse(text),
-      EditableFieldType.number when field.fieldKey == 'level' =>
-        int.tryParse(text),
-      EditableFieldType.date => _parseDate(text) == null
-          ? text
-          : _formatIsoDate(_parseDate(text)!),
+      EditableFieldType.number when field.fieldKey == 'level' => int.tryParse(
+        text,
+      ),
+      EditableFieldType.date =>
+        _parseDate(text) == null ? text : _formatIsoDate(_parseDate(text)!),
       _ => text,
     };
   }
@@ -1012,10 +1362,14 @@ class _EditSectionDialogState<T> extends State<EditSectionDialog<T>> {
 
   bool _isPrimaryKeyField(String fieldKey) {
     return fieldKey == 'code' ||
-        (widget.section.type == InfoSectionType.model && fieldKey == 'model_id') ||
-        (widget.section.type == InfoSectionType.contract && fieldKey == 'contract_id') ||
-        (widget.section.type == InfoSectionType.owner && fieldKey == 'owner_id') ||
-        (widget.section.type == InfoSectionType.department && fieldKey == 'office_id');
+        (widget.section.type == InfoSectionType.model &&
+            fieldKey == 'model_id') ||
+        (widget.section.type == InfoSectionType.contract &&
+            fieldKey == 'contract_id') ||
+        (widget.section.type == InfoSectionType.owner &&
+            fieldKey == 'owner_id') ||
+        (widget.section.type == InfoSectionType.department &&
+            fieldKey == 'office_id');
   }
 
   DateTime? _parseDate(Object? value) {
@@ -1174,7 +1528,9 @@ class CopyableField extends StatelessWidget {
     await Clipboard.setData(ClipboardData(text: value));
     if (!context.mounted) return;
     final content = 'Αντιγράφηκε $label: $value';
-    final message = content.length > 80 ? '${content.substring(0, 77)}...' : content;
+    final message = content.length > 80
+        ? '${content.substring(0, 77)}...'
+        : content;
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
       ..showSnackBar(SnackBar(content: Text(message)));

@@ -6,6 +6,20 @@
 
 **Σημείωση:** Μπορείτε να εμπλουτίσετε τις περιγραφές με λεπτομέρειες από μνήμη· το JSON `[assets/changelog.json](assets/changelog.json)` τροφοδοτεί την εφαρμογή και πρέπει να παραμένει συγχρονισμένο με αυτό το αρχείο.
 
+## [Unreleased]
+
+### Προστέθηκε
+
+- **Λάμπα · Επιλεκτική μεταφορά:** νέο κουμπί «Μεταφορά» στις κάρτες αποτελεσμάτων (μόνο για Εξοπλισμό/Ιδιοκτήτη/Τμήμα), που ανοίγει οδηγό μεταφοράς διπλού πίνακα (Dual-Pane Wizard).
+- **Λάμπα · οδηγός μεταφοράς:** νέο `LampTransferWizardDialog` με αριστερή προβολή μόνο ανάγνωσης από `old_equipment.db` και δεξιά επεξεργάσιμη φόρμα προορισμού στη `call_logger.db`.
+- **Λάμπα · υπηρεσία μεταφοράς:** νέο `LampMigrationService` για cross-referencing παλιών προς νέες εγγραφές, με pre-fill πεδίων και fallback Top-3 υποψηφίων αντιστοιχίσεων με confidence score.
+
+### Άλλαξε
+
+- **Λάμπα · scoring αντιστοίχισης:** προστέθηκε επαναχρησιμοποιήσιμη ρουτίνα similarity/confidence score στο `LampIssueResolutionService` και αξιοποιείται από τον migration οδηγό (χωρίς νέο scoring αλγόριθμο από το μηδέν).
+- **Λάμπα · ροή αποθήκευσης:** ο wizard γράφει αποκλειστικά μέσω υπαρχόντων methods του `DirectoryRepository` (`insertUser`, `insertEquipment`, `insertDepartment`, `update*`) με ασφαλή defaults schema (`is_deleted=0`, `map_hidden=1`).
+- **Λάμπα · συμβατότητα UI:** αντικατάσταση deprecated χειρισμού `RadioListTile` με `RadioGroup` στο wizard, ώστε να αφαιρεθούν προειδοποιήσεις `deprecated_member_use`.
+
 ## [0.15.0] - 2026-05-03
 
 ### Προστέθηκε

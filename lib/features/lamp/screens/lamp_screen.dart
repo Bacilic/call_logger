@@ -17,11 +17,13 @@ import '../../../core/database/old_database/lamp_settings_store.dart';
 import '../../../core/database/old_database/old_equipment_repository.dart';
 import '../../../core/database/old_database/old_excel_importer.dart';
 import '../../database/services/database_stats_service.dart';
+import '../services/lamp_migration_service.dart';
 import '../widgets/lamp_db_tables_tab.dart';
 import '../widgets/lamp_issue_manual_review_dialog.dart';
 import '../widgets/lamp_resolution_progress_dialog.dart';
 import '../widgets/lamp_unresolved_resolution_dialog.dart';
 import '../widgets/lamp_result_card.dart';
+import '../widgets/lamp_transfer_wizard_dialog.dart';
 
 class LampScreen extends ConsumerStatefulWidget {
   const LampScreen({super.key});
@@ -36,6 +38,7 @@ class _LampScreenState extends ConsumerState<LampScreen> {
   final _repository = OldEquipmentRepository();
   final _validator = LampOldDbValidator();
   final _issueResolutionService = LampIssueResolutionService();
+  final _migrationService = LampMigrationService();
 
   final _excelController = TextEditingController();
   final _readDbController = TextEditingController();
@@ -1393,10 +1396,7 @@ class _LampScreenState extends ConsumerState<LampScreen> {
                   SelectableText(breakdown, style: theme.textTheme.bodyMedium),
                 ],
                 if (stepReport.isNotEmpty)
-                  SelectableText(
-                    stepReport,
-                    style: theme.textTheme.bodySmall,
-                  ),
+                  SelectableText(stepReport, style: theme.textTheme.bodySmall),
               ],
             ),
           ),
@@ -1456,6 +1456,38 @@ class _LampScreenState extends ConsumerState<LampScreen> {
       success: result.success,
       message: result.message,
     );
+  }
+
+  LampTransferTarget? _transferTargetForSection(InfoSectionType sectionType) {
+    return switch (sectionType) {
+      InfoSectionType.equipment => LampTransferTarget.equipment,
+      InfoSectionType.owner => LampTransferTarget.owner,
+      InfoSectionType.department => LampTransferTarget.department,
+      _ => null,
+    };
+  }
+
+  Future<void> _openTransferWizard({
+    required InfoSectionType sectionType,
+    required Map<String, Object?> sourceRow,
+  }) async {
+    final target = _transferTargetForSection(sectionType);
+    if (target == null) {
+      _showSnack('Η μεταφορά υποστηρίζεται μόνο για εξοπλισμό/κάτοχο/τμήμα.');
+      return;
+    }
+    final message = await showDialog<String>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => LampTransferWizardDialog(
+        target: target,
+        sourceRow: sourceRow,
+        service: _migrationService,
+      ),
+    );
+    if (!mounted || message == null) return;
+    _showSnack(message);
+    await _runLiveSearch();
   }
 
   Future<void> _closeLampSettingsDialog(void Function() pop) async {
@@ -1546,7 +1578,9 @@ class _LampScreenState extends ConsumerState<LampScreen> {
                             ? const SizedBox(
                                 width: 16,
                                 height: 16,
-                                child: CircularProgressIndicator(strokeWidth: 2),
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
                               )
                             : const Icon(Icons.rule_folder_outlined),
                         label: const Text('Έλεγχος Προβλημάτων'),
@@ -2018,6 +2052,7 @@ class _LampScreenState extends ConsumerState<LampScreen> {
       itemBuilder: (context, index) => EquipmentResultCard(
         viewModel: EquipmentViewModel.fromRow(_results[index]),
         onSaveSection: _saveEquipmentSection,
+        onTransferSection: _openTransferWizard,
       ),
     );
   }
@@ -2183,7 +2218,6 @@ class _IntegrityProgressDialogState extends State<_IntegrityProgressDialog> {
       OldIntegrityStepStatus.cancelled => 'Ακυρώθηκε',
     };
   }
-
 }
 
 String _formatIntegrityDuration(Duration duration) {
