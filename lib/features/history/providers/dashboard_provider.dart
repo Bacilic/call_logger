@@ -20,16 +20,16 @@ class DashboardFilterNotifier extends Notifier<DashboardFilterModel> {
 
 final dashboardFilterProvider =
     NotifierProvider.autoDispose<DashboardFilterNotifier, DashboardFilterModel>(
-  DashboardFilterNotifier.new,
-);
+      DashboardFilterNotifier.new,
+    );
 
 /// Στατιστικά κλήσεων με βάση το τρέχον [DashboardFilterModel].
 final dashboardStatsProvider =
     FutureProvider.autoDispose<DashboardSummaryModel>((ref) async {
-  final filter = ref.watch(dashboardFilterProvider);
-  final db = await DatabaseHelper.instance.database;
-  return CallsRepository(db).getDashboardStatistics(filter);
-});
+      final filter = ref.watch(dashboardFilterProvider);
+      final db = await DatabaseHelper.instance.database;
+      return CallsRepository(db).getDashboardStatistics(filter);
+    });
 
 /// Ρυθμιζόμενο URL Lansweeper αποθηκευμένο μόνιμα σε `app_settings`.
 class LansweeperUrlNotifier extends Notifier<String> {
@@ -47,12 +47,15 @@ class LansweeperUrlNotifier extends Notifier<String> {
   Future<void> _hydrateFromDb() async {
     final db = await DatabaseHelper.instance.database;
     final repo = SettingsRepository(db);
-    final raw = await repo.getSetting(kLansweeperUrlSettingKey);
+    final raw =
+        await repo.getSetting(kLansweeperApiUrlSettingKey) ??
+        await repo.getSetting(kLansweeperUrlSettingKey);
     final normalized = raw?.trim() ?? '';
     if (normalized.isNotEmpty) {
       state = normalized;
       return;
     }
+    await repo.saveSetting(kLansweeperApiUrlSettingKey, kDefaultLansweeperUrl);
     await repo.saveSetting(kLansweeperUrlSettingKey, kDefaultLansweeperUrl);
     state = kDefaultLansweeperUrl;
   }
@@ -62,6 +65,7 @@ class LansweeperUrlNotifier extends Notifier<String> {
     final next = normalized.isEmpty ? kDefaultLansweeperUrl : normalized;
     state = next;
     final db = await DatabaseHelper.instance.database;
+    await SettingsRepository(db).saveSetting(kLansweeperApiUrlSettingKey, next);
     await SettingsRepository(db).saveSetting(kLansweeperUrlSettingKey, next);
   }
 
@@ -70,20 +74,55 @@ class LansweeperUrlNotifier extends Notifier<String> {
 
 final lansweeperUrlProvider =
     NotifierProvider.autoDispose<LansweeperUrlNotifier, String>(
-  LansweeperUrlNotifier.new,
-);
+      LansweeperUrlNotifier.new,
+    );
+
+class LansweeperApiKeyNotifier extends Notifier<String> {
+  bool _hydrated = false;
+
+  @override
+  String build() {
+    if (!_hydrated) {
+      _hydrated = true;
+      Future<void>(_hydrateFromDb);
+    }
+    return '';
+  }
+
+  Future<void> _hydrateFromDb() async {
+    final db = await DatabaseHelper.instance.database;
+    final repo = SettingsRepository(db);
+    final raw = await repo.getSetting(kLansweeperApiKeySettingKey);
+    state = raw?.trim() ?? '';
+  }
+
+  Future<void> setApiKey(String value) async {
+    final normalized = value.trim();
+    state = normalized;
+    final db = await DatabaseHelper.instance.database;
+    await SettingsRepository(
+      db,
+    ).saveSetting(kLansweeperApiKeySettingKey, normalized);
+  }
+}
+
+final lansweeperApiKeyProvider =
+    NotifierProvider.autoDispose<LansweeperApiKeyNotifier, String>(
+      LansweeperApiKeyNotifier.new,
+    );
 
 /// Κλήσεις dashboard με τα τρέχοντα φίλτρα, για αναφορά Lansweeper.
 final dashboardCallsForReportProvider =
     FutureProvider.autoDispose<List<CallModel>>((ref) async {
-  final filter = ref.watch(dashboardFilterProvider);
-  final db = await DatabaseHelper.instance.database;
-  return CallsRepository(db).getDashboardCalls(filter);
-});
+      final filter = ref.watch(dashboardFilterProvider);
+      final db = await DatabaseHelper.instance.database;
+      return CallsRepository(db).getDashboardCalls(filter);
+    });
 
 /// Ονόματα τμημάτων για dropdown φίλτρου (ταξινόμηση όπως στη βάση).
-final dashboardDepartmentsProvider =
-    FutureProvider.autoDispose<List<String>>((ref) async {
+final dashboardDepartmentsProvider = FutureProvider.autoDispose<List<String>>((
+  ref,
+) async {
   final db = await DatabaseHelper.instance.database;
   final rows = await DirectoryRepository(db).getDepartments();
   return rows

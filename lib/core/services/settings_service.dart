@@ -1,4 +1,4 @@
-import 'dart:convert';
+﻿import 'dart:convert';
 
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -44,6 +44,9 @@ class SettingsService {
       'calls_show_secondary_remote_actions';
   static const String _keyCallsShowEmptyRemoteLaunchers =
       'calls_show_empty_remote_launchers';
+  static const String _keyLansweeperApiUrl = 'lansweeper_api_url';
+  static const String _keyLansweeperApiKey = 'lansweeper_api_key';
+  static const String _legacyKeyLansweeperUrl = 'lansweeper_url';
 
   /// Μία φορά: migration legacy remote_tools → arguments_json (placeholders v2).
   static const String _keyRemoteToolsV2Migrated = 'remote_tools_v2_migrated';
@@ -490,6 +493,35 @@ class SettingsService {
   Future<void> setRemoteToolsV2Migrated(bool value) async {
     if (_setAppSetting == null) return;
     await _setAppSetting!(_keyRemoteToolsV2Migrated, value ? '1' : '0');
+  }
+
+  /// URL API Lansweeper στο app_settings. Διατηρεί fallback στο legacy `lansweeper_url`.
+  Future<String?> getLansweeperApiUrl() async {
+    if (_getAppSetting == null) return null;
+    final direct = await _getAppSetting!(_keyLansweeperApiUrl);
+    final normalizedDirect = direct?.trim() ?? '';
+    if (normalizedDirect.isNotEmpty) return normalizedDirect;
+    final legacy = await _getAppSetting!(_legacyKeyLansweeperUrl);
+    final normalizedLegacy = legacy?.trim() ?? '';
+    return normalizedLegacy.isEmpty ? null : normalizedLegacy;
+  }
+
+  Future<void> setLansweeperApiUrl(String value) async {
+    if (_setAppSetting == null) return;
+    await _setAppSetting!(_keyLansweeperApiUrl, value.trim());
+  }
+
+  /// Κοινό API key Lansweeper στο app_settings.
+  Future<String?> getLansweeperApiKey() async {
+    if (_getAppSetting == null) return null;
+    final value = await _getAppSetting!(_keyLansweeperApiKey);
+    final normalized = value?.trim() ?? '';
+    return normalized.isEmpty ? null : normalized;
+  }
+
+  Future<void> setLansweeperApiKey(String value) async {
+    if (_setAppSetting == null) return;
+    await _setAppSetting!(_keyLansweeperApiKey, value.trim());
   }
 
   /// Επιστρέφει λίστα επιλογών για dropdown (split by comma, trim, μη κενά). Τελευταία επιλογή "Κανένα" προστίθεται στα dialogs.

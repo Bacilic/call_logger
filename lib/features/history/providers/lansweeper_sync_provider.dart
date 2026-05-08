@@ -1,0 +1,262 @@
+﻿import 'dart:async';
+import 'dart:convert';
+
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../../core/database/calls_repository.dart';
+import '../../../core/database/database_helper.dart';
+import '../../../core/services/lansweeper_sync_service.dart';
+import '../models/lansweeper_sync_state.dart';
+import 'dashboard_provider.dart';
+
+class LansweeperSubmitInput {
+  const LansweeperSubmitInput({
+    required this.title,
+    required this.notes,
+    required this.agentUsername,
+  });
+
+  final String title;
+  final String notes;
+  final String agentUsername;
+}
+
+class LansweeperCommandResult {
+  const LansweeperCommandResult({
+    required this.success,
+    required this.message,
+    this.ticketId,
+    this.ignored = false,
+    this.failureReport,
+  });
+
+  final bool success;
+  final String message;
+  final String? ticketId;
+  final bool ignored;
+  final String? failureReport;
+}
+
+class LansweeperSyncNotifier extends AsyncNotifier<void> {
+  bool _isRunning = false;
+
+  @override
+  FutureOr<void> build() {}
+
+  Future<LansweeperCommandResult> submitCall({
+    required int callId,
+    required LansweeperSubmitInput input,
+  }) async {
+    if (_isRunning) {
+      return const LansweeperCommandResult(
+        success: false,
+        ignored: true,
+        message: 'Υπάρχει ήδη ενεργή αποστολή. Περίμενε να ολοκληρωθεί.',
+      );
+    }
+
+    _isRunning = true;
+    state = const AsyncLoading();
+    try {
+      final db = await DatabaseHelper.instance.database;
+      final repo = CallsRepository(db);
+      final call = await repo.getCallById(callId);
+      if (call == null) {
+        state = const AsyncData(null);
+        return LansweeperCommandResult(
+          success: false,
+          message: 'Δεν βρέθηκε η κλήση για αποστολή.',
+          failureReport: _buildFailureReport(
+            stage: 'call_lookup',
+            callId: callId,
+            message: 'Δεν βρέθηκε η κλήση για αποστολή.',
+          ),
+        );
+      }
+
+      final service = LansweeperSyncService();
+      final result = await service.submitAddTicket(
+        LansweeperSyncRequest(
+          call: call,
+          title: input.title,
+          notes: input.notes,
+          agentUsername: input.agentUsername,
+        ),
+      );
+
+      if (result.success && (result.ticketId?.trim().isNotEmpty ?? false)) {
+        await repo.markLansweeperSynced(
+          callId: callId,
+          ticketId: result.ticketId!.trim(),
+          provider: 'lansweeper',
+          metadata: <String, dynamic>{
+            'mode': 'api',
+            'message': result.message,
+            'payload': result.rawPayload,
+          },
+        );
+        state = const AsyncData(null);
+        _invalidateDashboardData();
+        return LansweeperCommandResult(
+          success: true,
+          message: result.message,
+          ticketId: result.ticketId,
+        );
+      }
+
+      await repo.updateLansweeperState(
+        callId: callId,
+        state: LansweeperSyncState.failed,
+      );
+      if (result.ticketId?.trim().isNotEmpty ?? false) {
+        await repo.addExternalLink(
+          callId: callId,
+          externalId: result.ticketId!.trim(),
+          provider: 'lansweeper',
+          metadata: <String, dynamic>{
+            'mode': 'api_failed',
+            'message': result.message,
+            'payload': result.rawPayload,
+          },
+        );
+      }
+      state = const AsyncData(null);
+      _invalidateDashboardData();
+      return LansweeperCommandResult(
+        success: false,
+        message: result.message,
+        ticketId: result.ticketId,
+        failureReport: _buildFailureReport(
+          stage: 'api_response',
+          callId: callId,
+          message: result.message,
+          ticketId: result.ticketId,
+          payload: result.rawPayload,
+        ),
+      );
+    } catch (e, st) {
+      state = AsyncError(e, st);
+      final db = await DatabaseHelper.instance.database;
+      await CallsRepository(db).updateLansweeperState(
+        callId: callId,
+        state: LansweeperSyncState.failed,
+      );
+      _invalidateDashboardData();
+      return LansweeperCommandResult(
+        success: false,
+        message: e.toString(),
+        failureReport: _buildFailureReport(
+          stage: 'exception',
+          callId: callId,
+          message: e.toString(),
+          stackTrace: st,
+        ),
+      );
+    } finally {
+      _isRunning = false;
+    }
+  }
+
+  Future<LansweeperCommandResult> resubmitCall({
+    required int callId,
+    required LansweeperSubmitInput input,
+  }) async {
+    return submitCall(callId: callId, input: input);
+  }
+
+  Future<void> markAsPassedManually({
+    required int callId,
+    required String ticketId,
+    String? comment,
+  }) async {
+    if (_isRunning) return;
+    _isRunning = true;
+    state = const AsyncLoading();
+    try {
+      final db = await DatabaseHelper.instance.database;
+      await CallsRepository(db).markManualPassed(
+        callId: callId,
+        ticketId: ticketId.trim(),
+        comment: comment,
+      );
+      state = const AsyncData(null);
+      _invalidateDashboardData();
+    } catch (e, st) {
+      state = AsyncError(e, st);
+    } finally {
+      _isRunning = false;
+    }
+  }
+
+  Future<void> setExcluded(int callId) =>
+      _setState(callId, LansweeperSyncState.excluded);
+
+  Future<void> setUnsent(int callId) =>
+      _setState(callId, LansweeperSyncState.unsent);
+
+  Future<void> setSent(int callId) =>
+      _setState(callId, LansweeperSyncState.sent);
+
+  Future<void> _setState(int callId, String nextState) async {
+    final db = await DatabaseHelper.instance.database;
+    await CallsRepository(
+      db,
+    ).updateLansweeperState(callId: callId, state: nextState);
+    _invalidateDashboardData();
+  }
+
+  void _invalidateDashboardData() {
+    ref.invalidate(dashboardCallsForReportProvider);
+    ref.invalidate(dashboardStatsProvider);
+  }
+
+  String _buildFailureReport({
+    required String stage,
+    required int callId,
+    required String message,
+    String? ticketId,
+    Map<String, dynamic>? payload,
+    StackTrace? stackTrace,
+  }) {
+    final lines = <String>[
+      'Lansweeper submit failed',
+      'stage: $stage',
+      'callId: $callId',
+      'message: $message',
+      'timestamp: ${DateTime.now().toIso8601String()}',
+    ];
+
+    final normalizedTicketId = (ticketId ?? '').trim();
+    if (normalizedTicketId.isNotEmpty) {
+      lines.add('ticketId: $normalizedTicketId');
+    }
+
+    if (payload != null) {
+      try {
+        final encoder = const JsonEncoder.withIndent('  ');
+        lines.add('payload:\n${encoder.convert(payload)}');
+      } catch (_) {
+        lines.add('payload: ${payload.toString()}');
+      }
+    }
+
+    if (stackTrace != null) {
+      lines.add('stackTrace:\n$stackTrace');
+    }
+
+    return lines.join('\n');
+  }
+}
+
+final lansweeperSyncProvider =
+    AsyncNotifierProvider.autoDispose<LansweeperSyncNotifier, void>(
+      LansweeperSyncNotifier.new,
+    );
+
+final callExternalLinksProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, int>((ref, callId) async {
+      final db = await DatabaseHelper.instance.database;
+      return CallsRepository(
+        db,
+      ).getCallExternalLinks(callId, provider: 'lansweeper');
+    });

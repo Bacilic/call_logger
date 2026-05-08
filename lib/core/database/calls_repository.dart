@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:intl/intl.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -33,6 +34,9 @@ class CallsRepository {
     'status',
     'duration',
     'is_priority',
+    'lansweeper_state',
+    'lansweeper_main_ticket_id',
+    'lansweeper_last_sync_at',
     'is_deleted',
   ];
 
@@ -147,6 +151,9 @@ class CallsRepository {
       'status': call.status ?? 'completed',
       'duration': call.duration,
       'is_priority': call.isPriority ?? 0,
+      'lansweeper_state': call.lansweeperState ?? 'unsent',
+      'lansweeper_main_ticket_id': call.lansweeperMainTicketId,
+      'lansweeper_last_sync_at': call.lansweeperLastSyncAt,
       'is_deleted': 0,
     };
     map['search_index'] = await _buildCallSearchIndex(db, map);
@@ -206,6 +213,9 @@ class CallsRepository {
       'status': call.status,
       'duration': call.duration,
       'is_priority': call.isPriority ?? 0,
+      'lansweeper_state': call.lansweeperState,
+      'lansweeper_main_ticket_id': call.lansweeperMainTicketId,
+      'lansweeper_last_sync_at': call.lansweeperLastSyncAt,
       'is_deleted': call.isDeleted ? 1 : 0,
     };
     map['search_index'] = await _buildCallSearchIndex(db, map);
@@ -807,8 +817,7 @@ WHERE ${whereSpark.join(' AND ')}
       args.add(dt);
     }
 
-    final rows = await db.rawQuery(
-      '''
+    final rows = await db.rawQuery('''
       SELECT
         calls.id,
         calls.date,
@@ -826,6 +835,9 @@ WHERE ${whereSpark.join(' AND ')}
         calls.status,
         calls.duration,
         calls.is_priority,
+        calls.lansweeper_state,
+        calls.lansweeper_main_ticket_id,
+        calls.lansweeper_last_sync_at,
         calls.is_deleted
       FROM calls
       LEFT JOIN users ON calls.caller_id = users.id
@@ -840,11 +852,20 @@ WHERE ${whereSpark.join(' AND ')}
       LEFT JOIN departments ON users.department_id = departments.id
       WHERE ${whereClauses.join(' AND ')}
       ORDER BY calls.date DESC, calls.time DESC, calls.id DESC
-      ''',
-      args,
-    );
+      ''', args);
 
     return rows.map(CallModel.fromMap).toList();
+  }
+
+  Future<CallModel?> getCallById(int callId) async {
+    final rows = await db.query(
+      'calls',
+      where: 'id = ?',
+      whereArgs: [callId],
+      limit: 1,
+    );
+    if (rows.isEmpty) return null;
+    return CallModel.fromMap(rows.first);
   }
 
   /// Γραμμή «τηλέφωνο - καλούντας - τμήμα - εξοπλισμός» όπως στο ιστορικό κλήσεων
@@ -894,5 +915,139 @@ WHERE ${whereSpark.join(' AND ')}
     );
     if (rows.isEmpty) return '';
     return formatCallAuditLineFromHistoryQueryRow(rows.first);
+  }
+
+  /// Ενημερώνει την κατάσταση Lansweeper μιας κλήσης.
+  Future<void> updateLansweeperState({
+    required int callId,
+    required String state,
+    String? ticketId,
+    String? syncedAt,
+  }) async {
+    final payload = <String, Object?>{
+      'lansweeper_state': state,
+      'lansweeper_main_ticket_id': ticketId,
+      'lansweeper_last_sync_at': syncedAt ?? DateTime.now().toIso8601String(),
+    };
+    await db.update('calls', payload, where: 'id = ?', whereArgs: [callId]);
+  }
+
+  /// Ορίζει/ενημερώνει το κύριο ticket Lansweeper μιας κλήσης.
+  Future<void> setLansweeperMainTicket({
+    required int callId,
+    required String? ticketId,
+    String? syncedAt,
+  }) async {
+    await db.update(
+      'calls',
+      {
+        'lansweeper_main_ticket_id': ticketId,
+        'lansweeper_last_sync_at': syncedAt ?? DateTime.now().toIso8601String(),
+      },
+      where: 'id = ?',
+      whereArgs: [callId],
+    );
+  }
+
+  /// Καταγράφει εξωτερικό link (π.χ. ticket id) για κλήση.
+  Future<int> addExternalLink({
+    required int callId,
+    required String externalId,
+    required String provider,
+    String? createdAt,
+    Map<String, dynamic>? metadata,
+    DatabaseExecutor? executor,
+  }) async {
+    final e = executor ?? db;
+    return e.insert('call_external_links', {
+      'call_id': callId,
+      'external_id': externalId,
+      'provider': provider,
+      'created_at': createdAt ?? DateTime.now().toIso8601String(),
+      'metadata': metadata == null ? null : jsonEncode(metadata),
+    });
+  }
+
+  /// Επιστρέφει το ιστορικό links εξωτερικών συστημάτων για μια κλήση.
+  Future<List<Map<String, dynamic>>> getCallExternalLinks(
+    int callId, {
+    String? provider,
+  }) async {
+    final where = provider == null
+        ? 'call_id = ?'
+        : 'call_id = ? AND provider = ?';
+    final args = provider == null
+        ? <Object?>[callId]
+        : <Object?>[callId, provider];
+    final rows = await db.query(
+      'call_external_links',
+      where: where,
+      whereArgs: args,
+      orderBy: 'created_at DESC, id DESC',
+    );
+    return rows.map((r) => Map<String, dynamic>.from(r)).toList();
+  }
+
+  /// Χειροκίνητη σήμανση κλήσης ως περασμένη, με transactional write (state + link history).
+  Future<void> markManualPassed({
+    required int callId,
+    required String ticketId,
+    String? comment,
+  }) async {
+    final nowIso = DateTime.now().toIso8601String();
+    await db.transaction((txn) async {
+      await txn.update(
+        'calls',
+        {
+          'lansweeper_state': 'sent',
+          'lansweeper_main_ticket_id': ticketId,
+          'lansweeper_last_sync_at': nowIso,
+        },
+        where: 'id = ?',
+        whereArgs: [callId],
+      );
+      await addExternalLink(
+        callId: callId,
+        externalId: ticketId,
+        provider: 'lansweeper',
+        createdAt: nowIso,
+        metadata: <String, dynamic>{
+          'mode': 'manual',
+          if (comment != null && comment.trim().isNotEmpty)
+            'comment': comment.trim(),
+        },
+        executor: txn,
+      );
+    });
+  }
+
+  /// Επιτυχής συγχρονισμός Lansweeper με transactional write (state + link history).
+  Future<void> markLansweeperSynced({
+    required int callId,
+    required String ticketId,
+    required String provider,
+    Map<String, dynamic>? metadata,
+  }) async {
+    final nowIso = DateTime.now().toIso8601String();
+    await db.transaction((txn) async {
+      await txn.update(
+        'calls',
+        {
+          'lansweeper_state': 'sent',
+          'lansweeper_main_ticket_id': ticketId,
+          'lansweeper_last_sync_at': nowIso,
+        },
+        where: 'id = ?',
+        whereArgs: [callId],
+      );
+      await addExternalLink(
+        callId: callId,
+        externalId: ticketId,
+        provider: provider,
+        createdAt: nowIso,
+        metadata: metadata,
+        executor: txn,
+      );
+    });
   }
 }

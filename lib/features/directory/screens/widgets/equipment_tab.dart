@@ -81,21 +81,37 @@ class _EquipmentTabState extends ConsumerState<EquipmentTab> {
           child: Row(
             children: [
               Expanded(
-                child: TextField(
-                  controller: _searchController,
-                  onChanged: notifier.setSearchQuery,
-                  decoration: InputDecoration(
-                    labelText: 'Αναζήτηση',
-                    hintText: 'Κωδικός, τύπος, κάτοχος...',
-                    prefixIcon: const Icon(Icons.search),
-                    border: const OutlineInputBorder(),
-                    suffixIcon: state.searchQuery.isNotEmpty
-                        ? IconButton(
-                            icon: const Icon(Icons.close),
-                            tooltip: 'Καθαρισμός',
-                            onPressed: () => notifier.setSearchQuery(''),
-                          )
-                        : null,
+                child: Tooltip(
+                  triggerMode: TooltipTriggerMode.tap,
+                  richMessage: const TextSpan(
+                    children: [
+                      TextSpan(text: 'Η αναζήτηση γίνεται μόνο '),
+                      TextSpan(
+                        text: 'στις ορατές στήλες',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      TextSpan(
+                        text:
+                            '. Εμφανίστε τις στήλες που θέλετε να ψάξετε, π.χ. Σημειώσεις.',
+                      ),
+                    ],
+                  ),
+                  child: TextField(
+                    controller: _searchController,
+                    onChanged: notifier.setSearchQuery,
+                    decoration: InputDecoration(
+                      labelText: 'Αναζήτηση',
+                      hintText: 'Κωδικός, τύπος, κάτοχος...',
+                      prefixIcon: const Icon(Icons.search),
+                      border: const OutlineInputBorder(),
+                      suffixIcon: state.searchQuery.isNotEmpty
+                          ? IconButton(
+                              icon: const Icon(Icons.close),
+                              tooltip: 'Καθαρισμός',
+                              onPressed: () => notifier.setSearchQuery(''),
+                            )
+                          : null,
+                    ),
                   ),
                 ),
               ),

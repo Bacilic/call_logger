@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
@@ -699,6 +699,9 @@ class DatabaseHelper {
     }
     if (oldVersion < 26 && newVersion >= 26) {
       await migrateDatabaseToV26(db);
+    }
+    if (oldVersion < 27 && newVersion >= 27) {
+      await migrateDatabaseToV27(db);
     }
   }
 

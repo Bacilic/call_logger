@@ -1,7 +1,9 @@
-import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+﻿import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 /// Κλειδί αποθήκευσης για URL Lansweeper στο `app_settings`.
 const String kLansweeperUrlSettingKey = 'lansweeper_url';
+const String kLansweeperApiUrlSettingKey = 'lansweeper_api_url';
+const String kLansweeperApiKeySettingKey = 'lansweeper_api_key';
 
 /// Προεπιλεγμένο URL Lansweeper.
 const String kDefaultLansweeperUrl =

@@ -27,7 +27,8 @@ import '../utils/search_text_normalizer.dart';
 /// v24: `audit_log.search_text` για αναζήτηση τίτλου χωρίς action.
 /// v25: backfill `search_text` με ρητές υποενέργειες (προσθήκη/αφαίρεση/αλλαγή).
 /// v26: πλήρης στοίχιση `search_text` με UI αλλαγών (1:1 κανονικοποιημένα).
-const int databaseSchemaVersionV1 = 26;
+/// v27: lansweeper sync state columns σε `calls` + πίνακας `call_external_links`.
+const int databaseSchemaVersionV1 = 27;
 
 /// Προεπιλογές διαδρομών (ίδιες με SettingsService — χωρίς εξάρτηση Flutter εδώ).
 const String kDefaultVncExecutablePath =
@@ -58,9 +59,32 @@ Future<void> applyDatabaseV1Schema(Database db) async {
         duration INTEGER,
         is_priority INTEGER DEFAULT 0,
         search_index TEXT,
+        lansweeper_state TEXT NOT NULL DEFAULT 'unsent',
+        lansweeper_main_ticket_id TEXT,
+        lansweeper_last_sync_at TEXT,
         is_deleted INTEGER DEFAULT 0
       )
     ''');
+  await db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_calls_lansweeper_state ON calls(lansweeper_state)',
+  );
+
+  await db.execute('''
+      CREATE TABLE IF NOT EXISTS call_external_links (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        call_id INTEGER NOT NULL,
+        external_id TEXT NOT NULL,
+        provider TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        metadata TEXT
+      )
+    ''');
+  await db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_call_external_links_call_provider ON call_external_links(call_id, provider)',
+  );
+  await db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_call_external_links_created_at ON call_external_links(created_at)',
+  );
 
   await db.execute('''
       CREATE TABLE users (
@@ -995,6 +1019,47 @@ Future<void> migrateDatabaseToV26(Database db) async {
     );
   }
   await batch.commit(noResult: true);
+}
+
+/// v27: lansweeper sync columns σε `calls` και ιστορικός πίνακας `call_external_links`.
+Future<void> migrateDatabaseToV27(Database db) async {
+  final callInfo = await db.rawQuery('PRAGMA table_info(calls)');
+  final callColumns = callInfo.map((r) => r['name'] as String).toSet();
+  if (!callColumns.contains('lansweeper_state')) {
+    await db.execute(
+      "ALTER TABLE calls ADD COLUMN lansweeper_state TEXT NOT NULL DEFAULT 'unsent'",
+    );
+  }
+  if (!callColumns.contains('lansweeper_main_ticket_id')) {
+    await db.execute(
+      'ALTER TABLE calls ADD COLUMN lansweeper_main_ticket_id TEXT',
+    );
+  }
+  if (!callColumns.contains('lansweeper_last_sync_at')) {
+    await db.execute(
+      'ALTER TABLE calls ADD COLUMN lansweeper_last_sync_at TEXT',
+    );
+  }
+  await db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_calls_lansweeper_state ON calls(lansweeper_state)',
+  );
+
+  await db.execute('''
+    CREATE TABLE IF NOT EXISTS call_external_links (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      call_id INTEGER NOT NULL,
+      external_id TEXT NOT NULL,
+      provider TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      metadata TEXT
+    )
+  ''');
+  await db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_call_external_links_call_provider ON call_external_links(call_id, provider)',
+  );
+  await db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_call_external_links_created_at ON call_external_links(created_at)',
+  );
 }
 
 Map<String, dynamic>? _decodeMapForMigration(String? raw) {

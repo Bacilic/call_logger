@@ -1,4 +1,4 @@
-/// Μοντέλο κλήσης (πίνακας calls).
+﻿/// Μοντέλο κλήσης (πίνακας calls).
 class CallModel {
   CallModel({
     this.id,
@@ -17,6 +17,9 @@ class CallModel {
     this.status,
     this.duration,
     this.isPriority,
+    this.lansweeperState,
+    this.lansweeperMainTicketId,
+    this.lansweeperLastSyncAt,
     this.isDeleted = false,
   });
 
@@ -36,6 +39,9 @@ class CallModel {
   final String? status;
   final int? duration;
   final int? isPriority;
+  final String? lansweeperState;
+  final String? lansweeperMainTicketId;
+  final String? lansweeperLastSyncAt;
   final bool isDeleted;
 
   factory CallModel.fromMap(Map<String, dynamic> map) {
@@ -56,6 +62,9 @@ class CallModel {
       status: map['status'] as String?,
       duration: map['duration'] as int?,
       isPriority: map['is_priority'] as int?,
+      lansweeperState: map['lansweeper_state'] as String?,
+      lansweeperMainTicketId: map['lansweeper_main_ticket_id'] as String?,
+      lansweeperLastSyncAt: map['lansweeper_last_sync_at'] as String?,
       isDeleted: (map['is_deleted'] as int?) == 1,
     );
   }
@@ -78,6 +87,11 @@ class CallModel {
       if (status != null) 'status': status,
       if (duration != null) 'duration': duration,
       if (isPriority != null) 'is_priority': isPriority,
+      if (lansweeperState != null) 'lansweeper_state': lansweeperState,
+      if (lansweeperMainTicketId != null)
+        'lansweeper_main_ticket_id': lansweeperMainTicketId,
+      if (lansweeperLastSyncAt != null)
+        'lansweeper_last_sync_at': lansweeperLastSyncAt,
       'is_deleted': isDeleted ? 1 : 0,
     };
   }
