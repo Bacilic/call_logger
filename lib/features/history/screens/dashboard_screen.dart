@@ -32,13 +32,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   final TextEditingController _keywordController = TextEditingController();
   final TextEditingController _userController = TextEditingController();
   final TextEditingController _equipmentController = TextEditingController();
-  final TextEditingController _lansweeperUrlController = TextEditingController();
-  final TextEditingController _lansweeperApiKeyController =
-      TextEditingController();
 
   Timer? _debounceTimer;
-  ProviderSubscription<String>? _lansweeperUrlSub;
-  ProviderSubscription<String>? _lansweeperApiKeySub;
   bool _isFilterOpen = false;
   bool _showMoreSection = false;
   _TopEntityMode _topEntityMode = _TopEntityMode.department;
@@ -53,35 +48,15 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       _keywordController.text = f.keyword;
       _userController.text = f.userName ?? '';
       _equipmentController.text = f.equipmentCode ?? '';
-      _lansweeperUrlController.text = ref.read(lansweeperUrlProvider);
-      _lansweeperApiKeyController.text = ref.read(lansweeperApiKeyProvider);
-    });
-    _lansweeperUrlSub = ref.listenManual<String>(lansweeperUrlProvider, (
-      _,
-      next,
-    ) {
-      if (_lansweeperUrlController.text == next) return;
-      _lansweeperUrlController.text = next;
-    });
-    _lansweeperApiKeySub = ref.listenManual<String>(lansweeperApiKeyProvider, (
-      _,
-      next,
-    ) {
-      if (_lansweeperApiKeyController.text == next) return;
-      _lansweeperApiKeyController.text = next;
     });
   }
 
   @override
   void dispose() {
     _debounceTimer?.cancel();
-    _lansweeperUrlSub?.close();
-    _lansweeperApiKeySub?.close();
     _keywordController.dispose();
     _userController.dispose();
     _equipmentController.dispose();
-    _lansweeperUrlController.dispose();
-    _lansweeperApiKeyController.dispose();
     super.dispose();
   }
 
@@ -96,16 +71,6 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   void _pushTextFiltersToProvider() {
     final u = _userController.text.trim();
     final e = _equipmentController.text.trim();
-    unawaited(
-      ref.read(lansweeperUrlProvider.notifier).setUrl(
-        _lansweeperUrlController.text,
-      ),
-    );
-    unawaited(
-      ref.read(lansweeperApiKeyProvider.notifier).setApiKey(
-        _lansweeperApiKeyController.text,
-      ),
-    );
     ref
         .read(dashboardFilterProvider.notifier)
         .update(
@@ -557,8 +522,6 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                     keywordController: _keywordController,
                     userController: _userController,
                     equipmentController: _equipmentController,
-                    lansweeperUrlController: _lansweeperUrlController,
-                    lansweeperApiKeyController: _lansweeperApiKeyController,
                     departmentsAsync: departmentsAsync,
                     selectedDepartment: filter.department,
                     onClose: () => setState(() => _isFilterOpen = false),
@@ -572,16 +535,6 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                       _keywordController.clear();
                       _userController.clear();
                       _equipmentController.clear();
-                      _lansweeperUrlController.clear();
-                      _lansweeperApiKeyController.clear();
-                      unawaited(
-                        ref
-                            .read(lansweeperUrlProvider.notifier)
-                            .resetToDefault(),
-                      );
-                      unawaited(
-                        ref.read(lansweeperApiKeyProvider.notifier).setApiKey(''),
-                      );
                       ref
                           .read(dashboardFilterProvider.notifier)
                           .update((s) => const DashboardFilterModel());
@@ -1337,8 +1290,6 @@ class _FilterPane extends StatelessWidget {
     required this.keywordController,
     required this.userController,
     required this.equipmentController,
-    required this.lansweeperUrlController,
-    required this.lansweeperApiKeyController,
     required this.departmentsAsync,
     required this.selectedDepartment,
     required this.onClose,
@@ -1358,8 +1309,6 @@ class _FilterPane extends StatelessWidget {
   final TextEditingController keywordController;
   final TextEditingController userController;
   final TextEditingController equipmentController;
-  final TextEditingController lansweeperUrlController;
-  final TextEditingController lansweeperApiKeyController;
   final AsyncValue<List<String>> departmentsAsync;
   final String? selectedDepartment;
   final VoidCallback onClose;
@@ -1506,28 +1455,6 @@ class _FilterPane extends StatelessWidget {
                 onChanged: (_) => onChangedText(),
                 decoration: const InputDecoration(
                   labelText: 'Εξοπλισμός',
-                  border: OutlineInputBorder(),
-                  isDense: true,
-                ),
-              ),
-              const SizedBox(height: 8),
-              TextFormField(
-                controller: lansweeperUrlController,
-                onChanged: (_) => onChangedText(),
-                decoration: const InputDecoration(
-                  labelText: 'Lansweeper URL',
-                  hintText: 'http://.../NewTicket.aspx?...',
-                  border: OutlineInputBorder(),
-                  isDense: true,
-                ),
-              ),
-              const SizedBox(height: 8),
-              TextFormField(
-                controller: lansweeperApiKeyController,
-                onChanged: (_) => onChangedText(),
-                decoration: const InputDecoration(
-                  labelText: 'Lansweeper API key',
-                  hintText: 'API key...',
                   border: OutlineInputBorder(),
                   isDense: true,
                 ),

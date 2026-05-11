@@ -4,13 +4,11 @@ class LansweeperSyncForm extends StatelessWidget {
   const LansweeperSyncForm({
     required this.titleController,
     required this.notesController,
-    required this.agentController,
     super.key,
   });
 
   final TextEditingController titleController;
   final TextEditingController notesController;
-  final TextEditingController agentController;
 
   @override
   Widget build(BuildContext context) {
@@ -39,14 +37,6 @@ class LansweeperSyncForm extends StatelessWidget {
               maxLines: 4,
               decoration: const InputDecoration(
                 labelText: 'Σημειώσεις',
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 10),
-            TextField(
-              controller: agentController,
-              decoration: const InputDecoration(
-                labelText: 'Πράκτορας (username)',
                 border: OutlineInputBorder(),
               ),
             ),

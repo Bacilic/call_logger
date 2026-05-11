@@ -1,4 +1,4 @@
-# Ιστορικό Αλλαγών
+﻿# Ιστορικό Αλλαγών
 
 Όλες οι σημαντικές αλλαγές σε αυτό το έργο θα καταγράφονται σε αυτό το αρχείο.
 
@@ -8,14 +8,26 @@
 
 ## [Unreleased]
 
+## [0.16.0] - 2026-05-11
+
 ### Προστέθηκε
 
+- **Lansweeper · ρυθμίσεις αναφοράς:** ξεχωριστά αποθηκευμένα URL για **API** (`…/api.aspx`, κλειδί `lansweeper_api_url`) και για **φόρμα εισιτηρίου στον browser** (κλειδί `lansweeper_url`), με providers `lansweeperApiUrlProvider` και `lansweeperTicketFormUrlProvider`.
+- **Lansweeper · επικύρωση:** νέο `LansweeperUrlRules` και παράδειγμα `kExampleLansweeperApiUrl` για υποδείξεις· έλεγχος ώστε η Άμεση καταχώρηση να ενεργοποιείται μόνο με έγκυρο API URL και το «Αντιγραφή & άνοιγμα» μόνο με έγκυρο http(s) URL φόρμας.
+- **Lansweeper · διάλογος σύνδεσης:** `LansweeperConnectionSettingsDialog` από εικονίδιο ρυθμίσεων στην αναφορά· κουμπιά **«Έλεγχος συνδέσμου»** που ανοίγουν τον αντίστοιχο σύνδεσμο στον φυλλομετρητή (χωρίς αντιγραφή στο πρόχειρο).
+- **Lansweeper · πράκτορας:** μόνιμη αποθήκευση `lansweeper_agent_username` στο `app_settings` και provider `lansweeperAgentUsernameProvider` (το πεδίο μεταφέρθηκε από τη φόρμα ανά κλήση στις ρυθμίσεις).
 - **Λάμπα · Επιλεκτική μεταφορά:** νέο κουμπί «Μεταφορά» στις κάρτες αποτελεσμάτων (μόνο για Εξοπλισμό/Ιδιοκτήτη/Τμήμα), που ανοίγει οδηγό μεταφοράς διπλού πίνακα (Dual-Pane Wizard).
 - **Λάμπα · οδηγός μεταφοράς:** νέο `LampTransferWizardDialog` με αριστερή προβολή μόνο ανάγνωσης από `old_equipment.db` και δεξιά επεξεργάσιμη φόρμα προορισμού στη `call_logger.db`.
 - **Λάμπα · υπηρεσία μεταφοράς:** νέο `LampMigrationService` για cross-referencing παλιών προς νέες εγγραφές, με pre-fill πεδίων και fallback Top-3 υποψηφίων αντιστοιχίσεων με confidence score.
 
+### Διορθώθηκε
+
+- **Lansweeper · Riverpod:** αποφυγή τροποποίησης providers κατά το κλείσιμο διαλόγου (lifecycle)· η αποθήκευση ρυθμίσεων από πεδία εκτελείται μετά το frame (`addPostFrameCallback`) ώστε να μην εμφανίζεται σφάλμα «Tried to modify a provider while the widget tree was building».
+
 ### Άλλαξε
 
+- **Lansweeper · dashboard:** οι ρυθμίσεις URL/API/πράκτορα μεταφέρθηκαν από το panel φίλτρων στον διάλογο αναφοράς Lansweeper (εικονίδιο ρυθμίσεων).
+- **Lansweeper · SettingsService:** το `getLansweeperApiUrl()` δεν επιστρέφει πλέον αυθαίρετα το URL φόρμας· το legacy `lansweeper_url` χρησιμοποιείται ως API URL μόνο αν περιέχει `api.aspx`.
 - **Λάμπα · scoring αντιστοίχισης:** προστέθηκε επαναχρησιμοποιήσιμη ρουτίνα similarity/confidence score στο `LampIssueResolutionService` και αξιοποιείται από τον migration οδηγό (χωρίς νέο scoring αλγόριθμο από το μηδέν).
 - **Λάμπα · ροή αποθήκευσης:** ο wizard γράφει αποκλειστικά μέσω υπαρχόντων methods του `DirectoryRepository` (`insertUser`, `insertEquipment`, `insertDepartment`, `update*`) με ασφαλή defaults schema (`is_deleted=0`, `map_hidden=1`).
 - **Λάμπα · συμβατότητα UI:** αντικατάσταση deprecated χειρισμού `RadioListTile` με `RadioGroup` στο wizard, ώστε να αφαιρεθούν προειδοποιήσεις `deprecated_member_use`.

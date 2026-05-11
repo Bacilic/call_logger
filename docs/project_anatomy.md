@@ -1,4 +1,4 @@
-# Call Logger — Project Anatomy
+﻿# Call Logger — Project Anatomy
 
 **Ημερομηνία τροποποίησης εγγράφου:** 6 Μαΐου 2026
 
@@ -442,7 +442,7 @@ lib/
 - callEntryProvider, callSmartEntityProvider, taskSmartEntityProvider: state φόρμας κλήσης και smart επιλογές.
 - tasksProvider, taskFilterProvider, taskStatusCountsProvider, globalPendingTasksCountProvider, orphanCallsProvider: state εκκρεμοτήτων.
 - historyFilterProvider, historyCallsProvider, historyCategoriesProvider, historyCategoryEntriesProvider: ιστορικό κλήσεων.
-- dashboardFilterProvider, dashboardStatsProvider, dashboardCallsForReportProvider, dashboardDepartmentsProvider, lansweeperUrlProvider: dashboard/αναφορές.
+- dashboardFilterProvider, dashboardStatsProvider, dashboardCallsForReportProvider, dashboardDepartmentsProvider, lansweeperApiUrlProvider, lansweeperTicketFormUrlProvider: dashboard/αναφορές.
 - audit providers (audit_providers.dart): φίλτρα, λίστα, side panel, preview.
 - databaseBackupSettingsProvider, backupSchedulerProvider, databaseBrowserStatsProvider, databaseMaintenanceServiceProvider: backup/maintenance.
 - buildingMap providers: selected floor/department, tool mode, draft shape, undo, viewport requests.

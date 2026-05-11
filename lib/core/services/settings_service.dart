@@ -46,6 +46,7 @@ class SettingsService {
       'calls_show_empty_remote_launchers';
   static const String _keyLansweeperApiUrl = 'lansweeper_api_url';
   static const String _keyLansweeperApiKey = 'lansweeper_api_key';
+  static const String _keyLansweeperAgentUsername = 'lansweeper_agent_username';
   static const String _legacyKeyLansweeperUrl = 'lansweeper_url';
 
   /// Μία φορά: migration legacy remote_tools → arguments_json (placeholders v2).
@@ -495,15 +496,30 @@ class SettingsService {
     await _setAppSetting!(_keyRemoteToolsV2Migrated, value ? '1' : '0');
   }
 
-  /// URL API Lansweeper στο app_settings. Διατηρεί fallback στο legacy `lansweeper_url`.
+  /// URL API Lansweeper (`lansweeper_api_url`). Legacy `lansweeper_url` μόνο αν περιέχει `api.aspx`.
   Future<String?> getLansweeperApiUrl() async {
     if (_getAppSetting == null) return null;
     final direct = await _getAppSetting!(_keyLansweeperApiUrl);
     final normalizedDirect = direct?.trim() ?? '';
-    if (normalizedDirect.isNotEmpty) return normalizedDirect;
+    if (_looksLikeLansweeperApiUrl(normalizedDirect)) {
+      return normalizedDirect;
+    }
     final legacy = await _getAppSetting!(_legacyKeyLansweeperUrl);
     final normalizedLegacy = legacy?.trim() ?? '';
-    return normalizedLegacy.isEmpty ? null : normalizedLegacy;
+    if (_looksLikeLansweeperApiUrl(normalizedLegacy)) {
+      return normalizedLegacy;
+    }
+    return null;
+  }
+
+  static bool _looksLikeLansweeperApiUrl(String value) {
+    if (value.isEmpty) return false;
+    final u = Uri.tryParse(value);
+    if (u == null || !u.hasScheme || u.host.isEmpty) return false;
+    if (u.scheme != 'http' && u.scheme != 'https') return false;
+    final p = u.path.toLowerCase();
+    final v = value.toLowerCase();
+    return p.contains('api.aspx') || v.contains('/api.aspx');
   }
 
   Future<void> setLansweeperApiUrl(String value) async {
@@ -522,6 +538,19 @@ class SettingsService {
   Future<void> setLansweeperApiKey(String value) async {
     if (_setAppSetting == null) return;
     await _setAppSetting!(_keyLansweeperApiKey, value.trim());
+  }
+
+  /// Όνομα χρήστη πράκτορα Lansweeper (μόνιμη ρύθμιση, κοινό σε υποβολές).
+  Future<String?> getLansweeperAgentUsername() async {
+    if (_getAppSetting == null) return null;
+    final value = await _getAppSetting!(_keyLansweeperAgentUsername);
+    final normalized = value?.trim() ?? '';
+    return normalized.isEmpty ? null : normalized;
+  }
+
+  Future<void> setLansweeperAgentUsername(String value) async {
+    if (_setAppSetting == null) return;
+    await _setAppSetting!(_keyLansweeperAgentUsername, value.trim());
   }
 
   /// Επιστρέφει λίστα επιλογών για dropdown (split by comma, trim, μη κενά). Τελευταία επιλογή "Κανένα" προστίθεται στα dialogs.
