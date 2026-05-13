@@ -48,6 +48,14 @@ class SettingsService {
   static const String _keyLansweeperApiKey = 'lansweeper_api_key';
   static const String _keyLansweeperAgentUsername = 'lansweeper_agent_username';
   static const String _legacyKeyLansweeperUrl = 'lansweeper_url';
+  static const String _keyLansweeperHelpdeskAutoLogin =
+      'lansweeper_helpdesk_auto_login';
+  static const String _keyLansweeperHelpdeskLoginUrl =
+      'lansweeper_helpdesk_login_url';
+  static const String _keyLansweeperHelpdeskWebUsername =
+      'lansweeper_helpdesk_web_username';
+  static const String _keyLansweeperHelpdeskWebPassword =
+      'lansweeper_helpdesk_web_password';
 
   /// Μία φορά: migration legacy remote_tools → arguments_json (placeholders v2).
   static const String _keyRemoteToolsV2Migrated = 'remote_tools_v2_migrated';
@@ -551,6 +559,54 @@ class SettingsService {
   Future<void> setLansweeperAgentUsername(String value) async {
     if (_setAppSetting == null) return;
     await _setAppSetting!(_keyLansweeperAgentUsername, value.trim());
+  }
+
+  /// Αυτόματο άνοιγμα σελίδας σύνδεσης πριν τη φόρμα αιτήματος (browser).
+  Future<bool> getLansweeperHelpdeskAutoLogin() async {
+    if (_getAppSetting == null) return false;
+    final raw = await _getAppSetting!(_keyLansweeperHelpdeskAutoLogin);
+    final t = (raw ?? '').trim().toLowerCase();
+    return t == '1' || t == 'true' || t == 'yes';
+  }
+
+  Future<void> setLansweeperHelpdeskAutoLogin(bool value) async {
+    if (_setAppSetting == null) return;
+    await _setAppSetting!(_keyLansweeperHelpdeskAutoLogin, value ? '1' : '0');
+  }
+
+  Future<String?> getLansweeperHelpdeskLoginUrl() async {
+    if (_getAppSetting == null) return null;
+    final v = (await _getAppSetting!(_keyLansweeperHelpdeskLoginUrl))?.trim();
+    return v == null || v.isEmpty ? null : v;
+  }
+
+  Future<void> setLansweeperHelpdeskLoginUrl(String value) async {
+    if (_setAppSetting == null) return;
+    await _setAppSetting!(_keyLansweeperHelpdeskLoginUrl, value.trim());
+  }
+
+  Future<String?> getLansweeperHelpdeskWebUsername() async {
+    if (_getAppSetting == null) return null;
+    final v =
+        (await _getAppSetting!(_keyLansweeperHelpdeskWebUsername))?.trim();
+    return v == null || v.isEmpty ? null : v;
+  }
+
+  Future<void> setLansweeperHelpdeskWebUsername(String value) async {
+    if (_setAppSetting == null) return;
+    await _setAppSetting!(_keyLansweeperHelpdeskWebUsername, value.trim());
+  }
+
+  Future<String?> getLansweeperHelpdeskWebPassword() async {
+    if (_getAppSetting == null) return null;
+    final v =
+        (await _getAppSetting!(_keyLansweeperHelpdeskWebPassword))?.trim();
+    return v == null || v.isEmpty ? null : v;
+  }
+
+  Future<void> setLansweeperHelpdeskWebPassword(String value) async {
+    if (_setAppSetting == null) return;
+    await _setAppSetting!(_keyLansweeperHelpdeskWebPassword, value);
   }
 
   /// Επιστρέφει λίστα επιλογών για dropdown (split by comma, trim, μη κενά). Τελευταία επιλογή "Κανένα" προστίθεται στα dialogs.

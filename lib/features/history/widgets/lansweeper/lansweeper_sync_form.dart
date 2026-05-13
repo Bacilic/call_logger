@@ -36,7 +36,9 @@ class LansweeperSyncForm extends StatelessWidget {
               minLines: 2,
               maxLines: 4,
               decoration: const InputDecoration(
-                labelText: 'Σημειώσεις',
+                labelText: 'Σημειώσεις (περιγραφή ticket)',
+                hintText:
+                    'Καλών και εξοπλισμό συμπληρώνετε χειροκίνητα στο Lansweeper.',
                 border: OutlineInputBorder(),
               ),
             ),

@@ -1,12 +1,23 @@
-import 'dart:async';
+﻿import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
 import '../../features/calls/models/call_model.dart';
+import 'lansweeper_ticket_requester_fields.dart';
 import 'settings_service.dart';
 
 class LansweeperSyncException implements Exception {
   const LansweeperSyncException(this.message);
+
+  final String message;
+
+  @override
+  String toString() => message;
+}
+
+/// Ρύθμιση/είσοδος αποτυχημένη πριν την κλήση API — δεν πρέπει να ενημερώνει κατάσταση κλήσης.
+class LansweeperSyncPrecheckException implements Exception {
+  const LansweeperSyncPrecheckException(this.message);
 
   final String message;
 
@@ -63,6 +74,11 @@ class LansweeperSyncService {
         'Δεν έχει οριστεί Lansweeper API key.',
       );
     }
+    if (request.agentUsername.trim().isEmpty) {
+      throw const LansweeperSyncPrecheckException(
+        'Ο πράκτορας API (AgentUsername) είναι υποχρεωτικός.',
+      );
+    }
 
     final baseUri = Uri.tryParse(apiUrl);
     if (baseUri == null || !baseUri.hasScheme || baseUri.host.isEmpty) {
@@ -80,20 +96,13 @@ class LansweeperSyncService {
     final subject = request.title.trim().isNotEmpty
         ? request.title.trim()
         : _buildSubject(request.call);
-    final description = _buildDescription(
-      call: request.call,
-      notes: request.notes,
-    );
+    final description = _buildDescription(notes: request.notes);
 
     final form = <String, String>{
       'Subject': subject,
       'Description': description,
-      'Displayname': _callerLabel(request.call),
+      ...lansweeperAgentAsMatchingRequesterFields(request.agentUsername),
     };
-    final agent = request.agentUsername.trim();
-    if (agent.isNotEmpty) {
-      form['AgentUsername'] = agent;
-    }
 
     final client = HttpClient();
     try {
@@ -140,44 +149,15 @@ class LansweeperSyncService {
 
   String _buildSubject(CallModel call) {
     final category = (call.category ?? '').trim();
-    final caller = _callerLabel(call);
-    if (category.isEmpty) return caller;
-    return '[$category] $caller';
+    final id = call.id;
+    final suffix = id != null ? ' #$id' : '';
+    if (category.isEmpty) {
+      return id != null ? 'Κλήση$suffix' : 'Κλήση';
+    }
+    return '[$category]$suffix';
   }
 
-  String _buildDescription({required CallModel call, required String notes}) {
-    final parts = <String>[];
-    final trimmedNotes = notes.trim();
-    if (trimmedNotes.isNotEmpty) {
-      parts.add(trimmedNotes);
-    }
-    final issue = (call.issue ?? '').trim();
-    if (issue.isNotEmpty) {
-      parts.add('Issue: $issue');
-    }
-    final solution = (call.solution ?? '').trim();
-    if (solution.isNotEmpty) {
-      parts.add('Solution: $solution');
-    }
-    final department = (call.departmentText ?? '').trim();
-    if (department.isNotEmpty) {
-      parts.add('Department: $department');
-    }
-    final equipment = (call.equipmentText ?? '').trim();
-    if (equipment.isNotEmpty) {
-      parts.add('Equipment: $equipment');
-    }
-    final callId = call.id;
-    if (callId != null) {
-      parts.add('Call ID: $callId');
-    }
-    return parts.join('\n');
-  }
-
-  String _callerLabel(CallModel call) {
-    final value = (call.callerText ?? '').trim();
-    return value.isEmpty ? 'Unknown caller' : value;
-  }
+  String _buildDescription({required String notes}) => notes.trim();
 
   Map<String, dynamic>? _tryDecodeJson(String body) {
     try {

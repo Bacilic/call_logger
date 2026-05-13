@@ -134,6 +134,12 @@ class LansweeperSyncNotifier extends AsyncNotifier<void> {
           payload: result.rawPayload,
         ),
       );
+    } on LansweeperSyncPrecheckException catch (e) {
+      state = const AsyncData(null);
+      return LansweeperCommandResult(
+        success: false,
+        message: e.message,
+      );
     } catch (e, st) {
       state = AsyncError(e, st);
       final db = await DatabaseHelper.instance.database;

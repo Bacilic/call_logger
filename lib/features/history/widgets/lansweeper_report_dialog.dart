@@ -41,10 +41,19 @@ class _LansweeperReportDialogState
       TextEditingController();
   final TextEditingController _lansweeperApiKeyController =
       TextEditingController();
+  final TextEditingController _lansweeperLoginUrlController =
+      TextEditingController();
+  final TextEditingController _lansweeperHelpdeskUsernameController =
+      TextEditingController();
+  final TextEditingController _lansweeperHelpdeskPasswordController =
+      TextEditingController();
   ProviderSubscription<String>? _lansweeperApiUrlSub;
   ProviderSubscription<String>? _lansweeperTicketFormUrlSub;
   ProviderSubscription<String>? _lansweeperApiKeySub;
   ProviderSubscription<String>? _lansweeperAgentUsernameSub;
+  ProviderSubscription<String>? _lansweeperLoginUrlSub;
+  ProviderSubscription<String>? _lansweeperHelpdeskUsernameSub;
+  ProviderSubscription<String>? _lansweeperHelpdeskPasswordSub;
   Timer? _lansweeperSettingsDebounceTimer;
   String? _lastPrefilledKey;
 
@@ -60,6 +69,15 @@ class _LansweeperReportDialogState
       _lansweeperApiKeyController.text = ref.read(lansweeperApiKeyProvider);
       _lansweeperAgentUsernameController.text = ref.read(
         lansweeperAgentUsernameProvider,
+      );
+      _lansweeperLoginUrlController.text = ref.read(
+        lansweeperHelpdeskLoginUrlProvider,
+      );
+      _lansweeperHelpdeskUsernameController.text = ref.read(
+        lansweeperHelpdeskWebUsernameProvider,
+      );
+      _lansweeperHelpdeskPasswordController.text = ref.read(
+        lansweeperHelpdeskWebPasswordProvider,
       );
     });
     _lansweeperApiUrlSub = ref.listenManual<String>(lansweeperApiUrlProvider, (
@@ -90,6 +108,27 @@ class _LansweeperReportDialogState
         _lansweeperAgentUsernameController.text = next;
       },
     );
+    _lansweeperLoginUrlSub = ref.listenManual<String>(
+      lansweeperHelpdeskLoginUrlProvider,
+      (_, next) {
+        if (_lansweeperLoginUrlController.text == next) return;
+        _lansweeperLoginUrlController.text = next;
+      },
+    );
+    _lansweeperHelpdeskUsernameSub = ref.listenManual<String>(
+      lansweeperHelpdeskWebUsernameProvider,
+      (_, next) {
+        if (_lansweeperHelpdeskUsernameController.text == next) return;
+        _lansweeperHelpdeskUsernameController.text = next;
+      },
+    );
+    _lansweeperHelpdeskPasswordSub = ref.listenManual<String>(
+      lansweeperHelpdeskWebPasswordProvider,
+      (_, next) {
+        if (_lansweeperHelpdeskPasswordController.text == next) return;
+        _lansweeperHelpdeskPasswordController.text = next;
+      },
+    );
   }
 
   Future<void> _openLansweeperConnectionSettingsDialog() async {
@@ -100,12 +139,18 @@ class _LansweeperReportDialogState
         ticketFormUrlController: _lansweeperTicketFormUrlController,
         apiKeyController: _lansweeperApiKeyController,
         agentUsernameController: _lansweeperAgentUsernameController,
+        loginUrlController: _lansweeperLoginUrlController,
+        helpdeskUsernameController: _lansweeperHelpdeskUsernameController,
+        helpdeskPasswordController: _lansweeperHelpdeskPasswordController,
         onSettingsChanged: _scheduleLansweeperSettingsSave,
         onApiHelpLink: () {
           unawaited(_lansweeperApiHelpFromSettings());
         },
         onTicketFormHelpLink: () {
           unawaited(_lansweeperTicketFormHelpFromSettings());
+        },
+        onLoginHelpLink: () {
+          unawaited(_lansweeperLoginHelpFromSettings());
         },
       ),
     );
@@ -129,6 +174,21 @@ class _LansweeperReportDialogState
   Future<void> _lansweeperTicketFormHelpFromSettings() async {
     final chosen = LansweeperUrlRules.ticketFormUrlForHelpLink(
       _lansweeperTicketFormUrlController.text,
+    );
+    if (!mounted) return;
+    final uri = Uri.tryParse(chosen);
+    if (uri != null && uri.hasScheme) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Άνοιξε ο σύνδεσμος: $chosen')),
+    );
+  }
+
+  Future<void> _lansweeperLoginHelpFromSettings() async {
+    final chosen = LansweeperUrlRules.loginPageUrlForHelpLink(
+      _lansweeperLoginUrlController.text,
     );
     if (!mounted) return;
     final uri = Uri.tryParse(chosen);
@@ -172,6 +232,21 @@ class _LansweeperReportDialogState
             .read(lansweeperAgentUsernameProvider.notifier)
             .setAgentUsername(_lansweeperAgentUsernameController.text),
       );
+      unawaited(
+        ref
+            .read(lansweeperHelpdeskLoginUrlProvider.notifier)
+            .setLoginUrl(_lansweeperLoginUrlController.text),
+      );
+      unawaited(
+        ref
+            .read(lansweeperHelpdeskWebUsernameProvider.notifier)
+            .setUsername(_lansweeperHelpdeskUsernameController.text),
+      );
+      unawaited(
+        ref
+            .read(lansweeperHelpdeskWebPasswordProvider.notifier)
+            .setPassword(_lansweeperHelpdeskPasswordController.text),
+      );
     });
   }
 
@@ -187,9 +262,15 @@ class _LansweeperReportDialogState
     _lansweeperTicketFormUrlSub?.close();
     _lansweeperApiKeySub?.close();
     _lansweeperAgentUsernameSub?.close();
+    _lansweeperLoginUrlSub?.close();
+    _lansweeperHelpdeskUsernameSub?.close();
+    _lansweeperHelpdeskPasswordSub?.close();
     _lansweeperApiUrlController.dispose();
     _lansweeperTicketFormUrlController.dispose();
     _lansweeperApiKeyController.dispose();
+    _lansweeperLoginUrlController.dispose();
+    _lansweeperHelpdeskUsernameController.dispose();
+    _lansweeperHelpdeskPasswordController.dispose();
     _lansweeperAgentUsernameController.dispose();
     _titleController.dispose();
     _notesController.dispose();
@@ -346,6 +427,21 @@ class _LansweeperReportDialogState
       const SnackBar(content: Text('Αντιγράφηκαν οι επιλεγμένες κλήσεις.')),
     );
 
+    final autoLogin = ref.read(lansweeperHelpdeskAutoLoginProvider);
+    final loginPageRaw = ref.read(lansweeperHelpdeskLoginUrlProvider).trim();
+    var openedLoginTab = false;
+    if (autoLogin &&
+        LansweeperUrlRules.isBrowserLaunchableUrl(loginPageRaw)) {
+      final loginUri = Uri.tryParse(loginPageRaw);
+      if (loginUri != null && loginUri.hasScheme) {
+        openedLoginTab = await launchUrl(
+          loginUri,
+          mode: LaunchMode.externalApplication,
+        );
+        await Future<void>.delayed(const Duration(milliseconds: 450));
+      }
+    }
+
     final uri = Uri.tryParse(ticketFormUrl.trim());
     if (uri == null || !uri.hasScheme) {
       if (!mounted) return;
@@ -359,6 +455,16 @@ class _LansweeperReportDialogState
     if (!opened && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Αποτυχία ανοίγματος URL φόρμας.')),
+      );
+      return;
+    }
+    if (mounted && openedLoginTab) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Ανοίχτηκαν καρτέλες στον περιηγητή· αν χρειάζεται, συνδεθείτε στη σελίδα σύνδεσης και επιστρέψτε στη φόρμα αιτήματος.',
+          ),
+        ),
       );
     }
   }
@@ -374,13 +480,12 @@ class _LansweeperReportDialogState
     if (_lastPrefilledKey == item.key) return;
     _lastPrefilledKey = item.key;
     final category = (item.call.category ?? '').trim();
+    final id = item.call.id;
+    final idSuffix = id != null ? ' #$id' : '';
     _titleController.text = category.isEmpty
-        ? item.caller
-        : '[$category] ${item.caller}';
-    final mergedNotes = item.details.isEmpty
-        ? item.notes
-        : '${item.notes}\n${item.details}';
-    _notesController.text = mergedNotes;
+        ? 'Κλήση$idSuffix'
+        : '[$category]$idSuffix';
+    _notesController.text = item.notes;
   }
 
   Future<void> _submitSelected(
@@ -393,6 +498,18 @@ class _LansweeperReportDialogState
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Ο τίτλος είναι υποχρεωτικός.')),
+      );
+      return;
+    }
+
+    if (_lansweeperAgentUsernameController.text.trim().isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Ορίστε τον πράκτορα API (username) στις ρυθμίσεις Lansweeper.',
+          ),
+        ),
       );
       return;
     }
@@ -598,7 +715,7 @@ class _LansweeperReportDialogState
           const Expanded(child: Text('Αναφορά Lansweeper')),
           IconButton(
             tooltip:
-                'Ρυθμίσεις Lansweeper (URL API, φόρμα εισιτηρίου, API key, πράκτορας)',
+                'Ρυθμίσεις Lansweeper (API, φόρμα, πράκτορας, αυτόματη σύνδεση Help Desk)',
             padding: const EdgeInsets.all(4),
             constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
             onPressed: () {

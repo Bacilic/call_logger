@@ -34,4 +34,20 @@ abstract final class LansweeperUrlRules {
     final t = fieldText.trim();
     return isBrowserLaunchableUrl(t) ? t : kDefaultLansweeperUrl;
   }
+
+  /// URL σελίδας σύνδεσης (`login.aspx`) στο ίδιο origin με τη φόρμα αιτήματος.
+  static String loginUrlDerivedFromTicketFormUrl(String ticketFormUrl) {
+    final t = ticketFormUrl.trim();
+    final u = Uri.tryParse(t);
+    if (u == null || !u.hasScheme || u.host.isEmpty) {
+      return kDefaultLansweeperLoginUrl;
+    }
+    return u.replace(path: '/login.aspx', queryParameters: {}).toString();
+  }
+
+  /// URL για βοήθεια σελίδας σύνδεσης: έγκυρο πεδίο ή προεπιλογή.
+  static String loginPageUrlForHelpLink(String fieldText) {
+    final t = fieldText.trim();
+    return isBrowserLaunchableUrl(t) ? t : kDefaultLansweeperLoginUrl;
+  }
 }

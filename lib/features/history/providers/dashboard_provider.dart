@@ -1,4 +1,4 @@
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+﻿import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/database/calls_repository.dart';
 import '../../../core/database/database_helper.dart';
@@ -47,15 +47,18 @@ class LansweeperApiUrlNotifier extends Notifier<String> {
 
   Future<void> _hydrateFromDb() async {
     final db = await DatabaseHelper.instance.database;
+    if (!ref.mounted) return;
     final repo = SettingsRepository(db);
     final apiRaw =
         (await repo.getSetting(kLansweeperApiUrlSettingKey))?.trim() ?? '';
+    if (!ref.mounted) return;
     if (apiRaw.isNotEmpty && LansweeperUrlRules.isApiEndpointUrl(apiRaw)) {
       state = apiRaw;
       return;
     }
     final legacy =
         (await repo.getSetting(kLansweeperUrlSettingKey))?.trim() ?? '';
+    if (!ref.mounted) return;
     if (legacy.isNotEmpty && LansweeperUrlRules.isApiEndpointUrl(legacy)) {
       state = legacy;
       return;
@@ -67,6 +70,7 @@ class LansweeperApiUrlNotifier extends Notifier<String> {
     final normalized = value.trim();
     state = normalized;
     final db = await DatabaseHelper.instance.database;
+    if (!ref.mounted) return;
     await SettingsRepository(
       db,
     ).saveSetting(kLansweeperApiUrlSettingKey, normalized);
@@ -93,15 +97,18 @@ class LansweeperTicketFormUrlNotifier extends Notifier<String> {
 
   Future<void> _hydrateFromDb() async {
     final db = await DatabaseHelper.instance.database;
+    if (!ref.mounted) return;
     final repo = SettingsRepository(db);
     final ticketRaw =
         (await repo.getSetting(kLansweeperUrlSettingKey))?.trim() ?? '';
+    if (!ref.mounted) return;
     if (ticketRaw.isNotEmpty) {
       state = ticketRaw;
       return;
     }
     final apiRaw =
         (await repo.getSetting(kLansweeperApiUrlSettingKey))?.trim() ?? '';
+    if (!ref.mounted) return;
     if (apiRaw.isNotEmpty && !LansweeperUrlRules.isApiEndpointUrl(apiRaw)) {
       state = apiRaw;
       return;
@@ -114,6 +121,7 @@ class LansweeperTicketFormUrlNotifier extends Notifier<String> {
     final next = normalized.isEmpty ? kDefaultLansweeperUrl : normalized;
     state = next;
     final db = await DatabaseHelper.instance.database;
+    if (!ref.mounted) return;
     await SettingsRepository(db).saveSetting(kLansweeperUrlSettingKey, next);
   }
 
@@ -139,8 +147,10 @@ class LansweeperApiKeyNotifier extends Notifier<String> {
 
   Future<void> _hydrateFromDb() async {
     final db = await DatabaseHelper.instance.database;
+    if (!ref.mounted) return;
     final repo = SettingsRepository(db);
     final raw = await repo.getSetting(kLansweeperApiKeySettingKey);
+    if (!ref.mounted) return;
     state = raw?.trim() ?? '';
   }
 
@@ -148,6 +158,7 @@ class LansweeperApiKeyNotifier extends Notifier<String> {
     final normalized = value.trim();
     state = normalized;
     final db = await DatabaseHelper.instance.database;
+    if (!ref.mounted) return;
     await SettingsRepository(
       db,
     ).saveSetting(kLansweeperApiKeySettingKey, normalized);
@@ -174,8 +185,10 @@ class LansweeperAgentUsernameNotifier extends Notifier<String> {
 
   Future<void> _hydrateFromDb() async {
     final db = await DatabaseHelper.instance.database;
+    if (!ref.mounted) return;
     final repo = SettingsRepository(db);
     final raw = await repo.getSetting(kLansweeperAgentUsernameSettingKey);
+    if (!ref.mounted) return;
     state = raw?.trim() ?? '';
   }
 
@@ -183,6 +196,7 @@ class LansweeperAgentUsernameNotifier extends Notifier<String> {
     final normalized = value.trim();
     state = normalized;
     final db = await DatabaseHelper.instance.database;
+    if (!ref.mounted) return;
     await SettingsRepository(
       db,
     ).saveSetting(kLansweeperAgentUsernameSettingKey, normalized);
@@ -193,6 +207,177 @@ final lansweeperAgentUsernameProvider =
     NotifierProvider.autoDispose<LansweeperAgentUsernameNotifier, String>(
       LansweeperAgentUsernameNotifier.new,
     );
+
+bool _parseBoolAppSetting(String? raw) {
+  final t = (raw ?? '').trim().toLowerCase();
+  return t == '1' || t == 'true' || t == 'yes';
+}
+
+/// Αυτόματο άνοιγμα σελίδας σύνδεσης πριν τη φόρμα αιτήματος (ίδιος host).
+class LansweeperHelpdeskAutoLoginNotifier extends Notifier<bool> {
+  bool _hydrated = false;
+
+  @override
+  bool build() {
+    if (!_hydrated) {
+      _hydrated = true;
+      Future<void>(_hydrateFromDb);
+    }
+    return false;
+  }
+
+  Future<void> _hydrateFromDb() async {
+    final db = await DatabaseHelper.instance.database;
+    if (!ref.mounted) return;
+    final raw = await SettingsRepository(
+      db,
+    ).getSetting(kLansweeperHelpdeskAutoLoginSettingKey);
+    if (!ref.mounted) return;
+    state = _parseBoolAppSetting(raw);
+  }
+
+  Future<void> setEnabled(bool value) async {
+    state = value;
+    final db = await DatabaseHelper.instance.database;
+    if (!ref.mounted) return;
+    await SettingsRepository(db).saveSetting(
+      kLansweeperHelpdeskAutoLoginSettingKey,
+      value ? '1' : '0',
+    );
+  }
+}
+
+final lansweeperHelpdeskAutoLoginProvider =
+    NotifierProvider.autoDispose<LansweeperHelpdeskAutoLoginNotifier, bool>(
+      LansweeperHelpdeskAutoLoginNotifier.new,
+    );
+
+/// URL σελίδας σύνδεσης Help Desk (`login.aspx`).
+class LansweeperHelpdeskLoginUrlNotifier extends Notifier<String> {
+  bool _hydrated = false;
+
+  @override
+  String build() {
+    if (!_hydrated) {
+      _hydrated = true;
+      Future<void>(_hydrateFromDb);
+    }
+    return '';
+  }
+
+  Future<void> _hydrateFromDb() async {
+    final db = await DatabaseHelper.instance.database;
+    if (!ref.mounted) return;
+    final repo = SettingsRepository(db);
+    final saved =
+        (await repo.getSetting(kLansweeperHelpdeskLoginUrlSettingKey))?.trim() ??
+        '';
+    if (!ref.mounted) return;
+    if (saved.isNotEmpty &&
+        LansweeperUrlRules.isBrowserLaunchableUrl(saved)) {
+      state = saved;
+      return;
+    }
+    final ticket =
+        (await repo.getSetting(kLansweeperUrlSettingKey))?.trim() ?? '';
+    if (!ref.mounted) return;
+    state = LansweeperUrlRules.loginUrlDerivedFromTicketFormUrl(
+      ticket.isNotEmpty ? ticket : kDefaultLansweeperUrl,
+    );
+  }
+
+  Future<void> setLoginUrl(String value) async {
+    final normalized = value.trim();
+    state = normalized;
+    final db = await DatabaseHelper.instance.database;
+    if (!ref.mounted) return;
+    await SettingsRepository(
+      db,
+    ).saveSetting(kLansweeperHelpdeskLoginUrlSettingKey, normalized);
+  }
+}
+
+final lansweeperHelpdeskLoginUrlProvider =
+    NotifierProvider.autoDispose<LansweeperHelpdeskLoginUrlNotifier, String>(
+      LansweeperHelpdeskLoginUrlNotifier.new,
+    );
+
+/// Όνομα χρήστη web console Lansweeper (όχι πράκτορας API).
+class LansweeperHelpdeskWebUsernameNotifier extends Notifier<String> {
+  bool _hydrated = false;
+
+  @override
+  String build() {
+    if (!_hydrated) {
+      _hydrated = true;
+      Future<void>(_hydrateFromDb);
+    }
+    return '';
+  }
+
+  Future<void> _hydrateFromDb() async {
+    final db = await DatabaseHelper.instance.database;
+    if (!ref.mounted) return;
+    final raw = await SettingsRepository(
+      db,
+    ).getSetting(kLansweeperHelpdeskWebUsernameSettingKey);
+    if (!ref.mounted) return;
+    state = raw?.trim() ?? '';
+  }
+
+  Future<void> setUsername(String value) async {
+    final normalized = value.trim();
+    state = normalized;
+    final db = await DatabaseHelper.instance.database;
+    if (!ref.mounted) return;
+    await SettingsRepository(
+      db,
+    ).saveSetting(kLansweeperHelpdeskWebUsernameSettingKey, normalized);
+  }
+}
+
+final lansweeperHelpdeskWebUsernameProvider = NotifierProvider.autoDispose<
+    LansweeperHelpdeskWebUsernameNotifier,
+    String
+>(LansweeperHelpdeskWebUsernameNotifier.new);
+
+/// Κωδικός web console Lansweeper (αποθηκεύεται όπως το API key, τοπικά).
+class LansweeperHelpdeskWebPasswordNotifier extends Notifier<String> {
+  bool _hydrated = false;
+
+  @override
+  String build() {
+    if (!_hydrated) {
+      _hydrated = true;
+      Future<void>(_hydrateFromDb);
+    }
+    return '';
+  }
+
+  Future<void> _hydrateFromDb() async {
+    final db = await DatabaseHelper.instance.database;
+    if (!ref.mounted) return;
+    final raw = await SettingsRepository(
+      db,
+    ).getSetting(kLansweeperHelpdeskWebPasswordSettingKey);
+    if (!ref.mounted) return;
+    state = raw ?? '';
+  }
+
+  Future<void> setPassword(String value) async {
+    state = value;
+    final db = await DatabaseHelper.instance.database;
+    if (!ref.mounted) return;
+    await SettingsRepository(
+      db,
+    ).saveSetting(kLansweeperHelpdeskWebPasswordSettingKey, value);
+  }
+}
+
+final lansweeperHelpdeskWebPasswordProvider = NotifierProvider.autoDispose<
+    LansweeperHelpdeskWebPasswordNotifier,
+    String
+>(LansweeperHelpdeskWebPasswordNotifier.new);
 
 /// Κλήσεις dashboard με τα τρέχοντα φίλτρα, για αναφορά Lansweeper.
 final dashboardCallsForReportProvider =
