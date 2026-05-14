@@ -635,9 +635,7 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
               ? null
               : state.departmentText.trim(),
         );
-      } catch (e, st) {
-        debugPrint('Orphan quick task: $e\n$st');
-      }
+      } catch (_) {}
     }
 
     return OrphanQuickAddResult(

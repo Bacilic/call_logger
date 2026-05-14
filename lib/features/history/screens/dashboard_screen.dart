@@ -16,7 +16,7 @@ import '../widgets/lansweeper_report_dialog.dart';
 
 enum _TopEntityMode { department, caller, issue }
 
-enum _DashboardPalette { classic, ocean, sunrise }
+enum _DashboardPalette { classic, ocean, sunrise, forest, indigoNight }
 
 /// Οθόνη στατιστικών κλήσεων (πίνακας ελέγχου / dashboard).
 class DashboardScreen extends ConsumerStatefulWidget {
@@ -222,13 +222,13 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     final dateRangeLabel = _formatDateRange(filter);
 
     return Scaffold(
-      backgroundColor: const Color(0xFFEFF3FC),
+      backgroundColor: colors.pageBg,
       body: Container(
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [Color(0xFFEAF2FF), Color(0xFFF7FAFF)],
+            colors: [colors.pageGradientStart, colors.pageGradientEnd],
           ),
         ),
         child: SafeArea(
@@ -258,11 +258,13 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                                   _EmptyStateCard(
                                     message:
                                         'Δεν βρέθηκαν κλήσεις για τα επιλεγμένα φίλτρα.',
+                                    colors: colors,
                                   ),
                                   const SizedBox(height: 12),
                                 ],
                                 _KpiGrid(
                                   crossAxisCount: kpiCrossCount,
+                                  paletteColors: colors,
                                   cards: [
                                     _KpiCardData(
                                       title:
@@ -497,9 +499,11 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                           },
                         );
                       },
-                      loading: () => const _LoadingDashboard(),
-                      error: (e, _) =>
-                          _ErrorCard(message: 'Σφάλμα φόρτωσης: $e'),
+                      loading: () => _LoadingDashboard(colors: colors),
+                      error: (e, _) => _ErrorCard(
+                        message: 'Σφάλμα φόρτωσης: $e',
+                        colors: colors,
+                      ),
                     ),
                   ],
                 ),
@@ -568,9 +572,11 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         child: Container(
           padding: const EdgeInsets.fromLTRB(18, 16, 18, 14),
           decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.75),
+            color: colors.topBarFill.withValues(alpha: 0.92),
             borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.9)),
+            border: Border.all(
+              color: colors.topBarBorder.withValues(alpha: 0.95),
+            ),
           ),
           child: Wrap(
             spacing: 12,
@@ -586,15 +592,18 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                     height: 42,
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(12),
-                      gradient: const LinearGradient(
-                        colors: [Color(0xFFF0F6FF), Color(0xFFE2EDFF)],
+                      gradient: LinearGradient(
+                        colors: [
+                          colors.topBarLogoBgStart,
+                          colors.topBarLogoBgEnd,
+                        ],
                         begin: Alignment.topCenter,
                         end: Alignment.bottomCenter,
                       ),
                     ),
-                    child: const Icon(
+                    child: Icon(
                       Icons.call_outlined,
-                      color: Color(0xFF2563EB),
+                      color: colors.topBarLogoIcon,
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -626,15 +635,23 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                     itemBuilder: (context) => const [
                       PopupMenuItem(
                         value: _DashboardPalette.classic,
-                        child: Text('Classic'),
+                        child: Text('Κλασικό'),
                       ),
                       PopupMenuItem(
                         value: _DashboardPalette.ocean,
-                        child: Text('Ocean'),
+                        child: Text('Ωκεανός'),
                       ),
                       PopupMenuItem(
                         value: _DashboardPalette.sunrise,
-                        child: Text('Sunrise'),
+                        child: Text('Ανατολή'),
+                      ),
+                      PopupMenuItem(
+                        value: _DashboardPalette.forest,
+                        child: Text('Δάσος'),
+                      ),
+                      PopupMenuItem(
+                        value: _DashboardPalette.indigoNight,
+                        child: Text('Νυχτερινό ίντιγκο'),
                       ),
                     ],
                     child: OutlinedButton.icon(
@@ -646,7 +663,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                         ),
                         disabledForegroundColor: theme.colorScheme.onSurface,
                       ),
-                      icon: const Icon(Icons.palette_outlined, size: 18),
+                      icon: _GradientPaletteIcon(colors: colors),
                       label: const Text('Χρώματα'),
                     ),
                   ),
@@ -738,11 +755,13 @@ class _KpiGrid extends StatelessWidget {
     required this.crossAxisCount,
     required this.cards,
     required this.onCardTap,
+    required this.paletteColors,
   });
 
   final int crossAxisCount;
   final List<_KpiCardData> cards;
   final ValueChanged<int> onCardTap;
+  final _DashboardPaletteColors paletteColors;
 
   @override
   Widget build(BuildContext context) {
@@ -808,7 +827,7 @@ class _KpiGrid extends StatelessWidget {
                     card.title,
                     style: Theme.of(context).textTheme.labelLarge?.copyWith(
                       fontWeight: FontWeight.w600,
-                      color: const Color(0xFF334155),
+                      color: paletteColors.kpiTitle,
                     ),
                   ),
                   const SizedBox(height: 6),
@@ -842,7 +861,7 @@ class _KpiGrid extends StatelessWidget {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: Theme.of(context).textTheme.bodySmall
-                              ?.copyWith(color: const Color(0xFF64748B)),
+                              ?.copyWith(color: paletteColors.kpiSubtitle),
                         ),
                       ),
                       SizedBox(
@@ -932,14 +951,16 @@ class _TopCallersCard extends StatelessWidget {
         ? 1
         : callers.map((e) => e.count).reduce(math.max).toDouble();
     return _GlassCard(
+      fill: colors.glassFill,
+      border: colors.glassBorder,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _SectionHeader(
             icon: Icons.emoji_events_outlined,
             title: 'Κορυφαίοι Καλούντες',
-            iconColor: const Color(0xFFD97706),
-            iconBg: const Color(0xFFFFF4D6),
+            iconColor: colors.sectionCallersIcon,
+            iconBg: colors.sectionCallersBg,
           ),
           const SizedBox(height: 10),
           if (callers.isEmpty)
@@ -994,7 +1015,7 @@ class _TopCallersCard extends StatelessWidget {
                                 return LinearProgressIndicator(
                                   value: value,
                                   minHeight: 6,
-                                  backgroundColor: const Color(0xFFE6EBF7),
+                                  backgroundColor: colors.progressTrackBg,
                                   color: colors.actionBlue,
                                 );
                               },
@@ -1044,17 +1065,19 @@ class _LongestCallsCard extends StatelessWidget {
         : rows.map((e) => e.durationSeconds).reduce(math.max).toDouble();
 
     return _GlassCard(
+      fill: colors.glassFill,
+      border: colors.glassBorder,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              const Expanded(
+              Expanded(
                 child: _SectionHeader(
                   icon: Icons.schedule_outlined,
                   title: 'Πιο Χρονοβόρες Κλήσεις',
-                  iconColor: Color(0xFF1D4ED8),
-                  iconBg: Color(0xFFDBEAFE),
+                  iconColor: colors.sectionDurationIcon,
+                  iconBg: colors.sectionDurationBg,
                 ),
               ),
               DropdownButton<int>(
@@ -1075,7 +1098,7 @@ class _LongestCallsCard extends StatelessWidget {
             scrollDirection: Axis.horizontal,
             child: DataTable(
               headingRowColor: WidgetStatePropertyAll(
-                const Color(0xFFF8FAFD).withValues(alpha: 0.95),
+                colors.tableHeaderBg.withValues(alpha: 0.95),
               ),
               columnSpacing: 16,
               columns: const [
@@ -1091,7 +1114,7 @@ class _LongestCallsCard extends StatelessWidget {
                 return DataRow(
                   color: WidgetStateProperty.resolveWith<Color?>((states) {
                     if (states.contains(WidgetState.hovered)) {
-                      return const Color(0xFFF1F6FF);
+                      return colors.tableRowHover;
                     }
                     return null;
                   }),
@@ -1126,7 +1149,8 @@ class _LongestCallsCard extends StatelessWidget {
                                     return LinearProgressIndicator(
                                       value: value,
                                       minHeight: 6,
-                                      backgroundColor: const Color(0xFFE5EDFF),
+                                      backgroundColor:
+                                          colors.progressTrackDataRowBg,
                                       color: colors.actionBlue,
                                     );
                                   },
@@ -1172,6 +1196,8 @@ class _MoreSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return _GlassCard(
+      fill: colors.glassFill,
+      border: colors.glassBorder,
       child: Column(
         children: [
           Row(
@@ -1215,6 +1241,8 @@ class _MoreSection extends StatelessWidget {
                                     Expanded(
                                       child: _ChartCard(
                                         title: 'Κατανομή ανά ώρα',
+                                        fill: colors.chartCardFill,
+                                        border: colors.chartCardBorder,
                                         child: _HourlyBarChart(
                                           buckets: data.hourlyDistribution,
                                           color: colors.actionBlue,
@@ -1225,9 +1253,12 @@ class _MoreSection extends StatelessWidget {
                                     Expanded(
                                       child: _ChartCard(
                                         title: 'Τάση Κλήσεων (7 ημέρες)',
+                                        fill: colors.chartCardFill,
+                                        border: colors.chartCardBorder,
                                         child: _TrendLineChart(
                                           trend: data.dailyTrend,
                                           color: colors.kpiGreen.sparkColor,
+                                          gridLineColor: colors.chartGridLine,
                                         ),
                                       ),
                                     ),
@@ -1236,9 +1267,13 @@ class _MoreSection extends StatelessWidget {
                                 const SizedBox(height: 14),
                                 _ChartCard(
                                   title: 'Κατανομή Βλαβών',
+                                  fill: colors.chartCardFill,
+                                  border: colors.chartCardBorder,
                                   child: _IssuePieChart(
                                     issues: data.byIssue,
                                     formatDuration: formatDuration,
+                                    pieColors: colors.pieColors,
+                                    legendMutedColor: colors.kpiSubtitle,
                                   ),
                                 ),
                               ],
@@ -1248,6 +1283,8 @@ class _MoreSection extends StatelessWidget {
                             children: [
                               _ChartCard(
                                 title: 'Κατανομή ανά ώρα',
+                                fill: colors.chartCardFill,
+                                border: colors.chartCardBorder,
                                 child: _HourlyBarChart(
                                   buckets: data.hourlyDistribution,
                                   color: colors.actionBlue,
@@ -1256,17 +1293,24 @@ class _MoreSection extends StatelessWidget {
                               const SizedBox(height: 14),
                               _ChartCard(
                                 title: 'Τάση Κλήσεων (7 ημέρες)',
+                                fill: colors.chartCardFill,
+                                border: colors.chartCardBorder,
                                 child: _TrendLineChart(
                                   trend: data.dailyTrend,
                                   color: colors.kpiGreen.sparkColor,
+                                  gridLineColor: colors.chartGridLine,
                                 ),
                               ),
                               const SizedBox(height: 14),
                               _ChartCard(
                                 title: 'Κατανομή Βλαβών',
+                                fill: colors.chartCardFill,
+                                border: colors.chartCardBorder,
                                 child: _IssuePieChart(
                                   issues: data.byIssue,
                                   formatDuration: formatDuration,
+                                  pieColors: colors.pieColors,
+                                  legendMutedColor: colors.kpiSubtitle,
                                 ),
                               ),
                             ],
@@ -1588,10 +1632,15 @@ class _HourlyBarChart extends StatelessWidget {
 }
 
 class _TrendLineChart extends StatelessWidget {
-  const _TrendLineChart({required this.trend, required this.color});
+  const _TrendLineChart({
+    required this.trend,
+    required this.color,
+    required this.gridLineColor,
+  });
 
   final List<DailyTrendPoint> trend;
   final Color color;
+  final Color gridLineColor;
 
   @override
   Widget build(BuildContext context) {
@@ -1608,7 +1657,7 @@ class _TrendLineChart extends StatelessWidget {
             drawVerticalLine: false,
             horizontalInterval: math.max(1, maxY / 4),
             getDrawingHorizontalLine: (_) =>
-                const FlLine(color: Color(0xFFE5EAF6), strokeWidth: 1),
+                FlLine(color: gridLineColor, strokeWidth: 1),
           ),
           borderData: FlBorderData(show: false),
           titlesData: FlTitlesData(
@@ -1665,10 +1714,17 @@ class _TrendLineChart extends StatelessWidget {
 }
 
 class _IssuePieChart extends StatelessWidget {
-  const _IssuePieChart({required this.issues, required this.formatDuration});
+  const _IssuePieChart({
+    required this.issues,
+    required this.formatDuration,
+    required this.pieColors,
+    required this.legendMutedColor,
+  });
 
   final List<IssueStat> issues;
   final String Function(num) formatDuration;
+  final List<Color> pieColors;
+  final Color legendMutedColor;
 
   @override
   Widget build(BuildContext context) {
@@ -1679,13 +1735,7 @@ class _IssuePieChart extends StatelessWidget {
         child: Center(child: Text('Δεν υπάρχουν δεδομένα.')),
       );
     }
-    final colors = <Color>[
-      const Color(0xFF3B82F6),
-      const Color(0xFF10B981),
-      const Color(0xFFF59E0B),
-      const Color(0xFFA855F7),
-      const Color(0xFFEF4444),
-    ];
+    final colors = pieColors;
     return Row(
       children: [
         SizedBox(
@@ -1745,7 +1795,7 @@ class _IssuePieChart extends StatelessWidget {
                     const SizedBox(width: 8),
                     Text(
                       formatDuration(issue.sumDurationSeconds),
-                      style: const TextStyle(color: Color(0xFF64748B)),
+                      style: TextStyle(color: legendMutedColor),
                     ),
                   ],
                 ),
@@ -1759,19 +1809,26 @@ class _IssuePieChart extends StatelessWidget {
 }
 
 class _ChartCard extends StatelessWidget {
-  const _ChartCard({required this.title, required this.child});
+  const _ChartCard({
+    required this.title,
+    required this.child,
+    required this.fill,
+    required this.border,
+  });
 
   final String title;
   final Widget child;
+  final Color fill;
+  final Color border;
 
   @override
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.8),
+        color: fill.withValues(alpha: 0.92),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
+        border: Border.all(color: border),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1863,9 +1920,15 @@ class _SectionHeader extends StatelessWidget {
 }
 
 class _GlassCard extends StatelessWidget {
-  const _GlassCard({required this.child});
+  const _GlassCard({
+    required this.child,
+    required this.fill,
+    required this.border,
+  });
 
   final Widget child;
+  final Color fill;
+  final Color border;
 
   @override
   Widget build(BuildContext context) {
@@ -1876,9 +1939,9 @@ class _GlassCard extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.8),
+            color: fill.withValues(alpha: 0.88),
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.82)),
+            border: Border.all(color: border.withValues(alpha: 0.9)),
           ),
           child: child,
         ),
@@ -1888,37 +1951,43 @@ class _GlassCard extends StatelessWidget {
 }
 
 class _LoadingDashboard extends StatelessWidget {
-  const _LoadingDashboard();
+  const _LoadingDashboard({required this.colors});
+
+  final _DashboardPaletteColors colors;
 
   @override
   Widget build(BuildContext context) {
     return Column(
       children: [
-        const _LoadingSkeleton(height: 172),
+        _LoadingSkeleton(height: 172, colors: colors),
         const SizedBox(height: 12),
-        const _LoadingSkeleton(height: 172),
+        _LoadingSkeleton(height: 172, colors: colors),
         const SizedBox(height: 12),
-        const _LoadingSkeleton(height: 240),
+        _LoadingSkeleton(height: 240, colors: colors),
       ],
     );
   }
 }
 
 class _LoadingSkeleton extends StatelessWidget {
-  const _LoadingSkeleton({required this.height});
+  const _LoadingSkeleton({required this.height, required this.colors});
 
   final double height;
+  final _DashboardPaletteColors colors;
 
   @override
   Widget build(BuildContext context) {
+    final a = colors.chartGridLine.withValues(alpha: 0.65);
+    final b = colors.chartCardFill.withValues(alpha: 0.95);
+    final c = colors.chartGridLine.withValues(alpha: 0.65);
     return Container(
       height: height,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(14),
-        gradient: const LinearGradient(
+        gradient: LinearGradient(
           begin: Alignment.centerLeft,
           end: Alignment.centerRight,
-          colors: [Color(0xFFE9EDF7), Color(0xFFF4F6FB), Color(0xFFE9EDF7)],
+          colors: [a, b, c],
         ),
       ),
     );
@@ -1926,13 +1995,16 @@ class _LoadingSkeleton extends StatelessWidget {
 }
 
 class _EmptyStateCard extends StatelessWidget {
-  const _EmptyStateCard({required this.message});
+  const _EmptyStateCard({required this.message, required this.colors});
 
   final String message;
+  final _DashboardPaletteColors colors;
 
   @override
   Widget build(BuildContext context) {
     return _GlassCard(
+      fill: colors.glassFill,
+      border: colors.glassBorder,
       child: Padding(
         padding: const EdgeInsets.all(18),
         child: Center(child: Text(message, textAlign: TextAlign.center)),
@@ -1942,15 +2014,42 @@ class _EmptyStateCard extends StatelessWidget {
 }
 
 class _ErrorCard extends StatelessWidget {
-  const _ErrorCard({required this.message});
+  const _ErrorCard({required this.message, required this.colors});
 
   final String message;
+  final _DashboardPaletteColors colors;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return _GlassCard(
+      fill: colors.glassFill,
+      border: colors.glassBorder,
       child: Text(message, style: TextStyle(color: theme.colorScheme.error)),
+    );
+  }
+}
+
+class _GradientPaletteIcon extends StatelessWidget {
+  const _GradientPaletteIcon({required this.colors});
+
+  final _DashboardPaletteColors colors;
+
+  @override
+  Widget build(BuildContext context) {
+    return ShaderMask(
+      blendMode: BlendMode.srcIn,
+      shaderCallback: (bounds) => LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [
+          colors.kpiBlue.sparkColor,
+          colors.kpiGreen.sparkColor,
+          colors.kpiOrange.sparkColor,
+          colors.kpiPurple.sparkColor,
+        ],
+      ).createShader(bounds),
+      child: const Icon(Icons.palette_outlined, size: 18, color: Colors.white),
     );
   }
 }
@@ -1978,6 +2077,31 @@ class _DashboardPaletteColors {
     required this.kpiOrange,
     required this.kpiPurple,
     required this.actionBlue,
+    required this.pageBg,
+    required this.pageGradientStart,
+    required this.pageGradientEnd,
+    required this.glassFill,
+    required this.glassBorder,
+    required this.topBarFill,
+    required this.topBarBorder,
+    required this.topBarLogoBgStart,
+    required this.topBarLogoBgEnd,
+    required this.topBarLogoIcon,
+    required this.kpiTitle,
+    required this.kpiSubtitle,
+    required this.rankSwatches,
+    required this.sectionCallersIcon,
+    required this.sectionCallersBg,
+    required this.sectionDurationIcon,
+    required this.sectionDurationBg,
+    required this.tableHeaderBg,
+    required this.tableRowHover,
+    required this.progressTrackBg,
+    required this.progressTrackDataRowBg,
+    required this.pieColors,
+    required this.chartCardFill,
+    required this.chartCardBorder,
+    required this.chartGridLine,
   });
 
   final _KpiTone kpiBlue;
@@ -1985,19 +2109,34 @@ class _DashboardPaletteColors {
   final _KpiTone kpiOrange;
   final _KpiTone kpiPurple;
   final Color actionBlue;
+  final Color pageBg;
+  final Color pageGradientStart;
+  final Color pageGradientEnd;
+  final Color glassFill;
+  final Color glassBorder;
+  final Color topBarFill;
+  final Color topBarBorder;
+  final Color topBarLogoBgStart;
+  final Color topBarLogoBgEnd;
+  final Color topBarLogoIcon;
+  final Color kpiTitle;
+  final Color kpiSubtitle;
+  final List<Color> rankSwatches;
+  final Color sectionCallersIcon;
+  final Color sectionCallersBg;
+  final Color sectionDurationIcon;
+  final Color sectionDurationBg;
+  final Color tableHeaderBg;
+  final Color tableRowHover;
+  final Color progressTrackBg;
+  final Color progressTrackDataRowBg;
+  final List<Color> pieColors;
+  final Color chartCardFill;
+  final Color chartCardBorder;
+  final Color chartGridLine;
 
-  Color rankColor(int index) {
-    const colors = [
-      Color(0xFFE0F2FE),
-      Color(0xFFDCFCE7),
-      Color(0xFFFFEDD5),
-      Color(0xFFEDE9FE),
-      Color(0xFFFCE7F3),
-      Color(0xFFE0F2FE),
-      Color(0xFFDCFCE7),
-    ];
-    return colors[index % colors.length];
-  }
+  Color rankColor(int index) =>
+      rankSwatches[index % rankSwatches.length];
 
   factory _DashboardPaletteColors.from(_DashboardPalette palette) {
     switch (palette) {
@@ -2032,6 +2171,45 @@ class _DashboardPaletteColors {
             sparkColor: Color(0xFF8B5CF6),
           ),
           actionBlue: Color(0xFF2563EB),
+          pageBg: Color(0xFFEFF3FC),
+          pageGradientStart: Color(0xFFEAF2FF),
+          pageGradientEnd: Color(0xFFF7FAFF),
+          glassFill: Color(0xFFF4F8FF),
+          glassBorder: Color(0xFFE2EAF6),
+          topBarFill: Color(0xFFFFFFFF),
+          topBarBorder: Color(0xFFE8EEF7),
+          topBarLogoBgStart: Color(0xFFF0F6FF),
+          topBarLogoBgEnd: Color(0xFFE2EDFF),
+          topBarLogoIcon: Color(0xFF2563EB),
+          kpiTitle: Color(0xFF334155),
+          kpiSubtitle: Color(0xFF64748B),
+          rankSwatches: [
+            Color(0xFFE0F2FE),
+            Color(0xFFDCFCE7),
+            Color(0xFFFFEDD5),
+            Color(0xFFEDE9FE),
+            Color(0xFFFCE7F3),
+            Color(0xFFE0F2FE),
+            Color(0xFFDCFCE7),
+          ],
+          sectionCallersIcon: Color(0xFFD97706),
+          sectionCallersBg: Color(0xFFFFF4D6),
+          sectionDurationIcon: Color(0xFF1D4ED8),
+          sectionDurationBg: Color(0xFFDBEAFE),
+          tableHeaderBg: Color(0xFFF8FAFD),
+          tableRowHover: Color(0xFFF1F6FF),
+          progressTrackBg: Color(0xFFE6EBF7),
+          progressTrackDataRowBg: Color(0xFFE5EDFF),
+          pieColors: [
+            Color(0xFF3B82F6),
+            Color(0xFF10B981),
+            Color(0xFFF59E0B),
+            Color(0xFFA855F7),
+            Color(0xFFEF4444),
+          ],
+          chartCardFill: Color(0xFFFFFFFF),
+          chartCardBorder: Color(0xFFE2E8F0),
+          chartGridLine: Color(0xFFE5EAF6),
         );
       case _DashboardPalette.ocean:
         return const _DashboardPaletteColors(
@@ -2064,6 +2242,45 @@ class _DashboardPaletteColors {
             sparkColor: Color(0xFF6366F1),
           ),
           actionBlue: Color(0xFF0284C7),
+          pageBg: Color(0xFFE8F5FB),
+          pageGradientStart: Color(0xFFDCF0FA),
+          pageGradientEnd: Color(0xFFF3FBFE),
+          glassFill: Color(0xFFF2FAFD),
+          glassBorder: Color(0xFFCDE8F4),
+          topBarFill: Color(0xFFF8FCFE),
+          topBarBorder: Color(0xFFD6EEF7),
+          topBarLogoBgStart: Color(0xFFE0F7FF),
+          topBarLogoBgEnd: Color(0xFFC8EFFF),
+          topBarLogoIcon: Color(0xFF0284C7),
+          kpiTitle: Color(0xFF1E3A4A),
+          kpiSubtitle: Color(0xFF4A7390),
+          rankSwatches: [
+            Color(0xFFE0F7FA),
+            Color(0xFFB2EBF2),
+            Color(0xFFCCFBF1),
+            Color(0xFFE0F2FE),
+            Color(0xFFDBEAFE),
+            Color(0xFFE0F7FA),
+            Color(0xFFB2EBF2),
+          ],
+          sectionCallersIcon: Color(0xFF0D9488),
+          sectionCallersBg: Color(0xFFCCFBF1),
+          sectionDurationIcon: Color(0xFF0369A1),
+          sectionDurationBg: Color(0xFFE0F2FE),
+          tableHeaderBg: Color(0xFFECF8FC),
+          tableRowHover: Color(0xFFE4F6FB),
+          progressTrackBg: Color(0xFFD4EBF5),
+          progressTrackDataRowBg: Color(0xFFCFE4F7),
+          pieColors: [
+            Color(0xFF0EA5E9),
+            Color(0xFF14B8A6),
+            Color(0xFFF59E0B),
+            Color(0xFF6366F1),
+            Color(0xFFF43F5E),
+          ],
+          chartCardFill: Color(0xFFF8FDFF),
+          chartCardBorder: Color(0xFFC7E2EE),
+          chartGridLine: Color(0xFFDAEAF4),
         );
       case _DashboardPalette.sunrise:
         return const _DashboardPaletteColors(
@@ -2096,6 +2313,187 @@ class _DashboardPaletteColors {
             sparkColor: Color(0xFFEC4899),
           ),
           actionBlue: Color(0xFF1D4ED8),
+          pageBg: Color(0xFFFFF7F2),
+          pageGradientStart: Color(0xFFFFEDE5),
+          pageGradientEnd: Color(0xFFFFFAF6),
+          glassFill: Color(0xFFFFFCF9),
+          glassBorder: Color(0xFFF5E0D6),
+          topBarFill: Color(0xFFFFFFFF),
+          topBarBorder: Color(0xFFF8E8E0),
+          topBarLogoBgStart: Color(0xFFFFE8EF),
+          topBarLogoBgEnd: Color(0xFFFFD6E5),
+          topBarLogoIcon: Color(0xFFBE185D),
+          kpiTitle: Color(0xFF422B2B),
+          kpiSubtitle: Color(0xFF7C6560),
+          rankSwatches: [
+            Color(0xFFFFE4E6),
+            Color(0xFFFFE7D5),
+            Color(0xFFE0F2FE),
+            Color(0xFFFCE7F3),
+            Color(0xFFFEF3C7),
+            Color(0xFFFFE4E6),
+            Color(0xFFFFE7D5),
+          ],
+          sectionCallersIcon: Color(0xFFC2410C),
+          sectionCallersBg: Color(0xFFFFEDD5),
+          sectionDurationIcon: Color(0xFFBE185D),
+          sectionDurationBg: Color(0xFFFCE7F3),
+          tableHeaderBg: Color(0xFFFFF5F0),
+          tableRowHover: Color(0xFFFFEDE5),
+          progressTrackBg: Color(0xFFF5E6DE),
+          progressTrackDataRowBg: Color(0xFFF5E1F0),
+          pieColors: [
+            Color(0xFF1D4ED8),
+            Color(0xFFEC4899),
+            Color(0xFFF59E0B),
+            Color(0xFF22C55E),
+            Color(0xFFA855F7),
+          ],
+          chartCardFill: Color(0xFFFFFFFF),
+          chartCardBorder: Color(0xFFF0D9CE),
+          chartGridLine: Color(0xFFF5E6DD),
+        );
+      case _DashboardPalette.forest:
+        return const _DashboardPaletteColors(
+          kpiBlue: _KpiTone(
+            surface: Color(0xFFE8F1FF),
+            iconSurface: Color(0xFFD4E4FF),
+            iconColor: Color(0xFF1D4ED8),
+            valueColor: Color(0xFF1E3A8A),
+            sparkColor: Color(0xFF2563EB),
+          ),
+          kpiGreen: _KpiTone(
+            surface: Color(0xFFDFF7EC),
+            iconSurface: Color(0xFFB7F0D1),
+            iconColor: Color(0xFF047857),
+            valueColor: Color(0xFF065F46),
+            sparkColor: Color(0xFF10B981),
+          ),
+          kpiOrange: _KpiTone(
+            surface: Color(0xFFFFF4E6),
+            iconSurface: Color(0xFFFFE8CC),
+            iconColor: Color(0xFFC2410C),
+            valueColor: Color(0xFF9A3412),
+            sparkColor: Color(0xFFEA580C),
+          ),
+          kpiPurple: _KpiTone(
+            surface: Color(0xFFF3E8FF),
+            iconSurface: Color(0xFFE9D5FF),
+            iconColor: Color(0xFF6D28D9),
+            valueColor: Color(0xFF5B21B6),
+            sparkColor: Color(0xFF9333EA),
+          ),
+          actionBlue: Color(0xFF047857),
+          pageBg: Color(0xFFECF8F1),
+          pageGradientStart: Color(0xFFE0F4E8),
+          pageGradientEnd: Color(0xFFF4FBF6),
+          glassFill: Color(0xFFF6FCF8),
+          glassBorder: Color(0xFFC9E8D8),
+          topBarFill: Color(0xFFF7FDF9),
+          topBarBorder: Color(0xFFD1EADD),
+          topBarLogoBgStart: Color(0xFFD1FAE5),
+          topBarLogoBgEnd: Color(0xFFA7F3D0),
+          topBarLogoIcon: Color(0xFF047857),
+          kpiTitle: Color(0xFF1C2D26),
+          kpiSubtitle: Color(0xFF4A6356),
+          rankSwatches: [
+            Color(0xFFD1FAE5),
+            Color(0xFFE0F2FE),
+            Color(0xFFFEF9C3),
+            Color(0xFFE9D5FF),
+            Color(0xFFFFE4E6),
+            Color(0xFFDCFCE7),
+            Color(0xFFCCFBF1),
+          ],
+          sectionCallersIcon: Color(0xFFB45309),
+          sectionCallersBg: Color(0xFFFEF3C7),
+          sectionDurationIcon: Color(0xFF047857),
+          sectionDurationBg: Color(0xFFD1FAE5),
+          tableHeaderBg: Color(0xFFEAF6EF),
+          tableRowHover: Color(0xFFE0F0E6),
+          progressTrackBg: Color(0xFFD5E8DD),
+          progressTrackDataRowBg: Color(0xFFC9E2D4),
+          pieColors: [
+            Color(0xFF059669),
+            Color(0xFF0D9488),
+            Color(0xFFCA8A04),
+            Color(0xFF7C3AED),
+            Color(0xFFDC2626),
+          ],
+          chartCardFill: Color(0xFFF6FBF8),
+          chartCardBorder: Color(0xFFC5DCCC),
+          chartGridLine: Color(0xFFD6E8DD),
+        );
+      case _DashboardPalette.indigoNight:
+        return const _DashboardPaletteColors(
+          kpiBlue: _KpiTone(
+            surface: Color(0xFFEAEEFC),
+            iconSurface: Color(0xFFD8DDFA),
+            iconColor: Color(0xFF4338CA),
+            valueColor: Color(0xFF3730A3),
+            sparkColor: Color(0xFF4F46E5),
+          ),
+          kpiGreen: _KpiTone(
+            surface: Color(0xFFECFDF5),
+            iconSurface: Color(0xFFD1FAE5),
+            iconColor: Color(0xFF059669),
+            valueColor: Color(0xFF047857),
+            sparkColor: Color(0xFF10B981),
+          ),
+          kpiOrange: _KpiTone(
+            surface: Color(0xFFFFF5F1),
+            iconSurface: Color(0xFFFFE4D6),
+            iconColor: Color(0xFFEA580C),
+            valueColor: Color(0xFFC2410C),
+            sparkColor: Color(0xFFF97316),
+          ),
+          kpiPurple: _KpiTone(
+            surface: Color(0xFFF5F2FF),
+            iconSurface: Color(0xFFEDE9FE),
+            iconColor: Color(0xFF7C3AED),
+            valueColor: Color(0xFF6D28D9),
+            sparkColor: Color(0xFF8B5CF6),
+          ),
+          actionBlue: Color(0xFF4338CA),
+          pageBg: Color(0xFFEDEDFA),
+          pageGradientStart: Color(0xFFE4E4F7),
+          pageGradientEnd: Color(0xFFF6F6FF),
+          glassFill: Color(0xFFF7F7FF),
+          glassBorder: Color(0xFFD8D8EE),
+          topBarFill: Color(0xFFF9F9FF),
+          topBarBorder: Color(0xFFE0E0F4),
+          topBarLogoBgStart: Color(0xFFE0E7FF),
+          topBarLogoBgEnd: Color(0xFFC7D2FE),
+          topBarLogoIcon: Color(0xFF4338CA),
+          kpiTitle: Color(0xFF1E1B4B),
+          kpiSubtitle: Color(0xFF575569),
+          rankSwatches: [
+            Color(0xFFE0E7FF),
+            Color(0xFFDCFCE7),
+            Color(0xFFFFE4E6),
+            Color(0xFFE9D5FF),
+            Color(0xFFFEF3C7),
+            Color(0xFFEDE9FE),
+            Color(0xFFDBEAFE),
+          ],
+          sectionCallersIcon: Color(0xFFC2410C),
+          sectionCallersBg: Color(0xFFFFEDD5),
+          sectionDurationIcon: Color(0xFF4338CA),
+          sectionDurationBg: Color(0xFFE0E7FF),
+          tableHeaderBg: Color(0xFFEEEEFF),
+          tableRowHover: Color(0xFFE4E4F9),
+          progressTrackBg: Color(0xFFDADBF0),
+          progressTrackDataRowBg: Color(0xFFD8DAF2),
+          pieColors: [
+            Color(0xFF4F46E5),
+            Color(0xFF10B981),
+            Color(0xFFF97316),
+            Color(0xFFA855F7),
+            Color(0xFFEF4444),
+          ],
+          chartCardFill: Color(0xFFFAFAFF),
+          chartCardBorder: Color(0xFFD4D4EA),
+          chartGridLine: Color(0xFFDADAE8),
         );
     }
   }

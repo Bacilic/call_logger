@@ -295,10 +295,13 @@ class _MainShellState extends ConsumerState<MainShell> {
       builder: (dialogContext) {
         return Dialog(
           child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 920, maxHeight: 640),
-            child: const Padding(
-              padding: EdgeInsets.all(8),
-              child: DatabaseSettingsPanel(),
+            constraints: const BoxConstraints(maxWidth: 920, maxHeight: 720),
+            child: Padding(
+              padding: const EdgeInsets.all(8),
+              child: DatabaseSettingsPanel(
+                onDatabaseLifecycleChanged:
+                    widget.onDatabaseReopened ?? () async {},
+              ),
             ),
           ),
         );

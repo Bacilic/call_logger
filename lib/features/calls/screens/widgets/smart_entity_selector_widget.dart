@@ -202,12 +202,12 @@ class SmartEntitySelectorWidgetState
           !_phoneFocusNode.hasFocus) {
         hooks.startTimerOnceIfNotRunningWhenAutofill?.call();
       }
-      if (next.selectedPhone != null &&
-          next.selectedPhone != _phoneController.text) {
+      final nextPhoneFromState = next.selectedPhone ?? '';
+      if (nextPhoneFromState != _phoneController.text) {
         _phoneController.value = TextEditingValue(
-          text: next.selectedPhone!,
+          text: nextPhoneFromState,
           selection: TextSelection.collapsed(
-            offset: next.selectedPhone!.length,
+            offset: nextPhoneFromState.length,
           ),
         );
       }

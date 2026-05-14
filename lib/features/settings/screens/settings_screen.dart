@@ -1,19 +1,14 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/models/calls_screen_cards_visibility.dart';
 import '../../../core/config/app_config.dart';
-import '../../../core/database/database_init_runner.dart';
-import '../../../core/database/database_path_pick_flow.dart';
-import '../../../core/init/app_init_provider.dart';
 import '../../../core/providers/settings_provider.dart';
 import '../../../core/services/settings_service.dart';
 import '../../calls/provider/remote_paths_provider.dart';
 import '../widgets/create_new_database_dialog.dart';
 
-/// Οθόνη ρυθμίσεων: διαδρομή βάσης δεδομένων και άλλες επιλογές.
+/// Οθόνη ρυθμίσεων: γενικές επιλογές εφαρμογής (η διαδρομή βάσης είναι στον περιηγητή βάσης).
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({
     super.key,
@@ -34,12 +29,7 @@ class SettingsScreen extends ConsumerStatefulWidget {
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   final SettingsService _settings = SettingsService();
 
-  String _currentPath = '';
-  List<String> _recentPaths = [];
-  bool _currentPathExists = false;
-  String? _selectedNewPath;
-  bool _isLoadingPath = true;
-  String? _errorMessage;
+  bool _isLoadingSettings = true;
   bool _showImportExcelButton = false;
   bool _showActiveTimer = true;
   bool _showEmptyRemoteLaunchers = true;
@@ -54,35 +44,25 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   @override
   void initState() {
     super.initState();
-    _loadCurrentPath();
+    _loadGeneralSettings();
     if (widget.openCreateDatabaseOnStart) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _runCreateNewDatabaseFlow();
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        if (!mounted) return;
+        await CreateNewDatabaseFlow.run(
+          context,
+          ref,
+          onDatabaseReopened: widget.onAfterDatabaseChanged,
+          onReloadSettingsState: () async {},
+        );
       });
     }
   }
 
-  Future<void> _loadCurrentPath() async {
+  Future<void> _loadGeneralSettings() async {
     setState(() {
-      _isLoadingPath = true;
-      _errorMessage = null;
+      _isLoadingSettings = true;
     });
     try {
-      final p = await _settings.getDatabasePath();
-      final recent = await _settings.getRecentDatabasePaths();
-      bool exists = false;
-      if (p.trim().isNotEmpty) {
-        try {
-          exists = await File(p).exists();
-        } catch (_) {
-          exists = false;
-        }
-      }
-      var paths = List<String>.from(recent);
-      if (!paths.contains(p)) {
-        paths.insert(0, p);
-        paths = paths.take(3).toList();
-      }
       final showImport = await _settings.getShowImportExcelButton();
       final showActiveTimer = await _settings.getShowActiveTimer();
       final showEmptyRemoteLaunchers = await _settings
@@ -96,9 +76,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           .getCallsScreenCardsVisibility();
       if (mounted) {
         setState(() {
-          _currentPath = p;
-          _recentPaths = paths;
-          _currentPathExists = exists;
           _showImportExcelButton = showImport;
           _showActiveTimer = showActiveTimer;
           _showEmptyRemoteLaunchers = showEmptyRemoteLaunchers;
@@ -108,15 +85,17 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           _databaseOpenTimeoutSeconds = dbOpenTimeout;
           _databaseOpenMaxAttempts = dbOpenMaxAttempts;
           _callsCardsVisibility = callsCardsVisibility;
-          _isLoadingPath = false;
+          _isLoadingSettings = false;
         });
       }
     } catch (e) {
       if (mounted) {
         setState(() {
-          _errorMessage = 'Σφάλμα ανάγνωσης διαδρομής: $e';
-          _isLoadingPath = false;
+          _isLoadingSettings = false;
         });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Σφάλμα φόρτωσης ρυθμίσεων: $e')),
+        );
       }
     }
   }
@@ -260,216 +239,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     ref.invalidate(callsScreenCardsVisibilityProvider);
   }
 
-  /// Επιλογή αρχείου .db (προτίμηση) ή φακέλου.
-  Future<void> _pickDatabasePath() async {
-    setState(() {
-      _errorMessage = null;
-      _selectedNewPath = null;
-    });
-
-    final picked = await pickDatabasePathWithSystemPicker();
-    if (picked != null && picked.isNotEmpty) {
-      await _validateApplyAndFinishPick(picked);
-    } else {
-      if (mounted) {
-        setState(() => _errorMessage = 'Δεν επιλέχθηκε αρχείο ή φάκελος.');
-      }
-    }
-  }
-
-  /// Επαληθεύει το αρχείο βάσης (ίδια ροή με εκκίνηση), αποθηκεύει διαδρομή αν OK,
-  /// επαναφέρει την προηγούμενη σε αποτυχία.
-  Future<void> _validateApplyAndFinishPick(String newPath) async {
-    final trimmed = newPath.trim();
-    if (trimmed.isEmpty || !mounted) return;
-
-    showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => const AlertDialog(
-        content: Row(
-          children: [
-            SizedBox(
-              height: 48,
-              width: 48,
-              child: CircularProgressIndicator(strokeWidth: 3),
-            ),
-            SizedBox(width: 24),
-            Expanded(
-              child: Text(
-                'Έλεγχος βάσης δεδομένων…',
-                style: TextStyle(fontSize: 16),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-
-    late ({bool ok, DatabaseInitRunnerResult runner}) outcome;
-    try {
-      outcome = await setAndVerifyDatabasePath(trimmed);
-    } finally {
-      if (mounted) {
-        Navigator.of(context, rootNavigator: true).pop();
-      }
-    }
-
-    if (!mounted) return;
-
-    if (!outcome.ok) {
-      if (!mounted) return;
-      final msg =
-          outcome.runner.result.message ?? 'Η βάση δεν πέρασε τον έλεγχο.';
-      final det = outcome.runner.result.details?.trim();
-      await showDialog<void>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Text('Η βάση δεν είναι έγκυρη'),
-          content: SingleChildScrollView(
-            child: Text(det != null && det.isNotEmpty ? '$msg\n\n$det' : msg),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(),
-              child: const Text('Εντάξει'),
-            ),
-          ],
-        ),
-      );
-      return;
-    }
-
-    if (!mounted) return;
-    await showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Βάση έτοιμη'),
-        content: const Text(
-          'Η διαδρομή αποθηκεύτηκε και η βάση επαληθεύτηκε.\n\n'
-          'Για πλήρη εφαρμογή αλλαγών, κλείστε την εφαρμογή (π.χ. Alt+F4) και ανοίξτε την ξανά.',
-        ),
-        actions: [
-          FilledButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Εντάξει'),
-          ),
-        ],
-      ),
-    );
-
-    if (!mounted) return;
-    setState(() {
-      _currentPath = trimmed;
-      _selectedNewPath = null;
-      _errorMessage = null;
-    });
-    await _loadCurrentPath();
-
-    if (!mounted) return;
-    ref.invalidate(appInitProvider);
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Η νέα βάση ορίστηκε και επαληθεύτηκε.')),
-      );
-    }
-  }
-
-  Future<void> _runCreateNewDatabaseFlow() async {
-    setState(() => _errorMessage = null);
-    await CreateNewDatabaseFlow.run(
-      context,
-      ref,
-      onDatabaseReopened: widget.onAfterDatabaseChanged,
-      onReloadSettingsState: () async {
-        if (!mounted) return;
-        await _loadCurrentPath();
-        if (!mounted) return;
-        setState(() {
-          _selectedNewPath = null;
-          _errorMessage = null;
-        });
-      },
-    );
-  }
-
-  Future<void> _saveSettings() async {
-    final newPath = _selectedNewPath?.trim();
-    if (newPath == null || newPath.isEmpty) {
-      setState(() => _errorMessage = 'Επιλέξτε πρώτα νέα διαδρομή.');
-      return;
-    }
-
-    if (!newPath.toLowerCase().endsWith('.db')) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text(
-              'Προειδοποίηση: η διαδρομή δεν τελειώνει σε .db. Βεβαιωθείτε ότι δείχνει σε αρχείο βάσης δεδομένων.',
-            ),
-            backgroundColor: Colors.orange.shade800,
-          ),
-        );
-      }
-    }
-
-    final newFile = File(newPath);
-    try {
-      final parentExists = await newFile.parent.exists();
-      if (!parentExists && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Προειδοποίηση: ο φάκελος δεν υπάρχει. Η διαδρομή θα αποθηκευτεί αλλά η βάση θα δημιουργηθεί στην πρώτη εκκίνηση.',
-            ),
-            backgroundColor: Colors.orange,
-          ),
-        );
-      }
-    } catch (_) {}
-
-    try {
-      await _settings.setDatabasePath(newPath);
-    } catch (e) {
-      if (mounted) {
-        setState(() => _errorMessage = 'Σφάλμα αποθήκευσης: $e');
-      }
-      return;
-    }
-
-    if (!mounted) return;
-    await showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Ρυθμίσεις αποθηκεύτηκαν'),
-        content: const Text(
-          'Η νέα διαδρομή θα ισχύσει στην επόμενη εκκίνηση της εφαρμογής.\n\n'
-          'Παρακαλώ κλείστε την εφαρμογή χειροκίνητα (Alt+F4 ή κουμπί κλεισίματος) και ανοίξτε την ξανά.',
-        ),
-        actions: [
-          FilledButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Εντάξει'),
-          ),
-        ],
-      ),
-    );
-
-    if (!mounted) return;
-    setState(() {
-      _currentPath = newPath;
-      _selectedNewPath = null;
-      _errorMessage = null;
-    });
-    await _loadCurrentPath();
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Η διαδρομή αποθηκεύτηκε επιτυχώς')),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -481,188 +250,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text(
-              'Διαδρομή βάσης δεδομένων',
-              style: theme.textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            const SizedBox(height: 8),
-            if (_isLoadingPath)
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 16),
-                child: Center(child: CircularProgressIndicator()),
-              )
-            else
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  Expanded(
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: theme.colorScheme.surfaceContainerHighest
-                            .withValues(alpha: 0.5),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: theme.colorScheme.outline.withValues(
-                            alpha: 0.3,
-                          ),
-                        ),
-                      ),
-                      child: DropdownButtonHideUnderline(
-                        child: DropdownButton<String>(
-                          value: _recentPaths.contains(_currentPath)
-                              ? _currentPath
-                              : _recentPaths.isNotEmpty
-                              ? _recentPaths.first
-                              : _currentPath,
-                          isExpanded: true,
-                          items: _recentPaths.map((path) {
-                            final isDefault = path == AppConfig.defaultDbPath;
-                            return DropdownMenuItem<String>(
-                              value: path,
-                              child: Text(
-                                path.isEmpty
-                                    ? '(προεπιλογή)'
-                                    : isDefault
-                                    ? '$path (προεπιλογή)'
-                                    : path,
-                                style: theme.textTheme.bodyMedium?.copyWith(
-                                  fontFamily: 'monospace',
-                                  fontSize: 12,
-                                ),
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            );
-                          }).toList(),
-                          onChanged: (String? value) async {
-                            if (value == null || value == _currentPath) return;
-                            await _settings.setDatabasePath(value);
-                            await _loadCurrentPath();
-                          },
-                        ),
-                      ),
-                    ),
-                  ),
-                  if (_currentPath.isNotEmpty && !_currentPathExists) ...[
-                    const SizedBox(width: 8),
-                    Tooltip(
-                      message: 'Δεν υπάρχει αυτή η βάση δεδομένων.',
-                      child: Icon(
-                        Icons.error,
-                        color: theme.colorScheme.error,
-                        size: 28,
-                      ),
-                    ),
-                  ],
-                  const SizedBox(width: 8),
-                  Tooltip(
-                    message: 'Επιλέξτε τη διαδρομή που είναι η βάση δεδομένων.',
-                    child: IconButton.filled(
-                      onPressed: _pickDatabasePath,
-                      icon: const Icon(Icons.storage),
-                      style: IconButton.styleFrom(
-                        backgroundColor: theme.colorScheme.primaryContainer,
-                        foregroundColor: theme.colorScheme.onPrimaryContainer,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            if (_selectedNewPath != null) ...[
-              const SizedBox(height: 20),
-              Text(
-                'Νέα διαδρομή (προεπισκόπηση)',
-                style: theme.textTheme.titleSmall?.copyWith(
-                  fontWeight: FontWeight.w600,
-                  color: theme.colorScheme.primary,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.primaryContainer.withValues(
-                    alpha: 0.4,
-                  ),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: theme.colorScheme.primary.withValues(alpha: 0.5),
-                  ),
-                ),
-                child: SelectableText(
-                  _selectedNewPath!,
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    fontFamily: 'monospace',
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-              FilledButton.icon(
-                onPressed: _saveSettings,
-                icon: const Icon(Icons.save),
-                label: const Text('Αποθήκευση ρύθμισης'),
-              ),
-            ],
-            if (_errorMessage != null) ...[
-              const SizedBox(height: 16),
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.errorContainer.withValues(
-                    alpha: 0.5,
-                  ),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.error_outline,
-                      color: theme.colorScheme.error,
-                      size: 20,
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        _errorMessage!,
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.onErrorContainer,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-            const SizedBox(height: 24),
-            Text(
-              'Δημιουργία νέου αρχείου βάσης',
-              style: theme.textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              'Η τρέχουσα βάση μετονομάζεται πάντα ως «όνομα_old_ημερομηνία» στον φάκελό της (χωρίς διαγραφή). '
-              'Δημιουργείται νέο κενό αρχείο και ορίζεται ενεργό· επανασύνδεση χωρίς επανεκκίνηση.',
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
-            const SizedBox(height: 12),
-            FilledButton.tonalIcon(
-              onPressed: _currentPath.trim().isEmpty
-                  ? null
-                  : _runCreateNewDatabaseFlow,
-              icon: const Icon(Icons.add_circle_outline),
-              label: const Text('Δημιουργία νέου αρχείου βάσης'),
-            ),
-            const SizedBox(height: 28),
             Text(
               'Αναμονή βάσης δεδομένων',
               style: theme.textTheme.titleMedium?.copyWith(
@@ -694,7 +281,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             ),
             const SizedBox(height: 12),
             ListTile(
-              enabled: !_isLoadingPath,
+              enabled: !_isLoadingSettings,
               contentPadding: EdgeInsets.zero,
               leading: Icon(
                 Icons.dashboard_customize_outlined,

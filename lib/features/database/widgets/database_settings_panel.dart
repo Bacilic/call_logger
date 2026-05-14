@@ -1,11 +1,17 @@
 ﻿import 'dart:async';
+import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/config/app_config.dart';
+import '../../../core/database/database_init_runner.dart';
+import '../../../core/database/database_path_pick_flow.dart';
+import '../../../core/init/app_init_provider.dart';
 import '../../../core/services/settings_service.dart';
+import '../../settings/widgets/create_new_database_dialog.dart';
 import '../models/database_backup_settings.dart';
 import '../providers/database_backup_settings_provider.dart';
 import '../services/database_backup_service.dart';
@@ -19,9 +25,15 @@ String _weekdayChipLabel(int weekday) {
   return labels[weekday - 1];
 }
 
-/// Πάνελ ρυθμίσεων βάσης δεδομένων (προς το παρόν: αντίγραφα ασφαλείας).
+/// Πάνελ ρυθμίσεων βάσης δεδομένων: αρχείο βάσης, δημιουργία νέου `.db`, αντίγραφα ασφαλείας.
 class DatabaseSettingsPanel extends ConsumerStatefulWidget {
-  const DatabaseSettingsPanel({super.key});
+  const DatabaseSettingsPanel({
+    super.key,
+    this.onDatabaseLifecycleChanged,
+  });
+
+  /// Μετά από επιτυχή αλλαγή διαδρομής (επαλήθευση) ή δημιουργία νέου αρχείου βάσης.
+  final Future<void> Function()? onDatabaseLifecycleChanged;
 
   @override
   ConsumerState<DatabaseSettingsPanel> createState() =>
@@ -29,13 +41,26 @@ class DatabaseSettingsPanel extends ConsumerStatefulWidget {
 }
 
 class _DatabaseSettingsPanelState extends ConsumerState<DatabaseSettingsPanel> {
+  final SettingsService _settings = SettingsService();
+
   late final TextEditingController _destinationController;
   late final TextEditingController _maxCopiesController;
   late final TextEditingController _maxAgeController;
   late final ScrollController _panelScrollController;
-  late final Future<List<BackupCaptionSegment>> _locationCaptionSegmentsFuture;
-  late final Future<({String dbPath, int eligibleWindowsVolumeCount})>
-      _backupDestinationWarningContextFuture;
+  Future<List<BackupCaptionSegment>> _locationCaptionSegmentsFuture =
+      Future.value(const <BackupCaptionSegment>[]);
+  Future<({String dbPath, int eligibleWindowsVolumeCount})>
+      _backupDestinationWarningContextFuture = Future.value(
+    (dbPath: '', eligibleWindowsVolumeCount: 0),
+  );
+
+  String _currentDbPath = '';
+  List<String> _recentDbPaths = [];
+  bool _currentDbPathExists = false;
+  String? _selectedNewDbPath;
+  bool _isLoadingDbPath = true;
+  String? _dbPathErrorMessage;
+
   final FocusNode _destinationFocus = FocusNode();
   final FocusNode _maxCopiesFocus = FocusNode();
   final FocusNode _maxAgeFocus = FocusNode();
@@ -49,9 +74,7 @@ class _DatabaseSettingsPanelState extends ConsumerState<DatabaseSettingsPanel> {
     _maxCopiesController = TextEditingController();
     _maxAgeController = TextEditingController();
     _panelScrollController = ScrollController();
-    _locationCaptionSegmentsFuture = _loadLocationCaptionSegments();
-    _backupDestinationWarningContextFuture =
-        _loadBackupDestinationWarningContext();
+    _reloadLocationAndWarningFutures();
     _destinationFocus.addListener(_onDestinationFocusChanged);
     _destinationController.addListener(_onDestinationTextChanged);
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -63,6 +86,444 @@ class _DatabaseSettingsPanelState extends ConsumerState<DatabaseSettingsPanel> {
         syncRetentionMaxAgeDays: true,
       );
     });
+    unawaited(_loadDatabasePathSection());
+  }
+
+  void _reloadLocationAndWarningFutures() {
+    _locationCaptionSegmentsFuture = _loadLocationCaptionSegments();
+    _backupDestinationWarningContextFuture =
+        _loadBackupDestinationWarningContext();
+  }
+
+  Future<void> _loadDatabasePathSection() async {
+    setState(() {
+      _isLoadingDbPath = true;
+      _dbPathErrorMessage = null;
+    });
+    try {
+      final p = await _settings.getDatabasePath();
+      final recent = await _settings.getRecentDatabasePaths();
+      var exists = false;
+      if (p.trim().isNotEmpty) {
+        try {
+          exists = await File(p).exists();
+        } catch (_) {
+          exists = false;
+        }
+      }
+      var paths = List<String>.from(recent);
+      if (!paths.contains(p)) {
+        paths.insert(0, p);
+        paths = paths.take(3).toList();
+      }
+      if (mounted) {
+        setState(() {
+          _currentDbPath = p;
+          _recentDbPaths = paths;
+          _currentDbPathExists = exists;
+          _isLoadingDbPath = false;
+          _locationCaptionSegmentsFuture = _loadLocationCaptionSegments();
+          _backupDestinationWarningContextFuture =
+              _loadBackupDestinationWarningContext();
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _dbPathErrorMessage = 'Σφάλμα ανάγνωσης διαδρομής: $e';
+          _isLoadingDbPath = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _pickDatabasePath() async {
+    setState(() {
+      _dbPathErrorMessage = null;
+      _selectedNewDbPath = null;
+    });
+
+    final picked = await pickDatabasePathWithSystemPicker();
+    if (picked != null && picked.isNotEmpty) {
+      await _validateApplyAndFinishPick(picked);
+    } else {
+      if (mounted) {
+        setState(() => _dbPathErrorMessage = 'Δεν επιλέχθηκε αρχείο ή φάκελος.');
+      }
+    }
+  }
+
+  Future<void> _validateApplyAndFinishPick(String newPath) async {
+    final trimmed = newPath.trim();
+    if (trimmed.isEmpty || !mounted) return;
+
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => const AlertDialog(
+        content: Row(
+          children: [
+            SizedBox(
+              height: 48,
+              width: 48,
+              child: CircularProgressIndicator(strokeWidth: 3),
+            ),
+            SizedBox(width: 24),
+            Expanded(
+              child: Text(
+                'Έλεγχος βάσης δεδομένων…',
+                style: TextStyle(fontSize: 16),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    late ({bool ok, DatabaseInitRunnerResult runner}) outcome;
+    try {
+      outcome = await setAndVerifyDatabasePath(trimmed);
+    } finally {
+      if (mounted) {
+        Navigator.of(context, rootNavigator: true).pop();
+      }
+    }
+
+    if (!mounted) return;
+
+    if (!outcome.ok) {
+      final msg =
+          outcome.runner.result.message ?? 'Η βάση δεν πέρασε τον έλεγχο.';
+      final det = outcome.runner.result.details?.trim();
+      await showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Η βάση δεν είναι έγκυρη'),
+          content: SingleChildScrollView(
+            child: Text(det != null && det.isNotEmpty ? '$msg\n\n$det' : msg),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('Εντάξει'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Βάση έτοιμη'),
+        content: const Text(
+          'Η διαδρομή αποθηκεύτηκε και η βάση επαληθεύτηκε.\n\n'
+          'Για πλήρη εφαρμογή αλλαγών, κλείστε την εφαρμογή (π.χ. Alt+F4) και ανοίξτε την ξανά.',
+        ),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Εντάξει'),
+          ),
+        ],
+      ),
+    );
+
+    if (!mounted) return;
+    setState(() {
+      _currentDbPath = trimmed;
+      _selectedNewDbPath = null;
+      _dbPathErrorMessage = null;
+    });
+    await _loadDatabasePathSection();
+
+    if (!mounted) return;
+    ref.invalidate(appInitProvider);
+    await widget.onDatabaseLifecycleChanged?.call();
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Η νέα βάση ορίστηκε και επαληθεύτηκε.')),
+      );
+    }
+  }
+
+  Future<void> _saveNewDatabasePathSetting() async {
+    final newPath = _selectedNewDbPath?.trim();
+    if (newPath == null || newPath.isEmpty) {
+      setState(() => _dbPathErrorMessage = 'Επιλέξτε πρώτα νέα διαδρομή.');
+      return;
+    }
+
+    if (!newPath.toLowerCase().endsWith('.db')) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text(
+              'Προειδοποίηση: η διαδρομή δεν τελειώνει σε .db. Βεβαιωθείτε ότι δείχνει σε αρχείο βάσης δεδομένων.',
+            ),
+            backgroundColor: Colors.orange.shade800,
+          ),
+        );
+      }
+    }
+
+    final newFile = File(newPath);
+    try {
+      final parentExists = await newFile.parent.exists();
+      if (!parentExists && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Προειδοποίηση: ο φάκελος δεν υπάρχει. Η διαδρομή θα αποθηκευτεί αλλά η βάση θα δημιουργηθεί στην πρώτη εκκίνηση.',
+            ),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+    } catch (_) {}
+
+    try {
+      await _settings.setDatabasePath(newPath);
+    } catch (e) {
+      if (mounted) {
+        setState(() => _dbPathErrorMessage = 'Σφάλμα αποθήκευσης: $e');
+      }
+      return;
+    }
+
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Ρυθμίσεις αποθηκεύτηκαν'),
+        content: const Text(
+          'Η νέα διαδρομή θα ισχύσει στην επόμενη εκκίνηση της εφαρμογής.\n\n'
+          'Παρακαλώ κλείστε την εφαρμογή χειροκίνητα (Alt+F4 ή κουμπί κλεισίματος) και ανοίξτε την ξανά.',
+        ),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Εντάξει'),
+          ),
+        ],
+      ),
+    );
+
+    if (!mounted) return;
+    setState(() {
+      _currentDbPath = newPath;
+      _selectedNewDbPath = null;
+      _dbPathErrorMessage = null;
+    });
+    await _loadDatabasePathSection();
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Η διαδρομή αποθηκεύτηκε επιτυχώς')),
+    );
+  }
+
+  Future<void> _runCreateNewDatabaseFlow() async {
+    setState(() => _dbPathErrorMessage = null);
+    await CreateNewDatabaseFlow.run(
+      context,
+      ref,
+      onDatabaseReopened: widget.onDatabaseLifecycleChanged,
+      onReloadSettingsState: () async {
+        if (!mounted) return;
+        await _loadDatabasePathSection();
+        if (!mounted) return;
+        setState(() {
+          _selectedNewDbPath = null;
+          _dbPathErrorMessage = null;
+        });
+      },
+    );
+  }
+
+  List<Widget> _buildDatabaseFilePathSection(ThemeData theme) {
+    return [
+      Text(
+        'Διαδρομή βάσης δεδομένων',
+        style: theme.textTheme.titleSmall?.copyWith(
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+      const SizedBox(height: 8),
+      if (_isLoadingDbPath)
+        const Padding(
+          padding: EdgeInsets.symmetric(vertical: 12),
+          child: Center(child: CircularProgressIndicator()),
+        )
+      else
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Expanded(
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 4,
+                ),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.surfaceContainerHighest
+                      .withValues(alpha: 0.5),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: theme.colorScheme.outline.withValues(alpha: 0.3),
+                  ),
+                ),
+                child: DropdownButtonHideUnderline(
+                  child: DropdownButton<String>(
+                    value: _recentDbPaths.contains(_currentDbPath)
+                        ? _currentDbPath
+                        : _recentDbPaths.isNotEmpty
+                            ? _recentDbPaths.first
+                            : _currentDbPath,
+                    isExpanded: true,
+                    items: _recentDbPaths.map((path) {
+                      final isDefault = path == AppConfig.defaultDbPath;
+                      return DropdownMenuItem<String>(
+                        value: path,
+                        child: Text(
+                          path.isEmpty
+                              ? '(προεπιλογή)'
+                              : isDefault
+                                  ? '$path (προεπιλογή)'
+                                  : path,
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            fontFamily: 'monospace',
+                            fontSize: 12,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      );
+                    }).toList(),
+                    onChanged: (String? value) async {
+                      if (value == null || value == _currentDbPath) return;
+                      await _settings.setDatabasePath(value);
+                      await _loadDatabasePathSection();
+                    },
+                  ),
+                ),
+              ),
+            ),
+            if (_currentDbPath.isNotEmpty && !_currentDbPathExists) ...[
+              const SizedBox(width: 8),
+              Tooltip(
+                message: 'Δεν υπάρχει αυτή η βάση δεδομένων.',
+                child: Icon(
+                  Icons.error,
+                  color: theme.colorScheme.error,
+                  size: 28,
+                ),
+              ),
+            ],
+            const SizedBox(width: 8),
+            Tooltip(
+              message: 'Επιλέξτε τη διαδρομή που είναι η βάση δεδομένων.',
+              child: IconButton.filled(
+                onPressed: _pickDatabasePath,
+                icon: const Icon(Icons.storage),
+                style: IconButton.styleFrom(
+                  backgroundColor: theme.colorScheme.primaryContainer,
+                  foregroundColor: theme.colorScheme.onPrimaryContainer,
+                ),
+              ),
+            ),
+          ],
+        ),
+      if (_selectedNewDbPath != null) ...[
+        const SizedBox(height: 16),
+        Text(
+          'Νέα διαδρομή (προεπισκόπηση)',
+          style: theme.textTheme.titleSmall?.copyWith(
+            fontWeight: FontWeight.w600,
+            color: theme.colorScheme.primary,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: theme.colorScheme.primaryContainer.withValues(alpha: 0.4),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: theme.colorScheme.primary.withValues(alpha: 0.5),
+            ),
+          ),
+          child: SelectableText(
+            _selectedNewDbPath!,
+            style: theme.textTheme.bodyMedium?.copyWith(
+              fontFamily: 'monospace',
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        FilledButton.icon(
+          onPressed: _saveNewDatabasePathSetting,
+          icon: const Icon(Icons.save),
+          label: const Text('Αποθήκευση ρύθμισης'),
+        ),
+      ],
+      if (_dbPathErrorMessage != null) ...[
+        const SizedBox(height: 12),
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: theme.colorScheme.errorContainer.withValues(alpha: 0.5),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Row(
+            children: [
+              Icon(
+                Icons.error_outline,
+                color: theme.colorScheme.error,
+                size: 20,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  _dbPathErrorMessage!,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onErrorContainer,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+      const SizedBox(height: 16),
+      Text(
+        'Δημιουργία νέου αρχείου βάσης',
+        style: theme.textTheme.titleSmall?.copyWith(
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+      const SizedBox(height: 4),
+      Text(
+        'Η τρέχουσα βάση μετονομάζεται πάντα ως «όνομα_old_ημερομηνία» στον φάκελό της (χωρίς διαγραφή). '
+        'Δημιουργείται νέο κενό αρχείο και ορίζεται ενεργό· επανασύνδεση χωρίς επανεκκίνηση.',
+        style: theme.textTheme.bodySmall?.copyWith(
+          color: theme.colorScheme.onSurfaceVariant,
+        ),
+      ),
+      const SizedBox(height: 8),
+      FilledButton.tonalIcon(
+        onPressed: _currentDbPath.trim().isEmpty
+            ? null
+            : _runCreateNewDatabaseFlow,
+        icon: const Icon(Icons.add_circle_outline),
+        label: const Text('Δημιουργία νέου αρχείου βάσης'),
+      ),
+      const SizedBox(height: 16),
+      const Divider(height: 1),
+      const SizedBox(height: 12),
+    ];
   }
 
   @override
@@ -164,7 +625,7 @@ class _DatabaseSettingsPanelState extends ConsumerState<DatabaseSettingsPanel> {
 
   Future<List<BackupCaptionSegment>> _loadLocationCaptionSegments() async {
     final drives = BackupLocationHints.eligibleWindowsBackupDriveLabels();
-    final dbPath = await SettingsService().getDatabasePath();
+    final dbPath = await _settings.getDatabasePath();
     return BackupLocationHints.composeLocationCaptionSegments(
       driveLabels: drives,
       configuredDatabasePath: dbPath,
@@ -173,7 +634,7 @@ class _DatabaseSettingsPanelState extends ConsumerState<DatabaseSettingsPanel> {
 
   Future<({String dbPath, int eligibleWindowsVolumeCount})>
       _loadBackupDestinationWarningContext() async {
-    final dbPath = await SettingsService().getDatabasePath();
+    final dbPath = await _settings.getDatabasePath();
     final eligibleWindowsVolumeCount =
         BackupLocationHints.eligibleWindowsBackupVolumeCount();
     return (
@@ -276,10 +737,10 @@ class _DatabaseSettingsPanelState extends ConsumerState<DatabaseSettingsPanel> {
                 ),
               ],
             ),
-            const SizedBox(height: 4),
+            const SizedBox(height: 8),
+            ..._buildDatabaseFilePathSection(theme),
             Text(
-              'Αντίγραφα ασφαλείας (SQLite VACUUM INTO — ατομικό, με WAL/SHM). '
-              'Περισσότερες ρυθμίσεις βάσης θα προστεθούν εδώ.',
+              'Αντίγραφα ασφαλείας (SQLite VACUUM INTO — ατομικό, με WAL/SHM).',
               style: theme.textTheme.bodySmall?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
               ),

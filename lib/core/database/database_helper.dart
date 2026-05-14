@@ -1,7 +1,6 @@
 ﻿import 'dart:async';
 import 'dart:io';
 
-import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
@@ -1049,12 +1048,7 @@ class DatabaseHelper {
         success: true,
         isLocalDev: resolved.usedUncFallback,
       );
-    } catch (e, st) {
-      debugPrint(
-        '[DatabaseHelper] Δεν είναι δυνατή η σύνδεση με τη βάση: $dbPath',
-      );
-      debugPrint('[DatabaseHelper] Σφάλμα: $e');
-      debugPrint('[DatabaseHelper] $st');
+    } catch (_, _) {
       return const ConnectionCheckResult(success: false, isLocalDev: false);
     }
   }

@@ -184,9 +184,12 @@ class _CategoryAutocompleteFieldState
               displayStringForOption: (option) => option,
               optionsBuilder: (TextEditingValue tev) {
                 final options = _sortedOptions(allCategoryNames, tev.text);
-                final blocked =
-                    _suppressOptionsUntilTyping &&
-                    tev.text.trim() == _controller.text.trim();
+                final trimmed = tev.text.trim();
+                // Με κενό πεδίο πάντα δείχνουμε πλήρη λίστα: αποφεύγει race όπου το
+                // optionsBuilder τρέχει πριν το onChanged μηδενίσει το suppress μετά από επιλογή.
+                final blocked = _suppressOptionsUntilTyping &&
+                    trimmed.isNotEmpty &&
+                    trimmed == _controller.text.trim();
                 return blocked ? const Iterable<String>.empty() : options;
               },
               onSelected: (String selection) {
@@ -281,6 +284,8 @@ class _CategoryAutocompleteFieldState
                                       textEditingController.clear();
                                       setState(() {
                                         _keyboardOptionIndex = -1;
+                                        // Το clear() δεν καλεί onChanged· ξεμπλοκάρουμε ρητά για συνέπεια.
+                                        _suppressOptionsUntilTyping = false;
                                       });
                                       widget.onCategoryChanged('', null);
                                     },

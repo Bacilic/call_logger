@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/database/calls_repository.dart';
@@ -158,7 +157,13 @@ class CallEntryNotifier extends Notifier<CallEntryState> {
   }
 
   void setNotes(String value) {
-    state = state.copyWith(notes: value);
+    final notesEmpty = value.trim().isEmpty;
+    state = state.copyWith(
+      notes: value,
+      // Χωρίς σημειώσεις δεν νοείται εκκρεμότητα (το checkbox γίνεται ανενεργό·
+      // αποφεύγουμε «κολλημένο» true μετά από εκκαθάριση πεδίου).
+      isPending: notesEmpty ? false : state.isPending,
+    );
   }
 
   void setCategory(String value, {int? categoryId}) {
@@ -229,7 +234,7 @@ class CallEntryNotifier extends Notifier<CallEntryState> {
           solution: null,
           category: state.category.isEmpty ? null : state.category,
           categoryId: state.categoryId,
-          status: state.isPending ? 'pending' : 'completed',
+          status: (state.isPending && notes.isNotEmpty) ? 'pending' : 'completed',
           duration: state.durationSeconds,
         ),
       );
@@ -246,7 +251,7 @@ class CallEntryNotifier extends Notifier<CallEntryState> {
       if (selectedPhone != null) {
         ref.read(callHeaderProvider.notifier).markPhoneUsed(selectedPhone);
       }
-      if (state.isPending) {
+      if (state.isPending && notes.isNotEmpty) {
         final callerName =
             user?.name ??
             (callerTextRaw.trim().isEmpty ? null : callerTextRaw.trim());
@@ -283,9 +288,7 @@ class CallEntryNotifier extends Notifier<CallEntryState> {
       reset();
       ref.read(callHeaderProvider.notifier).clearAll();
       return true;
-    } catch (e, st) {
-      debugPrint('submitCall error: $e');
-      debugPrint('$st');
+    } catch (_, _) {
       return false;
     }
   }
@@ -334,9 +337,7 @@ class CallEntryNotifier extends Notifier<CallEntryState> {
       reset();
       ref.read(callHeaderProvider.notifier).clearAll();
       return true;
-    } catch (e, st) {
-      debugPrint('submitOnlyPending error: $e');
-      debugPrint('$st');
+    } catch (_, _) {
       return false;
     }
   }
