@@ -154,6 +154,7 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final textTheme = GoogleFonts.interTextTheme();
+    final colorScheme = ColorScheme.fromSeed(seedColor: Colors.deepPurple);
     return MaterialApp(
       title: 'Καταγραφή Κλήσεων',
       locale: const Locale('el'),
@@ -166,7 +167,15 @@ class MyApp extends StatelessWidget {
       theme: ThemeData(
         useMaterial3: true,
         visualDensity: VisualDensity.adaptivePlatformDensity,
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
+        colorScheme: colorScheme,
+        appBarTheme: AppBarTheme(
+          backgroundColor: colorScheme.surface,
+          surfaceTintColor: Colors.transparent,
+          scrolledUnderElevation: 0,
+          elevation: 0,
+          shadowColor: Colors.transparent,
+        ),
+        scaffoldBackgroundColor: colorScheme.surface,
         textTheme: textTheme,
         dataTableTheme: DataTableThemeData(
           headingRowHeight: 42,

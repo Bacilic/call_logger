@@ -438,6 +438,8 @@ class CallsRepository {
     final args = List<dynamic>.from(argsBase);
     final df = filter.dateFromSql;
     final dt = filter.dateToSql;
+    final isAllDatesMode =
+        (df == null || df.isEmpty) && (dt == null || dt.isEmpty);
     if (df != null && df.isNotEmpty) {
       whereClauses.add('calls.date >= ?');
       args.add(df);
@@ -487,20 +489,26 @@ $whereSql
     final previousDay = anchorDay.subtract(const Duration(days: 1));
     final previousDaySql = DateFormat('yyyy-MM-dd').format(previousDay);
 
-    final prevRange = filter.previousComparisonRangeInclusive;
-    final wherePreviousPeriod = List<String>.from(whereClausesBase);
-    final argsPreviousPeriod = List<dynamic>.from(argsBase);
-    if (prevRange != null) {
-      wherePreviousPeriod.add('calls.date >= ?');
-      argsPreviousPeriod.add(DateFormat('yyyy-MM-dd').format(prevRange.start));
-      wherePreviousPeriod.add('calls.date <= ?');
-      argsPreviousPeriod.add(DateFormat('yyyy-MM-dd').format(prevRange.end));
+    final List<Map<String, dynamic>> previousKpiRows;
+    if (isAllDatesMode) {
+      previousKpiRows = const [];
     } else {
-      wherePreviousPeriod.add('calls.date = ?');
-      argsPreviousPeriod.add(previousDaySql);
-    }
-    final fromJoinPreviousPeriod =
-        '''
+      final prevRange = filter.previousComparisonRangeInclusive;
+      final wherePreviousPeriod = List<String>.from(whereClausesBase);
+      final argsPreviousPeriod = List<dynamic>.from(argsBase);
+      if (prevRange != null) {
+        wherePreviousPeriod.add('calls.date >= ?');
+        argsPreviousPeriod.add(
+          DateFormat('yyyy-MM-dd').format(prevRange.start),
+        );
+        wherePreviousPeriod.add('calls.date <= ?');
+        argsPreviousPeriod.add(DateFormat('yyyy-MM-dd').format(prevRange.end));
+      } else {
+        wherePreviousPeriod.add('calls.date = ?');
+        argsPreviousPeriod.add(previousDaySql);
+      }
+      final fromJoinPreviousPeriod =
+          '''
 FROM calls
 LEFT JOIN categories cat ON cat.id = calls.category_id
 LEFT JOIN users ON calls.caller_id = users.id
@@ -515,12 +523,13 @@ LEFT JOIN equipment ON calls.equipment_id = equipment.id
 LEFT JOIN departments ON users.department_id = departments.id
 WHERE ${wherePreviousPeriod.join(' AND ')}
 ''';
-    final previousKpiRows = await db.rawQuery('''
+      previousKpiRows = await db.rawQuery('''
       SELECT COUNT(*) AS c,
              COALESCE(SUM(calls.duration), 0) AS total_dur,
              AVG(calls.duration) AS avg_dur
       $fromJoinPreviousPeriod
       ''', argsPreviousPeriod);
+    }
 
     final deptRows = await db.rawQuery('''
       SELECT $deptExpr AS dept_name,
@@ -740,6 +749,102 @@ WHERE ${whereSpark.join(' AND ')}
       (hour) => HourlyBucket(hour: hour, callCount: hourCountMap[hour] ?? 0),
     );
 
+    var totalActiveDays = 0;
+    var medianDurationSeconds = 0;
+    DateTime? historyDateFrom;
+    DateTime? historyDateTo;
+    KpiAllDatesBarSparklines? allDatesBarSparklines;
+    if (isAllDatesMode && totalCalls > 0) {
+      final activeDaysRows = await db.rawQuery('''
+        SELECT COUNT(DISTINCT calls.date) AS active_days,
+               MIN(calls.date) AS min_date,
+               MAX(calls.date) AS max_date
+        $fromJoin
+        ''', args);
+      final activeRow =
+          activeDaysRows.isEmpty ? null : activeDaysRows.first;
+      totalActiveDays = (activeRow?['active_days'] as num?)?.toInt() ?? 0;
+      historyDateFrom = parseDashboardSqlDate(activeRow?['min_date'] as String?);
+      historyDateTo = parseDashboardSqlDate(activeRow?['max_date'] as String?);
+
+      final durationRows = await db.rawQuery('''
+        SELECT calls.duration AS dur
+        $fromJoin
+        ORDER BY calls.duration ASC
+        ''', args);
+      final durations = durationRows
+          .map((row) => (row['dur'] as num?)?.toInt() ?? 0)
+          .toList(growable: false);
+      medianDurationSeconds = medianDurationSecondsFromList(durations);
+
+      final monthRows = await db.rawQuery('''
+        SELECT strftime('%Y-%m', calls.date) AS month_key,
+               COUNT(*) AS cnt
+        $fromJoin
+        GROUP BY month_key
+        ORDER BY month_key ASC
+        ''', args);
+      final callsByMonth = monthRows
+          .map((row) => (row['cnt'] as num?)?.toDouble() ?? 0.0)
+          .toList(growable: false);
+
+      final weekdayRows = await db.rawQuery('''
+        SELECT CAST(strftime('%w', calls.date) AS INTEGER) AS dow,
+               COALESCE(SUM(calls.duration), 0) AS sum_dur
+        $fromJoin
+        AND CAST(strftime('%w', calls.date) AS INTEGER) BETWEEN 1 AND 5
+        GROUP BY dow
+        ORDER BY dow ASC
+        ''', args);
+      final weekdayDurationMap = <int, double>{
+        for (final row in weekdayRows)
+          (row['dow'] as num?)?.toInt() ?? 0:
+              (row['sum_dur'] as num?)?.toDouble() ?? 0.0,
+      };
+      final durationByWeekdayMonToFri = List<double>.generate(
+        5,
+        (index) => weekdayDurationMap[index + 1] ?? 0.0,
+      );
+
+      final longestDurRows = await db.rawQuery('''
+        SELECT COALESCE(calls.duration, 0) AS dur
+        $fromJoin
+        ORDER BY dur DESC
+        LIMIT 3
+        ''', args);
+      final shortestDurRows = await db.rawQuery('''
+        SELECT COALESCE(calls.duration, 0) AS dur
+        $fromJoin
+        ORDER BY dur ASC
+        LIMIT 3
+        ''', args);
+      final durationExtremesSix = padBarSparklineValues(
+        [
+          ...longestDurRows.map((row) => (row['dur'] as num?)?.toDouble() ?? 0),
+          ...shortestDurRows.map((row) => (row['dur'] as num?)?.toDouble() ?? 0),
+        ],
+        6,
+      );
+
+      allDatesBarSparklines = KpiAllDatesBarSparklines(
+        callsByMonth: callsByMonth.isEmpty ? const [0] : callsByMonth,
+        durationByWeekdayMonToFri: durationByWeekdayMonToFri,
+        durationExtremesSix: durationExtremesSix,
+        departmentCountsRank2To6: runnerUpCountsFromStats(
+          byDepartment.map((d) => d.count).toList(growable: false),
+          5,
+        ),
+        callerCountsRank2To6: runnerUpCountsFromStats(
+          topCallers.map((c) => c.count).toList(growable: false),
+          5,
+        ),
+        issueCountsRank2To6: runnerUpCountsFromStats(
+          byIssue.map((i) => i.count).toList(growable: false),
+          5,
+        ),
+      );
+    }
+
     return DashboardSummaryModel(
       totalCalls: totalCalls,
       totalDurationSeconds: totalDurationSeconds,
@@ -747,6 +852,12 @@ WHERE ${whereSpark.join(' AND ')}
       previousPeriodTotalCalls: previousPeriodTotalCalls,
       previousPeriodTotalDurationSeconds: previousPeriodTotalDurationSeconds,
       previousPeriodAvgDurationSeconds: previousPeriodAvgDurationSeconds,
+      isAllDatesMode: isAllDatesMode,
+      totalActiveDays: totalActiveDays,
+      medianDurationSeconds: medianDurationSeconds,
+      historyDateFrom: historyDateFrom,
+      historyDateTo: historyDateTo,
+      allDatesBarSparklines: allDatesBarSparklines,
       dailyTrend: dailyTrend,
       sparklineLast7Days: sparklineLast7Days,
       topCallers: topCallers,

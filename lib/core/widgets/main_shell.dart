@@ -270,7 +270,9 @@ class _MainShellState extends ConsumerState<MainShell> {
       case MainNavDestination.calls:
         return const CallsScreen();
       case MainNavDestination.tasks:
-        return const TasksScreen();
+        return PrimaryScrollController.none(
+          child: const TasksScreen(),
+        );
       case MainNavDestination.directory:
         return const DirectoryScreen();
       case MainNavDestination.history:
@@ -334,7 +336,16 @@ class _MainShellState extends ConsumerState<MainShell> {
     if (mounted) setState(() {});
   }
 
-  /// Περιεχόμενο προορισμού με μπάνερ dev/βάσης και επανεκκίνησης (χωρίς rail).
+  /// Απορροφά scroll notifications από εκκρεμότητες ώστε το εξωτερικό AppBar
+  /// να μην ενεργοποιεί Material 3 scrolled-under tint.
+  Widget _absorbTasksScrollForOuterAppBar(MainNavDestination dest, Widget child) {
+    if (dest != MainNavDestination.tasks) return child;
+    return NotificationListener<ScrollNotification>(
+      onNotification: (_) => true,
+      child: child,
+    );
+  }
+
   Widget _destinationContentColumn(MainNavDestination dest) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -676,7 +687,12 @@ class _MainShellState extends ConsumerState<MainShell> {
             ],
           ),
           const VerticalDivider(thickness: 1, width: 1),
-          Expanded(child: _destinationContentColumn(effectiveDestination)),
+          Expanded(
+            child: _absorbTasksScrollForOuterAppBar(
+              effectiveDestination,
+              _destinationContentColumn(effectiveDestination),
+            ),
+          ),
         ],
       ),
     );

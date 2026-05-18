@@ -174,7 +174,7 @@ class _TaskFilterBarState extends ConsumerState<TaskFilterBar> {
 
     return Material(
       elevation: 0,
-      color: theme.colorScheme.surfaceContainerLow.withValues(alpha: 0.6),
+      color: theme.colorScheme.surface,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         child: Column(

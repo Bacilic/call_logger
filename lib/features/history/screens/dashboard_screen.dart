@@ -2,9 +2,7 @@
 import 'dart:math' as math;
 import 'dart:ui';
 
-import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
@@ -15,10 +13,11 @@ import '../models/dashboard_summary_model.dart';
 import '../providers/dashboard_provider.dart';
 import '../providers/history_provider.dart';
 import '../widgets/lansweeper_report_dialog.dart';
+import 'dashboard_cards.dart';
+import 'dashboard_filter_pane.dart';
+import 'dashboard_palette_colors.dart';
 
-enum _TopEntityMode { department, caller, issue }
-
-enum _DashboardPalette { classic, ocean, sunrise, forest, indigoNight }
+enum TopEntityMode { department, caller, issue }
 
 /// Οθόνη στατιστικών κλήσεων (πίνακας ελέγχου / dashboard).
 class DashboardScreen extends ConsumerStatefulWidget {
@@ -38,8 +37,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   Timer? _debounceTimer;
   bool _isFilterOpen = false;
   bool _showMoreSection = false;
-  _TopEntityMode _topEntityMode = _TopEntityMode.department;
-  _DashboardPalette _palette = _DashboardPalette.classic;
+  TopEntityMode _topEntityMode = TopEntityMode.department;
+  DashboardPalette _palette = DashboardPalette.classic;
 
   @override
   void initState() {
@@ -126,19 +125,32 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     await ref.read(dashboardFilterProvider.notifier).setDatePreset(preset);
   }
 
-  String _formatDurationSeconds(num seconds) {
+  /// Διάρκεια ανά κλήση — λεπτά:δευτερόλεπτα (π.χ. `03:15`).
+  String _formatCallDurationSeconds(num seconds) {
+    final safeSeconds = seconds.isNaN ? 0 : seconds.round();
+    final absSeconds = math.max(0, safeSeconds);
+    final m = absSeconds ~/ 60;
+    final s = absSeconds % 60;
+    if (m > 0) {
+      return '${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
+    }
+    return '00:${s.toString().padLeft(2, '0')}';
+  }
+
+  /// Συνολικές / ημερήσιες διάρκειες — `ώρ:λεπ` ή `λεπ:δευτ` (π.χ. `10ω:23λ`).
+  String _formatAggregateDurationSeconds(num seconds) {
     final safeSeconds = seconds.isNaN ? 0 : seconds.round();
     final absSeconds = math.max(0, safeSeconds);
     final h = absSeconds ~/ 3600;
     final m = (absSeconds % 3600) ~/ 60;
     final s = absSeconds % 60;
     if (h > 0) {
-      return '${h.toString().padLeft(2, '0')}:${m.toString().padLeft(2, '0')}';
+      return '$hω:${m.toString().padLeft(2, '0')}λ';
     }
     if (m > 0) {
-      return '${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
+      return '$mλ:${s.toString().padLeft(2, '0')}δ';
     }
-    return '00:${s.toString().padLeft(2, '0')}';
+    return '$sδ';
   }
 
   String _formatDeltaPercent(num current, num previous) {
@@ -149,6 +161,39 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     final delta = ((current - previous) / previous) * 100;
     final prefix = delta >= 0 ? '+' : '';
     return '$prefix${delta.toStringAsFixed(1)}%';
+  }
+
+  String _formatAvgCallsPerDay(DashboardSummaryModel data) {
+    final avg = data.avgCallsPerActiveDay;
+    if (avg == null) return 'Μ.Ο.: —';
+    return 'Μ.Ο.: ${avg.round()} κλήσεις / ημέρα';
+  }
+
+  String _formatAvgDurationPerDay(DashboardSummaryModel data) {
+    final avg = data.avgDurationSecondsPerActiveDay;
+    if (avg == null) return 'Μ.Ο.: —';
+    return 'Μ.Ο.: ${_formatAggregateDurationSeconds(avg)} / ημέρα';
+  }
+
+  String _formatTopEntityShareSubtitle(int count, int totalCalls) {
+    if (totalCalls <= 0) return '$count κλήσεις';
+    final pct = (count / totalCalls) * 100;
+    return '$count κλήσεις (${pct.toStringAsFixed(1)}% του συνόλου)';
+  }
+
+  List<double> _runnerUpBarPoints(
+    KpiAllDatesBarSparklines? bars,
+    TopEntityMode mode,
+  ) {
+    if (bars == null) return const [];
+    switch (mode) {
+      case TopEntityMode.department:
+        return bars.departmentCountsRank2To6;
+      case TopEntityMode.caller:
+        return bars.callerCountsRank2To6;
+      case TopEntityMode.issue:
+        return bars.issueCountsRank2To6;
+    }
   }
 
   void _popWithHistoryPrefill({
@@ -170,27 +215,27 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     Navigator.of(context).pop();
   }
 
-  _KpiTopEntity _resolveTopEntity(DashboardSummaryModel data) {
+  KpiTopEntity _resolveTopEntity(DashboardSummaryModel data) {
     switch (_topEntityMode) {
-      case _TopEntityMode.department:
+      case TopEntityMode.department:
         final d = data.byDepartment.isNotEmpty ? data.byDepartment.first : null;
-        return _KpiTopEntity(
+        return KpiTopEntity(
           title: 'Κορυφαίο Τμήμα',
           label: d?.name ?? '-',
           count: d?.count ?? 0,
           icon: Icons.workspace_premium_rounded,
         );
-      case _TopEntityMode.caller:
+      case TopEntityMode.caller:
         final c = data.topCallers.isNotEmpty ? data.topCallers.first : null;
-        return _KpiTopEntity(
+        return KpiTopEntity(
           title: 'Κορυφαίος Καλών',
           label: c?.name ?? '-',
           count: c?.count ?? 0,
           icon: Icons.person_pin_circle_outlined,
         );
-      case _TopEntityMode.issue:
+      case TopEntityMode.issue:
         final i = data.byIssue.isNotEmpty ? data.byIssue.first : null;
-        return _KpiTopEntity(
+        return KpiTopEntity(
           title: 'Κορυφαία Βλάβη',
           label: i?.name ?? '-',
           count: i?.count ?? 0,
@@ -207,7 +252,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         ref.read(dashboardFilterProvider.notifier).activeDatePreset;
     final statsAsync = ref.watch(dashboardStatsProvider);
     final departmentsAsync = ref.watch(dashboardDepartmentsProvider);
-    final colors = _DashboardPaletteColors.from(_palette);
+    final colors = DashboardPaletteColors.from(_palette);
 
     final dateRangeLabel = _formatDateRange(filter);
 
@@ -233,6 +278,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                     statsAsync.when(
                       data: (data) {
                         final topEntity = _resolveTopEntity(data);
+                        final allDatesMode = data.isAllDatesMode;
+                        final allDatesBars = data.allDatesBarSparklines;
                         return LayoutBuilder(
                           builder: (context, constraints) {
                             final width = constraints.maxWidth;
@@ -245,42 +292,53 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                             return Column(
                               children: [
                                 if (data.totalCalls == 0) ...[
-                                  _EmptyStateCard(
+                                  EmptyStateCard(
                                     message:
                                         'Δεν βρέθηκαν κλήσεις για τα επιλεγμένα φίλτρα.',
                                     colors: colors,
                                   ),
                                   const SizedBox(height: 12),
                                 ],
-                                _KpiGrid(
+                                KpiGrid(
                                   crossAxisCount: kpiCrossCount,
                                   paletteColors: colors,
                                   cards: [
-                                    _KpiCardData(
+                                    KpiCardData(
                                       title:
+                                          data.totalCallsKpiTitleAllDates() ??
                                           'Συνολικές κλήσεις · ${filter.kpiTotalCallsRangeTitle()}',
                                       value: '${data.totalCalls}',
-                                      subtitle:
-                                          '${_formatDeltaPercent(data.totalCalls, data.previousPeriodTotalCalls)} vs ${filter.kpiComparisonRangeHint()}: ${data.previousPeriodTotalCalls}',
+                                      subtitle: allDatesMode
+                                          ? _formatAvgCallsPerDay(data)
+                                          : '${_formatDeltaPercent(data.totalCalls, data.previousPeriodTotalCalls)} vs ${filter.kpiComparisonRangeHint()}: ${data.previousPeriodTotalCalls}',
                                       isUp:
                                           data.totalCalls >=
                                           data.previousPeriodTotalCalls,
+                                      showTrendIndicator: !allDatesMode,
+                                      useBarSparkline: allDatesMode,
                                       icon: Icons.call_rounded,
                                       points: data.sparklineLast7Days
                                           .map((e) => e.callCount.toDouble())
                                           .toList(),
+                                      barPoints:
+                                          allDatesBars?.callsByMonth ??
+                                          const [],
                                       colors: colors.kpiBlue,
                                     ),
-                                    _KpiCardData(
-                                      title: 'Συνολική Διάρκεια Κλήσεων',
-                                      value: _formatDurationSeconds(
+                                    KpiCardData(
+                                      title:
+                                          'Συνολική Διάρκεια Κλήσεων (ώρ:λεπ)',
+                                      value: _formatAggregateDurationSeconds(
                                         data.totalDurationSeconds,
                                       ),
-                                      subtitle:
-                                          '${_formatDeltaPercent(data.totalDurationSeconds, data.previousPeriodTotalDurationSeconds)} vs ${filter.kpiComparisonRangeHint()}: ${_formatDurationSeconds(data.previousPeriodTotalDurationSeconds)}',
+                                      subtitle: allDatesMode
+                                          ? _formatAvgDurationPerDay(data)
+                                          : '${_formatDeltaPercent(data.totalDurationSeconds, data.previousPeriodTotalDurationSeconds)} vs ${filter.kpiComparisonRangeHint()}: ${_formatAggregateDurationSeconds(data.previousPeriodTotalDurationSeconds)}',
                                       isUp:
                                           data.totalDurationSeconds >=
                                           data.previousPeriodTotalDurationSeconds,
+                                      showTrendIndicator: !allDatesMode,
+                                      useBarSparkline: allDatesMode,
                                       icon: Icons.timer_outlined,
                                       points: data.sparklineLast7Days
                                           .map(
@@ -288,18 +346,26 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                                                 .toDouble(),
                                           )
                                           .toList(),
+                                      barPoints:
+                                          allDatesBars
+                                              ?.durationByWeekdayMonToFri ??
+                                          const [],
                                       colors: colors.kpiGreen,
                                     ),
-                                    _KpiCardData(
-                                      title: 'Μέσος Όρος ανά Κλήση',
-                                      value: _formatDurationSeconds(
+                                    KpiCardData(
+                                      title:
+                                          'Μέσος Όρος ανά Κλήση (λεπ:δευτ)',
+                                      value: _formatCallDurationSeconds(
                                         data.avgDurationSeconds,
                                       ),
-                                      subtitle:
-                                          '${_formatDeltaPercent(data.avgDurationSeconds, data.previousPeriodAvgDurationSeconds)} vs ${filter.kpiComparisonRangeHint()}: ${_formatDurationSeconds(data.previousPeriodAvgDurationSeconds)}',
+                                      subtitle: allDatesMode
+                                          ? 'Διάμεσος χρόνος: ${_formatCallDurationSeconds(data.medianDurationSeconds)}'
+                                          : '${_formatDeltaPercent(data.avgDurationSeconds, data.previousPeriodAvgDurationSeconds)} vs ${filter.kpiComparisonRangeHint()}: ${_formatCallDurationSeconds(data.previousPeriodAvgDurationSeconds)}',
                                       isUp:
                                           data.avgDurationSeconds >=
                                           data.previousPeriodAvgDurationSeconds,
+                                      showTrendIndicator: !allDatesMode,
+                                      useBarSparkline: allDatesMode,
                                       icon: Icons.av_timer_outlined,
                                       points: data.sparklineLast7Days
                                           .map(
@@ -309,17 +375,31 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                                                       e.callCount,
                                           )
                                           .toList(),
+                                      barPoints:
+                                          allDatesBars?.durationExtremesSix ??
+                                          const [],
                                       colors: colors.kpiOrange,
                                     ),
-                                    _KpiCardData(
+                                    KpiCardData(
                                       title: topEntity.title,
                                       value: topEntity.label,
-                                      subtitle: '${topEntity.count} κλήσεις',
+                                      subtitle: allDatesMode
+                                          ? _formatTopEntityShareSubtitle(
+                                              topEntity.count,
+                                              data.totalCalls,
+                                            )
+                                          : '${topEntity.count} κλήσεις',
                                       isUp: true,
+                                      showTrendIndicator: !allDatesMode,
+                                      useBarSparkline: allDatesMode,
                                       icon: topEntity.icon,
                                       points: data.sparklineLast7Days
                                           .map((e) => e.callCount.toDouble())
                                           .toList(),
+                                      barPoints: _runnerUpBarPoints(
+                                        allDatesBars,
+                                        _topEntityMode,
+                                      ),
                                       colors: colors.kpiPurple,
                                     ),
                                   ],
@@ -331,7 +411,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                                     if (index != 3) return;
                                     final selected =
                                         await showModalBottomSheet<
-                                          _TopEntityMode
+                                          TopEntityMode
                                         >(
                                           context: context,
                                           showDragHandle: true,
@@ -349,7 +429,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                                                     ),
                                                     onTap: () => Navigator.pop(
                                                       context,
-                                                      _TopEntityMode.department,
+                                                      TopEntityMode.department,
                                                     ),
                                                   ),
                                                   ListTile(
@@ -362,7 +442,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                                                     ),
                                                     onTap: () => Navigator.pop(
                                                       context,
-                                                      _TopEntityMode.caller,
+                                                      TopEntityMode.caller,
                                                     ),
                                                   ),
                                                   ListTile(
@@ -374,7 +454,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                                                     ),
                                                     onTap: () => Navigator.pop(
                                                       context,
-                                                      _TopEntityMode.issue,
+                                                      TopEntityMode.issue,
                                                     ),
                                                   ),
                                                 ],
@@ -395,7 +475,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                                     children: [
                                       Expanded(
                                         flex: 4,
-                                        child: _TopCallersCard(
+                                        child: TopCallersCard(
                                           data: data,
                                           colors: colors,
                                           onViewAll: () {
@@ -413,12 +493,12 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                                       const SizedBox(width: 16),
                                       Expanded(
                                         flex: 9,
-                                        child: _LongestCallsCard(
+                                        child: LongestCallsCard(
                                           data: data,
                                           topN: filter.topN,
                                           colors: colors,
                                           formatDuration:
-                                              _formatDurationSeconds,
+                                              _formatCallDurationSeconds,
                                           onTopNChanged: (v) {
                                             ref
                                                 .read(
@@ -440,7 +520,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                                     ],
                                   )
                                 else ...[
-                                  _TopCallersCard(
+                                  TopCallersCard(
                                     data: data,
                                     colors: colors,
                                     onViewAll: () {
@@ -454,11 +534,11 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                                     },
                                   ),
                                   const SizedBox(height: 16),
-                                  _LongestCallsCard(
+                                  LongestCallsCard(
                                     data: data,
                                     topN: filter.topN,
                                     colors: colors,
-                                    formatDuration: _formatDurationSeconds,
+                                    formatDuration: _formatCallDurationSeconds,
                                     onTopNChanged: (v) {
                                       ref
                                           .read(
@@ -475,22 +555,22 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                                   ),
                                 ],
                                 const SizedBox(height: 18),
-                                _MoreSection(
+                                MoreSection(
                                   expanded: _showMoreSection,
                                   onToggle: () => setState(
                                     () => _showMoreSection = !_showMoreSection,
                                   ),
                                   data: data,
                                   colors: colors,
-                                  formatDuration: _formatDurationSeconds,
+                                  formatDuration: _formatCallDurationSeconds,
                                 ),
                               ],
                             );
                           },
                         );
                       },
-                      loading: () => _LoadingDashboard(colors: colors),
-                      error: (e, _) => _ErrorCard(
+                      loading: () => LoadingDashboard(colors: colors),
+                      error: (e, _) => ErrorCard(
                         message: 'Σφάλμα φόρτωσης: $e',
                         colors: colors,
                       ),
@@ -507,7 +587,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                   duration: const Duration(milliseconds: 210),
                   curve: Curves.easeOut,
                   opacity: _isFilterOpen ? 1 : 0,
-                  child: _FilterPane(
+                  child: FilterPane(
                     paneWidth: math.max(
                       220,
                       math.min(330, MediaQuery.sizeOf(context).width - 24),
@@ -556,7 +636,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     );
   }
 
-  Widget _buildTopBar(ThemeData theme, _DashboardPaletteColors colors) {
+  Widget _buildTopBar(ThemeData theme, DashboardPaletteColors colors) {
     return ClipRRect(
       borderRadius: BorderRadius.circular(20),
       child: BackdropFilter(
@@ -620,29 +700,29 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                     icon: const Icon(Icons.logout_rounded, size: 18),
                     label: const Text('Έξοδος'),
                   ),
-                  PopupMenuButton<_DashboardPalette>(
+                  PopupMenuButton<DashboardPalette>(
                     tooltip: 'Παλέτα Χρωμάτων',
                     initialValue: _palette,
                     onSelected: (v) => setState(() => _palette = v),
                     itemBuilder: (context) => const [
                       PopupMenuItem(
-                        value: _DashboardPalette.classic,
+                        value: DashboardPalette.classic,
                         child: Text('Κλασικό'),
                       ),
                       PopupMenuItem(
-                        value: _DashboardPalette.ocean,
+                        value: DashboardPalette.ocean,
                         child: Text('Ωκεανός'),
                       ),
                       PopupMenuItem(
-                        value: _DashboardPalette.sunrise,
+                        value: DashboardPalette.sunrise,
                         child: Text('Ανατολή'),
                       ),
                       PopupMenuItem(
-                        value: _DashboardPalette.forest,
+                        value: DashboardPalette.forest,
                         child: Text('Δάσος'),
                       ),
                       PopupMenuItem(
-                        value: _DashboardPalette.indigoNight,
+                        value: DashboardPalette.indigoNight,
                         child: Text('Νυχτερινό ίντιγκο'),
                       ),
                     ],
@@ -655,7 +735,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                         ),
                         disabledForegroundColor: theme.colorScheme.onSurface,
                       ),
-                      icon: _GradientPaletteIcon(colors: colors),
+                      icon: GradientPaletteIcon(colors: colors),
                       label: const Text('Χρώματα'),
                     ),
                   ),
@@ -705,1870 +785,5 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       return 'έως ${DateFormat('dd/MM/yyyy').format(filter.dateTo!)}';
     }
     return 'Εύρος ημερομηνιών';
-  }
-}
-
-class _KpiTopEntity {
-  const _KpiTopEntity({
-    required this.title,
-    required this.label,
-    required this.count,
-    required this.icon,
-  });
-
-  final String title;
-  final String label;
-  final int count;
-  final IconData icon;
-}
-
-/// Κείμενο με ellipsis· tooltip μόνο όταν το κείμενο κόβεται.
-class _EllipsisTooltipText extends StatefulWidget {
-  const _EllipsisTooltipText({required this.text, this.style});
-
-  final String text;
-  final TextStyle? style;
-
-  @override
-  State<_EllipsisTooltipText> createState() => _EllipsisTooltipTextState();
-}
-
-class _EllipsisTooltipTextState extends State<_EllipsisTooltipText> {
-  final GlobalKey _textKey = GlobalKey();
-  bool _overflows = false;
-
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback(_checkOverflow);
-  }
-
-  @override
-  void didUpdateWidget(covariant _EllipsisTooltipText oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.text != widget.text || oldWidget.style != widget.style) {
-      WidgetsBinding.instance.addPostFrameCallback(_checkOverflow);
-    }
-  }
-
-  void _checkOverflow(_) {
-    if (!mounted) return;
-    final ro = _textKey.currentContext?.findRenderObject();
-    if (ro is! RenderParagraph) return;
-    final overflows = ro.didExceedMaxLines;
-    if (overflows != _overflows) {
-      setState(() => _overflows = overflows);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        WidgetsBinding.instance.addPostFrameCallback(_checkOverflow);
-        final text = Text(
-          widget.text,
-          key: _textKey,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: widget.style,
-        );
-        if (!_overflows || widget.text.isEmpty) return text;
-        return Tooltip(message: widget.text, child: text);
-      },
-    );
-  }
-}
-
-class _KpiCardData {
-  const _KpiCardData({
-    required this.title,
-    required this.value,
-    required this.subtitle,
-    required this.isUp,
-    required this.icon,
-    required this.points,
-    required this.colors,
-  });
-
-  final String title;
-  final String value;
-  final String subtitle;
-  final bool isUp;
-  final IconData icon;
-  final List<double> points;
-  final _KpiTone colors;
-}
-
-class _KpiGrid extends StatelessWidget {
-  const _KpiGrid({
-    required this.crossAxisCount,
-    required this.cards,
-    required this.onCardTap,
-    required this.paletteColors,
-  });
-
-  final int crossAxisCount;
-  final List<_KpiCardData> cards;
-  final ValueChanged<int> onCardTap;
-  final _DashboardPaletteColors paletteColors;
-
-  @override
-  Widget build(BuildContext context) {
-    return GridView.builder(
-      itemCount: cards.length,
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: crossAxisCount,
-        crossAxisSpacing: 14,
-        mainAxisSpacing: 14,
-        childAspectRatio: 1.62,
-      ),
-      itemBuilder: (context, index) {
-        final card = cards[index];
-        return TweenAnimationBuilder<double>(
-          tween: Tween(begin: 0, end: 1),
-          duration: Duration(milliseconds: 320 + (index * 90)),
-          curve: Curves.easeOutCubic,
-          builder: (context, t, child) {
-            return Opacity(
-              opacity: t,
-              child: Transform.translate(
-                offset: Offset(0, (1 - t) * 14),
-                child: child,
-              ),
-            );
-          },
-          child: _HoverLiftCard(
-            onTap: () => onCardTap(index),
-            child: Container(
-              padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(16),
-                color: card.colors.surface,
-                border: Border.all(color: Colors.white.withValues(alpha: 0.86)),
-                boxShadow: const [
-                  BoxShadow(
-                    color: Color(0x140F172A),
-                    blurRadius: 18,
-                    offset: Offset(0, 8),
-                  ),
-                ],
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Container(
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(10),
-                      color: card.colors.iconSurface,
-                    ),
-                    child: Icon(
-                      card.icon,
-                      color: card.colors.iconColor,
-                      size: 22,
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  Text(
-                    card.title,
-                    style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                      fontWeight: FontWeight.w600,
-                      color: paletteColors.kpiTitle,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Expanded(
-                    child: Text(
-                      card.value,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.headlineSmall
-                          ?.copyWith(
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: -0.8,
-                            color: card.colors.valueColor,
-                          ),
-                    ),
-                  ),
-                  Row(
-                    children: [
-                      Text(
-                        card.isUp ? '▲ ' : '▼ ',
-                        style: TextStyle(
-                          color: card.isUp
-                              ? const Color(0xFF16A34A)
-                              : const Color(0xFFDC2626),
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      Expanded(
-                        child: _EllipsisTooltipText(
-                          text: card.subtitle,
-                          style: Theme.of(context).textTheme.bodySmall
-                              ?.copyWith(color: paletteColors.kpiSubtitle),
-                        ),
-                      ),
-                      SizedBox(
-                        width: 86,
-                        height: 34,
-                        child: _SparklineChart(
-                          points: card.points,
-                          color: card.colors.sparkColor,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-}
-
-class _HoverLiftCard extends StatefulWidget {
-  const _HoverLiftCard({required this.child, required this.onTap});
-
-  final Widget child;
-  final VoidCallback onTap;
-
-  @override
-  State<_HoverLiftCard> createState() => _HoverLiftCardState();
-}
-
-class _HoverLiftCardState extends State<_HoverLiftCard> {
-  bool _hovered = false;
-  bool _pressed = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final scale = _pressed
-        ? 0.992
-        : _hovered
-        ? 1.01
-        : 1.0;
-    final y = _hovered ? -3.0 : 0.0;
-    return MouseRegion(
-      onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() {
-        _hovered = false;
-        _pressed = false;
-      }),
-      child: GestureDetector(
-        onTapDown: (_) => setState(() => _pressed = true),
-        onTapUp: (_) => setState(() => _pressed = false),
-        onTapCancel: () => setState(() => _pressed = false),
-        onTap: widget.onTap,
-        child: AnimatedScale(
-          scale: scale,
-          duration: const Duration(milliseconds: 140),
-          curve: Curves.easeOutCubic,
-          child: AnimatedSlide(
-            offset: Offset(0, y / 100),
-            duration: const Duration(milliseconds: 180),
-            curve: Curves.easeOutCubic,
-            child: widget.child,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _TopCallersCard extends StatelessWidget {
-  const _TopCallersCard({
-    required this.data,
-    required this.colors,
-    required this.onViewAll,
-  });
-
-  final DashboardSummaryModel data;
-  final _DashboardPaletteColors colors;
-  final VoidCallback onViewAll;
-
-  @override
-  Widget build(BuildContext context) {
-    final callers = data.topCallers.take(7).toList();
-    final maxCount = callers.isEmpty
-        ? 1
-        : callers.map((e) => e.count).reduce(math.max).toDouble();
-    return _GlassCard(
-      fill: colors.glassFill,
-      border: colors.glassBorder,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _SectionHeader(
-            icon: Icons.emoji_events_outlined,
-            title: 'Κορυφαίοι Καλούντες',
-            iconColor: colors.sectionCallersIcon,
-            iconBg: colors.sectionCallersBg,
-          ),
-          const SizedBox(height: 10),
-          if (callers.isEmpty)
-            const Text('Δεν υπάρχουν δεδομένα.')
-          else
-            ...callers.indexed.map((entry) {
-              final i = entry.$1;
-              final c = entry.$2;
-              final progress = maxCount == 0 ? 0.0 : c.count / maxCount;
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 28,
-                      height: 28,
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(14),
-                        color: colors.rankColor(i),
-                      ),
-                      alignment: Alignment.center,
-                      child: Text(
-                        '${i + 1}',
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w700,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            c.name,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              fontWeight: FontWeight.w500,
-                              fontSize: 13.5,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(999),
-                            child: TweenAnimationBuilder<double>(
-                              tween: Tween<double>(begin: 0, end: progress),
-                              duration: Duration(milliseconds: 320 + (i * 80)),
-                              curve: Curves.easeOutCubic,
-                              builder: (context, value, _) {
-                                return LinearProgressIndicator(
-                                  value: value,
-                                  minHeight: 6,
-                                  backgroundColor: colors.progressTrackBg,
-                                  color: colors.actionBlue,
-                                );
-                              },
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      '${c.count}',
-                      style: const TextStyle(fontWeight: FontWeight.w700),
-                    ),
-                  ],
-                ),
-              );
-            }),
-          TextButton(onPressed: onViewAll, child: const Text('Προβολή όλων >')),
-        ],
-      ),
-    );
-  }
-}
-
-class _LongestCallsCard extends StatelessWidget {
-  const _LongestCallsCard({
-    required this.data,
-    required this.topN,
-    required this.colors,
-    required this.formatDuration,
-    required this.onTopNChanged,
-    required this.onOpenReport,
-  });
-
-  final DashboardSummaryModel data;
-  final int topN;
-  final _DashboardPaletteColors colors;
-  final String Function(num) formatDuration;
-  final ValueChanged<int> onTopNChanged;
-  final VoidCallback onOpenReport;
-
-  @override
-  Widget build(BuildContext context) {
-    final rows = data.longestCalls.take(topN).toList();
-    final maxDur = rows.isEmpty
-        ? 1
-        : rows.map((e) => e.durationSeconds).reduce(math.max).toDouble();
-
-    return _GlassCard(
-      fill: colors.glassFill,
-      border: colors.glassBorder,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: _SectionHeader(
-                  icon: Icons.schedule_outlined,
-                  title: 'Πιο Χρονοβόρες Κλήσεις',
-                  iconColor: colors.sectionDurationIcon,
-                  iconBg: colors.sectionDurationBg,
-                ),
-              ),
-              DropdownButton<int>(
-                value: topN,
-                items: const [
-                  DropdownMenuItem(value: 5, child: Text('Top 5')),
-                  DropdownMenuItem(value: 10, child: Text('Top 10')),
-                  DropdownMenuItem(value: 20, child: Text('Top 20')),
-                ],
-                onChanged: (v) {
-                  if (v != null) onTopNChanged(v);
-                },
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: DataTable(
-              headingRowColor: WidgetStatePropertyAll(
-                colors.tableHeaderBg.withValues(alpha: 0.95),
-              ),
-              columnSpacing: 16,
-              columns: const [
-                DataColumn(label: Text('#')),
-                DataColumn(label: Text('Καλών')),
-                DataColumn(label: Text('Τμήμα')),
-                DataColumn(label: Text('Διάρκεια')),
-              ],
-              rows: rows.indexed.map((entry) {
-                final idx = entry.$1;
-                final r = entry.$2;
-                final pct = maxDur == 0 ? 0.0 : r.durationSeconds / maxDur;
-                return DataRow(
-                  color: WidgetStateProperty.resolveWith<Color?>((states) {
-                    if (states.contains(WidgetState.hovered)) {
-                      return colors.tableRowHover;
-                    }
-                    return null;
-                  }),
-                  cells: [
-                    DataCell(Text('${idx + 1}')),
-                    DataCell(
-                      SizedBox(
-                        width: 210,
-                        child: Text(
-                          r.callerName,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    ),
-                    DataCell(_DepartmentPill(name: r.department)),
-                    DataCell(
-                      SizedBox(
-                        width: 220,
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: ClipRRect(
-                                borderRadius: BorderRadius.circular(999),
-                                child: TweenAnimationBuilder<double>(
-                                  tween: Tween<double>(begin: 0, end: pct),
-                                  duration: Duration(
-                                    milliseconds: 300 + (idx * 70),
-                                  ),
-                                  curve: Curves.easeOutCubic,
-                                  builder: (context, value, _) {
-                                    return LinearProgressIndicator(
-                                      value: value,
-                                      minHeight: 6,
-                                      backgroundColor:
-                                          colors.progressTrackDataRowBg,
-                                      color: colors.actionBlue,
-                                    );
-                                  },
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-                            Text(formatDuration(r.durationSeconds)),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
-                );
-              }).toList(),
-            ),
-          ),
-          TextButton(
-            onPressed: onOpenReport,
-            child: const Text('Προβολή αναφοράς >'),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _MoreSection extends StatelessWidget {
-  const _MoreSection({
-    required this.expanded,
-    required this.onToggle,
-    required this.data,
-    required this.colors,
-    required this.formatDuration,
-  });
-
-  final bool expanded;
-  final VoidCallback onToggle;
-  final DashboardSummaryModel data;
-  final _DashboardPaletteColors colors;
-  final String Function(num) formatDuration;
-
-  @override
-  Widget build(BuildContext context) {
-    return _GlassCard(
-      fill: colors.glassFill,
-      border: colors.glassBorder,
-      child: Column(
-        children: [
-          Row(
-            children: [
-              Text(
-                'Περισσότερα...',
-                style: Theme.of(
-                  context,
-                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
-              ),
-              const Spacer(),
-              IconButton(
-                onPressed: onToggle,
-                icon: Icon(
-                  expanded
-                      ? Icons.keyboard_arrow_up_rounded
-                      : Icons.keyboard_arrow_down_rounded,
-                ),
-              ),
-            ],
-          ),
-          ClipRect(
-            child: AnimatedSize(
-              duration: const Duration(milliseconds: 300),
-              curve: Curves.easeOutCubic,
-              alignment: Alignment.topCenter,
-              child: AnimatedOpacity(
-                duration: const Duration(milliseconds: 210),
-                curve: Curves.easeOut,
-                opacity: expanded ? 1 : 0,
-                child: expanded
-                    ? LayoutBuilder(
-                        builder: (context, constraints) {
-                          final split = constraints.maxWidth >= 980;
-                          if (split) {
-                            return Column(
-                              children: [
-                                Row(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Expanded(
-                                      child: _ChartCard(
-                                        title: 'Κατανομή ανά ώρα',
-                                        fill: colors.chartCardFill,
-                                        border: colors.chartCardBorder,
-                                        child: _HourlyBarChart(
-                                          buckets: data.hourlyDistribution,
-                                          color: colors.actionBlue,
-                                        ),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 14),
-                                    Expanded(
-                                      child: _ChartCard(
-                                        title: 'Τάση Κλήσεων (7 ημέρες)',
-                                        fill: colors.chartCardFill,
-                                        border: colors.chartCardBorder,
-                                        child: _TrendLineChart(
-                                          trend: data.dailyTrend,
-                                          color: colors.kpiGreen.sparkColor,
-                                          gridLineColor: colors.chartGridLine,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 14),
-                                _ChartCard(
-                                  title: 'Κατανομή Βλαβών',
-                                  fill: colors.chartCardFill,
-                                  border: colors.chartCardBorder,
-                                  child: _IssuePieChart(
-                                    issues: data.byIssue,
-                                    formatDuration: formatDuration,
-                                    pieColors: colors.pieColors,
-                                    legendMutedColor: colors.kpiSubtitle,
-                                  ),
-                                ),
-                              ],
-                            );
-                          }
-                          return Column(
-                            children: [
-                              _ChartCard(
-                                title: 'Κατανομή ανά ώρα',
-                                fill: colors.chartCardFill,
-                                border: colors.chartCardBorder,
-                                child: _HourlyBarChart(
-                                  buckets: data.hourlyDistribution,
-                                  color: colors.actionBlue,
-                                ),
-                              ),
-                              const SizedBox(height: 14),
-                              _ChartCard(
-                                title: 'Τάση Κλήσεων (7 ημέρες)',
-                                fill: colors.chartCardFill,
-                                border: colors.chartCardBorder,
-                                child: _TrendLineChart(
-                                  trend: data.dailyTrend,
-                                  color: colors.kpiGreen.sparkColor,
-                                  gridLineColor: colors.chartGridLine,
-                                ),
-                              ),
-                              const SizedBox(height: 14),
-                              _ChartCard(
-                                title: 'Κατανομή Βλαβών',
-                                fill: colors.chartCardFill,
-                                border: colors.chartCardBorder,
-                                child: _IssuePieChart(
-                                  issues: data.byIssue,
-                                  formatDuration: formatDuration,
-                                  pieColors: colors.pieColors,
-                                  legendMutedColor: colors.kpiSubtitle,
-                                ),
-                              ),
-                            ],
-                          );
-                        },
-                      )
-                    : const SizedBox.shrink(),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _DatePresetButton extends StatelessWidget {
-  const _DatePresetButton({
-    required this.label,
-    required this.selected,
-    required this.onPressed,
-  });
-
-  final String label;
-  final bool selected;
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    if (selected) {
-      return FilledButton(onPressed: onPressed, child: Text(label));
-    }
-    return FilledButton.tonal(onPressed: onPressed, child: Text(label));
-  }
-}
-
-class _FilterPane extends StatelessWidget {
-  const _FilterPane({
-    required this.paneWidth,
-    required this.dateRangeLabel,
-    required this.keywordController,
-    required this.userController,
-    required this.equipmentController,
-    required this.departmentsAsync,
-    required this.selectedDepartment,
-    required this.activeDatePreset,
-    required this.onClose,
-    required this.onPickDateRange,
-    required this.onSetToday,
-    required this.onSetWeek,
-    required this.onSetMonth,
-    required this.onSetAll,
-    required this.onApply,
-    required this.onClearAll,
-    required this.onDepartmentChanged,
-    required this.onChangedText,
-  });
-
-  final double paneWidth;
-  final String dateRangeLabel;
-  final TextEditingController keywordController;
-  final TextEditingController userController;
-  final TextEditingController equipmentController;
-  final AsyncValue<List<String>> departmentsAsync;
-  final String? selectedDepartment;
-  final DashboardDatePreset activeDatePreset;
-  final VoidCallback onClose;
-  final VoidCallback onPickDateRange;
-  final VoidCallback onSetToday;
-  final VoidCallback onSetWeek;
-  final VoidCallback onSetMonth;
-  final VoidCallback onSetAll;
-  final VoidCallback onApply;
-  final VoidCallback onClearAll;
-  final ValueChanged<String?> onDepartmentChanged;
-  final VoidCallback onChangedText;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(16),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-        child: Container(
-          width: paneWidth,
-          padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.82),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.86)),
-            boxShadow: const [
-              BoxShadow(
-                color: Color(0x330F172A),
-                blurRadius: 28,
-                offset: Offset(0, 16),
-              ),
-            ],
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Row(
-                children: [
-                  const Icon(Icons.tune_rounded, size: 18),
-                  const SizedBox(width: 8),
-                  Text(
-                    'Φίλτρα',
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const Spacer(),
-                  IconButton(
-                    onPressed: onClose,
-                    icon: const Icon(Icons.close_rounded),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              TextField(
-                controller: keywordController,
-                onChanged: (_) => onChangedText(),
-                decoration: const InputDecoration(
-                  labelText: 'Αναζήτηση Οντότητας',
-                  hintText: 'Αναζήτηση ονόματος ή τμήματος...',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.search_rounded),
-                  isDense: true,
-                ),
-              ),
-              const SizedBox(height: 10),
-              OutlinedButton.icon(
-                onPressed: onPickDateRange,
-                icon: const Icon(Icons.event_available_outlined, size: 18),
-                label: Text(dateRangeLabel),
-              ),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 6,
-                runSpacing: 6,
-                children: [
-                  _DatePresetButton(
-                    label: 'Σήμερα',
-                    selected: activeDatePreset == DashboardDatePreset.today,
-                    onPressed: onSetToday,
-                  ),
-                  _DatePresetButton(
-                    label: '7 ημέρες',
-                    selected: activeDatePreset == DashboardDatePreset.last7,
-                    onPressed: onSetWeek,
-                  ),
-                  _DatePresetButton(
-                    label: '30 ημέρες',
-                    selected: activeDatePreset == DashboardDatePreset.last30,
-                    onPressed: onSetMonth,
-                  ),
-                  _DatePresetButton(
-                    label: 'Όλα',
-                    selected: activeDatePreset == DashboardDatePreset.all,
-                    onPressed: onSetAll,
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              departmentsAsync.when(
-                data: (deps) {
-                  final options = <String?>[null, ...deps];
-                  return DropdownButtonFormField<String?>(
-                    initialValue: options.contains(selectedDepartment)
-                        ? selectedDepartment
-                        : null,
-                    isExpanded: true,
-                    items: options
-                        .map(
-                          (e) => DropdownMenuItem<String?>(
-                            value: e,
-                            child: Text(e ?? 'Όλα τα Τμήματα'),
-                          ),
-                        )
-                        .toList(),
-                    onChanged: onDepartmentChanged,
-                    decoration: const InputDecoration(
-                      labelText: 'Τμήμα',
-                      border: OutlineInputBorder(),
-                      isDense: true,
-                    ),
-                  );
-                },
-                loading: () => const Padding(
-                  padding: EdgeInsets.all(10),
-                  child: LinearProgressIndicator(),
-                ),
-                error: (e, _) => Text(
-                  'Σφάλμα φόρτωσης τμημάτων: $e',
-                  style: TextStyle(color: theme.colorScheme.error),
-                ),
-              ),
-              const SizedBox(height: 8),
-              TextField(
-                controller: userController,
-                onChanged: (_) => onChangedText(),
-                decoration: const InputDecoration(
-                  labelText: 'Όνομα Χρήστη',
-                  border: OutlineInputBorder(),
-                  isDense: true,
-                ),
-              ),
-              const SizedBox(height: 8),
-              TextField(
-                controller: equipmentController,
-                onChanged: (_) => onChangedText(),
-                decoration: const InputDecoration(
-                  labelText: 'Εξοπλισμός',
-                  border: OutlineInputBorder(),
-                  isDense: true,
-                ),
-              ),
-              const SizedBox(height: 14),
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: onClearAll,
-                      child: const Text('Καθαρισμός'),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: FilledButton(
-                      onPressed: onApply,
-                      child: const Text('Εφαρμογή'),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _SparklineChart extends StatelessWidget {
-  const _SparklineChart({required this.points, required this.color});
-
-  final List<double> points;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    final safePoints = points.isEmpty ? [0.0] : points;
-    return LineChart(
-      LineChartData(
-        gridData: const FlGridData(show: false),
-        titlesData: const FlTitlesData(show: false),
-        borderData: FlBorderData(show: false),
-        lineBarsData: [
-          LineChartBarData(
-            spots: safePoints.indexed
-                .map((e) => FlSpot(e.$1.toDouble(), e.$2))
-                .toList(),
-            isCurved: true,
-            barWidth: 2.2,
-            color: color,
-            dotData: const FlDotData(show: false),
-            belowBarData: BarAreaData(
-              show: true,
-              color: color.withValues(alpha: 0.15),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _HourlyBarChart extends StatelessWidget {
-  const _HourlyBarChart({required this.buckets, required this.color});
-
-  final List<HourlyBucket> buckets;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    final maxY = buckets.isEmpty
-        ? 1.0
-        : (buckets.map((e) => e.callCount).reduce(math.max)).toDouble();
-    return SizedBox(
-      height: 220,
-      child: BarChart(
-        BarChartData(
-          maxY: math.max(maxY, 1),
-          alignment: BarChartAlignment.spaceAround,
-          gridData: FlGridData(
-            drawVerticalLine: false,
-            horizontalInterval: math.max(1, maxY / 4),
-            getDrawingHorizontalLine: (value) =>
-                const FlLine(color: Color(0xFFE5EAF6), strokeWidth: 1),
-          ),
-          borderData: FlBorderData(show: false),
-          titlesData: FlTitlesData(
-            leftTitles: const AxisTitles(
-              sideTitles: SideTitles(showTitles: false),
-            ),
-            topTitles: const AxisTitles(
-              sideTitles: SideTitles(showTitles: false),
-            ),
-            rightTitles: const AxisTitles(
-              sideTitles: SideTitles(showTitles: false),
-            ),
-            bottomTitles: AxisTitles(
-              sideTitles: SideTitles(
-                showTitles: true,
-                interval: 3,
-                getTitlesWidget: (value, meta) {
-                  return Text(
-                    value.toInt().toString(),
-                    style: const TextStyle(fontSize: 10),
-                  );
-                },
-              ),
-            ),
-          ),
-          barGroups: buckets
-              .map(
-                (e) => BarChartGroupData(
-                  x: e.hour,
-                  barRods: [
-                    BarChartRodData(
-                      toY: e.callCount.toDouble(),
-                      width: 8,
-                      borderRadius: BorderRadius.circular(4),
-                      color: color,
-                    ),
-                  ],
-                ),
-              )
-              .toList(),
-        ),
-      ),
-    );
-  }
-}
-
-class _TrendLineChart extends StatelessWidget {
-  const _TrendLineChart({
-    required this.trend,
-    required this.color,
-    required this.gridLineColor,
-  });
-
-  final List<DailyTrendPoint> trend;
-  final Color color;
-  final Color gridLineColor;
-
-  @override
-  Widget build(BuildContext context) {
-    final maxY = trend.isEmpty
-        ? 1.0
-        : trend.map((e) => e.callCount).reduce(math.max).toDouble();
-    return SizedBox(
-      height: 220,
-      child: LineChart(
-        LineChartData(
-          minY: 0,
-          maxY: math.max(maxY, 1),
-          gridData: FlGridData(
-            drawVerticalLine: false,
-            horizontalInterval: math.max(1, maxY / 4),
-            getDrawingHorizontalLine: (_) =>
-                FlLine(color: gridLineColor, strokeWidth: 1),
-          ),
-          borderData: FlBorderData(show: false),
-          titlesData: FlTitlesData(
-            leftTitles: const AxisTitles(
-              sideTitles: SideTitles(showTitles: false),
-            ),
-            rightTitles: const AxisTitles(
-              sideTitles: SideTitles(showTitles: false),
-            ),
-            topTitles: const AxisTitles(
-              sideTitles: SideTitles(showTitles: false),
-            ),
-            bottomTitles: AxisTitles(
-              sideTitles: SideTitles(
-                showTitles: true,
-                interval: 1,
-                getTitlesWidget: (value, meta) {
-                  final index = value.toInt();
-                  if (index < 0 || index >= trend.length) {
-                    return const SizedBox.shrink();
-                  }
-                  return Padding(
-                    padding: const EdgeInsets.only(top: 6),
-                    child: Text(
-                      DateFormat('dd/MM').format(trend[index].date),
-                      style: const TextStyle(fontSize: 10),
-                    ),
-                  );
-                },
-              ),
-            ),
-          ),
-          lineBarsData: [
-            LineChartBarData(
-              spots: trend.indexed
-                  .map(
-                    (e) => FlSpot(e.$1.toDouble(), e.$2.callCount.toDouble()),
-                  )
-                  .toList(),
-              isCurved: true,
-              barWidth: 2.6,
-              color: color,
-              dotData: const FlDotData(show: false),
-              belowBarData: BarAreaData(
-                show: true,
-                color: color.withValues(alpha: 0.16),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _IssuePieChart extends StatelessWidget {
-  const _IssuePieChart({
-    required this.issues,
-    required this.formatDuration,
-    required this.pieColors,
-    required this.legendMutedColor,
-  });
-
-  final List<IssueStat> issues;
-  final String Function(num) formatDuration;
-  final List<Color> pieColors;
-  final Color legendMutedColor;
-
-  @override
-  Widget build(BuildContext context) {
-    final top = issues.take(5).toList();
-    if (top.isEmpty) {
-      return const SizedBox(
-        height: 180,
-        child: Center(child: Text('Δεν υπάρχουν δεδομένα.')),
-      );
-    }
-    final colors = pieColors;
-    return Row(
-      children: [
-        SizedBox(
-          width: 210,
-          height: 210,
-          child: PieChart(
-            PieChartData(
-              centerSpaceRadius: 46,
-              sectionsSpace: 2,
-              sections: top.indexed.map((entry) {
-                final i = entry.$1;
-                final issue = entry.$2;
-                return PieChartSectionData(
-                  color: colors[i % colors.length],
-                  value: issue.count.toDouble(),
-                  title: '${issue.count}',
-                  radius: 52,
-                  titleStyle: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                    color: Colors.white,
-                  ),
-                );
-              }).toList(),
-            ),
-          ),
-        ),
-        const SizedBox(width: 14),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: top.indexed.map((entry) {
-              final i = entry.$1;
-              final issue = entry.$2;
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 7),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 10,
-                      height: 10,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: colors[i % colors.length],
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        issue.name,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Text('${issue.count}'),
-                    const SizedBox(width: 8),
-                    Text(
-                      formatDuration(issue.sumDurationSeconds),
-                      style: TextStyle(color: legendMutedColor),
-                    ),
-                  ],
-                ),
-              );
-            }).toList(),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _ChartCard extends StatelessWidget {
-  const _ChartCard({
-    required this.title,
-    required this.child,
-    required this.fill,
-    required this.border,
-  });
-
-  final String title;
-  final Widget child;
-  final Color fill;
-  final Color border;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: fill.withValues(alpha: 0.92),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: border),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            title,
-            style: Theme.of(
-              context,
-            ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
-          ),
-          const SizedBox(height: 8),
-          child,
-        ],
-      ),
-    );
-  }
-}
-
-class _DepartmentPill extends StatelessWidget {
-  const _DepartmentPill({required this.name});
-
-  final String name;
-
-  @override
-  Widget build(BuildContext context) {
-    final lower = name.toLowerCase();
-    Color bg;
-    Color fg;
-    if (lower.contains('λογ') || lower.contains('account')) {
-      bg = const Color(0xFFEDE9FE);
-      fg = const Color(0xFF5B21B6);
-    } else if (lower.contains('πωλ') || lower.contains('sales')) {
-      bg = const Color(0xFFFFF1DF);
-      fg = const Color(0xFFB45309);
-    } else {
-      bg = const Color(0xFFDCFCE7);
-      fg = const Color(0xFF166534);
-    }
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: Text(
-        name,
-        style: TextStyle(color: fg, fontWeight: FontWeight.w600, fontSize: 12),
-      ),
-    );
-  }
-}
-
-class _SectionHeader extends StatelessWidget {
-  const _SectionHeader({
-    required this.icon,
-    required this.title,
-    required this.iconColor,
-    required this.iconBg,
-  });
-
-  final IconData icon;
-  final String title;
-  final Color iconColor;
-  final Color iconBg;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Container(
-          width: 32,
-          height: 32,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(9),
-            color: iconBg,
-          ),
-          child: Icon(icon, size: 18, color: iconColor),
-        ),
-        const SizedBox(width: 10),
-        Text(
-          title,
-          style: Theme.of(
-            context,
-          ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
-        ),
-      ],
-    );
-  }
-}
-
-class _GlassCard extends StatelessWidget {
-  const _GlassCard({
-    required this.child,
-    required this.fill,
-    required this.border,
-  });
-
-  final Widget child;
-  final Color fill;
-  final Color border;
-
-  @override
-  Widget build(BuildContext context) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(16),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
-        child: Container(
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            color: fill.withValues(alpha: 0.88),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: border.withValues(alpha: 0.9)),
-          ),
-          child: child,
-        ),
-      ),
-    );
-  }
-}
-
-class _LoadingDashboard extends StatelessWidget {
-  const _LoadingDashboard({required this.colors});
-
-  final _DashboardPaletteColors colors;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        _LoadingSkeleton(height: 172, colors: colors),
-        const SizedBox(height: 12),
-        _LoadingSkeleton(height: 172, colors: colors),
-        const SizedBox(height: 12),
-        _LoadingSkeleton(height: 240, colors: colors),
-      ],
-    );
-  }
-}
-
-class _LoadingSkeleton extends StatelessWidget {
-  const _LoadingSkeleton({required this.height, required this.colors});
-
-  final double height;
-  final _DashboardPaletteColors colors;
-
-  @override
-  Widget build(BuildContext context) {
-    final a = colors.chartGridLine.withValues(alpha: 0.65);
-    final b = colors.chartCardFill.withValues(alpha: 0.95);
-    final c = colors.chartGridLine.withValues(alpha: 0.65);
-    return Container(
-      height: height,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(14),
-        gradient: LinearGradient(
-          begin: Alignment.centerLeft,
-          end: Alignment.centerRight,
-          colors: [a, b, c],
-        ),
-      ),
-    );
-  }
-}
-
-class _EmptyStateCard extends StatelessWidget {
-  const _EmptyStateCard({required this.message, required this.colors});
-
-  final String message;
-  final _DashboardPaletteColors colors;
-
-  @override
-  Widget build(BuildContext context) {
-    return _GlassCard(
-      fill: colors.glassFill,
-      border: colors.glassBorder,
-      child: Padding(
-        padding: const EdgeInsets.all(18),
-        child: Center(child: Text(message, textAlign: TextAlign.center)),
-      ),
-    );
-  }
-}
-
-class _ErrorCard extends StatelessWidget {
-  const _ErrorCard({required this.message, required this.colors});
-
-  final String message;
-  final _DashboardPaletteColors colors;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return _GlassCard(
-      fill: colors.glassFill,
-      border: colors.glassBorder,
-      child: Text(message, style: TextStyle(color: theme.colorScheme.error)),
-    );
-  }
-}
-
-class _GradientPaletteIcon extends StatelessWidget {
-  const _GradientPaletteIcon({required this.colors});
-
-  final _DashboardPaletteColors colors;
-
-  @override
-  Widget build(BuildContext context) {
-    return ShaderMask(
-      blendMode: BlendMode.srcIn,
-      shaderCallback: (bounds) => LinearGradient(
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-        colors: [
-          colors.kpiBlue.sparkColor,
-          colors.kpiGreen.sparkColor,
-          colors.kpiOrange.sparkColor,
-          colors.kpiPurple.sparkColor,
-        ],
-      ).createShader(bounds),
-      child: const Icon(Icons.palette_outlined, size: 18, color: Colors.white),
-    );
-  }
-}
-
-class _KpiTone {
-  const _KpiTone({
-    required this.surface,
-    required this.iconSurface,
-    required this.iconColor,
-    required this.valueColor,
-    required this.sparkColor,
-  });
-
-  final Color surface;
-  final Color iconSurface;
-  final Color iconColor;
-  final Color valueColor;
-  final Color sparkColor;
-}
-
-class _DashboardPaletteColors {
-  const _DashboardPaletteColors({
-    required this.kpiBlue,
-    required this.kpiGreen,
-    required this.kpiOrange,
-    required this.kpiPurple,
-    required this.actionBlue,
-    required this.pageBg,
-    required this.pageGradientStart,
-    required this.pageGradientEnd,
-    required this.glassFill,
-    required this.glassBorder,
-    required this.topBarFill,
-    required this.topBarBorder,
-    required this.topBarLogoBgStart,
-    required this.topBarLogoBgEnd,
-    required this.topBarLogoIcon,
-    required this.kpiTitle,
-    required this.kpiSubtitle,
-    required this.rankSwatches,
-    required this.sectionCallersIcon,
-    required this.sectionCallersBg,
-    required this.sectionDurationIcon,
-    required this.sectionDurationBg,
-    required this.tableHeaderBg,
-    required this.tableRowHover,
-    required this.progressTrackBg,
-    required this.progressTrackDataRowBg,
-    required this.pieColors,
-    required this.chartCardFill,
-    required this.chartCardBorder,
-    required this.chartGridLine,
-  });
-
-  final _KpiTone kpiBlue;
-  final _KpiTone kpiGreen;
-  final _KpiTone kpiOrange;
-  final _KpiTone kpiPurple;
-  final Color actionBlue;
-  final Color pageBg;
-  final Color pageGradientStart;
-  final Color pageGradientEnd;
-  final Color glassFill;
-  final Color glassBorder;
-  final Color topBarFill;
-  final Color topBarBorder;
-  final Color topBarLogoBgStart;
-  final Color topBarLogoBgEnd;
-  final Color topBarLogoIcon;
-  final Color kpiTitle;
-  final Color kpiSubtitle;
-  final List<Color> rankSwatches;
-  final Color sectionCallersIcon;
-  final Color sectionCallersBg;
-  final Color sectionDurationIcon;
-  final Color sectionDurationBg;
-  final Color tableHeaderBg;
-  final Color tableRowHover;
-  final Color progressTrackBg;
-  final Color progressTrackDataRowBg;
-  final List<Color> pieColors;
-  final Color chartCardFill;
-  final Color chartCardBorder;
-  final Color chartGridLine;
-
-  Color rankColor(int index) =>
-      rankSwatches[index % rankSwatches.length];
-
-  factory _DashboardPaletteColors.from(_DashboardPalette palette) {
-    switch (palette) {
-      case _DashboardPalette.classic:
-        return const _DashboardPaletteColors(
-          kpiBlue: _KpiTone(
-            surface: Color(0xFFEEF6FF),
-            iconSurface: Color(0xFFDBEAFE),
-            iconColor: Color(0xFF2563EB),
-            valueColor: Color(0xFF0B63CE),
-            sparkColor: Color(0xFF3B82F6),
-          ),
-          kpiGreen: _KpiTone(
-            surface: Color(0xFFE9F9F1),
-            iconSurface: Color(0xFFD1FAE5),
-            iconColor: Color(0xFF059669),
-            valueColor: Color(0xFF047857),
-            sparkColor: Color(0xFF10B981),
-          ),
-          kpiOrange: _KpiTone(
-            surface: Color(0xFFFFF4E8),
-            iconSurface: Color(0xFFFFEDD5),
-            iconColor: Color(0xFFEA580C),
-            valueColor: Color(0xFFC2410C),
-            sparkColor: Color(0xFFF97316),
-          ),
-          kpiPurple: _KpiTone(
-            surface: Color(0xFFF5F0FF),
-            iconSurface: Color(0xFFEDE9FE),
-            iconColor: Color(0xFF7C3AED),
-            valueColor: Color(0xFF6D28D9),
-            sparkColor: Color(0xFF8B5CF6),
-          ),
-          actionBlue: Color(0xFF2563EB),
-          pageBg: Color(0xFFEFF3FC),
-          pageGradientStart: Color(0xFFEAF2FF),
-          pageGradientEnd: Color(0xFFF7FAFF),
-          glassFill: Color(0xFFF4F8FF),
-          glassBorder: Color(0xFFE2EAF6),
-          topBarFill: Color(0xFFFFFFFF),
-          topBarBorder: Color(0xFFE8EEF7),
-          topBarLogoBgStart: Color(0xFFF0F6FF),
-          topBarLogoBgEnd: Color(0xFFE2EDFF),
-          topBarLogoIcon: Color(0xFF2563EB),
-          kpiTitle: Color(0xFF334155),
-          kpiSubtitle: Color(0xFF64748B),
-          rankSwatches: [
-            Color(0xFFE0F2FE),
-            Color(0xFFDCFCE7),
-            Color(0xFFFFEDD5),
-            Color(0xFFEDE9FE),
-            Color(0xFFFCE7F3),
-            Color(0xFFE0F2FE),
-            Color(0xFFDCFCE7),
-          ],
-          sectionCallersIcon: Color(0xFFD97706),
-          sectionCallersBg: Color(0xFFFFF4D6),
-          sectionDurationIcon: Color(0xFF1D4ED8),
-          sectionDurationBg: Color(0xFFDBEAFE),
-          tableHeaderBg: Color(0xFFF8FAFD),
-          tableRowHover: Color(0xFFF1F6FF),
-          progressTrackBg: Color(0xFFE6EBF7),
-          progressTrackDataRowBg: Color(0xFFE5EDFF),
-          pieColors: [
-            Color(0xFF3B82F6),
-            Color(0xFF10B981),
-            Color(0xFFF59E0B),
-            Color(0xFFA855F7),
-            Color(0xFFEF4444),
-          ],
-          chartCardFill: Color(0xFFFFFFFF),
-          chartCardBorder: Color(0xFFE2E8F0),
-          chartGridLine: Color(0xFFE5EAF6),
-        );
-      case _DashboardPalette.ocean:
-        return const _DashboardPaletteColors(
-          kpiBlue: _KpiTone(
-            surface: Color(0xFFEFF8FF),
-            iconSurface: Color(0xFFD8EEFF),
-            iconColor: Color(0xFF0284C7),
-            valueColor: Color(0xFF0369A1),
-            sparkColor: Color(0xFF0EA5E9),
-          ),
-          kpiGreen: _KpiTone(
-            surface: Color(0xFFEDFBF7),
-            iconSurface: Color(0xFFD2F6EC),
-            iconColor: Color(0xFF0D9488),
-            valueColor: Color(0xFF0F766E),
-            sparkColor: Color(0xFF14B8A6),
-          ),
-          kpiOrange: _KpiTone(
-            surface: Color(0xFFFFF7ED),
-            iconSurface: Color(0xFFFFEDD5),
-            iconColor: Color(0xFFEA580C),
-            valueColor: Color(0xFFC2410C),
-            sparkColor: Color(0xFFF97316),
-          ),
-          kpiPurple: _KpiTone(
-            surface: Color(0xFFF4F4FF),
-            iconSurface: Color(0xFFE9E8FF),
-            iconColor: Color(0xFF6366F1),
-            valueColor: Color(0xFF4F46E5),
-            sparkColor: Color(0xFF6366F1),
-          ),
-          actionBlue: Color(0xFF0284C7),
-          pageBg: Color(0xFFE8F5FB),
-          pageGradientStart: Color(0xFFDCF0FA),
-          pageGradientEnd: Color(0xFFF3FBFE),
-          glassFill: Color(0xFFF2FAFD),
-          glassBorder: Color(0xFFCDE8F4),
-          topBarFill: Color(0xFFF8FCFE),
-          topBarBorder: Color(0xFFD6EEF7),
-          topBarLogoBgStart: Color(0xFFE0F7FF),
-          topBarLogoBgEnd: Color(0xFFC8EFFF),
-          topBarLogoIcon: Color(0xFF0284C7),
-          kpiTitle: Color(0xFF1E3A4A),
-          kpiSubtitle: Color(0xFF4A7390),
-          rankSwatches: [
-            Color(0xFFE0F7FA),
-            Color(0xFFB2EBF2),
-            Color(0xFFCCFBF1),
-            Color(0xFFE0F2FE),
-            Color(0xFFDBEAFE),
-            Color(0xFFE0F7FA),
-            Color(0xFFB2EBF2),
-          ],
-          sectionCallersIcon: Color(0xFF0D9488),
-          sectionCallersBg: Color(0xFFCCFBF1),
-          sectionDurationIcon: Color(0xFF0369A1),
-          sectionDurationBg: Color(0xFFE0F2FE),
-          tableHeaderBg: Color(0xFFECF8FC),
-          tableRowHover: Color(0xFFE4F6FB),
-          progressTrackBg: Color(0xFFD4EBF5),
-          progressTrackDataRowBg: Color(0xFFCFE4F7),
-          pieColors: [
-            Color(0xFF0EA5E9),
-            Color(0xFF14B8A6),
-            Color(0xFFF59E0B),
-            Color(0xFF6366F1),
-            Color(0xFFF43F5E),
-          ],
-          chartCardFill: Color(0xFFF8FDFF),
-          chartCardBorder: Color(0xFFC7E2EE),
-          chartGridLine: Color(0xFFDAEAF4),
-        );
-      case _DashboardPalette.sunrise:
-        return const _DashboardPaletteColors(
-          kpiBlue: _KpiTone(
-            surface: Color(0xFFF1F7FF),
-            iconSurface: Color(0xFFDDEBFF),
-            iconColor: Color(0xFF2563EB),
-            valueColor: Color(0xFF1E40AF),
-            sparkColor: Color(0xFF3B82F6),
-          ),
-          kpiGreen: _KpiTone(
-            surface: Color(0xFFF4FDF4),
-            iconSurface: Color(0xFFDCFCE7),
-            iconColor: Color(0xFF16A34A),
-            valueColor: Color(0xFF166534),
-            sparkColor: Color(0xFF22C55E),
-          ),
-          kpiOrange: _KpiTone(
-            surface: Color(0xFFFFF6EC),
-            iconSurface: Color(0xFFFFEDD5),
-            iconColor: Color(0xFFF97316),
-            valueColor: Color(0xFFEA580C),
-            sparkColor: Color(0xFFF59E0B),
-          ),
-          kpiPurple: _KpiTone(
-            surface: Color(0xFFFFF0FA),
-            iconSurface: Color(0xFFFCE7F3),
-            iconColor: Color(0xFFDB2777),
-            valueColor: Color(0xFFBE185D),
-            sparkColor: Color(0xFFEC4899),
-          ),
-          actionBlue: Color(0xFF1D4ED8),
-          pageBg: Color(0xFFFFF7F2),
-          pageGradientStart: Color(0xFFFFEDE5),
-          pageGradientEnd: Color(0xFFFFFAF6),
-          glassFill: Color(0xFFFFFCF9),
-          glassBorder: Color(0xFFF5E0D6),
-          topBarFill: Color(0xFFFFFFFF),
-          topBarBorder: Color(0xFFF8E8E0),
-          topBarLogoBgStart: Color(0xFFFFE8EF),
-          topBarLogoBgEnd: Color(0xFFFFD6E5),
-          topBarLogoIcon: Color(0xFFBE185D),
-          kpiTitle: Color(0xFF422B2B),
-          kpiSubtitle: Color(0xFF7C6560),
-          rankSwatches: [
-            Color(0xFFFFE4E6),
-            Color(0xFFFFE7D5),
-            Color(0xFFE0F2FE),
-            Color(0xFFFCE7F3),
-            Color(0xFFFEF3C7),
-            Color(0xFFFFE4E6),
-            Color(0xFFFFE7D5),
-          ],
-          sectionCallersIcon: Color(0xFFC2410C),
-          sectionCallersBg: Color(0xFFFFEDD5),
-          sectionDurationIcon: Color(0xFFBE185D),
-          sectionDurationBg: Color(0xFFFCE7F3),
-          tableHeaderBg: Color(0xFFFFF5F0),
-          tableRowHover: Color(0xFFFFEDE5),
-          progressTrackBg: Color(0xFFF5E6DE),
-          progressTrackDataRowBg: Color(0xFFF5E1F0),
-          pieColors: [
-            Color(0xFF1D4ED8),
-            Color(0xFFEC4899),
-            Color(0xFFF59E0B),
-            Color(0xFF22C55E),
-            Color(0xFFA855F7),
-          ],
-          chartCardFill: Color(0xFFFFFFFF),
-          chartCardBorder: Color(0xFFF0D9CE),
-          chartGridLine: Color(0xFFF5E6DD),
-        );
-      case _DashboardPalette.forest:
-        return const _DashboardPaletteColors(
-          kpiBlue: _KpiTone(
-            surface: Color(0xFFE8F1FF),
-            iconSurface: Color(0xFFD4E4FF),
-            iconColor: Color(0xFF1D4ED8),
-            valueColor: Color(0xFF1E3A8A),
-            sparkColor: Color(0xFF2563EB),
-          ),
-          kpiGreen: _KpiTone(
-            surface: Color(0xFFDFF7EC),
-            iconSurface: Color(0xFFB7F0D1),
-            iconColor: Color(0xFF047857),
-            valueColor: Color(0xFF065F46),
-            sparkColor: Color(0xFF10B981),
-          ),
-          kpiOrange: _KpiTone(
-            surface: Color(0xFFFFF4E6),
-            iconSurface: Color(0xFFFFE8CC),
-            iconColor: Color(0xFFC2410C),
-            valueColor: Color(0xFF9A3412),
-            sparkColor: Color(0xFFEA580C),
-          ),
-          kpiPurple: _KpiTone(
-            surface: Color(0xFFF3E8FF),
-            iconSurface: Color(0xFFE9D5FF),
-            iconColor: Color(0xFF6D28D9),
-            valueColor: Color(0xFF5B21B6),
-            sparkColor: Color(0xFF9333EA),
-          ),
-          actionBlue: Color(0xFF047857),
-          pageBg: Color(0xFFECF8F1),
-          pageGradientStart: Color(0xFFE0F4E8),
-          pageGradientEnd: Color(0xFFF4FBF6),
-          glassFill: Color(0xFFF6FCF8),
-          glassBorder: Color(0xFFC9E8D8),
-          topBarFill: Color(0xFFF7FDF9),
-          topBarBorder: Color(0xFFD1EADD),
-          topBarLogoBgStart: Color(0xFFD1FAE5),
-          topBarLogoBgEnd: Color(0xFFA7F3D0),
-          topBarLogoIcon: Color(0xFF047857),
-          kpiTitle: Color(0xFF1C2D26),
-          kpiSubtitle: Color(0xFF4A6356),
-          rankSwatches: [
-            Color(0xFFD1FAE5),
-            Color(0xFFE0F2FE),
-            Color(0xFFFEF9C3),
-            Color(0xFFE9D5FF),
-            Color(0xFFFFE4E6),
-            Color(0xFFDCFCE7),
-            Color(0xFFCCFBF1),
-          ],
-          sectionCallersIcon: Color(0xFFB45309),
-          sectionCallersBg: Color(0xFFFEF3C7),
-          sectionDurationIcon: Color(0xFF047857),
-          sectionDurationBg: Color(0xFFD1FAE5),
-          tableHeaderBg: Color(0xFFEAF6EF),
-          tableRowHover: Color(0xFFE0F0E6),
-          progressTrackBg: Color(0xFFD5E8DD),
-          progressTrackDataRowBg: Color(0xFFC9E2D4),
-          pieColors: [
-            Color(0xFF059669),
-            Color(0xFF0D9488),
-            Color(0xFFCA8A04),
-            Color(0xFF7C3AED),
-            Color(0xFFDC2626),
-          ],
-          chartCardFill: Color(0xFFF6FBF8),
-          chartCardBorder: Color(0xFFC5DCCC),
-          chartGridLine: Color(0xFFD6E8DD),
-        );
-      case _DashboardPalette.indigoNight:
-        return const _DashboardPaletteColors(
-          kpiBlue: _KpiTone(
-            surface: Color(0xFFEAEEFC),
-            iconSurface: Color(0xFFD8DDFA),
-            iconColor: Color(0xFF4338CA),
-            valueColor: Color(0xFF3730A3),
-            sparkColor: Color(0xFF4F46E5),
-          ),
-          kpiGreen: _KpiTone(
-            surface: Color(0xFFECFDF5),
-            iconSurface: Color(0xFFD1FAE5),
-            iconColor: Color(0xFF059669),
-            valueColor: Color(0xFF047857),
-            sparkColor: Color(0xFF10B981),
-          ),
-          kpiOrange: _KpiTone(
-            surface: Color(0xFFFFF5F1),
-            iconSurface: Color(0xFFFFE4D6),
-            iconColor: Color(0xFFEA580C),
-            valueColor: Color(0xFFC2410C),
-            sparkColor: Color(0xFFF97316),
-          ),
-          kpiPurple: _KpiTone(
-            surface: Color(0xFFF5F2FF),
-            iconSurface: Color(0xFFEDE9FE),
-            iconColor: Color(0xFF7C3AED),
-            valueColor: Color(0xFF6D28D9),
-            sparkColor: Color(0xFF8B5CF6),
-          ),
-          actionBlue: Color(0xFF4338CA),
-          pageBg: Color(0xFFEDEDFA),
-          pageGradientStart: Color(0xFFE4E4F7),
-          pageGradientEnd: Color(0xFFF6F6FF),
-          glassFill: Color(0xFFF7F7FF),
-          glassBorder: Color(0xFFD8D8EE),
-          topBarFill: Color(0xFFF9F9FF),
-          topBarBorder: Color(0xFFE0E0F4),
-          topBarLogoBgStart: Color(0xFFE0E7FF),
-          topBarLogoBgEnd: Color(0xFFC7D2FE),
-          topBarLogoIcon: Color(0xFF4338CA),
-          kpiTitle: Color(0xFF1E1B4B),
-          kpiSubtitle: Color(0xFF575569),
-          rankSwatches: [
-            Color(0xFFE0E7FF),
-            Color(0xFFDCFCE7),
-            Color(0xFFFFE4E6),
-            Color(0xFFE9D5FF),
-            Color(0xFFFEF3C7),
-            Color(0xFFEDE9FE),
-            Color(0xFFDBEAFE),
-          ],
-          sectionCallersIcon: Color(0xFFC2410C),
-          sectionCallersBg: Color(0xFFFFEDD5),
-          sectionDurationIcon: Color(0xFF4338CA),
-          sectionDurationBg: Color(0xFFE0E7FF),
-          tableHeaderBg: Color(0xFFEEEEFF),
-          tableRowHover: Color(0xFFE4E4F9),
-          progressTrackBg: Color(0xFFDADBF0),
-          progressTrackDataRowBg: Color(0xFFD8DAF2),
-          pieColors: [
-            Color(0xFF4F46E5),
-            Color(0xFF10B981),
-            Color(0xFFF97316),
-            Color(0xFFA855F7),
-            Color(0xFFEF4444),
-          ],
-          chartCardFill: Color(0xFFFAFAFF),
-          chartCardBorder: Color(0xFFD4D4EA),
-          chartGridLine: Color(0xFFDADAE8),
-        );
-    }
   }
 }
