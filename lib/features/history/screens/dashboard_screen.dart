@@ -4,10 +4,12 @@ import 'dart:ui';
 
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/widgets/calendar_range_picker.dart';
+import '../models/dashboard_date_preset.dart';
 import '../models/dashboard_filter_model.dart';
 import '../models/dashboard_summary_model.dart';
 import '../providers/dashboard_provider.dart';
@@ -110,32 +112,18 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     );
     if (!mounted || result == null) return;
     if (result.wasCleared) {
-      ref
-          .read(dashboardFilterProvider.notifier)
-          .update((s) => s.copyWith(clearDateRange: true));
+      await ref.read(dashboardFilterProvider.notifier).clearDateRange();
       return;
     }
     final range = result.range;
     if (range == null) return;
-    ref
+    await ref
         .read(dashboardFilterProvider.notifier)
-        .update((s) => s.copyWith(dateFrom: range.start, dateTo: range.end));
+        .setCustomDateRange(range.start, range.end);
   }
 
-  void _setDatePreset(int inclusiveDays) {
-    final filter = ref.read(dashboardFilterProvider);
-    final anchor = filter.dateTo ?? filter.dateFrom ?? DateTime.now();
-    final end = DateTime(anchor.year, anchor.month, anchor.day);
-    final start = end.subtract(Duration(days: inclusiveDays - 1));
-    ref
-        .read(dashboardFilterProvider.notifier)
-        .update((s) => s.copyWith(dateFrom: start, dateTo: end));
-  }
-
-  void _clearDateRange() {
-    ref
-        .read(dashboardFilterProvider.notifier)
-        .update((s) => s.copyWith(clearDateRange: true));
+  Future<void> _setDatePreset(DashboardDatePreset preset) async {
+    await ref.read(dashboardFilterProvider.notifier).setDatePreset(preset);
   }
 
   String _formatDurationSeconds(num seconds) {
@@ -215,6 +203,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final filter = ref.watch(dashboardFilterProvider);
+    final activeDatePreset =
+        ref.read(dashboardFilterProvider.notifier).activeDatePreset;
     final statsAsync = ref.watch(dashboardStatsProvider);
     final departmentsAsync = ref.watch(dashboardDepartmentsProvider);
     final colors = _DashboardPaletteColors.from(_palette);
@@ -528,20 +518,22 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                     equipmentController: _equipmentController,
                     departmentsAsync: departmentsAsync,
                     selectedDepartment: filter.department,
+                    activeDatePreset: activeDatePreset,
                     onClose: () => setState(() => _isFilterOpen = false),
                     onPickDateRange: _pickDateRange,
-                    onSetToday: () => _setDatePreset(1),
-                    onSetWeek: () => _setDatePreset(7),
-                    onSetMonth: () => _setDatePreset(30),
+                    onSetToday: () => _setDatePreset(DashboardDatePreset.today),
+                    onSetWeek: () => _setDatePreset(DashboardDatePreset.last7),
+                    onSetMonth: () =>
+                        _setDatePreset(DashboardDatePreset.last30),
+                    onSetAll: () => _setDatePreset(DashboardDatePreset.all),
                     onApply: _applyAllFilters,
-                    onClearDate: _clearDateRange,
                     onClearAll: () {
                       _keywordController.clear();
                       _userController.clear();
                       _equipmentController.clear();
                       ref
                           .read(dashboardFilterProvider.notifier)
-                          .update((s) => const DashboardFilterModel());
+                          .clearAllFilters();
                     },
                     onDepartmentChanged: (v) {
                       ref
@@ -730,6 +722,64 @@ class _KpiTopEntity {
   final IconData icon;
 }
 
+/// Κείμενο με ellipsis· tooltip μόνο όταν το κείμενο κόβεται.
+class _EllipsisTooltipText extends StatefulWidget {
+  const _EllipsisTooltipText({required this.text, this.style});
+
+  final String text;
+  final TextStyle? style;
+
+  @override
+  State<_EllipsisTooltipText> createState() => _EllipsisTooltipTextState();
+}
+
+class _EllipsisTooltipTextState extends State<_EllipsisTooltipText> {
+  final GlobalKey _textKey = GlobalKey();
+  bool _overflows = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback(_checkOverflow);
+  }
+
+  @override
+  void didUpdateWidget(covariant _EllipsisTooltipText oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.text != widget.text || oldWidget.style != widget.style) {
+      WidgetsBinding.instance.addPostFrameCallback(_checkOverflow);
+    }
+  }
+
+  void _checkOverflow(_) {
+    if (!mounted) return;
+    final ro = _textKey.currentContext?.findRenderObject();
+    if (ro is! RenderParagraph) return;
+    final overflows = ro.didExceedMaxLines;
+    if (overflows != _overflows) {
+      setState(() => _overflows = overflows);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        WidgetsBinding.instance.addPostFrameCallback(_checkOverflow);
+        final text = Text(
+          widget.text,
+          key: _textKey,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: widget.style,
+        );
+        if (!_overflows || widget.text.isEmpty) return text;
+        return Tooltip(message: widget.text, child: text);
+      },
+    );
+  }
+}
+
 class _KpiCardData {
   const _KpiCardData({
     required this.title,
@@ -856,10 +906,8 @@ class _KpiGrid extends StatelessWidget {
                         ),
                       ),
                       Expanded(
-                        child: Text(
-                          card.subtitle,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+                        child: _EllipsisTooltipText(
+                          text: card.subtitle,
                           style: Theme.of(context).textTheme.bodySmall
                               ?.copyWith(color: paletteColors.kpiSubtitle),
                         ),
@@ -1327,6 +1375,26 @@ class _MoreSection extends StatelessWidget {
   }
 }
 
+class _DatePresetButton extends StatelessWidget {
+  const _DatePresetButton({
+    required this.label,
+    required this.selected,
+    required this.onPressed,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    if (selected) {
+      return FilledButton(onPressed: onPressed, child: Text(label));
+    }
+    return FilledButton.tonal(onPressed: onPressed, child: Text(label));
+  }
+}
+
 class _FilterPane extends StatelessWidget {
   const _FilterPane({
     required this.paneWidth,
@@ -1336,13 +1404,14 @@ class _FilterPane extends StatelessWidget {
     required this.equipmentController,
     required this.departmentsAsync,
     required this.selectedDepartment,
+    required this.activeDatePreset,
     required this.onClose,
     required this.onPickDateRange,
     required this.onSetToday,
     required this.onSetWeek,
     required this.onSetMonth,
+    required this.onSetAll,
     required this.onApply,
-    required this.onClearDate,
     required this.onClearAll,
     required this.onDepartmentChanged,
     required this.onChangedText,
@@ -1355,13 +1424,14 @@ class _FilterPane extends StatelessWidget {
   final TextEditingController equipmentController;
   final AsyncValue<List<String>> departmentsAsync;
   final String? selectedDepartment;
+  final DashboardDatePreset activeDatePreset;
   final VoidCallback onClose;
   final VoidCallback onPickDateRange;
   final VoidCallback onSetToday;
   final VoidCallback onSetWeek;
   final VoidCallback onSetMonth;
+  final VoidCallback onSetAll;
   final VoidCallback onApply;
-  final VoidCallback onClearDate;
   final VoidCallback onClearAll;
   final ValueChanged<String?> onDepartmentChanged;
   final VoidCallback onChangedText;
@@ -1431,21 +1501,25 @@ class _FilterPane extends StatelessWidget {
                 spacing: 6,
                 runSpacing: 6,
                 children: [
-                  FilledButton.tonal(
+                  _DatePresetButton(
+                    label: 'Σήμερα',
+                    selected: activeDatePreset == DashboardDatePreset.today,
                     onPressed: onSetToday,
-                    child: const Text('Σήμερα'),
                   ),
-                  FilledButton.tonal(
+                  _DatePresetButton(
+                    label: '7 ημέρες',
+                    selected: activeDatePreset == DashboardDatePreset.last7,
                     onPressed: onSetWeek,
-                    child: const Text('7 ημέρες'),
                   ),
-                  FilledButton.tonal(
+                  _DatePresetButton(
+                    label: '30 ημέρες',
+                    selected: activeDatePreset == DashboardDatePreset.last30,
                     onPressed: onSetMonth,
-                    child: const Text('30 ημέρες'),
                   ),
-                  TextButton(
-                    onPressed: onClearDate,
-                    child: const Text('Καθαρισμός'),
+                  _DatePresetButton(
+                    label: 'Όλα',
+                    selected: activeDatePreset == DashboardDatePreset.all,
+                    onPressed: onSetAll,
                   ),
                 ],
               ),

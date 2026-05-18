@@ -21,6 +21,9 @@ class SettingsService {
   static const String _keyEnableSpellCheck = 'enable_spell_check';
   static const String _keyShowGlobalCallsDashboard =
       'show_global_calls_dashboard';
+  static const String _keyDashboardDatePreset = 'dashboard_date_preset';
+  static const String _keyDashboardDateFrom = 'dashboard_date_from';
+  static const String _keyDashboardDateTo = 'dashboard_date_to';
   static const String _keyDatabaseOpenTimeoutSeconds =
       'database_open_timeout_seconds';
   static const String _keyDatabaseOpenMaxAttempts =
@@ -234,6 +237,60 @@ class SettingsService {
   Future<void> setShowGlobalCalls(bool value) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_keyShowGlobalCallsDashboard, value);
+  }
+
+  /// Τελευταία επιλογή εύρους ημερομηνιών στον πίνακα στατιστικών κλήσεων.
+  /// Προεπιλογή: `today`.
+  Future<String> getDashboardDatePreset() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_keyDashboardDatePreset) ?? 'today';
+  }
+
+  Future<DateTime?> getDashboardCustomDateFrom() async {
+    final prefs = await SharedPreferences.getInstance();
+    return _parseStoredDate(prefs.getString(_keyDashboardDateFrom));
+  }
+
+  Future<DateTime?> getDashboardCustomDateTo() async {
+    final prefs = await SharedPreferences.getInstance();
+    return _parseStoredDate(prefs.getString(_keyDashboardDateTo));
+  }
+
+  Future<void> setDashboardDateFilter({
+    required String preset,
+    DateTime? customFrom,
+    DateTime? customTo,
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_keyDashboardDatePreset, preset);
+    if (preset == 'custom' && customFrom != null && customTo != null) {
+      await prefs.setString(
+        _keyDashboardDateFrom,
+        _formatStoredDate(customFrom),
+      );
+      await prefs.setString(_keyDashboardDateTo, _formatStoredDate(customTo));
+    } else {
+      await prefs.remove(_keyDashboardDateFrom);
+      await prefs.remove(_keyDashboardDateTo);
+    }
+  }
+
+  static DateTime? _parseStoredDate(String? raw) {
+    if (raw == null || raw.isEmpty) return null;
+    final parts = raw.split('-');
+    if (parts.length != 3) return null;
+    final y = int.tryParse(parts[0]);
+    final m = int.tryParse(parts[1]);
+    final d = int.tryParse(parts[2]);
+    if (y == null || m == null || d == null) return null;
+    return DateTime(y, m, d);
+  }
+
+  static String _formatStoredDate(DateTime d) {
+    final y = d.year;
+    final m = d.month.toString().padLeft(2, '0');
+    final day = d.day.toString().padLeft(2, '0');
+    return '$y-$m-$day';
   }
 
   /// Timeout ανοίγματος βάσης σε δευτερόλεπτα. Προεπιλογή: [AppConfig.databaseOpenTimeoutSeconds].

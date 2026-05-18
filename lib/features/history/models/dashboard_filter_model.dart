@@ -1,4 +1,4 @@
-/// Μοντέλο φίλτρων για τον πίνακα ελέγχου στατιστικών κλήσεων (χωρίς εξαρτήσεις από providers/repository).
+﻿/// Μοντέλο φίλτρων για τον πίνακα ελέγχου στατιστικών κλήσεων (χωρίς εξαρτήσεις από providers/repository).
 class DashboardFilterModel {
   const DashboardFilterModel({
     this.keyword = '',
@@ -118,16 +118,13 @@ class DashboardFilterModel {
 
   /// Μικρή περιγραφή περιόδου σύγκρισης για υπότιτλους KPI.
   String kpiComparisonRangeHint({DateTime? now}) {
-    final n = now != null ? dayOnly(now) : dayOnly(DateTime.now());
     final prev = previousComparisonRangeInclusive;
     if (prev != null) {
       if (prev.start == prev.end) {
-        return 'προηγ. ημέρα (${formatDisplayDate(prev.start)})';
+        return 'εχθές';
       }
       return 'προηγ. εύρος (${formatDisplayDate(prev.start)}–${formatDisplayDate(prev.end)})';
     }
-    final anchor = dayOnly(dateTo ?? dateFrom ?? n);
-    final y = anchor.subtract(const Duration(days: 1));
-    return 'προηγ. ημέρα (${formatDisplayDate(y)})';
+    return 'εχθές';
   }
 }

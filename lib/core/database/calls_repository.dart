@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 import 'dart:convert';
 
 import 'package:intl/intl.dart';
@@ -917,18 +917,53 @@ WHERE ${whereSpark.join(' AND ')}
     return formatCallAuditLineFromHistoryQueryRow(rows.first);
   }
 
+  /// Πλήθος κλήσεων με το ίδιο Lansweeper ticket id (trimmed σύγκριση).
+  Future<int> countCallsWithLansweeperTicketId(
+    String ticketId, {
+    int? excludeCallId,
+    bool registeredOnly = false,
+  }) async {
+    final normalized = ticketId.trim();
+    if (normalized.isEmpty) return 0;
+    final clauses = <String>[
+      "trim(lansweeper_main_ticket_id) = ?",
+      '(is_deleted IS NULL OR is_deleted = 0)',
+    ];
+    final args = <Object?>[normalized];
+    if (excludeCallId != null) {
+      clauses.add('id != ?');
+      args.add(excludeCallId);
+    }
+    if (registeredOnly) {
+      clauses.add("lansweeper_state = 'sent'");
+    }
+    final rows = await db.rawQuery(
+      'SELECT COUNT(*) AS c FROM calls WHERE ${clauses.join(' AND ')}',
+      args,
+    );
+    if (rows.isEmpty) return 0;
+    final value = rows.first['c'];
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    return int.tryParse(value?.toString() ?? '') ?? 0;
+  }
+
   /// Ενημερώνει την κατάσταση Lansweeper μιας κλήσης.
   Future<void> updateLansweeperState({
     required int callId,
     required String state,
     String? ticketId,
+    bool updateTicketId = false,
+    bool clearTicketId = false,
     String? syncedAt,
   }) async {
     final payload = <String, Object?>{
       'lansweeper_state': state,
-      'lansweeper_main_ticket_id': ticketId,
       'lansweeper_last_sync_at': syncedAt ?? DateTime.now().toIso8601String(),
     };
+    if (updateTicketId || clearTicketId) {
+      payload['lansweeper_main_ticket_id'] = clearTicketId ? null : ticketId;
+    }
     await db.update('calls', payload, where: 'id = ?', whereArgs: [callId]);
   }
 

@@ -56,6 +56,7 @@ class _LansweeperReportDialogState
   ProviderSubscription<String>? _lansweeperHelpdeskPasswordSub;
   Timer? _lansweeperSettingsDebounceTimer;
   String? _lastPrefilledKey;
+  _LansweeperReportFilter _reportFilter = _LansweeperReportFilter.unsentOnly;
 
   @override
   void initState() {
@@ -607,10 +608,200 @@ class _LansweeperReportDialogState
     );
   }
 
+  Future<bool> _markAsUnsentWithTicketPrompt(_ReportCallItem item) async {
+    final callId = item.call.id;
+    if (callId == null) return false;
+    final storedTicket = (item.call.lansweeperMainTicketId ?? '').trim();
+    final notifier = ref.read(lansweeperSyncProvider.notifier);
+    if (storedTicket.isEmpty) {
+      await notifier.setUnsent(callId);
+      return true;
+    }
+    final choice = await showDialog<_UnsentTicketChoice>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Ακαταχώρητη κλήση'),
+        content: Text(
+          'Η κλήση έχει καταχωρηθεί με id: #$storedTicket στο Lansweeper.\n\n'
+          'Τι θέλεις να γίνει με το ticket id;',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(_UnsentTicketChoice.cancel),
+            child: const Text('Άκυρο'),
+          ),
+          OutlinedButton(
+            onPressed: () => Navigator.of(ctx).pop(_UnsentTicketChoice.clear),
+            child: const Text('Μηδενισμός id'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(_UnsentTicketChoice.retain),
+            child: const Text('Διατήρηση id'),
+          ),
+        ],
+      ),
+    );
+    if (choice == null || choice == _UnsentTicketChoice.cancel) return false;
+    await notifier.setUnsent(
+      callId,
+      retainTicketId: choice == _UnsentTicketChoice.retain,
+    );
+    return true;
+  }
+
+  Future<_DuplicateTicketAction> _promptDuplicateTicketWarning({
+    required String ticketId,
+    required int callId,
+  }) async {
+    final count = await ref
+        .read(lansweeperSyncProvider.notifier)
+        .countRegisteredCallsWithTicketId(ticketId, excludeCallId: callId);
+    if (count <= 0) return _DuplicateTicketAction.proceed;
+    if (!mounted) return _DuplicateTicketAction.cancel;
+    final callsLabel = count == 1 ? 'άλλη κλήση' : 'άλλες κλήσεις';
+    return await showDialog<_DuplicateTicketAction>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('Ίδιο Ticket ID'),
+            content: Text(
+              'Υπάρχουν $count $callsLabel καταχωρημένες με ticket #$ticketId.\n\n'
+              'Συνήθως ένα ticket Lansweeper αντιστοιχεί σε ένα περιστατικό· '
+              'πολλές κλήσεις με το ίδιο id επιτρέπονται (π.χ. ίδιος καλών / '
+              'ομαδοποιημένες κλήσεις).',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () =>
+                    Navigator.of(ctx).pop(_DuplicateTicketAction.cancel),
+                child: const Text('Άκυρο'),
+              ),
+              OutlinedButton(
+                onPressed: () =>
+                    Navigator.of(ctx).pop(_DuplicateTicketAction.changeId),
+                child: const Text('Αλλαγή id'),
+              ),
+              FilledButton(
+                onPressed: () =>
+                    Navigator.of(ctx).pop(_DuplicateTicketAction.proceed),
+                child: const Text('Πρόσθεση'),
+              ),
+            ],
+          ),
+        ) ??
+        _DuplicateTicketAction.cancel;
+  }
+
+  Future<void> _applyRegistration({
+    required _ReportCallItem item,
+    String? comment,
+    String title = 'Καταχώρηση κλήσης',
+    String? subtitle,
+  }) async {
+    final callId = item.call.id;
+    if (callId == null) return;
+    var initialTicket = (item.call.lansweeperMainTicketId ?? '').trim();
+    while (mounted) {
+      final ticketId = await _promptOptionalTicketId(
+        initialTicketId: initialTicket.isEmpty ? null : initialTicket,
+        title: title,
+        subtitle: subtitle,
+      );
+      if (ticketId == null) return;
+      if (ticketId.isNotEmpty) {
+        final duplicateAction = await _promptDuplicateTicketWarning(
+          ticketId: ticketId,
+          callId: callId,
+        );
+        if (duplicateAction == _DuplicateTicketAction.cancel) return;
+        if (duplicateAction == _DuplicateTicketAction.changeId) {
+          final next = await _promptOptionalTicketId(
+            initialTicketId: ticketId,
+            title: 'Αλλαγή Ticket ID',
+          );
+          if (next == null) return;
+          initialTicket = next;
+          continue;
+        }
+      }
+      await ref.read(lansweeperSyncProvider.notifier).markRegistered(
+        callId: callId,
+        ticketId: ticketId.isEmpty ? null : ticketId,
+        comment: comment,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            ticketId.isEmpty
+                ? 'Η κλήση επισημάνθηκε ως καταχωρημένη.'
+                : 'Η κλήση επισημάνθηκε ως καταχωρημένη (ticket #$ticketId).',
+          ),
+        ),
+      );
+      return;
+    }
+  }
+
+  Future<String?> _promptOptionalTicketId({
+    String? initialTicketId,
+    String title = 'Ticket Lansweeper',
+    String? subtitle,
+  }) async {
+    final ticketController = TextEditingController(
+      text: (initialTicketId ?? '').trim(),
+    );
+    try {
+      final accepted = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: Text(title),
+          content: SizedBox(
+            width: 420,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (subtitle != null) ...[
+                  Text(subtitle, style: Theme.of(ctx).textTheme.bodySmall),
+                  const SizedBox(height: 10),
+                ],
+                TextField(
+                  controller: ticketController,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: 'Ticket ID (προαιρετικό)',
+                    hintText: 'π.χ. 17132',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Άκυρο'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: const Text('Αποθήκευση'),
+            ),
+          ],
+        ),
+      );
+      if (accepted != true) return null;
+      return ticketController.text.trim();
+    } finally {
+      ticketController.dispose();
+    }
+  }
+
   Future<void> _manualMark(_ReportCallItem item) async {
     final callId = item.call.id;
     if (callId == null) return;
-    final ticketController = TextEditingController();
+    final ticketController = TextEditingController(
+      text: (item.call.lansweeperMainTicketId ?? '').trim(),
+    );
     final commentController = TextEditingController();
     try {
       final accepted = await showDialog<bool>(
@@ -624,8 +815,10 @@ class _LansweeperReportDialogState
               children: [
                 TextField(
                   controller: ticketController,
+                  keyboardType: TextInputType.number,
                   decoration: const InputDecoration(
-                    labelText: 'Ticket ID',
+                    labelText: 'Ticket ID (προαιρετικό)',
+                    hintText: 'π.χ. 17132',
                     border: OutlineInputBorder(),
                   ),
                 ),
@@ -653,30 +846,130 @@ class _LansweeperReportDialogState
         ),
       );
       if (accepted != true) return;
-      final ticketId = ticketController.text.trim();
-      if (ticketId.isEmpty) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Το Ticket ID είναι υποχρεωτικό.')),
+      var ticketId = ticketController.text.trim();
+      final comment = commentController.text;
+      while (mounted) {
+        if (ticketId.isNotEmpty) {
+          final duplicateAction = await _promptDuplicateTicketWarning(
+            ticketId: ticketId,
+            callId: callId,
           );
+          if (duplicateAction == _DuplicateTicketAction.cancel) return;
+          if (duplicateAction == _DuplicateTicketAction.changeId) {
+            final next = await _promptOptionalTicketId(
+              initialTicketId: ticketId,
+              title: 'Αλλαγή Ticket ID',
+            );
+            if (next == null) return;
+            ticketId = next;
+            continue;
+          }
         }
+        await ref.read(lansweeperSyncProvider.notifier).markRegistered(
+          callId: callId,
+          ticketId: ticketId.isEmpty ? null : ticketId,
+          comment: comment,
+        );
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              ticketId.isEmpty
+                  ? 'Η κλήση επισημάνθηκε ως καταχωρημένη.'
+                  : 'Η κλήση επισημάνθηκε ως καταχωρημένη (ticket #$ticketId).',
+            ),
+          ),
+        );
         return;
       }
-      await ref
-          .read(lansweeperSyncProvider.notifier)
-          .markAsPassedManually(
-            callId: callId,
-            ticketId: ticketId,
-            comment: commentController.text,
-          );
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Η κλήση επισημάνθηκε ως περασμένη.')),
-      );
     } finally {
       ticketController.dispose();
       commentController.dispose();
     }
+  }
+
+  Future<void> _toggleRegistrationFromBadge(_ReportCallItem item) async {
+    final state = (item.call.lansweeperState ?? LansweeperSyncState.unsent)
+        .trim();
+    if (state == LansweeperSyncState.sent) {
+      final changed = await _markAsUnsentWithTicketPrompt(item);
+      if (!changed || !mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Η κλήση σημειώθηκε ως ακαταχώρητη.')),
+      );
+      return;
+    }
+    await _applyRegistration(
+      item: item,
+      title: 'Καταχώρηση κλήσης',
+      subtitle: 'Ο αριθμός ticket Lansweeper είναι προαιρετικός (π.χ. 17132).',
+    );
+  }
+
+  bool _matchesReportFilter(String state) {
+    final normalized = state.trim().isEmpty
+        ? LansweeperSyncState.unsent
+        : state.trim();
+    return switch (_reportFilter) {
+      _LansweeperReportFilter.unsentOnly =>
+        normalized == LansweeperSyncState.unsent,
+      _LansweeperReportFilter.sentOnly => normalized == LansweeperSyncState.sent,
+      _LansweeperReportFilter.excludedOnly =>
+        normalized == LansweeperSyncState.excluded,
+      _LansweeperReportFilter.failedOnly =>
+        normalized == LansweeperSyncState.failed,
+      _LansweeperReportFilter.all => true,
+    };
+  }
+
+  List<_ReportCallItem> _filterReportItems(List<_ReportCallItem> items) {
+    return items
+        .where(
+          (item) => _matchesReportFilter(item.call.lansweeperState ?? ''),
+        )
+        .toList();
+  }
+
+  Widget _buildReportFilterBar() {
+    return Wrap(
+      spacing: 6,
+      runSpacing: 6,
+      children: [
+        FilterChip(
+          label: const Text('Ακαταχώρητες'),
+          selected: _reportFilter == _LansweeperReportFilter.unsentOnly,
+          onSelected: (_) => setState(
+            () => _reportFilter = _LansweeperReportFilter.unsentOnly,
+          ),
+        ),
+        FilterChip(
+          label: const Text('Καταχωρημένες'),
+          selected: _reportFilter == _LansweeperReportFilter.sentOnly,
+          onSelected: (_) =>
+              setState(() => _reportFilter = _LansweeperReportFilter.sentOnly),
+        ),
+        FilterChip(
+          label: const Text('Εξαιρεμένες'),
+          selected: _reportFilter == _LansweeperReportFilter.excludedOnly,
+          onSelected: (_) => setState(
+            () => _reportFilter = _LansweeperReportFilter.excludedOnly,
+          ),
+        ),
+        FilterChip(
+          label: const Text('Αποτυχημένες'),
+          selected: _reportFilter == _LansweeperReportFilter.failedOnly,
+          onSelected: (_) => setState(
+            () => _reportFilter = _LansweeperReportFilter.failedOnly,
+          ),
+        ),
+        FilterChip(
+          label: const Text('Όλες'),
+          selected: _reportFilter == _LansweeperReportFilter.all,
+          onSelected: (_) =>
+              setState(() => _reportFilter = _LansweeperReportFilter.all),
+        ),
+      ],
+    );
   }
 
   Future<void> _setStateForSelected(
@@ -689,9 +982,13 @@ class _LansweeperReportDialogState
     if (nextState == LansweeperSyncState.excluded) {
       await notifier.setExcluded(callId);
     } else if (nextState == LansweeperSyncState.unsent) {
-      await notifier.setUnsent(callId);
+      await _markAsUnsentWithTicketPrompt(item);
     } else if (nextState == LansweeperSyncState.sent) {
-      await notifier.setSent(callId);
+      await _applyRegistration(
+        item: item,
+        title: 'Καταχώρηση κλήσης',
+        subtitle: 'Ο αριθμός ticket Lansweeper είναι προαιρετικός (π.χ. 17132).',
+      );
     }
   }
 
@@ -736,13 +1033,16 @@ class _LansweeperReportDialogState
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            _buildReportFilterBar(),
+            const SizedBox(height: 10),
             Expanded(
               child: callsAsync.when(
                 loading: () => const Center(child: CircularProgressIndicator()),
                 error: (e, _) =>
                     Center(child: Text('Σφάλμα φόρτωσης κλήσεων: $e')),
                 data: (calls) {
-                  final items = _toItems(calls);
+                  final allItems = _toItems(calls);
+                  final items = _filterReportItems(allItems);
                   final grouped = _groupByCaller(items);
                   final selected = items
                       .where((e) => _selectedKeys.contains(e.key))
@@ -762,10 +1062,17 @@ class _LansweeperReportDialogState
                           <Map<String, dynamic>>[],
                         );
 
+                  if (allItems.isEmpty) {
+                    return const Center(
+                      child: Text(
+                        'Δεν βρέθηκαν κλήσεις για τα τρέχοντα φίλτρα ημερομηνίας.',
+                      ),
+                    );
+                  }
                   if (items.isEmpty) {
                     return const Center(
                       child: Text(
-                        'Δεν βρέθηκαν κλήσεις για τα τρέχοντα φίλτρα.',
+                        'Δεν υπάρχουν κλήσεις σε αυτή την κατηγορία Lansweeper.',
                       ),
                     );
                   }
@@ -840,42 +1147,75 @@ class _LansweeperReportDialogState
                                                         LansweeperSyncState
                                                             .unsent)
                                                     .trim();
-                                            final hasTicket =
-                                                (item.call.lansweeperMainTicketId ??
-                                                        '')
-                                                    .trim()
-                                                    .isNotEmpty;
-                                            return CheckboxListTile(
-                                              dense: true,
-                                              value: _selectedKeys.contains(
-                                                item.key,
-                                              ),
-                                              onChanged: (v) =>
-                                                  _toggleItem(item, v),
-                                              title: Row(
-                                                children: [
-                                                  Expanded(
-                                                    child: Text(
-                                                      '$date • ${_durationLabel(item.durationSeconds)}',
-                                                    ),
+                                            return Padding(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                    horizontal: 4,
+                                                    vertical: 2,
                                                   ),
-                                                  LansweeperStateBadge(
-                                                    state: state,
-                                                    hasTicket: hasTicket,
+                                              child: Row(
+                                                crossAxisAlignment:
+                                                    CrossAxisAlignment.start,
+                                                children: [
+                                                  Checkbox(
+                                                    visualDensity:
+                                                        VisualDensity.compact,
+                                                    materialTapTargetSize:
+                                                        MaterialTapTargetSize
+                                                            .shrinkWrap,
+                                                    value: _selectedKeys
+                                                        .contains(item.key),
+                                                    onChanged: (v) =>
+                                                        _toggleItem(item, v),
+                                                  ),
+                                                  Expanded(
+                                                    child: Column(
+                                                      crossAxisAlignment:
+                                                          CrossAxisAlignment
+                                                              .start,
+                                                      children: [
+                                                        Row(
+                                                          children: [
+                                                            Expanded(
+                                                              child: Text(
+                                                                '$date • ${_durationLabel(item.durationSeconds)}',
+                                                              ),
+                                                            ),
+                                                            LansweeperStateBadge(
+                                                              state: state,
+                                                              ticketId: item
+                                                                  .call
+                                                                  .lansweeperMainTicketId,
+                                                              onPressed: syncState
+                                                                      .isLoading
+                                                                  ? null
+                                                                  : () => unawaited(
+                                                                      _toggleRegistrationFromBadge(
+                                                                        item,
+                                                                      ),
+                                                                    ),
+                                                            ),
+                                                          ],
+                                                        ),
+                                                        const SizedBox(
+                                                          height: 4,
+                                                        ),
+                                                        Text(
+                                                          item.details.isNotEmpty
+                                                              ? '${item.notes}\n${item.details}'
+                                                              : item.notes,
+                                                          maxLines: 3,
+                                                          overflow: TextOverflow
+                                                              .ellipsis,
+                                                          style: Theme.of(
+                                                            context,
+                                                          ).textTheme.bodySmall,
+                                                        ),
+                                                      ],
+                                                    ),
                                                   ),
                                                 ],
                                               ),
-                                              subtitle: Text(
-                                                item.details.isNotEmpty
-                                                    ? '${item.notes}\n${item.details}'
-                                                    : item.notes,
-                                                maxLines: 3,
-                                                overflow: TextOverflow.ellipsis,
-                                              ),
-                                              contentPadding:
-                                                  const EdgeInsets.symmetric(
-                                                    horizontal: 12,
-                                                  ),
                                             );
                                           }),
                                         ],
@@ -979,7 +1319,7 @@ class _LansweeperReportDialogState
                                                       primarySelected,
                                                       LansweeperSyncState.sent,
                                                     ),
-                                              child: const Text('Περασμένη'),
+                                              child: const Text('Καταχωρημένη'),
                                             ),
                                           ],
                                         ),
@@ -1047,6 +1387,18 @@ class _LansweeperReportDialogState
     );
   }
 }
+
+enum _LansweeperReportFilter {
+  unsentOnly,
+  sentOnly,
+  excludedOnly,
+  failedOnly,
+  all,
+}
+
+enum _UnsentTicketChoice { clear, retain, cancel }
+
+enum _DuplicateTicketAction { proceed, changeId, cancel }
 
 class _ReportCallItem {
   const _ReportCallItem({

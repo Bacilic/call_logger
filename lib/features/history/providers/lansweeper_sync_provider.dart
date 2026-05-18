@@ -197,11 +197,77 @@ class LansweeperSyncNotifier extends AsyncNotifier<void> {
   Future<void> setExcluded(int callId) =>
       _setState(callId, LansweeperSyncState.excluded);
 
-  Future<void> setUnsent(int callId) =>
-      _setState(callId, LansweeperSyncState.unsent);
+  Future<void> setUnsent(int callId, {bool retainTicketId = false}) async {
+    final db = await DatabaseHelper.instance.database;
+    await CallsRepository(db).updateLansweeperState(
+      callId: callId,
+      state: LansweeperSyncState.unsent,
+      clearTicketId: !retainTicketId,
+    );
+    _invalidateDashboardData();
+  }
 
-  Future<void> setSent(int callId) =>
-      _setState(callId, LansweeperSyncState.sent);
+  Future<int> countRegisteredCallsWithTicketId(
+    String ticketId, {
+    required int excludeCallId,
+  }) async {
+    final db = await DatabaseHelper.instance.database;
+    return CallsRepository(db).countCallsWithLansweeperTicketId(
+      ticketId,
+      excludeCallId: excludeCallId,
+      registeredOnly: true,
+    );
+  }
+
+  Future<void> setSent(int callId, {String? ticketId}) async {
+    final normalized = ticketId?.trim() ?? '';
+    if (normalized.isEmpty) {
+      await _setState(callId, LansweeperSyncState.sent);
+      return;
+    }
+    final db = await DatabaseHelper.instance.database;
+    await CallsRepository(db).updateLansweeperState(
+      callId: callId,
+      state: LansweeperSyncState.sent,
+      ticketId: normalized,
+      updateTicketId: true,
+    );
+    _invalidateDashboardData();
+  }
+
+  /// Χειροκίνητη καταχώρηση· το ticket id είναι προαιρετικό.
+  Future<void> markRegistered({
+    required int callId,
+    String? ticketId,
+    String? comment,
+  }) async {
+    if (_isRunning) return;
+    _isRunning = true;
+    state = const AsyncLoading();
+    try {
+      final normalized = ticketId?.trim() ?? '';
+      final db = await DatabaseHelper.instance.database;
+      final repo = CallsRepository(db);
+      if (normalized.isEmpty) {
+        await repo.updateLansweeperState(
+          callId: callId,
+          state: LansweeperSyncState.sent,
+        );
+      } else {
+        await repo.markManualPassed(
+          callId: callId,
+          ticketId: normalized,
+          comment: comment,
+        );
+      }
+      state = const AsyncData(null);
+      _invalidateDashboardData();
+    } catch (e, st) {
+      state = AsyncError(e, st);
+    } finally {
+      _isRunning = false;
+    }
+  }
 
   Future<void> _setState(int callId, String nextState) async {
     final db = await DatabaseHelper.instance.database;

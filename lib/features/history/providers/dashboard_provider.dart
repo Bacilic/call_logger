@@ -4,18 +4,136 @@ import '../../../core/database/calls_repository.dart';
 import '../../../core/database/database_helper.dart';
 import '../../../core/database/directory_repository.dart';
 import '../../../core/database/settings_repository.dart';
+import '../../../core/services/settings_service.dart';
 import '../../calls/models/call_model.dart';
+import '../models/dashboard_date_preset.dart';
 import '../models/dashboard_filter_model.dart';
 import '../models/dashboard_summary_model.dart';
 import '../widgets/lansweeper/lansweeper_url_rules.dart';
 
 /// Notifier για τα κριτήρια φίλτρου του dashboard στατιστικών.
 class DashboardFilterNotifier extends Notifier<DashboardFilterModel> {
+  bool _hydrated = false;
+  DashboardDatePreset _activePreset = DashboardDatePreset.defaultPreset;
+  DateTime? _storedCustomFrom;
+  DateTime? _storedCustomTo;
+
+  DashboardDatePreset get activeDatePreset => _activePreset;
+
   @override
-  DashboardFilterModel build() => const DashboardFilterModel();
+  DashboardFilterModel build() {
+    if (!_hydrated) {
+      _hydrated = true;
+      Future<void>(_hydrateFromSettings);
+    }
+    return DashboardDatePreset.applyToFilter(
+      const DashboardFilterModel(),
+      DashboardDatePreset.defaultPreset,
+    );
+  }
+
+  Future<void> _hydrateFromSettings() async {
+    final settings = SettingsService();
+    final rawPreset = await settings.getDashboardDatePreset();
+    final preset =
+        DashboardDatePreset.fromStorage(rawPreset) ??
+        DashboardDatePreset.defaultPreset;
+    DateTime? customFrom;
+    DateTime? customTo;
+    if (preset == DashboardDatePreset.custom) {
+      customFrom = await settings.getDashboardCustomDateFrom();
+      customTo = await settings.getDashboardCustomDateTo();
+      if (customFrom == null || customTo == null) {
+        await _applyPreset(DashboardDatePreset.defaultPreset, persist: false);
+        return;
+      }
+      _storedCustomFrom = customFrom;
+      _storedCustomTo = customTo;
+    }
+    if (!ref.mounted) return;
+    _activePreset = preset;
+    state = DashboardDatePreset.applyToFilter(
+      state,
+      preset,
+      customFrom: customFrom,
+      customTo: customTo,
+    );
+  }
+
+  Future<void> _persistPreset(
+    DashboardDatePreset preset, {
+    DateTime? customFrom,
+    DateTime? customTo,
+  }) async {
+    await SettingsService().setDashboardDateFilter(
+      preset: preset.storageValue,
+      customFrom: customFrom,
+      customTo: customTo,
+    );
+  }
+
+  Future<void> _applyPreset(
+    DashboardDatePreset preset, {
+    DateTime? customFrom,
+    DateTime? customTo,
+    bool persist = true,
+  }) async {
+    _activePreset = preset;
+    if (preset == DashboardDatePreset.custom) {
+      _storedCustomFrom = customFrom;
+      _storedCustomTo = customTo;
+    }
+    state = DashboardDatePreset.applyToFilter(
+      state,
+      preset,
+      customFrom: customFrom,
+      customTo: customTo,
+    );
+    if (persist) {
+      await _persistPreset(
+        preset,
+        customFrom: customFrom ?? state.dateFrom,
+        customTo: customTo ?? state.dateTo,
+      );
+    }
+  }
 
   void update(DashboardFilterModel Function(DashboardFilterModel) fn) {
     state = fn(state);
+    final detected = DashboardDatePreset.detect(state);
+    if (detected != null) {
+      _activePreset = detected;
+    }
+  }
+
+  Future<void> setDatePreset(DashboardDatePreset preset) async {
+    await _applyPreset(preset);
+  }
+
+  Future<void> setCustomDateRange(DateTime from, DateTime to) async {
+    final start = DashboardFilterModel.dayOnly(from);
+    final end = DashboardFilterModel.dayOnly(to);
+    await _applyPreset(
+      DashboardDatePreset.custom,
+      customFrom: start,
+      customTo: end,
+    );
+  }
+
+  Future<void> clearDateRange() async {
+    await _applyPreset(DashboardDatePreset.all);
+  }
+
+  Future<void> clearAllFilters() async {
+    final preset = _activePreset;
+    final customFrom = _storedCustomFrom;
+    final customTo = _storedCustomTo;
+    state = DashboardDatePreset.applyToFilter(
+      const DashboardFilterModel(),
+      preset,
+      customFrom: customFrom,
+      customTo: customTo,
+    );
   }
 }
 

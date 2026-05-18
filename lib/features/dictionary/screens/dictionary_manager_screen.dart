@@ -274,6 +274,15 @@ class _DictionaryManagerScreenState extends ConsumerState<DictionaryManagerScree
   static const double _lexiconWordColumnMin = 88.0;
   static const double _lexiconWordColumnMax = 2000.0;
 
+  /// Γιατί η λίστα μπορεί να έχει λίγες γραμμές ενώ η ορθογραφία «ξέρει» πολλές λέξεις.
+  static const String _lexiconScopeInfoTooltip =
+      'Εδώ φαίνονται μόνο οι εγγραφές στη βάση '
+      '(full_dictionary + πρόχειρα user_dictionary), όχι το bundled λεξικό '
+      '(~31k λέξεις, greek_core_60k.txt).\n\n'
+      'Η ορθογραφία φορτώνει το asset στη μνήμη + user_dictionary· '
+      'ο full_dictionary δεν επηρεάζει τον έλεγχο.\n\n'
+      'Για πλήρη προβολή εδώ: Ρυθμίσεις → Εισαγωγή από αρχείο (TXT).';
+
   final _master = MasterDictionaryService();
   final _searchCtrl = TextEditingController();
   final _horizontalTableScroll = ScrollController();
@@ -883,6 +892,30 @@ class _DictionaryManagerScreenState extends ConsumerState<DictionaryManagerScree
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
+              ),
+              IconButton(
+                tooltip: _lexiconScopeInfoTooltip,
+                icon: Icon(
+                  Icons.info_outline,
+                  color: theme.colorScheme.primary,
+                ),
+                onPressed: () {
+                  showDialog<void>(
+                    context: context,
+                    builder: (ctx) => AlertDialog(
+                      title: const Text('Τι εμφανίζεται εδώ;'),
+                      content: const SingleChildScrollView(
+                        child: Text(_lexiconScopeInfoTooltip),
+                      ),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(ctx),
+                          child: const Text('Κλείσιμο'),
+                        ),
+                      ],
+                    ),
+                  );
+                },
               ),
               IconButton(
                 tooltip: 'Προσθήκη λέξεων στο λεξικό (πολλές, με κενά ή κόμμα)',

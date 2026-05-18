@@ -5,17 +5,19 @@ import '../../models/lansweeper_sync_state.dart';
 class LansweeperStateBadge extends StatelessWidget {
   const LansweeperStateBadge({
     required this.state,
-    this.hasTicket = false,
+    this.ticketId,
+    this.onPressed,
     super.key,
   });
 
   final String state;
-  final bool hasTicket;
+  final String? ticketId;
+  final VoidCallback? onPressed;
 
   @override
   Widget build(BuildContext context) {
     final label = switch (state) {
-      LansweeperSyncState.sent => 'Περασμένη',
+      LansweeperSyncState.sent => 'Καταχωρημένη',
       LansweeperSyncState.excluded => 'Εξαιρεσμένη',
       LansweeperSyncState.failed => 'Αποτυχημένη',
       _ => 'Ακαταχώρητη',
@@ -26,12 +28,32 @@ class LansweeperStateBadge extends StatelessWidget {
       LansweeperSyncState.failed => Colors.red,
       _ => Colors.blueGrey,
     };
-    final suffix = hasTicket ? ' • Ticket' : '';
-    return Chip(
-      label: Text('$label$suffix'),
+    final normalizedTicket = (ticketId ?? '').trim();
+    final ticketSuffix = normalizedTicket.isNotEmpty
+        ? ' • #$normalizedTicket'
+        : '';
+    final tooltip = onPressed == null
+        ? null
+        : state == LansweeperSyncState.sent
+        ? 'Κλικ για ακαταχώρητη'
+        : normalizedTicket.isNotEmpty
+        ? 'Αποθηκευμένο ticket #$normalizedTicket — κλικ για καταχώρηση'
+        : 'Κλικ για καταχώρηση';
+
+    final chip = ActionChip(
+      label: Text('$label$ticketSuffix'),
       backgroundColor: color.withValues(alpha: 0.12),
       side: BorderSide(color: color.withValues(alpha: 0.4)),
       visualDensity: VisualDensity.compact,
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      labelStyle: TextStyle(
+        color: Color.alphaBlend(Colors.black.withValues(alpha: 0.55), color),
+        fontSize: 12,
+      ),
+      onPressed: onPressed,
     );
+
+    if (tooltip == null) return chip;
+    return Tooltip(message: tooltip, child: chip);
   }
 }
