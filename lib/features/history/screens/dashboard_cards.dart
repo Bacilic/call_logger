@@ -1,4 +1,4 @@
-import 'dart:math' as math;
+﻿import 'dart:math' as math;
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
@@ -93,7 +93,8 @@ class KpiCardData {
     this.useBarSparkline = false,
     required this.icon,
     required this.points,
-    this.barPoints = const [],
+    this.sparklineTooltips = const [],
+    this.barPoints = const <KpiBarSparklinePoint>[],
     required this.colors,
   });
 
@@ -105,7 +106,8 @@ class KpiCardData {
   final bool useBarSparkline;
   final IconData icon;
   final List<double> points;
-  final List<double> barPoints;
+  final List<String> sparklineTooltips;
+  final List<KpiBarSparklinePoint> barPoints;
   final KpiTone colors;
 }
 
@@ -225,14 +227,15 @@ class KpiGrid extends StatelessWidget {
                       ),
                       SizedBox(
                         width: 86,
-                        height: 34,
+                        height: card.useBarSparkline ? 52 : 34,
                         child: card.useBarSparkline
                             ? BarSparklineChart(
-                                values: card.barPoints,
+                                points: card.barPoints,
                                 color: card.colors.sparkColor,
                               )
                             : SparklineChart(
                                 points: card.points,
+                                tooltips: card.sparklineTooltips,
                                 color: card.colors.sparkColor,
                               ),
                       ),

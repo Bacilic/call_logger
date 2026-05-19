@@ -1,4 +1,4 @@
-import 'dart:math' as math;
+﻿import 'dart:math' as math;
 
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
@@ -6,91 +6,420 @@ import 'package:intl/intl.dart';
 
 import '../models/dashboard_summary_model.dart';
 
-class BarSparklineChart extends StatelessWidget {
+class BarSparklineChart extends StatefulWidget {
   const BarSparklineChart({
     super.key,
-    required this.values, required this.color,
+    required this.points,
+    required this.color,
   });
 
-  final List<double> values;
+  final List<KpiBarSparklinePoint> points;
   final Color color;
 
   @override
+  State<BarSparklineChart> createState() => _BarSparklineChartState();
+}
+
+class _BarSparklineChartState extends State<BarSparklineChart> {
+  final GlobalKey _chartKey = GlobalKey();
+  final OverlayPortalController _tooltipPortal = OverlayPortalController();
+  String? _tooltipText;
+  double? _tooltipAnchorX;
+
+  @override
+  void dispose() {
+    _hideTooltip();
+    super.dispose();
+  }
+
+  void _hideTooltip() {
+    final wasVisible = _tooltipText != null;
+    _tooltipText = null;
+    _tooltipAnchorX = null;
+    if (_tooltipPortal.isShowing) {
+      _tooltipPortal.hide();
+    } else if (wasVisible && mounted) {
+      setState(() {});
+    }
+  }
+
+  void _showTooltip(String text, double anchorX) {
+    final wasShowing = _tooltipPortal.isShowing;
+    _tooltipText = text;
+    _tooltipAnchorX = anchorX;
+    if (wasShowing) {
+      setState(() {});
+      return;
+    }
+    _tooltipPortal.show();
+  }
+
+  Widget? _buildOverlayTooltip(BuildContext overlayContext) {
+    final text = _tooltipText;
+    final anchorX = _tooltipAnchorX;
+    if (text == null || anchorX == null) {
+      return null;
+    }
+
+    final renderBox = _chartKey.currentContext?.findRenderObject() as RenderBox?;
+    if (renderBox == null || !renderBox.hasSize) {
+      return null;
+    }
+
+    final chartTopLeft = renderBox.localToGlobal(Offset.zero);
+    final chartSize = renderBox.size;
+    const tooltipWidth = 160.0;
+    final clampedAnchorX = anchorX.clamp(0.0, chartSize.width);
+    final anchorGlobalX = chartTopLeft.dx + clampedAnchorX;
+    final screenWidth = MediaQuery.sizeOf(overlayContext).width;
+    final left = (anchorGlobalX - tooltipWidth / 2)
+        .clamp(
+          8.0,
+          math.max(8.0, screenWidth - tooltipWidth - 8),
+        )
+        .toDouble();
+    final top = chartTopLeft.dy - 6;
+
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        Positioned(
+          left: left,
+          top: top,
+          width: tooltipWidth,
+          child: Transform.translate(
+            offset: const Offset(0, -1),
+            child: Align(
+              alignment: Alignment.bottomCenter,
+              child: IgnorePointer(
+                child: _BarSparklineTooltip(text: text),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  void _onBarTouch(FlTouchEvent event, BarTouchResponse? response) {
+    if (!event.isInterestedForInteractions) {
+      _hideTooltip();
+      return;
+    }
+
+    final spot = response?.spot;
+    if (spot == null) {
+      _hideTooltip();
+      return;
+    }
+
+    final safePoints = widget.points.isEmpty
+        ? const [KpiBarSparklinePoint(value: 0, tooltip: '')]
+        : widget.points;
+    final index = spot.touchedBarGroupIndex;
+    if (index < 0 || index >= safePoints.length) return;
+
+    final point = safePoints[index];
+    if (point.tooltip.isEmpty) {
+      _hideTooltip();
+      return;
+    }
+
+    _showTooltip(point.tooltip, spot.offset.dx);
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final safeValues = values.isEmpty ? const [0.0] : values;
-    final maxY = safeValues.reduce(math.max);
+    final safePoints = widget.points.isEmpty
+        ? const [KpiBarSparklinePoint(value: 0, tooltip: '')]
+        : widget.points;
+    final values = safePoints.map((point) => point.value).toList();
+    final maxY = values.reduce(math.max);
     final chartMaxY = maxY <= 0 ? 1.0 : maxY;
-    final barWidth = switch (safeValues.length) {
+    final barWidth = switch (safePoints.length) {
       <= 5 => 5.0,
       <= 8 => 4.0,
       <= 12 => 3.0,
       _ => 2.0,
     };
 
-    return BarChart(
-      BarChartData(
-        maxY: chartMaxY,
-        minY: 0,
-        gridData: const FlGridData(show: false),
-        titlesData: const FlTitlesData(show: false),
-        borderData: FlBorderData(show: false),
-        barTouchData: const BarTouchData(enabled: false),
-        alignment: BarChartAlignment.spaceBetween,
-        groupsSpace: 1,
-        barGroups: safeValues.indexed
-            .map(
-              (entry) => BarChartGroupData(
-                x: entry.$1,
-                barRods: [
-                  BarChartRodData(
-                    toY: entry.$2,
-                    fromY: 0,
-                    width: barWidth,
-                    color: color,
-                    borderRadius: BorderRadius.zero,
-                  ),
-                ],
+    return OverlayPortal(
+      controller: _tooltipPortal,
+      overlayChildBuilder: (overlayContext) {
+        return _buildOverlayTooltip(overlayContext) ?? const SizedBox.shrink();
+      },
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          return SizedBox(
+            key: _chartKey,
+            width: constraints.maxWidth,
+            height: constraints.maxHeight,
+            child: BarChart(
+              BarChartData(
+                maxY: chartMaxY,
+                minY: 0,
+                gridData: const FlGridData(show: false),
+                titlesData: const FlTitlesData(show: false),
+                borderData: FlBorderData(show: false),
+                barTouchData: BarTouchData(
+                  enabled: true,
+                  handleBuiltInTouches: false,
+                  touchCallback: _onBarTouch,
+                  mouseCursorResolver: (event, response) {
+                    final index = response?.spot?.touchedBarGroupIndex;
+                    if (index == null ||
+                        index < 0 ||
+                        index >= safePoints.length ||
+                        safePoints[index].tooltip.isEmpty) {
+                      return SystemMouseCursors.basic;
+                    }
+                    return SystemMouseCursors.click;
+                  },
+                ),
+                alignment: BarChartAlignment.spaceBetween,
+                groupsSpace: 1,
+                barGroups: safePoints.indexed
+                    .map(
+                      (entry) => BarChartGroupData(
+                        x: entry.$1,
+                        barRods: [
+                          BarChartRodData(
+                            toY: entry.$2.value,
+                            fromY: 0,
+                            width: barWidth,
+                            color: widget.color,
+                            borderRadius: BorderRadius.zero,
+                          ),
+                        ],
+                      ),
+                    )
+                    .toList(),
               ),
-            )
-            .toList(),
+            ),
+          );
+        },
       ),
     );
   }
 }
 
-class SparklineChart extends StatelessWidget {
-  const SparklineChart({
-    super.key,
-    required this.points, required this.color,
-  });
+class _BarSparklineTooltip extends StatelessWidget {
+  const _BarSparklineTooltip({required this.text});
 
-  final List<double> points;
-  final Color color;
+  final String text;
 
   @override
   Widget build(BuildContext context) {
-    final safePoints = points.isEmpty ? [0.0] : points;
-    return LineChart(
-      LineChartData(
-        gridData: const FlGridData(show: false),
-        titlesData: const FlTitlesData(show: false),
-        borderData: FlBorderData(show: false),
-        lineBarsData: [
-          LineChartBarData(
-            spots: safePoints.indexed
-                .map((e) => FlSpot(e.$1.toDouble(), e.$2))
-                .toList(),
-            isCurved: true,
-            barWidth: 2.2,
-            color: color,
-            dotData: const FlDotData(show: false),
-            belowBarData: BarAreaData(
-              show: true,
-              color: color.withValues(alpha: 0.15),
+    return Material(
+      elevation: 12,
+      borderRadius: BorderRadius.circular(6),
+      color: const Color(0xF01E293B),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        child: Text(
+          text,
+          maxLines: 3,
+          overflow: TextOverflow.ellipsis,
+          textAlign: TextAlign.center,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 10.5,
+            fontWeight: FontWeight.w600,
+            height: 1.2,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class SparklineChart extends StatefulWidget {
+  const SparklineChart({
+    super.key,
+    required this.points,
+    required this.color,
+    this.tooltips = const [],
+  });
+
+  final List<double> points;
+  final List<String> tooltips;
+  final Color color;
+
+  @override
+  State<SparklineChart> createState() => _SparklineChartState();
+}
+
+class _SparklineChartState extends State<SparklineChart> {
+  final GlobalKey _chartKey = GlobalKey();
+  final OverlayPortalController _tooltipPortal = OverlayPortalController();
+  String? _tooltipText;
+  double? _tooltipAnchorX;
+
+  bool get _hasTooltips =>
+      widget.tooltips.length == widget.points.length &&
+      widget.tooltips.any((t) => t.isNotEmpty);
+
+  @override
+  void dispose() {
+    _hideTooltip();
+    super.dispose();
+  }
+
+  void _hideTooltip() {
+    final wasVisible = _tooltipText != null;
+    _tooltipText = null;
+    _tooltipAnchorX = null;
+    if (_tooltipPortal.isShowing) {
+      _tooltipPortal.hide();
+    } else if (wasVisible && mounted) {
+      setState(() {});
+    }
+  }
+
+  void _showTooltip(String text, double anchorX) {
+    final wasShowing = _tooltipPortal.isShowing;
+    _tooltipText = text;
+    _tooltipAnchorX = anchorX;
+    if (wasShowing) {
+      setState(() {});
+      return;
+    }
+    _tooltipPortal.show();
+  }
+
+  Widget? _buildOverlayTooltip(BuildContext overlayContext) {
+    final text = _tooltipText;
+    final anchorX = _tooltipAnchorX;
+    if (text == null || anchorX == null) {
+      return null;
+    }
+
+    final renderBox = _chartKey.currentContext?.findRenderObject() as RenderBox?;
+    if (renderBox == null || !renderBox.hasSize) {
+      return null;
+    }
+
+    final chartTopLeft = renderBox.localToGlobal(Offset.zero);
+    final chartSize = renderBox.size;
+    const tooltipWidth = 160.0;
+    final clampedAnchorX = anchorX.clamp(0.0, chartSize.width);
+    final anchorGlobalX = chartTopLeft.dx + clampedAnchorX;
+    final screenWidth = MediaQuery.sizeOf(overlayContext).width;
+    final left = (anchorGlobalX - tooltipWidth / 2)
+        .clamp(
+          8.0,
+          math.max(8.0, screenWidth - tooltipWidth - 8),
+        )
+        .toDouble();
+    final top = chartTopLeft.dy - 6;
+
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        Positioned(
+          left: left,
+          top: top,
+          width: tooltipWidth,
+          child: Transform.translate(
+            offset: const Offset(0, -1),
+            child: Align(
+              alignment: Alignment.bottomCenter,
+              child: IgnorePointer(
+                child: _BarSparklineTooltip(text: text),
+              ),
             ),
           ),
-        ],
-      ),
+        ),
+      ],
+    );
+  }
+
+  void _onLineTouch(FlTouchEvent event, LineTouchResponse? response) {
+    if (!_hasTooltips) return;
+
+    if (!event.isInterestedForInteractions) {
+      _hideTooltip();
+      return;
+    }
+
+    final spot = response?.lineBarSpots?.firstOrNull;
+    if (spot == null) {
+      _hideTooltip();
+      return;
+    }
+
+    final index = spot.spotIndex;
+    if (index < 0 || index >= widget.tooltips.length) return;
+
+    final tooltip = widget.tooltips[index];
+    if (tooltip.isEmpty) {
+      _hideTooltip();
+      return;
+    }
+
+    _showTooltip(tooltip, response!.touchLocation.dx);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final safePoints = widget.points.isEmpty ? [0.0] : widget.points;
+    final chart = LayoutBuilder(
+      builder: (context, constraints) {
+        return SizedBox(
+          key: _chartKey,
+          width: constraints.maxWidth,
+          height: constraints.maxHeight,
+          child: LineChart(
+            LineChartData(
+              gridData: const FlGridData(show: false),
+              titlesData: const FlTitlesData(show: false),
+              borderData: FlBorderData(show: false),
+              lineTouchData: LineTouchData(
+                enabled: _hasTooltips,
+                handleBuiltInTouches: false,
+                touchCallback: _onLineTouch,
+                mouseCursorResolver: (event, response) {
+                  final index = response?.lineBarSpots?.firstOrNull?.spotIndex;
+                  if (index == null ||
+                      index < 0 ||
+                      index >= widget.tooltips.length ||
+                      widget.tooltips[index].isEmpty) {
+                    return SystemMouseCursors.basic;
+                  }
+                  return SystemMouseCursors.click;
+                },
+              ),
+              lineBarsData: [
+                LineChartBarData(
+                  spots: safePoints.indexed
+                      .map((e) => FlSpot(e.$1.toDouble(), e.$2))
+                      .toList(),
+                  isCurved: true,
+                  barWidth: 2.2,
+                  color: widget.color,
+                  dotData: const FlDotData(show: false),
+                  belowBarData: BarAreaData(
+                    show: true,
+                    color: widget.color.withValues(alpha: 0.15),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+
+    if (!_hasTooltips) {
+      return chart;
+    }
+
+    return OverlayPortal(
+      controller: _tooltipPortal,
+      overlayChildBuilder: (overlayContext) {
+        return _buildOverlayTooltip(overlayContext) ?? const SizedBox.shrink();
+      },
+      child: chart,
     );
   }
 }

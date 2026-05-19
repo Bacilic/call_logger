@@ -1,4 +1,4 @@
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+﻿import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/database/calls_repository.dart';
 import '../../../core/database/database_helper.dart';
@@ -64,6 +64,20 @@ final historyFilterProvider =
     NotifierProvider<HistoryFilterNotifier, HistoryFilterModel>(
   HistoryFilterNotifier.new,
 );
+
+/// Πλήθος κλήσεων ιστορικού με βάση φίλτρα ημερομηνίας και κατηγορίας (χωρίς keyword).
+final historyCategoryDateCallCountProvider =
+    FutureProvider.autoDispose<int>((ref) async {
+  final filter = ref.watch(historyFilterProvider);
+  final db = await DatabaseHelper.instance.database;
+  return CallsRepository(db).getHistoryCallCount(
+    dateFrom: filter.dateFromSql,
+    dateTo: filter.dateToSql,
+    category: filter.category != null && filter.category!.isEmpty
+        ? null
+        : filter.category,
+  );
+});
 
 /// Λίστα κλήσεων ιστορικού με βάση τα τρέχοντα φίλτρα.
 /// Η αναζήτηση keyword γίνεται στη βάση μέσω `calls.search_index` (κανονικοποιημένο).

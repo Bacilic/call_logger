@@ -175,17 +175,49 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     return 'Μ.Ο.: ${_formatAggregateDurationSeconds(avg)} / ημέρα';
   }
 
+  List<String> _callsSparklineTooltips(List<DailyTrendPoint> days) {
+    return days
+        .map((dayPoint) {
+          if (dayPoint.callCount <= 0) return '';
+          final day = DateFormat('dd/MM').format(dayPoint.date);
+          return '$day: ${formatKpiCallCountLabel(dayPoint.callCount)}';
+        })
+        .toList(growable: false);
+  }
+
+  List<String> _durationSparklineTooltips(List<DailyTrendPoint> days) {
+    return days
+        .map((dayPoint) {
+          if (dayPoint.totalDurationSeconds <= 0) return '';
+          final day = DateFormat('dd/MM').format(dayPoint.date);
+          return '$day: ${formatKpiAggregateDurationSeconds(dayPoint.totalDurationSeconds)}';
+        })
+        .toList(growable: false);
+  }
+
+  List<String> _avgCallSparklineTooltips(List<DailyTrendPoint> days) {
+    return days
+        .map((dayPoint) {
+          if (dayPoint.callCount <= 0) return '';
+          final day = DateFormat('dd/MM').format(dayPoint.date);
+          final avgSeconds =
+              dayPoint.totalDurationSeconds / dayPoint.callCount;
+          return '$day: ${formatKpiCallDurationSeconds(avgSeconds)}';
+        })
+        .toList(growable: false);
+  }
+
   String _formatTopEntityShareSubtitle(int count, int totalCalls) {
     if (totalCalls <= 0) return '$count κλήσεις';
     final pct = (count / totalCalls) * 100;
     return '$count κλήσεις (${pct.toStringAsFixed(1)}% του συνόλου)';
   }
 
-  List<double> _runnerUpBarPoints(
+  List<KpiBarSparklinePoint> _runnerUpBarPoints(
     KpiAllDatesBarSparklines? bars,
     TopEntityMode mode,
   ) {
-    if (bars == null) return const [];
+    if (bars == null) return const <KpiBarSparklinePoint>[];
     switch (mode) {
       case TopEntityMode.department:
         return bars.departmentCountsRank2To6;
@@ -320,9 +352,12 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                                       points: data.sparklineLast7Days
                                           .map((e) => e.callCount.toDouble())
                                           .toList(),
+                                      sparklineTooltips: _callsSparklineTooltips(
+                                        data.sparklineLast7Days,
+                                      ),
                                       barPoints:
                                           allDatesBars?.callsByMonth ??
-                                          const [],
+                                          const <KpiBarSparklinePoint>[],
                                       colors: colors.kpiBlue,
                                     ),
                                     KpiCardData(
@@ -346,10 +381,13 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                                                 .toDouble(),
                                           )
                                           .toList(),
+                                      sparklineTooltips: _durationSparklineTooltips(
+                                        data.sparklineLast7Days,
+                                      ),
                                       barPoints:
                                           allDatesBars
                                               ?.durationByWeekdayMonToFri ??
-                                          const [],
+                                          const <KpiBarSparklinePoint>[],
                                       colors: colors.kpiGreen,
                                     ),
                                     KpiCardData(
@@ -375,9 +413,12 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                                                       e.callCount,
                                           )
                                           .toList(),
+                                      sparklineTooltips: _avgCallSparklineTooltips(
+                                        data.sparklineLast7Days,
+                                      ),
                                       barPoints:
                                           allDatesBars?.durationExtremesSix ??
-                                          const [],
+                                          const <KpiBarSparklinePoint>[],
                                       colors: colors.kpiOrange,
                                     ),
                                     KpiCardData(
@@ -396,6 +437,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                                       points: data.sparklineLast7Days
                                           .map((e) => e.callCount.toDouble())
                                           .toList(),
+                                      sparklineTooltips: _callsSparklineTooltips(
+                                        data.sparklineLast7Days,
+                                      ),
                                       barPoints: _runnerUpBarPoints(
                                         allDatesBars,
                                         _topEntityMode,

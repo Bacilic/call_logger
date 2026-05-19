@@ -14,6 +14,8 @@ class SettingsService {
   static const String _keyShowActiveTimer = 'show_active_timer';
   static const String _keyShowTasksBadge = 'show_tasks_badge';
   static const String _keyNavRailShowLabels = 'nav_rail_show_labels';
+  static const String _keyWindowWidth = 'window_width_v1';
+  static const String _keyWindowHeight = 'window_height_v1';
   static const String _keyDatabaseBrowserStatsCardExpanded =
       'database_browser_stats_card_expanded';
   static const String _keyEquipmentLocationShowBuilding =
@@ -192,6 +194,35 @@ class SettingsService {
   Future<void> setNavRailShowLabels(bool value) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_keyNavRailShowLabels, value);
+  }
+
+  /// Τελευταίο πλάτος/ύψος κύριου παραθύρου (Windows desktop)· null αν δεν έχει αποθηκευτεί.
+  Future<({double width, double height})?> getSavedWindowSize() async {
+    final prefs = await SharedPreferences.getInstance();
+    final width = prefs.getDouble(_keyWindowWidth);
+    final height = prefs.getDouble(_keyWindowHeight);
+    if (width == null ||
+        height == null ||
+        !width.isFinite ||
+        !height.isFinite ||
+        width <= 0 ||
+        height <= 0) {
+      return null;
+    }
+    return (width: width, height: height);
+  }
+
+  /// Αποθήκευση τελευταίου μεγέθους παραθύρου που όρισε ο χρήστης.
+  Future<void> setSavedWindowSize({
+    required double width,
+    required double height,
+  }) async {
+    if (!width.isFinite || !height.isFinite || width <= 0 || height <= 0) {
+      return;
+    }
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble(_keyWindowWidth, width);
+    await prefs.setDouble(_keyWindowHeight, height);
   }
 
   /// Κάρτα «Στατιστικά Βάσης Δεδομένων» στην οθόνη περιήγησης βάσης — ανοιχτή/κλειστή.

@@ -290,48 +290,61 @@ class NotesStickyFieldState extends ConsumerState<NotesStickyField> {
                   _lastSecondaryPointerGlobal = event.position;
                 }
               },
-              child: TextField(
-                focusNode: _focusNode,
-                controller: _controller,
-                decoration: const InputDecoration(
-                  hintText: 'Σημειώσεις...',
-                  hintStyle: TextStyle(
-                    color: Colors.grey,
-                    fontStyle: FontStyle.italic,
+              child: Stack(
+                children: [
+                  TextField(
+                    focusNode: _focusNode,
+                    controller: _controller,
+                    decoration: const InputDecoration(
+                      hintText: 'Σημειώσεις...',
+                      hintStyle: TextStyle(
+                        color: Colors.grey,
+                        fontStyle: FontStyle.italic,
+                      ),
+                      border: InputBorder.none,
+                      enabledBorder: InputBorder.none,
+                      focusedBorder: InputBorder.none,
+                      filled: true,
+                      fillColor: Colors.transparent,
+                      isDense: true,
+                      contentPadding: EdgeInsets.zero,
+                      counterText: '',
+                    ),
+                    minLines: 2,
+                    maxLines: 5,
+                    // Guardrail for future text-snippet expansion (e.g. .pwd):
+                    // expansion logic must respect remaining characters.
+                    maxLength: 500,
+                    spellCheckConfiguration:
+                        const SpellCheckConfiguration.disabled(),
+                    contextMenuBuilder: _contextMenuBuilder,
+                    onChanged: (value) =>
+                        ref.read(callEntryProvider.notifier).setNotes(value),
                   ),
-                  border: InputBorder.none,
-                  enabledBorder: InputBorder.none,
-                  focusedBorder: InputBorder.none,
-                  filled: true,
-                  fillColor: Colors.transparent,
-                  isDense: true,
-                  contentPadding: EdgeInsets.zero,
-                ),
-                minLines: 2,
-                maxLines: 5,
-                // Guardrail for future text-snippet expansion (e.g. .pwd):
-                // expansion logic must respect remaining characters.
-                maxLength: 500,
-                buildCounter:
-                    (
-                      BuildContext context, {
-                      required int currentLength,
-                      required bool isFocused,
-                      required int? maxLength,
-                    }) {
-                      return Text(
-                        '$currentLength / ${maxLength ?? 500}',
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: Theme.of(context).colorScheme.onSurfaceVariant,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      );
-                    },
-                spellCheckConfiguration:
-                    const SpellCheckConfiguration.disabled(),
-                contextMenuBuilder: _contextMenuBuilder,
-                onChanged: (value) =>
-                    ref.read(callEntryProvider.notifier).setNotes(value),
+                  Positioned(
+                    right: 0,
+                    bottom: 0,
+                    child: IgnorePointer(
+                      child: ValueListenableBuilder<TextEditingValue>(
+                        valueListenable: _controller,
+                        builder: (context, value, _) {
+                          return Text(
+                            '${value.text.length} / 500',
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodySmall
+                                ?.copyWith(
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .onSurfaceVariant,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                          );
+                        },
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
           ),

@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 import 'dart:io' show Platform;
 
 import 'package:flutter/material.dart';
@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:window_manager/window_manager.dart';
 
 import '../../features/database/services/database_exit_backup.dart';
+import '../services/settings_service.dart';
 import '../database/database_helper.dart';
 import '../database/database_init_result.dart';
 import '../database/database_init_runner.dart';
@@ -39,6 +40,8 @@ class _AppShortcutsState extends ConsumerState<AppShortcuts>
     with WidgetsBindingObserver, WindowListener {
   late DatabaseInitResult _databaseResult;
   late bool _isLocalDevMode;
+  Timer? _windowSizeSaveTimer;
+  final SettingsService _settings = SettingsService();
 
   static final Map<ShortcutActivator, Intent> _shortcuts =
       <ShortcutActivator, Intent>{
@@ -72,6 +75,7 @@ class _AppShortcutsState extends ConsumerState<AppShortcuts>
 
   @override
   void dispose() {
+    _windowSizeSaveTimer?.cancel();
     if (Platform.isWindows) {
       try {
         windowManager.removeListener(this);
@@ -82,6 +86,31 @@ class _AppShortcutsState extends ConsumerState<AppShortcuts>
   }
 
   @override
+  void onWindowResized() {
+    if (!Platform.isWindows) return;
+    _schedulePersistWindowSize();
+  }
+
+  void _schedulePersistWindowSize() {
+    _windowSizeSaveTimer?.cancel();
+    _windowSizeSaveTimer = Timer(const Duration(milliseconds: 400), () {
+      unawaited(_persistWindowSizeIfNeeded());
+    });
+  }
+
+  Future<void> _persistWindowSizeIfNeeded() async {
+    if (!Platform.isWindows) return;
+    try {
+      if (await windowManager.isMaximized()) return;
+      final bounds = await windowManager.getBounds();
+      await _settings.setSavedWindowSize(
+        width: bounds.width,
+        height: bounds.height,
+      );
+    } on MissingPluginException catch (_) {}
+  }
+
+  @override
   void onWindowClose() {
     if (!Platform.isWindows) return;
     unawaited(_handleWindowsClose());
@@ -89,6 +118,7 @@ class _AppShortcutsState extends ConsumerState<AppShortcuts>
 
   Future<void> _handleWindowsClose() async {
     try {
+      await _persistWindowSizeIfNeeded();
       await DatabaseHelper.instance.tryWalCheckpoint();
       await DatabaseExitBackup.runIfEnabled();
     } catch (_) {

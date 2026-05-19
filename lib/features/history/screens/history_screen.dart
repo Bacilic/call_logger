@@ -206,6 +206,7 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
     final theme = Theme.of(context);
     final filter = ref.watch(historyFilterProvider);
     final asyncCalls = ref.watch(historyCallsProvider);
+    final asyncCallCount = ref.watch(historyCategoryDateCallCountProvider);
     final asyncCategories = ref.watch(historyCategoriesProvider);
     final tableZoom = ref.watch(historyTableZoomProvider);
     final appAudit = ref.watch(historyApplicationAuditViewProvider);
@@ -410,6 +411,57 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
                   const SizedBox(height: 8),
                   Row(
                     children: [
+                      asyncCallCount.when(
+                        data: (count) => Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              'Κλήσεις',
+                              style: theme.textTheme.labelLarge?.copyWith(
+                                color: theme.colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              '$count',
+                              style: theme.textTheme.labelMedium?.copyWith(
+                                fontFeatures: const [
+                                  FontFeature.tabularFigures(),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                        loading: () => SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                        error: (_, _) => const SizedBox.shrink(),
+                      ),
+                      const Spacer(),
+                      IconButton(
+                        tooltip: 'Σμίκρυνση',
+                        icon: const Icon(Icons.zoom_out),
+                        onPressed: () =>
+                            ref.read(historyTableZoomProvider.notifier).zoomOut(),
+                      ),
+                      IconButton(
+                        tooltip: 'Επαναφορά μεγέθους (100%)',
+                        icon: const Icon(Icons.restart_alt),
+                        onPressed: () =>
+                            ref.read(historyTableZoomProvider.notifier).reset(),
+                      ),
+                      IconButton(
+                        tooltip: 'Μεγέθυνση',
+                        icon: const Icon(Icons.zoom_in),
+                        onPressed: () =>
+                            ref.read(historyTableZoomProvider.notifier).zoomIn(),
+                      ),
+                      const SizedBox(width: 8),
                       Text(
                         'Μέγεθος πίνακα',
                         style: theme.textTheme.labelLarge?.copyWith(
@@ -422,24 +474,6 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
                         style: theme.textTheme.labelMedium?.copyWith(
                           fontFeatures: const [FontFeature.tabularFigures()],
                         ),
-                      ),
-                      const Spacer(),
-                      IconButton(
-                        tooltip: 'Σμίκρυνση',
-                        icon: const Icon(Icons.zoom_out),
-                        onPressed: () =>
-                            ref.read(historyTableZoomProvider.notifier).zoomOut(),
-                      ),
-                      TextButton(
-                        onPressed: () =>
-                            ref.read(historyTableZoomProvider.notifier).reset(),
-                        child: const Text('100%'),
-                      ),
-                      IconButton(
-                        tooltip: 'Μεγέθυνση',
-                        icon: const Icon(Icons.zoom_in),
-                        onPressed: () =>
-                            ref.read(historyTableZoomProvider.notifier).zoomIn(),
                       ),
                     ],
                   ),

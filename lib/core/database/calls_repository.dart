@@ -383,6 +383,38 @@ class CallsRepository {
     return db.rawQuery(sql, args);
   }
 
+  /// Πλήθος κλήσεων ιστορικού με φίλτρα ημερομηνίας και κατηγορίας (χωρίς keyword).
+  Future<int> getHistoryCallCount({
+    String? dateFrom,
+    String? dateTo,
+    String? category,
+  }) async {
+    final whereClauses = <String>[];
+    final args = <dynamic>[];
+
+    if (dateFrom != null && dateFrom.isNotEmpty) {
+      whereClauses.add('calls.date >= ?');
+      args.add(dateFrom);
+    }
+    if (dateTo != null && dateTo.isNotEmpty) {
+      whereClauses.add('calls.date <= ?');
+      args.add(dateTo);
+    }
+    if (category != null && category.isNotEmpty) {
+      whereClauses.add('calls.category_text = ?');
+      args.add(category);
+    }
+
+    whereClauses.insert(0, 'COALESCE(calls.is_deleted, 0) = 0');
+
+    final whereSql = 'WHERE ${whereClauses.join(' AND ')}';
+    final rows = await db.rawQuery(
+      'SELECT COUNT(*) AS c FROM calls $whereSql',
+      args,
+    );
+    return (rows.first['c'] as int?) ?? 0;
+  }
+
   /// Στατιστικά κλήσεων για πίνακα ελέγχου: KPIs, ανά τμήμα, ανά βλάβη (`issue`).
   Future<DashboardSummaryModel> getDashboardStatistics(
     DashboardFilterModel filter,
@@ -784,8 +816,15 @@ WHERE ${whereSpark.join(' AND ')}
         GROUP BY month_key
         ORDER BY month_key ASC
         ''', args);
-      final callsByMonth = monthRows
-          .map((row) => (row['cnt'] as num?)?.toDouble() ?? 0.0)
+      final List<KpiBarSparklinePoint> callsByMonth = monthRows
+          .map((row) {
+            final monthKey = row['month_key'] as String? ?? '';
+            final count = (row['cnt'] as num?)?.toDouble() ?? 0.0;
+            return KpiBarSparklinePoint(
+              value: count,
+              tooltip: formatKpiMonthCallsTooltip(monthKey, count),
+            );
+          })
           .toList(growable: false);
 
       final weekdayRows = await db.rawQuery('''
@@ -801,9 +840,12 @@ WHERE ${whereSpark.join(' AND ')}
           (row['dow'] as num?)?.toInt() ?? 0:
               (row['sum_dur'] as num?)?.toDouble() ?? 0.0,
       };
-      final durationByWeekdayMonToFri = List<double>.generate(
+      final durationByWeekdayMonToFri = List<KpiBarSparklinePoint>.generate(
         5,
-        (index) => weekdayDurationMap[index + 1] ?? 0.0,
+        (index) => kpiWeekdayDurationPoint(
+          index,
+          weekdayDurationMap[index + 1] ?? 0.0,
+        ),
       );
 
       final longestDurRows = await db.rawQuery('''
@@ -815,31 +857,44 @@ WHERE ${whereSpark.join(' AND ')}
       final shortestDurRows = await db.rawQuery('''
         SELECT COALESCE(calls.duration, 0) AS dur
         $fromJoin
+        AND COALESCE(calls.duration, 0) > 0
         ORDER BY dur ASC
         LIMIT 3
         ''', args);
-      final durationExtremesSix = padBarSparklineValues(
+      final List<KpiBarSparklinePoint> durationExtremesSix = padBarSparklinePoints(
         [
-          ...longestDurRows.map((row) => (row['dur'] as num?)?.toDouble() ?? 0),
-          ...shortestDurRows.map((row) => (row['dur'] as num?)?.toDouble() ?? 0),
+          ...longestDurRows.asMap().entries.map(
+            (entry) => kpiDurationExtremePoint(
+              entry.key,
+              (entry.value['dur'] as num?)?.toDouble() ?? 0,
+            ),
+          ),
+          ...shortestDurRows.asMap().entries.map(
+            (entry) => kpiDurationExtremePoint(
+              entry.key + 3,
+              (entry.value['dur'] as num?)?.toDouble() ?? 0,
+            ),
+          ),
         ],
         6,
       );
 
       allDatesBarSparklines = KpiAllDatesBarSparklines(
-        callsByMonth: callsByMonth.isEmpty ? const [0] : callsByMonth,
+        callsByMonth: callsByMonth.isEmpty
+            ? const [KpiBarSparklinePoint(value: 0, tooltip: '')]
+            : callsByMonth,
         durationByWeekdayMonToFri: durationByWeekdayMonToFri,
         durationExtremesSix: durationExtremesSix,
-        departmentCountsRank2To6: runnerUpCountsFromStats(
-          byDepartment.map((d) => d.count).toList(growable: false),
+        departmentCountsRank2To6: runnerUpPointsFromDepartmentStats(
+          byDepartment,
           5,
         ),
-        callerCountsRank2To6: runnerUpCountsFromStats(
-          topCallers.map((c) => c.count).toList(growable: false),
+        callerCountsRank2To6: runnerUpPointsFromCallerStats(
+          topCallers,
           5,
         ),
-        issueCountsRank2To6: runnerUpCountsFromStats(
-          byIssue.map((i) => i.count).toList(growable: false),
+        issueCountsRank2To6: runnerUpPointsFromIssueStats(
+          byIssue,
           5,
         ),
       );
@@ -1026,6 +1081,39 @@ WHERE ${whereSpark.join(' AND ')}
     );
     if (rows.isEmpty) return '';
     return formatCallAuditLineFromHistoryQueryRow(rows.first);
+  }
+
+  /// Μέγιστο αριθμητικό Lansweeper ticket id από κλήσεις και ιστορικό links.
+  Future<int?> maxNumericLansweeperTicketId() async {
+    final rows = await db.rawQuery('''
+      SELECT MAX(CAST(ticket_id AS INTEGER)) AS max_id
+      FROM (
+        SELECT trim(lansweeper_main_ticket_id) AS ticket_id
+        FROM calls
+        WHERE trim(lansweeper_main_ticket_id) != ''
+          AND trim(lansweeper_main_ticket_id) GLOB '[0-9]*'
+          AND (is_deleted IS NULL OR is_deleted = 0)
+        UNION
+        SELECT trim(external_id) AS ticket_id
+        FROM call_external_links
+        WHERE provider = 'lansweeper'
+          AND trim(external_id) != ''
+          AND trim(external_id) GLOB '[0-9]*'
+      )
+      ''');
+    if (rows.isEmpty) return null;
+    final value = rows.first['max_id'];
+    if (value == null) return null;
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    return int.tryParse(value.toString());
+  }
+
+  /// Πρόταση επόμενου ticket id (μέγιστο αριθμητικό + 1), ή null αν δεν υπάρχει.
+  Future<String?> suggestedNextLansweeperTicketId() async {
+    final maxId = await maxNumericLansweeperTicketId();
+    if (maxId == null) return null;
+    return '${maxId + 1}';
   }
 
   /// Πλήθος κλήσεων με το ίδιο Lansweeper ticket id (trimmed σύγκριση).

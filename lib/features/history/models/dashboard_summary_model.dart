@@ -1,3 +1,7 @@
+﻿import 'dart:math' as math;
+
+import 'package:intl/intl.dart';
+
 import 'dashboard_filter_model.dart';
 
 /// Ετικέτα για κενή/NULL περιγραφή βλάβης (`issue`) — συμφωνεί με το SQL του dashboard.
@@ -81,6 +85,34 @@ class HourlyBucket {
   final int callCount;
 }
 
+/// Σημείο mini bar sparkline με κείμενο tooltip.
+class KpiBarSparklinePoint {
+  const KpiBarSparklinePoint({
+    required this.value,
+    required this.tooltip,
+  });
+
+  final double value;
+  final String tooltip;
+}
+
+const _kWeekdayLabelsMonToFri = [
+  'Δευτέρα',
+  'Τρίτη',
+  'Τετάρτη',
+  'Πέμπτη',
+  'Παρασκευή',
+];
+
+const _kDurationExtremeLabels = [
+  'Μεγαλύτερη #1',
+  'Μεγαλύτερη #2',
+  'Μεγαλύτερη #3',
+  'Μικρότερη #1',
+  'Μικρότερη #2',
+  'Μικρότερη #3',
+];
+
 /// Mini-γράφημα ράβδων για KPI κάρτες σε λειτουργία «Όλες οι ημερομηνίες».
 class KpiAllDatesBarSparklines {
   const KpiAllDatesBarSparklines({
@@ -93,37 +125,140 @@ class KpiAllDatesBarSparklines {
   });
 
   /// Σύνολο κλήσεων ανά μήνα (χρονολογική σειρά).
-  final List<double> callsByMonth;
+  final List<KpiBarSparklinePoint> callsByMonth;
 
   /// Συνολική διάρκεια ανά ημέρα εβδομάδας (Δευ–Παρ, 5 ράβδοι).
-  final List<double> durationByWeekdayMonToFri;
+  final List<KpiBarSparklinePoint> durationByWeekdayMonToFri;
 
   /// 3 μεγαλύτερες + 3 μικρότερες διάρκειες κλήσεων (6 ράβδοι).
-  final List<double> durationExtremesSix;
+  final List<KpiBarSparklinePoint> durationExtremesSix;
 
   /// Κλήσεις τμημάτων θέσεων 2–6 (το #1 είναι η κύρια τιμή KPI).
-  final List<double> departmentCountsRank2To6;
+  final List<KpiBarSparklinePoint> departmentCountsRank2To6;
 
   /// Κλήσεις καλούντων θέσεων 2–6.
-  final List<double> callerCountsRank2To6;
+  final List<KpiBarSparklinePoint> callerCountsRank2To6;
 
   /// Κλήσεις βλαβών θέσεων 2–6.
-  final List<double> issueCountsRank2To6;
+  final List<KpiBarSparklinePoint> issueCountsRank2To6;
 }
 
-/// Συμπλήρωση λίστας τιμών σε σταθερό μήκος (μηδενικά στο τέλος).
-List<double> padBarSparklineValues(List<double> values, int length) {
-  if (length <= 0) return List<double>.from(values);
-  if (values.length >= length) {
-    return values.sublist(0, length);
+String formatKpiCallCountLabel(num count) {
+  final rounded = count.round();
+  final unit = rounded == 1 ? 'κλήση' : 'κλήσεις';
+  return '$rounded $unit';
+}
+
+String formatKpiCallDurationSeconds(num seconds) {
+  final safeSeconds = seconds.isNaN ? 0 : seconds.round();
+  final absSeconds = math.max(0, safeSeconds);
+  final m = absSeconds ~/ 60;
+  final s = absSeconds % 60;
+  if (m > 0) {
+    return '${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
   }
-  return [...values, ...List<double>.filled(length - values.length, 0)];
+  return '00:${s.toString().padLeft(2, '0')}';
 }
 
-/// Απόσπαση count θέσεων 2..(1+take) από ταξινομημένη λίστα στατιστικών.
-List<double> runnerUpCountsFromStats(List<int> counts, int take) {
-  return padBarSparklineValues(
-    counts.skip(1).take(take).map((c) => c.toDouble()).toList(),
+String formatKpiAggregateDurationSeconds(num seconds) {
+  final safeSeconds = seconds.isNaN ? 0 : seconds.round();
+  final absSeconds = math.max(0, safeSeconds);
+  final h = absSeconds ~/ 3600;
+  final m = (absSeconds % 3600) ~/ 60;
+  final s = absSeconds % 60;
+  if (h > 0) {
+    return '${h.toString().padLeft(2, '0')}:${m.toString().padLeft(2, '0')}';
+  }
+  return '${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
+}
+
+String formatKpiMonthCallsTooltip(String monthKey, num count) {
+  final parsed = DateTime.tryParse('$monthKey-01');
+  final label = parsed != null
+      ? DateFormat('MMMM yyyy', 'el').format(parsed)
+      : monthKey;
+  return '$label: ${formatKpiCallCountLabel(count)}';
+}
+
+KpiBarSparklinePoint kpiWeekdayDurationPoint(int weekdayIndex, num seconds) {
+  final label = _kWeekdayLabelsMonToFri[weekdayIndex];
+  return KpiBarSparklinePoint(
+    value: seconds.toDouble(),
+    tooltip: '$label: ${formatKpiAggregateDurationSeconds(seconds)}',
+  );
+}
+
+KpiBarSparklinePoint kpiDurationExtremePoint(int index, num seconds) {
+  final label = _kDurationExtremeLabels[index];
+  return KpiBarSparklinePoint(
+    value: seconds.toDouble(),
+    tooltip: '$label: ${formatKpiCallDurationSeconds(seconds)}',
+  );
+}
+
+KpiBarSparklinePoint kpiRunnerUpCallsPoint(String name, int count) {
+  return KpiBarSparklinePoint(
+    value: count.toDouble(),
+    tooltip: '$name: ${formatKpiCallCountLabel(count)}',
+  );
+}
+
+/// Συμπλήρωση λίστας σημείων σε σταθερό μήκος (μηδενικά στο τέλος).
+List<KpiBarSparklinePoint> padBarSparklinePoints(
+  List<KpiBarSparklinePoint> points,
+  int length,
+) {
+  if (length <= 0) return List<KpiBarSparklinePoint>.from(points);
+  if (points.length >= length) {
+    return points.sublist(0, length);
+  }
+  return [
+    ...points,
+    ...List<KpiBarSparklinePoint>.filled(
+      length - points.length,
+      const KpiBarSparklinePoint(value: 0, tooltip: ''),
+    ),
+  ];
+}
+
+List<KpiBarSparklinePoint> runnerUpPointsFromDepartmentStats(
+  List<DepartmentStat> stats,
+  int take,
+) {
+  return padBarSparklinePoints(
+    stats
+        .skip(1)
+        .take(take)
+        .map((e) => kpiRunnerUpCallsPoint(e.name, e.count))
+        .toList(growable: false),
+    take,
+  );
+}
+
+List<KpiBarSparklinePoint> runnerUpPointsFromCallerStats(
+  List<CallerStat> stats,
+  int take,
+) {
+  return padBarSparklinePoints(
+    stats
+        .skip(1)
+        .take(take)
+        .map((e) => kpiRunnerUpCallsPoint(e.name, e.count))
+        .toList(growable: false),
+    take,
+  );
+}
+
+List<KpiBarSparklinePoint> runnerUpPointsFromIssueStats(
+  List<IssueStat> stats,
+  int take,
+) {
+  return padBarSparklinePoints(
+    stats
+        .skip(1)
+        .take(take)
+        .map((e) => kpiRunnerUpCallsPoint(e.name, e.count))
+        .toList(growable: false),
     take,
   );
 }

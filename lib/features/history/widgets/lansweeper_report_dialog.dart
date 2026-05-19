@@ -747,9 +747,9 @@ class _LansweeperReportDialogState
     String title = 'Ticket Lansweeper',
     String? subtitle,
   }) async {
-    final ticketController = TextEditingController(
-      text: (initialTicketId ?? '').trim(),
-    );
+    final prefilled = await _resolveSuggestedTicketId(initialTicketId);
+    if (!mounted) return null;
+    final ticketController = TextEditingController(text: prefilled);
     try {
       final accepted = await showDialog<bool>(
         context: context,
@@ -796,12 +796,23 @@ class _LansweeperReportDialogState
     }
   }
 
+  Future<String> _resolveSuggestedTicketId(String? existingTicketId) async {
+    final trimmed = (existingTicketId ?? '').trim();
+    if (trimmed.isNotEmpty) return trimmed;
+    return await ref
+            .read(lansweeperSyncProvider.notifier)
+            .suggestedNextLansweeperTicketId() ??
+        '';
+  }
+
   Future<void> _manualMark(_ReportCallItem item) async {
     final callId = item.call.id;
     if (callId == null) return;
-    final ticketController = TextEditingController(
-      text: (item.call.lansweeperMainTicketId ?? '').trim(),
+    final initialTicket = await _resolveSuggestedTicketId(
+      item.call.lansweeperMainTicketId,
     );
+    if (!mounted) return;
+    final ticketController = TextEditingController(text: initialTicket);
     final commentController = TextEditingController();
     try {
       final accepted = await showDialog<bool>(

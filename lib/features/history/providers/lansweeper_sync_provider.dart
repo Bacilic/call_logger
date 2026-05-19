@@ -219,6 +219,11 @@ class LansweeperSyncNotifier extends AsyncNotifier<void> {
     );
   }
 
+  Future<String?> suggestedNextLansweeperTicketId() async {
+    final db = await DatabaseHelper.instance.database;
+    return CallsRepository(db).suggestedNextLansweeperTicketId();
+  }
+
   Future<void> setSent(int callId, {String? ticketId}) async {
     final normalized = ticketId?.trim() ?? '';
     if (normalized.isEmpty) {
