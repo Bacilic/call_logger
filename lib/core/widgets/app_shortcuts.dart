@@ -1,5 +1,6 @@
 ﻿import 'dart:async';
 import 'dart:io' show Platform;
+import 'dart:ui' show AppExitResponse;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -42,6 +43,8 @@ class _AppShortcutsState extends ConsumerState<AppShortcuts>
   late bool _isLocalDevMode;
   Timer? _windowSizeSaveTimer;
   final SettingsService _settings = SettingsService();
+  AppLifecycleListener? _appLifecycleListener;
+  bool _windowCloseHandling = false;
 
   static final Map<ShortcutActivator, Intent> _shortcuts =
       <ShortcutActivator, Intent>{
@@ -67,6 +70,9 @@ class _AppShortcutsState extends ConsumerState<AppShortcuts>
     }
     _databaseResult = widget.initialDatabaseResult;
     _isLocalDevMode = widget.initialIsLocalDevMode;
+    _appLifecycleListener = AppLifecycleListener(
+      onExitRequested: () async => AppExitResponse.exit,
+    );
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       unawaited(ref.read(greekDictionaryServiceProvider.future));
@@ -76,6 +82,8 @@ class _AppShortcutsState extends ConsumerState<AppShortcuts>
   @override
   void dispose() {
     _windowSizeSaveTimer?.cancel();
+    _appLifecycleListener?.dispose();
+    _appLifecycleListener = null;
     if (Platform.isWindows) {
       try {
         windowManager.removeListener(this);
@@ -113,16 +121,20 @@ class _AppShortcutsState extends ConsumerState<AppShortcuts>
   @override
   void onWindowClose() {
     if (!Platform.isWindows) return;
+    if (_windowCloseHandling) return;
     unawaited(_handleWindowsClose());
   }
 
   Future<void> _handleWindowsClose() async {
+    if (_windowCloseHandling) return;
+    _windowCloseHandling = true;
     try {
       await _persistWindowSizeIfNeeded();
       await DatabaseHelper.instance.tryWalCheckpoint();
       await DatabaseExitBackup.runIfEnabled();
+      await DatabaseHelper.instance.closeConnection();
     } catch (_) {
-      // Αθόρυβο· το παράθυρο πρέπει να κλείσει.
+      // Συνεχίζουμε προς κλείσιμο παραθύρου ακόμα κι αν αποτύχει βήμα.
     } finally {
       if (Platform.isWindows) {
         try {
@@ -134,6 +146,7 @@ class _AppShortcutsState extends ConsumerState<AppShortcuts>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (_windowCloseHandling) return;
     if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.detached) {
       unawaited(DatabaseHelper.instance.tryWalCheckpoint());

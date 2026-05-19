@@ -1,6 +1,6 @@
 # Call Logger — Project Anatomy
 
-**Ημερομηνία τροποποίησης εγγράφου:** 14 Μαΐου 2026
+**Ημερομηνία τροποποίησης εγγράφου:** 19 Μαΐου 2026
 
 Συμπυκνωμένη «ακτινογραφία» για εξωτερικό LLM (Καθοδηγητής): Flutter για Windows 11, δομή ανά features/, Riverpod, SQLite μέσω sqflite_common_ffi.
 
@@ -57,7 +57,6 @@ lib/
         lock_diagnostic_service.dart
         remote_tools_repository.dart
         settings_repository.dart
-    debug/
     errors/
         department_exists_exception.dart
         dictionary_export_exception.dart
@@ -305,6 +304,7 @@ lib/
           floor_color_assignment_service.dart
     history/
       models/
+          dashboard_date_preset.dart
           dashboard_filter_model.dart
           dashboard_summary_model.dart
           lansweeper_sync_state.dart
@@ -314,6 +314,10 @@ lib/
           history_provider.dart
           lansweeper_sync_provider.dart
       screens/
+          dashboard_cards.dart
+          dashboard_charts.dart
+          dashboard_filter_pane.dart
+          dashboard_palette_colors.dart
           dashboard_screen.dart
           history_screen.dart
       widgets/
@@ -383,8 +387,6 @@ lib/
           task_due_option_tooltips.dart
       widgets/
           task_analytics_bottom_sheet.dart
-  tool/
-    main.dart
 ```
 
 ---
@@ -447,6 +449,7 @@ lib/
 - **department_floor_display_extension** — extension επί DepartmentModel (όχι νέα κλάση)
 
 ### `lib/features/history/models/`
+- **DashboardDatePreset** — enum προεπιλογών εύρους ημερομηνιών πίνακα ελέγχου
 - **DashboardFilterModel** — keyword, dateFrom, dateTo, department, userName, equipmentCode, topN
 - **DepartmentStat** / **IssueStat** / **DailyTrendPoint** / **CallerStat** / **LongestCallEntry** / **HourlyBucket** — βοηθητικά στατιστικών
 - **DashboardSummaryModel** — totalCalls, totalDurationSeconds, avgDurationSeconds, KPIs προηγούμενης περιόδου, λίστες dailyTrend, sparklineLast7Days, topCallers, longestCalls, hourlyDistribution, byDepartment, byIssue
@@ -535,11 +538,13 @@ lib/
 - **changelogProvider** / **appVersionProvider** — έκδοση εφαρμογής και changelog.
 - **notesFieldHintTickProvider** — ένδειξη υποχρεωτικών σημειώσεων για εκκρεμότητα.
 
+**Κλείσιμο παραθύρου (Windows, όχι provider):** το widget **AppShortcuts** (`app_shortcuts.dart`) με `WindowListener`· ροή: αποθήκευση μεγέθους παραθύρου → WAL checkpoint → `DatabaseExitBackup.runIfEnabled` → `DatabaseHelper.closeConnection()` → `windowManager.destroy()`. Στο lifecycle δεν τρέχει παράλληλο checkpoint όσο εκτελείται αυτή η ροή (`_windowCloseHandling`).
+
 ---
 
 ## 5) DEPENDENCIES (pubspec.yaml)
 
-**dependencies:** flutter (sdk), flutter_localizations (sdk), cupertino_icons ^1.0.9, flutter_riverpod ^3.3.1, sqflite_common ^2.5.6, sqflite_common_ffi ^2.4.0+2, sqlite3_flutter_libs ^0.6.0+eol, path_provider ^2.1.2, path ^1.9.0, google_fonts ^8.0.2, intl ^0.20.2, characters ^1.4.0, window_manager ^0.5.1, screen_retriever ^0.2.0, shared_preferences ^2.5.5, url_launcher ^6.3.0, excel ^4.0.6, file_picker 11.0.2, fl_chart ^1.2.0, archive ^3.6.1, win32 ^5.15.0, ffi ^2.2.0, custom_mouse_cursor ^1.1.3, package_info_plus ^8.3.0, image 4.3.0
+**dependencies:** flutter (sdk), flutter_localizations (sdk), cupertino_icons ^1.0.9, flutter_riverpod ^3.3.1, sqflite_common 2.5.8, sqflite_common_ffi 2.4.0+3, sqlite3_flutter_libs ^0.6.0+eol, path_provider ^2.1.2, path ^1.9.0, google_fonts ^8.1.0, intl ^0.20.2, characters ^1.4.0, window_manager ^0.5.1, screen_retriever ^0.2.0, shared_preferences ^2.5.5, url_launcher ^6.3.2, excel ^4.0.6, file_picker ^11.0.2, fl_chart ^1.2.0, archive ^3.6.1, win32 ^5.15.0, ffi ^2.2.0, custom_mouse_cursor ^1.1.3, package_info_plus 9.0.1, image 4.3.0
 
 **dev_dependencies:** flutter_test (sdk), integration_test (sdk), riverpod ^3.2.1, flutter_lints ^6.0.0
 

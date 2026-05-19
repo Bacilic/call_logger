@@ -7,9 +7,33 @@ import '../../provider/lookup_provider.dart';
 import '../../../../core/utils/search_text_normalizer.dart';
 import 'smart_entity_selector_widget.dart';
 
-/// Ελάχιστο πλάτος γραμμής πεδίων ώστε να χωράει Τηλ. + Καλών. + Τμήμα + Εξοπλισμός + × + +.
-/// Υπολογισμός: w1(120) + 12 + w2(220) + 12 + wDept(160) + 12 + w3(130) + 4 + 40 + 40 = 750.
+/// Ελάχιστο πλάτος γραμμής πεδίων ώστε να χωράει Τηλ. + Καλών. + Τμήμα + Εξοπλισμός + κενά + ×.
+/// Πεδία ~120+220+160+150 + 3×12 (κενά) + 4 (πριν trailing) + 40 (κουμπί καθαρισμού) ≈ 750.
 const double kCallHeaderRowMinWidth = 790;
+
+/// Κενό μεταξύ πεδίων στη γραμμή [SmartEntitySelectorWidget].
+const double _kHeaderFieldGap = 12.0;
+
+/// Κενό πριν τα trailing στοιχεία + ελάχιστο πλάτος κουμπιού «Καθαρισμός όλων».
+const double _kHeaderTrailingGap = 4.0;
+const double _kHeaderClearAllButtonWidth = 40.0;
+
+/// Χώρος εκτός πεδίων στην ίδια Row: 3 κενά, trailing gap, κουμπί ×.
+const double _kHeaderGapsAndIcons =
+    _kHeaderFieldGap * 3 +
+    _kHeaderTrailingGap +
+    _kHeaderClearAllButtonWidth;
+
+/// Αναλογίες πλάτους πεδίων (άθροισμα 96· κανονικοποιούνται στο 1.0).
+const double _kHeaderWidthRatioPhone = 0.18;
+const double _kHeaderWidthRatioCaller = 0.34;
+const double _kHeaderWidthRatioDept = 0.24;
+const double _kHeaderWidthRatioEquipment = 0.20;
+const double _kHeaderWidthRatioSum =
+    _kHeaderWidthRatioPhone +
+    _kHeaderWidthRatioCaller +
+    _kHeaderWidthRatioDept +
+    _kHeaderWidthRatioEquipment;
 
 /// Header φόρμα εισαγωγής κλήσης: Τηλέφωνο, Καλούντας, Τμήμα, Κωδικός Εξοπλισμού.
 class CallHeaderForm extends ConsumerStatefulWidget {
@@ -142,15 +166,23 @@ class _CallHeaderFormState extends ConsumerState<CallHeaderForm> {
             ? constraints.maxWidth
             : MediaQuery.sizeOf(context).width;
 
-        // Διαθέσιμο πλάτος μείον κενά και κουμπί × ώστε η γραμμή να χωράει πάντα (όχι overflow).
-        const gapsAndIcons = 12.0 + 12.0 + 12.0 + 4.0 + 40.0; // 80
-        final available = (mw - gapsAndIcons).clamp(200.0, double.infinity);
-        // Αναλογία 18:34:24:20 (άθροισμα 96%) ώστε το σύνολο να μην ξεπερνά το available.
-        final w1 = (available * 0.18).clamp(0.0, 170.0);
-        final w2 = (available * 0.34).clamp(0.0, 300.0);
-        final wDept = (available * 0.24).clamp(0.0, 240.0);
-        final w3 = (available * 0.20).clamp(0.0, 185.0);
-        final equipmentColumnOffset = w1 + 12.0 + w2 + 12.0 + wDept + 12.0;
+        // Διαθέσιμο πλάτος μείον κενά και κουμπί × — το άθροισμα πεδίων + _kHeaderGapsAndIcons ≤ mw.
+        final available = (mw - _kHeaderGapsAndIcons).clamp(0.0, double.infinity);
+        var w1 = available * _kHeaderWidthRatioPhone / _kHeaderWidthRatioSum;
+        var w2 = available * _kHeaderWidthRatioCaller / _kHeaderWidthRatioSum;
+        var wDept = available * _kHeaderWidthRatioDept / _kHeaderWidthRatioSum;
+        var w3 = available * _kHeaderWidthRatioEquipment / _kHeaderWidthRatioSum;
+        // Ασφάλεια αριθμητικής ακρίβειας: ποτέ overflow στη Row.
+        final fieldsSum = w1 + w2 + wDept + w3;
+        if (fieldsSum > available && fieldsSum > 0) {
+          final scale = available / fieldsSum;
+          w1 *= scale;
+          w2 *= scale;
+          wDept *= scale;
+          w3 *= scale;
+        }
+        final equipmentColumnOffset =
+            w1 + _kHeaderFieldGap + w2 + _kHeaderFieldGap + wDept + _kHeaderFieldGap;
 
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -283,7 +315,7 @@ class _CallHeaderFormState extends ConsumerState<CallHeaderForm> {
                     ref.read(callEntryProvider.notifier).resetTimerToStandby(),
               ),
               trailingRowChildren: [
-                const SizedBox(width: 4),
+                const SizedBox(width: _kHeaderTrailingGap),
                 IgnorePointer(
                   ignoring: !hasAnyContent,
                   child: AnimatedOpacity(

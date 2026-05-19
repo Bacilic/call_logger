@@ -1,0 +1,9 @@
+<filters>
+  <filter>
+    <archive>0</archive>
+    <column>Process Name</column>
+    <relation>is</relation>
+    <value>call_logger.exe</value>
+    <action>Include</action>
+  </filter>
+</filters>

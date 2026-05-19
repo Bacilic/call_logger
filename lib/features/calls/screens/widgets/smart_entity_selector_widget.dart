@@ -2221,7 +2221,7 @@ class _EquipmentFieldState extends State<_EquipmentField> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 Icon(
                   Icons.computer_outlined,
@@ -2230,10 +2230,15 @@ class _EquipmentFieldState extends State<_EquipmentField> {
                 ),
                 const SizedBox(width: 4),
                 Expanded(
-                  child: Text(
-                    'Κωδικός Εξοπλισμού',
-                    style: theme.textTheme.labelMedium,
-                    softWrap: true,
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: AlignmentDirectional.centerStart,
+                    child: Text(
+                      'Κωδικός Εξοπλισμού',
+                      style: theme.textTheme.labelMedium,
+                      maxLines: 1,
+                      softWrap: false,
+                    ),
                   ),
                 ),
               ],

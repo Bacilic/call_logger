@@ -126,13 +126,27 @@ class DatabaseHelper {
   }
 
   /// Κλείνει την τρέχουσα σύνδεση και επαναφέρει την κατάσταση.
-  /// Στην επόμενη κλήση [database] θα γίνει νέα σύνδεση (π.χ. με νέα διαδρομή από ρυθμίσεις).
+  /// Περιμένει τυχόν εκκρεμές άνοιγμα, checkpoint (best-effort) και κλείσιμο sqflite.
   Future<void> closeConnection() async {
     requestOpeningAbort();
-    if (_database != null) {
-      await _database!.close();
-      _database = null;
+
+    final opening = _databaseInitializingFuture;
+    if (opening != null) {
+      try {
+        await opening;
+      } catch (_) {
+        // Ακυρώθηκε ή απέτυχε — συνεχίζουμε προς κλείσιμο ό,τι υπάρχει.
+      }
     }
+
+    final db = _database;
+    if (db != null && db.isOpen) {
+      try {
+        await db.rawQuery('PRAGMA wal_checkpoint(PASSIVE)');
+      } catch (_) {}
+      await db.close();
+    }
+    _database = null;
     _databaseInitializingFuture = null;
     _userAbortCompleter = null;
     _isUsingLocalDb = false;
@@ -180,11 +194,11 @@ class DatabaseHelper {
 
   /// Best-effort WAL checkpoint για μείωση pending WAL writes.
   Future<void> tryWalCheckpoint({String mode = 'PASSIVE'}) async {
+    final normalized = mode.trim().toUpperCase();
+    final effective = normalized.isEmpty ? 'PASSIVE' : normalized;
     final db = _database;
     if (db == null || !db.isOpen) return;
     try {
-      final normalized = mode.trim().toUpperCase();
-      final effective = normalized.isEmpty ? 'PASSIVE' : normalized;
       await db.rawQuery('PRAGMA wal_checkpoint($effective)');
     } catch (_) {}
   }
