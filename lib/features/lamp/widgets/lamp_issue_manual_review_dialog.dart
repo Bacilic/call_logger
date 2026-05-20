@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 
 import '../../../core/database/old_database/lamp_issue_resolution_service.dart';
 
@@ -188,9 +188,14 @@ class _ManualReviewCard extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             if (proposal.originalValue != null)
-              SelectableText('Αρχική τιμή: ${proposal.originalValue}'),
-            if (proposal.proposedMatch != null)
-              SelectableText('Πρόταση: ${proposal.proposedMatch}'),
+              SelectableText(
+                'Αρχική τιμή: ${_proposalOriginalDisplay(proposal)}',
+              ),
+            if (proposal.proposedMatch != null ||
+                proposal.proposedId != null)
+              SelectableText(
+                'Πρόταση: ${_proposalProposedDisplay(proposal)}',
+              ),
             if (rowContextLines.isNotEmpty) ...[
               const SizedBox(height: 8),
               Text('Στοιχεία εγγραφής', style: theme.textTheme.labelLarge),
@@ -218,14 +223,8 @@ class _ManualReviewCard extends StatelessWidget {
                   ),
                   for (final option in proposal.options)
                     RadioListTile<LampIssueResolutionOption?>(
-                      title: Text(_displayResolutionOptionLabel(option.label)),
-                      subtitle: option.description != null &&
-                              option.description!.trim().isNotEmpty
-                          ? Text(
-                              option.description!,
-                              style: theme.textTheme.bodySmall,
-                            )
-                          : null,
+                      title: Text(_displayResolutionOptionLabel(option)),
+                      subtitle: _resolutionOptionSubtitle(theme, option),
                       value: option,
                       dense: true,
                       contentPadding: EdgeInsets.zero,
@@ -298,8 +297,62 @@ List<String> _proposalRowContextLines(LampIssueResolutionProposal proposal) {
   return lines;
 }
 
-String _displayResolutionOptionLabel(String rawLabel) {
-  var label = rawLabel.trim();
+Widget? _resolutionOptionSubtitle(
+  ThemeData theme,
+  LampIssueResolutionOption option,
+) {
+  final description = option.description?.trim();
+  if (description == null || description.isEmpty) return null;
+  return Text(
+    description,
+    style: theme.textTheme.bodySmall?.copyWith(
+      color: theme.colorScheme.onSurface.withValues(alpha: 0.65),
+    ),
+  );
+}
+
+String? _metadataDisplayLabel(
+  LampIssueResolutionProposal proposal,
+  String key,
+) {
+  final value = proposal.metadata[key]?.toString().trim();
+  if (value == null || value.isEmpty || value == 'null') return null;
+  return value;
+}
+
+String _proposalOriginalDisplay(LampIssueResolutionProposal proposal) {
+  return _metadataDisplayLabel(proposal, 'originalDisplayLabel') ??
+      _formatIdWithName(
+        raw: proposal.originalValue ?? '',
+        id: int.tryParse((proposal.originalValue ?? '').trim()),
+      );
+}
+
+String _proposalProposedDisplay(LampIssueResolutionProposal proposal) {
+  return _metadataDisplayLabel(proposal, 'proposedDisplayLabel') ??
+      _formatIdWithName(
+        raw: proposal.proposedMatch ?? '',
+        id: proposal.proposedId,
+      );
+}
+
+String _formatIdWithName({required String raw, int? id}) {
+  final trimmed = raw.trim();
+  final parsedId = id ?? int.tryParse(trimmed);
+  if (parsedId != null &&
+      trimmed.isNotEmpty &&
+      trimmed != parsedId.toString()) {
+    return '$parsedId · $trimmed';
+  }
+  if (parsedId != null) return parsedId.toString();
+  return trimmed.isEmpty ? '-' : trimmed;
+}
+
+String _displayResolutionOptionLabel(LampIssueResolutionOption option) {
+  if (option.proposedId != null) {
+    return option.label.trim();
+  }
+  var label = option.label.trim();
   label = label.replaceAll('owner', 'υπάλληλος');
   label = label.replaceAll('last_name', 'επώνυμο');
   label = label.replaceAll('first_name', 'μικρό όνομα');

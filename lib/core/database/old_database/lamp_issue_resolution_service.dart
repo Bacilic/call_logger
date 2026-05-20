@@ -1,4 +1,4 @@
-import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+﻿import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import '../../utils/search_text_normalizer.dart';
 import '../../utils/user_identity_normalizer.dart';
@@ -575,6 +575,7 @@ class LampIssueResolutionService {
               createLabel: 'office_name',
               exactAutoConfidence: 97,
               fuzzyAllowed: true,
+              detailedLabelById: officeLabelById,
             ),
           ),
         );
@@ -599,6 +600,7 @@ class LampIssueResolutionService {
               original: original,
               normalized: normalized,
               references: contracts,
+              detailedLabelById: contractLabelById,
             ),
           ),
         );
@@ -618,6 +620,7 @@ class LampIssueResolutionService {
               createLabel: 'model_name',
               exactAutoConfidence: 96,
               fuzzyAllowed: false,
+              detailedLabelById: modelLabelById,
             ),
           ),
         );
@@ -625,6 +628,63 @@ class LampIssueResolutionService {
     }
 
     return proposals;
+  }
+
+  String _referenceValueDisplayLabel({
+    required String rawValue,
+    int? id,
+    Map<int, String>? detailedLabelById,
+  }) {
+    final trimmed = rawValue.trim();
+    final parsedId = id ?? int.tryParse(trimmed);
+    final detailed = parsedId != null && detailedLabelById != null
+        ? detailedLabelById[parsedId]?.trim()
+        : null;
+    if (parsedId != null && detailed != null && detailed.isNotEmpty) {
+      return '$parsedId · $detailed';
+    }
+    if (parsedId != null &&
+        trimmed.isNotEmpty &&
+        trimmed != parsedId.toString()) {
+      return '$parsedId · $trimmed';
+    }
+    if (parsedId != null) return parsedId.toString();
+    return trimmed.isEmpty ? '-' : trimmed;
+  }
+
+  Map<String, Object?> _referenceDisplayMetadata({
+    required String original,
+    int? proposedId,
+    String? proposedMatch,
+    Map<int, String>? detailedLabelById,
+    required Map<String, Object?> base,
+  }) {
+    return <String, Object?>{
+      ...base,
+      'originalDisplayLabel': _referenceValueDisplayLabel(
+        rawValue: original,
+        detailedLabelById: detailedLabelById,
+      ),
+      if (proposedId != null ||
+          (proposedMatch != null && proposedMatch.trim().isNotEmpty))
+        'proposedDisplayLabel': _referenceValueDisplayLabel(
+          rawValue: proposedMatch ?? '',
+          id: proposedId,
+          detailedLabelById: detailedLabelById,
+        ),
+    };
+  }
+
+  String _referenceOptionDisplayLabel(
+    _ReferenceRow match, {
+    Map<int, String>? detailedLabelById,
+  }) {
+    final detailed = detailedLabelById?[match.id]?.trim();
+    final name = (detailed != null && detailed.isNotEmpty)
+        ? detailed
+        : match.label.trim();
+    if (name.isEmpty) return '${match.id}';
+    return '${match.id} · $name';
   }
 
   LampIssueResolutionProposal _resolveNamedReference({
@@ -640,6 +700,7 @@ class LampIssueResolutionService {
     required String createLabel,
     required int exactAutoConfidence,
     required bool fuzzyAllowed,
+    Map<int, String>? detailedLabelById,
   }) {
     final base = _baseProposal(issueType, issue, originalOverride: original);
     final exact = references
@@ -669,11 +730,20 @@ class LampIssueResolutionService {
         action: LampIssueResolutionAction.manualReview,
         confidence: 55,
         notes: 'Πολλαπλές ακριβείς αντιστοιχίσεις.',
+        metadata: _referenceDisplayMetadata(
+          original: original,
+          detailedLabelById: detailedLabelById,
+          base: metadata,
+        ),
         options: [
           for (final match in exact)
             LampIssueResolutionOption(
               id: 'fk_${match.id}',
-              label: '${match.id} · ${match.label}',
+              label: _referenceOptionDisplayLabel(
+                match,
+                detailedLabelById: detailedLabelById,
+              ),
+              description: 'Ακριβής αντιστοίχιση',
               action: LampIssueResolutionAction.autoFix,
               proposedId: match.id,
               proposedMatch: match.label,
@@ -706,19 +776,30 @@ class LampIssueResolutionService {
         return byScore != 0 ? byScore : a.distance.compareTo(b.distance);
       });
       if (candidates.isNotEmpty) {
+        final top = candidates.first;
         return base(
           action: LampIssueResolutionAction.manualReview,
-          proposedId: candidates.first.reference.id,
-          proposedMatch: candidates.first.reference.label,
-          confidence: candidates.first.score,
+          proposedId: top.reference.id,
+          proposedMatch: top.reference.label,
+          confidence: top.score,
           notes: 'Ασαφής αντιστοίχιση με κοντινό όνομα.',
+          metadata: _referenceDisplayMetadata(
+            original: original,
+            proposedId: top.reference.id,
+            proposedMatch: top.reference.label,
+            detailedLabelById: detailedLabelById,
+            base: metadata,
+          ),
           options: [
             for (final candidate in candidates.take(5))
               LampIssueResolutionOption(
                 id: 'fk_${candidate.reference.id}',
-                label:
-                    '${candidate.reference.id} · ${candidate.reference.label}',
-                description: 'Απόσταση: ${candidate.distance}',
+                label: _referenceOptionDisplayLabel(
+                  candidate.reference,
+                  detailedLabelById: detailedLabelById,
+                ),
+                description:
+                    'Ομοιότητα: ${candidate.score}% · Απόσταση: ${candidate.distance}',
                 action: LampIssueResolutionAction.autoFix,
                 proposedId: candidate.reference.id,
                 proposedMatch: candidate.reference.label,
@@ -1362,6 +1443,7 @@ class LampIssueResolutionService {
     required String original,
     required String normalized,
     required List<_ReferenceRow> references,
+    Map<int, String>? detailedLabelById,
   }) {
     final raw = _text(issue['raw_value']) ?? '';
     final rawId = int.tryParse(raw.trim());
@@ -1387,16 +1469,33 @@ class LampIssueResolutionService {
           .where((r) => r.label.contains(rawId.toString()))
           .toList();
       if (inName.isNotEmpty) {
+        final first = inName.first;
         return base(
           action: LampIssueResolutionAction.manualReview,
+          proposedId: first.id,
+          proposedMatch: first.label,
           confidence: 58,
           notes:
               'Το ID δεν υπάρχει, αλλά ο αριθμός εμφανίζεται σε contract_name.',
+          metadata: _referenceDisplayMetadata(
+            original: original,
+            proposedId: first.id,
+            proposedMatch: first.label,
+            detailedLabelById: detailedLabelById,
+            base: <String, Object?>{
+              'operation': 'update_equipment_fk',
+              'fkColumn': 'contract',
+            },
+          ),
           options: [
             for (final match in inName.take(10))
               LampIssueResolutionOption(
                 id: 'contract_${match.id}',
-                label: '${match.id} · ${match.label}',
+                label: _referenceOptionDisplayLabel(
+                  match,
+                  detailedLabelById: detailedLabelById,
+                ),
+                description: 'Ακριβής αντιστοίχιση',
                 action: LampIssueResolutionAction.autoFix,
                 proposedId: match.id,
                 proposedMatch: match.label,
@@ -1431,6 +1530,7 @@ class LampIssueResolutionService {
       createLabel: 'contract_name',
       exactAutoConfidence: 96,
       fuzzyAllowed: false,
+      detailedLabelById: detailedLabelById,
     );
   }
 

@@ -68,6 +68,7 @@ class _LampScreenState extends ConsumerState<LampScreen> {
   int _lampRequestBaseline = 0;
   List<Map<String, Object?>> _results = const <Map<String, Object?>>[];
   List<Map<String, Object?>> _issues = const <Map<String, Object?>>[];
+  final Set<String> _expandedIssueGroupKeys = <String>{};
 
   @override
   void initState() {
@@ -261,7 +262,10 @@ class _LampScreenState extends ConsumerState<LampScreen> {
       await _loadIssues();
       await _repository.preloadSearchCache(read);
     } else {
-      setState(() => _issues = const <Map<String, Object?>>[]);
+      setState(() {
+        _issues = const <Map<String, Object?>>[];
+        _expandedIssueGroupKeys.clear();
+      });
     }
     if (announce) {
       _announceCheck(result, source: source);
@@ -411,6 +415,7 @@ class _LampScreenState extends ConsumerState<LampScreen> {
       _message = null;
       _results = const <Map<String, Object?>>[];
       _issues = const <Map<String, Object?>>[];
+      _expandedIssueGroupKeys.clear();
     });
     _lampSettingsDialogSetState?.call(() {});
 
@@ -566,7 +571,10 @@ class _LampScreenState extends ConsumerState<LampScreen> {
     if (path.isEmpty) return;
     if (_readPathCheck?.status != LampOldDbStatus.ok) {
       if (mounted) {
-        setState(() => _issues = const <Map<String, Object?>>[]);
+        setState(() {
+        _issues = const <Map<String, Object?>>[];
+        _expandedIssueGroupKeys.clear();
+      });
       }
       return;
     }
@@ -576,7 +584,10 @@ class _LampScreenState extends ConsumerState<LampScreen> {
       setState(() => _issues = issues);
     } catch (e) {
       if (!mounted) return;
-      setState(() => _issues = const <Map<String, Object?>>[]);
+      setState(() {
+        _issues = const <Map<String, Object?>>[];
+        _expandedIssueGroupKeys.clear();
+      });
       _showSnack('Δεν φορτώθηκαν τα προβλήματα ETL: $e', isError: true);
     }
   }
@@ -688,6 +699,141 @@ class _LampScreenState extends ConsumerState<LampScreen> {
       return a.key.compareTo(b.key);
     });
     return entries;
+  }
+
+  int _flatIssuesItemCount(
+    List<MapEntry<String, List<Map<String, Object?>>>> groups,
+  ) {
+    var count = 0;
+    for (final group in groups) {
+      count++;
+      if (_expandedIssueGroupKeys.contains(group.key)) {
+        count += group.value.length;
+      }
+    }
+    return count;
+  }
+
+  ({int groupIndex, bool isHeader, int? issueIndex})? _flatIssueRefAt(
+    List<MapEntry<String, List<Map<String, Object?>>>> groups,
+    int flatIndex,
+  ) {
+    var i = 0;
+    for (var g = 0; g < groups.length; g++) {
+      if (i == flatIndex) {
+        return (groupIndex: g, isHeader: true, issueIndex: null);
+      }
+      i++;
+      if (_expandedIssueGroupKeys.contains(groups[g].key)) {
+        final issues = groups[g].value;
+        for (var j = 0; j < issues.length; j++) {
+          if (i == flatIndex) {
+            return (groupIndex: g, isHeader: false, issueIndex: j);
+          }
+          i++;
+        }
+      }
+    }
+    return null;
+  }
+
+  Widget _issueEntryListTile(Map<String, Object?> issue) {
+    final entityType = _issueEntityTypeDisplayLabel(
+      _issueEntityTypeValue(issue),
+    );
+    final origin = _issueOriginDisplayLabel(_issueOriginValue(issue));
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const Divider(height: 1),
+        ListTile(
+          leading: const Icon(Icons.warning_amber),
+          title: Text(
+            'Οντότητα: $entityType | '
+            'Προέλευση: $origin | '
+            'Γραμμή: ${_issueField(issue, 'row_number')}',
+          ),
+          subtitle: Text(
+            'Στήλη: ${_issueField(issue, 'column_name')}\n'
+            'Τιμή: ${_issueField(issue, 'raw_value')}\n'
+            '${_issueField(issue, 'message')}',
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _issueGroupHeaderCard({
+    required BuildContext context,
+    required String rawIssueType,
+    required String categoryLabel,
+    required List<Map<String, Object?>> issues,
+    required LampIssueType? lampIssueType,
+  }) {
+    final expanded = _expandedIssueGroupKeys.contains(rawIssueType);
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: () {
+          setState(() {
+            if (expanded) {
+              _expandedIssueGroupKeys.remove(rawIssueType);
+            } else {
+              _expandedIssueGroupKeys.add(rawIssueType);
+            }
+          });
+        },
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(
+                expanded ? Icons.expand_less : Icons.expand_more,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+              const SizedBox(width: 8),
+              const Icon(Icons.category_outlined),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Text(
+                  categoryLabel,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                '${issues.length}',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              if (lampIssueType != null) ...[
+                const SizedBox(width: 4),
+                IconButton(
+                  tooltip: '${lampIssueType.label} (${issues.length})',
+                  visualDensity: VisualDensity.compact,
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(
+                    minWidth: 36,
+                    minHeight: 36,
+                  ),
+                  onPressed: _canResolveIssueType(lampIssueType)
+                      ? () => _runIssueResolution(lampIssueType)
+                      : null,
+                  icon: _resolvingIssueType == lampIssueType
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : Icon(_resolveIssueIcon(lampIssueType)),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   Future<void> _showIssueResolutionOrderInfo(BuildContext context) {
@@ -1898,91 +2044,34 @@ class _LampScreenState extends ConsumerState<LampScreen> {
         Expanded(
           child: ListView.separated(
             padding: const EdgeInsets.all(16),
-            itemCount: groups.length,
-            separatorBuilder: (context, index) => const SizedBox(height: 12),
-            itemBuilder: (context, index) {
-              final group = groups[index];
+            itemCount: _flatIssuesItemCount(groups),
+            separatorBuilder: (context, index) {
+              final next = _flatIssueRefAt(groups, index + 1);
+              if (next != null && next.isHeader) {
+                return const SizedBox(height: 12);
+              }
+              return const SizedBox.shrink();
+            },
+            itemBuilder: (context, flatIndex) {
+              final ref = _flatIssueRefAt(groups, flatIndex);
+              if (ref == null) return const SizedBox.shrink();
+              final group = groups[ref.groupIndex];
               final rawIssueType = group.key;
               final issues = group.value;
-              final categoryLabel = _issueCategoryDisplayLabel(rawIssueType);
-              final lampIssueType = _lampIssueTypeForRaw(rawIssueType);
+              if (ref.isHeader) {
+                return _issueGroupHeaderCard(
+                  context: context,
+                  rawIssueType: rawIssueType,
+                  categoryLabel: _issueCategoryDisplayLabel(rawIssueType),
+                  issues: issues,
+                  lampIssueType: _lampIssueTypeForRaw(rawIssueType),
+                );
+              }
+              final issue = issues[ref.issueIndex!];
               return Card(
+                margin: EdgeInsets.zero,
                 clipBehavior: Clip.antiAlias,
-                child: ExpansionTile(
-                  leading: const Icon(Icons.category_outlined),
-                  title: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(
-                        child: Text(
-                          categoryLabel,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        '${issues.length}',
-                        style: Theme.of(context).textTheme.titleMedium,
-                      ),
-                      if (lampIssueType != null) ...[
-                        const SizedBox(width: 4),
-                        IconButton(
-                          tooltip: '${lampIssueType.label} (${issues.length})',
-                          visualDensity: VisualDensity.compact,
-                          padding: EdgeInsets.zero,
-                          constraints: const BoxConstraints(
-                            minWidth: 36,
-                            minHeight: 36,
-                          ),
-                          onPressed: _canResolveIssueType(lampIssueType)
-                              ? () => _runIssueResolution(lampIssueType)
-                              : null,
-                          icon: _resolvingIssueType == lampIssueType
-                              ? const SizedBox(
-                                  width: 18,
-                                  height: 18,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                  ),
-                                )
-                              : Icon(_resolveIssueIcon(lampIssueType)),
-                        ),
-                      ],
-                    ],
-                  ),
-                  children: [
-                    const Divider(height: 1),
-                    ...List<Widget>.generate(issues.length, (issueIndex) {
-                      final issue = issues[issueIndex];
-                      final entityType = _issueEntityTypeDisplayLabel(
-                        _issueEntityTypeValue(issue),
-                      );
-                      final origin = _issueOriginDisplayLabel(
-                        _issueOriginValue(issue),
-                      );
-                      return Column(
-                        children: [
-                          ListTile(
-                            leading: const Icon(Icons.warning_amber),
-                            title: Text(
-                              'Οντότητα: $entityType | '
-                              'Προέλευση: $origin | '
-                              'Γραμμή: ${_issueField(issue, 'row_number')}',
-                            ),
-                            subtitle: Text(
-                              'Στήλη: ${_issueField(issue, 'column_name')}\n'
-                              'Τιμή: ${_issueField(issue, 'raw_value')}\n'
-                              '${_issueField(issue, 'message')}',
-                            ),
-                          ),
-                          if (issueIndex < issues.length - 1)
-                            const Divider(height: 1),
-                        ],
-                      );
-                    }),
-                  ],
-                ),
+                child: _issueEntryListTile(issue),
               );
             },
           ),
