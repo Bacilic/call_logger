@@ -460,6 +460,9 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
   bool _isFillingFromLookup = false;
   static const int _criticalTaskPriority = 2;
 
+  bool get _hasManualEquipmentSelection =>
+      state.equipmentIsManual && state.selectedEquipment != null;
+
   /// Έως ένα quick task ανά κύκλο φόρμας· set μόνο μετά επιτυχή insert.
   int? _associationQuickTaskId;
 
@@ -749,6 +752,16 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
 
   void updatePhone(String? value) {
     if (value == state.selectedPhone && state.selectedCaller != null) return;
+    if (_isFillingFromLookup) {
+      state = state.copyWith(
+        selectedPhone: value,
+        clearSelectedPhone: value == null,
+        clearPhoneError: true,
+        clearPhoneCandidates: true,
+      );
+      return;
+    }
+    final preserveEquipment = _hasManualEquipmentSelection;
     state = state.copyWith(
       selectedPhone: value,
       clearSelectedPhone: value == null,
@@ -760,7 +773,7 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
         clearCallerCandidates: true,
         clearSelectedCaller: true,
         clearEquipmentCandidates: true,
-        clearSelectedEquipment: true,
+        clearSelectedEquipment: !preserveEquipment,
         isPhoneAmbiguous: false,
         isEquipmentAmbiguous: false,
         callerNoMatch: false,
@@ -771,7 +784,7 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
         clearCallerCandidates: true,
         clearSelectedCaller: true,
         clearEquipmentCandidates: true,
-        clearSelectedEquipment: true,
+        clearSelectedEquipment: !preserveEquipment,
         isPhoneAmbiguous: false,
         isEquipmentAmbiguous: false,
         callerNoMatch: false,
@@ -993,7 +1006,7 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
           clearCallerCandidates: true,
           clearSelectedCaller: true,
           clearEquipmentCandidates: true,
-          clearSelectedEquipment: true,
+          clearSelectedEquipment: !_hasManualEquipmentSelection,
           isPhoneAmbiguous: false,
           isEquipmentAmbiguous: false,
           callerNoMatch: false,
@@ -1103,7 +1116,7 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
         callerCandidates: users,
         clearSelectedCaller: true,
         equipmentCandidates: [],
-        clearSelectedEquipment: true,
+        clearSelectedEquipment: !_hasManualEquipmentSelection,
         isPhoneAmbiguous: true,
         isEquipmentAmbiguous: false,
         callerNoMatch: false,
@@ -1133,7 +1146,7 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
     if (list.isEmpty) {
       state = state.copyWith(
         equipmentCandidates: [],
-        clearSelectedEquipment: true,
+        clearSelectedEquipment: !_hasManualEquipmentSelection,
         isEquipmentAmbiguous: false,
         equipmentNoMatch: true,
       );
@@ -1161,7 +1174,7 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
     }
     state = state.copyWith(
       equipmentCandidates: list,
-      clearSelectedEquipment: true,
+      clearSelectedEquipment: !_hasManualEquipmentSelection,
       isEquipmentAmbiguous: true,
       equipmentNoMatch: false,
     );
@@ -1256,7 +1269,7 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
       if (list.isEmpty) {
         state = state.copyWith(
           equipmentCandidates: [],
-          clearSelectedEquipment: true,
+          clearSelectedEquipment: !_hasManualEquipmentSelection,
           isEquipmentAmbiguous: false,
           equipmentNoMatch: true,
         );
@@ -1265,7 +1278,7 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
       if (list.length > 1) {
         state = state.copyWith(
           equipmentCandidates: list,
-          clearSelectedEquipment: true,
+          clearSelectedEquipment: !_hasManualEquipmentSelection,
           isEquipmentAmbiguous: true,
           equipmentNoMatch: false,
         );
@@ -1273,13 +1286,18 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
       }
 
       final equipment = list.first;
+      final preserveManual = state.equipmentIsManual;
+      final resolvedText = equipment.code?.trim().isNotEmpty == true
+          ? equipment.code!.trim()
+          : query;
       state = state.copyWith(
         selectedEquipment: equipment,
+        equipmentText: resolvedText,
         clearPhoneCandidates: true,
         equipmentCandidates: [],
         isEquipmentAmbiguous: false,
         equipmentNoMatch: false,
-        equipmentIsManual: false,
+        equipmentIsManual: preserveManual,
       );
 
       final owners = equipment.id != null
@@ -1460,9 +1478,15 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
   }
 
   void setEquipment(EquipmentModel? value) {
+    final text = value == null
+        ? ''
+        : (value.code?.trim().isNotEmpty == true
+              ? value.code!.trim()
+              : value.displayLabel.trim());
     state = state.copyWith(
       selectedEquipment: value,
       clearSelectedEquipment: value == null,
+      equipmentText: text,
       clearEquipmentCandidates: true,
       isEquipmentAmbiguous: false,
       equipmentNoMatch: false,

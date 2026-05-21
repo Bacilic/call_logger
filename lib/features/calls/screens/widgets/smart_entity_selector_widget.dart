@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -228,10 +228,21 @@ class SmartEntitySelectorWidgetState
         );
       }
       if (next.equipmentText != _equipmentController.text) {
-        _equipmentController.value = TextEditingValue(
-          text: next.equipmentText,
-          selection: TextSelection.collapsed(offset: next.equipmentText.length),
-        );
+        final selectedCode = next.selectedEquipment?.code?.trim() ?? '';
+        final controllerText = _equipmentController.text.trim();
+        // Μην αντικαθιστάς πλήρη κωδικό με ημιτελές equipmentText (π.χ. "29" αντί "2990").
+        if (selectedCode.isNotEmpty &&
+            controllerText.isNotEmpty &&
+            controllerText == selectedCode) {
+          // controller είναι σωστό· το state θα συγχρονιστεί από setEquipment/checkContent.
+        } else {
+          _equipmentController.value = TextEditingValue(
+            text: next.equipmentText,
+            selection: TextSelection.collapsed(
+              offset: next.equipmentText.length,
+            ),
+          );
+        }
       }
     });
 
@@ -1954,6 +1965,12 @@ class _EquipmentFieldState extends State<_EquipmentField> {
   void _performLookup() {
     final query = widget.controller.text.trim();
     if (query.isEmpty) return;
+    final selected = widget.header.selectedEquipment;
+    if (widget.header.equipmentIsManual &&
+        selected != null &&
+        query == _equipmentFieldText(selected)) {
+      return;
+    }
     widget.notifier.performEquipmentLookupByCode(query);
   }
 
@@ -2133,15 +2150,15 @@ class _EquipmentFieldState extends State<_EquipmentField> {
     EquipmentModel equipment, {
     bool fromCustomList = false,
   }) {
+    _debounce?.cancel();
     _isSelectingEquipment = true;
     if (fromCustomList) _justSelectedFromCustomList = true;
-    _setControllerText(widget.controller, _equipmentFieldText(equipment));
+    final fieldText = _equipmentFieldText(equipment);
+    _setControllerText(widget.controller, fieldText);
     widget.notifier.setEquipment(equipment);
     widget.notifier.markEquipmentAsManual();
-    widget.notifier.performEquipmentLookupByCode(
-      _equipmentFieldText(equipment),
-    );
-    widget.notifier.checkContent(equipmentText: widget.controller.text);
+    widget.notifier.checkContent(equipmentText: fieldText);
+    widget.notifier.performEquipmentLookupByCode(fieldText);
     setState(() {
       _showInitialList = false;
     });
@@ -2187,6 +2204,10 @@ class _EquipmentFieldState extends State<_EquipmentField> {
         !_justSelectedFromCustomList &&
         widget.header.equipmentCandidates.length <= 1 &&
         widget.header.isEquipmentAmbiguous == false) {
+      final manualText = widget.header.equipmentText.trim();
+      if (widget.header.equipmentIsManual && manualText.isNotEmpty) {
+        return;
+      }
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
           widget.controller.clear();
