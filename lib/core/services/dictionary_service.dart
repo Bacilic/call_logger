@@ -1,8 +1,7 @@
-import 'dart:collection';
+﻿import 'dart:collection';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 import '../config/app_config.dart';
@@ -59,7 +58,6 @@ class DictionaryService {
 
   Future<void> load() async {
     if (_loaded) return;
-    final sw = Stopwatch()..start();
     String text;
     final customPath = await SettingsService().getDictionarySourcePath();
     if (customPath != null && customPath.isNotEmpty) {
@@ -88,13 +86,6 @@ class DictionaryService {
       }
     }
     _loaded = true;
-    sw.stop();
-    assert(() {
-      debugPrint(
-        'DictionaryService: wordCount=$wordCount loadMs=${sw.elapsedMilliseconds}',
-      );
-      return true;
-    }());
   }
 
   /// Προτιμάται ως εμφάνιση η μορφή με τόνους / μακρύτερη / λεξικογραφικά πρώτη.

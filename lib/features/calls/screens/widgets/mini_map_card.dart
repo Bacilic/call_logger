@@ -36,6 +36,10 @@ class MiniMapCard extends ConsumerStatefulWidget {
 class _MiniMapCardState extends ConsumerState<MiniMapCard> {
   static const double _kCardWidth = 336;
   static const double _kSnapshotHeight = 170;
+  static const String _kDepartmentNotFoundAsset =
+      'assets/department_not_found.png';
+  static const String _kDepartmentNotOnMapMessage =
+      'Δεν υπάρχει το τμήμα στο χάρτη';
 
   late Future<_MiniMapCardData> _dataFuture;
   _MiniMapMode _mode = _MiniMapMode.equipment;
@@ -259,6 +263,9 @@ class _MiniMapCardState extends ConsumerState<MiniMapCard> {
     if (dept == null) {
       return _placeholder(context, 'Δεν βρέθηκε τμήμα για προεπισκόπηση.');
     }
+    if (!dept.isMapped) {
+      return _departmentNotOnMap(context);
+    }
     final floorId = dept.mapFloor == null ? null : int.tryParse(dept.mapFloor!.trim());
     final floor = floorId == null
         ? data.floors.firstOrNull
@@ -275,27 +282,10 @@ class _MiniMapCardState extends ConsumerState<MiniMapCard> {
       return _placeholder(context, 'Δεν βρέθηκε αρχείο κατόψης.');
     }
 
-    final nx = dept.mapX;
-    final ny = dept.mapY;
-    final nw = dept.mapWidth;
-    final nh = dept.mapHeight;
-    final mapped =
-        nx != null && ny != null && nw != null && nh != null && nw > 0 && nh > 0;
-    if (!mapped) {
-      return ClipRect(
-        child: Container(
-          color: Colors.black12,
-          alignment: Alignment.center,
-          child: Image.file(
-            File(imagePath),
-            fit: BoxFit.contain,
-            width: _kCardWidth,
-            height: _kSnapshotHeight,
-            filterQuality: FilterQuality.medium,
-          ),
-        ),
-      );
-    }
+    final nx = dept.mapX!;
+    final ny = dept.mapY!;
+    final nw = dept.mapWidth!;
+    final nh = dept.mapHeight!;
 
     final cx = (nx + (nw / 2)).clamp(0.0, 1.0);
     final cy = (ny + (nh / 2)).clamp(0.0, 1.0);
@@ -383,6 +373,35 @@ class _MiniMapCardState extends ConsumerState<MiniMapCard> {
           ),
         );
       },
+    );
+  }
+
+  Widget _departmentNotOnMap(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      alignment: Alignment.center,
+      color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.45),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Image.asset(
+              _kDepartmentNotFoundAsset,
+              height: 96,
+              fit: BoxFit.contain,
+              filterQuality: FilterQuality.medium,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              _kDepartmentNotOnMapMessage,
+              textAlign: TextAlign.center,
+              style: theme.textTheme.bodySmall,
+            ),
+          ],
+        ),
+      ),
     );
   }
 

@@ -1,8 +1,15 @@
-part of 'smart_entity_selector_widget.dart';
+﻿import 'package:flutter/material.dart';
+
+import '../../../../core/utils/name_parser.dart';
+import '../../provider/smart_entity_selector_provider.dart';
 
 /// Οπτική ανατροφοδότηση: πώς θα ερμηνευτεί το κείμενο Καλούντα (Όνομα / Επώνυμο).
-class _CallerParseHint extends StatelessWidget {
-  const _CallerParseHint({required this.header, required this.theme});
+class CallerNameParseHint extends StatelessWidget {
+  const CallerNameParseHint({
+    super.key,
+    required this.header,
+    required this.theme,
+  });
 
   final SmartEntitySelectorState header;
   final ThemeData theme;

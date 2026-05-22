@@ -1,7 +1,11 @@
-part of 'smart_entity_selector_widget.dart';
+﻿import 'package:flutter/material.dart';
 
-class _PhoneHelperAndError extends StatelessWidget {
-  const _PhoneHelperAndError({
+import '../../../../core/services/lookup_service.dart';
+import '../../provider/smart_entity_selector_provider.dart';
+
+class SmartEntityPhoneHelperAndError extends StatelessWidget {
+  const SmartEntityPhoneHelperAndError({
+    super.key,
     required this.header,
     required this.lookupService,
     required this.notifier,
@@ -18,12 +22,12 @@ class _PhoneHelperAndError extends StatelessWidget {
     if (header.selectedCaller != null &&
         header.selectedPhone != null &&
         lookupService != null) {
-      // Ο πρώτος χρήστης που ταιριάζει στο τηλέφωνο (search) μπορεί να είναι
-      // διαφορετικός από τον επιλεγμένο καλούντα· εμφανίζουμε εξοπλισμό του επιλεγμένου.
       final callerId = header.selectedCaller!.id;
       equipmentCount = callerId != null
           ? lookupService!.findEquipmentsForUser(callerId).length
-          : lookupService!.searchEquipmentsByPhone(header.selectedPhone!).length;
+          : lookupService!
+                .searchEquipmentsByPhone(header.selectedPhone!)
+                .length;
     } else {
       equipmentCount = null;
     }
