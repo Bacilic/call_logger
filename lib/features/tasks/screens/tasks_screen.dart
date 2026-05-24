@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
+import '../../../core/errors/task_save_exception.dart';
 import '../../../core/providers/task_focus_intent_provider.dart';
 import '../../calls/provider/lookup_provider.dart';
 import '../../directory/providers/department_directory_provider.dart';
@@ -217,19 +218,30 @@ class _TasksScreenState extends ConsumerState<TasksScreen> {
     );
   }
 
+  static void _showTaskSaveError(BuildContext context, TaskSaveException e) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(e.message)),
+    );
+  }
+
   static Future<void> _openNewTaskForm(
     BuildContext context,
     WidgetRef ref,
   ) async {
     final result = await showTaskFormDialog(context, task: null);
     if (!context.mounted || result == null) return;
-    await ref
-        .read(tasksProvider.notifier)
-        .addTask(result.copyWith(origin: Task.originManualFab));
-    if (!context.mounted) return;
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('Εκκρεμότητα δημιουργήθηκε.')));
+    try {
+      await ref
+          .read(tasksProvider.notifier)
+          .addTask(result.copyWith(origin: Task.originManualFab));
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Εκκρεμότητα δημιουργήθηκε.')));
+    } on TaskSaveException catch (e) {
+      if (!context.mounted) return;
+      _showTaskSaveError(context, e);
+    }
   }
 
   static Future<void> _openTaskSettings(
@@ -256,71 +268,76 @@ class _TasksScreenState extends ConsumerState<TasksScreen> {
     final result = await showTaskFormDialog(context, task: task);
     if (!context.mounted || result == null) return;
 
-    if (closedMode != null) {
-      final notifier = ref.read(tasksProvider.notifier);
-      switch (closedMode) {
-        case _ClosedEditMode.recreate:
-          await notifier.addTask(
-            result.copyWith(
-              id: null,
-              status: TaskStatus.open.toDbValue,
-              solutionNotes: null,
-              snoozeHistoryJson: null,
-              createdAt: null,
-              updatedAt: null,
-            ),
-          );
-          if (!context.mounted) return;
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Δημιουργήθηκε νέα εκκρεμότητα.')),
-          );
-          return;
-        case _ClosedEditMode.reopen:
-          await notifier.updateTask(
-            result.copyWith(
-              status: TaskStatus.open.toDbValue,
-              // Ρητό: στην αναίρεση ολοκλήρωσης η λύση παραμένει.
-              solutionNotes: task.solutionNotes,
-              createdAt: task.createdAt,
-              snoozeHistoryJson: task.snoozeHistoryJson,
-            ),
-          );
-          if (!context.mounted) return;
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Η ολοκλήρωση αναιρέθηκε.')),
-          );
-          return;
-        case _ClosedEditMode.snooze:
-          final due = result.dueDateTime ?? DateTime.now();
-          await notifier.updateTask(
-            result
-                .copyWith(
-                  status: TaskStatus.snoozed.toDbValue,
-                  createdAt: task.createdAt,
-                )
-                .addSnoozeEntry(due),
-          );
-          if (!context.mounted) return;
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                'Η εκκρεμότητα αναβλήθηκε για τις: ${DateFormat('dd/MM HH:mm').format(due)}',
+    try {
+      if (closedMode != null) {
+        final notifier = ref.read(tasksProvider.notifier);
+        switch (closedMode) {
+          case _ClosedEditMode.recreate:
+            await notifier.addTask(
+              result.copyWith(
+                id: null,
+                status: TaskStatus.open.toDbValue,
+                solutionNotes: null,
+                snoozeHistoryJson: null,
+                createdAt: null,
+                updatedAt: null,
               ),
-            ),
-          );
-          return;
+            );
+            if (!context.mounted) return;
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Δημιουργήθηκε νέα εκκρεμότητα.')),
+            );
+            return;
+          case _ClosedEditMode.reopen:
+            await notifier.updateTask(
+              result.copyWith(
+                status: TaskStatus.open.toDbValue,
+                // Ρητό: στην αναίρεση ολοκλήρωσης η λύση παραμένει.
+                solutionNotes: task.solutionNotes,
+                createdAt: task.createdAt,
+                snoozeHistoryJson: task.snoozeHistoryJson,
+              ),
+            );
+            if (!context.mounted) return;
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Η ολοκλήρωση αναιρέθηκε.')),
+            );
+            return;
+          case _ClosedEditMode.snooze:
+            final due = result.dueDateTime ?? DateTime.now();
+            await notifier.updateTask(
+              result
+                  .copyWith(
+                    status: TaskStatus.snoozed.toDbValue,
+                    createdAt: task.createdAt,
+                  )
+                  .addSnoozeEntry(due),
+            );
+            if (!context.mounted) return;
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  'Η εκκρεμότητα αναβλήθηκε για τις: ${DateFormat('dd/MM HH:mm').format(due)}',
+                ),
+              ),
+            );
+            return;
+        }
       }
-    }
 
-    if (result.id != null) {
-      await ref.read(tasksProvider.notifier).updateTask(result);
-    } else {
-      await ref.read(tasksProvider.notifier).addTask(result);
+      if (result.id != null) {
+        await ref.read(tasksProvider.notifier).updateTask(result);
+      } else {
+        await ref.read(tasksProvider.notifier).addTask(result);
+      }
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Εκκρεμότητα ενημερώθηκε.')));
+    } on TaskSaveException catch (e) {
+      if (!context.mounted) return;
+      _showTaskSaveError(context, e);
     }
-    if (!context.mounted) return;
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('Εκκρεμότητα ενημερώθηκε.')));
   }
 
   static String _buildClosedInfoText(Task task) {
@@ -540,15 +557,20 @@ class _TasksScreenState extends ConsumerState<TasksScreen> {
             status: TaskStatus.snoozed.toDbValue,
           )
           .addSnoozeEntry(newDue);
-      await ref.read(tasksProvider.notifier).updateTask(updatedTask);
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Η εκκρεμότητα αναβλήθηκε για τις: ${DateFormat('dd/MM HH:mm').format(newDue)}',
+      try {
+        await ref.read(tasksProvider.notifier).updateTask(updatedTask);
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Η εκκρεμότητα αναβλήθηκε για τις: ${DateFormat('dd/MM HH:mm').format(newDue)}',
+            ),
           ),
-        ),
-      );
+        );
+      } on TaskSaveException catch (e) {
+        if (!context.mounted) return;
+        _showTaskSaveError(context, e);
+      }
       return;
     }
 
@@ -589,15 +611,20 @@ class _TasksScreenState extends ConsumerState<TasksScreen> {
           status: TaskStatus.snoozed.toDbValue,
         )
         .addSnoozeEntry(newDue);
-    await ref.read(tasksProvider.notifier).updateTask(updatedTask);
-    if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          'Η εκκρεμότητα αναβλήθηκε για τις: ${DateFormat('dd/MM HH:mm').format(newDue)}',
+    try {
+      await ref.read(tasksProvider.notifier).updateTask(updatedTask);
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Η εκκρεμότητα αναβλήθηκε για τις: ${DateFormat('dd/MM HH:mm').format(newDue)}',
+          ),
         ),
-      ),
-    );
+      );
+    } on TaskSaveException catch (e) {
+      if (!context.mounted) return;
+      _showTaskSaveError(context, e);
+    }
   }
 
   static Future<void> _onDelete(

@@ -1,4 +1,6 @@
-﻿import 'package:file_picker/file_picker.dart';
+﻿import 'dart:typed_data';
+
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -119,10 +121,17 @@ class _DictionarySettingsDialogState
   }
 
   Future<void> _pickSaveExportPath() async {
+    final existing = _exportPathCtrl.text.trim();
+    final fileName = existing.isNotEmpty
+        ? existing.replaceAll(r'\', '/').split('/').last
+        : 'dictionary_compile.txt';
+
     final p = await FilePicker.saveFile(
       dialogTitle: 'Αρχείο εξαγωγής Compile (TXT)',
+      fileName: fileName,
       type: FileType.custom,
       allowedExtensions: const ['txt'],
+      bytes: Uint8List(0),
     );
     if (p == null) return;
     _exportPathCtrl.text = p;

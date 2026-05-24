@@ -50,6 +50,14 @@ class DatabaseBackupSettingsNotifier
     await _persist();
   }
 
+  Future<void> setIncludeMapImagesInBackup(bool value) async {
+    state = state.copyWith(
+      includeMapImagesInBackup: value,
+      zipOutput: value ? true : state.zipOutput,
+    );
+    await _persist();
+  }
+
   Future<void> setBackupOnExit(bool value) async {
     state = state.copyWith(backupOnExit: value);
     await _persist();

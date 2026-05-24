@@ -510,7 +510,7 @@ final dashboardDepartmentsProvider = FutureProvider.autoDispose<List<String>>((
   ref,
 ) async {
   final db = await DatabaseHelper.instance.database;
-  final rows = await DirectoryRepository(db).getDepartments();
+  final rows = await DirectoryRepository(db).getActiveDepartments();
   return rows
       .map((r) => (r['name'] as String?)?.trim() ?? '')
       .where((s) => s.isNotEmpty)

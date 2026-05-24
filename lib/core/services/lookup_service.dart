@@ -132,7 +132,7 @@ class LookupService {
     if (_loadedDepartments) return;
     final db = await DatabaseHelper.instance.database;
     final dir = DirectoryRepository(db);
-    final maps = await dir.getDepartments();
+    final maps = await dir.getActiveDepartments();
     _departmentDirectPhones = await dir.getDepartmentDirectPhonesMap();
     _phoneDepartmentByNumber
       ..clear()

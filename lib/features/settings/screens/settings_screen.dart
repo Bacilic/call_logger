@@ -30,11 +30,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   final SettingsService _settings = SettingsService();
 
   bool _isLoadingSettings = true;
-  bool _showImportExcelButton = false;
   bool _showActiveTimer = true;
   bool _showEmptyRemoteLaunchers = true;
   bool _enableSpellCheck = true;
   bool _showDatabaseNav = true;
+  bool _showLampNav = true;
   bool _showDictionaryNav = true;
   int _databaseOpenTimeoutSeconds = AppConfig.databaseOpenTimeoutSeconds;
   int _databaseOpenMaxAttempts = AppConfig.databaseOpenMaxAttempts;
@@ -63,12 +63,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       _isLoadingSettings = true;
     });
     try {
-      final showImport = await _settings.getShowImportExcelButton();
       final showActiveTimer = await _settings.getShowActiveTimer();
       final showEmptyRemoteLaunchers = await _settings
           .getCallsShowEmptyRemoteLaunchers();
       final enableSpellCheck = await _settings.getEnableSpellCheck();
       final showDatabaseNav = await _settings.getShowDatabaseNav();
+      final showLampNav = await _settings.getShowLampNav();
       final showDictionaryNav = await _settings.getShowDictionaryNav();
       final dbOpenTimeout = await _settings.getDatabaseOpenTimeoutSeconds();
       final dbOpenMaxAttempts = await _settings.getDatabaseOpenMaxAttempts();
@@ -76,11 +76,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           .getCallsScreenCardsVisibility();
       if (mounted) {
         setState(() {
-          _showImportExcelButton = showImport;
           _showActiveTimer = showActiveTimer;
           _showEmptyRemoteLaunchers = showEmptyRemoteLaunchers;
           _enableSpellCheck = enableSpellCheck;
           _showDatabaseNav = showDatabaseNav;
+          _showLampNav = showLampNav;
           _showDictionaryNav = showDictionaryNav;
           _databaseOpenTimeoutSeconds = dbOpenTimeout;
           _databaseOpenMaxAttempts = dbOpenMaxAttempts;
@@ -298,17 +298,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               onTap: () => _openCallsCardsVisibilityEditor(),
             ),
             SwitchListTile(
-              value: _showImportExcelButton,
-              onChanged: (value) async {
-                await _settings.setShowImportExcelButton(value);
-                if (mounted) setState(() => _showImportExcelButton = value);
-              },
-              title: const Text('Εμφάνιση κουμπιού Import Excel'),
-              subtitle: const Text(
-                'Ενεργοποίηση για να εμφανίζεται το κουμπί εισαγωγής Excel στην κύρια οθόνη.',
-              ),
-            ),
-            SwitchListTile(
               value: _showActiveTimer,
               onChanged: (value) async {
                 await _settings.setShowActiveTimer(value);
@@ -357,6 +346,19 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               title: const Text('Απόκρυψη Βάσης Δεδομένων'),
               subtitle: const Text(
                 'Κρύβει το στοιχείο πλοήγησης «Βάση Δεδομένων». Οι ρυθμίσεις λεξικού είναι στην οθόνη Λεξικό.',
+              ),
+            ),
+            SwitchListTile(
+              value: !_showLampNav,
+              onChanged: (value) async {
+                final show = !value;
+                await _settings.setShowLampNav(show);
+                if (mounted) setState(() => _showLampNav = show);
+                ref.invalidate(showLampNavProvider);
+              },
+              title: const Text('Απόκρυψη παλιάς Βάσης Δεδομένων (Λάμπα)'),
+              subtitle: const Text(
+                'Κρύβει το στοιχείο πλοήγησης «Λάμπα» (μετατροπή Excel, παλιά βάση εξοπλισμού).',
               ),
             ),
             SwitchListTile(

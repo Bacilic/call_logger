@@ -7,6 +7,7 @@ import 'package:sqflite_common/sqlite_api.dart';
 import '../../../../core/database/database_helper.dart';
 import '../../../../core/database/directory_repository.dart';
 import '../../../../core/models/building_map_floor.dart';
+import '../../../../core/services/building_map_storage.dart';
 import '../../../../core/services/lookup_service.dart';
 import '../../../directory/building_map/screens/building_map_dialog.dart';
 import '../../../directory/models/department_model.dart';
@@ -172,10 +173,9 @@ class _MiniMapCardState extends ConsumerState<MiniMapCard> {
     final db = await DatabaseHelper.instance.database;
     final repo = DirectoryRepository(db);
     final floors = await repo.listBuildingMapFloors();
-    final departmentRows = await repo.getDepartments();
+    final departmentRows = await repo.getActiveDepartments();
     final departments = departmentRows
         .map(DepartmentModel.fromMap)
-        .where((d) => !d.isDeleted)
         .toList(growable: false);
     final byId = <int, DepartmentModel>{
       for (final d in departments)
@@ -276,12 +276,44 @@ class _MiniMapCardState extends ConsumerState<MiniMapCard> {
     if (floor == null) {
       return _placeholder(context, 'Δεν υπάρχει διαθέσιμο φύλλο χάρτη.');
     }
-    final imagePath = floor.imagePath.trim();
-    final imageExists = imagePath.isNotEmpty && File(imagePath).existsSync();
-    if (!imageExists) {
+    final storedImagePath = floor.imagePath.trim();
+    if (storedImagePath.isEmpty) {
       return _placeholder(context, 'Δεν βρέθηκε αρχείο κατόψης.');
     }
 
+    return FutureBuilder<String>(
+      key: ValueKey<String>(storedImagePath),
+      future: BuildingMapStorage.resolveToAbsolute(storedImagePath),
+      builder: (context, pathSnap) {
+        if (!pathSnap.hasData) {
+          return const Center(
+            child: SizedBox(
+              width: 28,
+              height: 28,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+          );
+        }
+        final imagePath = pathSnap.data!;
+        if (imagePath.isEmpty || !File(imagePath).existsSync()) {
+          return _placeholder(context, 'Δεν βρέθηκε αρχείο κατόψης.');
+        }
+        return _buildMappedFloorPreview(
+          context,
+          dept: dept,
+          floor: floor,
+          imagePath: imagePath,
+        );
+      },
+    );
+  }
+
+  Widget _buildMappedFloorPreview(
+    BuildContext context, {
+    required DepartmentModel dept,
+    required BuildingMapFloor floor,
+    required String imagePath,
+  }) {
     final nx = dept.mapX!;
     final ny = dept.mapY!;
     final nw = dept.mapWidth!;

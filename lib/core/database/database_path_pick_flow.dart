@@ -11,8 +11,8 @@ import 'database_init_runner.dart';
 Future<String?> pickDatabasePathWithSystemPicker() async {
   final fileResult = await FilePicker.pickFiles(
     type: FileType.custom,
-    allowedExtensions: ['db'],
-    dialogTitle: 'Επιλογή αρχείου βάσης δεδομένων (.db)',
+    allowedExtensions: ['db', 'zip'],
+    dialogTitle: 'Επιλογή αρχείου βάσης (.db) ή αντιγράφου (.zip)',
   );
 
   if (fileResult != null &&

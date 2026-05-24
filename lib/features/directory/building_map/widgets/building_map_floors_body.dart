@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/database/directory_repository.dart';
 import '../../../../core/models/building_map_floor.dart';
+import '../../../../core/services/building_map_storage.dart';
 import '../../providers/department_directory_provider.dart';
 import '../controllers/building_map_controller.dart';
 import '../providers/building_map_providers.dart';
@@ -34,6 +35,8 @@ class _BuildingMapFloorsBodyState extends ConsumerState<BuildingMapFloorsBody> {
   final FocusNode _globalSearchFocusNode = FocusNode();
 
   String? _scheduledDecodePath;
+  String? _scheduledResolvePath;
+  String _resolvedAbsImgPath = '';
 
   @override
   void dispose() {
@@ -47,6 +50,18 @@ class _BuildingMapFloorsBodyState extends ConsumerState<BuildingMapFloorsBody> {
     _scheduledDecodePath = imgPath;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(buildingMapControllerProvider).decodeImageForPath(imgPath);
+    });
+  }
+
+  void _scheduleResolveForCurrentPath(String storedPath) {
+    if (_scheduledResolvePath == storedPath) return;
+    _scheduledResolvePath = storedPath;
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final abs = storedPath.trim().isEmpty
+          ? ''
+          : await BuildingMapStorage.resolveToAbsolute(storedPath);
+      if (!mounted || _scheduledResolvePath != storedPath) return;
+      setState(() => _resolvedAbsImgPath = abs);
     });
   }
 
@@ -116,9 +131,11 @@ class _BuildingMapFloorsBodyState extends ConsumerState<BuildingMapFloorsBody> {
         final sheetStr = currentSheetId?.toString() ?? '';
         final rotRad = (current?.rotationDegrees ?? 0) * math.pi / 180;
         final imgPath = current?.imagePath ?? '';
-        final imgFile = File(imgPath);
+        _scheduleResolveForCurrentPath(imgPath);
+        final imgFile = File(_resolvedAbsImgPath);
 
-        final imgExists = imgPath.isNotEmpty && imgFile.existsSync();
+        final imgExists =
+            _resolvedAbsImgPath.isNotEmpty && imgFile.existsSync();
         final sz = decodedSize;
         final hasActiveCanvas = current != null && imgExists && sz != null;
 

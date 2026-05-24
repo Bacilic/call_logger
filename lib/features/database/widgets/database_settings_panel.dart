@@ -5,8 +5,10 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:path/path.dart' as p;
 
 import '../../../core/config/app_config.dart';
+import '../../../core/database/database_helper.dart';
 import '../../../core/database/database_init_runner.dart';
 import '../../../core/database/database_path_pick_flow.dart';
 import '../../../core/init/app_init_provider.dart';
@@ -154,8 +156,51 @@ class _DatabaseSettingsPanelState extends ConsumerState<DatabaseSettingsPanel> {
   }
 
   Future<void> _validateApplyAndFinishPick(String newPath) async {
-    final trimmed = newPath.trim();
+    var trimmed = newPath.trim();
     if (trimmed.isEmpty || !mounted) return;
+
+    if (trimmed.toLowerCase().endsWith('.zip')) {
+      final targetDb = p.join(p.dirname(trimmed), 'call_logger.db');
+      final confirm = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Επαναφορά από zip'),
+          content: Text(
+            'Το αντίγραφο θα αποσυμπιεστεί στη διαδρομή:\n$targetDb',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Άκυρο'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Συνέχεια'),
+            ),
+          ],
+        ),
+      );
+      if (confirm != true || !mounted) return;
+      try {
+        await DatabaseHelper.instance.closeConnection();
+      } catch (_) {}
+      final restored = await DatabaseBackupService.restoreFromBackupZip(
+        trimmed,
+        targetDatabasePath: targetDb,
+      );
+      if (!restored.success || restored.databasePath == null) {
+        if (mounted) {
+          setState(() {
+            _dbPathErrorMessage =
+                restored.message ?? 'Αποτυχία επαναφοράς από zip.';
+          });
+        }
+        return;
+      }
+      trimmed = restored.databasePath!;
+    }
+
+    if (!mounted) return;
 
     showDialog<void>(
       context: context,
@@ -676,6 +721,120 @@ class _DatabaseSettingsPanelState extends ConsumerState<DatabaseSettingsPanel> {
     }
   }
 
+  Future<void> _restoreFromBackupZip() async {
+    final picked = await FilePicker.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['zip'],
+      dialogTitle: 'Επιλογή αρχείου επαναφοράς (.zip)',
+    );
+    if (picked == null ||
+        picked.files.isEmpty ||
+        picked.files.single.path == null) {
+      return;
+    }
+    final zipPath = picked.files.single.path!.trim();
+    if (!mounted) return;
+
+    final defaultTarget = _currentDbPath.trim().isNotEmpty
+        ? _currentDbPath
+        : AppConfig.defaultDbPath;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Επαναφορά από zip'),
+        content: Text(
+          'Η βάση θα αντικατασταθεί στο:\n$defaultTarget\n\n'
+          'Οι εικόνες χαρτών (maps_images) θα τοποθετηθούν στον ίδιο φάκελο '
+          'δίπλα στη βάση. Συνέχεια;',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Άκυρο'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Επαναφορά'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => const AlertDialog(
+        content: Row(
+          children: [
+            SizedBox(
+              width: 48,
+              height: 48,
+              child: CircularProgressIndicator(strokeWidth: 3),
+            ),
+            SizedBox(width: 24),
+            Expanded(child: Text('Επαναφορά από zip…')),
+          ],
+        ),
+      ),
+    );
+
+    DatabaseRestoreResult result;
+    try {
+      try {
+        await DatabaseHelper.instance.closeConnection();
+      } catch (_) {}
+      result = await DatabaseBackupService.restoreFromBackupZip(
+        zipPath,
+        targetDatabasePath: defaultTarget,
+      );
+    } catch (e) {
+      result = DatabaseRestoreResult(
+        success: false,
+        message: e.toString(),
+      );
+    } finally {
+      if (mounted) {
+        Navigator.of(context, rootNavigator: true).pop();
+      }
+    }
+
+    if (!mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    if (!result.success) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(result.message ?? 'Αποτυχία επαναφοράς'),
+          backgroundColor: Theme.of(context).colorScheme.error,
+        ),
+      );
+      return;
+    }
+
+    if (result.databasePath != null) {
+      final outcome = await setAndVerifyDatabasePath(result.databasePath!);
+      if (!mounted) return;
+      if (outcome.ok) {
+        await widget.onDatabaseLifecycleChanged?.call();
+        await _loadDatabasePathSection();
+        messenger.showSnackBar(
+          SnackBar(content: Text(result.message ?? 'Η επαναφορά ολοκληρώθηκε.')),
+        );
+      } else {
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text(
+              outcome.runner.result.message ??
+                  'Η επαναφορά ολοκληρώθηκε αλλά η βάση δεν πέρασε έλεγχο.',
+            ),
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -1022,9 +1181,22 @@ class _DatabaseSettingsPanelState extends ConsumerState<DatabaseSettingsPanel> {
               title: const Text('Αποθήκευση σε μορφή .zip'),
               subtitle: const Text('Συμπίεση μετά το VACUUM INTO'),
               value: settings.zipOutput,
+              onChanged: settings.includeMapImagesInBackup
+                  ? null
+                  : (v) => ref
+                        .read(databaseBackupSettingsProvider.notifier)
+                        .setZipOutput(v),
+            ),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Συμπερίληψη εικόνων χαρτών'),
+              subtitle: const Text(
+                'Zip με call_logger.db και φάκελο maps_images (δίπλα στη βάση)',
+              ),
+              value: settings.includeMapImagesInBackup,
               onChanged: (v) => ref
                   .read(databaseBackupSettingsProvider.notifier)
-                  .setZipOutput(v),
+                  .setIncludeMapImagesInBackup(v),
             ),
             const Divider(height: 24),
             const SizedBox(height: 12),
@@ -1236,6 +1408,12 @@ class _DatabaseSettingsPanelState extends ConsumerState<DatabaseSettingsPanel> {
                   : _runBackupNow,
               icon: const Icon(Icons.save_alt_outlined),
               label: const Text('Δημιουργία αντιγράφου τώρα'),
+            ),
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              onPressed: _restoreFromBackupZip,
+              icon: const Icon(Icons.unarchive_outlined),
+              label: const Text('Επαναφορά από zip (βάση + χάρτες)'),
             ),
             ],
               ],

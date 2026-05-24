@@ -84,11 +84,11 @@ class BackupLocationHints {
   }
 
   static Iterable<({String letter, int driveType})> _iterEligibleWindowsDriveMeta() sync* {
-    final mask = GetLogicalDrives();
+    final mask = GetLogicalDrives().value;
     for (var i = 0; i < 26; i++) {
       if ((mask & (1 << i)) == 0) continue;
       final letter = String.fromCharCode(0x41 + i);
-      final rootPtr = '$letter:\\'.toNativeUtf16(allocator: calloc);
+      final rootPtr = '$letter:\\'.toPcwstr(allocator: calloc);
       try {
         final t = GetDriveType(rootPtr);
         if (t == DRIVE_CDROM ||

@@ -1053,15 +1053,28 @@ class _BuildingMapSheetViewportState
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             const Icon(Icons.broken_image_outlined, size: 48),
-            TextButton(
-              onPressed: () async {
-                await ref
-                    .read(buildingMapControllerProvider)
-                    .addFloorSheet(context);
-                w.onFloorsChanged();
-              },
-              child: const Text('Επανεπιλογή εικόνας (νέο φύλλο)'),
+            const SizedBox(height: 8),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              child: Text(
+                'Η εικόνα κατόψης δεν βρέθηκε.',
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
             ),
+            if (w.currentSheetId != null) ...[
+              const SizedBox(height: 12),
+              TextButton.icon(
+                onPressed: () async {
+                  await ref
+                      .read(buildingMapControllerProvider)
+                      .replaceFloorSheetImageById(context, w.currentSheetId!);
+                  w.onFloorsChanged();
+                },
+                icon: const Icon(Icons.image_outlined),
+                label: const Text('Επανεπιλογή εικόνας'),
+              ),
+            ],
           ],
         ),
       );

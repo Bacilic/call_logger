@@ -1,4 +1,8 @@
 import 'package:flutter/material.dart';
+
+import '../../../core/widgets/deleted_catalog_entity_text.dart';
+
+import '../../../core/errors/task_save_exception.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
@@ -202,7 +206,7 @@ class _TaskCardState extends ConsumerState<TaskCard> {
     final onVar = theme.colorScheme.onSurfaceVariant;
     final textStyle = theme.textTheme.bodySmall?.copyWith(color: onVar);
 
-    Widget row(IconData icon, String text) {
+    Widget row(IconData icon, String text, {bool linkedDeleted = false}) {
       return Row(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -210,11 +214,11 @@ class _TaskCardState extends ConsumerState<TaskCard> {
           Icon(icon, size: 16, color: onVar),
           const SizedBox(width: 4),
           Flexible(
-            child: Text(
-              text,
+            child: DeletedCatalogEntityText(
+              text: text,
+              isDeleted: linkedDeleted,
               style: textStyle,
               maxLines: 2,
-              overflow: TextOverflow.ellipsis,
             ),
           ),
         ],
@@ -225,10 +229,10 @@ class _TaskCardState extends ConsumerState<TaskCard> {
       spacing: 12.0,
       runSpacing: 4.0,
       children: [
-        if (hasUser) row(Icons.person_outline, user),
+        if (hasUser) row(Icons.person_outline, user, linkedDeleted: t.callerLinkedDeleted),
         if (hasPhone) row(Icons.phone_outlined, phone),
-        if (hasDept) row(Icons.domain, dept),
-        if (hasEquip) row(Icons.computer_outlined, equip),
+        if (hasDept) row(Icons.domain, dept, linkedDeleted: t.departmentLinkedDeleted),
+        if (hasEquip) row(Icons.computer_outlined, equip, linkedDeleted: t.equipmentLinkedDeleted),
       ],
     );
   }
@@ -330,12 +334,19 @@ class _TaskCardState extends ConsumerState<TaskCard> {
     final notes = task.solutionNotes?.trim().isNotEmpty == true
         ? task.solutionNotes!.trim()
         : 'Κλείσιμο μετά από επιτυχή επεξεργασία οντότητας';
-    await ref.read(tasksProvider.notifier).updateTask(
-          task.copyWith(
-            status: TaskStatus.closed.toDbValue,
-            solutionNotes: notes,
-          ),
-        );
+    try {
+      await ref.read(tasksProvider.notifier).updateTask(
+        task.copyWith(
+          status: TaskStatus.closed.toDbValue,
+          solutionNotes: notes,
+        ),
+      );
+    } on TaskSaveException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.message)),
+      );
+    }
   }
 
   @override

@@ -7,7 +7,9 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import '../../features/calls/models/call_model.dart';
 import '../../features/history/models/dashboard_filter_model.dart';
 import '../../features/history/models/dashboard_summary_model.dart';
+import '../errors/call_save_exception.dart';
 import '../services/audit_service.dart';
+import '../utils/history_entity_display_utils.dart';
 import '../utils/search_text_normalizer.dart';
 
 /// Πρόσβαση σε πίνακα `calls` και επαναδόμηση `search_index`.
@@ -110,16 +112,26 @@ class CallsRepository {
     return SearchTextNormalizer.normalizeForSearch(parts.join(' '));
   }
 
-  /// Επαναδόμηση `search_index` για όλες τις κλήσεις με [categoryId] (ίδιο [DatabaseExecutor] / transaction).
-  Future<void> rebuildSearchIndexForCallsByCategoryId(
-    DatabaseExecutor executor,
-    int categoryId,
-  ) async {
-    final rows = await executor.query(
-      'calls',
-      where: 'category_id = ?',
-      whereArgs: [categoryId],
+  /// Φίλτρο «όνομα χρήστη» dashboard — κανονικοποιημένο όπως keyword Ιστορικού.
+  void _appendDashboardUserFilter(
+    List<String> whereClauses,
+    List<dynamic> args,
+    String userPhoneExpr,
+    String userQuery,
+  ) {
+    final nq = SearchTextNormalizer.normalizeForSearch(userQuery);
+    if (nq.isEmpty) return;
+    whereClauses.add(
+      '(calls.search_index LIKE ? OR $userPhoneExpr LIKE ?)',
     );
+    args.add('%$nq%');
+    args.add('%$nq%');
+  }
+
+  Future<void> _rebuildSearchIndexForCallRows(
+    DatabaseExecutor executor,
+    List<Map<String, dynamic>> rows,
+  ) async {
     for (final row in rows) {
       final map = Map<String, dynamic>.from(row);
       final si = await _buildCallSearchIndex(executor, map);
@@ -132,7 +144,48 @@ class CallsRepository {
     }
   }
 
+  /// Επαναδόμηση `search_index` για όλες τις κλήσεις με [categoryId] (ίδιο [DatabaseExecutor] / transaction).
+  Future<void> rebuildSearchIndexForCallsByCategoryId(
+    DatabaseExecutor executor,
+    int categoryId,
+  ) async {
+    final rows = await executor.query(
+      'calls',
+      where: 'category_id = ?',
+      whereArgs: [categoryId],
+    );
+    await _rebuildSearchIndexForCallRows(executor, rows);
+  }
+
+  /// Επαναδόμηση `search_index` για μη-διαγραμμένες κλήσεις με [callerId].
+  Future<void> rebuildSearchIndexForCallsByCallerId(
+    DatabaseExecutor executor,
+    int callerId,
+  ) async {
+    final rows = await executor.query(
+      'calls',
+      where: 'caller_id = ? AND COALESCE(is_deleted, 0) = 0',
+      whereArgs: [callerId],
+    );
+    await _rebuildSearchIndexForCallRows(executor, rows);
+  }
+
+  /// Επαναδόμηση `search_index` για μη-διαγραμμένες κλήσεις με [equipmentId].
+  Future<void> rebuildSearchIndexForCallsByEquipmentId(
+    DatabaseExecutor executor,
+    int equipmentId,
+  ) async {
+    final rows = await executor.query(
+      'calls',
+      where: 'equipment_id = ? AND COALESCE(is_deleted, 0) = 0',
+      whereArgs: [equipmentId],
+    );
+    await _rebuildSearchIndexForCallRows(executor, rows);
+  }
+
   /// Εισάγει νέα κλήση. date/time τίθενται από τώρα αν δεν δοθούν.
+  ///
+  /// Κλήση + audit στο ίδιο transaction· σε αποτυχία rollback ([CallSaveException]).
   Future<int> insertCall(CallModel call) async {
     final now = DateTime.now();
     final map = <String, dynamic>{
@@ -156,32 +209,42 @@ class CallsRepository {
       'lansweeper_last_sync_at': call.lansweeperLastSyncAt,
       'is_deleted': 0,
     };
-    map['search_index'] = await _buildCallSearchIndex(db, map);
-    final id = await db.insert('calls', map);
     try {
-      final user = await AuditService.performingUser(db);
-      final nv = <String, dynamic>{};
-      for (final k in _kCallAuditFields) {
-        if (map.containsKey(k) && map[k] != null) {
-          nv[k] = map[k];
+      return await db.transaction((txn) async {
+        map['search_index'] = await _buildCallSearchIndex(txn, map);
+        final id = await txn.insert('calls', map);
+        final user = await AuditService.performingUser(db);
+        final nv = <String, dynamic>{};
+        for (final k in _kCallAuditFields) {
+          if (map.containsKey(k) && map[k] != null) {
+            nv[k] = map[k];
+          }
         }
-      }
-      final entityName = (await buildCallAuditDisplayLine(id)).trim();
-      await AuditService.log(
-        db,
-        action: 'ΔΗΜΙΟΥΡΓΙΑ ΚΛΗΣΗΣ',
-        userPerforming: user,
-        details: 'calls id=$id',
-        entityType: AuditEntityTypes.call,
-        entityId: id,
-        entityName: entityName.isEmpty ? null : entityName,
-        newValues: nv.isEmpty ? null : nv,
+        final entityName =
+            (await buildCallAuditDisplayLine(id, executor: txn)).trim();
+        await AuditService.log(
+          txn,
+          action: 'ΔΗΜΙΟΥΡΓΙΑ ΚΛΗΣΗΣ',
+          userPerforming: user,
+          details: 'calls id=$id',
+          entityType: AuditEntityTypes.call,
+          entityId: id,
+          entityName: entityName.isEmpty ? null : entityName,
+          newValues: nv.isEmpty ? null : nv,
+        );
+        return id;
+      });
+    } catch (e) {
+      if (e is CallSaveException) rethrow;
+      throw CallSaveException(
+        'Η κλήση δεν αποθηκεύτηκε. Δοκιμάστε ξανά.',
       );
-    } catch (_) {}
-    return id;
+    }
   }
 
   /// Ενημερώνει υπάρχουσα κλήση. Απαιτείται μη-null [CallModel.id].
+  ///
+  /// Κλήση + audit στο ίδιο transaction· σε αποτυχία rollback ([CallSaveException]).
   Future<int> updateCall(CallModel call) async {
     final id = call.id;
     if (id == null) {
@@ -218,40 +281,53 @@ class CallsRepository {
       'lansweeper_last_sync_at': call.lansweeperLastSyncAt,
       'is_deleted': call.isDeleted ? 1 : 0,
     };
-    map['search_index'] = await _buildCallSearchIndex(db, map);
-    final n = await db.update('calls', map, where: 'id = ?', whereArgs: [id]);
-    if (oldRow != null && n > 0) {
-      try {
-        final oldDiff = <String, dynamic>{};
-        final newDiff = <String, dynamic>{};
-        for (final k in _kCallAuditFields) {
-          final a = oldRow[k];
-          final b = map[k];
-          final sa = a?.toString() ?? '';
-          final sb = b?.toString() ?? '';
-          if (sa != sb) {
-            oldDiff[k] = a;
-            newDiff[k] = b;
+    try {
+      return await db.transaction((txn) async {
+        map['search_index'] = await _buildCallSearchIndex(txn, map);
+        final n = await txn.update(
+          'calls',
+          map,
+          where: 'id = ?',
+          whereArgs: [id],
+        );
+        if (oldRow != null && n > 0) {
+          final oldDiff = <String, dynamic>{};
+          final newDiff = <String, dynamic>{};
+          for (final k in _kCallAuditFields) {
+            final a = oldRow[k];
+            final b = map[k];
+            final sa = a?.toString() ?? '';
+            final sb = b?.toString() ?? '';
+            if (sa != sb) {
+              oldDiff[k] = a;
+              newDiff[k] = b;
+            }
+          }
+          if (newDiff.isNotEmpty) {
+            final user = await AuditService.performingUser(db);
+            final entityName =
+                (await buildCallAuditDisplayLine(id, executor: txn)).trim();
+            await AuditService.log(
+              txn,
+              action: 'ΤΡΟΠΟΠΟΙΗΣΗ ΚΛΗΣΗΣ',
+              userPerforming: user,
+              details: 'calls id=$id',
+              entityType: AuditEntityTypes.call,
+              entityId: id,
+              entityName: entityName.isEmpty ? null : entityName,
+              oldValues: oldDiff,
+              newValues: newDiff,
+            );
           }
         }
-        if (newDiff.isNotEmpty) {
-          final user = await AuditService.performingUser(db);
-          final entityName = (await buildCallAuditDisplayLine(id)).trim();
-          await AuditService.log(
-            db,
-            action: 'ΤΡΟΠΟΠΟΙΗΣΗ ΚΛΗΣΗΣ',
-            userPerforming: user,
-            details: 'calls id=$id',
-            entityType: AuditEntityTypes.call,
-            entityId: id,
-            entityName: entityName.isEmpty ? null : entityName,
-            oldValues: oldDiff,
-            newValues: newDiff,
-          );
-        }
-      } catch (_) {}
+        return n;
+      });
+    } catch (e) {
+      if (e is CallSaveException) rethrow;
+      throw CallSaveException(
+        'Η κλήση δεν ενημερώθηκε. Δοκιμάστε ξανά.',
+      );
     }
-    return n;
   }
 
   /// Επιστρέφει τις τελευταίες κλήσεις για καλούντα (calls.caller_id, κατά id DESC).
@@ -259,12 +335,19 @@ class CallsRepository {
     int callerId, {
     int limit = 3,
   }) async {
-    return db.query(
-      'calls',
-      where: 'caller_id = ? AND COALESCE(is_deleted, 0) = ?',
-      whereArgs: [callerId, 0],
-      orderBy: 'id DESC',
-      limit: limit,
+    return db.rawQuery(
+      '''
+      SELECT calls.*,
+        COALESCE(users.is_deleted, 0) AS caller_is_deleted,
+        COALESCE(equipment.is_deleted, 0) AS equipment_is_deleted
+      FROM calls
+      LEFT JOIN users ON users.id = calls.caller_id
+      LEFT JOIN equipment ON equipment.id = calls.equipment_id
+      WHERE calls.caller_id = ? AND COALESCE(calls.is_deleted, 0) = 0
+      ORDER BY calls.id DESC
+      LIMIT ?
+      ''',
+      [callerId, limit],
     );
   }
 
@@ -281,10 +364,13 @@ class CallsRepository {
           )
           ELSE ''
         END AS caller_text,
-        COALESCE(NULLIF(TRIM(calls.department_text), ''), departments.name, '') AS department_text
+        COALESCE(NULLIF(TRIM(calls.department_text), ''), departments.name, '') AS department_text,
+        COALESCE(users.is_deleted, 0) AS caller_is_deleted,
+        COALESCE(equipment.is_deleted, 0) AS equipment_is_deleted
       FROM calls
       LEFT JOIN users ON users.id = calls.caller_id
       LEFT JOIN departments ON departments.id = users.department_id
+      LEFT JOIN equipment ON equipment.id = calls.equipment_id
       WHERE COALESCE(calls.is_deleted, 0) = 0
       ORDER BY calls.id DESC
       LIMIT ?
@@ -305,8 +391,11 @@ class CallsRepository {
     if (code.isEmpty) return const <Map<String, dynamic>>[];
     return db.rawQuery(
       '''
-      SELECT calls.*
+      SELECT calls.*,
+        COALESCE(users.is_deleted, 0) AS caller_is_deleted,
+        COALESCE(equipment.is_deleted, 0) AS equipment_is_deleted
       FROM calls
+      LEFT JOIN users ON users.id = calls.caller_id
       LEFT JOIN equipment ON equipment.id = calls.equipment_id
       WHERE COALESCE(calls.is_deleted, 0) = 0
         AND (
@@ -361,6 +450,9 @@ class CallsRepository {
              COALESCE(cat.name, calls.category_text, '') AS category, calls.status, calls.duration, calls.is_priority,
              COALESCE(users.first_name, calls.caller_text, '') AS user_first_name,
              COALESCE(users.last_name, '') AS user_last_name,
+             COALESCE(users.is_deleted, 0) AS caller_is_deleted,
+             COALESCE(cat.is_deleted, 0) AS category_is_deleted,
+             COALESCE(equipment.is_deleted, 0) AS equipment_is_deleted,
              $userPhoneExpr AS user_phone,
              COALESCE(departments.name, calls.department_text, '-') AS user_department,
              COALESCE(equipment.code_equipment, calls.equipment_text, '-') AS equipment_code
@@ -442,13 +534,7 @@ class CallsRepository {
 
     final userQ = filter.userName?.trim();
     if (userQ != null && userQ.isNotEmpty) {
-      whereClausesBase.add(
-        '($callerNameExpr LIKE ? OR calls.caller_text LIKE ? OR $userPhoneExpr LIKE ?)',
-      );
-      final p = '%$userQ%';
-      argsBase.add(p);
-      argsBase.add(p);
-      argsBase.add(p);
+      _appendDashboardUserFilter(whereClausesBase, argsBase, userPhoneExpr, userQ);
     }
 
     final eqQ = filter.equipmentCode?.trim();
@@ -948,13 +1034,7 @@ WHERE ${whereSpark.join(' AND ')}
 
     final userQ = filter.userName?.trim();
     if (userQ != null && userQ.isNotEmpty) {
-      whereClauses.add(
-        '($callerNameExpr LIKE ? OR calls.caller_text LIKE ? OR $userPhoneExpr LIKE ?)',
-      );
-      final p = '%$userQ%';
-      args.add(p);
-      args.add(p);
-      args.add(p);
+      _appendDashboardUserFilter(whereClauses, args, userPhoneExpr, userQ);
     }
 
     final eqQ = filter.equipmentCode?.trim();
@@ -1046,24 +1126,47 @@ WHERE ${whereSpark.join(' AND ')}
     final phone = nz(r['user_phone']);
     final first = (r['user_first_name'] as String?)?.trim() ?? '';
     final last = (r['user_last_name'] as String?)?.trim() ?? '';
-    final caller = '$first $last'.trim();
+    var caller = '$first $last'.trim();
+    if (caller.isNotEmpty && historyEntityIsDeleted(r['caller_is_deleted'])) {
+      caller = historyDeletedDisplayLabel(
+        caller,
+        isDeleted: true,
+        deletedSuffix: kHistoryUserDeletedSuffix,
+      );
+    }
     final dept = nz(r['user_department']);
-    final equip = nz(r['equipment_code']);
+    var equip = nz(r['equipment_code']);
+    if (equip.isNotEmpty && historyEntityIsDeleted(r['equipment_is_deleted'])) {
+      equip = historyDeletedDisplayLabel(
+        equip,
+        isDeleted: true,
+        deletedSuffix: kHistoryEquipmentDeletedSuffix,
+      );
+    }
     return [phone, caller, dept, equip].where((s) => s.isNotEmpty).join(' - ');
   }
 
   /// Ίδια JOIN/COALESCE με [getHistoryCalls], για μία εγγραφή (π.χ. audit `entity_name`).
-  Future<String> buildCallAuditDisplayLine(int callId) async {
+  Future<String> buildCallAuditDisplayLine(
+    int callId, {
+    DatabaseExecutor? executor,
+  }) async {
     const userPhoneExpr =
         "COALESCE(NULLIF(TRIM(calls.phone_text), ''), upl.phone_list, '-')";
-    final rows = await db.rawQuery(
+    final ex = executor ?? db;
+    final rows = await ex.rawQuery(
       '''
       SELECT COALESCE(users.first_name, calls.caller_text, '') AS user_first_name,
              COALESCE(users.last_name, '') AS user_last_name,
+             COALESCE(users.is_deleted, 0) AS caller_is_deleted,
+             COALESCE(cat.is_deleted, 0) AS category_is_deleted,
+             COALESCE(equipment.is_deleted, 0) AS equipment_is_deleted,
+             COALESCE(cat.name, calls.category_text, '') AS category,
              $userPhoneExpr AS user_phone,
              COALESCE(departments.name, calls.department_text, '-') AS user_department,
              COALESCE(equipment.code_equipment, calls.equipment_text, '-') AS equipment_code
       FROM calls
+      LEFT JOIN categories cat ON cat.id = calls.category_id
       LEFT JOIN users ON calls.caller_id = users.id
       LEFT JOIN (
         SELECT up.user_id AS uid,

@@ -24,6 +24,7 @@ class DatabaseBackupSettings {
     required this.destinationDirectory,
     required this.namingFormat,
     required this.zipOutput,
+    required this.includeMapImagesInBackup,
     required this.backupOnExit,
     required this.interval,
     required this.backupDays,
@@ -41,6 +42,8 @@ class DatabaseBackupSettings {
   final String destinationDirectory;
   final DatabaseBackupNamingFormat namingFormat;
   final bool zipOutput;
+  /// Συμπερίληψη φακέλου `maps_images` στο zip (με `call_logger.db` εσωτερικά).
+  final bool includeMapImagesInBackup;
   /// Κύριος διακόπτης: αν false, δεν εκτελείται κανένα backup (ούτε χειροκίνητο).
   final bool backupOnExit;
   final DatabaseBackupInterval interval;
@@ -65,6 +68,7 @@ class DatabaseBackupSettings {
         destinationDirectory: '',
         namingFormat: DatabaseBackupNamingFormat.dateTimeThenBase,
         zipOutput: false,
+        includeMapImagesInBackup: false,
         backupOnExit: false,
         interval: DatabaseBackupInterval.never,
         backupDays: <int>[],
@@ -95,6 +99,7 @@ class DatabaseBackupSettings {
     String? destinationDirectory,
     DatabaseBackupNamingFormat? namingFormat,
     bool? zipOutput,
+    bool? includeMapImagesInBackup,
     bool? backupOnExit,
     DatabaseBackupInterval? interval,
     List<int>? backupDays,
@@ -112,6 +117,8 @@ class DatabaseBackupSettings {
           destinationDirectory ?? this.destinationDirectory,
       namingFormat: namingFormat ?? this.namingFormat,
       zipOutput: zipOutput ?? this.zipOutput,
+      includeMapImagesInBackup:
+          includeMapImagesInBackup ?? this.includeMapImagesInBackup,
       backupOnExit: backupOnExit ?? this.backupOnExit,
       interval: interval ?? this.interval,
       backupDays: backupDays ?? this.backupDays,
@@ -134,6 +141,7 @@ class DatabaseBackupSettings {
         'destinationDirectory': destinationDirectory,
         'namingFormat': namingFormat.index,
         'zipOutput': zipOutput,
+        'includeMapImagesInBackup': includeMapImagesInBackup,
         'backupOnExit': backupOnExit,
         'interval': interval.index,
         'backupDays': backupDays,
@@ -194,6 +202,7 @@ class DatabaseBackupSettings {
       destinationDirectory: s('destinationDirectory', ''),
       namingFormat: DatabaseBackupNamingFormat.values[nf],
       zipOutput: b('zipOutput', false),
+      includeMapImagesInBackup: b('includeMapImagesInBackup', false),
       backupOnExit: b('backupOnExit', false),
       interval: DatabaseBackupInterval.values[iv],
       backupDays: daysList('backupDays'),
@@ -229,6 +238,7 @@ class DatabaseBackupSettings {
     if (o.destinationDirectory != destinationDirectory ||
         o.namingFormat != namingFormat ||
         o.zipOutput != zipOutput ||
+        o.includeMapImagesInBackup != includeMapImagesInBackup ||
         o.backupOnExit != backupOnExit ||
         o.interval != interval ||
         o.backupTime != backupTime ||
@@ -252,6 +262,7 @@ class DatabaseBackupSettings {
         destinationDirectory,
         namingFormat,
         zipOutput,
+        includeMapImagesInBackup,
         backupOnExit,
         interval,
         Object.hashAll(backupDays),

@@ -10,7 +10,6 @@ import '../models/calls_screen_cards_visibility.dart';
 class SettingsService {
   static const String _keyDatabasePath = 'database_path';
   static const String _keyRecentPaths = 'recent_database_paths';
-  static const String _keyShowImportExcelButton = 'show_import_excel_button';
   static const String _keyShowActiveTimer = 'show_active_timer';
   static const String _keyShowTasksBadge = 'show_tasks_badge';
   static const String _keyNavRailShowLabels = 'nav_rail_show_labels';
@@ -33,6 +32,7 @@ class SettingsService {
   static const String _keyDictionarySourcePath = 'dictionary_source_path';
   static const String _keyDictionaryExportPath = 'dictionary_export_path';
   static const String _keyShowDatabaseNav = 'show_database_nav';
+  static const String _keyShowLampNav = 'show_lamp_nav';
   static const String _keyShowDictionaryNav = 'show_dictionary_nav';
   static const String _keyCallsScreenCardsVisibility =
       'calls_screen_cards_visibility_v1';
@@ -147,18 +147,6 @@ class SettingsService {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_keyDatabasePath);
     await _addToRecentPaths(prefs, AppConfig.defaultDbPath);
-  }
-
-  /// Εμφάνιση κουμπιού Import Excel στη βασική οθόνη. Προεπιλογή: false (απόκρυψη).
-  Future<bool> getShowImportExcelButton() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool(_keyShowImportExcelButton) ?? false;
-  }
-
-  /// Ορίζει αν θα εμφανίζεται το κουμπί Import Excel.
-  Future<void> setShowImportExcelButton(bool value) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_keyShowImportExcelButton, value);
   }
 
   /// Εμφάνιση ενεργού χρονομέτρου στη φόρμα κλήσεων. Προεπιλογή: true.
@@ -406,6 +394,17 @@ class SettingsService {
   Future<void> setShowDatabaseNav(bool value) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_keyShowDatabaseNav, value);
+  }
+
+  /// Εμφάνιση στοιχείου πλοήγησης «Λάμπα» (παλιά βάση). Προεπιλογή: true.
+  Future<bool> getShowLampNav() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_keyShowLampNav) ?? true;
+  }
+
+  Future<void> setShowLampNav(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_keyShowLampNav, value);
   }
 
   /// Εμφάνιση στοιχείου πλοήγησης «Λεξικό». Προεπιλογή: true.

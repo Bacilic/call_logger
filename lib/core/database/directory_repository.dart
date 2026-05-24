@@ -6,11 +6,12 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import '../models/building_map_floor.dart';
 import '../errors/department_exists_exception.dart';
 import '../utils/department_display_utils.dart';
-import '../utils/name_parser.dart';
 import '../utils/phone_list_parser.dart';
 import '../utils/search_text_normalizer.dart';
 import '../utils/department_floor_sync.dart';
+import 'user_delete_phone_policy.dart';
 import '../services/audit_service.dart';
+import 'calls_repository.dart';
 import 'database_helper.dart';
 import 'directory_audit_helpers.dart';
 
@@ -804,6 +805,9 @@ class DirectoryRepository {
             : <String>[];
         await _replaceUserPhonesInTxn(txn, id, phones);
       }
+      if (map.isNotEmpty || phonesRaw != null) {
+        await CallsRepository(db).rebuildSearchIndexForCallsByCallerId(txn, id);
+      }
       if (!recordAudit) return n;
 
       final newRow = await _userRowById(txn, id);
@@ -915,14 +919,123 @@ class DirectoryRepository {
     });
   }
 
-  Future<void> deleteUsers(List<int> ids) async {
+  /// Τηλέφωνα 1↔1 για τους χρήστες που πρόκειται να διαγραφούν (για διάλογο F2-02).
+  Future<List<ExclusivePhoneForUserDelete>> findExclusivePhonesForUserDelete(
+    List<int> userIds,
+  ) async {
+    if (userIds.isEmpty) return const [];
+    final placeholders = List.filled(userIds.length, '?').join(',');
+    final rows = await db.rawQuery(
+      '''
+      SELECT up.user_id AS user_id,
+             up.phone_id AS phone_id,
+             p.number AS number,
+             u.department_id AS department_id,
+             d.name AS department_name
+      FROM user_phones up
+      JOIN phones p ON p.id = up.phone_id
+      JOIN users u ON u.id = up.user_id
+      LEFT JOIN departments d ON d.id = u.department_id
+      WHERE up.user_id IN ($placeholders)
+        AND up.phone_id IN (
+          SELECT phone_id FROM user_phones GROUP BY phone_id HAVING COUNT(*) = 1
+        )
+      ORDER BY p.number COLLATE NOCASE ASC
+      ''',
+      userIds,
+    );
+    return rows
+        .map(
+          (r) => ExclusivePhoneForUserDelete(
+            phoneId: r['phone_id'] as int,
+            number: (r['number'] as String?)?.trim() ?? '',
+            userId: r['user_id'] as int,
+            departmentId: r['department_id'] as int?,
+            departmentName: (r['department_name'] as String?)?.trim(),
+          ),
+        )
+        .where((e) => e.number.isNotEmpty)
+        .toList();
+  }
+
+  Future<void> _unlinkUserFromPhoneInTxn(
+    Transaction txn,
+    int userId,
+    int phoneId,
+  ) async {
+    await txn.delete(
+      'user_phones',
+      where: 'user_id = ? AND phone_id = ?',
+      whereArgs: [userId, phoneId],
+    );
+  }
+
+  Future<void> _removePhoneFromDepartmentsInTxn(
+    Transaction txn,
+    int phoneId,
+    String number,
+    String userPerforming,
+  ) async {
+    final deptRows = await txn.rawQuery(
+      '''
+      SELECT dp.department_id AS department_id
+      FROM department_phones dp
+      WHERE dp.phone_id = ?
+      UNION
+      SELECT p.department_id AS department_id
+      FROM phones p
+      WHERE p.id = ? AND p.department_id IS NOT NULL
+      ''',
+      [phoneId, phoneId],
+    );
+    await txn.delete(
+      'department_phones',
+      where: 'phone_id = ?',
+      whereArgs: [phoneId],
+    );
+    await txn.update(
+      'phones',
+      {'department_id': null},
+      where: 'id = ?',
+      whereArgs: [phoneId],
+    );
+    for (final row in deptRows) {
+      final deptId = row['department_id'] as int?;
+      if (deptId == null) continue;
+      await AuditService.log(
+        txn,
+        action: 'ΤΡΟΠΟΠΟΙΗΣΗ',
+        userPerforming: userPerforming,
+        details: 'phones id=$phoneId (αφαίρεση τμήματος $deptId κατά διαγραφή χρήστη)',
+        entityType: AuditEntityTypes.phone,
+        entityId: phoneId,
+        entityName: number,
+        oldValues: {'department_id': deptId},
+        newValues: {'department_id': null},
+      );
+    }
+  }
+
+  /// Soft delete χρηστών· καθαρισμός `user_phones` (F2-02).
+  ///
+  /// [exclusivePhoneActions]: μόνο για τηλέφωνα 1↔1· κλειδί `phone_id`.
+  Future<void> deleteUsers(
+    List<int> ids, {
+    Map<int, UserDeleteExclusivePhoneAction>? exclusivePhoneActions,
+  }) async {
     if (ids.isEmpty) return;
     final user = await _auditPerformingUser();
+    final exclusiveByPhone = exclusivePhoneActions ?? const {};
+    final phoneIdsByUser = <int, Set<int>>{};
+    for (final uid in ids) {
+      phoneIdsByUser[uid] = await _userPhoneIds(db, uid);
+    }
+
     await db.transaction((txn) async {
       for (final id in ids) {
         final nameRows = await txn.query(
           'users',
-          columns: ['first_name', 'last_name'],
+          columns: ['first_name', 'last_name', 'department_id'],
           where: 'id = ?',
           whereArgs: [id],
           limit: 1,
@@ -934,6 +1047,46 @@ class DirectoryRepository {
             ? ''
             : (nameRows.first['last_name'] as String?)?.trim() ?? '';
         final displayName = '$fn $ln'.trim();
+        final departmentId = nameRows.isEmpty
+            ? null
+            : nameRows.first['department_id'] as int?;
+        final linkedPhoneIds = phoneIdsByUser[id] ?? {};
+
+        for (final phoneId in linkedPhoneIds) {
+          final nums = await _phoneNumbersByIds(txn, {phoneId});
+          final number = nums[phoneId] ?? '';
+          final action = exclusiveByPhone[phoneId];
+          final beforeIds = await _userPhoneIds(txn, id);
+
+          if (action == UserDeleteExclusivePhoneAction.keepAtDepartment) {
+            await _unlinkUserFromPhoneInTxn(txn, id, phoneId);
+            if (departmentId != null && number.isNotEmpty) {
+              await _addDepartmentPhoneInTxn(txn, departmentId, number);
+            }
+          } else if (action == UserDeleteExclusivePhoneAction.removePhone) {
+            await _unlinkUserFromPhoneInTxn(txn, id, phoneId);
+            if (number.isNotEmpty) {
+              await _removePhoneFromDepartmentsInTxn(
+                txn,
+                phoneId,
+                number,
+                user,
+              );
+            }
+          } else {
+            await _unlinkUserFromPhoneInTxn(txn, id, phoneId);
+          }
+
+          final afterIds = await _userPhoneIds(txn, id);
+          await _auditPhoneUserLinkDeltaInTxn(
+            txn,
+            user,
+            id,
+            beforeIds,
+            afterIds,
+          );
+        }
+
         await txn.update(
           'users',
           {'is_deleted': 1},
@@ -1073,8 +1226,18 @@ class DirectoryRepository {
     });
   }
 
+  /// Όλα τα τμήματα (συμπεριλαμβανομένων soft-deleted) — για διαχείριση Καταλόγου.
   Future<List<Map<String, dynamic>>> getDepartments() async {
     return db.query('departments', orderBy: 'name COLLATE NOCASE ASC');
+  }
+
+  /// Μόνο ενεργά τμήματα — dropdown κλήσης, lookup, dashboard, χάρτης.
+  Future<List<Map<String, dynamic>>> getActiveDepartments() async {
+    return db.query(
+      'departments',
+      where: 'COALESCE(is_deleted, 0) = 0',
+      orderBy: 'name COLLATE NOCASE ASC',
+    );
   }
 
   int _omnisearchRank({
@@ -2028,6 +2191,7 @@ ORDER BY p.number COLLATE NOCASE ASC
         newValues: newDiff,
       );
     }
+    await CallsRepository(db).rebuildSearchIndexForCallsByEquipmentId(db, id);
     return n;
   }
 
@@ -2124,105 +2288,7 @@ ORDER BY p.number COLLATE NOCASE ASC
     });
   }
 
-  Future<void> clearImportedData() async {
-    final user = await _auditPerformingUser();
-    await db.transaction((txn) async {
-      await txn.rawUpdate('UPDATE equipment SET is_deleted = 1');
-      await txn.rawUpdate('UPDATE users SET is_deleted = 1');
-      await AuditService.log(
-        txn,
-        action: DatabaseHelper.auditActionBulkDelete,
-        userPerforming: user,
-        details: 'clearImportedData: users+equipment (soft)',
-        entityType: AuditEntityTypes.importData,
-        newValues: {'operation': 'clearImportedData'},
-      );
-    });
-  }
-
-  Future<({int usersInserted, int equipmentInserted})> importPreparedData(
-    List<Map<String, dynamic>> ownersList,
-    List<Map<String, dynamic>> equipmentList,
-  ) async {
-    if (ownersList.isEmpty && equipmentList.isEmpty) {
-      return (usersInserted: 0, equipmentInserted: 0);
-    }
-    int usersInserted = 0;
-    int equipmentInserted = 0;
-
-    final deptNameToId = <String, int?>{};
-    for (final u in ownersList) {
-      final dn = (u['department'] as String?)?.trim() ?? '';
-      if (dn.isNotEmpty) {
-        deptNameToId.putIfAbsent(dn, () => null);
-      }
-    }
-    for (final name in deptNameToId.keys.toList()) {
-      deptNameToId[name] = await getOrCreateDepartmentIdByName(
-        name,
-        recordAudit: false,
-      );
-    }
-
-    await db.transaction((txn) async {
-      final ownerCodeToDbId = <int, int>{};
-      for (final u in ownersList) {
-        final ownerId = u['ownerId'] as int? ?? 0;
-        final fullName = u['fullName'] as String? ?? '';
-        final parsed = NameParserUtility.parse(fullName);
-        final dn = (u['department'] as String?)?.trim() ?? '';
-        final did = dn.isEmpty ? null : deptNameToId[dn];
-        final id = await txn.insert('users', {
-          'last_name': parsed.lastName,
-          'first_name': parsed.firstName,
-          'location': null,
-          'notes': null,
-          'is_deleted': 0,
-          'department_id': did,
-        });
-        final importPhones = PhoneListParser.splitPhones(
-          u['phones'] as String?,
-        );
-        if (importPhones.isNotEmpty) {
-          await _replaceUserPhonesInTxn(txn, id, importPhones);
-        }
-        ownerCodeToDbId[ownerId] = id;
-      }
-      usersInserted = ownerCodeToDbId.length;
-
-      for (final e in equipmentList) {
-        final ownerCodeTemp = e['ownerCodeTemp'] as int? ?? 0;
-        final userId = ownerCodeToDbId[ownerCodeTemp];
-        final eqId = await txn.insert('equipment', {
-          'code_equipment': e['code'] as String?,
-          'is_deleted': 0,
-        });
-        if (userId != null) {
-          await txn.insert('user_equipment', {
-            'user_id': userId,
-            'equipment_id': eqId,
-          }, conflictAlgorithm: ConflictAlgorithm.ignore);
-        }
-        equipmentInserted++;
-      }
-    });
-
-    final apImport = await _auditPerformingUser();
-    await AuditService.log(
-      db,
-      action: 'ΕΙΣΑΓΩΓΗ ΔΕΔΟΜΕΝΩΝ',
-      userPerforming: apImport,
-      details: 'importPreparedData',
-      entityType: AuditEntityTypes.importData,
-      newValues: {
-        'users_inserted': usersInserted,
-        'equipment_inserted': equipmentInserted,
-      },
-    );
-
-    return (usersInserted: usersInserted, equipmentInserted: equipmentInserted);
-  }
-
+  /// Ενεργές (μη soft-deleted) εγγραφές καταλόγου — για διάλογο πριν την εισαγωγή Excel (F2-03).
   Future<int> insertUser({
     required String firstName,
     required String lastName,

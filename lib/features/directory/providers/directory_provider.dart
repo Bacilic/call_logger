@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/database/database_helper.dart';
 import '../../../core/database/directory_repository.dart';
+import '../../../core/database/user_delete_phone_policy.dart';
 import '../../../core/services/lookup_service.dart';
 import '../../../core/utils/phone_list_parser.dart';
 import '../../../core/utils/search_text_normalizer.dart';
@@ -581,13 +582,18 @@ class DirectoryNotifier extends Notifier<DirectoryState> {
     await loadUsers();
   }
 
-  Future<void> deleteSelected() async {
+  Future<void> deleteSelected({
+    Map<int, UserDeleteExclusivePhoneAction>? exclusivePhoneActions,
+  }) async {
     if (state.selectedIds.isEmpty) return;
     final toDelete = state.allUsers
         .where((u) => u.id != null && state.selectedIds.contains(u.id))
         .toList();
     final dbDel = await DatabaseHelper.instance.database;
-    await DirectoryRepository(dbDel).deleteUsers(state.selectedIds.toList());
+    await DirectoryRepository(dbDel).deleteUsers(
+      state.selectedIds.toList(),
+      exclusivePhoneActions: exclusivePhoneActions,
+    );
     await _refreshLookupCache();
     if (!ref.mounted) return;
     state = state.copyWith(

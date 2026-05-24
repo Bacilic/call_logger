@@ -1,4 +1,6 @@
-﻿/// Μοντέλο κλήσης (πίνακας calls).
+﻿import '../../../core/utils/history_entity_display_utils.dart';
+
+/// Μοντέλο κλήσης (πίνακας calls).
 class CallModel {
   CallModel({
     this.id,
@@ -21,6 +23,8 @@ class CallModel {
     this.lansweeperMainTicketId,
     this.lansweeperLastSyncAt,
     this.isDeleted = false,
+    this.callerLinkedDeleted = false,
+    this.equipmentLinkedDeleted = false,
   });
 
   final int? id;
@@ -44,6 +48,12 @@ class CallModel {
   final String? lansweeperLastSyncAt;
   final bool isDeleted;
 
+  /// Η συνδεδεμένη εγγραφή users είναι soft-deleted (ιστορική αλήθεια).
+  final bool callerLinkedDeleted;
+
+  /// Η συνδεδεμένη εγγραφή equipment είναι soft-deleted.
+  final bool equipmentLinkedDeleted;
+
   factory CallModel.fromMap(Map<String, dynamic> map) {
     return CallModel(
       id: map['id'] as int?,
@@ -66,6 +76,10 @@ class CallModel {
       lansweeperMainTicketId: map['lansweeper_main_ticket_id'] as String?,
       lansweeperLastSyncAt: map['lansweeper_last_sync_at'] as String?,
       isDeleted: (map['is_deleted'] as int?) == 1,
+      callerLinkedDeleted:
+          historyEntityIsDeleted(map['caller_is_deleted']),
+      equipmentLinkedDeleted:
+          historyEntityIsDeleted(map['equipment_is_deleted']),
     );
   }
 

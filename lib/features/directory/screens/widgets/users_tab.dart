@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/providers/user_form_edit_intent_provider.dart';
 import '../../../../core/database/database_helper.dart';
 import '../../../../core/database/directory_repository.dart';
+import '../../../../core/database/user_delete_phone_policy.dart';
 import '../../../calls/models/user_model.dart';
 import '../../../calls/provider/lookup_provider.dart';
 import '../../models/department_model.dart';
@@ -12,6 +13,7 @@ import '../../models/user_catalog_mode.dart';
 import '../../models/user_directory_column.dart';
 import '../../providers/department_directory_provider.dart';
 import '../../providers/directory_provider.dart';
+import '../../widgets/user_delete_exclusive_phone_dialog.dart';
 import 'bulk_user_edit_dialog.dart';
 import 'catalog_column_selector_shell.dart';
 import 'department_form_dialog.dart';
@@ -273,8 +275,27 @@ class _UsersTabState extends ConsumerState<UsersTab> {
       ),
     );
     if (ok != true || !context.mounted) return;
+
+    final ids = state.selectedIds.toList();
+    final db = await DatabaseHelper.instance.database;
+    final exclusivePhones =
+        await DirectoryRepository(db).findExclusivePhonesForUserDelete(ids);
+
+    Map<int, UserDeleteExclusivePhoneAction>? phoneActions;
+    if (exclusivePhones.isNotEmpty) {
+      if (!context.mounted) return;
+      final action = await showUserDeleteExclusivePhoneDialog(
+        context,
+        phones: exclusivePhones,
+      );
+      if (!context.mounted || action == null) return;
+      phoneActions = {
+        for (final p in exclusivePhones) p.phoneId: action,
+      };
+    }
+
     final notifier = ref.read(directoryProvider.notifier);
-    await notifier.deleteSelected();
+    await notifier.deleteSelected(exclusivePhoneActions: phoneActions);
     if (!context.mounted) return;
     final deleted = ref.read(directoryProvider).lastDeleted ?? [];
     final deletedCount = deleted.length;

@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import '../../../core/utils/history_entity_display_utils.dart';
+
 /// Κατάσταση εργασίας (tasks.status).
 enum TaskStatus { open, snoozed, closed }
 
@@ -64,6 +66,9 @@ class Task {
     this.updatedAt,
     this.origin = originLegacy,
     this.isDeleted = false,
+    this.callerLinkedDeleted = false,
+    this.equipmentLinkedDeleted = false,
+    this.departmentLinkedDeleted = false,
   });
 
   final int? id;
@@ -92,6 +97,9 @@ class Task {
   final String? updatedAt;
   final String origin;
   final bool isDeleted;
+  final bool callerLinkedDeleted;
+  final bool equipmentLinkedDeleted;
+  final bool departmentLinkedDeleted;
 
   static DateTime? _parseDateTime(String? value) {
     if (value == null || value.isEmpty) return null;
@@ -133,6 +141,12 @@ class Task {
       updatedAt: map['updated_at'] as String?,
       origin: normalizeOrigin(map['origin'] as String?),
       isDeleted: (map['is_deleted'] as int?) == 1,
+      callerLinkedDeleted:
+          historyEntityIsDeleted(map['caller_is_deleted']),
+      equipmentLinkedDeleted:
+          historyEntityIsDeleted(map['equipment_is_deleted']),
+      departmentLinkedDeleted:
+          historyEntityIsDeleted(map['department_is_deleted']),
     );
   }
 

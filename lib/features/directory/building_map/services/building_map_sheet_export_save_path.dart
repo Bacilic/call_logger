@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
@@ -67,5 +69,6 @@ Future<String?> _promptExportSavePath({
     initialDirectory: initialDir,
     type: FileType.custom,
     allowedExtensions: kind == _ExportKind.png ? const ['png'] : const ['jpg'],
+    bytes: Uint8List(0),
   );
 }

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -235,6 +236,7 @@ class _LampResolutionProgressDialogState
         fileName: 'resolution_log_${_timestampForFileName()}.txt',
         type: FileType.custom,
         allowedExtensions: const <String>['txt'],
+        bytes: Uint8List(0),
       );
       if (!mounted) return;
       if (path == null) {

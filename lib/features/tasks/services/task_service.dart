@@ -6,6 +6,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import '../../../core/database/database_helper.dart';
 import '../../../core/database/directory_repository.dart';
+import '../../../core/errors/task_save_exception.dart';
 import '../../../core/services/audit_service.dart';
 import '../../../core/utils/search_text_normalizer.dart';
 import '../models/task.dart';
@@ -59,60 +60,58 @@ class TaskService {
   ];
 
   Future<void> _auditTaskCreate(
-    Database db,
+    DatabaseExecutor executor,
+    Database dbForSettings,
     int id,
     Map<String, dynamic> row,
   ) async {
-    try {
-      final user = await AuditService.performingUser(db);
-      final nv = <String, dynamic>{};
-      for (final k in _kTaskAuditKeys) {
-        if (row.containsKey(k) && row[k] != null) nv[k] = row[k];
-      }
-      await AuditService.log(
-        db,
-        action: 'ΔΗΜΙΟΥΡΓΙΑ ΕΚΚΡΕΜΟΤΗΤΑΣ',
-        userPerforming: user,
-        details: 'tasks id=$id',
-        entityType: AuditEntityTypes.task,
-        entityId: id,
-        entityName: row['title']?.toString(),
-        newValues: nv.isEmpty ? null : nv,
-      );
-    } catch (_) {}
+    final user = await AuditService.performingUser(dbForSettings);
+    final nv = <String, dynamic>{};
+    for (final k in _kTaskAuditKeys) {
+      if (row.containsKey(k) && row[k] != null) nv[k] = row[k];
+    }
+    await AuditService.log(
+      executor,
+      action: 'ΔΗΜΙΟΥΡΓΙΑ ΕΚΚΡΕΜΟΤΗΤΑΣ',
+      userPerforming: user,
+      details: 'tasks id=$id',
+      entityType: AuditEntityTypes.task,
+      entityId: id,
+      entityName: row['title']?.toString(),
+      newValues: nv.isEmpty ? null : nv,
+    );
   }
 
   Future<void> _auditTaskUpdate(
-    Database db,
+    DatabaseExecutor executor,
+    Database dbForSettings,
     int id,
     Map<String, dynamic> oldRow,
     Map<String, dynamic> newMap,
   ) async {
-    try {
-      final oldDiff = <String, dynamic>{};
-      final newDiff = <String, dynamic>{};
-      for (final k in _kTaskAuditKeys) {
-        final a = oldRow[k];
-        final b = newMap[k];
-        if ('${a ?? ''}' != '${b ?? ''}') {
-          oldDiff[k] = a;
-          newDiff[k] = b;
-        }
+    final oldDiff = <String, dynamic>{};
+    final newDiff = <String, dynamic>{};
+    for (final k in _kTaskAuditKeys) {
+      final a = oldRow[k];
+      final b = newMap[k];
+      if ('${a ?? ''}' != '${b ?? ''}') {
+        oldDiff[k] = a;
+        newDiff[k] = b;
       }
-      if (newDiff.isEmpty) return;
-      final user = await AuditService.performingUser(db);
-      await AuditService.log(
-        db,
-        action: 'ΤΡΟΠΟΠΟΙΗΣΗ ΕΚΚΡΕΜΟΤΗΤΑΣ',
-        userPerforming: user,
-        details: 'tasks id=$id',
-        entityType: AuditEntityTypes.task,
-        entityId: id,
-        entityName: newMap['title']?.toString() ?? oldRow['title']?.toString(),
-        oldValues: oldDiff,
-        newValues: newDiff,
-      );
-    } catch (_) {}
+    }
+    if (newDiff.isEmpty) return;
+    final user = await AuditService.performingUser(dbForSettings);
+    await AuditService.log(
+      executor,
+      action: 'ΤΡΟΠΟΠΟΙΗΣΗ ΕΚΚΡΕΜΟΤΗΤΑΣ',
+      userPerforming: user,
+      details: 'tasks id=$id',
+      entityType: AuditEntityTypes.task,
+      entityId: id,
+      entityName: newMap['title']?.toString() ?? oldRow['title']?.toString(),
+      oldValues: oldDiff,
+      newValues: newDiff,
+    );
   }
 
   Future<bool> _hasSnoozeHistoryColumn(Database db) async {
@@ -343,9 +342,18 @@ class TaskService {
         ].join(' '),
       ),
     };
-    final id = await db.insert('tasks', row);
-    await _auditTaskCreate(db, id, row);
-    return id;
+    try {
+      return await db.transaction((txn) async {
+        final id = await txn.insert('tasks', row);
+        await _auditTaskCreate(txn, db, id, row);
+        return id;
+      });
+    } catch (e) {
+      if (e is TaskSaveException) rethrow;
+      throw TaskSaveException(
+        'Η εκκρεμότητα δεν δημιουργήθηκε. Δοκιμάστε ξανά.',
+      );
+    }
   }
 
   /// Προσθέτει γραμμή στην περιγραφή ανοιχτής γρήγορης εκκρεμότητας (ίδιο [taskId]).
@@ -939,13 +947,25 @@ class TaskService {
     final orderByClause = 'ORDER BY $sortColumn $sortDirection';
 
     final rows = await db.rawQuery(
-      'SELECT * FROM tasks $where $orderByClause',
+      '''
+      SELECT tasks.*,
+        COALESCE(u.is_deleted, 0) AS caller_is_deleted,
+        COALESCE(e.is_deleted, 0) AS equipment_is_deleted,
+        COALESCE(d.is_deleted, 0) AS department_is_deleted
+      FROM tasks
+      LEFT JOIN users u ON u.id = tasks.caller_id
+      LEFT JOIN equipment e ON e.id = tasks.equipment_id
+      LEFT JOIN departments d ON d.id = tasks.department_id
+      $where $orderByClause
+      ''',
       args,
     );
     return rows.map((row) => Task.fromMap(row)).toList();
   }
 
   /// Δημιουργεί νέα εγγραφή στον πίνακα tasks. Επιστρέφει το νέο id.
+  ///
+  /// Εγγραφή + audit στο ίδιο transaction ([TaskSaveException] σε αποτυχία).
   Future<int> createTask(Task task) async {
     final db = await _db;
     final map = task.toMap();
@@ -960,12 +980,23 @@ class TaskService {
     map['search_index'] = SearchTextNormalizer.normalizeForSearch(
       task.combinedSearchText,
     );
-    final id = await db.insert('tasks', map);
-    await _auditTaskCreate(db, id, map);
-    return id;
+    try {
+      return await db.transaction((txn) async {
+        final id = await txn.insert('tasks', map);
+        await _auditTaskCreate(txn, db, id, map);
+        return id;
+      });
+    } catch (e) {
+      if (e is TaskSaveException) rethrow;
+      throw TaskSaveException(
+        'Η εκκρεμότητα δεν αποθηκεύτηκε. Δοκιμάστε ξανά.',
+      );
+    }
   }
 
   /// Ενημερώνει μια υπάρχουσα εγγραφή στον πίνακα tasks.
+  ///
+  /// Εγγραφή + audit στο ίδιο transaction ([TaskSaveException] σε αποτυχία).
   Future<void> updateTask(Task task) async {
     if (task.id == null) return;
     final db = await _db;
@@ -990,9 +1021,23 @@ class TaskService {
     map['search_index'] = SearchTextNormalizer.normalizeForSearch(
       task.combinedSearchText,
     );
-    final n = await db.update('tasks', map, where: 'id = ?', whereArgs: [tid]);
-    if (n > 0 && oldRow != null) {
-      await _auditTaskUpdate(db, tid, oldRow, map);
+    try {
+      await db.transaction((txn) async {
+        final n = await txn.update(
+          'tasks',
+          map,
+          where: 'id = ?',
+          whereArgs: [tid],
+        );
+        if (n > 0 && oldRow != null) {
+          await _auditTaskUpdate(txn, db, tid, oldRow, map);
+        }
+      });
+    } catch (e) {
+      if (e is TaskSaveException) rethrow;
+      throw TaskSaveException(
+        'Η εκκρεμότητα δεν ενημερώθηκε. Δοκιμάστε ξανά.',
+      );
     }
   }
 

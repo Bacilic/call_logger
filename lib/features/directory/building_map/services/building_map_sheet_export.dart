@@ -9,28 +9,13 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
 import '../../../../core/utils/file_picker_initial_directory.dart';
+import '../../../../core/utils/safe_file_base_name.dart';
 import '../building_map_sheet_export_key.dart';
 import 'building_map_sheet_export_save_path.dart';
 
 /// Ασφαλές όνομα αρχείου (χωρίς `\\ / : * ? " < > |`).
-String buildingMapExportSanitizedFileBaseName(String raw) {
-  var s = raw.trim();
-  if (s.isEmpty) return 'floor_map';
-  const forbidden = r'\/:*?"<>|';
-  final buf = StringBuffer();
-  for (final r in s.runes) {
-    final c = String.fromCharCode(r);
-    if (forbidden.contains(c)) {
-      buf.write('_');
-    } else {
-      buf.write(c);
-    }
-  }
-  s = buf.toString().replaceAll(RegExp(r'_+'), '_').trim();
-  if (s.isEmpty || s == '.') return 'floor_map';
-  if (s.endsWith('.')) s = s.substring(0, s.length - 1);
-  return s;
-}
+String buildingMapExportSanitizedFileBaseName(String raw) =>
+    safeFileBaseName(raw);
 
 Future<String?> _defaultExportDirectoryPath() async {
   try {

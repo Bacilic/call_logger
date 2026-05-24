@@ -1,4 +1,4 @@
-﻿import 'dart:io';
+﻿import 'dart:async';
 import 'dart:ui' as ui;
 
 import 'package:file_picker/file_picker.dart';
@@ -41,6 +41,18 @@ class BuildingMapController {
 
   void resetSession() {
     appliedInitialFloorSync = false;
+    unawaited(_migratePortableImagePathsOnce());
+  }
+
+  bool _portablePathsMigrationDone = false;
+
+  Future<void> _migratePortableImagePathsOnce() async {
+    if (_portablePathsMigrationDone) return;
+    _portablePathsMigrationDone = true;
+    try {
+      final db = await DatabaseHelper.instance.database;
+      await BuildingMapStorage.migrateStoredPathsToPortableIfNeeded(db);
+    } catch (_) {}
   }
 
   Future<void> decodeImageForPath(String imagePath) async {
@@ -49,7 +61,7 @@ class BuildingMapController {
       decoded.setSize(null);
       return;
     }
-    final f = File(imagePath);
+    final f = await BuildingMapStorage.fileForStoredPath(imagePath);
     if (!await f.exists()) {
       decoded.setSize(null);
       return;
@@ -520,12 +532,132 @@ class BuildingMapController {
         );
   }
 
+  Future<bool> _confirmPortableImageCopy(BuildContext context) async {
+    final choice = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Μεταφορά εικόνας για φορητότητα'),
+        content: const Text(
+          'Η επιλεγμένη εικόνα βρίσκεται εκτός του φακέλου της εφαρμογής.\n\n'
+          'Να αντιγραφεί στον φάκελο maps_images δίπλα στη βάση δεδομένων '
+          'ώστε να εμφανίζεται σωστά σε εκτελέσιμη έκδοση ή σε άλλο PC;',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Όχι'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Μεταφορά'),
+          ),
+        ],
+      ),
+    );
+    return choice == true;
+  }
+
+  Future<String?> _ingestPickedImagePath(
+    BuildContext context,
+    String srcPath, {
+    required String floorLabel,
+  }) async {
+    var approved = false;
+  ingestLoop:
+    while (true) {
+      final result = await BuildingMapStorage.ingestPickedImage(
+        srcPath,
+        floorLabel: floorLabel,
+        userApprovedPortableCopy: approved,
+      );
+      if (result.ok && result.storedRelativePath != null) {
+        return result.storedRelativePath;
+      }
+      if (result.needsPortableConfirmation) {
+        if (!context.mounted) return null;
+        final ok = await _confirmPortableImageCopy(context);
+        if (!ok) return null;
+        approved = true;
+        continue ingestLoop;
+      }
+      if (result.errorMessage != null && context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(result.errorMessage!)),
+        );
+      }
+      return null;
+    }
+  }
+
+  /// Αντικατάσταση εικόνας στο **υπάρχον** φύλλο (διατήρηση γεωμετρίας τμημάτων).
+  Future<void> replaceFloorSheetImageById(
+    BuildContext context,
+    int floorId,
+  ) async {
+    final db = await DatabaseHelper.instance.database;
+    final floors = await DirectoryRepository(db).listBuildingMapFloors();
+    BuildingMapFloor? floor;
+    for (final f in floors) {
+      if (f.id == floorId) {
+        floor = f;
+        break;
+      }
+    }
+    if (floor == null || !context.mounted) return;
+    await replaceFloorSheetImage(context, floor);
+  }
+
+  Future<void> replaceFloorSheetImage(
+    BuildContext context,
+    BuildingMapFloor floor,
+  ) async {
+    final picked = await FilePicker.pickFiles(type: FileType.image);
+    if (picked == null || picked.files.isEmpty) return;
+    final srcPath = picked.files.single.path;
+    if (srcPath == null || !context.mounted) return;
+
+    final stored = await _ingestPickedImagePath(
+      context,
+      srcPath,
+      floorLabel: floor.label,
+    );
+    if (stored == null || !context.mounted) return;
+
+    try {
+      final db = await DatabaseHelper.instance.database;
+      final previousPath = floor.imagePath;
+      await DirectoryRepository(db).updateBuildingMapFloor(
+        floor.id,
+        rotationDegrees: floor.rotationDegrees,
+        imagePath: stored,
+      );
+      if (previousPath != stored) {
+        await BuildingMapStorage.deleteStoredImageBestEffort(previousPath);
+      }
+      final sel = _ref.read(buildingMapSelectedSheetIdProvider);
+      if (sel == floor.id) {
+        await decodeImageForPath(stored);
+      }
+      _ref.read(buildingMapFloorReloadSeqProvider.notifier).bump();
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Η κατόψη ενημερώθηκε.')),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Αποτυχία ενημέρωσης κατόψης: $e')),
+        );
+      }
+    }
+  }
+
   Future<void> addFloorSheet(BuildContext context) async {
     final labelCtrl = TextEditingController();
     final groupCtrl = TextEditingController();
     final picked = await FilePicker.pickFiles(
       type: FileType.image,
-      withData: false,
     );
     if (picked == null || picked.files.isEmpty) return;
     final srcPath = picked.files.single.path;
@@ -574,7 +706,13 @@ class BuildingMapController {
     final label = labelCtrl.text.trim();
     if (label.isEmpty) return;
 
-    final copied = await BuildingMapStorage.copyPickedImageToStorage(srcPath);
+    final copied = await _ingestPickedImagePath(
+      context,
+      srcPath,
+      floorLabel: label,
+    );
+    if (copied == null || !context.mounted) return;
+
     final db = await DatabaseHelper.instance.database;
     final repo = DirectoryRepository(db);
     final id = await repo.insertBuildingMapFloor(
@@ -625,7 +763,6 @@ class BuildingMapController {
                   onPressed: () async {
                     final picked = await FilePicker.pickFiles(
                       type: FileType.image,
-                      withData: false,
                     );
                     if (picked == null || picked.files.isEmpty) return;
                     final srcPath = picked.files.single.path;
@@ -661,10 +798,15 @@ class BuildingMapController {
     if (label.isEmpty) return;
 
     var imagePathUpdate = floor.imagePath;
+    final previousPath = floor.imagePath;
     if (pickedSrcPath != null) {
-      imagePathUpdate = await BuildingMapStorage.copyPickedImageToStorage(
+      final ingested = await _ingestPickedImagePath(
+        context,
         pickedSrcPath!,
+        floorLabel: label,
       );
+      if (ingested == null) return;
+      imagePathUpdate = ingested;
     }
 
     final db = await DatabaseHelper.instance.database;
@@ -675,6 +817,9 @@ class BuildingMapController {
       floorGroup: groupCtrl.text,
       imagePath: pickedSrcPath != null ? imagePathUpdate : null,
     );
+    if (pickedSrcPath != null && previousPath != imagePathUpdate) {
+      await BuildingMapStorage.deleteStoredImageBestEffort(previousPath);
+    }
 
     final sel = _ref.read(buildingMapSelectedSheetIdProvider);
     if (sel == floor.id) {

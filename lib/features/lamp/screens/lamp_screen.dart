@@ -351,6 +351,7 @@ class _LampScreenState extends ConsumerState<LampScreen> {
       fileName: 'old_equipment.db',
       type: FileType.custom,
       allowedExtensions: const <String>['db'],
+      bytes: Uint8List(0),
     );
     if (path == null) {
       if (mounted) {

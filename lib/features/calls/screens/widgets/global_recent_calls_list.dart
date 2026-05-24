@@ -3,6 +3,8 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/utils/history_entity_display_utils.dart';
+import '../../../../core/widgets/deleted_catalog_entity_text.dart';
 import '../../models/call_model.dart';
 import '../../provider/calls_dashboard_providers.dart';
 
@@ -114,13 +116,14 @@ _RecentCallColumnWidths _intrinsicRecentColumnWidths(
         textScaler,
       ),
     );
+    final callerLabel = historyDeletedDisplayLabel(
+      _globalRecentDisplayOrDash(c.callerText),
+      isDeleted: c.callerLinkedDeleted,
+      deletedSuffix: kCatalogEntityDeletedSuffix,
+    );
     maxCaller = math.max(
       maxCaller,
-      _globalRecentTextWidth(
-        _globalRecentDisplayOrDash(c.callerText),
-        bodyMedium,
-        textScaler,
-      ),
+      _globalRecentTextWidth(callerLabel, bodyMedium, textScaler),
     );
   }
 
@@ -369,10 +372,11 @@ class _RecentCallDataRow extends StatelessWidget {
         SizedBox(width: _kGlobalRecentGap),
         SizedBox(
           width: widths.caller,
-          child: Text(
-            displayOrDash(call.callerText),
+          child: DeletedCatalogEntityText(
+            text: displayOrDash(call.callerText),
+            isDeleted: call.callerLinkedDeleted,
             style: theme.textTheme.bodyMedium,
-            overflow: TextOverflow.ellipsis,
+            maxLines: 1,
           ),
         ),
         SizedBox(width: _kGlobalRecentDeptLeadingGap),

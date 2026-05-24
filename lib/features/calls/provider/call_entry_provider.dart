@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/database/calls_repository.dart';
+import '../../../core/errors/call_save_exception.dart';
+import '../../../core/errors/task_save_exception.dart';
 import '../../../core/database/database_helper.dart';
 import '../../../core/services/lookup_service.dart';
 import '../../tasks/models/task_filter.dart';
@@ -288,6 +290,10 @@ class CallEntryNotifier extends Notifier<CallEntryState> {
       reset();
       ref.read(callHeaderProvider.notifier).clearAll();
       return true;
+    } on CallSaveException {
+      rethrow;
+    } on TaskSaveException {
+      rethrow;
     } catch (_, _) {
       return false;
     }
@@ -337,6 +343,8 @@ class CallEntryNotifier extends Notifier<CallEntryState> {
       reset();
       ref.read(callHeaderProvider.notifier).clearAll();
       return true;
+    } on TaskSaveException {
+      rethrow;
     } catch (_, _) {
       return false;
     }

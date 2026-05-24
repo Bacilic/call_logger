@@ -5,10 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../database/database_init_result.dart';
-import '../../features/calls/provider/import_log_provider.dart';
-import '../../features/calls/provider/lookup_provider.dart';
 import '../../features/calls/screens/calls_screen.dart';
-import '../../features/calls/screens/widgets/import_console_widget.dart';
 import '../../features/database/screens/database_browser_screen.dart';
 import '../../features/dictionary/screens/dictionary_manager_screen.dart';
 import '../../features/lamp/screens/lamp_screen.dart';
@@ -30,8 +27,6 @@ import '../providers/settings_provider.dart';
 import '../providers/shell_navigation_intent_provider.dart';
 import '../providers/task_focus_intent_provider.dart';
 import 'main_nav_destination.dart';
-import '../services/import_service.dart';
-import '../services/import_types.dart';
 import '../services/settings_service.dart';
 import '../about/widgets/version_chip.dart';
 import '../../features/tasks/providers/tasks_provider.dart';
@@ -64,9 +59,6 @@ class _MainShellState extends ConsumerState<MainShell> {
   bool _pendingRestartDueToPathChange = false;
   MainNavDestination _selectedDestination = MainNavDestination.calls;
 
-  /// Εμφάνιση κουμπιού Import Excel (ρύθμιση από Ρυθμίσεις· προεπιλογή false).
-  bool _showImportExcelButton = false;
-
   /// Λεζάντες πλευρικής μπάρας (όταν το πλάτος παραθύρου επιτρέπει extended rail).
   bool _navRailShowLabels = true;
 
@@ -75,13 +67,7 @@ class _MainShellState extends ConsumerState<MainShell> {
   @override
   void initState() {
     super.initState();
-    _loadShowImportExcelSetting();
     _loadNavRailShowLabels();
-  }
-
-  Future<void> _loadShowImportExcelSetting() async {
-    final value = await SettingsService().getShowImportExcelButton();
-    if (mounted) setState(() => _showImportExcelButton = value);
   }
 
   Future<void> _loadNavRailShowLabels() async {
@@ -155,6 +141,7 @@ class _MainShellState extends ConsumerState<MainShell> {
   }
 
   static List<MainNavDestination> _visibleDestinations(
+    bool showLampNav,
     bool showDatabaseNav,
     bool showDictionaryNav,
   ) {
@@ -163,9 +150,9 @@ class _MainShellState extends ConsumerState<MainShell> {
       MainNavDestination.tasks,
       MainNavDestination.directory,
       MainNavDestination.history,
+      if (showLampNav) MainNavDestination.lamp,
       if (showDatabaseNav) MainNavDestination.database,
       if (showDictionaryNav) MainNavDestination.dictionary,
-      MainNavDestination.lamp,
     ];
   }
 
@@ -329,10 +316,10 @@ class _MainShellState extends ConsumerState<MainShell> {
     if (pathBefore != pathAfter) {
       setState(() => _pendingRestartDueToPathChange = true);
     }
+    ref.invalidate(showLampNavProvider);
     ref.invalidate(showDatabaseNavProvider);
     ref.invalidate(showDictionaryNavProvider);
     ref.invalidate(greekDictionaryServiceProvider);
-    await _loadShowImportExcelSetting();
     if (mounted) setState(() {});
   }
 
@@ -468,6 +455,9 @@ class _MainShellState extends ConsumerState<MainShell> {
     final pendingCountAsync = ref.watch(globalPendingTasksCountProvider);
     final showBadge = showBadgeAsync.value ?? true;
     final pendingCount = pendingCountAsync.value ?? 0;
+    final showLampNav = ref
+        .watch(showLampNavProvider)
+        .maybeWhen(data: (v) => v, orElse: () => true);
     final showDatabaseNav = ref
         .watch(showDatabaseNavProvider)
         .maybeWhen(data: (v) => v, orElse: () => true);
@@ -475,6 +465,7 @@ class _MainShellState extends ConsumerState<MainShell> {
         .watch(showDictionaryNavProvider)
         .maybeWhen(data: (v) => v, orElse: () => true);
     final visibleDestinations = _visibleDestinations(
+      showLampNav,
       showDatabaseNav,
       showDictionaryNav,
     );
@@ -559,7 +550,6 @@ class _MainShellState extends ConsumerState<MainShell> {
     if (dictionaryImmersive || historyImmersive) {
       return Scaffold(
         appBar: null,
-        floatingActionButton: null,
         body: SafeArea(
           child: _destinationContentColumn(
             dictionaryImmersive
@@ -602,13 +592,6 @@ class _MainShellState extends ConsumerState<MainShell> {
                       ),
                     ]
                   : null,
-            )
-          : null,
-      floatingActionButton: _showImportExcelButton
-          ? FloatingActionButton(
-              onPressed: _onImportExcel,
-              tooltip: 'Import Excel',
-              child: const Icon(Icons.upload_file),
             )
           : null,
       body: Row(
@@ -696,64 +679,5 @@ class _MainShellState extends ConsumerState<MainShell> {
         ],
       ),
     );
-  }
-
-  Future<void> _onImportExcel() async {
-    ref.read(importLogProvider.notifier).clearLogs();
-    if (!context.mounted) return;
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      builder: (ctx) => SizedBox(
-        height: MediaQuery.of(ctx).size.height * 0.6,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Padding(
-              padding: const EdgeInsets.all(8.0),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    'Import Excel – Live Console',
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.close),
-                    onPressed: () => Navigator.of(ctx).pop(),
-                  ),
-                ],
-              ),
-            ),
-            const Expanded(child: ImportConsoleWidget()),
-          ],
-        ),
-      ),
-    );
-    final messenger = ScaffoldMessenger.of(context);
-    await Future.delayed(const Duration(milliseconds: 100));
-    try {
-      final result = await ImportService().importFromExcel(
-        onLog: (msg, [level]) => ref
-            .read(importLogProvider.notifier)
-            .addLog(msg, level ?? ImportLogLevel.info),
-      );
-      if (!result.success && result.errorMessage != null) {
-        messenger.showSnackBar(SnackBar(content: Text(result.errorMessage!)));
-      } else if (result.success &&
-          (result.usersInserted > 0 || result.equipmentInserted > 0)) {
-        ref.invalidate(lookupServiceProvider);
-        messenger.showSnackBar(
-          SnackBar(
-            content: Text(
-              'Εισήχθησαν ${result.usersInserted} χρήστες και ${result.equipmentInserted} υπολογιστές',
-            ),
-          ),
-        );
-      }
-    } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('Σφάλμα: $e')));
-    }
   }
 }

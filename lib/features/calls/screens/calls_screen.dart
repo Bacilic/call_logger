@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/models/calls_screen_cards_visibility.dart';
 import '../../../core/models/remote_tool.dart';
 import '../../../core/providers/settings_provider.dart';
+import '../../../core/errors/call_save_exception.dart';
+import '../../../core/errors/task_save_exception.dart';
 import '../provider/call_entry_provider.dart';
 import '../provider/call_header_provider.dart';
 import '../provider/notes_field_hint_provider.dart';
@@ -297,14 +299,25 @@ Widget _buildActionsRow(
   final primarySubmit = ElevatedButton.icon(
     onPressed: header.canSubmitCall
         ? () async {
-            final ok = await notifier.submitCall();
-            if (context.mounted) {
+            try {
+              final ok = await notifier.submitCall();
+              if (!context.mounted) return;
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
                   content: Text(
                     ok ? 'Κλήση αποθηκεύτηκε' : 'Αποτυχία αποθήκευσης',
                   ),
                 ),
+              );
+            } on CallSaveException catch (e) {
+              if (!context.mounted) return;
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text(e.message)),
+              );
+            } on TaskSaveException catch (e) {
+              if (!context.mounted) return;
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text(e.message)),
               );
             }
           }

@@ -10,8 +10,10 @@ import '../../../core/providers/shell_navigation_intent_provider.dart';
 import '../../../core/widgets/calendar_range_picker.dart';
 import '../../../core/providers/settings_provider.dart';
 import '../../../core/widgets/main_nav_destination.dart';
+import '../../../core/utils/history_entity_display_utils.dart';
 import '../providers/history_application_audit_view_provider.dart';
 import '../providers/history_provider.dart';
+import '../widgets/history_deleted_entity_text.dart';
 import '../widgets/application_audit_tab.dart';
 import 'dashboard_screen.dart';
 
@@ -562,7 +564,7 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
   }
 }
 
-/// Πίνακας γραμμών ιστορικού (ημ/νία & ώρα, καλούντας, τηλέφωνο, τμήμα, εξοπλισμός, σημειώσεις, διάρκεια).
+/// Πίνακας γραμμών ιστορικού (ημ/νία & ώρα, καλούντας, τηλέφωνο, τμήμα, εξοπλισμός, κατηγορία, σημειώσεις, διάρκεια).
 class _HistoryDataTable extends ConsumerStatefulWidget {
   const _HistoryDataTable({required this.rows});
 
@@ -640,7 +642,7 @@ class _HistoryDataTableState extends ConsumerState<_HistoryDataTable> {
     return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
   }
 
-  /// Τιμή για σύγκριση ταξινόμησης ανά ευρετήριο στήλης (0..6).
+  /// Τιμή για σύγκριση ταξινόμησης ανά ευρετήριο στήλης (0..7).
   Comparable<Object> _valueForSort(Map<String, dynamic> row, int columnIndex) {
     switch (columnIndex) {
       case 0:
@@ -655,8 +657,10 @@ class _HistoryDataTableState extends ConsumerState<_HistoryDataTable> {
       case 4:
         return _str(row['equipment_code']);
       case 5:
-        return _str(row['issue']);
+        return _str(row['category']);
       case 6:
+        return _str(row['issue']);
+      case 7:
         final dur = row['duration'];
         if (dur == null) return -1;
         return dur is int ? dur : int.tryParse(dur?.toString() ?? '') ?? -1;
@@ -756,16 +760,23 @@ class _HistoryDataTableState extends ConsumerState<_HistoryDataTable> {
                     }),
                   ),
                   DataColumn(
-                    label: const Text('Σημειώσεις'),
+                    label: const Text('Κατηγορία'),
                     onSort: (_, asc) => setState(() {
                       _sortColumnIndex = 5;
                       _sortAscending = asc;
                     }),
                   ),
                   DataColumn(
-                    label: const Text('Διάρκεια'),
+                    label: const Text('Σημειώσεις'),
                     onSort: (_, asc) => setState(() {
                       _sortColumnIndex = 6;
+                      _sortAscending = asc;
+                    }),
+                  ),
+                  DataColumn(
+                    label: const Text('Διάρκεια'),
+                    onSort: (_, asc) => setState(() {
+                      _sortColumnIndex = 7;
                       _sortAscending = asc;
                     }),
                   ),
@@ -773,9 +784,16 @@ class _HistoryDataTableState extends ConsumerState<_HistoryDataTable> {
                 rows: rowsToShow.map((row) {
                   final dateTime = _formatCallDateTimeDisplay(row);
                   final user = _userDisplay(row);
+                  final callerDeleted =
+                      historyEntityIsDeleted(row['caller_is_deleted']);
                   final phone = row['user_phone']?.toString().trim() ?? '—';
                   final department = _str(row['user_department']);
                   final equipment = _str(row['equipment_code']);
+                  final equipmentDeleted =
+                      historyEntityIsDeleted(row['equipment_is_deleted']);
+                  final category = _str(row['category']);
+                  final categoryDeleted =
+                      historyEntityIsDeleted(row['category_is_deleted']);
                   final issue = _str(row['issue']);
                   final durationStr = _formatDuration(row['duration']);
                   return DataRow(
@@ -783,11 +801,21 @@ class _HistoryDataTableState extends ConsumerState<_HistoryDataTable> {
                       DataCell(Text(dateTime)),
                       DataCell(ConstrainedBox(
                         constraints: const BoxConstraints(maxWidth: 180),
-                        child: Text(user, overflow: TextOverflow.ellipsis),
+                        child: HistoryDeletedEntityText(
+                          text: user,
+                          isDeleted: callerDeleted && user != '—',
+                        ),
                       )),
                       DataCell(Text(phone.isEmpty ? '—' : phone)),
                       DataCell(Text(department.isEmpty ? '—' : department)),
-                      DataCell(Text(equipment)),
+                      DataCell(HistoryDeletedEntityText(
+                        text: equipment.isEmpty ? '—' : equipment,
+                        isDeleted: equipmentDeleted && equipment.isNotEmpty,
+                      )),
+                      DataCell(HistoryDeletedEntityText(
+                        text: category.isEmpty ? '—' : category,
+                        isDeleted: categoryDeleted && category.isNotEmpty,
+                      )),
                       DataCell(ConstrainedBox(
                         constraints: const BoxConstraints(maxWidth: 220),
                         child: Text(issue, overflow: TextOverflow.ellipsis),

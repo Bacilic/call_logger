@@ -1,10 +1,13 @@
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:archive/archive.dart';
 import 'package:intl/intl.dart';
 import 'package:path/path.dart' as p;
+import 'package:sqflite_common/sqflite.dart';
 
 import '../../../core/database/database_helper.dart';
+import '../../../core/services/building_map_storage.dart';
 import '../models/database_backup_settings.dart';
 
 /// Αποτέλεσμα χειροκίνητου ή προγραμματισμένου backup.
@@ -20,6 +23,21 @@ class DatabaseBackupResult {
   final String? message;
 }
 
+/// Αποτέλεσμα επαναφοράς από zip αντιγράφου.
+class DatabaseRestoreResult {
+  const DatabaseRestoreResult({
+    required this.success,
+    this.databasePath,
+    this.message,
+    this.imagesRelinked = 0,
+  });
+
+  final bool success;
+  final String? databasePath;
+  final String? message;
+  final int imagesRelinked;
+}
+
 /// Αφαιρετική κλάση εκτέλεσης αντιγράφου: φάκελος προορισμού, μορφή ονομασίας, zip (μέσω [DatabaseBackupService]).
 class DatabaseBackupFileOperation {
   DatabaseBackupFileOperation._();
@@ -27,6 +45,16 @@ class DatabaseBackupFileOperation {
   /// Εκτελεί το αντίγραφο και επιστρέφει [DatabaseBackupResult] (επιτυχία / μήνυμα σφάλματος).
   static Future<DatabaseBackupResult> run(DatabaseBackupSettings settings) =>
       DatabaseBackupService.runBackup(settings);
+
+  /// Επαναφορά από zip (βάση + εικόνες χαρτών).
+  static Future<DatabaseRestoreResult> restoreFromZip(
+    String zipPath, {
+    required String targetDatabasePath,
+  }) =>
+      DatabaseBackupService.restoreFromBackupZip(
+        zipPath,
+        targetDatabasePath: targetDatabasePath,
+      );
 }
 
 /// Δημιουργία αντιγράφων με `VACUUM INTO` (ατομικό, ενσωματώνει WAL/SHM),
@@ -118,24 +146,46 @@ class DatabaseBackupService {
       );
     }
 
+    final useZipBundle =
+        settings.includeMapImagesInBackup || settings.zipOutput;
     var finalPath = outDbPath;
-    if (settings.zipOutput) {
+
+    if (useZipBundle) {
       final zipPath = p.join(dest, '$stem.zip');
       try {
-        final bytes = await outDbFile.readAsBytes();
-        final archive = Archive()
-          ..addFile(ArchiveFile(dbFileName, bytes.length, bytes));
-        final zipped = ZipEncoder().encode(archive);
-        if (zipped == null) {
-          throw StateError('ZipEncoder.encode επέστρεψε null');
+        final archive = Archive();
+        final dbBytes = await outDbFile.readAsBytes();
+        final innerDbName = settings.includeMapImagesInBackup
+            ? BuildingMapStorage.backupZipDbFileName
+            : dbFileName;
+        archive.addFile(ArchiveFile(innerDbName, dbBytes.length, dbBytes));
+
+        if (settings.includeMapImagesInBackup) {
+          final mapFiles = await BuildingMapStorage.listPortableImageFiles();
+          for (final img in mapFiles) {
+            try {
+              final bytes = await img.readAsBytes();
+              final entryName = p.posix.join(
+                BuildingMapStorage.backupZipMapsFolderName,
+                p.basename(img.path),
+              );
+              archive.addFile(ArchiveFile(entryName, bytes.length, bytes));
+            } catch (_) {}
+          }
         }
+
+        final zipped = ZipEncoder().encode(archive);
         await File(zipPath).writeAsBytes(zipped, flush: true);
-        await outDbFile.delete();
+        try {
+          await outDbFile.delete();
+        } catch (_) {}
         finalPath = zipPath;
       } catch (e) {
         return DatabaseBackupResult(
           success: false,
-          message: 'Η συμπίεση zip απέτυχε: $e',
+          message: settings.includeMapImagesInBackup
+              ? 'Η συμπίεση zip (βάση + εικόνες χαρτών) απέτυχε: $e'
+              : 'Η συμπίεση zip απέτυχε: $e',
           outputPath: outDbPath,
         );
       }
@@ -145,10 +195,133 @@ class DatabaseBackupService {
       await _applyRetention(destDir, baseName, settings);
     } catch (_) {}
 
+    final tail = settings.includeMapImagesInBackup
+        ? ' (βάση + εικόνες χαρτών)'
+        : '';
     return DatabaseBackupResult(
       success: true,
       outputPath: finalPath,
-      message: 'Το αντίγραφο ολοκληρώθηκε.',
+      message: 'Το αντίγραφο ολοκληρώθηκε$tail.',
+    );
+  }
+
+  /// Αποσυμπίεση zip αντιγράφου· τοποθετεί `call_logger.db` και `maps_images/` δίπλα στο [targetDatabasePath].
+  static Future<DatabaseRestoreResult> restoreFromBackupZip(
+    String zipPath, {
+    required String targetDatabasePath,
+  }) async {
+    final zipFile = File(zipPath);
+    if (!await zipFile.exists()) {
+      return const DatabaseRestoreResult(
+        success: false,
+        message: 'Το αρχείο zip δεν βρέθηκε.',
+      );
+    }
+
+    final targetDb = p.normalize(p.absolute(targetDatabasePath));
+    final targetDir = p.dirname(targetDb);
+    final mapsRoot = p.join(
+      targetDir,
+      BuildingMapStorage.mapsImagesDirName,
+    );
+
+    try {
+      await Directory(targetDir).create(recursive: true);
+      await Directory(mapsRoot).create(recursive: true);
+    } catch (e) {
+      return DatabaseRestoreResult(
+        success: false,
+        message: 'Δεν ήταν δυνατή η δημιουργία φακέλων προορισμού: $e',
+      );
+    }
+
+    Archive archive;
+    try {
+      final bytes = await zipFile.readAsBytes();
+      archive = ZipDecoder().decodeBytes(bytes);
+    } catch (e) {
+      return DatabaseRestoreResult(
+        success: false,
+        message: 'Αποτυχία ανάγνωσης/αποσυμπίεσης zip: $e',
+      );
+    }
+
+    ArchiveFile? dbEntry;
+    for (final f in archive.files) {
+      if (f.isFile && f.name.toLowerCase().endsWith('.db')) {
+        if (f.name == BuildingMapStorage.backupZipDbFileName ||
+            dbEntry == null) {
+          dbEntry = f;
+          if (f.name == BuildingMapStorage.backupZipDbFileName) break;
+        }
+      }
+    }
+
+    if (dbEntry == null) {
+      return const DatabaseRestoreResult(
+        success: false,
+        message: 'Δεν βρέθηκε αρχείο βάσης (.db) μέσα στο zip.',
+      );
+    }
+
+    try {
+      final existingDb = File(targetDb);
+      if (await existingDb.exists()) {
+        await existingDb.delete();
+      }
+      await existingDb.writeAsBytes(
+        Uint8List.fromList(dbEntry.content),
+        flush: true,
+      );
+    } catch (e) {
+      return DatabaseRestoreResult(
+        success: false,
+        message: 'Αποτυχία εγγραφής βάσης στον προορισμό: $e',
+      );
+    }
+
+    var imagesCopied = 0;
+    final mapsPrefix = '${BuildingMapStorage.backupZipMapsFolderName}/';
+    for (final f in archive.files) {
+      if (!f.isFile) continue;
+      final name = f.name.replaceAll('\\', '/');
+      if (!name.startsWith(mapsPrefix)) continue;
+      final base = p.basename(name);
+      if (base.isEmpty) continue;
+      try {
+        final dest = File(p.join(mapsRoot, base));
+        await dest.writeAsBytes(Uint8List.fromList(f.content), flush: true);
+        imagesCopied++;
+      } catch (_) {}
+    }
+
+    var relinked = 0;
+    try {
+      final restoredDb = await openDatabase(
+        targetDb,
+        readOnly: false,
+        singleInstance: false,
+      );
+      try {
+        relinked =
+            await BuildingMapStorage.relinkMissingFloorImagesAfterRestore(
+          restoredDb,
+        );
+        await BuildingMapStorage.migrateStoredPathsToPortableIfNeeded(
+          restoredDb,
+        );
+      } finally {
+        await restoredDb.close();
+      }
+    } catch (_) {}
+
+    return DatabaseRestoreResult(
+      success: true,
+      databasePath: targetDb,
+      imagesRelinked: relinked,
+      message: imagesCopied > 0
+          ? 'Η επαναφορά ολοκληρώθηκε ($imagesCopied εικόνες χαρτών).'
+          : 'Η επαναφορά της βάσης ολοκληρώθηκε.',
     );
   }
 

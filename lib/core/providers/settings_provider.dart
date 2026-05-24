@@ -20,6 +20,10 @@ final enableSpellCheckProvider =
 final showDatabaseNavProvider =
     FutureProvider<bool>((ref) => SettingsService().getShowDatabaseNav());
 
+/// Εμφάνιση προορισμού Λάμπα (παλιά βάση) στο NavigationRail. Invalidate μετά από Ρυθμίσεις.
+final showLampNavProvider =
+    FutureProvider<bool>((ref) => SettingsService().getShowLampNav());
+
 /// Εμφάνιση προορισμού Λεξικό στο NavigationRail. Invalidate μετά από Ρυθμίσεις.
 final showDictionaryNavProvider =
     FutureProvider<bool>((ref) => SettingsService().getShowDictionaryNav());
