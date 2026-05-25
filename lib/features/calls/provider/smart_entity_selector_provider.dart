@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/database/database_helper.dart';
@@ -14,6 +14,7 @@ import '../../directory/models/department_model.dart';
 import '../../tasks/models/task.dart';
 import '../../tasks/providers/task_service_provider.dart';
 import '../../tasks/providers/tasks_provider.dart';
+import '../models/call_model.dart';
 import '../utils/remote_target_rules.dart';
 import '../utils/vnc_remote_target.dart';
 
@@ -159,9 +160,7 @@ class SmartEntitySelectorState {
     final text = equipmentText.trim();
     if (text.isEmpty) return false;
     final callerId = selectedCaller!.id;
-    if (lookup != null &&
-        selectedEquipment?.id != null &&
-        callerId != null) {
+    if (lookup != null && selectedEquipment?.id != null && callerId != null) {
       final owners = lookup.findUsersForEquipment(selectedEquipment!.id!);
       if (owners.any((u) => u.id == callerId)) return true;
     }
@@ -203,11 +202,15 @@ class SmartEntitySelectorState {
     if (!needsOrphanDepartmentQuickAdd) return false;
     if (lookup == null) return true;
     final deptText = departmentText.trim();
-    final departmentId = selectedDepartmentId ?? lookup.findDepartmentByName(deptText)?.id;
+    final departmentId =
+        selectedDepartmentId ?? lookup.findDepartmentByName(deptText)?.id;
     final phone = selectedPhone?.trim();
-    final equipmentCode = equipmentText.trim().isEmpty ? null : equipmentText.trim();
+    final equipmentCode = equipmentText.trim().isEmpty
+        ? null
+        : equipmentText.trim();
 
-    final phoneNeedsShared = phone != null &&
+    final phoneNeedsShared =
+        phone != null &&
         phone.isNotEmpty &&
         (() {
           final usage = lookup.checkPhoneUsage(phone);
@@ -216,7 +219,8 @@ class SmartEntitySelectorState {
           return usage.departmentId != departmentId;
         })();
 
-    final equipmentNeedsShared = equipmentCode != null &&
+    final equipmentNeedsShared =
+        equipmentCode != null &&
         (() {
           final usage = lookup.checkEquipmentUsage(equipmentCode);
           if (usage.hasUserOwners) return true;
@@ -491,7 +495,9 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
       departmentId = selectedDepartment?.id;
     }
     final phone = s.selectedPhone?.trim();
-    final equipmentCode = s.equipmentText.trim().isEmpty ? null : s.equipmentText.trim();
+    final equipmentCode = s.equipmentText.trim().isEmpty
+        ? null
+        : s.equipmentText.trim();
 
     final dbOrphan = await DatabaseHelper.instance.database;
     final dirOrphan = DirectoryRepository(dbOrphan);
@@ -511,24 +517,28 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
         ? lookup.checkEquipmentUsage(equipmentCode)
         : null;
 
-    final phoneConflict = phoneUsage != null &&
+    final phoneConflict =
+        phoneUsage != null &&
         (phoneUsage.hasUserOwners ||
             (phoneUsage.departmentId != null &&
                 departmentId != null &&
                 phoneUsage.departmentId != departmentId));
-    final equipmentConflict = equipmentUsage != null &&
+    final equipmentConflict =
+        equipmentUsage != null &&
         (equipmentUsage.hasUserOwners ||
             (equipmentUsage.departmentId != null &&
                 departmentId != null &&
                 equipmentUsage.departmentId != departmentId));
     final hasConflict = phoneConflict || equipmentConflict;
-    final phoneNeedsShared = phone != null &&
+    final phoneNeedsShared =
+        phone != null &&
         phone.isNotEmpty &&
         (phoneUsage == null ||
             phoneUsage.hasUserOwners ||
             departmentId == null ||
             phoneUsage.departmentId != departmentId);
-    final equipmentNeedsShared = equipmentCode != null &&
+    final equipmentNeedsShared =
+        equipmentCode != null &&
         (equipmentUsage == null ||
             equipmentUsage.hasUserOwners ||
             departmentId == null ||
@@ -543,7 +553,8 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
             'Το τηλέφωνο ${phoneUsage.phone} ανήκει ήδη στους: ${phoneUsage.userNames.join(', ')}.',
           );
         }
-        if (phoneUsage.departmentId != null && phoneUsage.departmentName != null) {
+        if (phoneUsage.departmentId != null &&
+            phoneUsage.departmentName != null) {
           lines.add(
             'Το τηλέφωνο ${phoneUsage.phone} έχει ήδη τοποθεσία τμήμα: ${phoneUsage.departmentName}.',
           );
@@ -571,9 +582,7 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
       );
     }
 
-    departmentId ??= await dirOrphan.getOrCreateDepartmentIdByName(
-      deptText,
-    );
+    departmentId ??= await dirOrphan.getOrCreateDepartmentIdByName(deptText);
     if (departmentId == null) {
       return const OrphanQuickAddResult(
         requiresConfirmation: false,
@@ -585,10 +594,7 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
       await dirOrphan.updatePhoneDepartment(phone, departmentId);
     }
     if (equipmentNeedsShared) {
-      await dirOrphan.updateEquipmentDepartment(
-        equipmentCode,
-        departmentId,
-      );
+      await dirOrphan.updateEquipmentDepartment(equipmentCode, departmentId);
     }
 
     ref.invalidate(lookupServiceProvider);
@@ -610,7 +616,8 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
         ? 'Δεν υπήρχε στοιχείο προς καταχώρηση.'
         : 'Καταχωρήθηκε ${added.join(' και ')} ως κοινόχρηστο στο τμήμα ${state.departmentText.trim()}.';
 
-    final newEntityEligible = (deptText.isNotEmpty && !deptExistedBefore) ||
+    final newEntityEligible =
+        (deptText.isNotEmpty && !deptExistedBefore) ||
         (phone != null && phone.isNotEmpty && !phoneExistedBefore) ||
         (equipmentCode != null && !equipmentExistedBefore);
 
@@ -618,8 +625,9 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
     final equipResolved = (equipmentCode != null && equipmentCode.isNotEmpty)
         ? refreshed.findEquipmentsByCode(equipmentCode)
         : const <EquipmentModel>[];
-    final resolvedEquipmentId =
-        equipResolved.isNotEmpty ? equipResolved.first.id : null;
+    final resolvedEquipmentId = equipResolved.isNotEmpty
+        ? equipResolved.first.id
+        : null;
 
     if (newEntityEligible || _associationQuickTaskId != null) {
       try {
@@ -747,6 +755,68 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
       isEquipmentAmbiguous: false,
       callerNoMatch: false,
       equipmentNoMatch: false,
+    );
+  }
+
+  /// Φόρτωση πεδίων επιλογέα από υπάρχουσα `CallModel` (λειτουργία επεξεργασίας ιστορικού).
+  ///
+  /// Ακολουθεί το ίδιο pattern με `loadFromTask`: μόνο in-memory lookup cache και
+  /// fallback σε snapshot κειμένων της κλήσης όταν οι συσχετισμένες οντότητες
+  /// λείπουν ή είναι soft-deleted.
+  Future<void> loadFromCall(CallModel call) async {
+    final lookupService = (await ref.read(
+      lookupServiceProvider.future,
+    )).service;
+
+    final user = call.callerId != null
+        ? lookupService.findUserById(call.callerId)
+        : null;
+
+    final equipmentTextTrimmed = (call.equipmentText ?? '').trim();
+    final equipment = equipmentTextTrimmed.isEmpty
+        ? null
+        : lookupService.findEquipmentsByCode(equipmentTextTrimmed).firstOrNull;
+
+    final phoneRaw = call.phoneText?.trim();
+    final phoneValue = phoneRaw != null && phoneRaw.isNotEmpty
+        ? phoneRaw
+        : null;
+
+    final snapshotCaller = (call.callerText ?? '').trim();
+    final callerDisplayText = snapshotCaller.isNotEmpty
+        ? snapshotCaller
+        : (user?.name ?? user?.fullNameWithDepartment ?? '').trim();
+
+    final hasAnyContent =
+        user != null ||
+        equipment != null ||
+        phoneValue != null ||
+        snapshotCaller.isNotEmpty ||
+        (call.departmentText?.trim().isNotEmpty ?? false) ||
+        equipmentTextTrimmed.isNotEmpty;
+
+    state = state.copyWith(
+      selectedCaller: user,
+      clearSelectedCaller: user == null,
+      selectedEquipment: equipment,
+      clearSelectedEquipment: equipment == null,
+      selectedPhone: phoneValue,
+      clearSelectedPhone: phoneValue == null,
+      callerDisplayText: callerDisplayText,
+      departmentText: call.departmentText ?? '',
+      equipmentText: call.equipmentText ?? '',
+      hasAnyContent: hasAnyContent,
+      clearPhoneCandidates: true,
+      clearCallerCandidates: true,
+      clearEquipmentCandidates: true,
+      isPhoneAmbiguous: false,
+      isEquipmentAmbiguous: false,
+      callerNoMatch: false,
+      equipmentNoMatch: false,
+      phoneIsManual: false,
+      callerIsManual: false,
+      equipmentIsManual: false,
+      departmentIsManual: false,
     );
   }
 
@@ -1024,10 +1094,13 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
       return;
     }
     // Κατά το πρώτο frame το AsyncValue μπορεί να είναι ακόμα loading.
-    ref.read(lookupServiceProvider.future).then((bundle) {
-      if (!ref.mounted) return;
-      _applyPhoneLookupWithCatalog(digits, bundle.service);
-    }).catchError((_) {});
+    ref
+        .read(lookupServiceProvider.future)
+        .then((bundle) {
+          if (!ref.mounted) return;
+          _applyPhoneLookupWithCatalog(digits, bundle.service);
+        })
+        .catchError((_) {});
   }
 
   void _applyPhoneLookupWithCatalog(String digits, LookupService lookup) {
@@ -1038,8 +1111,9 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
       if (users.isEmpty) {
         final orphanDept = lookup.getDepartmentByPhone(digits);
         final canAutofillDepartment =
-            (!state.departmentIsManual || state.departmentText.trim().isEmpty) &&
-                state.selectedDepartmentId == null;
+            (!state.departmentIsManual ||
+                state.departmentText.trim().isEmpty) &&
+            state.selectedDepartmentId == null;
         state = state.copyWith(
           clearPhoneCandidates: true,
           callerCandidates: [],
@@ -1536,7 +1610,9 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
     if (!state.needsAssociation(lookupForAssoc)) return null;
 
     final msg = state.associationTooltip(lookupForAssoc);
-    final directory = DirectoryRepository(await DatabaseHelper.instance.database);
+    final directory = DirectoryRepository(
+      await DatabaseHelper.instance.database,
+    );
     if (state.needsNewCallerCreation) {
       final name = NameParserUtility.stripParentheticalSuffix(
         state.normalizedCallerDisplayText,
@@ -1545,7 +1621,8 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
       final equipmentCode = state.equipmentText.trim();
       final parsed = NameParserUtility.parse(name);
       final deptTextRaw = state.departmentText.trim();
-      final departmentExistedBefore = deptTextRaw.isNotEmpty &&
+      final departmentExistedBefore =
+          deptTextRaw.isNotEmpty &&
           await directory.departmentNameExists(deptTextRaw);
       final phoneExistedBefore = (phone != null && phone.isNotEmpty)
           ? await directory.phoneNumberExists(phone)
@@ -1561,8 +1638,9 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
               ? lookup.findDepartmentByName(state.departmentText)?.id
               : null);
       if (departmentId == null && state.departmentText.trim().isNotEmpty) {
-        departmentId = await directory
-            .getOrCreateDepartmentIdByName(state.departmentText.trim());
+        departmentId = await directory.getOrCreateDepartmentIdByName(
+          state.departmentText.trim(),
+        );
       }
       try {
         final parsedPhones = PhoneListParser.splitPhones(phone);
@@ -1607,14 +1685,17 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
           equipmentIsManual: false,
         );
         ref.invalidate(lookupServiceProvider);
-        final refreshedLookup = (await ref.read(lookupServiceProvider.future)).service;
+        final refreshedLookup = (await ref.read(
+          lookupServiceProvider.future,
+        )).service;
         final matchedNewCallerEquipment = equipTrim.isEmpty
             ? const <EquipmentModel>[]
             : refreshedLookup.findEquipmentsByCode(equipTrim);
         final resolvedEquipmentId = matchedNewCallerEquipment.isEmpty
             ? null
             : matchedNewCallerEquipment.first.id;
-        final resolvedDepartmentId = departmentIdNow ??
+        final resolvedDepartmentId =
+            departmentIdNow ??
             (s.departmentText.trim().isNotEmpty
                 ? refreshedLookup.findDepartmentByName(s.departmentText)?.id
                 : null);
@@ -1629,7 +1710,8 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
           newEntityEligible: true,
           associationWorkDone: true,
           summaryText: msg,
-          callerName: state.selectedCaller?.name ?? state.callerDisplayText.trim(),
+          callerName:
+              state.selectedCaller?.name ?? state.callerDisplayText.trim(),
           callerId: userId,
           departmentId: resolvedDepartmentId,
           equipmentId: resolvedEquipmentId,
@@ -1642,12 +1724,14 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
               ? null
               : s.departmentText.trim(),
         );
-        final createdDeptNow = deptTextRaw.isNotEmpty && !departmentExistedBefore;
+        final createdDeptNow =
+            deptTextRaw.isNotEmpty && !departmentExistedBefore;
         final lines = <String>[];
-        final fullName =
-            (state.selectedCaller?.name ?? state.callerDisplayText).trim();
-        final deptSuffix =
-            deptTextRaw.isNotEmpty ? ' στο τμήμα: $deptTextRaw' : '';
+        final fullName = (state.selectedCaller?.name ?? state.callerDisplayText)
+            .trim();
+        final deptSuffix = deptTextRaw.isNotEmpty
+            ? ' στο τμήμα: $deptTextRaw'
+            : '';
         lines.add('Δημιουργήθηκε νέος χρήστης $fullName$deptSuffix');
         if (createdDeptNow) {
           lines.add('Δημιουργήθηκε νέο τμήμα: $deptTextRaw');
@@ -1692,8 +1776,7 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
     final newEquipmentRow =
         hadEqWork && !await directory.equipmentCodeExists(eqCode);
     final deptTrimAssoc = state.departmentText.trim();
-    final willCreateDept =
-        updatePrimaryDepartment && deptTrimAssoc.isNotEmpty;
+    final willCreateDept = updatePrimaryDepartment && deptTrimAssoc.isNotEmpty;
     final newDepartmentRow =
         willCreateDept && !await directory.departmentNameExists(deptTrimAssoc);
     final newEntityEligible =
@@ -1717,8 +1800,9 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
           state.departmentText.trim().isNotEmpty &&
           state.selectedCaller?.id != null) {
         // Αν το τμήμα δεν υπάρχει ακόμα στη βάση, το δημιουργούμε ώστε να πάρουμε id.
-        selectedDepartmentId ??= await directory
-            .getOrCreateDepartmentIdByName(state.departmentText.trim());
+        selectedDepartmentId ??= await directory.getOrCreateDepartmentIdByName(
+          state.departmentText.trim(),
+        );
       }
 
       if (updatePrimaryDepartment &&
@@ -1729,17 +1813,16 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
           state.selectedCaller!.toMap(),
         );
         updatedMap['department_id'] = selectedDepartmentId;
-        await directory.updateUser(
-          state.selectedCaller!.id!,
-          updatedMap,
-        );
+        await directory.updateUser(state.selectedCaller!.id!, updatedMap);
         updatedDepartmentId = selectedDepartmentId;
         primaryDepartmentChanged = true;
       }
 
       final s = state;
       final phoneNow = s.hasPhoneAssociation ? null : s.selectedPhone?.trim();
-      final currentPhones = List<String>.from(s.selectedCaller?.phones ?? const []);
+      final currentPhones = List<String>.from(
+        s.selectedCaller?.phones ?? const [],
+      );
       List<String> updatedPhones = currentPhones;
       if (phoneNow != null && phoneNow.isNotEmpty) {
         final joined = PhoneListParser.joinPhones(currentPhones);
@@ -1770,14 +1853,17 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
       );
 
       ref.invalidate(lookupServiceProvider);
-      final refreshedLookup = (await ref.read(lookupServiceProvider.future)).service;
+      final refreshedLookup = (await ref.read(
+        lookupServiceProvider.future,
+      )).service;
       final matchedEquipment = eqCode?.isNotEmpty == true
           ? refreshedLookup.findEquipmentsByCode(eqCode!)
           : const <EquipmentModel>[];
       final resolvedEquipmentId = matchedEquipment.isNotEmpty
           ? matchedEquipment.first.id
           : s.selectedEquipment?.id;
-      final resolvedDepartmentId = selectedDepartmentId ??
+      final resolvedDepartmentId =
+          selectedDepartmentId ??
           (s.departmentText.trim().isNotEmpty
               ? refreshedLookup.findDepartmentByName(s.departmentText)?.id
               : null);
@@ -1890,22 +1976,26 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
               ? 'Ενημερώθηκε οντότητα καλούντα'
               : 'Quick add');
     final quickDescription = '${Task.quickAddTag} $descriptionCore';
-    return ref.read(taskServiceProvider).createFromCall(
-      callId: null,
-      callerName: caller,
-      description: quickDescription,
-      callDate: DateTime.now(),
-      callerId: callerId,
-      equipmentId: equipmentId,
-      departmentId: departmentId,
-      phoneId: null,
-      phoneText: phoneText?.isEmpty == true ? null : phoneText,
-      userText: userText?.isEmpty == true ? null : userText,
-      equipmentText: equipmentText?.isEmpty == true ? null : equipmentText,
-      departmentText: departmentText?.isEmpty == true ? null : departmentText,
-      priority: _criticalTaskPriority,
-      categoryName: Task.quickAddCategoryEl,
-    );
+    return ref
+        .read(taskServiceProvider)
+        .createFromCall(
+          callId: null,
+          callerName: caller,
+          description: quickDescription,
+          callDate: DateTime.now(),
+          callerId: callerId,
+          equipmentId: equipmentId,
+          departmentId: departmentId,
+          phoneId: null,
+          phoneText: phoneText?.isEmpty == true ? null : phoneText,
+          userText: userText?.isEmpty == true ? null : userText,
+          equipmentText: equipmentText?.isEmpty == true ? null : equipmentText,
+          departmentText: departmentText?.isEmpty == true
+              ? null
+              : departmentText,
+          priority: _criticalTaskPriority,
+          categoryName: Task.quickAddCategoryEl,
+        );
   }
 }
 
@@ -1917,6 +2007,12 @@ final callSmartEntityProvider =
 
 /// Κατάσταση έξυπνου επιλογέα για φόρμες **Εκκρεμοτήτων** / άλλες οθόνες.
 final taskSmartEntityProvider =
+    NotifierProvider<SmartEntitySelectorNotifier, SmartEntitySelectorState>(
+      SmartEntitySelectorNotifier.new,
+    );
+
+/// Κατάσταση έξυπνου επιλογέα για dialog επεξεργασίας από Ιστορικό κλήσεων.
+final historyEditSmartEntityProvider =
     NotifierProvider<SmartEntitySelectorNotifier, SmartEntitySelectorState>(
       SmartEntitySelectorNotifier.new,
     );

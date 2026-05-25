@@ -61,11 +61,10 @@ class TaskService {
 
   Future<void> _auditTaskCreate(
     DatabaseExecutor executor,
-    Database dbForSettings,
     int id,
     Map<String, dynamic> row,
   ) async {
-    final user = await AuditService.performingUser(dbForSettings);
+    final user = await AuditService.performingUser(executor);
     final nv = <String, dynamic>{};
     for (final k in _kTaskAuditKeys) {
       if (row.containsKey(k) && row[k] != null) nv[k] = row[k];
@@ -84,7 +83,6 @@ class TaskService {
 
   Future<void> _auditTaskUpdate(
     DatabaseExecutor executor,
-    Database dbForSettings,
     int id,
     Map<String, dynamic> oldRow,
     Map<String, dynamic> newMap,
@@ -100,7 +98,7 @@ class TaskService {
       }
     }
     if (newDiff.isEmpty) return;
-    final user = await AuditService.performingUser(dbForSettings);
+    final user = await AuditService.performingUser(executor);
     await AuditService.log(
       executor,
       action: 'ΤΡΟΠΟΠΟΙΗΣΗ ΕΚΚΡΕΜΟΤΗΤΑΣ',
@@ -345,7 +343,7 @@ class TaskService {
     try {
       return await db.transaction((txn) async {
         final id = await txn.insert('tasks', row);
-        await _auditTaskCreate(txn, db, id, row);
+        await _auditTaskCreate(txn, id, row);
         return id;
       });
     } catch (e) {
@@ -983,7 +981,7 @@ class TaskService {
     try {
       return await db.transaction((txn) async {
         final id = await txn.insert('tasks', map);
-        await _auditTaskCreate(txn, db, id, map);
+        await _auditTaskCreate(txn, id, map);
         return id;
       });
     } catch (e) {
@@ -1030,7 +1028,7 @@ class TaskService {
           whereArgs: [tid],
         );
         if (n > 0 && oldRow != null) {
-          await _auditTaskUpdate(txn, db, tid, oldRow, map);
+          await _auditTaskUpdate(txn, tid, oldRow, map);
         }
       });
     } catch (e) {

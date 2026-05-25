@@ -6,6 +6,24 @@
 
 **Σημείωση:** Μπορείτε να εμπλουτίσετε τις περιγραφές με λεπτομέρειες από μνήμη· το JSON `[assets/changelog.json](assets/changelog.json)` τροφοδοτεί την εφαρμογή και πρέπει να παραμένει συγχρονισμένο με αυτό το αρχείο.
 
+## [0.20.1] - 2026-05-25
+
+### Προστέθηκε
+
+- **Ιστορικό κλήσεων · επεξεργασία (`call_edit_dialog`):** διάλογος με `SmartEntitySelectorWidget` (`historyEditSmartEntityProvider`, `loadFromCall`), ημ/νία/ώρα, κατηγορία (`historyCategoryEntriesProvider`), κατάσταση, διάρκεια, σημειώσεις/λύση· προειδοποίηση όταν υπάρχει Lansweeper ticket/sent· κλωνοποίηση ως νέα κλήση· αποθήκευση μέσω `HistoryCallActionsService.saveEditedCall`.
+- **Ιστορικό κλήσεων · διαγραφή (`call_delete_dialog`):** soft delete ή hard delete· αν υπάρχουν συνδεδεμένες εκκρεμότητες — cascade ή αποσύνδεση (`nullify`)· επαναφόρτωση providers μετά τη μετάλλαξη.
+- **Ιστορικό κλήσεων · μαζική διαγραφή:** `historySelectedCallIdsProvider`, γραμμή ενεργειών «Επιλεγμένες κλήσεις» και `showCallBulkDeleteDialog`.
+
+### Άλλαξε
+
+- **Ιστορικό κλήσεων · πίνακας (`history_screen`):** αντικατάσταση `DataTable` με εικονικοποιημένη δομή (`ListView.builder`, οριζόντιο scroll, σταθερά πλάτη στηλών × zoom) — σημαντικά καλύτερη απόδοση σε ~180+ γραμμές και κατά το resize του desktop παραθύρου· διατήρηση ταξινόμησης, multi-select και ενέργειες ανά γραμμή.
+
+### Διορθώθηκε
+
+- **Ιστορικό · αποθήκευση τροποποίησης:** κλείδωμα βάσης ~10s και freeze — μέσα σε `db.transaction` καλούνταν `AuditService.performingUser(db)` αντί `performingUser(txn)`· διόρθωση σε `insertCall` / `updateCall` και `performingUser(DatabaseExecutor)`.
+- **Ιστορικό · Riverpod:** «Cannot use the Ref … after it has been disposed» μετά αποθήκευση — το `historyCallActionsServiceProvider` ήταν `autoDispose` ενώ τα dialogs κάνουν μόνο `ref.read`· μετατροπή σε κανονικό `Provider` και `ref.mounted` πριν τα `invalidate`.
+- **Εκκρεμότητες · audit σε transaction:** `_auditTaskCreate` / `_auditTaskUpdate` χρησιμοποιούν πλέον τον ίδιο `executor` για `performingUser` (ίδιο anti-deadlock pattern).
+
 ## [0.20.0] - 2026-05-24
 
 ### Προστέθηκε

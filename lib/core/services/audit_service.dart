@@ -12,8 +12,11 @@ class AuditService {
   final Database _db;
 
   /// Όνομα χρήστη για στήλη `user_performing` (ρύθμιση `app_settings`).
-  static Future<String> performingUser(Database db) async {
-    final rows = await db.query(
+  ///
+  /// Χρησιμοποίησε το ίδιο [DatabaseExecutor] με το ενεργό transaction (π.χ. `txn`),
+  /// όχι το root [Database] ενώ είναι ανοιχτό transaction — αλλιώς κλείδωμα SQLite.
+  static Future<String> performingUser(DatabaseExecutor executor) async {
+    final rows = await executor.query(
       'app_settings',
       columns: ['value'],
       where: 'key = ?',

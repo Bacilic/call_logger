@@ -13,6 +13,8 @@ import '../../../core/widgets/main_nav_destination.dart';
 import '../../../core/utils/history_entity_display_utils.dart';
 import '../providers/history_application_audit_view_provider.dart';
 import '../providers/history_provider.dart';
+import '../widgets/call_delete_dialog.dart';
+import '../widgets/call_edit_dialog.dart';
 import '../widgets/history_deleted_entity_text.dart';
 import '../widgets/application_audit_tab.dart';
 import 'dashboard_screen.dart';
@@ -20,8 +22,8 @@ import 'dashboard_screen.dart';
 /// Επίπεδο μεγέθυνσης πίνακα ιστορικού (0.5–2.0).
 final historyTableZoomProvider =
     NotifierProvider.autoDispose<HistoryTableZoomNotifier, double>(
-  HistoryTableZoomNotifier.new,
-);
+      HistoryTableZoomNotifier.new,
+    );
 
 class HistoryTableZoomNotifier extends Notifier<double> {
   @override
@@ -70,9 +72,9 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
   void _onSearchChanged(String value) {
     _debounceTimer?.cancel();
     _debounceTimer = Timer(_debounceDuration, () {
-      ref.read(historyFilterProvider.notifier).update(
-            (s) => s.copyWith(keyword: value.trim()),
-          );
+      ref
+          .read(historyFilterProvider.notifier)
+          .update((s) => s.copyWith(keyword: value.trim()));
     });
   }
 
@@ -93,15 +95,15 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
     }
     final range = result.range;
     if (range == null) return;
-    ref.read(historyFilterProvider.notifier).update(
-          (s) => s.copyWith(dateFrom: range.start, dateTo: range.end),
-        );
+    ref
+        .read(historyFilterProvider.notifier)
+        .update((s) => s.copyWith(dateFrom: range.start, dateTo: range.end));
   }
 
   void _clearDateRange() {
-    ref.read(historyFilterProvider.notifier).update(
-          (s) => s.copyWith(clearDateRange: true),
-        );
+    ref
+        .read(historyFilterProvider.notifier)
+        .update((s) => s.copyWith(clearDateRange: true));
   }
 
   void _toggleApplicationAuditView() {
@@ -132,21 +134,15 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
   }
 
   Widget _immersiveNavigationMenuButton() {
-    final showDb = ref.watch(showDatabaseNavProvider).maybeWhen(
-          data: (v) => v,
-          orElse: () => true,
-        );
+    final showDb = ref
+        .watch(showDatabaseNavProvider)
+        .maybeWhen(data: (v) => v, orElse: () => true);
     return PopupMenuButton<MainNavDestination>(
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       tooltip: 'Μετάβαση σε άλλη οθόνη',
       icon: const Icon(Icons.menu),
       padding: EdgeInsets.zero,
-      constraints: const BoxConstraints(
-        minWidth: 40,
-        minHeight: 40,
-      ),
+      constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
       onSelected: _navigateFromImmersiveHistory,
       itemBuilder: (context) {
         return <PopupMenuEntry<MainNavDestination>>[
@@ -205,6 +201,9 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
 
   @override
   Widget build(BuildContext context) {
+    ref.listen<HistoryFilterModel>(historyFilterProvider, (_, _) {
+      ref.read(historySelectedCallIdsProvider.notifier).clear();
+    });
     final theme = Theme.of(context);
     final filter = ref.watch(historyFilterProvider);
     final asyncCalls = ref.watch(historyCallsProvider);
@@ -213,13 +212,15 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
     final tableZoom = ref.watch(historyTableZoomProvider);
     final appAudit = ref.watch(historyApplicationAuditViewProvider);
     final immersive = ref.watch(historyAuditImmersiveProvider);
+    final selectedCallIds = ref.watch(historySelectedCallIdsProvider);
 
     String dateRangeLabel = '';
     if (filter.dateFrom != null && filter.dateTo != null) {
       dateRangeLabel =
           '${DateFormat('dd/MM/yyyy').format(filter.dateFrom!)} – ${DateFormat('dd/MM/yyyy').format(filter.dateTo!)}';
     } else if (filter.dateFrom != null) {
-      dateRangeLabel = 'από ${DateFormat('dd/MM/yyyy').format(filter.dateFrom!)}';
+      dateRangeLabel =
+          'από ${DateFormat('dd/MM/yyyy').format(filter.dateFrom!)}';
     } else if (filter.dateTo != null) {
       dateRangeLabel = 'έως ${DateFormat('dd/MM/yyyy').format(filter.dateTo!)}';
     }
@@ -253,10 +254,7 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
         title: Row(
           children: [
             const Expanded(
-              child: Text(
-                'Ιστορικό Κλήσεων',
-                overflow: TextOverflow.ellipsis,
-              ),
+              child: Text('Ιστορικό Κλήσεων', overflow: TextOverflow.ellipsis),
             ),
             IconButton(
               tooltip: 'Στατιστικά κλήσεων / Αναφορές',
@@ -312,9 +310,9 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
                                 onPressed: () {
                                   _debounceTimer?.cancel();
                                   _searchController.clear();
-                                  ref.read(historyFilterProvider.notifier).update(
-                                        (s) => s.copyWith(keyword: ''),
-                                      );
+                                  ref
+                                      .read(historyFilterProvider.notifier)
+                                      .update((s) => s.copyWith(keyword: ''));
                                 },
                                 tooltip: 'Καθαρισμός αναζήτησης',
                               );
@@ -335,7 +333,9 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
                           final options = <String?>[null, ...categories];
                           final current = filter.category;
                           return DropdownButtonFormField<String?>(
-                            initialValue: options.contains(current) ? current : null,
+                            initialValue: options.contains(current)
+                                ? current
+                                : null,
                             decoration: InputDecoration(
                               labelText: 'Κατηγορία',
                               border: OutlineInputBorder(
@@ -354,7 +354,9 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
                               );
                             }).toList(),
                             onChanged: (v) {
-                              ref.read(historyFilterProvider.notifier).update(
+                              ref
+                                  .read(historyFilterProvider.notifier)
+                                  .update(
                                     (s) => s.copyWith(
                                       category: v,
                                       clearCategory: v == null,
@@ -448,8 +450,9 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
                       IconButton(
                         tooltip: 'Σμίκρυνση',
                         icon: const Icon(Icons.zoom_out),
-                        onPressed: () =>
-                            ref.read(historyTableZoomProvider.notifier).zoomOut(),
+                        onPressed: () => ref
+                            .read(historyTableZoomProvider.notifier)
+                            .zoomOut(),
                       ),
                       IconButton(
                         tooltip: 'Επαναφορά μεγέθους (100%)',
@@ -460,8 +463,9 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
                       IconButton(
                         tooltip: 'Μεγέθυνση',
                         icon: const Icon(Icons.zoom_in),
-                        onPressed: () =>
-                            ref.read(historyTableZoomProvider.notifier).zoomIn(),
+                        onPressed: () => ref
+                            .read(historyTableZoomProvider.notifier)
+                            .zoomIn(),
                       ),
                       const SizedBox(width: 8),
                       Text(
@@ -520,7 +524,11 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(Icons.error_outline, size: 48, color: theme.colorScheme.error),
+                      Icon(
+                        Icons.error_outline,
+                        size: 48,
+                        color: theme.colorScheme.error,
+                      ),
                       const SizedBox(height: 16),
                       Expanded(
                         child: SingleChildScrollView(
@@ -554,7 +562,75 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
                     ),
                   );
                 }
-                return _HistoryDataTable(rows: rows);
+                final visibleRowIds = rows
+                    .map((r) => r['id'])
+                    .whereType<int>()
+                    .toSet();
+                final visibleSelectedIds = selectedCallIds
+                    .where(visibleRowIds.contains)
+                    .toSet();
+
+                if (visibleSelectedIds.length != selectedCallIds.length) {
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    if (!mounted) return;
+                    ref
+                        .read(historySelectedCallIdsProvider.notifier)
+                        .setAll(visibleSelectedIds);
+                  });
+                }
+
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    if (visibleSelectedIds.isNotEmpty)
+                      Container(
+                        color: theme.colorScheme.secondaryContainer.withValues(
+                          alpha: 0.35,
+                        ),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 8,
+                        ),
+                        child: Row(
+                          children: [
+                            Text(
+                              'Επιλεγμένες κλήσεις: ${visibleSelectedIds.length}',
+                              style: theme.textTheme.titleSmall,
+                            ),
+                            const SizedBox(width: 12),
+                            TextButton(
+                              onPressed: () {
+                                ref
+                                    .read(
+                                      historySelectedCallIdsProvider.notifier,
+                                    )
+                                    .clear();
+                              },
+                              child: const Text('Καθαρισμός'),
+                            ),
+                            const Spacer(),
+                            FilledButton.icon(
+                              onPressed: () async {
+                                await showCallBulkDeleteDialog(
+                                  context,
+                                  callIds: visibleSelectedIds.toList(),
+                                );
+                                if (!mounted) return;
+                                ref
+                                    .read(
+                                      historySelectedCallIdsProvider.notifier,
+                                    )
+                                    .clear();
+                              },
+                              icon: const Icon(Icons.delete_sweep_outlined),
+                              label: const Text('Μαζική διαγραφή'),
+                            ),
+                          ],
+                        ),
+                      ),
+                    Expanded(child: _HistoryDataTable(rows: rows)),
+                  ],
+                );
               },
             ),
           ),
@@ -575,10 +651,50 @@ class _HistoryDataTable extends ConsumerStatefulWidget {
 }
 
 class _HistoryDataTableState extends ConsumerState<_HistoryDataTable> {
+  /// Βασικά πλάτη στηλών (checkbox, ημ/νία, καλούντας, τηλέφωνο, τμήμα,
+  /// εξοπλισμός, κατηγορία, σημειώσεις, διάρκεια, ενέργειες).
+  static const List<double> _baseColumnWidths = [
+    50,
+    130,
+    160,
+    110,
+    140,
+    130,
+    140,
+    220,
+    90,
+    110,
+  ];
+
+  static const List<String> _dataColumnLabels = [
+    'Ημ/νία & Ώρα',
+    'Καλούντας',
+    'Τηλέφωνο',
+    'Τμήμα',
+    'Εξοπλισμός',
+    'Κατηγορία',
+    'Σημειώσεις',
+    'Διάρκεια',
+  ];
+
   late final ScrollController _horizontalScrollController;
   late final ScrollController _verticalScrollController;
   int? _sortColumnIndex;
   bool _sortAscending = true;
+  int? _hoveredRowIndex;
+
+  int? _rowId(Map<String, dynamic> row) => row['id'] as int?;
+
+  void _toggleSelection(int callId, bool selected) {
+    final current = ref.read(historySelectedCallIdsProvider);
+    final next = <int>{...current};
+    if (selected) {
+      next.add(callId);
+    } else {
+      next.remove(callId);
+    }
+    ref.read(historySelectedCallIdsProvider.notifier).setAll(next);
+  }
 
   @override
   void initState() {
@@ -635,7 +751,9 @@ class _HistoryDataTableState extends ConsumerState<_HistoryDataTable> {
   /// Μορφοποίηση διάρκειας (δευτερόλεπτα) ως "λλ:δδ". Null → "—".
   String _formatDuration(dynamic duration) {
     if (duration == null) return '—';
-    final sec = duration is int ? duration : int.tryParse(duration?.toString() ?? '');
+    final sec = duration is int
+        ? duration
+        : int.tryParse(duration?.toString() ?? '');
     if (sec == null) return '—';
     final minutes = sec ~/ 60;
     final seconds = sec % 60;
@@ -684,13 +802,348 @@ class _HistoryDataTableState extends ConsumerState<_HistoryDataTable> {
     return list;
   }
 
+  List<double> _scaledColumnWidths(double zoomLevel) =>
+      _baseColumnWidths.map((w) => w * zoomLevel).toList();
+
+  double _totalTableWidth(double zoomLevel) =>
+      _scaledColumnWidths(zoomLevel).fold(0.0, (a, b) => a + b);
+
+  void _onSortHeaderTap(int columnIndex) {
+    setState(() {
+      if (_sortColumnIndex == columnIndex) {
+        _sortAscending = !_sortAscending;
+      } else {
+        _sortColumnIndex = columnIndex;
+        _sortAscending = true;
+      }
+    });
+  }
+
+  Widget _headerCell({
+    required double width,
+    required double horizontalPadding,
+    required Widget child,
+    VoidCallback? onTap,
+  }) {
+    final theme = Theme.of(context);
+    final content = Padding(
+      padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
+      child: child,
+    );
+    if (onTap == null) {
+      return SizedBox(width: width, child: content);
+    }
+    return SizedBox(
+      width: width,
+      child: Material(
+        type: MaterialType.transparency,
+        child: InkWell(
+          onTap: onTap,
+          hoverColor: theme.colorScheme.onSurface.withValues(alpha: 0.04),
+          child: content,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHeaderRow({
+    required ThemeData theme,
+    required double zoomLevel,
+    required List<double> columnWidths,
+    required double headingRowHeight,
+    required double horizontalPadding,
+    required bool allVisibleSelected,
+    required Set<int> visibleIds,
+    required Set<int> selectedCallIds,
+  }) {
+    final headingStyle = theme.textTheme.titleSmall?.copyWith(
+      fontWeight: FontWeight.w600,
+      color: theme.colorScheme.onSurface,
+    );
+
+    Widget sortableLabel(int columnIndex, String label) {
+      final isActive = _sortColumnIndex == columnIndex;
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Flexible(
+            child: Text(
+              label,
+              style: headingStyle,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          if (isActive) ...[
+            const SizedBox(width: 4),
+            Icon(
+              _sortAscending
+                  ? Icons.arrow_upward
+                  : Icons.arrow_downward,
+              size: 16 * zoomLevel,
+              color: theme.colorScheme.primary,
+            ),
+          ],
+        ],
+      );
+    }
+
+    final cells = <Widget>[
+      _headerCell(
+        width: columnWidths[0],
+        horizontalPadding: horizontalPadding,
+        child: Transform.scale(
+          scale: zoomLevel.clamp(0.85, 1.4),
+          child: Checkbox(
+            value: allVisibleSelected,
+            onChanged: (v) {
+              final target = v == true;
+              final next = <int>{...selectedCallIds};
+              if (target) {
+                next.addAll(visibleIds);
+              } else {
+                next.removeAll(visibleIds);
+              }
+              ref.read(historySelectedCallIdsProvider.notifier).setAll(next);
+            },
+          ),
+        ),
+      ),
+      for (var i = 0; i < _dataColumnLabels.length; i++)
+        _headerCell(
+          width: columnWidths[i + 1],
+          horizontalPadding: horizontalPadding,
+          onTap: () => _onSortHeaderTap(i + 1),
+          child: sortableLabel(i + 1, _dataColumnLabels[i]),
+        ),
+      _headerCell(
+        width: columnWidths[9],
+        horizontalPadding: horizontalPadding,
+        child: Text('Ενέργειες', style: headingStyle),
+      ),
+    ];
+
+    return Container(
+      height: headingRowHeight,
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHighest.withValues(
+          alpha: 0.5,
+        ),
+        border: Border(
+          bottom: BorderSide(
+            color: theme.dividerColor.withValues(alpha: 0.6),
+          ),
+        ),
+      ),
+      child: Row(children: cells),
+    );
+  }
+
+  Widget _dataCell({
+    required double width,
+    required double horizontalPadding,
+    required Widget child,
+  }) {
+    return SizedBox(
+      width: width,
+      child: Padding(
+        padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
+        child: Align(alignment: Alignment.centerLeft, child: child),
+      ),
+    );
+  }
+
+  Widget _buildDataRow({
+    required Map<String, dynamic> row,
+    required int rowIndex,
+    required ThemeData theme,
+    required double zoomLevel,
+    required List<double> columnWidths,
+    required double dataRowHeight,
+    required double horizontalPadding,
+    required Set<int> selectedCallIds,
+  }) {
+    final callId = _rowId(row);
+    final isSelected = callId != null && selectedCallIds.contains(callId);
+    final isHovered = _hoveredRowIndex == rowIndex;
+
+    Color? rowColor;
+    if (isSelected) {
+      rowColor = theme.colorScheme.primaryContainer.withValues(alpha: 0.35);
+    } else if (isHovered) {
+      rowColor = theme.colorScheme.surfaceContainerHighest.withValues(
+        alpha: 0.45,
+      );
+    }
+
+    final dateTime = _formatCallDateTimeDisplay(row);
+    final user = _userDisplay(row);
+    final callerDeleted = historyEntityIsDeleted(row['caller_is_deleted']);
+    final phone = row['user_phone']?.toString().trim() ?? '—';
+    final department = _str(row['user_department']);
+    final equipment = _str(row['equipment_code']);
+    final equipmentDeleted = historyEntityIsDeleted(row['equipment_is_deleted']);
+    final category = _str(row['category']);
+    final categoryDeleted = historyEntityIsDeleted(row['category_is_deleted']);
+    final issue = _str(row['issue']);
+    final durationStr = _formatDuration(row['duration']);
+
+    final bodyStyle = theme.textTheme.bodyMedium;
+
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hoveredRowIndex = rowIndex),
+      onExit: (_) {
+        if (_hoveredRowIndex == rowIndex) {
+          setState(() => _hoveredRowIndex = null);
+        }
+      },
+      child: Container(
+        height: dataRowHeight,
+        decoration: BoxDecoration(
+          color: rowColor,
+          border: Border(
+            bottom: BorderSide(
+              color: theme.dividerColor.withValues(alpha: 0.35),
+            ),
+          ),
+        ),
+        child: Row(
+          children: [
+            _dataCell(
+              width: columnWidths[0],
+              horizontalPadding: horizontalPadding,
+              child: Transform.scale(
+                scale: zoomLevel.clamp(0.85, 1.4),
+                child: Checkbox(
+                  value: isSelected,
+                  onChanged: callId == null
+                      ? null
+                      : (value) =>
+                            _toggleSelection(callId, value == true),
+                ),
+              ),
+            ),
+            _dataCell(
+              width: columnWidths[1],
+              horizontalPadding: horizontalPadding,
+              child: Text(dateTime, style: bodyStyle),
+            ),
+            _dataCell(
+              width: columnWidths[2],
+              horizontalPadding: horizontalPadding,
+              child: HistoryDeletedEntityText(
+                text: user,
+                isDeleted: callerDeleted && user != '—',
+                style: bodyStyle,
+              ),
+            ),
+            _dataCell(
+              width: columnWidths[3],
+              horizontalPadding: horizontalPadding,
+              child: Text(
+                phone.isEmpty ? '—' : phone,
+                style: bodyStyle,
+              ),
+            ),
+            _dataCell(
+              width: columnWidths[4],
+              horizontalPadding: horizontalPadding,
+              child: Text(
+                department.isEmpty ? '—' : department,
+                style: bodyStyle,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            _dataCell(
+              width: columnWidths[5],
+              horizontalPadding: horizontalPadding,
+              child: HistoryDeletedEntityText(
+                text: equipment.isEmpty ? '—' : equipment,
+                isDeleted: equipmentDeleted && equipment.isNotEmpty,
+                style: bodyStyle,
+              ),
+            ),
+            _dataCell(
+              width: columnWidths[6],
+              horizontalPadding: horizontalPadding,
+              child: HistoryDeletedEntityText(
+                text: category.isEmpty ? '—' : category,
+                isDeleted: categoryDeleted && category.isNotEmpty,
+                style: bodyStyle,
+              ),
+            ),
+            _dataCell(
+              width: columnWidths[7],
+              horizontalPadding: horizontalPadding,
+              child: Text(
+                issue.isEmpty ? '—' : issue,
+                style: bodyStyle,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            _dataCell(
+              width: columnWidths[8],
+              horizontalPadding: horizontalPadding,
+              child: Text(durationStr, style: bodyStyle),
+            ),
+            _dataCell(
+              width: columnWidths[9],
+              horizontalPadding: horizontalPadding,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(
+                    tooltip: 'Επεξεργασία',
+                    visualDensity: VisualDensity.compact,
+                    onPressed: callId == null
+                        ? null
+                        : () => showCallEditDialog(
+                            context,
+                            callId: callId,
+                          ),
+                    icon: const Icon(Icons.edit_outlined),
+                  ),
+                  IconButton(
+                    tooltip: 'Διαγραφή',
+                    visualDensity: VisualDensity.compact,
+                    onPressed: callId == null
+                        ? null
+                        : () => showCallDeleteDialog(
+                            context,
+                            callId: callId,
+                            callerId: row['caller_id'] as int?,
+                            equipmentCode: _str(row['equipment_code']),
+                          ),
+                    icon: Icon(
+                      Icons.delete_outline,
+                      color: theme.colorScheme.error,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final zoomLevel = ref.watch(historyTableZoomProvider);
+    final selectedCallIds = ref.watch(historySelectedCallIdsProvider);
     final rowsToShow = _sortColumnIndex != null
-        ? _sortedRows(widget.rows, _sortColumnIndex!, _sortAscending)
+        ? _sortedRows(widget.rows, _sortColumnIndex! - 1, _sortAscending)
         : widget.rows;
+    final visibleIds = rowsToShow.map(_rowId).whereType<int>().toSet();
+    final allVisibleSelected =
+        visibleIds.isNotEmpty && visibleIds.every(selectedCallIds.contains);
+
+    final columnWidths = _scaledColumnWidths(zoomLevel);
+    final tableWidth = _totalTableWidth(zoomLevel);
+    final headingRowHeight = 56.0 * zoomLevel;
+    final dataRowHeight = 48.0 * zoomLevel;
+    final horizontalPadding = 12.0 * zoomLevel;
 
     return Scrollbar(
       controller: _horizontalScrollController,
@@ -699,132 +1152,50 @@ class _HistoryDataTableState extends ConsumerState<_HistoryDataTable> {
       child: SingleChildScrollView(
         controller: _horizontalScrollController,
         scrollDirection: Axis.horizontal,
-        child: Scrollbar(
-          controller: _verticalScrollController,
-          thumbVisibility: true,
-          trackVisibility: true,
-          child: SingleChildScrollView(
-            controller: _verticalScrollController,
-            scrollDirection: Axis.vertical,
-            child: MediaQuery(
-              data: MediaQuery.of(context).copyWith(
-                textScaler: TextScaler.linear(zoomLevel),
-              ),
-              child: IconTheme(
-                data: IconThemeData(size: 24.0 * zoomLevel),
-                child: DataTable(
-                  headingRowColor: WidgetStateProperty.all(
-                    theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+        child: SizedBox(
+          width: tableWidth,
+          child: MediaQuery(
+            data: MediaQuery.of(context).copyWith(
+              textScaler: TextScaler.linear(zoomLevel),
+            ),
+            child: IconTheme(
+              data: IconThemeData(size: 24.0 * zoomLevel),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _buildHeaderRow(
+                    theme: theme,
+                    zoomLevel: zoomLevel,
+                    columnWidths: columnWidths,
+                    headingRowHeight: headingRowHeight,
+                    horizontalPadding: horizontalPadding,
+                    allVisibleSelected: allVisibleSelected,
+                    visibleIds: visibleIds,
+                    selectedCallIds: selectedCallIds,
                   ),
-                  dataRowMinHeight: 48.0 * zoomLevel,
-                  dataRowMaxHeight: 48.0 * zoomLevel,
-                  headingRowHeight: 56.0 * zoomLevel,
-                  columnSpacing: 28.0 * zoomLevel,
-                  horizontalMargin: 12.0 * zoomLevel,
-                  sortColumnIndex: _sortColumnIndex,
-                  sortAscending: _sortAscending,
-                columns: [
-                  DataColumn(
-                    label: const Text('Ημ/νία & Ώρα'),
-                    onSort: (_, asc) => setState(() {
-                      _sortColumnIndex = 0;
-                      _sortAscending = asc;
-                    }),
-                  ),
-                  DataColumn(
-                    label: const Text('Καλούντας'),
-                    onSort: (_, asc) => setState(() {
-                      _sortColumnIndex = 1;
-                      _sortAscending = asc;
-                    }),
-                  ),
-                  DataColumn(
-                    label: const Text('Τηλέφωνο'),
-                    onSort: (_, asc) => setState(() {
-                      _sortColumnIndex = 2;
-                      _sortAscending = asc;
-                    }),
-                  ),
-                  DataColumn(
-                    label: const Text('Τμήμα'),
-                    onSort: (_, asc) => setState(() {
-                      _sortColumnIndex = 3;
-                      _sortAscending = asc;
-                    }),
-                  ),
-                  DataColumn(
-                    label: const Text('Εξοπλισμός'),
-                    onSort: (_, asc) => setState(() {
-                      _sortColumnIndex = 4;
-                      _sortAscending = asc;
-                    }),
-                  ),
-                  DataColumn(
-                    label: const Text('Κατηγορία'),
-                    onSort: (_, asc) => setState(() {
-                      _sortColumnIndex = 5;
-                      _sortAscending = asc;
-                    }),
-                  ),
-                  DataColumn(
-                    label: const Text('Σημειώσεις'),
-                    onSort: (_, asc) => setState(() {
-                      _sortColumnIndex = 6;
-                      _sortAscending = asc;
-                    }),
-                  ),
-                  DataColumn(
-                    label: const Text('Διάρκεια'),
-                    onSort: (_, asc) => setState(() {
-                      _sortColumnIndex = 7;
-                      _sortAscending = asc;
-                    }),
+                  Expanded(
+                    child: Scrollbar(
+                      controller: _verticalScrollController,
+                      thumbVisibility: true,
+                      trackVisibility: true,
+                      child: ListView.builder(
+                        controller: _verticalScrollController,
+                        itemCount: rowsToShow.length,
+                        itemExtent: dataRowHeight,
+                        itemBuilder: (context, index) => _buildDataRow(
+                          row: rowsToShow[index],
+                          rowIndex: index,
+                          theme: theme,
+                          zoomLevel: zoomLevel,
+                          columnWidths: columnWidths,
+                          dataRowHeight: dataRowHeight,
+                          horizontalPadding: horizontalPadding,
+                          selectedCallIds: selectedCallIds,
+                        ),
+                      ),
+                    ),
                   ),
                 ],
-                rows: rowsToShow.map((row) {
-                  final dateTime = _formatCallDateTimeDisplay(row);
-                  final user = _userDisplay(row);
-                  final callerDeleted =
-                      historyEntityIsDeleted(row['caller_is_deleted']);
-                  final phone = row['user_phone']?.toString().trim() ?? '—';
-                  final department = _str(row['user_department']);
-                  final equipment = _str(row['equipment_code']);
-                  final equipmentDeleted =
-                      historyEntityIsDeleted(row['equipment_is_deleted']);
-                  final category = _str(row['category']);
-                  final categoryDeleted =
-                      historyEntityIsDeleted(row['category_is_deleted']);
-                  final issue = _str(row['issue']);
-                  final durationStr = _formatDuration(row['duration']);
-                  return DataRow(
-                    cells: [
-                      DataCell(Text(dateTime)),
-                      DataCell(ConstrainedBox(
-                        constraints: const BoxConstraints(maxWidth: 180),
-                        child: HistoryDeletedEntityText(
-                          text: user,
-                          isDeleted: callerDeleted && user != '—',
-                        ),
-                      )),
-                      DataCell(Text(phone.isEmpty ? '—' : phone)),
-                      DataCell(Text(department.isEmpty ? '—' : department)),
-                      DataCell(HistoryDeletedEntityText(
-                        text: equipment.isEmpty ? '—' : equipment,
-                        isDeleted: equipmentDeleted && equipment.isNotEmpty,
-                      )),
-                      DataCell(HistoryDeletedEntityText(
-                        text: category.isEmpty ? '—' : category,
-                        isDeleted: categoryDeleted && category.isNotEmpty,
-                      )),
-                      DataCell(ConstrainedBox(
-                        constraints: const BoxConstraints(maxWidth: 220),
-                        child: Text(issue, overflow: TextOverflow.ellipsis),
-                      )),
-                      DataCell(Text(durationStr)),
-                    ],
-                  );
-                }).toList(),
-                ),
               ),
             ),
           ),

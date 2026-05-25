@@ -7,6 +7,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import '../../features/calls/models/call_model.dart';
 import '../../features/history/models/dashboard_filter_model.dart';
 import '../../features/history/models/dashboard_summary_model.dart';
+import 'database_helper.dart';
 import '../errors/call_save_exception.dart';
 import '../services/audit_service.dart';
 import '../utils/history_entity_display_utils.dart';
@@ -121,9 +122,7 @@ class CallsRepository {
   ) {
     final nq = SearchTextNormalizer.normalizeForSearch(userQuery);
     if (nq.isEmpty) return;
-    whereClauses.add(
-      '(calls.search_index LIKE ? OR $userPhoneExpr LIKE ?)',
-    );
+    whereClauses.add('(calls.search_index LIKE ? OR $userPhoneExpr LIKE ?)');
     args.add('%$nq%');
     args.add('%$nq%');
   }
@@ -213,15 +212,17 @@ class CallsRepository {
       return await db.transaction((txn) async {
         map['search_index'] = await _buildCallSearchIndex(txn, map);
         final id = await txn.insert('calls', map);
-        final user = await AuditService.performingUser(db);
+        final user = await AuditService.performingUser(txn);
         final nv = <String, dynamic>{};
         for (final k in _kCallAuditFields) {
           if (map.containsKey(k) && map[k] != null) {
             nv[k] = map[k];
           }
         }
-        final entityName =
-            (await buildCallAuditDisplayLine(id, executor: txn)).trim();
+        final entityName = (await buildCallAuditDisplayLine(
+          id,
+          executor: txn,
+        )).trim();
         await AuditService.log(
           txn,
           action: 'ΔΗΜΙΟΥΡΓΙΑ ΚΛΗΣΗΣ',
@@ -236,9 +237,7 @@ class CallsRepository {
       });
     } catch (e) {
       if (e is CallSaveException) rethrow;
-      throw CallSaveException(
-        'Η κλήση δεν αποθηκεύτηκε. Δοκιμάστε ξανά.',
-      );
+      throw CallSaveException('Η κλήση δεν αποθηκεύτηκε. Δοκιμάστε ξανά.');
     }
   }
 
@@ -304,9 +303,11 @@ class CallsRepository {
             }
           }
           if (newDiff.isNotEmpty) {
-            final user = await AuditService.performingUser(db);
-            final entityName =
-                (await buildCallAuditDisplayLine(id, executor: txn)).trim();
+            final user = await AuditService.performingUser(txn);
+            final entityName = (await buildCallAuditDisplayLine(
+              id,
+              executor: txn,
+            )).trim();
             await AuditService.log(
               txn,
               action: 'ΤΡΟΠΟΠΟΙΗΣΗ ΚΛΗΣΗΣ',
@@ -324,9 +325,322 @@ class CallsRepository {
       });
     } catch (e) {
       if (e is CallSaveException) rethrow;
-      throw CallSaveException(
-        'Η κλήση δεν ενημερώθηκε. Δοκιμάστε ξανά.',
+      throw CallSaveException('Η κλήση δεν ενημερώθηκε. Δοκιμάστε ξανά.');
+    }
+  }
+
+  Future<int> getTasksCountLinkedToCall(int callId) async {
+    final rows = await db.rawQuery(
+      '''
+      SELECT COUNT(*) AS c
+      FROM tasks
+      WHERE call_id = ? AND COALESCE(is_deleted, 0) = 0
+      ''',
+      [callId],
+    );
+    if (rows.isEmpty) return 0;
+    final value = rows.first['c'];
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    return int.tryParse(value?.toString() ?? '') ?? 0;
+  }
+
+  Future<int> getTasksCountLinkedToCalls(List<int> callIds) async {
+    if (callIds.isEmpty) return 0;
+    final placeholders = List.filled(callIds.length, '?').join(', ');
+    final rows = await db.rawQuery('''
+      SELECT COUNT(*) AS c
+      FROM tasks
+      WHERE call_id IN ($placeholders) AND COALESCE(is_deleted, 0) = 0
+      ''', callIds);
+    if (rows.isEmpty) return 0;
+    final value = rows.first['c'];
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    return int.tryParse(value?.toString() ?? '') ?? 0;
+  }
+
+  Future<List<int>> _getTaskIdsLinkedToCall(
+    DatabaseExecutor executor,
+    int callId,
+  ) async {
+    final rows = await executor.query(
+      'tasks',
+      columns: ['id'],
+      where: 'call_id = ? AND COALESCE(is_deleted, 0) = 0',
+      whereArgs: [callId],
+    );
+    return rows.map((r) => r['id']).whereType<int>().toList(growable: false);
+  }
+
+  Future<void> _softDeleteTaskInTxn(
+    DatabaseExecutor txn,
+    int taskId,
+    String userPerforming,
+  ) async {
+    final titleRows = await txn.query(
+      'tasks',
+      columns: ['title'],
+      where: 'id = ?',
+      whereArgs: [taskId],
+      limit: 1,
+    );
+    if (titleRows.isEmpty) return;
+    final taskTitle = (titleRows.first['title'] as String?)?.trim();
+    await txn.update(
+      'tasks',
+      {'is_deleted': 1},
+      where: 'id = ?',
+      whereArgs: [taskId],
+    );
+    await AuditService.log(
+      txn,
+      action: DatabaseHelper.auditActionDelete,
+      userPerforming: userPerforming,
+      details: 'tasks id=$taskId',
+      entityType: AuditEntityTypes.task,
+      entityId: taskId,
+      entityName: taskTitle != null && taskTitle.isNotEmpty ? taskTitle : null,
+    );
+  }
+
+  Future<void> _softDeleteCallInTxn(
+    DatabaseExecutor txn,
+    int callId,
+    String userPerforming, {
+    bool logAudit = true,
+  }) async {
+    final rows = await txn.query(
+      'calls',
+      where: 'id = ?',
+      whereArgs: [callId],
+      limit: 1,
+    );
+    if (rows.isEmpty) return;
+    final row = Map<String, dynamic>.from(rows.first);
+    row['is_deleted'] = 1;
+    final si = await _buildCallSearchIndex(txn, row);
+    await txn.update(
+      'calls',
+      {'is_deleted': 1, 'search_index': si},
+      where: 'id = ?',
+      whereArgs: [callId],
+    );
+    if (!logAudit) return;
+    final entityName = (await buildCallAuditDisplayLine(
+      callId,
+      executor: txn,
+    )).trim();
+    await AuditService.log(
+      txn,
+      action: DatabaseHelper.auditActionDelete,
+      userPerforming: userPerforming,
+      details: 'calls id=$callId',
+      entityType: AuditEntityTypes.call,
+      entityId: callId,
+      entityName: entityName.isEmpty ? null : entityName,
+      oldValues: {'is_deleted': 0},
+      newValues: {'is_deleted': 1},
+    );
+  }
+
+  Future<void> _hardDeleteCallInTxn(
+    DatabaseExecutor txn,
+    int callId,
+    String userPerforming,
+  ) async {
+    final rows = await txn.query(
+      'calls',
+      where: 'id = ?',
+      whereArgs: [callId],
+      limit: 1,
+    );
+    if (rows.isEmpty) return;
+    final oldRow = Map<String, dynamic>.from(rows.first);
+    final oldValues = <String, dynamic>{};
+    for (final field in _kCallAuditFields) {
+      if (oldRow.containsKey(field)) {
+        oldValues[field] = oldRow[field];
+      }
+    }
+    final entityName = (await buildCallAuditDisplayLine(
+      callId,
+      executor: txn,
+    )).trim();
+    await txn.delete(
+      'call_external_links',
+      where: 'call_id = ?',
+      whereArgs: [callId],
+    );
+    await txn.delete('calls', where: 'id = ?', whereArgs: [callId]);
+    await AuditService.log(
+      txn,
+      action: DatabaseHelper.auditActionDelete,
+      userPerforming: userPerforming,
+      details: 'calls id=$callId',
+      entityType: AuditEntityTypes.call,
+      entityId: callId,
+      entityName: entityName.isEmpty ? null : entityName,
+      oldValues: oldValues,
+    );
+  }
+
+  Future<void> deleteCallWithTasksAction(
+    int callId,
+    String action, {
+    bool hard = false,
+  }) async {
+    if (action != 'cascade' && action != 'nullify') {
+      throw ArgumentError.value(action, 'action', 'Unsupported tasks action');
+    }
+    final user = await AuditService.performingUser(db);
+    await db.transaction((txn) async {
+      if (action == 'cascade') {
+        final taskIds = await _getTaskIdsLinkedToCall(txn, callId);
+        for (final taskId in taskIds) {
+          await _softDeleteTaskInTxn(txn, taskId, user);
+        }
+      } else {
+        await txn.update(
+          'tasks',
+          {'call_id': null},
+          where: 'call_id = ?',
+          whereArgs: [callId],
+        );
+      }
+      if (hard) {
+        await _hardDeleteCallInTxn(txn, callId, user);
+      } else {
+        await _softDeleteCallInTxn(txn, callId, user);
+      }
+    });
+  }
+
+  Future<void> hardDeleteCall(int callId) async {
+    final user = await AuditService.performingUser(db);
+    await db.transaction((txn) async {
+      await _hardDeleteCallInTxn(txn, callId, user);
+    });
+  }
+
+  Future<void> bulkSoftDeleteCalls(
+    List<int> callIds, {
+    String? taskAction,
+  }) async {
+    if (callIds.isEmpty) return;
+    if (taskAction != null &&
+        taskAction != 'cascade' &&
+        taskAction != 'nullify') {
+      throw ArgumentError.value(
+        taskAction,
+        'taskAction',
+        'Unsupported tasks action',
       );
+    }
+    if (taskAction == null) {
+      final linkedCount = await getTasksCountLinkedToCalls(callIds);
+      if (linkedCount > 0) {
+        throw StateError('Linked tasks exist; choose a tasks action.');
+      }
+    }
+
+    final user = await AuditService.performingUser(db);
+    await db.transaction((txn) async {
+      final placeholders = List.filled(callIds.length, '?').join(', ');
+      if (taskAction == 'cascade') {
+        final taskRows = await txn.query(
+          'tasks',
+          columns: ['id'],
+          where: 'call_id IN ($placeholders) AND COALESCE(is_deleted, 0) = 0',
+          whereArgs: callIds,
+        );
+        final taskIds = taskRows.map((r) => r['id']).whereType<int>();
+        for (final taskId in taskIds) {
+          await _softDeleteTaskInTxn(txn, taskId, user);
+        }
+      } else if (taskAction == 'nullify') {
+        await txn.update(
+          'tasks',
+          {'call_id': null},
+          where: 'call_id IN ($placeholders)',
+          whereArgs: callIds,
+        );
+      }
+
+      for (final callId in callIds) {
+        await _softDeleteCallInTxn(txn, callId, user, logAudit: false);
+      }
+
+      await AuditService.logBulk(
+        txn,
+        action: DatabaseHelper.auditActionBulkDelete,
+        userPerforming: user,
+        entityType: AuditEntityTypes.call,
+        affectedIds: callIds,
+        appliedFields: const {'is_deleted': 1},
+        details: 'calls count=${callIds.length}',
+      );
+    });
+  }
+
+  Future<int> cloneCall(int sourceCallId) async {
+    final source = await getCallById(sourceCallId);
+    if (source == null) {
+      throw StateError('Call not found: id=$sourceCallId');
+    }
+    final now = DateTime.now();
+    final user = await AuditService.performingUser(db);
+    final map = <String, dynamic>{
+      'date': DateFormat('yyyy-MM-dd').format(now),
+      'time': DateFormat('HH:mm').format(now),
+      'caller_id': source.callerId,
+      'equipment_id': source.equipmentId,
+      'caller_text': source.callerText,
+      'phone_text': source.phoneText,
+      'department_text': source.departmentText,
+      'equipment_text': source.equipmentText,
+      'issue': source.issue,
+      'solution': source.solution,
+      'category_text': source.category,
+      'category_id': source.categoryId,
+      'status': source.status ?? 'completed',
+      'duration': source.duration,
+      'is_priority': source.isPriority ?? 0,
+      'lansweeper_state': 'unsent',
+      'lansweeper_main_ticket_id': null,
+      'lansweeper_last_sync_at': null,
+      'is_deleted': 0,
+    };
+
+    try {
+      return await db.transaction((txn) async {
+        map['search_index'] = await _buildCallSearchIndex(txn, map);
+        final id = await txn.insert('calls', map);
+        final nv = <String, dynamic>{};
+        for (final k in _kCallAuditFields) {
+          if (map.containsKey(k) && map[k] != null) {
+            nv[k] = map[k];
+          }
+        }
+        final entityName = (await buildCallAuditDisplayLine(
+          id,
+          executor: txn,
+        )).trim();
+        await AuditService.log(
+          txn,
+          action: 'ΔΗΜΙΟΥΡΓΙΑ ΚΛΗΣΗΣ',
+          userPerforming: user,
+          details: 'calls id=$id',
+          entityType: AuditEntityTypes.call,
+          entityId: id,
+          entityName: entityName.isEmpty ? null : entityName,
+          newValues: nv.isEmpty ? null : nv,
+        );
+        return id;
+      });
+    } catch (e) {
+      if (e is CallSaveException) rethrow;
+      throw CallSaveException('Η κλήση δεν κλωνοποιήθηκε. Δοκιμάστε ξανά.');
     }
   }
 
@@ -534,7 +848,12 @@ class CallsRepository {
 
     final userQ = filter.userName?.trim();
     if (userQ != null && userQ.isNotEmpty) {
-      _appendDashboardUserFilter(whereClausesBase, argsBase, userPhoneExpr, userQ);
+      _appendDashboardUserFilter(
+        whereClausesBase,
+        argsBase,
+        userPhoneExpr,
+        userQ,
+      );
     }
 
     final eqQ = filter.equipmentCode?.trim();
@@ -879,10 +1198,11 @@ WHERE ${whereSpark.join(' AND ')}
                MAX(calls.date) AS max_date
         $fromJoin
         ''', args);
-      final activeRow =
-          activeDaysRows.isEmpty ? null : activeDaysRows.first;
+      final activeRow = activeDaysRows.isEmpty ? null : activeDaysRows.first;
       totalActiveDays = (activeRow?['active_days'] as num?)?.toInt() ?? 0;
-      historyDateFrom = parseDashboardSqlDate(activeRow?['min_date'] as String?);
+      historyDateFrom = parseDashboardSqlDate(
+        activeRow?['min_date'] as String?,
+      );
       historyDateTo = parseDashboardSqlDate(activeRow?['max_date'] as String?);
 
       final durationRows = await db.rawQuery('''
@@ -947,23 +1267,21 @@ WHERE ${whereSpark.join(' AND ')}
         ORDER BY dur ASC
         LIMIT 3
         ''', args);
-      final List<KpiBarSparklinePoint> durationExtremesSix = padBarSparklinePoints(
-        [
-          ...longestDurRows.asMap().entries.map(
-            (entry) => kpiDurationExtremePoint(
-              entry.key,
-              (entry.value['dur'] as num?)?.toDouble() ?? 0,
+      final List<KpiBarSparklinePoint> durationExtremesSix =
+          padBarSparklinePoints([
+            ...longestDurRows.asMap().entries.map(
+              (entry) => kpiDurationExtremePoint(
+                entry.key,
+                (entry.value['dur'] as num?)?.toDouble() ?? 0,
+              ),
             ),
-          ),
-          ...shortestDurRows.asMap().entries.map(
-            (entry) => kpiDurationExtremePoint(
-              entry.key + 3,
-              (entry.value['dur'] as num?)?.toDouble() ?? 0,
+            ...shortestDurRows.asMap().entries.map(
+              (entry) => kpiDurationExtremePoint(
+                entry.key + 3,
+                (entry.value['dur'] as num?)?.toDouble() ?? 0,
+              ),
             ),
-          ),
-        ],
-        6,
-      );
+          ], 6);
 
       allDatesBarSparklines = KpiAllDatesBarSparklines(
         callsByMonth: callsByMonth.isEmpty
@@ -975,14 +1293,8 @@ WHERE ${whereSpark.join(' AND ')}
           byDepartment,
           5,
         ),
-        callerCountsRank2To6: runnerUpPointsFromCallerStats(
-          topCallers,
-          5,
-        ),
-        issueCountsRank2To6: runnerUpPointsFromIssueStats(
-          byIssue,
-          5,
-        ),
+        callerCountsRank2To6: runnerUpPointsFromCallerStats(topCallers, 5),
+        issueCountsRank2To6: runnerUpPointsFromIssueStats(byIssue, 5),
       );
     }
 

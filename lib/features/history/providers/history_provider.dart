@@ -36,11 +36,9 @@ class HistoryFilterModel {
   }
 
   /// Ημερομηνία από σε yyyy-MM-dd για SQL.
-  String? get dateFromSql =>
-      dateFrom != null ? _formatDate(dateFrom!) : null;
+  String? get dateFromSql => dateFrom != null ? _formatDate(dateFrom!) : null;
 
-  String? get dateToSql =>
-      dateTo != null ? _formatDate(dateTo!) : null;
+  String? get dateToSql => dateTo != null ? _formatDate(dateTo!) : null;
 
   static String _formatDate(DateTime d) {
     final y = d.year;
@@ -62,12 +60,13 @@ class HistoryFilterNotifier extends Notifier<HistoryFilterModel> {
 
 final historyFilterProvider =
     NotifierProvider<HistoryFilterNotifier, HistoryFilterModel>(
-  HistoryFilterNotifier.new,
-);
+      HistoryFilterNotifier.new,
+    );
 
 /// Πλήθος κλήσεων ιστορικού με βάση φίλτρα ημερομηνίας και κατηγορίας (χωρίς keyword).
-final historyCategoryDateCallCountProvider =
-    FutureProvider.autoDispose<int>((ref) async {
+final historyCategoryDateCallCountProvider = FutureProvider.autoDispose<int>((
+  ref,
+) async {
   final filter = ref.watch(historyFilterProvider);
   final db = await DatabaseHelper.instance.database;
   return CallsRepository(db).getHistoryCallCount(
@@ -83,25 +82,28 @@ final historyCategoryDateCallCountProvider =
 /// Η αναζήτηση keyword γίνεται στη βάση μέσω `calls.search_index` (κανονικοποιημένο).
 final historyCallsProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
-  final filter = ref.watch(historyFilterProvider);
-  final keyword = filter.keyword.trim();
-  final normalizedKeyword = SearchTextNormalizer.normalizeForSearch(keyword);
+      final filter = ref.watch(historyFilterProvider);
+      final keyword = filter.keyword.trim();
+      final normalizedKeyword = SearchTextNormalizer.normalizeForSearch(
+        keyword,
+      );
 
-  final db = await DatabaseHelper.instance.database;
-  final calls = CallsRepository(db);
-  return calls.getHistoryCalls(
-    dateFrom: filter.dateFromSql,
-    dateTo: filter.dateToSql,
-    category: filter.category != null && filter.category!.isEmpty
-        ? null
-        : filter.category,
-    keyword: keyword.isEmpty ? null : normalizedKeyword,
-  );
-});
+      final db = await DatabaseHelper.instance.database;
+      final calls = CallsRepository(db);
+      return calls.getHistoryCalls(
+        dateFrom: filter.dateFromSql,
+        dateTo: filter.dateToSql,
+        category: filter.category != null && filter.category!.isEmpty
+            ? null
+            : filter.category,
+        keyword: keyword.isEmpty ? null : normalizedKeyword,
+      );
+    });
 
 /// Λίστα ονομάτων κατηγοριών για το dropdown φίλτρου.
-final historyCategoriesProvider =
-    FutureProvider.autoDispose<List<String>>((ref) async {
+final historyCategoriesProvider = FutureProvider.autoDispose<List<String>>((
+  ref,
+) async {
   final db = await DatabaseHelper.instance.database;
   return DirectoryRepository(db).getCategoryNames();
 });
@@ -109,13 +111,34 @@ final historyCategoriesProvider =
 /// Ενεργές κατηγορίες (id + όνομα) για φόρμα κλήσης / επίλυση category_id.
 final historyCategoryEntriesProvider =
     FutureProvider.autoDispose<List<({int id, String name})>>((ref) async {
-  final db = await DatabaseHelper.instance.database;
-  final rows = await DirectoryRepository(db).getActiveCategoryRows();
-  return rows
-      .map((m) => (
-            id: m['id'] as int,
-            name: (m['name'] as String?)?.trim() ?? '',
-          ))
-      .where((e) => e.name.isNotEmpty)
-      .toList();
-});
+      final db = await DatabaseHelper.instance.database;
+      final rows = await DirectoryRepository(db).getActiveCategoryRows();
+      return rows
+          .map(
+            (m) => (
+              id: m['id'] as int,
+              name: (m['name'] as String?)?.trim() ?? '',
+            ),
+          )
+          .where((e) => e.name.isNotEmpty)
+          .toList();
+    });
+
+class HistorySelectedCallIdsNotifier extends Notifier<Set<int>> {
+  @override
+  Set<int> build() => <int>{};
+
+  void setAll(Set<int> ids) {
+    state = ids;
+  }
+
+  void clear() {
+    state = <int>{};
+  }
+}
+
+/// Επιλεγμένα call ids στον πίνακα ιστορικού (multi-select για μαζικές ενέργειες).
+final historySelectedCallIdsProvider =
+    NotifierProvider.autoDispose<HistorySelectedCallIdsNotifier, Set<int>>(
+      HistorySelectedCallIdsNotifier.new,
+    );
