@@ -31,7 +31,6 @@ class CallsRepository {
     'department_text',
     'equipment_text',
     'issue',
-    'solution',
     'category_text',
     'category_id',
     'status',
@@ -57,7 +56,6 @@ class CallsRepository {
     final parts = <String>[];
 
     addNonEmpty(parts, callMap['issue']);
-    addNonEmpty(parts, callMap['solution']);
     addNonEmpty(parts, callMap['category_text']);
     addNonEmpty(parts, callMap['caller_text']);
     addNonEmpty(parts, callMap['phone_text']);
@@ -197,7 +195,6 @@ class CallsRepository {
       'department_text': call.departmentText,
       'equipment_text': call.equipmentText,
       'issue': call.issue,
-      'solution': call.solution,
       'category_text': call.category,
       'category_id': call.categoryId,
       'status': call.status ?? 'completed',
@@ -269,7 +266,6 @@ class CallsRepository {
       'department_text': call.departmentText,
       'equipment_text': call.equipmentText,
       'issue': call.issue,
-      'solution': call.solution,
       'category_text': call.category,
       'category_id': call.categoryId,
       'status': call.status,
@@ -600,7 +596,6 @@ class CallsRepository {
       'department_text': source.departmentText,
       'equipment_text': source.equipmentText,
       'issue': source.issue,
-      'solution': source.solution,
       'category_text': source.category,
       'category_id': source.categoryId,
       'status': source.status ?? 'completed',
@@ -760,7 +755,7 @@ class CallsRepository {
     final sql =
         '''
       SELECT calls.id, calls.date, calls.time, calls.caller_id, calls.equipment_id,
-             calls.issue, calls.solution, calls.caller_text, calls.phone_text, calls.department_text, calls.equipment_text,
+             calls.issue, calls.caller_text, calls.phone_text, calls.department_text, calls.equipment_text,
              COALESCE(cat.name, calls.category_text, '') AS category, calls.status, calls.duration, calls.is_priority,
              COALESCE(users.first_name, calls.caller_text, '') AS user_first_name,
              COALESCE(users.last_name, '') AS user_last_name,
@@ -1387,7 +1382,6 @@ WHERE ${whereSpark.join(' AND ')}
         calls.department_text,
         calls.equipment_text,
         calls.issue,
-        calls.solution,
         calls.category_text,
         calls.category_id,
         calls.status,

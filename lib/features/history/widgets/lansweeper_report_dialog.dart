@@ -280,10 +280,7 @@ class _LansweeperReportDialogState
 
   String _notes(CallModel call) {
     final issue = (call.issue ?? '').trim();
-    final solution = (call.solution ?? '').trim();
-    if (issue.isNotEmpty && solution.isNotEmpty) return '$issue — $solution';
     if (issue.isNotEmpty) return issue;
-    if (solution.isNotEmpty) return solution;
     return '-';
   }
 

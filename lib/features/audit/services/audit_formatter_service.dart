@@ -300,7 +300,6 @@ class AuditFormatterService {
           'equipment_text',
           'equipment_id',
           'issue',
-          'solution',
           'duration',
           'is_priority',
         ],

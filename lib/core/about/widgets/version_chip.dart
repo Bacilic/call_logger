@@ -5,7 +5,7 @@ import '../providers/app_version_provider.dart';
 import '../version_display.dart';
 import 'changelog_dialog.dart';
 
-/// Κλικ για άνοιγμα του ιστορικού αλλαγών. Για έκδοση 0.x.y δείχνει ένδειξη βήτα.
+/// Κλικ για άνοιγμα του ιστορικού αλλαγών με εμφάνιση έκδοσης.
 class VersionChip extends ConsumerWidget {
   const VersionChip({super.key, required this.extended});
 

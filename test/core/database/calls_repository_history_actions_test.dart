@@ -28,7 +28,6 @@ void main() {
         'department_text': 'Support',
         'equipment_text': 'PC-1',
         'issue': issue,
-        'solution': null,
         'category_text': 'Κατηγορία',
         'category_id': null,
         'status': status ?? 'completed',

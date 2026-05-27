@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../utils/history_entity_display_utils.dart';
+import 'ellipsis_tooltip_text.dart';
 
 /// Κείμενο με πλαγιά + «(διαγραμμένο)» όταν η συνδεδεμένη οντότητα καταλόγου είναι soft-deleted.
 class DeletedCatalogEntityText extends StatelessWidget {
@@ -27,13 +28,21 @@ class DeletedCatalogEntityText extends StatelessWidget {
       deletedSuffix: kCatalogEntityDeletedSuffix,
     );
     final base = style ?? DefaultTextStyle.of(context).style;
+    final textStyle = base.copyWith(
+      fontStyle: isDeleted && label != '—' ? FontStyle.italic : null,
+    );
+    if (overflow == TextOverflow.ellipsis) {
+      return EllipsisTooltipText(
+        text: label,
+        style: textStyle,
+        maxLines: maxLines,
+      );
+    }
     return Text(
       label,
       maxLines: maxLines,
       overflow: overflow,
-      style: base.copyWith(
-        fontStyle: isDeleted && label != '—' ? FontStyle.italic : null,
-      ),
+      style: textStyle,
     );
   }
 }

@@ -233,7 +233,6 @@ class CallEntryNotifier extends Notifier<CallEntryState> {
               ? null
               : header.equipmentText.trim(),
           issue: notes.isEmpty ? null : notes,
-          solution: null,
           category: state.category.isEmpty ? null : state.category,
           categoryId: state.categoryId,
           status: (state.isPending && notes.isNotEmpty) ? 'pending' : 'completed',

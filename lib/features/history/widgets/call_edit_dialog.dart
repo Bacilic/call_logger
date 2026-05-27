@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/utils/history_entity_display_utils.dart';
+import '../../../core/widgets/lexicon_spell_text_form_field.dart';
+import '../../../core/widgets/spell_check_controller.dart';
 import '../../calls/models/call_model.dart';
 import '../../calls/provider/smart_entity_selector_provider.dart';
 import '../../calls/screens/widgets/smart_entity_selector_widget.dart';
@@ -26,8 +28,7 @@ class _CallEditDialog extends ConsumerStatefulWidget {
 }
 
 class _CallEditDialogState extends ConsumerState<_CallEditDialog> {
-  final TextEditingController _issueController = TextEditingController();
-  final TextEditingController _solutionController = TextEditingController();
+  late final SpellCheckController _issueController;
   final TextEditingController _durationController = TextEditingController();
   final TextEditingController _dateController = TextEditingController();
   final TextEditingController _timeController = TextEditingController();
@@ -39,20 +40,19 @@ class _CallEditDialogState extends ConsumerState<_CallEditDialog> {
   CallModel? _original;
   DateTime? _selectedDate;
   TimeOfDay? _selectedTime;
-  String _status = 'completed';
   int? _categoryId;
   String _categoryText = '';
 
   @override
   void initState() {
     super.initState();
+    _issueController = SpellCheckController();
     _load();
   }
 
   @override
   void dispose() {
     _issueController.dispose();
-    _solutionController.dispose();
     _durationController.dispose();
     _dateController.dispose();
     _timeController.dispose();
@@ -81,9 +81,7 @@ class _CallEditDialogState extends ConsumerState<_CallEditDialog> {
     if (!mounted) return;
     _original = call;
     _issueController.text = call.issue ?? '';
-    _solutionController.text = call.solution ?? '';
     _durationController.text = call.duration?.toString() ?? '';
-    _status = call.status == 'pending' ? 'pending' : 'completed';
     _categoryId = call.categoryId;
     _categoryText = (call.category ?? '').trim();
     _selectedDate = _parseDate(call.date);
@@ -184,7 +182,6 @@ class _CallEditDialogState extends ConsumerState<_CallEditDialog> {
     final departmentRaw = selector.departmentText.trim();
     final equipmentRaw = selector.equipmentText.trim();
     final issueRaw = _issueController.text.trim();
-    final solutionRaw = _solutionController.text.trim();
     final categoryRaw = _categoryText.trim();
 
     final updated = CallModel(
@@ -200,10 +197,9 @@ class _CallEditDialogState extends ConsumerState<_CallEditDialog> {
       departmentText: departmentRaw.isEmpty ? null : departmentRaw,
       equipmentText: equipmentRaw.isEmpty ? null : equipmentRaw,
       issue: issueRaw.isEmpty ? null : issueRaw,
-      solution: solutionRaw.isEmpty ? null : solutionRaw,
       category: categoryRaw.isEmpty ? null : categoryRaw,
       categoryId: _categoryId,
-      status: _status,
+      status: _original!.status,
       duration: duration,
       isPriority: _original!.isPriority,
       lansweeperState: _original!.lansweeperState,
@@ -441,48 +437,17 @@ class _CallEditDialogState extends ConsumerState<_CallEditDialog> {
                       ],
                     ),
                     const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: DropdownButtonFormField<String>(
-                            initialValue: _status,
-                            decoration: const InputDecoration(
-                              labelText: 'Κατάσταση',
-                              border: OutlineInputBorder(),
-                              isDense: true,
-                            ),
-                            items: const [
-                              DropdownMenuItem(
-                                value: 'completed',
-                                child: Text('Ολοκληρωμένη'),
-                              ),
-                              DropdownMenuItem(
-                                value: 'pending',
-                                child: Text('Εκκρεμής'),
-                              ),
-                            ],
-                            onChanged: (value) {
-                              if (value == null) return;
-                              setState(() => _status = value);
-                            },
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: TextFormField(
-                            controller: _durationController,
-                            keyboardType: TextInputType.number,
-                            decoration: const InputDecoration(
-                              labelText: 'Διάρκεια (sec)',
-                              border: OutlineInputBorder(),
-                              isDense: true,
-                            ),
-                          ),
-                        ),
-                      ],
+                    TextFormField(
+                      controller: _durationController,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(
+                        labelText: 'Διάρκεια (sec)',
+                        border: OutlineInputBorder(),
+                        isDense: true,
+                      ),
                     ),
                     const SizedBox(height: 12),
-                    TextFormField(
+                    LexiconSpellTextFormField(
                       controller: _issueController,
                       minLines: 2,
                       maxLines: 5,
@@ -493,16 +458,6 @@ class _CallEditDialogState extends ConsumerState<_CallEditDialog> {
                       ),
                     ),
                     const SizedBox(height: 12),
-                    TextFormField(
-                      controller: _solutionController,
-                      minLines: 2,
-                      maxLines: 5,
-                      decoration: const InputDecoration(
-                        labelText: 'Λύση',
-                        border: OutlineInputBorder(),
-                        alignLabelWithHint: true,
-                      ),
-                    ),
                     if (historyEntityIsDeleted(
                       selector.selectedCaller?.isDeleted,
                     ))

@@ -2,8 +2,8 @@
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart';
 
+import '../../../core/widgets/ellipsis_tooltip_text.dart';
 import '../models/dashboard_summary_model.dart';
 import 'dashboard_charts.dart';
 import 'dashboard_palette_colors.dart';
@@ -20,67 +20,6 @@ class KpiTopEntity {
   final String label;
   final int count;
   final IconData icon;
-}
-
-/// Κείμενο με ellipsis· tooltip μόνο όταν το κείμενο κόβεται.
-class EllipsisTooltipText extends StatefulWidget {
-  const EllipsisTooltipText({
-    super.key,
-    required this.text, this.style,
-  });
-
-  final String text;
-  final TextStyle? style;
-
-  @override
-  State<EllipsisTooltipText> createState() => EllipsisTooltipTextState();
-}
-
-class EllipsisTooltipTextState extends State<EllipsisTooltipText> {
-  final GlobalKey _textKey = GlobalKey();
-  bool _overflows = false;
-
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback(_checkOverflow);
-  }
-
-  @override
-  void didUpdateWidget(covariant EllipsisTooltipText oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.text != widget.text || oldWidget.style != widget.style) {
-      WidgetsBinding.instance.addPostFrameCallback(_checkOverflow);
-    }
-  }
-
-  void _checkOverflow(_) {
-    if (!mounted) return;
-    final ro = _textKey.currentContext?.findRenderObject();
-    if (ro is! RenderParagraph) return;
-    final overflows = ro.didExceedMaxLines;
-    if (overflows != _overflows) {
-      setState(() => _overflows = overflows);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        WidgetsBinding.instance.addPostFrameCallback(_checkOverflow);
-        final text = Text(
-          widget.text,
-          key: _textKey,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: widget.style,
-        );
-        if (!_overflows || widget.text.isEmpty) return text;
-        return Tooltip(message: widget.text, child: text);
-      },
-    );
-  }
 }
 
 class KpiCardData {

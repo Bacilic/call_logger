@@ -8,6 +8,7 @@ import '../../../core/providers/history_audit_immersive_provider.dart';
 import '../../../core/providers/lexicon_full_mode_provider.dart';
 import '../../../core/providers/shell_navigation_intent_provider.dart';
 import '../../../core/widgets/calendar_range_picker.dart';
+import '../../../core/widgets/ellipsis_tooltip_text.dart';
 import '../../../core/providers/settings_provider.dart';
 import '../../../core/widgets/main_nav_destination.dart';
 import '../../../core/utils/history_entity_display_utils.dart';
@@ -1047,10 +1048,9 @@ class _HistoryDataTableState extends ConsumerState<_HistoryDataTable> {
             _dataCell(
               width: columnWidths[4],
               horizontalPadding: horizontalPadding,
-              child: Text(
-                department.isEmpty ? '—' : department,
+              child: EllipsisTooltipText(
+                text: department.isEmpty ? '—' : department,
                 style: bodyStyle,
-                overflow: TextOverflow.ellipsis,
               ),
             ),
             _dataCell(
@@ -1074,10 +1074,9 @@ class _HistoryDataTableState extends ConsumerState<_HistoryDataTable> {
             _dataCell(
               width: columnWidths[7],
               horizontalPadding: horizontalPadding,
-              child: Text(
-                issue.isEmpty ? '—' : issue,
+              child: EllipsisTooltipText(
+                text: issue.isEmpty ? '—' : issue,
                 style: bodyStyle,
-                overflow: TextOverflow.ellipsis,
               ),
             ),
             _dataCell(

@@ -48,19 +48,17 @@ disable-model-invocation: true
 
 ### 1β) Πού εμφανίζεται η έκδοση στην οθόνη (αυτόματα από `pubspec`)
 
-Με bump στο `pubspec.yaml` **δεν** επεξεργάζεσαι χειροκίνητα αριθμούς έκδοσης στα παρακάτω — μόνο στυλ/κείμενο βήτα αν αλλάζει η πολιτική εμφάνισης.
+Με bump στο `pubspec.yaml` **δεν** επεξεργάζεσαι χειροκίνητα αριθμούς έκδοσης στα παρακάτω.
 
 | UI (όπως στην εφαρμογή) | Αρχείο | Πώς παίρνει την έκδοση |
 |-------------------------|--------|-------------------------|
-| **Chip έκδοσης** κάτω αριστερά (`v0.16 β` / `v0.17.0 βήτα`) | `lib/core/about/widgets/version_chip.dart` | `appVersionProvider` → `PackageInfo.version` → `versionChipLabel()` στο `version_display.dart` |
-| **Τίτλος παραθύρου** (`Καταγραφή Κλήσεων v0.17.0 βήτα`) | `lib/main.dart` (~γρ. 125–126) | `PackageInfo.fromPlatform()` → `windowTitleWithVersionLabel()` στο `version_display.dart` |
+| **Chip έκδοσης** κάτω αριστερά (`v0.16` / `v0.17.0`) | `lib/core/about/widgets/version_chip.dart` | `appVersionProvider` → `PackageInfo.version` → `versionChipLabel()` στο `version_display.dart` |
+| **Τίτλος παραθύρου** (`Καταγραφή Κλήσεων v0.17.0`) | `lib/main.dart` (~γρ. 125–126) | `PackageInfo.fromPlatform()` → `windowTitleWithVersionLabel()` στο `version_display.dart` |
 | Διάλογος ιστορικού | `changelog_dialog.dart` | `appVersionProvider` + `changelogSubtitleAppLine()` |
 
 **Σημαντικό για `version_chip.dart` (π.χ. γραμμές 55–63):** εκεί είναι μόνο **στυλ** (`Text`, χρώμα, underline). Το κείμενο `label` προέρχεται από `versionChipLabel(version, …)` — **μην** αντικαθιστάς `v0.x.y` μέσα στο widget.
 
 **Σημαντικό για τίτλο παραθύρου:** ορίζεται **μία φορά** στην εκκίνηση (`WindowManager.setTitle`). Μετά bump στο `pubspec` χρειάζεται **πλήρης επανεκκίνηση** της εφαρμογής (όχι μόνο hot reload) για να αλλάξει ο τίτλος· το chip ενημερώνεται με **hot restart** ή restart.
-
-**Μορφοποίηση βήτα (όχι αριθμός έκδοσης):** `lib/core/about/version_display.dart` — για `0.x.y` προσθέτει «βήτα» / «β» στο chip και στον τίτλο. Άγγιξέ το μόνο αν αλλάζεις κείμενο ένδειξης, όχι για release bump.
 
 ---
 
@@ -68,7 +66,7 @@ disable-model-invocation: true
 
 **Ισχύει μόνο όταν η σημερινή ημερομηνία ≠ `date` της πρώτης εγγραφής JSON** (βλ. §2β).
 
-Τρέχουσα σειρά: `0.x.y` (προ-έκδοση / **βήτα** όταν `major == 0`, βλ. `lib/core/about/version_display.dart`).
+Τρέχουσα σειρά: `0.x.y` (προ-έκδοση σύμφωνα με το SemVer όταν το major είναι 0).
 
 | Τύπος αλλαγής | Bump | Παράδειγμα |
 |---------------|------|------------|
@@ -204,7 +202,7 @@ version: 0.16.2+2
 Μετά την επεξεργασία, πες στον χρήστη:
 
 - **Ίδια μέρα:** συμπληρώθηκε η έκδοση `X.Y.Z` χωρίς αλλαγή αριθμού — **hot restart** αρκεί για `changelog.json`· chip/τίτλος παραθύρου **δεν** αλλάζουν εκτός αν αυξήθηκε μόνο το build.
-- **Νέα έκδοση:** **hot restart** ή νέο build → `changelog.json` + chip· **πλήρης επανεκκίνηση** → τίτλος παραθύρου (`Καταγραφή Κλήσεων v… βήτα`).
+- **Νέα έκδοση:** **hot restart** ή νέο build → `changelog.json` + chip· **πλήρης επανεκκίνηση** → τίτλος παραθύρου (`Καταγραφή Κλήσεων [αριθμός-έκδοσης] `).
 
 ---
 

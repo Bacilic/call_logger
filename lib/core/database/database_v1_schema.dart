@@ -52,7 +52,6 @@ Future<void> applyDatabaseV1Schema(Database db) async {
         department_text TEXT,
         equipment_text TEXT,
         issue TEXT,
-        solution TEXT,
         category_text TEXT,
         category_id INTEGER,
         status TEXT,
@@ -774,6 +773,27 @@ Future<void> ensureDepartmentsMapHiddenColumn(Database db) async {
     await db.execute(
       'ALTER TABLE departments ADD COLUMN map_hidden INTEGER NOT NULL DEFAULT 0',
     );
+  }
+}
+
+/// Αφαιρεί (idempotent) τη στήλη `calls.solution` αν υπάρχει ακόμα.
+///
+/// Εκτελείται σε κάθε άνοιγμα βάσης χωρίς αλλαγή [databaseSchemaVersionV1].
+/// Το ιστορικό `search_index` μπορεί να διατηρεί κανονικοποιημένα tokens από την
+/// παλιά στήλη μέχρι την επόμενη ενημέρωση της αντίστοιχης κλήσης.
+Future<void> ensureCallsNoSolutionColumn(Database db) async {
+  List<Map<String, Object?>> info;
+  try {
+    info = await db.rawQuery('PRAGMA table_info(calls)');
+  } catch (_) {
+    return;
+  }
+  final names = info.map((r) => r['name'] as String).toSet();
+  if (!names.contains('solution')) return;
+  try {
+    await db.execute('ALTER TABLE calls DROP COLUMN solution');
+  } catch (_) {
+    // Παλαιότερο SQLite χωρίς DROP COLUMN · η στήλη μένει· η εφαρμογή την αγνοεί.
   }
 }
 
