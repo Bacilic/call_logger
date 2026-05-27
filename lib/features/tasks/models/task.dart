@@ -31,6 +31,13 @@ extension TaskStatusX on TaskStatus {
     TaskStatus.snoozed => 'αναβληθείσα',
     TaskStatus.closed => 'ολοκληρωμένη',
   };
+
+  /// Ετικέτα chip φίλτρου (πληθυντικός, κεφαλαία).
+  String get filterChipLabelEl => switch (this) {
+    TaskStatus.open => 'Ανοικτές',
+    TaskStatus.snoozed => 'Αναβληθείσες',
+    TaskStatus.closed => 'Ολοκληρωμένες',
+  };
 }
 
 /// Μοντέλο εργασίας (πίνακας tasks).

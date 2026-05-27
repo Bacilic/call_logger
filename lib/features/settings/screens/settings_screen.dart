@@ -1,7 +1,11 @@
+import 'dart:async';
+import 'dart:io' show Platform;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/models/calls_screen_cards_visibility.dart';
+import '../../../core/models/window_placement_mode.dart';
 import '../../../core/config/app_config.dart';
 import '../../../core/providers/settings_provider.dart';
 import '../../../core/services/settings_service.dart';
@@ -40,6 +44,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   int _databaseOpenMaxAttempts = AppConfig.databaseOpenMaxAttempts;
   CallsScreenCardsVisibility _callsCardsVisibility =
       CallsScreenCardsVisibility.defaults;
+  WindowPlacementMode _windowPlacementMode = WindowPlacementMode.alwaysCenter;
 
   @override
   void initState() {
@@ -74,6 +79,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       final dbOpenMaxAttempts = await _settings.getDatabaseOpenMaxAttempts();
       final callsCardsVisibility = await _settings
           .getCallsScreenCardsVisibility();
+      final windowPlacementMode = Platform.isWindows
+          ? await _settings.getWindowPlacementMode()
+          : WindowPlacementMode.alwaysCenter;
       if (mounted) {
         setState(() {
           _showActiveTimer = showActiveTimer;
@@ -85,6 +93,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           _databaseOpenTimeoutSeconds = dbOpenTimeout;
           _databaseOpenMaxAttempts = dbOpenMaxAttempts;
           _callsCardsVisibility = callsCardsVisibility;
+          _windowPlacementMode = windowPlacementMode;
           _isLoadingSettings = false;
         });
       }
@@ -227,6 +236,17 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     return '$n από 5 κάρτες εμφανίζονται';
   }
 
+  Future<void> _setWindowPlacementMode(WindowPlacementMode mode) async {
+    await _settings.setWindowPlacementMode(mode);
+    if (!mounted) return;
+    setState(() => _windowPlacementMode = mode);
+  }
+
+  void _handleWindowPlacementModeChanged(WindowPlacementMode? value) {
+    if (value == null) return;
+    unawaited(_setWindowPlacementMode(value));
+  }
+
   Future<void> _openCallsCardsVisibilityEditor() async {
     final result = await showDialog<CallsScreenCardsVisibility>(
       context: context,
@@ -270,6 +290,56 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               trailing: const Icon(Icons.edit_outlined),
               onTap: _editDatabaseOpenSettings,
             ),
+            if (Platform.isWindows) ...[
+              const SizedBox(height: 32),
+              const Divider(),
+              const SizedBox(height: 16),
+              Text(
+                'Παράθυρο εφαρμογής',
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Ισχύει στην επόμενη εκκίνηση της εφαρμογής (Windows).',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(height: 8),
+              IgnorePointer(
+                ignoring: _isLoadingSettings,
+                child: RadioGroup<WindowPlacementMode?>(
+                  groupValue: _windowPlacementMode,
+                  onChanged: _handleWindowPlacementModeChanged,
+                  child: Column(
+                    children: [
+                      RadioListTile<WindowPlacementMode?>(
+                        value: WindowPlacementMode.lastPosition,
+                      title: Text(
+                        WindowPlacementMode.lastPosition.settingsLabel,
+                      ),
+                      subtitle: const Text(
+                        'Αποθηκεύεται η θέση και το μέγεθος όταν κλείνετε ή μετακινείτε το παράθυρο.',
+                      ),
+                      contentPadding: EdgeInsets.zero,
+                    ),
+                      RadioListTile<WindowPlacementMode?>(
+                        value: WindowPlacementMode.alwaysCenter,
+                      title: Text(
+                        WindowPlacementMode.alwaysCenter.settingsLabel,
+                      ),
+                      subtitle: const Text(
+                        'Το μέγεθος παραμένει αποθηκευμένο· η θέση κεντράρεται σε κάθε εκκίνηση.',
+                      ),
+                      contentPadding: EdgeInsets.zero,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
             const SizedBox(height: 32),
             const Divider(),
             const SizedBox(height: 16),

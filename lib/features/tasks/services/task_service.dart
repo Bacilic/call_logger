@@ -483,6 +483,39 @@ class TaskService {
     return n is int ? n : (n is num ? n.toInt() : int.tryParse('$n') ?? 0);
   }
 
+  /// Ελάχιστη/μέγιστη ημερομηνία δημιουργίας εκκρεμοτήτων (ημέρα μόνο).
+  Future<({DateTime start, DateTime end})> getTaskCreationDateSpan() async {
+    final db = await _db;
+    final rows = await db.rawQuery(
+      '''
+      SELECT MIN(created_at) AS min_created, MAX(created_at) AS max_created
+      FROM tasks
+      WHERE COALESCE(is_deleted, 0) = 0
+        AND created_at IS NOT NULL
+        AND TRIM(created_at) != ''
+      ''',
+    );
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    if (rows.isEmpty) {
+      return (start: today, end: today);
+    }
+    final minRaw = rows.first['min_created'];
+    final maxRaw = rows.first['max_created'];
+    if (minRaw == null || maxRaw == null) {
+      return (start: today, end: today);
+    }
+    final minDt = DateTime.tryParse(minRaw.toString());
+    final maxDt = DateTime.tryParse(maxRaw.toString());
+    if (minDt == null || maxDt == null) {
+      return (start: today, end: today);
+    }
+    return (
+      start: DateTime(minDt.year, minDt.month, minDt.day),
+      end: DateTime(maxDt.year, maxDt.month, maxDt.day),
+    );
+  }
+
   Future<TaskAnalyticsSummary> getTaskAnalytics(DateTimeRange range) async {
     final db = await _db;
     final normalized = _normalizeRange(range);

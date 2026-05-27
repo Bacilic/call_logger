@@ -128,14 +128,11 @@ class _TaskFilterBarState extends ConsumerState<TaskFilterBar> {
         !filter.allFiltersOff) {
       showCount = false;
     }
+    final label = status.filterChipLabelEl;
     if (!showCount) {
-      return Text(switch (status) {
-        TaskStatus.open => 'Ανοιχτές',
-        TaskStatus.snoozed => 'Αναβολές',
-        TaskStatus.closed => 'Ολοκληρωμένες',
-      });
+      return Text(label);
     }
-    return Text('${status.displayLabelEl} ($count)');
+    return Text('$label ($count)');
   }
 
   String _getSortOptionLabel(TaskSortOption option) {
@@ -284,8 +281,13 @@ class _TaskFilterBarState extends ConsumerState<TaskFilterBar> {
                     label: Text(dateRangeLabel),
                     onPressed: _pickDateRange,
                   ),
-                  ActionChip(
-                    label: const Text('Καθαρισμός ημερομηνιών'),
+                  IconButton(
+                    tooltip: 'Καθαρισμός ημερομηνιών',
+                    icon: Image.asset(
+                      'assets/ic_calendar_broom_clear.png',
+                      width: 22,
+                      height: 22,
+                    ),
                     onPressed: _clearDateRange,
                   ),
                 ],

@@ -14,7 +14,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:window_manager/window_manager.dart';
 
 import 'core/about/version_display.dart';
-import 'core/services/settings_service.dart';
+import 'core/services/desktop_window_service.dart';
 import 'core/database/database_init_result.dart';
 import 'core/widgets/app_init_wrapper.dart';
 import 'core/widgets/app_shell_with_global_fatal_error.dart';
@@ -135,19 +135,13 @@ Future<void> _bootstrapAndRunApp() async {
       await wm.waitUntilReadyToShow(null, () async {
         await wm.show();
       });
-      final savedSize = await SettingsService().getSavedWindowSize();
-      final bounds = await wm.getBounds();
-      final targetW = savedSize?.width ?? bounds.width;
-      final targetH = savedSize?.height ?? bounds.height;
-      final newW = math.min(screenWidth, math.max(targetW, minW));
-      final newH = math.min(screenHeight, math.max(targetH, minH));
-      if ((newW - bounds.width).abs() > 0.5 ||
-          (newH - bounds.height).abs() > 0.5) {
-        await wm.setSize(Size(newW, newH));
-      }
-      if (savedSize == null) {
-        await wm.center();
-      }
+      await DesktopWindowService().applyStartupPlacement(
+        windowManager: wm,
+        screenWidth: screenWidth,
+        screenHeight: screenHeight,
+        minWidth: minW,
+        minHeight: minH,
+      );
     } catch (_) {}
   }
 

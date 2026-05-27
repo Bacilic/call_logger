@@ -7,23 +7,27 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/widgets/calendar_range_picker.dart';
+import '../models/task_analytics_date_preset.dart';
 import '../models/task_analytics_summary.dart';
+import '../providers/task_analytics_date_provider.dart';
 import '../providers/task_analytics_provider.dart';
-import '../providers/tasks_provider.dart';
 
 class TaskAnalyticsBottomSheet extends ConsumerWidget {
   const TaskAnalyticsBottomSheet({super.key});
-
-  static const _palette = _TaskAnalyticsPalette();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final analyticsFilter = ref.watch(taskAnalyticsFilterProvider);
     final asyncSummary = ref.watch(taskAnalyticsProvider);
+    final asyncDates = ref.watch(taskAnalyticsDateProvider);
     final theme = Theme.of(context);
     final dateRangeText =
         '${DateFormat('dd/MM/yyyy').format(analyticsFilter.startDate)} - '
         '${DateFormat('dd/MM/yyyy').format(analyticsFilter.endDate)}';
+    final activePreset = asyncDates.value?.activePreset;
+    final selectedPresetDays = activePreset?.presetDayCount;
+    final allRangeSelected =
+        activePreset == TaskAnalyticsDatePreset.all;
 
     return ClipRRect(
       borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
@@ -88,29 +92,58 @@ class TaskAnalyticsBottomSheet extends ConsumerWidget {
                   crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
                     OutlinedButton.icon(
-                      onPressed: () => _pickDateRange(context, ref),
+                      onPressed: asyncDates.isLoading
+                          ? null
+                          : () => _pickDateRange(context, ref),
                       icon: const Icon(
                         Icons.event_available_outlined,
                         size: 18,
                       ),
                       label: Text(dateRangeText),
                     ),
-                    FilledButton.tonal(
-                      onPressed: () => _setDatePreset(ref, 1),
-                      child: const Text('Σήμερα'),
+                    _TaskAnalyticsDatePresetButton(
+                      label: 'Σήμερα',
+                      selected: selectedPresetDays == 1,
+                      onPressed: asyncDates.isLoading
+                          ? null
+                          : () => _setDatePreset(
+                              ref,
+                              TaskAnalyticsDatePreset.today,
+                            ),
                     ),
-                    FilledButton.tonal(
-                      onPressed: () => _setDatePreset(ref, 7),
-                      child: const Text('7 ημέρες'),
+                    _TaskAnalyticsDatePresetButton(
+                      label: '7 ημέρες',
+                      selected: selectedPresetDays == 7,
+                      onPressed: asyncDates.isLoading
+                          ? null
+                          : () => _setDatePreset(
+                              ref,
+                              TaskAnalyticsDatePreset.last7,
+                            ),
                     ),
-                    FilledButton.tonal(
-                      onPressed: () => _setDatePreset(ref, 30),
-                      child: const Text('30 ημέρες'),
+                    _TaskAnalyticsDatePresetButton(
+                      label: '30 ημέρες',
+                      selected: selectedPresetDays == 30,
+                      onPressed: asyncDates.isLoading
+                          ? null
+                          : () => _setDatePreset(
+                              ref,
+                              TaskAnalyticsDatePreset.last30,
+                            ),
                     ),
-                    TextButton(
-                      onPressed: () => _clearDateRange(ref),
-                      child: const Text('Καθαρισμός'),
-                    ),
+                    allRangeSelected
+                        ? FilledButton(
+                            onPressed: asyncDates.isLoading
+                                ? null
+                                : () => _clearToAllTasksRange(ref),
+                            child: const Text('Καθαρισμός'),
+                          )
+                        : TextButton(
+                            onPressed: asyncDates.isLoading
+                                ? null
+                                : () => _clearToAllTasksRange(ref),
+                            child: const Text('Καθαρισμός'),
+                          ),
                   ],
                 ),
                 const SizedBox(height: 12),
@@ -137,41 +170,56 @@ class TaskAnalyticsBottomSheet extends ConsumerWidget {
   }
 
   Future<void> _pickDateRange(BuildContext context, WidgetRef ref) async {
-    final filter = ref.read(taskFilterProvider);
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final initialStart = filter.startDate ?? today;
-    final initialEnd = filter.endDate ?? today;
+    final dates = ref.read(taskAnalyticsDateProvider).value;
+    if (dates == null) return;
     final result = await showCalendarRangePickerDialog(
       context,
-      initialValue: DateTimeRange(start: initialStart, end: initialEnd),
+      initialValue: DateTimeRange(
+        start: dates.startDate,
+        end: dates.endDate,
+      ),
     );
     if (!context.mounted || result == null) return;
     if (result.wasCleared) {
-      _clearDateRange(ref);
+      await _clearToAllTasksRange(ref);
       return;
     }
     final range = result.range;
     if (range == null) return;
-    ref
-        .read(taskFilterProvider.notifier)
-        .update((s) => s.copyWith(startDate: range.start, endDate: range.end));
+    await ref
+        .read(taskAnalyticsDateProvider.notifier)
+        .setCustomDateRange(range.start, range.end);
   }
 
-  void _setDatePreset(WidgetRef ref, int inclusiveDays) {
-    final filter = ref.read(taskFilterProvider);
-    final anchor = filter.endDate ?? filter.startDate ?? DateTime.now();
-    final end = DateTime(anchor.year, anchor.month, anchor.day);
-    final start = end.subtract(Duration(days: inclusiveDays - 1));
-    ref
-        .read(taskFilterProvider.notifier)
-        .update((s) => s.copyWith(startDate: start, endDate: end));
+  Future<void> _setDatePreset(
+    WidgetRef ref,
+    TaskAnalyticsDatePreset preset,
+  ) async {
+    await ref.read(taskAnalyticsDateProvider.notifier).setDatePreset(preset);
   }
 
-  void _clearDateRange(WidgetRef ref) {
-    ref
-        .read(taskFilterProvider.notifier)
-        .update((s) => s.copyWith(clearDateRange: true));
+  Future<void> _clearToAllTasksRange(WidgetRef ref) async {
+    await ref.read(taskAnalyticsDateProvider.notifier).clearToAllTasksRange();
+  }
+}
+
+class _TaskAnalyticsDatePresetButton extends StatelessWidget {
+  const _TaskAnalyticsDatePresetButton({
+    required this.label,
+    required this.selected,
+    required this.onPressed,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    if (selected) {
+      return FilledButton(onPressed: onPressed, child: Text(label));
+    }
+    return FilledButton.tonal(onPressed: onPressed, child: Text(label));
   }
 }
 
@@ -180,7 +228,7 @@ class _TaskAnalyticsBody extends StatelessWidget {
 
   final TaskAnalyticsSummary summary;
 
-  static const _palette = TaskAnalyticsBottomSheet._palette;
+  static const _palette = _TaskAnalyticsPalette();
 
   @override
   Widget build(BuildContext context) {

@@ -1,10 +1,11 @@
-﻿import 'dart:convert';
+import 'dart:convert';
 
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../config/app_config.dart';
 import '../config/audit_retention_config.dart';
 import '../models/calls_screen_cards_visibility.dart';
+import '../models/window_placement_mode.dart';
 
 /// Υπηρεσία αποθήκευσης και ανάκτησης ρυθμίσεων (key-value) τοπικά.
 class SettingsService {
@@ -15,6 +16,9 @@ class SettingsService {
   static const String _keyNavRailShowLabels = 'nav_rail_show_labels';
   static const String _keyWindowWidth = 'window_width_v1';
   static const String _keyWindowHeight = 'window_height_v1';
+  static const String _keyWindowPositionX = 'window_position_x_v1';
+  static const String _keyWindowPositionY = 'window_position_y_v1';
+  static const String _keyWindowPlacementMode = 'window_placement_mode_v1';
   static const String _keyDatabaseBrowserStatsCardExpanded =
       'database_browser_stats_card_expanded';
   static const String _keyEquipmentLocationShowBuilding =
@@ -25,6 +29,11 @@ class SettingsService {
   static const String _keyDashboardDatePreset = 'dashboard_date_preset';
   static const String _keyDashboardDateFrom = 'dashboard_date_from';
   static const String _keyDashboardDateTo = 'dashboard_date_to';
+  static const String _keyTaskAnalyticsDatePreset =
+      'task_analytics_date_preset_v1';
+  static const String _keyTaskAnalyticsDateFrom =
+      'task_analytics_date_from_v1';
+  static const String _keyTaskAnalyticsDateTo = 'task_analytics_date_to_v1';
   static const String _keyDatabaseOpenTimeoutSeconds =
       'database_open_timeout_seconds';
   static const String _keyDatabaseOpenMaxAttempts =
@@ -213,6 +222,47 @@ class SettingsService {
     await prefs.setDouble(_keyWindowHeight, height);
   }
 
+  /// Τελευταία θέση κύριου παραθύρου (πάνω-αριστερή γωνία)· null αν δεν έχει αποθηκευτεί.
+  Future<({double x, double y})?> getSavedWindowPosition() async {
+    final prefs = await SharedPreferences.getInstance();
+    final x = prefs.getDouble(_keyWindowPositionX);
+    final y = prefs.getDouble(_keyWindowPositionY);
+    if (x == null ||
+        y == null ||
+        !x.isFinite ||
+        !y.isFinite) {
+      return null;
+    }
+    return (x: x, y: y);
+  }
+
+  /// Αποθήκευση τελευταίας θέσης παραθύρου (πάνω-αριστερή γωνία).
+  Future<void> setSavedWindowPosition({
+    required double x,
+    required double y,
+  }) async {
+    if (!x.isFinite || !y.isFinite) {
+      return;
+    }
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble(_keyWindowPositionX, x);
+    await prefs.setDouble(_keyWindowPositionY, y);
+  }
+
+  /// Πού εμφανίζεται το παράθυρο στην επόμενη εκκίνηση. Προεπιλογή: κέντρο οθόνης.
+  Future<WindowPlacementMode> getWindowPlacementMode() async {
+    final prefs = await SharedPreferences.getInstance();
+    return WindowPlacementModeStorage.fromStorage(
+          prefs.getString(_keyWindowPlacementMode),
+        ) ??
+        WindowPlacementMode.alwaysCenter;
+  }
+
+  Future<void> setWindowPlacementMode(WindowPlacementMode mode) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_keyWindowPlacementMode, mode.storageValue);
+  }
+
   /// Κάρτα «Στατιστικά Βάσης Δεδομένων» στην οθόνη περιήγησης βάσης — ανοιχτή/κλειστή.
   /// Προεπιλογή: false (συμπτυγμένη).
   Future<bool> getDatabaseBrowserStatsCardExpanded() async {
@@ -291,6 +341,45 @@ class SettingsService {
     } else {
       await prefs.remove(_keyDashboardDateFrom);
       await prefs.remove(_keyDashboardDateTo);
+    }
+  }
+
+  /// Τελευταία επιλογή εύρους ημερομηνιών στις αναφορές εκκρεμοτήτων.
+  /// Προεπιλογή: `all` (πλήρες εύρος δημιουργίας).
+  Future<String> getTaskAnalyticsDatePreset() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_keyTaskAnalyticsDatePreset) ?? 'all';
+  }
+
+  Future<DateTime?> getTaskAnalyticsCustomDateFrom() async {
+    final prefs = await SharedPreferences.getInstance();
+    return _parseStoredDate(prefs.getString(_keyTaskAnalyticsDateFrom));
+  }
+
+  Future<DateTime?> getTaskAnalyticsCustomDateTo() async {
+    final prefs = await SharedPreferences.getInstance();
+    return _parseStoredDate(prefs.getString(_keyTaskAnalyticsDateTo));
+  }
+
+  Future<void> setTaskAnalyticsDateFilter({
+    required String preset,
+    DateTime? customFrom,
+    DateTime? customTo,
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_keyTaskAnalyticsDatePreset, preset);
+    if (preset == 'custom' && customFrom != null && customTo != null) {
+      await prefs.setString(
+        _keyTaskAnalyticsDateFrom,
+        _formatStoredDate(customFrom),
+      );
+      await prefs.setString(
+        _keyTaskAnalyticsDateTo,
+        _formatStoredDate(customTo),
+      );
+    } else {
+      await prefs.remove(_keyTaskAnalyticsDateFrom);
+      await prefs.remove(_keyTaskAnalyticsDateTo);
     }
   }
 

@@ -11,8 +11,8 @@ class DateParserUtil {
   static const _datePartSeparatorRegex = r'[/\\\-]+';
 
   /// Αναλύει input σε ημερομηνία ή εύρος. Κενό input -> (null, null).
-  /// Algorithm: + -> σήμερα; split σε clusters με [^0-9/\\\-]+; πάρε 2 clusters max;
-  /// ανά cluster split με /,\,-; expansion 1/2/3 parts; validation; swap αν start > end.
+  /// Algorithm: + -> σήμερα; split σε clusters με [^0-9/\\\-]+; πρώτο/τελευταίο
+  /// cluster με / ή \ (αποφεύγει το μεμονωμένο "-" στο " - "); expansion· swap.
   static DateParseResult parseSmartInput(String input) {
     final trimmed = input.trim();
     if (trimmed.isEmpty) return (null, null);
@@ -31,10 +31,15 @@ class DateParserUtil {
         .where((s) => s.isNotEmpty)
         .toList();
 
-    // c. Πρώτα 2 clusters
+    // c. Εύρος: το " - " χωρίζει με κενά, οπότε το "-" μένει δικό του token·
+    // παίρνουμε πρώτο/τελευταίο cluster που μοιάζει με ημερομηνία (έχει / ή \).
     if (clusters.isEmpty) return (null, null);
-    final cluster1 = clusters[0];
-    final cluster2 = clusters.length > 1 ? clusters[1] : null;
+    final dateClusters = clusters
+        .where((c) => RegExp(r'[/\\]').hasMatch(c))
+        .toList();
+    if (dateClusters.isEmpty) return (null, null);
+    final cluster1 = dateClusters.first;
+    final cluster2 = dateClusters.length > 1 ? dateClusters.last : null;
 
     final now = DateTime.now();
     final currentYear = now.year;

@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 import 'dart:io' show Platform;
 import 'dart:ui' show AppExitResponse;
 
@@ -8,7 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:window_manager/window_manager.dart';
 
 import '../../features/database/services/database_exit_backup.dart';
-import '../services/settings_service.dart';
+import '../services/desktop_window_service.dart';
 import '../database/database_helper.dart';
 import '../database/database_init_result.dart';
 import '../database/database_init_runner.dart';
@@ -41,8 +41,8 @@ class _AppShortcutsState extends ConsumerState<AppShortcuts>
     with WidgetsBindingObserver, WindowListener {
   late DatabaseInitResult _databaseResult;
   late bool _isLocalDevMode;
-  Timer? _windowSizeSaveTimer;
-  final SettingsService _settings = SettingsService();
+  Timer? _windowBoundsSaveTimer;
+  final DesktopWindowService _desktopWindow = DesktopWindowService();
   AppLifecycleListener? _appLifecycleListener;
   bool _windowCloseHandling = false;
 
@@ -81,7 +81,7 @@ class _AppShortcutsState extends ConsumerState<AppShortcuts>
 
   @override
   void dispose() {
-    _windowSizeSaveTimer?.cancel();
+    _windowBoundsSaveTimer?.cancel();
     _appLifecycleListener?.dispose();
     _appLifecycleListener = null;
     if (Platform.isWindows) {
@@ -96,25 +96,26 @@ class _AppShortcutsState extends ConsumerState<AppShortcuts>
   @override
   void onWindowResized() {
     if (!Platform.isWindows) return;
-    _schedulePersistWindowSize();
+    _schedulePersistWindowBounds();
   }
 
-  void _schedulePersistWindowSize() {
-    _windowSizeSaveTimer?.cancel();
-    _windowSizeSaveTimer = Timer(const Duration(milliseconds: 400), () {
-      unawaited(_persistWindowSizeIfNeeded());
+  @override
+  void onWindowMoved() {
+    if (!Platform.isWindows) return;
+    _schedulePersistWindowBounds();
+  }
+
+  void _schedulePersistWindowBounds() {
+    _windowBoundsSaveTimer?.cancel();
+    _windowBoundsSaveTimer = Timer(const Duration(milliseconds: 400), () {
+      unawaited(_persistWindowBoundsIfNeeded());
     });
   }
 
-  Future<void> _persistWindowSizeIfNeeded() async {
+  Future<void> _persistWindowBoundsIfNeeded() async {
     if (!Platform.isWindows) return;
     try {
-      if (await windowManager.isMaximized()) return;
-      final bounds = await windowManager.getBounds();
-      await _settings.setSavedWindowSize(
-        width: bounds.width,
-        height: bounds.height,
-      );
+      await _desktopWindow.persistWindowBounds(windowManager);
     } on MissingPluginException catch (_) {}
   }
 
@@ -129,7 +130,7 @@ class _AppShortcutsState extends ConsumerState<AppShortcuts>
     if (_windowCloseHandling) return;
     _windowCloseHandling = true;
     try {
-      await _persistWindowSizeIfNeeded();
+      await _persistWindowBoundsIfNeeded();
       await DatabaseHelper.instance.tryWalCheckpoint();
       await DatabaseExitBackup.runIfEnabled();
       await DatabaseHelper.instance.closeConnection();
