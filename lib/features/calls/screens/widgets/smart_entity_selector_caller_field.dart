@@ -141,6 +141,7 @@ class SmartEntityCallerFieldState extends State<SmartEntityCallerField> {
 
   void _onCallerTextChange() {
     if (_isKeyboardPreview) {
+      if (mounted) setState(() {});
       return;
     }
     final currentText = widget.controller.text;
@@ -151,9 +152,12 @@ class SmartEntityCallerFieldState extends State<SmartEntityCallerField> {
       _keyboardOptionIndex = -1;
       _lastAutoScrollIndex = -1;
     }
-    if (widget.focusNode.hasFocus) {
-      setState(() => _showSuggestionList = true);
-    }
+    if (!mounted) return;
+    setState(() {
+      if (widget.focusNode.hasFocus) {
+        _showSuggestionList = true;
+      }
+    });
   }
 
   void _onCallerFocusChange() {
@@ -693,20 +697,24 @@ class SmartEntityCallerFieldState extends State<SmartEntityCallerField> {
                               ),
                               border: const OutlineInputBorder(),
                               isDense: true,
-                              suffixIcon: Semantics(
-                                label: 'Καθαρισμός Καλούντα',
-                                child: IconButton(
-                                  icon: const Icon(Icons.close, size: 20),
-                                  onPressed: () {
-                                    textController.clear();
-                                    _typedQuery = '';
-                                    _keyboardOptionIndex = -1;
-                                    notifier.clearCaller();
-                                    notifier.clearEquipment();
-                                  },
-                                  tooltip: 'Καθαρισμός Καλούντα',
-                                ),
-                              ),
+                              suffixIcon: showInlineFieldClearButton(
+                                textController.text,
+                              )
+                                  ? Semantics(
+                                      label: 'Καθαρισμός Καλούντα',
+                                      child: IconButton(
+                                        icon: const Icon(Icons.close, size: 20),
+                                        onPressed: () {
+                                          textController.clear();
+                                          _typedQuery = '';
+                                          _keyboardOptionIndex = -1;
+                                          notifier.clearCaller();
+                                          notifier.clearEquipment();
+                                        },
+                                        tooltip: 'Καθαρισμός Καλούντα',
+                                      ),
+                                    )
+                                  : null,
                             ),
                             onChanged: (value) {
                               if (_isKeyboardPreview) {

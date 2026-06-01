@@ -687,12 +687,26 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
 
   /// Κλήση μετά από Enter ή focus out· ενημερώνει hasAnyContent για εμφάνιση κουμπιού "Καθαρισμός όλων"
   /// και αποθηκεύει το equipmentText/departmentText. Το UI περνάει τις τρέχουσες τιμές πεδίων.
+  /// Κρατά υπάρχουσα τιμή state όταν το UI περνάει κενό πεδίο πριν συγχρονιστεί με provider.
+  static String _mergeTextFieldIntoState(String? fieldValue, String stateValue) {
+    if (fieldValue == null) return stateValue;
+    if (fieldValue.isEmpty && stateValue.trim().isNotEmpty) return stateValue;
+    return fieldValue;
+  }
+
   void checkContent({
     String? phoneText,
     String? callerText,
     String? equipmentText,
     String? departmentText,
   }) {
+    final mergedEquipment = equipmentText != null
+        ? _mergeTextFieldIntoState(equipmentText.trim(), state.equipmentText)
+        : state.equipmentText;
+    final mergedDepartment = _mergeTextFieldIntoState(
+      departmentText,
+      state.departmentText,
+    );
     state = state.copyWith(
       hasAnyContent: _computeHasAnyContent(
         phoneText: phoneText,
@@ -700,10 +714,10 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
         equipmentText: equipmentText,
         departmentText: departmentText,
       ),
-      equipmentText: equipmentText?.trim() ?? state.equipmentText,
+      equipmentText: mergedEquipment,
       // Στο departmentText κρατάμε το ακριβές input του χρήστη (με κενά),
       // ώστε να μην αφαιρούνται αυτόματα τα διαστήματα πληκτρολόγησης.
-      departmentText: departmentText ?? state.departmentText,
+      departmentText: mergedDepartment,
     );
   }
 
@@ -1490,13 +1504,17 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
         }
       }
     }
+    // Όταν το κείμενο δεν ταιριάζει σε γνωστό τμήμα, μηδενίζουμε το id·
+    // αλλιώς μένει stale id (π.χ. από autofill) και το hasPendingDepartmentChange
+    // συγκρίνει λάθος μόνο ids → κρύβεται το «Προσθήκη».
+    final clearDeptId = trimmed.isEmpty || matchedDepartmentId == null;
     state = state.copyWith(
       // Αποθηκεύουμε το raw κείμενο (με κενά) ώστε ο χρήστης να βλέπει
       // ακριβώς αυτό που πληκτρολόγησε. Το trimming χρησιμοποιείται μόνο
       // για matching/clearSelectedDepartmentId.
       departmentText: text,
       selectedDepartmentId: matchedDepartmentId,
-      clearSelectedDepartmentId: trimmed.isEmpty,
+      clearSelectedDepartmentId: clearDeptId,
       departmentIsManual: true,
     );
   }

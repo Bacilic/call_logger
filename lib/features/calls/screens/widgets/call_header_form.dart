@@ -316,27 +316,53 @@ class _CallHeaderFormState extends ConsumerState<CallHeaderForm> {
               ),
               trailingRowChildren: [
                 const SizedBox(width: _kHeaderTrailingGap),
-                IgnorePointer(
-                  ignoring: !hasAnyContent,
-                  child: AnimatedOpacity(
-                    opacity: hasAnyContent ? 1.0 : 0.0,
-                    duration: const Duration(milliseconds: 180),
-                    child: AnimatedScale(
-                      scale: hasAnyContent ? 1.0 : 0.0,
-                      duration: const Duration(milliseconds: 180),
-                      child: IconButton(
-                        icon: Icon(Icons.clear, color: theme.colorScheme.error),
-                        tooltip: 'Καθαρισμός όλων των πεδίων',
-                        padding: EdgeInsets.zero,
-                        constraints: const BoxConstraints(
-                          minWidth: 40,
-                          minHeight: 40,
-                        ),
-                        onPressed: () =>
-                            _selectorKey.currentState?.performClearAllFields(),
+                Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    // Αόρατος placeholder ίδιου ύψους με τη γραμμή ετικέτας (label)
+                    // των πεδίων, ώστε το κόκκινο × να κατέβει στο κέντρο του
+                    // TextField και να ευθυγραμμιστεί με τα × των πεδίων.
+                    // Κείμενο = ένα κενό: κρατά το ύψος γραμμής χωρίς να αυξάνει
+                    // το πλάτος (αλλιώς προκαλείται overflow στη Row).
+                    Opacity(
+                      opacity: 0,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          const Icon(Icons.circle, size: 16),
+                          Text(' ', style: theme.textTheme.labelMedium),
+                        ],
                       ),
                     ),
-                  ),
+                    const SizedBox(height: 4),
+                    IgnorePointer(
+                      ignoring: !hasAnyContent,
+                      child: AnimatedOpacity(
+                        opacity: hasAnyContent ? 1.0 : 0.0,
+                        duration: const Duration(milliseconds: 180),
+                        child: AnimatedScale(
+                          scale: hasAnyContent ? 1.0 : 0.0,
+                          duration: const Duration(milliseconds: 180),
+                          child: IconButton(
+                            icon: Icon(
+                              Icons.clear,
+                              color: theme.colorScheme.error,
+                            ),
+                            tooltip: 'Καθαρισμός όλων των πεδίων',
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(
+                              minWidth: 40,
+                              minHeight: 40,
+                            ),
+                            onPressed: () => _selectorKey.currentState
+                                ?.performClearAllFields(),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),

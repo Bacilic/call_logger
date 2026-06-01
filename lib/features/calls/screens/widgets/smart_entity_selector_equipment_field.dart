@@ -13,6 +13,7 @@ import '../../utils/vnc_remote_target.dart';
 import 'smart_entity_selector_equipment_models.dart';
 import 'smart_entity_selector_equipment_suggestion_list.dart';
 import 'smart_entity_selector_overlay_utils.dart';
+import 'text_layout_utils.dart';
 
 /// Πεδίο κωδικού εξοπλισμού με overlay αρχικών προτάσεων και Autocomplete αναζήτησης.
 class SmartEntityEquipmentField extends StatefulWidget {
@@ -131,11 +132,12 @@ class _SmartEntityEquipmentFieldState extends State<SmartEntityEquipmentField> {
   }
 
   void _onEquipmentTextChange() {
-    if (widget.focusNode.hasFocus) {
-      setState(() {
+    if (!mounted) return;
+    setState(() {
+      if (widget.focusNode.hasFocus) {
         _showInitialList = true;
-      });
-    }
+      }
+    });
   }
 
   String _equipmentKey(EquipmentModel equipment) {
@@ -636,19 +638,23 @@ class _SmartEntityEquipmentFieldState extends State<SmartEntityEquipmentField> {
                             ),
                             border: const OutlineInputBorder(),
                             isDense: true,
-                            suffixIcon: Semantics(
-                              label: 'Καθαρισμός Εξοπλισμού',
-                              child: IconButton(
-                                icon: const Icon(Icons.close, size: 20),
-                                onPressed: () {
-                                  textController.clear();
-                                  _typedQuery = '';
-                                  _keyboardOptionIndex = -1;
-                                  notifier.clearEquipment();
-                                },
-                                tooltip: 'Καθαρισμός Εξοπλισμού',
-                              ),
-                            ),
+                            suffixIcon: showInlineFieldClearButton(
+                              textController.text,
+                            )
+                                ? Semantics(
+                                    label: 'Καθαρισμός Εξοπλισμού',
+                                    child: IconButton(
+                                      icon: const Icon(Icons.close, size: 20),
+                                      onPressed: () {
+                                        textController.clear();
+                                        _typedQuery = '';
+                                        _keyboardOptionIndex = -1;
+                                        notifier.clearEquipment();
+                                      },
+                                      tooltip: 'Καθαρισμός Εξοπλισμού',
+                                    ),
+                                  )
+                                : null,
                           ),
                           onChanged: (value) {
                             if (_isKeyboardPreview) {

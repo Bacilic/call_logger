@@ -88,10 +88,11 @@ class SmartEntitySelectorWidgetState
   @override
   void initState() {
     super.initState();
-    _phoneController = TextEditingController();
-    _callerController = TextEditingController();
-    _departmentController = TextEditingController();
-    _equipmentController = TextEditingController();
+    final initial = ref.read(widget.provider);
+    _phoneController = TextEditingController(text: initial.selectedPhone ?? '');
+    _callerController = TextEditingController(text: initial.callerDisplayText);
+    _departmentController = TextEditingController(text: initial.departmentText);
+    _equipmentController = TextEditingController(text: initial.equipmentText);
     _phoneFocusNode = FocusNode();
     _callerFocusNode = FocusNode();
     _departmentFocusNode = FocusNode();

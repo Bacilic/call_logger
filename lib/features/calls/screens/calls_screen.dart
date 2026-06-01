@@ -341,7 +341,7 @@ Widget _buildActionsRow(
       ? primarySubmit
       : Tooltip(
           message:
-              'Συμπληρώστε εσωτερικό αριθμό και πρέπει να βρεθεί ο καλώντας',
+              'Συμπληρώστε ένα αριθμό τηλεφώνου ώστε να είναι δυνατή η καταγραφή της κλήσης',
           child: primarySubmit,
         );
 

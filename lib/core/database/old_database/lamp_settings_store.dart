@@ -2,6 +2,8 @@ import 'dart:convert';
 
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../config/app_config.dart';
+
 /// Τοπικές ρυθμίσεις μόνο για τη «Λάμπα».
 ///
 /// Δεν χρησιμοποιεί την κεντρική οθόνη ρυθμίσεων της εφαρμογής.
@@ -19,9 +21,12 @@ class LampSettingsStore {
   static const int minMaxSearchResults = 1;
   static const int maxMaxSearchResults = 10000;
 
+  static String _prefKey(String baseKey) =>
+      AppConfig.prefixedPreferencesKey(baseKey);
+
   Future<int> getMaxSearchResults() async {
     final prefs = await SharedPreferences.getInstance();
-    final v = prefs.getInt(_maxSearchResultsKey);
+    final v = prefs.getInt(_prefKey(_maxSearchResultsKey));
     if (v == null) return defaultMaxSearchResults;
     return v.clamp(minMaxSearchResults, maxMaxSearchResults);
   }
@@ -29,7 +34,7 @@ class LampSettingsStore {
   Future<void> setMaxSearchResults(int value) async {
     final prefs = await SharedPreferences.getInstance();
     final clamped = value.clamp(minMaxSearchResults, maxMaxSearchResults);
-    await prefs.setInt(_maxSearchResultsKey, clamped);
+    await prefs.setInt(_prefKey(_maxSearchResultsKey), clamped);
   }
 
   /// Παλιό κλειδί: μονή διαδρομή. Μεταφέρεται αυτόματα σε [read] και [output].
@@ -37,22 +42,22 @@ class LampSettingsStore {
 
   Future<String?> getExcelPath() async {
     final prefs = await SharedPreferences.getInstance();
-    final value = prefs.getString(_excelPathKey)?.trim();
+    final value = prefs.getString(_prefKey(_excelPathKey))?.trim();
     return value == null || value.isEmpty ? null : value;
   }
 
   Future<void> setExcelPath(String path) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_excelPathKey, path.trim());
+    await prefs.setString(_prefKey(_excelPathKey), path.trim());
   }
 
   /// Διαδρομή .db **για αναζήτηση, ETL issues** κ.λπ.
   Future<String?> getReadPath() async {
     final prefs = await SharedPreferences.getInstance();
     await _migrateIfNeeded(prefs);
-    var value = prefs.getString(_readPathKey)?.trim();
+    var value = prefs.getString(_prefKey(_readPathKey))?.trim();
     if (value == null || value.isEmpty) {
-      value = prefs.getString(_outputPathKey)?.trim();
+      value = prefs.getString(_prefKey(_outputPathKey))?.trim();
     }
     return value == null || value.isEmpty ? null : value;
   }
@@ -61,23 +66,23 @@ class LampSettingsStore {
   Future<String?> getReadPathRaw() async {
     final prefs = await SharedPreferences.getInstance();
     await _migrateIfNeeded(prefs);
-    final value = prefs.getString(_readPathKey)?.trim();
+    final value = prefs.getString(_prefKey(_readPathKey))?.trim();
     return value == null || value.isEmpty ? null : value;
   }
 
   Future<void> setReadPath(String path) async {
     final prefs = await SharedPreferences.getInstance();
     await _migrateIfNeeded(prefs);
-    await prefs.setString(_readPathKey, path.trim());
+    await prefs.setString(_prefKey(_readPathKey), path.trim());
   }
 
   /// Διαδρομή .db **όπου γράφει το import/ενημέρωση από Excel**.
   Future<String?> getOutputPath() async {
     final prefs = await SharedPreferences.getInstance();
     await _migrateIfNeeded(prefs);
-    var value = prefs.getString(_outputPathKey)?.trim();
+    var value = prefs.getString(_prefKey(_outputPathKey))?.trim();
     if (value == null || value.isEmpty) {
-      value = prefs.getString(_readPathKey)?.trim();
+      value = prefs.getString(_prefKey(_readPathKey))?.trim();
     }
     return value == null || value.isEmpty ? null : value;
   }
@@ -85,14 +90,14 @@ class LampSettingsStore {
   Future<String?> getOutputPathRaw() async {
     final prefs = await SharedPreferences.getInstance();
     await _migrateIfNeeded(prefs);
-    final value = prefs.getString(_outputPathKey)?.trim();
+    final value = prefs.getString(_prefKey(_outputPathKey))?.trim();
     return value == null || value.isEmpty ? null : value;
   }
 
   Future<void> setOutputPath(String path) async {
     final prefs = await SharedPreferences.getInstance();
     await _migrateIfNeeded(prefs);
-    await prefs.setString(_outputPathKey, path.trim());
+    await prefs.setString(_prefKey(_outputPathKey), path.trim());
   }
 
   /// Μετά από επιτυχημένη δημιουργία: και τα δύο ίδια. Ο τεχνικός αλλάζει
@@ -101,14 +106,14 @@ class LampSettingsStore {
     final p = newOutputPath.trim();
     final prefs = await SharedPreferences.getInstance();
     await _migrateIfNeeded(prefs);
-    await prefs.setString(_outputPathKey, p);
-    await prefs.setString(_readPathKey, p);
+    await prefs.setString(_prefKey(_outputPathKey), p);
+    await prefs.setString(_prefKey(_readPathKey), p);
   }
 
   /// Αποθηκευμένο πλάτος λίστας πινάκων (σε px) για την καρτέλα «Πίνακες».
   Future<double?> getTablesPaneWidthPx() async {
     final prefs = await SharedPreferences.getInstance();
-    final value = prefs.getDouble(_tablesPaneWidthKey);
+    final value = prefs.getDouble(_prefKey(_tablesPaneWidthKey));
     if (value == null || value.isNaN || !value.isFinite) return null;
     if (value < 120 || value > 1200) return null;
     return value;
@@ -118,12 +123,12 @@ class LampSettingsStore {
     if (widthPx.isNaN || !widthPx.isFinite) return;
     final prefs = await SharedPreferences.getInstance();
     final clamped = widthPx.clamp(120, 1200).toDouble();
-    await prefs.setDouble(_tablesPaneWidthKey, clamped);
+    await prefs.setDouble(_prefKey(_tablesPaneWidthKey), clamped);
   }
 
   Future<Map<String, int>> getIntegrityStepDurationsMs() async {
     final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(_integrityStepDurationsMsKey);
+    final raw = prefs.getString(_prefKey(_integrityStepDurationsMsKey));
     if (raw == null || raw.trim().isEmpty) return const <String, int>{};
     try {
       final decoded = jsonDecode(raw);
@@ -153,7 +158,10 @@ class LampSettingsStore {
           ? latest
           : ((previous * 3 + latest) / 4).round();
     }
-    await prefs.setString(_integrityStepDurationsMsKey, jsonEncode(merged));
+    await prefs.setString(
+      _prefKey(_integrityStepDurationsMsKey),
+      jsonEncode(merged),
+    );
   }
 
   /// [Deprecated] Χρήση μόνο εσωτερική για migration.
@@ -171,11 +179,12 @@ class LampSettingsStore {
   }
 
   Future<void> _migrateIfNeeded(SharedPreferences prefs) async {
-    if (prefs.getBool(_migratedKey) == true) return;
+    if (prefs.getBool(_prefKey(_migratedKey)) == true) return;
 
-    String? r = _nonEmpty(prefs.getString(_readPathKey));
-    String? o = _nonEmpty(prefs.getString(_outputPathKey));
-    final String? legacy = _nonEmpty(prefs.getString(_legacyDatabasePathKey));
+    String? r = _nonEmpty(prefs.getString(_prefKey(_readPathKey)));
+    String? o = _nonEmpty(prefs.getString(_prefKey(_outputPathKey)));
+    final String? legacy =
+        _nonEmpty(prefs.getString(_prefKey(_legacyDatabasePathKey)));
 
     if (legacy != null) {
       r ??= legacy;
@@ -183,9 +192,9 @@ class LampSettingsStore {
     }
     if (r == null && o != null) r = o;
     if (o == null && r != null) o = r;
-    if (r != null) await prefs.setString(_readPathKey, r);
-    if (o != null) await prefs.setString(_outputPathKey, o);
-    await prefs.setBool(_migratedKey, true);
+    if (r != null) await prefs.setString(_prefKey(_readPathKey), r);
+    if (o != null) await prefs.setString(_prefKey(_outputPathKey), o);
+    await prefs.setBool(_prefKey(_migratedKey), true);
   }
 
   String? _nonEmpty(String? s) {

@@ -1,5 +1,28 @@
 ﻿[
   {
+    "version": "0.21.0",
+    "date": "2026-06-01",
+    "added": [
+      "CLI προφίλ δοκιμών (`--profile <όνομα>` ή `--profile=<όνομα>`): απομόνωση ρυθμίσεων SharedPreferences με πρόθεμα κλειδιού ανά προφίλ",
+      "CLI προφίλ · προεπιλεγμένη βάση σε `%AppData%\\Roaming\\Bacilic\\Καταγραφή Κλήσεων\\profiles\\<όνομα>\\call_logger.db` (ξεχωριστή από portable παραγωγής)",
+      "CLI προφίλ · τίτλος παραθύρου «Καταγραφή Κλήσεων [Profile: …]» και providers Riverpod (`activeProfileProvider`, `hasActiveProfileProvider`)",
+      "Πλοήγηση · Badge ενεργής κλήσης στο NavigationRail (λευκό `Icons.phone` σε κόκκινο κύκλο, όπως οι εκκρεμότητες) — `callEntryProvider.select`, χωρίς rebuild ανά δευτερόλεπτο",
+      "Κατάλογος · επιλογέας χρώματος τμήματος (`department_color_picker_dialog`): τετράγωνο κορεσμού/φωτεινότητας, ράβδος απόχρωσης, HEX· κλικ στην προεπισκόπηση φόρμας",
+      "Κατάλογος · 8 τετράγωνες θέσεις προσαρμοσμένων χρωμάτων μετά το λευκό (`DepartmentPaletteStore`, `department_custom_palette_slots_v2`) — μόνιμη αποθήκευση, κύκλοι vs τετράγωνα"
+    ],
+    "changed": [
+      "Windows · metadata εκτελέσιμου (`Runner.rc`): `CompanyName` = Bacilic — φάκελος Roaming Application Support `Bacilic\\Καταγραφή Κλήσεων\\` αντί `gr.itsupport\\`",
+      "Κλήσεις · κεφαλίδα Smart Entity: δυναμική εμφάνιση Χ καθαρισμού (≥1 μη-κενός χαρακτήρας) στα πεδία τηλέφωνο, καλών, τμήμα, εξοπλισμός (`showInlineFieldClearButton`)",
+      "Κατάλογος · παλέτα χρωμάτων: διάλογοι πλήρους παλέτας/καθαρισμού θέσης, απαγόρευση διπλότυπου hex, γέμισμα πρώτης κενής θέσης από προεπισκόπηση· μενού «Διαγραφή χρώματος» σε παρατεταμένο πάτημα"
+    ],
+    "fixed": [
+      "Εκκίνηση · Zone mismatch: `WidgetsFlutterBinding.ensureInitialized` και ρύθμιση CLI προφίλ εντός του ίδιου `runZonedGuarded` με το `runApp`",
+      "Κλήσεις · κόκκινο Χ «καθαρισμός όλων» ευθυγραμμισμένο με τα άλλα Χ πεδίων (όχι υπερυψωμένο)· διόρθωση overflow 52px στο placeholder",
+      "Κλήσεις · κουμπί προσθήκης τμήματος εμφανίζεται και για άγνωστο κείμενο (μηδενισμός `selectedDepartmentId` όταν δεν ταιριάζει λίστα)",
+      "Κλήσεις · πεδίο τμήμα κενό μετά επιστροφή στην ανοιχτή κλήση — σύγχρονισμός controllers από provider και προστασία `checkContent` από ακούσιο wipe"
+    ]
+  },
+  {
     "version": "0.20.2",
     "date": "2026-05-27",
     "added": [

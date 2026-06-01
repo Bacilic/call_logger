@@ -15,6 +15,10 @@ import '../../models/department_model.dart';
 import '../../providers/department_directory_provider.dart';
 import '../../../floor_map/services/floor_color_assignment_service.dart';
 import 'department_color_palette.dart';
+import 'department_color_picker_dialog.dart';
+import 'department_palette_actions.dart';
+import 'department_palette_host.dart';
+import 'department_palette_store.dart';
 
 enum _ConflictResolutionChoice { moveToDepartment, keepCurrentOwnership }
 
@@ -209,6 +213,7 @@ class _DepartmentFormDialogState extends State<DepartmentFormDialog> {
     if (widget.isClone) {
       _nameController.text = '${d?.name ?? ''} (αντίγραφο)'.trim();
     }
+    DepartmentPaletteStore.instance.ensureLoaded();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
       await _loadFloors();
@@ -882,10 +887,46 @@ class _DepartmentFormDialogState extends State<DepartmentFormDialog> {
     });
   }
 
+  DepartmentPaletteHost get _paletteHost => DepartmentPaletteHost(
+    editingDepartmentId: widget.initialDepartment?.id,
+    directoryNotifier: widget.notifier,
+    onEditingDepartmentColorChanged: (hex) {
+      if (!mounted) return;
+      final c = tryParseDepartmentHex(hex);
+      if (c == null) return;
+      setState(() {
+        _selectedColor = c;
+        _hexController.text = hex;
+      });
+    },
+  );
+
+  Future<void> _openColorPickerFromPreview() async {
+    final initial =
+        tryParseDepartmentHex(_hexController.text.trim()) ?? _selectedColor;
+    final picked = await showDepartmentColorPickerDialog(
+      context,
+      initialColor: initial,
+    );
+    if (picked == null || !mounted) return;
+    final applied = await DepartmentPaletteActions.applyPickedColorForPreview(
+      context,
+      picked: picked,
+      previousColor: initial,
+      host: _paletteHost,
+    );
+    if (applied == null || !mounted) return;
+    setState(() {
+      _selectedColor = applied;
+      _hexController.text = colorToDepartmentHex(applied);
+    });
+  }
+
   Widget _buildReadOnlyLegend({
     required BuildContext context,
     required String title,
     required Map<String, List<String>> byValueToOwners,
+    required IconData avatarIcon,
   }) {
     if (byValueToOwners.isEmpty) return const SizedBox.shrink();
     return Column(
@@ -907,7 +948,7 @@ class _DepartmentFormDialogState extends State<DepartmentFormDialog> {
                 message: byValueToOwners[key]!.join(', '),
                 child: Chip(
                   label: Text(key),
-                  avatar: const Icon(Icons.person, size: 14),
+                  avatar: Icon(avatarIcon, size: 14),
                 ),
               ),
           ],
@@ -1038,11 +1079,12 @@ class _DepartmentFormDialogState extends State<DepartmentFormDialog> {
                     _buildReadOnlyLegend(
                       context: context,
                       title:
-                          'Τηλέφωνα καλούντων (μόνο προβολή - tooltip με καλούντα)',
+                          'Τηλέφωνα Τμήματος (Πέρασμα του ποντικιού για προβολή υπαλλήλου)',
                       byValueToOwners: LookupService.instance
                           .getCallerOwnedPhonesByDepartment(
                             widget.initialDepartment!.id!,
                           ),
+                      avatarIcon: Icons.phone_outlined,
                     ),
                   const SizedBox(height: 12),
                   Text(
@@ -1133,11 +1175,12 @@ class _DepartmentFormDialogState extends State<DepartmentFormDialog> {
                     _buildReadOnlyLegend(
                       context: context,
                       title:
-                          'Εξοπλισμός καλούντων (μόνο προβολή - tooltip με καλούντα)',
+                          'Εξοπλισμός Τμήματος (Πέρασμα του ποντικιού για προβολή υπαλλήλου)',
                       byValueToOwners: LookupService.instance
                           .getCallerOwnedEquipmentByDepartment(
                             widget.initialDepartment!.id!,
                           ),
+                      avatarIcon: Icons.computer_outlined,
                     ),
                   const SizedBox(height: 12),
                   Row(
@@ -1196,6 +1239,7 @@ class _DepartmentFormDialogState extends State<DepartmentFormDialog> {
                         child: DepartmentColorPalette(
                           compact: true,
                           showHeading: false,
+                          host: _paletteHost,
                           selected: _selectedColor,
                           onColorSelected: (c) {
                             setState(() {
@@ -1246,29 +1290,56 @@ class _DepartmentFormDialogState extends State<DepartmentFormDialog> {
                                   },
                                 ),
                                 const SizedBox(height: 6),
-                                Container(
-                                  height: 22,
-                                  decoration: BoxDecoration(
-                                    color: parsedHex ?? Colors.transparent,
-                                    border: Border.all(
-                                      color: hasInvalidHex
-                                          ? Theme.of(context).colorScheme.error
-                                          : Theme.of(
-                                              context,
-                                            ).colorScheme.outlineVariant,
-                                    ),
+                                Material(
+                                  color: Colors.transparent,
+                                  child: InkWell(
+                                    onTap: hasInvalidHex
+                                        ? null
+                                        : _openColorPickerFromPreview,
                                     borderRadius: BorderRadius.circular(4),
+                                    child: Tooltip(
+                                      message: hasInvalidHex
+                                          ? 'Διορθώστε το hex'
+                                          : 'Επιλογέας χρώματος',
+                                      child: Container(
+                                        height: 22,
+                                        decoration: BoxDecoration(
+                                          color:
+                                              parsedHex ?? Colors.transparent,
+                                          border: Border.all(
+                                            color: hasInvalidHex
+                                                ? Theme.of(
+                                                    context,
+                                                  ).colorScheme.error
+                                                : Theme.of(
+                                                    context,
+                                                  ).colorScheme.outlineVariant,
+                                          ),
+                                          borderRadius:
+                                              BorderRadius.circular(4),
+                                        ),
+                                        alignment: Alignment.center,
+                                        child: hasInvalidHex
+                                            ? Icon(
+                                                Icons.error_outline,
+                                                size: 14,
+                                                color: Theme.of(
+                                                  context,
+                                                ).colorScheme.error,
+                                              )
+                                            : Icon(
+                                                Icons.palette_outlined,
+                                                size: 14,
+                                                color: (parsedHex ??
+                                                            Colors.grey)
+                                                        .computeLuminance() >
+                                                    0.55
+                                                    ? Colors.black54
+                                                    : Colors.white70,
+                                              ),
+                                      ),
+                                    ),
                                   ),
-                                  alignment: Alignment.center,
-                                  child: hasInvalidHex
-                                      ? Icon(
-                                          Icons.error_outline,
-                                          size: 14,
-                                          color: Theme.of(
-                                            context,
-                                          ).colorScheme.error,
-                                        )
-                                      : null,
                                 ),
                               ],
                             );

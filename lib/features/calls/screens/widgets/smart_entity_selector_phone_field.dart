@@ -10,6 +10,7 @@ import '../../provider/smart_entity_selector_provider.dart';
 import 'smart_entity_selector_overlay_utils.dart';
 import 'smart_entity_selector_phone_suggestion_list.dart';
 import 'smart_entity_selector_phone_utils.dart';
+import 'text_layout_utils.dart';
 
 /// Πεδίο Τηλέφωνο με overlay λίστα πολλαπλών candidates και Autocomplete για prefix αναζήτηση.
 class SmartEntityPhoneField extends StatefulWidget {
@@ -125,6 +126,7 @@ class _SmartEntityPhoneFieldState extends State<SmartEntityPhoneField> {
 
   void _onPhoneTextChange() {
     if (_isKeyboardPreview) {
+      if (mounted) setState(() {});
       return;
     }
     final currentText = widget.controller.text;
@@ -135,9 +137,12 @@ class _SmartEntityPhoneFieldState extends State<SmartEntityPhoneField> {
       _keyboardOptionIndex = -1;
       _lastAutoScrollIndex = -1;
     }
-    if (widget.focusNode.hasFocus) {
-      setState(() => _showSuggestionList = true);
-    }
+    if (!mounted) return;
+    setState(() {
+      if (widget.focusNode.hasFocus) {
+        _showSuggestionList = true;
+      }
+    });
   }
 
   @override
@@ -561,19 +566,23 @@ class _SmartEntityPhoneFieldState extends State<SmartEntityPhoneField> {
                             ),
                             border: const OutlineInputBorder(),
                             isDense: true,
-                            suffixIcon: Semantics(
-                              label: 'Καθαρισμός Τηλεφώνου',
-                              child: IconButton(
-                                icon: const Icon(Icons.close, size: 20),
-                                onPressed: () {
-                                  textController.clear();
-                                  _typedQuery = '';
-                                  _keyboardOptionIndex = -1;
-                                  onClearAll();
-                                },
-                                tooltip: 'Καθαρισμός Τηλεφώνου',
-                              ),
-                            ),
+                            suffixIcon: showInlineFieldClearButton(
+                              textController.text,
+                            )
+                                ? Semantics(
+                                    label: 'Καθαρισμός Τηλεφώνου',
+                                    child: IconButton(
+                                      icon: const Icon(Icons.close, size: 20),
+                                      onPressed: () {
+                                        textController.clear();
+                                        _typedQuery = '';
+                                        _keyboardOptionIndex = -1;
+                                        onClearAll();
+                                      },
+                                      tooltip: 'Καθαρισμός Τηλεφώνου',
+                                    ),
+                                  )
+                                : null,
                           ),
                           inputFormatters: [
                             FilteringTextInputFormatter.digitsOnly,

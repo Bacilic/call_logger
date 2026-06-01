@@ -1,5 +1,10 @@
 import 'package:flutter/material.dart';
 
+import 'department_color_picker_dialog.dart';
+import 'department_palette_actions.dart';
+import 'department_palette_host.dart';
+import 'department_palette_store.dart';
+
 /// Μετατροπή αποθηκευμένου hex (π.χ. `#1976D2`) σε [Color].
 Color? tryParseDepartmentHex(String? s) {
   if (s == null) return null;
@@ -24,7 +29,7 @@ String colorToDepartmentHex(Color c) {
       .toUpperCase();
 }
 
-bool _sameRgb(Color a, Color b) =>
+bool sameDepartmentRgb(Color a, Color b) =>
     colorToDepartmentHex(a) == colorToDepartmentHex(b);
 
 /// Προκαθορισμένη παλέτα (Material-τύπου, κατάλληλη για desktop).
@@ -56,12 +61,13 @@ const List<Color> kDepartmentPaletteColors = [
   Color(0xFFFFFFFF),
 ];
 
-/// Οπτική επιλογή χρώματος τμήματος· το hex (αν χρειάζεται) μπαίνει στη γονική φόρμα.
+/// Οπτική επιλογή χρώματος τμήματος· κύκλοι = προκαθορισμένα, τετράγωνα = 8 θέσεις χρήστη.
 class DepartmentColorPalette extends StatelessWidget {
   const DepartmentColorPalette({
     super.key,
     required this.selected,
     required this.onColorSelected,
+    this.host,
     this.focusNode,
     this.showHeading = true,
     this.compact = false,
@@ -69,6 +75,7 @@ class DepartmentColorPalette extends StatelessWidget {
 
   final Color selected;
   final ValueChanged<Color> onColorSelected;
+  final DepartmentPaletteHost? host;
   final FocusNode? focusNode;
 
   /// Αν false, δεν εμφανίζεται η επικεφαλίδα «Χρώμα» (π.χ. όταν υπάρχει εξωτερικό label).
@@ -79,6 +86,35 @@ class DepartmentColorPalette extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    DepartmentPaletteStore.instance.ensureLoaded();
+    return ListenableBuilder(
+      listenable: DepartmentPaletteStore.instance,
+      builder: (context, _) => _buildContent(context),
+    );
+  }
+
+  bool _isInBasePalette(Color c) =>
+      kDepartmentPaletteColors.any((p) => sameDepartmentRgb(p, c));
+
+  bool _isInCustomSlots(Color c) =>
+      DepartmentPaletteStore.instance.indexOfCustomColor(c) != null;
+
+  Future<void> _openPickerForEmptySlot(BuildContext context, int index) async {
+    final picked = await showDepartmentColorPickerDialog(
+      context,
+      initialColor: selected,
+    );
+    if (picked == null || !context.mounted) return;
+    final ok = await DepartmentPaletteActions.assignPickedToEmptySlot(
+      context,
+      index,
+      picked,
+    );
+    if (!ok || !context.mounted) return;
+    onColorSelected(picked);
+  }
+
+  Widget _buildContent(BuildContext context) {
     final theme = Theme.of(context);
     final outline = theme.colorScheme.outlineVariant;
     final swatchSize = compact ? 20.0 : 30.0;
@@ -87,11 +123,13 @@ class DepartmentColorPalette extends StatelessWidget {
     final iconSize = compact ? 12.0 : 18.0;
     final selectedBorder = compact ? 2.0 : 3.0;
 
-    final inPalette =
-        kDepartmentPaletteColors.any((c) => _sameRgb(c, selected));
-    final colors = inPalette
-        ? kDepartmentPaletteColors
-        : <Color>[selected, ...kDepartmentPaletteColors];
+    final customSlots = DepartmentPaletteStore.instance.customSlots;
+
+    final inBase = _isInBasePalette(selected);
+    final inCustom = _isInCustomSlots(selected);
+    final baseColors = (!inBase && !inCustom)
+        ? <Color>[selected, ...kDepartmentPaletteColors]
+        : kDepartmentPaletteColors;
 
     final body = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -110,16 +148,34 @@ class DepartmentColorPalette extends StatelessWidget {
           spacing: wrapSpacing,
           runSpacing: wrapRunSpacing,
           children: [
-            for (final c in colors)
-              _Swatch(
+            for (final c in baseColors)
+              _CircleSwatch(
                 size: swatchSize,
                 iconSize: iconSize,
                 selectedBorderWidth: selectedBorder,
                 color: c,
-                selected: _sameRgb(c, selected),
+                selected: sameDepartmentRgb(c, selected),
                 onTap: () => onColorSelected(c),
                 outline: outline,
                 primary: theme.colorScheme.primary,
+              ),
+            for (var i = 0; i < DepartmentPaletteStore.customSlotCount; i++)
+              _SquareCustomSlot(
+                size: swatchSize,
+                iconSize: iconSize,
+                selectedBorderWidth: selectedBorder,
+                slotColor: customSlots[i],
+                selected: customSlots[i] != null &&
+                    sameDepartmentRgb(customSlots[i]!, selected),
+                outline: outline,
+                primary: theme.colorScheme.primary,
+                onTapFilled: (color) => onColorSelected(color),
+                onTapEmpty: () => _openPickerForEmptySlot(context, i),
+                onClear: () => DepartmentPaletteActions.requestClearCustomSlot(
+                  context,
+                  i,
+                  host: host,
+                ),
               ),
           ],
         ),
@@ -136,8 +192,8 @@ class DepartmentColorPalette extends StatelessWidget {
   }
 }
 
-class _Swatch extends StatelessWidget {
-  const _Swatch({
+class _CircleSwatch extends StatelessWidget {
+  const _CircleSwatch({
     required this.size,
     required this.iconSize,
     required this.selectedBorderWidth,
@@ -202,6 +258,111 @@ class _Swatch extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _SquareCustomSlot extends StatelessWidget {
+  const _SquareCustomSlot({
+    required this.size,
+    required this.iconSize,
+    required this.selectedBorderWidth,
+    required this.slotColor,
+    required this.selected,
+    required this.outline,
+    required this.primary,
+    required this.onTapFilled,
+    required this.onTapEmpty,
+    required this.onClear,
+  });
+
+  final double size;
+  final double iconSize;
+  final double selectedBorderWidth;
+  final Color? slotColor;
+  final bool selected;
+  final Color outline;
+  final Color primary;
+  final ValueChanged<Color> onTapFilled;
+  final VoidCallback onTapEmpty;
+  final VoidCallback onClear;
+
+  @override
+  Widget build(BuildContext context) {
+    final filled = slotColor != null;
+    final color = slotColor;
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: filled ? () => onTapFilled(color!) : onTapEmpty,
+        onLongPress: filled
+            ? () => _showDeleteColorMenu(context)
+            : null,
+        borderRadius: BorderRadius.circular(4),
+        child: Tooltip(
+          message: filled
+              ? '${colorToDepartmentHex(color!)}\n'
+                  'Κλικ: επιλογή · Παρατεταμένο: διαγραφή'
+              : 'Κενή θέση · Κλικ για επιλογή χρώματος',
+          child: Container(
+            width: size,
+            height: size,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(4),
+              color: filled ? color : Colors.transparent,
+              border: Border.all(
+                color: selected
+                    ? primary
+                    : outline.withValues(alpha: filled ? 0.6 : 0.45),
+                width: selected ? selectedBorderWidth : 1,
+              ),
+              boxShadow: selected
+                  ? [
+                      BoxShadow(
+                        color: primary.withValues(alpha: 0.35),
+                        blurRadius: 2,
+                      ),
+                    ]
+                  : null,
+            ),
+            child: selected && filled
+                ? Icon(
+                    Icons.check,
+                    size: iconSize,
+                    color: color!.computeLuminance() > 0.6
+                        ? Colors.black87
+                        : Colors.white,
+                  )
+                : null,
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showDeleteColorMenu(BuildContext context) {
+    final box = context.findRenderObject() as RenderBox?;
+    final offset = box?.localToGlobal(Offset.zero) ?? Offset.zero;
+    final size = box?.size ?? Size.zero;
+    final position = RelativeRect.fromLTRB(
+      offset.dx,
+      offset.dy + size.height,
+      offset.dx + size.width,
+      offset.dy,
+    );
+    showMenu<void>(
+      context: context,
+      position: position,
+      items: [
+        PopupMenuItem<void>(
+          child: const Text('Διαγραφή χρώματος'),
+          onTap: () {
+            WidgetsBinding.instance.addPostFrameCallback((_) => onClear());
+          },
+        ),
+      ],
     );
   }
 }

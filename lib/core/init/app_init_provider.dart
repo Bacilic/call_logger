@@ -6,6 +6,7 @@ import '../services/audit_retention_runner.dart';
 import 'app_initializer.dart';
 
 /// Provider αρχικοποίησης εφαρμογής. Τρέχει μία φορά στην εκκίνηση.
+/// Με `--profile` η προεπιλεγμένη βάση είναι ήδη στο [AppConfig.defaultDbPath].
 final appInitProvider = FutureProvider<AppInitResult>((ref) async {
   // Μην τροποποιείς άλλους providers συγχρονισμένα κατά το mount του FutureProvider
   // (Riverpod: «Providers are not allowed to modify other providers during their initialization»).

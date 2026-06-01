@@ -6,6 +6,31 @@
 
 **Σημείωση:** Μπορείτε να εμπλουτίσετε τις περιγραφές με λεπτομέρειες από μνήμη· το JSON `[assets/changelog.json](assets/changelog.json)` τροφοδοτεί την εφαρμογή και πρέπει να παραμένει συγχρονισμένο με αυτό το αρχείο.
 
+## [0.21.0] - 2026-06-01
+
+### Προστέθηκε
+
+- **CLI προφίλ (`main.dart`, `AppConfig`, `SettingsService`):** παράμετρος `--profile <όνομα>` ή `--profile=<όνομα>` (μόνο `a-z`, `A-Z`, `0-9`, `_`, `-`)· χωρίς παράμετρο η συμπεριφορά παραγωγής παραμένει αμετάβλητη.
+- **CLI προφίλ · απομόνωση ρυθμίσεων:** πρόθεμα κλειδιών SharedPreferences (`profile_<όνομα>_…`) σε `SettingsService`, `LampSettingsStore` και `DepartmentPaletteStore`.
+- **CLI προφίλ · βάση:** προεπιλεγμένο `call_logger.db` στον φάκελο `profiles/<όνομα>/` κάτω από Application Support (`path_provider`) — όχι η portable διαδρομή `..\\Data Base\\` δίπλα στο εκτελέσιμο.
+- **CLI προφίλ · UI:** τίτλος παραθύρου `Καταγραφή Κλήσεων [Profile: …]` (`windowTitleWithProfileLabel`)· providers `activeProfileProvider` / `hasActiveProfileProvider`· unit tests `test/app_config_profile_test.dart`.
+- **Πλοήγηση (`main_shell.dart`, `_CallsNavigationIcon`):** ένδειξη ανοιχτής κλήσης στο εικονίδιο «Κλήσεις» — `Badge` με λευκό `Icons.phone` σε κόκκινο κύκλο (οπτικά όπως badge εκκρεμοτήτων)· `callEntryProvider.select(_hasActiveCallSession)` ώστε να μην γίνεται rebuild κάθε δευτερόλεπτο· κρύβεται στην οθόνη Κλήσεων.
+- **Κατάλογος · χρώμα τμήματος (`department_color_picker_dialog`, `department_form_dialog`):** διάλογος HSV (κορεσμός/φωτεινότητα, hue, HEX, αντιγραφή)· κλικ στην προεπισκόπηση ανοίγει επιλογέα.
+- **Κατάλογος · παλέτα (`DepartmentPaletteStore`, `department_color_palette.dart`):** 8 τετράγωνες θέσεις χρήστη μετά το λευκό (κύκλοι = προκαθορισμένα)· κενή θέση → επιλογέας· γεμάτη → επιλογή χρώματος τμήματος· αποθήκευση `department_custom_palette_slots_v2`.
+
+### Άλλαξε
+
+- **Windows · metadata (`Runner.rc`):** `CompanyName` = **Bacilic** — τα τοπικά prefs και οι κατάλογοι εφαρμογής στο Roaming AppData είναι πλέον `Bacilic\Καταγραφή Κλήσεων\` (παλιά εγκατάσταση κάτω από `gr.itsupport\` δεν διαβάζεται αυτόματα).
+- **Κλήσεις · κεφαλίδα (`smart_entity_selector_*_field.dart`, `text_layout_utils.dart`):** τα Χ καθαρισμού ανά πεδίο εμφανίζονται δυναμικά όταν `trim().isNotEmpty` (≥1 χαρακτήρας)· χρώμα γκρι όπως πριν.
+- **Κατάλογος · παλέτα (`department_palette_actions.dart`):** διάλογος όταν καθαρίζεται χρώμα που χρησιμοποιείται σε τμήμα· διάλογος πλήρους παλέτας (8/8)· απαγόρευση διπλότυπου hex· προεπισκόπηση γεμίζει πρώτη κενή θέση· παρατεταμένο πάτημα → μενού «Διαγραφή χρώματος» (όχι άμεση διαγραφή).
+
+### Διορθώθηκε
+
+- **Εκκίνηση (`main.dart`):** σφάλμα «Zone mismatch» — `WidgetsFlutterBinding.ensureInitialized()`, `AppConfig.configureFromCliArguments()` και `await _bootstrapAndRunApp()` εκτελούνται στο ίδιο async closure του `runZonedGuarded` με το `runApp`.
+- **Κλήσεις · κεφαλίδα (`smart_entity_selector_widget.dart`):** ευθυγράμμιση κόκκινου Χ «καθαρισμός όλων» με τα Χ των πεδίων· διόρθωση `RenderFlex overflow` (placeholder πλάτους).
+- **Κλήσεις · τμήμα (`smart_entity_selector_provider.dart`):** κουμπί «προσθήκη» για άγνωστο τμήμα (π.χ. «μαγειρία») — `selectedDepartmentId` μηδενίζεται όταν δεν υπάρχει αντιστοιχία στη λίστα.
+- **Κλήσεις · επιστροφή στην οθόνη (`smart_entity_selector_widget.dart`):** το πεδίο τμήμα δεν μένει κενό μετά αλλαγή tab και επιστροφή σε ανοιχτή κλήση — σύγχρονισμός controllers από provider και διόρθωση `checkContent` στο focus-out τηλεφώνου.
+
 ## [0.20.2] - 2026-05-27
 
 ### Προστέθηκε

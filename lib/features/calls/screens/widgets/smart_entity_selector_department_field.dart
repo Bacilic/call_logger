@@ -56,6 +56,7 @@ class SmartEntityDepartmentFieldState extends State<SmartEntityDepartmentField> 
 
   void _onDepartmentTextChange() {
     if (_isKeyboardPreview) {
+      if (mounted) setState(() {});
       return;
     }
     final currentText = widget.controller.text;
@@ -66,6 +67,7 @@ class SmartEntityDepartmentFieldState extends State<SmartEntityDepartmentField> 
       _keyboardOptionIndex = -1;
       _lastAutoScrollIndex = -1;
     }
+    if (mounted) setState(() {});
   }
 
   List<DepartmentModel> _departmentOptions(String query) {
@@ -255,20 +257,24 @@ class SmartEntityDepartmentFieldState extends State<SmartEntityDepartmentField> 
                         decoration: InputDecoration(
                           border: const OutlineInputBorder(),
                           isDense: true,
-                          suffixIcon: Semantics(
-                            label: 'Καθαρισμός Τμήματος',
-                            child: IconButton(
-                              icon: const Icon(Icons.close, size: 20),
-                              onPressed: () {
-                                textController.clear();
-                                _typedQuery = '';
-                                _keyboardOptionIndex = -1;
-                                notifier.updateDepartmentText('');
-                                onContentChecked();
-                              },
-                              tooltip: 'Καθαρισμός Τμήματος',
-                            ),
-                          ),
+                          suffixIcon: showInlineFieldClearButton(
+                            textController.text,
+                          )
+                              ? Semantics(
+                                  label: 'Καθαρισμός Τμήματος',
+                                  child: IconButton(
+                                    icon: const Icon(Icons.close, size: 20),
+                                    onPressed: () {
+                                      textController.clear();
+                                      _typedQuery = '';
+                                      _keyboardOptionIndex = -1;
+                                      notifier.updateDepartmentText('');
+                                      onContentChecked();
+                                    },
+                                    tooltip: 'Καθαρισμός Τμήματος',
+                                  ),
+                                )
+                              : null,
                         ),
                         onChanged: (value) {
                           if (_isKeyboardPreview) {

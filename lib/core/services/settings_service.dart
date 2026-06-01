@@ -110,12 +110,16 @@ class SettingsService {
     _setAppSetting = set;
   }
 
+  /// Κλειδί αποθήκευσης SharedPreferences (με πρόθεμα προφίλ όταν υπάρχει CLI `--profile`).
+  static String _prefKey(String baseKey) =>
+      AppConfig.prefixedPreferencesKey(baseKey);
+
   /// Επιστρέφει την αποθηκευμένη διαδρομή βάσης δεδομένων.
   /// Αν δεν υπάρχει ή είναι κενή, επιστρέφει το [AppConfig.defaultDbPath]
   /// (`..\Data Base\call_logger.db` δίπλα στο εκτελέσιμο).
   Future<String> getDatabasePath() async {
     final prefs = await SharedPreferences.getInstance();
-    final path = prefs.getString(_keyDatabasePath);
+    final path = prefs.getString(_prefKey(_keyDatabasePath));
     if (path == null || path.trim().isEmpty) {
       return AppConfig.defaultDbPath;
     }
@@ -127,14 +131,14 @@ class SettingsService {
   Future<void> setDatabasePath(String path) async {
     final prefs = await SharedPreferences.getInstance();
     final trimmed = path.trim();
-    await prefs.setString(_keyDatabasePath, trimmed);
+    await prefs.setString(_prefKey(_keyDatabasePath), trimmed);
     await _addToRecentPaths(prefs, trimmed);
   }
 
   /// Επιστρέφει τις 3 τελευταίες έγκυρες (χρησιμοποιημένες) διαδρομές για dropdown.
   Future<List<String>> getRecentDatabasePaths() async {
     final prefs = await SharedPreferences.getInstance();
-    final list = prefs.getStringList(_keyRecentPaths);
+    final list = prefs.getStringList(_prefKey(_keyRecentPaths));
     if (list == null || list.isEmpty) {
       return [AppConfig.defaultDbPath];
     }
@@ -142,62 +146,62 @@ class SettingsService {
   }
 
   Future<void> _addToRecentPaths(SharedPreferences prefs, String path) async {
-    final list = prefs.getStringList(_keyRecentPaths) ?? [];
+    final list = prefs.getStringList(_prefKey(_keyRecentPaths)) ?? [];
     final updated = [
       path,
       ...list.where((p) => p != path),
     ].take(_maxRecentPaths).toList();
-    await prefs.setStringList(_keyRecentPaths, updated);
+    await prefs.setStringList(_prefKey(_keyRecentPaths), updated);
   }
 
   /// Επαναφορά σε προεπιλεγμένη διαδρομή (αφαίρεση αποθηκευμένης ρύθμισης).
   /// Προσθέτει την προεπιλογή στη λίστα recent ώστε να εμφανίζεται στο dropdown.
   Future<void> resetToDefault() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_keyDatabasePath);
+    await prefs.remove(_prefKey(_keyDatabasePath));
     await _addToRecentPaths(prefs, AppConfig.defaultDbPath);
   }
 
   /// Εμφάνιση ενεργού χρονομέτρου στη φόρμα κλήσεων. Προεπιλογή: true.
   Future<bool> getShowActiveTimer() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool(_keyShowActiveTimer) ?? true;
+    return prefs.getBool(_prefKey(_keyShowActiveTimer)) ?? true;
   }
 
   /// Ορίζει αν θα εμφανίζεται το ενεργό χρονόμετρο (MM:SS) στη φόρμα κλήσεων.
   Future<void> setShowActiveTimer(bool value) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_keyShowActiveTimer, value);
+    await prefs.setBool(_prefKey(_keyShowActiveTimer), value);
   }
 
   /// Εμφάνιση μετρητή (badge) εκκρεμοτήτων στο κεντρικό μενού. Προεπιλογή: true.
   Future<bool> getShowTasksBadge() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool(_keyShowTasksBadge) ?? true;
+    return prefs.getBool(_prefKey(_keyShowTasksBadge)) ?? true;
   }
 
   Future<void> setShowTasksBadge(bool value) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_keyShowTasksBadge, value);
+    await prefs.setBool(_prefKey(_keyShowTasksBadge), value);
   }
 
   /// Εμφάνιση λεζαντών στην πλευρική μπάρα (NavigationRail extended) όταν το πλάτος επιτρέπει.
   /// Προεπιλογή: true.
   Future<bool> getNavRailShowLabels() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool(_keyNavRailShowLabels) ?? true;
+    return prefs.getBool(_prefKey(_keyNavRailShowLabels)) ?? true;
   }
 
   Future<void> setNavRailShowLabels(bool value) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_keyNavRailShowLabels, value);
+    await prefs.setBool(_prefKey(_keyNavRailShowLabels), value);
   }
 
   /// Τελευταίο πλάτος/ύψος κύριου παραθύρου (Windows desktop)· null αν δεν έχει αποθηκευτεί.
   Future<({double width, double height})?> getSavedWindowSize() async {
     final prefs = await SharedPreferences.getInstance();
-    final width = prefs.getDouble(_keyWindowWidth);
-    final height = prefs.getDouble(_keyWindowHeight);
+    final width = prefs.getDouble(_prefKey(_keyWindowWidth));
+    final height = prefs.getDouble(_prefKey(_keyWindowHeight));
     if (width == null ||
         height == null ||
         !width.isFinite ||
@@ -218,15 +222,15 @@ class SettingsService {
       return;
     }
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setDouble(_keyWindowWidth, width);
-    await prefs.setDouble(_keyWindowHeight, height);
+    await prefs.setDouble(_prefKey(_keyWindowWidth), width);
+    await prefs.setDouble(_prefKey(_keyWindowHeight), height);
   }
 
   /// Τελευταία θέση κύριου παραθύρου (πάνω-αριστερή γωνία)· null αν δεν έχει αποθηκευτεί.
   Future<({double x, double y})?> getSavedWindowPosition() async {
     final prefs = await SharedPreferences.getInstance();
-    final x = prefs.getDouble(_keyWindowPositionX);
-    final y = prefs.getDouble(_keyWindowPositionY);
+    final x = prefs.getDouble(_prefKey(_keyWindowPositionX));
+    final y = prefs.getDouble(_prefKey(_keyWindowPositionY));
     if (x == null ||
         y == null ||
         !x.isFinite ||
@@ -245,84 +249,84 @@ class SettingsService {
       return;
     }
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setDouble(_keyWindowPositionX, x);
-    await prefs.setDouble(_keyWindowPositionY, y);
+    await prefs.setDouble(_prefKey(_keyWindowPositionX), x);
+    await prefs.setDouble(_prefKey(_keyWindowPositionY), y);
   }
 
   /// Πού εμφανίζεται το παράθυρο στην επόμενη εκκίνηση. Προεπιλογή: κέντρο οθόνης.
   Future<WindowPlacementMode> getWindowPlacementMode() async {
     final prefs = await SharedPreferences.getInstance();
     return WindowPlacementModeStorage.fromStorage(
-          prefs.getString(_keyWindowPlacementMode),
+          prefs.getString(_prefKey(_keyWindowPlacementMode)),
         ) ??
         WindowPlacementMode.alwaysCenter;
   }
 
   Future<void> setWindowPlacementMode(WindowPlacementMode mode) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_keyWindowPlacementMode, mode.storageValue);
+    await prefs.setString(_prefKey(_keyWindowPlacementMode), mode.storageValue);
   }
 
   /// Κάρτα «Στατιστικά Βάσης Δεδομένων» στην οθόνη περιήγησης βάσης — ανοιχτή/κλειστή.
   /// Προεπιλογή: false (συμπτυγμένη).
   Future<bool> getDatabaseBrowserStatsCardExpanded() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool(_keyDatabaseBrowserStatsCardExpanded) ?? false;
+    return prefs.getBool(_prefKey(_keyDatabaseBrowserStatsCardExpanded)) ?? false;
   }
 
   Future<void> setDatabaseBrowserStatsCardExpanded(bool value) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_keyDatabaseBrowserStatsCardExpanded, value);
+    await prefs.setBool(_prefKey(_keyDatabaseBrowserStatsCardExpanded), value);
   }
 
   /// Εμφάνιση κωδικού κτιρίου `[...]` στη στήλη Τοποθεσία (πίνακας εξοπλισμού). Προεπιλογή: true.
   Future<bool> getEquipmentLocationShowBuilding() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool(_keyEquipmentLocationShowBuilding) ?? true;
+    return prefs.getBool(_prefKey(_keyEquipmentLocationShowBuilding)) ?? true;
   }
 
   Future<void> setEquipmentLocationShowBuilding(bool value) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_keyEquipmentLocationShowBuilding, value);
+    await prefs.setBool(_prefKey(_keyEquipmentLocationShowBuilding), value);
   }
 
   /// Ενεργοποίηση ενσωματωμένου ορθογραφικού ελέγχου σημειώσεων (Windows). Προεπιλογή: true.
   Future<bool> getEnableSpellCheck() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool(_keyEnableSpellCheck) ?? true;
+    return prefs.getBool(_prefKey(_keyEnableSpellCheck)) ?? true;
   }
 
   Future<void> setEnableSpellCheck(bool value) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_keyEnableSpellCheck, value);
+    await prefs.setBool(_prefKey(_keyEnableSpellCheck), value);
   }
 
   /// Εμφάνιση κάρτας «Τελευταίες 7 Κλήσεις» στην οθόνη κλήσεων. Προεπιλογή: true.
   Future<bool> getShowGlobalCalls() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool(_keyShowGlobalCallsDashboard) ?? true;
+    return prefs.getBool(_prefKey(_keyShowGlobalCallsDashboard)) ?? true;
   }
 
   Future<void> setShowGlobalCalls(bool value) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_keyShowGlobalCallsDashboard, value);
+    await prefs.setBool(_prefKey(_keyShowGlobalCallsDashboard), value);
   }
 
   /// Τελευταία επιλογή εύρους ημερομηνιών στον πίνακα στατιστικών κλήσεων.
   /// Προεπιλογή: `today`.
   Future<String> getDashboardDatePreset() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_keyDashboardDatePreset) ?? 'today';
+    return prefs.getString(_prefKey(_keyDashboardDatePreset)) ?? 'today';
   }
 
   Future<DateTime?> getDashboardCustomDateFrom() async {
     final prefs = await SharedPreferences.getInstance();
-    return _parseStoredDate(prefs.getString(_keyDashboardDateFrom));
+    return _parseStoredDate(prefs.getString(_prefKey(_keyDashboardDateFrom)));
   }
 
   Future<DateTime?> getDashboardCustomDateTo() async {
     final prefs = await SharedPreferences.getInstance();
-    return _parseStoredDate(prefs.getString(_keyDashboardDateTo));
+    return _parseStoredDate(prefs.getString(_prefKey(_keyDashboardDateTo)));
   }
 
   Future<void> setDashboardDateFilter({
@@ -331,16 +335,16 @@ class SettingsService {
     DateTime? customTo,
   }) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_keyDashboardDatePreset, preset);
+    await prefs.setString(_prefKey(_keyDashboardDatePreset), preset);
     if (preset == 'custom' && customFrom != null && customTo != null) {
       await prefs.setString(
         _keyDashboardDateFrom,
         _formatStoredDate(customFrom),
       );
-      await prefs.setString(_keyDashboardDateTo, _formatStoredDate(customTo));
+      await prefs.setString(_prefKey(_keyDashboardDateTo), _formatStoredDate(customTo));
     } else {
-      await prefs.remove(_keyDashboardDateFrom);
-      await prefs.remove(_keyDashboardDateTo);
+      await prefs.remove(_prefKey(_keyDashboardDateFrom));
+      await prefs.remove(_prefKey(_keyDashboardDateTo));
     }
   }
 
@@ -348,17 +352,17 @@ class SettingsService {
   /// Προεπιλογή: `all` (πλήρες εύρος δημιουργίας).
   Future<String> getTaskAnalyticsDatePreset() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_keyTaskAnalyticsDatePreset) ?? 'all';
+    return prefs.getString(_prefKey(_keyTaskAnalyticsDatePreset)) ?? 'all';
   }
 
   Future<DateTime?> getTaskAnalyticsCustomDateFrom() async {
     final prefs = await SharedPreferences.getInstance();
-    return _parseStoredDate(prefs.getString(_keyTaskAnalyticsDateFrom));
+    return _parseStoredDate(prefs.getString(_prefKey(_keyTaskAnalyticsDateFrom)));
   }
 
   Future<DateTime?> getTaskAnalyticsCustomDateTo() async {
     final prefs = await SharedPreferences.getInstance();
-    return _parseStoredDate(prefs.getString(_keyTaskAnalyticsDateTo));
+    return _parseStoredDate(prefs.getString(_prefKey(_keyTaskAnalyticsDateTo)));
   }
 
   Future<void> setTaskAnalyticsDateFilter({
@@ -367,7 +371,7 @@ class SettingsService {
     DateTime? customTo,
   }) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_keyTaskAnalyticsDatePreset, preset);
+    await prefs.setString(_prefKey(_keyTaskAnalyticsDatePreset), preset);
     if (preset == 'custom' && customFrom != null && customTo != null) {
       await prefs.setString(
         _keyTaskAnalyticsDateFrom,
@@ -378,8 +382,8 @@ class SettingsService {
         _formatStoredDate(customTo),
       );
     } else {
-      await prefs.remove(_keyTaskAnalyticsDateFrom);
-      await prefs.remove(_keyTaskAnalyticsDateTo);
+      await prefs.remove(_prefKey(_keyTaskAnalyticsDateFrom));
+      await prefs.remove(_prefKey(_keyTaskAnalyticsDateTo));
     }
   }
 
@@ -404,7 +408,7 @@ class SettingsService {
   /// Timeout ανοίγματος βάσης σε δευτερόλεπτα. Προεπιλογή: [AppConfig.databaseOpenTimeoutSeconds].
   Future<int> getDatabaseOpenTimeoutSeconds() async {
     final prefs = await SharedPreferences.getInstance();
-    final value = prefs.getInt(_keyDatabaseOpenTimeoutSeconds);
+    final value = prefs.getInt(_prefKey(_keyDatabaseOpenTimeoutSeconds));
     if (value == null || value <= 0) {
       return AppConfig.databaseOpenTimeoutSeconds;
     }
@@ -416,13 +420,13 @@ class SettingsService {
     final normalized = value <= 0
         ? AppConfig.databaseOpenTimeoutSeconds
         : value;
-    await prefs.setInt(_keyDatabaseOpenTimeoutSeconds, normalized);
+    await prefs.setInt(_prefKey(_keyDatabaseOpenTimeoutSeconds), normalized);
   }
 
   /// Μέγιστες προσπάθειες ανοίγματος βάσης. Προεπιλογή: [AppConfig.databaseOpenMaxAttempts].
   Future<int> getDatabaseOpenMaxAttempts() async {
     final prefs = await SharedPreferences.getInstance();
-    final value = prefs.getInt(_keyDatabaseOpenMaxAttempts);
+    final value = prefs.getInt(_prefKey(_keyDatabaseOpenMaxAttempts));
     if (value == null || value <= 0) {
       return AppConfig.databaseOpenMaxAttempts;
     }
@@ -434,14 +438,14 @@ class SettingsService {
     final normalized = value <= 0
         ? AppConfig.databaseOpenMaxAttempts
         : value.clamp(1, 5);
-    await prefs.setInt(_keyDatabaseOpenMaxAttempts, normalized);
+    await prefs.setInt(_prefKey(_keyDatabaseOpenMaxAttempts), normalized);
   }
 
   /// Διαδρομή αρχείου TXT που φορτώνει το runtime λεξικό ορθογραφίας (μετά το Compile).
   /// Κενό/null = χρήση bundled asset.
   Future<String?> getDictionarySourcePath() async {
     final prefs = await SharedPreferences.getInstance();
-    final s = prefs.getString(_keyDictionarySourcePath);
+    final s = prefs.getString(_prefKey(_keyDictionarySourcePath));
     if (s == null) return null;
     final t = s.trim();
     return t.isEmpty ? null : t;
@@ -450,16 +454,16 @@ class SettingsService {
   Future<void> setDictionarySourcePath(String? path) async {
     final prefs = await SharedPreferences.getInstance();
     if (path == null || path.trim().isEmpty) {
-      await prefs.remove(_keyDictionarySourcePath);
+      await prefs.remove(_prefKey(_keyDictionarySourcePath));
     } else {
-      await prefs.setString(_keyDictionarySourcePath, path.trim());
+      await prefs.setString(_prefKey(_keyDictionarySourcePath), path.trim());
     }
   }
 
   /// Διαδρομή εξόδου για Compile (`exportToTxt`).
   Future<String?> getDictionaryExportPath() async {
     final prefs = await SharedPreferences.getInstance();
-    final s = prefs.getString(_keyDictionaryExportPath);
+    final s = prefs.getString(_prefKey(_keyDictionaryExportPath));
     if (s == null) return null;
     final t = s.trim();
     return t.isEmpty ? null : t;
@@ -468,49 +472,49 @@ class SettingsService {
   Future<void> setDictionaryExportPath(String? path) async {
     final prefs = await SharedPreferences.getInstance();
     if (path == null || path.trim().isEmpty) {
-      await prefs.remove(_keyDictionaryExportPath);
+      await prefs.remove(_prefKey(_keyDictionaryExportPath));
     } else {
-      await prefs.setString(_keyDictionaryExportPath, path.trim());
+      await prefs.setString(_prefKey(_keyDictionaryExportPath), path.trim());
     }
   }
 
   /// Εμφάνιση στοιχείου πλοήγησης «Βάση Δεδομένων». Προεπιλογή: true.
   Future<bool> getShowDatabaseNav() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool(_keyShowDatabaseNav) ?? true;
+    return prefs.getBool(_prefKey(_keyShowDatabaseNav)) ?? true;
   }
 
   Future<void> setShowDatabaseNav(bool value) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_keyShowDatabaseNav, value);
+    await prefs.setBool(_prefKey(_keyShowDatabaseNav), value);
   }
 
   /// Εμφάνιση στοιχείου πλοήγησης «Λάμπα» (παλιά βάση). Προεπιλογή: true.
   Future<bool> getShowLampNav() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool(_keyShowLampNav) ?? true;
+    return prefs.getBool(_prefKey(_keyShowLampNav)) ?? true;
   }
 
   Future<void> setShowLampNav(bool value) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_keyShowLampNav, value);
+    await prefs.setBool(_prefKey(_keyShowLampNav), value);
   }
 
   /// Εμφάνιση στοιχείου πλοήγησης «Λεξικό». Προεπιλογή: true.
   Future<bool> getShowDictionaryNav() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool(_keyShowDictionaryNav) ?? true;
+    return prefs.getBool(_prefKey(_keyShowDictionaryNav)) ?? true;
   }
 
   Future<void> setShowDictionaryNav(bool value) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_keyShowDictionaryNav, value);
+    await prefs.setBool(_prefKey(_keyShowDictionaryNav), value);
   }
 
   /// Ποια κάρτες εμφανίζονται στην οθόνη κλήσεων. Προεπιλογή: όλες ορατές.
   Future<CallsScreenCardsVisibility> getCallsScreenCardsVisibility() async {
     final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(_keyCallsScreenCardsVisibility);
+    final raw = prefs.getString(_prefKey(_keyCallsScreenCardsVisibility));
     return CallsScreenCardsVisibility.fromJsonString(raw);
   }
 
@@ -518,13 +522,13 @@ class SettingsService {
     CallsScreenCardsVisibility value,
   ) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_keyCallsScreenCardsVisibility, value.toJsonString());
+    await prefs.setString(_prefKey(_keyCallsScreenCardsVisibility), value.toJsonString());
   }
 
   /// Πολιτική εκκαθάρισης audit log (ηλικία / max rows).
   Future<AuditRetentionConfig> getAuditRetentionConfig() async {
     final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(_keyAuditRetentionConfig);
+    final raw = prefs.getString(_prefKey(_keyAuditRetentionConfig));
     return AuditRetentionConfig.fromJsonString(raw);
   }
 
@@ -541,12 +545,12 @@ class SettingsService {
   /// Δεν αποθηκεύεται ανά εργαλείο· κοινή για όλα τα διαλόγους.
   Future<bool> getRemoteToolPrioritySwapMode() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool(_keyRemoteToolPrioritySwapMode) ?? false;
+    return prefs.getBool(_prefKey(_keyRemoteToolPrioritySwapMode)) ?? false;
   }
 
   Future<void> setRemoteToolPrioritySwapMode(bool value) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_keyRemoteToolPrioritySwapMode, value);
+    await prefs.setBool(_prefKey(_keyRemoteToolPrioritySwapMode), value);
   }
 
   // --- Ρυθμίσεις απομακρυσμένης σύνδεσης (app_settings) ---

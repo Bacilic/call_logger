@@ -1,9 +1,14 @@
 /// Εμφάνιση έκδοσης χωρίς ειδική ετικέτα προ-έκδοσης.
 library;
 
-/// Τίτλος παραθύρου: δείχνει μόνο το version.
+/// Τίτλος παραθύρου: δείχνει μόνο το version (παραγωγική λειτουργία).
 String windowTitleWithVersionLabel(String version) {
   return 'Καταγραφή Κλήσεων v$version';
+}
+
+/// Τίτλος παραθύρου όταν τρέχει CLI προφίλ (`--profile`).
+String windowTitleWithProfileLabel(String profileName) {
+  return 'Καταγραφή Κλήσεων [Profile: ${profileName.trim()}]';
 }
 
 /// Κείμενο chip: συμπαγής ή πλήρης ετικέτα έκδοσης.

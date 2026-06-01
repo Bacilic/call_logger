@@ -14,6 +14,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:window_manager/window_manager.dart';
 
 import 'core/about/version_display.dart';
+import 'core/config/app_config.dart';
 import 'core/services/desktop_window_service.dart';
 import 'core/database/database_init_result.dart';
 import 'core/widgets/app_init_wrapper.dart';
@@ -75,10 +76,11 @@ void _rootZoneErrorHandler(Object error, StackTrace stack) {
   _routeFatalErrorToUi(error, stack);
 }
 
-void main() {
-  runZonedGuarded(
-    () {
+Future<void> main(List<String> arguments) async {
+  await runZonedGuarded(
+    () async {
       WidgetsFlutterBinding.ensureInitialized();
+      await AppConfig.configureFromCliArguments(arguments);
 
       FlutterError.onError = (FlutterErrorDetails details) {
         final st = details.stack ?? StackTrace.empty;
@@ -97,7 +99,7 @@ void main() {
 
       PlatformDispatcher.instance.onError = _platformAsyncErrorHandler;
 
-      unawaited(_bootstrapAndRunApp());
+      await _bootstrapAndRunApp();
     },
     _rootZoneErrorHandler,
     zoneSpecification: ZoneSpecification(
@@ -123,8 +125,14 @@ Future<void> _bootstrapAndRunApp() async {
       final wm = WindowManager.instance;
       await wm.ensureInitialized();
       try {
-        final pkg = await PackageInfo.fromPlatform();
-        await wm.setTitle(windowTitleWithVersionLabel(pkg.version));
+        if (AppConfig.hasActiveProfile) {
+          await wm.setTitle(
+            windowTitleWithProfileLabel(AppConfig.activeProfile!),
+          );
+        } else {
+          final pkg = await PackageInfo.fromPlatform();
+          await wm.setTitle(windowTitleWithVersionLabel(pkg.version));
+        }
       } catch (_) {}
       final display = await ScreenRetriever.instance.getPrimaryDisplay();
       final screenWidth = display.size.width;

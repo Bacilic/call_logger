@@ -30,6 +30,7 @@ import 'main_nav_destination.dart';
 import '../services/settings_service.dart';
 import '../about/widgets/version_chip.dart';
 import '../../features/tasks/providers/tasks_provider.dart';
+import '../../features/calls/provider/call_entry_provider.dart';
 
 /// Κύριο κέλυφος εφαρμογής: πλευρική πλοήγηση και περιοχή περιεχομένου.
 class MainShell extends ConsumerStatefulWidget {
@@ -159,21 +160,15 @@ class _MainShellState extends ConsumerState<MainShell> {
   NavigationRailDestination _railDestination(
     MainNavDestination dest,
     bool showBadge,
-    int pendingCount,
-  ) {
+    int pendingCount, {
+    required bool isOnCallsScreen,
+  }) {
     switch (dest) {
       case MainNavDestination.calls:
+        final callsIcon = _CallsNavigationIcon(isOnCallsScreen: isOnCallsScreen);
         return NavigationRailDestination(
-          icon: Tooltip(
-            waitDuration: const Duration(milliseconds: 600),
-            showDuration: const Duration(seconds: 4),
-            message:
-                'Καταγραφή νέας κλήσης τεχνικής υποστήριξης\nΚύρια οθόνη – πατήστε εδώ όταν χτυπά τηλέφωνο',
-            child: const Icon(
-              Icons.phone_in_talk,
-              key: ValueKey('nav_rail_calls'),
-            ),
-          ),
+          icon: callsIcon,
+          selectedIcon: callsIcon,
           label: const Text('Κλήσεις'),
         );
       case MainNavDestination.tasks:
@@ -659,7 +654,13 @@ class _MainShellState extends ConsumerState<MainShell> {
                   ),
                   destinations: [
                     for (final d in visibleDestinations)
-                      _railDestination(d, showBadge, pendingCount),
+                      _railDestination(
+                        d,
+                        showBadge,
+                        pendingCount,
+                        isOnCallsScreen:
+                            effectiveDestination == MainNavDestination.calls,
+                      ),
                   ],
                 ),
               ),
@@ -678,6 +679,42 @@ class _MainShellState extends ConsumerState<MainShell> {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Εικονίδιο πλοήγησης «Κλήσεις» — ίδιο στυλ μπάλωματος με τις εκκρεμότητες.
+class _CallsNavigationIcon extends ConsumerWidget {
+  const _CallsNavigationIcon({required this.isOnCallsScreen});
+
+  final bool isOnCallsScreen;
+
+  static bool _hasActiveCallSession(CallEntryState s) =>
+      s.durationSeconds > 0 ||
+      s.isCallTimerRunning ||
+      s.retainPlayPauseAfterManualZero;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final hasActiveCall = ref.watch(
+      callEntryProvider.select(_hasActiveCallSession),
+    );
+    final showBadge = hasActiveCall && !isOnCallsScreen;
+
+    final core = Tooltip(
+      waitDuration: const Duration(milliseconds: 600),
+      showDuration: const Duration(seconds: 4),
+      message:
+          'Καταγραφή νέας κλήσης τεχνικής υποστήριξης\nΚύρια οθόνη – πατήστε εδώ όταν χτυπά τηλέφωνο',
+      child: const Icon(
+        Icons.phone_in_talk,
+        key: ValueKey('nav_rail_calls'),
+      ),
+    );
+    return Badge(
+      isLabelVisible: showBadge,
+      label: const Icon(Icons.phone, size: 10, color: Colors.white),
+      child: core,
     );
   }
 }
