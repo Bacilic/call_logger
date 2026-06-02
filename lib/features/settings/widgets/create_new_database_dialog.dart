@@ -1,4 +1,5 @@
 ﻿import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -7,6 +8,8 @@ import 'package:path/path.dart' as path;
 
 import '../../../core/database/database_helper.dart';
 import '../../../core/init/app_init_provider.dart';
+import '../../../core/utils/file_picker_initial_directory.dart';
+import '../../../core/utils/windows_save_sqlite_database_dialog.dart';
 import '../../calls/provider/lookup_provider.dart';
 import '../../database/providers/database_browser_stats_provider.dart';
 import '../../database/providers/database_maintenance_provider.dart';
@@ -22,140 +25,76 @@ bool _sameResolvedPath(String a, String b) {
   return na == nb;
 }
 
-/// Διάλογος επιλογής φακέλου και ονόματος αρχείου για δημιουργία νέου `.db`.
-class CreateNewDatabaseDialog extends StatefulWidget {
-  const CreateNewDatabaseDialog({super.key});
-
-  @override
-  State<CreateNewDatabaseDialog> createState() => _CreateNewDatabaseDialogState();
+/// Έλεγχος διαδρομής μετά το σύστημα «Αποθήκευση ως».
+String? validateNewDatabaseSavePath(String raw) {
+  final trimmed = raw.trim();
+  if (trimmed.isEmpty) {
+    return 'Δεν επιλέχθηκε διαδρομή αρχείου.';
+  }
+  final name = path.basename(trimmed);
+  if (name.isEmpty) {
+    return 'Εισάγετε όνομα αρχείου.';
+  }
+  if (!name.toLowerCase().endsWith('.db')) {
+    return 'Το όνομα αρχείου πρέπει να τελειώνει σε .db';
+  }
+  if (name.contains(RegExp(r'[/\\]'))) {
+    return 'Το όνομα αρχείου δεν πρέπει να περιέχει διαχωριστικά διαδρομής.';
+  }
+  return null;
 }
 
-class _CreateNewDatabaseDialogState extends State<CreateNewDatabaseDialog> {
-  String? _selectedFolder;
-  final TextEditingController _filenameController =
-      TextEditingController(text: 'call_logger.db');
-  String? _validationError;
-
-  @override
-  void dispose() {
-    _filenameController.dispose();
-    super.dispose();
+/// Native «Αποθήκευση ως» (φάκελος + όνομα + `.db` σε ένα βήμα).
+Future<String?> pickNewDatabaseSavePath({String? initialPathHint}) async {
+  final hint = initialPathHint?.trim();
+  final initialDir = initialDirectoryForFilePicker(hint);
+  var suggested = 'call_logger.db';
+  if (hint != null && hint.isNotEmpty) {
+    final base = path.basename(hint);
+    if (base.toLowerCase().endsWith('.db') && !base.contains(RegExp(r'[/\\]'))) {
+      suggested = base;
+    }
   }
 
-  Future<void> _pickFolder() async {
-    final dirPath = await FilePicker.getDirectoryPath(
-      dialogTitle: 'Επιλογή φακέλου για νέο αρχείο βάσης',
+  final String? picked;
+  if (Platform.isWindows) {
+    picked = await showWindowsSaveSqliteDatabasePath(
+      dialogTitle: 'Δημιουργία νέου αρχείου βάσης',
+      fileName: suggested,
+      initialDirectory: initialDir,
     );
-    if (dirPath != null && dirPath.trim().isNotEmpty && mounted) {
-      setState(() {
-        _selectedFolder = dirPath;
-        _validationError = null;
-      });
-    }
+  } else {
+    picked = await FilePicker.saveFile(
+      dialogTitle: 'Δημιουργία νέου αρχείου βάσης',
+      fileName: suggested,
+      initialDirectory: initialDir,
+      type: FileType.custom,
+      allowedExtensions: const ['db'],
+      bytes: Uint8List(0),
+    );
   }
+  if (picked == null || picked.trim().isEmpty) return null;
 
-  void _submit() {
-    final folder = _selectedFolder?.trim();
-    final name = _filenameController.text.trim();
-    if (folder == null || folder.isEmpty) {
-      setState(() => _validationError = 'Επιλέξτε φάκελο.');
-      return;
-    }
-    if (name.isEmpty) {
-      setState(() => _validationError = 'Εισάγετε όνομα αρχείου.');
-      return;
-    }
-    if (!name.toLowerCase().endsWith('.db')) {
-      setState(
-        () => _validationError =
-            'Το όνομα αρχείου πρέπει να τελειώνει σε .db',
-      );
-      return;
-    }
-    if (name.contains(RegExp(r'[/\\]'))) {
-      setState(
-        () => _validationError =
-            'Το όνομα αρχείου δεν πρέπει να περιέχει διαχωριστικά διαδρομής.',
-      );
-      return;
-    }
-    final fullPath = path.join(folder, name);
-    Navigator.of(context).pop(fullPath);
-  }
+  return path.normalize(path.absolute(picked.trim()));
+}
 
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final hasFolder = _selectedFolder?.trim().isNotEmpty ?? false;
-    return AlertDialog(
-      title: const Text('Δημιουργία νέου αρχείου βάσης'),
-      content: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const Text(
-              'Επιλέξτε φάκελο και δώστε όνομα αρχείου (π.χ. new_base.db).',
-              style: TextStyle(fontSize: 13),
-            ),
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    _selectedFolder ?? 'Δεν έχει επιλεγεί φάκελος',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      fontFamily: 'monospace',
-                      color: hasFolder
-                          ? theme.colorScheme.onSurface
-                          : theme.colorScheme.error,
-                    ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                FilledButton.tonalIcon(
-                  onPressed: _pickFolder,
-                  icon: const Icon(Icons.folder_open),
-                  label: const Text('Φάκελος'),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: _filenameController,
-              decoration: const InputDecoration(
-                labelText: 'Όνομα αρχείου',
-                hintText: 'π.χ. new_base.db',
-                border: OutlineInputBorder(),
-              ),
-              onChanged: (_) => setState(() => _validationError = null),
-            ),
-            if (_validationError != null) ...[
-              const SizedBox(height: 8),
-              Text(
-                _validationError!,
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.error,
-                ),
-              ),
-            ],
-          ],
-        ),
-      ),
+Future<void> showNewDatabasePathValidationDialog(
+  BuildContext context,
+  String message,
+) async {
+  await showDialog<void>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: const Text('Μη έγκυρη διαδρομή'),
+      content: Text(message, style: Theme.of(ctx).textTheme.bodyMedium),
       actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Ακύρωση'),
-        ),
         FilledButton(
-          onPressed: hasFolder ? _submit : null,
-          child: const Text('Δημιουργία'),
+          onPressed: () => Navigator.of(ctx).pop(),
+          child: const Text('Εντάξει'),
         ),
       ],
-    );
-  }
+    ),
+  );
 }
 
 /// Κοινή ροή: μετονομασία πάντα της τρέχουσας βάσης (`{όνομα}_old_YYYY-MM-DD.db`), νέο κενό αρχείο,
@@ -181,17 +120,29 @@ class CreateNewDatabaseFlow {
     VoidCallback? onFlowSuccessCloseParent,
     bool showSuccessSnackBar = true,
   }) async {
-    final fullPath = await showDialog<String>(
-      context: context,
-      builder: (ctx) => const CreateNewDatabaseDialog(),
-    );
-    if (fullPath == null || !context.mounted) return;
-
-    final norm = path.normalize(path.absolute(fullPath.trim()));
-    final exists = await File(norm).exists();
     String? currentDb;
     try {
       currentDb = (await DatabaseHelper.instance.database).path;
+    } catch (_) {}
+
+    final picked = await pickNewDatabaseSavePath(initialPathHint: currentDb);
+    if (picked == null || !context.mounted) return;
+
+    final validationError = validateNewDatabaseSavePath(picked);
+    if (validationError != null) {
+      if (!context.mounted) return;
+      await showNewDatabasePathValidationDialog(context, validationError);
+      return;
+    }
+
+    final norm = picked;
+
+    final exists = await File(norm).exists();
+    if (!context.mounted) return;
+
+    String? currentDbForCompare;
+    try {
+      currentDbForCompare = (await DatabaseHelper.instance.database).path;
     } catch (_) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -204,7 +155,7 @@ class CreateNewDatabaseFlow {
       return;
     }
 
-    if (exists && !_sameResolvedPath(norm, currentDb)) {
+    if (exists && !_sameResolvedPath(norm, currentDbForCompare)) {
       if (!context.mounted) return;
       await showDialog<void>(
         context: context,
@@ -231,24 +182,24 @@ class CreateNewDatabaseFlow {
       final confirm = await showDialog<bool>(
         context: context,
         builder: (ctx) => AlertDialog(
-                title: const Text('Δημιουργία νέου αρχείου βάσης'),
-                content: Text(
-                  'Θα δημιουργηθεί νέο κενό αρχείο στη διαδρομή:\n\n$norm\n\n'
-                  'Η τρέχουσα βάση θα μετονομαστεί στον φάκελό της ως '
-                  '«όνομα_αρχείου_old_ημερομηνία» (χωρίς διαγραφή) και θα οριστεί ως ενεργή η νέα διαδρομή. '
-                  'Η εφαρμογή θα επανασυνδεθεί με τη νέα βάση.',
-                  style: Theme.of(ctx).textTheme.bodyMedium,
-                ),
-                actions: [
-                  TextButton(
-                    onPressed: () => Navigator.of(ctx).pop(false),
-                    child: const Text('Ακύρωση'),
-                  ),
-                  FilledButton(
-                    onPressed: () => Navigator.of(ctx).pop(true),
-                    child: const Text('Δημιουργία'),
-                  ),
-                ],
+          title: const Text('Δημιουργία νέου αρχείου βάσης'),
+          content: Text(
+            'Θα δημιουργηθεί νέο κενό αρχείο στη διαδρομή:\n\n$norm\n\n'
+            'Η τρέχουσα βάση θα μετονομαστεί στον φάκελό της ως '
+            '«όνομα_αρχείου_old_ημερομηνία» (χωρίς διαγραφή) και θα οριστεί ως ενεργή η νέα διαδρομή. '
+            'Η εφαρμογή θα επανασυνδεθεί με τη νέα βάση.',
+            style: Theme.of(ctx).textTheme.bodyMedium,
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Ακύρωση'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: const Text('Δημιουργία'),
+            ),
+          ],
         ),
       );
       if (confirm != true || !context.mounted) return;
@@ -257,22 +208,22 @@ class CreateNewDatabaseFlow {
       final confirm = await showDialog<bool>(
         context: context,
         builder: (ctx) => AlertDialog(
-                title: const Text('Νέο κενό αρχείο στη θέση της τρέχουσας βάσης'),
-                content: Text(
-                  'Το τρέχον αρχείο θα μετονομαστεί ως «όνομα_old_ημερομηνία» στον ίδιο φάκελο '
-                  'και θα δημιουργηθεί νέο κενό στη θέση:\n\n$norm',
-                  style: Theme.of(ctx).textTheme.bodyMedium,
-                ),
-                actions: [
-                  TextButton(
-                    onPressed: () => Navigator.of(ctx).pop(false),
-                    child: const Text('Ακύρωση'),
-                  ),
-                  FilledButton(
-                    onPressed: () => Navigator.of(ctx).pop(true),
-                    child: const Text('Συνέχεια'),
-                  ),
-                ],
+          title: const Text('Νέο κενό αρχείο στη θέση της τρέχουσας βάσης'),
+          content: Text(
+            'Το τρέχον αρχείο θα μετονομαστεί ως «όνομα_old_ημερομηνία» στον ίδιο φάκελο '
+            'και θα δημιουργηθεί νέο κενό στη θέση:\n\n$norm',
+            style: Theme.of(ctx).textTheme.bodyMedium,
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Ακύρωση'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: const Text('Συνέχεια'),
+            ),
+          ],
         ),
       );
       if (confirm != true || !context.mounted) return;

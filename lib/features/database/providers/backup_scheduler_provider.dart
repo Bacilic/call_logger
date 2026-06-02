@@ -15,6 +15,9 @@ class BackupSchedulerNotifier extends Notifier<int> {
   Timer? _timer;
   bool _runLock = false;
 
+  /// True όσο τρέχει προγραμματισμένο αντίγραφο ασφαλείας.
+  bool get isBackupJobRunning => _runLock;
+
   @override
   int build() {
     ref.onDispose(() {

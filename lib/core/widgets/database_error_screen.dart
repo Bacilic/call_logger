@@ -2,9 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'dart:io';
 
+import '../database/database_helper.dart';
 import '../database/database_init_result.dart';
 import '../database/database_path_pick_flow.dart';
-import '../../features/settings/screens/settings_screen.dart';
+import '../../features/settings/widgets/create_new_database_dialog.dart';
 
 /// Οθόνη σφάλματος βάσης / γενικού σφάλματος.
 /// Λεπτομερή ελληνικά μηνύματα, επιλέξιμο κείμενο, αντιγραφή πλήρους αναφοράς.
@@ -77,14 +78,98 @@ class _DatabaseErrorScreenState extends State<DatabaseErrorScreen> {
   static const Color _solutionPhraseBlue = Color(0xFF1565C0);
 
   Future<void> _openSettingsForCreateDatabase() async {
-    await Navigator.of(context).push<void>(
-      MaterialPageRoute<void>(
-        builder: (_) => const SettingsScreen(
-          openCreateDatabaseOnStart: true,
+    // Από την οθόνη σφάλματος δεν ανοίγουμε ολόκληρες Ρυθμίσεις.
+    // Δείχνουμε μόνο τον διάλογο δημιουργίας νέου αρχείου βάσης και,
+    // αν ολοκληρωθεί, δημιουργούμε το αρχείο, ορίζουμε τη διαδρομή
+    // και επαναδοκιμάζουμε την αρχικοποίηση.
+    final picked = await pickNewDatabaseSavePath(
+      initialPathHint: _databaseFilePath,
+    );
+    if (!mounted) return;
+    if (picked == null) {
+      return;
+    }
+
+    final validationError = validateNewDatabaseSavePath(picked);
+    if (validationError != null) {
+      await showNewDatabasePathValidationDialog(context, validationError);
+      return;
+    }
+
+    final norm = picked;
+
+    // Αν υπάρχει ήδη αρχείο στον στόχο, ζητάμε χειροκίνητη παρέμβαση.
+    if (await File(norm).exists()) {
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Υπάρχον αρχείο στον στόχο'),
+          content: Text(
+            'Στη διαδρομή:\n\n$norm\n\nυπάρχει ήδη αρχείο. '
+            'Δεν διαγράφουμε υπάρχοντα αρχεία· μετακινήστε ή μετονομάστε το χειροκίνητα.',
+            style: Theme.of(ctx).textTheme.bodyMedium,
+          ),
+          actions: [
+            FilledButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('Εντάξει'),
+            ),
+          ],
         ),
+      );
+      return;
+    }
+
+    // Δημιουργία νέου κενoύ αρχείου με πλήρες schema.
+    try {
+      await DatabaseHelper.instance.createNewDatabaseFile(norm);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Αποτυχία δημιουργίας νέας βάσης: $e'),
+          backgroundColor: Theme.of(context).colorScheme.error,
+        ),
+      );
+      return;
+    }
+
+    // Έλεγχος / αποθήκευση διαδρομής και επανασύνδεση.
+    final outcome = await setAndVerifyDatabasePath(norm);
+    if (!mounted) return;
+
+    if (!outcome.ok) {
+      final msg =
+          outcome.runner.result.message ?? 'Η βάση δεν πέρασε τον έλεγχο.';
+      final det = outcome.runner.result.details?.trim();
+      await showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Η νέα βάση δεν είναι έγκυρη'),
+          content: SingleChildScrollView(
+            child: Text(
+              det != null && det.isNotEmpty ? '$msg\n\n$det' : msg,
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('Εντάξει'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Η νέα βάση δημιουργήθηκε και η εφαρμογή επανασυνδέθηκε.'),
+        behavior: SnackBarBehavior.floating,
       ),
     );
-    if (!context.mounted) return;
     await widget.onRetry();
   }
 
@@ -440,20 +525,6 @@ class _DatabaseErrorScreenState extends State<DatabaseErrorScreen> {
                 label: const Text('Αντιγραφή πλήρους σφάλματος'),
               ),
               const SizedBox(height: 12),
-              if (!_isSchemaMigrationRecoveryMessage) ...[
-                FilledButton.icon(
-                  onPressed: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute<void>(
-                        builder: (_) => const SettingsScreen(),
-                      ),
-                    );
-                  },
-                  icon: const Icon(Icons.settings),
-                  label: const Text('Ρυθμίσεις'),
-                ),
-                const SizedBox(height: 12),
-              ],
               if (_isFileNotFound && !_shouldOfferRestart)
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,

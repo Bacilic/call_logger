@@ -28,6 +28,12 @@ class DepartmentPaletteStore extends ChangeNotifier {
     return _loading!;
   }
 
+  /// Μετά από rollback επαναφοράς ρυθμίσεων εφαρμογής.
+  Future<void> reloadFromPreferences() async {
+    _loading = null;
+    await ensureLoaded();
+  }
+
   Future<void> _load() async {
     final prefs = await SharedPreferences.getInstance();
     var raw = prefs.getStringList(_prefKey(_prefsKeySlots));

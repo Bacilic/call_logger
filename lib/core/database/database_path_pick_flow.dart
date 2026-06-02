@@ -1,6 +1,7 @@
 ﻿import 'package:file_picker/file_picker.dart';
 import 'package:path/path.dart' as p;
 
+import '../services/application_reset_service.dart';
 import '../services/settings_service.dart';
 import 'database_helper.dart';
 import 'database_init_result.dart';
@@ -37,7 +38,8 @@ Future<({bool ok, DatabaseInitRunnerResult runner})> setAndVerifyDatabasePath(
   String trimmed,
 ) async {
   final settings = SettingsService();
-  final previous = await settings.getDatabasePath();
+  final wasUnconfigured = await settings.isDatabaseUnconfigured();
+  final previous = wasUnconfigured ? null : await settings.getDatabasePath();
   late DatabaseInitRunnerResult runner;
   try {
     try {
@@ -56,10 +58,18 @@ Future<({bool ok, DatabaseInitRunnerResult runner})> setAndVerifyDatabasePath(
     try {
       await DatabaseHelper.instance.closeConnection();
     } catch (_) {}
-    try {
-      await settings.setDatabasePath(previous);
-    } catch (_) {}
+    if (!wasUnconfigured && previous != null) {
+      try {
+        await settings.setDatabasePath(previous);
+      } catch (_) {}
+    } else if (wasUnconfigured) {
+      await settings.markDatabaseUnconfigured();
+    }
     return (ok: false, runner: runner);
+  }
+
+  if (await ApplicationResetService.instance.hasPendingReset()) {
+    await ApplicationResetService.instance.commitPendingReset();
   }
 
   return (ok: true, runner: runner);

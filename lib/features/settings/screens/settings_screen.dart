@@ -11,6 +11,7 @@ import '../../../core/providers/settings_provider.dart';
 import '../../../core/services/settings_service.dart';
 import '../../calls/provider/remote_paths_provider.dart';
 import '../widgets/create_new_database_dialog.dart';
+import '../widgets/start_from_beginning_flow.dart';
 
 /// Οθόνη ρυθμίσεων: γενικές επιλογές εφαρμογής (η διαδρομή βάσης είναι στον περιηγητή βάσης).
 class SettingsScreen extends ConsumerStatefulWidget {
@@ -441,6 +442,32 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               },
               title: const Text('Απόκρυψη Λεξικού'),
               subtitle: const Text('Κρύβει το στοιχείο πλοήγησης «Λεξικό».'),
+            ),
+            const SizedBox(height: 32),
+            const Divider(),
+            const SizedBox(height: 16),
+            Text(
+              'Επαναφορά εφαρμογής',
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w600,
+                color: theme.colorScheme.error,
+              ),
+            ),
+            const SizedBox(height: 8),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: Icon(
+                Icons.restart_alt,
+                color: theme.colorScheme.error,
+              ),
+              title: const Text('Ξεκίνα από την αρχή (Επαναφορά ρυθμίσεων)'),
+              subtitle: const Text(
+                'Αποσύνδεση από την τρέχουσα βάση και επαναφορά τοπικών ρυθμίσεων. '
+                'Τα αρχεία .db στο δίσκο δεν διαγράφονται.',
+              ),
+              onTap: _isLoadingSettings
+                  ? null
+                  : () => StartFromBeginningFlow.run(context, ref),
             ),
           ],
         ),

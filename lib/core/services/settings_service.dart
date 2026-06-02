@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../config/app_config.dart';
@@ -10,7 +12,12 @@ import '../models/window_placement_mode.dart';
 /// Υπηρεσία αποθήκευσης και ανάκτησης ρυθμίσεων (key-value) τοπικά.
 class SettingsService {
   static const String _keyDatabasePath = 'database_path';
+  static const String _keyDatabaseSetupState = 'database_setup_state_v1';
+  static const String _keyApplicationResetPending = 'application_reset_pending_v1';
   static const String _keyRecentPaths = 'recent_database_paths';
+
+  /// Τιμή [database_setup_state_v1] όταν η εφαρμογή περιμένει επιλογή/δημιουργία βάσης.
+  static const String databaseSetupStateUnconfigured = 'unconfigured';
   static const String _keyShowActiveTimer = 'show_active_timer';
   static const String _keyShowTasksBadge = 'show_tasks_badge';
   static const String _keyNavRailShowLabels = 'nav_rail_show_labels';
@@ -115,9 +122,12 @@ class SettingsService {
       AppConfig.prefixedPreferencesKey(baseKey);
 
   /// Επιστρέφει την αποθηκευμένη διαδρομή βάσης δεδομένων.
-  /// Αν δεν υπάρχει ή είναι κενή, επιστρέφει το [AppConfig.defaultDbPath]
-  /// (`..\Data Base\call_logger.db` δίπλα στο εκτελέσιμο).
+  /// Σε κατάσταση [databaseSetupStateUnconfigured] επιστρέφει placeholder που δεν υπάρχει.
+  /// Αλλιώς, αν δεν υπάρχει αποθηκευμένη τιμή, [AppConfig.defaultDbPath].
   Future<String> getDatabasePath() async {
+    if (await isDatabaseUnconfigured()) {
+      return getUnconfiguredPlaceholderDatabasePath();
+    }
     final prefs = await SharedPreferences.getInstance();
     final path = prefs.getString(_prefKey(_keyDatabasePath));
     if (path == null || path.trim().isEmpty) {
@@ -126,11 +136,77 @@ class SettingsService {
     return path;
   }
 
+  /// Placeholder `.db` (δεν δημιουργείται) για έλεγχο «δεν βρέθηκε βάση» μετά επαναφορά.
+  Future<String> getUnconfiguredPlaceholderDatabasePath() async {
+    final support = await getApplicationSupportDirectory();
+    return p.normalize(
+      p.join(
+        support.path,
+        'unconfigured',
+        'pending_database_connection.db',
+      ),
+    );
+  }
+
+  Future<bool> isDatabaseUnconfigured() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_prefKey(_keyDatabaseSetupState)) ==
+        databaseSetupStateUnconfigured;
+  }
+
+  Future<void> markDatabaseUnconfigured() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+      _prefKey(_keyDatabaseSetupState),
+      databaseSetupStateUnconfigured,
+    );
+    await prefs.remove(_prefKey(_keyDatabasePath));
+    await prefs.remove(_prefKey(_keyRecentPaths));
+  }
+
+  Future<void> markDatabaseConfigured() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_prefKey(_keyDatabaseSetupState));
+  }
+
+  Future<bool> isApplicationResetPending() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_prefKey(_keyApplicationResetPending)) ?? false;
+  }
+
+  Future<void> setApplicationResetPending(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (value) {
+      await prefs.setBool(_prefKey(_keyApplicationResetPending), true);
+    } else {
+      await prefs.remove(_prefKey(_keyApplicationResetPending));
+    }
+  }
+
+  /// Διαγραφή όλων των prefs του τρέχοντος CLI προφίλ (ή παραγωγής χωρίς πρόθεμα).
+  Future<void> clearAllPreferencesForCurrentProfile() async {
+    final prefs = await SharedPreferences.getInstance();
+    for (final key in prefs.getKeys().toList()) {
+      if (_keyBelongsToCurrentProfile(key)) {
+        await prefs.remove(key);
+      }
+    }
+  }
+
+  static bool _keyBelongsToCurrentProfile(String key) {
+    final profile = AppConfig.activeProfile?.trim();
+    if (profile == null || profile.isEmpty) {
+      return !key.startsWith('profile_');
+    }
+    return key.startsWith('profile_${profile}_');
+  }
+
   /// Αποθηκεύει τη νέα διαδρομή βάσης δεδομένων (trim() εφαρμόζεται αυτόματα).
   /// Προσθέτει τη διαδρομή στη λίστα των τελευταίων έγκυρων διαδρομών.
   Future<void> setDatabasePath(String path) async {
     final prefs = await SharedPreferences.getInstance();
     final trimmed = path.trim();
+    await markDatabaseConfigured();
     await prefs.setString(_prefKey(_keyDatabasePath), trimmed);
     await _addToRecentPaths(prefs, trimmed);
   }

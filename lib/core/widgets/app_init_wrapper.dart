@@ -6,6 +6,9 @@ import '../database/database_init_result.dart';
 import '../database/database_init_progress_provider.dart';
 import '../database/database_helper.dart';
 import '../init/app_init_provider.dart';
+import '../providers/application_reset_provider.dart';
+import '../services/application_reset_service.dart';
+import '../../features/settings/widgets/pending_reset_database_screen.dart';
 import 'app_shortcuts.dart';
 import 'database_error_screen.dart';
 
@@ -26,17 +29,48 @@ class _AppInitWrapperState extends ConsumerState<AppInitWrapper> {
     ref.invalidate(appInitProvider);
   }
 
+  Widget _buildInitFailureScreen({
+    required DatabaseInitResult result,
+    required String? dbPath,
+  }) {
+    return FutureBuilder<bool>(
+      future: ApplicationResetService.instance.hasPendingReset(),
+      builder: (context, snapshot) {
+        final pending = snapshot.data == true;
+        if (pending &&
+            result.status == DatabaseStatus.fileNotFound) {
+          return _buildPendingResetScreen();
+        }
+        return DatabaseErrorScreen(
+          result: result,
+          dbPath: dbPath,
+          onRetry: _retryAppInitialization,
+        );
+      },
+    );
+  }
+
+  Widget _buildPendingResetScreen() {
+    return PendingResetDatabaseScreen(
+      onLifecycleChanged: _retryAppInitialization,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final pendingReset = ref.watch(applicationResetPendingProvider);
+    if (pendingReset.value == true) {
+      return _buildPendingResetScreen();
+    }
+
     final asyncInit = ref.watch(appInitProvider);
     return asyncInit.when(
       loading: () => const _InitLoadingScreen(),
       error: (err, st) {
         final result = DatabaseInitResult.fromException(err, null, st);
-        return DatabaseErrorScreen(
+        return _buildInitFailureScreen(
           result: result,
           dbPath: result.path,
-          onRetry: _retryAppInitialization,
         );
       },
       data: (initResult) {
@@ -46,10 +80,9 @@ class _AppInitWrapperState extends ConsumerState<AppInitWrapper> {
             initialIsLocalDevMode: initResult.isLocalDevMode,
           );
         }
-        return DatabaseErrorScreen(
+        return _buildInitFailureScreen(
           result: initResult.result,
           dbPath: initResult.result.path,
-          onRetry: _retryAppInitialization,
         );
       },
     );

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import '../config/app_config.dart';
+import '../services/settings_service.dart';
 
 /// Αποτέλεσμα επίλυσης διαδρομής βάσης (μετά από πιθανό fallback από UNC).
 class ResolvedDatabasePath {
@@ -35,6 +36,13 @@ Future<bool> databaseFileExistsQuick(String dbPath) async {
 Future<ResolvedDatabasePath> resolveEffectiveDatabasePath(
   String configuredPath,
 ) async {
+  if (await SettingsService().isDatabaseUnconfigured()) {
+    return ResolvedDatabasePath(
+      path: configuredPath.trim(),
+      usedUncFallback: false,
+    );
+  }
+
   var p = configuredPath.trim().isEmpty
       ? AppConfig.defaultDbPath
       : configuredPath.trim();

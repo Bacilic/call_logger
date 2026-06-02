@@ -505,8 +505,8 @@ class DatabaseInitResult {
     return DatabaseInitResult(
       status: DatabaseStatus.fileNotFound,
       message: dbPath.isNotEmpty
-          ? 'Δεν βρέθηκε αρχείο βάσης στη διαδρομή.'
-          : 'Δεν βρέθηκε αρχείο βάσης στη διαδρομή.',
+          ? 'Δεν βρέθηκε το αρχείο της Βάσης Δεδομένων στη διαδρομή.'
+          : 'Δεν βρέθηκε το αρχείο της Βάσης Δεδομένων στη διαδρομή.',
       details: dbPath.isNotEmpty ? 'Διαδρομή: $dbPath' : null,
       path: dbPath.isNotEmpty ? dbPath : null,
     );
@@ -521,7 +521,7 @@ class DatabaseInitResult {
       status: DatabaseStatus.accessDenied,
       message:
           extraMessage ??
-          'Δεν έχετε δικαίωμα ανάγνωσης/εγγραφής του αρχείου βάσης.',
+          'Δεν έχετε δικαίωμα ανάγνωσης/εγγραφής του αρχείου της Βάσης Δεδομένων.',
       details: dbPath != null && dbPath.isNotEmpty ? 'Διαδρομή: $dbPath' : null,
       path: dbPath,
     );

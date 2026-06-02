@@ -6,6 +6,20 @@
 
 **Σημείωση:** Μπορείτε να εμπλουτίσετε τις περιγραφές με λεπτομέρειες από μνήμη· το JSON `[assets/changelog.json](assets/changelog.json)` τροφοδοτεί την εφαρμογή και πρέπει να παραμένει συγχρονισμένο με αυτό το αρχείο.
 
+## [0.22.0] - 2026-06-02
+
+### Προστέθηκε
+
+- **Ρυθμίσεις · «Ξεκίνα από την αρχή» (`start_from_beginning_flow`, `settings_screen`):** προειδοποίηση με λίστα τομέων που αποσυνδέονται (κατάλογος, χάρτες, Λάμπα, απομακρυσμένα εργαλεία, εκκρεμότητες/ιστορικό, λεξικό, παλέτα χρωμάτων, τοπικές ρυθμίσεις)· έλεγχοι ανοιχτής κλήσης και αντίγραφου ασφαλείας σε εξέλιξη· **δεν** διαγράφονται αρχεία `.db`.
+- **Επαναφορά ρυθμίσεων (`ApplicationResetService`, `ApplicationPrefsSnapshot`, `pending_reset_database_screen`):** snapshot prefs στο δίσκο → καθάρισμα SharedPreferences ανά προφίλ CLI ή παραγωγή → οθόνη «Εύρεση βάσης» / «Δημιουργία νέας βάσης» / «Αναίρεση επαναφοράς»· commit μετά επιτυχή σύνδεση ή rollback στο προηγούμενο state.
+- **Βάση δεδομένων · δημιουργία νέου αρχείου (`pickNewDatabaseSavePath`, `windows_save_sqlite_database_dialog.dart`):** native «Αποθήκευση ως» (φάκελος + όνομα + `.db` σε ένα βήμα) αντί Material `AlertDialog` με ξεχωριστή επιλογή φακέλου.
+
+### Άλλαξε
+
+- **Οθόνη σφάλματος βάσης (`database_error_screen.dart`):** αφαιρέθηκε το κουμπί «Ρυθμίσεις» για όλους τους τύπους σφάλματος.
+- **Οθόνη σφάλματος · «Δημιουργία νέας βάσης»:** `pickNewDatabaseSavePath` → `createNewDatabaseFile` → `setAndVerifyDatabasePath` → επαναδοκιμή· **όχι** `SettingsScreen`· ακύρωση διαλόγου επιστρέφει στην οθόνη σφάλματος.
+- **Δημιουργία νέου `.db`:** κοινές `pickNewDatabaseSavePath` / `validateNewDatabaseSavePath` / `showNewDatabasePathValidationDialog` σε `CreateNewDatabaseFlow`, `pending_reset_database_screen` και οθόνη σφάλματος.
+
 ## [0.21.0] - 2026-06-01
 
 ### Προστέθηκε
