@@ -25,7 +25,7 @@ class LampOldDbCheckResult {
   String get userMessageGreek {
     switch (status) {
       case LampOldDbStatus.pathEmpty:
-        return 'Δεν έχει οριστεί διαδρομή βάσης προς ανάγνωση. Ορίστε αρχείο .db στις ρυθμίσεις (γρανάζι).';
+        return 'Δεν έχει οριστεί διαδρομή βάσης προς ανάγνωση.';
       case LampOldDbStatus.fileMissing:
         return 'Το αρχείο βάσης δεν βρέθηκε στη δίσκο. Ελέγξτε τη διαδρομή (δίκτυο, αφαιρούμενο δίσκο).';
       case LampOldDbStatus.notAFile:

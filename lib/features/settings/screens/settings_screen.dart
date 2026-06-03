@@ -41,6 +41,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   bool _showDatabaseNav = true;
   bool _showLampNav = true;
   bool _showDictionaryNav = true;
+  bool _spellCheckFlashHighlight = false;
+  bool _spellCheckFlashPlaying = false;
   int _databaseOpenTimeoutSeconds = AppConfig.databaseOpenTimeoutSeconds;
   int _databaseOpenMaxAttempts = AppConfig.databaseOpenMaxAttempts;
   CallsScreenCardsVisibility _callsCardsVisibility =
@@ -83,6 +85,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       final windowPlacementMode = Platform.isWindows
           ? await _settings.getWindowPlacementMode()
           : WindowPlacementMode.alwaysCenter;
+      var dictionaryNavVisible = showDictionaryNav;
+      if (!enableSpellCheck && dictionaryNavVisible) {
+        await _settings.setShowDictionaryNav(false);
+        dictionaryNavVisible = false;
+      }
       if (mounted) {
         setState(() {
           _showActiveTimer = showActiveTimer;
@@ -90,7 +97,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           _enableSpellCheck = enableSpellCheck;
           _showDatabaseNav = showDatabaseNav;
           _showLampNav = showLampNav;
-          _showDictionaryNav = showDictionaryNav;
+          _showDictionaryNav = dictionaryNavVisible;
           _databaseOpenTimeoutSeconds = dbOpenTimeout;
           _databaseOpenMaxAttempts = dbOpenMaxAttempts;
           _callsCardsVisibility = callsCardsVisibility;
@@ -260,6 +267,52 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     ref.invalidate(callsScreenCardsVisibilityProvider);
   }
 
+  Future<void> _playSpellCheckHintFlash() async {
+    if (_spellCheckFlashPlaying || !mounted) return;
+    _spellCheckFlashPlaying = true;
+    try {
+      for (var i = 0; i < 2; i++) {
+        if (!mounted) return;
+        setState(() => _spellCheckFlashHighlight = true);
+        await Future<void>.delayed(const Duration(milliseconds: 220));
+        if (!mounted) return;
+        setState(() => _spellCheckFlashHighlight = false);
+        await Future<void>.delayed(const Duration(milliseconds: 180));
+      }
+    } finally {
+      _spellCheckFlashPlaying = false;
+    }
+  }
+
+  Future<void> _onEnableSpellCheckChanged(bool value) async {
+    await _settings.setEnableSpellCheck(value);
+    if (!value) {
+      await _settings.setShowDictionaryNav(false);
+      if (!mounted) return;
+      setState(() {
+        _enableSpellCheck = false;
+        _showDictionaryNav = false;
+      });
+    } else {
+      if (!mounted) return;
+      setState(() => _enableSpellCheck = true);
+    }
+    ref.invalidate(enableSpellCheckProvider);
+    ref.invalidate(showDictionaryNavProvider);
+  }
+
+  Future<void> _onHideDictionaryNavChanged(bool hideDictionary) async {
+    if (!_enableSpellCheck) {
+      if (!hideDictionary) await _playSpellCheckHintFlash();
+      return;
+    }
+    final show = !hideDictionary;
+    await _settings.setShowDictionaryNav(show);
+    if (!mounted) return;
+    setState(() => _showDictionaryNav = show);
+    ref.invalidate(showDictionaryNavProvider);
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -394,16 +447,35 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 'Μικρά εικονίδια δίπλα στα εργαλεία απομακρυσμένης σύνδεσης για άνοιγμα της εφαρμογής χωρίς στόχο από την κλήση.',
               ),
             ),
-            SwitchListTile(
-              value: _enableSpellCheck,
-              onChanged: (value) async {
-                await _settings.setEnableSpellCheck(value);
-                if (mounted) setState(() => _enableSpellCheck = value);
-                ref.invalidate(enableSpellCheckProvider);
-              },
-              title: const Text('Ορθογραφικός έλεγχος'),
-              subtitle: const Text(
-                'Ενσωματωμένο λεξικό (ελληνικά + IT)· σημαντικό σε Windows όπου δεν υπάρχει εγγενής έλεγχος.',
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 120),
+              curve: Curves.easeInOut,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(8),
+                border: _spellCheckFlashHighlight
+                    ? Border.all(color: theme.colorScheme.primary, width: 3)
+                    : null,
+                boxShadow: _spellCheckFlashHighlight
+                    ? [
+                        BoxShadow(
+                          color: theme.colorScheme.primary.withValues(
+                            alpha: 0.35,
+                          ),
+                          blurRadius: 10,
+                          offset: const Offset(0, 2),
+                        ),
+                      ]
+                    : null,
+              ),
+              child: SwitchListTile(
+                value: _enableSpellCheck,
+                onChanged: _isLoadingSettings
+                    ? null
+                    : (value) => _onEnableSpellCheckChanged(value),
+                title: const Text('Ορθογραφικός έλεγχος'),
+                subtitle: const Text(
+                  'Ενσωματωμένο λεξικό (ελληνικά + IT)· σημαντικό σε Windows όπου δεν υπάρχει εγγενής έλεγχος.',
+                ),
               ),
             ),
             SwitchListTile(
@@ -434,14 +506,16 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             ),
             SwitchListTile(
               value: !_showDictionaryNav,
-              onChanged: (value) async {
-                final show = !value;
-                await _settings.setShowDictionaryNav(show);
-                if (mounted) setState(() => _showDictionaryNav = show);
-                ref.invalidate(showDictionaryNavProvider);
-              },
+              onChanged: _isLoadingSettings
+                  ? null
+                  : (value) => _onHideDictionaryNavChanged(value),
               title: const Text('Απόκρυψη Λεξικού'),
-              subtitle: const Text('Κρύβει το στοιχείο πλοήγησης «Λεξικό».'),
+              subtitle: Text(
+                _enableSpellCheck
+                    ? 'Κρύβει το στοιχείο πλοήγησης «Λεξικό»· ο ορθογραφικός έλεγχος παραμένει ενεργός.'
+                    : 'Το «Λεξικό» κρύβεται αυτόματα όταν ο ορθογραφικός έλεγχος είναι απενεργοποιημένος. '
+                        'Ενεργοποιήστε πρώτα τον ορθογραφικό έλεγχο για να εμφανιστεί.',
+              ),
             ),
             const SizedBox(height: 32),
             const Divider(),

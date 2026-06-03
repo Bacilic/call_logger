@@ -23,6 +23,7 @@ import '../providers/equipment_focus_intent_provider.dart';
 import '../providers/history_audit_immersive_provider.dart';
 import '../providers/lexicon_full_mode_provider.dart';
 import '../providers/lamp_open_settings_intent_provider.dart';
+import '../providers/lamp_read_path_health_provider.dart';
 import '../../features/history/providers/history_application_audit_view_provider.dart';
 import '../providers/main_nav_request_provider.dart';
 import '../providers/settings_provider.dart';
@@ -31,6 +32,7 @@ import '../providers/task_focus_intent_provider.dart';
 import 'main_nav_destination.dart';
 import '../services/settings_service.dart';
 import '../about/widgets/version_chip.dart';
+import 'nav_rail_attention_badge.dart';
 import '../../features/tasks/providers/tasks_provider.dart';
 import '../../features/calls/provider/call_entry_provider.dart';
 
@@ -184,14 +186,10 @@ class _MainShellState extends ConsumerState<MainShell> {
             clipBehavior: Clip.none,
             children: [
               book,
-              Positioned(
+              const Positioned(
                 right: -4,
                 top: -4,
-                child: Icon(
-                  Icons.warning_amber_rounded,
-                  size: 16,
-                  color: Colors.amber.shade700,
-                ),
+                child: NavRailAttentionBadge(),
               ),
             ],
           )
@@ -206,12 +204,41 @@ class _MainShellState extends ConsumerState<MainShell> {
     );
   }
 
+  Widget _lampNavigationIcon({required bool showWarning}) {
+    const lamp = Icon(
+      Icons.lightbulb_outline,
+      key: ValueKey('nav_rail_lamp'),
+    );
+    final child = showWarning
+        ? Stack(
+            clipBehavior: Clip.none,
+            children: [
+              lamp,
+              const Positioned(
+                right: -4,
+                top: -4,
+                child: NavRailAttentionBadge(),
+              ),
+            ],
+          )
+        : lamp;
+    return Tooltip(
+      waitDuration: const Duration(milliseconds: 600),
+      showDuration: const Duration(seconds: 4),
+      message: showWarning
+          ? 'Η παλιά βάση δεν είναι προσπελάσιμη — ανοίξτε τη Λάμπα για διόρθωση διαδρομών'
+          : 'Παλιά βάση εξοπλισμού\nΜετατροπή Excel, αναζήτηση και προβλήματα ETL',
+      child: child,
+    );
+  }
+
   NavigationRailDestination _railDestination(
     MainNavDestination dest,
     bool showBadge,
     int pendingCount, {
     required bool isOnCallsScreen,
     required bool showCoreLexiconWarning,
+    required bool showLampReadPathWarning,
   }) {
     switch (dest) {
       case MainNavDestination.calls:
@@ -273,16 +300,7 @@ class _MainShellState extends ConsumerState<MainShell> {
         );
       case MainNavDestination.lamp:
         return NavigationRailDestination(
-          icon: Tooltip(
-            waitDuration: const Duration(milliseconds: 600),
-            showDuration: const Duration(seconds: 4),
-            message:
-                'Παλιά βάση εξοπλισμού\nΜετατροπή Excel, αναζήτηση και προβλήματα ETL',
-            child: const Icon(
-              Icons.lightbulb_outline,
-              key: ValueKey('nav_rail_lamp'),
-            ),
-          ),
+          icon: _lampNavigationIcon(showWarning: showLampReadPathWarning),
           label: const Text('Λάμπα'),
         );
     }
@@ -505,6 +523,7 @@ class _MainShellState extends ConsumerState<MainShell> {
         .maybeWhen(data: (v) => v, orElse: () => true);
     final coreLexiconLoaded = ref.watch(coreLexiconLoadedProvider);
     final showCoreLexiconWarning = enableSpellCheck && !coreLexiconLoaded;
+    final showLampReadPathWarning = ref.watch(lampShowNavWarningProvider);
     final visibleDestinations = _visibleDestinations(
       showLampNav,
       showDatabaseNav,
@@ -713,6 +732,9 @@ class _MainShellState extends ConsumerState<MainShell> {
                         showCoreLexiconWarning:
                             d == MainNavDestination.dictionary &&
                             showCoreLexiconWarning,
+                        showLampReadPathWarning:
+                            d == MainNavDestination.lamp &&
+                            showLampReadPathWarning,
                       ),
                   ],
                 ),

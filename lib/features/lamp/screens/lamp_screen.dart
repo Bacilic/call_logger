@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 
 import '../../../core/providers/lamp_open_settings_intent_provider.dart';
+import '../../../core/providers/lamp_read_path_health_provider.dart';
 import '../../../core/database/old_database/lamp_database_provider.dart';
 import '../../../core/database/old_database/lamp_data_issue_type_labels.dart';
 import '../../../core/database/old_database/lamp_issue_resolution_service.dart';
@@ -36,7 +37,6 @@ class _LampScreenState extends ConsumerState<LampScreen> {
   final _settings = LampSettingsStore();
   final _importer = OldExcelImporter();
   final _repository = OldEquipmentRepository();
-  final _validator = LampOldDbValidator();
   final _issueResolutionService = LampIssueResolutionService();
   final _migrationService = LampMigrationService();
 
@@ -52,6 +52,7 @@ class _LampScreenState extends ConsumerState<LampScreen> {
   final _officeController = TextEditingController();
   final _phoneController = TextEditingController();
   final _maxSearchResultsController = TextEditingController();
+  final _lampErrorDialogScroll = ScrollController();
   int _maxSearchResults = LampSettingsStore.defaultMaxSearchResults;
   Timer? _liveSearchDebounce;
   bool _suppressLiveSearch = false;
@@ -61,14 +62,18 @@ class _LampScreenState extends ConsumerState<LampScreen> {
   bool _integrityChecking = false;
   LampIssueType? _resolvingIssueType;
   String? _message;
-  LampOldDbCheckResult? _readPathCheck;
   bool _lampSettingsDialogOpen = false;
+  String? _lampDialogFeedback;
+  bool _lampDialogFeedbackIsError = false;
   void Function(void Function())? _lampSettingsDialogSetState;
   bool _capturedLampRequestBaseline = false;
   int _lampRequestBaseline = 0;
   List<Map<String, Object?>> _results = const <Map<String, Object?>>[];
   List<Map<String, Object?>> _issues = const <Map<String, Object?>>[];
   final Set<String> _expandedIssueGroupKeys = <String>{};
+
+  LampOldDbCheckResult? get _readPathCheck =>
+      ref.watch(lampReadPathHealthProvider).value;
 
   @override
   void initState() {
@@ -102,6 +107,7 @@ class _LampScreenState extends ConsumerState<LampScreen> {
     _officeController.dispose();
     _phoneController.dispose();
     _maxSearchResultsController.dispose();
+    _lampErrorDialogScroll.dispose();
     super.dispose();
   }
 
@@ -206,12 +212,88 @@ class _LampScreenState extends ConsumerState<LampScreen> {
     );
   }
 
+  void _clearLampDialogFeedback() {
+    if (_lampDialogFeedback == null && !_lampDialogFeedbackIsError) return;
+    if (!mounted) return;
+    setState(() {
+      _lampDialogFeedback = null;
+      _lampDialogFeedbackIsError = false;
+    });
+    _lampSettingsDialogSetState?.call(() {});
+  }
+
+  void _setLampDialogFeedback(
+    String message, {
+    bool isError = false,
+  }) {
+    if (!mounted) return;
+    setState(() {
+      _lampDialogFeedback = message;
+      _lampDialogFeedbackIsError = isError;
+    });
+    _lampSettingsDialogSetState?.call(() {});
+  }
+
+  /// Ξεχωριστός διάλογος σφάλματος (μπροστά από το dialog ρυθμίσεων), με κύλιση
+  /// και αντιγραφή — αποφεύγει overflow από μεγάλα μηνύματα (π.χ. SQL errors).
+  Future<void> _showLampErrorDialog(String message) async {
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          icon: const Icon(Icons.error_outline),
+          title: const Text('Σφάλμα'),
+          content: SizedBox(
+            width: 560,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                maxHeight: MediaQuery.sizeOf(ctx).height * 0.5,
+              ),
+              child: Scrollbar(
+                controller: _lampErrorDialogScroll,
+                child: SingleChildScrollView(
+                  controller: _lampErrorDialogScroll,
+                  child: SelectableText(
+                    message,
+                    style: Theme.of(ctx).textTheme.bodySmall,
+                  ),
+                ),
+              ),
+            ),
+          ),
+          actions: [
+            TextButton.icon(
+              onPressed: () async {
+                await Clipboard.setData(ClipboardData(text: message));
+              },
+              icon: const Icon(Icons.copy_outlined, size: 18),
+              label: const Text('Αντιγραφή'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('Κλείσιμο'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   void _showSnack(
     String message, {
     bool isError = false,
     Duration duration = const Duration(seconds: 5),
   }) {
     if (!mounted) return;
+    if (_lampSettingsDialogOpen) {
+      if (isError) {
+        unawaited(_showLampErrorDialog(message));
+      } else {
+        _setLampDialogFeedback(message, isError: false);
+      }
+      return;
+    }
     final messenger = ScaffoldMessenger.of(context);
     messenger.hideCurrentSnackBar();
     messenger.showSnackBar(
@@ -255,12 +337,16 @@ class _LampScreenState extends ConsumerState<LampScreen> {
     }
     await _settings.setReadPath(read);
     await _settings.setOutputPath(output);
-    final result = await _validator.validateReadPath(read);
+    await ref.read(lampReadPathHealthProvider.notifier).refresh(pathOverride: read);
     if (!mounted) return;
-    setState(() => _readPathCheck = result);
+    final result = _readPathCheck;
+    if (result == null) return;
     if (result.status == LampOldDbStatus.ok) {
       await _loadIssues();
       await _repository.preloadSearchCache(read);
+      if (_lampSettingsDialogOpen) {
+        _clearLampDialogFeedback();
+      }
     } else {
       setState(() {
         _issues = const <Map<String, Object?>>[];
@@ -273,25 +359,21 @@ class _LampScreenState extends ConsumerState<LampScreen> {
   }
 
   void _announceCheck(LampOldDbCheckResult result, {required String source}) {
-    final String prefix = source == 'έναρξη'
+    if (result.status == LampOldDbStatus.ok) {
+      return;
+    }
+    final prefix = source == 'έναρξη'
         ? 'Λάμπα: '
         : 'Έλεγχος βάσης ($source): ';
-    if (result.status == LampOldDbStatus.ok) {
-      // Η επιτυχία εμφανίζεται στο banner· όχι SnackBar (αποφυγή τριπλότητας).
-      return;
-    } else if (result.status == LampOldDbStatus.pathEmpty) {
-      _showSnack(
-        '$prefix${result.userMessageGreek}',
-        isError: false,
-        duration: const Duration(seconds: 7),
-      );
-    } else {
-      _showSnack(
-        '$prefix${result.userMessageGreek}',
-        isError: true,
-        duration: const Duration(seconds: 8),
-      );
-    }
+    final message = _lampSettingsDialogOpen
+        ? result.userMessageGreek
+        : '$prefix${result.userMessageGreek}';
+    final isError = result.status != LampOldDbStatus.pathEmpty;
+    _showSnack(
+      message,
+      isError: isError,
+      duration: Duration(seconds: isError ? 8 : 7),
+    );
   }
 
   /// Ανανέωση αναζητήσεων μετά αλλαγή read path: κλείσιμο σύνδεσης, επανεπαλήθευση, μηνύματα.
@@ -382,6 +464,57 @@ class _LampScreenState extends ConsumerState<LampScreen> {
     }
   }
 
+  /// Λόγος απενεργοποίησης import Excel· `null` όταν μπορεί να εκτελεστεί.
+  String? _excelImportDisabledReason() {
+    final excelEmpty = _excelController.text.trim().isEmpty;
+    final outEmpty = _outputDbController.text.trim().isEmpty;
+    if (excelEmpty && outEmpty) {
+      return 'Λείπει το Excel και διαδρομή του αρχείου εξόδου .db';
+    }
+    if (excelEmpty) {
+      return 'Λείπει το αρχείο Excel';
+    }
+    if (outEmpty) {
+      return 'Δεν έχει οριστεί διαδρομή εξόδου';
+    }
+    return null;
+  }
+
+  void _notifyLampSettingsDialogFieldsChanged() {
+    if (!mounted) return;
+    _lampSettingsDialogSetState?.call(() {});
+  }
+
+  Widget _excelImportButton(BuildContext context) {
+    final blockReason = _excelImportDisabledReason();
+    final enabled = !_importing && blockReason == null;
+    final button = FilledButton.icon(
+      onPressed: enabled ? _runImport : null,
+      icon: const Icon(Icons.play_arrow),
+      label: const Text('Δημιουργία/ενημέρωση βάσης από Excel'),
+    );
+    final tooltipMessage = _importing
+        ? 'Εκτελείται εισαγωγή Excel…'
+        : blockReason;
+    if (enabled || tooltipMessage == null) {
+      return button;
+    }
+    // Διαφανές επίπεδο πάνω από disabled κουμπί ώστε το Tooltip να λειτουργεί.
+    return Tooltip(
+      waitDuration: const Duration(milliseconds: 400),
+      showDuration: const Duration(seconds: 5),
+      message: tooltipMessage,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: () {},
+          child: IgnorePointer(child: button),
+        ),
+      ),
+    );
+  }
+
   void _matchReadToOutput() {
     _readDbController.text = _outputDbController.text;
     if (mounted) {
@@ -395,16 +528,13 @@ class _LampScreenState extends ConsumerState<LampScreen> {
   Future<void> _runImport() async {
     final excelPath = _excelController.text.trim();
     final outPath = _outputDbController.text.trim();
-    if (excelPath.isEmpty || outPath.isEmpty) {
+    final blockReason = _excelImportDisabledReason();
+    if (blockReason != null) {
       setState(() {
-        _message =
-            'Χρειάζονται αρχείο Excel και αρχείο βάσης εξόδου .db (δημιουργίας).';
+        _message = blockReason;
       });
       _lampSettingsDialogSetState?.call(() {});
-      _showSnack(
-        'Λείπει Excel ή/c η διαδρομή αρχείου εξόδου .db.',
-        isError: true,
-      );
+      _showSnack(blockReason, isError: true);
       return;
     }
 
@@ -452,17 +582,16 @@ class _LampScreenState extends ConsumerState<LampScreen> {
       );
     } catch (e) {
       if (!mounted) return;
-      setState(() => _message = e.toString());
+      setState(() => _message = 'Η εισαγωγή Excel απέτυχε.');
       _lampSettingsDialogSetState?.call(() {});
       _showSnack(
-        'Η εισαγωγή απέτυχε. Δείτε το μήνυμα στο παράθυρο.',
+        'Η εισαγωγή Excel απέτυχε:\n\n$e',
         isError: true,
       );
-      final check = await _validator.validateReadPath(
-        _readDbController.text.trim(),
-      );
       if (mounted) {
-        setState(() => _readPathCheck = check);
+        await ref.read(lampReadPathHealthProvider.notifier).refresh(
+          pathOverride: _readDbController.text.trim(),
+        );
         await _loadIssues();
       }
     } finally {
@@ -482,7 +611,7 @@ class _LampScreenState extends ConsumerState<LampScreen> {
     if (!_readPathReadyForQuery) {
       _showSnack(
         _readPathCheck?.userMessageGreek ??
-            'Η βάση προς ανάγνωση δεν είναι έτοιμη. Ανοίξτε τις ρυθμίσεις (γρανάζι).',
+            'Η βάση προς ανάγνωση δεν είναι έτοιμη. Ανοίξτε «Ρυθμίσεις διαδρομών».',
         isError: true,
       );
       return;
@@ -561,7 +690,7 @@ class _LampScreenState extends ConsumerState<LampScreen> {
       if (!mounted) return;
       setState(() => _message = e.toString());
       _showSnack(
-        'Η αναζήτηση απέτυχε. Δοκιμάστε έλεγχο βάσης από το γρανάζι.',
+        'Η αναζήτηση απέτυχε. Ελέγξτε τη διαδρομή από «Ρυθμίσεις διαδρομών».',
         isError: true,
       );
     }
@@ -1660,22 +1789,87 @@ class _LampScreenState extends ConsumerState<LampScreen> {
     });
   }
 
+  Widget _lampSettingsDialogFeedbackPanel(BuildContext context) {
+    final message = _lampDialogFeedback;
+    if (message == null || message.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    final scheme = Theme.of(context).colorScheme;
+    final isError = _lampDialogFeedbackIsError;
+    final Color bg = isError
+        ? scheme.errorContainer.withValues(alpha: 0.55)
+        : scheme.primaryContainer.withValues(alpha: 0.45);
+    final IconData icon =
+        isError ? Icons.error_outline : Icons.info_outline;
+    return Material(
+      color: bg,
+      borderRadius: BorderRadius.circular(8),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(icon, size: 20, color: scheme.onSurface),
+            const SizedBox(width: 8),
+            Expanded(
+              child: SelectableText(
+                message,
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ),
+            Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (isError)
+                  IconButton(
+                    tooltip: 'Αντιγραφή μηνύματος',
+                    visualDensity: VisualDensity.compact,
+                    onPressed: () => _copyLampDialogFeedback(message),
+                    icon: const Icon(Icons.copy_outlined, size: 18),
+                  ),
+                IconButton(
+                  tooltip: 'Απόκρυψη μηνύματος',
+                  visualDensity: VisualDensity.compact,
+                  onPressed: _clearLampDialogFeedback,
+                  icon: const Icon(Icons.close, size: 18),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _copyLampDialogFeedback(String message) async {
+    await Clipboard.setData(ClipboardData(text: message));
+  }
+
   void _openLampSettingsDialog() {
     if (_lampSettingsDialogOpen) return;
     _lampSettingsDialogOpen = true;
+    _clearLampDialogFeedback();
     showDialog<void>(
       context: context,
       builder: (dialogContext) {
         return StatefulBuilder(
           builder: (context, setDialogState) {
             _lampSettingsDialogSetState = setDialogState;
+            final maxDialogBodyHeight =
+                MediaQuery.sizeOf(context).height * 0.55;
             return AlertDialog(
               title: const Text('Ρυθμίσεις Λάμπας'),
-              content: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
+              content: SizedBox(
+                width: 720,
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(
+                    maxHeight: maxDialogBodyHeight,
+                  ),
+                  child: SingleChildScrollView(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
                     Text(
                       'Ξεχωριστά: αρχείο εξόδου (import Excel) και αρχείο ανάγνωσης (αναζήτηση). '
                       'Με το πρώτο import ευθυγραμμίζονται. Μπορείτε μετά να φορτώσετε άλλο .db μόνο για ανάγνωση (δοκιμές).',
@@ -1686,12 +1880,14 @@ class _LampScreenState extends ConsumerState<LampScreen> {
                       controller: _excelController,
                       label: 'Αρχείο Excel (πηγή import)',
                       onPick: _pickExcel,
+                      onChanged: _notifyLampSettingsDialogFieldsChanged,
                     ),
                     const SizedBox(height: 12),
                     _pathRow(
                       controller: _outputDbController,
                       label: 'Βάση εξόδου .db (δημιουργία / ενημέρωση)',
                       onPick: _pickDatabaseOutput,
+                      onChanged: _notifyLampSettingsDialogFieldsChanged,
                     ),
                     const SizedBox(height: 4),
                     Text(
@@ -1785,15 +1981,15 @@ class _LampScreenState extends ConsumerState<LampScreen> {
                     const SizedBox(height: 12),
                     Align(
                       alignment: Alignment.centerLeft,
-                      child: FilledButton.icon(
-                        onPressed: _importing ? null : _runImport,
-                        icon: const Icon(Icons.play_arrow),
-                        label: const Text(
-                          'Δημιουργία/ενημέρωση βάσης από Excel',
-                        ),
-                      ),
+                      child: _excelImportButton(context),
                     ),
-                  ],
+                        if (_lampDialogFeedback != null) ...[
+                          const SizedBox(height: 12),
+                          _lampSettingsDialogFeedbackPanel(context),
+                        ],
+                      ],
+                    ),
+                  ),
                 ),
               ),
               actions: [
@@ -1813,7 +2009,17 @@ class _LampScreenState extends ConsumerState<LampScreen> {
         );
       },
     ).then((_) {
-      _lampSettingsDialogOpen = false;
+      if (mounted) {
+        setState(() {
+          _lampSettingsDialogOpen = false;
+          _lampDialogFeedback = null;
+          _lampDialogFeedbackIsError = false;
+        });
+      } else {
+        _lampSettingsDialogOpen = false;
+        _lampDialogFeedback = null;
+        _lampDialogFeedbackIsError = false;
+      }
       _lampSettingsDialogSetState = null;
     });
   }
@@ -1872,7 +2078,7 @@ class _LampScreenState extends ConsumerState<LampScreen> {
   }
 
   /// Έλεγχος/κατάσταση της διαδρομής ανάγνωσης· εμφανίζεται κάτω από το αντίστοιχο
-  /// [TextField] στις ρυθμίσεις (γρανάζι).
+  /// [TextField] στο dialog «Ρυθμίσεις Λάμπας».
   Widget _lampReadPathCheckPanel(BuildContext context) {
     final r = _readPathCheck;
     if (r == null) {
@@ -1932,11 +2138,66 @@ class _LampScreenState extends ConsumerState<LampScreen> {
     );
   }
 
+  /// Μόνιμο banner όταν η βάση προς ανάγνωση δεν είναι έτοιμη (ίδια κατάσταση με το rail).
+  Widget? _searchTabReadPathBanner(BuildContext context) {
+    final check = _readPathCheck;
+    if (!lampReadPathNeedsAttention(check)) return null;
+    final scheme = Theme.of(context).colorScheme;
+    final Color bg;
+    final IconData icon;
+    if (check!.status == LampOldDbStatus.pathEmpty) {
+      bg = scheme.surfaceContainerHighest;
+      icon = Icons.info_outline;
+    } else {
+      bg = scheme.errorContainer.withValues(alpha: 0.55);
+      icon = Icons.error_outline;
+    }
+    return Material(
+      color: bg,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(icon, size: 22, color: scheme.onSurface),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Η παλιά βάση δεν είναι έτοιμη για αναζήτηση',
+                    style: Theme.of(context).textTheme.titleSmall,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    check.userMessageGreek,
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            FilledButton.tonalIcon(
+              onPressed: () {
+                ref.read(lampOpenSettingsRequestProvider.notifier).request();
+              },
+              icon: const Icon(Icons.settings_outlined, size: 18),
+              label: const Text('Ρυθμίσεις διαδρομών'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   /// Καθολική αναζήτηση πάνω, αναζήτηση ανά πεδίο κάτω, κοινά αποτελέσματα.
   Widget _searchTab(BuildContext context) {
+    final banner = _searchTabReadPathBanner(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        ?banner,
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
           child: Row(
@@ -1985,6 +2246,8 @@ class _LampScreenState extends ConsumerState<LampScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Text(
               _message!,
+              maxLines: 4,
+              overflow: TextOverflow.ellipsis,
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
                 color: Theme.of(context).colorScheme.primary,
               ),
@@ -2085,12 +2348,14 @@ class _LampScreenState extends ConsumerState<LampScreen> {
     required TextEditingController controller,
     required String label,
     required VoidCallback onPick,
+    VoidCallback? onChanged,
   }) {
     return Row(
       children: [
         Expanded(
           child: TextField(
             controller: controller,
+            onChanged: onChanged == null ? null : (_) => onChanged(),
             decoration: InputDecoration(
               labelText: label,
               border: const OutlineInputBorder(),
