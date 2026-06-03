@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -26,6 +26,7 @@ class _AppInitWrapperState extends ConsumerState<AppInitWrapper> {
       await DatabaseHelper.instance.closeConnection();
     } catch (_) {}
     if (!mounted) return;
+    ref.invalidate(applicationResetPendingProvider);
     ref.invalidate(appInitProvider);
   }
 

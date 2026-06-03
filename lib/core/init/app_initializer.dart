@@ -1,18 +1,16 @@
-import 'dart:async';
+﻿import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../features/database/providers/backup_scheduler_provider.dart';
 import '../../features/database/providers/database_backup_settings_provider.dart';
-import '../config/app_config.dart';
 import '../database/database_init_progress_provider.dart';
 import '../database/database_init_result.dart';
 import '../database/database_init_runner.dart';
 import '../database/database_path_resolution.dart';
 import '../database/lock_diagnostic_service.dart';
-import '../services/dictionary_service.dart';
+import '../services/core_lexicon_service.dart';
 import '../services/settings_service.dart';
-import '../services/spell_check_service.dart';
 
 /// Αποτέλεσμα αρχικοποίησης εφαρμογής (βάση δεδομένων + τρόπος λειτουργίας).
 class AppInitResult {
@@ -25,7 +23,7 @@ class AppInitResult {
   final DatabaseInitResult result;
   final bool isLocalDevMode;
 
-  /// True αν φορτώθηκε με επιτυχία το λεξικό ορθογραφίας (soft-fail, χωρίς crash).
+  /// True αν φορτώθηκε λεξικό-πυρήνας από αποθηκευμένη διαδρομή.
   final bool spellCheckReady;
 
   bool get success => result.isSuccess;
@@ -35,12 +33,9 @@ class AppInitResult {
 }
 
 /// Αρχικοποίηση εφαρμογής: έλεγχος βάσης δεδομένων και υπολογισμός τρόπου λειτουργίας.
-/// Χωρίς migrations ή flags παλιού σχήματος στο startup· μόνο έλεγχοι διαδρομής, σύνδεσης και υγείας (v1).
 class AppInitializer {
   AppInitializer._();
 
-  /// Μετά από επιτυχή αρχικοποίηση βάσης: φόρτωση ρυθμίσεων backup και
-  /// `checkStartupStatus` + εκκίνηση χρονόμετρου προγράμματος.
   static Future<void> activateBackupSchedulingAfterDatabaseReady(
     Ref ref,
   ) async {
@@ -48,8 +43,6 @@ class AppInitializer {
     await ref.read(backupSchedulerProvider.notifier).checkStartupAndStart();
   }
 
-  /// Εκτελεί τους ελέγχους βάσης (διαδρομή, ύπαρξη, δικαιώματα, σύνδεση, υγεία)
-  /// και επιστρέφει [AppInitResult]. Δεν πετάει exception — τα σφάλματα επιστρέφονται στο result.
   static Future<AppInitResult> initialize({
     DatabaseInitProgressNotifier? progressNotifier,
   }) async {
@@ -61,19 +54,9 @@ class AppInitializer {
       var spellCheckReady = false;
       if (runnerResult.result.isSuccess) {
         try {
-          progressNotifier?.setStep('Φόρτωση λεξικού ορθογραφίας');
-          final dict = DictionaryService(
-            assetPath: AppConfig.greekDictionaryAsset,
-          );
-          await dict.load().timeout(const Duration(seconds: 8));
-          progressNotifier?.setStep('Αρχικοποίηση ορθογραφικού ελέγχου');
-          final spell = LexiconSpellCheckService();
-          await spell
-              .init(lexiconMap: dict.stripKeyToDisplayMap)
-              .timeout(const Duration(seconds: 8));
-          spellCheckReady = true;
+          spellCheckReady =
+              await CoreLexiconService.instance.bootstrapFromSavedPath();
         } catch (_) {
-          // Soft-fail: η εφαρμογή συνεχίζει χωρίς spell-check, ποτέ χωρίς τερματισμό εκκίνησης.
           spellCheckReady = false;
         }
       }

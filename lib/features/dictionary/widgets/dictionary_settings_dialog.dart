@@ -4,10 +4,11 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/providers/greek_dictionary_provider.dart';
+import '../../../core/providers/core_lexicon_provider.dart';
 import '../../../core/providers/lexicon_categories_provider.dart';
 import '../../../core/providers/lexicon_language_recalc_provider.dart';
-import '../../../core/providers/spell_check_provider.dart';
+import '../../../core/services/core_lexicon_service.dart';
+import '../../../core/services/core_lexicon_validation.dart';
 import '../../../core/services/settings_service.dart';
 
 /// Διάλογος ρυθμίσεων λεξικού: διαδρομές πηγής/εξαγωγής, εισαγωγές και compile.
@@ -62,16 +63,84 @@ class _DictionarySettingsDialogState
     super.dispose();
   }
 
+  String _formatWordCount(int n) {
+    if (n >= 1000) {
+      final k = (n / 1000).round();
+      return '~${k}k';
+    }
+    return n.toString();
+  }
+
+  Widget _coreLexiconStatusPanel(ThemeData theme) {
+    final core = ref.watch(coreLexiconProvider);
+    final String statusText;
+    if (core.loaded && core.path != null) {
+      statusText =
+          '${core.path}\n${_formatWordCount(core.wordCount)} λέξεις στη μνήμη';
+    } else {
+      statusText = 'Δεν έχει φορτωθεί λεξικό-πυρήνας';
+    }
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHighest.withValues(
+          alpha: 0.5,
+        ),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: theme.dividerColor),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Λεξικό-πυρήνας (ορθογραφία)',
+              style: theme.textTheme.titleSmall,
+            ),
+            const SizedBox(height: 6),
+            SelectableText(
+              statusText,
+              style: theme.textTheme.bodySmall,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Future<void> _saveSourcePath() async {
     final t = _sourcePathCtrl.text.trim();
-    await _settings.setDictionarySourcePath(t.isEmpty ? null : t);
-    ref.invalidate(greekDictionaryServiceProvider);
-    ref.invalidate(spellCheckServiceProvider);
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Αποθηκεύτηκε διαδρομή πηγής λεξικού')),
-      );
+    if (t.isEmpty) {
+      await _settings.setDictionarySourcePath(null);
+      ref.read(coreLexiconProvider.notifier).unload();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Αφαιρέθηκε διαδρομή πυρήνα λεξικού')),
+        );
+      }
+      return;
     }
+
+    final validation = await validateCoreDictionaryFile(t);
+    if (validation != null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(validation)),
+        );
+      }
+      return;
+    }
+
+    final ok = await ref.read(coreLexiconProvider.notifier).loadFromDiskPath(t);
+    if (!mounted) return;
+    if (!ok) {
+      final err = ref.read(coreLexiconProvider).lastError ?? 'Αποτυχία φόρτωσης.';
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(err)));
+      return;
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Αποθηκεύτηκε και φορτώθηκε λεξικό-πυρήνας')),
+    );
   }
 
   Future<void> _saveExportPath() async {
@@ -107,16 +176,37 @@ class _DictionarySettingsDialogState
 
   Future<void> _pickSaveSourcePath() async {
     final r = await FilePicker.pickFiles(
-      dialogTitle: 'Αρχείο πηγής λεξικού (TXT)',
+      dialogTitle: 'Αρχείο λεξικού-πυρήνα (TXT)',
       type: FileType.custom,
       allowedExtensions: const ['txt'],
     );
     if (r == null || r.files.isEmpty) return;
     final p = r.files.single.path;
-    if (p != null) {
-      _sourcePathCtrl.text = p;
-      await _saveSourcePath();
-      setState(() {});
+    if (p == null) return;
+
+    setState(() => _compileBusy = true);
+    try {
+      final ok = await ref
+          .read(coreLexiconProvider.notifier)
+          .installFromExternalFile(p);
+      if (!mounted) return;
+      if (ok) {
+        final path = CoreLexiconService.instance.state.path ?? p;
+        _sourcePathCtrl.text = path;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Το λεξικό-πυρήνας αντιγράφηκε και φορτώθηκε'),
+          ),
+        );
+      } else {
+        final err =
+            ref.read(coreLexiconProvider).lastError ?? 'Αποτυχία εγκατάστασης.';
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(err)),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _compileBusy = false);
     }
   }
 
@@ -174,6 +264,8 @@ class _DictionarySettingsDialogState
       }
     });
 
+    final theme = Theme.of(context);
+
     return AlertDialog(
       title: const Text('Ρυθμίσεις λεξικού'),
       content: SizedBox(
@@ -206,6 +298,8 @@ class _DictionarySettingsDialogState
                 ),
               ),
               const SizedBox(height: 16),
+              _coreLexiconStatusPanel(theme),
+              const SizedBox(height: 12),
               TextField(
                 controller: _sourcePathCtrl,
                 decoration: InputDecoration(
@@ -213,7 +307,7 @@ class _DictionarySettingsDialogState
                   border: const OutlineInputBorder(),
                   suffixIcon: IconButton(
                     icon: const Icon(Icons.folder_open),
-                    onPressed: _pickSaveSourcePath,
+                    onPressed: _compileBusy ? null : _pickSaveSourcePath,
                   ),
                 ),
                 onSubmitted: (_) => _saveSourcePath(),
@@ -221,7 +315,7 @@ class _DictionarySettingsDialogState
               Align(
                 alignment: Alignment.centerLeft,
                 child: TextButton.icon(
-                  onPressed: _saveSourcePath,
+                  onPressed: _compileBusy ? null : _saveSourcePath,
                   icon: const Icon(Icons.save_outlined),
                   label: const Text('Αποθήκευση πηγής'),
                 ),
@@ -285,7 +379,7 @@ class _DictionarySettingsDialogState
                             height: 20,
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
-                        : const Text('Εξαγωγή\\Δημιουργία'),
+                        : const Text('Εξαγωγή / Δημιουργία'),
                   ),
                 ],
               ),

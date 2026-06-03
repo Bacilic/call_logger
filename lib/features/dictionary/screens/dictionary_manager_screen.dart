@@ -14,7 +14,7 @@ import '../../../core/database/dictionary_repository.dart';
 import '../../../core/database/directory_repository.dart';
 import '../../../core/errors/dictionary_export_exception.dart';
 import '../../../core/models/dictionary_import_mode.dart';
-import '../../../core/providers/greek_dictionary_provider.dart';
+import '../../../core/providers/core_lexicon_provider.dart';
 import '../../../core/providers/lexicon_categories_provider.dart';
 import '../../../core/providers/lexicon_full_mode_provider.dart';
 import '../../../core/providers/lexicon_language_recalc_provider.dart';
@@ -505,7 +505,7 @@ class _DictionaryManagerScreenState extends ConsumerState<DictionaryManagerScree
     );
 
     if (added == true && mounted) {
-      ref.invalidate(greekDictionaryServiceProvider);
+      ref.invalidate(coreLexiconProvider);
       ref.invalidate(spellCheckServiceProvider);
       ref.read(lexiconMasterDataRevisionProvider.notifier).bump();
       ScaffoldMessenger.of(context).showSnackBar(
@@ -596,7 +596,7 @@ class _DictionaryManagerScreenState extends ConsumerState<DictionaryManagerScree
   Future<void> _compileExport() async {
     try {
       await _master.compileExportToTxt();
-      ref.invalidate(greekDictionaryServiceProvider);
+      ref.invalidate(coreLexiconProvider);
       ref.invalidate(spellCheckServiceProvider);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

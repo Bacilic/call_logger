@@ -1,7 +1,7 @@
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+﻿import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../services/master_dictionary_service.dart';
-import 'greek_dictionary_provider.dart';
+import 'core_lexicon_provider.dart';
 import 'spell_check_provider.dart';
 
 /// Κατάσταση βαριάς διεργασίας επανελέγχου γλωσσών στο `full_dictionary`.
@@ -42,7 +42,7 @@ class LexiconLanguageRecalcNotifier extends Notifier<LexiconLanguageRecalcState>
         },
       );
       state = const LexiconLanguageRecalcSuccess();
-      ref.invalidate(greekDictionaryServiceProvider);
+      ref.invalidate(coreLexiconProvider);
       ref.invalidate(spellCheckServiceProvider);
       ref.read(lexiconMasterDataRevisionProvider.notifier).bump();
     } catch (e) {

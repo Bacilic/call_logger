@@ -401,7 +401,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 if (mounted) setState(() => _enableSpellCheck = value);
                 ref.invalidate(enableSpellCheckProvider);
               },
-              title: const Text('Ορθογραφικός έλεγχος σημειώσεων'),
+              title: const Text('Ορθογραφικός έλεγχος'),
               subtitle: const Text(
                 'Ενσωματωμένο λεξικό (ελληνικά + IT)· σημαντικό σε Windows όπου δεν υπάρχει εγγενής έλεγχος.',
               ),

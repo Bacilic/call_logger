@@ -1,4 +1,4 @@
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+﻿import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../features/calls/provider/call_entry_provider.dart';
 import '../../features/database/providers/backup_scheduler_provider.dart';
@@ -6,7 +6,9 @@ import '../../features/database/providers/database_backup_settings_provider.dart
 import '../database/database_helper.dart';
 import '../init/app_init_provider.dart';
 import '../providers/application_reset_provider.dart';
+import '../providers/core_lexicon_provider.dart';
 import '../providers/settings_provider.dart';
+import 'core_lexicon_service.dart';
 import 'application_prefs_snapshot.dart';
 import 'settings_service.dart';
 
@@ -27,6 +29,7 @@ class ApplicationResetService {
       await DatabaseHelper.instance.closeConnection();
     } catch (_) {}
     await _settings.clearAllPreferencesForCurrentProfile();
+    CoreLexiconService.instance.unload();
     await _settings.markDatabaseUnconfigured();
     await _settings.setApplicationResetPending(true);
   }
@@ -62,6 +65,7 @@ class ApplicationResetService {
     ref.invalidate(showDatabaseNavProvider);
     ref.invalidate(showLampNavProvider);
     ref.invalidate(showDictionaryNavProvider);
+    ref.invalidate(coreLexiconProvider);
     ref.invalidate(callsScreenCardsVisibilityProvider);
     ref.invalidate(databaseBackupSettingsProvider);
     ref.invalidate(backupSchedulerProvider);

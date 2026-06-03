@@ -16,8 +16,11 @@ Future<String?> pickDatabasePathWithSystemPicker() async {
     dialogTitle: 'Επιλογή αρχείου βάσης (.db) ή αντιγράφου (.zip)',
   );
 
-  if (fileResult != null &&
-      fileResult.files.isNotEmpty &&
+  if (fileResult == null) {
+    return null;
+  }
+
+  if (fileResult.files.isNotEmpty &&
       fileResult.files.single.path != null) {
     return fileResult.files.single.path!.trim();
   }

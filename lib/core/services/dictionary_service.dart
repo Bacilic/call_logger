@@ -2,22 +2,22 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:flutter/services.dart';
-
-import '../config/app_config.dart';
-import 'settings_service.dart';
-
-/// Φόρτωση συμπαγούς ελληνικού λεξικού από asset.
+/// Φόρτωση λεξικού-πυρήνας από αρχείο `.txt` στο δίσκο.
 ///
 /// Εσωτερικά: `Map` από κανονικοποιημένο κλειδί (χωρίς τόνους, πεζά) σε μορφή
 /// εμφάνισης (π.χ. με τόνους όταν υπάρχουν στο corpus).
 class DictionaryService {
-  DictionaryService({String? assetPath})
-      : assetPath = assetPath ?? AppConfig.greekDictionaryAsset;
+  DictionaryService();
 
-  final String assetPath;
+  factory DictionaryService.empty() {
+    final s = DictionaryService();
+    s._loaded = true;
+    return s;
+  }
+
   final Map<String, String> _stripKeyToDisplay = <String, String>{};
   bool _loaded = false;
+  String? _loadedFromPath;
 
   bool get isLoaded => _loaded;
 
@@ -56,26 +56,19 @@ class DictionaryService {
   Map<String, String> get stripKeyToDisplayMap =>
       UnmodifiableMapView(_stripKeyToDisplay);
 
-  Future<void> load() async {
-    if (_loaded) return;
-    String text;
-    final customPath = await SettingsService().getDictionarySourcePath();
-    if (customPath != null && customPath.isNotEmpty) {
-      final f = File(customPath);
-      if (await f.exists()) {
-        try {
-          text = await f.readAsString();
-        } catch (_) {
-          text = await rootBundle.loadString(assetPath);
-        }
-      } else {
-        text = await rootBundle.loadString(assetPath);
-      }
-    } else {
-      text = await rootBundle.loadString(assetPath);
-    }
-    final lines = const LineSplitter().convert(text);
-    for (final line in lines) {
+  /// Φόρτωση από αρχείο TXT στο δίσκο (μόνο πηγή — χωρίς asset fallback).
+  Future<void> loadFromFile(String filePath) async {
+    final norm = filePath.trim();
+    if (_loaded && _loadedFromPath == norm) return;
+    _stripKeyToDisplay.clear();
+    final text = await File(norm).readAsString(encoding: utf8);
+    _ingestText(text);
+    _loaded = true;
+    _loadedFromPath = norm;
+  }
+
+  void _ingestText(String text) {
+    for (final line in const LineSplitter().convert(text)) {
       final display = line.trim();
       if (display.isEmpty || display.startsWith('#')) continue;
       final key = canonicalLexiconKey(display);
@@ -85,7 +78,6 @@ class DictionaryService {
         _stripKeyToDisplay[key] = display;
       }
     }
-    _loaded = true;
   }
 
   /// Προτιμάται ως εμφάνιση η μορφή με τόνους / μακρύτερη / λεξικογραφικά πρώτη.

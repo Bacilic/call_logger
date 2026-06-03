@@ -1,9 +1,10 @@
-import 'dart:convert';
+﻿import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:flutter/services.dart';
 import '../config/app_config.dart';
+import '../utils/bundled_dictionary_assets.dart';
 import '../database/database_helper.dart';
 import '../database/dictionary_repository.dart';
 import '../utils/lexicon_word_metrics.dart';
@@ -28,8 +29,20 @@ class MasterDictionaryService {
 
   /// Εισαγωγή από bundled asset (ίδια κατηγορία πηγής με αρχείο TXT: `imported`).
   Future<void> importFromAsset(DictionaryImportMode mode) async {
-    final text = await rootBundle.loadString(AppConfig.greekDictionaryAsset);
-    await _importFromLineText(text, mode, source: 'imported');
+    final assets = await listBundledDictionaryAssets();
+    if (assets.isEmpty) {
+      throw StateError(
+        'Δεν υπάρχει διαθέσιμο bundled λεξικό (.txt στο assets/dictionaries/).',
+      );
+    }
+    try {
+      final text = await rootBundle.loadString(assets.first);
+      await _importFromLineText(text, mode, source: 'imported');
+    } catch (_) {
+      throw StateError(
+        'Δεν υπάρχει διαθέσιμο bundled λεξικό (.txt στο assets/dictionaries/).',
+      );
+    }
   }
 
   /// Εισαγωγή από αρχείο δίσκου (.txt).

@@ -1,4 +1,4 @@
-import 'dart:convert';
+﻿import 'dart:convert';
 
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
@@ -517,8 +517,7 @@ class SettingsService {
     await prefs.setInt(_prefKey(_keyDatabaseOpenMaxAttempts), normalized);
   }
 
-  /// Διαδρομή αρχείου TXT που φορτώνει το runtime λεξικό ορθογραφίας (μετά το Compile).
-  /// Κενό/null = χρήση bundled asset.
+  /// Διαδρομή αρχείου TXT λεξικού-πυρήνα (ορθογραφία). Κενό/null = δεν έχει φορτωθεί πυρήνας.
   Future<String?> getDictionarySourcePath() async {
     final prefs = await SharedPreferences.getInstance();
     final s = prefs.getString(_prefKey(_keyDictionarySourcePath));

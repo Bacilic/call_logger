@@ -1,3 +1,4 @@
+﻿import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/gestures.dart';
@@ -15,7 +16,8 @@ import '../../features/tasks/screens/tasks_screen.dart';
 import '../../features/directory/screens/directory_screen.dart';
 import '../../features/history/screens/history_screen.dart';
 import '../../features/settings/screens/settings_screen.dart';
-import '../providers/greek_dictionary_provider.dart';
+import '../providers/core_lexicon_provider.dart';
+import '../../features/dictionary/widgets/core_lexicon_setup_dialog.dart';
 import '../providers/directory_tab_intent_provider.dart';
 import '../providers/equipment_focus_intent_provider.dart';
 import '../providers/history_audit_immersive_provider.dart';
@@ -77,7 +79,15 @@ class _MainShellState extends ConsumerState<MainShell> {
   }
 
   /// Ίδια λογική με [NavigationRail.onDestinationSelected] (λεξικό, ιστορικό immersive).
-  void _selectDestination(MainNavDestination d) {
+  Future<void> _selectDestination(MainNavDestination d) async {
+    if (d == MainNavDestination.dictionary) {
+      final loaded = ref.read(coreLexiconLoadedProvider);
+      if (!loaded) {
+        final ok = await showCoreLexiconSetupDialog(context: context, ref: ref);
+        if (!ok || !mounted) return;
+      }
+    }
+    if (!mounted) return;
     setState(() => _selectedDestination = d);
     if (d == MainNavDestination.dictionary) {
       ref.read(lexiconFullModeProvider.notifier).setTrue();
@@ -145,7 +155,14 @@ class _MainShellState extends ConsumerState<MainShell> {
     bool showLampNav,
     bool showDatabaseNav,
     bool showDictionaryNav,
+    bool enableSpellCheck,
+    bool coreLexiconLoaded,
   ) {
+    final showDictionary = isDictionaryNavVisible(
+      enableSpellCheck: enableSpellCheck,
+      showDictionaryNav: showDictionaryNav,
+      coreLexiconLoaded: coreLexiconLoaded,
+    );
     return [
       MainNavDestination.calls,
       MainNavDestination.tasks,
@@ -153,8 +170,40 @@ class _MainShellState extends ConsumerState<MainShell> {
       MainNavDestination.history,
       if (showLampNav) MainNavDestination.lamp,
       if (showDatabaseNav) MainNavDestination.database,
-      if (showDictionaryNav) MainNavDestination.dictionary,
+      if (showDictionary) MainNavDestination.dictionary,
     ];
+  }
+
+  Widget _dictionaryNavigationIcon({required bool showWarning}) {
+    const book = Icon(
+      Icons.menu_book,
+      key: ValueKey('nav_rail_dictionary'),
+    );
+    final child = showWarning
+        ? Stack(
+            clipBehavior: Clip.none,
+            children: [
+              book,
+              Positioned(
+                right: -4,
+                top: -4,
+                child: Icon(
+                  Icons.warning_amber_rounded,
+                  size: 16,
+                  color: Colors.amber.shade700,
+                ),
+              ),
+            ],
+          )
+        : book;
+    return Tooltip(
+      waitDuration: const Duration(milliseconds: 600),
+      showDuration: const Duration(seconds: 4),
+      message: showWarning
+          ? 'Δεν έχει φορτωθεί λεξικό-πυρήνας — πατήστε για ρύθμιση'
+          : 'Διαχείριση λεξικού ορθογραφίας\nΕισαγωγές, συγχώνευση και εξαγωγή (compile) σε αρχείο',
+      child: child,
+    );
   }
 
   NavigationRailDestination _railDestination(
@@ -162,6 +211,7 @@ class _MainShellState extends ConsumerState<MainShell> {
     bool showBadge,
     int pendingCount, {
     required bool isOnCallsScreen,
+    required bool showCoreLexiconWarning,
   }) {
     switch (dest) {
       case MainNavDestination.calls:
@@ -218,16 +268,7 @@ class _MainShellState extends ConsumerState<MainShell> {
         );
       case MainNavDestination.dictionary:
         return NavigationRailDestination(
-          icon: Tooltip(
-            waitDuration: const Duration(milliseconds: 600),
-            showDuration: const Duration(seconds: 4),
-            message:
-                'Διαχείριση λεξικού ορθογραφίας\nΕισαγωγές, συγχώνευση και εξαγωγή (compile) σε αρχείο',
-            child: const Icon(
-              Icons.menu_book,
-              key: ValueKey('nav_rail_dictionary'),
-            ),
-          ),
+          icon: _dictionaryNavigationIcon(showWarning: showCoreLexiconWarning),
           label: const Text('Λεξικό'),
         );
       case MainNavDestination.lamp:
@@ -314,7 +355,7 @@ class _MainShellState extends ConsumerState<MainShell> {
     ref.invalidate(showLampNavProvider);
     ref.invalidate(showDatabaseNavProvider);
     ref.invalidate(showDictionaryNavProvider);
-    ref.invalidate(greekDictionaryServiceProvider);
+    ref.invalidate(coreLexiconProvider);
     if (mounted) setState(() {});
   }
 
@@ -459,10 +500,17 @@ class _MainShellState extends ConsumerState<MainShell> {
     final showDictionaryNav = ref
         .watch(showDictionaryNavProvider)
         .maybeWhen(data: (v) => v, orElse: () => true);
+    final enableSpellCheck = ref
+        .watch(enableSpellCheckProvider)
+        .maybeWhen(data: (v) => v, orElse: () => true);
+    final coreLexiconLoaded = ref.watch(coreLexiconLoadedProvider);
+    final showCoreLexiconWarning = enableSpellCheck && !coreLexiconLoaded;
     final visibleDestinations = _visibleDestinations(
       showLampNav,
       showDatabaseNav,
       showDictionaryNav,
+      enableSpellCheck,
+      coreLexiconLoaded,
     );
     final effectiveDestination =
         visibleDestinations.contains(_selectedDestination)
@@ -528,7 +576,7 @@ class _MainShellState extends ConsumerState<MainShell> {
     ref.listen<MainNavRequest?>(mainNavRequestProvider, (previous, req) {
       if (req == null || !mounted) return;
       ref.read(mainNavRequestProvider.notifier).clear();
-      _selectDestination(req.destination);
+      unawaited(_selectDestination(req.destination));
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
         _dispatchFollowUpNavIntents(req);
@@ -599,7 +647,9 @@ class _MainShellState extends ConsumerState<MainShell> {
                   extended: railExtended,
                   selectedIndex: selectedRailIndex,
                   onDestinationSelected: (index) {
-                    _selectDestination(visibleDestinations[index]);
+                    unawaited(
+                      _selectDestination(visibleDestinations[index]),
+                    );
                   },
                   leading: wideEnoughForExtendedRail
                       ? IconButton(
@@ -660,6 +710,9 @@ class _MainShellState extends ConsumerState<MainShell> {
                         pendingCount,
                         isOnCallsScreen:
                             effectiveDestination == MainNavDestination.calls,
+                        showCoreLexiconWarning:
+                            d == MainNavDestination.dictionary &&
+                            showCoreLexiconWarning,
                       ),
                   ],
                 ),

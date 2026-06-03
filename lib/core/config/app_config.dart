@@ -1,4 +1,4 @@
-import 'dart:io';
+﻿import 'dart:io';
 
 import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
@@ -137,9 +137,17 @@ class AppConfig {
   static String get localDevDbPath =>
       path.join(Directory.current.path, 'Data Base', 'call_logger.db');
 
-  /// Asset ελληνικού core λεξικού για ορθογραφία / lookup.
-  static const String greekDictionaryAsset =
-      'assets/dictionaries/greek_core_60k.txt';
+  /// Πρόθεμα assets για προαιρετικά bundled λεξικά (.txt).
+  static const String bundledDictionariesAssetPrefix = 'assets/dictionaries/';
+
+  /// Portable φάκελος λεξικού-πυρήνα (δίπλα στο εκτελέσιμο, όπως `Data Base`).
+  static String get portableDictionariesDirectory => path.normalize(
+    path.join(
+      applicationExecutableDirectory,
+      '..',
+      'dictionaries',
+    ),
+  );
 
   /// Πίνακας SQLite προσωπικών λέξεων ορθογραφίας.
   static const String userDictionaryTable = 'user_dictionary';

@@ -1,4 +1,4 @@
-import 'dart:io';
+﻿import 'dart:io';
 
 import 'package:call_logger/core/database/calls_repository.dart';
 import 'package:call_logger/core/database/database_helper.dart';
@@ -9,7 +9,10 @@ import 'package:flutter/material.dart';
 import 'package:call_logger/core/database/database_init_result.dart';
 import 'package:call_logger/core/init/app_init_provider.dart';
 import 'package:call_logger/core/init/app_initializer.dart';
+import 'package:call_logger/core/providers/core_lexicon_provider.dart';
 import 'package:call_logger/core/providers/settings_provider.dart';
+import 'package:call_logger/core/services/core_lexicon_service.dart';
+import 'package:call_logger/core/services/dictionary_service.dart';
 import 'package:call_logger/core/services/lookup_service.dart';
 import 'package:call_logger/features/calls/models/call_model.dart';
 import 'package:call_logger/features/calls/provider/lookup_provider.dart';
@@ -31,6 +34,20 @@ const String kTestCategoryName = 'Δοκιμαστική Κατηγορία';
 const String kTestHistorySearchMarker = 'TEST_ELL_MARKER';
 
 Directory? _testTempDir;
+
+class _TestCoreLexiconNotifier extends CoreLexiconNotifier {
+  @override
+  CoreLexiconState build() {
+    final dict = DictionaryService.empty();
+    CoreLexiconService.instance.dictionaryService = dict;
+    CoreLexiconService.instance.state = CoreLexiconState(
+      loaded: true,
+      path: 'test/lexicon.txt',
+      wordCount: dict.wordCount,
+    );
+    return CoreLexiconService.instance.state;
+  }
+}
 
 /// Πεδίο εσωτερικού τηλεφώνου — μοναδικό `TextInputType.number` στη γραμμή κεφαλίδας.
 Finder callLoggerPhoneTextField() {
@@ -208,6 +225,7 @@ List<Override> callLoggerTestProviderOverrides() {
     showTasksBadgeProvider.overrideWith((ref) async => true),
     showDatabaseNavProvider.overrideWith((ref) async => true),
     showDictionaryNavProvider.overrideWith((ref) async => true),
+    coreLexiconProvider.overrideWith(() => _TestCoreLexiconNotifier()),
     // Αποφυγή επιπλέον async queries στο `remote_tools` κατά widget tests (locks / timers).
     remoteToolsCatalogProvider.overrideWith((ref) async => const <RemoteTool>[]),
     remoteToolsAllCatalogProvider.overrideWith((ref) async => const <RemoteTool>[]),
