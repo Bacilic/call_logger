@@ -1,4 +1,4 @@
-import 'dart:io';
+﻿import 'dart:io';
 
 import 'package:path/path.dart' as p;
 
@@ -37,13 +37,13 @@ class RemoteLauncherService {
   }
 
   /// Ίδια λογική με [testRemoteTool] για ενεργά ορίσματα + placeholders.
+  /// Το [testIp] τροφοδοτεί και `{EQUIPMENT_CODE}` και `{TARGET}`.
   static List<String> testArgumentList(
     RemoteTool tool,
     String testIp, {
-    String equipmentCodeForTest = 'TEST',
     String? filePathForTest,
   }) {
-    final ip = testIp.trim();
+    final host = testIp.trim();
     final fp = filePathForTest ??
         (tool.arguments.any(
           (a) => a.isActive && a.value.contains('{FILE}'),
@@ -56,8 +56,8 @@ class RemoteLauncherService {
         .map(
           (v) => replaceAllPlaceholders(
             v,
-            equipmentCode: equipmentCodeForTest,
-            resolvedTarget: ip,
+            equipmentCode: host,
+            resolvedTarget: host,
             filePath: fp,
           ),
         )
@@ -65,47 +65,21 @@ class RemoteLauncherService {
         .toList();
   }
 
-  /// Προεπισκόπηση κειμένου για UI (ίδια ουσία με την εκτέλεση δοκιμής).
+  /// Προεπισκόπηση εντολής για UI (ίδια ουσία με την εκτέλεση δοκιμής).
   static String formatTestCommandPreview(RemoteTool tool) {
     final testIp = tool.testTargetIp?.trim() ?? '';
     if (testIp.isEmpty) {
       return '';
     }
-    final mode = tool.launchMode.trim().toLowerCase();
     final exe = tool.executablePath.trim();
-    if (mode == 'template_file') {
-      if (exe.isEmpty) {
-        return 'Δοκιμή: (συμπληρώστε διαδρομή εκτελέσιμου — π.χ. mstsc.exe)';
-      }
-      final hasFile =
-          tool.arguments.any((a) => a.isActive && a.value.contains('{FILE}'));
-      final fileNote = hasFile
-          ? ' · {FILE} → $kPreviewRdpFilePath (προεπισκόπηση)'
-          : '';
-      final args = testArgumentList(tool, testIp);
-      final exeName = _executableDisplayName(exe);
-      final buf = StringBuffer(
-        'Δοκιμή: ${_shellQuoteDisplay(exeName)}$fileNote\n',
-      );
-      if (args.isEmpty) {
-        buf.write('(χωρίς επιπλέον ορίσματα)');
-      } else {
-        for (var i = 0; i < args.length; i++) {
-          if (i > 0) buf.write(' ');
-          buf.write(_shellQuoteDisplay(args[i]));
-        }
-      }
-      return buf.toString();
-    }
     if (exe.isEmpty) {
-      return 'Δοκιμή: (συμπληρώστε διαδρομή εκτελέσιμου)';
+      return '(συμπληρώστε διαδρομή εκτελέσιμου)';
     }
     final args = testArgumentList(tool, testIp);
-    final buf = StringBuffer('Δοκιμή: ');
-    buf.write(_shellQuoteDisplay(_executableDisplayName(exe)));
+    final buf = StringBuffer(_executableDisplayName(exe));
     for (final a in args) {
       buf.write(' ');
-      buf.write(_shellQuoteDisplay(a));
+      buf.write(a);
     }
     return buf.toString();
   }
@@ -115,14 +89,6 @@ class RemoteLauncherService {
     final t = executablePath.trim();
     if (t.isEmpty) return '';
     return p.basename(t);
-  }
-
-  static String _shellQuoteDisplay(String s) {
-    if (s.isEmpty) return '""';
-    if (RegExp(r'[\s"&|<>^%]').hasMatch(s)) {
-      return '"${s.replaceAll('"', '""')}"';
-    }
-    return s;
   }
 
   static const String errorPathNotSet = 'Η διαδρομή δεν ορίζεται.';

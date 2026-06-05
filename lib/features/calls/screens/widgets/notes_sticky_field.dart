@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/gestures.dart';
@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/providers/settings_provider.dart';
 import '../../../../core/providers/spell_check_provider.dart';
+import '../../../../core/widgets/lexicon_spell_menu_helper.dart';
 import '../../../../core/widgets/spell_check_controller.dart';
 import '../../provider/call_entry_provider.dart';
 import '../../provider/notes_field_hint_provider.dart';
@@ -99,6 +100,12 @@ class NotesStickyFieldState extends ConsumerState<NotesStickyField> {
             ),
           );
         }
+        extras.add(
+          LexiconSpellMenuHelper.googleSpellSearchButtonItem(
+            word: raw,
+            onBeforeLaunch: () => state.hideToolbar(),
+          ),
+        );
         extras.add(
           ContextMenuButtonItem(
             label: 'Προσθήκη στο λεξικό μου',

@@ -15,6 +15,7 @@ import 'package:window_manager/window_manager.dart';
 
 import 'core/about/version_display.dart';
 import 'core/config/app_config.dart';
+import 'core/utils/windows_cli_error_dialog.dart';
 import 'core/services/desktop_window_service.dart';
 import 'core/database/database_init_result.dart';
 import 'core/widgets/app_init_wrapper.dart';
@@ -77,6 +78,12 @@ void _rootZoneErrorHandler(Object error, StackTrace stack) {
 }
 
 Future<void> main(List<String> arguments) async {
+  final cliValidation = AppConfig.validateCliArguments(arguments);
+  if (!cliValidation.isValid) {
+    showWindowsCliErrorDialog(cliValidation.buildErrorMessage());
+    exit(1);
+  }
+
   await runZonedGuarded(
     () async {
       WidgetsFlutterBinding.ensureInitialized();

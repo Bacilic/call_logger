@@ -1,4 +1,4 @@
-import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+﻿import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 const List<String> oldDatabaseCreateStatements = <String>[
   '''
@@ -145,28 +145,7 @@ const List<String> oldDatabaseIntegrityStatements = <String>[
   '''
   CREATE UNIQUE INDEX IF NOT EXISTS ux_owners_identity_key_clean
   ON owners(
-    trim(
-      replace(replace(replace(
-        replace(replace(replace(replace(replace(replace(replace(replace(
-          replace(replace(
-            lower(
-              trim(COALESCE(first_name, '')) || ' ' || trim(COALESCE(last_name, ''))
-            ),
-            '_', ' '
-          ), 'ς', 'σ'),
-          'ά', 'α'),
-          'έ', 'ε'),
-          'ή', 'η'),
-          'ί', 'ι'),
-          'ϊ', 'ι'),
-          'ΐ', 'ι'),
-          'ό', 'ο'),
-          'ύ', 'υ'),
-          'ϋ', 'υ'),
-          'ΰ', 'υ'),
-          'ώ', 'ω'),
-        '  ', ' '), '  ', ' '), '  ', ' ')
-    )
+    trim(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(lower(trim(COALESCE(first_name, '')) || ' ' || trim(COALESCE(last_name, ''))), '_', ' '), 'ς', 'σ'), 'ά', 'α'), 'έ', 'ε'), 'ή', 'η'), 'ί', 'ι'), 'ϊ', 'ι'), 'ΐ', 'ι'), 'ό', 'ο'), 'ύ', 'υ'), 'ϋ', 'υ'), 'ΰ', 'υ'), 'ώ', 'ω'), '  ', ' '), '  ', ' '), '  ', ' '))
   )
   WHERE TRIM(COALESCE(last_name, '') || COALESCE(first_name, '')) <> ''
   ''',
@@ -189,7 +168,7 @@ const List<String> oldDatabaseIntegrityStatements = <String>[
   '''
   CREATE TRIGGER IF NOT EXISTS trg_equipment_set_master_no_cycle_insert
   BEFORE INSERT ON equipment
-  WHEN NEW.set_master IS NOT NULL
+  WHEN NEW.set_master IS NOT NULL AND NEW.set_master <> NEW.code
   BEGIN
     SELECT RAISE(ABORT, 'Η ιεραρχία set_master δημιουργεί κύκλο.')
     WHERE EXISTS (
@@ -208,7 +187,7 @@ const List<String> oldDatabaseIntegrityStatements = <String>[
   '''
   CREATE TRIGGER IF NOT EXISTS trg_equipment_set_master_no_cycle_update
   BEFORE UPDATE OF code, set_master ON equipment
-  WHEN NEW.set_master IS NOT NULL
+  WHEN NEW.set_master IS NOT NULL AND NEW.set_master <> NEW.code
   BEGIN
     SELECT RAISE(ABORT, 'Η ιεραρχία set_master δημιουργεί κύκλο.')
     WHERE EXISTS (

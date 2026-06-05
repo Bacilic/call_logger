@@ -1,10 +1,18 @@
-import 'dart:io';
+﻿import 'dart:io';
+
+import 'package:path/path.dart' as path;
 
 import 'lamp_database_provider.dart';
+
+/// Κουμπί import Excel στη Λάμπα — κοινό κείμενο σε μηνύματα pending creation.
+const String kLampExcelImportButtonLabel =
+    'Δημιουργία/ενημέρωση βάσης από Excel';
 
 /// Αποτέλεσμα ελέγχου αρχείου .db «Λάμπα» για ανάγνωση (read path).
 enum LampOldDbStatus {
   pathEmpty,
+  /// Η διαδρομή ανάγνωσης ταυτίζεται με εξόδου· το .db θα δημιουργηθεί από Excel.
+  pendingCreation,
   fileMissing,
   notAFile,
   emptyFile,
@@ -17,15 +25,23 @@ class LampOldDbCheckResult {
   const LampOldDbCheckResult(
     this.status, {
     this.technicalDetail,
+    this.pendingDbFileName,
+    this.pendingFolderPath,
+    this.pendingExcelFileName,
   });
 
   final LampOldDbStatus status;
   final String? technicalDetail;
+  final String? pendingDbFileName;
+  final String? pendingFolderPath;
+  final String? pendingExcelFileName;
 
   String get userMessageGreek {
     switch (status) {
       case LampOldDbStatus.pathEmpty:
         return 'Δεν έχει οριστεί διαδρομή βάσης προς ανάγνωση.';
+      case LampOldDbStatus.pendingCreation:
+        return _pendingCreationMessageGreek();
       case LampOldDbStatus.fileMissing:
         return 'Το αρχείο βάσης δεν βρέθηκε στη δίσκο. Ελέγξτε τη διαδρομή (δίκτυο, αφαιρούμενο δίσκο).';
       case LampOldDbStatus.notAFile:
@@ -42,6 +58,20 @@ class LampOldDbCheckResult {
         return 'Η βάση προς ανάγνωση είναι προσπελάσιμη και έγκυρη.';
     }
   }
+
+  String _pendingCreationMessageGreek() {
+    final dbName = pendingDbFileName ?? '…';
+    final folder = pendingFolderPath ?? '…';
+    final excel = pendingExcelFileName?.trim();
+    if (excel != null && excel.isNotEmpty) {
+      return 'Το αρχείο [$dbName] θα δημιουργηθεί στον φάκελο [$folder] '
+          'μετά την επιτυχή εισαγωγή του Excel [$excel] '
+          '(κουμπί: $kLampExcelImportButtonLabel).';
+    }
+    return 'Το αρχείο [$dbName] θα δημιουργηθεί στον φάκελο [$folder] '
+        'όταν οριστεί αρχείο Excel και εκτελεστεί επιτυχώς η εισαγωγή '
+        '(κουμπί: $kLampExcelImportButtonLabel).';
+  }
 }
 
 /// Επαλήθευση αρχείου για αναζήτηση/προβλήματα ETL (read path).
@@ -53,17 +83,47 @@ class LampOldDbValidator {
 
   static const String _equipmentTable = 'equipment';
 
+  static bool pathsReferToSameFile(String? a, String? b) {
+    final ta = a?.trim() ?? '';
+    final tb = b?.trim() ?? '';
+    if (ta.isEmpty || tb.isEmpty) return false;
+    final na = path.normalize(ta);
+    final nb = path.normalize(tb);
+    if (Platform.isWindows) {
+      return na.toLowerCase() == nb.toLowerCase();
+    }
+    return na == nb;
+  }
+
   /// Κλείνει τυχόν ανοιχτό handle της [LampDatabaseProvider] μετά τον έλεγχο
   /// ώστε αναζητήσεις να ξανα-ανοίγουν καθαρά.
-  Future<LampOldDbCheckResult> validateReadPath(String? rawPath) async {
-    final path = rawPath?.trim() ?? '';
-    if (path.isEmpty) {
+  ///
+  /// [outputPath] και [excelPath] χρησιμοποιούνται για ενημερωτικό μήνυμα όταν
+  /// η ανάγνωση δείχνει στο μέλλον .db εξόδου που δεν έχει δημιουργηθεί ακόμα.
+  Future<LampOldDbCheckResult> validateReadPath(
+    String? rawPath, {
+    String? outputPath,
+    String? excelPath,
+  }) async {
+    final dbPath = rawPath?.trim() ?? '';
+    if (dbPath.isEmpty) {
       return const LampOldDbCheckResult(LampOldDbStatus.pathEmpty);
     }
 
-    final file = File(path);
+    final file = File(dbPath);
     try {
       if (!await file.exists()) {
+        if (pathsReferToSameFile(dbPath, outputPath)) {
+          final excelName = excelPath?.trim();
+          return LampOldDbCheckResult(
+            LampOldDbStatus.pendingCreation,
+            pendingDbFileName: path.basename(dbPath),
+            pendingFolderPath: path.dirname(dbPath),
+            pendingExcelFileName: excelName == null || excelName.isEmpty
+                ? null
+                : path.basename(excelName),
+          );
+        }
         return const LampOldDbCheckResult(LampOldDbStatus.fileMissing);
       }
     } on FileSystemException catch (e) {
@@ -100,7 +160,7 @@ class LampOldDbValidator {
     try {
       await _databaseProvider.close();
       final db = await _databaseProvider.open(
-        path,
+        dbPath,
         mode: LampDatabaseMode.read,
       );
       final rows = await db.rawQuery(

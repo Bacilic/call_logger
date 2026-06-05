@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
@@ -17,7 +17,9 @@ import '../../../core/database/old_database/resolution_log_entry.dart';
 import '../../../core/database/old_database/lamp_settings_store.dart';
 import '../../../core/database/old_database/old_equipment_repository.dart';
 import '../../../core/database/old_database/old_excel_importer.dart';
+import '../../../core/utils/file_picker_session.dart';
 import '../../database/services/database_stats_service.dart';
+import '../../settings/widgets/create_new_database_dialog.dart';
 import '../services/lamp_migration_service.dart';
 import '../widgets/lamp_db_tables_tab.dart';
 import '../widgets/lamp_issue_manual_review_dialog.dart';
@@ -337,7 +339,11 @@ class _LampScreenState extends ConsumerState<LampScreen> {
     }
     await _settings.setReadPath(read);
     await _settings.setOutputPath(output);
-    await ref.read(lampReadPathHealthProvider.notifier).refresh(pathOverride: read);
+    await ref.read(lampReadPathHealthProvider.notifier).refresh(
+      pathOverride: read,
+      outputPathOverride: output,
+      excelPathOverride: _excelController.text.trim(),
+    );
     if (!mounted) return;
     final result = _readPathCheck;
     if (result == null) return;
@@ -359,7 +365,8 @@ class _LampScreenState extends ConsumerState<LampScreen> {
   }
 
   void _announceCheck(LampOldDbCheckResult result, {required String source}) {
-    if (result.status == LampOldDbStatus.ok) {
+    if (result.status == LampOldDbStatus.ok ||
+        result.status == LampOldDbStatus.pendingCreation) {
       return;
     }
     final prefix = source == 'έναρξη'
@@ -383,13 +390,16 @@ class _LampScreenState extends ConsumerState<LampScreen> {
   }
 
   Future<void> _pickExcel() async {
-    final result = await FilePicker.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: const <String>['xlsx', 'xls'],
-    );
-    final path = (result != null && result.files.isNotEmpty)
-        ? result.files.first.path
-        : null;
+    final session = await FilePickerSession.run(() async {
+      final result = await FilePicker.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: const <String>['xlsx', 'xls'],
+      );
+      if (result == null || result.files.isEmpty) return null;
+      return result.files.first.path;
+    });
+    if (session.refocusedExisting) return;
+    final path = session.value;
     if (path == null) {
       if (mounted) {
         _showSnack('Η επιλογή αρχείου Excel ακυρώθηκε.');
@@ -405,13 +415,16 @@ class _LampScreenState extends ConsumerState<LampScreen> {
   }
 
   Future<void> _pickReadDatabase() async {
-    final result = await FilePicker.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: const <String>['db'],
-    );
-    final path = (result != null && result.files.isNotEmpty)
-        ? result.files.first.path
-        : null;
+    final session = await FilePickerSession.run(() async {
+      final result = await FilePicker.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: const <String>['db'],
+      );
+      if (result == null || result.files.isEmpty) return null;
+      return result.files.first.path;
+    });
+    if (session.refocusedExisting) return;
+    final path = session.value;
     if (path == null) {
       if (mounted) {
         _showSnack('Η επιλογή αρχείου .db (ανάγνωση) ακυρώθηκε.');
@@ -428,16 +441,22 @@ class _LampScreenState extends ConsumerState<LampScreen> {
 
   Future<void> _pickDatabaseOutput() async {
     final oldOut = _outputDbController.text.trim();
-    final path = await FilePicker.saveFile(
+    final path = await pickSqliteDatabaseSavePath(
+      initialPathHint: oldOut.isNotEmpty ? oldOut : null,
       dialogTitle: 'Θέση και όνομα βάσης εξόδου (.db) για import Excel',
-      fileName: 'old_equipment.db',
-      type: FileType.custom,
-      allowedExtensions: const <String>['db'],
-      bytes: Uint8List(0),
+      defaultSuggestedFileName: 'old_equipment.db',
     );
+    if (FilePickerSession.takeLastRefocusedExisting()) return;
     if (path == null) {
       if (mounted) {
         _showSnack('Η αποθήκευση/προορισμός αρχείου εξόδου ακυρώθηκε.');
+      }
+      return;
+    }
+    final validationError = validateNewDatabaseSavePath(path);
+    if (validationError != null) {
+      if (mounted) {
+        _showSnack(validationError, isError: true);
       }
       return;
     }
@@ -591,6 +610,8 @@ class _LampScreenState extends ConsumerState<LampScreen> {
       if (mounted) {
         await ref.read(lampReadPathHealthProvider.notifier).refresh(
           pathOverride: _readDbController.text.trim(),
+          outputPathOverride: _outputDbController.text.trim(),
+          excelPathOverride: _excelController.text.trim(),
         );
         await _loadIssues();
       }
@@ -607,12 +628,17 @@ class _LampScreenState extends ConsumerState<LampScreen> {
   bool get _readPathReadyForQuery =>
       _readPathCheck?.status == LampOldDbStatus.ok;
 
+  bool _readPathCheckIsErrorForSnack(LampOldDbStatus? status) {
+    return status != LampOldDbStatus.pathEmpty &&
+        status != LampOldDbStatus.pendingCreation;
+  }
+
   Future<void> _fieldSearch({bool showProgressSnack = true}) async {
     if (!_readPathReadyForQuery) {
       _showSnack(
         _readPathCheck?.userMessageGreek ??
             'Η βάση προς ανάγνωση δεν είναι έτοιμη. Ανοίξτε «Ρυθμίσεις διαδρομών».',
-        isError: true,
+        isError: _readPathCheckIsErrorForSnack(_readPathCheck?.status),
       );
       return;
     }
@@ -639,7 +665,7 @@ class _LampScreenState extends ConsumerState<LampScreen> {
       _showSnack(
         _readPathCheck?.userMessageGreek ??
             'Η βάση προς ανάγνωση δεν είναι έτοιμη.',
-        isError: true,
+        isError: _readPathCheckIsErrorForSnack(_readPathCheck?.status),
       );
       return;
     }
@@ -2095,7 +2121,8 @@ class _LampScreenState extends ConsumerState<LampScreen> {
     if (r.status == LampOldDbStatus.ok) {
       bg = scheme.primaryContainer.withValues(alpha: 0.45);
       icon = Icons.check_circle_outline;
-    } else if (r.status == LampOldDbStatus.pathEmpty) {
+    } else if (r.status == LampOldDbStatus.pathEmpty ||
+        r.status == LampOldDbStatus.pendingCreation) {
       bg = scheme.surfaceContainerHighest;
       icon = Icons.info_outline;
     } else {
@@ -2122,7 +2149,8 @@ class _LampScreenState extends ConsumerState<LampScreen> {
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
                   if (r.status != LampOldDbStatus.ok) ...[
-                    if (_readDbController.text.isNotEmpty)
+                    if (_readDbController.text.isNotEmpty &&
+                        r.status != LampOldDbStatus.pendingCreation)
                       const SizedBox(height: 4),
                     Text(
                       r.userMessageGreek,
@@ -2145,13 +2173,17 @@ class _LampScreenState extends ConsumerState<LampScreen> {
     final scheme = Theme.of(context).colorScheme;
     final Color bg;
     final IconData icon;
-    if (check!.status == LampOldDbStatus.pathEmpty) {
+    if (check!.status == LampOldDbStatus.pathEmpty ||
+        check.status == LampOldDbStatus.pendingCreation) {
       bg = scheme.surfaceContainerHighest;
       icon = Icons.info_outline;
     } else {
       bg = scheme.errorContainer.withValues(alpha: 0.55);
       icon = Icons.error_outline;
     }
+    final bannerTitle = check.status == LampOldDbStatus.pendingCreation
+        ? 'Η βάση δεν έχει δημιουργηθεί ακόμα'
+        : 'Η παλιά βάση δεν είναι έτοιμη για αναζήτηση';
     return Material(
       color: bg,
       child: Padding(
@@ -2166,7 +2198,7 @@ class _LampScreenState extends ConsumerState<LampScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Η παλιά βάση δεν είναι έτοιμη για αναζήτηση',
+                    bannerTitle,
                     style: Theme.of(context).textTheme.titleSmall,
                   ),
                   const SizedBox(height: 4),

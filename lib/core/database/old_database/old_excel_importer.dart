@@ -1,9 +1,10 @@
-import 'dart:io';
+﻿import 'dart:io';
 
 import 'package:justkawal_excel_updated/justkawal_excel_updated.dart';
 import 'package:path/path.dart' as p;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
+import 'equipment_set_master_cycle.dart';
 import 'lamp_excel_parse_int.dart';
 import 'old_database_schema.dart';
 
@@ -302,11 +303,27 @@ class OldExcelImporter {
   ) {
     final equipmentIds = records.keys.toSet();
     for (final entry in records.entries) {
+      final code = entry.key;
       final record = entry.value;
       final raw = record['set_master_original_text']?.toString();
       final parsed = lampParseExcelInt(raw);
       if (raw == null || raw.trim().isEmpty) {
         record['set_master'] = null;
+        continue;
+      }
+      if (parsed != null && parsed == code) {
+        record['set_master'] = null;
+        issues.add(
+          _DataIssue(
+            sheet: sheetName,
+            rowNumber: null,
+            columnName: 'set_master',
+            rawValue: raw,
+            issueType: 'set_master_self_reference',
+            message:
+                'Το set_master δείχνει στον ίδιο εξοπλισμό (code=$code).',
+          ),
+        );
         continue;
       }
       if (parsed != null && equipmentIds.contains(parsed)) {
@@ -322,6 +339,28 @@ class OldExcelImporter {
           rawValue: raw,
           issueType: parsed == null ? 'non_numeric_fk' : 'unknown_id',
           message: 'Το set_master δεν αντιστοιχεί σε έγκυρο code εξοπλισμού.',
+        ),
+      );
+    }
+
+    final masterByCode = <int, int>{};
+    for (final entry in records.entries) {
+      final master = entry.value['set_master'];
+      if (master is int) {
+        masterByCode[entry.key] = master;
+      }
+    }
+    for (final root in findEquipmentSetMasterCycleRoots(masterByCode)) {
+      records[root]?['set_master'] = null;
+      issues.add(
+        _DataIssue(
+          sheet: sheetName,
+          rowNumber: null,
+          columnName: 'set_master',
+          rawValue: root.toString(),
+          issueType: 'set_master_cycle',
+          message:
+              'Εντοπίστηκε κύκλος ιεραρχίας set_master που περιλαμβάνει code=$root.',
         ),
       );
     }

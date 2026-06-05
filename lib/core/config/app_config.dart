@@ -3,6 +3,37 @@
 import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
 
+/// Αποτέλεσμα ανάλυσης/επικύρωσης CLI ορισμάτων.
+class CliArgumentsParseResult {
+  const CliArgumentsParseResult._({
+    this.profile,
+    this.invalidParameter,
+  });
+
+  /// Έγκυρο όνομα προφίλ, null στην παραγωγική εκτέλεση χωρίς `--profile`.
+  final String? profile;
+
+  /// Η πρώτη άκυρη παράμετρος που εντοπίστηκε (για εμφάνιση στον χρήστη).
+  final String? invalidParameter;
+
+  bool get isValid => invalidParameter == null;
+
+  String buildErrorMessage() {
+    final bad = invalidParameter?.trim();
+    final shown = (bad == null || bad.isEmpty) ? '(κενή)' : bad;
+    return 'Άκυρη παράμετρος γραμμής εντολών: $shown\n\n'
+        'Επιτρεπόμενες:\n'
+        '--profile <όνομα> ή --profile=<όνομα>\n'
+        '(όνομα: γράμματα, αριθμοί, _, -)';
+  }
+
+  static CliArgumentsParseResult success({String? profile}) =>
+      CliArgumentsParseResult._(profile: profile);
+
+  static CliArgumentsParseResult failure(String invalidParameter) =>
+      CliArgumentsParseResult._(invalidParameter: invalidParameter);
+}
+
 /// Κεντρικές σταθερές ρυθμίσεων της εφαρμογής.
 class AppConfig {
   AppConfig._();
@@ -31,26 +62,72 @@ class AppConfig {
     return t.startsWith(r'\\');
   }
 
-  /// Αναλύει `--profile <name>` ή `--profile=<name>` από CLI arguments.
-  static String? parseCliProfile(List<String> arguments) {
-    for (var i = 0; i < arguments.length; i++) {
+  /// Επικυρώνει CLI ορίσματα. Κενή λίστα = παραγωγή. Μόνο `--profile` επιτρέπεται.
+  static CliArgumentsParseResult validateCliArguments(List<String> arguments) {
+    if (arguments.isEmpty) {
+      return CliArgumentsParseResult.success();
+    }
+
+    String? profile;
+    var i = 0;
+    while (i < arguments.length) {
       final arg = arguments[i];
       if (arg == '--profile') {
-        if (i + 1 >= arguments.length) return null;
-        return _sanitizeProfileName(arguments[i + 1]);
+        if (profile != null) {
+          return CliArgumentsParseResult.failure('--profile');
+        }
+        if (i + 1 >= arguments.length) {
+          return CliArgumentsParseResult.failure('--profile');
+        }
+        final value = arguments[i + 1];
+        final sanitized = _sanitizeProfileName(value);
+        if (sanitized == null) {
+          return CliArgumentsParseResult.failure(value);
+        }
+        profile = sanitized;
+        i += 2;
+        continue;
       }
+
       const prefix = '--profile=';
       if (arg.startsWith(prefix)) {
+        if (profile != null) {
+          return CliArgumentsParseResult.failure(arg);
+        }
         final value = arg.substring(prefix.length);
-        return _sanitizeProfileName(value);
+        if (value.isEmpty) {
+          return CliArgumentsParseResult.failure(arg);
+        }
+        final sanitized = _sanitizeProfileName(value);
+        if (sanitized == null) {
+          return CliArgumentsParseResult.failure(arg);
+        }
+        profile = sanitized;
+        i += 1;
+        continue;
       }
+
+      return CliArgumentsParseResult.failure(arg);
     }
-    return null;
+
+    return CliArgumentsParseResult.success(profile: profile);
+  }
+
+  /// Αναλύει `--profile <name>` ή `--profile=<name>` από CLI arguments.
+  static String? parseCliProfile(List<String> arguments) {
+    final result = validateCliArguments(arguments);
+    if (!result.isValid) return null;
+    return result.profile;
   }
 
   /// Ορίζει [activeProfile] από CLI και προετοιμάζει φάκελο/προεπιλογή βάσης αν χρειάζεται.
   static Future<void> configureFromCliArguments(List<String> arguments) async {
-    final profile = parseCliProfile(arguments);
+    final result = validateCliArguments(arguments);
+    assert(
+      result.isValid,
+      'Τα CLI ορίσματα πρέπει να έχουν επικυρωθεί πριν την εκκίνηση.',
+    );
+    final profile = result.profile;
     if (profile == null) {
       activeProfile = null;
       _profileDefaultDbPath = null;

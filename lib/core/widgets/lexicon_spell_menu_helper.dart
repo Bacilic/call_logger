@@ -2,6 +2,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../providers/settings_provider.dart';
 import '../providers/spell_check_provider.dart';
@@ -9,6 +10,33 @@ import 'spell_check_controller.dart';
 
 /// Κοινή λογική μενού ορθογραφίας (λεξικό) για πεδία με [SpellCheckController].
 abstract final class LexiconSpellMenuHelper {
+  static Uri googleSpellSearchUri(String word) {
+    return Uri.https(
+      'www.google.com',
+      '/search',
+      {'q': 'ορθογραφία "$word"'},
+    );
+  }
+
+  static Future<void> openGoogleSpellSearch(String word) async {
+    final uri = googleSpellSearchUri(word);
+    if (!await canLaunchUrl(uri)) return;
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
+  }
+
+  static ContextMenuButtonItem googleSpellSearchButtonItem({
+    required String word,
+    required VoidCallback onBeforeLaunch,
+  }) {
+    return ContextMenuButtonItem(
+      label: '🌐 Αναζήτηση Google: $word',
+      onPressed: () {
+        onBeforeLaunch();
+        unawaited(openGoogleSpellSearch(word));
+      },
+    );
+  }
+
   static void replaceWordAtOffset(
     SpellCheckController controller,
     TextEditingValue value,
@@ -74,6 +102,12 @@ abstract final class LexiconSpellMenuHelper {
         ),
       );
     }
+    extras.add(
+      googleSpellSearchButtonItem(
+        word: raw,
+        onBeforeLaunch: () => state.hideToolbar(),
+      ),
+    );
     extras.add(
       ContextMenuButtonItem(
         label: 'Προσθήκη στο λεξικό μου',

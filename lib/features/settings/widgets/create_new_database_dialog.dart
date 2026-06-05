@@ -9,6 +9,7 @@ import 'package:path/path.dart' as path;
 import '../../../core/database/database_helper.dart';
 import '../../../core/init/app_init_provider.dart';
 import '../../../core/utils/file_picker_initial_directory.dart';
+import '../../../core/utils/file_picker_session.dart';
 import '../../../core/utils/windows_save_sqlite_database_dialog.dart';
 import '../../calls/provider/lookup_provider.dart';
 import '../../database/providers/database_browser_stats_provider.dart';
@@ -45,10 +46,30 @@ String? validateNewDatabaseSavePath(String raw) {
 }
 
 /// Native «Αποθήκευση ως» (φάκελος + όνομα + `.db` σε ένα βήμα).
-Future<String?> pickNewDatabaseSavePath({String? initialPathHint}) async {
+Future<String?> pickSqliteDatabaseSavePath({
+  String? initialPathHint,
+  String dialogTitle = 'Δημιουργία νέου αρχείου βάσης',
+  String defaultSuggestedFileName = 'call_logger.db',
+}) async {
+  final session = await FilePickerSession.run(
+    () => _pickSqliteDatabaseSavePathImpl(
+      initialPathHint: initialPathHint,
+      dialogTitle: dialogTitle,
+      defaultSuggestedFileName: defaultSuggestedFileName,
+    ),
+  );
+  if (session.refocusedExisting) return null;
+  return session.value;
+}
+
+Future<String?> _pickSqliteDatabaseSavePathImpl({
+  String? initialPathHint,
+  required String dialogTitle,
+  required String defaultSuggestedFileName,
+}) async {
   final hint = initialPathHint?.trim();
   final initialDir = initialDirectoryForFilePicker(hint);
-  var suggested = 'call_logger.db';
+  var suggested = defaultSuggestedFileName;
   if (hint != null && hint.isNotEmpty) {
     final base = path.basename(hint);
     if (base.toLowerCase().endsWith('.db') && !base.contains(RegExp(r'[/\\]'))) {
@@ -59,13 +80,13 @@ Future<String?> pickNewDatabaseSavePath({String? initialPathHint}) async {
   final String? picked;
   if (Platform.isWindows) {
     picked = await showWindowsSaveSqliteDatabasePath(
-      dialogTitle: 'Δημιουργία νέου αρχείου βάσης',
+      dialogTitle: dialogTitle,
       fileName: suggested,
       initialDirectory: initialDir,
     );
   } else {
     picked = await FilePicker.saveFile(
-      dialogTitle: 'Δημιουργία νέου αρχείου βάσης',
+      dialogTitle: dialogTitle,
       fileName: suggested,
       initialDirectory: initialDir,
       type: FileType.custom,
@@ -77,6 +98,10 @@ Future<String?> pickNewDatabaseSavePath({String? initialPathHint}) async {
 
   return path.normalize(path.absolute(picked.trim()));
 }
+
+/// Συντομογραφία για τη ροή δημιουργίας νέας βάσης Call Logger.
+Future<String?> pickNewDatabaseSavePath({String? initialPathHint}) =>
+    pickSqliteDatabaseSavePath(initialPathHint: initialPathHint);
 
 Future<void> showNewDatabasePathValidationDialog(
   BuildContext context,

@@ -70,6 +70,86 @@ void main() {
     });
   });
 
+  group('RemoteLauncherService.testArgumentList', () {
+    RemoteTool vncTool(List<RemoteToolArgument> arguments) => RemoteTool(
+          id: 1,
+          name: 'TightVNC',
+          role: ToolRole.vnc,
+          executablePath: r'C:\Program Files\TightVNC\tvnviewer.exe',
+          launchMode: 'direct_exec',
+          sortOrder: 1,
+          isActive: true,
+          arguments: arguments,
+        );
+
+    test('EQUIPMENT_CODE και TARGET από δοκιμαστικό host', () {
+      final tool = vncTool(const [
+        RemoteToolArgument(
+          value: '-host=PC{EQUIPMENT_CODE}',
+          isActive: true,
+        ),
+        RemoteToolArgument(
+          value: '-password=pass99',
+          isActive: true,
+        ),
+      ]);
+      expect(
+        RemoteLauncherService.testArgumentList(tool, '922'),
+        ['-host=PC922', '-password=pass99'],
+      );
+      expect(
+        RemoteLauncherService.testArgumentList(tool, 'pc922'),
+        ['-host=PCpc922', '-password=pass99'],
+      );
+    });
+
+    test('παραλείπει ανενεργά ορίσματα', () {
+      final tool = vncTool(const [
+        RemoteToolArgument(
+          value: '-host=PC{EQUIPMENT_CODE}',
+          isActive: true,
+        ),
+        RemoteToolArgument(
+          value: '-password=secret',
+          isActive: false,
+        ),
+      ]);
+      expect(
+        RemoteLauncherService.testArgumentList(tool, '922'),
+        ['-host=PC922'],
+      );
+    });
+  });
+
+  group('RemoteLauncherService.formatTestCommandPreview', () {
+    test('ενιαία γραμμή εντολής με ενεργά ορίσματα', () {
+      final tool = RemoteTool(
+        id: 2,
+        name: 'TightVNC',
+        role: ToolRole.vnc,
+        executablePath: r'C:\Program Files\TightVNC\tvnviewer.exe',
+        launchMode: 'direct_exec',
+        sortOrder: 1,
+        isActive: true,
+        testTargetIp: 'pc922',
+        arguments: const [
+          RemoteToolArgument(
+            value: '-host=PC{EQUIPMENT_CODE}',
+            isActive: true,
+          ),
+          RemoteToolArgument(
+            value: '-password=12345',
+            isActive: true,
+          ),
+        ],
+      );
+      expect(
+        RemoteLauncherService.formatTestCommandPreview(tool),
+        'tvnviewer.exe -host=PCpc922 -password=12345',
+      );
+    });
+  });
+
   group('RemoteTool.acceptsFileParam', () {
     test('αναγνωρίζει template_file με placeholder αρχείου ανεξάρτητα από πεζά/κεφαλαία', () {
       final t = RemoteTool(

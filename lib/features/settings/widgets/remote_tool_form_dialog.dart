@@ -10,6 +10,8 @@ import '../../../core/services/remote_launcher_service.dart';
 import '../../../core/services/settings_service.dart';
 import '../../../core/utils/file_picker_initial_directory.dart';
 import '../../../core/database/remote_tools_repository.dart';
+import '../../../core/widgets/lexicon_spell_text_form_field.dart';
+import '../../../core/widgets/spell_check_controller.dart';
 import '../../calls/provider/remote_paths_provider.dart';
 
 enum _SoftDeletedNameChoice { restore, keepSameName }
@@ -57,14 +59,20 @@ class _ArgRow {
     required this.valueC,
     required this.descC,
     required this.active,
+    required this.valueFocus,
+    required this.descFocus,
   });
 
   final int stableId;
   final TextEditingController valueC;
-  final TextEditingController descC;
+  final SpellCheckController descC;
+  final FocusNode valueFocus;
+  final FocusNode descFocus;
   bool active;
 
   void dispose() {
+    valueFocus.dispose();
+    descFocus.dispose();
     valueC.dispose();
     descC.dispose();
   }
@@ -78,6 +86,9 @@ class _RemoteToolFormDialogState extends ConsumerState<RemoteToolFormDialog> {
   late final TextEditingController _testIpC;
 
   final FocusNode _nameFocus = FocusNode();
+
+  int? _focusedArgRowIndex;
+  bool _focusedArgIsDescription = false;
 
   String _launchMode = 'direct_exec';
   ToolRole _role = ToolRole.generic;
@@ -171,6 +182,41 @@ class _RemoteToolFormDialogState extends ConsumerState<RemoteToolFormDialog> {
 
   void _markFormChanged() => setState(() {});
 
+  void _onArgFieldFocused(int stableId, bool isDescription) {
+    final idx = _argRows.indexWhere((r) => r.stableId == stableId);
+    if (idx < 0) return;
+    _focusedArgRowIndex = idx;
+    _focusedArgIsDescription = isDescription;
+  }
+
+  _ArgRow _createArgRow({
+    required int stableId,
+    String value = '',
+    String desc = '',
+    bool active = true,
+  }) {
+    final valueC = TextEditingController(text: value);
+    final descC = SpellCheckController()..text = desc;
+    final valueFocus = FocusNode();
+    final descFocus = FocusNode();
+    valueFocus.addListener(() {
+      if (valueFocus.hasFocus) _onArgFieldFocused(stableId, false);
+    });
+    descFocus.addListener(() {
+      if (descFocus.hasFocus) _onArgFieldFocused(stableId, true);
+    });
+    valueC.addListener(_markFormChanged);
+    descC.addListener(_markFormChanged);
+    return _ArgRow(
+      stableId: stableId,
+      valueC: valueC,
+      descC: descC,
+      active: active,
+      valueFocus: valueFocus,
+      descFocus: descFocus,
+    );
+  }
+
   @override
   void initState() {
     super.initState();
@@ -189,10 +235,10 @@ class _RemoteToolFormDialogState extends ConsumerState<RemoteToolFormDialog> {
     if (t != null && t.arguments.isNotEmpty) {
       for (final a in t.arguments) {
         _argRows.add(
-          _ArgRow(
+          _createArgRow(
             stableId: _nextArgId++,
-            valueC: TextEditingController(text: a.value),
-            descC: TextEditingController(text: a.description),
+            value: a.value,
+            desc: a.description,
             active: a.isActive,
           ),
         );
@@ -243,12 +289,17 @@ class _RemoteToolFormDialogState extends ConsumerState<RemoteToolFormDialog> {
 
   bool get _canRunTest => _testIpC.text.trim().isNotEmpty;
 
+  String get _testCommandPreview {
+    if (!_canRunTest) return '';
+    final id = widget.initialTool?.id ?? 0;
+    return RemoteLauncherService.formatTestCommandPreview(_toolFromForm(id: id));
+  }
+
   String get _testButtonTooltip {
     if (!_canRunTest) {
       return 'Ορίστε δοκιμαστική IP ή hostname στο πεδίο παραπάνω για να εκτελέσετε δοκιμή.';
     }
-    final id = widget.initialTool?.id ?? 0;
-    return RemoteLauncherService.formatTestCommandPreview(_toolFromForm(id: id));
+    return _testCommandPreview;
   }
 
   @override
@@ -587,15 +638,7 @@ class _RemoteToolFormDialogState extends ConsumerState<RemoteToolFormDialog> {
 
   void _addArg() {
     setState(() {
-      final row = _ArgRow(
-        stableId: _nextArgId++,
-        valueC: TextEditingController(),
-        descC: TextEditingController(),
-        active: true,
-      );
-      row.valueC.addListener(_markFormChanged);
-      row.descC.addListener(_markFormChanged);
-      _argRows.add(row);
+      _argRows.add(_createArgRow(stableId: _nextArgId++));
     });
   }
 
@@ -605,6 +648,11 @@ class _RemoteToolFormDialogState extends ConsumerState<RemoteToolFormDialog> {
       _argRows[index].descC.removeListener(_markFormChanged);
       _argRows[index].dispose();
       _argRows.removeAt(index);
+      if (_focusedArgRowIndex == index) {
+        _focusedArgRowIndex = null;
+      } else if (_focusedArgRowIndex != null && _focusedArgRowIndex! > index) {
+        _focusedArgRowIndex = _focusedArgRowIndex! - 1;
+      }
     });
   }
 
@@ -660,34 +708,61 @@ class _RemoteToolFormDialogState extends ConsumerState<RemoteToolFormDialog> {
     }
     if (_argRows.any((r) => r.valueC.text.trim() == line)) return;
     setState(() {
-      final row = _ArgRow(
-        stableId: _nextArgId++,
-        valueC: TextEditingController(text: line),
-        descC: TextEditingController(),
-        active: true,
+      _argRows.add(
+        _createArgRow(stableId: _nextArgId++, value: line),
       );
-      row.valueC.addListener(_markFormChanged);
-      row.descC.addListener(_markFormChanged);
-      _argRows.add(row);
     });
   }
 
+  void _insertTextAtSelection(TextEditingController controller, String text) {
+    final value = controller.value;
+    final fullText = value.text;
+    final sel = value.selection;
+    final start = sel.start >= 0 ? sel.start : fullText.length;
+    final end = sel.end >= 0 ? sel.end : fullText.length;
+    final insertAt = start < end ? start : end;
+    final replaceEnd = start < end ? end : start;
+    final newText = fullText.replaceRange(insertAt, replaceEnd, text);
+    controller.value = TextEditingValue(
+      text: newText,
+      selection: TextSelection.collapsed(offset: insertAt + text.length),
+    );
+  }
+
   void _insertPlaceholder(String token) {
-    setState(() {
-      if (_argRows.isEmpty) {
-        final row = _ArgRow(
-          stableId: _nextArgId++,
-          valueC: TextEditingController(text: token),
-          descC: TextEditingController(),
-          active: true,
-        );
-        row.valueC.addListener(_markFormChanged);
-        row.descC.addListener(_markFormChanged);
-        _argRows.add(row);
+    if (_argRows.isEmpty) {
+      setState(() {
+        _argRows.add(_createArgRow(stableId: _nextArgId++, value: token));
+      });
+      return;
+    }
+
+    late final TextEditingController targetController;
+    late final FocusNode focusToRestore;
+
+    if (_focusedArgRowIndex != null &&
+        _focusedArgRowIndex! >= 0 &&
+        _focusedArgRowIndex! < _argRows.length) {
+      final row = _argRows[_focusedArgRowIndex!];
+      if (_focusedArgIsDescription) {
+        targetController = row.descC;
+        focusToRestore = row.descFocus;
       } else {
-        final c = _argRows.last.valueC;
-        c.text = c.text.isEmpty ? token : '${c.text}$token';
+        targetController = row.valueC;
+        focusToRestore = row.valueFocus;
       }
+    } else {
+      final row = _argRows.last;
+      targetController = row.valueC;
+      focusToRestore = row.valueFocus;
+    }
+
+    _insertTextAtSelection(targetController, token);
+
+    final restoreFocusNode = focusToRestore;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      restoreFocusNode.requestFocus();
     });
   }
 
@@ -945,8 +1020,8 @@ class _RemoteToolFormDialogState extends ConsumerState<RemoteToolFormDialog> {
                               labelText:
                                   'Δοκιμαστική IP / Hostname (για δοκιμή)',
                               helperText:
-                                  'Απαιτείται για το κουμπί «Δοκιμή εργαλείου».',
-                              hintText: 'π.χ. 192.168.1.100',
+                                  'Απαιτείται για δοκιμή· τροφοδοτεί {TARGET} και {EQUIPMENT_CODE}.',
+                              hintText: 'π.χ. 922 ή 192.168.1.100',
                               border: OutlineInputBorder(),
                             ),
                           ),
@@ -1017,6 +1092,42 @@ class _RemoteToolFormDialogState extends ConsumerState<RemoteToolFormDialog> {
                               ],
                             ),
                           const SizedBox(height: 16),
+                          if (_canRunTest) ...[
+                            Text(
+                              'Εντολή δοκιμής',
+                              style: theme.textTheme.labelMedium?.copyWith(
+                                color: theme.colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            DecoratedBox(
+                              decoration: BoxDecoration(
+                                color: theme.colorScheme.surfaceContainerHighest
+                                    .withValues(alpha: 0.45),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(
+                                  color: theme.colorScheme.outlineVariant,
+                                ),
+                              ),
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 10,
+                                ),
+                                child: SelectableText(
+                                  _testCommandPreview,
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    fontFamily: 'Consolas',
+                                    fontFamilyFallback: const [
+                                      'Courier New',
+                                      'monospace',
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                          ],
                           Row(
                             children: [
                               Tooltip(
@@ -1658,6 +1769,7 @@ class _ArgRowTile extends StatelessWidget {
                   Expanded(
                     child: TextField(
                       controller: row.valueC,
+                      focusNode: row.valueFocus,
                       enabled: !saving,
                       decoration: const InputDecoration(
                         labelText: 'Όρισμα (τιμή)',
@@ -1677,13 +1789,19 @@ class _ArgRowTile extends StatelessWidget {
                   ),
                 ],
               ),
-              TextField(
-                controller: row.descC,
-                enabled: !saving,
-                decoration: const InputDecoration(
-                  labelText: 'Περιγραφή',
-                  border: OutlineInputBorder(),
-                  isDense: true,
+              AbsorbPointer(
+                absorbing: saving,
+                child: Opacity(
+                  opacity: saving ? 0.5 : 1,
+                  child: LexiconSpellTextFormField(
+                    controller: row.descC,
+                    focusNode: row.descFocus,
+                    decoration: const InputDecoration(
+                      labelText: 'Περιγραφή',
+                      border: OutlineInputBorder(),
+                      isDense: true,
+                    ),
+                  ),
                 ),
               ),
             ],

@@ -10,6 +10,7 @@ import '../../../../core/models/building_map_floor.dart';
 import '../../../../core/services/building_map_storage.dart';
 import '../../../../core/services/lookup_service.dart';
 import '../../../directory/building_map/screens/building_map_dialog.dart';
+import '../../../directory/models/department_floor_display_extension.dart';
 import '../../../directory/models/department_model.dart';
 import '../../models/equipment_model.dart';
 import '../../models/user_model.dart';
@@ -225,6 +226,78 @@ class _MiniMapCardState extends ConsumerState<MiniMapCard> {
       phoneDepartmentId: phoneDeptId,
       userDepartmentId: userDeptFallback,
     );
+  }
+
+  DepartmentModel? _departmentForTarget(
+    _MiniMapCardData data,
+    _MiniMapTarget target,
+  ) {
+    final deptId = target.departmentId;
+    if (deptId == null) return null;
+    return data.departmentsById[deptId];
+  }
+
+  String? _floorDisplayName(
+    _MiniMapCardData data,
+    DepartmentModel? dept,
+  ) {
+    if (dept == null) return null;
+    final floorById = {for (final f in data.floors) f.id: f};
+    return dept.floorDisplayWithCatalog(floorById);
+  }
+
+  String _snapshotTooltip(_MiniMapCardData data, _MiniMapTarget target) {
+    final dept = _departmentForTarget(data, target);
+    if (dept == null) {
+      return 'Δεν βρέθηκε συσχετισμένο τμήμα για ${target.label.toLowerCase()}.';
+    }
+    final lines = <String>[
+      dept.displayName,
+      if (_floorDisplayName(data, dept) case final floor?) 'Όροφος: $floor',
+      if (!dept.isMapped)
+        'Το τμήμα δεν υπάρχει στον χάρτη κτιρίου.'
+      else
+        'Προεπισκόπηση — ${target.label.toLowerCase()}.',
+    ];
+    return lines.join('\n');
+  }
+
+  String _exploreTooltip(
+    _MiniMapCardData data,
+    _MiniMapTarget target,
+    dynamic pendingEntity,
+  ) {
+    if (pendingEntity == null) {
+      return 'Δεν υπάρχει επιλογή για άνοιγμα χάρτη.\n'
+          'Συμπληρώστε εξοπλισμό, τηλέφωνο ή υπάλληλο.';
+    }
+    final dept = _departmentForTarget(data, target);
+    final lines = <String>['Άνοιγμα πλήρους χάρτη κτιρίου'];
+    if (dept != null) {
+      lines.add('Τμήμα: ${dept.displayName}');
+      final floor = _floorDisplayName(data, dept);
+      if (floor != null) lines.add('Όροφος: $floor');
+    }
+    return lines.join('\n');
+  }
+
+  String _swapTooltip(_MiniMapCardData data, _MiniMapMode activeMode) {
+    if (activeMode == _MiniMapMode.equipment) {
+      final dept = data.phoneDepartmentId == null
+          ? null
+          : data.departmentsById[data.phoneDepartmentId!];
+      if (dept != null) {
+        return 'Εναλλαγή σε θέση τηλεφώνου\nΤμήμα: ${dept.displayName}';
+      }
+      return 'Προβολή θέσης τηλεφώνου';
+    }
+    final dept = data.equipmentDepartmentId == null
+        ? null
+        : data.departmentsById[data.equipmentDepartmentId!];
+    if (dept != null) {
+      return 'Εναλλαγή σε θέση εξοπλισμού\nΤμήμα: ${dept.displayName}';
+    }
+    return 'Προβολή θέσης εξοπλισμού';
   }
 
   _MiniMapTarget _targetForMode(
@@ -496,9 +569,7 @@ class _MiniMapCardState extends ConsumerState<MiniMapCard> {
                       ),
                       if (data.hasPhoneEquipmentToggle)
                         IconButton(
-                          tooltip: activeMode == _MiniMapMode.equipment
-                              ? 'Προβολή θέσης τηλεφώνου'
-                              : 'Προβολή θέσης εξοπλισμού',
+                          tooltip: _swapTooltip(data, activeMode),
                           onPressed: () {
                             setState(() {
                               _mode = activeMode == _MiniMapMode.equipment
@@ -509,7 +580,7 @@ class _MiniMapCardState extends ConsumerState<MiniMapCard> {
                           icon: const Icon(Icons.swap_horiz),
                         ),
                       IconButton(
-                        tooltip: 'Άνοιγμα πλήρους χάρτη',
+                        tooltip: _exploreTooltip(data, target, pendingEntity),
                         onPressed: pendingEntity == null
                             ? null
                             : () async {
@@ -524,19 +595,24 @@ class _MiniMapCardState extends ConsumerState<MiniMapCard> {
                     ],
                   ),
                   const SizedBox(height: 8),
-                  SizedBox(
-                    height: _kSnapshotHeight,
-                    width: _kCardWidth,
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(
-                          color: theme.colorScheme.outlineVariant,
+                  Tooltip(
+                    message: _snapshotTooltip(data, target),
+                    waitDuration: const Duration(milliseconds: 350),
+                    showDuration: const Duration(seconds: 10),
+                    child: SizedBox(
+                      height: _kSnapshotHeight,
+                      width: _kCardWidth,
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                            color: theme.colorScheme.outlineVariant,
+                          ),
                         ),
-                      ),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(10),
-                        child: _buildSnapshot(context, target, data),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(10),
+                          child: _buildSnapshot(context, target, data),
+                        ),
                       ),
                     ),
                   ),
