@@ -210,6 +210,7 @@ class CallsScreen extends ConsumerWidget {
                               equipmentCodeText: header.equipmentText,
                               phoneText: header.selectedPhone ?? '',
                               user: header.selectedCaller,
+                              callerDisplayText: header.callerDisplayText,
                             ),
                           if (hasRecentCallsCard &&
                               cardsVis.showEmployeeRecentCard)
@@ -248,6 +249,7 @@ class CallsScreen extends ConsumerWidget {
                                       equipmentCodeText: header.equipmentText,
                                       phoneText: header.selectedPhone ?? '',
                                       user: header.selectedCaller,
+                                      callerDisplayText: header.callerDisplayText,
                                     ),
                                 ],
                               ),

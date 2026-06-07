@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import '../../../core/database/database_helper.dart';
 import '../models/audit_log_model.dart';
+import '../models/audit_reference_labels.dart';
 
 /// Μορφοποίηση εγγραφών audit σε φυσικά ελληνικά (απλός/τεχνικός τόνος).
 class AuditFormatterService {
@@ -25,10 +26,19 @@ class AuditFormatterService {
   }
 
   /// Μήνυμα μίας γραμμής για τη λίστα.
-  String summaryLine(AuditLogModel row, {bool technical = false}) {
+  String summaryLine(
+    AuditLogModel row, {
+    bool technical = false,
+    AuditReferenceLabels labels = AuditReferenceLabels.empty,
+  }) {
     final bulk = _parseBulk(row.newValuesJson);
     if (bulk != null) {
-      return _formatBulk(row, bulk, technical: technical);
+      return _formatBulk(
+        row,
+        bulk,
+        technical: technical,
+        labels: labels,
+      );
     }
 
     var type = row.entityType?.trim();
@@ -55,7 +65,11 @@ class AuditFormatterService {
       final dash = _callAuditDashContext(row);
       final subject = dash != null && dash.isNotEmpty ? dash : 'Κλήση';
       final main = action.isEmpty ? subject : '$action · $subject';
-      final change = primaryChangeLine(row, technical: technical);
+      final change = primaryChangeLine(
+        row,
+        technical: technical,
+        labels: labels,
+      );
       if (change != null && change.isNotEmpty) {
         return '$main - $change';
       }
@@ -71,7 +85,11 @@ class AuditFormatterService {
         ? _entitySummarySubject(type, eid, effectiveName, technical: technical)
         : (row.details?.trim() ?? '');
     final base = [action, subject].where((e) => e.trim().isNotEmpty).join(' · ');
-    final change = primaryChangeLine(row, technical: technical);
+    final change = primaryChangeLine(
+      row,
+      technical: technical,
+      labels: labels,
+    );
     if (change != null && change.isNotEmpty) {
       if (base.isEmpty) return change;
       return '$base - $change';
@@ -210,6 +228,7 @@ class AuditFormatterService {
     AuditLogModel row, {
     bool technical = false,
     String? skipIfEquals,
+    AuditReferenceLabels labels = AuditReferenceLabels.empty,
   }) {
     final oldMap = row.oldValuesMap ?? const <String, dynamic>{};
     final newMap = row.newValuesMap ?? const <String, dynamic>{};
@@ -222,12 +241,11 @@ class AuditFormatterService {
     }
     final normalizedType = type == null ? '' : _normalizeEntityType(type);
 
-    final keys = _orderedDiffKeys(
-      normalizedType,
-      oldMap.keys.toSet().union(newMap.keys.toSet()),
-    );
+    final allKeys = oldMap.keys.toSet().union(newMap.keys.toSet());
+    final keys = _orderedDiffKeys(normalizedType, allKeys);
     final lines = <String>[];
     for (final key in keys) {
+      if (_shouldSkipRedundantTextField(key, allKeys)) continue;
       final hasOld = oldMap.containsKey(key);
       final hasNew = newMap.containsKey(key);
       if (!hasOld && !hasNew) continue;
@@ -242,6 +260,9 @@ class AuditFormatterService {
         newValue: newValue,
         hasNew: hasNew,
         technical: technical,
+        oldMap: oldMap,
+        newMap: newMap,
+        labels: labels,
       );
       if (line != null && line.trim().isNotEmpty) {
         if (skipIfEquals != null && line == skipIfEquals) continue;
@@ -251,9 +272,27 @@ class AuditFormatterService {
     return lines;
   }
 
-  String? primaryChangeLine(AuditLogModel row, {bool technical = false}) {
-    final lines = describeChanges(row, technical: technical);
+  String? primaryChangeLine(
+    AuditLogModel row, {
+    bool technical = false,
+    AuditReferenceLabels labels = AuditReferenceLabels.empty,
+  }) {
+    final lines = describeChanges(
+      row,
+      technical: technical,
+      labels: labels,
+    );
     return lines.isEmpty ? null : lines.first;
+  }
+
+  bool _shouldSkipRedundantTextField(String field, Set<String> keys) {
+    if (field == 'department_text' && keys.contains('department_id')) {
+      return true;
+    }
+    if (field == 'caller_text' && keys.contains('caller_id')) {
+      return true;
+    }
+    return false;
   }
 
   String _entityTypeGreek(String type) {
@@ -280,6 +319,8 @@ class AuditFormatterService {
         return 'Δεδομένα εισαγωγής';
       case 'maintenance':
         return 'Συντήρηση βάσης';
+      case 'backup':
+        return 'Αντίγραφο ασφαλείας';
       case 'phone':
         return 'Τηλέφωνο';
       default:
@@ -339,7 +380,7 @@ class AuditFormatterService {
       'equipment' => const [
           'department_id',
           'type',
-          'custom_ip',
+          'remote_params',
           'linked_users',
         ],
       'phone' => const ['linked_user_id', 'department_id'],
@@ -362,6 +403,9 @@ class AuditFormatterService {
     required dynamic newValue,
     required bool hasNew,
     required bool technical,
+    required Map<String, dynamic> oldMap,
+    required Map<String, dynamic> newMap,
+    required AuditReferenceLabels labels,
   }) {
     if (entityType == 'department' && field == 'map_floor') {
       final oldFloor = _fmtFloorValue(oldValue);
@@ -389,16 +433,40 @@ class AuditFormatterService {
       if (o != null && n != null) return 'Μεταφορά από χρήστη $o σε $n';
     }
     if (entityType == 'phone' && field == 'department_id') {
-      final o = oldValue == null ? null : '#$oldValue';
-      final n = newValue == null ? null : '#$newValue';
+      final o = _formatDepartmentReference(
+        oldValue,
+        oldMap,
+        technical: technical,
+        labels: labels,
+      );
+      final n = _formatDepartmentReference(
+        newValue,
+        newMap,
+        technical: technical,
+        labels: labels,
+      );
       if (o == null && n != null) return 'Σύνδεση σε τμήμα $n';
       if (o != null && n == null) return 'Αποσύνδεση από τμήμα $o';
       if (o != null && n != null) return 'Μεταφορά από τμήμα $o σε $n';
     }
 
     final label = _fieldLabel(entityType, field);
-    final oldFmt = _friendlyValue(entityType, field, oldValue, technical: technical);
-    final newFmt = _friendlyValue(entityType, field, newValue, technical: technical);
+    final oldFmt = _friendlyValue(
+      entityType,
+      field,
+      oldValue,
+      technical: technical,
+      sideMap: oldMap,
+      labels: labels,
+    );
+    final newFmt = _friendlyValue(
+      entityType,
+      field,
+      newValue,
+      technical: technical,
+      sideMap: newMap,
+      labels: labels,
+    );
     final hasOldValue = hasOld && !_isEmptyLike(oldValue);
     final hasNewValue = hasNew && !_isEmptyLike(newValue);
 
@@ -430,7 +498,7 @@ class AuditFormatterService {
       'issue': 'θέματος',
       'solution': 'λύσης',
       'type': 'τύπου',
-      'custom_ip': 'IP',
+      'remote_params': 'Παράμετροι απομακρυσμένης',
       'linked_users': 'συνδεδεμένων χρηστών',
       'linked_equipment': 'συνδεδεμένου εξοπλισμού',
       'linked_phone_numbers': 'τηλεφώνων',
@@ -452,13 +520,45 @@ class AuditFormatterService {
     return 'πεδίου $field';
   }
 
+  String? _formatDepartmentReference(
+    dynamic value,
+    Map<String, dynamic> sideMap, {
+    required bool technical,
+    required AuditReferenceLabels labels,
+  }) {
+    if (value == null || _isEmptyLike(value)) return null;
+    if (technical) return '#$value';
+    final text = sideMap['department_text']?.toString().trim();
+    if (text != null && text.isNotEmpty) return text;
+    final id = _parseIntId(value);
+    final resolved = labels.departmentName(id);
+    if (resolved != null) return resolved;
+    return '#$value';
+  }
+
+  int? _parseIntId(dynamic value) {
+    if (value is int) return value;
+    return int.tryParse(value.toString().trim());
+  }
+
   String _friendlyValue(
     String entityType,
     String field,
     dynamic value, {
     required bool technical,
+    Map<String, dynamic> sideMap = const {},
+    AuditReferenceLabels labels = AuditReferenceLabels.empty,
   }) {
     if (value == null) return 'κενό';
+    if (field == 'department_id') {
+      final formatted = _formatDepartmentReference(
+        value,
+        sideMap,
+        technical: technical,
+        labels: labels,
+      );
+      return formatted ?? 'κενό';
+    }
     if (field == 'status') {
       final s = value.toString().trim().toLowerCase();
       const map = <String, String>{
@@ -554,15 +654,18 @@ class AuditFormatterService {
     AuditLogModel row,
     Map<String, dynamic> bulk, {
     required bool technical,
+    AuditReferenceLabels labels = AuditReferenceLabels.empty,
   }) {
     final ids = bulk['affected_ids'];
     final fields = bulk['fields'];
     final n = ids is List ? ids.length : 0;
     final fieldNames = fields is Map
-        ? fields.keys
-            .map((k) => _fieldLabel(row.entityType ?? '', '$k'))
-            .toSet()
-            .toList()
+        ? _bulkFieldLabels(
+            entityType: row.entityType ?? '',
+            fields: Map<String, dynamic>.from(fields),
+            technical: technical,
+            labels: labels,
+          )
         : const <String>[];
     final fieldStr = fieldNames.join(', ');
     final action = _actionLabel(row.action ?? '', technical);
@@ -571,6 +674,35 @@ class AuditFormatterService {
       return '$action · $entity · ids=$n${fieldStr.isNotEmpty ? ' · {$fieldStr}' : ''}';
     }
     return '$action · Επηρέασε $n $entity${fieldStr.isNotEmpty ? ' - Πεδία: $fieldStr' : ''}';
+  }
+
+  List<String> _bulkFieldLabels({
+    required String entityType,
+    required Map<String, dynamic> fields,
+    required bool technical,
+    required AuditReferenceLabels labels,
+  }) {
+    final out = <String>[];
+    for (final key in fields.keys) {
+      if (key == 'department_text' && fields.containsKey('department_id')) {
+        continue;
+      }
+      final label = _fieldLabel(entityType, key);
+      if (key == 'department_id' && !technical) {
+        final name = _formatDepartmentReference(
+          fields['department_id'],
+          fields,
+          technical: false,
+          labels: labels,
+        );
+        if (name != null) {
+          out.add('$label ($name)');
+          continue;
+        }
+      }
+      out.add(label);
+    }
+    return out.toSet().toList();
   }
 
   String _entityTypeGreekPlural(String type) {

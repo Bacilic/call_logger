@@ -29,6 +29,7 @@ class _SharedConflictItem {
     required this.isPhone,
     required this.ownerDetails,
     required this.sourceForMoveText,
+    required this.sourceIsPersonal,
   });
 
   final String key;
@@ -36,6 +37,109 @@ class _SharedConflictItem {
   final bool isPhone;
   final String ownerDetails;
   final String sourceForMoveText;
+
+  /// True όταν το [sourceForMoveText] είναι κάτοχος (όνομα + τμήμα), όχι άλλο τμήμα.
+  final bool sourceIsPersonal;
+}
+
+const TextStyle _kSharedConflictEmphasisStyle = TextStyle(
+  fontWeight: FontWeight.bold,
+);
+
+Widget _sharedConflictMoveLabel(
+  _SharedConflictItem item,
+  String targetDepartmentName,
+) {
+  final removePronoun = item.isPhone ? 'το' : 'τον';
+  return Text.rich(
+    TextSpan(
+      children: [
+        TextSpan(text: 'Κάνε $removePronoun '),
+        const TextSpan(
+          text: 'κοινόχρηστο',
+          style: _kSharedConflictEmphasisStyle,
+        ),
+        TextSpan(text: ' της «$targetDepartmentName» '),
+        TextSpan(
+          text:
+              '(αφαίρεσέ $removePronoun από «${item.sourceForMoveText}»)',
+        ),
+      ],
+    ),
+  );
+}
+
+Widget _sharedConflictKeepLabel(_SharedConflictItem item) {
+  if (item.sourceIsPersonal) {
+    return Text.rich(
+      TextSpan(
+        children: [
+          const TextSpan(text: 'Κράτα το '),
+          const TextSpan(
+            text: 'προσωπικό',
+            style: _kSharedConflictEmphasisStyle,
+          ),
+          TextSpan(text: ' του «${item.sourceForMoveText}» (μην το καταχωρήσεις ως '),
+          const TextSpan(
+            text: 'κοινόχρηστο',
+            style: _kSharedConflictEmphasisStyle,
+          ),
+          const TextSpan(text: ' τμήματος)'),
+        ],
+      ),
+    );
+  }
+  return Text.rich(
+    TextSpan(
+      children: [
+        const TextSpan(text: 'Μην το καταχωρήσεις ως '),
+        const TextSpan(
+          text: 'κοινόχρηστο',
+          style: _kSharedConflictEmphasisStyle,
+        ),
+        TextSpan(text: ' τμήματος (παραμονή στο «${item.sourceForMoveText}»)'),
+      ],
+    ),
+  );
+}
+
+Future<bool?> _showSharedOnlyDisconnectDialog({
+  required BuildContext context,
+  required bool isPhone,
+  required List<String> values,
+  required String departmentName,
+}) {
+  final valuesText = values.join(', ');
+  final content = isPhone
+      ? (values.length == 1
+            ? 'Το κοινόχρηστο τηλέφωνο $valuesText πρόκειται να αποσυνδεθεί από το τμήμα «$departmentName».'
+            : 'Τα κοινόχρηστα τηλέφωνα $valuesText πρόκειται να αποσυνδεθούν από το τμήμα «$departmentName».')
+      : (values.length == 1
+            ? 'Ο κοινόχρηστος εξοπλισμός $valuesText πρόκειται να αποσυνδεθεί από το τμήμα «$departmentName».'
+            : 'Ο κοινόχρηστος εξοπλισμός $valuesText πρόκειται να αποσυνδεθεί από το τμήμα «$departmentName».');
+
+  return showDialog<bool>(
+    context: context,
+    barrierDismissible: false,
+    builder: (ctx) => AlertDialog(
+      title: Text(
+        isPhone
+            ? 'Αποσύνδεση κοινόχρηστου τηλεφώνου'
+            : 'Αποσύνδεση κοινόχρηστου εξοπλισμού',
+      ),
+      content: Text(content),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(ctx).pop(false),
+          child: const Text('Διατήρηση ως κοινόχρηστος'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.of(ctx).pop(true),
+          child: const Text('Αποσύνδεση από το τμήμα'),
+        ),
+      ],
+    ),
+  );
 }
 
 /// Διάλογος προσθήκης / επεξεργασίας / αντιγράφου τμήματος.
@@ -453,6 +557,7 @@ class _DepartmentFormDialogState extends State<DepartmentFormDialog> {
             isPhone: true,
             ownerDetails: detailsParts.join(' | '),
             sourceForMoveText: source,
+            sourceIsPersonal: !hasDeptConflict && ownerLabels.isNotEmpty,
           ),
         );
       }
@@ -496,6 +601,7 @@ class _DepartmentFormDialogState extends State<DepartmentFormDialog> {
             isPhone: false,
             ownerDetails: detailsParts.join(' | '),
             sourceForMoveText: source,
+            sourceIsPersonal: !hasDeptConflict && ownerList.isNotEmpty,
           ),
         );
       }
@@ -561,8 +667,9 @@ class _DepartmentFormDialogState extends State<DepartmentFormDialog> {
                                         dense: true,
                                         value: _ConflictResolutionChoice
                                             .moveToDepartment,
-                                        title: Text(
-                                          'Μεταφορά στο τμήμα «$targetDepartmentName» (αφαίρεση από «${item.sourceForMoveText}»)',
+                                        title: _sharedConflictMoveLabel(
+                                          item,
+                                          targetDepartmentName,
                                         ),
                                       ),
                                       const SizedBox(height: 2),
@@ -570,10 +677,7 @@ class _DepartmentFormDialogState extends State<DepartmentFormDialog> {
                                         dense: true,
                                         value: _ConflictResolutionChoice
                                             .keepCurrentOwnership,
-                                        title: Text(
-                                          'Να ΜΗΝ προστεθεί στο τμήμα «$targetDepartmentName» '
-                                          '(παραμονή στο «${item.sourceForMoveText}»)',
-                                        ),
+                                        title: _sharedConflictKeepLabel(item),
                                       ),
                                     ],
                                   ),
@@ -636,6 +740,73 @@ class _DepartmentFormDialogState extends State<DepartmentFormDialog> {
       phonesToMoveFromUsers: phonesToMoveFromUsers,
       equipmentToMoveFromUsers: equipmentToMoveFromUsers,
     );
+  }
+
+  Future<
+    ({
+      List<String> sharedPhones,
+      List<String> sharedEquipmentCodes,
+    })?
+  >
+  _applySharedOnlyRemovalConfirmations({
+    required int departmentId,
+    required String departmentName,
+    required List<String> sharedPhones,
+    required List<String> sharedEquipmentCodes,
+  }) async {
+    final lookup = LookupService.instance;
+    var phones = List<String>.from(sharedPhones);
+    var equipment = List<String>.from(sharedEquipmentCodes);
+
+    final existingPhones =
+        lookup.getDirectPhonesByDepartment(departmentId).toSet();
+    final existingEq =
+        lookup.getSharedEquipmentCodesByDepartment(departmentId).toSet();
+    final sharedOnlyPhonesRemoved =
+        existingPhones
+            .difference(phones.toSet())
+            .where((p) => !lookup.checkPhoneUsage(p).hasUserOwners)
+            .toList()
+          ..sort();
+    final sharedOnlyEqRemoved =
+        existingEq
+            .difference(equipment.toSet())
+            .where((c) => !lookup.checkEquipmentUsage(c).hasUserOwners)
+            .toList()
+          ..sort();
+
+    if (sharedOnlyEqRemoved.isNotEmpty) {
+      final disconnect = await _showSharedOnlyDisconnectDialog(
+        context: context,
+        isPhone: false,
+        values: sharedOnlyEqRemoved,
+        departmentName: departmentName,
+      );
+      if (!mounted) return null;
+      if (disconnect == null) return null;
+      if (!disconnect) {
+        equipment = (equipment.toSet()..addAll(sharedOnlyEqRemoved)).toList()
+          ..sort();
+      }
+    }
+
+    if (sharedOnlyPhonesRemoved.isNotEmpty) {
+      if (!mounted) return null;
+      final disconnect = await _showSharedOnlyDisconnectDialog(
+        context: context,
+        isPhone: true,
+        values: sharedOnlyPhonesRemoved,
+        departmentName: departmentName,
+      );
+      if (!mounted) return null;
+      if (disconnect == null) return null;
+      if (!disconnect) {
+        phones = (phones.toSet()..addAll(sharedOnlyPhonesRemoved)).toList()
+          ..sort();
+      }
+    }
+
+    return (sharedPhones: phones, sharedEquipmentCodes: equipment);
   }
 
   Future<void> _save() async {
@@ -730,6 +901,17 @@ class _DepartmentFormDialogState extends State<DepartmentFormDialog> {
           }
         }
         if (did != null) {
+          if (!mounted) return;
+          final confirmed = await _applySharedOnlyRemovalConfirmations(
+            departmentId: did,
+            departmentName: name,
+            sharedPhones: sharedPhones,
+            sharedEquipmentCodes: sharedEquipmentCodes,
+          );
+          if (confirmed == null || !mounted) return;
+          sharedPhones = confirmed.sharedPhones;
+          sharedEquipmentCodes = confirmed.sharedEquipmentCodes;
+
           await widget.notifier.updateDepartmentSharedAssets(
             did,
             sharedPhones: sharedPhones,
@@ -778,6 +960,17 @@ class _DepartmentFormDialogState extends State<DepartmentFormDialog> {
           dbDid,
         ).getOrCreateDepartmentIdByName(name);
         if (did != null) {
+          if (!mounted) return;
+          final confirmed = await _applySharedOnlyRemovalConfirmations(
+            departmentId: did,
+            departmentName: name,
+            sharedPhones: sharedPhones,
+            sharedEquipmentCodes: sharedEquipmentCodes,
+          );
+          if (confirmed == null || !mounted) return;
+          sharedPhones = confirmed.sharedPhones;
+          sharedEquipmentCodes = confirmed.sharedEquipmentCodes;
+
           await widget.notifier.updateDepartmentSharedAssets(
             did,
             sharedPhones: sharedPhones,

@@ -57,9 +57,6 @@ class SettingsService {
   static const int _maxRecentPaths = 3;
 
   /// Κλειδιά για ρυθμίσεις απομακρυσμένης σύνδεσης (πίνακας app_settings).
-  static const String _keyVncPaths = 'vnc_paths';
-  static const String _keyAnydeskPath = 'anydesk_path';
-  static const String _keyRemoteSurfaceApps = 'remote_surface_apps';
   static const String _keyCallsPrimaryToolId = 'calls_primary_tool_id';
   static const String _keyCallsShowSecondaryRemoteActions =
       'calls_show_secondary_remote_actions';
@@ -96,13 +93,6 @@ class SettingsService {
         .toList();
   }
 
-  /// Προεπιλεγμένη διαδρομή TightVNC Viewer (μία μόνο).
-  static const String _defaultVncPath =
-      r'C:\Program Files\TightVNC\tvnviewer.exe';
-
-  /// Προεπιλεγμένη διαδρομή AnyDesk.
-  static const String _defaultAnydeskPath =
-      r'C:\Program Files (x86)\AnyDesk\AnyDesk.exe';
 
   /// Πρόσβαση σε ρυθμίσεις από πίνακα app_settings (ορίζεται μετά το άνοιγμα βάσης).
   static Future<String?> Function(String key)? _getAppSetting;
@@ -630,68 +620,6 @@ class SettingsService {
 
   // --- Ρυθμίσεις απομακρυσμένης σύνδεσης (app_settings) ---
 
-  /// Επιστρέφει τη μοναδική διαδρομή για TightVNC Viewer.
-  /// Αν δεν υπάρχει τιμή στη βάση, επιστρέφει την προεπιλεγμένη.
-  /// Υποστηρίζει και παλιά αποθηκευμένη λίστα (JSON array): χρησιμοποιεί το πρώτο στοιχείο.
-  Future<String> getVncPath() async {
-    final raw = _getAppSetting != null
-        ? await _getAppSetting!(_keyVncPaths)
-        : null;
-    if (raw == null || raw.trim().isEmpty) {
-      return _defaultVncPath;
-    }
-    try {
-      final decoded = jsonDecode(raw);
-      if (decoded is List && decoded.isNotEmpty) {
-        return decoded.first.toString().trim();
-      }
-      if (decoded is String && decoded.trim().isNotEmpty) {
-        return decoded.trim();
-      }
-    } catch (_) {}
-    return _defaultVncPath;
-  }
-
-  /// Αποθηκεύει τη διαδρομή VNC στη βάση (JSON array με ένα στοιχείο για συμβατότητα).
-  Future<void> setVncPath(String path) async {
-    if (_setAppSetting != null) {
-      await _setAppSetting!(_keyVncPaths, jsonEncode([path.trim()]));
-    }
-  }
-
-  /// Επιστρέφει την αποθηκευμένη διαδρομή AnyDesk. Αν δεν υπάρχει ή είναι κενή, η προεπιλογή.
-  Future<String> getAnydeskPath() async {
-    final value = _getAppSetting != null
-        ? await _getAppSetting!(_keyAnydeskPath)
-        : null;
-    if (value == null || value.trim().isEmpty) return _defaultAnydeskPath;
-    return value.trim();
-  }
-
-  /// Αποθηκεύει τη διαδρομή AnyDesk στη βάση.
-  Future<void> setAnydeskPath(String path) async {
-    if (_setAppSetting != null) {
-      await _setAppSetting!(_keyAnydeskPath, path.trim());
-    }
-  }
-
-  /// Επιστρέφει το ακατέργαστο string επιλογών εφαρμογής απομακρυσμένης επιφάνειας (διαχωρισμένα με κόμμα).
-  /// Χρήση στο UI ρυθμίσεων. Προεπιλογή: "AnyDesk, VNC".
-  Future<String> getRemoteSurfaceAppsRaw() async {
-    final value = _getAppSetting != null
-        ? await _getAppSetting!(_keyRemoteSurfaceApps)
-        : null;
-    if (value == null || value.trim().isEmpty) return 'AnyDesk, VNC';
-    return value.trim();
-  }
-
-  /// Αποθηκεύει τις επιλογές εφαρμογής απομακρυσμένης επιφάνειας (comma-separated).
-  Future<void> setRemoteSurfaceApps(String value) async {
-    if (_setAppSetting != null) {
-      await _setAppSetting!(_keyRemoteSurfaceApps, value.trim());
-    }
-  }
-
   /// Προεπιλεγμένο κύριο εργαλείο στην οθόνη κλήσεων (`remote_tools.id`)· null = πρώτο ενεργό.
   Future<int?> getCallsPrimaryToolId() async {
     final value = _getAppSetting != null
@@ -866,16 +794,6 @@ class SettingsService {
 
   /// Επιστρέφει λίστα επιλογών για dropdown (split by comma, trim, μη κενά). Τελευταία επιλογή "Κανένα" προστίθεται στα dialogs.
   /// Αν η ρύθμιση είναι κενή, επιστρέφει ["AnyDesk", "VNC"].
-  Future<List<String>> getRemoteSurfaceAppsList() async {
-    final raw = await getRemoteSurfaceAppsRaw();
-    final list = raw
-        .split(',')
-        .map((s) => s.trim())
-        .where((s) => s.isNotEmpty)
-        .toList();
-    if (list.isEmpty) return ['AnyDesk', 'VNC'];
-    return list;
-  }
 
   // --- Τύποι εξοπλισμού (app_settings, comma-separated) ---
 

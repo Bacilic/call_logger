@@ -20,8 +20,8 @@ void main() {
           id: 1,
           code: 'PC-01',
           type: 'Desktop',
-          customIp: '10.0.0.1',
-          defaultRemoteTool: 'AnyDesk',
+          remoteParams: const {'2': '10.0.0.1'},
+          defaultRemoteTool: '2',
         ),
         UserModel(
           id: 100,
@@ -34,7 +34,7 @@ void main() {
     final visibleColumns = [
       EquipmentColumn.code,
       EquipmentColumn.owner,
-      EquipmentColumn.customIp,
+      EquipmentColumn.remoteParams,
       EquipmentColumn.defaultRemote,
     ];
 
@@ -63,13 +63,13 @@ void main() {
 
     expect(find.text('Κωδικός'), findsOneWidget);
     expect(find.text('Κάτοχος'), findsOneWidget);
-    expect(find.text('Προσαρμοσμένη IP'), findsOneWidget);
+    expect(find.text('Παράμετροι απομακρυσμένης'), findsOneWidget);
     expect(find.text('Εργαλείο Απομακρυσμένης'), findsOneWidget);
 
     expect(find.text('PC-01'), findsOneWidget);
     expect(find.text('Γιάννης Ιωάννου'), findsOneWidget);
-    expect(find.text('10.0.0.1'), findsOneWidget);
-    expect(find.text('AnyDesk'), findsOneWidget);
+    expect(find.textContaining('2: 10.0.0.1'), findsOneWidget);
+    expect(find.text('2'), findsOneWidget);
   });
 
   // Χωρίς κάτοχο/κενά πεδία: «Χωρίς κάτοχο» και em dash στα κενά.

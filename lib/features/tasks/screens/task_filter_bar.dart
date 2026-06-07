@@ -13,7 +13,10 @@ import '../widgets/task_analytics_bottom_sheet.dart';
 
 /// Μπάρα αναζήτησης και φίλτρων: κείμενο (debounce 300ms), status chips, εύρος ημερομηνιών.
 class TaskFilterBar extends ConsumerStatefulWidget {
-  const TaskFilterBar({super.key});
+  const TaskFilterBar({super.key, this.filtersEnabled = true});
+
+  /// Όταν false, απενεργοποιούνται αναζήτηση, chips, ημερολόγιο, στατιστικά, ταξινόμηση.
+  final bool filtersEnabled;
 
   @override
   ConsumerState<TaskFilterBar> createState() => _TaskFilterBarState();
@@ -157,6 +160,7 @@ class _TaskFilterBarState extends ConsumerState<TaskFilterBar> {
     final filter = ref.watch(taskFilterProvider);
     final countsAsync = ref.watch(taskStatusCountsProvider);
     final theme = Theme.of(context);
+    final filtersEnabled = widget.filtersEnabled;
     final hasDateRange = filter.startDate != null || filter.endDate != null;
     final allFiltersOff = filter.allFiltersOff;
     String dateRangeLabel = '';
@@ -183,7 +187,8 @@ class _TaskFilterBarState extends ConsumerState<TaskFilterBar> {
                 Expanded(
                   child: TextField(
                     controller: _searchController,
-                    onChanged: _onSearchChanged,
+                    enabled: filtersEnabled,
+                    onChanged: filtersEnabled ? _onSearchChanged : null,
                     decoration: InputDecoration(
                       hintText: 'Αναζήτηση τίτλου / περιγραφής',
                       prefixIcon: const Icon(Icons.search),
@@ -192,7 +197,8 @@ class _TaskFilterBarState extends ConsumerState<TaskFilterBar> {
                           : IconButton(
                               tooltip: 'Καθαρισμός αναζήτησης',
                               icon: const Icon(Icons.clear),
-                              onPressed: _clearSearch,
+                              onPressed:
+                                  filtersEnabled ? _clearSearch : null,
                             ),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
@@ -207,26 +213,28 @@ class _TaskFilterBarState extends ConsumerState<TaskFilterBar> {
                 ),
                 const SizedBox(width: 8),
                 IconButton.filled(
-                  onPressed: _pickDateRange,
+                  onPressed: filtersEnabled ? _pickDateRange : null,
                   tooltip: 'Εύρος ημερομηνιών',
                   icon: const Icon(Icons.date_range),
                 ),
                 const SizedBox(width: 8),
                 IconButton.filledTonal(
-                  onPressed: () {
-                    showModalBottomSheet<void>(
-                      context: context,
-                      isScrollControlled: true,
-                      useSafeArea: true,
-                      backgroundColor: Colors.transparent,
-                      constraints: const BoxConstraints(maxWidth: 1200),
-                      builder: (_) => const FractionallySizedBox(
-                        heightFactor: 0.96,
-                        widthFactor: 1,
-                        child: TaskAnalyticsBottomSheet(),
-                      ),
-                    );
-                  },
+                  onPressed: filtersEnabled
+                      ? () {
+                          showModalBottomSheet<void>(
+                            context: context,
+                            isScrollControlled: true,
+                            useSafeArea: true,
+                            backgroundColor: Colors.transparent,
+                            constraints: const BoxConstraints(maxWidth: 1200),
+                            builder: (_) => const FractionallySizedBox(
+                              heightFactor: 0.96,
+                              widthFactor: 1,
+                              child: TaskAnalyticsBottomSheet(),
+                            ),
+                          );
+                        }
+                      : null,
                   tooltip: 'Στατιστικά εκκρεμοτήτων',
                   icon: const Icon(Icons.analytics_outlined),
                 ),
@@ -240,7 +248,9 @@ class _TaskFilterBarState extends ConsumerState<TaskFilterBar> {
                 FilterChip(
                   label: _statusChipLabel(TaskStatus.open, countsAsync, filter),
                   selected: filter.statuses.contains(TaskStatus.open),
-                  onSelected: (_) => _toggleStatus(TaskStatus.open),
+                  onSelected: filtersEnabled
+                      ? (_) => _toggleStatus(TaskStatus.open)
+                      : null,
                 ),
                 FilterChip(
                   label: _statusChipLabel(
@@ -249,7 +259,9 @@ class _TaskFilterBarState extends ConsumerState<TaskFilterBar> {
                     filter,
                   ),
                   selected: filter.statuses.contains(TaskStatus.snoozed),
-                  onSelected: (_) => _toggleStatus(TaskStatus.snoozed),
+                  onSelected: filtersEnabled
+                      ? (_) => _toggleStatus(TaskStatus.snoozed)
+                      : null,
                 ),
                 FilterChip(
                   label: _statusChipLabel(
@@ -258,7 +270,9 @@ class _TaskFilterBarState extends ConsumerState<TaskFilterBar> {
                     filter,
                   ),
                   selected: filter.statuses.contains(TaskStatus.closed),
-                  onSelected: (_) => _toggleStatus(TaskStatus.closed),
+                  onSelected: filtersEnabled
+                      ? (_) => _toggleStatus(TaskStatus.closed)
+                      : null,
                 ),
                 if (allFiltersOff)
                   Padding(
@@ -279,7 +293,7 @@ class _TaskFilterBarState extends ConsumerState<TaskFilterBar> {
                   ActionChip(
                     avatar: const Icon(Icons.calendar_today, size: 18),
                     label: Text(dateRangeLabel),
-                    onPressed: _pickDateRange,
+                    onPressed: filtersEnabled ? _pickDateRange : null,
                   ),
                   IconButton(
                     tooltip: 'Καθαρισμός ημερομηνιών',
@@ -288,34 +302,44 @@ class _TaskFilterBarState extends ConsumerState<TaskFilterBar> {
                       width: 22,
                       height: 22,
                     ),
-                    onPressed: _clearDateRange,
+                    onPressed: filtersEnabled ? _clearDateRange : null,
                   ),
                 ],
                 const SizedBox(width: 8),
-                PopupMenuButton<TaskSortOption>(
-                  tooltip: 'Ταξινόμηση',
-                  onSelected: (value) {
-                    _deferProviderUpdate(() {
-                      ref
-                          .read(taskFilterProvider.notifier)
-                          .update((s) => s.copyWith(sortBy: value));
-                    });
-                  },
-                  itemBuilder: (context) => TaskSortOption.values
-                      .map(
-                        (o) => PopupMenuItem<TaskSortOption>(
-                          value: o,
-                          child: Text(_getSortOptionLabel(o)),
-                        ),
-                      )
-                      .toList(),
-                  child: Chip(
+                if (filtersEnabled)
+                  PopupMenuButton<TaskSortOption>(
+                    tooltip: 'Ταξινόμηση',
+                    onSelected: (value) {
+                      _deferProviderUpdate(() {
+                        ref
+                            .read(taskFilterProvider.notifier)
+                            .update((s) => s.copyWith(sortBy: value));
+                      });
+                    },
+                    itemBuilder: (context) => TaskSortOption.values
+                        .map(
+                          (o) => PopupMenuItem<TaskSortOption>(
+                            value: o,
+                            child: Text(_getSortOptionLabel(o)),
+                          ),
+                        )
+                        .toList(),
+                    child: Chip(
+                      avatar: const Icon(Icons.sort, size: 18),
+                      label: Text(_getSortOptionLabel(filter.sortBy)),
+                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      visualDensity: VisualDensity.compact,
+                    ),
+                  )
+                else
+                  FilterChip(
                     avatar: const Icon(Icons.sort, size: 18),
                     label: Text(_getSortOptionLabel(filter.sortBy)),
+                    selected: false,
+                    onSelected: null,
                     materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                     visualDensity: VisualDensity.compact,
                   ),
-                ),
                 IconButton.filledTonal(
                   constraints: const BoxConstraints(
                     minWidth: 36,
@@ -328,15 +352,19 @@ class _TaskFilterBarState extends ConsumerState<TaskFilterBar> {
                   tooltip: filter.sortAscending
                       ? 'Αύξουσα ταξινόμηση'
                       : 'Φθίνουσα ταξινόμηση',
-                  onPressed: () {
-                    _deferProviderUpdate(() {
-                      ref
-                          .read(taskFilterProvider.notifier)
-                          .update(
-                            (s) => s.copyWith(sortAscending: !s.sortAscending),
-                          );
-                    });
-                  },
+                  onPressed: filtersEnabled
+                      ? () {
+                          _deferProviderUpdate(() {
+                            ref
+                                .read(taskFilterProvider.notifier)
+                                .update(
+                                  (s) => s.copyWith(
+                                    sortAscending: !s.sortAscending,
+                                  ),
+                                );
+                          });
+                        }
+                      : null,
                   icon: Icon(
                     filter.sortAscending
                         ? Icons.arrow_upward

@@ -82,5 +82,48 @@ void main() {
       );
       expect(result.status, LampOldDbStatus.fileMissing);
     });
+
+    test('invalidPathFormat when path lacks .db extension', () async {
+      final result = await validator.validateReadPath(
+        r'F:\Data\old_base_test',
+        outputPath: r'F:\Data\old_base_test',
+        excelPath: r'F:\Data\file.xlsx',
+      );
+      expect(result.status, LampOldDbStatus.invalidPathFormat);
+      expect(
+        result.userMessageGreek,
+        'Η διαδρομή πρέπει να δείχνει σε αρχείο με κατάληξη .db',
+      );
+    });
+
+    test('invalidPathFormat blocks pendingCreation for same missing path', () async {
+      final result = await validator.validateReadPath(
+        r'C:\missing\old_base_test',
+        outputPath: r'C:\missing\old_base_test',
+        excelPath: r'C:\import\file.xlsx',
+      );
+      expect(result.status, LampOldDbStatus.invalidPathFormat);
+    });
+  });
+
+  group('LampOldDbValidator.validateDbPathFormat', () {
+    test('returns null for empty path', () {
+      expect(LampOldDbValidator.validateDbPathFormat(''), isNull);
+      expect(LampOldDbValidator.validateDbPathFormat('   '), isNull);
+    });
+
+    test('returns null for valid .db path', () {
+      expect(
+        LampOldDbValidator.validateDbPathFormat(r'C:\Data\lampa_test.db'),
+        isNull,
+      );
+    });
+
+    test('returns error when extension is missing', () {
+      expect(
+        LampOldDbValidator.validateDbPathFormat(r'F:\Data\old_base_test'),
+        'Η διαδρομή πρέπει να δείχνει σε αρχείο με κατάληξη .db',
+      );
+    });
   });
 }

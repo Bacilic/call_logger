@@ -1,46 +1,17 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/database/database_helper.dart';
 import '../../../core/database/directory_repository.dart';
 import '../../../core/models/remote_tool.dart';
+import '../../../core/widgets/remote_tool_icon.dart';
 import '../../calls/provider/remote_paths_provider.dart';
 import '../../../core/services/settings_service.dart';
 import '../widgets/remote_tool_form_dialog.dart';
 
-/// Προεπισκόπηση εικονιδίου στη λίστα (asset, διαδρομή αρχείου ή asset key) — συμβατό με `iconAssetKey`.
+/// Προεπισκόπηση εικονιδίου στη λίστα — συμβατό με `iconAssetKey`.
 Widget _remoteToolListIcon(RemoteTool t, {double size = 22}) {
-  final raw = t.iconAssetKey?.trim() ?? '';
-  if (raw.isEmpty) return const SizedBox.shrink();
-  Widget broken() => Icon(Icons.broken_image_outlined, size: size);
-  if (raw.startsWith('assets/')) {
-    return Image.asset(
-      raw,
-      width: size,
-      height: size,
-      fit: BoxFit.contain,
-      errorBuilder: (context, error, stackTrace) => broken(),
-    );
-  }
-  final f = File(raw);
-  if (f.existsSync()) {
-    return Image.file(
-      f,
-      width: size,
-      height: size,
-      fit: BoxFit.contain,
-      errorBuilder: (context, error, stackTrace) => broken(),
-    );
-  }
-  return Image.asset(
-    raw,
-    width: size,
-    height: size,
-    fit: BoxFit.contain,
-    errorBuilder: (context, error, stackTrace) => broken(),
-  );
+  return RemoteToolIcon(iconAssetKey: t.iconAssetKey, size: size);
 }
 
 /// CRUD ορισμών `remote_tools` + ρυθμίσεις κύριου εργαλείου / overflow στην οθόνη κλήσεων.
@@ -100,9 +71,7 @@ class _RemoteToolsManagementScreenState
     ref.invalidate(remoteToolFormPairsProvider);
     ref.invalidate(remotePathsProvider);
     ref.invalidate(validRemoteToolPathsByIdProvider);
-    ref.invalidate(validRemotePathsProvider);
     ref.invalidate(remoteLauncherStatusesByIdProvider);
-    ref.invalidate(remoteLauncherStatusProvider);
   }
 
   String _argumentsSummary(RemoteTool t) {
@@ -773,7 +742,7 @@ class _CallsRemoteUiPanelState extends ConsumerState<_CallsRemoteUiPanel> {
         ),
         const SizedBox(height: 8),
         SwitchListTile(
-          title: const Text('Δευτερεύοντα σε μενού overflow'),
+          title: const Text('Δευτερεύοντα σε αναδυόμενο μενού'),
           subtitle: const Text(
             'Όταν είναι ενεργό, επιπλέον εργαλεία ανοίγουν από το εικονίδιο «⋯».',
           ),

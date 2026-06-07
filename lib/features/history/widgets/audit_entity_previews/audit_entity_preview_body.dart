@@ -40,6 +40,7 @@ class AuditEntityPreviewBody extends StatelessWidget {
       case AuditEntityTypes.phone:
         return UserPreviewWidget(preview: preview, showTitle: st);
       case AuditEntityTypes.maintenance:
+      case AuditEntityTypes.backup:
         return BackupPreviewWidget(preview: preview, showTitle: st);
       default:
         return SettingsPreviewWidget(preview: preview, showTitle: st);

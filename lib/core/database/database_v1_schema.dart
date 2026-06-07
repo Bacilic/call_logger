@@ -127,8 +127,6 @@ Future<void> applyDatabaseV1Schema(Database db) async {
         code_equipment TEXT,
         type TEXT,
         notes TEXT,
-        custom_ip TEXT,
-        anydesk_id TEXT,
         remote_params TEXT,
         default_remote_tool TEXT,
         department_id INTEGER,
@@ -1116,6 +1114,8 @@ String _entityTypeGreekForMigration(String? type) {
       return 'εισαγωγη δεδομενων';
     case 'maintenance':
       return 'συντηρηση βασης';
+    case 'backup':
+      return 'αντιγραφο ασφαλειας';
     case 'phone':
       return 'τηλεφωνο';
     default:
@@ -1146,7 +1146,7 @@ String _fieldLabelForMigration(String entityType, String field) {
     'issue': 'θεμα',
     'solution': 'λυση',
     'type': 'τυπος',
-    'custom_ip': 'ip',
+    'remote_params': 'παραμετροι απομακρυσμενης',
     'linked_users': 'συνδεδεμενοι χρηστες',
     'linked_equipment': 'συνδεδεμενος εξοπλισμος',
     'linked_phone_numbers': 'τηλεφωνα',

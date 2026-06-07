@@ -8,6 +8,7 @@ import '../../../core/services/audit_service.dart';
 import '../../../core/services/settings_service.dart';
 import '../../tasks/models/task.dart';
 import '../models/database_backup_settings.dart';
+import 'database_backup_audit.dart';
 import 'database_backup_service.dart';
 
 /// Αποτέλεσμα προσπάθειας αντιγράφου πριν από επικίνδυνη ενέργεια.
@@ -90,9 +91,20 @@ class DatabaseMaintenanceService {
       final settings = DatabaseBackupSettings.fromJsonString(raw);
       if (!settings.backupOnExit ||
           settings.destinationDirectory.trim().isEmpty) {
+        await DatabaseBackupAudit.log(
+          trigger: BackupAuditTrigger.maintenance,
+          outcome: BackupAuditOutcome.skipped,
+          details: !settings.backupOnExit
+              ? 'Παραλείφθηκε αντίγραφο πριν από συντήρηση: τα αντίγραφα είναι απενεργοποιημένα ή δεν έχει οριστεί προορισμός.'
+              : 'Παραλείφθηκε αντίγραφο πριν από συντήρηση: δεν έχει οριστεί φάκελος προορισμού.',
+          destination: settings.destinationDirectory.trim(),
+        );
         return (kind: MaintenanceBackupPrecheck.notConfigured, message: null);
       }
-      final r = await DatabaseBackupService.runBackup(settings);
+      final r = await DatabaseBackupService.runBackup(
+        settings,
+        auditTrigger: BackupAuditTrigger.maintenance,
+      );
       if (r.success) {
         return (kind: MaintenanceBackupPrecheck.ok, message: r.message);
       }

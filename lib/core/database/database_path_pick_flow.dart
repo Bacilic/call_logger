@@ -1,6 +1,7 @@
 ﻿import 'package:file_picker/file_picker.dart';
 import 'package:path/path.dart' as p;
 
+import '../utils/file_picker_session.dart';
 import '../services/application_reset_service.dart';
 import '../services/settings_service.dart';
 import 'database_helper.dart';
@@ -8,8 +9,14 @@ import 'database_init_result.dart';
 import 'database_init_runner.dart';
 
 /// Επιλογή αρχείου `.db` (προτίμηση) ή φακέλου → `call_logger.db` μέσα.
-/// Επιστρέφει `null` αν ακυρώθηκε η επιλογή.
+/// Επιστρέφει `null` αν ακυρώθηκε η επιλογή ή έγινε refocus σε ανοιχτό picker.
 Future<String?> pickDatabasePathWithSystemPicker() async {
+  final session = await FilePickerSession.run(_pickDatabasePathWithSystemPickerImpl);
+  if (session.refocusedExisting) return null;
+  return session.value;
+}
+
+Future<String?> _pickDatabasePathWithSystemPickerImpl() async {
   final fileResult = await FilePicker.pickFiles(
     type: FileType.custom,
     allowedExtensions: ['db', 'zip'],

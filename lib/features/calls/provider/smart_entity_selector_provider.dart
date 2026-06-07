@@ -109,43 +109,19 @@ class SmartEntitySelectorState {
 
   bool get hasEquipmentInput => equipmentText.trim().isNotEmpty;
 
-  /// Στόχος AnyDesk για σύνδεση: από [selectedEquipment] (μόνο `anydeskTarget`) ή από regex στο [equipmentText].
-  String? get resolvedAnyDeskTarget {
-    if (selectedEquipment != null) {
-      final fromDb = selectedEquipment!.anydeskTarget?.trim();
-      if (fromDb == null || fromDb.isEmpty) return null;
-      return RemoteTargetRules.isValidAnyDeskTarget(fromDb) ? fromDb : null;
-    }
-    return RemoteTargetRules.parseAnyDeskFromFreeText(equipmentText);
-  }
+  /// Στόχος AnyDesk: μόνο από regex στο ελεύθερο κείμενο εξοπλισμού (χωρίς κατάλογο εργαλείων εδώ).
+  String? get resolvedAnyDeskTarget =>
+      RemoteTargetRules.parseAnyDeskFromFreeText(equipmentText);
 
   bool get canConnectAnyDesk => resolvedAnyDeskTarget != null;
 
-  /// Στόχος για κλήση VNC ([EquipmentModel.vncTarget] ή IPv4 χωρίς `PC` ή `PC` + κείμενο).
-  String get resolvedVncTarget {
-    if (selectedEquipment != null) {
-      return selectedEquipment!.vncTarget;
-    }
-    return VncRemoteTarget.hostForUnknownEquipmentText(equipmentText);
-  }
+  /// Στόχος VNC από ελεύθερο κείμενο· με επιλεγμένο εξοπλισμό χρησιμοποιήστε [CallRemoteTargets].
+  String get resolvedVncTarget =>
+      VncRemoteTarget.hostForUnknownEquipmentText(equipmentText);
 
-  /// Έγκυρη σύνδεση VNC: γνωστός εξοπλισμός με μη κενό/μη «άγνωστο» target, ή μη κενό κείμενο για `PC…`.
-  bool get canConnectVnc {
-    if (selectedEquipment != null) {
-      final raw = selectedEquipment!.vncTarget.trim();
-      return raw.isNotEmpty && raw != 'Άγνωστο';
-    }
-    return equipmentText.trim().isNotEmpty;
-  }
+  bool get canConnectVnc => equipmentText.trim().isNotEmpty;
 
-  /// Κείμενο εμφάνισης δίπλα στο AnyDesk (και όταν το ID είναι μη έγκυρο αλλά υπάρχει στη βάση).
-  String get anydeskTargetDisplay {
-    final r = resolvedAnyDeskTarget;
-    if (r != null) return r;
-    final fromEq = selectedEquipment?.anydeskTarget?.trim();
-    if (fromEq != null && fromEq.isNotEmpty) return fromEq;
-    return '—';
-  }
+  String get anydeskTargetDisplay => resolvedAnyDeskTarget ?? '—';
 
   bool get hasPhoneAssociation {
     final callerPhone = selectedCaller?.phoneJoined ?? '';

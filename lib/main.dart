@@ -17,7 +17,7 @@ import 'core/about/version_display.dart';
 import 'core/config/app_config.dart';
 import 'core/utils/windows_cli_error_dialog.dart';
 import 'core/services/desktop_window_service.dart';
-import 'core/database/database_init_result.dart';
+import 'core/errors/app_error_result.dart';
 import 'core/widgets/app_init_wrapper.dart';
 import 'core/widgets/app_shell_with_global_fatal_error.dart';
 import 'core/widgets/global_fatal_error_notifier.dart';
@@ -36,7 +36,7 @@ final double _kMinWindowWidth =
 const double _kMinWindowHeight = 640;
 
 void _routeFatalErrorToUi(Object exception, StackTrace stack) {
-  final result = DatabaseInitResult.fromException(exception, null, stack);
+  final result = AppErrorResult.fromException(exception, stack);
   final phase = WidgetsBinding.instance.schedulerPhase;
   if (phase == SchedulerPhase.persistentCallbacks ||
       phase == SchedulerPhase.midFrameMicrotasks) {
@@ -46,6 +46,13 @@ void _routeFatalErrorToUi(Object exception, StackTrace stack) {
     return;
   }
   globalFatalErrorNotifier.value = result;
+}
+
+bool _isNonFatalUiLayoutErrorMessage(String message) {
+  final lower = message.toLowerCase();
+  return lower.contains('overflowed') ||
+      lower.contains('renderflex') ||
+      lower.contains('renderbox');
 }
 
 bool _isIgnorableHardwareKeyboardAssertion(Object exception) {
@@ -99,6 +106,13 @@ Future<void> main(List<String> arguments) async {
               'HardwareKeyboard assertion (αγνοήθηκε): ${details.exceptionAsString()}',
             );
           }
+          return;
+        }
+        if (kReleaseMode &&
+            _isNonFatalUiLayoutErrorMessage(details.exceptionAsString())) {
+          debugPrint(
+            'UI layout error (αγνοήθηκε σε release): ${details.exceptionAsString()}',
+          );
           return;
         }
         _routeFatalErrorToUi(details.exception, st);

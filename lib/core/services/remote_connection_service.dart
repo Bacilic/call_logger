@@ -3,17 +3,13 @@
 import '../database/remote_tools_repository.dart';
 import '../models/remote_tool.dart';
 import '../models/remote_tool_role.dart';
-import 'remote_args_service.dart';
 import 'remote_launcher_service.dart';
 import 'remote_tools_paths_helper.dart';
-import 'settings_service.dart';
 
 /// Υπηρεσία απομακρυσμένων συνδέσεων: διαδρομές από `remote_tools`, εκκίνηση ανά `launch_mode`.
 class RemoteConnectionService {
-  RemoteConnectionService(this._settings, this._argsService, this._toolsRepo);
+  RemoteConnectionService(this._toolsRepo);
 
-  final SettingsService _settings;
-  final RemoteArgsService _argsService;
   final RemoteToolsRepository _toolsRepo;
 
   /// Πρώτο υπαρκτό `.rdp` path από ενεργά ορίσματα (εκτός `__rdp_file__` template body).
@@ -68,29 +64,9 @@ class RemoteConnectionService {
         .toList();
   }
 
-  Future<String?> getValidVncPath() => validExecutablePathForTool(
-        repo: _toolsRepo,
-        settings: _settings,
-        role: ToolRole.vnc,
-      );
-
-  Future<String?> getValidAnydeskPath() => validExecutablePathForTool(
-        repo: _toolsRepo,
-        settings: _settings,
-        role: ToolRole.anydesk,
-      );
-
-  Future<String?> getValidRdpPath() => validExecutablePathForTool(
-        repo: _toolsRepo,
-        settings: _settings,
-        role: ToolRole.rdp,
-      );
-
-  /// Έγκυρο path για συγκεκριμένο εργαλείο (ή fallback ανά ρόλο).
   Future<String?> getValidPathForTool(RemoteTool tool) =>
       validExecutablePathForTool(
         repo: _toolsRepo,
-        settings: _settings,
         tool: tool,
         role: tool.role,
       );
@@ -109,72 +85,6 @@ class RemoteConnectionService {
     }
   }
 
-  Future<void> launchVnc(String target) async {
-    final tool = await _toolsRepo.getFirstActiveByRole(ToolRole.vnc);
-    if (tool != null) {
-      await launchRemoteTool(
-        tool: tool,
-        resolvedTarget: target,
-        remoteParams: const {},
-      );
-      return;
-    }
-    final path = await getValidVncPath();
-    if (path == null) {
-      throw Exception('Δεν βρέθηκε εγκατάσταση TightVNC στις ρυθμισμένες διαδρομές.');
-    }
-    final portOpen = await _isVncPortOpen(target);
-    if (!portOpen) {
-      throw Exception(
-        'Ο υπολογιστής $target δεν απαντά ή το VNC δεν τρέχει (Port 5900).',
-      );
-    }
-    final activeArgs = await _argsService.getActiveArgsForRole(ToolRole.vnc);
-    final argFlags = activeArgs.map((a) => a.argFlag).toList();
-    final arguments = argFlags
-        .map(
-          (f) => RemoteLauncherService.replaceAllPlaceholders(
-            f,
-            equipmentCode: null,
-            resolvedTarget: target,
-            filePath: null,
-          ),
-        )
-        .where((s) => s.isNotEmpty)
-        .toList();
-    await Process.start(path, arguments, mode: ProcessStartMode.detached);
-  }
-
-  Future<void> launchAnydesk(String targetId) async {
-    final tool = await _toolsRepo.getFirstActiveByRole(ToolRole.anydesk);
-    if (tool != null) {
-      await launchRemoteTool(
-        tool: tool,
-        resolvedTarget: targetId,
-        remoteParams: const {},
-      );
-      return;
-    }
-    final path = await getValidAnydeskPath();
-    if (path == null) {
-      throw Exception('Δεν βρέθηκε εγκατάσταση AnyDesk. Ελέγξτε τις ρυθμίσεις.');
-    }
-    final activeArgs = await _argsService.getActiveArgsForRole(ToolRole.anydesk);
-    final argFlags = activeArgs.map((a) => a.argFlag).toList();
-    final arguments = argFlags
-        .map(
-          (f) => RemoteLauncherService.replaceAllPlaceholders(
-            f,
-            equipmentCode: null,
-            resolvedTarget: targetId,
-            filePath: null,
-          ),
-        )
-        .where((s) => s.isNotEmpty)
-        .toList();
-    await Process.start(path, arguments, mode: ProcessStartMode.detached);
-  }
-
   /// Γενική εκκίνηση: `direct_exec` ή `template_file` (ίδια ανάλυση ορισμάτων).
   Future<void> launchRemoteTool({
     required RemoteTool tool,
@@ -184,7 +94,6 @@ class RemoteConnectionService {
   }) async {
     final path = await validExecutablePathForTool(
       repo: _toolsRepo,
-      settings: _settings,
       tool: tool,
       role: tool.role,
     );
@@ -194,8 +103,7 @@ class RemoteConnectionService {
       );
     }
 
-    final needsVncPort = tool.role == ToolRole.vnc;
-    if (needsVncPort) {
+    if (tool.role == ToolRole.vnc) {
       final portOpen = await _isVncPortOpen(resolvedTarget);
       if (!portOpen) {
         throw Exception(

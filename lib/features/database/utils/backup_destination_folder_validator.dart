@@ -2,10 +2,30 @@ import 'dart:io';
 
 import 'package:path/path.dart' as p;
 
+/// Κατάσταση φακέλου προορισμού ως προς ύπαρξη και αρχεία αντιγράφου.
+enum BackupDestinationContentKind {
+  folderMissing,
+  folderEmptyNoFiles,
+  folderOk,
+}
+
+class BackupDestinationContentResult {
+  const BackupDestinationContentResult({
+    required this.kind,
+    this.matchingBackupFileCount = 0,
+    this.latestBackupModified,
+  });
+
+  final BackupDestinationContentKind kind;
+  final int matchingBackupFileCount;
+  final DateTime? latestBackupModified;
+}
+
 /// Αποτέλεσμα ελέγχου διαδρομής φακέλου αντιγράφων ασφαλείας.
 enum BackupDestinationValidationKind {
   ok,
   invalidPath,
+  missingDirectory,
   notADirectory,
   accessDenied,
 }
@@ -21,6 +41,8 @@ class BackupDestinationValidationResult {
   String? get errorMessage => switch (kind) {
         BackupDestinationValidationKind.ok => null,
         BackupDestinationValidationKind.invalidPath => 'Δώστε έγκυρη διαδρομή',
+        BackupDestinationValidationKind.missingDirectory =>
+          'Ο φάκελος δεν υπάρχει',
         BackupDestinationValidationKind.notADirectory =>
           'Η διαδρομή δεν είναι φάκελος',
         BackupDestinationValidationKind.accessDenied =>
@@ -102,7 +124,7 @@ class BackupDestinationFolderValidator {
 
     if (!dir.existsSync()) {
       return const BackupDestinationValidationResult(
-        BackupDestinationValidationKind.invalidPath,
+        BackupDestinationValidationKind.missingDirectory,
       );
     }
 
@@ -131,6 +153,66 @@ class BackupDestinationFolderValidator {
     }
 
     return BackupDestinationValidationResult.ok;
+  }
+
+  /// Έλεγχος ύπαρξης φακέλου και αρχείων αντιγράφου (μορφή ονομασίας backup).
+  static Future<BackupDestinationContentResult> inspectDestinationContent({
+    required String destinationDirectory,
+    required String dbBaseName,
+  }) async {
+    final dest = destinationDirectory.trim();
+    if (dest.isEmpty) {
+      return const BackupDestinationContentResult(
+        kind: BackupDestinationContentKind.folderMissing,
+      );
+    }
+
+    final dir = Directory(dest);
+    if (!await dir.exists()) {
+      return const BackupDestinationContentResult(
+        kind: BackupDestinationContentKind.folderMissing,
+      );
+    }
+
+    var count = 0;
+    DateTime? newest;
+    await for (final entity in dir.list(followLinks: false)) {
+      if (entity is! File) continue;
+      final name = p.basename(entity.path);
+      if (!isBackupArtifactFileName(name, dbBaseName)) continue;
+      count++;
+      try {
+        final modified = await entity.lastModified();
+        if (newest == null || modified.isAfter(newest)) {
+          newest = modified;
+        }
+      } catch (_) {}
+    }
+
+    if (count == 0) {
+      return const BackupDestinationContentResult(
+        kind: BackupDestinationContentKind.folderEmptyNoFiles,
+      );
+    }
+    return BackupDestinationContentResult(
+      kind: BackupDestinationContentKind.folderOk,
+      matchingBackupFileCount: count,
+      latestBackupModified: newest,
+    );
+  }
+
+  /// Ταιριάζει με τα πρότυπα ονομασίας [DatabaseBackupService].
+  static bool isBackupArtifactFileName(String fileName, String dbBaseName) {
+    final base = dbBaseName.trim();
+    if (base.isEmpty) return false;
+    final escapedBase = RegExp.escape(base);
+    final dateFirst = RegExp(
+      r'^(\d{4}-\d{2}-\d{2}_\d{2}-\d{2})_' + escapedBase + r'\.(db|zip)$',
+    );
+    final baseFirst = RegExp(
+      r'^' + escapedBase + r'_(\d{4}-\d{2}-\d{2}_\d{2}-\d{2})\.(db|zip)$',
+    );
+    return dateFirst.hasMatch(fileName) || baseFirst.hasMatch(fileName);
   }
 
   static bool _probeWriteAccess(Directory dir) {

@@ -1,4 +1,5 @@
 ﻿import 'dart:async';
+import 'dart:io';
 import 'dart:ui' as ui;
 
 import 'package:file_picker/file_picker.dart';
@@ -12,12 +13,16 @@ import '../../../../core/services/lookup_service.dart';
 import '../../../calls/models/equipment_model.dart';
 import '../../../calls/models/user_model.dart';
 import '../../../../core/services/building_map_storage.dart';
+import '../../../../core/widgets/lexicon_spell_text_form_field.dart';
+import '../../../../core/widgets/spell_check_controller.dart';
 import '../../../floor_map/services/floor_color_assignment_service.dart';
 import '../../models/department_model.dart';
 import '../../providers/department_directory_provider.dart';
 import '../../screens/widgets/department_color_palette.dart';
 import '../providers/building_map_providers.dart';
 import '../widgets/building_map_commit_color_dialog.dart';
+import '../widgets/building_map_floor_edit_preview.dart';
+import '../widgets/building_map_portable_image_copy_dialog.dart';
 
 final buildingMapControllerProvider = Provider<BuildingMapController>(
   (ref) => BuildingMapController(ref),
@@ -41,18 +46,6 @@ class BuildingMapController {
 
   void resetSession() {
     appliedInitialFloorSync = false;
-    unawaited(_migratePortableImagePathsOnce());
-  }
-
-  bool _portablePathsMigrationDone = false;
-
-  Future<void> _migratePortableImagePathsOnce() async {
-    if (_portablePathsMigrationDone) return;
-    _portablePathsMigrationDone = true;
-    try {
-      final db = await DatabaseHelper.instance.database;
-      await BuildingMapStorage.migrateStoredPathsToPortableIfNeeded(db);
-    } catch (_) {}
   }
 
   Future<void> decodeImageForPath(String imagePath) async {
@@ -532,52 +525,35 @@ class BuildingMapController {
         );
   }
 
-  Future<bool> _confirmPortableImageCopy(BuildContext context) async {
-    final choice = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Μεταφορά εικόνας για φορητότητα'),
-        content: const Text(
-          'Η επιλεγμένη εικόνα βρίσκεται εκτός του φακέλου της εφαρμογής.\n\n'
-          'Να αντιγραφεί στον φάκελο maps_images δίπλα στη βάση δεδομένων '
-          'ώστε να εμφανίζεται σωστά σε εκτελέσιμη έκδοση ή σε άλλο PC;',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Όχι'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Μεταφορά'),
-          ),
-        ],
-      ),
-    );
-    return choice == true;
-  }
-
   Future<String?> _ingestPickedImagePath(
     BuildContext context,
     String srcPath, {
     required String floorLabel,
   }) async {
-    var approved = false;
+    var responded = false;
+    var copyToPortable = true;
+    String? targetFileName;
   ingestLoop:
     while (true) {
       final result = await BuildingMapStorage.ingestPickedImage(
         srcPath,
-        floorLabel: floorLabel,
-        userApprovedPortableCopy: approved,
+        userRespondedToPortablePrompt: responded,
+        copyToPortable: copyToPortable,
+        targetFileName: targetFileName,
       );
       if (result.ok && result.storedRelativePath != null) {
         return result.storedRelativePath;
       }
       if (result.needsPortableConfirmation) {
         if (!context.mounted) return null;
-        final ok = await _confirmPortableImageCopy(context);
-        if (!ok) return null;
-        approved = true;
+        final choice = await showBuildingMapPortableImageCopyDialog(
+          context,
+          sourceImagePath: srcPath,
+        );
+        if (choice == null) return null;
+        responded = true;
+        copyToPortable = choice.copyToPortable;
+        targetFileName = choice.fileName;
         continue ingestLoop;
       }
       if (result.errorMessage != null && context.mounted) {
@@ -654,8 +630,10 @@ class BuildingMapController {
   }
 
   Future<void> addFloorSheet(BuildContext context) async {
-    final labelCtrl = TextEditingController();
-    final groupCtrl = TextEditingController();
+    final labelCtrl = SpellCheckController();
+    final groupCtrl = SpellCheckController();
+    final labelFocus = FocusNode();
+    try {
     final picked = await FilePicker.pickFiles(
       type: FileType.image,
     );
@@ -666,40 +644,45 @@ class BuildingMapController {
 
     final ok = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Νέο φύλλο κατόψης'),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: labelCtrl,
-                decoration: const InputDecoration(
-                  labelText: 'Ετικέτα',
-                  hintText: 'π.χ. 1ος — Γραφεία',
+      builder: (ctx) => Consumer(
+        builder: (context, ref, _) => AlertDialog(
+          title: const Text('Νέο φύλλο κατόψης'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Focus(
+                  autofocus: true,
+                  child: LexiconSpellTextFormField(
+                    controller: labelCtrl,
+                    focusNode: labelFocus,
+                    decoration: const InputDecoration(
+                      labelText: 'Ετικέτα',
+                      hintText: 'π.χ. 1ος — Γραφεία',
+                    ),
+                  ),
                 ),
-                autofocus: true,
-              ),
-              TextField(
-                controller: groupCtrl,
-                decoration: const InputDecoration(
-                  labelText: 'Ομάδα ορόφου (προαιρετικό)',
-                  hintText: 'π.χ. L1',
+                LexiconSpellTextFormField(
+                  controller: groupCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Ομάδα ορόφου (προαιρετικό)',
+                    hintText: 'π.χ. L1',
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Άκυρο'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Προσθήκη'),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Άκυρο'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Προσθήκη'),
-          ),
-        ],
       ),
     );
     if (ok != true || !context.mounted) return;
@@ -727,19 +710,51 @@ class BuildingMapController {
     await syncSheetSelection(floors);
     appliedInitialFloorSync = false;
     _ref.read(buildingMapFloorReloadSeqProvider.notifier).bump();
+    } finally {
+      labelCtrl.dispose();
+      groupCtrl.dispose();
+      labelFocus.dispose();
+    }
   }
 
   Future<void> editFloorSheet(
     BuildContext context,
     BuildingMapFloor floor,
   ) async {
-    final labelCtrl = TextEditingController(text: floor.label);
-    final groupCtrl = TextEditingController(text: floor.floorGroup ?? '');
+    final labelCtrl = SpellCheckController()..text = floor.label;
+    final groupCtrl = SpellCheckController()..text = floor.floorGroup ?? '';
+    final labelFocus = FocusNode();
+    final originalLabel = floor.label.trim();
+    final originalGroup = (floor.floorGroup ?? '').trim();
+    try {
     String? pickedSrcPath;
+    var previewImageAvailable = false;
+    if (floor.imagePath.trim().isNotEmpty) {
+      final initialImage =
+          await BuildingMapStorage.fileForStoredPath(floor.imagePath);
+      previewImageAvailable = await initialImage.exists();
+    }
+    var showDepartmentsOnPreview = previewImageAvailable;
+    if (!context.mounted) return;
+    final previewDepartments = _ref
+        .read(departmentDirectoryProvider)
+        .allDepartments
+        .where((d) => !d.isDeleted)
+        .toList();
+
+    bool hasSaveableChanges() {
+      final label = labelCtrl.text.trim();
+      if (label.isEmpty) return false;
+      final group = groupCtrl.text.trim();
+      return label != originalLabel ||
+          group != originalGroup ||
+          pickedSrcPath != null;
+    }
 
     final ok = await showDialog<bool>(
       context: context,
-      builder: (ctx) => StatefulBuilder(
+      builder: (ctx) => Consumer(
+        builder: (context, ref, _) => StatefulBuilder(
         builder: (ctx, setDlg) => AlertDialog(
           title: const Text('Επεξεργασία κατόψης'),
           content: SingleChildScrollView(
@@ -747,16 +762,21 @@ class BuildingMapController {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                TextField(
-                  controller: labelCtrl,
-                  decoration: const InputDecoration(labelText: 'Ετικέτα'),
+                Focus(
                   autofocus: true,
+                  child: LexiconSpellTextFormField(
+                    controller: labelCtrl,
+                    focusNode: labelFocus,
+                    decoration: const InputDecoration(labelText: 'Όνομα ορόφου'),
+                    onChanged: (_) => setDlg(() {}),
+                  ),
                 ),
-                TextField(
+                LexiconSpellTextFormField(
                   controller: groupCtrl,
                   decoration: const InputDecoration(
                     labelText: 'Περιοχή ορόφου (προαιρετικό)',
                   ),
+                  onChanged: (_) => setDlg(() {}),
                 ),
                 const SizedBox(height: 12),
                 OutlinedButton.icon(
@@ -768,6 +788,10 @@ class BuildingMapController {
                     final srcPath = picked.files.single.path;
                     if (srcPath == null) return;
                     pickedSrcPath = srcPath;
+                    previewImageAvailable = await File(srcPath).exists();
+                    if (previewImageAvailable) {
+                      showDepartmentsOnPreview = true;
+                    }
                     setDlg(() {});
                   },
                   icon: const Icon(Icons.image_outlined),
@@ -775,6 +799,27 @@ class BuildingMapController {
                     pickedSrcPath != null
                         ? 'Επιλέχθηκε νέα κατόψη'
                         : 'Αλλαγή κατόψης',
+                  ),
+                ),
+                const SizedBox(height: 12),
+                BuildingMapFloorEditPreview(
+                  imagePath: pickedSrcPath ?? floor.imagePath,
+                  floorId: floor.id,
+                  rotationDegrees: floor.rotationDegrees,
+                  showDepartments: showDepartmentsOnPreview,
+                  departments: previewDepartments,
+                ),
+                Tooltip(
+                  message:
+                      'Η προβολή τμημάτων είναι μόνο για την εκκαθάριση της '
+                      'μικρογραφίας. ΔΕΝ επιρεάζει τη βασική σχεδίαση του ορόφου.',
+                  child: SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Προβολή τμημάτων'),
+                    value: showDepartmentsOnPreview,
+                    onChanged: previewImageAvailable
+                        ? (v) => setDlg(() => showDepartmentsOnPreview = v)
+                        : null,
                   ),
                 ),
               ],
@@ -786,11 +831,13 @@ class BuildingMapController {
               child: const Text('Άκυρο'),
             ),
             FilledButton(
-              onPressed: () => Navigator.pop(ctx, true),
+              onPressed:
+                  hasSaveableChanges() ? () => Navigator.pop(ctx, true) : null,
               child: const Text('Αποθήκευση'),
             ),
           ],
         ),
+      ),
       ),
     );
     if (ok != true || !context.mounted) return;
@@ -826,6 +873,11 @@ class BuildingMapController {
       await decodeImageForPath(imagePathUpdate);
     }
     _ref.read(buildingMapFloorReloadSeqProvider.notifier).bump();
+    } finally {
+      labelCtrl.dispose();
+      groupCtrl.dispose();
+      labelFocus.dispose();
+    }
   }
 
   Future<void> deleteFloorSheet(
@@ -833,13 +885,26 @@ class BuildingMapController {
     int sheetId,
     String imagePath,
   ) async {
+    final trimmedPath = imagePath.trim();
+    String? resolvedImagePath;
+    var imageFileExists = false;
+    if (trimmedPath.isNotEmpty) {
+      final imageFile =
+          await BuildingMapStorage.fileForStoredPath(trimmedPath);
+      resolvedImagePath = imageFile.path;
+      imageFileExists = await imageFile.exists();
+    }
+
     var deleteImageFile = false;
+    if (!context.mounted) return;
+    final displayImagePath = resolvedImagePath;
     final choice = await showDialog<BuildingMapFloorDeleteChoice?>(
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (context, setDialogLocal) {
+          final errorColor = Theme.of(context).colorScheme.error;
           return AlertDialog(
-            title: const Text('Διαγραφή φύλλου'),
+            title: const Text('Διαγραφή ορόφου'),
             content: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -853,11 +918,38 @@ class BuildingMapController {
                   SwitchListTile(
                     contentPadding: EdgeInsets.zero,
                     title: const Text('Διαγραφή αρχείου εικόνας από το δίσκο'),
-                    subtitle: const Text(
-                      'Από προεπιλογή η εικόνα διατηρείται στον φάκελο της εφαρμογής.',
+                    subtitle: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (deleteImageFile)
+                          Text(
+                            'Η εικόνα του χάρτη θα διαγραφεί οριστικά από το δίσκο.',
+                            style: TextStyle(color: errorColor),
+                          )
+                        else
+                          const Text(
+                            'Από προεπιλογή η εικόνα διατηρείται στον φάκελο της εφαρμογής.',
+                          ),
+                        if (displayImagePath != null &&
+                            displayImagePath.isNotEmpty) ...[
+                          const SizedBox(height: 8),
+                          Text(
+                            displayImagePath,
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                        ] else if (!imageFileExists && trimmedPath.isNotEmpty) ...[
+                          const SizedBox(height: 8),
+                          Text(
+                            'Το αρχείο εικόνας δεν βρέθηκε στο δίσκο.',
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                        ],
+                      ],
                     ),
                     value: deleteImageFile,
-                    onChanged: (v) => setDialogLocal(() => deleteImageFile = v),
+                    onChanged: imageFileExists
+                        ? (v) => setDialogLocal(() => deleteImageFile = v)
+                        : null,
                   ),
                 ],
               ),

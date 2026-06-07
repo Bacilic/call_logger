@@ -37,16 +37,12 @@ class _BulkEquipmentEditDialogState extends State<BulkEquipmentEditDialog> {
   static const _fieldKeys = [
     'type',
     'notes',
-    'customIp',
-    'anydeskId',
     'defaultRemoteTool',
     'owner',
   ];
   static const _dbKeys = [
     'type',
     'notes',
-    'custom_ip',
-    'anydesk_id',
     'default_remote_tool',
     'user_id',
   ];
@@ -54,8 +50,6 @@ class _BulkEquipmentEditDialogState extends State<BulkEquipmentEditDialog> {
   final Map<String, bool> _applyField = {
     'type': false,
     'notes': false,
-    'customIp': false,
-    'anydeskId': false,
     'defaultRemoteTool': false,
     'owner': false,
   };
@@ -164,10 +158,6 @@ class _BulkEquipmentEditDialogState extends State<BulkEquipmentEditDialog> {
         return (r) => r.$1.type;
       case 'notes':
         return (r) => r.$1.notes;
-      case 'customIp':
-        return (r) => r.$1.customIp;
-      case 'anydeskId':
-        return (r) => r.$1.anydeskId;
       case 'defaultRemoteTool':
         return (r) => r.$1.defaultRemoteTool;
       default:
@@ -265,8 +255,6 @@ class _BulkEquipmentEditDialogState extends State<BulkEquipmentEditDialog> {
     final labels = {
       'type': 'Τύπος',
       'notes': 'Σημειώσεις',
-      'customIp': 'Προσαρμοσμένη IP',
-      'anydeskId': 'AnyDesk ID',
       'defaultRemoteTool': 'Εργαλείο απομακρυσμένης',
       'owner': 'Κάτοχος',
     };

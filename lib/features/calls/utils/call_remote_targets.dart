@@ -3,7 +3,6 @@ import '../../../core/models/remote_tool.dart';
 import '../../../core/models/remote_tool_role.dart';
 import '../models/equipment_model.dart';
 import '../provider/smart_entity_selector_provider.dart';
-import 'equipment_remote_param_key.dart';
 import 'remote_target_rules.dart';
 import 'vnc_remote_target.dart';
 
@@ -101,12 +100,7 @@ abstract final class CallRemoteTargets {
     RemoteTool tool,
   ) {
     if (s.selectedEquipment == null) return null;
-    final p = s.selectedEquipment!.remoteParams;
-    final byId = p[tool.id.toString()]?.trim();
-    if (byId != null && byId.isNotEmpty) return byId;
-    final legacy = p[tool.role.dbValue]?.trim();
-    if (legacy != null && legacy.isNotEmpty) return legacy;
-    return null;
+    return s.selectedEquipment!.paramForTool(tool);
   }
 
   static bool canConnectRdp(
@@ -186,38 +180,16 @@ abstract final class CallRemoteTargets {
   ) {
     final r = resolvedAnyDeskTarget(s, tools);
     if (r != null) return r;
-    final fromEq = s.selectedEquipment?.anydeskIdResolved(tools)?.trim();
-    if (fromEq != null && fromEq.isNotEmpty) return fromEq;
     return '—';
   }
 
-  /// Μη επιλεγμένο εργαλείο: `remote_params` έχει τιμή για το id εργαλείου ή legacy κλειδί ρόλου / στήλες.
+  /// Μη επιλεγμένο εργαλείο: `remote_params` έχει τιμή για το id εργαλείου.
   static bool _equipmentHasNonDefaultParamForTool(
     RemoteTool tool,
     EquipmentModel eq,
   ) {
-    final p = eq.remoteParams;
-    final idKey = tool.id.toString();
-    if ((p[idKey]?.trim().isNotEmpty ?? false)) return true;
-    switch (tool.role) {
-      case ToolRole.anydesk:
-        if ((p[EquipmentRemoteParamKey.anydesk]?.trim().isNotEmpty ?? false)) {
-          return true;
-        }
-        return eq.anydeskId?.trim().isNotEmpty ?? false;
-      case ToolRole.vnc:
-        if ((p[EquipmentRemoteParamKey.vnc]?.trim().isNotEmpty ?? false)) {
-          return true;
-        }
-        return eq.customIp?.trim().isNotEmpty ?? false;
-      case ToolRole.rdp:
-        if ((p[EquipmentRemoteParamKey.rdp]?.trim().isNotEmpty ?? false)) {
-          return true;
-        }
-        return false;
-      case ToolRole.generic:
-        return false;
-    }
+    final v = eq.paramForTool(tool);
+    return v != null && v.isNotEmpty;
   }
 
   /// Ελεύθερο κείμενο εξοπλισμού (χωρίς εγγραφή καταλόγου): εργαλείο «ταιριάζει» αν ο ρόλος

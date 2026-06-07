@@ -1,8 +1,10 @@
 ﻿import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:path/path.dart' as p;
 
 import '../../../core/database/calls_repository.dart';
 import '../../../core/database/database_helper.dart';
 import '../../../core/database/directory_repository.dart';
+import '../../../core/services/settings_service.dart';
 import '../../../core/utils/search_text_normalizer.dart';
 
 /// Μοντέλο φίλτρων για το ιστορικό κλήσεων.
@@ -40,6 +42,13 @@ class HistoryFilterModel {
 
   String? get dateToSql => dateTo != null ? _formatDate(dateTo!) : null;
 
+  /// True όταν υπάρχει ενεργό φίλτρο (αναζήτηση, ημερομηνίες ή κατηγορία).
+  bool get hasActiveFilters =>
+      keyword.trim().isNotEmpty ||
+      dateFrom != null ||
+      dateTo != null ||
+      (category != null && category!.trim().isNotEmpty);
+
   static String _formatDate(DateTime d) {
     final y = d.year;
     final m = d.month.toString().padLeft(2, '0');
@@ -62,6 +71,20 @@ final historyFilterProvider =
     NotifierProvider<HistoryFilterNotifier, HistoryFilterModel>(
       HistoryFilterNotifier.new,
     );
+
+/// Όνομα αρχείου ενεργής βάσης (για μηνύματα σφάλματος).
+final historyDatabaseDisplayNameProvider =
+    FutureProvider.autoDispose<String>((ref) async {
+      try {
+        final db = await DatabaseHelper.instance.database;
+        return p.basename(db.path);
+      } catch (_) {
+        final path = await SettingsService().getDatabasePath();
+        final trimmed = path.trim();
+        if (trimmed.isEmpty) return '—';
+        return p.basename(trimmed);
+      }
+    });
 
 /// Πλήθος κλήσεων ιστορικού με βάση φίλτρα ημερομηνίας και κατηγορίας (χωρίς keyword).
 final historyCategoryDateCallCountProvider = FutureProvider.autoDispose<int>((

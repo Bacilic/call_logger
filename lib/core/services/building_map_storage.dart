@@ -1,15 +1,11 @@
 import 'dart:io';
 
-import 'package:intl/intl.dart';
 import 'package:path/path.dart' as p;
-import 'package:path_provider/path_provider.dart';
 import 'package:sqflite_common/sqflite.dart';
 
 import '../config/app_config.dart';
-import '../database/database_helper.dart';
-import '../utils/safe_file_base_name.dart';
 
-/// Φορητές κατόψεις δίπλα στη βάση: `[dbDir]/maps_images/`.
+/// Φορητές κατόψεις δίπλα στο εκτελέσιμο: `<exeDir>/maps_images/`.
 ///
 /// Στη βάση αποθηκεύεται σχετική διαδρομή `maps_images/<αρχείο>`.
 class BuildingMapStorage {
@@ -17,74 +13,45 @@ class BuildingMapStorage {
 
   static const String mapsImagesDirName = 'maps_images';
 
-  /// Παλιός κατάλογος Application Support (μετανάστευση ανάγνωσης).
-  static const String legacyAppSupportDirName = 'building_map_images';
-
   /// Όνομα αρχείου βάσης μέσα στο zip αντιγράφου με εικόνες χαρτών.
   static const String backupZipDbFileName = 'call_logger.db';
 
   /// Όνομα φακέλου εικόνων μέσα στο zip αντιγράφου.
   static const String backupZipMapsFolderName = mapsImagesDirName;
 
-  /// Κατάλογος δίπλα στο αρχείο `.db` (προεπιλογή portable).
-  static Future<String> getDatabaseDirectory() async {
-    final db = await DatabaseHelper.instance.database;
-    return p.normalize(p.dirname(db.path));
-  }
+  /// Απόλυτος φάκελος `maps_images` δίπλα στο εκτελέσιμο.
+  static Future<String> getPortableMapsRoot() async =>
+      AppConfig.portableMapsDirectory;
 
-  /// Απόλυτος φάκελος `maps_images` δίπλα στη βάση.
-  static Future<String> getPortableMapsRoot() async {
-    final dbDir = await getDatabaseDirectory();
-    return p.normalize(p.join(dbDir, mapsImagesDirName));
-  }
-
-  /// Παλιός κατάλογος `[ApplicationSupport]/building_map_images/`.
-  static Future<String?> getLegacyAppSupportMapsRoot() async {
-    try {
-      final dir = await getApplicationSupportDirectory();
-      return p.normalize(p.join(dir.path, legacyAppSupportDirName));
-    } catch (_) {
-      return null;
+  static Future<String?> _firstExistingPath(List<String> candidates) async {
+    for (final c in candidates) {
+      if (c.isEmpty) continue;
+      if (await File(c).exists()) return c;
     }
+    return null;
   }
 
-  /// Επιλύει αποθηκευμένη διαδρομή (σχετική ή απόλυτη/παλιά) σε απόλυτη για I/O.
+  /// Επιλύει αποθηκευμένη διαδρομή (σχετική ή απόλυτη) σε απόλυτη για I/O.
   static Future<String> resolveToAbsolute(String stored) async {
     final trimmed = stored.trim();
     if (trimmed.isEmpty) return '';
 
-    final dbDir = await getDatabaseDirectory();
     final portableRoot = await getPortableMapsRoot();
+    final fileName = p.basename(trimmed.replaceAll('\\', '/'));
 
     if (p.isAbsolute(trimmed)) {
       final norm = p.normalize(trimmed);
-      if (await File(norm).exists()) return norm;
-
-      final byBase = p.join(portableRoot, p.basename(trimmed));
-      if (await File(byBase).exists()) return byBase;
-
-      final legacyRoot = await getLegacyAppSupportMapsRoot();
-      if (legacyRoot != null) {
-        final legacy = p.join(legacyRoot, p.basename(trimmed));
-        if (await File(legacy).exists()) return legacy;
-      }
-      return norm;
+      final candidate = p.join(portableRoot, fileName);
+      return await _firstExistingPath([candidate, norm]) ?? norm;
     }
 
     final rel = trimmed.replaceAll('\\', '/');
-    if (rel.startsWith('$mapsImagesDirName/') ||
-        rel == mapsImagesDirName) {
-      final underDb = p.normalize(p.join(dbDir, rel.replaceAll('/', p.separator)));
-      if (await File(underDb).exists()) return underDb;
+    if (rel.startsWith('$mapsImagesDirName/') || rel == mapsImagesDirName) {
       final onlyName = p.basename(rel);
-      final inPortable = p.join(portableRoot, onlyName);
-      if (await File(inPortable).exists()) return inPortable;
-      return underDb;
+      return p.join(portableRoot, onlyName);
     }
 
-    final inPortable = p.join(portableRoot, rel.replaceAll('/', p.separator));
-    if (await File(inPortable).exists()) return inPortable;
-    return p.normalize(p.join(dbDir, rel.replaceAll('/', p.separator)));
+    return p.join(portableRoot, rel.replaceAll('/', p.separator));
   }
 
   /// Αρχείο για αποθηκευμένη διαδρομή (μετά επίλυση).
@@ -93,23 +60,13 @@ class BuildingMapStorage {
     return File(abs);
   }
 
-  /// True αν το αρχείο δεν βρίσκεται ήδη στον portable/legacy κατάλογο της εφαρμογής.
+  /// True αν το αρχείο δεν βρίσκεται ήδη στον portable κατάλογο της εφαρμογής.
   static Future<bool> isOutsidePortableStorage(String srcPath) async {
     final norm = p.normalize(p.absolute(srcPath));
     if (!await File(norm).exists()) return true;
 
     final portableRoot = await getPortableMapsRoot();
     if (_isPathInsideDirectory(norm, portableRoot)) return false;
-
-    final legacyRoot = await getLegacyAppSupportMapsRoot();
-    if (legacyRoot != null && _isPathInsideDirectory(norm, legacyRoot)) {
-      return false;
-    }
-
-    final dbDir = await getDatabaseDirectory();
-    if (_isPathInsideDirectory(norm, dbDir)) {
-      return false;
-    }
 
     try {
       final exeDir = p.normalize(AppConfig.applicationExecutableDirectory);
@@ -130,41 +87,30 @@ class BuildingMapStorage {
   /// Μετατρέπει απόλυτη διαδρομή σε `maps_images/<όνομα>` για αποθήκευση στη βάση.
   static Future<String> toStoredRelativePath(String absolutePath) async {
     final norm = p.normalize(p.absolute(absolutePath));
-    final portableRoot = await getPortableMapsRoot();
-    if (_isPathInsideDirectory(norm, portableRoot)) {
-      return p.join(mapsImagesDirName, p.basename(norm)).replaceAll('\\', '/');
-    }
-    final dbDir = await getDatabaseDirectory();
-    if (_isPathInsideDirectory(norm, dbDir)) {
-      final rel = p.relative(norm, from: dbDir);
-      return rel.replaceAll('\\', '/');
-    }
-    return p.join(mapsImagesDirName, p.basename(norm)).replaceAll('\\', '/');
+    return p
+        .join(mapsImagesDirName, p.basename(norm))
+        .replaceAll('\\', '/');
   }
 
   /// Αντιγραφή επιλεγμένης εικόνας στον portable κατάλογο· επιστρέφει σχετική διαδρομή.
   ///
-  /// Το όνομα αρχείου προκύπτει από [floorLabel] (π.χ. `1st_floor.png`).
-  /// Αν υπάρχει ήδη αρχείο με το ίδιο όνομα, προστίθεται `yyyy-MM-dd_HH-mm-ss`.
+  /// Το [targetFileName] ορίζει το τελικό όνομα αρχείου (με κατάληξη).
   static Future<String> copyPickedImageToStorage(
     String srcPath, {
-    required String floorLabel,
+    required String targetFileName,
   }) async {
     final src = p.normalize(p.absolute(srcPath));
     final portableRoot = await getPortableMapsRoot();
     await Directory(portableRoot).create(recursive: true);
 
     if (!_isPathInsideDirectory(src, portableRoot)) {
-      final ext = p.extension(src).toLowerCase();
-      final safeExt = ext.isEmpty || ext == '.'
-          ? '.png'
-          : (ext == '.jpeg' ? '.jpg' : ext);
-      final fileName = await _allocateUniqueImageFileName(
-        portableRoot,
-        floorLabel,
-        safeExt,
-      );
+      final fileName = p.basename(targetFileName.replaceAll('\\', '/'));
       final destPath = p.join(portableRoot, fileName);
+      if (await File(destPath).exists()) {
+        throw BuildingMapStorageException(
+          'Υπάρχει ήδη αρχείο με το όνομα «$fileName» στο maps_images.',
+        );
+      }
       try {
         await File(src).copy(destPath);
       } catch (e) {
@@ -176,30 +122,13 @@ class BuildingMapStorage {
     return toStoredRelativePath(src);
   }
 
-  static Future<String> _allocateUniqueImageFileName(
-    String portableRoot,
-    String floorLabel,
-    String extension,
-  ) async {
-    final base = safeFloorImageBaseName(floorLabel);
-    var candidate = '$base$extension';
-    if (!await File(p.join(portableRoot, candidate)).exists()) {
-      return candidate;
-    }
-    final stamp = DateFormat('yyyy-MM-dd_HH-mm-ss').format(DateTime.now());
-    candidate = '${base}_$stamp$extension';
-    if (!await File(p.join(portableRoot, candidate)).exists()) {
-      return candidate;
-    }
-    final ms = DateTime.now().millisecondsSinceEpoch;
-    return '${base}_${stamp}_$ms$extension';
-  }
-
-  /// Εισαγωγή εικόνας: αν είναι εξωτερική χρειάζεται [userApprovedPortableCopy].
+  /// Εισαγωγή εικόνας: αν είναι εξωτερική χρειάζεται απάντηση στον διάλογο
+  /// ([userRespondedToPortablePrompt]) και επιλογή αντιγραφής ή εξωτερικής διαδρομής.
   static Future<BuildingMapImageIngestResult> ingestPickedImage(
     String srcPath, {
-    required String floorLabel,
-    required bool userApprovedPortableCopy,
+    required bool userRespondedToPortablePrompt,
+    required bool copyToPortable,
+    required String? targetFileName,
   }) async {
     final src = srcPath.trim();
     if (src.isEmpty) {
@@ -207,14 +136,30 @@ class BuildingMapStorage {
     }
 
     final outside = await isOutsidePortableStorage(src);
-    if (outside && !userApprovedPortableCopy) {
+    if (outside && !userRespondedToPortablePrompt) {
       return const BuildingMapImageIngestResult.needsPortableConfirmation();
     }
 
     try {
+      if (outside && !copyToPortable) {
+        final abs = p.normalize(p.absolute(src));
+        if (!await File(abs).exists()) {
+          return const BuildingMapImageIngestResult.failure(
+            'Το αρχείο εικόνας δεν βρέθηκε στην επιλεγμένη διαδρομή.',
+          );
+        }
+        return BuildingMapImageIngestResult.success(abs);
+      }
+
+      final name = targetFileName?.trim();
+      if (name == null || name.isEmpty) {
+        return const BuildingMapImageIngestResult.failure(
+          'Δεν ορίστηκε όνομα αρχείου για μεταφορά.',
+        );
+      }
       final stored = await copyPickedImageToStorage(
         src,
-        floorLabel: floorLabel,
+        targetFileName: name,
       );
       return BuildingMapImageIngestResult.success(stored);
     } catch (e) {
@@ -265,37 +210,6 @@ class BuildingMapStorage {
         if (!await File(candidate).exists()) continue;
 
         final rel = p.join(mapsImagesDirName, name).replaceAll('\\', '/');
-        await db.update(
-          'building_map_floors',
-          {'image_path': rel},
-          where: 'id = ?',
-          whereArgs: [id],
-        );
-        updated++;
-      }
-    } catch (_) {}
-    return updated;
-  }
-
-  /// Μία φορά: μετατροπή αποθηκευμένων απόλυτων διαδρομών σε σχετικές όπου το αρχείο υπάρχει.
-  static Future<int> migrateStoredPathsToPortableIfNeeded(Database db) async {
-    var updated = 0;
-    try {
-      final rows = await db.query('building_map_floors', columns: ['id', 'image_path']);
-      for (final row in rows) {
-        final id = row['id'] as int?;
-        final stored = (row['image_path'] as String?)?.trim() ?? '';
-        if (id == null || stored.isEmpty) continue;
-        if (!p.isAbsolute(stored) && stored.replaceAll('\\', '/').startsWith('$mapsImagesDirName/')) {
-          continue;
-        }
-
-        final abs = await resolveToAbsolute(stored);
-        if (abs.isEmpty || !await File(abs).exists()) continue;
-
-        final rel = await toStoredRelativePath(abs);
-        if (rel == stored) continue;
-
         await db.update(
           'building_map_floors',
           {'image_path': rel},

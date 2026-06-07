@@ -77,8 +77,8 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog> {
   /// Εργαλεία με ανοιχτό πεδίο επεξεργασίας (επιλεγμένο FilterChip).
   final Set<String> _expandedRemoteKeys = {};
   final Map<String, TextEditingController> _remoteParamControllers = {};
-  /// Μία φορά μετά φόρτωση καταλόγου: αφαίρεση διπλών slug (`vnc`/`anydesk`/`rdp`) όταν υπάρχει ήδη chip ανά id.
-  bool _didCollapseLegacyRemoteKeys = false;
+  /// Μία φορά μετά φόρτωση καταλόγου: αφαίρεση κλειδιών που δεν αντιστοιχούν σε ενεργό εργαλείο.
+  bool _didPruneUnknownRemoteKeys = false;
 
   bool get _isEdit => widget.initialEquipment != null && !widget.isClone;
 
@@ -86,7 +86,6 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog> {
     _remoteParamValues.clear();
     _expandedRemoteKeys.clear();
     if (e == null) return;
-    final stashOnlyKeys = <String>{};
     final nonStashEntries = <MapEntry<String, String>>[];
     final stashEntries = <MapEntry<String, String>>[];
     for (final entry in e.remoteParams.entries) {
@@ -109,120 +108,46 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog> {
       final k = entry.key;
       if (_expandedRemoteKeys.contains(k)) continue;
       _remoteParamValues[k] = entry.value;
-      stashOnlyKeys.add(k);
-    }
-    final ad = e.anydeskId?.trim();
-    if (ad != null && ad.isNotEmpty) {
-      final k = EquipmentRemoteParamKey.anydesk;
-      if (!_remoteParamValues.containsKey(k) ||
-          _remoteParamValues[k]!.trim().isEmpty) {
-        _remoteParamValues[k] = ad;
-      }
-      if (!stashOnlyKeys.contains(k)) {
-        _expandedRemoteKeys.add(k);
-      }
-    }
-    final ip = e.customIp?.trim();
-    if (ip != null && ip.isNotEmpty) {
-      final k = EquipmentRemoteParamKey.vnc;
-      if (!_remoteParamValues.containsKey(k) ||
-          _remoteParamValues[k]!.trim().isEmpty) {
-        _remoteParamValues[k] = ip;
-      }
-      if (!stashOnlyKeys.contains(k)) {
-        _expandedRemoteKeys.add(k);
-      }
     }
   }
 
-  bool _isVncLikeParamKey(String key, List<RemoteTool> catalog) {
-    if (key == EquipmentRemoteParamKey.vnc) return true;
+  RemoteTool? _toolForParamKey(String key, List<RemoteTool> catalog) {
     final id = int.tryParse(key);
-    if (id == null) return false;
+    if (id == null) return null;
     for (final t in catalog) {
-      if (t.id == id) {
-        return t.role == ToolRole.vnc;
-      }
+      if (t.id == id) return t;
     }
-    return false;
+    return null;
   }
 
-  bool _isAnydeskParamKey(String key, List<RemoteTool> catalog) {
-    if (key == EquipmentRemoteParamKey.anydesk) return true;
-    final id = int.tryParse(key);
-    if (id == null) return false;
-    for (final t in catalog) {
-      if (t.id == id) {
-        return t.role == ToolRole.anydesk;
-      }
-    }
-    return false;
-  }
+  bool _isVncLikeParamKey(String key, List<RemoteTool> catalog) =>
+      _toolForParamKey(key, catalog)?.role == ToolRole.vnc;
 
-  bool _isRdpParamKey(String key, List<RemoteTool> catalog) {
-    if (key == EquipmentRemoteParamKey.rdp) return true;
-    final id = int.tryParse(key);
-    if (id == null) return false;
-    for (final t in catalog) {
-      if (t.id == id) {
-        return t.role == ToolRole.rdp;
-      }
-    }
-    return false;
-  }
-
-  /// Αφαιρεί από το UI/κατάσταση τα legacy κλειδιά JSON όταν το ίδιο εργαλείο είναι ήδη ανοιχτό ως chip (κλειδί `tool.id`).
-  void _collapseRedundantLegacyRemoteParamKeys(
-    List<RemoteTool> catalog,
-    List<RemoteToolFormPair> pairs,
-  ) {
+  void _pruneUnknownRemoteParamKeys(List<RemoteTool> catalog) {
     for (final k in _expandedRemoteKeys.toList()) {
-      _syncRemoteValueFromController(k);
-    }
-    String? primaryIdKeyForRole(bool Function(String k) role) {
-      for (final p in pairs) {
-        final k = p.key;
-        if (!_expandedRemoteKeys.contains(k)) continue;
-        if (role(k)) return k;
+      if (_toolForParamKey(k, catalog) == null) {
+        _expandedRemoteKeys.remove(k);
+        _remoteParamValues.remove(k);
+        _disposeRemoteController(k);
       }
-      return null;
     }
-
-    void foldLegacy(String legacyKey, bool Function(String k) role) {
-      if (!_expandedRemoteKeys.contains(legacyKey)) return;
-      final primary = primaryIdKeyForRole(role);
-      if (primary == null) return;
-      _syncRemoteValueFromController(legacyKey);
-      final leg = (_remoteParamValues[legacyKey] ?? '').trim();
-      final pri = (_remoteParamValues[primary] ?? '').trim();
-      if (pri.isEmpty && leg.isNotEmpty) {
-        _remoteParamValues[primary] = _remoteParamValues[legacyKey] ?? '';
-        final pc = _remoteParamControllers[primary];
-        if (pc != null) {
-          pc.text = _remoteParamValues[primary] ?? '';
-        }
+    for (final k in _remoteParamValues.keys.toList()) {
+      if (EquipmentRemoteParamKey.isRemoteParamStashKey(k)) continue;
+      if (int.tryParse(k) == null) {
+        _remoteParamValues.remove(k);
+        _disposeRemoteController(k);
       }
-      _expandedRemoteKeys.remove(legacyKey);
-      _remoteParamValues.remove(legacyKey);
-      _disposeRemoteController(legacyKey);
     }
-
-    foldLegacy(EquipmentRemoteParamKey.vnc, (k) => _isVncLikeParamKey(k, catalog));
-    foldLegacy(
-      EquipmentRemoteParamKey.anydesk,
-      (k) => _isAnydeskParamKey(k, catalog),
-    );
-    foldLegacy(EquipmentRemoteParamKey.rdp, (k) => _isRdpParamKey(k, catalog));
   }
 
-  Future<void> _collapseLegacyRemoteParamsAfterCatalogLoad() async {
-    if (!mounted || _didCollapseLegacyRemoteKeys) return;
+  Future<void> _pruneRemoteParamsAfterCatalogLoad() async {
+    if (!mounted || _didPruneUnknownRemoteKeys) return;
     final pairs = await widget.ref.read(remoteToolFormPairsProvider.future);
     final catalog = await widget.ref.read(remoteToolsCatalogProvider.future);
-    if (!mounted || _didCollapseLegacyRemoteKeys) return;
-    _didCollapseLegacyRemoteKeys = true;
+    if (!mounted || _didPruneUnknownRemoteKeys) return;
+    _didPruneUnknownRemoteKeys = true;
     setState(() {
-      _collapseRedundantLegacyRemoteParamKeys(catalog, pairs);
+      _pruneUnknownRemoteParamKeys(catalog);
       _recomputeDefaultRemoteFromChips(pairs, catalog);
     });
   }
@@ -325,7 +250,7 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog> {
         RemoteToolsRepository.parseDefaultRemoteToolId(e?.defaultRemoteTool);
     if (e != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        _collapseLegacyRemoteParamsAfterCatalogLoad();
+        _pruneRemoteParamsAfterCatalogLoad();
       });
     }
   }
@@ -458,18 +383,6 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog> {
     final pairs = await widget.ref.read(remoteToolFormPairsProvider.future);
     final catalog = await widget.ref.read(remoteToolsCatalogProvider.future);
     final remoteParams = _remoteParamsForSave(pairs, catalog);
-    String? vncSaved;
-    String? anydeskSaved;
-    for (final e in remoteParams.entries) {
-      final v = e.value.trim();
-      if (v.isEmpty) continue;
-      if (_isVncLikeParamKey(e.key, catalog)) {
-        vncSaved ??= v;
-      }
-      if (_isAnydeskParamKey(e.key, catalog)) {
-        anydeskSaved ??= v;
-      }
-    }
     final equipment = EquipmentModel(
       id: _isEdit ? widget.initialEquipment?.id : null,
       code: code.isEmpty ? null : code,
@@ -477,10 +390,6 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog> {
       notes: _notesController.text.trim().isEmpty
           ? null
           : _notesController.text.trim(),
-      customIp: vncSaved != null && vncSaved.isNotEmpty ? vncSaved : null,
-      anydeskId: anydeskSaved != null && anydeskSaved.isNotEmpty
-          ? anydeskSaved
-          : null,
       remoteParams: remoteParams,
       defaultRemoteTool: RemoteToolsRepository.defaultRemoteToolIdToDbString(
         _defaultRemoteToolId,

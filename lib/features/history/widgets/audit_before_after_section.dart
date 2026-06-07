@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../audit/models/audit_log_model.dart';
+import '../../audit/models/audit_reference_labels.dart';
 import '../../audit/services/audit_formatter_service.dart';
 
 /// Αναδιπλούμενη ενότητα «Πριν / Μετά» από JSON τιμών audit.
@@ -9,10 +10,12 @@ class AuditBeforeAfterSection extends StatelessWidget {
     super.key,
     required this.entry,
     this.formatter = const AuditFormatterService(),
+    this.labels = AuditReferenceLabels.empty,
   });
 
   final AuditLogModel entry;
   final AuditFormatterService formatter;
+  final AuditReferenceLabels labels;
 
   @override
   Widget build(BuildContext context) {
@@ -22,8 +25,8 @@ class AuditBeforeAfterSection extends StatelessWidget {
     final theme = Theme.of(context);
     final hasOld = entry.hasOldJson;
     final hasNew = entry.hasNewJson;
-    final changes = formatter.describeChanges(entry);
-    final primary = formatter.primaryChangeLine(entry);
+    final changes = formatter.describeChanges(entry, labels: labels);
+    final primary = formatter.primaryChangeLine(entry, labels: labels);
     final extraChanges = primary == null
         ? changes
         : changes.where((c) => c != primary).toList();

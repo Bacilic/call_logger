@@ -164,25 +164,13 @@ class RemoteToolsRepository {
     return list.isEmpty ? null : list.first;
   }
 
-  /// Τιμή στόχου από `remote_params`: πρώτα κλειδί `toolId` ως string, μετά legacy κλειδί ρόλου.
+  /// Τιμή στόχου από `remote_params` — μόνο κλειδί `remote_tools.id` ως string.
   String? resolveParamValue({
     required Map<String, String> remoteParams,
     required RemoteTool tool,
   }) {
-    final idKey = tool.id.toString();
-    final v = remoteParams[idKey]?.trim();
+    final v = remoteParams[tool.id.toString()]?.trim();
     if (v != null && v.isNotEmpty) return v;
-    final roleKey = tool.role.dbValue;
-    final legacy = remoteParams[roleKey]?.trim();
-    if (legacy != null && legacy.isNotEmpty) return legacy;
-    if (tool.role == ToolRole.anydesk) {
-      final a = remoteParams['anydesk']?.trim();
-      if (a != null && a.isNotEmpty) return a;
-    }
-    if (tool.role == ToolRole.vnc) {
-      final vnc = remoteParams['vnc']?.trim();
-      if (vnc != null && vnc.isNotEmpty) return vnc;
-    }
     return null;
   }
 

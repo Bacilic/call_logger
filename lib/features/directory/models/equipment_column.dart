@@ -133,17 +133,17 @@ class EquipmentColumn {
     (row) => row.$1.notes ?? '–',
     (row) => row.$1.notes ?? '',
   );
-  static final customIp = EquipmentColumn(
-    'customIp',
-    'Προσαρμοσμένη IP',
-    (row) => row.$1.displayCustomIp ?? '–',
-    (row) => row.$1.displayCustomIp ?? '',
-  );
-  static final anydeskId = EquipmentColumn(
-    'anydeskId',
-    'AnyDesk ID',
-    (row) => row.$1.displayAnydeskId ?? '–',
-    (row) => row.$1.displayAnydeskId ?? '',
+  static final remoteParams = EquipmentColumn(
+    'remoteParams',
+    'Παράμετροι απομακρυσμένης',
+    (row) {
+      final p = row.$1.remoteParams;
+      if (p.isEmpty) return '–';
+      return p.entries.map((e) => '${e.key}: ${e.value}').join(' · ');
+    },
+    (row) => row.$1.remoteParams.entries
+        .map((e) => '${e.key}:${e.value}')
+        .join('|'),
   );
   static final defaultRemote = EquipmentColumn(
     'defaultRemote',
@@ -152,14 +152,13 @@ class EquipmentColumn {
     (row) => row.$1.defaultRemoteTool ?? '',
   );
 
-  /// Προεπιλεγμένες ορατές στήλες (επιλογή, id, κωδικός, τύπος, κάτοχος, IP).
+  /// Προεπιλεγμένες ορατές στήλες (επιλογή, id, κωδικός, τύπος, κάτοχος).
   static final List<EquipmentColumn> defaults = [
     selection,
     id,
     code,
     type,
     owner,
-    customIp,
   ];
 
   /// Όλες οι διαθέσιμες στήλες για το μενού επιλογής.
@@ -172,8 +171,7 @@ class EquipmentColumn {
     location,
     phone,
     notes,
-    customIp,
-    anydeskId,
+    remoteParams,
     defaultRemote,
   ];
 

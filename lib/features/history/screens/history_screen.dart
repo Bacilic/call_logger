@@ -211,6 +211,11 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
     final asyncCallCount = ref.watch(historyCategoryDateCallCountProvider);
     final asyncCategories = ref.watch(historyCategoriesProvider);
     final tableZoom = ref.watch(historyTableZoomProvider);
+    final filtersEnabled = asyncCalls.maybeWhen(
+      data: (rows) => rows.isNotEmpty,
+      orElse: () => false,
+    );
+    final databaseDisplayName = ref.watch(historyDatabaseDisplayNameProvider);
     final appAudit = ref.watch(historyApplicationAuditViewProvider);
     final immersive = ref.watch(historyAuditImmersiveProvider);
     final selectedCallIds = ref.watch(historySelectedCallIdsProvider);
@@ -259,13 +264,15 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
             ),
             IconButton(
               tooltip: 'Στατιστικά κλήσεων / Αναφορές',
-              onPressed: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute<void>(
-                    builder: (_) => const DashboardScreen(),
-                  ),
-                );
-              },
+              onPressed: filtersEnabled
+                  ? () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => const DashboardScreen(),
+                        ),
+                      );
+                    }
+                  : null,
               icon: const Icon(Icons.analytics_outlined),
             ),
             _auditToggleButton(
@@ -293,7 +300,8 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
                       final compact = constraints.maxWidth < 980;
                       final keywordField = TextField(
                         controller: _searchController,
-                        onChanged: _onSearchChanged,
+                        enabled: filtersEnabled,
+                        onChanged: filtersEnabled ? _onSearchChanged : null,
                         decoration: InputDecoration(
                           hintText: compact
                               ? 'Αναζήτηση ιστορικού'
@@ -308,13 +316,19 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
                               }
                               return IconButton(
                                 icon: const Icon(Icons.close),
-                                onPressed: () {
-                                  _debounceTimer?.cancel();
-                                  _searchController.clear();
-                                  ref
-                                      .read(historyFilterProvider.notifier)
-                                      .update((s) => s.copyWith(keyword: ''));
-                                },
+                                onPressed: filtersEnabled
+                                    ? () {
+                                        _debounceTimer?.cancel();
+                                        _searchController.clear();
+                                        ref
+                                            .read(
+                                              historyFilterProvider.notifier,
+                                            )
+                                            .update(
+                                              (s) => s.copyWith(keyword: ''),
+                                            );
+                                      }
+                                    : null,
                                 tooltip: 'Καθαρισμός αναζήτησης',
                               );
                             },
@@ -354,16 +368,18 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
                                 child: Text(c ?? '— Όλες —'),
                               );
                             }).toList(),
-                            onChanged: (v) {
-                              ref
-                                  .read(historyFilterProvider.notifier)
-                                  .update(
-                                    (s) => s.copyWith(
-                                      category: v,
-                                      clearCategory: v == null,
-                                    ),
-                                  );
-                            },
+                            onChanged: filtersEnabled
+                                ? (v) {
+                                    ref
+                                        .read(historyFilterProvider.notifier)
+                                        .update(
+                                          (s) => s.copyWith(
+                                            category: v,
+                                            clearCategory: v == null,
+                                          ),
+                                        );
+                                  }
+                                : null,
                           );
                         },
                         loading: () => const SizedBox(
@@ -379,7 +395,7 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
                         error: (_, _) => const SizedBox.shrink(),
                       );
                       final dateButton = IconButton.filled(
-                        onPressed: _pickDateRange,
+                        onPressed: filtersEnabled ? _pickDateRange : null,
                         tooltip: 'Εύρος ημερομηνιών',
                         icon: const Icon(Icons.date_range),
                       );
@@ -451,22 +467,29 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
                       IconButton(
                         tooltip: 'Σμίκρυνση',
                         icon: const Icon(Icons.zoom_out),
-                        onPressed: () => ref
-                            .read(historyTableZoomProvider.notifier)
-                            .zoomOut(),
+                        onPressed: filtersEnabled
+                            ? () => ref
+                                .read(historyTableZoomProvider.notifier)
+                                .zoomOut()
+                            : null,
                       ),
                       IconButton(
                         tooltip: 'Επαναφορά μεγέθους (100%)',
                         icon: const Icon(Icons.restart_alt),
-                        onPressed: () =>
-                            ref.read(historyTableZoomProvider.notifier).reset(),
+                        onPressed: filtersEnabled
+                            ? () => ref
+                                .read(historyTableZoomProvider.notifier)
+                                .reset()
+                            : null,
                       ),
                       IconButton(
                         tooltip: 'Μεγέθυνση',
                         icon: const Icon(Icons.zoom_in),
-                        onPressed: () => ref
-                            .read(historyTableZoomProvider.notifier)
-                            .zoomIn(),
+                        onPressed: filtersEnabled
+                            ? () => ref
+                                .read(historyTableZoomProvider.notifier)
+                                .zoomIn()
+                            : null,
                       ),
                       const SizedBox(width: 8),
                       Text(
@@ -493,11 +516,11 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
                         ActionChip(
                           avatar: const Icon(Icons.calendar_today, size: 18),
                           label: Text(dateRangeLabel),
-                          onPressed: _pickDateRange,
+                          onPressed: filtersEnabled ? _pickDateRange : null,
                         ),
                         ActionChip(
                           label: const Text('Καθαρισμός ημερομηνιών'),
-                          onPressed: _clearDateRange,
+                          onPressed: filtersEnabled ? _clearDateRange : null,
                         ),
                       ],
                     ),
@@ -531,14 +554,26 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
                         color: theme.colorScheme.error,
                       ),
                       const SizedBox(height: 16),
-                      Expanded(
-                        child: SingleChildScrollView(
-                          child: SelectableText(
-                            err.toString(),
-                            textAlign: TextAlign.center,
-                            style: theme.textTheme.bodyMedium?.copyWith(
-                              color: theme.colorScheme.error,
-                            ),
+                      databaseDisplayName.when(
+                        loading: () => Text(
+                          'Υπάρχει σφάλμα στη βάση δεδομένων: …',
+                          textAlign: TextAlign.center,
+                          style: theme.textTheme.bodyLarge?.copyWith(
+                            color: theme.colorScheme.error,
+                          ),
+                        ),
+                        error: (_, _) => Text(
+                          'Υπάρχει σφάλμα στη βάση δεδομένων: —',
+                          textAlign: TextAlign.center,
+                          style: theme.textTheme.bodyLarge?.copyWith(
+                            color: theme.colorScheme.error,
+                          ),
+                        ),
+                        data: (dbName) => Text(
+                          'Υπάρχει σφάλμα στη βάση δεδομένων: $dbName',
+                          textAlign: TextAlign.center,
+                          style: theme.textTheme.bodyLarge?.copyWith(
+                            color: theme.colorScheme.error,
                           ),
                         ),
                       ),
@@ -554,9 +589,12 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
               ),
               data: (rows) {
                 if (rows.isEmpty) {
+                  final emptyMessage = filter.hasActiveFilters
+                      ? 'Δεν βρέθηκαν κλήσεις με τα τρέχοντα κριτήρια.'
+                      : 'Δεν υπάρχουν εγγραφές';
                   return Center(
                     child: Text(
-                      'Δεν βρέθηκαν κλήσεις με τα τρέχοντα κριτήρια.',
+                      emptyMessage,
                       style: theme.textTheme.bodyLarge?.copyWith(
                         color: theme.colorScheme.onSurfaceVariant,
                       ),
@@ -1087,37 +1125,41 @@ class _HistoryDataTableState extends ConsumerState<_HistoryDataTable> {
             _dataCell(
               width: columnWidths[9],
               horizontalPadding: horizontalPadding,
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  IconButton(
-                    tooltip: 'Επεξεργασία',
-                    visualDensity: VisualDensity.compact,
-                    onPressed: callId == null
-                        ? null
-                        : () => showCallEditDialog(
-                            context,
-                            callId: callId,
-                          ),
-                    icon: const Icon(Icons.edit_outlined),
-                  ),
-                  IconButton(
-                    tooltip: 'Διαγραφή',
-                    visualDensity: VisualDensity.compact,
-                    onPressed: callId == null
-                        ? null
-                        : () => showCallDeleteDialog(
-                            context,
-                            callId: callId,
-                            callerId: row['caller_id'] as int?,
-                            equipmentCode: _str(row['equipment_code']),
-                          ),
-                    icon: Icon(
-                      Icons.delete_outline,
-                      color: theme.colorScheme.error,
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      tooltip: 'Επεξεργασία',
+                      visualDensity: VisualDensity.compact,
+                      onPressed: callId == null
+                          ? null
+                          : () => showCallEditDialog(
+                              context,
+                              callId: callId,
+                            ),
+                      icon: const Icon(Icons.edit_outlined),
                     ),
-                  ),
-                ],
+                    IconButton(
+                      tooltip: 'Διαγραφή',
+                      visualDensity: VisualDensity.compact,
+                      onPressed: callId == null
+                          ? null
+                          : () => showCallDeleteDialog(
+                              context,
+                              callId: callId,
+                              callerId: row['caller_id'] as int?,
+                              equipmentCode: _str(row['equipment_code']),
+                            ),
+                      icon: Icon(
+                        Icons.delete_outline,
+                        color: theme.colorScheme.error,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ],

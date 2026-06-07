@@ -2,21 +2,17 @@ import 'dart:convert';
 
 import '../../../core/models/remote_tool.dart';
 import '../../../core/models/remote_tool_role.dart';
-import '../utils/equipment_remote_param_key.dart';
 import '../utils/vnc_remote_target.dart';
 
 /// Μοντέλο εξοπλισμού (πίνακας equipment): id, code_equipment, type, notes,
-/// custom_ip, anydesk_id, remote_params (JSON), default_remote_tool (απομακρυσμένες συνδέσεις),
-/// department_id / location (κοινόχρηστα μηχανήματα χωρίς κάτοχο· fallback στο UI).
-/// Η αντιστοίχιση χρήστη–εξοπλισμού γίνεται στον πίνακα [user_equipment] (M2M).
+/// remote_params (JSON με κλειδιά `<remote_tools.id>`), default_remote_tool,
+/// department_id / location.
 class EquipmentModel {
   EquipmentModel({
     this.id,
     this.code,
     this.type,
     this.notes,
-    this.customIp,
-    this.anydeskId,
     Map<String, String> remoteParams = const {},
     this.defaultRemoteTool,
     this.departmentId,
@@ -31,13 +27,9 @@ class EquipmentModel {
   final String? code;
   final String? type;
   final String? notes;
-  /// Προσαρμοσμένη IP για VNC/απομακρυσμένη σύνδεση (legacy στήλη· συγχρονίζεται με [remoteParams][vnc]).
-  final String? customIp;
-  /// AnyDesk ID (legacy στήλη· συγχρονίζεται με [remoteParams][anydesk]).
-  final String? anydeskId;
-  /// Παράμετροι ανά εργαλείο (κλειδί → τιμή), αποθηκευμένα ως JSON στη στήλη `remote_params`.
+  /// Παράμετροι ανά εργαλείο (κλειδί = `remote_tools.id` ως string).
   final Map<String, String> remoteParams;
-  /// Προεπιλεγμένο εργαλείο απομακρυσμένης σύνδεσης (π.χ. VNC, AnyDesk).
+  /// Προεπιλεγμένο εργαλείο απομακρυσμένης σύνδεσης (`remote_tools.id`).
   final String? defaultRemoteTool;
   /// Τμήμα απευθείας στον εξοπλισμό (πίνακας `departments`)· όταν λείπει κάτοχος.
   final int? departmentId;
@@ -52,59 +44,37 @@ class EquipmentModel {
     return t.isEmpty ? c : (c.isEmpty ? t : '$c ($t)');
   }
 
-  /// AnyDesk ID: προτεραιότητα [remoteParams][anydesk], αλλιώς [anydeskId].
-  String? get displayAnydeskId {
-    final fromJson = remoteParams[EquipmentRemoteParamKey.anydesk]?.trim();
-    if (fromJson != null && fromJson.isNotEmpty) return fromJson;
-    final leg = anydeskId?.trim();
-    if (leg != null && leg.isNotEmpty) return leg;
+  String? paramForTool(RemoteTool tool) {
+    final v = remoteParams[tool.id.toString()]?.trim();
+    if (v != null && v.isNotEmpty) return v;
     return null;
   }
 
-  /// Στόχος VNC (host/IP): προτεραιότητα [remoteParams][vnc], αλλιώς [customIp].
-  String? get displayCustomIp {
-    final fromJson = remoteParams[EquipmentRemoteParamKey.vnc]?.trim();
-    if (fromJson != null && fromJson.isNotEmpty) {
-      final resolved = VncRemoteTarget.resolveValidVncHost(fromJson);
-      if (resolved != null) return resolved;
+  RemoteTool? _preferredToolForRole(List<RemoteTool> tools, ToolRole role) {
+    final prefId = int.tryParse(defaultRemoteTool?.trim() ?? '');
+    if (prefId != null) {
+      for (final t in tools) {
+        if (t.id == prefId && t.role == role) return t;
+      }
     }
-    final leg = customIp?.trim();
-    if (leg != null && leg.isNotEmpty) {
-      final resolved = VncRemoteTarget.resolveValidVncHost(leg);
-      if (resolved != null) return resolved;
+    for (final t in tools) {
+      if (t.role == role) return t;
     }
     return null;
   }
 
-  /// Στόχος για VNC: προσαρμοσμένη IP αν υπάρχει, αλλιώς απευθείας IPv4 στον κωδικό, αλλιώς 'PC{code}', αλλιώς 'Άγνωστο'.
-  /// Δεν διαβάζει κλειδιά numeric `remote_tools.id` — χρησιμοποιήστε [vncTargetResolved].
-  String get vncTarget {
-    final ip = displayCustomIp;
-    if (ip != null && ip.isNotEmpty) return ip;
-    final c = code?.trim();
-    if (c != null && c.isNotEmpty) {
-      final resolved = VncRemoteTarget.resolveValidVncHost(c);
-      if (resolved != null) return resolved;
-    }
-    return 'Άγνωστο';
-  }
-
-  /// VNC / `vnc_host`: dual-read τιμής· πρόθεμα ψηφιακού κωδικού σταθερό `PC` (το prefix του εργαλείου ζει στα arguments).
+  /// VNC / `vnc_host`: τιμή από `remote_params[<tool.id>]`· αλλιώς κωδικός + πρόθεμα `PC`.
   String vncLikeTargetResolved(RemoteTool? forTool) {
     const prefix = 'PC';
     if (forTool != null) {
-      final byId = remoteParams[forTool.id.toString()]?.trim();
-      if (byId != null && byId.isNotEmpty) {
+      final byId = paramForTool(forTool);
+      if (byId != null) {
         final resolved = VncRemoteTarget.resolveValidVncHost(
           byId,
           prefix: prefix,
         );
         if (resolved != null) return resolved;
       }
-    }
-    if (forTool == null || forTool.role == ToolRole.vnc) {
-      final legacy = displayCustomIp;
-      if (legacy != null && legacy.isNotEmpty) return legacy;
     }
     final c = code?.trim();
     if (c != null && c.isNotEmpty) {
@@ -114,80 +84,19 @@ class EquipmentModel {
     return 'Άγνωστο';
   }
 
-  /// VNC host με dual-read: `remote_params[vncTool.id]`, μετά legacy, μετά κωδικός + πρόθεμα από ορισμό εργαλείου VNC.
-  String vncTargetResolved(List<RemoteTool> tools) {
-    RemoteTool? vncTool;
-    final prefId = int.tryParse(defaultRemoteTool?.trim() ?? '');
-    if (prefId != null) {
-      for (final t in tools) {
-        if (t.id == prefId && t.role == ToolRole.vnc) {
-          vncTool = t;
-          break;
-        }
-      }
-    }
-    vncTool ??= () {
-      for (final t in tools) {
-        if (t.role == ToolRole.vnc) return t;
-      }
-      return null;
-    }();
-    return vncLikeTargetResolved(vncTool);
-  }
+  String vncTargetResolved(List<RemoteTool> tools) =>
+      vncLikeTargetResolved(_preferredToolForRole(tools, ToolRole.vnc));
 
-  /// Στόχος RDP (διακομιστής): `remote_params[rdp.id]` μετά legacy `rdp`.
   String? rdpHostResolved(List<RemoteTool> tools) {
-    RemoteTool? rdpTool;
-    final prefId = int.tryParse(defaultRemoteTool?.trim() ?? '');
-    if (prefId != null) {
-      for (final t in tools) {
-        if (t.id == prefId && t.role == ToolRole.rdp) {
-          rdpTool = t;
-          break;
-        }
-      }
-    }
-    rdpTool ??= () {
-      for (final t in tools) {
-        if (t.role == ToolRole.rdp) return t;
-      }
-      return null;
-    }();
-    if (rdpTool != null) {
-      final byId = remoteParams[rdpTool.id.toString()]?.trim();
-      if (byId != null && byId.isNotEmpty) return byId;
-    }
-    final leg = remoteParams[EquipmentRemoteParamKey.rdp]?.trim();
-    if (leg != null && leg.isNotEmpty) return leg;
-    return null;
+    final rdpTool = _preferredToolForRole(tools, ToolRole.rdp);
+    if (rdpTool == null) return null;
+    return paramForTool(rdpTool);
   }
 
-  /// Στόχος για AnyDesk: επιστρέφει το ID (null αν μη διαθέσιμο).
-  String? get anydeskTarget => displayAnydeskId;
-
-  /// AnyDesk ID με dual-read: `remote_params[anydeskTool.id]` μετά legacy στήλες/κλειδιά.
   String? anydeskIdResolved(List<RemoteTool> tools) {
-    RemoteTool? adTool;
-    final prefId = int.tryParse(defaultRemoteTool?.trim() ?? '');
-    if (prefId != null) {
-      for (final t in tools) {
-        if (t.id == prefId && t.role == ToolRole.anydesk) {
-          adTool = t;
-          break;
-        }
-      }
-    }
-    adTool ??= () {
-      for (final t in tools) {
-        if (t.role == ToolRole.anydesk) return t;
-      }
-      return null;
-    }();
-    if (adTool != null) {
-      final byId = remoteParams[adTool.id.toString()]?.trim();
-      if (byId != null && byId.isNotEmpty) return byId;
-    }
-    return displayAnydeskId;
+    final adTool = _preferredToolForRole(tools, ToolRole.anydesk);
+    if (adTool == null) return null;
+    return paramForTool(adTool);
   }
 
   static Map<String, String> _parseRemoteParamsColumn(Object? raw) {
@@ -217,8 +126,6 @@ class EquipmentModel {
       code: (map['code_equipment'] ?? map['code']) as String?,
       type: map['type'] as String?,
       notes: map['notes'] as String?,
-      customIp: map['custom_ip'] as String?,
-      anydeskId: map['anydesk_id'] as String?,
       remoteParams: Map<String, String>.unmodifiable(parsed),
       defaultRemoteTool: map['default_remote_tool'] as String?,
       departmentId: map['department_id'] as int?,
@@ -233,9 +140,6 @@ class EquipmentModel {
       if (code != null) 'code_equipment': code,
       if (type != null) 'type': type,
       if (notes != null) 'notes': notes,
-      // Πάντα ώστε το UPDATE να μπορεί να μηδενίζει τις στήλες όταν αφαιρείται ενεργός στόχος.
-      'custom_ip': customIp,
-      'anydesk_id': anydeskId,
       if (defaultRemoteTool != null) 'default_remote_tool': defaultRemoteTool,
       'department_id': departmentId,
       'location': location,
@@ -249,8 +153,6 @@ class EquipmentModel {
     String? code,
     String? type,
     String? notes,
-    String? customIp,
-    String? anydeskId,
     Map<String, String>? remoteParams,
     String? defaultRemoteTool,
     int? departmentId,
@@ -263,8 +165,6 @@ class EquipmentModel {
       code: code ?? this.code,
       type: type ?? this.type,
       notes: notes ?? this.notes,
-      customIp: customIp ?? this.customIp,
-      anydeskId: anydeskId ?? this.anydeskId,
       remoteParams: Map<String, String>.from(nextRemote),
       defaultRemoteTool: defaultRemoteTool ?? this.defaultRemoteTool,
       departmentId: departmentId ?? this.departmentId,

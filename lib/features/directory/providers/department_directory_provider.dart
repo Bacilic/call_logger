@@ -538,13 +538,7 @@ class DepartmentDirectoryNotifier extends Notifier<DepartmentDirectoryState> {
       await dirShared.updateEquipmentDepartment(code, departmentId);
     }
     for (final code in existingEq.difference(nextEq)) {
-      await dirShared.db.update(
-        'equipment',
-        {'department_id': null},
-        where:
-            'code_equipment = ? AND department_id = ? AND COALESCE(is_deleted, 0) = 0',
-        whereArgs: [code, departmentId],
-      );
+      await dirShared.clearEquipmentSharedDepartment(code, departmentId);
     }
 
     await _refreshLookupCache();

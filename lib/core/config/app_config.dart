@@ -191,7 +191,7 @@ class AppConfig {
   }
 
   /// Προεπιλεγμένη διαδρομή βάσης.
-  /// Παραγωγή: `..\Data Base\call_logger.db` δίπλα στο εκτελέσιμο.
+  /// Παραγωγή: `Data Base\call_logger.db` στον φάκελο του εκτελέσιμου.
   /// CLI προφίλ: `…/profiles/<profile>/call_logger.db` στο Application Support.
   static String get defaultDbPath {
     final profilePath = _profileDefaultDbPath;
@@ -201,30 +201,51 @@ class AppConfig {
     return _portableProductionDefaultDbPath;
   }
 
+  /// Ρίζα φορητών δεδομένων (ίδιος φάκελος με το εκτελέσιμο).
+  static String get portableDataRoot =>
+      path.normalize(applicationExecutableDirectory);
+
+  static const String portableDataBaseDirName = 'Data Base';
+  static const String portableMapsDirName = 'maps_images';
+  static const String portableImagesDirName = 'images';
+  static const String portableDictionariesDirName = 'dictionaries';
+
+  static String get portableDataBaseDirectory => path.normalize(
+    path.join(portableDataRoot, portableDataBaseDirName),
+  );
+
+  static String get portableMapsDirectory => path.normalize(
+    path.join(portableDataRoot, portableMapsDirName),
+  );
+
+  static String get portableImagesDirectory => path.normalize(
+    path.join(portableDataRoot, portableImagesDirName),
+  );
+
   static String get _portableProductionDefaultDbPath => path.normalize(
-    path.join(
-      applicationExecutableDirectory,
-      '..',
-      'Data Base',
-      'call_logger.db',
-    ),
+    path.join(portableDataBaseDirectory, 'call_logger.db'),
   );
 
   /// Τοπική διαδρομή για εργαλεία CLI (`dart run` από τη ρίζα του project).
   static String get localDevDbPath =>
-      path.join(Directory.current.path, 'Data Base', 'call_logger.db');
+      path.join(Directory.current.path, portableDataBaseDirName, 'call_logger.db');
 
   /// Πρόθεμα assets για προαιρετικά bundled λεξικά (.txt).
   static const String bundledDictionariesAssetPrefix = 'assets/dictionaries/';
 
-  /// Portable φάκελος λεξικού-πυρήνα (δίπλα στο εκτελέσιμο, όπως `Data Base`).
+  /// Portable φάκελος λεξικού-πυρήνα στη ρίζα εφαρμογής.
   static String get portableDictionariesDirectory => path.normalize(
-    path.join(
-      applicationExecutableDirectory,
-      '..',
-      'dictionaries',
-    ),
+    path.join(portableDataRoot, portableDictionariesDirName),
   );
+
+  /// Δημιουργεί φάκελο μόνο όταν κληθεί ρητά (όχι στην εκκίνηση).
+  static Future<Directory> ensureDirectoryExists(String dirPath) async {
+    final dir = Directory(path.normalize(dirPath));
+    if (!await dir.exists()) {
+      await dir.create(recursive: true);
+    }
+    return dir;
+  }
 
   /// Πίνακας SQLite προσωπικών λέξεων ορθογραφίας.
   static const String userDictionaryTable = 'user_dictionary';

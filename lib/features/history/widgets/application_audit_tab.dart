@@ -14,6 +14,7 @@ import '../../audit/constants/audit_ui_mappings.dart';
 import '../../audit/models/audit_filter_model.dart';
 import '../../audit/models/audit_log_model.dart';
 import '../../audit/models/audit_page_result.dart';
+import '../../audit/models/audit_reference_labels.dart';
 import '../../audit/providers/audit_providers.dart';
 import '../../audit/services/audit_formatter_service.dart';
 import 'audit_entity_side_panel.dart';
@@ -80,6 +81,7 @@ MainNavRequest? mainNavRequestForAuditEntry(AuditLogModel row) {
         directoryTabIndex: 2,
       );
     case AuditEntityTypes.maintenance:
+    case AuditEntityTypes.backup:
       return const MainNavRequest(
         destination: MainNavDestination.database,
       );
@@ -321,6 +323,11 @@ class _ApplicationAuditTabState extends ConsumerState<ApplicationAuditTab> {
     final pageIndex = ref.watch(auditPageIndexProvider);
     final panelOpen = ref.watch(auditSidePanelOpenProvider);
     final listAsync = ref.watch(auditListProvider);
+    final labelsAsync = ref.watch(auditPageReferenceLabelsProvider);
+    final referenceLabels = labelsAsync.maybeWhen(
+      data: (labels) => labels,
+      orElse: () => AuditReferenceLabels.empty,
+    );
     final actionOptionsAsync = ref.watch(auditActionOptionsProvider);
     final selectedId = ref.watch(selectedAuditEntryIdProvider);
     final actionOptions = actionOptionsAsync.maybeWhen(
@@ -705,7 +712,10 @@ class _ApplicationAuditTabState extends ConsumerState<ApplicationAuditTab> {
                             ),
                           ),
                           title: Text(
-                            formatter.summaryLine(row),
+                            formatter.summaryLine(
+                              row,
+                              labels: referenceLabels,
+                            ),
                             maxLines: 3,
                             overflow: TextOverflow.ellipsis,
                           ),
@@ -741,7 +751,10 @@ class _ApplicationAuditTabState extends ConsumerState<ApplicationAuditTab> {
                   selectedEntry != null &&
                   selectedId != null) ...[
                 const VerticalDivider(width: 1),
-                AuditEntitySidePanel(entry: selectedEntry),
+                AuditEntitySidePanel(
+                  entry: selectedEntry,
+                  labels: referenceLabels,
+                ),
               ],
             ],
           ),
@@ -764,6 +777,7 @@ class _ApplicationAuditTabState extends ConsumerState<ApplicationAuditTab> {
       AuditEntityTypes.bulkEquipment,
       AuditEntityTypes.importData,
       AuditEntityTypes.maintenance,
+      AuditEntityTypes.backup,
     ];
     const labels = <String, String>{
       AuditEntityTypes.user: 'Χρήστης',
@@ -778,6 +792,7 @@ class _ApplicationAuditTabState extends ConsumerState<ApplicationAuditTab> {
       AuditEntityTypes.bulkEquipment: 'Μαζική ενημέρωση εξοπλισμού',
       AuditEntityTypes.importData: 'Εισαγωγή δεδομένων',
       AuditEntityTypes.maintenance: 'Συντήρηση βάσης',
+      AuditEntityTypes.backup: 'Αντίγραφο ασφαλείας',
     };
     return types
         .map(

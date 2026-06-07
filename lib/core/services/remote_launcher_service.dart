@@ -6,16 +6,14 @@ import '../database/remote_tools_repository.dart';
 import '../models/remote_tool.dart';
 import '../models/remote_tool_role.dart';
 import 'remote_tools_paths_helper.dart';
-import 'settings_service.dart';
 
 /// Dummy διαδρομή για προεπισκόπηση/δοκιμή όταν το όρισμα περιέχει `{FILE}`.
 const String kPreviewRdpFilePath = r'C:\call_logger_preview.rdp';
 
 /// Εκκίνηση εργαλείων χωρίς παραμέτρους και δοκιμή ορισμάτων.
 class RemoteLauncherService {
-  RemoteLauncherService(this._settings, this._toolsRepo);
+  RemoteLauncherService(this._toolsRepo);
 
-  final SettingsService _settings;
   final RemoteToolsRepository _toolsRepo;
 
   /// Αντικατάσταση placeholders: `{EQUIPMENT_CODE}` → [equipmentCode], `{TARGET}` →
@@ -105,7 +103,6 @@ class RemoteLauncherService {
   Future<({String? path, String? errorReason})> getAnydeskStatus() async {
     final path = await rawExecutablePathForTool(
       repo: _toolsRepo,
-      settings: _settings,
       role: ToolRole.anydesk,
     );
     final trimmed = path.trim();
@@ -126,7 +123,6 @@ class RemoteLauncherService {
   Future<({String? path, String? errorReason})> getVncStatus() async {
     final path = await rawExecutablePathForTool(
       repo: _toolsRepo,
-      settings: _settings,
       role: ToolRole.vnc,
     );
     final trimmed = path.trim();
@@ -144,7 +140,6 @@ class RemoteLauncherService {
   ) async {
     final path = await rawExecutablePathForTool(
       repo: _toolsRepo,
-      settings: _settings,
       tool: tool,
       role: tool.role,
     );
@@ -163,7 +158,6 @@ class RemoteLauncherService {
   ) async {
     final path = await rawExecutablePathForTool(
       repo: _toolsRepo,
-      settings: _settings,
       role: role,
     );
     final trimmed = path.trim();

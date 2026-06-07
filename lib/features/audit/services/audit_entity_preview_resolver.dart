@@ -183,7 +183,7 @@ class AuditEntityPreviewResolver {
       title: code.isEmpty ? 'Εξοπλισμός #$id' : 'Εξοπλισμός $code',
       lines: [
         'Τύπος: ${r['type'] ?? '—'}',
-        'IP: ${r['custom_ip'] ?? '—'}',
+        'Παράμετροι: ${r['remote_params'] ?? '—'}',
         'Id: $id',
       ],
     );

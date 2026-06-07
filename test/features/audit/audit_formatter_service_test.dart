@@ -1,4 +1,5 @@
 import 'package:call_logger/features/audit/models/audit_log_model.dart';
+import 'package:call_logger/features/audit/models/audit_reference_labels.dart';
 import 'package:call_logger/features/audit/services/audit_formatter_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -104,5 +105,56 @@ void main() {
     );
     final lines = formatter.describeChanges(row);
     expect(lines.first, 'Σύνδεση σε χρήστη #12');
+  });
+
+  test('describeChanges department_id με department_text στο JSON', () {
+    final row = AuditLogModel(
+      id: 6,
+      action: 'ΤΡΟΠΟΠΟΙΗΣΗ ΕΞΟΠΛΙΣΜΟΥ',
+      entityType: 'equipment',
+      entityName: '2978',
+      oldValuesJson: '{"department_id":null}',
+      newValuesJson:
+          '{"department_id":46,"department_text":"Πληροφορική"}',
+    );
+    final s = formatter.summaryLine(row);
+    expect(s, contains('Πληροφορική'));
+    expect(s, isNot(contains('46')));
+  });
+
+  test('describeChanges department_id με resolved labels', () {
+    final row = AuditLogModel(
+      id: 7,
+      action: 'ΤΡΟΠΟΠΟΙΗΣΗ ΕΞΟΠΛΙΣΜΟΥ',
+      entityType: 'equipment',
+      entityName: '2978',
+      oldValuesJson: '{"department_id":null}',
+      newValuesJson: '{"department_id":46}',
+    );
+    const labels = AuditReferenceLabels(
+      departmentNames: {46: 'Γραμματεία'},
+    );
+    final s = formatter.summaryLine(row, labels: labels);
+    expect(s, contains('Γραμματεία'));
+    expect(s, isNot(contains('#46')));
+  });
+
+  test('describeChanges department_id technical mode κρατά id', () {
+    final row = AuditLogModel(
+      id: 8,
+      action: 'ΤΡΟΠΟΠΟΙΗΣΗ ΕΞΟΠΛΙΣΜΟΥ',
+      entityType: 'equipment',
+      entityName: '2978',
+      newValuesJson: '{"department_id":46}',
+    );
+    const labels = AuditReferenceLabels(
+      departmentNames: {46: 'Γραμματεία'},
+    );
+    final lines = formatter.describeChanges(
+      row,
+      technical: true,
+      labels: labels,
+    );
+    expect(lines.first, contains('#46'));
   });
 }

@@ -1,11 +1,11 @@
-﻿import 'dart:io';
-import 'dart:math' as math;
+﻿import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 
 import '../../../../core/models/remote_tool.dart';
+import '../../../../core/widgets/remote_tool_icon.dart';
 import '../../../../core/models/remote_tool_role.dart';
 import '../../../../core/services/remote_connection_service.dart';
 import '../../../../core/services/remote_launcher_service.dart';
@@ -115,7 +115,6 @@ class _RemoteConnectionButtonsState extends ConsumerState<RemoteConnectionButton
     final theme = Theme.of(context);
     final allCatalogAsync = ref.watch(remoteToolsAllCatalogProvider);
     final pathsAsync = ref.watch(validRemoteToolPathsByIdProvider);
-    final legacyPathsAsync = ref.watch(validRemotePathsProvider);
     final uiConfig = ref.watch(callsRemoteUiConfigProvider);
     final remoteService = ref.read(remoteConnectionServiceProvider);
     final launcherService = ref.read(remoteLauncherServiceProvider);
@@ -151,28 +150,12 @@ class _RemoteConnectionButtonsState extends ConsumerState<RemoteConnectionButton
             return uiConfig.when(
               data: (cfg) {
                 if (visible.isEmpty) {
-                  if (widget.tools.isEmpty) {
-                  return legacyPathsAsync.when(
-                    data: (legacyPaths) => _legacyLayout(
-                      context,
-                      theme,
-                      legacyPaths,
-                      cfg.showEmptyRemoteLaunchers,
-                      remoteService,
-                      launcherService,
-                      ref,
-                    ),
-                    loading: () => const Padding(
-                      padding: EdgeInsets.all(8),
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    ),
-                    error: (e, _) => Text('Διαδρομές: $e'),
-                  );
-                  }
                   return Padding(
                     padding: const EdgeInsets.symmetric(vertical: 8),
                     child: Text(
-                      'Δεν υπάρχουν εργαλεία απομακρυσμένης σύνδεσης για την τρέχουσα επιλογή.',
+                      widget.tools.isEmpty
+                          ? 'Δεν έχουν ρυθμιστεί ενεργά εργαλεία απομακρυσμένης επιφάνειας.'
+                          : 'Δεν υπάρχουν εργαλεία απομακρυσμένης σύνδεσης για την τρέχουσα επιλογή.',
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: theme.colorScheme.onSurfaceVariant,
                       ),
@@ -375,84 +358,6 @@ class _RemoteConnectionButtonsState extends ConsumerState<RemoteConnectionButton
     );
   }
 
-  Widget _legacyLayout(
-    BuildContext context,
-    ThemeData theme,
-    ({String? vncPath, String? anydeskPath, String? rdpPath}) legacyPaths,
-    bool showEmptyRemoteLaunchers,
-    RemoteConnectionService remoteService,
-    RemoteLauncherService launcherService,
-    WidgetRef ref,
-  ) {
-    const emptyTools = <RemoteTool>[];
-    final vncTarget =
-        CallRemoteTargets.resolvedVncTarget(widget.header, emptyTools);
-    final hasValidVnc = CallRemoteTargets.canConnectVnc(widget.header, emptyTools);
-    final hasValidAd =
-        CallRemoteTargets.canConnectAnyDesk(widget.header, emptyTools);
-
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Wrap(
-          spacing: 12,
-          runSpacing: 8,
-          crossAxisAlignment: WrapCrossAlignment.center,
-          children: [
-            _buildToolButton(
-              context: context,
-              theme: theme,
-              label: 'VNC',
-              icon: Icons.desktop_windows,
-              pathValid: legacyPaths.vncPath != null,
-              enabled:
-                  hasValidVnc && legacyPaths.vncPath != null && !_isConnecting,
-              subtitle: vncTarget,
-              onPressed: hasValidVnc && legacyPaths.vncPath != null && !_isConnecting
-                  ? () => _connectLegacyVnc(remoteService, vncTarget)
-                  : null,
-              tooltipDisabled: legacyPaths.vncPath == null
-                  ? 'Διαδρομή VNC δεν βρέθηκε.'
-                  : 'VNC: δεν υπάρχει έγκυρος στόχος.',
-            ),
-            _buildToolButton(
-              context: context,
-              theme: theme,
-              label: 'AnyDesk',
-              icon: Icons.screen_share,
-              pathValid: legacyPaths.anydeskPath != null,
-              enabled: hasValidAd &&
-                  legacyPaths.anydeskPath != null &&
-                  !_isConnecting,
-              subtitle: CallRemoteTargets.anydeskTargetDisplay(
-                widget.header,
-                emptyTools,
-              ),
-              onPressed: hasValidAd &&
-                      legacyPaths.anydeskPath != null &&
-                      !_isConnecting
-                  ? () => _connectLegacyAnydesk(remoteService)
-                  : null,
-              tooltipDisabled: 'AnyDesk…',
-            ),
-            if (showEmptyRemoteLaunchers) ...[
-              ref.watch(remoteLauncherStatusProvider).when(
-                    data: (status) => _buildLegacyLaunchers(
-                      theme,
-                      status,
-                      launcherService,
-                    ),
-                    loading: () => const SizedBox.shrink(),
-                    error: (_, _) => const SizedBox.shrink(),
-                  ),
-            ],
-          ],
-        ),
-      ],
-    );
-  }
-
   /// Εικονίδιο κουμπιού εργαλείου: προτεραιότητα [RemoteTool.iconAssetKey], αλλιώς ρόλος.
   Widget _toolButtonIcon({
     required RemoteTool? tool,
@@ -461,33 +366,10 @@ class _RemoteConnectionButtonsState extends ConsumerState<RemoteConnectionButton
     if (tool == null) {
       return Icon(fallbackIcon, size: 18);
     }
-    final raw = tool.iconAssetKey?.trim() ?? '';
-    if (raw.isEmpty) {
-      return Icon(fallbackIcon, size: 18);
-    }
-    Widget fallback() => Icon(fallbackIcon, size: 18);
-    if (raw.startsWith('assets/')) {
-      return Image.asset(
-        raw,
-        width: 18,
-        height: 18,
-        errorBuilder: (context, error, stackTrace) => fallback(),
-      );
-    }
-    final f = File(raw);
-    if (f.existsSync()) {
-      return Image.file(
-        f,
-        width: 18,
-        height: 18,
-        errorBuilder: (context, error, stackTrace) => fallback(),
-      );
-    }
-    return Image.asset(
-      raw,
-      width: 18,
-      height: 18,
-      errorBuilder: (context, error, stackTrace) => fallback(),
+    return RemoteToolIcon(
+      iconAssetKey: tool.iconAssetKey,
+      size: 18,
+      fallback: fallbackIcon,
     );
   }
 
@@ -619,46 +501,6 @@ class _RemoteConnectionButtonsState extends ConsumerState<RemoteConnectionButton
     );
   }
 
-  Widget _buildLegacyLaunchers(
-    ThemeData theme,
-    ({
-      ({String? path, String? errorReason}) anydesk,
-      ({String? path, String? errorReason}) vnc,
-    }) status,
-    RemoteLauncherService launcherService,
-  ) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Tooltip(
-          message: status.anydesk.path != null
-              ? 'Άνοιγμα AnyDesk χωρίς παραμέτρους'
-              : (status.anydesk.errorReason ?? ''),
-          child: _buildLauncherIconButton(
-            theme: theme,
-            enabled: status.anydesk.path != null,
-            onPressed: () => _launchEmpty(launcherService, ToolRole.anydesk),
-            assetPath: 'assets/anydesk_seeklogo.png',
-            fallbackIcon: Icons.screen_share,
-          ),
-        ),
-        const SizedBox(width: 4),
-        Tooltip(
-          message: status.vnc.path != null
-              ? 'Άνοιγμα VNC Viewer χωρίς παραμέτρους'
-              : (status.vnc.errorReason ?? ''),
-          child: _buildLauncherIconButton(
-            theme: theme,
-            enabled: status.vnc.path != null,
-            onPressed: () => _launchEmpty(launcherService, ToolRole.vnc),
-            assetPath: 'assets/vnc_viewer.png',
-            fallbackIcon: Icons.desktop_windows,
-          ),
-        ),
-      ],
-    );
-  }
-
   Widget _buildLauncherIconButton({
     required ThemeData theme,
     required bool enabled,
@@ -744,52 +586,6 @@ class _RemoteConnectionButtonsState extends ConsumerState<RemoteConnectionButton
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Αποτυχία εκκίνησης: $e')),
       );
-    }
-  }
-
-  Future<void> _connectLegacyVnc(
-    RemoteConnectionService remoteService,
-    String target,
-  ) async {
-    setState(() => _isConnecting = true);
-    try {
-      await remoteService.launchVnc(target);
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('$e')),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _isConnecting = false);
-    }
-  }
-
-  Future<void> _connectLegacyAnydesk(RemoteConnectionService remoteService) async {
-    final targetId = CallRemoteTargets.resolvedAnyDeskTarget(
-          widget.header,
-          widget.tools,
-        ) ??
-        '';
-    setState(() => _isConnecting = true);
-    try {
-      if (targetId.isEmpty) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Δεν υπάρχει έγκυρος στόχος AnyDesk.')),
-          );
-        }
-        return;
-      }
-      await remoteService.launchAnydesk(targetId);
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('$e')),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _isConnecting = false);
     }
   }
 

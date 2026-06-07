@@ -13,6 +13,8 @@ enum LampOldDbStatus {
   pathEmpty,
   /// Η διαδρομή ανάγνωσης ταυτίζεται με εξόδου· το .db θα δημιουργηθεί από Excel.
   pendingCreation,
+  /// Διαδρομή χωρίς κατάληξη .db ή άλλο σφάλμα μορφής (π.χ. επικόλληση φακέλου).
+  invalidPathFormat,
   fileMissing,
   notAFile,
   emptyFile,
@@ -42,6 +44,9 @@ class LampOldDbCheckResult {
         return 'Δεν έχει οριστεί διαδρομή βάσης προς ανάγνωση.';
       case LampOldDbStatus.pendingCreation:
         return _pendingCreationMessageGreek();
+      case LampOldDbStatus.invalidPathFormat:
+        return technicalDetail ??
+            'Η διαδρομή πρέπει να δείχνει σε αρχείο με κατάληξη .db';
       case LampOldDbStatus.fileMissing:
         return 'Το αρχείο βάσης δεν βρέθηκε στη δίσκο. Ελέγξτε τη διαδρομή (δίκτυο, αφαιρούμενο δίσκο).';
       case LampOldDbStatus.notAFile:
@@ -83,6 +88,26 @@ class LampOldDbValidator {
 
   static const String _equipmentTable = 'equipment';
 
+  /// Έλεγχος μορφής διαδρομής .db (επικόλληση / χειροκίνητη εισαγωγή).
+  /// Επιστρέφει `null` όταν η διαδρομή είναι κενή ή έγκυρη.
+  static String? validateDbPathFormat(String? raw) {
+    final trimmed = raw?.trim() ?? '';
+    if (trimmed.isEmpty) {
+      return null;
+    }
+    final name = path.basename(trimmed);
+    if (name.isEmpty) {
+      return 'Η διαδρομή πρέπει να περιέχει όνομα αρχείου.';
+    }
+    if (!name.toLowerCase().endsWith('.db')) {
+      return 'Η διαδρομή πρέπει να δείχνει σε αρχείο με κατάληξη .db';
+    }
+    if (name.contains(RegExp(r'[/\\]'))) {
+      return 'Το όνομα αρχείου δεν πρέπει να περιέχει διαχωριστικά διαδρομής.';
+    }
+    return null;
+  }
+
   static bool pathsReferToSameFile(String? a, String? b) {
     final ta = a?.trim() ?? '';
     final tb = b?.trim() ?? '';
@@ -108,6 +133,14 @@ class LampOldDbValidator {
     final dbPath = rawPath?.trim() ?? '';
     if (dbPath.isEmpty) {
       return const LampOldDbCheckResult(LampOldDbStatus.pathEmpty);
+    }
+
+    final formatError = validateDbPathFormat(dbPath);
+    if (formatError != null) {
+      return LampOldDbCheckResult(
+        LampOldDbStatus.invalidPathFormat,
+        technicalDetail: formatError,
+      );
     }
 
     final file = File(dbPath);

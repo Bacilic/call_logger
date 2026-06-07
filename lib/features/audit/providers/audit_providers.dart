@@ -6,8 +6,10 @@ import '../../../core/utils/search_text_normalizer.dart';
 import '../models/audit_filter_model.dart';
 import '../models/audit_log_model.dart';
 import '../models/audit_page_result.dart';
+import '../models/audit_reference_labels.dart';
 import '../services/audit_entity_preview_resolver.dart';
 import '../services/audit_formatter_service.dart';
+import '../services/audit_reference_label_resolver.dart';
 
 final auditFormatterServiceProvider = Provider<AuditFormatterService>(
   (ref) => const AuditFormatterService(),
@@ -65,6 +67,14 @@ final auditListProvider =
       result.rows.map((m) => AuditLogModel.fromMap(m)).toList();
   return AuditPageResult(items: items, totalCount: result.total);
 });
+
+/// Επελυμένα ονόματα τμημάτων για φιλική εμφάνιση της τρέχουσας σελίδας audit.
+final auditPageReferenceLabelsProvider =
+    FutureProvider.autoDispose<AuditReferenceLabels>((ref) async {
+      final page = await ref.watch(auditListProvider.future);
+      final db = await DatabaseHelper.instance.database;
+      return AuditReferenceLabelResolver(db).resolveForRows(page.items);
+    });
 
 /// Διαθέσιμες ενέργειες για dropdown φίλτρου, βάσει τρέχοντος τύπου οντότητας.
 final auditActionOptionsProvider = FutureProvider.autoDispose<List<String>>((

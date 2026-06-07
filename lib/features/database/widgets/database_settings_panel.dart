@@ -8,6 +8,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 
 import '../../../core/config/app_config.dart';
+import '../../../core/utils/file_picker_initial_directory.dart';
+import '../../../core/utils/file_picker_session.dart';
+import '../../../core/providers/core_lexicon_provider.dart';
 import '../../../core/database/database_helper.dart';
 import '../../../core/database/database_init_runner.dart';
 import '../../../core/database/database_path_pick_flow.dart';
@@ -15,12 +18,17 @@ import '../../../core/init/app_init_provider.dart';
 import '../../../core/services/settings_service.dart';
 import '../../settings/widgets/create_new_database_dialog.dart';
 import '../models/database_backup_settings.dart';
+import '../providers/backup_scheduler_provider.dart';
 import '../providers/database_backup_settings_provider.dart';
+import '../services/database_backup_audit.dart';
 import '../services/database_backup_service.dart';
+import 'backup_folder_missing_dialog.dart';
 import '../utils/backup_destination_folder_validator.dart';
 import '../utils/backup_destination_location_warnings.dart';
 import '../utils/backup_location_hints.dart';
+import '../utils/backup_schedule_status.dart';
 import '../utils/backup_schedule_utils.dart';
+import '../utils/portable_backup_availability.dart';
 
 String _weekdayChipLabel(int weekday) {
   const labels = ['Δε', 'Τρ', 'Τε', 'Πε', 'Πα', 'Σα', 'Κυ'];
@@ -55,6 +63,12 @@ class _DatabaseSettingsPanelState extends ConsumerState<DatabaseSettingsPanel> {
       _backupDestinationWarningContextFuture = Future.value(
     (dbPath: '', eligibleWindowsVolumeCount: 0),
   );
+  Future<BackupDestinationContentResult> _destinationContentFuture =
+      Future.value(
+    const BackupDestinationContentResult(
+      kind: BackupDestinationContentKind.folderMissing,
+    ),
+  );
 
   String _currentDbPath = '';
   List<String> _recentDbPaths = [];
@@ -68,6 +82,7 @@ class _DatabaseSettingsPanelState extends ConsumerState<DatabaseSettingsPanel> {
   final FocusNode _maxAgeFocus = FocusNode();
   String? _destinationFolderError;
   int _destinationValidationGen = 0;
+  Timer? _scheduleStatusRefreshTimer;
 
   @override
   void initState() {
@@ -89,12 +104,47 @@ class _DatabaseSettingsPanelState extends ConsumerState<DatabaseSettingsPanel> {
       );
     });
     unawaited(_loadDatabasePathSection());
+    _scheduleStatusRefreshTimer = Timer.periodic(
+      const Duration(seconds: 30),
+      (_) {
+        if (!mounted) return;
+        _reloadDestinationContentFuture();
+        setState(() {});
+      },
+    );
   }
 
   void _reloadLocationAndWarningFutures() {
     _locationCaptionSegmentsFuture = _loadLocationCaptionSegments();
     _backupDestinationWarningContextFuture =
         _loadBackupDestinationWarningContext();
+    _reloadDestinationContentFuture();
+  }
+
+  void _reloadDestinationContentFuture() {
+    _destinationContentFuture = _loadDestinationContent();
+  }
+
+  Future<BackupDestinationContentResult> _loadDestinationContent() async {
+    final dest =
+        ref.read(databaseBackupSettingsProvider).destinationDirectory.trim();
+    if (dest.isEmpty) {
+      return const BackupDestinationContentResult(
+        kind: BackupDestinationContentKind.folderMissing,
+      );
+    }
+    try {
+      final db = await DatabaseHelper.instance.database;
+      final baseName = p.basenameWithoutExtension(db.path);
+      return BackupDestinationFolderValidator.inspectDestinationContent(
+        destinationDirectory: dest,
+        dbBaseName: baseName,
+      );
+    } catch (_) {
+      return const BackupDestinationContentResult(
+        kind: BackupDestinationContentKind.folderMissing,
+      );
+    }
   }
 
   Future<void> _loadDatabasePathSection() async {
@@ -146,6 +196,7 @@ class _DatabaseSettingsPanelState extends ConsumerState<DatabaseSettingsPanel> {
     });
 
     final picked = await pickDatabasePathWithSystemPicker();
+    if (FilePickerSession.takeLastRefocusedExisting()) return;
     if (picked != null && picked.isNotEmpty) {
       await _validateApplyAndFinishPick(picked);
     } else {
@@ -573,6 +624,7 @@ class _DatabaseSettingsPanelState extends ConsumerState<DatabaseSettingsPanel> {
 
   @override
   void dispose() {
+    _scheduleStatusRefreshTimer?.cancel();
     _destinationFocus.removeListener(_onDestinationFocusChanged);
     _destinationController.removeListener(_onDestinationTextChanged);
     _destinationFocus.dispose();
@@ -625,16 +677,74 @@ class _DatabaseSettingsPanelState extends ConsumerState<DatabaseSettingsPanel> {
     });
   }
 
+  Future<bool> _confirmCreateBackupDestinationFolder(String folderPath) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Δημιουργία φακέλου'),
+        content: Text(
+          'Ο φάκελος δεν υπάρχει:\n\n$folderPath\n\n'
+          'Θέλετε να δημιουργηθεί;',
+          style: Theme.of(ctx).textTheme.bodyMedium,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Άκυρο'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Δημιουργία'),
+          ),
+        ],
+      ),
+    );
+    return confirmed == true;
+  }
+
+  Future<bool> _createBackupDestinationFolderIfConfirmed(
+    String folderPath,
+  ) async {
+    if (!await _confirmCreateBackupDestinationFolder(folderPath)) {
+      return false;
+    }
+    try {
+      await Directory(folderPath).create(recursive: true);
+      return true;
+    } catch (e) {
+      if (!mounted) return false;
+      setState(() {
+        _destinationFolderError =
+            'Δεν ήταν δυνατή η δημιουργία του φακέλου: $e';
+      });
+      return false;
+    }
+  }
+
   Future<void> _validateAndPersistDestination() async {
     final gen = ++_destinationValidationGen;
     final raw = _destinationController.text;
-    final result = await BackupDestinationFolderValidator.validate(raw);
+    var result = await BackupDestinationFolderValidator.validate(raw);
     if (!mounted || gen != _destinationValidationGen) return;
+
+    if (result.kind == BackupDestinationValidationKind.missingDirectory) {
+      final trimmed = raw.trim();
+      final created = await _createBackupDestinationFolderIfConfirmed(trimmed);
+      if (!mounted || gen != _destinationValidationGen) return;
+      if (!created) {
+        setState(() => _destinationFolderError = result.errorMessage);
+        return;
+      }
+      result = await BackupDestinationFolderValidator.validate(raw);
+      if (!mounted || gen != _destinationValidationGen) return;
+    }
+
     if (result.kind == BackupDestinationValidationKind.ok) {
       setState(() => _destinationFolderError = null);
       await ref.read(databaseBackupSettingsProvider.notifier).setDestinationDirectory(
             raw.trim(),
           );
+      _reloadDestinationContentFuture();
     } else {
       setState(() => _destinationFolderError = result.errorMessage);
     }
@@ -689,19 +799,166 @@ class _DatabaseSettingsPanelState extends ConsumerState<DatabaseSettingsPanel> {
   }
 
   Future<void> _pickFolder() async {
-    final path = await FilePicker.getDirectoryPath();
+    final initialDirectory = initialDirectoryForFilePicker(
+      _destinationController.text,
+    );
+    final session = await FilePickerSession.run(
+      () => FilePicker.getDirectoryPath(
+        dialogTitle: 'Φάκελος προορισμού αντιγράφων ασφαλείας',
+        initialDirectory: initialDirectory,
+      ),
+    );
+    if (session.refocusedExisting) return;
+    final path = session.value;
     if (path == null || !mounted) return;
     setState(() => _destinationFolderError = null);
     _destinationController.text = path;
     await _validateAndPersistDestination();
   }
 
+  Widget _buildBackupScheduleStatusSection(
+    ThemeData theme,
+    DatabaseBackupSettings settings,
+  ) {
+    ref.watch(backupSchedulerProvider);
+    final jobRunning =
+        ref.read(backupSchedulerProvider.notifier).isBackupJobRunning;
+    final status = BackupScheduleStatusFormatter.build(
+      settings: settings,
+      backupJobRunning: jobRunning,
+    );
+
+    Color? severityColor({required bool warning, required bool caution}) {
+      if (warning) return theme.colorScheme.error;
+      if (caution) return theme.colorScheme.tertiary;
+      return theme.colorScheme.onSurfaceVariant;
+    }
+
+    Widget line(
+      String text, {
+      bool warning = false,
+      bool caution = false,
+      bool emphasize = false,
+    }) {
+      return Padding(
+        padding: const EdgeInsets.only(top: 4),
+        child: Text(
+          text,
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: severityColor(warning: warning, caution: caution),
+            fontWeight: emphasize ? FontWeight.w600 : null,
+          ),
+        ),
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 4, bottom: 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (status.nextBackupText != null)
+            line(
+              status.nextBackupText!,
+              emphasize: status.nextIsImminent,
+            ),
+          if (status.lastBackupText != null)
+            ...status.lastBackupText!
+                .split('\n')
+                .map((row) => line(row)),
+          FutureBuilder<BackupDestinationContentResult>(
+            future: _destinationContentFuture,
+            builder: (context, snapshot) {
+              if (!snapshot.hasData) {
+                return line('Έλεγχος φακέλου…');
+              }
+              final content = snapshot.data!;
+              final label =
+                  BackupScheduleStatusFormatter.destinationContentLabelEl(
+                content,
+              );
+              return line(
+                label,
+                warning: content.kind ==
+                    BackupDestinationContentKind.folderMissing,
+                caution: content.kind ==
+                    BackupDestinationContentKind.folderEmptyNoFiles,
+              );
+            },
+          ),
+          if (status.hintText != null)
+            line(status.hintText!, warning: status.hintIsWarning),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDestinationFolderMissingBanner(ThemeData theme) {
+    return FutureBuilder<BackupDestinationContentResult>(
+      future: _destinationContentFuture,
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) return const SizedBox.shrink();
+        if (snapshot.data!.kind != BackupDestinationContentKind.folderMissing) {
+          return const SizedBox.shrink();
+        }
+        final dest = ref.read(databaseBackupSettingsProvider).destinationDirectory;
+        return Padding(
+          padding: const EdgeInsets.only(top: 8, bottom: 4),
+          child: Material(
+            color: theme.colorScheme.errorContainer.withValues(alpha: 0.45),
+            borderRadius: BorderRadius.circular(8),
+            child: Padding(
+              padding: const EdgeInsets.all(10),
+              child: Text(
+                'Ο φάκελος προορισμού δεν βρέθηκε:\n$dest\n'
+                'Πιθανή αιτία: αποσυνδεδεμένος δίσκος ή διαγραφή. '
+                'Τα αρχεία αντιγράφου στον δίσκο μπορεί να μην είναι διαθέσιμα.',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onErrorContainer,
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   Future<void> _runBackupNow() async {
     final settings = ref.read(databaseBackupSettingsProvider);
+    final dest = settings.destinationDirectory.trim();
+    if (dest.isNotEmpty) {
+      final content = await _loadDestinationContent();
+      if (!mounted) return;
+      if (content.kind == BackupDestinationContentKind.folderMissing) {
+        await showBackupFolderMissingDialog(
+          context: context,
+          ref: ref,
+          folderPath: dest,
+          auditTrigger: BackupAuditTrigger.manual,
+          dismissSetsStatusNone: false,
+        );
+        if (mounted) _reloadDestinationContentFuture();
+        return;
+      }
+    }
+
     final messenger = ScaffoldMessenger.of(context);
-    final result = await DatabaseBackupService.runBackup(settings);
+    final result = await DatabaseBackupService.runBackup(
+      settings,
+      auditTrigger: BackupAuditTrigger.manual,
+    );
     if (!mounted) return;
     if (result.success) {
+      final notifier = ref.read(databaseBackupSettingsProvider.notifier);
+      await notifier.setLastManualBackupAttempt(DateTime.now());
+      final current = ref.read(databaseBackupSettingsProvider);
+      if (current.lastBackupStatus == BackupScheduleStatus.missed ||
+          current.lastBackupStatus == BackupScheduleStatus.folderMissing) {
+        await notifier.setLastBackupAttempt(null);
+        await notifier.setLastBackupStatus(BackupScheduleStatus.none);
+      }
+      _reloadDestinationContentFuture();
       messenger.showSnackBar(
         SnackBar(
           content: Text(
@@ -712,6 +969,18 @@ class _DatabaseSettingsPanelState extends ConsumerState<DatabaseSettingsPanel> {
         ),
       );
     } else {
+      if (result.failureCode == DatabaseBackupFailureCode.folderMissing &&
+          dest.isNotEmpty) {
+        await showBackupFolderMissingDialog(
+          context: context,
+          ref: ref,
+          folderPath: dest,
+          auditTrigger: BackupAuditTrigger.manual,
+          dismissSetsStatusNone: false,
+        );
+        if (mounted) _reloadDestinationContentFuture();
+        return;
+      }
       messenger.showSnackBar(
         SnackBar(
           content: Text(result.message ?? 'Αποτυχία αντιγράφου'),
@@ -722,11 +991,22 @@ class _DatabaseSettingsPanelState extends ConsumerState<DatabaseSettingsPanel> {
   }
 
   Future<void> _restoreFromBackupZip() async {
-    final picked = await FilePicker.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: ['zip'],
-      dialogTitle: 'Επιλογή αρχείου επαναφοράς (.zip)',
+    final backupFolder = _destinationController.text.trim().isNotEmpty
+        ? _destinationController.text.trim()
+        : ref.read(databaseBackupSettingsProvider).destinationDirectory.trim();
+    final initialDirectory = initialDirectoryForFilePicker(
+      backupFolder.isNotEmpty ? backupFolder : null,
     );
+    final session = await FilePickerSession.run(
+      () => FilePicker.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['zip'],
+        dialogTitle: 'Επιλογή αρχείου επαναφοράς (.zip)',
+        initialDirectory: initialDirectory,
+      ),
+    );
+    if (session.refocusedExisting) return;
+    final picked = session.value;
     if (picked == null ||
         picked.files.isEmpty ||
         picked.files.single.path == null) {
@@ -745,8 +1025,10 @@ class _DatabaseSettingsPanelState extends ConsumerState<DatabaseSettingsPanel> {
         title: const Text('Επαναφορά από zip'),
         content: Text(
           'Η βάση θα αντικατασταθεί στο:\n$defaultTarget\n\n'
-          'Οι εικόνες χαρτών (maps_images) θα τοποθετηθούν στον ίδιο φάκελο '
-          'δίπλα στη βάση. Συνέχεια;',
+          'Οι εικόνες χαρτών (${AppConfig.portableMapsDirName}), εικονίδια '
+          '(${AppConfig.portableImagesDirName}), λεξικό (${AppConfig.portableDictionariesDirName}) '
+          'και βάση Λάμπας (${AppConfig.portableDataBaseDirName}) θα επαναφερθούν στη '
+          'ρίζα της εφαρμογής. Συνέχεια;',
         ),
         actions: [
           TextButton(
@@ -1041,6 +1323,20 @@ class _DatabaseSettingsPanelState extends ConsumerState<DatabaseSettingsPanel> {
                 ),
               ],
             ),
+            if (settings.destinationDirectory.trim().isNotEmpty)
+              _buildDestinationFolderMissingBanner(theme),
+            if (Platform.isWindows) ...[
+              const SizedBox(height: 4),
+              Text(
+                'Στον διάλογο επιλογής (Windows) χρησιμοποιήστε «Νέος φάκελος» '
+                'για δημιουργία φακέλου (π.χ. backups σε εξωτερικό δίσκο). '
+                'Μπορείτε επίσης να πληκτρολογήσετε διαδρομή και να επιβεβαιώσετε '
+                'με Enter — αν λείπει ο φάκελος, θα σας ζητηθεί δημιουργία.',
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
             FutureBuilder<({String dbPath, int eligibleWindowsVolumeCount})>(
               future: _backupDestinationWarningContextFuture,
               builder: (context, snapshot) {
@@ -1176,27 +1472,83 @@ class _DatabaseSettingsPanelState extends ConsumerState<DatabaseSettingsPanel> {
               },
             ),
             const SizedBox(height: 8),
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              title: const Text('Αποθήκευση σε μορφή .zip'),
-              subtitle: const Text('Συμπίεση μετά το VACUUM INTO'),
-              value: settings.zipOutput,
-              onChanged: settings.includeMapImagesInBackup
-                  ? null
-                  : (v) => ref
-                        .read(databaseBackupSettingsProvider.notifier)
-                        .setZipOutput(v),
-            ),
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              title: const Text('Συμπερίληψη εικόνων χαρτών'),
-              subtitle: const Text(
-                'Zip με call_logger.db και φάκελο maps_images (δίπλα στη βάση)',
+            FutureBuilder<PortableBackupAvailability>(
+              future: PortableBackupAvailability.load(
+                lexiconLoaded: ref.watch(coreLexiconProvider).loaded,
               ),
-              value: settings.includeMapImagesInBackup,
-              onChanged: (v) => ref
-                  .read(databaseBackupSettingsProvider.notifier)
-                  .setIncludeMapImagesInBackup(v),
+              builder: (context, snapshot) {
+                final avail = snapshot.data;
+                final bundleLocksZip = avail != null &&
+                    settings.effectiveIncludesPortableBundleInZip(avail);
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('Αποθήκευση σε μορφή .zip'),
+                      subtitle: const Text('Συμπίεση μετά το VACUUM INTO'),
+                      value: settings.zipOutput,
+                      onChanged: bundleLocksZip
+                          ? null
+                          : (v) => ref
+                                .read(databaseBackupSettingsProvider.notifier)
+                                .setZipOutput(v),
+                    ),
+                    _portableBackupSwitch(
+                      title: 'Συμπερίληψη εικόνων χαρτών',
+                      subtitle: Text(
+                        PortableBackupAvailability.mapsImagesSubtitle(),
+                      ),
+                      value: settings.includeMapImagesInBackup,
+                      enabled: avail?.hasMapImages ?? false,
+                      disabledTooltip:
+                          'Δεν υπάρχουν αποθηκευμένες εικόνες χαρτών',
+                      onChanged: (v) => ref
+                          .read(databaseBackupSettingsProvider.notifier)
+                          .setIncludeMapImagesInBackup(v),
+                    ),
+                    _portableBackupSwitch(
+                      title: 'Εικονίδια εργαλείων',
+                      subtitle: Text(
+                        'Zip με φάκελο ${AppConfig.portableImagesDirName} '
+                        '(στη ρίζα εφαρμογής)',
+                      ),
+                      value: settings.includeToolImages,
+                      enabled: avail?.hasToolImages ?? false,
+                      disabledTooltip:
+                          'Δεν υπάρχουν αποθηκευμένα εικονίδια εργαλείων',
+                      onChanged: (v) => ref
+                          .read(databaseBackupSettingsProvider.notifier)
+                          .setIncludeToolImages(v),
+                    ),
+                    _portableBackupSwitch(
+                      title: 'Λεξικό',
+                      subtitle: Text(
+                        'Zip με φάκελο ${AppConfig.portableDictionariesDirName}',
+                      ),
+                      value: settings.includeLexicon,
+                      enabled: avail?.hasLoadedLexicon ?? false,
+                      disabledTooltip: 'Δεν υπάρχει φορτωμένο λεξικό',
+                      onChanged: (v) => ref
+                          .read(databaseBackupSettingsProvider.notifier)
+                          .setIncludeLexicon(v),
+                    ),
+                    _portableBackupSwitch(
+                      title: 'Βάση Λάμπας',
+                      subtitle: Text(
+                        'Zip με αρχείο .db από ${AppConfig.portableDataBaseDirName}',
+                      ),
+                      value: settings.includeLampDb,
+                      enabled: avail?.hasLampDbInPortableDataBase ?? false,
+                      disabledTooltip:
+                          'Δεν υπάρχει βάση Λάμπας στον φάκελο της εφαρμογής',
+                      onChanged: (v) => ref
+                          .read(databaseBackupSettingsProvider.notifier)
+                          .setIncludeLampDb(v),
+                    ),
+                  ],
+                );
+              },
             ),
             const Divider(height: 24),
             const SizedBox(height: 12),
@@ -1208,7 +1560,8 @@ class _DatabaseSettingsPanelState extends ConsumerState<DatabaseSettingsPanel> {
             ),
             const SizedBox(height: 4),
             Text(
-              'Επιλέξτε ημέρες και ώρα για αυτόματο αντίγραφο ασφαλείας όσο η εφαρμογή είναι ανοιχτή.',
+              'Επιλέξτε ημέρες και ώρα για αυτόματο αντίγραφο ασφαλείας όσο η εφαρμογή είναι ανοιχτή. '
+              'Εκτελείται το πολύ ένα προγραμματισμένο αντίγραφο ανά ημερολογιακή ημέρα.',
               style: theme.textTheme.bodySmall?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
               ),
@@ -1281,6 +1634,7 @@ class _DatabaseSettingsPanelState extends ConsumerState<DatabaseSettingsPanel> {
                   label: const Text('Επιλογή'),
                 ),
               ),
+              _buildBackupScheduleStatusSection(theme, settings),
             ],
             const Divider(height: 24),
             Text(
@@ -1422,6 +1776,31 @@ class _DatabaseSettingsPanelState extends ConsumerState<DatabaseSettingsPanel> {
         ),
       ),
     );
+  }
+
+  Widget _portableBackupSwitch({
+    required String title,
+    required Widget subtitle,
+    required bool value,
+    required bool enabled,
+    required String disabledTooltip,
+    required ValueChanged<bool> onChanged,
+  }) {
+    final tile = SwitchListTile(
+      contentPadding: EdgeInsets.zero,
+      title: Text(title),
+      subtitle: subtitle,
+      value: value,
+      onChanged: enabled ? onChanged : null,
+    );
+    if (!enabled) {
+      return Tooltip(
+        message: disabledTooltip,
+        waitDuration: const Duration(milliseconds: 400),
+        child: tile,
+      );
+    }
+    return tile;
   }
 }
 

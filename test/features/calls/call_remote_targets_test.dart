@@ -58,10 +58,10 @@ void main() {
       },
     );
 
-    test('visibleRemoteToolsForCallState: προεπιλεγμένο + παράμετρος anydesk', () {
+    test('visibleRemoteToolsForCallState: προεπιλεγμένο + παράμετρος tool id', () {
       final eq = EquipmentModel(
         code: '12',
-        remoteParams: {'anydesk': '123456789'},
+        remoteParams: {'2': '123456789'},
         defaultRemoteTool: '2',
       );
       final s = SmartEntitySelectorState(selectedEquipment: eq);
@@ -94,7 +94,7 @@ void main() {
     test('visibleRemoteToolsForCallState: exclusive suppression κρατά μόνο αποκλειστικά', () {
       final eq = EquipmentModel(
         code: '99',
-        remoteParams: const {'anydesk': '123456789'},
+        remoteParams: const {'2': '123456789'},
         defaultRemoteTool: '1',
       );
       final s = SmartEntitySelectorState(selectedEquipment: eq);

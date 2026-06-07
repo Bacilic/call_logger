@@ -62,6 +62,11 @@ class _TasksScreenState extends ConsumerState<TasksScreen> {
 
     final asyncTasks = ref.watch(tasksProvider);
     ref.watch(taskSettingsConfigProvider);
+    final filtersEnabled = asyncTasks.maybeWhen(
+      data: (tasks) => tasks.isNotEmpty,
+      orElse: () => false,
+    );
+    final canCreateTask = !asyncTasks.hasError;
     return Scaffold(
       appBar: AppBar(
         title: const Text('Εκκρεμότητες'),
@@ -74,13 +79,15 @@ class _TasksScreenState extends ConsumerState<TasksScreen> {
         ],
       ),
       floatingActionButton: FloatingActionButton(
-        onPressed: () => _openNewTaskForm(context, ref),
+        onPressed: canCreateTask
+            ? () => _openNewTaskForm(context, ref)
+            : null,
         child: const Icon(Icons.add),
       ),
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const TaskFilterBar(),
+          TaskFilterBar(filtersEnabled: filtersEnabled),
           Expanded(
             child: asyncTasks.when(
               loading: () => const Center(

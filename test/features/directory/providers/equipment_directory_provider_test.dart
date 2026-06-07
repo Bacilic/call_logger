@@ -142,7 +142,7 @@ void main() {
         EquipmentColumn.code,
         EquipmentColumn.type,
         EquipmentColumn.owner,
-        EquipmentColumn.customIp,
+        EquipmentColumn.remoteParams,
       ];
       final container = ProviderContainer(
         overrides: [
@@ -169,7 +169,7 @@ void main() {
           EquipmentColumn.type,
           EquipmentColumn.owner,
           EquipmentColumn.code,
-          EquipmentColumn.customIp,
+          EquipmentColumn.remoteParams,
         ]),
       );
     });
@@ -223,9 +223,8 @@ void main() {
                   'code_equipment': 'PC-01',
                   'type': 'Desktop',
                   'notes': 'Γραφείο',
-                  'custom_ip': '10.0.0.10',
-                  'anydesk_id': 'AD-001',
-                  'default_remote_tool': 'AnyDesk',
+                  'remote_params': '{"2":"10.0.0.10","3":"AD-001"}',
+                  'default_remote_tool': '2',
                 },
                 {
                   'id': 2,

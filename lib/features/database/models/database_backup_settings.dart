@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import '../utils/backup_schedule_utils.dart';
+import '../utils/portable_backup_availability.dart';
 
 /// Μορφή ονόματος αρχείου αντιγράφου (.db / .zip).
 enum DatabaseBackupNamingFormat {
@@ -25,11 +26,15 @@ class DatabaseBackupSettings {
     required this.namingFormat,
     required this.zipOutput,
     required this.includeMapImagesInBackup,
+    required this.includeToolImages,
+    required this.includeLexicon,
+    required this.includeLampDb,
     required this.backupOnExit,
     required this.interval,
     required this.backupDays,
     required this.backupTime,
     this.lastBackupAttempt,
+    this.lastManualBackupAttempt,
     required this.lastBackupStatus,
     required this.retentionMaxCopiesEnabled,
     required this.retentionMaxCopies,
@@ -44,6 +49,12 @@ class DatabaseBackupSettings {
   final bool zipOutput;
   /// Συμπερίληψη φακέλου `maps_images` στο zip (με `call_logger.db` εσωτερικά).
   final bool includeMapImagesInBackup;
+  /// Συμπερίληψη φακέλου `images/` (εικονίδια εργαλείων).
+  final bool includeToolImages;
+  /// Συμπερίληψη φακέλου `dictionaries/` (λεξικό-πυρήνας).
+  final bool includeLexicon;
+  /// Συμπερίληψη αρχείου βάσης Λάμπας από portable `Data Base/`.
+  final bool includeLampDb;
   /// Κύριος διακόπτης: αν false, δεν εκτελείται κανένα backup (ούτε χειροκίνητο).
   final bool backupOnExit;
   final DatabaseBackupInterval interval;
@@ -55,6 +66,9 @@ class DatabaseBackupSettings {
   final String backupTime;
 
   final DateTime? lastBackupAttempt;
+
+  /// Τελευταίο επιτυχές χειροκίνητο αντίγραφο (για ένδειξη/διάλογο).
+  final DateTime? lastManualBackupAttempt;
 
   /// `success` | `failed` | `missed` | `none` — βλ. [BackupScheduleStatus].
   final String lastBackupStatus;
@@ -69,11 +83,15 @@ class DatabaseBackupSettings {
         namingFormat: DatabaseBackupNamingFormat.dateTimeThenBase,
         zipOutput: false,
         includeMapImagesInBackup: false,
+        includeToolImages: true,
+        includeLexicon: false,
+        includeLampDb: false,
         backupOnExit: false,
         interval: DatabaseBackupInterval.never,
         backupDays: <int>[],
         backupTime: '09:00',
         lastBackupAttempt: null,
+        lastManualBackupAttempt: null,
         lastBackupStatus: BackupScheduleStatus.none,
         retentionMaxCopiesEnabled: false,
         retentionMaxCopies: 30,
@@ -84,6 +102,36 @@ class DatabaseBackupSettings {
   /// Προσαρμοσμένο εβδομαδιαίο χρονοδιάγραμμα (αντικαθιστά το περιοδικό [interval] όταν ενεργό).
   bool get usesCustomSchedule =>
       backupDays.isNotEmpty && BackupScheduleUtils.hasValidTimeString(backupTime);
+
+  /// Προτίμηση χρήστη: κάποιο portable περιεχόμενο επιλέχθηκε (χωρίς έλεγχο διαθεσιμότητας).
+  bool get includesPortableBundleInZip =>
+      includeMapImagesInBackup ||
+      includeToolImages ||
+      includeLexicon ||
+      includeLampDb;
+
+  /// Ενεργή συμπερίληψη portable bundle: προτίμηση ΚΑΙ διαθέσιμο περιεχόμενο.
+  bool effectiveIncludesPortableBundleInZip(
+    PortableBackupAvailability availability,
+  ) =>
+      effectiveIncludeMapImagesInBackup(availability) ||
+      effectiveIncludeToolImages(availability) ||
+      effectiveIncludeLexicon(availability) ||
+      effectiveIncludeLampDb(availability);
+
+  bool effectiveIncludeMapImagesInBackup(
+    PortableBackupAvailability availability,
+  ) =>
+      includeMapImagesInBackup && availability.hasMapImages;
+
+  bool effectiveIncludeToolImages(PortableBackupAvailability availability) =>
+      includeToolImages && availability.hasToolImages;
+
+  bool effectiveIncludeLexicon(PortableBackupAvailability availability) =>
+      includeLexicon && availability.hasLoadedLexicon;
+
+  bool effectiveIncludeLampDb(PortableBackupAvailability availability) =>
+      includeLampDb && availability.hasLampDbInPortableDataBase;
 
   /// True αν ο επιλεγμένος φάκελος είναι στον τόμο `C:` (συστήματος).
   bool get destinationLooksLikeWindowsSystemDriveC {
@@ -100,12 +148,17 @@ class DatabaseBackupSettings {
     DatabaseBackupNamingFormat? namingFormat,
     bool? zipOutput,
     bool? includeMapImagesInBackup,
+    bool? includeToolImages,
+    bool? includeLexicon,
+    bool? includeLampDb,
     bool? backupOnExit,
     DatabaseBackupInterval? interval,
     List<int>? backupDays,
     String? backupTime,
     DateTime? lastBackupAttempt,
     bool clearLastBackupAttempt = false,
+    DateTime? lastManualBackupAttempt,
+    bool clearLastManualBackupAttempt = false,
     String? lastBackupStatus,
     bool? retentionMaxCopiesEnabled,
     int? retentionMaxCopies,
@@ -119,6 +172,9 @@ class DatabaseBackupSettings {
       zipOutput: zipOutput ?? this.zipOutput,
       includeMapImagesInBackup:
           includeMapImagesInBackup ?? this.includeMapImagesInBackup,
+      includeToolImages: includeToolImages ?? this.includeToolImages,
+      includeLexicon: includeLexicon ?? this.includeLexicon,
+      includeLampDb: includeLampDb ?? this.includeLampDb,
       backupOnExit: backupOnExit ?? this.backupOnExit,
       interval: interval ?? this.interval,
       backupDays: backupDays ?? this.backupDays,
@@ -126,6 +182,9 @@ class DatabaseBackupSettings {
       lastBackupAttempt: clearLastBackupAttempt
           ? null
           : (lastBackupAttempt ?? this.lastBackupAttempt),
+      lastManualBackupAttempt: clearLastManualBackupAttempt
+          ? null
+          : (lastManualBackupAttempt ?? this.lastManualBackupAttempt),
       lastBackupStatus:
           lastBackupStatus ?? this.lastBackupStatus,
       retentionMaxCopiesEnabled:
@@ -142,11 +201,15 @@ class DatabaseBackupSettings {
         'namingFormat': namingFormat.index,
         'zipOutput': zipOutput,
         'includeMapImagesInBackup': includeMapImagesInBackup,
+        'includeToolImages': includeToolImages,
+        'includeLexicon': includeLexicon,
+        'includeLampDb': includeLampDb,
         'backupOnExit': backupOnExit,
         'interval': interval.index,
         'backupDays': backupDays,
         'backupTime': backupTime,
         'lastBackupAttempt': lastBackupAttempt?.toIso8601String(),
+        'lastManualBackupAttempt': lastManualBackupAttempt?.toIso8601String(),
         'lastBackupStatus': lastBackupStatus,
         'retentionMaxCopiesEnabled': retentionMaxCopiesEnabled,
         'retentionMaxCopies': retentionMaxCopies,
@@ -203,11 +266,20 @@ class DatabaseBackupSettings {
       namingFormat: DatabaseBackupNamingFormat.values[nf],
       zipOutput: b('zipOutput', false),
       includeMapImagesInBackup: b('includeMapImagesInBackup', false),
+      includeToolImages: b('includeToolImages', true),
+      includeLexicon: b('includeLexicon', true),
+      includeLampDb: b('includeLampDb', true),
       backupOnExit: b('backupOnExit', false),
       interval: DatabaseBackupInterval.values[iv],
       backupDays: daysList('backupDays'),
       backupTime: s('backupTime', '09:00'),
       lastBackupAttempt: parseAttempt(),
+      lastManualBackupAttempt: () {
+        final v = json['lastManualBackupAttempt'];
+        if (v == null) return null;
+        if (v is String) return DateTime.tryParse(v);
+        return null;
+      }(),
       lastBackupStatus:
           BackupScheduleStatus.normalize(s('lastBackupStatus', 'none')),
       retentionMaxCopiesEnabled: b('retentionMaxCopiesEnabled', false),
@@ -239,10 +311,14 @@ class DatabaseBackupSettings {
         o.namingFormat != namingFormat ||
         o.zipOutput != zipOutput ||
         o.includeMapImagesInBackup != includeMapImagesInBackup ||
+        o.includeToolImages != includeToolImages ||
+        o.includeLexicon != includeLexicon ||
+        o.includeLampDb != includeLampDb ||
         o.backupOnExit != backupOnExit ||
         o.interval != interval ||
         o.backupTime != backupTime ||
         o.lastBackupAttempt != lastBackupAttempt ||
+        o.lastManualBackupAttempt != lastManualBackupAttempt ||
         o.lastBackupStatus != lastBackupStatus ||
         o.retentionMaxCopiesEnabled != retentionMaxCopiesEnabled ||
         o.retentionMaxCopies != retentionMaxCopies ||
@@ -263,11 +339,15 @@ class DatabaseBackupSettings {
         namingFormat,
         zipOutput,
         includeMapImagesInBackup,
+        includeToolImages,
+        includeLexicon,
+        includeLampDb,
         backupOnExit,
         interval,
         Object.hashAll(backupDays),
         backupTime,
         lastBackupAttempt,
+        lastManualBackupAttempt,
         lastBackupStatus,
         retentionMaxCopiesEnabled,
         retentionMaxCopies,

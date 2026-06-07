@@ -58,6 +58,30 @@ class DatabaseBackupSettingsNotifier
     await _persist();
   }
 
+  Future<void> setIncludeToolImages(bool value) async {
+    state = state.copyWith(
+      includeToolImages: value,
+      zipOutput: value ? true : state.zipOutput,
+    );
+    await _persist();
+  }
+
+  Future<void> setIncludeLexicon(bool value) async {
+    state = state.copyWith(
+      includeLexicon: value,
+      zipOutput: value ? true : state.zipOutput,
+    );
+    await _persist();
+  }
+
+  Future<void> setIncludeLampDb(bool value) async {
+    state = state.copyWith(
+      includeLampDb: value,
+      zipOutput: value ? true : state.zipOutput,
+    );
+    await _persist();
+  }
+
   Future<void> setBackupOnExit(bool value) async {
     state = state.copyWith(backupOnExit: value);
     await _persist();
@@ -100,6 +124,11 @@ class DatabaseBackupSettingsNotifier
     state = state.copyWith(
       lastBackupStatus: BackupScheduleStatus.normalize(value),
     );
+    await _persist();
+  }
+
+  Future<void> setLastManualBackupAttempt(DateTime value) async {
+    state = state.copyWith(lastManualBackupAttempt: value);
     await _persist();
   }
 

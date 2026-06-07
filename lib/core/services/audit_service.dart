@@ -176,6 +176,8 @@ class AuditService {
         return 'εισαγωγη δεδομενων';
       case AuditEntityTypes.maintenance:
         return 'συντηρηση βασης';
+      case AuditEntityTypes.backup:
+        return 'αντιγραφο ασφαλειας';
       case AuditEntityTypes.phone:
         return 'τηλεφωνο';
       default:
@@ -206,7 +208,7 @@ class AuditService {
       'issue': 'θεμα',
       'solution': 'λυση',
       'type': 'τυπος',
-      'custom_ip': 'ip',
+      'remote_params': 'Παράμετροι απομακρυσμένης',
       'linked_users': 'συνδεδεμενοι χρηστες',
       'linked_equipment': 'συνδεδεμενος εξοπλισμος',
       'linked_phone_numbers': 'τηλεφωνα',
@@ -624,6 +626,9 @@ abstract final class AuditEntityTypes {
   static const String bulkEquipment = 'bulk_equipment';
   static const String importData = 'import_data';
   static const String maintenance = 'maintenance';
+
+  /// Αντίγραφα ασφαλείας βάσης / φορητών αρχείων.
+  static const String backup = 'backup';
 
   /// Πίνακας `phones` (entity_id = `phones.id`).
   static const String phone = 'phone';

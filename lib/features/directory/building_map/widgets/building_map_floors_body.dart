@@ -155,6 +155,7 @@ class _BuildingMapFloorsBodyState extends ConsumerState<BuildingMapFloorsBody> {
             : DropdownButtonFormField<int>(
                 key: ValueKey<int>(currentSheetId!),
                 initialValue: currentSheetId,
+                isExpanded: true,
                 decoration: const InputDecoration(
                   labelText: 'Φύλλο κατόψης',
                   border: OutlineInputBorder(),

@@ -15,6 +15,7 @@ import '../../../core/database/old_database/lamp_issue_resolution_service.dart';
 import '../../../core/database/old_database/lamp_old_db_validator.dart';
 import '../../../core/database/old_database/resolution_log_entry.dart';
 import '../../../core/database/old_database/lamp_settings_store.dart';
+import '../../../core/services/portable_lamp_storage.dart';
 import '../../../core/database/old_database/old_equipment_repository.dart';
 import '../../../core/database/old_database/old_excel_importer.dart';
 import '../../../core/utils/file_picker_session.dart';
@@ -57,6 +58,7 @@ class _LampScreenState extends ConsumerState<LampScreen> {
   final _lampErrorDialogScroll = ScrollController();
   int _maxSearchResults = LampSettingsStore.defaultMaxSearchResults;
   Timer? _liveSearchDebounce;
+  Timer? _pathValidationDebounce;
   bool _suppressLiveSearch = false;
 
   bool _loading = true;
@@ -97,6 +99,7 @@ class _LampScreenState extends ConsumerState<LampScreen> {
   void dispose() {
     _detachSearchListeners();
     _liveSearchDebounce?.cancel();
+    _pathValidationDebounce?.cancel();
     _excelController.dispose();
     _readDbController.dispose();
     _outputDbController.dispose();
@@ -384,9 +387,12 @@ class _LampScreenState extends ConsumerState<LampScreen> {
   }
 
   /// Ανανέωση αναζητήσεων μετά αλλαγή read path: κλείσιμο σύνδεσης, επανεπαλήθευση, μηνύματα.
-  Future<void> _refreshDataAfterReadPathChange({required String source}) async {
+  Future<void> _refreshDataAfterReadPathChange({
+    required String source,
+    bool announce = true,
+  }) async {
     await LampDatabaseProvider.instance.close();
-    await _applyPersistedReadAndValidate(announce: true, source: source);
+    await _applyPersistedReadAndValidate(announce: announce, source: source);
   }
 
   Future<void> _pickExcel() async {
@@ -431,8 +437,10 @@ class _LampScreenState extends ConsumerState<LampScreen> {
       }
       return;
     }
-    _readDbController.text = path;
-    await _settings.setReadPath(path);
+    final portablePath =
+        await PortableLampStorage.tryCopyLampDbToPortableDataBase(path);
+    _readDbController.text = portablePath;
+    await _settings.setReadPath(portablePath);
     if (!mounted) return;
     _lampSettingsDialogSetState?.call(() {});
     _showSnack('Θα γίνει έλεγχος της βάσης προς ανάγνωση…');
@@ -460,12 +468,14 @@ class _LampScreenState extends ConsumerState<LampScreen> {
       }
       return;
     }
-    _outputDbController.text = path;
-    await _settings.setOutputPath(path);
+    final portablePath =
+        await PortableLampStorage.tryCopyLampDbToPortableDataBase(path);
+    _outputDbController.text = portablePath;
+    await _settings.setOutputPath(portablePath);
     final readT = _readDbController.text.trim();
     if (readT.isEmpty || (oldOut.isNotEmpty && readT == oldOut)) {
-      _readDbController.text = path;
-      await _settings.setReadPath(path);
+      _readDbController.text = portablePath;
+      await _settings.setReadPath(portablePath);
       if (mounted) {
         _showSnack(
           'Η διαδρομή εξόδου ενημερώθηκε. Η «ανάγνωση» συγχρονίστηκε (ίδιο αρχείο).',
@@ -496,11 +506,47 @@ class _LampScreenState extends ConsumerState<LampScreen> {
     if (outEmpty) {
       return 'Δεν έχει οριστεί διαδρομή εξόδου';
     }
+    final outputFormatError = LampOldDbValidator.validateDbPathFormat(
+      _outputDbController.text,
+    );
+    if (outputFormatError != null) {
+      return outputFormatError;
+    }
     return null;
+  }
+
+  String? _outputPathFormatWarning() =>
+      LampOldDbValidator.validateDbPathFormat(_outputDbController.text);
+
+  String? _readPathFormatWarning() =>
+      LampOldDbValidator.validateDbPathFormat(_readDbController.text);
+
+  String _effectiveReadPathForValidation() {
+    var read = _readDbController.text.trim();
+    final output = _outputDbController.text.trim();
+    if (read.isEmpty && output.isNotEmpty) {
+      read = output;
+    }
+    return read;
+  }
+
+  void _schedulePathHealthRefresh() {
+    _pathValidationDebounce?.cancel();
+    _pathValidationDebounce = Timer(const Duration(milliseconds: 400), () {
+      if (!mounted) return;
+      unawaited(
+        ref.read(lampReadPathHealthProvider.notifier).refresh(
+          pathOverride: _effectiveReadPathForValidation(),
+          outputPathOverride: _outputDbController.text.trim(),
+          excelPathOverride: _excelController.text.trim(),
+        ),
+      );
+    });
   }
 
   void _notifyLampSettingsDialogFieldsChanged() {
     if (!mounted) return;
+    _schedulePathHealthRefresh();
     _lampSettingsDialogSetState?.call(() {});
   }
 
@@ -1794,6 +1840,10 @@ class _LampScreenState extends ConsumerState<LampScreen> {
 
   Future<void> _closeLampSettingsDialog(void Function() pop) async {
     if (_importing) return;
+    pop();
+    _lampSettingsDialogOpen = false;
+    _lampSettingsDialogSetState = null;
+
     final parsedMax = int.tryParse(_maxSearchResultsController.text.trim());
     if (parsedMax != null) {
       await _settings.setMaxSearchResults(parsedMax);
@@ -1805,10 +1855,11 @@ class _LampScreenState extends ConsumerState<LampScreen> {
         _maxSearchResultsController.text = max.toString();
       });
     }
-    _showSnack('Αποθήκευση διαδρομών και έλεγχος βάσης…');
-    await _refreshDataAfterReadPathChange(source: 'αποθήκευση ρυθμίσεων');
+    await _refreshDataAfterReadPathChange(
+      source: 'αποθήκευση ρυθμίσεων',
+      announce: false,
+    );
     if (!mounted) return;
-    pop();
     Future<void>.microtask(() async {
       if (!mounted) return;
       await _runLiveSearch();
@@ -1909,6 +1960,13 @@ class _LampScreenState extends ConsumerState<LampScreen> {
                       onChanged: _notifyLampSettingsDialogFieldsChanged,
                     ),
                     const SizedBox(height: 12),
+                    if (_outputPathFormatWarning() != null) ...[
+                      _pathFormatWarningBanner(
+                        context,
+                        _outputPathFormatWarning()!,
+                      ),
+                      const SizedBox(height: 6),
+                    ],
                     _pathRow(
                       controller: _outputDbController,
                       label: 'Βάση εξόδου .db (δημιουργία / ενημέρωση)',
@@ -1921,10 +1979,18 @@ class _LampScreenState extends ConsumerState<LampScreen> {
                       style: Theme.of(context).textTheme.labelSmall,
                     ),
                     const SizedBox(height: 12),
+                    if (_readPathFormatWarning() != null) ...[
+                      _pathFormatWarningBanner(
+                        context,
+                        _readPathFormatWarning()!,
+                      ),
+                      const SizedBox(height: 6),
+                    ],
                     _pathRow(
                       controller: _readDbController,
                       label: 'Βάση .db προς ανάγνωση (αναζήτηση, ETL issues)',
                       onPick: _pickReadDatabase,
+                      onChanged: _notifyLampSettingsDialogFieldsChanged,
                     ),
                     const SizedBox(height: 6),
                     _lampReadPathCheckPanel(context),
@@ -2373,6 +2439,36 @@ class _LampScreenState extends ConsumerState<LampScreen> {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _pathFormatWarningBanner(BuildContext context, String message) {
+    final scheme = Theme.of(context).colorScheme;
+    return Material(
+      color: scheme.errorContainer.withValues(alpha: 0.55),
+      borderRadius: BorderRadius.circular(8),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(
+              Icons.warning_amber_rounded,
+              size: 20,
+              color: scheme.onErrorContainer,
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                message,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: scheme.onErrorContainer,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 

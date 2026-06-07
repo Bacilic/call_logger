@@ -24,12 +24,14 @@ class MiniMapCard extends ConsumerStatefulWidget {
     required this.equipmentCodeText,
     required this.phoneText,
     required this.user,
+    this.callerDisplayText = '',
   });
 
   final EquipmentModel? equipment;
   final String equipmentCodeText;
   final String phoneText;
   final UserModel? user;
+  final String callerDisplayText;
 
   @override
   ConsumerState<MiniMapCard> createState() => _MiniMapCardState();
@@ -60,6 +62,7 @@ class _MiniMapCardState extends ConsumerState<MiniMapCard> {
         oldWidget.equipment?.departmentId != widget.equipment?.departmentId ||
         oldWidget.equipmentCodeText != widget.equipmentCodeText ||
         oldWidget.phoneText != widget.phoneText ||
+        oldWidget.callerDisplayText != widget.callerDisplayText ||
         oldWidget.user?.id != widget.user?.id ||
         oldWidget.user?.departmentId != widget.user?.departmentId;
     if (changed) {
@@ -246,6 +249,14 @@ class _MiniMapCardState extends ConsumerState<MiniMapCard> {
     return dept.floorDisplayWithCatalog(floorById);
   }
 
+  String? _registeredCallerName() {
+    final fromUser = widget.user?.name?.trim();
+    if (fromUser != null && fromUser.isNotEmpty) return fromUser;
+    final fromText = widget.callerDisplayText.trim();
+    if (fromText.isNotEmpty) return fromText;
+    return null;
+  }
+
   String _snapshotTooltip(_MiniMapCardData data, _MiniMapTarget target) {
     final dept = _departmentForTarget(data, target);
     if (dept == null) {
@@ -254,10 +265,8 @@ class _MiniMapCardState extends ConsumerState<MiniMapCard> {
     final lines = <String>[
       dept.displayName,
       if (_floorDisplayName(data, dept) case final floor?) 'Όροφος: $floor',
-      if (!dept.isMapped)
-        'Το τμήμα δεν υπάρχει στον χάρτη κτιρίου.'
-      else
-        'Προεπισκόπηση — ${target.label.toLowerCase()}.',
+      ?_registeredCallerName(),
+      if (!dept.isMapped) 'Το τμήμα δεν υπάρχει στον χάρτη κτιρίου.',
     ];
     return lines.join('\n');
   }

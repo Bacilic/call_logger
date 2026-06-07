@@ -3,7 +3,6 @@
 import '../../../core/database/database_helper.dart';
 import '../../../core/database/remote_tools_repository.dart';
 import '../../../core/models/remote_tool.dart';
-import '../../../core/models/remote_tool_role.dart';
 import '../../../core/services/remote_args_service.dart';
 import '../../../core/services/remote_connection_service.dart';
 import '../../../core/services/remote_launcher_service.dart';
@@ -84,18 +83,6 @@ final validRemoteToolPathsByIdProvider =
   }
 });
 
-/// VNC / AnyDesk / RDP paths για συμβατότητα με παλιό UI.
-final validRemotePathsProvider =
-    FutureProvider<({String? vncPath, String? anydeskPath, String? rdpPath})>(
-        (ref) async {
-  final conn = ref.read(remoteConnectionServiceProvider);
-  return (
-    vncPath: await conn.getValidVncPath(),
-    anydeskPath: await conn.getValidAnydeskPath(),
-    rdpPath: await conn.getValidRdpPath(),
-  );
-});
-
 typedef LauncherStatus = ({String? path, String? errorReason});
 
 /// Κατάσταση launcher ανά id εργαλείου.
@@ -115,36 +102,14 @@ final remoteLauncherStatusesByIdProvider =
   }
 });
 
-/// Συμβατότητα: μόνο VNC + AnyDesk.
-final remoteLauncherStatusProvider = FutureProvider<
-    ({
-      LauncherStatus anydesk,
-      LauncherStatus vnc,
-    })>((ref) async {
-  final launcher = ref.read(remoteLauncherServiceProvider);
-  final ad = await launcher.getStatusForRole(ToolRole.anydesk);
-  final vn = await launcher.getStatusForRole(ToolRole.vnc);
-  return (
-    anydesk: ad.path != null
-        ? ad
-        : (path: null, errorReason: RemoteLauncherService.errorPathNotSet),
-    vnc: vn.path != null
-        ? vn
-        : (path: null, errorReason: RemoteLauncherService.errorPathNotSet),
-  );
-});
-
 final remoteConnectionServiceProvider = Provider<RemoteConnectionService>((ref) {
   return RemoteConnectionService(
-    SettingsService(),
-    ref.read(remoteArgsServiceProvider),
     ref.read(remoteToolsRepositoryProvider),
   );
 });
 
 final remoteLauncherServiceProvider = Provider<RemoteLauncherService>((ref) {
   return RemoteLauncherService(
-    SettingsService(),
     ref.read(remoteToolsRepositoryProvider),
   );
 });

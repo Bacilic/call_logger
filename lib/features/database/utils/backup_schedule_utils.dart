@@ -3,6 +3,7 @@ abstract final class BackupScheduleStatus {
   static const String success = 'success';
   static const String failed = 'failed';
   static const String missed = 'missed';
+  static const String folderMissing = 'folder_missing';
   static const String none = 'none';
 
   static String normalize(String? raw) {
@@ -11,6 +12,7 @@ abstract final class BackupScheduleStatus {
       case success:
       case failed:
       case missed:
+      case folderMissing:
       case none:
         return s;
       default:

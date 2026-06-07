@@ -20,8 +20,7 @@ const _defaultWidthsByKey = <String, double>{
   'location': 120.0,
   'phone': 120.0,
   'notes': 180.0,
-  'customIp': 140.0,
-  'anydeskId': 120.0,
+  'remoteParams': 220.0,
   'defaultRemote': 160.0,
 };
 

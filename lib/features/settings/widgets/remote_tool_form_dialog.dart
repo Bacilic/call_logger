@@ -10,6 +10,8 @@ import '../../../core/services/remote_launcher_service.dart';
 import '../../../core/services/settings_service.dart';
 import '../../../core/utils/file_picker_initial_directory.dart';
 import '../../../core/database/remote_tools_repository.dart';
+import '../../../core/services/portable_tool_image_storage.dart';
+import '../../../core/widgets/remote_tool_icon.dart';
 import '../../../core/widgets/lexicon_spell_text_form_field.dart';
 import '../../../core/widgets/spell_check_controller.dart';
 import '../../calls/provider/remote_paths_provider.dart';
@@ -392,13 +394,50 @@ class _RemoteToolFormDialogState extends ConsumerState<RemoteToolFormDialog> {
       dialogTitle: 'Εικονίδιο εργαλείου',
       initialDirectory: initial,
     );
-    if (r != null && r.files.isNotEmpty) {
-      final p = r.files.single.path;
-      if (p != null) {
-        _iconC.text = p;
-        setState(() {});
+    if (r == null || r.files.isEmpty) return;
+    final picked = r.files.single.path;
+    if (picked == null) return;
+    if (!mounted) return;
+
+    final copyToPortable = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Αντιγραφή εικονιδίου'),
+        content: const Text(
+          'Να αντιγραφεί το εικονίδιο στον φάκελο images της εφαρμογής;\n'
+          'Αυτό ενισχύει τη φορητότητα της εφαρμογής και συμβάλλει στην '
+          'επαναφορά από αντίγραφο ασφαλείας.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Όχι, κράτα την τρέχουσα θέση'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Αντιγραφή'),
+          ),
+        ],
+      ),
+    );
+    if (!mounted) return;
+
+    if (copyToPortable == true) {
+      try {
+        _iconC.text =
+            await PortableToolImageStorage.copyPickedIconToPortable(picked);
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Αποτυχία αντιγραφής εικονιδίου: $e')),
+          );
+        }
+        _iconC.text = picked;
       }
+    } else {
+      _iconC.text = picked;
     }
+    setState(() {});
   }
 
   Future<_SoftDeletedNameChoice?> _showSoftDeletedNameConflictDialog(
@@ -430,13 +469,6 @@ class _RemoteToolFormDialogState extends ConsumerState<RemoteToolFormDialog> {
     );
   }
 
-  Future<void> _applyRolePaths(RemoteTool t) async {
-    if (t.role == ToolRole.vnc) {
-      await SettingsService().setVncPath(t.executablePath);
-    } else if (t.role == ToolRole.anydesk) {
-      await SettingsService().setAnydeskPath(t.executablePath);
-    }
-  }
 
   /// Επαναφορά soft-deleted γραμμής με τα περιεχόμενα της φόρμας· σε επεξεργασία
   /// άλλου id, η τρέχουσα εγγραφή διαγράφεται (soft).
@@ -472,7 +504,6 @@ class _RemoteToolFormDialogState extends ConsumerState<RemoteToolFormDialog> {
         positionOneBased: sortClamped,
       );
     }
-    await _applyRolePaths(restored);
     _invalidateRemote();
     if (mounted) Navigator.of(context).pop(true);
   }
@@ -562,7 +593,6 @@ class _RemoteToolFormDialogState extends ConsumerState<RemoteToolFormDialog> {
             positionOneBased: sortClamped,
           );
         }
-        await _applyRolePaths(updated);
       } else {
         final sortedBefore = sorted;
         final insertOrder = swap ? (n + 1) : sortClamped;
@@ -581,7 +611,6 @@ class _RemoteToolFormDialogState extends ConsumerState<RemoteToolFormDialog> {
             positionOneBased: sortClamped,
           );
         }
-        await _applyRolePaths(toInsert);
       }
       _invalidateRemote();
       if (mounted) Navigator.of(context).pop(true);
@@ -605,9 +634,7 @@ class _RemoteToolFormDialogState extends ConsumerState<RemoteToolFormDialog> {
     ref.invalidate(remoteToolFormPairsProvider);
     ref.invalidate(remotePathsProvider);
     ref.invalidate(validRemoteToolPathsByIdProvider);
-    ref.invalidate(validRemotePathsProvider);
     ref.invalidate(remoteLauncherStatusesByIdProvider);
-    ref.invalidate(remoteLauncherStatusProvider);
   }
 
   Future<void> _runTest() async {
@@ -1495,39 +1522,13 @@ class _IconPreview extends StatelessWidget {
         ),
       );
     }
-    if (text.startsWith('assets/')) {
-      return SizedBox(
-        width: size,
-        height: size,
-        child: Image.asset(
-          text,
-          fit: BoxFit.contain,
-          errorBuilder: (context, error, stackTrace) =>
-              const Icon(Icons.broken_image_outlined),
-        ),
-      );
-    }
-    final f = File(text);
-    if (f.existsSync()) {
-      return SizedBox(
-        width: size,
-        height: size,
-        child: Image.file(
-          f,
-          fit: BoxFit.contain,
-          errorBuilder: (context, error, stackTrace) =>
-              const Icon(Icons.broken_image_outlined),
-        ),
-      );
-    }
     return SizedBox(
       width: size,
       height: size,
-      child: Image.asset(
-        text,
-        fit: BoxFit.contain,
-        errorBuilder: (context, error, stackTrace) =>
-          const Icon(Icons.image_outlined),
+      child: RemoteToolIcon(
+        iconAssetKey: text,
+        size: 22,
+        fallback: Icons.image_outlined,
       ),
     );
   }

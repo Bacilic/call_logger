@@ -91,6 +91,49 @@ class DirectoryRepository {
     return rows.isEmpty ? null : rows.first;
   }
 
+  Future<Map<String, dynamic>> _departmentAuditSnapshot(
+    DatabaseExecutor e,
+    int? departmentId,
+  ) async {
+    if (departmentId == null) {
+      return const {'department_id': null};
+    }
+    final rows = await e.query(
+      'departments',
+      columns: ['name'],
+      where: 'id = ?',
+      whereArgs: [departmentId],
+      limit: 1,
+    );
+    final name = rows.isEmpty
+        ? null
+        : (rows.first['name'] as String?)?.trim();
+    return {
+      'department_id': departmentId,
+      if (name != null && name.isNotEmpty) 'department_text': name,
+    };
+  }
+
+  Future<void> _applyDepartmentAuditText(
+    DatabaseExecutor e,
+    Map<String, dynamic> map,
+  ) async {
+    if (!map.containsKey('department_id')) return;
+    final raw = map['department_id'];
+    final id = raw is int ? raw : int.tryParse('$raw');
+    if (id == null) {
+      map.remove('department_text');
+      return;
+    }
+    final snap = await _departmentAuditSnapshot(e, id);
+    map['department_id'] = snap['department_id'];
+    if (snap.containsKey('department_text')) {
+      map['department_text'] = snap['department_text'];
+    } else {
+      map.remove('department_text');
+    }
+  }
+
   Future<Set<int>> _userPhoneIds(DatabaseExecutor e, int userId) async {
     final rows = await e.rawQuery(
       'SELECT phone_id FROM user_phones WHERE user_id = ?',
@@ -260,7 +303,10 @@ class DirectoryRepository {
         entityType: AuditEntityTypes.phone,
         entityId: pid,
         entityName: t,
-        newValues: {'department_id': departmentId, 'via': 'department_phones'},
+        newValues: {
+          ...await _departmentAuditSnapshot(txn, departmentId),
+          'via': 'department_phones',
+        },
       );
     });
   }
@@ -303,7 +349,7 @@ class DirectoryRepository {
         entityType: AuditEntityTypes.phone,
         entityId: pid,
         entityName: t,
-        oldValues: {'department_id': departmentId},
+        oldValues: await _departmentAuditSnapshot(txn, departmentId),
       );
     });
   }
@@ -446,8 +492,10 @@ class DirectoryRepository {
         entityType: AuditEntityTypes.phone,
         entityId: pid,
         entityName: t,
-        oldValues: beforeDept == null ? null : {'department_id': beforeDept},
-        newValues: {'department_id': departmentId},
+        oldValues: beforeDept == null
+            ? null
+            : await _departmentAuditSnapshot(txn, beforeDept),
+        newValues: await _departmentAuditSnapshot(txn, departmentId),
       );
     });
   }
@@ -481,7 +529,10 @@ class DirectoryRepository {
           entityType: AuditEntityTypes.equipment,
           entityId: id,
           entityName: code,
-          newValues: {'code_equipment': code, 'department_id': departmentId},
+          newValues: {
+            'code_equipment': code,
+            ...await _departmentAuditSnapshot(txn, departmentId),
+          },
         );
         return;
       }
@@ -502,8 +553,49 @@ class DirectoryRepository {
         entityType: AuditEntityTypes.equipment,
         entityId: id,
         entityName: code,
-        oldValues: {'department_id': oldDept},
-        newValues: {'department_id': departmentId},
+        oldValues: await _departmentAuditSnapshot(txn, oldDept),
+        newValues: await _departmentAuditSnapshot(txn, departmentId),
+      );
+    });
+  }
+
+  /// Αφαιρεί κοινόχρηστη τοποθεσία τμήματος (`department_id`) από εξοπλισμό.
+  Future<void> clearEquipmentSharedDepartment(
+    String equipmentCode,
+    int departmentId,
+  ) async {
+    final code = equipmentCode.trim();
+    if (code.isEmpty) return;
+    await db.transaction((txn) async {
+      final rows = await txn.query(
+        'equipment',
+        columns: ['id', 'department_id'],
+        where:
+            'code_equipment = ? AND department_id = ? AND COALESCE(is_deleted, 0) = 0',
+        whereArgs: [code, departmentId],
+        limit: 1,
+      );
+      if (rows.isEmpty) return;
+      final id = rows.first['id'] as int;
+      final oldDept = rows.first['department_id'] as int?;
+      await txn.update(
+        'equipment',
+        {'department_id': null},
+        where: 'id = ?',
+        whereArgs: [id],
+      );
+      final ap = await _auditPerformingUser(executor: txn);
+      await AuditService.log(
+        txn,
+        action: 'ΤΡΟΠΟΠΟΙΗΣΗ ΕΞΟΠΛΙΣΜΟΥ',
+        userPerforming: ap,
+        details:
+            'equipment id=$id (αφαίρεση κοινόχρηστου τμήματος $departmentId)',
+        entityType: AuditEntityTypes.equipment,
+        entityId: id,
+        entityName: code,
+        oldValues: await _departmentAuditSnapshot(txn, oldDept),
+        newValues: const {'department_id': null},
       );
     });
   }
@@ -668,6 +760,7 @@ class DirectoryRepository {
       nv['linked_phone_numbers'] = nums;
       final linkedEq = await _linkedEquipmentSnapshotsForUser(txn, id);
       nv['linked_equipment'] = linkedEq;
+      await _applyDepartmentAuditText(txn, nv);
       await AuditService.log(
         txn,
         action: 'ΔΗΜΙΟΥΡΓΙΑ ΧΡΗΣΤΗ',
@@ -829,6 +922,8 @@ class DirectoryRepository {
         txn,
         id,
       );
+      await _applyDepartmentAuditText(txn, oldAudit);
+      await _applyDepartmentAuditText(txn, newAudit);
 
       final oldDiff = <String, dynamic>{};
       final newDiff = <String, dynamic>{};
@@ -904,6 +999,9 @@ class DirectoryRepository {
       final fields = Map<String, dynamic>.from(map);
       if (phoneBulk != null) {
         fields['phone'] = phoneBulk;
+      }
+      if (fields.containsKey('department_id')) {
+        await _applyDepartmentAuditText(txn, fields);
       }
       if (fields.isNotEmpty) {
         await AuditService.logBulk(
@@ -1010,8 +1108,8 @@ class DirectoryRepository {
         entityType: AuditEntityTypes.phone,
         entityId: phoneId,
         entityName: number,
-        oldValues: {'department_id': deptId},
-        newValues: {'department_id': null},
+        oldValues: await _departmentAuditSnapshot(txn, deptId),
+        newValues: const {'department_id': null},
       );
     }
   }

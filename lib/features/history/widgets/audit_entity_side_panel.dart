@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/services/audit_service.dart';
 import '../../audit/models/audit_log_model.dart';
+import '../../audit/models/audit_reference_labels.dart';
 import '../../audit/providers/audit_providers.dart';
 import '../../audit/services/audit_entity_preview_resolver.dart';
 import '../../audit/services/audit_formatter_service.dart';
@@ -14,16 +15,19 @@ class AuditEntitySidePanel extends ConsumerWidget {
   const AuditEntitySidePanel({
     super.key,
     required this.entry,
+    this.labels = AuditReferenceLabels.empty,
   });
 
   final AuditLogModel entry;
+  final AuditReferenceLabels labels;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     const formatter = AuditFormatterService();
-    final isMaintenance =
-        entry.entityType?.trim() == AuditEntityTypes.maintenance;
+    final entityType = entry.entityType?.trim() ?? '';
+    final isMaintenance = entityType == AuditEntityTypes.maintenance;
+    final isBackup = entityType == AuditEntityTypes.backup;
 
     return Material(
       elevation: 1,
@@ -60,7 +64,7 @@ class AuditEntitySidePanel extends ConsumerWidget {
                   padding: const EdgeInsets.all(12),
                   children: [
                     Text(
-                      formatter.summaryLine(entry),
+                      formatter.summaryLine(entry, labels: labels),
                       style: theme.textTheme.bodyMedium,
                     ),
                     const SizedBox(height: 8),
@@ -91,13 +95,14 @@ class AuditEntitySidePanel extends ConsumerWidget {
                     ],
                     if (entry.hasAnyDeltaJson) ...[
                       const SizedBox(height: 12),
-                      AuditBeforeAfterSection(entry: entry),
+                      AuditBeforeAfterSection(entry: entry, labels: labels),
                     ],
                     const SizedBox(height: 16),
                     _buildPreviewBlock(
                       context,
                       ref,
                       isMaintenance,
+                      isBackup,
                       formatter,
                     ),
                   ],
@@ -114,24 +119,28 @@ class AuditEntitySidePanel extends ConsumerWidget {
     BuildContext context,
     WidgetRef ref,
     bool isMaintenance,
+    bool isBackup,
     AuditFormatterService formatter,
   ) {
     final theme = Theme.of(context);
-    if (isMaintenance) {
+    if (isMaintenance || isBackup) {
+      final previewLines = <String>[
+        if (entry.details != null && entry.details!.trim().isNotEmpty)
+          entry.details!.trim(),
+        if (entry.timestamp != null && entry.timestamp!.trim().isNotEmpty)
+          'Χρονική σήμανση: ${formatter.formatAuditTimestamp(entry.timestamp)}',
+        if ((entry.details == null || entry.details!.trim().isEmpty) &&
+            (entry.timestamp == null || entry.timestamp!.trim().isEmpty))
+          'Δεν υπάρχει συγκεκριμένη οντότητα.',
+      ];
       return AuditEntityPreviewBody(
-        entityType: AuditEntityTypes.maintenance,
+        entityType:
+            isBackup ? AuditEntityTypes.backup : AuditEntityTypes.maintenance,
         showPreviewTitle: false,
         preview: AuditEntityPreview(
-          title: entry.action ?? 'Συντήρηση βάσης',
-          lines: [
-            if (entry.details != null && entry.details!.trim().isNotEmpty)
-              entry.details!.trim(),
-            if (entry.timestamp != null && entry.timestamp!.trim().isNotEmpty)
-              'Χρονική σήμανση: ${formatter.formatAuditTimestamp(entry.timestamp)}',
-            if ((entry.details == null || entry.details!.trim().isEmpty) &&
-                (entry.timestamp == null || entry.timestamp!.trim().isEmpty))
-              'Δεν υπάρχει συγκεκριμένη οντότητα.',
-          ],
+          title: entry.action ??
+              (isBackup ? 'Αντίγραφο ασφαλείας' : 'Συντήρηση βάσης'),
+          lines: previewLines,
         ),
       );
     }
