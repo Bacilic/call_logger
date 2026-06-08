@@ -1,4 +1,4 @@
-import 'dart:convert';
+﻿import 'dart:convert';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -499,6 +499,10 @@ class DepartmentDirectoryNotifier extends Notifier<DepartmentDirectoryState> {
     required List<String> sharedEquipmentCodes,
     Set<String> phonesToMoveFromUsers = const {},
     Set<String> equipmentToMoveFromUsers = const {},
+    Map<String, int> phoneTransfers = const {},
+    Map<String, int> equipmentTransfers = const {},
+    List<String> phonesToSoftDelete = const [],
+    List<String> equipmentToSoftDelete = const [],
   }) async {
     final lookup = LookupService.instance;
     final existingPhones = lookup
@@ -539,6 +543,42 @@ class DepartmentDirectoryNotifier extends Notifier<DepartmentDirectoryState> {
     }
     for (final code in existingEq.difference(nextEq)) {
       await dirShared.clearEquipmentSharedDepartment(code, departmentId);
+    }
+
+    for (final entry in phoneTransfers.entries) {
+      final phone = entry.key.trim();
+      final targetId = entry.value;
+      if (phone.isEmpty) continue;
+      await dirShared.removeDepartmentDirectPhone(departmentId, phone);
+      await dirShared.addDepartmentDirectPhone(targetId, phone);
+    }
+    for (final entry in equipmentTransfers.entries) {
+      final code = entry.key.trim();
+      final targetId = entry.value;
+      if (code.isEmpty) continue;
+      await dirShared.clearEquipmentSharedDepartment(code, departmentId);
+      await dirShared.updateEquipmentDepartment(code, targetId);
+    }
+
+    if (phonesToSoftDelete.isNotEmpty) {
+      final phoneIds = <int>[];
+      for (final p in phonesToSoftDelete) {
+        final id = await dirShared.getPhoneIdByNumber(p);
+        if (id != null) phoneIds.add(id);
+      }
+      if (phoneIds.isNotEmpty) {
+        await dirShared.softDeletePhones(phoneIds);
+      }
+    }
+    if (equipmentToSoftDelete.isNotEmpty) {
+      final equipmentIds = <int>[];
+      for (final code in equipmentToSoftDelete) {
+        final id = await dirShared.getEquipmentIdByCode(code);
+        if (id != null) equipmentIds.add(id);
+      }
+      if (equipmentIds.isNotEmpty) {
+        await dirShared.deleteEquipments(equipmentIds);
+      }
     }
 
     await _refreshLookupCache();

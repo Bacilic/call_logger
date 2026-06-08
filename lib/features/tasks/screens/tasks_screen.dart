@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -62,10 +62,9 @@ class _TasksScreenState extends ConsumerState<TasksScreen> {
 
     final asyncTasks = ref.watch(tasksProvider);
     ref.watch(taskSettingsConfigProvider);
-    final filtersEnabled = asyncTasks.maybeWhen(
-      data: (tasks) => tasks.isNotEmpty,
-      orElse: () => false,
-    );
+    final totalTasksAsync = ref.watch(totalTasksCountProvider);
+    // Διατήρηση τελευταίας γνωστής τιμής κατά το reload — αποφυγή απενεργοποίησης φίλτρων.
+    final filtersEnabled = (totalTasksAsync.value ?? 0) > 0;
     final canCreateTask = !asyncTasks.hasError;
     return Scaffold(
       appBar: AppBar(
@@ -125,6 +124,7 @@ class _TasksScreenState extends ConsumerState<TasksScreen> {
                 ),
               ),
               data: (tasks) {
+                final totalTaskCount = totalTasksAsync.value ?? 0;
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
@@ -138,7 +138,9 @@ class _TasksScreenState extends ConsumerState<TasksScreen> {
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
                                   Icon(
-                                    Icons.task_alt_outlined,
+                                    totalTaskCount == 0
+                                        ? Icons.task_alt_outlined
+                                        : Icons.search_off_outlined,
                                     size: 64,
                                     color: Theme.of(
                                       context,
@@ -146,7 +148,9 @@ class _TasksScreenState extends ConsumerState<TasksScreen> {
                                   ),
                                   const SizedBox(height: 16),
                                   Text(
-                                    'Δεν υπάρχουν εκκρεμότητες αυτή τη στιγμή',
+                                    totalTaskCount == 0
+                                        ? 'Δεν υπάρχουν εκκρεμότητες αυτή τη στιγμή'
+                                        : 'Δεν βρέθηκαν εκκρεμότητες με τα επιλεγμένα κριτήρια',
                                     style: Theme.of(
                                       context,
                                     ).textTheme.bodyLarge,
@@ -213,6 +217,7 @@ class _TasksScreenState extends ConsumerState<TasksScreen> {
     final created = await service.createTasksForOrphanCalls();
     if (!context.mounted) return;
     ref.invalidate(tasksProvider);
+    ref.invalidate(totalTasksCountProvider);
     ref.invalidate(orphanCallsProvider);
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(

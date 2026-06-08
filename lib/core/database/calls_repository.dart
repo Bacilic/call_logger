@@ -784,6 +784,14 @@ class CallsRepository {
     return db.rawQuery(sql, args);
   }
 
+  /// Συνολικό πλήθος μη διαγραμμένων εγγραφών στον πίνακα `calls`.
+  Future<int> getTotalCallCount() async {
+    final rows = await db.rawQuery(
+      'SELECT COUNT(*) AS c FROM calls WHERE COALESCE(is_deleted, 0) = 0',
+    );
+    return (rows.first['c'] as int?) ?? 0;
+  }
+
   /// Πλήθος κλήσεων ιστορικού με φίλτρα ημερομηνίας και κατηγορίας (χωρίς keyword).
   Future<int> getHistoryCallCount({
     String? dateFrom,

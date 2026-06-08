@@ -86,6 +86,13 @@ final historyDatabaseDisplayNameProvider =
       }
     });
 
+/// Συνολικό πλήθος εγγραφών στον πίνακα calls (χωρίς φίλτρα UI).
+final totalCallsCountProvider = FutureProvider.autoDispose<int>((ref) async {
+  ref.watch(historyCallsProvider);
+  final db = await DatabaseHelper.instance.database;
+  return CallsRepository(db).getTotalCallCount();
+});
+
 /// Πλήθος κλήσεων ιστορικού με βάση φίλτρα ημερομηνίας και κατηγορίας (χωρίς keyword).
 final historyCategoryDateCallCountProvider = FutureProvider.autoDispose<int>((
   ref,

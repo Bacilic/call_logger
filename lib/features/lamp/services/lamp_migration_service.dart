@@ -1,6 +1,7 @@
-import '../../../core/database/database_helper.dart';
+﻿import '../../../core/database/database_helper.dart';
 import '../../../core/database/directory_repository.dart';
 import '../../../core/database/old_database/lamp_issue_resolution_service.dart';
+import '../../../core/utils/department_floor_sync.dart';
 import '../../../core/utils/name_parser.dart';
 import '../../../core/utils/phone_list_parser.dart';
 import '../../../core/utils/search_text_normalizer.dart';
@@ -552,15 +553,18 @@ class LampMigrationService {
     final name = formValues['name']?.trim() ?? '';
     if (name.isEmpty) throw StateError('Το πεδίο τμήμα είναι υποχρεωτικό.');
 
-    final map = <String, dynamic>{
-      'name': name,
-      'name_key': _norm(name),
-      'building': _nullable(formValues['building']),
-      'level': int.tryParse((formValues['level'] ?? '').trim()),
-      'notes': _nullable(formValues['notes']),
-      'map_hidden': 1,
-      'is_deleted': 0,
-    };
+    final floorLevel = int.tryParse((formValues['level'] ?? '').trim());
+    final map = DepartmentFloorSync.mergeFloorContext(
+      <String, dynamic>{
+        'name': name,
+        'name_key': _norm(name),
+        'building': _nullable(formValues['building']),
+        'notes': _nullable(formValues['notes']),
+        'map_hidden': 1,
+        'is_deleted': 0,
+      },
+      manualFloorId: floorLevel,
+    );
     final db = await DatabaseHelper.instance.database;
     final dir = DirectoryRepository(db);
     if (selectedCandidateId != null) {

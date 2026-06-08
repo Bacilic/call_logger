@@ -19,6 +19,7 @@ import 'department_color_picker_dialog.dart';
 import 'department_palette_actions.dart';
 import 'department_palette_host.dart';
 import 'department_palette_store.dart';
+import 'shared_asset_disconnect_dialog.dart';
 
 enum _ConflictResolutionChoice { moveToDepartment, keepCurrentOwnership }
 
@@ -103,45 +104,6 @@ Widget _sharedConflictKeepLabel(_SharedConflictItem item) {
   );
 }
 
-Future<bool?> _showSharedOnlyDisconnectDialog({
-  required BuildContext context,
-  required bool isPhone,
-  required List<String> values,
-  required String departmentName,
-}) {
-  final valuesText = values.join(', ');
-  final content = isPhone
-      ? (values.length == 1
-            ? 'Το κοινόχρηστο τηλέφωνο $valuesText πρόκειται να αποσυνδεθεί από το τμήμα «$departmentName».'
-            : 'Τα κοινόχρηστα τηλέφωνα $valuesText πρόκειται να αποσυνδεθούν από το τμήμα «$departmentName».')
-      : (values.length == 1
-            ? 'Ο κοινόχρηστος εξοπλισμός $valuesText πρόκειται να αποσυνδεθεί από το τμήμα «$departmentName».'
-            : 'Ο κοινόχρηστος εξοπλισμός $valuesText πρόκειται να αποσυνδεθεί από το τμήμα «$departmentName».');
-
-  return showDialog<bool>(
-    context: context,
-    barrierDismissible: false,
-    builder: (ctx) => AlertDialog(
-      title: Text(
-        isPhone
-            ? 'Αποσύνδεση κοινόχρηστου τηλεφώνου'
-            : 'Αποσύνδεση κοινόχρηστου εξοπλισμού',
-      ),
-      content: Text(content),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(ctx).pop(false),
-          child: const Text('Διατήρηση ως κοινόχρηστος'),
-        ),
-        FilledButton(
-          onPressed: () => Navigator.of(ctx).pop(true),
-          child: const Text('Αποσύνδεση από το τμήμα'),
-        ),
-      ],
-    ),
-  );
-}
-
 /// Διάλογος προσθήκης / επεξεργασίας / αντιγράφου τμήματος.
 class DepartmentFormDialog extends StatefulWidget {
   const DepartmentFormDialog({
@@ -165,7 +127,7 @@ class DepartmentFormDialog extends StatefulWidget {
 
 class _DepartmentFormDialogState extends State<DepartmentFormDialog> {
   final _formKey = GlobalKey<FormState>();
-  late final TextEditingController _nameController;
+  late final SpellCheckController _nameController;
   late final TextEditingController _buildingController;
   late final SpellCheckController _notesController;
   late final TextEditingController _hexController;
@@ -272,7 +234,7 @@ class _DepartmentFormDialogState extends State<DepartmentFormDialog> {
   void initState() {
     super.initState();
     final d = widget.initialDepartment;
-    _nameController = TextEditingController(text: d?.name ?? '');
+    _nameController = SpellCheckController()..text = d?.name ?? '';
     _buildingController = TextEditingController(text: d?.building ?? '');
     _notesController = SpellCheckController()..text = (d?.notes ?? '');
     _selectedColor = tryParseDepartmentHex(d?.color) ?? const Color(0xFF1976D2);
@@ -746,6 +708,10 @@ class _DepartmentFormDialogState extends State<DepartmentFormDialog> {
     ({
       List<String> sharedPhones,
       List<String> sharedEquipmentCodes,
+      Map<String, int> phoneTransfers,
+      Map<String, int> equipmentTransfers,
+      List<String> phonesToDelete,
+      List<String> equipmentToDelete,
     })?
   >
   _applySharedOnlyRemovalConfirmations({
@@ -775,38 +741,74 @@ class _DepartmentFormDialogState extends State<DepartmentFormDialog> {
             .toList()
           ..sort();
 
-    if (sharedOnlyEqRemoved.isNotEmpty) {
-      final disconnect = await _showSharedOnlyDisconnectDialog(
-        context: context,
-        isPhone: false,
-        values: sharedOnlyEqRemoved,
-        departmentName: departmentName,
+    if (sharedOnlyPhonesRemoved.isEmpty && sharedOnlyEqRemoved.isEmpty) {
+      return (
+        sharedPhones: phones,
+        sharedEquipmentCodes: equipment,
+        phoneTransfers: <String, int>{},
+        equipmentTransfers: <String, int>{},
+        phonesToDelete: <String>[],
+        equipmentToDelete: <String>[],
       );
-      if (!mounted) return null;
-      if (disconnect == null) return null;
-      if (!disconnect) {
-        equipment = (equipment.toSet()..addAll(sharedOnlyEqRemoved)).toList()
-          ..sort();
-      }
     }
 
-    if (sharedOnlyPhonesRemoved.isNotEmpty) {
-      if (!mounted) return null;
-      final disconnect = await _showSharedOnlyDisconnectDialog(
-        context: context,
-        isPhone: true,
-        values: sharedOnlyPhonesRemoved,
-        departmentName: departmentName,
-      );
-      if (!mounted) return null;
-      if (disconnect == null) return null;
-      if (!disconnect) {
-        phones = (phones.toSet()..addAll(sharedOnlyPhonesRemoved)).toList()
-          ..sort();
+    if (!mounted) return null;
+    final batch = await showSharedAssetDisconnectFlow(
+      context: context,
+      sourceDepartmentId: departmentId,
+      sourceDepartmentName: departmentName,
+      phones: sharedOnlyPhonesRemoved,
+      equipmentCodes: sharedOnlyEqRemoved,
+      availableDepartments: lookup.departments,
+    );
+    if (!mounted || batch == null) return null;
+
+    phones = (phones.toSet()..addAll(batch.phonesToKeep)).toList()..sort();
+    equipment = (equipment.toSet()..addAll(batch.equipmentToKeep)).toList()
+      ..sort();
+
+    final db = await DatabaseHelper.instance.database;
+    final dir = DirectoryRepository(db);
+    final phoneTransfers = <String, int>{};
+    final equipmentTransfers = <String, int>{};
+
+    for (final newName in batch.newDepartmentNamesToCreate.keys) {
+      final deptId = await dir.getOrCreateDepartmentIdByName(newName);
+      if (deptId == null) continue;
+      for (final entry in batch.phoneTransfers.entries) {
+        if (entry.value.newDepartmentName?.trim() == newName.trim()) {
+          phoneTransfers[entry.key] = deptId;
+        }
+      }
+      for (final entry in batch.equipmentTransfers.entries) {
+        if (entry.value.newDepartmentName?.trim() == newName.trim()) {
+          equipmentTransfers[entry.key] = deptId;
+        }
       }
     }
+    for (final entry in batch.phoneTransfers.entries) {
+      final id = entry.value.departmentId;
+      if (id != null) phoneTransfers[entry.key] = id;
+    }
+    for (final entry in batch.equipmentTransfers.entries) {
+      final id = entry.value.departmentId;
+      if (id != null) equipmentTransfers[entry.key] = id;
+    }
 
-    return (sharedPhones: phones, sharedEquipmentCodes: equipment);
+    if (batch.newDepartmentNamesToCreate.isNotEmpty) {
+      LookupService.instance.resetForReload();
+      await LookupService.instance.loadFromDatabase();
+      await widget.notifier.loadDepartments();
+    }
+
+    return (
+      sharedPhones: phones,
+      sharedEquipmentCodes: equipment,
+      phoneTransfers: phoneTransfers,
+      equipmentTransfers: equipmentTransfers,
+      phonesToDelete: batch.phonesToDelete,
+      equipmentToDelete: batch.equipmentToDelete,
+    );
   }
 
   Future<void> _save() async {
@@ -918,6 +920,10 @@ class _DepartmentFormDialogState extends State<DepartmentFormDialog> {
             sharedEquipmentCodes: sharedEquipmentCodes,
             phonesToMoveFromUsers: phonesToMoveFromUsers,
             equipmentToMoveFromUsers: equipmentToMoveFromUsers,
+            phoneTransfers: confirmed.phoneTransfers,
+            equipmentTransfers: confirmed.equipmentTransfers,
+            phonesToSoftDelete: confirmed.phonesToDelete,
+            equipmentToSoftDelete: confirmed.equipmentToDelete,
           );
         }
       } else {
@@ -977,6 +983,10 @@ class _DepartmentFormDialogState extends State<DepartmentFormDialog> {
             sharedEquipmentCodes: sharedEquipmentCodes,
             phonesToMoveFromUsers: phonesToMoveFromUsers,
             equipmentToMoveFromUsers: equipmentToMoveFromUsers,
+            phoneTransfers: confirmed.phoneTransfers,
+            equipmentTransfers: confirmed.equipmentTransfers,
+            phonesToSoftDelete: confirmed.phonesToDelete,
+            equipmentToSoftDelete: confirmed.equipmentToDelete,
           );
         }
       }
@@ -1170,7 +1180,7 @@ class _DepartmentFormDialogState extends State<DepartmentFormDialog> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  TextFormField(
+                  LexiconSpellTextFormField(
                     controller: _nameController,
                     focusNode: _nameFocus,
                     decoration: const InputDecoration(
@@ -1183,7 +1193,7 @@ class _DepartmentFormDialogState extends State<DepartmentFormDialog> {
                       }
                       return null;
                     },
-                    spellCheckConfiguration: platformSpellCheckConfiguration,
+                    onChanged: (_) => _onFieldChanged(),
                   ),
                   const SizedBox(height: 12),
                   Text(

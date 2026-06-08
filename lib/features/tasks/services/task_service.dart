@@ -1,4 +1,4 @@
-import 'dart:convert';
+﻿import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -477,6 +477,17 @@ class TaskService {
     final db = await _db;
     final rows = await db.rawQuery(
       "SELECT COUNT(id) AS count FROM tasks WHERE status IN ('open', 'snoozed') AND COALESCE(is_deleted, 0) = 0",
+    );
+    if (rows.isEmpty) return 0;
+    final n = rows.first['count'];
+    return n is int ? n : (n is num ? n.toInt() : int.tryParse('$n') ?? 0);
+  }
+
+  /// Συνολικό πλήθος μη διαγραμμένων εγγραφών στον πίνακα `tasks`.
+  Future<int> getTotalTaskCount() async {
+    final db = await _db;
+    final rows = await db.rawQuery(
+      'SELECT COUNT(id) AS count FROM tasks WHERE COALESCE(is_deleted, 0) = 0',
     );
     if (rows.isEmpty) return 0;
     final n = rows.first['count'];

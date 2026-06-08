@@ -1,4 +1,4 @@
-import 'dart:convert';
+﻿import 'dart:convert';
 
 import 'package:sqflite_common/sqlite_api.dart';
 import '../utils/search_text_normalizer.dart';
@@ -28,7 +28,8 @@ import '../utils/search_text_normalizer.dart';
 /// v25: backfill `search_text` με ρητές υποενέργειες (προσθήκη/αφαίρεση/αλλαγή).
 /// v26: πλήρης στοίχιση `search_text` με UI αλλαγών (1:1 κανονικοποιημένα).
 /// v27: lansweeper sync state columns σε `calls` + πίνακας `call_external_links`.
-const int databaseSchemaVersionV1 = 27;
+/// v28: phones.is_deleted (soft delete κοινόχρηστων τηλεφώνων).
+const int databaseSchemaVersionV1 = 28;
 
 /// Προεπιλογές διαδρομών (ίδιες με SettingsService — χωρίς εξάρτηση Flutter εδώ).
 const String kDefaultVncExecutablePath =
@@ -101,7 +102,8 @@ Future<void> applyDatabaseV1Schema(Database db) async {
       CREATE TABLE phones (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         number TEXT UNIQUE NOT NULL,
-        department_id INTEGER
+        department_id INTEGER,
+        is_deleted INTEGER DEFAULT 0
       )
     ''');
 
@@ -1078,6 +1080,17 @@ Future<void> migrateDatabaseToV27(Database db) async {
   await db.execute(
     'CREATE INDEX IF NOT EXISTS idx_call_external_links_created_at ON call_external_links(created_at)',
   );
+}
+
+/// v28: soft delete για εγγραφές `phones`.
+Future<void> migrateDatabaseToV28(Database db) async {
+  final info = await db.rawQuery('PRAGMA table_info(phones)');
+  final names = info.map((r) => r['name'] as String).toSet();
+  if (!names.contains('is_deleted')) {
+    await db.execute(
+      'ALTER TABLE phones ADD COLUMN is_deleted INTEGER NOT NULL DEFAULT 0',
+    );
+  }
 }
 
 Map<String, dynamic>? _decodeMapForMigration(String? raw) {

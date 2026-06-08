@@ -55,6 +55,19 @@ class DirectoryRepository {
     }
   }
 
+  Future<void> _ensurePhonesIsDeletedColumn(DatabaseExecutor executor) async {
+    final info = await executor.rawQuery('PRAGMA table_info(phones)');
+    final names = info.map((r) => r['name'] as String).toSet();
+    if (!names.contains('is_deleted')) {
+      await executor.execute(
+        'ALTER TABLE phones ADD COLUMN is_deleted INTEGER NOT NULL DEFAULT 0',
+      );
+    }
+  }
+
+  static String _phoneDigitsOnly(String s) =>
+      s.replaceAll(RegExp(r'[^0-9]'), '');
+
   Future<String> _auditPerformingUser({DatabaseExecutor? executor}) async {
     final v = await getSetting(
       DatabaseHelper.auditUserPerformingSettingsKey,
@@ -252,7 +265,10 @@ class DirectoryRepository {
     final pid = r.first['id'] as int;
     await txn.update(
       'phones',
-      {'department_id': departmentId},
+      {
+        'department_id': departmentId,
+        'is_deleted': 0,
+      },
       where: 'id = ?',
       whereArgs: [pid],
     );
@@ -320,7 +336,7 @@ class DirectoryRepository {
     await db.transaction((txn) async {
       final r = await txn.query(
         'phones',
-        columns: ['id'],
+        columns: ['id', 'department_id'],
         where: 'number = ?',
         whereArgs: [t],
         limit: 1,
@@ -328,18 +344,32 @@ class DirectoryRepository {
       if (r.isEmpty) return;
       final pid = r.first['id'] as int?;
       if (pid == null) return;
+      final phoneDeptIdBefore = r.first['department_id'] as int?;
       final pre = await txn.query(
         'department_phones',
         where: 'department_id = ? AND phone_id = ?',
         whereArgs: [departmentId, pid],
         limit: 1,
       );
-      if (pre.isEmpty) return;
-      await txn.delete(
-        'department_phones',
-        where: 'department_id = ? AND phone_id = ?',
-        whereArgs: [departmentId, pid],
-      );
+      final hadDepartmentPhonesRow = pre.isNotEmpty;
+      final hadPhonesDepartmentId = phoneDeptIdBefore == departmentId;
+      if (!hadDepartmentPhonesRow && !hadPhonesDepartmentId) return;
+
+      if (hadDepartmentPhonesRow) {
+        await txn.delete(
+          'department_phones',
+          where: 'department_id = ? AND phone_id = ?',
+          whereArgs: [departmentId, pid],
+        );
+      }
+      if (hadPhonesDepartmentId) {
+        await txn.update(
+          'phones',
+          {'department_id': null},
+          where: 'id = ?',
+          whereArgs: [pid],
+        );
+      }
       final ap = await _auditPerformingUser(executor: txn);
       await AuditService.log(
         txn,
@@ -354,18 +384,193 @@ class DirectoryRepository {
     });
   }
 
+  Future<int?> getPhoneIdByNumber(String phoneNumber) async {
+    await _ensurePhonesIsDeletedColumn(db);
+    final t = phoneNumber.trim();
+    if (t.isEmpty) return null;
+    final rows = await db.query(
+      'phones',
+      columns: ['id'],
+      where: 'number = ? AND COALESCE(is_deleted, 0) = 0',
+      whereArgs: [t],
+      limit: 1,
+    );
+    if (rows.isEmpty) return null;
+    return rows.first['id'] as int?;
+  }
+
+  Future<int?> getEquipmentIdByCode(String code) async {
+    final c = code.trim();
+    if (c.isEmpty) return null;
+    final rows = await db.query(
+      'equipment',
+      columns: ['id'],
+      where:
+          'code_equipment = ? AND COALESCE(is_deleted, 0) = 0',
+      whereArgs: [c],
+      limit: 1,
+    );
+    if (rows.isEmpty) return null;
+    return rows.first['id'] as int?;
+  }
+
+  /// Αναφορές σε τηλέφωνο (εκτός audit): συνδέσεις + κλήσεις.
+  Future<int> countPhoneReferencesExcludingAudit(
+    int phoneId,
+    String phoneNumber,
+  ) async {
+    await _ensurePhonesIsDeletedColumn(db);
+    final digits = _phoneDigitsOnly(phoneNumber.trim());
+    final userLinks = await db.rawQuery(
+      'SELECT COUNT(*) AS c FROM user_phones WHERE phone_id = ?',
+      [phoneId],
+    );
+    final deptLinks = await db.rawQuery(
+      'SELECT COUNT(*) AS c FROM department_phones WHERE phone_id = ?',
+      [phoneId],
+    );
+    final taskLinks = await db.rawQuery(
+      '''
+      SELECT COUNT(*) AS c FROM tasks
+      WHERE phone_id = ? AND COALESCE(is_deleted, 0) = 0
+      ''',
+      [phoneId],
+    );
+    final callLinks = await db.rawQuery(
+      '''
+      SELECT COUNT(*) AS c FROM calls
+      WHERE COALESCE(is_deleted, 0) = 0
+        AND (
+          TRIM(phone_text) = ?
+          OR (
+            ? != ''
+            AND REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(
+              COALESCE(phone_text, ''), ' ', ''), '-', ''), '(', ''), ')', ''), '+', '')
+              LIKE '%' || ? || '%'
+          )
+        )
+      ''',
+      [phoneNumber.trim(), digits, digits],
+    );
+    return _readCount(userLinks) +
+        _readCount(deptLinks) +
+        _readCount(taskLinks) +
+        _readCount(callLinks);
+  }
+
+  /// Αναφορές σε εξοπλισμό (εκτός audit): συνδέσεις + κλήσεις.
+  Future<int> countEquipmentReferencesExcludingAudit(int equipmentId) async {
+    final userLinks = await db.rawQuery(
+      'SELECT COUNT(*) AS c FROM user_equipment WHERE equipment_id = ?',
+      [equipmentId],
+    );
+    final taskLinks = await db.rawQuery(
+      '''
+      SELECT COUNT(*) AS c FROM tasks
+      WHERE equipment_id = ? AND COALESCE(is_deleted, 0) = 0
+      ''',
+      [equipmentId],
+    );
+    final callLinks = await db.rawQuery(
+      '''
+      SELECT COUNT(*) AS c FROM calls
+      WHERE equipment_id = ? AND COALESCE(is_deleted, 0) = 0
+      ''',
+      [equipmentId],
+    );
+    final codeRows = await db.query(
+      'equipment',
+      columns: ['code_equipment'],
+      where: 'id = ?',
+      whereArgs: [equipmentId],
+      limit: 1,
+    );
+    var callTextLinks = 0;
+    if (codeRows.isNotEmpty) {
+      final code = (codeRows.first['code_equipment'] as String?)?.trim() ?? '';
+      if (code.isNotEmpty) {
+        final rows = await db.rawQuery(
+          '''
+          SELECT COUNT(*) AS c FROM calls
+          WHERE COALESCE(is_deleted, 0) = 0
+            AND equipment_id IS NULL
+            AND TRIM(COALESCE(equipment_text, '')) = ?
+          ''',
+          [code],
+        );
+        callTextLinks = _readCount(rows);
+      }
+    }
+    return _readCount(userLinks) +
+        _readCount(taskLinks) +
+        _readCount(callLinks) +
+        callTextLinks;
+  }
+
+  static int _readCount(List<Map<String, Object?>> rows) {
+    if (rows.isEmpty) return 0;
+    final raw = rows.first['c'];
+    if (raw is int) return raw;
+    if (raw is num) return raw.toInt();
+    return int.tryParse('$raw') ?? 0;
+  }
+
+  Future<void> softDeletePhones(List<int> ids) async {
+    if (ids.isEmpty) return;
+    final user = await _auditPerformingUser();
+    await db.transaction((txn) async {
+      for (final id in ids) {
+        final rows = await txn.query(
+          'phones',
+          columns: ['number'],
+          where: 'id = ?',
+          whereArgs: [id],
+          limit: 1,
+        );
+        if (rows.isEmpty) continue;
+        final number = (rows.first['number'] as String?)?.trim() ?? '';
+        await txn.delete(
+          'department_phones',
+          where: 'phone_id = ?',
+          whereArgs: [id],
+        );
+        await txn.update(
+          'phones',
+          {
+            'department_id': null,
+            'is_deleted': 1,
+          },
+          where: 'id = ?',
+          whereArgs: [id],
+        );
+        await AuditService.log(
+          txn,
+          action: DatabaseHelper.auditActionDelete,
+          userPerforming: user,
+          details: 'phones id=$id',
+          entityType: AuditEntityTypes.phone,
+          entityId: id,
+          entityName: number.isEmpty ? null : number,
+        );
+      }
+    });
+  }
+
   Future<Map<int, List<String>>> getDepartmentDirectPhonesMap() async {
     await _ensurePhonesDepartmentColumn(db);
+    await _ensurePhonesIsDeletedColumn(db);
     final rows = await db.rawQuery('''
       SELECT src.department_id AS department_id, src.number AS number
       FROM (
         SELECT dp.department_id AS department_id, p.number AS number
         FROM department_phones dp
         JOIN phones p ON p.id = dp.phone_id
+        WHERE COALESCE(p.is_deleted, 0) = 0
         UNION
         SELECT p.department_id AS department_id, p.number AS number
         FROM phones p
         WHERE p.department_id IS NOT NULL
+          AND COALESCE(p.is_deleted, 0) = 0
       ) src
       ORDER BY src.department_id, src.number
     ''');
@@ -382,10 +587,11 @@ class DirectoryRepository {
   Future<bool> phoneNumberExists(String phoneNumber) async {
     final t = phoneNumber.trim();
     if (t.isEmpty) return false;
+    await _ensurePhonesIsDeletedColumn(db);
     final rows = await db.query(
       'phones',
       columns: ['id'],
-      where: 'number = ?',
+      where: 'number = ? AND COALESCE(is_deleted, 0) = 0',
       whereArgs: [t],
       limit: 1,
     );
@@ -1568,14 +1774,18 @@ class DirectoryRepository {
   /// Επιστρέφει `phone_id`, `number`, `dept_names` (GROUP_CONCAT), `primary_department_id` (MIN έγκυρου τμήματος).
   Future<List<Map<String, dynamic>>> getNonUserPhonesCatalogRows() async {
     await _ensurePhonesDepartmentColumn(db);
+    await _ensurePhonesIsDeletedColumn(db);
     return db.rawQuery('''
 WITH phone_dept AS (
   SELECT p.id AS phone_id, p.department_id AS dept_id
   FROM phones p
   WHERE p.department_id IS NOT NULL
+    AND COALESCE(p.is_deleted, 0) = 0
   UNION
   SELECT dp.phone_id AS phone_id, dp.department_id AS dept_id
   FROM department_phones dp
+  JOIN phones p ON p.id = dp.phone_id
+  WHERE COALESCE(p.is_deleted, 0) = 0
 )
 SELECT
   p.id AS phone_id,
@@ -1585,7 +1795,8 @@ SELECT
 FROM phones p
 LEFT JOIN phone_dept pd ON pd.phone_id = p.id
 LEFT JOIN departments d ON d.id = pd.dept_id AND COALESCE(d.is_deleted, 0) = 0
-WHERE NOT EXISTS (SELECT 1 FROM user_phones up WHERE up.phone_id = p.id)
+WHERE COALESCE(p.is_deleted, 0) = 0
+  AND NOT EXISTS (SELECT 1 FROM user_phones up WHERE up.phone_id = p.id)
 GROUP BY p.id, p.number
 ORDER BY p.number COLLATE NOCASE ASC
 ''');

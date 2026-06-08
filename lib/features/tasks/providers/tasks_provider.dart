@@ -1,4 +1,4 @@
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+﻿import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/task.dart';
 import '../models/task_filter.dart';
 import '../services/task_service.dart';
@@ -35,6 +35,12 @@ final globalPendingTasksCountProvider = FutureProvider<int>((ref) async {
   return ref.read(taskServiceProvider).getGlobalPendingTasksCount();
 });
 
+/// Συνολικό πλήθος εγγραφών στον πίνακα tasks (χωρίς φίλτρα UI).
+/// Δεν παρακολουθεί [tasksProvider] — ανανεώνεται ρητά μετά από προσθήκη/διαγραφή.
+final totalTasksCountProvider = FutureProvider<int>((ref) async {
+  return ref.read(taskServiceProvider).getTotalTaskCount();
+});
+
 class TasksNotifier extends AsyncNotifier<List<Task>> {
   @override
   Future<List<Task>> build() async {
@@ -54,6 +60,7 @@ class TasksNotifier extends AsyncNotifier<List<Task>> {
     final service = ref.read(taskServiceProvider);
     await service.createTask(task);
     await refresh();
+    ref.invalidate(totalTasksCountProvider);
   }
 
   Future<void> updateTask(Task task) async {
@@ -67,6 +74,7 @@ class TasksNotifier extends AsyncNotifier<List<Task>> {
     await service.deleteTask(id);
     await refresh();
     ref.invalidate(orphanCallsProvider);
+    ref.invalidate(totalTasksCountProvider);
   }
 
   Future<void> closeTask(int id, String solutionNotes) async {

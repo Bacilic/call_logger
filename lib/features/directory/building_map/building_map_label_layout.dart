@@ -1,9 +1,12 @@
-import 'dart:math' as math;
+﻿import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
 import '../models/department_model.dart';
 import 'providers/building_map_providers.dart';
+
+/// Μέγιστες γραμμές ετικέτας χάρτη (συμπ. ρητές αλλαγές γραμμής με Shift+Enter).
+const int kBuildingMapLabelMaxLines = 4;
 
 /// Γεωμετρία ετικέτας χάρτη (ίδια λογική με [BuildingMapSheetPainter]).
 class MapLabelLayout {
@@ -114,7 +117,7 @@ MapLabelLayout? computeMapLabelLayout({
       ),
     ),
     textDirection: TextDirection.ltr,
-    maxLines: 2,
+    maxLines: kBuildingMapLabelMaxLines,
     ellipsis: '…',
   )..layout(maxWidth: math.max(72.0, canvasSize.width * 0.24));
 

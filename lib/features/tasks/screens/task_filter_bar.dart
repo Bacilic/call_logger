@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/material.dart';
@@ -33,16 +33,10 @@ class _TaskFilterBarState extends ConsumerState<TaskFilterBar> {
     super.initState();
     final filter = ref.read(taskFilterProvider);
     _searchController.text = filter.searchQuery;
-    _searchController.addListener(_onSearchControllerChanged);
-  }
-
-  void _onSearchControllerChanged() {
-    if (mounted) setState(() {});
   }
 
   @override
   void dispose() {
-    _searchController.removeListener(_onSearchControllerChanged);
     _debounceTimer?.cancel();
     _searchController.dispose();
     super.dispose();
@@ -185,30 +179,35 @@ class _TaskFilterBarState extends ConsumerState<TaskFilterBar> {
             Row(
               children: [
                 Expanded(
-                  child: TextField(
-                    controller: _searchController,
-                    enabled: filtersEnabled,
-                    onChanged: filtersEnabled ? _onSearchChanged : null,
-                    decoration: InputDecoration(
-                      hintText: 'Αναζήτηση τίτλου / περιγραφής',
-                      prefixIcon: const Icon(Icons.search),
-                      suffixIcon: _searchController.text.isEmpty
-                          ? null
-                          : IconButton(
-                              tooltip: 'Καθαρισμός αναζήτησης',
-                              icon: const Icon(Icons.clear),
-                              onPressed:
-                                  filtersEnabled ? _clearSearch : null,
-                            ),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      isDense: true,
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 10,
-                      ),
-                    ),
+                  child: ValueListenableBuilder<TextEditingValue>(
+                    valueListenable: _searchController,
+                    builder: (context, value, _) {
+                      return TextField(
+                        controller: _searchController,
+                        enabled: filtersEnabled,
+                        onChanged: filtersEnabled ? _onSearchChanged : null,
+                        decoration: InputDecoration(
+                          hintText: 'Αναζήτηση τίτλου / περιγραφής',
+                          prefixIcon: const Icon(Icons.search),
+                          suffixIcon: value.text.isEmpty
+                              ? null
+                              : IconButton(
+                                  tooltip: 'Καθαρισμός αναζήτησης',
+                                  icon: const Icon(Icons.clear),
+                                  onPressed:
+                                      filtersEnabled ? _clearSearch : null,
+                                ),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          isDense: true,
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 10,
+                          ),
+                        ),
+                      );
+                    },
                   ),
                 ),
                 const SizedBox(width: 8),

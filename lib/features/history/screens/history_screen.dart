@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -208,11 +208,12 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
     final theme = Theme.of(context);
     final filter = ref.watch(historyFilterProvider);
     final asyncCalls = ref.watch(historyCallsProvider);
+    final totalCallsAsync = ref.watch(totalCallsCountProvider);
     final asyncCallCount = ref.watch(historyCategoryDateCallCountProvider);
     final asyncCategories = ref.watch(historyCategoriesProvider);
     final tableZoom = ref.watch(historyTableZoomProvider);
-    final filtersEnabled = asyncCalls.maybeWhen(
-      data: (rows) => rows.isNotEmpty,
+    final filtersEnabled = totalCallsAsync.maybeWhen(
+      data: (count) => count > 0,
       orElse: () => false,
     );
     final databaseDisplayName = ref.watch(historyDatabaseDisplayNameProvider);

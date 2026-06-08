@@ -5,6 +5,7 @@ import 'dart:math' as math;
 import 'package:custom_mouse_cursor/custom_mouse_cursor.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../models/department_model.dart';
@@ -366,6 +367,33 @@ class _BuildingMapSheetViewportState
     _scheduleDisposeMapNameField(c, f);
   }
 
+  void _insertMapDisplayNameNewline() {
+    final ctrl = _mapDisplayNameCtrl;
+    if (ctrl == null) return;
+    final text = ctrl.text;
+    final sel = ctrl.selection;
+    final start = sel.start >= 0 ? sel.start : text.length;
+    final end = sel.end >= 0 ? sel.end : start;
+    final updated = text.replaceRange(start, end, '\n');
+    ctrl.value = TextEditingValue(
+      text: updated,
+      selection: TextSelection.collapsed(offset: start + 1),
+    );
+  }
+
+  KeyEventResult _onMapDisplayNameFieldKey(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+    if (event.logicalKey != LogicalKeyboardKey.enter) {
+      return KeyEventResult.ignored;
+    }
+    if (HardwareKeyboard.instance.isShiftPressed) {
+      _insertMapDisplayNameNewline();
+      return KeyEventResult.handled;
+    }
+    _softEndMapDisplayNameEditing();
+    return KeyEventResult.handled;
+  }
+
   void _beginMapDisplayNameEditing(DepartmentModel dept) {
     if (dept.id == null) return;
     final did = dept.id!;
@@ -384,8 +412,9 @@ class _BuildingMapSheetViewportState
     _mapDisplayNameDeptId = did;
     _mapDisplayNameEditing = true;
     _mapDisplayNameCtrl = TextEditingController(text: initial);
-    _mapDisplayNameFocus = FocusNode()
-      ..addListener(() {
+    _mapDisplayNameFocus = FocusNode(
+      onKeyEvent: _onMapDisplayNameFieldKey,
+    )..addListener(() {
         if (_mapDisplayNameFocus?.hasFocus ?? false) return;
         if (!_mapDisplayNameEditing) return;
         _softEndMapDisplayNameEditing();
@@ -1360,7 +1389,7 @@ class _BuildingMapSheetViewportState
                               left: (editingLabelLayout.textTopLeft.dx - 4)
                                   .clamp(0.0, sz.width - 120),
                               top: (editingLabelLayout.textTopLeft.dy - 4)
-                                  .clamp(0.0, sz.height - 48),
+                                  .clamp(0.0, sz.height - 96),
                               width: math
                                   .min(
                                     sz.width -
@@ -1388,7 +1417,7 @@ class _BuildingMapSheetViewportState
                                   decoration: InputDecoration(
                                     isDense: true,
                                     hintText:
-                                        'Επιβεβαίωση draft (✓) για αποθήκευση — κενό = όνομα τμήματος',
+                                        'Enter: τέλος · Shift+Enter: νέα γραμμή · ✓ για αποθήκευση',
                                     filled: true,
                                     fillColor: Theme.of(
                                       context,
@@ -1401,10 +1430,9 @@ class _BuildingMapSheetViewportState
                                       borderRadius: BorderRadius.circular(8),
                                     ),
                                   ),
-                                  maxLines: 2,
-                                  textInputAction: TextInputAction.done,
-                                  onSubmitted: (_) =>
-                                      _softEndMapDisplayNameEditing(),
+                                  keyboardType: TextInputType.multiline,
+                                  minLines: 1,
+                                  maxLines: kBuildingMapLabelMaxLines,
                                 ),
                               ),
                             ),

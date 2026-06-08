@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/widgets/deleted_catalog_entity_text.dart';
+import '../../../core/widgets/linkable_selectable_text.dart';
 
 import '../../../core/errors/task_save_exception.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -573,8 +574,8 @@ class _TaskCardState extends ConsumerState<TaskCard> {
                     thickness: 0.5,
                     color: Colors.black87,
                   ),
-                  Text(
-                    task.solutionNotes!.trim(),
+                  LinkableSelectableText(
+                    text: task.solutionNotes!.trim(),
                     style: theme.textTheme.bodySmall?.copyWith(
                       color: theme.colorScheme.onSurfaceVariant,
                     ),

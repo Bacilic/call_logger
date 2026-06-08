@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../services/lamp_migration_service.dart';
 
@@ -24,6 +25,7 @@ class _LampTransferWizardDialogState extends State<LampTransferWizardDialog> {
   bool _loading = true;
   bool _saving = false;
   String? _error;
+  String? _localError;
   int? _selectedCandidateId;
   final Map<String, TextEditingController> _controllers =
       <String, TextEditingController>{};
@@ -117,9 +119,61 @@ class _LampTransferWizardDialogState extends State<LampTransferWizardDialog> {
   }
 
   void _showLocalError(String message) {
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(message)));
+    setState(() => _localError = message);
+  }
+
+  void _clearLocalError() {
+    if (_localError == null) return;
+    setState(() => _localError = null);
+  }
+
+  Future<void> _copyLocalError(String message) async {
+    await Clipboard.setData(ClipboardData(text: message));
+  }
+
+  Widget _localErrorPanel(BuildContext context) {
+    final message = _localError;
+    if (message == null || message.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    final scheme = Theme.of(context).colorScheme;
+    return Material(
+      color: scheme.errorContainer.withValues(alpha: 0.55),
+      borderRadius: BorderRadius.circular(8),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(Icons.error_outline, size: 20, color: scheme.onSurface),
+            const SizedBox(width: 8),
+            Expanded(
+              child: SelectableText(
+                message,
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ),
+            Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                IconButton(
+                  tooltip: 'Αντιγραφή μηνύματος',
+                  visualDensity: VisualDensity.compact,
+                  onPressed: () => _copyLocalError(message),
+                  icon: const Icon(Icons.copy_outlined, size: 18),
+                ),
+                IconButton(
+                  tooltip: 'Απόκρυψη μηνύματος',
+                  visualDensity: VisualDensity.compact,
+                  onPressed: _clearLocalError,
+                  icon: const Icon(Icons.close, size: 18),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
@@ -129,7 +183,16 @@ class _LampTransferWizardDialogState extends State<LampTransferWizardDialog> {
       content: SizedBox(
         width: 1120,
         height: 620,
-        child: _buildContent(context),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(child: _buildContent(context)),
+            if (_localError != null) ...[
+              const SizedBox(height: 12),
+              _localErrorPanel(context),
+            ],
+          ],
+        ),
       ),
     );
   }

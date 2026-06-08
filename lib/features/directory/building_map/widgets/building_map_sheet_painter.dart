@@ -1,7 +1,8 @@
-import 'dart:math' as math;
+﻿import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import '../building_map_label_layout.dart';
 import '../providers/building_map_providers.dart';
 import '../../models/department_model.dart';
 
@@ -294,7 +295,7 @@ class BuildingMapSheetPainter extends CustomPainter {
           ),
         ),
         textDirection: TextDirection.ltr,
-        maxLines: 2,
+        maxLines: kBuildingMapLabelMaxLines,
         ellipsis: '…',
       )..layout(maxWidth: math.max(72, size.width * 0.24));
       final textTopLeft = Offset(
