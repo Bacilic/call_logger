@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/directory/phone_department_policy.dart';
+import '../../../../core/services/lookup_service.dart';
+import '../../../../core/utils/phone_list_parser.dart';
 import '../../../../core/utils/spell_check.dart';
 import '../../../calls/models/user_model.dart';
 import '../../providers/directory_provider.dart';
+import 'user_phone_department_conflict_dialog.dart';
 
 /// Διάλογος μαζικής επεξεργασίας: εφαρμογή τιμών σε επιλεγμένους χρήστες.
 class BulkUserEditDialog extends StatefulWidget {
@@ -83,6 +87,61 @@ class _BulkUserEditDialogState extends State<BulkUserEditDialog> {
     super.dispose();
   }
 
+  Future<UserPhoneConflictBatchResult?> _confirmBulkPhoneConflicts(
+    List<String> phones,
+  ) async {
+    final byPhone = <String, PhoneDepartmentConflict>{};
+    for (final u in widget.selectedUsers) {
+      final conflicts = PhoneDepartmentPolicy.findConflictsForUserAssignment(
+        phones: phones,
+        targetDepartmentId: u.departmentId,
+        editingUserId: u.id,
+      );
+      for (final c in conflicts) {
+        byPhone.putIfAbsent(c.phone, () => c);
+      }
+    }
+    if (byPhone.isEmpty) return const UserPhoneConflictBatchResult();
+
+    final deptIds = widget.selectedUsers
+        .map((u) => u.departmentId)
+        .whereType<int>()
+        .toSet();
+    if (deptIds.length > 1) {
+      if (!mounted) return null;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Η μαζική ανάθεση συγκρουόμενου τηλέφωνου απαιτεί '
+            'το ίδιο τμήμα για όλους τους επιλεγμένους χρήστες.',
+          ),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return null;
+    }
+
+    final targetId = deptIds.isEmpty ? null : deptIds.first;
+    final targetName = targetId == null
+        ? ''
+        : (LookupService.instance.getDepartmentName(targetId) ?? '');
+
+    final userDisplayName = widget.selectedUsers.length == 1
+        ? ((widget.selectedUsers.first.name ?? '').trim().isEmpty
+              ? '—'
+              : widget.selectedUsers.first.name!.trim())
+        : '${widget.selectedUsers.length} επιλεγμένους χρήστες';
+
+    if (!mounted) return null;
+    return showUserPhoneDepartmentConflictDialog(
+      context,
+      conflicts: byPhone.values.toList(),
+      userDisplayName: userDisplayName,
+      targetDepartmentName: targetName,
+      targetDepartmentId: targetId,
+    );
+  }
+
   Future<void> _save() async {
     final ids = widget.selectedUsers
         .map((u) => u.id)
@@ -104,7 +163,37 @@ class _BulkUserEditDialogState extends State<BulkUserEditDialog> {
       if (mounted) Navigator.of(context).pop();
       return;
     }
-    await widget.notifier.bulkUpdate(ids, changes);
+
+    UserPhoneConflictBatchResult? phoneResolutions;
+    if (_applyField['phone'] == true) {
+      final phones = PhoneListParser.splitPhones(_controllers['phone']!.text);
+      if (phones.isNotEmpty) {
+        phoneResolutions = await _confirmBulkPhoneConflicts(phones);
+        if (!mounted) return;
+        if (phoneResolutions == null) return;
+      }
+    }
+
+    try {
+      await widget.notifier.bulkUpdate(
+        ids,
+        changes,
+        phoneConflictResolutions: phoneResolutions,
+      );
+    } on PhoneDepartmentPolicyException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Απορρίφθηκε η μαζική ενημέρωση: '
+            '${e.conflicts.map((c) => c.phone).join(', ')}.',
+          ),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
     if (!mounted) return;
     Navigator.of(context).pop();
     ScaffoldMessenger.of(context).showSnackBar(

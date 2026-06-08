@@ -5,6 +5,9 @@ import '../../../../core/database/database_helper.dart';
 import '../../../../core/models/building_map_floor.dart';
 import '../../../../core/database/directory_repository.dart';
 import '../../../calls/provider/lookup_provider.dart';
+import '../../../../core/services/lookup_service.dart';
+import '../../services/shared_asset_disconnect_apply.dart';
+import 'shared_asset_disconnect_dialog.dart';
 import '../../models/department_directory_column.dart';
 import '../../models/department_model.dart';
 import '../../building_map/providers/building_map_providers.dart';
@@ -244,8 +247,54 @@ class _DepartmentsTabState extends ConsumerState<DepartmentsTab> {
       ),
     );
     if (ok != true || !context.mounted) return;
+
+    final toDelete = state.allDepartments
+        .where((d) => d.id != null && state.selectedIds.contains(d.id))
+        .toList();
+    final db = await DatabaseHelper.instance.database;
+    final dir = DirectoryRepository(db);
+    final lookup = LookupService.instance;
+    final deletingIds = state.selectedIds.toSet();
+
+    for (final dept in toDelete) {
+      final deptId = dept.id;
+      if (deptId == null) continue;
+      final phones = lookup.getDirectPhonesByDepartment(deptId);
+      final equipment = lookup.getSharedEquipmentCodesByDepartment(deptId);
+      if (phones.isEmpty && equipment.isEmpty) continue;
+
+      final availableDepartments = lookup.departments
+          .where(
+            (d) =>
+                d.id != null &&
+                !d.isDeleted &&
+                !deletingIds.contains(d.id) &&
+                d.name.trim().isNotEmpty,
+          )
+          .toList();
+
+      if (!context.mounted) return;
+      final batch = await showSharedAssetDisconnectFlow(
+        context: context,
+        sourceDepartmentId: deptId,
+        sourceDepartmentName: dept.name,
+        phones: phones,
+        equipmentCodes: equipment,
+        availableDepartments: availableDepartments,
+        allowKeepInDepartment: false,
+      );
+      if (!context.mounted || batch == null) return;
+
+      await applyDepartmentSharedAssetDisconnectBatch(
+        dir,
+        batch,
+        sourceDepartmentId: deptId,
+      );
+    }
+
     final notifier = ref.read(departmentDirectoryProvider.notifier);
     await notifier.deleteSelected();
+    ref.invalidate(lookupServiceProvider);
     if (!context.mounted) return;
     final deleted = ref.read(departmentDirectoryProvider).lastDeleted ?? [];
     final deletedCount = deleted.length;

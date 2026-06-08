@@ -22,6 +22,12 @@ String _departmentOptionLabel(String option) {
   return option;
 }
 
+/// Πλαίσιο αποδέσμευσης: κοινόχρηστο στοιχείο τμήματος ή προσωπικό τηλέφωνο χρήστη.
+enum SharedAssetDisconnectMode {
+  sharedAsset,
+  personalPhone,
+}
+
 /// Επιλογή στον κύριο διάλογο αποδέσμευσης κοινόχρηστου στοιχείου.
 enum SharedAssetDisconnectChoice {
   keepInDepartment,
@@ -81,14 +87,18 @@ class SharedAssetDisconnectBatchResult {
   final Map<String, Set<String>> newDepartmentNamesToCreate;
 }
 
-/// Ροή αποδέσμευσης κοινόχρηστων τηλεφώνων/εξοπλισμού από τμήμα.
+/// Ροή αποδέσμευσης κοινόχρηστων τηλεφώνων/εξοπλισμού από τμήμα
+/// ή προσωπικών τηλεφώνων χρήστη (αφαίρεση από φόρμα χρήστη).
 Future<SharedAssetDisconnectBatchResult?> showSharedAssetDisconnectFlow({
   required BuildContext context,
-  required int sourceDepartmentId,
-  required String sourceDepartmentName,
+  int? sourceDepartmentId,
+  String? sourceDepartmentName,
   List<String> phones = const [],
   List<String> equipmentCodes = const [],
   required List<DepartmentModel> availableDepartments,
+  SharedAssetDisconnectMode mode = SharedAssetDisconnectMode.sharedAsset,
+  String? personalPhoneUserDisplayName,
+  bool allowKeepInDepartment = true,
 }) async {
   if (phones.isEmpty && equipmentCodes.isEmpty) {
     return const SharedAssetDisconnectBatchResult();
@@ -111,6 +121,9 @@ Future<SharedAssetDisconnectBatchResult?> showSharedAssetDisconnectFlow({
       sourceDepartmentId: sourceDepartmentId,
       sourceDepartmentName: sourceDepartmentName,
       availableDepartments: availableDepartments,
+      mode: mode,
+      personalPhoneUserDisplayName: personalPhoneUserDisplayName,
+      allowKeepInDepartment: allowKeepInDepartment,
     );
     if (item == null) return null;
     switch (item.choice) {
@@ -140,6 +153,8 @@ Future<SharedAssetDisconnectBatchResult?> showSharedAssetDisconnectFlow({
       sourceDepartmentId: sourceDepartmentId,
       sourceDepartmentName: sourceDepartmentName,
       availableDepartments: availableDepartments,
+      mode: SharedAssetDisconnectMode.sharedAsset,
+      allowKeepInDepartment: allowKeepInDepartment,
     );
     if (item == null) return null;
     switch (item.choice) {
@@ -169,14 +184,56 @@ Future<SharedAssetDisconnectBatchResult?> showSharedAssetDisconnectFlow({
   );
 }
 
+String _disconnectDialogTitle({
+  required bool isPhone,
+  required SharedAssetDisconnectMode mode,
+}) {
+  if (isPhone && mode == SharedAssetDisconnectMode.personalPhone) {
+    return 'Αποδέσμευση προσωπικού τηλεφώνου';
+  }
+  return isPhone
+      ? 'Αποδέσμευση κοινόχρηστου τηλεφώνου'
+      : 'Αποδέσμευση κοινόχρηστου εξοπλισμού';
+}
+
+String _disconnectDialogContent({
+  required bool isPhone,
+  required String value,
+  required SharedAssetDisconnectMode mode,
+  String? sourceDepartmentName,
+  String? personalPhoneUserDisplayName,
+}) {
+  if (isPhone && mode == SharedAssetDisconnectMode.personalPhone) {
+    final user = personalPhoneUserDisplayName?.trim();
+    final userPart = (user == null || user.isEmpty) ? '' : ' «$user»';
+    final dept = sourceDepartmentName?.trim();
+    final deptPart = (dept == null || dept.isEmpty)
+        ? ''
+        : ' (τμήμα «$dept»)';
+    return 'Ο αριθμός $value πρόκειται να αποσυνδεθεί από τον χρήστη$userPart$deptPart.\n\nΕπιλέξτε ενέργεια:';
+  }
+  final dept = sourceDepartmentName?.trim() ?? '';
+  return isPhone
+      ? 'Το κοινόχρηστο τηλέφωνο $value πρόκειται να αποδεσμευτεί από το τμήμα «$dept».\n\nΕπιλέξτε ενέργεια:'
+      : 'Ο κοινόχρηστος εξοπλισμός $value πρόκειται να αποδεσμευτεί από το τμήμα «$dept».\n\nΕπιλέξτε ενέργεια:';
+}
+
 Future<SharedAssetDisconnectItemResult?> _resolveSingleItem({
   required BuildContext context,
   required bool isPhone,
   required String value,
-  required int sourceDepartmentId,
-  required String sourceDepartmentName,
+  int? sourceDepartmentId,
+  String? sourceDepartmentName,
   required List<DepartmentModel> availableDepartments,
+  SharedAssetDisconnectMode mode = SharedAssetDisconnectMode.sharedAsset,
+  String? personalPhoneUserDisplayName,
+  bool allowKeepInDepartment = true,
 }) async {
+  final canKeepInDepartment =
+      allowKeepInDepartment &&
+      sourceDepartmentId != null &&
+      (sourceDepartmentName?.trim().isNotEmpty ?? false);
+
   while (true) {
     if (!context.mounted) return null;
     final choice = await showDialog<SharedAssetDisconnectChoice>(
@@ -184,26 +241,29 @@ Future<SharedAssetDisconnectItemResult?> _resolveSingleItem({
       barrierDismissible: false,
       builder: (ctx) => AlertDialog(
         title: Text(
-          isPhone
-              ? 'Αποδέσμευση κοινόχρηστου τηλεφώνου'
-              : 'Αποδέσμευση κοινόχρηστου εξοπλισμού',
+          _disconnectDialogTitle(isPhone: isPhone, mode: mode),
         ),
         content: Text(
-          isPhone
-              ? 'Το κοινόχρηστο τηλέφωνο $value πρόκειται να αποδεσμευτεί από το τμήμα «$sourceDepartmentName».\n\nΕπιλέξτε ενέργεια:'
-              : 'Ο κοινόχρηστος εξοπλισμός $value πρόκειται να αποδεσμευτεί από το τμήμα «$sourceDepartmentName».\n\nΕπιλέξτε ενέργεια:',
+          _disconnectDialogContent(
+            isPhone: isPhone,
+            value: value,
+            mode: mode,
+            sourceDepartmentName: sourceDepartmentName,
+            personalPhoneUserDisplayName: personalPhoneUserDisplayName,
+          ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(),
             child: const Text('Άκυρο'),
           ),
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(
-              SharedAssetDisconnectChoice.keepInDepartment,
+          if (canKeepInDepartment)
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(
+                SharedAssetDisconnectChoice.keepInDepartment,
+              ),
+              child: const Text('Παραμονή στο ίδιο τμήμα'),
             ),
-            child: const Text('Παραμονή στο ίδιο τμήμα'),
-          ),
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(
               SharedAssetDisconnectChoice.transfer,
@@ -250,14 +310,14 @@ Future<SharedAssetTransferTarget?> _showTransferDialog({
   required BuildContext context,
   required bool isPhone,
   required String value,
-  required int sourceDepartmentId,
+  int? sourceDepartmentId,
   required List<DepartmentModel> availableDepartments,
 }) async {
   final depts = availableDepartments
       .where(
         (d) =>
             d.id != null &&
-            d.id != sourceDepartmentId &&
+            (sourceDepartmentId == null || d.id != sourceDepartmentId) &&
             !d.isDeleted &&
             d.name.trim().isNotEmpty,
       )

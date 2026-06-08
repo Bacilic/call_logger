@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/database/database_helper.dart';
 import '../../../../core/database/directory_repository.dart';
+import '../../../../core/directory/phone_department_policy.dart';
 import '../../../../core/widgets/database_persistence_error_snackbar.dart';
 import '../../../../core/providers/settings_provider.dart';
 import '../../../../core/providers/spell_check_provider.dart';
@@ -11,12 +12,16 @@ import '../../../../core/utils/user_identity_normalizer.dart';
 import '../../../../core/utils/phone_list_parser.dart';
 import '../../../../core/widgets/lexicon_spell_text_form_field.dart';
 import '../../../../core/widgets/spell_check_controller.dart';
+import '../../../../core/services/lookup_service.dart';
 import '../../../calls/models/user_model.dart';
 import '../../../calls/provider/lookup_provider.dart';
 import '../../providers/directory_provider.dart';
+import '../../services/shared_asset_disconnect_apply.dart';
 import 'department_transfer_confirm_dialog.dart';
 import 'homonym_warning_dialog.dart';
+import 'shared_asset_disconnect_dialog.dart';
 import 'user_name_change_confirm_dialog.dart';
+import 'user_phone_department_conflict_dialog.dart';
 import 'user_form_smart_text_field.dart';
 
 /// Διάλογος φόρμας για δημιουργία/επεξεργασία/αντίγραφο χρήστη.
@@ -194,6 +199,123 @@ class _UserFormDialogState extends ConsumerState<UserFormDialog> {
         );
   }
 
+  List<String> _removedPhonesFromField() {
+    final before = PhoneListParser.splitPhones(_snapPhone);
+    final after = PhoneListParser.splitPhones(_phoneController.text).toSet();
+    return before.where((p) => !after.contains(p)).toList();
+  }
+
+  /// Τηλέφωνα που αφαιρούνται από το πεδίο και συνδέονται μόνο με τον τρέχοντα χρήστη.
+  List<String> _exclusiveRemovedPhones() {
+    final editingId = widget.initialUser?.id;
+    if (!_isEdit || editingId == null) return const [];
+
+    final removed = _removedPhonesFromField();
+    if (removed.isEmpty) return const [];
+
+    final exclusive = <String>[];
+    for (final phone in removed) {
+      final owners = widget.notifier.allUsersForUi.where((u) {
+        if (u.isDeleted) return false;
+        return u.phones.any((p) => p.trim() == phone.trim());
+      }).toList();
+      if (owners.length == 1 && owners.first.id == editingId) {
+        exclusive.add(phone);
+      }
+    }
+    return exclusive;
+  }
+
+  ({int? id, String? name}) _resolveSourceDepartmentForDisconnect() {
+    final typed = _departmentController.text.trim();
+    if (typed.isEmpty) return (id: null, name: null);
+
+    final key = SearchTextNormalizer.normalizeForSearch(typed);
+    if (key.isEmpty) return (id: null, name: null);
+
+    for (final d in LookupService.instance.departments) {
+      if (d.isDeleted) continue;
+      if (SearchTextNormalizer.normalizeForSearch(d.name) == key) {
+        return (id: d.id, name: d.name.trim());
+      }
+    }
+    return (id: null, name: null);
+  }
+
+  List<String> _phonesToValidateForPolicy() {
+    final current = PhoneListParser.splitPhones(_phoneController.text);
+    if (!_isEdit || widget.isClone) return current;
+    final deptChanged =
+        SearchTextNormalizer.normalizeForSearch(_departmentController.text) !=
+        _snapDepartmentNorm;
+    if (deptChanged) return current;
+    return PhoneDepartmentPolicy.addedPhones(
+      beforePhones: PhoneListParser.splitPhones(_snapPhone),
+      afterPhones: current,
+    );
+  }
+
+  Future<({int? id, String name})> _resolveTargetDepartmentForSave() async {
+    final name = _departmentController.text.trim();
+    if (name.isEmpty) return (id: null, name: '');
+
+    final fromLookup = _resolveSourceDepartmentForDisconnect();
+    if (fromLookup.id != null) {
+      return (id: fromLookup.id, name: fromLookup.name ?? name);
+    }
+
+    final id = await DirectoryRepository(await DatabaseHelper.instance.database)
+        .getOrCreateDepartmentIdByName(name);
+    return (id: id, name: name);
+  }
+
+  Future<UserPhoneConflictBatchResult?> _confirmUserPhoneAssignmentConflicts({
+    required int? editingUserId,
+  }) async {
+    final phones = _phonesToValidateForPolicy();
+    if (phones.isEmpty) return const UserPhoneConflictBatchResult();
+
+    final target = await _resolveTargetDepartmentForSave();
+    final conflicts = PhoneDepartmentPolicy.findConflictsForUserAssignment(
+      phones: phones,
+      targetDepartmentId: target.id,
+      editingUserId: editingUserId,
+    );
+    if (conflicts.isEmpty) return const UserPhoneConflictBatchResult();
+
+    if (!mounted) return null;
+    return showUserPhoneDepartmentConflictDialog(
+      context,
+      conflicts: conflicts,
+      userDisplayName: _buildUserDisplayName(),
+      targetDepartmentName: target.name,
+      targetDepartmentId: target.id,
+    );
+  }
+
+  Future<SharedAssetDisconnectBatchResult?>
+  _confirmExclusiveRemovedPhonesDisconnect() async {
+    final phones = _exclusiveRemovedPhones();
+    if (phones.isEmpty) return const SharedAssetDisconnectBatchResult();
+
+    final lookup = LookupService.instance;
+    final source = _resolveSourceDepartmentForDisconnect();
+    final departments = lookup.departments
+        .where((d) => !d.isDeleted && d.name.trim().isNotEmpty)
+        .toList();
+
+    if (!mounted) return null;
+    return showSharedAssetDisconnectFlow(
+      context: context,
+      sourceDepartmentId: source.id,
+      sourceDepartmentName: source.name,
+      phones: phones,
+      availableDepartments: departments,
+      mode: SharedAssetDisconnectMode.personalPhone,
+      personalPhoneUserDisplayName: _buildUserDisplayName(),
+    );
+  }
+
   static const _duplicateSnack = SnackBar(
     content: Text(
       'Υπάρχει ήδη χρήστης με το ίδιο ονοματεπώνυμο (ισοδύναμη γραφή), το ίδιο τηλέφωνο και τους ίδιους κωδικούς εξοπλισμού. Διορθώστε τα δεδομένα.',
@@ -293,17 +415,66 @@ class _UserFormDialogState extends ConsumerState<UserFormDialog> {
         }
       }
 
-      await _persistUser(cloneAsNewEmployee: cloneAsNewEmployee);
+      SharedAssetDisconnectBatchResult? phoneDisconnectBatch;
+      if (_isEdit && !cloneAsNewEmployee) {
+        phoneDisconnectBatch = await _confirmExclusiveRemovedPhonesDisconnect();
+        if (!mounted) return;
+        if (phoneDisconnectBatch == null) return;
+      }
+
+      final editingUserId =
+          _isEdit && !cloneAsNewEmployee && !widget.isClone
+          ? widget.initialUser?.id
+          : null;
+      final phoneConflictBatch = await _confirmUserPhoneAssignmentConflicts(
+        editingUserId: editingUserId,
+      );
+      if (!mounted) return;
+      if (phoneConflictBatch == null) return;
+
+      await _persistUser(
+        cloneAsNewEmployee: cloneAsNewEmployee,
+        phoneDisconnectBatch: phoneDisconnectBatch,
+        phoneConflictBatch: phoneConflictBatch,
+      );
+    } on PhoneDepartmentPolicyException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Απορρίφθηκε η αποθήκευση: το(α) τηλέφωνο(α) '
+            '${e.conflicts.map((c) => c.phone).join(', ')} '
+            'συγκρούεται με τμήμα άλλου καταλόγου.',
+          ),
+          backgroundColor: Colors.orange,
+        ),
+      );
     } catch (e, st) {
       if (!mounted) return;
       showDatabasePersistenceErrorSnackBar(context, e, st);
     }
   }
 
-  Future<void> _persistUser({bool cloneAsNewEmployee = false}) async {
-    final departmentId = await DirectoryRepository(
-            await DatabaseHelper.instance.database)
-        .getOrCreateDepartmentIdByName(_departmentController.text);
+  Future<void> _persistUser({
+    bool cloneAsNewEmployee = false,
+    SharedAssetDisconnectBatchResult? phoneDisconnectBatch,
+    UserPhoneConflictBatchResult? phoneConflictBatch,
+  }) async {
+    final db = await DatabaseHelper.instance.database;
+    final dir = DirectoryRepository(db);
+    final departmentId =
+        await dir.getOrCreateDepartmentIdByName(_departmentController.text);
+
+    if (phoneConflictBatch != null && !phoneConflictBatch.isEmpty) {
+      await PhoneDepartmentPolicy.applyUserPhoneConflictResolutions(
+        dir: dir,
+        resolutions: phoneConflictBatch,
+        targetDepartmentId: departmentId,
+      );
+      LookupService.instance.resetForReload();
+      await LookupService.instance.loadFromDatabase();
+    }
+
     final user = UserModel(
       id: (_isEdit && !cloneAsNewEmployee) ? widget.initialUser?.id : null,
       lastName: _lastNameController.text.trim(),
@@ -350,6 +521,15 @@ class _UserFormDialogState extends ConsumerState<UserFormDialog> {
         return;
       }
       await widget.notifier.updateUser(user);
+      if (phoneDisconnectBatch != null) {
+        final db = await DatabaseHelper.instance.database;
+        await applyPersonalPhoneDisconnectBatch(
+          DirectoryRepository(db),
+          phoneDisconnectBatch,
+          sourceDepartmentId: departmentId,
+        );
+        await widget.notifier.loadUsers();
+      }
       ref.invalidate(lookupServiceProvider);
       await ref.read(lookupServiceProvider.future);
       if (!mounted) return;

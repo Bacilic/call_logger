@@ -1,6 +1,8 @@
 ﻿import '../../../core/database/database_helper.dart';
 import '../../../core/database/directory_repository.dart';
 import '../../../core/database/old_database/lamp_issue_resolution_service.dart';
+import '../../../core/directory/phone_department_policy.dart';
+import '../../../core/services/lookup_service.dart';
 import '../../../core/utils/department_floor_sync.dart';
 import '../../../core/utils/name_parser.dart';
 import '../../../core/utils/phone_list_parser.dart';
@@ -176,6 +178,42 @@ class LampMigrationService {
             currentOwners: entry.value.toList(growable: false),
           ),
         );
+      }
+
+      final departmentName = (formValues['department_name'] ?? '').trim();
+      int? targetDepartmentId;
+      if (departmentName.isNotEmpty) {
+        final deptKey = SearchTextNormalizer.normalizeForSearch(departmentName);
+        for (final d in LookupService.instance.departments) {
+          if ((d.isDeleted) || d.id == null) continue;
+          if (SearchTextNormalizer.normalizeForSearch(d.name) == deptKey) {
+            targetDepartmentId = d.id;
+            break;
+          }
+        }
+      }
+      final phonesWithOwnerConflict = ownersByPhone.keys.toSet();
+      for (final phone in phones) {
+        if (phonesWithOwnerConflict.contains(phone)) continue;
+        final policyConflicts =
+            PhoneDepartmentPolicy.findConflictsForUserAssignment(
+          phones: [phone],
+          targetDepartmentId: targetDepartmentId,
+          editingUserId: selectedCandidateId,
+        );
+        for (final c in policyConflicts) {
+          if (!c.hasDepartmentLocationConflict) continue;
+          conflicts.add(
+            LampOwnerConflict(
+              conflictId: 'phone:${_norm(phone)}',
+              kind: LampOwnerConflictKind.phone,
+              value: phone,
+              currentOwners: [
+                'Κοινόχρηστο: ${c.existingDepartmentName ?? c.existingDepartmentId}',
+              ],
+            ),
+          );
+        }
       }
     }
 
@@ -647,6 +685,14 @@ class LampMigrationService {
 
     for (final phone in transferPhones) {
       await dir.removePhoneFromAllUsers(phone);
+      if (departmentId != null) {
+        final usage = LookupService.instance.checkPhoneUsage(phone);
+        final sourceDeptId = usage.departmentId;
+        if (sourceDeptId != null && sourceDeptId != departmentId) {
+          await dir.removeDepartmentDirectPhone(sourceDeptId, phone);
+          await dir.addDepartmentDirectPhone(departmentId, phone);
+        }
+      }
     }
     for (final code in transferEquipmentCodes) {
       await dir.removeEquipmentFromAllUsers(code);

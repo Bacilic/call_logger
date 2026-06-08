@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/providers/user_form_edit_intent_provider.dart';
@@ -7,17 +7,19 @@ import '../../../../core/database/directory_repository.dart';
 import '../../../../core/database/user_delete_phone_policy.dart';
 import '../../../calls/models/user_model.dart';
 import '../../../calls/provider/lookup_provider.dart';
+import '../../../../core/services/lookup_service.dart';
 import '../../models/department_model.dart';
 import '../../models/non_user_phone_entry.dart';
 import '../../models/user_catalog_mode.dart';
 import '../../models/user_directory_column.dart';
 import '../../providers/department_directory_provider.dart';
 import '../../providers/directory_provider.dart';
-import '../../widgets/user_delete_exclusive_phone_dialog.dart';
+import '../../services/shared_asset_disconnect_apply.dart';
 import 'bulk_user_edit_dialog.dart';
 import 'catalog_column_selector_shell.dart';
 import 'department_form_dialog.dart';
 import 'non_user_phones_data_table.dart';
+import 'shared_asset_disconnect_dialog.dart';
 import 'user_form_dialog.dart';
 import 'users_data_table.dart';
 
@@ -278,24 +280,46 @@ class _UsersTabState extends ConsumerState<UsersTab> {
 
     final ids = state.selectedIds.toList();
     final db = await DatabaseHelper.instance.database;
-    final exclusivePhones =
-        await DirectoryRepository(db).findExclusivePhonesForUserDelete(ids);
+    final dir = DirectoryRepository(db);
+    final exclusivePhones = await dir.findExclusivePhonesForUserDelete(ids);
+    final usersToDelete = state.allUsers
+        .where((u) => u.id != null && ids.contains(u.id))
+        .toList();
 
-    Map<int, UserDeleteExclusivePhoneAction>? phoneActions;
+    final pendingPhoneBatches = <({
+      SharedAssetDisconnectBatchResult batch,
+      int? sourceDepartmentId,
+    })>[];
     if (exclusivePhones.isNotEmpty) {
       if (!context.mounted) return;
-      final action = await showUserDeleteExclusivePhoneDialog(
+      final confirmed = await _collectExclusivePhoneDisconnectBatches(
         context,
-        phones: exclusivePhones,
+        exclusivePhones: exclusivePhones,
+        usersToDelete: usersToDelete,
+        onBatch: (batch, sourceDepartmentId) {
+          pendingPhoneBatches.add((
+            batch: batch,
+            sourceDepartmentId: sourceDepartmentId,
+          ));
+        },
       );
-      if (!context.mounted || action == null) return;
-      phoneActions = {
-        for (final p in exclusivePhones) p.phoneId: action,
-      };
+      if (!context.mounted || !confirmed) return;
     }
 
     final notifier = ref.read(directoryProvider.notifier);
-    await notifier.deleteSelected(exclusivePhoneActions: phoneActions);
+    await notifier.deleteSelected();
+
+    for (final pending in pendingPhoneBatches) {
+      await applyPersonalPhoneDisconnectBatch(
+        dir,
+        pending.batch,
+        sourceDepartmentId: pending.sourceDepartmentId,
+      );
+    }
+    if (pendingPhoneBatches.isNotEmpty) {
+      await notifier.loadUsers();
+      ref.invalidate(lookupServiceProvider);
+    }
     if (!context.mounted) return;
     final deleted = ref.read(directoryProvider).lastDeleted ?? [];
     final deletedCount = deleted.length;
@@ -392,6 +416,61 @@ class _UsersTabState extends ConsumerState<UsersTab> {
     await ref.read(lookupServiceProvider.future);
     if (!context.mounted) return;
     await ref.read(directoryProvider.notifier).loadUsers();
+  }
+
+  Future<bool> _collectExclusivePhoneDisconnectBatches(
+    BuildContext context, {
+    required List<ExclusivePhoneForUserDelete> exclusivePhones,
+    required List<UserModel> usersToDelete,
+    required void Function(
+      SharedAssetDisconnectBatchResult batch,
+      int? sourceDepartmentId,
+    )
+    onBatch,
+  }) async {
+    final lookup = LookupService.instance;
+    final departments = lookup.departments
+        .where((d) => !d.isDeleted && d.name.trim().isNotEmpty)
+        .toList();
+
+    final byUser = <int, List<ExclusivePhoneForUserDelete>>{};
+    for (final phone in exclusivePhones) {
+      byUser.putIfAbsent(phone.userId, () => []).add(phone);
+    }
+
+    for (final entry in byUser.entries) {
+      final phones = entry.value
+          .map((p) => p.number)
+          .where((n) => n.isNotEmpty)
+          .toList();
+      if (phones.isEmpty) continue;
+
+      final first = entry.value.first;
+      UserModel? user;
+      for (final u in usersToDelete) {
+        if (u.id == entry.key) {
+          user = u;
+          break;
+        }
+      }
+      final displayName = user == null
+          ? null
+          : '${user.firstName} ${user.lastName}'.trim();
+
+      if (!context.mounted) return false;
+      final batch = await showSharedAssetDisconnectFlow(
+        context: context,
+        sourceDepartmentId: first.departmentId,
+        sourceDepartmentName: first.departmentName,
+        phones: phones,
+        availableDepartments: departments,
+        mode: SharedAssetDisconnectMode.personalPhone,
+        personalPhoneUserDisplayName: displayName,
+      );
+      if (!context.mounted || batch == null) return false;
+      onBatch(batch, first.departmentId);
+    }
+    return true;
   }
 }
 
@@ -639,3 +718,4 @@ class _UserColumnSelectorOverlay extends ConsumerWidget {
     );
   }
 }
+

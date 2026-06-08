@@ -15,11 +15,3 @@ class ExclusivePhoneForUserDelete {
   final String? departmentName;
 }
 
-/// Επιλογή χρήστη όταν διαγράφεται ο μοναδικός κάτοχος τηλεφώνου.
-enum UserDeleteExclusivePhoneAction {
-  /// Αποσύνδεση από χρήστη· το νούμερο μένει στο τμήμα του χρήστη (αν υπάρχει).
-  keepAtDepartment,
-
-  /// Αποσύνδεση από χρήστη και αφαίρεση από τμήμα / κατάλογο τμήματος.
-  removePhone,
-}

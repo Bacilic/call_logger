@@ -15,11 +15,16 @@
 - **Εκκρεμότητες (`linkable_selectable_text.dart`, `linkable_text_parser.dart`, `task_card.dart`):** επιλέξιμο κείμενο λύσης με αυτόματη αναγνώριση και κλικ σε URL (`https://`), UNC (`\\server\share`) και τοπικές διαδρομές Windows (`E:\…`).
 - **Κατάλογος · αποδέσμευση κοινόχρηστου (`shared_asset_disconnect_dialog.dart`):** νέα ροή 3 επιλογών (παραμονή στο τμήμα / μεταφορά / διαγραφή)· δεύτερος διάλογος διαγραφής με μέτρηση αναφορών στη βάση (συμπ. κλήσεις)· μεταφορά σε υπάρχον ή νέο τμήμα.
 - **Βάση δεδομένων v28 (`database_v1_schema.dart`):** στήλη `phones.is_deleted` και `softDeletePhones` — soft delete κοινόχρηστων τηλεφώνων (συνεπές με εξοπλισμό).
+- **Ρυθμίσεις · Έκθεση Ακεραιότητας (`database_integrity_service.dart`, `database_integrity_panel.dart`):** read-only διάγνωση SQLite (ορφανά τηλέφωνα/συσχετίσεις, αναφορές κλήσεων/εκκρεμοτήτων, `search_index`, PRAGMA)· progress ανά έλεγχο· εξαγωγή Markdown στο clipboard· ελληνικές ετικέτες πινάκων (π.χ. συσχέτιση χρήστη–τηλεφώνου).
+- **Κατάλογος · προσωπικό τηλέφωνο (`user_form_dialog.dart`, `shared_asset_disconnect_dialog.dart`):** όταν αφαιρείται από τη φόρμα χρήστη αριθμός 1↔1, ροή αποδέσμευσης (παραμονή στο τμήμα / μεταφορά / soft delete) πριν την αποθήκευση.
+- **Κατάλογος · πολιτική τηλεφώνων (`phone_department_policy.dart`, `user_phone_department_conflict_dialog.dart`):** έλεγχος cross-department στη φόρμα χρήστη, μαζική επεξεργασία (`bulk_user_edit_dialog.dart`) και εισαγωγή Λάμπα (`lamp_migration_service.dart`)· διάλογος «Σύγκρουση τοποθεσίας τηλεφώνου».
 
 ### Άλλαξε
 
 - **Λάμπα · οδηγός μεταφοράς (`lamp_transfer_wizard_dialog.dart`):** σφάλματα αποθήκευσης/επικύρωσης εμφανίζονται σε panel μέσα στον διάλογο (όχι SnackBar πίσω από το modal)· αντιγραφή πλήρους μηνύματος και κλείσιμο με ✕ χωρίς timeout.
 - **Κατάλογος · μεταφορά κοινόχρηστου (`shared_asset_disconnect_dialog.dart`):** ένα πεδίο autocomplete «Τμήμα προορισμού» με πρόταση «Δημιουργία νέου τμήματος» όταν το κείμενο δεν ταιριάζει σε υπάρχον — ίδιο μοτίβο με φόρμα χρήστη/εξοπλισμού (αντί dropdown + ξεχωριστό πεδίο).
+- **Κατάλογος · διαγραφή χρήστη/τμήματος (`users_tab.dart`, `departments_tab.dart`, `shared_asset_disconnect_apply.dart`):** ενοποιημένη ροή `shared_asset_disconnect_dialog` (παραμονή / μεταφορά / διαγραφή) αντί `user_delete_exclusive_phone_dialog`· για διαγραφή τμήματος χωρίς «παραμονή στο ίδιο τμήμα».
+- **Κατάλογος · soft delete (`directory_repository.dart`):** `softDeletePhones`, `deleteEquipments` και `deleteUsers` καθαρίζουν αυτόματα `user_phones` / `user_equipment` — αποφυγή στάσιμων συσχετίσεων μετά soft delete.
 
 ### Διορθώθηκε
 
@@ -28,6 +33,8 @@
 - **Ιστορικό κλήσεων (`history_screen.dart`, `history_provider.dart`):** ίδια λογική φίλτρων με εκκρεμότητες — ενεργά χειριστήρια όταν υπάρχουν κλήσεις στη βάση, όχι μόνο στο φιλτραρισμένο αποτέλεσμα.
 - **Λάμπα · μεταφορά τμήματος (`lamp_migration_service.dart`):** αποθήκευση τμήματος από Λάμπα — το πεδίο όροφος (`level`) αντιστοιχίζεται σε `floor_id`/`map_floor` αντί ανύπαρκτης στήλης `level` στον πίνακα `departments`.
 - **Κατάλογος · αποσύνδεση κοινόχρηστου τηλεφώνου (`directory_repository.dart`):** `removeDepartmentDirectPhone` καθαρίζει πλήρως τη σύνδεση (`department_phones` και `phones.department_id`) — μετά την αφαίρεση chip και αποθήκευση το lookup δεν εμφανίζει πλέον το τηλέφωνο στο τμήμα.
+- **Κατάλογος · φόρμα χρήστη:** αφαίρεση αριθμού από το πεδίο «Τηλέφωνο» δεν αφήνει πλέον σιωπηλά ορφανό νούμερο χωρίς χρήστη και τμήμα.
+- **Κατάλογος · ανάθεση τηλεφώνου:** αποτροπή σιωπηλής διπλής εμφάνισης του ίδιου νούμερου σε δύο τμήματα όταν προστίθεται σε χρήστη άλλου τμήματος (ενώ ήδη είναι κοινόχρηστο αλλού).
 
 ## [0.26.0] - 2026-06-07
 

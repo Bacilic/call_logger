@@ -29,6 +29,7 @@ import '../utils/backup_location_hints.dart';
 import '../utils/backup_schedule_status.dart';
 import '../utils/backup_schedule_utils.dart';
 import '../utils/portable_backup_availability.dart';
+import 'database_integrity_panel.dart';
 
 String _weekdayChipLabel(int weekday) {
   const labels = ['Δε', 'Τρ', 'Τε', 'Πε', 'Πα', 'Σα', 'Κυ'];
@@ -1770,6 +1771,8 @@ class _DatabaseSettingsPanelState extends ConsumerState<DatabaseSettingsPanel> {
               label: const Text('Επαναφορά από zip (βάση + χάρτες)'),
             ),
             ],
+            const Divider(height: 24),
+            const DatabaseIntegrityPanel(),
               ],
             ),
           ),

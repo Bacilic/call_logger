@@ -1,6 +1,6 @@
 # Call Logger — Project Anatomy
 
-**Ημερομηνία τροποποίησης εγγράφου:** 7 Ιουνίου 2026
+**Ημερομηνία τροποποίησης εγγράφου:** 14 Μαΐου 2026
 
 Συμπυκνωμένη «ακτινογραφία» για εξωτερικό LLM (Καθοδηγητής): Flutter για Windows 11, δομή ανά features/, Riverpod, SQLite μέσω sqflite_common_ffi.
 
@@ -60,6 +60,8 @@ lib/
         settings_repository.dart
         user_delete_phone_policy.dart
     debug/
+    directory/
+        phone_department_policy.dart
     errors/
         app_error_result.dart
         call_save_exception.dart
@@ -134,6 +136,7 @@ lib/
         file_picker_session.dart
         history_entity_display_utils.dart
         lexicon_word_metrics.dart
+        linkable_text_parser.dart
         name_parser.dart
         phone_list_parser.dart
         safe_file_base_name.dart
@@ -158,6 +161,7 @@ lib/
         global_fatal_error_notifier.dart
         lexicon_spell_menu_helper.dart
         lexicon_spell_text_form_field.dart
+        linkable_selectable_text.dart
         main_nav_destination.dart
         main_shell.dart
         nav_rail_attention_badge.dart
@@ -231,11 +235,14 @@ lib/
     database/
       models/
           database_backup_settings.dart
+          database_integrity_finding.dart
+          database_integrity_report.dart
           database_stats.dart
       providers/
           backup_scheduler_provider.dart
           database_backup_settings_provider.dart
           database_browser_stats_provider.dart
+          database_integrity_provider.dart
           database_maintenance_provider.dart
       screens/
           database_browser_screen.dart
@@ -243,6 +250,7 @@ lib/
           database_backup_audit.dart
           database_backup_service.dart
           database_exit_backup.dart
+          database_integrity_service.dart
           database_maintenance_service.dart
           database_stats_service.dart
       utils/
@@ -254,6 +262,7 @@ lib/
           portable_backup_availability.dart
       widgets/
           backup_folder_missing_dialog.dart
+          database_integrity_panel.dart
           database_maintenance_panel.dart
           database_rename_failure_dialog.dart
           database_settings_panel.dart
@@ -342,15 +351,18 @@ lib/
             homonym_warning_dialog.dart
             miscellaneous_tab.dart
             non_user_phones_data_table.dart
+            shared_asset_disconnect_dialog.dart
             user_form_dialog.dart
             user_form_smart_text_field.dart
             user_name_change_confirm_dialog.dart
+            user_phone_department_conflict_dialog.dart
             users_data_table.dart
             users_tab.dart
           .gitkeep
           directory_screen.dart
+      services/
+          shared_asset_disconnect_apply.dart
       widgets/
-          user_delete_exclusive_phone_dialog.dart
     floor_map/
       services/
           floor_color_assignment_service.dart
@@ -461,17 +473,15 @@ lib/
 
 **Σημείωση runtime:** η `DatabaseHelper.ensureDepartmentsMapHiddenColumn` προσθέτει idempotent τη στήλη **`departments.map_hidden`** (INTEGER NOT NULL DEFAULT 0) χωρίς αύξηση του αριθμού έκδοσης σχήματος.
 
-**Φορητά δεδομένα (AppConfig):** δίπλα στο εκτελέσιμο — `Data Base/`, `maps_images/`, `images/`, `dictionaries/` (όχι γονικός φάκελος `../`).
-
 ### Πίνακες (στήλη → τύπος SQLite)
 
-- **calls** — id INTEGER PK AI, date TEXT, time TEXT, caller_id INTEGER, equipment_id INTEGER, caller_text TEXT, phone_text TEXT, department_text TEXT, equipment_text TEXT, issue TEXT, category_text TEXT, category_id INTEGER, status TEXT, duration INTEGER, is_priority INTEGER DEFAULT 0, search_index TEXT, lansweeper_state TEXT NOT NULL DEFAULT 'unsent', lansweeper_main_ticket_id TEXT, lansweeper_last_sync_at TEXT, is_deleted INTEGER DEFAULT 0
+- **calls** — id INTEGER PK AI, date TEXT, time TEXT, caller_id INTEGER, equipment_id INTEGER, caller_text TEXT, phone_text TEXT, department_text TEXT, equipment_text TEXT, issue TEXT, solution TEXT, category_text TEXT, category_id INTEGER, status TEXT, duration INTEGER, is_priority INTEGER DEFAULT 0, search_index TEXT, lansweeper_state TEXT NOT NULL DEFAULT 'unsent', lansweeper_main_ticket_id TEXT, lansweeper_last_sync_at TEXT, is_deleted INTEGER DEFAULT 0
 - **call_external_links** — id INTEGER PK AI, call_id INTEGER NOT NULL, external_id TEXT NOT NULL, provider TEXT NOT NULL, created_at TEXT NOT NULL, metadata TEXT
 - **users** — id INTEGER PK AI, last_name TEXT NOT NULL, first_name TEXT NOT NULL, department_id INTEGER, location TEXT, notes TEXT, is_deleted INTEGER DEFAULT 0
 - **phones** — id INTEGER PK AI, number TEXT UNIQUE NOT NULL, department_id INTEGER
 - **department_phones** — department_id INTEGER NOT NULL, phone_id INTEGER NOT NULL, PRIMARY KEY (department_id, phone_id)
 - **user_phones** — user_id INTEGER NOT NULL, phone_id INTEGER NOT NULL, PRIMARY KEY (user_id, phone_id)
-- **equipment** — id INTEGER PK AI, code_equipment TEXT, type TEXT, notes TEXT, remote_params TEXT, default_remote_tool TEXT, department_id INTEGER, location TEXT, is_deleted INTEGER DEFAULT 0
+- **equipment** — id INTEGER PK AI, code_equipment TEXT, type TEXT, notes TEXT, custom_ip TEXT, anydesk_id TEXT, remote_params TEXT, default_remote_tool TEXT, department_id INTEGER, location TEXT, is_deleted INTEGER DEFAULT 0
 - **user_equipment** — user_id INTEGER NOT NULL, equipment_id INTEGER NOT NULL, PRIMARY KEY (user_id, equipment_id)
 - **departments** — id INTEGER PK AI, name TEXT NOT NULL, name_key TEXT UNIQUE NOT NULL, building TEXT, color TEXT DEFAULT '#1976D2', notes TEXT, map_floor TEXT, map_x REAL DEFAULT 0.0, map_y REAL DEFAULT 0.0, map_width REAL DEFAULT 0.0, map_height REAL DEFAULT 0.0, map_rotation REAL DEFAULT 0.0, map_label_offset_x REAL, map_label_offset_y REAL, map_anchor_offset_x REAL, map_anchor_offset_y REAL, map_custom_name TEXT, group_name TEXT, floor_id INTEGER, is_deleted INTEGER DEFAULT 0 (+ **map_hidden** INTEGER όπως παραπάνω)
 - **building_map_floors** — id INTEGER PK AI, sort_order INTEGER NOT NULL DEFAULT 0, label TEXT NOT NULL, floor_group TEXT, image_path TEXT NOT NULL, rotation_degrees REAL NOT NULL DEFAULT 0
@@ -493,16 +503,15 @@ lib/
 - **AuditFilterModel** — keyword, action, entityType, dateFrom, dateTo
 - **AuditLogModel** — id, action, timestamp, userPerforming, details, entityType, entityId, entityName, oldValuesJson, newValuesJson
 - **AuditPageResult** — items (λίστα AuditLogModel), totalCount
-- **AuditReferenceLabels** — departmentNames (Map id→όνομα για φιλική εμφάνιση audit)
 
 ### `lib/features/calls/models/`
-- **CallModel** — id, date, time, callerId, equipmentId, callerText, phoneText, departmentText, equipmentText, issue, category, categoryId, status, duration, isPriority, lansweeperState, lansweeperMainTicketId, lansweeperLastSyncAt, isDeleted, callerLinkedDeleted, equipmentLinkedDeleted
-- **EquipmentModel** — id, code, type, notes, remoteParams (Map κλειδί = remote_tools.id), defaultRemoteTool, departmentId, location, isDeleted
+- **CallModel** — id, date, time, callerId, equipmentId, callerText, phoneText, departmentText, equipmentText, issue, solution, category, categoryId, status, duration, isPriority, lansweeperState, lansweeperMainTicketId, lansweeperLastSyncAt, isDeleted
+- **EquipmentModel** — id, code, type, notes, customIp, anydeskId, remoteParams (Map), defaultRemoteTool, departmentId, location, isDeleted
 - **UserModel** — id, firstName, lastName, phones, departmentId, location, notes, isDeleted
 
 ### `lib/features/database/models/`
 - **DatabaseStats** — fileSizeBytes, dbPath, lastBackupTime, rowCountsByTable
-- **DatabaseBackupSettings** — destinationDirectory, namingFormat, zipOutput, includeMapImagesInBackup, includeToolImages, includeLexicon, includeLampDb, backupOnExit, interval, backupDays, backupTime, lastBackupAttempt, lastManualBackupAttempt, lastBackupStatus, retentionMaxCopiesEnabled/MaxCopies, retentionMaxAgeEnabled/MaxAgeDays
+- **DatabaseBackupSettings** — destinationDirectory, namingFormat (enum), zipOutput, backupOnExit, interval (enum), backupDays, backupTime, lastBackupAttempt, lastBackupStatus, retention flags/αριθμοί
 
 ### `lib/features/directory/models/`
 - **CategoryModel** — id, name
@@ -516,7 +525,6 @@ lib/
 - **department_floor_display_extension** — extension επί DepartmentModel (όχι νέα κλάση)
 
 ### `lib/features/history/models/`
-- **DashboardDatePreset** — enum: all, today, last7, last30, custom (+ helpers fromStorage/detect/apply)
 - **DashboardFilterModel** — keyword, dateFrom, dateTo, department, userName, equipmentCode, topN
 - **DepartmentStat** / **IssueStat** / **DailyTrendPoint** / **CallerStat** / **LongestCallEntry** / **HourlyBucket** — βοηθητικά στατιστικών
 - **DashboardSummaryModel** — totalCalls, totalDurationSeconds, avgDurationSeconds, KPIs προηγούμενης περιόδου, λίστες dailyTrend, sparklineLast7Days, topCallers, longestCalls, hourlyDistribution, byDepartment, byIssue
@@ -528,7 +536,6 @@ lib/
 - **TaskSnoozeEntry** — snoozedAt, dueAt
 - **TaskSortOption** — enum (createdAt, dueAt, priority, department, user, equipment)
 - **TaskFilter** — searchQuery, statuses, startDate, endDate, sortBy, sortAscending
-- **TaskAnalyticsDatePreset** — enum προεπιλογών ημερομηνίας analytics
 - **TaskAnalyticsFilter** — startDate, endDate
 - **TaskAnalyticsOriginSlice** / **TaskAnalyticsBacklogPoint** — βοηθητικά analytics
 - **TaskAnalyticsSummary** — εύρος ημερομηνιών, μετρήσεις active/created/closed/cancelled/overdue, rates, μέσοι χρόνοι, originDistribution, backlogGrowth, sparkline arrays
@@ -541,7 +548,6 @@ lib/
 - **RemoteToolArgument** — value, description, isActive
 - **RemoteTool** — id, name, role, executablePath, launchMode, sortOrder, isActive, deletedAt, suggestedValuesJson, iconAssetKey, arguments, testTargetIp, isExclusive
 - **ToolRole** — enum: vnc, rdp, anydesk, generic
-- **WindowPlacementMode** — enum τοποθέτησης παραθύρου (DesktopWindowService)
 
 ### `lib/core/about/models/`
 - **ChangelogEntry** — version, date, added, changed, fixed
@@ -553,77 +559,65 @@ lib/
 ### Βήμα Γ — σημαντικοί τύποι χωρίς επίθημα Model
 | Περιοχή | Αρχείο | Τύποι |
 |----------|--------|--------|
-| Runtime σφάλματα | app_error_result.dart | AppErrorKind (enum), AppErrorResult |
 | Αρχικοποίηση βάσης | database_init_result.dart | DatabaseStatus, DatabaseInitResult, DatabaseInitException |
 | | database_init_runner.dart | DatabaseInitRunnerResult |
 | | database_init_progress_provider.dart | DatabaseInitProgressState |
 | | database_helper.dart | ConnectionCheckResult, TablePreviewResult |
 | Εφαρμογή | app_initializer.dart | AppInitResult |
-| Επαναφορά ρυθμίσεων | application_reset_service.dart | ApplicationResetService (+ ApplicationPrefsSnapshot) |
 | Ρυθμίσεις | audit_retention_config.dart | AuditRetentionConfig |
 | Υπηρεσίες | excel_parser.dart | ImportResult |
 | | lookup_service.dart | LookupResult, PhoneUsageCheck, EquipmentUsageCheck |
 | | import_types.dart | ImportLogLevel (enum) |
-| Audit preview | audit_entity_preview_resolver.dart | AuditEntityPreview |
 | Κλήσεις | call_entry_provider.dart | CallEntryState |
 | | import_log_provider.dart | ImportLogEntry |
 | | lookup_provider.dart | LookupLoadResult |
 | | smart_entity_selector_provider.dart | SmartEntitySelectorState, OrphanQuickAddResult |
-| Απομακρυσμένα | remote_paths_provider.dart | CallsRemoteUiConfig |
 | Κατάλογος | directory_provider.dart | DirectoryState |
 | | category_directory_provider.dart | CategoryDirectoryState |
 | | department_directory_provider.dart | DepartmentDirectoryState |
 | | equipment_directory_provider.dart | EquipmentDirectoryState, EquipmentDeleteUndoEntry |
 | Χάρτης κτιρίου | building_map_controller.dart | BuildingMapFloorDeleteChoice |
-| Βάση / backup | database_maintenance_service.dart | MaintenanceBackupPrecheck (enum), ReplaceDatabaseResult |
-| | database_backup_service.dart | DatabaseBackupResult, DatabaseBackupFailureCode |
-| | database_backup_audit.dart | BackupAuditTrigger, BackupAuditOutcome, BackupAuditSkipReason |
-| | backup_destination_folder_validator.dart | BackupDestinationContentKind, BackupDestinationValidationKind, BackupDestinationValidationResult |
-| | backup_schedule_status.dart | BackupScheduleStatus, BackupScheduleStatusFormatter |
-| | portable_backup_availability.dart | PortableBackupAvailability |
-| Λάμπα | lamp_read_path_health_provider.dart | LampReadPathHealth |
+| Βάση | database_maintenance_service.dart | MaintenanceBackupPrecheck (enum), ReplaceDatabaseResult |
+| | database_backup_service.dart | DatabaseBackupResult |
+| | backup_destination_folder_validator.dart | BackupDestinationValidationKind (enum), BackupDestinationValidationResult |
 
 ---
 
 ## 4) STATE MANAGEMENT — PROVIDERS (Riverpod)
 
-- **appInitProvider** / **applicationResetPendingProvider** — εκκίνηση εφαρμογής και κατάσταση επαναφοράς ρυθμίσεων.
+- **appInitProvider** — αποτέλεσμα εκκίνησης (βάση + spell check readiness).
 - **databaseInitProgressProvider** — βήματα/μηνύματα κατά το άνοιγμα βάσης.
 - **lookupServiceProvider** — `LookupLoadResult` + singleton `LookupService` (cache καταλόγου).
 - **callHeaderProvider** — ίδιο instance με **callSmartEntityProvider** (κεφαλίδα κλήσης / έξυπνος επιλογέας).
-- **callSmartEntityProvider** / **taskSmartEntityProvider** / **historyEditSmartEntityProvider** — επιλογή τηλεφώνου, καλούντα, τμήματος, εξοπλισμού.
+- **callSmartEntityProvider** / **taskSmartEntityProvider** — κατάσταση επιλογής τηλεφώνου, καλούντα, τμήματος, εξοπλισμού.
 - **callEntryProvider** — φόρμα κλήσης, χρονόμετρο, σημειώσεις, κατηγορία, εκκρεμότητα.
 - **importLogProvider** — γραμμές live console εισαγωγής.
-- **recentCallsProvider** / **recentCallsByEquipmentProvider** / **globalRecentCallsProvider** / **showGlobalCallsToggleProvider** — πρόσφατες κλήσεις.
-- **remoteToolsCatalogProvider** / **remoteToolsAllCatalogProvider** / **callsRemoteUiConfigProvider** / **remoteConnectionServiceProvider** / **remoteLauncherServiceProvider** — κατάλογος και εκτέλεση απομακρυσμένων εργαλείων.
-- **directoryProvider** / **categoryDirectoryProvider** / **departmentDirectoryProvider** / **equipmentDirectoryProvider** — πίνακες καταλόγου, φίλτρα, στήλες, undo.
-- **buildingMapControllerProvider** / **buildingMapSelectedSheetIdProvider** / **buildingMapUndoProvider** — χάρτης κτιρίου.
-- **tasksProvider** / **taskFilterProvider** / **taskStatusCountsProvider** / **orphanCallsProvider** — εκκρεμότητες.
-- **taskServiceProvider** / **taskSettingsConfigProvider** — CRUD/snooze και ρυθμίσεις ωραρίου.
-- **taskAnalyticsProvider** / **taskAnalyticsFilterProvider** / **taskAnalyticsDateProvider** — analytics εκκρεμοτήτων.
-- **pendingTaskDeleteProvider** — διαγραφή εκκρεμότητας από κλήση.
-- **historyFilterProvider** / **historyCallsProvider** / **historyCategoriesProvider** / **historyCategoryEntriesProvider** / **historyDatabaseDisplayNameProvider** / **historySelectedCallIdsProvider** / **historyTableZoomProvider** — ιστορικό κλήσεων.
-- **dashboardFilterProvider** / **dashboardStatsProvider** / **dashboardCallsForReportProvider** / **dashboardDepartmentsProvider** — πίνακας ελέγχου.
-- **lansweeperSyncProvider** / **callExternalLinksProvider** + σειρά `lansweeper*Provider` — Lansweeper sync και ρυθμίσεις API.
-- **historyApplicationAuditViewProvider** / **historyAuditImmersiveProvider** — προβολή audit στο ιστορικό.
-- **auditFilterProvider** / **auditListProvider** / **auditPageReferenceLabelsProvider** / **auditEntityPreviewProvider** / **auditSidePanelOpenProvider** — ιστορικό εφαρμογής (audit).
-- **databaseBackupSettingsProvider** / **backupSchedulerProvider** / **databaseMaintenanceServiceProvider** / **databaseBrowserStatsProvider** — backup και συντήρηση.
-- **showActiveTimerProvider** / **showTasksBadgeProvider** / **enableSpellCheckProvider** / **showDatabaseNavProvider** / **showLampNavProvider** / **showDictionaryNavProvider** / **callsScreenCardsVisibilityProvider** — ρυθμίσεις UI.
-- **coreLexiconProvider** / **greekDictionaryServiceProvider** / **spellCheckServiceProvider** / **lexiconCategoriesProvider** / **lexiconFullModeProvider** / **lexiconLanguageRecalcProvider** — λεξικά και ορθογραφία.
-- **lampReadPathHealthProvider** / **lampShowNavWarningProvider** / **lampOpenSettingsRequestProvider** — υγεία διαδρομής Λάμπας.
-- **mainNavRequestProvider** / **shellNavigationIntentProvider** / **directoryTabIntentProvider** / **equipmentFocusIntentProvider** / **taskFocusIntentProvider** — πλοήγηση κελύφους.
-- **changelogProvider** / **appVersionProvider** — έκδοση και changelog.
-- **notesFieldHintTickProvider** — υποχρεωτικές σημειώσεις για εκκρεμότητα.
-
-**Κλείσιμο παραθύρου (Windows):** **AppShortcuts** (`app_shortcuts.dart`) με `WindowListener` — αποθήκευση μεγέθους → WAL checkpoint → `DatabaseExitBackup.runIfEnabled` → κλείσιμο σύνδεσης.
-
-**Global fatal errors:** `globalFatalErrorNotifier` + **FatalErrorScreen** (`AppErrorResult`) — ξεχωριστά από `DatabaseErrorScreen`.
+- **recentCallsProvider** / **recentCallsByEquipmentProvider** / **globalRecentCallsProvider** / **showGlobalCallsToggleProvider** — πρόσφατες κλήσεις και toggle καθολικής λίστας.
+- **directoryProvider** / **categoryDirectoryProvider** / **departmentDirectoryProvider** / **equipmentDirectoryProvider** — κατάσταση πινάκων καταλόγου, φίλτρα, στήλες, undo.
+- **buildingMapControllerProvider** — λογική χάρτη κτιρίου (φύλλα, εικόνες, CRUD τμημάτων στο χάρτη).
+- **building_map_providers** — δεδομένα φύλλων/επιλογής (`building_map_providers.dart`).
+- **tasksProvider** / **taskFilterProvider** / **taskStatusCountsProvider** / **orphanCallsProvider** — λίστα εκκρεμοτήτων και φίλτρα.
+- **taskServiceProvider** — υπηρεσία CRUD/snooze εκκρεμοτήτων.
+- **taskSettingsConfigProvider** — ρυθμίσεις snooze/ωραρίου.
+- **taskAnalyticsProvider** / **taskAnalyticsFilterProvider** — σύνοψη analytics εκκρεμοτήτων.
+- **pendingTaskDeleteProvider** — ροή διαγραφής εκκρεμότητας από κλήση.
+- **historyFilterProvider** / **historyCallsProvider** / **historyCategoriesProvider** / **historyCategoryEntriesProvider** — ιστορικό κλήσεων.
+- **dashboardFilterProvider** / **dashboardStatsProvider** / **dashboardCallsForReportProvider** / **dashboardDepartmentsProvider** — πίνακας ελέγχου· σειρά providers ρυθμίσεων Lansweeper (API URL, κλειδιά, auto-login, κ.λπ.).
+- **lansweeperSyncProvider** / **callExternalLinksProvider** — συγχρονισμός κλήσεων με Lansweeper και εξωτερικά tickets.
+- **historyApplicationAuditViewProvider** — εναλλαγή προβολής audit εφαρμογής στο ιστορικό.
+- **auditFilterProvider** / **auditListProvider** / **auditServiceAsyncProvider** / **auditEntityPreviewProvider** — ιστορικό εφαρμογής (audit).
+- **databaseBackupSettingsProvider** / **backupSchedulerProvider** / **databaseMaintenanceServiceProvider** / **databaseBrowserStatsProvider** — backup, συντήρηση, στατιστικά αρχείου βάσης.
+- **settingsProvider** (και σχετικά) — εμφάνιση χρονομέτρου, badge εργασιών, ορθογραφία, ορατότητα καρτών κλήσεων, κ.λπ.
+- **greekDictionaryProvider** / **spellCheckServiceProvider** / **lexiconCategoriesProvider** / **lexiconFullModeProvider** / **lexiconLanguageRecalcProvider** — λεξικά και ορθογραφία.
+- **mainNavRequestProvider** / **shellNavigationIntentProvider** / **directoryTabIntentProvider** — πλοήγηση κελύφους και καρτελών.
+- **changelogProvider** / **appVersionProvider** — έκδοση εφαρμογής και changelog.
+- **notesFieldHintTickProvider** — ένδειξη υποχρεωτικών σημειώσεων για εκκρεμότητα.
 
 ---
 
 ## 5) DEPENDENCIES (pubspec.yaml)
 
-**dependencies:** flutter (sdk), flutter_localizations (sdk), cupertino_icons ^1.0.9, flutter_riverpod ^3.3.1, sqflite_common 2.5.8, sqflite_common_ffi 2.4.0+3, sqlite3_flutter_libs ^0.6.0+eol, path_provider ^2.1.2, path ^1.9.0, google_fonts ^8.1.0, intl ^0.20.2, characters ^1.4.0, window_manager ^0.5.1, screen_retriever ^0.2.0, shared_preferences ^2.5.5, url_launcher ^6.3.2, justkawal_excel_updated ^5.0.0, file_picker ^12.0.0-beta.4, fl_chart ^1.2.0, archive ^4.0.9, win32 ^6.3.0, ffi ^2.2.0, custom_mouse_cursor ^1.1.3, package_info_plus ^10.1.0, image ^4.9.0
+**dependencies:** flutter (sdk), flutter_localizations (sdk), cupertino_icons ^1.0.9, flutter_riverpod ^3.3.1, sqflite_common ^2.5.6, sqflite_common_ffi ^2.4.0+2, sqlite3_flutter_libs ^0.6.0+eol, path_provider ^2.1.2, path ^1.9.0, google_fonts ^8.0.2, intl ^0.20.2, characters ^1.4.0, window_manager ^0.5.1, screen_retriever ^0.2.0, shared_preferences ^2.5.5, url_launcher ^6.3.0, excel ^4.0.6, file_picker 11.0.2, fl_chart ^1.2.0, archive ^3.6.1, win32 ^5.15.0, ffi ^2.2.0, custom_mouse_cursor ^1.1.3, package_info_plus ^8.3.0, image 4.3.0
 
 **dev_dependencies:** flutter_test (sdk), integration_test (sdk), riverpod ^3.2.1, flutter_lints ^6.0.0
 

@@ -4,7 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/database/database_helper.dart';
 import '../../../core/database/directory_repository.dart';
-import '../../../core/database/user_delete_phone_policy.dart';
+import '../../../core/directory/phone_department_policy.dart';
 import '../../../core/services/lookup_service.dart';
 import '../../../core/utils/phone_list_parser.dart';
 import '../../../core/utils/search_text_normalizer.dart';
@@ -582,18 +582,13 @@ class DirectoryNotifier extends Notifier<DirectoryState> {
     await loadUsers();
   }
 
-  Future<void> deleteSelected({
-    Map<int, UserDeleteExclusivePhoneAction>? exclusivePhoneActions,
-  }) async {
+  Future<void> deleteSelected() async {
     if (state.selectedIds.isEmpty) return;
     final toDelete = state.allUsers
         .where((u) => u.id != null && state.selectedIds.contains(u.id))
         .toList();
     final dbDel = await DatabaseHelper.instance.database;
-    await DirectoryRepository(dbDel).deleteUsers(
-      state.selectedIds.toList(),
-      exclusivePhoneActions: exclusivePhoneActions,
-    );
+    await DirectoryRepository(dbDel).deleteUsers(state.selectedIds.toList());
     await _refreshLookupCache();
     if (!ref.mounted) return;
     state = state.copyWith(
@@ -616,12 +611,30 @@ class DirectoryNotifier extends Notifier<DirectoryState> {
   }
 
   /// Μαζική ενημέρωση: εφαρμόζει [changes] σε όλα τα [ids]. Αποθηκεύει παλιές τιμές για undo.
-  Future<void> bulkUpdate(List<int> ids, Map<String, dynamic> changes) async {
+  Future<void> bulkUpdate(
+    List<int> ids,
+    Map<String, dynamic> changes, {
+    UserPhoneConflictBatchResult? phoneConflictResolutions,
+  }) async {
     if (ids.isEmpty || changes.isEmpty) return;
     final toUpdate = state.allUsers
         .where((u) => u.id != null && ids.contains(u.id))
         .toList();
     if (toUpdate.isEmpty) return;
+
+    if (phoneConflictResolutions != null &&
+        !phoneConflictResolutions.isEmpty) {
+      final deptIds = toUpdate.map((u) => u.departmentId).whereType<int>().toSet();
+      final targetDepartmentId = deptIds.length == 1 ? deptIds.first : null;
+      final db = await DatabaseHelper.instance.database;
+      await PhoneDepartmentPolicy.applyUserPhoneConflictResolutions(
+        dir: DirectoryRepository(db),
+        resolutions: phoneConflictResolutions,
+        targetDepartmentId: targetDepartmentId,
+      );
+      await _refreshLookupCache();
+    }
+
     final dbBulk = await DatabaseHelper.instance.database;
     await DirectoryRepository(dbBulk).bulkUpdateUsers(ids, changes);
     await _refreshLookupCache();
