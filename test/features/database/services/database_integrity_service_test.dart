@@ -70,6 +70,8 @@ void main() {
       expect(orphanFindings, hasLength(1));
       expect(orphanFindings.first.severity, IntegritySeverity.warning);
       expect(orphanFindings.first.category, IntegrityCategory.referential);
+      expect(orphanFindings.first.checkType, IntegrityCheckType.orphanPhone);
+      expect(orphanFindings.first.context['phone_id'], isNotNull);
     });
 
     test('detects call without search_index', () async {
@@ -248,6 +250,72 @@ VALUES ('Κενό κλειδί', '', 0)
       expect(findings.first.description, isNot(contains('user_id=')));
       expect(findings.first.description, isNot(contains('equipment_id=')));
     });
+
+    test('runCheck targets single check type', () async {
+      final db = await DatabaseHelper.instance.database;
+      await db.insert('phones', {'number': '7777', 'is_deleted': 0});
+
+      final findings = await service.runCheck(IntegrityCheckType.orphanPhone);
+      expect(findings, isNotEmpty);
+      expect(findings.every((f) => f.checkType == IntegrityCheckType.orphanPhone), isTrue);
+    });
+
+    test('flags only hard-missing call references, not soft-deleted', () async {
+      final db = await DatabaseHelper.instance.database;
+      // Soft-deleted αναφορά: ΔΕΝ είναι εύρημα (ιστορική αλήθεια).
+      final softDeletedUserId = await db.insert('users', {
+        'first_name': 'Del',
+        'last_name': 'User',
+        'is_deleted': 1,
+      });
+      await db.insert('calls', {
+        'phone_text': '3001',
+        'status': 'completed',
+        'search_index': 'idx soft',
+        'lansweeper_state': 'unsent',
+        'caller_id': softDeletedUserId,
+        'is_deleted': 0,
+      });
+      // Hard-missing αναφορές: εύρημα ανά πεδίο.
+      await db.insert('calls', {
+        'phone_text': '3000',
+        'status': 'completed',
+        'search_index': 'idx',
+        'lansweeper_state': 'unsent',
+        'caller_id': 990001,
+        'equipment_id': 990002,
+        'is_deleted': 0,
+      });
+
+      final findings = await service.runCheck(
+        IntegrityCheckType.callsDeletedLinkedEntities,
+      );
+      expect(findings, hasLength(2));
+      expect(
+        findings.map((f) => f.context['invalidField']).toSet(),
+        equals({'caller_id', 'equipment_id'}),
+      );
+      expect(
+        findings.map((f) => f.context['invalidFkId']).toSet(),
+        equals({990001, 990002}),
+      );
+    });
+
+    test('junction finding includes both keys in context', () async {
+      final db = await DatabaseHelper.instance.database;
+      final userId = await db.insert('users', {
+        'first_name': 'A',
+        'last_name': 'B',
+        'is_deleted': 1,
+      });
+      final phoneId = await db.insert('phones', {'number': '5555', 'is_deleted': 0});
+      await db.insert('user_phones', {'user_id': userId, 'phone_id': phoneId});
+
+      final findings = await service.runCheck(IntegrityCheckType.orphanUserPhones);
+      expect(findings, hasLength(1));
+      expect(findings.first.context['user_id'], userId);
+      expect(findings.first.context['phone_id'], phoneId);
+    });
   });
 
   group('DatabaseIntegrityReport.toMarkdown', () {
@@ -259,6 +327,7 @@ VALUES ('Κενό κλειδί', '', 0)
           DatabaseIntegrityFinding(
             severity: IntegritySeverity.critical,
             category: IntegrityCategory.referential,
+            checkType: IntegrityCheckType.tasksInvalidCall,
             title: 'Κρίσιμο A',
             description: 'Περιγραφή A',
             affectedId: 1,
@@ -267,6 +336,7 @@ VALUES ('Κενό κλειδί', '', 0)
           DatabaseIntegrityFinding(
             severity: IntegritySeverity.warning,
             category: IntegrityCategory.searchIndex,
+            checkType: IntegrityCheckType.callsMissingSearchIndex,
             title: 'Προειδοποίηση B',
             description: 'Περιγραφή B',
             affectedId: 2,

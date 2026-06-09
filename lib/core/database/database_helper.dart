@@ -59,6 +59,9 @@ class DatabaseHelper {
   static const String auditActionRestore = 'ΕΠΑΝΑΦΟΡΑ';
   static const String auditActionBulkDelete = 'ΜΑΖΙΚΗ ΔΙΑΓΡΑΦΗ';
 
+  /// Επιδιόρθωση ευρημάτων ακεραιότητας (Integrity Fixer Engine).
+  static const String auditActionIntegrityFix = 'ΕΠΙΔΙΟΡΘΩΣΗ ΑΚΕΡΑΙΟΤΗΤΑΣ';
+
   /// Squashed schema ([_onCreate] + [_onUpgradeSquashed] για v1→v2). Παλιά αρχεία: `dart run tool/migrate_to_v1.dart`.
   static const int _kDatabaseSchemaVersion = databaseSchemaVersionV1;
 

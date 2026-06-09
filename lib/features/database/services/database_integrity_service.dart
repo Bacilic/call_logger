@@ -13,12 +13,14 @@ typedef _IntegrityCheckRunner = Future<List<DatabaseIntegrityFinding>> Function(
 
 class _IntegrityCheckStep {
   const _IntegrityCheckStep({
+    required this.checkType,
     required this.name,
     required this.tableScopeLabel,
     required this.countSql,
     required this.run,
   });
 
+  final IntegrityCheckType checkType;
   final String name;
   final String tableScopeLabel;
   final String countSql;
@@ -29,14 +31,10 @@ class _IntegrityCheckStep {
 class DatabaseIntegrityService {
   static const int totalSteps = 16;
 
-  static const String _activePhones =
-      'COALESCE(is_deleted, 0) = 0';
-  static const String _activeCalls =
-      'COALESCE(c.is_deleted, 0) = 0';
-  static const String _activeTasks =
-      'COALESCE(t.is_deleted, 0) = 0';
-  static const String _activeUsers =
-      'COALESCE(u.is_deleted, 0) = 0';
+  static const String _activePhones = 'COALESCE(is_deleted, 0) = 0';
+  static const String _activeCalls = 'COALESCE(c.is_deleted, 0) = 0';
+  static const String _activeTasks = 'COALESCE(t.is_deleted, 0) = 0';
+  static const String _activeUsers = 'COALESCE(u.is_deleted, 0) = 0';
 
   Future<DatabaseIntegrityReport> runChecks({
     void Function(DatabaseIntegrityProgress)? onProgress,
@@ -62,9 +60,8 @@ class DatabaseIntegrityService {
       );
     }
 
-    // Βήμα 1: PRAGMA quick_check (χωρίς count).
     await emitProgress(
-      checkName: 'Έλεγχος SQLite (PRAGMA)',
+      checkName: IntegrityCheckType.pragmaQuickCheck.displayNameEl,
       tableScopeLabel: 'αρχείο βάσης',
       totalRowsChecked: 0,
     );
@@ -89,35 +86,49 @@ class DatabaseIntegrityService {
     );
   }
 
+  /// Στοχευμένη επαν-επαλήθευση ενός τύπου ελέγχου (χωρίς πλήρες 16-βηματικό scan).
+  Future<List<DatabaseIntegrityFinding>> runCheck(IntegrityCheckType type) async {
+    final db = await DatabaseHelper.instance.database;
+    if (type == IntegrityCheckType.pragmaQuickCheck) {
+      return _checkPragmaQuickCheck(db);
+    }
+    final step = _diagnosticSteps().firstWhere((s) => s.checkType == type);
+    return step.run(db);
+  }
+
   static List<_IntegrityCheckStep> _diagnosticSteps() {
     return [
       _IntegrityCheckStep(
-        name: 'Ορφανά τηλέφωνα',
+        checkType: IntegrityCheckType.orphanPhone,
+        name: IntegrityCheckType.orphanPhone.displayNameEl,
         tableScopeLabel: 'συνολικά τηλέφωνα',
-        countSql:
-            'SELECT COUNT(*) FROM phones WHERE $_activePhones',
+        countSql: 'SELECT COUNT(*) FROM phones WHERE $_activePhones',
         run: _checkOrphanPhones,
       ),
       _IntegrityCheckStep(
-        name: 'Κλήσεις χωρίς ευρετήριο',
+        checkType: IntegrityCheckType.callsMissingSearchIndex,
+        name: IntegrityCheckType.callsMissingSearchIndex.displayNameEl,
         tableScopeLabel: 'συνολικές κλήσεις',
         countSql: 'SELECT COUNT(*) FROM calls WHERE COALESCE(is_deleted, 0) = 0',
         run: _checkCallsMissingSearchIndex,
       ),
       _IntegrityCheckStep(
-        name: 'Εκκρεμότητες χωρίς ευρετήριο',
+        checkType: IntegrityCheckType.tasksMissingSearchIndex,
+        name: IntegrityCheckType.tasksMissingSearchIndex.displayNameEl,
         tableScopeLabel: 'συνολικές εκκρεμότητες',
         countSql: 'SELECT COUNT(*) FROM tasks WHERE COALESCE(is_deleted, 0) = 0',
         run: _checkTasksMissingSearchIndex,
       ),
       _IntegrityCheckStep(
-        name: 'Χρήστες χωρίς τμήμα',
+        checkType: IntegrityCheckType.usersWithoutDepartment,
+        name: IntegrityCheckType.usersWithoutDepartment.displayNameEl,
         tableScopeLabel: 'συνολικοί χρήστες',
         countSql: 'SELECT COUNT(*) FROM users WHERE COALESCE(is_deleted, 0) = 0',
         run: _checkUsersWithoutDepartment,
       ),
       _IntegrityCheckStep(
-        name: 'Χρήστες σε διαγραμμένο/ανύπαρκτο τμήμα',
+        checkType: IntegrityCheckType.usersInvalidDepartment,
+        name: IntegrityCheckType.usersInvalidDepartment.displayNameEl,
         tableScopeLabel: 'χρήστες με τμήμα',
         countSql: '''
 SELECT COUNT(*) FROM users
@@ -126,7 +137,8 @@ WHERE COALESCE(is_deleted, 0) = 0 AND department_id IS NOT NULL
         run: _checkUsersInvalidDepartment,
       ),
       _IntegrityCheckStep(
-        name: 'Εκκρεμότητες με άκυρη κλήση',
+        checkType: IntegrityCheckType.tasksInvalidCall,
+        name: IntegrityCheckType.tasksInvalidCall.displayNameEl,
         tableScopeLabel: 'εκκρεμότητες με κλήση',
         countSql: '''
 SELECT COUNT(*) FROM tasks
@@ -135,38 +147,44 @@ WHERE COALESCE(is_deleted, 0) = 0 AND call_id IS NOT NULL
         run: _checkTasksInvalidCall,
       ),
       _IntegrityCheckStep(
-        name: 'Τμήματα χωρίς έγκυρο name_key',
+        checkType: IntegrityCheckType.departmentsInvalidNameKey,
+        name: IntegrityCheckType.departmentsInvalidNameKey.displayNameEl,
         tableScopeLabel: 'συνολικά τμήματα',
         countSql:
             'SELECT COUNT(*) FROM departments WHERE COALESCE(is_deleted, 0) = 0',
         run: _checkDepartmentsInvalidNameKey,
       ),
       _IntegrityCheckStep(
-        name: 'Ορφανά call_external_links',
+        checkType: IntegrityCheckType.orphanCallExternalLinks,
+        name: IntegrityCheckType.orphanCallExternalLinks.displayNameEl,
         tableScopeLabel: 'call_external_links',
         countSql: 'SELECT COUNT(*) FROM call_external_links',
         run: _checkOrphanCallExternalLinks,
       ),
       _IntegrityCheckStep(
-        name: 'Ορφανές συσχετίσεις χρήστη–τηλεφώνου',
+        checkType: IntegrityCheckType.orphanUserPhones,
+        name: IntegrityCheckType.orphanUserPhones.displayNameEl,
         tableScopeLabel: 'συσχετίσεις χρήστη–τηλεφώνου',
         countSql: 'SELECT COUNT(*) FROM user_phones',
         run: _checkOrphanUserPhones,
       ),
       _IntegrityCheckStep(
-        name: 'Ορφανά department_phones',
+        checkType: IntegrityCheckType.orphanDepartmentPhones,
+        name: IntegrityCheckType.orphanDepartmentPhones.displayNameEl,
         tableScopeLabel: 'department_phones',
         countSql: 'SELECT COUNT(*) FROM department_phones',
         run: _checkOrphanDepartmentPhones,
       ),
       _IntegrityCheckStep(
-        name: 'Ορφανές συσχετίσεις χρήστη–εξοπλισμού',
+        checkType: IntegrityCheckType.orphanUserEquipment,
+        name: IntegrityCheckType.orphanUserEquipment.displayNameEl,
         tableScopeLabel: 'συσχετίσεις χρήστη–εξοπλισμού',
         countSql: 'SELECT COUNT(*) FROM user_equipment',
         run: _checkOrphanUserEquipment,
       ),
       _IntegrityCheckStep(
-        name: 'Κλήσεις με διαγραμμένα linked entities',
+        checkType: IntegrityCheckType.callsDeletedLinkedEntities,
+        name: IntegrityCheckType.callsDeletedLinkedEntities.displayNameEl,
         tableScopeLabel: 'κλήσεις με αναφορές',
         countSql: '''
 SELECT COUNT(*) FROM calls c
@@ -176,13 +194,15 @@ WHERE $_activeCalls
         run: _checkCallsDeletedLinkedEntities,
       ),
       _IntegrityCheckStep(
-        name: 'Εκκρεμότητες με διαγραμμένα linked entities',
+        checkType: IntegrityCheckType.tasksDeletedLinkedEntities,
+        name: IntegrityCheckType.tasksDeletedLinkedEntities.displayNameEl,
         tableScopeLabel: 'συνολικές εκκρεμότητες',
         countSql: 'SELECT COUNT(*) FROM tasks WHERE COALESCE(is_deleted, 0) = 0',
         run: _checkTasksDeletedLinkedEntities,
       ),
       _IntegrityCheckStep(
-        name: 'Εκκρεμότητες: created_at > updated_at',
+        checkType: IntegrityCheckType.tasksTemporalInconsistency,
+        name: IntegrityCheckType.tasksTemporalInconsistency.displayNameEl,
         tableScopeLabel: 'εκκρεμότητες με χρονικές στιγμές',
         countSql: '''
 SELECT COUNT(*) FROM tasks t
@@ -193,7 +213,8 @@ WHERE $_activeTasks
         run: _checkTasksTemporalInconsistency,
       ),
       _IntegrityCheckStep(
-        name: 'Audit χωρίς search_text',
+        checkType: IntegrityCheckType.auditMissingSearchText,
+        name: IntegrityCheckType.auditMissingSearchText.displayNameEl,
         tableScopeLabel: 'εγγραφές audit με entity_id',
         countSql: 'SELECT COUNT(*) FROM audit_log WHERE entity_id IS NOT NULL',
         run: _checkAuditMissingSearchText,
@@ -214,6 +235,7 @@ WHERE $_activeTasks
       DatabaseIntegrityFinding(
         severity: IntegritySeverity.critical,
         category: IntegrityCategory.technicalFlow,
+        checkType: IntegrityCheckType.pragmaQuickCheck,
         title: 'Αποτυχία PRAGMA quick_check',
         description: result,
       ),
@@ -236,11 +258,13 @@ WHERE $_activePhones
           (r) => DatabaseIntegrityFinding(
             severity: IntegritySeverity.warning,
             category: IntegrityCategory.referential,
+            checkType: IntegrityCheckType.orphanPhone,
             title: 'Ορφανό τηλέφωνο',
             description:
                 'Το τηλέφωνο ${r['number']} δεν συνδέεται με χρήστη, τμήμα ή department_phones.',
             affectedId: r['id'] as int?,
             affectedEntity: 'phones',
+            context: {'phone_id': r['id']},
           ),
         )
         .toList();
@@ -260,10 +284,12 @@ WHERE $_activeCalls
           (r) => DatabaseIntegrityFinding(
             severity: IntegritySeverity.warning,
             category: IntegrityCategory.searchIndex,
+            checkType: IntegrityCheckType.callsMissingSearchIndex,
             title: 'Κλήση χωρίς ευρετήριο αναζήτησης',
             description: 'Η κλήση δεν έχει search_index.',
             affectedId: r['id'] as int?,
             affectedEntity: 'calls',
+            context: {'call_id': r['id']},
           ),
         )
         .toList();
@@ -283,11 +309,13 @@ WHERE $_activeTasks
           (r) => DatabaseIntegrityFinding(
             severity: IntegritySeverity.warning,
             category: IntegrityCategory.searchIndex,
+            checkType: IntegrityCheckType.tasksMissingSearchIndex,
             title: 'Εκκρεμότητα χωρίς ευρετήριο αναζήτησης',
             description:
                 'Η εκκρεμότητα «${r['title'] ?? ''}» δεν έχει search_index.',
             affectedId: r['id'] as int?,
             affectedEntity: 'tasks',
+            context: {'task_id': r['id']},
           ),
         )
         .toList();
@@ -307,11 +335,13 @@ WHERE $_activeUsers
           (r) => DatabaseIntegrityFinding(
             severity: IntegritySeverity.warning,
             category: IntegrityCategory.referential,
+            checkType: IntegrityCheckType.usersWithoutDepartment,
             title: 'Χρήστης χωρίς τμήμα',
             description:
                 'Ο χρήστης ${r['last_name']} ${r['first_name']} δεν έχει department_id.',
             affectedId: r['id'] as int?,
             affectedEntity: 'users',
+            context: {'user_id': r['id']},
           ),
         )
         .toList();
@@ -333,11 +363,16 @@ WHERE $_activeUsers
           (r) => DatabaseIntegrityFinding(
             severity: IntegritySeverity.critical,
             category: IntegrityCategory.referential,
+            checkType: IntegrityCheckType.usersInvalidDepartment,
             title: 'Χρήστης με άκυρο τμήμα',
             description:
                 'Ο χρήστης ${r['last_name']} ${r['first_name']} δείχνει σε ανύπαρκτο ή διαγραμμένο τμήμα (department_id=${r['department_id']}).',
             affectedId: r['id'] as int?,
             affectedEntity: 'users',
+            context: {
+              'user_id': r['id'],
+              'department_id': r['department_id'],
+            },
           ),
         )
         .toList();
@@ -359,11 +394,17 @@ WHERE $_activeTasks
           (r) => DatabaseIntegrityFinding(
             severity: IntegritySeverity.critical,
             category: IntegrityCategory.referential,
+            checkType: IntegrityCheckType.tasksInvalidCall,
             title: 'Εκκρεμότητα με άκυρη κλήση',
             description:
                 'Η εκκρεμότητα «${r['title'] ?? ''}» δείχνει σε ανύπαρκτη ή διαγραμμένη κλήση (call_id=${r['call_id']}).',
             affectedId: r['id'] as int?,
             affectedEntity: 'tasks',
+            context: {
+              'task_id': r['id'],
+              'call_id': r['call_id'],
+              'invalidField': 'call_id',
+            },
           ),
         )
         .toList();
@@ -381,15 +422,21 @@ WHERE COALESCE(d.is_deleted, 0) = 0
   AND (d.name_key IS NULL OR TRIM(d.name_key) = '')
 ''');
     for (final r in emptyKeyRows) {
+      final name = r['name'] as String? ?? '';
+      final expected = SearchTextNormalizer.normalizeForSearch(name);
       findings.add(
         DatabaseIntegrityFinding(
           severity: IntegritySeverity.warning,
           category: IntegrityCategory.technicalFlow,
+          checkType: IntegrityCheckType.departmentsInvalidNameKey,
           title: 'Τμήμα με κενό name_key',
-          description:
-              'Το τμήμα «${r['name']}» έχει κενό ή null name_key.',
+          description: 'Το τμήμα «$name» έχει κενό ή null name_key.',
           affectedId: r['id'] as int?,
           affectedEntity: 'departments',
+          context: {
+            'department_id': r['id'],
+            'expectedNameKey': expected,
+          },
         ),
       );
     }
@@ -410,11 +457,17 @@ WHERE COALESCE(d.is_deleted, 0) = 0
           DatabaseIntegrityFinding(
             severity: IntegritySeverity.warning,
             category: IntegrityCategory.technicalFlow,
+            checkType: IntegrityCheckType.departmentsInvalidNameKey,
             title: 'Τμήμα με μη συμβαδίζον name_key',
             description:
                 'Το τμήμα «$name» έχει name_key «$nameKey» αντί για «$expected».',
             affectedId: r['id'] as int?,
             affectedEntity: 'departments',
+            context: {
+              'department_id': r['id'],
+              'expectedNameKey': expected,
+              'currentNameKey': nameKey,
+            },
           ),
         );
       }
@@ -437,11 +490,16 @@ WHERE c.id IS NULL OR COALESCE(c.is_deleted, 0) = 1
           (r) => DatabaseIntegrityFinding(
             severity: IntegritySeverity.critical,
             category: IntegrityCategory.referential,
+            checkType: IntegrityCheckType.orphanCallExternalLinks,
             title: 'Ορφανό call_external_link',
             description:
                 'Η εγγραφή δείχνει σε ανύπαρκτη ή διαγραμμένη κλήση (call_id=${r['call_id']}).',
             affectedId: r['id'] as int?,
             affectedEntity: 'call_external_links',
+            context: {
+              'link_id': r['id'],
+              'call_id': r['call_id'],
+            },
           ),
         )
         .toList();
@@ -466,6 +524,7 @@ WHERE p.id IS NULL OR COALESCE(p.is_deleted, 0) = 1
           (r) => DatabaseIntegrityFinding(
             severity: IntegritySeverity.critical,
             category: IntegrityCategory.referential,
+            checkType: IntegrityCheckType.orphanUserPhones,
             title: 'Ορφανή συσχέτιση χρήστη–τηλεφώνου',
             description:
                 'Σύνδεση υπαλλήλου ${_formatUserLabel(r['user_id'] as int?, r['user_last_name'] as String?, r['user_first_name'] as String?)} '
@@ -473,6 +532,10 @@ WHERE p.id IS NULL OR COALESCE(p.is_deleted, 0) = 1
                 'δείχνει σε διαγραμμένη ή ανύπαρκτη εγγραφή.',
             affectedId: r['phone_id'] as int?,
             affectedEntity: 'user_phones',
+            context: {
+              'user_id': r['user_id'],
+              'phone_id': r['phone_id'],
+            },
           ),
         )
         .toList();
@@ -496,6 +559,7 @@ WHERE d.id IS NULL OR COALESCE(d.is_deleted, 0) = 1
           (r) => DatabaseIntegrityFinding(
             severity: IntegritySeverity.critical,
             category: IntegrityCategory.referential,
+            checkType: IntegrityCheckType.orphanDepartmentPhones,
             title: 'Ορφανό department_phones',
             description:
                 'Σύνδεση τμήματος ${_formatDepartmentLabel(r['department_id'] as int?, r['department_name'] as String?)} '
@@ -503,6 +567,10 @@ WHERE d.id IS NULL OR COALESCE(d.is_deleted, 0) = 1
                 'δείχνει σε διαγραμμένη ή ανύπαρκτη εγγραφή.',
             affectedId: r['phone_id'] as int?,
             affectedEntity: 'department_phones',
+            context: {
+              'department_id': r['department_id'],
+              'phone_id': r['phone_id'],
+            },
           ),
         )
         .toList();
@@ -527,6 +595,7 @@ WHERE u.id IS NULL OR COALESCE(u.is_deleted, 0) = 1
           (r) => DatabaseIntegrityFinding(
             severity: IntegritySeverity.critical,
             category: IntegrityCategory.referential,
+            checkType: IntegrityCheckType.orphanUserEquipment,
             title: 'Ορφανή συσχέτιση χρήστη–εξοπλισμού',
             description:
                 'Σύνδεση υπαλλήλου ${_formatUserLabel(r['user_id'] as int?, r['user_last_name'] as String?, r['user_first_name'] as String?)} '
@@ -534,6 +603,10 @@ WHERE u.id IS NULL OR COALESCE(u.is_deleted, 0) = 1
                 'δείχνει σε διαγραμμένη ή ανύπαρκτη εγγραφή.',
             affectedId: r['equipment_id'] as int?,
             affectedEntity: 'user_equipment',
+            context: {
+              'user_id': r['user_id'],
+              'equipment_id': r['equipment_id'],
+            },
           ),
         )
         .toList();
@@ -542,20 +615,19 @@ WHERE u.id IS NULL OR COALESCE(u.is_deleted, 0) = 1
   static Future<List<DatabaseIntegrityFinding>> _checkCallsDeletedLinkedEntities(
     Database db,
   ) async {
+    // Soft-deleted αναφορές (is_deleted=1) ΔΕΝ είναι εύρημα — αποτελούν
+    // «ιστορική αλήθεια» και εμφανίζονται με σήμανση «(διαγραμμένο)» στο UI.
+    // Εύρημα είναι μόνο όταν η εγγραφή ΛΕΙΠΕΙ εντελώς από τον πίνακα.
     final rows = await db.rawQuery('''
 SELECT c.id,
        c.caller_id,
        c.equipment_id,
        c.category_id,
-       u.first_name AS caller_first_name,
-       u.last_name AS caller_last_name,
-       e.code_equipment,
-       cat.name AS category_name,
-       CASE WHEN c.caller_id IS NOT NULL AND (u.id IS NULL OR COALESCE(u.is_deleted, 0) = 1)
+       CASE WHEN c.caller_id IS NOT NULL AND u.id IS NULL
             THEN 1 ELSE 0 END AS caller_invalid,
-       CASE WHEN c.equipment_id IS NOT NULL AND (e.id IS NULL OR COALESCE(e.is_deleted, 0) = 1)
+       CASE WHEN c.equipment_id IS NOT NULL AND e.id IS NULL
             THEN 1 ELSE 0 END AS equipment_invalid,
-       CASE WHEN c.category_id IS NOT NULL AND (cat.id IS NULL OR COALESCE(cat.is_deleted, 0) = 1)
+       CASE WHEN c.category_id IS NOT NULL AND cat.id IS NULL
             THEN 1 ELSE 0 END AS category_invalid
 FROM calls c
 LEFT JOIN users u ON u.id = c.caller_id
@@ -563,58 +635,94 @@ LEFT JOIN equipment e ON e.id = c.equipment_id
 LEFT JOIN categories cat ON cat.id = c.category_id
 WHERE $_activeCalls
   AND (
-    (c.caller_id IS NOT NULL AND (u.id IS NULL OR COALESCE(u.is_deleted, 0) = 1))
-    OR (c.equipment_id IS NOT NULL AND (e.id IS NULL OR COALESCE(e.is_deleted, 0) = 1))
-    OR (c.category_id IS NOT NULL AND (cat.id IS NULL OR COALESCE(cat.is_deleted, 0) = 1))
+    (c.caller_id IS NOT NULL AND u.id IS NULL)
+    OR (c.equipment_id IS NOT NULL AND e.id IS NULL)
+    OR (c.category_id IS NOT NULL AND cat.id IS NULL)
   )
 ''');
-    return rows.map((r) {
-      final issues = <String>[];
+
+    final findings = <DatabaseIntegrityFinding>[];
+    for (final r in rows) {
+      final callId = r['id'] as int;
       if ((r['caller_invalid'] as int?) == 1) {
-        issues.add(
-          'υπάλληλος ${_formatUserLabel(r['caller_id'] as int?, r['caller_last_name'] as String?, r['caller_first_name'] as String?)}',
+        final callerId = r['caller_id'] as int?;
+        findings.add(
+          DatabaseIntegrityFinding(
+            severity: IntegritySeverity.critical,
+            category: IntegrityCategory.referential,
+            checkType: IntegrityCheckType.callsDeletedLinkedEntities,
+            title: 'Κλήση με ανύπαρκτη αναφορά (υπάλληλος)',
+            description:
+                'Η κλήση αναφέρεται σε υπάλληλο (id=$callerId) που λείπει εντελώς από τη βάση.',
+            affectedId: callId,
+            affectedEntity: 'calls',
+            context: {
+              'call_id': callId,
+              'invalidField': 'caller_id',
+              'invalidFkId': callerId,
+            },
+          ),
         );
       }
       if ((r['equipment_invalid'] as int?) == 1) {
-        issues.add(
-          'εξοπλισμός ${_formatEquipmentLabel(r['equipment_id'] as int?, r['code_equipment'] as String?)}',
+        final equipmentId = r['equipment_id'] as int?;
+        findings.add(
+          DatabaseIntegrityFinding(
+            severity: IntegritySeverity.critical,
+            category: IntegrityCategory.referential,
+            checkType: IntegrityCheckType.callsDeletedLinkedEntities,
+            title: 'Κλήση με ανύπαρκτη αναφορά (εξοπλισμός)',
+            description:
+                'Η κλήση αναφέρεται σε εξοπλισμό (id=$equipmentId) που λείπει εντελώς από τη βάση.',
+            affectedId: callId,
+            affectedEntity: 'calls',
+            context: {
+              'call_id': callId,
+              'invalidField': 'equipment_id',
+              'invalidFkId': equipmentId,
+            },
+          ),
         );
       }
       if ((r['category_invalid'] as int?) == 1) {
-        issues.add(
-          'κατηγορία ${_formatCategoryLabel(r['category_id'] as int?, r['category_name'] as String?)}',
+        final categoryId = r['category_id'] as int?;
+        findings.add(
+          DatabaseIntegrityFinding(
+            severity: IntegritySeverity.critical,
+            category: IntegrityCategory.referential,
+            checkType: IntegrityCheckType.callsDeletedLinkedEntities,
+            title: 'Κλήση με ανύπαρκτη αναφορά (κατηγορία)',
+            description:
+                'Η κλήση αναφέρεται σε κατηγορία (id=$categoryId) που λείπει εντελώς από τη βάση.',
+            affectedId: callId,
+            affectedEntity: 'calls',
+            context: {
+              'call_id': callId,
+              'invalidField': 'category_id',
+              'invalidFkId': categoryId,
+            },
+          ),
         );
       }
-      return DatabaseIntegrityFinding(
-        severity: IntegritySeverity.warning,
-        category: IntegrityCategory.referential,
-        title: 'Κλήση με διαγραμμένη αναφορά',
-        description:
-            'Η κλήση έχει άκυρες αναφορές: ${issues.join(', ')}.',
-        affectedId: r['id'] as int?,
-        affectedEntity: 'calls',
-      );
-    }).toList();
+    }
+    return findings;
   }
 
   static Future<List<DatabaseIntegrityFinding>> _checkTasksDeletedLinkedEntities(
     Database db,
   ) async {
+    // Soft-deleted αναφορές ΔΕΝ είναι εύρημα (ιστορική αλήθεια, σήμανση
+    // «(διαγραμμένο)» στο UI). Εύρημα μόνο όταν η εγγραφή λείπει εντελώς.
     final rows = await db.rawQuery('''
 SELECT t.id, t.title,
        t.caller_id, t.equipment_id, t.department_id, t.phone_id,
-       u.first_name AS caller_first_name,
-       u.last_name AS caller_last_name,
-       e.code_equipment,
-       d.name AS department_name,
-       p.number AS phone_number,
-       CASE WHEN t.caller_id IS NOT NULL AND (u.id IS NULL OR COALESCE(u.is_deleted, 0) = 1)
+       CASE WHEN t.caller_id IS NOT NULL AND u.id IS NULL
             THEN 1 ELSE 0 END AS caller_invalid,
-       CASE WHEN t.equipment_id IS NOT NULL AND (e.id IS NULL OR COALESCE(e.is_deleted, 0) = 1)
+       CASE WHEN t.equipment_id IS NOT NULL AND e.id IS NULL
             THEN 1 ELSE 0 END AS equipment_invalid,
-       CASE WHEN t.department_id IS NOT NULL AND (d.id IS NULL OR COALESCE(d.is_deleted, 0) = 1)
+       CASE WHEN t.department_id IS NOT NULL AND d.id IS NULL
             THEN 1 ELSE 0 END AS department_invalid,
-       CASE WHEN t.phone_id IS NOT NULL AND (p.id IS NULL OR COALESCE(p.is_deleted, 0) = 1)
+       CASE WHEN t.phone_id IS NOT NULL AND p.id IS NULL
             THEN 1 ELSE 0 END AS phone_invalid
 FROM tasks t
 LEFT JOIN users u ON u.id = t.caller_id
@@ -623,44 +731,99 @@ LEFT JOIN departments d ON d.id = t.department_id
 LEFT JOIN phones p ON p.id = t.phone_id
 WHERE $_activeTasks
   AND (
-    (t.caller_id IS NOT NULL AND (u.id IS NULL OR COALESCE(u.is_deleted, 0) = 1))
-    OR (t.equipment_id IS NOT NULL AND (e.id IS NULL OR COALESCE(e.is_deleted, 0) = 1))
-    OR (t.department_id IS NOT NULL AND (d.id IS NULL OR COALESCE(d.is_deleted, 0) = 1))
-    OR (t.phone_id IS NOT NULL AND (p.id IS NULL OR COALESCE(p.is_deleted, 0) = 1))
+    (t.caller_id IS NOT NULL AND u.id IS NULL)
+    OR (t.equipment_id IS NOT NULL AND e.id IS NULL)
+    OR (t.department_id IS NOT NULL AND d.id IS NULL)
+    OR (t.phone_id IS NOT NULL AND p.id IS NULL)
   )
 ''');
-    return rows.map((r) {
-      final issues = <String>[];
+
+    final findings = <DatabaseIntegrityFinding>[];
+    for (final r in rows) {
+      final taskId = r['id'] as int;
+      final title = r['title'] as String? ?? '';
       if ((r['caller_invalid'] as int?) == 1) {
-        issues.add(
-          'υπάλληλος ${_formatUserLabel(r['caller_id'] as int?, r['caller_last_name'] as String?, r['caller_first_name'] as String?)}',
+        final callerId = r['caller_id'] as int?;
+        findings.add(
+          DatabaseIntegrityFinding(
+            severity: IntegritySeverity.critical,
+            category: IntegrityCategory.referential,
+            checkType: IntegrityCheckType.tasksDeletedLinkedEntities,
+            title: 'Εκκρεμότητα με ανύπαρκτη αναφορά (υπάλληλος)',
+            description:
+                'Η εκκρεμότητα «$title» αναφέρεται σε υπάλληλο (id=$callerId) που λείπει εντελώς από τη βάση.',
+            affectedId: taskId,
+            affectedEntity: 'tasks',
+            context: {
+              'task_id': taskId,
+              'invalidField': 'caller_id',
+              'invalidFkId': callerId,
+            },
+          ),
         );
       }
       if ((r['equipment_invalid'] as int?) == 1) {
-        issues.add(
-          'εξοπλισμός ${_formatEquipmentLabel(r['equipment_id'] as int?, r['code_equipment'] as String?)}',
+        final equipmentId = r['equipment_id'] as int?;
+        findings.add(
+          DatabaseIntegrityFinding(
+            severity: IntegritySeverity.critical,
+            category: IntegrityCategory.referential,
+            checkType: IntegrityCheckType.tasksDeletedLinkedEntities,
+            title: 'Εκκρεμότητα με ανύπαρκτη αναφορά (εξοπλισμός)',
+            description:
+                'Η εκκρεμότητα «$title» αναφέρεται σε εξοπλισμό (id=$equipmentId) που λείπει εντελώς από τη βάση.',
+            affectedId: taskId,
+            affectedEntity: 'tasks',
+            context: {
+              'task_id': taskId,
+              'invalidField': 'equipment_id',
+              'invalidFkId': equipmentId,
+            },
+          ),
         );
       }
       if ((r['department_invalid'] as int?) == 1) {
-        issues.add(
-          'τμήμα ${_formatDepartmentLabel(r['department_id'] as int?, r['department_name'] as String?)}',
+        final departmentId = r['department_id'] as int?;
+        findings.add(
+          DatabaseIntegrityFinding(
+            severity: IntegritySeverity.critical,
+            category: IntegrityCategory.referential,
+            checkType: IntegrityCheckType.tasksDeletedLinkedEntities,
+            title: 'Εκκρεμότητα με ανύπαρκτη αναφορά (τμήμα)',
+            description:
+                'Η εκκρεμότητα «$title» αναφέρεται σε τμήμα (id=$departmentId) που λείπει εντελώς από τη βάση.',
+            affectedId: taskId,
+            affectedEntity: 'tasks',
+            context: {
+              'task_id': taskId,
+              'invalidField': 'department_id',
+              'invalidFkId': departmentId,
+            },
+          ),
         );
       }
       if ((r['phone_invalid'] as int?) == 1) {
-        issues.add(
-          'τηλέφωνο ${_formatPhoneLabel(r['phone_id'] as int?, r['phone_number'] as String?)}',
+        final phoneId = r['phone_id'] as int?;
+        findings.add(
+          DatabaseIntegrityFinding(
+            severity: IntegritySeverity.critical,
+            category: IntegrityCategory.referential,
+            checkType: IntegrityCheckType.tasksDeletedLinkedEntities,
+            title: 'Εκκρεμότητα με ανύπαρκτη αναφορά (τηλέφωνο)',
+            description:
+                'Η εκκρεμότητα «$title» αναφέρεται σε τηλέφωνο (id=$phoneId) που λείπει εντελώς από τη βάση.',
+            affectedId: taskId,
+            affectedEntity: 'tasks',
+            context: {
+              'task_id': taskId,
+              'invalidField': 'phone_id',
+              'invalidFkId': phoneId,
+            },
+          ),
         );
       }
-      return DatabaseIntegrityFinding(
-        severity: IntegritySeverity.warning,
-        category: IntegrityCategory.referential,
-        title: 'Εκκρεμότητα με διαγραμμένη αναφορά',
-        description:
-            'Η εκκρεμότητα «${r['title'] ?? ''}» έχει άκυρες αναφορές: ${issues.join(', ')}.',
-        affectedId: r['id'] as int?,
-        affectedEntity: 'tasks',
-      );
-    }).toList();
+    }
+    return findings;
   }
 
   static Future<List<DatabaseIntegrityFinding>> _checkTasksTemporalInconsistency(
@@ -679,11 +842,13 @@ WHERE $_activeTasks
           (r) => DatabaseIntegrityFinding(
             severity: IntegritySeverity.warning,
             category: IntegrityCategory.temporal,
+            checkType: IntegrityCheckType.tasksTemporalInconsistency,
             title: 'Εκκρεμότητα: created_at > updated_at',
             description:
                 'Η εκκρεμότητα «${r['title'] ?? ''}» έχει created_at (${r['created_at']}) μεταγενέστερο από updated_at (${r['updated_at']}).',
             affectedId: r['id'] as int?,
             affectedEntity: 'tasks',
+            context: {'task_id': r['id']},
           ),
         )
         .toList();
@@ -703,11 +868,17 @@ WHERE a.entity_id IS NOT NULL
           (r) => DatabaseIntegrityFinding(
             severity: IntegritySeverity.warning,
             category: IntegrityCategory.searchIndex,
+            checkType: IntegrityCheckType.auditMissingSearchText,
             title: 'Audit χωρίς search_text',
             description:
                 'Η εγγραφή audit για ${r['entity_type']} #${r['entity_id']} δεν έχει search_text.',
             affectedId: r['id'] as int?,
             affectedEntity: 'audit_log',
+            context: {
+              'audit_id': r['id'],
+              'entity_type': r['entity_type'],
+              'entity_id': r['entity_id'],
+            },
           ),
         )
         .toList();
@@ -755,12 +926,4 @@ WHERE a.entity_id IS NOT NULL
     return 'τμήμα id=$departmentId';
   }
 
-  static String _formatCategoryLabel(int? categoryId, String? name) {
-    if (categoryId == null) return 'άγνωστη κατηγορία';
-    final trimmed = name?.trim();
-    if (trimmed != null && trimmed.isNotEmpty) {
-      return '«$trimmed» (id=$categoryId)';
-    }
-    return 'κατηγορία id=$categoryId';
-  }
 }

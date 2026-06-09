@@ -201,6 +201,35 @@ class BackupDestinationFolderValidator {
     );
   }
 
+  /// Τελευταίο αρχείο `.zip` αντιγράφου στον φάκελο προορισμού (κατά ημερομηνία τροποποίησης).
+  static Future<File?> findLatestBackupZip({
+    required String destinationDirectory,
+    required String dbBaseName,
+  }) async {
+    final dest = destinationDirectory.trim();
+    if (dest.isEmpty) return null;
+
+    final dir = Directory(dest);
+    if (!await dir.exists()) return null;
+
+    File? latest;
+    DateTime? newest;
+    await for (final entity in dir.list(followLinks: false)) {
+      if (entity is! File) continue;
+      final name = p.basename(entity.path);
+      if (!name.toLowerCase().endsWith('.zip')) continue;
+      if (!isBackupArtifactFileName(name, dbBaseName)) continue;
+      try {
+        final modified = await entity.lastModified();
+        if (newest == null || modified.isAfter(newest)) {
+          newest = modified;
+          latest = entity;
+        }
+      } catch (_) {}
+    }
+    return latest;
+  }
+
   /// Ταιριάζει με τα πρότυπα ονομασίας [DatabaseBackupService].
   static bool isBackupArtifactFileName(String fileName, String dbBaseName) {
     final base = dbBaseName.trim();

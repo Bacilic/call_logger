@@ -141,6 +141,28 @@ class CallsRepository {
     }
   }
 
+  /// Επαναδόμηση `search_index` για μία κλήση βάσει id (integrity fix).
+  Future<void> rebuildSearchIndexForCallId(int callId) async {
+    await db.transaction((txn) async {
+      await rebuildSearchIndexForCallIdInTxn(txn, callId);
+    });
+  }
+
+  /// Επαναδόμηση `search_index` για μία κλήση μέσα σε transaction.
+  Future<void> rebuildSearchIndexForCallIdInTxn(
+    DatabaseExecutor executor,
+    int callId,
+  ) async {
+    final rows = await executor.query(
+      'calls',
+      where: 'id = ?',
+      whereArgs: [callId],
+      limit: 1,
+    );
+    if (rows.isEmpty) return;
+    await _rebuildSearchIndexForCallRows(executor, rows);
+  }
+
   /// Επαναδόμηση `search_index` για όλες τις κλήσεις με [categoryId] (ίδιο [DatabaseExecutor] / transaction).
   Future<void> rebuildSearchIndexForCallsByCategoryId(
     DatabaseExecutor executor,
@@ -178,6 +200,34 @@ class CallsRepository {
       whereArgs: [equipmentId],
     );
     await _rebuildSearchIndexForCallRows(executor, rows);
+  }
+
+  /// Ενημέρωση ενός FK πεδίου κλήσης (integrity fix — χωρίς audit, το κάνει ο caller).
+  Future<Map<String, dynamic>?> integrityUpdateCallFk(
+    DatabaseExecutor executor,
+    int callId,
+    String field,
+    int? newValue,
+  ) async {
+    const allowed = {'caller_id', 'equipment_id', 'category_id'};
+    if (!allowed.contains(field)) {
+      throw ArgumentError('Άκυρο πεδίο κλήσης: $field');
+    }
+    final rows = await executor.query(
+      'calls',
+      where: 'id = ?',
+      whereArgs: [callId],
+      limit: 1,
+    );
+    if (rows.isEmpty) return null;
+    final oldRow = Map<String, dynamic>.from(rows.first);
+    await executor.update(
+      'calls',
+      {field: newValue},
+      where: 'id = ?',
+      whereArgs: [callId],
+    );
+    return oldRow;
   }
 
   /// Εισάγει νέα κλήση. date/time τίθενται από τώρα αν δεν δοθούν.

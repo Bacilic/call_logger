@@ -7,4 +7,7 @@ enum MainNavDestination {
   database,
   dictionary,
   lamp,
+
+  /// Οθόνη debug σενάριων σφαλμάτων (μόνο kDebugMode desktop).
+  debugScenarios,
 }

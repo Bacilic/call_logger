@@ -104,6 +104,50 @@ class AuditService {
     return jsonEncode(m);
   }
 
+  /// Ανακατασκευή `search_text` από υπάρχουσα γραμμή `audit_log`.
+  static String rebuildSearchTextForRow(Map<String, dynamic> row) {
+    Map<String, dynamic>? decodeJson(String? raw) {
+      if (raw == null || raw.trim().isEmpty) return null;
+      try {
+        final decoded = jsonDecode(raw);
+        if (decoded is Map<String, dynamic>) return decoded;
+        if (decoded is Map) {
+          return decoded.map((k, v) => MapEntry(k.toString(), v));
+        }
+      } catch (_) {}
+      return null;
+    }
+
+    return _buildSearchText(
+      details: row['details'] as String?,
+      entityType: row['entity_type'] as String?,
+      entityName: row['entity_name'] as String?,
+      oldValues: decodeJson(row['old_values_json'] as String?),
+      newValues: decodeJson(row['new_values_json'] as String?),
+    );
+  }
+
+  /// Ενημέρωση `search_text` για μία εγγραφή audit μέσα σε transaction.
+  static Future<void> rebuildAndPersistSearchText(
+    DatabaseExecutor executor,
+    int auditId,
+  ) async {
+    final rows = await executor.query(
+      'audit_log',
+      where: 'id = ?',
+      whereArgs: [auditId],
+      limit: 1,
+    );
+    if (rows.isEmpty) return;
+    final searchText = rebuildSearchTextForRow(rows.first);
+    await executor.update(
+      'audit_log',
+      {'search_text': searchText},
+      where: 'id = ?',
+      whereArgs: [auditId],
+    );
+  }
+
   static String _buildSearchText({
     String? details,
     String? entityType,

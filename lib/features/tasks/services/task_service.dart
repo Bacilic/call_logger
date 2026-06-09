@@ -1089,6 +1089,55 @@ class TaskService {
     await DirectoryRepository(dbDel).softDeleteTask(id);
   }
 
+  /// Επαναδόμηση `search_index` για μία εκκρεμότητα (integrity fix).
+  Future<void> rebuildSearchIndexForTaskId(int taskId) async {
+    final db = await _db;
+    await db.transaction((txn) async {
+      final rows = await txn.query(
+        'tasks',
+        where: 'id = ?',
+        whereArgs: [taskId],
+        limit: 1,
+      );
+      if (rows.isEmpty) return;
+      final task = Task.fromMap(rows.first);
+      final si = SearchTextNormalizer.normalizeForSearch(
+        task.combinedSearchText,
+      );
+      await txn.update(
+        'tasks',
+        {'search_index': si},
+        where: 'id = ?',
+        whereArgs: [taskId],
+      );
+    });
+  }
+
+  /// Συγχρονισμός updated_at = created_at (integrity fix — χωρίς audit).
+  Future<Map<String, dynamic>?> integritySyncTaskTimestamps(int taskId) async {
+    final db = await _db;
+    return db.transaction((txn) async {
+      return DirectoryRepository(db).integritySyncTaskTimestamps(txn, taskId);
+    });
+  }
+
+  /// Ενημέρωση FK πεδίου εκκρεμότητας (integrity fix — χωρίς audit).
+  Future<Map<String, dynamic>?> integrityUpdateTaskFk(
+    int taskId,
+    String field,
+    int? newValue,
+  ) async {
+    final db = await _db;
+    return db.transaction((txn) async {
+      return DirectoryRepository(db).integrityUpdateTaskFk(
+        txn,
+        taskId,
+        field,
+        newValue,
+      );
+    });
+  }
+
   /// Ορίζει status = closed, solution_notes και updated_at.
   Future<void> closeTask(int id, String solutionNotes) async {
     final db = await _db;

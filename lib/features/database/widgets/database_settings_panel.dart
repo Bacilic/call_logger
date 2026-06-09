@@ -20,6 +20,7 @@ import '../../settings/widgets/create_new_database_dialog.dart';
 import '../models/database_backup_settings.dart';
 import '../providers/backup_scheduler_provider.dart';
 import '../providers/database_backup_settings_provider.dart';
+import '../providers/database_integrity_provider.dart';
 import '../services/database_backup_audit.dart';
 import '../services/database_backup_service.dart';
 import 'backup_folder_missing_dialog.dart';
@@ -28,6 +29,7 @@ import '../utils/backup_destination_location_warnings.dart';
 import '../utils/backup_location_hints.dart';
 import '../utils/backup_schedule_status.dart';
 import '../utils/backup_schedule_utils.dart';
+import '../utils/backup_restore_tooltip.dart';
 import '../utils/portable_backup_availability.dart';
 import 'database_integrity_panel.dart';
 
@@ -35,6 +37,14 @@ String _weekdayChipLabel(int weekday) {
   const labels = ['Δε', 'Τρ', 'Τε', 'Πε', 'Πα', 'Σα', 'Κυ'];
   return labels[weekday - 1];
 }
+
+/// Tooltip δίπλα στον διακόπτη αυτόματων αντιγράφων ασφαλείας.
+const _backupSafetyTooltipMessage =
+    'Ασφαλές αντίγραφο χωρίς διακοπή λειτουργίας.\n\n'
+    'VACUUM INTO (ατομικό): Ολόκληρο αντίγραφο με μία κίνηση — σε διακοπή '
+    '(π.χ. ρεύμα) δεν μένει μισοκατεστραμμένο αρχείο.\n\n'
+    'WAL / SHM: Γραφή στο παρασκήνιο· η εφαρμογή συνεχίζει κανονικά χωρίς '
+    'να «παγώνει».';
 
 /// Πάνελ ρυθμίσεων βάσης δεδομένων: αρχείο βάσης, δημιουργία νέου `.db`, αντίγραφα ασφαλείας.
 class DatabaseSettingsPanel extends ConsumerStatefulWidget {
@@ -960,6 +970,7 @@ class _DatabaseSettingsPanelState extends ConsumerState<DatabaseSettingsPanel> {
         await notifier.setLastBackupStatus(BackupScheduleStatus.none);
       }
       _reloadDestinationContentFuture();
+      ref.invalidate(backupRestoreTooltipProvider);
       messenger.showSnackBar(
         SnackBar(
           content: Text(
@@ -1181,23 +1192,28 @@ class _DatabaseSettingsPanelState extends ConsumerState<DatabaseSettingsPanel> {
             ),
             const SizedBox(height: 8),
             ..._buildDatabaseFilePathSection(theme),
-            Text(
-              'Αντίγραφα ασφαλείας (SQLite VACUUM INTO — ατομικό, με WAL/SHM).',
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
             const SizedBox(height: 12),
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              title: const Text('Αυτόματα αντίγραφα ασφαλείας'),
-              subtitle: const Text(
-                'Ενεργοποίηση\\Απενεργοποίηση Αυτόματων Αντιγράφων ασφαλείας της εφαρμογής.',
-              ),
-              value: settings.backupOnExit,
-              onChanged: (v) => ref
-                  .read(databaseBackupSettingsProvider.notifier)
-                  .setBackupOnExit(v),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Expanded(
+                  child: SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Αυτόματα αντίγραφα ασφαλείας'),
+                    subtitle: const Text(
+                      'Ενεργοποίηση\\Απενεργοποίηση Αυτόματων Αντιγράφων ασφαλείας της εφαρμογής.',
+                    ),
+                    value: settings.backupOnExit,
+                    onChanged: (v) => ref
+                        .read(databaseBackupSettingsProvider.notifier)
+                        .setBackupOnExit(v),
+                  ),
+                ),
+                _SettingsPanelInfoTooltip(
+                  message: _backupSafetyTooltipMessage,
+                  iconColor: theme.colorScheme.onSurfaceVariant,
+                ),
+              ],
             ),
             if (!settings.backupOnExit) ...[
               const SizedBox(height: 8),
@@ -1608,32 +1624,43 @@ class _DatabaseSettingsPanelState extends ConsumerState<DatabaseSettingsPanel> {
                 ),
               ),
             ] else ...[
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                title: const Text('Προγραμματισμένη Ώρα:'),
-                subtitle: Text(settings.backupTime),
-                trailing: TextButton.icon(
-                  onPressed: () async {
-                    final p =
-                        BackupScheduleUtils.parseTime(settings.backupTime);
-                    final initial = TimeOfDay(
-                      hour: p?.hour ?? 9,
-                      minute: p?.minute ?? 0,
-                    );
-                    final picked = await showTimePicker(
-                      context: context,
-                      initialTime: initial,
-                    );
-                    if (picked == null || !mounted) return;
-                    final h = picked.hour.toString().padLeft(2, '0');
-                    final m = picked.minute.toString().padLeft(2, '0');
-                    await ref
-                        .read(databaseBackupSettingsProvider.notifier)
-                        .setBackupTime('$h:$m');
-                  },
-                  icon: const Icon(Icons.access_time, size: 20),
-                  label: const Text('Επιλογή'),
-                ),
+              Row(
+                children: [
+                  Text(
+                    'Προγραμματισμένη Ώρα:',
+                    style: theme.textTheme.bodyLarge,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    settings.backupTime,
+                    style: theme.textTheme.bodyLarge?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const Spacer(),
+                  TextButton.icon(
+                    onPressed: () async {
+                      final p =
+                          BackupScheduleUtils.parseTime(settings.backupTime);
+                      final initial = TimeOfDay(
+                        hour: p?.hour ?? 9,
+                        minute: p?.minute ?? 0,
+                      );
+                      final picked = await showTimePicker(
+                        context: context,
+                        initialTime: initial,
+                      );
+                      if (picked == null || !mounted) return;
+                      final h = picked.hour.toString().padLeft(2, '0');
+                      final m = picked.minute.toString().padLeft(2, '0');
+                      await ref
+                          .read(databaseBackupSettingsProvider.notifier)
+                          .setBackupTime('$h:$m');
+                    },
+                    icon: const Icon(Icons.access_time, size: 20),
+                    label: const Text('Επιλογή'),
+                  ),
+                ],
               ),
               _buildBackupScheduleStatusSection(theme, settings),
             ],
@@ -1765,14 +1792,25 @@ class _DatabaseSettingsPanelState extends ConsumerState<DatabaseSettingsPanel> {
               label: const Text('Δημιουργία αντιγράφου τώρα'),
             ),
             const SizedBox(height: 8),
-            OutlinedButton.icon(
-              onPressed: _restoreFromBackupZip,
-              icon: const Icon(Icons.unarchive_outlined),
-              label: const Text('Επαναφορά από zip (βάση + χάρτες)'),
-            ),
+            _RestoreFromBackupZipButton(onPressed: _restoreFromBackupZip),
             ],
             const Divider(height: 24),
-            const DatabaseIntegrityPanel(),
+            Text(
+              'Έλεγχος ακεραιότητας',
+              style: theme.textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Διάγνωση ορφανών συσχετίσεων, ευρετηρίων αναζήτησης και βηματική '
+              'επιδιόρθωση με επιβεβαίωση.',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 8),
+            _IntegrityLaunchSection(),
               ],
             ),
           ),
@@ -1807,4 +1845,125 @@ class _DatabaseSettingsPanelState extends ConsumerState<DatabaseSettingsPanel> {
   }
 }
 
+/// Στενό tooltip (i) που μένει εντός του διαλόγου ρυθμίσεων βάσης.
+class _SettingsPanelInfoTooltip extends StatelessWidget {
+  const _SettingsPanelInfoTooltip({
+    required this.message,
+    required this.iconColor,
+    this.maxWidth = 280,
+  });
+
+  final String message;
+  final Color iconColor;
+  final double maxWidth;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Tooltip(
+      message: message,
+      constraints: BoxConstraints(maxWidth: maxWidth),
+      margin: const EdgeInsets.symmetric(horizontal: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      preferBelow: false,
+      verticalOffset: 10,
+      waitDuration: const Duration(milliseconds: 350),
+      showDuration: const Duration(seconds: 8),
+      textStyle: theme.textTheme.bodySmall?.copyWith(
+        color: theme.colorScheme.onInverseSurface,
+        height: 1.4,
+      ),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.inverseSurface,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(6),
+        child: Icon(Icons.info_outline, size: 18, color: iconColor),
+      ),
+    );
+  }
+}
+
+class _RestoreFromBackupZipButton extends ConsumerWidget {
+  const _RestoreFromBackupZipButton({required this.onPressed});
+
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final tooltipAsync = ref.watch(backupRestoreTooltipProvider);
+    final message = tooltipAsync.when(
+      data: (value) => value,
+      loading: () => 'Φόρτωση πληροφοριών αντιγράφου…',
+      error: (_, _) => BackupRestoreTooltipBuilder.fallbackMessage,
+    );
+
+    return Tooltip(
+      message: message,
+      preferBelow: false,
+      waitDuration: const Duration(milliseconds: 400),
+      child: OutlinedButton.icon(
+        onPressed: onPressed,
+        icon: const Icon(Icons.unarchive_outlined),
+        label: const Text('Επαναφορά από Αντίγραφο Ασφαλείας'),
+      ),
+    );
+  }
+}
+
+class _IntegrityLaunchSection extends ConsumerWidget {
+  const _IntegrityLaunchSection();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final integrityState = ref.watch(databaseIntegrityProvider);
+
+    String? statusHint;
+    if (integrityState is DatabaseIntegritySuccess) {
+      if (!integrityState.report.hasFindings) {
+        statusHint = 'Τελευταίος έλεγχος: δεν εντοπίστηκαν προβλήματα.';
+      } else {
+        statusHint =
+            'Τελευταίος έλεγχος: ${integrityState.report.findings.length} ευρήματα '
+            '(${integrityState.report.criticalCount} κρίσιμα).';
+      }
+    } else if (integrityState is DatabaseIntegrityError) {
+      statusHint = 'Τελευταίος έλεγχος απέτυχε.';
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: () => DatabaseIntegrityDialog.show(context),
+                icon: const Icon(Icons.fact_check_outlined, size: 18),
+                label: const Text('Έλεγχος ακεραιότητας…'),
+              ),
+            ),
+            _SettingsPanelInfoTooltip(
+              message: integrityChecksTooltipMessage,
+              iconColor: theme.colorScheme.onSurfaceVariant,
+              maxWidth: 560,
+            ),
+          ],
+        ),
+        if (statusHint != null) ...[
+          const SizedBox(height: 6),
+          Text(
+            statusHint,
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
 

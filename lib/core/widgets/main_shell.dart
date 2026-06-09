@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../database/database_init_result.dart';
 import '../../features/calls/screens/calls_screen.dart';
+import '../../features/database/debug/error_scenarios_screen.dart';
 import '../../features/database/screens/database_browser_screen.dart';
 import '../../features/dictionary/screens/dictionary_manager_screen.dart';
 import '../../features/lamp/screens/lamp_screen.dart';
@@ -303,6 +304,12 @@ class _MainShellState extends ConsumerState<MainShell> {
           icon: _lampNavigationIcon(showWarning: showLampReadPathWarning),
           label: const Text('Λάμπα'),
         );
+      case MainNavDestination.debugScenarios:
+        // Δεν εμφανίζεται στο rail — πρόσβαση μόνο από κουμπί πάνω από την έκδοση.
+        return const NavigationRailDestination(
+          icon: Icon(Icons.bug_report_outlined),
+          label: Text('Σενάρια'),
+        );
     }
   }
 
@@ -328,6 +335,8 @@ class _MainShellState extends ConsumerState<MainShell> {
         return DictionaryManagerScreen(databaseResult: widget.databaseResult);
       case MainNavDestination.lamp:
         return const LampScreen();
+      case MainNavDestination.debugScenarios:
+        return const ErrorScenariosScreen();
     }
   }
 
@@ -532,7 +541,8 @@ class _MainShellState extends ConsumerState<MainShell> {
       coreLexiconLoaded,
     );
     final effectiveDestination =
-        visibleDestinations.contains(_selectedDestination)
+        visibleDestinations.contains(_selectedDestination) ||
+            _selectedDestination == MainNavDestination.debugScenarios
         ? _selectedDestination
         : MainNavDestination.calls;
     final selectedRailIndex = visibleDestinations.indexOf(effectiveDestination);
@@ -664,7 +674,7 @@ class _MainShellState extends ConsumerState<MainShell> {
               Expanded(
                 child: NavigationRail(
                   extended: railExtended,
-                  selectedIndex: selectedRailIndex,
+                  selectedIndex: selectedRailIndex < 0 ? 0 : selectedRailIndex,
                   onDestinationSelected: (index) {
                     unawaited(
                       _selectDestination(visibleDestinations[index]),
