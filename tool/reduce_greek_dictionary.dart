@@ -1,10 +1,11 @@
-// ignore_for_file: avoid_print, avoid_relative_lib_imports
+﻿// ignore_for_file: avoid_print, avoid_relative_lib_imports
 
 import 'dart:convert';
 import 'dart:io';
 
 import 'package:path/path.dart' as p;
 
+import '../lib/core/services/dictionary_service.dart';
 import '../lib/core/utils/search_text_normalizer.dart';
 
 const _subtlexUrl =
@@ -85,13 +86,13 @@ Future<void> _run(List<String> args) async {
   final entries =
       merged.entries.toList()..sort((a, b) => b.value.score.compareTo(a.value.score));
 
-  final picked = <String, String>{};
+  final picked = <String, Set<String>>{};
   for (final e in entries) {
     if (!_isAcceptableDictionaryToken(e.key)) continue;
-    picked[e.key] = e.value.display;
+    _addLexiconVariant(picked, e.key, e.value.display);
     if (picked.length >= target) break;
   }
-  print('  Επιλογή top-$target (αποδεκτά): ${picked.length}');
+  print('  Επιλογή top-$target (αποδεκτά κλειδιά): ${picked.length}');
 
   if (greekLexPath.isNotEmpty) {
     var added = 0;
@@ -103,37 +104,46 @@ Future<void> _run(List<String> args) async {
         continue;
       }
       final display = e.word.trim().toLowerCase();
-      final existing = picked[key];
-      if (existing == null) {
-        picked[key] = display;
-        added++;
-      } else if (_preferDisplay(display, existing)) {
-        picked[key] = display;
-      }
+      final before = picked[key]?.length ?? 0;
+      _addLexiconVariant(picked, key, display);
+      if ((picked[key]?.length ?? 0) > before) added++;
     }
     print('  GreekLex επιπλέον: $added');
   }
 
   if (File(itPath).existsSync()) {
     final itAdded = _mergeItTerms(File(itPath), picked);
-    print('  IT όροι προστέθηκαν: $itAdded (σύνολο ${picked.length})');
+    print('  IT όροι προστέθηκαν: $itAdded (σύνολο ${picked.length} κλειδιά)');
   } else {
     print('  Προειδοποίηση: δεν βρέθηκε $itPath');
   }
 
-  final sortedOut = picked.entries.toList()
-    ..sort((a, b) => a.key.compareTo(b.key));
+  final sortedKeys = picked.keys.toList()..sort();
+  final outputLines = <String>[];
+  for (final key in sortedKeys) {
+    final variants = picked[key]!.toList()
+      ..sort((a, b) {
+        final primary =
+            DictionaryService.primaryDisplayForVariants(key, picked[key]!);
+        if (a == primary) return -1;
+        if (b == primary) return 1;
+        return a.compareTo(b);
+      });
+    outputLines.addAll(variants);
+  }
   Directory(p.dirname(outPath)).createSync(recursive: true);
   final sink = File(outPath).openWrite(mode: FileMode.writeOnly);
   sink.writeln(
     '# greek_core — merged SUBTLEX-GR_CD (rank=$rank) + GreekLex + IT terms',
   );
-  sink.writeln('# Γραμμές λεξικού (display forms): ${sortedOut.length}');
-  for (final e in sortedOut) {
-    sink.writeln(e.value);
+  sink.writeln(
+    '# Γραμμές λεξικού (επιφανειακές μορφές / παραλλαγές): ${outputLines.length}',
+  );
+  for (final line in outputLines) {
+    sink.writeln(line);
   }
   await sink.close();
-  print('Έγγραφο: $outPath (${sortedOut.length} λέξεις)');
+  print('Έγγραφο: $outPath (${outputLines.length} γραμμές, ${picked.length} κλειδιά)');
   print(
     'SUBTLEX-GR: Dimitropoulou et al. (2010), Frontiers in Psychology (BCBL)',
   );
@@ -193,7 +203,8 @@ Map<String, _RankedWord> _loadSubtlexMerged(String path, {required String rank})
       }
     }
     final existingDisplay = displayByKey[key];
-    if (existingDisplay == null || _preferDisplay(display, existingDisplay)) {
+    if (existingDisplay == null ||
+        DictionaryService.preferLexiconDisplay(display, existingDisplay)) {
       displayByKey[key] = display;
     }
   }
@@ -311,7 +322,17 @@ List<_GreekLexEntry> _loadGreekLexSorted(String path) {
   return list;
 }
 
-int _mergeItTerms(File file, Map<String, String> picked) {
+void _addLexiconVariant(
+  Map<String, Set<String>> picked,
+  String key,
+  String display,
+) {
+  final trimmed = display.trim();
+  if (trimmed.isEmpty) return;
+  picked.putIfAbsent(key, () => <String>{}).add(trimmed);
+}
+
+int _mergeItTerms(File file, Map<String, Set<String>> picked) {
   var n = 0;
   for (final line in file.readAsLinesSync(encoding: utf8)) {
     var t = line.trim();
@@ -324,32 +345,12 @@ int _mergeItTerms(File file, Map<String, String> picked) {
       if (key.length < 2) continue;
       if (!_isAcceptableDictionaryToken(key)) continue;
       final display = raw.trim().toLowerCase();
-      final existing = picked[key];
-      if (existing == null) {
-        picked[key] = display;
-        n++;
-      } else if (_preferDisplay(display, existing)) {
-        picked[key] = display;
-      }
+      final before = picked[key]?.length ?? 0;
+      _addLexiconVariant(picked, key, display);
+      if ((picked[key]?.length ?? 0) > before) n++;
     }
   }
   return n;
-}
-
-bool _preferDisplay(String candidate, String existing) {
-  final cTon = _hasGreekTonos(candidate);
-  final eTon = _hasGreekTonos(existing);
-  if (cTon != eTon) return cTon;
-  if (candidate.length != existing.length) return candidate.length > existing.length;
-  return candidate.compareTo(existing) < 0;
-}
-
-bool _hasGreekTonos(String s) {
-  const ton = 'άέήίόύώϊΐϋΰΆΈΉΊΌΎΏ';
-  for (var i = 0; i < s.length; i++) {
-    if (ton.contains(s[i])) return true;
-  }
-  return false;
 }
 
 class _RankedWord {

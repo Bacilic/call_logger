@@ -7,6 +7,34 @@ import '../models/database_integrity_finding.dart';
 import '../models/database_integrity_report.dart';
 import '../providers/database_integrity_provider.dart';
 
+/// Κατανοητές περιγραφές των ελέγχων (για tooltip πληροφοριών).
+const _integrityCheckDescriptions = <String>[
+  'Φυσική κατάσταση του αρχείου βάσης δεδομένων',
+  'Τηλέφωνα που δεν ανήκουν σε υπάλληλο ούτε σε τμήμα',
+  'Κλήσεις που λείπουν από την αναζήτηση',
+  'Εκκρεμότητες που λείπουν από την αναζήτηση',
+  'Υπάλληλοι χωρίς καταχωρημένο τμήμα',
+  'Υπάλληλοι συνδεδεμένοι με ανύπαρκτο ή διαγραμμένο τμήμα',
+  'Εκκρεμότητες συνδεδεμένες με ανύπαρκτη ή διαγραμμένη κλήση',
+  'Τμήματα με μη συμβαδίζον εσωτερικό όνομα (π.χ. μετά από μετονομασία)',
+  'Εξωτερικοί σύνδεσμοι κλήσεων χωρίς αντίστοιχη κλήση',
+  'Συνδέσεις τηλεφώνου–υπαλλήλου με ανύπαρκτες εγγραφές',
+  'Συνδέσεις τηλεφώνου–τμήματος με ανύπαρκτες εγγραφές',
+  'Συνδέσεις εξοπλισμού–υπαλλήλου με ανύπαρκτες εγγραφές',
+  'Κλήσεις που αναφέρονται σε διαγραμμένους υπαλλήλους, εξοπλισμό ή κατηγορίες',
+  'Εκκρεμότητες που αναφέρονται σε διαγραμμένες εγγραφές',
+  'Εκκρεμότητες με αλλόκοτη χρονολογική σειρά ημερομηνιών',
+  'Εγγραφές ιστορικού ενεργειών χωρίς κείμενο αναζήτησης',
+];
+
+String get _integrityChecksTooltipMessage {
+  final buffer = StringBuffer('Ο έλεγχος περιλαμβάνει:\n');
+  for (var i = 0; i < _integrityCheckDescriptions.length; i++) {
+    buffer.writeln('${i + 1}. ${_integrityCheckDescriptions[i]}');
+  }
+  return buffer.toString().trimRight();
+}
+
 /// Ενότητα ελέγχου ακεραιότητας βάσης (embed στο DatabaseSettingsPanel).
 class DatabaseIntegrityPanel extends ConsumerStatefulWidget {
   const DatabaseIntegrityPanel({super.key});
@@ -81,12 +109,43 @@ class _DatabaseIntegrityPanelState extends ConsumerState<DatabaseIntegrityPanel>
           ),
         ),
         const SizedBox(height: 12),
-        OutlinedButton.icon(
-          onPressed: isLoading
-              ? null
-              : () => ref.read(databaseIntegrityProvider.notifier).runCheck(),
-          icon: const Icon(Icons.fact_check_outlined),
-          label: const Text('Έλεγχος ακεραιότητας'),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              OutlinedButton.icon(
+                onPressed: isLoading
+                    ? null
+                    : () =>
+                          ref.read(databaseIntegrityProvider.notifier).runCheck(),
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
+                  visualDensity: VisualDensity.compact,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                icon: const Icon(Icons.fact_check_outlined, size: 18),
+                label: const Text('Έλεγχος ακεραιότητας'),
+              ),
+              const SizedBox(width: 2),
+              Tooltip(
+                message: _integrityChecksTooltipMessage,
+                preferBelow: false,
+                waitDuration: const Duration(milliseconds: 350),
+                child: Padding(
+                  padding: const EdgeInsets.all(6),
+                  child: Icon(
+                    Icons.info_outline,
+                    size: 18,
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
         if (state is DatabaseIntegrityLoading) ...[
           const SizedBox(height: 12),

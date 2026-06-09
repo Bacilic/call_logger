@@ -10,6 +10,6 @@ final spellCheckServiceProvider =
   ref.watch(coreLexiconProvider);
   final dict = ref.watch(greekDictionaryServiceProvider);
   final svc = LexiconSpellCheckService();
-  await svc.init(lexiconMap: dict.stripKeyToDisplayMap);
+  await svc.init(lexiconVariants: dict.stripKeyToVariantsMap);
   return svc;
 });

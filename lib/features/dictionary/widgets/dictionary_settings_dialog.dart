@@ -1,15 +1,38 @@
-﻿import 'dart:typed_data';
+﻿import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/config/app_config.dart';
+import '../../../core/database/database_helper.dart';
+import '../../../core/database/dictionary_repository.dart';
 import '../../../core/providers/core_lexicon_provider.dart';
 import '../../../core/providers/lexicon_categories_provider.dart';
 import '../../../core/providers/lexicon_language_recalc_provider.dart';
 import '../../../core/services/core_lexicon_service.dart';
 import '../../../core/services/core_lexicon_validation.dart';
 import '../../../core/services/settings_service.dart';
+import '../../../core/utils/file_picker_initial_directory.dart';
+
+/// Tooltip για το κουμπί «Επανέλεγχος Γλωσσών».
+const _languageRecalcInfoTooltip =
+    'Διατρέχει όλες τις λέξεις του λεξικού (χειροκίνητες και πλήρους λεξικού) '
+    'και ξαναορίζει τη γλώσσα κάθε λέξης: ελληνικά, αγγλικά ή μικτή.\n\n'
+    'Ενημερώνονται μόνο οι εγγραφές όπου η ταξινόμηση άλλαξε. '
+    'Δεν αλλάζει ορθογραφία ούτε διαγράφει λέξεις.\n\n'
+    'Χρήσιμο μετά από εισαγωγή λέξεων ή όταν οι ετικέτες γλώσσας φαίνονται λανθασμένες.';
+
+/// Tooltip για το κουμπί «Εισαγωγή από αρχείο».
+const _importTxtInfoTooltip =
+    'Το κουμπί εισάγει λέξεις από ένα αρχείο .txt στο Πλήρες Λεξικό '
+    'δηλαδή στη λίστα της Διαχείρισης λεξικού.\n'
+    'Δεν αλλάζει:\n'
+    '• το Λεξικό-Πυρήνας (ορθογραφικός έλεγχος στη μνήμη)\n'
+    '• το πρόχειρο Λεξικό Χρήστη\n\n'
+    'Η λογική είναι: ανεβάζουμε λέξεις → τις επεξεργαζόμαστε → '
+    'εξάγουμε το νέο ενημερωμένο λεξικό';
 
 /// Διάλογος ρυθμίσεων λεξικού: διαδρομές πηγής/εξαγωγής, εισαγωγές και compile.
 class DictionarySettingsDialog extends ConsumerStatefulWidget {
@@ -34,6 +57,8 @@ class _DictionarySettingsDialogState
   late final TextEditingController _exportPathCtrl;
   late final TextEditingController _lexiconCategoriesCtrl;
   bool _compileBusy = false;
+  String _savedSourcePath = '';
+  String _savedLexiconCategories = '';
 
   @override
   void initState() {
@@ -52,7 +77,23 @@ class _DictionarySettingsDialogState
     _sourcePathCtrl.text = s ?? '';
     _exportPathCtrl.text = e ?? '';
     _lexiconCategoriesCtrl.text = c;
+    _savedSourcePath = _sourcePathCtrl.text.trim();
+    _savedLexiconCategories = _lexiconCategoriesCtrl.text.trim();
     setState(() {});
+  }
+
+  bool get _sourcePathDirty =>
+      _sourcePathCtrl.text.trim() != _savedSourcePath;
+
+  bool get _lexiconCategoriesDirty =>
+      _lexiconCategoriesCtrl.text.trim() != _savedLexiconCategories;
+
+  void _markSourcePathSaved([String? value]) {
+    _savedSourcePath = (value ?? _sourcePathCtrl.text).trim();
+  }
+
+  void _markLexiconCategoriesSaved([String? value]) {
+    _savedLexiconCategories = (value ?? _lexiconCategoriesCtrl.text).trim();
   }
 
   @override
@@ -114,6 +155,8 @@ class _DictionarySettingsDialogState
       await _settings.setDictionarySourcePath(null);
       ref.read(coreLexiconProvider.notifier).unload();
       if (mounted) {
+        _markSourcePathSaved('');
+        setState(() {});
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Αφαιρέθηκε διαδρομή πυρήνα λεξικού')),
         );
@@ -138,6 +181,8 @@ class _DictionarySettingsDialogState
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(err)));
       return;
     }
+    _markSourcePathSaved(t);
+    setState(() {});
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Αποθηκεύτηκε και φορτώθηκε λεξικό-πυρήνας')),
     );
@@ -168,6 +213,8 @@ class _DictionarySettingsDialogState
     await _settings.setLexiconCategories(t);
     ref.invalidate(lexiconCategoriesProvider);
     if (mounted) {
+      _markLexiconCategoriesSaved(t);
+      setState(() {});
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Αποθηκεύτηκαν κατηγορίες λεξικού')),
       );
@@ -193,6 +240,7 @@ class _DictionarySettingsDialogState
       if (ok) {
         final path = CoreLexiconService.instance.state.path ?? p;
         _sourcePathCtrl.text = path;
+        _markSourcePathSaved(path);
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Το λεξικό-πυρήνας αντιγράφηκε και φορτώθηκε'),
@@ -210,15 +258,30 @@ class _DictionarySettingsDialogState
     }
   }
 
+  Future<String> _defaultExportFileName() async {
+    final db = await DatabaseHelper.instance.database;
+    final digram = await DictionaryRepository(db).exportLanguageDigram();
+    return 'dictionary_compile_$digram.txt';
+  }
+
+  Future<String?> _exportPickerInitialDirectory() async {
+    final dictDir = AppConfig.portableDictionariesDirectory;
+    if (await Directory(dictDir).exists()) {
+      return dictDir;
+    }
+    return initialDirectoryForFilePicker(_exportPathCtrl.text.trim());
+  }
+
   Future<void> _pickSaveExportPath() async {
     final existing = _exportPathCtrl.text.trim();
     final fileName = existing.isNotEmpty
         ? existing.replaceAll(r'\', '/').split('/').last
-        : 'dictionary_compile.txt';
+        : await _defaultExportFileName();
 
     final p = await FilePicker.saveFile(
       dialogTitle: 'Αρχείο εξαγωγής Compile (TXT)',
       fileName: fileName,
+      initialDirectory: await _exportPickerInitialDirectory(),
       type: FileType.custom,
       allowedExtensions: const ['txt'],
       bytes: Uint8List(0),
@@ -287,14 +350,37 @@ class _DictionarySettingsDialogState
               ],
               Align(
                 alignment: Alignment.centerLeft,
-                child: FilledButton.tonalIcon(
-                  onPressed: recalcLoading
-                      ? null
-                      : () => ref
-                          .read(lexiconLanguageRecalcProvider.notifier)
-                          .recalculate(),
-                  icon: const Icon(Icons.translate_outlined),
-                  label: const Text('Επανέλεγχος Γλωσσών'),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    FilledButton.tonalIcon(
+                      onPressed: recalcLoading
+                          ? null
+                          : () => ref
+                              .read(lexiconLanguageRecalcProvider.notifier)
+                              .recalculate(),
+                      style: FilledButton.styleFrom(
+                        visualDensity: VisualDensity.compact,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                      icon: const Icon(Icons.translate_outlined, size: 18),
+                      label: const Text('Επανέλεγχος Γλωσσών'),
+                    ),
+                    const SizedBox(width: 2),
+                    Tooltip(
+                      message: _languageRecalcInfoTooltip,
+                      preferBelow: false,
+                      waitDuration: const Duration(milliseconds: 350),
+                      child: Padding(
+                        padding: const EdgeInsets.all(6),
+                        child: Icon(
+                          Icons.info_outline,
+                          size: 18,
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
               const SizedBox(height: 16),
@@ -302,6 +388,7 @@ class _DictionarySettingsDialogState
               const SizedBox(height: 12),
               TextField(
                 controller: _sourcePathCtrl,
+                onChanged: (_) => setState(() {}),
                 decoration: InputDecoration(
                   labelText: 'Διαδρομή πηγής TXT (ορθογραφία)',
                   border: const OutlineInputBorder(),
@@ -310,12 +397,16 @@ class _DictionarySettingsDialogState
                     onPressed: _compileBusy ? null : _pickSaveSourcePath,
                   ),
                 ),
-                onSubmitted: (_) => _saveSourcePath(),
+                onSubmitted: (_) {
+                  if (_sourcePathDirty) _saveSourcePath();
+                },
               ),
               Align(
                 alignment: Alignment.centerLeft,
                 child: TextButton.icon(
-                  onPressed: _compileBusy ? null : _saveSourcePath,
+                  onPressed: _compileBusy || !_sourcePathDirty
+                      ? null
+                      : _saveSourcePath,
                   icon: const Icon(Icons.save_outlined),
                   label: const Text('Αποθήκευση πηγής'),
                 ),
@@ -355,7 +446,9 @@ class _DictionarySettingsDialogState
               Align(
                 alignment: Alignment.centerLeft,
                 child: TextButton.icon(
-                  onPressed: _saveLexiconCategories,
+                  onPressed: !_lexiconCategoriesDirty
+                      ? null
+                      : _saveLexiconCategories,
                   icon: const Icon(Icons.save_outlined),
                   label: const Text('Αποθήκευση κατηγοριών'),
                 ),
@@ -364,12 +457,26 @@ class _DictionarySettingsDialogState
               Wrap(
                 spacing: 8,
                 runSpacing: 8,
+                crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
                   FilledButton.tonal(
                     onPressed: () async {
                       await widget.onImportTxt();
                     },
                     child: const Text('Εισαγωγή από αρχείο'),
+                  ),
+                  Tooltip(
+                    message: _importTxtInfoTooltip,
+                    preferBelow: false,
+                    waitDuration: const Duration(milliseconds: 350),
+                    child: Padding(
+                      padding: const EdgeInsets.all(6),
+                      child: Icon(
+                        Icons.info_outline,
+                        size: 18,
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
                   ),
                   FilledButton(
                     onPressed: _compileBusy ? null : _runCompile,

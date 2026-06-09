@@ -238,10 +238,12 @@ class MasterDictionaryService {
       language: lang,
       source: 'user',
     );
-    if (DictionaryService.canonicalLexiconKey(displayWord) != normalizedKey) {
+    final nextKey = DictionaryService.canonicalLexiconKey(displayWord);
+    if (nextKey != normalizedKey || displayWord.trim().isNotEmpty) {
       await d.updateUserDictionaryWordKey(
         normalizedKey,
-        DictionaryService.canonicalLexiconKey(displayWord),
+        nextKey,
+        displayWord: displayWord,
       );
     }
   }

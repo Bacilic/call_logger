@@ -2096,9 +2096,20 @@ ORDER BY p.number COLLATE NOCASE ASC
     return map;
   }
 
+  /// Συγχρονίζει `name_key` με κανονικοποιημένο `name` όταν αλλάζει το όνομα τμήματος.
+  static void _applyDepartmentNameKeyFromName(Map<String, dynamic> map) {
+    if (!map.containsKey('name')) return;
+    final name = (map['name'] as String?)?.trim() ?? '';
+    final key = SearchTextNormalizer.normalizeForSearch(name);
+    if (key.isNotEmpty) {
+      map['name_key'] = key;
+    }
+  }
+
   Future<int> updateDepartment(int id, Map<String, dynamic> values) async {
     final map = Map<String, dynamic>.from(values);
     map.remove('id');
+    _applyDepartmentNameKeyFromName(map);
     if (map.isEmpty) return 0;
     final oldRows = await db.query(
       'departments',

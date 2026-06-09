@@ -29,7 +29,8 @@ import '../utils/search_text_normalizer.dart';
 /// v26: πλήρης στοίχιση `search_text` με UI αλλαγών (1:1 κανονικοποιημένα).
 /// v27: lansweeper sync state columns σε `calls` + πίνακας `call_external_links`.
 /// v28: phones.is_deleted (soft delete κοινόχρηστων τηλεφώνων).
-const int databaseSchemaVersionV1 = 28;
+/// v29: user_dictionary.display_word (ορθογραφημένη μορφή, ξεχωριστά από κλειδί).
+const int databaseSchemaVersionV1 = 29;
 
 /// Προεπιλογές διαδρομών (ίδιες με SettingsService — χωρίς εξάρτηση Flutter εδώ).
 const String kDefaultVncExecutablePath =
@@ -295,6 +296,7 @@ Future<void> applyDatabaseV1Schema(Database db) async {
   await db.execute('''
       CREATE TABLE IF NOT EXISTS user_dictionary (
         word TEXT PRIMARY KEY,
+        display_word TEXT,
         language TEXT,
         letters_count INTEGER NOT NULL DEFAULT 0,
         diacritic_mark_count INTEGER NOT NULL DEFAULT 0
@@ -1080,6 +1082,22 @@ Future<void> migrateDatabaseToV27(Database db) async {
   await db.execute(
     'CREATE INDEX IF NOT EXISTS idx_call_external_links_created_at ON call_external_links(created_at)',
   );
+}
+
+/// v29: `user_dictionary.display_word` + backfill από `word`.
+Future<void> migrateDatabaseToV29(Database db) async {
+  final info = await db.rawQuery('PRAGMA table_info(user_dictionary)');
+  final names = info.map((r) => r['name'] as String).toSet();
+  if (!names.contains('display_word')) {
+    await db.execute(
+      'ALTER TABLE user_dictionary ADD COLUMN display_word TEXT',
+    );
+  }
+  await db.execute('''
+    UPDATE user_dictionary
+    SET display_word = word
+    WHERE display_word IS NULL OR TRIM(display_word) = ''
+  ''');
 }
 
 /// v28: soft delete για εγγραφές `phones`.

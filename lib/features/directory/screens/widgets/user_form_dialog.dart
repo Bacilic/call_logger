@@ -82,10 +82,8 @@ class _UserFormDialogState extends ConsumerState<UserFormDialog> {
     if (_firstNameController.text.trim() != _snapFirstName) return true;
     if (_phoneController.text.trim() != _snapPhone) return true;
     if (_notesController.text.trim() != _snapNotes) return true;
-    if (SearchTextNormalizer.normalizeForSearch(_departmentController.text) !=
-        _snapDepartmentNorm) {
-      return true;
-    }
+    // Εμφανιζόμενο κείμενο (όχι μόνο κανονικοποίηση): τόνοι/κεφαλαία μετράνε ως αλλαγή.
+    if (_departmentController.text.trim() != _initialDepartmentText) return true;
     return false;
   }
 
@@ -259,14 +257,28 @@ class _UserFormDialogState extends ConsumerState<UserFormDialog> {
     final name = _departmentController.text.trim();
     if (name.isEmpty) return (id: null, name: '');
 
-    final fromLookup = _resolveSourceDepartmentForDisconnect();
-    if (fromLookup.id != null) {
-      return (id: fromLookup.id, name: fromLookup.name ?? name);
+    final id = await _resolveDepartmentIdForSave(
+      DirectoryRepository(await DatabaseHelper.instance.database),
+    );
+    return (id: id, name: name);
+  }
+
+  /// Αν το πεδίο τμήματος δείχνει σε υπάρχον τμήμα (ίδιο name_key), επιστρέφει το id του·
+  /// όταν αλλάζει μόνο η εμφάνιση (τόνοι/κεφαλαία), ενημερώνει και το `departments.name`.
+  Future<int?> _resolveDepartmentIdForSave(DirectoryRepository dir) async {
+    final typed = _departmentController.text.trim();
+    if (typed.isEmpty) return null;
+
+    final matched = _resolveSourceDepartmentForDisconnect();
+    if (matched.id != null) {
+      final stored = (matched.name ?? '').trim();
+      if (stored != typed) {
+        await dir.updateDepartment(matched.id!, {'name': typed});
+      }
+      return matched.id;
     }
 
-    final id = await DirectoryRepository(await DatabaseHelper.instance.database)
-        .getOrCreateDepartmentIdByName(name);
-    return (id: id, name: name);
+    return dir.getOrCreateDepartmentIdByName(typed);
   }
 
   Future<UserPhoneConflictBatchResult?> _confirmUserPhoneAssignmentConflicts({
@@ -462,8 +474,7 @@ class _UserFormDialogState extends ConsumerState<UserFormDialog> {
   }) async {
     final db = await DatabaseHelper.instance.database;
     final dir = DirectoryRepository(db);
-    final departmentId =
-        await dir.getOrCreateDepartmentIdByName(_departmentController.text);
+    final departmentId = await _resolveDepartmentIdForSave(dir);
 
     if (phoneConflictBatch != null && !phoneConflictBatch.isEmpty) {
       await PhoneDepartmentPolicy.applyUserPhoneConflictResolutions(

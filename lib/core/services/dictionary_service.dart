@@ -4,8 +4,7 @@ import 'dart:io';
 
 /// Φόρτωση λεξικού-πυρήνας από αρχείο `.txt` στο δίσκο.
 ///
-/// Εσωτερικά: `Map` από κανονικοποιημένο κλειδί (χωρίς τόνους, πεζά) σε μορφή
-/// εμφάνισης (π.χ. με τόνους όταν υπάρχουν στο corpus).
+/// Εσωτερικά: κανονικοποιημένο κλειδί → σύνολο επιφανειακών μορφών (π.χ. «αίτημα», «αίτημά»).
 class DictionaryService {
   DictionaryService();
 
@@ -15,13 +14,13 @@ class DictionaryService {
     return s;
   }
 
-  final Map<String, String> _stripKeyToDisplay = <String, String>{};
+  final Map<String, Set<String>> _stripKeyToVariants = <String, Set<String>>{};
   bool _loaded = false;
   String? _loadedFromPath;
 
   bool get isLoaded => _loaded;
 
-  int get wordCount => _stripKeyToDisplay.length;
+  int get wordCount => _stripKeyToVariants.length;
 
   /// Αφαιρεί μόνο ελληνικούς τόνους/διαλυτικά· διατηρεί υπόλοιπους χαρακτήρες και πεζά/κεφαλαία.
   static String stripDiacritics(String input) {
@@ -52,15 +51,38 @@ class DictionaryService {
   static String canonicalLexiconKey(String input) =>
       stripDiacritics(input.trim()).toLowerCase();
 
-  /// Αμετάβλητο αντίγραφο για [LexiconSpellCheckService].
-  Map<String, String> get stripKeyToDisplayMap =>
-      UnmodifiableMapView(_stripKeyToDisplay);
+  /// Κύρια μορφή εμφάνισης ανά κλειδί (για προτάσεις / legacy API).
+  Map<String, String> get stripKeyToDisplayMap {
+    return UnmodifiableMapView({
+      for (final e in _stripKeyToVariants.entries)
+        e.key: primaryDisplayForVariants(e.key, e.value),
+    });
+  }
+
+  /// Όλες οι καταχωρημένες επιφανειακές μορφές ανά κλειδί.
+  Map<String, Set<String>> get stripKeyToVariantsMap =>
+      UnmodifiableMapView({
+        for (final e in _stripKeyToVariants.entries)
+          e.key: UnmodifiableSetView(Set<String>.from(e.value)),
+      });
+
+  /// Επιλογή κύριας μορφής από σύνολο παραλλαγών.
+  static String primaryDisplayForVariants(String key, Set<String> variants) {
+    if (variants.isEmpty) return key;
+    var best = variants.first;
+    for (final candidate in variants) {
+      if (preferLexiconDisplay(candidate, best)) {
+        best = candidate;
+      }
+    }
+    return best;
+  }
 
   /// Φόρτωση από αρχείο TXT στο δίσκο (μόνο πηγή — χωρίς asset fallback).
   Future<void> loadFromFile(String filePath) async {
     final norm = filePath.trim();
     if (_loaded && _loadedFromPath == norm) return;
-    _stripKeyToDisplay.clear();
+    _stripKeyToVariants.clear();
     final text = await File(norm).readAsString(encoding: utf8);
     _ingestText(text);
     _loaded = true;
@@ -73,17 +95,14 @@ class DictionaryService {
       if (display.isEmpty || display.startsWith('#')) continue;
       final key = canonicalLexiconKey(display);
       if (key.length < 2) continue;
-      final existing = _stripKeyToDisplay[key];
-      if (existing == null || _preferDisplay(display, existing)) {
-        _stripKeyToDisplay[key] = display;
-      }
+      _stripKeyToVariants.putIfAbsent(key, () => <String>{}).add(display);
     }
   }
 
   /// Προτιμάται ως εμφάνιση η μορφή με τόνους / μακρύτερη / λεξικογραφικά πρώτη.
-  static bool _preferDisplay(String candidate, String existing) {
-    final cTon = _hasGreekTonos(candidate);
-    final eTon = _hasGreekTonos(existing);
+  static bool preferLexiconDisplay(String candidate, String existing) {
+    final cTon = hasGreekTonos(candidate);
+    final eTon = hasGreekTonos(existing);
     if (cTon != eTon) return cTon;
     if (candidate.length != existing.length) {
       return candidate.length > existing.length;
@@ -91,7 +110,7 @@ class DictionaryService {
     return candidate.compareTo(existing) < 0;
   }
 
-  static bool _hasGreekTonos(String s) {
+  static bool hasGreekTonos(String s) {
     const ton = 'άέήίόύώϊΐϋΰΆΈΉΊΌΎΏ';
     for (var i = 0; i < s.length; i++) {
       if (ton.contains(s[i])) return true;
@@ -102,6 +121,6 @@ class DictionaryService {
   bool isKnownWord(String token) {
     final key = canonicalLexiconKey(token);
     if (key.length < 2) return false;
-    return _stripKeyToDisplay.containsKey(key);
+    return _stripKeyToVariants.containsKey(key);
   }
 }

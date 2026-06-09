@@ -1,49 +1,58 @@
-import 'dart:math' as math;
+﻿import 'dart:math' as math;
 
 import '../database/database_helper.dart';
 import '../database/dictionary_repository.dart';
 import 'dictionary_service.dart';
 
-/// Ελαφρύς ορθογραφικός έλεγχος: στατικό λεξικό (strip→εμφάνιση) + προσωπικές λέξεις.
+/// Ελαφρύς ορθογραφικός έλεγχος: στατικό λεξικό (κλειδί→παραλλαγές) + προσωπικές λέξεις.
 /// Χωρίς εξωτερικές βιβλιοθήκες· οι προτάσεις με Levenshtein σε κλειδιά (μέγ. απόσταση 2).
 ///
 /// (Όνομα κλάσης: αποφυγή σύγκρουσης με [SpellCheckService] του Flutter SDK.)
 class LexiconSpellCheckService {
   LexiconSpellCheckService();
 
-  /// Κλειδί χαμηλής μορφής → μορφή εμφάνισης (με τόνους όταν υπάρχουν στο map).
-  final Map<String, String> _lexicon = <String, String>{};
+  final Map<String, Set<String>> _variants = <String, Set<String>>{};
+  final Map<String, String> _primaryDisplay = <String, String>{};
   bool _initialized = false;
 
   bool get isInitialized => _initialized;
 
-  /// Φόρτωση από χάρτη που χτίστηκε από asset + `user_dictionary`.
-  Future<void> init({required Map<String, String> lexiconMap}) async {
-    _lexicon
+  /// Φόρτωση από χάρτη παραλλαγών (πυρήνας) + `user_dictionary`.
+  Future<void> init({
+    required Map<String, Set<String>> lexiconVariants,
+  }) async {
+    _variants
       ..clear()
-      ..addAll(lexiconMap);
+      ..addAll({
+        for (final e in lexiconVariants.entries)
+          e.key: Set<String>.from(e.value),
+      });
+    _rebuildPrimaryDisplays();
     try {
       final db = await DatabaseHelper.instance.database;
-      final user = await DictionaryRepository(db).getUserWords();
-      for (final w in user) {
-        final k = DictionaryService.canonicalLexiconKey(w);
-        if (k.length < 2) continue;
-        if (!_lexicon.containsKey(k)) {
-          _lexicon[k] = w;
-        }
+      final user = await DictionaryRepository(db).getUserLexiconEntries();
+      for (final entry in user) {
+        _addVariant(entry.normalizedKey, entry.displayWord);
       }
     } catch (_) {}
     _initialized = true;
   }
 
-  /// Προσθήκη στη βάση και στο in-memory χάρτι.
+  /// Προσθήκη στη βάση και στο in-memory χάρτη.
   Future<void> insertUserWord(String word) async {
     final k = DictionaryService.canonicalLexiconKey(word);
     if (k.length < 2) return;
-    _lexicon[k] = word.trim().isEmpty ? k : word.trim();
+    var display = word.trim().isEmpty ? k : word.trim();
+    if (!DictionaryService.hasGreekTonos(display)) {
+      final coreVariants = _variants[k];
+      if (coreVariants != null && hasAnyGreekTonos(coreVariants)) {
+        display = DictionaryService.primaryDisplayForVariants(k, coreVariants);
+      }
+    }
+    _addVariant(k, display);
     try {
       final db = await DatabaseHelper.instance.database;
-      await DictionaryRepository(db).insertUserWord(word);
+      await DictionaryRepository(db).insertUserWord(display);
     } catch (_) {}
   }
 
@@ -54,31 +63,34 @@ class LexiconSpellCheckService {
     final key = DictionaryService.canonicalLexiconKey(word);
     if (key.length < 2) return true;
     if (_shouldSkipToken(key)) return true;
-    final display = _lexicon[key];
-    if (display == null) return false;
+    final variants = _variants[key];
+    if (variants == null || variants.isEmpty) return false;
 
-    // Αν η λεξική μορφή περιέχει τόνο, απαιτούμε και το input να έχει
-    // τονισμένη επιφανειακή μορφή που ταιριάζει (case-insensitive).
-    if (_hasGreekTonos(display)) {
-      final normalizedInput = word.trim().toLowerCase();
-      final normalizedDisplay = display.trim().toLowerCase();
-      return normalizedInput == normalizedDisplay;
+    final input = word.trim();
+    // Μόνο άτονες παραλλαγές στο λεξικό → δέχεται οποιαδήποτε επιφάνεια για το κλειδί.
+    if (!hasAnyGreekTonos(variants)) return true;
+
+    // Υπάρχει τουλάχιστον μία τονισμένη παραλλαγή → απαιτείται ακριβής ταύτιση.
+    final inputLower = input.toLowerCase();
+    for (final variant in variants) {
+      if (variant.trim().toLowerCase() == inputLower) return true;
     }
-    return true;
+    return false;
   }
 
-  /// Έως 5 προτάσεις (μορφή εμφάνισης με τόνους) με απόσταση Levenshtein ≤ 2 στα κλειδιά.
+  /// Έως 5 προτάσεις (κύρια μορφή εμφάνισης) με Levenshtein ≤ 2 στα κλειδιά.
   List<String> getSuggestions(String wrongWord) {
     final key = DictionaryService.canonicalLexiconKey(wrongWord);
     if (key.length < 2) return [];
     final keyRunes = key.runes.toList();
     final scored = <_Suggestion>[];
-    for (final entry in _lexicon.entries) {
+    for (final entry in _variants.entries) {
       final candKey = entry.key;
       if ((candKey.runes.length - keyRunes.length).abs() > 2) continue;
       final d = _levenshteinBounded(keyRunes, candKey.runes.toList(), 2);
       if (d <= 2) {
-        scored.add(_Suggestion(entry.value, d, candKey));
+        final display = _primaryDisplay[candKey] ?? entry.value.first;
+        scored.add(_Suggestion(display, d, candKey));
       }
     }
     scored.sort((a, b) {
@@ -103,6 +115,34 @@ class LexiconSpellCheckService {
     return out;
   }
 
+  void _addVariant(String key, String display) {
+    final trimmed = display.trim();
+    if (trimmed.isEmpty) return;
+    final set = _variants.putIfAbsent(key, () => <String>{});
+    set.add(trimmed);
+    final current = _primaryDisplay[key];
+    if (current == null ||
+        DictionaryService.preferLexiconDisplay(trimmed, current)) {
+      _primaryDisplay[key] = trimmed;
+    }
+  }
+
+  void _rebuildPrimaryDisplays() {
+    _primaryDisplay
+      ..clear()
+      ..addAll({
+        for (final e in _variants.entries)
+          e.key: DictionaryService.primaryDisplayForVariants(e.key, e.value),
+      });
+  }
+
+  static bool hasAnyGreekTonos(Set<String> variants) {
+    for (final v in variants) {
+      if (DictionaryService.hasGreekTonos(v)) return true;
+    }
+    return false;
+  }
+
   static bool _shouldSkipToken(String normalizedKey) {
     if (normalizedKey.isEmpty) return true;
     var hasLetter = false;
@@ -115,14 +155,6 @@ class LexiconSpellCheckService {
       }
     }
     return !hasLetter;
-  }
-
-  static bool _hasGreekTonos(String s) {
-    const ton = 'άέήίόύώϊΐϋΰΆΈΉΊΌΎΏ';
-    for (var i = 0; i < s.length; i++) {
-      if (ton.contains(s[i])) return true;
-    }
-    return false;
   }
 }
 

@@ -1,10 +1,21 @@
-import 'dart:async';
+﻿import 'dart:async';
 
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import '../config/app_config.dart';
 import '../services/dictionary_service.dart';
 import '../utils/lexicon_word_metrics.dart';
+
+/// Εγγραφή προσωπικού λεξικού: κανονικοποιημένο κλειδί + μορφή εμφάνισης.
+class UserLexiconEntry {
+  const UserLexiconEntry({
+    required this.normalizedKey,
+    required this.displayWord,
+  });
+
+  final String normalizedKey;
+  final String displayWord;
+}
 
 /// Πρόσβαση σε `user_dictionary` / `full_dictionary` και ενωμένα queries λεξικού.
 class DictionaryRepository {
@@ -41,6 +52,33 @@ class DictionaryRepository {
   static const String kLexiconMixedScriptsFilter = '__mixed_scripts__';
   static const String kLexiconLanguageMix = 'mix';
 
+  /// Δίγραμμα γλώσσας για όνομα αρχείου εξαγωγής (π.χ. GR, EN, GR_EN).
+  static String languageDigramForExport(Set<String> languages) {
+    final hasGreek =
+        languages.contains('el') || languages.contains(kLexiconLanguageMix);
+    final hasEnglish =
+        languages.contains('en') || languages.contains(kLexiconLanguageMix);
+    if (hasGreek && hasEnglish) return 'GR_EN';
+    if (hasEnglish) return 'EN';
+    return 'GR';
+  }
+
+  /// Δίγραμμα γλώσσας από τις εγγραφές `full_dictionary` και `user_dictionary`.
+  Future<String> exportLanguageDigram() async {
+    final langs = <String>{};
+    for (final table in [
+      AppConfig.fullDictionaryTable,
+      AppConfig.userDictionaryTable,
+    ]) {
+      final rows = await db.rawQuery('SELECT DISTINCT language FROM $table');
+      for (final r in rows) {
+        final lang = (r['language'] as String?)?.trim() ?? '';
+        if (lang.isNotEmpty) langs.add(lang);
+      }
+    }
+    return languageDigramForExport(langs);
+  }
+
   static String lexiconSourceUiLabel(String? src) {
     switch (src ?? '') {
       case kLexiconSourceDraft:
@@ -59,27 +97,76 @@ class DictionaryRepository {
   Future<void> insertUserWord(String word) async {
     final key = DictionaryService.canonicalLexiconKey(word);
     if (key.length < 2) return;
-    final m = LexiconWordMetrics.compute(key);
-    await db.insert(AppConfig.userDictionaryTable, {
-      'word': key,
-      'language': detectDictionaryLanguage(key),
-      'letters_count': m.lettersCount,
-      'diacritic_mark_count': m.diacriticMarkCount,
-    }, conflictAlgorithm: ConflictAlgorithm.ignore);
+    final display = word.trim().isEmpty ? key : word.trim();
+    final metricsWord =
+        DictionaryService.hasGreekTonos(display) ? display : key;
+    final m = LexiconWordMetrics.compute(metricsWord);
+    final existing = await db.query(
+      AppConfig.userDictionaryTable,
+      columns: ['word', 'display_word'],
+      where: 'word = ?',
+      whereArgs: [key],
+      limit: 1,
+    );
+    if (existing.isEmpty) {
+      await db.insert(AppConfig.userDictionaryTable, {
+        'word': key,
+        'display_word': display,
+        'language': detectDictionaryLanguage(display),
+        'letters_count': m.lettersCount,
+        'diacritic_mark_count': m.diacriticMarkCount,
+      });
+      return;
+    }
+    final curDisplay =
+        (existing.first['display_word'] as String?)?.trim() ?? key;
+    final nextDisplay = DictionaryService.preferLexiconDisplay(display, curDisplay)
+        ? display
+        : curDisplay;
+    final nextMetrics =
+        DictionaryService.hasGreekTonos(nextDisplay) ? nextDisplay : key;
+    final nm = LexiconWordMetrics.compute(nextMetrics);
+    await db.update(
+      AppConfig.userDictionaryTable,
+      {
+        'display_word': nextDisplay,
+        'language': detectDictionaryLanguage(nextDisplay),
+        'letters_count': nm.lettersCount,
+        'diacritic_mark_count': nm.diacriticMarkCount,
+      },
+      where: 'word = ?',
+      whereArgs: [key],
+    );
   }
 
   Future<void> addUserWord(String word) => insertUserWord(word);
 
-  Future<List<String>> getUserWords() async {
+  Future<List<UserLexiconEntry>> getUserLexiconEntries() async {
     final rows = await db.query(
       AppConfig.userDictionaryTable,
-      columns: ['word'],
+      columns: ['word', 'display_word'],
       orderBy: 'word COLLATE NOCASE',
     );
     return rows
-        .map((r) => (r['word'] as String?)?.trim() ?? '')
-        .where((w) => w.isNotEmpty)
+        .map((r) {
+          final key = (r['word'] as String?)?.trim() ?? '';
+          if (key.isEmpty) return null;
+          final display =
+              (r['display_word'] as String?)?.trim().isNotEmpty == true
+                  ? (r['display_word'] as String).trim()
+                  : key;
+          return UserLexiconEntry(
+            normalizedKey: key,
+            displayWord: display,
+          );
+        })
+        .whereType<UserLexiconEntry>()
         .toList();
+  }
+
+  Future<List<String>> getUserWords() async {
+    final entries = await getUserLexiconEntries();
+    return entries.map((e) => e.displayWord).toList();
   }
 
   Future<void> deleteUserDictionaryWord(String normalizedKey) async {
@@ -90,20 +177,30 @@ class DictionaryRepository {
     );
   }
 
-  Future<void> updateUserDictionaryWordKey(String oldKey, String newKey) async {
-    if (oldKey == newKey) return;
+  Future<void> updateUserDictionaryWordKey(
+    String oldKey,
+    String newKey, {
+    String? displayWord,
+  }) async {
+    if (oldKey == newKey && displayWord == null) return;
+    final display = (displayWord ?? newKey).trim();
+    final metricsWord =
+        DictionaryService.hasGreekTonos(display) ? display : newKey;
+    final m = LexiconWordMetrics.compute(metricsWord);
     await db.transaction((txn) async {
-      await txn.delete(
-        AppConfig.userDictionaryTable,
-        where: 'word = ?',
-        whereArgs: [newKey],
-      );
-      final m = LexiconWordMetrics.compute(newKey);
+      if (oldKey != newKey) {
+        await txn.delete(
+          AppConfig.userDictionaryTable,
+          where: 'word = ?',
+          whereArgs: [newKey],
+        );
+      }
       await txn.update(
         AppConfig.userDictionaryTable,
         {
-          'word': newKey,
-          'language': detectDictionaryLanguage(newKey),
+          if (oldKey != newKey) 'word': newKey,
+          'display_word': display,
+          'language': detectDictionaryLanguage(display),
           'letters_count': m.lettersCount,
           'diacritic_mark_count': m.diacriticMarkCount,
         },
@@ -232,44 +329,66 @@ class DictionaryRepository {
     final fullRows = await db.query(
       AppConfig.fullDictionaryTable,
       columns: ['word', 'normalized_word'],
-      orderBy: 'normalized_word COLLATE NOCASE',
+      orderBy: 'normalized_word COLLATE NOCASE, word COLLATE NOCASE',
     );
     final userRows = await db.query(
       AppConfig.userDictionaryTable,
-      columns: ['word'],
+      columns: ['word', 'display_word'],
       orderBy: 'word COLLATE NOCASE',
     );
-    final byNorm = <String, String>{};
+    final surfaces = <String>{};
+    final sortKeys = <String, String>{};
     for (final r in fullRows) {
       final nw = (r['normalized_word'] as String?)?.trim() ?? '';
       final w = (r['word'] as String?)?.trim() ?? '';
       if (nw.isEmpty || w.isEmpty) continue;
-      byNorm[nw] = w;
+      if (surfaces.add(w)) {
+        sortKeys[w] = nw;
+      }
     }
     for (final r in userRows) {
-      final w = (r['word'] as String?)?.trim() ?? '';
-      if (w.isEmpty || w.length < 2) continue;
-      final canon = DictionaryService.canonicalLexiconKey(w);
-      byNorm.putIfAbsent(canon, () => w);
+      final key = (r['word'] as String?)?.trim() ?? '';
+      if (key.length < 2) continue;
+      final display =
+          (r['display_word'] as String?)?.trim().isNotEmpty == true
+              ? (r['display_word'] as String).trim()
+              : key;
+      if (surfaces.add(display)) {
+        sortKeys[display] = key;
+      }
     }
-    final keys = byNorm.keys.toList()..sort((a, b) => a.compareTo(b));
-    return keys.map((k) => byNorm[k]!).toList();
+    final out = surfaces.toList()
+      ..sort((a, b) {
+        final ka = sortKeys[a] ?? DictionaryService.canonicalLexiconKey(a);
+        final kb = sortKeys[b] ?? DictionaryService.canonicalLexiconKey(b);
+        final c = ka.compareTo(kb);
+        if (c != 0) return c;
+        return a.compareTo(b);
+      });
+    return out;
   }
 
   Future<void> mergeAllUserDictionaryIntoFullWithinTransaction(
     Transaction txn,
   ) async {
-    final userRows = await txn.query(AppConfig.userDictionaryTable, columns: ['word']);
+    final userRows = await txn.query(
+      AppConfig.userDictionaryTable,
+      columns: ['word', 'display_word'],
+    );
     for (final r in userRows) {
       final key = (r['word'] as String?)?.trim() ?? '';
       if (key.length < 2) continue;
+      final display =
+          (r['display_word'] as String?)?.trim().isNotEmpty == true
+              ? (r['display_word'] as String).trim()
+              : key;
       final norm = DictionaryService.canonicalLexiconKey(key);
-      final lang = detectDictionaryLanguage(key);
-      final m = LexiconWordMetrics.compute(key);
+      final lang = detectDictionaryLanguage(display);
+      final m = LexiconWordMetrics.compute(display);
       await txn.insert(
         AppConfig.fullDictionaryTable,
         {
-          'word': key,
+          'word': display,
           'normalized_word': norm,
           'source': 'user',
           'language': lang,
@@ -392,7 +511,7 @@ WITH full_part AS (
 draft_part AS (
   SELECT
     CAST(NULL AS INTEGER) AS entry_id,
-    u.word AS display_word,
+    COALESCE(NULLIF(TRIM(u.display_word), ''), u.word) AS display_word,
     u.word AS norm_key,
     '$kLexiconSourceDraft' AS src,
     COALESCE(u.language, 'en') AS lang,

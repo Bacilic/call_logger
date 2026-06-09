@@ -6,6 +6,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:path/path.dart' as p;
 
 import '../../../core/config/app_config.dart';
 import '../../../core/database/database_helper.dart';
@@ -23,6 +24,7 @@ import '../../../core/services/settings_service.dart';
 import '../../../core/providers/shell_navigation_intent_provider.dart';
 import '../../../core/providers/spell_check_provider.dart';
 import '../../../core/widgets/main_nav_destination.dart';
+import '../../../core/services/core_lexicon_service.dart';
 import '../../../core/services/dictionary_service.dart';
 import '../../../core/services/master_dictionary_service.dart';
 import '../dictionary_table_layout.dart';
@@ -275,13 +277,17 @@ class _DictionaryManagerScreenState extends ConsumerState<DictionaryManagerScree
   static const double _lexiconWordColumnMax = 2000.0;
 
   /// Γιατί η λίστα μπορεί να έχει λίγες γραμμές ενώ η ορθογραφία «ξέρει» πολλές λέξεις.
-  static const String _lexiconScopeInfoTooltip =
-      'Εδώ φαίνονται μόνο οι εγγραφές στη βάση '
-      '(full_dictionary + πρόχειρα user_dictionary), όχι το bundled λεξικό '
-      '(~31k λέξεις, greek_core_60k.txt).\n\n'
-      'Η ορθογραφία φορτώνει το asset στη μνήμη + user_dictionary· '
-      'ο full_dictionary δεν επηρεάζει τον έλεγχο.\n\n'
-      'Για πλήρη προβολή εδώ: Ρυθμίσεις → Εισαγωγή από αρχείο (TXT).';
+  String _lexiconScopeInfoTooltip(CoreLexiconState core) {
+    final coreSummary = core.loaded && (core.path?.trim().isNotEmpty ?? false)
+        ? '${p.basename(core.path!.trim())} - ${core.wordCount} λέξεις'
+        : 'δεν φορτώθηκε';
+    return 'Εδώ φαίνονται μόνο οι εγγραφές στη βάση '
+        '(Πλήρες Λεξικό μαζί με το πρόχειρο Λεξικό Χρήστη), όχι το Λεξικό-Πυρήνας '
+        '($coreSummary).\n\n'
+        'Η ορθογραφία φορτώνει στη μνήμη το Λεξικό-Πυρήνας και το Λεξικό Χρήστη· '
+        'Το Πλήρες Λεξικό δεν επηρεάζει τον έλεγχο. Είναι μόνο για επεξεργασία των λέξεων.\n\n'
+        'Για προβολή ΟΛΩΝ των λέξεων πηγήνε: Ρυθμίσεις → Εισαγωγή από αρχείο (TXT).';
+  }
 
   final _master = MasterDictionaryService();
   final _searchCtrl = TextEditingController();
@@ -661,7 +667,11 @@ class _DictionaryManagerScreenState extends ConsumerState<DictionaryManagerScree
         if ((row['pending_user'] as int? ?? 0) == 1 && newWord != display) {
           final newKey = DictionaryService.canonicalLexiconKey(newWord);
           if (newKey != normKey) {
-            await dictUp.updateUserDictionaryWordKey(normKey, newKey);
+            await dictUp.updateUserDictionaryWordKey(
+              normKey,
+              newKey,
+              displayWord: newWord,
+            );
           }
         }
       }
@@ -829,6 +839,8 @@ class _DictionaryManagerScreenState extends ConsumerState<DictionaryManagerScree
     }
 
     final theme = Theme.of(context);
+    final coreLexicon = ref.watch(coreLexiconProvider);
+    final lexiconScopeInfo = _lexiconScopeInfoTooltip(coreLexicon);
     final lexiconCategoriesAsync = ref.watch(lexiconCategoriesProvider);
     final lexiconCategoryOptions = switch (lexiconCategoriesAsync) {
       AsyncData(:final value) => value,
@@ -894,7 +906,7 @@ class _DictionaryManagerScreenState extends ConsumerState<DictionaryManagerScree
                 ),
               ),
               IconButton(
-                tooltip: _lexiconScopeInfoTooltip,
+                tooltip: lexiconScopeInfo,
                 icon: Icon(
                   Icons.info_outline,
                   color: theme.colorScheme.primary,
@@ -904,8 +916,8 @@ class _DictionaryManagerScreenState extends ConsumerState<DictionaryManagerScree
                     context: context,
                     builder: (ctx) => AlertDialog(
                       title: const Text('Τι εμφανίζεται εδώ;'),
-                      content: const SingleChildScrollView(
-                        child: Text(_lexiconScopeInfoTooltip),
+                      content: SingleChildScrollView(
+                        child: Text(lexiconScopeInfo),
                       ),
                       actions: [
                         TextButton(
