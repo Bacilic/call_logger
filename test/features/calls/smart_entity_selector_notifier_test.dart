@@ -153,8 +153,11 @@ void printStateSnapshot(String step, SmartEntitySelectorState state) {
   print('  departmentText: "${state.departmentText}"');
   // ignore: avoid_print
   print(
-    '  manual flags — phone: ${state.phoneIsManual}, caller: ${state.callerIsManual}, '
-    'equipment: ${state.equipmentIsManual}, department: ${state.departmentIsManual}',
+    '  conflicts — '
+    'phone: ${state.conflictsFor(SelectorField.phone).length}, '
+    'caller: ${state.conflictsFor(SelectorField.caller).length}, '
+    'equipment: ${state.conflictsFor(SelectorField.equipment).length}, '
+    'department: ${state.conflictsFor(SelectorField.department).length}',
   );
   // ignore: avoid_print
   print(
@@ -661,25 +664,6 @@ void main() {
       },
     );
 
-    // markPhoneAsManual μετά από updatePhone → phoneIsManual == true.
-    //   flutter test test/features/calls/smart_entity_selector_notifier_test.dart --plain-name "markPhoneAsManual: ορίζει phoneIsManual"
-    test('markPhoneAsManual: ορίζει phoneIsManual', () async {
-      final container = await _containerWithCatalog(
-        users: [],
-        equipment: [],
-        departments: [],
-      );
-      addTearDown(container.dispose);
-      final n = container.read(callSmartEntityProvider.notifier);
-      n.updatePhone('111');
-      n.markPhoneAsManual();
-      expect(
-        container.read(callSmartEntityProvider).phoneIsManual,
-        isTrue,
-        reason: greekExpectMsg('Σήμα χειροκίνητου τηλεφώνου'),
-      );
-    });
-
     // Stub findUsersByPhone: επαλήθευση ότι χρησιμοποιείται το stub, όχι κενός in-memory catalog.
     //   flutter test test/features/calls/smart_entity_selector_notifier_test.dart --plain-name "Ψεύτικο LookupService: ελεγχόμενη findUsersByPhone χωρίς χρήστες στο cache"
     test(
@@ -970,20 +954,32 @@ void main() {
             n.performEquipmentLookupByCode('XF-SALES-01');
             s = container.read(callSmartEntityProvider);
             printStateSnapshot('Μετά αλλαγή εξοπλισμού σε κάτοχο 522', s);
+            // v2 §Β: τα συμπληρωμένα πεδία καλούντα/τμήμα ΔΕΝ αντικαθίστανται.
             expect(
               s.selectedCaller?.id,
-              522,
-              reason: greekExpectMsg('Ο νέος εξοπλισμός ανήκει σε άλλον χρήστη — ενημέρωση καλούντα'),
+              521,
+              reason: greekExpectMsg('v2 §Β: ο συμπληρωμένος καλών δεν αντικαθίσταται'),
             );
             expect(
               s.departmentText,
-              'Sales',
-              reason: greekExpectMsg('Το τμήμα συγχρονίζεται με τον νέο κάτοχο όταν επιτρέπεται autofill'),
+              'R&D',
+              reason: greekExpectMsg('v2 §Β: το συμπληρωμένο τμήμα δεν αντικαθίσταται'),
             );
             expect(
               s.selectedEquipment?.code,
               'XF-SALES-01',
-              reason: greekExpectMsg('Επιλεγμένος νέος εξοπλισμός'),
+              reason: greekExpectMsg('Επιλεγμένος νέος εξοπλισμός (πεδίο-πηγή)'),
+            );
+            // v2 §Α.3: ο νέος εξοπλισμός διαφωνεί με καλούντα/τμήμα → κόκκινο ✱.
+            expect(
+              s.conflictSeverityFor(SelectorField.caller),
+              ConflictSeverity.mismatch,
+              reason: greekExpectMsg('Δείκτης σύγκρουσης στον καλούντα'),
+            );
+            expect(
+              s.conflictSeverityFor(SelectorField.department),
+              ConflictSeverity.mismatch,
+              reason: greekExpectMsg('Δείκτης σύγκρουσης στο τμήμα'),
             );
 
             _recordCrossFieldScenario(
@@ -1043,14 +1039,12 @@ void main() {
             var s = container.read(callSmartEntityProvider);
             printStateSnapshot('Πριν χειροκίνητη αλλαγή καλούντα', s);
 
-            // Η [updateSelectedCaller] → [setCaller] μηδενίζει το callerIsManual·
-            // η σειρά «επιλογή καλούντα → markCallerAsManual» αντιστοιχεί σε ρεαλιστικό UI flow.
+            // v2 §Β: ένας συμπληρωμένος (isFilled) καλών προστατεύεται από
+            // αντικατάσταση· δεν χρειάζεται πλέον σήμα χειροκίνητου.
             n.updateSelectedCaller(u2);
             n.updateCallerDisplayText(u2.name ?? 'Ιωάννα Δύο');
-            n.markCallerAsManual();
             s = container.read(callSmartEntityProvider);
-            printStateSnapshot('Μετά updateSelectedCaller(532) + markCallerAsManual', s);
-            expect(s.callerIsManual, isTrue, reason: greekExpectMsg('Σήμα χειροκίνητου καλούντα'));
+            printStateSnapshot('Μετά updateSelectedCaller(532)', s);
             expect(s.selectedCaller?.id, 532);
 
             n.performEquipmentLookupByCode('XF-MAN-A');
@@ -1124,18 +1118,24 @@ void main() {
             n.selectDepartment(DepartmentModel(id: 122, name: 'Νότιο'));
             var s = container.read(callSmartEntityProvider);
             printStateSnapshot('Μετά επιλογή τμήματος ενώ caller παραμένει 541', s);
-            expect(s.departmentIsManual, isTrue, reason: greekExpectMsg('Ρητή επιλογή τμήματος'));
-            expect(s.selectedDepartmentId, 122);
+            expect(s.selectedDepartmentId, 122, reason: greekExpectMsg('Ρητή επιλογή τμήματος'));
             expect(s.selectedCaller?.id, 541);
 
             n.performEquipmentLookupByCode('XF-D2');
             s = container.read(callSmartEntityProvider);
             printStateSnapshot('Μετά εξοπλισμό κάτοχου τμήματος Νότιο', s);
             expect(s.selectedEquipment?.code, 'XF-D2');
+            // v2 §Β: ο συμπληρωμένος καλών (541) δεν αντικαθίσταται από τον κάτοχο
+            // του εξοπλισμού (542)· αντί αυτού εμφανίζεται δείκτης σύγκρουσης.
             expect(
               s.selectedCaller?.id,
-              542,
-              reason: greekExpectMsg('Επιτρέπεται autofill καλούντα όταν το τμήμα δεν μπλοκάρει τον κάτοχο'),
+              541,
+              reason: greekExpectMsg('v2 §Β: ο συμπληρωμένος καλών δεν αντικαθίσταται'),
+            );
+            expect(
+              s.conflictSeverityFor(SelectorField.caller),
+              ConflictSeverity.mismatch,
+              reason: greekExpectMsg('Δείκτης σύγκρουσης στον καλούντα'),
             );
 
             _recordCrossFieldScenario(
@@ -1355,9 +1355,9 @@ void main() {
                 n.performEquipmentLookupByCode(i.isEven ? 'XF-ST-A' : 'XF-ST-B');
                 printStateSnapshot('Stress #$i: performEquipmentLookupByCode', container.read(callSmartEntityProvider));
               } else {
-                n.markCallerAsManual();
-                n.markEquipmentAsManual();
-                printStateSnapshot('Stress #$i: mark manual flags', container.read(callSmartEntityProvider));
+                n.updateCallerDisplayText(i.isEven ? 'Καλών Α' : 'Καλών Β');
+                n.checkContent(equipmentText: i.isEven ? 'XF-ST-A' : 'XF-ST-B');
+                printStateSnapshot('Stress #$i: edit caller/equipment text', container.read(callSmartEntityProvider));
               }
               final st = container.read(callSmartEntityProvider);
               expect(

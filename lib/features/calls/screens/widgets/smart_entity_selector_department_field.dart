@@ -6,6 +6,7 @@ import '../../../../core/utils/autocomplete_highlight_scroll.dart';
 import '../../../../core/utils/spell_check.dart';
 import '../../../../features/directory/models/department_model.dart';
 import '../../provider/smart_entity_selector_provider.dart';
+import 'smart_entity_selector_conflict_badge.dart';
 import 'text_layout_utils.dart';
 class SmartEntityDepartmentField extends StatefulWidget {
   const SmartEntityDepartmentField({
@@ -126,6 +127,12 @@ class SmartEntityDepartmentFieldState extends State<SmartEntityDepartmentField> 
                     style: theme.textTheme.labelMedium,
                     softWrap: true,
                   ),
+                ),
+                ConflictBadge(
+                  severity: widget.header
+                      .conflictSeverityFor(SelectorField.department),
+                  message: widget.header
+                      .conflictTooltipFor(SelectorField.department),
                 ),
               ],
             ),

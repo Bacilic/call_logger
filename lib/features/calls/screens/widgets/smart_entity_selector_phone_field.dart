@@ -7,6 +7,7 @@ import '../../../../core/services/lookup_service.dart';
 import '../../../../core/utils/autocomplete_highlight_scroll.dart';
 import '../../../../core/utils/spell_check.dart';
 import '../../provider/smart_entity_selector_provider.dart';
+import 'smart_entity_selector_conflict_badge.dart';
 import 'smart_entity_selector_overlay_utils.dart';
 import 'smart_entity_selector_phone_suggestion_list.dart';
 import 'smart_entity_selector_phone_utils.dart';
@@ -115,13 +116,13 @@ class _SmartEntityPhoneFieldState extends State<SmartEntityPhoneField> {
     final headerPhone = widget.header.selectedPhone ?? '';
     if (digits != headerPhone) {
       widget.notifier.updatePhone(digits.isEmpty ? null : digits);
-      widget.notifier.markPhoneAsManual();
     }
     if (digits.isEmpty) {
       widget.onPhoneBecameEmpty();
-    } else if (digits.length >= 3) {
-      _scheduleCompletedLookup();
     }
+    // v2 §Ζ: το entity lookup ΔΕΝ τρέχει κατά την πληκτρολόγηση. Εκτελείται
+    // μόνο σε commit (focus-out, Enter, επιλογή από λίστα). Η ζωντανή λίστα
+    // autocomplete (prefix search) παραμένει ενεργή μέσω του optionsBuilder.
   }
 
   void _onPhoneTextChange() {
@@ -288,6 +289,12 @@ class _SmartEntityPhoneFieldState extends State<SmartEntityPhoneField> {
                     style: Theme.of(context).textTheme.labelMedium,
                     softWrap: true,
                   ),
+                ),
+                ConflictBadge(
+                  severity:
+                      widget.header.conflictSeverityFor(SelectorField.phone),
+                  message:
+                      widget.header.conflictTooltipFor(SelectorField.phone),
                 ),
               ],
             ),

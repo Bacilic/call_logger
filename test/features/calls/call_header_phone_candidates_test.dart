@@ -68,7 +68,6 @@ void main() {
             ),
             phoneCandidates: const ['2551', '2564', '2975', '2997'],
             callerDisplayText: 'Σταματίνα Γεωργάκη',
-            equipmentIsManual: true,
             equipmentText: 'dummy',
           ),
         );
@@ -91,7 +90,6 @@ void main() {
         expect(state.selectedPhone, '2551');
         expect(state.selectedCaller?.id, 10);
         expect(state.phoneCandidates, isEmpty);
-        expect(state.phoneIsManual, isFalse);
         expect(n.selectPhoneFromCandidatesCalled, isTrue);
         expect(n.selectedFromCandidates, '2551');
       },

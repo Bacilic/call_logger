@@ -11,6 +11,7 @@ import '../../../../core/utils/search_text_normalizer.dart';
 import '../../models/user_model.dart';
 import '../../provider/smart_entity_selector_provider.dart';
 import 'smart_entity_selector_caller_presentational.dart' as caller_ui;
+import 'smart_entity_selector_conflict_badge.dart';
 import 'smart_entity_selector_overlay_utils.dart';
 import 'text_layout_utils.dart';
 
@@ -173,6 +174,12 @@ class SmartEntityCallerFieldState extends State<SmartEntityCallerField> {
           setState(() => _showSuggestionList = false);
         }
       });
+      // v2 §Ζ: entity lookup σε focus-out (commit). Μόνο για ελεύθερο κείμενο
+      // που δεν έχει ήδη επιλεγμένο καλούντα — ώστε να μη χαλάει ρητή επιλογή.
+      if (widget.controller.text.trim().isNotEmpty &&
+          widget.header.selectedCaller == null) {
+        _scheduleCompletedLookup();
+      }
       widget.onCallerFocusOut?.call();
     }
   }
@@ -275,7 +282,6 @@ class SmartEntityCallerFieldState extends State<SmartEntityCallerField> {
     if (selection == 'Άγνωστος') {
       notifier.updateSelectedCaller(null);
       notifier.updateCallerDisplayText('Άγνωστος');
-      notifier.markCallerAsManual();
       _setControllerText(controller, 'Άγνωστος');
       _onSuggestionSelected();
     } else {
@@ -377,6 +383,12 @@ class SmartEntityCallerFieldState extends State<SmartEntityCallerField> {
                     style: theme.textTheme.labelMedium,
                     softWrap: true,
                   ),
+                ),
+                ConflictBadge(
+                  severity:
+                      widget.header.conflictSeverityFor(SelectorField.caller),
+                  message:
+                      widget.header.conflictTooltipFor(SelectorField.caller),
                 ),
               ],
             ),
@@ -728,7 +740,6 @@ class SmartEntityCallerFieldState extends State<SmartEntityCallerField> {
                                 notifier.clearEquipment();
                               } else {
                                 notifier.updateCallerDisplayText(value);
-                                notifier.markCallerAsManual();
                                 if (header.selectedCaller != null) {
                                   final n = header.selectedCaller!.name;
                                   final f = header
@@ -892,7 +903,6 @@ class SmartEntityCallerSuggestionList extends StatelessWidget {
           onTap: () {
             notifier.updateSelectedCaller(null);
             notifier.updateCallerDisplayText('Άγνωστος');
-            notifier.markCallerAsManual();
             controller.value = const TextEditingValue(
               text: 'Άγνωστος',
               selection: TextSelection.collapsed(offset: 9),

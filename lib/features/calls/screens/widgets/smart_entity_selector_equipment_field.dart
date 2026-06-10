@@ -12,6 +12,7 @@ import '../../provider/smart_entity_selector_provider.dart';
 import '../../utils/vnc_remote_target.dart';
 import 'smart_entity_selector_equipment_models.dart';
 import 'smart_entity_selector_equipment_suggestion_list.dart';
+import 'smart_entity_selector_conflict_badge.dart';
 import 'smart_entity_selector_overlay_utils.dart';
 import 'text_layout_utils.dart';
 
@@ -63,9 +64,9 @@ class _SmartEntityEquipmentFieldState extends State<SmartEntityEquipmentField> {
     final query = widget.controller.text.trim();
     if (query.isEmpty) return;
     final selected = widget.header.selectedEquipment;
-    if (widget.header.equipmentIsManual &&
-        selected != null &&
-        query == _equipmentFieldText(selected)) {
+    // Αποφυγή περιττού lookup όταν το κείμενο ταιριάζει ήδη με την επιλεγμένη
+    // οντότητα (v2 §Β: η τιμή του πεδίου είναι η αλήθεια).
+    if (selected != null && query == _equipmentFieldText(selected)) {
       return;
     }
     widget.notifier.performEquipmentLookupByCode(query);
@@ -286,7 +287,6 @@ class _SmartEntityEquipmentFieldState extends State<SmartEntityEquipmentField> {
     final fieldText = _equipmentFieldText(equipment);
     _setControllerText(widget.controller, fieldText);
     widget.notifier.setEquipment(equipment);
-    widget.notifier.markEquipmentAsManual();
     widget.notifier.checkContent(equipmentText: fieldText);
     widget.notifier.performEquipmentLookupByCode(fieldText);
     setState(() {
@@ -319,9 +319,11 @@ class _SmartEntityEquipmentFieldState extends State<SmartEntityEquipmentField> {
       widget.controller.addListener(_onEquipmentTextChange);
     }
     final sel = widget.header.selectedEquipment;
-    if (!widget.header.equipmentIsManual &&
-        sel != null &&
-        widget.controller.text != _equipmentFieldText(sel)) {
+    // v2 §Β: συμπληρώνουμε το ορατό κείμενο από την επιλογή μόνο όταν το πεδίο
+    // είναι κενό· ποτέ δεν αντικαθιστούμε κείμενο που έχει ήδη ο χρήστης.
+    if (sel != null &&
+        widget.controller.text.trim().isEmpty &&
+        _equipmentFieldText(sel).isNotEmpty) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
           _setControllerText(widget.controller, _equipmentFieldText(sel));
@@ -334,8 +336,9 @@ class _SmartEntityEquipmentFieldState extends State<SmartEntityEquipmentField> {
         !_justSelectedFromCustomList &&
         widget.header.equipmentCandidates.length <= 1 &&
         widget.header.isEquipmentAmbiguous == false) {
+      // v2 §Β: μη καθαρίζεις ορατό κείμενο που έχει ήδη ο χρήστης (isFilled).
       final manualText = widget.header.equipmentText.trim();
-      if (widget.header.equipmentIsManual && manualText.isNotEmpty) {
+      if (manualText.isNotEmpty) {
         return;
       }
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -397,6 +400,12 @@ class _SmartEntityEquipmentFieldState extends State<SmartEntityEquipmentField> {
                       softWrap: false,
                     ),
                   ),
+                ),
+                ConflictBadge(
+                  severity: widget.header
+                      .conflictSeverityFor(SelectorField.equipment),
+                  message: widget.header
+                      .conflictTooltipFor(SelectorField.equipment),
                 ),
               ],
             ),
@@ -673,7 +682,6 @@ class _SmartEntityEquipmentFieldState extends State<SmartEntityEquipmentField> {
                                 value != _equipmentFieldText(selected)) {
                               notifier.clearEquipment();
                             }
-                            notifier.markEquipmentAsManual();
                             notifier.checkContent(equipmentText: value);
                           },
                           onSubmitted: (_) {

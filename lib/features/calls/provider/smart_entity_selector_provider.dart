@@ -18,6 +18,31 @@ import '../models/call_model.dart';
 import '../utils/remote_target_rules.dart';
 import '../utils/vnc_remote_target.dart';
 
+/// Τα τέσσερα πεδία του έξυπνου επιλογέα (v2 §Α).
+enum SelectorField { phone, caller, department, equipment }
+
+/// Σοβαρότητα δείκτη σύγκρουσης (v2 §Α.3 / §Α.6 / §Α.7).
+/// - [mismatch] = κόκκινο: η βάση γνωρίζει διαφορετική τιμή.
+/// - [unknown]  = κίτρινο: το πεδίο δεν αντιστοιχεί σε γνωστή οντότητα.
+enum ConflictSeverity { mismatch, unknown }
+
+/// Μία καταχώρηση σύγκρουσης πάνω σε ένα πεδίο (v2 §Α.7).
+class FieldConflict {
+  const FieldConflict({required this.severity, required this.message});
+
+  final ConflictSeverity severity;
+  final String message;
+}
+
+/// Η «αλήθεια» που υπονοεί το πεδίο-πηγή κατά τον υπολογισμό συγκρούσεων.
+class _SourceTruth {
+  _SourceTruth({this.user, this.departmentId, this.departmentName});
+
+  final UserModel? user;
+  final int? departmentId;
+  final String? departmentName;
+}
+
 /// Κατάσταση έξυπνου επιλογέα οντοτήτων (τηλέφωνο, καλών, εξοπλισμός, τμήμα).
 /// FocusNodes ΔΕΝ αποθηκεύονται εδώ — ζουν στο widget State.
 class SmartEntitySelectorState {
@@ -39,14 +64,12 @@ class SmartEntitySelectorState {
     this.callerDisplayText = '',
     this.departmentText = '',
     this.selectedDepartmentId,
-    this.departmentIsManual = false,
-    this.phoneIsManual = false,
-    this.callerIsManual = false,
-    this.equipmentIsManual = false,
+    Map<SelectorField, List<FieldConflict>>? conflicts,
   }) : recentPhones = recentPhones ?? [],
        phoneCandidates = phoneCandidates ?? [],
        callerCandidates = callerCandidates ?? [],
-       equipmentCandidates = equipmentCandidates ?? [];
+       equipmentCandidates = equipmentCandidates ?? [],
+       conflicts = conflicts ?? const {};
 
   final String? selectedPhone;
 
@@ -84,17 +107,30 @@ class SmartEntitySelectorState {
   /// Επιλεγμένο τμήμα (department_id) όταν υπάρχει σαφής αντιστοίχιση.
   final int? selectedDepartmentId;
 
-  /// True όταν το τμήμα έχει τροποποιηθεί χειροκίνητα από τον χρήστη.
-  final bool departmentIsManual;
+  /// Ενεργές συγκρούσεις ανά πεδίο (v2 §Α.7). Επανυπολογίζεται εξ αρχής σε κάθε
+  /// ολοκληρωμένο lookup (§Α.4, stateless). Το πεδίο-πηγή δεν περιέχεται ποτέ.
+  final Map<SelectorField, List<FieldConflict>> conflicts;
 
-  /// True όταν το τηλέφωνο έχει τροποποιηθεί χειροκίνητα από τον χρήστη.
-  final bool phoneIsManual;
+  /// Λίστα συγκρούσεων για ένα πεδίο (κενή αν δεν υπάρχουν).
+  List<FieldConflict> conflictsFor(SelectorField field) =>
+      conflicts[field] ?? const [];
 
-  /// True όταν ο καλών έχει τροποποιηθεί χειροκίνητα από τον χρήστη.
-  final bool callerIsManual;
+  /// Σοβαρότητα προς εμφάνιση: κόκκινο αν υπάρχει έστω μία [ConflictSeverity.mismatch],
+  /// αλλιώς κίτρινο αν όλες είναι [ConflictSeverity.unknown] (v2 §Α.7).
+  ConflictSeverity? conflictSeverityFor(SelectorField field) {
+    final list = conflictsFor(field);
+    if (list.isEmpty) return null;
+    return list.any((c) => c.severity == ConflictSeverity.mismatch)
+        ? ConflictSeverity.mismatch
+        : ConflictSeverity.unknown;
+  }
 
-  /// True όταν ο εξοπλισμός έχει τροποποιηθεί χειροκίνητα από τον χρήστη.
-  final bool equipmentIsManual;
+  /// Tooltip με όλες τις γραμμές σύγκρουσης για ένα πεδίο (v2 §Α.7).
+  String? conflictTooltipFor(SelectorField field) {
+    final list = conflictsFor(field);
+    if (list.isEmpty) return null;
+    return list.map((c) => c.message).join('\n');
+  }
 
   static const int _maxRecentPhones = 20;
 
@@ -271,11 +307,9 @@ class SmartEntitySelectorState {
     final equipmentFilled = hasEquipmentInput;
 
     if (needsNewCallerCreation) {
-      // Για νέο καλούντα, αναφέρουμε εξοπλισμό μόνο αν ο χρήστης
-      // τον έχει τροποποιήσει ρητά (equipmentIsManual = true). Έτσι
-      // δεν "υπόσχεται" αλλαγή εξοπλισμού όταν το πεδίο προέκυψε
-      // μόνο από autofill.
-      final includeEquipmentForNewCaller = equipmentFilled && equipmentIsManual;
+      // Για νέο καλούντα συσχετίζεται ό,τι υπάρχει στη φόρμα (v2 §Γ: η τιμή
+      // του πεδίου είναι η αλήθεια, ανεξάρτητα από το πώς αποκτήθηκε).
+      final includeEquipmentForNewCaller = equipmentFilled;
       final parts = <String>[];
       if (phoneFilled) {
         parts.add('τηλέφωνο: ${selectedPhone!.trim()}');
@@ -352,10 +386,8 @@ class SmartEntitySelectorState {
     String? departmentText,
     int? selectedDepartmentId,
     bool clearSelectedDepartmentId = false,
-    bool? departmentIsManual,
-    bool? phoneIsManual,
-    bool? callerIsManual,
-    bool? equipmentIsManual,
+    Map<SelectorField, List<FieldConflict>>? conflicts,
+    bool clearConflicts = false,
   }) {
     return SmartEntitySelectorState(
       selectedPhone: clearSelectedPhone
@@ -389,10 +421,7 @@ class SmartEntitySelectorState {
       selectedDepartmentId: clearSelectedDepartmentId
           ? null
           : (selectedDepartmentId ?? this.selectedDepartmentId),
-      departmentIsManual: departmentIsManual ?? this.departmentIsManual,
-      phoneIsManual: phoneIsManual ?? this.phoneIsManual,
-      callerIsManual: callerIsManual ?? this.callerIsManual,
-      equipmentIsManual: equipmentIsManual ?? this.equipmentIsManual,
+      conflicts: clearConflicts ? const {} : (conflicts ?? this.conflicts),
     );
   }
 
@@ -414,10 +443,7 @@ class SmartEntitySelectorState {
       callerDisplayText: '',
       departmentText: '',
       clearSelectedDepartmentId: true,
-      departmentIsManual: false,
-      phoneIsManual: false,
-      callerIsManual: false,
-      equipmentIsManual: false,
+      clearConflicts: true,
     );
   }
 }
@@ -440,8 +466,9 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
   bool _isFillingFromLookup = false;
   static const int _criticalTaskPriority = 2;
 
-  bool get _hasManualEquipmentSelection =>
-      state.equipmentIsManual && state.selectedEquipment != null;
+  /// v2 §Β: ένα συμπληρωμένο πεδίο εξοπλισμού (isFilled) προστατεύεται και δεν
+  /// καθαρίζεται από επαναλαμβανόμενα lookups τηλεφώνου/καλούντα.
+  bool get _hasManualEquipmentSelection => state.equipmentText.trim().isNotEmpty;
 
   /// Έως ένα quick task ανά κύκλο φόρμας· set μόνο μετά επιτυχή insert.
   int? _associationQuickTaskId;
@@ -579,7 +606,6 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
     state = state.copyWith(
       selectedDepartmentId: finalDepartment?.id ?? departmentId,
       departmentText: finalDepartment?.name ?? deptText,
-      departmentIsManual: true,
       callerNoMatch: false,
       equipmentNoMatch: false,
     );
@@ -683,6 +709,9 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
       departmentText,
       state.departmentText,
     );
+    // v2 §Ζ.3: αν αλλάζει το πεδίο εξοπλισμού κατά την πληκτρολόγηση, καθαρίζουμε
+    // τους ✱ μέχρι το επόμενο commit/lookup.
+    final clearConflictsOnEdit = equipmentText != null;
     state = state.copyWith(
       hasAnyContent: _computeHasAnyContent(
         phoneText: phoneText,
@@ -694,6 +723,7 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
       // Στο departmentText κρατάμε το ακριβές input του χρήστη (με κενά),
       // ώστε να μην αφαιρούνται αυτόματα τα διαστήματα πληκτρολόγησης.
       departmentText: mergedDepartment,
+      clearConflicts: clearConflictsOnEdit,
     );
   }
 
@@ -803,10 +833,6 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
       isEquipmentAmbiguous: false,
       callerNoMatch: false,
       equipmentNoMatch: false,
-      phoneIsManual: false,
-      callerIsManual: false,
-      equipmentIsManual: false,
-      departmentIsManual: false,
     );
   }
 
@@ -828,6 +854,8 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
       clearPhoneError: true,
       clearPhoneCandidates: true,
     );
+    // v2 §Ζ.3: κατά την πληκτρολόγηση τηλεφώνου καθαρίζονται οι ✱ μέχρι το
+    // επόμενο commit/lookup.
     if (value == null || value.trim().isEmpty) {
       state = state.copyWith(
         clearCallerCandidates: true,
@@ -838,6 +866,7 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
         isEquipmentAmbiguous: false,
         callerNoMatch: false,
         equipmentNoMatch: false,
+        clearConflicts: true,
       );
     } else {
       state = state.copyWith(
@@ -849,6 +878,7 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
         isEquipmentAmbiguous: false,
         callerNoMatch: false,
         equipmentNoMatch: false,
+        clearConflicts: true,
       );
     }
   }
@@ -867,7 +897,6 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
       clearPhoneError: true,
       clearPhoneCandidates: true,
       isPhoneAmbiguous: false,
-      phoneIsManual: false,
     );
   }
 
@@ -892,31 +921,18 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
       clearPhoneError: true,
       clearPhoneCandidates: true,
       isPhoneAmbiguous: false,
-      phoneIsManual: false,
       recentPhones: _recentPhonesWithPhoneBumped(trimmed),
     );
 
     final callerId = state.selectedCaller?.id;
-    final canAutofillEquipment =
-        !state.equipmentIsManual || state.equipmentText.trim().isEmpty;
+    final canAutofillEquipment = state.equipmentText.trim().isEmpty;
     if (callerId != null && canAutofillEquipment) {
       performEquipmentLookup(callerId);
     }
-  }
-
-  void markPhoneAsManual() {
-    if (state.phoneIsManual) return;
-    state = state.copyWith(phoneIsManual: true);
-  }
-
-  void markCallerAsManual() {
-    if (state.callerIsManual) return;
-    state = state.copyWith(callerIsManual: true);
-  }
-
-  void markEquipmentAsManual() {
-    if (state.equipmentIsManual) return;
-    state = state.copyWith(equipmentIsManual: true);
+    _recomputeConflicts(
+      SelectorField.phone,
+      ref.read(lookupServiceProvider).value?.service,
+    );
   }
 
   void clearPhone() {
@@ -957,7 +973,6 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
       clearPhoneError: true,
       clearPhoneCandidates: true,
       isPhoneAmbiguous: false,
-      phoneIsManual: false,
     );
     markPhoneUsed(trimmed);
   }
@@ -1014,8 +1029,9 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
   }
 
   bool _canAutofillPhone() {
-    return !state.phoneIsManual ||
-        (state.selectedPhone?.trim().isEmpty ?? true);
+    // v2 §Β.1: autofill μόνο σε κενό πεδίο (isFilled = false), ανεξάρτητα
+    // από το πώς αποκτήθηκε η τρέχουσα τιμή.
+    return state.selectedPhone?.trim().isEmpty ?? true;
   }
 
   /// Autofill τηλεφώνου από τον κάτοχο του εξοπλισμού μόνο όταν δεν υπάρχει ήδη
@@ -1027,22 +1043,10 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
   }
 
   bool _canAutofillDepartmentForUser(UserModel user) {
-    final hasLockedManualDepartmentSelection =
-        state.departmentIsManual &&
-        state.selectedDepartmentId != null &&
-        state.departmentText.trim().isNotEmpty;
-    if (hasLockedManualDepartmentSelection) {
-      // Όταν ο χρήστης έχει επιλέξει ρητά τμήμα στο header, δεν το
-      // αντικαθιστούμε αυτόματα από το προφίλ του caller.
-      return false;
-    }
-    final currentCallerId = state.selectedCaller?.id;
-    final newCallerId = user.id;
-    if (newCallerId != null && currentCallerId != newCallerId) {
-      // Σε αλλαγή καλούντα επιτρέπουμε auto-fill από το νέο προφίλ.
-      return true;
-    }
-    return !state.departmentIsManual || state.departmentText.trim().isEmpty;
+    // v2 §Β.1: το τμήμα συμπληρώνεται αυτόματα μόνο όταν το πεδίο είναι κενό.
+    // Συμπληρωμένο τμήμα (isFilled) δεν αντικαθίσταται — η τυχόν σύγκρουση
+    // εκτίθεται μέσω δείκτη (Φάση 2).
+    return state.departmentText.trim().isEmpty;
   }
 
   String _departmentTextForUser(UserModel user) {
@@ -1051,6 +1055,271 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
     final lookup = asyncLookup.value?.service;
     if (lookup == null) return '';
     return lookup.departmentIdToName[user.departmentId] ?? '';
+  }
+
+  // ───────────────────────── Δείκτες σύγκρουσης (v2 §Α) ─────────────────────
+
+  String _phoneDigitsOfState() =>
+      state.selectedPhone?.replaceAll(RegExp(r'[^0-9]'), '').trim() ?? '';
+
+  String _equipmentCodeOfState() {
+    final code = state.selectedEquipment?.code?.trim();
+    if (code != null && code.isNotEmpty) return code;
+    return state.equipmentText.trim();
+  }
+
+  /// Ετικέτα πεδίου-πηγής για τα μηνύματα σύγκρουσης.
+  String _sourceLabel(SelectorField field) {
+    switch (field) {
+      case SelectorField.phone:
+        return 'Το τηλέφωνο ${_phoneDigitsOfState()}';
+      case SelectorField.caller:
+        final name =
+            state.selectedCaller?.name ?? state.callerDisplayText.trim();
+        return 'Ο καλούντας $name';
+      case SelectorField.department:
+        return 'Το τμήμα ${state.departmentText.trim()}';
+      case SelectorField.equipment:
+        return 'Ο εξοπλισμός ${_equipmentCodeOfState()}';
+    }
+  }
+
+  void _addConflict(
+    Map<SelectorField, List<FieldConflict>> target,
+    SelectorField field,
+    ConflictSeverity severity,
+    String message,
+  ) {
+    (target[field] ??= <FieldConflict>[]).add(
+      FieldConflict(severity: severity, message: message),
+    );
+  }
+
+  /// Η «αλήθεια» που υπονοεί το πεδίο-πηγή: ένας μονοσήμαντος χρήστης και/ή ένα
+  /// τμήμα. Επιστρέφει null όταν η πηγή είναι ασαφής (π.χ. >1 χρήστες) ή άγνωστη.
+  _SourceTruth? _resolveSourceTruth(SelectorField source, LookupService lookup) {
+    switch (source) {
+      case SelectorField.phone:
+        final digits = _phoneDigitsOfState();
+        if (digits.length < 3) return null;
+        final users = lookup.findUsersByPhone(digits);
+        if (users.length == 1) {
+          return _SourceTruth(user: users.first);
+        }
+        if (users.isEmpty) {
+          final dept = lookup.getDepartmentByPhone(digits);
+          if (dept?.id != null) {
+            return _SourceTruth(departmentId: dept!.id, departmentName: dept.name);
+          }
+        }
+        return null;
+      case SelectorField.caller:
+        final caller = state.selectedCaller;
+        if (caller?.id == null) return null;
+        return _SourceTruth(user: caller);
+      case SelectorField.equipment:
+        final eq = state.selectedEquipment;
+        if (eq?.id == null) return null;
+        final owners = lookup.findUsersForEquipment(eq!.id!);
+        if (owners.length == 1) return _SourceTruth(user: owners.first);
+        return null;
+      case SelectorField.department:
+        final id = state.selectedDepartmentId;
+        if (id == null) return null;
+        return _SourceTruth(
+          departmentId: id,
+          departmentName: state.departmentText.trim(),
+        );
+    }
+  }
+
+  /// Κόκκινες ασυμφωνίες: κάθε άλλο συμπληρωμένο πεδίο έναντι της πηγής.
+  void _collectMismatches(
+    SelectorField source,
+    _SourceTruth truth,
+    LookupService lookup,
+    Map<SelectorField, List<FieldConflict>> out,
+  ) {
+    final label = _sourceLabel(source);
+    final user = truth.user;
+    final truthDeptId = user?.departmentId ?? truth.departmentId;
+    final truthDeptName = truthDeptId == null
+        ? null
+        : (lookup.departmentIdToName[truthDeptId] ?? truth.departmentName);
+
+    // ── Καλούντας ──
+    if (source != SelectorField.caller &&
+        state.callerDisplayText.trim().isNotEmpty &&
+        state.callerDisplayText.trim() != 'Άγνωστος') {
+      if (user != null) {
+        final selected = state.selectedCaller;
+        final identityDiffers = selected?.id != null
+            ? selected!.id != user.id
+            : SearchTextNormalizer.normalizeForSearch(
+                    state.callerDisplayText) !=
+                SearchTextNormalizer.normalizeForSearch(user.name ?? '');
+        if (identityDiffers) {
+          _addConflict(
+            out,
+            SelectorField.caller,
+            ConflictSeverity.mismatch,
+            '$label αντιστοιχεί σε: ${user.name ?? user.fullNameWithDepartment}',
+          );
+        }
+      } else if (truthDeptId != null) {
+        final selected = state.selectedCaller;
+        if (selected?.id != null &&
+            selected!.departmentId != null &&
+            selected.departmentId != truthDeptId) {
+          final callerDept =
+              lookup.departmentIdToName[selected.departmentId] ?? '—';
+          _addConflict(
+            out,
+            SelectorField.caller,
+            ConflictSeverity.mismatch,
+            'Ο καλούντας ${selected.name ?? ''} ανήκει στο τμήμα: $callerDept',
+          );
+        }
+      }
+    }
+
+    // ── Τμήμα ──
+    if (source != SelectorField.department &&
+        state.departmentText.trim().isNotEmpty &&
+        state.selectedDepartmentId != null &&
+        truthDeptId != null &&
+        state.selectedDepartmentId != truthDeptId) {
+      _addConflict(
+        out,
+        SelectorField.department,
+        ConflictSeverity.mismatch,
+        '$label ανήκει στο τμήμα: ${truthDeptName ?? '—'}',
+      );
+    }
+
+    // ── Τηλέφωνο ──
+    if (source != SelectorField.phone) {
+      final phone = _phoneDigitsOfState();
+      if (phone.isNotEmpty) {
+        if (user != null) {
+          if (!PhoneListParser.containsPhone(user.phoneJoined, phone)) {
+            final expected = user.phones.isEmpty
+                ? '—'
+                : user.phones.join(', ');
+            _addConflict(
+              out,
+              SelectorField.phone,
+              ConflictSeverity.mismatch,
+              '$label συνδέεται με τηλέφωνο: $expected',
+            );
+          }
+        } else if (truthDeptId != null) {
+          final phoneDeptIds = _departmentIdsForPhone(phone, lookup);
+          if (phoneDeptIds.isNotEmpty && !phoneDeptIds.contains(truthDeptId)) {
+            final phoneDeptName =
+                lookup.departmentIdToName[phoneDeptIds.first] ?? '—';
+            _addConflict(
+              out,
+              SelectorField.phone,
+              ConflictSeverity.mismatch,
+              'Το τηλέφωνο $phone συνδέεται με το τμήμα: $phoneDeptName',
+            );
+          }
+        }
+      }
+    }
+
+    // ── Εξοπλισμός ──
+    if (source != SelectorField.equipment &&
+        state.equipmentText.trim().isNotEmpty) {
+      final eqId = state.selectedEquipment?.id;
+      if (user != null && eqId != null) {
+        final owned = lookup
+            .findEquipmentsForUser(user.id!)
+            .any((e) => e.id == eqId);
+        if (!owned) {
+          _addConflict(
+            out,
+            SelectorField.equipment,
+            ConflictSeverity.mismatch,
+            '$label δεν συνδέεται με τον εξοπλισμό: ${_equipmentCodeOfState()}',
+          );
+        }
+      } else if (truthDeptId != null && eqId != null) {
+        final eqDeptIds = lookup
+            .findUsersForEquipment(eqId)
+            .map((u) => u.departmentId)
+            .whereType<int>()
+            .toSet();
+        if (eqDeptIds.isNotEmpty && !eqDeptIds.contains(truthDeptId)) {
+          final eqDeptName = lookup.departmentIdToName[eqDeptIds.first] ?? '—';
+          _addConflict(
+            out,
+            SelectorField.equipment,
+            ConflictSeverity.mismatch,
+            'Ο εξοπλισμός ${_equipmentCodeOfState()} ανήκει στο τμήμα: $eqDeptName',
+          );
+        }
+      }
+    }
+  }
+
+  Set<int> _departmentIdsForPhone(String phone, LookupService lookup) {
+    final users = lookup.findUsersByPhone(phone);
+    final ids = users.map((u) => u.departmentId).whereType<int>().toSet();
+    if (ids.isNotEmpty) return ids;
+    final orphan = lookup.getDepartmentByPhone(phone);
+    return orphan?.id != null ? {orphan!.id!} : <int>{};
+  }
+
+  /// Κίτρινο: ο καλούντας είναι ελεύθερο κείμενο εκτός βάσης ενώ τουλάχιστον ένα
+  /// άλλο πεδίο δείχνει σε γνωστή οντότητα (v2 §Α.6).
+  void _collectCallerUnknownWarning(
+    SelectorField source,
+    LookupService lookup,
+    Map<SelectorField, List<FieldConflict>> out,
+  ) {
+    if (source == SelectorField.caller) return;
+    final text = state.callerDisplayText.trim();
+    if (text.isEmpty || text == 'Άγνωστος') return;
+    if (state.selectedCaller?.id != null) return;
+
+    final phone = _phoneDigitsOfState();
+    final phoneKnown =
+        phone.length >= 3 && lookup.findUsersByPhone(phone).isNotEmpty;
+    final equipmentKnown = state.selectedEquipment?.id != null;
+    if (phoneKnown || equipmentKnown) {
+      _addConflict(
+        out,
+        SelectorField.caller,
+        ConflictSeverity.unknown,
+        'Ο καλούντας δεν βρέθηκε στη βάση',
+      );
+    }
+  }
+
+  /// Επανυπολογισμός όλων των συγκρούσεων εξ αρχής μετά από ολοκληρωμένο lookup
+  /// (v2 §Α.4 stateless). [source] = το πεδίο που μόλις τροποποιήθηκε· δεν παίρνει
+  /// ποτέ δείκτη (§Α.5).
+  void _recomputeConflicts(SelectorField source, LookupService? lookup) {
+    if (lookup == null) {
+      if (state.conflicts.isNotEmpty) {
+        state = state.copyWith(clearConflicts: true);
+      }
+      return;
+    }
+    final out = <SelectorField, List<FieldConflict>>{};
+    final truth = _resolveSourceTruth(source, lookup);
+    if (truth != null) {
+      _collectMismatches(source, truth, lookup, out);
+    }
+    _collectCallerUnknownWarning(source, lookup, out);
+    out.remove(source); // §Α.5: η πηγή ποτέ δεν εμφανίζει δικό της δείκτη.
+    out.removeWhere((_, v) => v.isEmpty);
+    state = state.copyWith(
+      conflicts: out,
+      clearConflicts: out.isEmpty,
+    );
   }
 
   /// Lookup τηλεφώνου: 0 → no match hint, 1 → setCaller + equipment lookup, >1 → dropdown candidates.
@@ -1071,6 +1340,7 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
           isEquipmentAmbiguous: false,
           callerNoMatch: false,
           equipmentNoMatch: false,
+          clearConflicts: true,
         );
       } finally {
         _isFillingFromLookup = false;
@@ -1101,8 +1371,7 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
       if (users.isEmpty) {
         final orphanDept = lookup.getDepartmentByPhone(digits);
         final canAutofillDepartment =
-            (!state.departmentIsManual ||
-                state.departmentText.trim().isEmpty) &&
+            state.departmentText.trim().isEmpty &&
             state.selectedDepartmentId == null;
         state = state.copyWith(
           clearPhoneCandidates: true,
@@ -1120,9 +1389,6 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
           selectedDepartmentId: (orphanDept != null && canAutofillDepartment)
               ? orphanDept.id
               : state.selectedDepartmentId,
-          departmentIsManual: (orphanDept != null && canAutofillDepartment)
-              ? false
-              : state.departmentIsManual,
         );
         return;
       }
@@ -1130,8 +1396,7 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
         final user = users.first;
         final name = user.name ?? user.fullNameWithDepartment;
         final shouldAutofillDepartment = _canAutofillDepartmentForUser(user);
-        final canAutofillCaller =
-            !state.callerIsManual || state.callerDisplayText.trim().isEmpty;
+        final canAutofillCaller = state.callerDisplayText.trim().isEmpty;
         if (canAutofillCaller) {
           state = state.copyWith(
             clearPhoneCandidates: true,
@@ -1146,10 +1411,6 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
             selectedDepartmentId: shouldAutofillDepartment
                 ? user.departmentId
                 : state.selectedDepartmentId,
-            departmentIsManual: shouldAutofillDepartment
-                ? false
-                : state.departmentIsManual,
-            callerIsManual: false,
           );
         } else if (shouldAutofillDepartment) {
           state = state.copyWith(
@@ -1159,7 +1420,6 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
             callerNoMatch: false,
             departmentText: _departmentTextForUser(user),
             selectedDepartmentId: user.departmentId,
-            departmentIsManual: false,
           );
         } else {
           state = state.copyWith(
@@ -1187,6 +1447,7 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
         equipmentNoMatch: false,
       );
     } finally {
+      _recomputeConflicts(SelectorField.phone, lookup);
       _isFillingFromLookup = false;
     }
   }
@@ -1217,15 +1478,13 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
       return;
     }
     if (list.length == 1) {
-      final canAutofillEquipment =
-          !state.equipmentIsManual || state.equipmentText.trim().isEmpty;
+      final canAutofillEquipment = state.equipmentText.trim().isEmpty;
       if (canAutofillEquipment) {
         state = state.copyWith(
           selectedEquipment: list.first,
           equipmentCandidates: [],
           isEquipmentAmbiguous: false,
           equipmentNoMatch: false,
-          equipmentIsManual: false,
         );
       } else {
         state = state.copyWith(
@@ -1292,10 +1551,6 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
         selectedDepartmentId: shouldAutofillDepartment
             ? user.departmentId
             : state.selectedDepartmentId,
-        departmentIsManual: shouldAutofillDepartment
-            ? false
-            : state.departmentIsManual,
-        callerIsManual: false,
       );
       final snap =
           phoneFieldDigits?.replaceAll(RegExp(r'[^0-9]'), '').trim() ?? '';
@@ -1310,12 +1565,15 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
       }
       _autofillPhoneFromUserProfile(user);
 
-      final canAutofillEquipment =
-          !state.equipmentIsManual || state.equipmentText.trim().isEmpty;
+      final canAutofillEquipment = state.equipmentText.trim().isEmpty;
       if (user.id != null && canAutofillEquipment) {
         _performEquipmentLookupForUser(user.id!);
       }
     } finally {
+      _recomputeConflicts(
+        SelectorField.caller,
+        ref.read(lookupServiceProvider).value?.service,
+      );
       _isFillingFromLookup = false;
     }
   }
@@ -1331,9 +1589,11 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
       if (lookup == null) return;
       final list = lookup.findEquipmentsByCode(query);
       if (list.isEmpty) {
+        // Το ίδιο το πεδίο εξοπλισμού δεν ταιριάζει σε καμία οντότητα: η τυχόν
+        // προηγούμενη επιλογή είναι άκυρη και καθαρίζεται.
         state = state.copyWith(
           equipmentCandidates: [],
-          clearSelectedEquipment: !_hasManualEquipmentSelection,
+          clearSelectedEquipment: true,
           isEquipmentAmbiguous: false,
           equipmentNoMatch: true,
         );
@@ -1342,7 +1602,7 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
       if (list.length > 1) {
         state = state.copyWith(
           equipmentCandidates: list,
-          clearSelectedEquipment: !_hasManualEquipmentSelection,
+          clearSelectedEquipment: true,
           isEquipmentAmbiguous: true,
           equipmentNoMatch: false,
         );
@@ -1350,7 +1610,6 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
       }
 
       final equipment = list.first;
-      final preserveManual = state.equipmentIsManual;
       final resolvedText = equipment.code?.trim().isNotEmpty == true
           ? equipment.code!.trim()
           : query;
@@ -1361,20 +1620,34 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
         equipmentCandidates: [],
         isEquipmentAmbiguous: false,
         equipmentNoMatch: false,
-        equipmentIsManual: preserveManual,
       );
 
       final owners = equipment.id != null
           ? lookup.findUsersForEquipment(equipment.id!)
           : <UserModel>[];
+
+      // v2 §Δ.3: πολλαπλοί κάτοχοι → λίστα candidates, ποτέ αυτόματη επιλογή
+      // του πρώτου. Δεν αλλάζουμε καλούντα/τμήμα/τηλέφωνο αυτόματα όταν η
+      // αντιστοίχιση κατόχου είναι ασαφής.
+      if (owners.length > 1) {
+        if (state.callerDisplayText.trim().isEmpty) {
+          state = state.copyWith(
+            callerCandidates: owners,
+            clearSelectedCaller: true,
+            callerNoMatch: false,
+            isPhoneAmbiguous: false,
+          );
+        }
+        return;
+      }
+
       final user = owners.isNotEmpty ? owners.first : null;
       if (user == null) return;
 
       final shouldAutofillDepartment = _canAutofillDepartmentForUser(user);
-      final canAutofillCaller =
-          !state.callerIsManual || state.callerDisplayText.trim().isEmpty;
-      final hasLockedDepartmentSelection =
-          state.departmentIsManual && state.selectedDepartmentId != null;
+      final canAutofillCaller = state.callerDisplayText.trim().isEmpty;
+      // v2 §Β: «κλειδωμένο» τμήμα = συμπληρωμένο πεδίο (isFilled) με ταυτοποιημένο id.
+      final hasLockedDepartmentSelection = state.selectedDepartmentId != null;
       final isCallerOutsideSelectedDepartment =
           hasLockedDepartmentSelection &&
           user.departmentId != state.selectedDepartmentId;
@@ -1391,16 +1664,11 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
           selectedDepartmentId: shouldAutofillDepartment
               ? user.departmentId
               : state.selectedDepartmentId,
-          departmentIsManual: shouldAutofillDepartment
-              ? false
-              : state.departmentIsManual,
-          callerIsManual: false,
         );
       } else if (shouldAutofillDepartment) {
         state = state.copyWith(
           departmentText: _departmentTextForUser(user),
           selectedDepartmentId: user.departmentId,
-          departmentIsManual: false,
         );
       }
 
@@ -1408,6 +1676,10 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
         _autofillPhoneFromUserProfile(user);
       }
     } finally {
+      _recomputeConflicts(
+        SelectorField.equipment,
+        ref.read(lookupServiceProvider).value?.service,
+      );
       _isFillingFromLookup = false;
     }
   }
@@ -1428,8 +1700,6 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
       callerDisplayText: value?.name ?? value?.fullNameWithDepartment ?? '',
       departmentText: deptText,
       selectedDepartmentId: value?.departmentId,
-      departmentIsManual: false,
-      callerIsManual: false,
     );
     if (value != null) {
       final pool = value.phoneJoined.trim();
@@ -1448,7 +1718,9 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
   }
 
   void updateCallerDisplayText(String text) {
-    state = state.copyWith(callerDisplayText: text);
+    // v2 §Ζ.3: κατά την πληκτρολόγηση δεν εμφανίζονται ✱· καθαρίζονται μέχρι
+    // το επόμενο commit/lookup.
+    state = state.copyWith(callerDisplayText: text, clearConflicts: true);
   }
 
   void clearCaller() {
@@ -1460,8 +1732,7 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
       callerDisplayText: '',
       departmentText: '',
       clearSelectedDepartmentId: true,
-      departmentIsManual: false,
-      callerIsManual: false,
+      clearConflicts: true,
     );
   }
 
@@ -1491,7 +1762,7 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
       departmentText: text,
       selectedDepartmentId: matchedDepartmentId,
       clearSelectedDepartmentId: clearDeptId,
-      departmentIsManual: true,
+      clearConflicts: true,
     );
   }
 
@@ -1518,10 +1789,10 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
       if (!keepCallerUntouched) {
         callerCandidates = lookup.getUsersByDepartment(departmentId);
       }
-      if (!hasEquipmentInput && !state.equipmentIsManual) {
+      if (!hasEquipmentInput) {
         equipmentCandidates = lookup.getEquipmentByDepartment(departmentId);
       }
-      if (!hasPhoneInput && !state.phoneIsManual) {
+      if (!hasPhoneInput) {
         phoneCandidates = lookup.getPhonesByDepartment(departmentId);
       }
     }
@@ -1529,10 +1800,8 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
     state = state.copyWith(
       departmentText: dept.name,
       selectedDepartmentId: departmentId,
-      departmentIsManual: true,
       clearSelectedCaller: !keepCallerUntouched,
       callerDisplayText: keepCallerUntouched ? state.callerDisplayText : '',
-      callerIsManual: keepCallerUntouched ? state.callerIsManual : false,
       callerCandidates: keepCallerUntouched
           ? state.callerCandidates
           : (callerCandidates ?? state.callerCandidates),
@@ -1543,6 +1812,7 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
       isPhoneAmbiguous: false,
       isEquipmentAmbiguous: false,
     );
+    _recomputeConflicts(SelectorField.department, lookup);
   }
 
   void setEquipment(EquipmentModel? value) {
@@ -1568,8 +1838,8 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
       isEquipmentAmbiguous: false,
       equipmentNoMatch: false,
       equipmentText: '',
-      equipmentIsManual: false,
       hasAnyContent: _computeHasAnyContent(equipmentText: ''),
+      clearConflicts: true,
     );
   }
 
@@ -1676,9 +1946,6 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
               ? s.callerDisplayText
               : name,
           departmentText: s.departmentText,
-          phoneIsManual: false,
-          callerIsManual: false,
-          equipmentIsManual: false,
         );
         ref.invalidate(lookupServiceProvider);
         final refreshedLookup = (await ref.read(
@@ -1844,9 +2111,6 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
                 notes: s.selectedEquipment?.notes,
               )
             : s.selectedEquipment,
-        phoneIsManual: false,
-        callerIsManual: false,
-        equipmentIsManual: false,
       );
 
       ref.invalidate(lookupServiceProvider);
