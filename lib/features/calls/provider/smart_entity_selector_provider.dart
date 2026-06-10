@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/database/database_helper.dart';
@@ -1655,6 +1655,7 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
         final lookupNow = ref.read(lookupServiceProvider).value?.service;
         final departmentIdNow =
             s.selectedDepartmentId ??
+            departmentId ??
             (s.departmentText.trim().isNotEmpty && lookupNow != null
                 ? lookupNow.findDepartmentByName(s.departmentText)?.id
                 : null);
@@ -1667,6 +1668,7 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
             phones: parsedPhones,
             departmentId: departmentIdNow,
           ),
+          selectedDepartmentId: departmentIdNow,
           selectedEquipment: equipTrim.isNotEmpty
               ? EquipmentModel(code: equipTrim)
               : s.selectedEquipment,
@@ -1690,6 +1692,7 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
             : matchedNewCallerEquipment.first.id;
         final resolvedDepartmentId =
             departmentIdNow ??
+            departmentId ??
             (s.departmentText.trim().isNotEmpty
                 ? refreshedLookup.findDepartmentByName(s.departmentText)?.id
                 : null);
