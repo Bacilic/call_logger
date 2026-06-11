@@ -15,6 +15,7 @@ import '../../calls/provider/lookup_provider.dart';
 import '../../database/providers/database_browser_stats_provider.dart';
 import '../../database/providers/database_maintenance_provider.dart';
 import '../../database/widgets/database_rename_failure_dialog.dart';
+import '../../tasks/providers/task_service_provider.dart';
 import '../../tasks/providers/tasks_provider.dart';
 
 bool _sameResolvedPath(String a, String b) {
@@ -131,7 +132,9 @@ class CreateNewDatabaseFlow {
     ref.invalidate(databaseBrowserStatsProvider);
     ref.invalidate(lookupServiceProvider);
     ref.invalidate(tasksProvider);
+    ref.invalidate(totalTasksCountProvider);
     ref.invalidate(orphanCallsProvider);
+    ref.read(taskServiceProvider).resetSnoozeHistoryColumnCache();
   }
 
   /// [onDatabaseReopened]: π.χ. `MainShell` / `AppShortcuts` → [runDatabaseInitChecks].

@@ -19,6 +19,7 @@ import '../../../floor_map/services/floor_color_assignment_service.dart';
 import '../../models/department_model.dart';
 import '../../providers/department_directory_provider.dart';
 import '../../screens/widgets/department_color_palette.dart';
+import '../building_map_label_layout.dart';
 import '../providers/building_map_providers.dart';
 import '../widgets/building_map_commit_color_dialog.dart';
 import '../widgets/building_map_floor_edit_preview.dart';
@@ -339,6 +340,7 @@ class BuildingMapController {
       'map_label_offset_y': draft.labelOffsetY,
       'map_anchor_offset_x': draft.anchorOffsetX,
       'map_anchor_offset_y': draft.anchorOffsetY,
+      'map_label_font_scale': mapLabelFontScaleForDatabase(draft.labelFontScale),
     };
     if (colorHex != null) {
       updates['color'] = colorHex;
@@ -366,6 +368,17 @@ class BuildingMapController {
         const SnackBar(content: Text('Αποθηκεύτηκε η θέση στο χάρτη.')),
       );
     }
+  }
+
+  /// Αύξηση/μείωση κλίμακας ετικέτας στο τρέχον draft (αποθήκευση με ✓).
+  void adjustDraftLabelFontScale({required bool increase}) {
+    final draft = _ref.read(buildingMapDraftShapeProvider);
+    if (draft == null) return;
+    final next = stepMapLabelFontScale(draft.labelFontScale, increase: increase);
+    if ((next - draft.labelFontScale).abs() < 0.001) return;
+    _ref
+        .read(buildingMapDraftShapeProvider.notifier)
+        .setDraft(draft.copyWith(labelFontScale: next));
   }
 
   /// Αποθηκεύει το προσαρμοσμένο όνομα εμφάνισης στο χάρτη (`map_custom_name`).
@@ -521,6 +534,9 @@ class BuildingMapController {
             labelOffsetY: selected.mapLabelOffsetY,
             anchorOffsetX: selected.mapAnchorOffsetX,
             anchorOffsetY: selected.mapAnchorOffsetY,
+            labelFontScale: effectiveMapLabelFontScale(
+              selected.mapLabelFontScale,
+            ),
           ),
         );
   }

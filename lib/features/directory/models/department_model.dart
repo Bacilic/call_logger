@@ -31,6 +31,7 @@ class DepartmentModel {
     this.mapAnchorOffsetX,
     this.mapAnchorOffsetY,
     this.mapCustomName,
+    this.mapLabelFontScale,
     this.groupName,
     this.floorId,
     this.directPhones,
@@ -59,6 +60,8 @@ class DepartmentModel {
   final double? mapAnchorOffsetX;
   final double? mapAnchorOffsetY;
   final String? mapCustomName;
+  /// Πολλαπλασιαστής μεγέθους ετικέτας στον χάρτη (`NULL` = 1.0).
+  final double? mapLabelFontScale;
   /// “Ορφανά” τηλέφωνα που ανήκουν απευθείας στο τμήμα (δεν είναι των χρηστών).
   /// Δεν αποθηκεύονται μέσα στον πίνακα `departments`· φορτώνονται από `department_phones`.
   final List<String>? directPhones;
@@ -131,6 +134,7 @@ class DepartmentModel {
       mapAnchorOffsetX: (map['map_anchor_offset_x'] as num?)?.toDouble(),
       mapAnchorOffsetY: (map['map_anchor_offset_y'] as num?)?.toDouble(),
       mapCustomName: map['map_custom_name'] as String?,
+      mapLabelFontScale: (map['map_label_font_scale'] as num?)?.toDouble(),
       groupName: map['group_name'] as String?,
       floorId: (map['floor_id'] as num?)?.toInt(),
       directPhones: parseDirectPhones(map['direct_phones']),
@@ -160,6 +164,7 @@ class DepartmentModel {
     Object? mapAnchorOffsetX = _unset,
     Object? mapAnchorOffsetY = _unset,
     Object? mapCustomName = _unset,
+    Object? mapLabelFontScale = _unset,
     Object? groupName = _unset,
     Object? floorId = _unset,
     Object? directPhones = _unset,
@@ -201,6 +206,9 @@ class DepartmentModel {
       mapCustomName: identical(mapCustomName, _unset)
           ? this.mapCustomName
           : mapCustomName as String?,
+      mapLabelFontScale: identical(mapLabelFontScale, _unset)
+          ? this.mapLabelFontScale
+          : (mapLabelFontScale as num?)?.toDouble(),
       directPhones: identical(directPhones, _unset)
           ? this.directPhones
           : directPhones as List<String>?,
@@ -227,6 +235,7 @@ class DepartmentModel {
       if (mapAnchorOffsetX != null) 'map_anchor_offset_x': mapAnchorOffsetX,
       if (mapAnchorOffsetY != null) 'map_anchor_offset_y': mapAnchorOffsetY,
       if (mapCustomName != null) 'map_custom_name': mapCustomName,
+      if (mapLabelFontScale != null) 'map_label_font_scale': mapLabelFontScale,
       if (groupName != null) 'group_name': groupName,
       if (floorId != null) 'floor_id': floorId,
       'is_deleted': isDeleted ? 1 : 0,

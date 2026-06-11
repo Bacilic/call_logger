@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../calls/models/equipment_model.dart';
+import '../../../calls/provider/lookup_provider.dart';
 import '../../../calls/provider/remote_paths_provider.dart';
 import '../../../../core/database/database_helper.dart';
 import '../../../../core/database/directory_repository.dart';
@@ -47,6 +48,7 @@ class _EquipmentTabState extends ConsumerState<EquipmentTab> {
 
   @override
   Widget build(BuildContext context) {
+    ref.watch(lookupServiceProvider);
     ref.listen<int?>(equipmentFocusIntentProvider, (previous, next) {
       if (next == null) return;
       WidgetsBinding.instance.addPostFrameCallback((_) {

@@ -15,6 +15,7 @@ import '../../calls/provider/lookup_provider.dart';
 import '../models/non_user_phone_entry.dart';
 import '../models/user_catalog_mode.dart';
 import '../models/user_directory_column.dart';
+import 'directory_cache_refresh.dart';
 
 const _catalogUsersVisibleColumnsKey = 'catalog_users_visible_columns';
 
@@ -495,6 +496,21 @@ class DirectoryNotifier extends Notifier<DirectoryState> {
     return PhoneListParser.joinPhones(list);
   }
 
+  /// Έλεγχος διπλότυπου με φρέσκο lookup cache (πριν από αποθήκευση).
+  Future<bool> hasDuplicateUserFresh(
+    UserModel u, {
+    int? excludeId,
+    int? mirrorEquipmentFromUserId,
+  }) async {
+    await _refreshLookupCache();
+    if (!ref.mounted) return false;
+    return hasDuplicateUser(
+      u,
+      excludeId: excludeId,
+      mirrorEquipmentFromUserId: mirrorEquipmentFromUserId,
+    );
+  }
+
   bool hasDuplicateUser(
     UserModel u, {
     int? excludeId,
@@ -557,6 +573,7 @@ class DirectoryNotifier extends Notifier<DirectoryState> {
     await DirectoryRepository(db).insertUserFromMap(u.toMap());
     await _refreshLookupCache();
     await loadUsers();
+    await refreshDirectoryCaches(ref, equipment: true);
   }
 
   /// Εισαγωγή χρήστη και αντιγραφή συνδέσεων `user_equipment` από [sourceUserId].
@@ -571,6 +588,7 @@ class DirectoryNotifier extends Notifier<DirectoryState> {
     await dir.copyUserEquipmentLinks(sourceUserId, newId);
     await _refreshLookupCache();
     await loadUsers();
+    await refreshDirectoryCaches(ref, equipment: true);
     return newId;
   }
 
@@ -580,6 +598,7 @@ class DirectoryNotifier extends Notifier<DirectoryState> {
     await DirectoryRepository(dbUp).updateUser(u.id!, u.toMap());
     await _refreshLookupCache();
     await loadUsers();
+    await refreshDirectoryCaches(ref, equipment: true);
   }
 
   Future<void> deleteSelected() async {
@@ -596,6 +615,7 @@ class DirectoryNotifier extends Notifier<DirectoryState> {
       lastDeleted: toDelete,
     );
     await loadUsers();
+    await refreshDirectoryCaches(ref, equipment: true);
   }
 
   Future<void> undoLastDelete() async {
@@ -608,6 +628,7 @@ class DirectoryNotifier extends Notifier<DirectoryState> {
     if (!ref.mounted) return;
     state = state.copyWith(lastDeleted: null);
     await loadUsers();
+    await refreshDirectoryCaches(ref, equipment: true);
   }
 
   /// Μαζική ενημέρωση: εφαρμόζει [changes] σε όλα τα [ids]. Αποθηκεύει παλιές τιμές για undo.
@@ -616,7 +637,9 @@ class DirectoryNotifier extends Notifier<DirectoryState> {
     Map<String, dynamic> changes, {
     UserPhoneConflictBatchResult? phoneConflictResolutions,
   }) async {
-    if (ids.isEmpty || changes.isEmpty) return;
+    final hasPhoneResolutions = phoneConflictResolutions != null &&
+        !phoneConflictResolutions.isEmpty;
+    if (ids.isEmpty || (changes.isEmpty && !hasPhoneResolutions)) return;
     final toUpdate = state.allUsers
         .where((u) => u.id != null && ids.contains(u.id))
         .toList();
@@ -641,26 +664,38 @@ class DirectoryNotifier extends Notifier<DirectoryState> {
     if (!ref.mounted) return;
     state = state.copyWith(lastBulkUpdatedUsers: toUpdate);
     await loadUsers();
+    await refreshDirectoryCaches(
+      ref,
+      equipment: true,
+      departments: hasPhoneResolutions,
+    );
   }
 
   /// Αναίρεση τελευταίας μαζικής επεξεργασίας (επαναφορά παλιών τιμών).
   Future<void> undoLastBulkUpdate() async {
     final list = state.lastBulkUpdatedUsers;
     if (list == null || list.isEmpty) return;
-    for (final u in list) {
-      if (u.id != null) {
-        final dbUndo = await DatabaseHelper.instance.database;
-        await DirectoryRepository(dbUndo).updateUser(
-          u.id!,
-          u.toMap(),
-          recordAudit: false,
-        );
-        if (!ref.mounted) return;
+    final dbUndo = await DatabaseHelper.instance.database;
+    final dir = DirectoryRepository(dbUndo);
+    try {
+      for (final u in list) {
+        if (u.id != null) {
+          await dir.updateUser(
+            u.id!,
+            u.toMap(),
+            recordAudit: false,
+          );
+          if (!ref.mounted) break;
+        }
+      }
+    } finally {
+      state = state.copyWith(lastBulkUpdatedUsers: null);
+      await _refreshLookupCache();
+      if (ref.mounted) {
+        await loadUsers();
+        await refreshDirectoryCaches(ref, equipment: true);
       }
     }
-    state = state.copyWith(lastBulkUpdatedUsers: null);
-    await _refreshLookupCache();
-    await loadUsers();
   }
 }
 

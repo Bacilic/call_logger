@@ -1,12 +1,13 @@
 import 'dart:async';
+import 'dart:developer' as developer;
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import '../../../core/database/calls_repository.dart';
 import '../../../core/errors/call_save_exception.dart';
 import '../../../core/errors/task_save_exception.dart';
 import '../../../core/database/database_helper.dart';
-import '../../../core/services/lookup_service.dart';
 import '../../tasks/models/task_filter.dart';
 import '../../tasks/providers/task_service_provider.dart';
 import '../../tasks/providers/tasks_provider.dart';
@@ -14,7 +15,7 @@ import '../models/call_model.dart';
 import '../models/equipment_model.dart';
 import '../models/user_model.dart';
 import 'call_header_provider.dart';
-import 'calls_dashboard_providers.dart';
+import 'call_mutation_refresh.dart';
 
 /// Κατάσταση φόρμας εισαγωγής κλήσης.
 class CallEntryState {
@@ -29,6 +30,7 @@ class CallEntryState {
     this.durationSeconds = 0,
     this.isCallTimerRunning = false,
     this.retainPlayPauseAfterManualZero = false,
+    this.isSubmitting = false,
   });
 
   final String internalDigits;
@@ -46,6 +48,9 @@ class CallEntryState {
   /// Όταν η διάρκεια μηδενίστηκε από τον διάλογο προσαρμογής, κρατά ορατό το Play/Pause στο `CallStatusBar`.
   final bool retainPlayPauseAfterManualZero;
 
+  /// Αποτρέπει διπλή υποβολή κατά async αποθήκευση.
+  final bool isSubmitting;
+
   CallEntryState copyWith({
     String? internalDigits,
     UserModel? selectedUser,
@@ -57,6 +62,7 @@ class CallEntryState {
     int? durationSeconds,
     bool? isCallTimerRunning,
     bool? retainPlayPauseAfterManualZero,
+    bool? isSubmitting,
   }) {
     return CallEntryState(
       internalDigits: internalDigits ?? this.internalDigits,
@@ -70,6 +76,7 @@ class CallEntryState {
       isCallTimerRunning: isCallTimerRunning ?? this.isCallTimerRunning,
       retainPlayPauseAfterManualZero:
           retainPlayPauseAfterManualZero ?? this.retainPlayPauseAfterManualZero,
+      isSubmitting: isSubmitting ?? this.isSubmitting,
     );
   }
 }
@@ -143,21 +150,6 @@ class CallEntryNotifier extends Notifier<CallEntryState> {
     );
   }
 
-  void setInternalDigits(String value, LookupService? lookupService) {
-    final digits = value.trim();
-    LookupResult? result;
-    if (digits.length >= 3 && lookupService != null) {
-      result = lookupService.search(digits);
-    }
-    state = state.copyWith(
-      internalDigits: value,
-      selectedUser: result?.user,
-      selectedEquipment: result?.equipment.isNotEmpty == true
-          ? result!.equipment.first
-          : null,
-    );
-  }
-
   void setNotes(String value) {
     final notesEmpty = value.trim().isEmpty;
     state = state.copyWith(
@@ -169,18 +161,17 @@ class CallEntryNotifier extends Notifier<CallEntryState> {
   }
 
   void setCategory(String value, {int? categoryId}) {
-    state = CallEntryState(
-      internalDigits: state.internalDigits,
-      selectedUser: state.selectedUser,
-      selectedEquipment: state.selectedEquipment,
-      notes: state.notes,
-      category: value,
-      categoryId: categoryId,
-      isPending: state.isPending,
-      durationSeconds: state.durationSeconds,
-      isCallTimerRunning: state.isCallTimerRunning,
-      retainPlayPauseAfterManualZero: state.retainPlayPauseAfterManualZero,
-    );
+    state = state.copyWith(category: value, categoryId: categoryId);
+  }
+
+  String? _equipmentCodeForRecentInvalidation({
+    required dynamic header,
+  }) {
+    final fromModel = header.selectedEquipment?.code?.trim();
+    if (fromModel != null && fromModel.isNotEmpty) return fromModel;
+    final fromText = header.equipmentText?.trim();
+    if (fromText != null && fromText.isNotEmpty) return fromText;
+    return null;
   }
 
   /// Υποβολή κλήσης: διαβάζει caller/equipment από call_header_provider.
@@ -198,6 +189,7 @@ class CallEntryNotifier extends Notifier<CallEntryState> {
   /// Χρησιμοποιεί το [Notifier.ref] (όχι εξωτερικό [WidgetRef]) ώστε το async να ολοκληρώνεται
   /// αξιόπιστα και στα widget tests όπου το callback του κουμπιού δεν «δένεται» πάντα με await.
   Future<bool> submitCall() async {
+    if (state.isSubmitting) return false;
     if (!ref.read(callHeaderProvider).canSubmitCall) {
       return false;
     }
@@ -209,54 +201,42 @@ class CallEntryNotifier extends Notifier<CallEntryState> {
     final callerText = callerId != null
         ? null
         : (callerTextRaw.isEmpty ? 'Άγνωστος' : callerTextRaw);
+    final createsPendingTask = state.isPending && notes.isNotEmpty;
 
+    state = state.copyWith(isSubmitting: true);
     try {
       stopTimer();
-      final dbCalls = await DatabaseHelper.instance.database;
-      final callId = await CallsRepository(dbCalls).insertCall(
-        CallModel(
-          date: null,
-          time: null,
-          callerId: callerId ?? user?.id,
-          equipmentId: header.selectedEquipment?.id,
-          callerText: callerText,
-          phoneText: () {
-            final phone = header.selectedPhone;
-            if (phone == null) return null;
-            final trimmedPhone = phone.trim();
-            return trimmedPhone.isEmpty ? null : trimmedPhone;
-          }(),
-          departmentText: header.departmentText.trim().isEmpty
-              ? null
-              : header.departmentText.trim(),
-          equipmentText: header.equipmentText.trim().isEmpty
-              ? null
-              : header.equipmentText.trim(),
-          issue: notes.isEmpty ? null : notes,
-          category: state.category.isEmpty ? null : state.category,
-          categoryId: state.categoryId,
-          status: (state.isPending && notes.isNotEmpty) ? 'pending' : 'completed',
-          duration: state.durationSeconds,
-        ),
+      final callModel = CallModel(
+        date: null,
+        time: null,
+        callerId: callerId ?? user?.id,
+        equipmentId: header.selectedEquipment?.id,
+        callerText: callerText,
+        phoneText: () {
+          final phone = header.selectedPhone;
+          if (phone == null) return null;
+          final trimmedPhone = phone.trim();
+          return trimmedPhone.isEmpty ? null : trimmedPhone;
+        }(),
+        departmentText: header.departmentText.trim().isEmpty
+            ? null
+            : header.departmentText.trim(),
+        equipmentText: header.equipmentText.trim().isEmpty
+            ? null
+            : header.equipmentText.trim(),
+        issue: notes.isEmpty ? null : notes,
+        category: state.category.isEmpty ? null : state.category,
+        categoryId: state.categoryId,
+        status: createsPendingTask ? 'pending' : 'completed',
+        duration: state.durationSeconds,
       );
-      final userId = user?.id;
-      if (userId != null) {
-        ref.invalidate(recentCallsProvider(userId));
-      }
-      final equipmentCode = header.selectedEquipment?.code?.trim();
-      if (equipmentCode != null && equipmentCode.isNotEmpty) {
-        ref.invalidate(recentCallsByEquipmentProvider(equipmentCode));
-      }
-      ref.invalidate(globalRecentCallsProvider);
-      final selectedPhone = header.selectedPhone;
-      if (selectedPhone != null) {
-        ref.read(callHeaderProvider.notifier).markPhoneUsed(selectedPhone);
-      }
-      if (state.isPending && notes.isNotEmpty) {
+
+      final taskService = ref.read(taskServiceProvider);
+      Map<String, dynamic>? pendingTaskRow;
+      if (createsPendingTask) {
         final callerName =
             user?.name ??
             (callerTextRaw.trim().isEmpty ? null : callerTextRaw.trim());
-        final callDate = DateTime.now();
         final taskFields = callsFormPendingTaskFields(
           ref,
           internalDigits: state.internalDigits,
@@ -264,27 +244,48 @@ class CallEntryNotifier extends Notifier<CallEntryState> {
         final categoryName = state.category.trim().isEmpty
             ? null
             : state.category.trim();
-        await ref
-            .read(taskServiceProvider)
-            .createFromCall(
-              callId: callId,
-              callerName: callerName,
-              description: state.notes,
-              callDate: callDate,
-              callerId: taskFields.callerId,
-              equipmentId: taskFields.equipmentId,
-              departmentId: taskFields.departmentId,
-              phoneId: taskFields.phoneId,
-              phoneText: taskFields.phoneText,
-              userText: taskFields.userText,
-              equipmentText: taskFields.equipmentText,
-              departmentText: taskFields.departmentText,
-              categoryName: categoryName,
-            );
+        pendingTaskRow = await taskService.buildCreateFromCallRow(
+          callId: null,
+          callerName: callerName,
+          description: state.notes,
+          callDate: DateTime.now(),
+          callerId: taskFields.callerId,
+          equipmentId: taskFields.equipmentId,
+          departmentId: taskFields.departmentId,
+          phoneId: taskFields.phoneId,
+          phoneText: taskFields.phoneText,
+          userText: taskFields.userText,
+          equipmentText: taskFields.equipmentText,
+          departmentText: taskFields.departmentText,
+          categoryName: categoryName,
+        );
+      }
+
+      final db = await DatabaseHelper.instance.database;
+      final callsRepo = CallsRepository(db);
+      await db.transaction((DatabaseExecutor txn) async {
+        final id = await callsRepo.insertCallOnExecutor(txn, callModel);
+        if (pendingTaskRow != null) {
+          pendingTaskRow['call_id'] = id;
+          await taskService.createFromCallOnExecutor(txn, row: pendingTaskRow);
+        }
+      });
+
+      final userId = user?.id;
+      refreshAfterCallMutation(
+        ref,
+        callerId: userId,
+        equipmentCode: _equipmentCodeForRecentInvalidation(header: header),
+      );
+      if (createsPendingTask) {
         ref
             .read(taskFilterProvider.notifier)
             .update((_) => TaskFilter.initial());
-        ref.invalidate(tasksProvider);
+        invalidateTaskListProviders(ref);
+      }
+      final selectedPhone = header.selectedPhone;
+      if (selectedPhone != null) {
+        ref.read(callHeaderProvider.notifier).markPhoneUsed(selectedPhone);
       }
       reset();
       ref.read(callHeaderProvider.notifier).clearAll();
@@ -293,8 +294,18 @@ class CallEntryNotifier extends Notifier<CallEntryState> {
       rethrow;
     } on TaskSaveException {
       rethrow;
-    } catch (_, _) {
+    } catch (e, st) {
+      developer.log(
+        'submitCall failed',
+        name: 'CallEntryNotifier',
+        error: e,
+        stackTrace: st,
+      );
       return false;
+    } finally {
+      if (ref.mounted) {
+        state = state.copyWith(isSubmitting: false);
+      }
     }
   }
 
@@ -304,6 +315,7 @@ class CallEntryNotifier extends Notifier<CallEntryState> {
   /// - Δεν επιτρέπεται καμία δημιουργία/συσχέτιση οντοτήτων καταλόγου από αυτή τη ροή.
   /// - Η ροή του `+` είναι η μοναδική πύλη για directory mutations.
   Future<bool> submitOnlyPending() async {
+    if (state.isSubmitting) return false;
     final header = ref.read(callHeaderProvider);
     final user = header.selectedCaller;
     final callerTextRaw = header.callerDisplayText.trim();
@@ -311,6 +323,8 @@ class CallEntryNotifier extends Notifier<CallEntryState> {
         user?.name ??
         (callerTextRaw.trim().isEmpty ? null : callerTextRaw.trim());
     final callDate = DateTime.now();
+
+    state = state.copyWith(isSubmitting: true);
     try {
       stopTimer();
       final taskFields = callsFormPendingTaskFields(
@@ -338,14 +352,24 @@ class CallEntryNotifier extends Notifier<CallEntryState> {
             categoryName: categoryName,
           );
       ref.read(taskFilterProvider.notifier).update((_) => TaskFilter.initial());
-      ref.invalidate(tasksProvider);
+      invalidateTaskListProviders(ref);
       reset();
       ref.read(callHeaderProvider.notifier).clearAll();
       return true;
     } on TaskSaveException {
       rethrow;
-    } catch (_, _) {
+    } catch (e, st) {
+      developer.log(
+        'submitOnlyPending failed',
+        name: 'CallEntryNotifier',
+        error: e,
+        stackTrace: st,
+      );
       return false;
+    } finally {
+      if (ref.mounted) {
+        state = state.copyWith(isSubmitting: false);
+      }
     }
   }
 

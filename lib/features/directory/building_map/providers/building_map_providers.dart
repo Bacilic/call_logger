@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/database/database_helper.dart';
 import '../../../../core/database/directory_repository.dart';
 import '../../../../core/models/building_map_floor.dart';
+import '../building_map_label_layout.dart';
 
 /// Undo ενός βήματος: στιγμιότυπο γεωμετρίας τμήματος πριν την τελευταία εγγραφή.
 @immutable
@@ -170,6 +171,7 @@ class DraftDepartmentShape {
     this.labelOffsetY,
     this.anchorOffsetX,
     this.anchorOffsetY,
+    this.labelFontScale = kBuildingMapLabelFontScaleDefault,
   });
 
   final double x;
@@ -181,6 +183,8 @@ class DraftDepartmentShape {
   final double? labelOffsetY;
   final double? anchorOffsetX;
   final double? anchorOffsetY;
+  /// Ενεργή κλίμακα μεγέθους ετικέτας (1.0 = προεπιλογή).
+  final double labelFontScale;
 
   Rect get rect => Rect.fromLTWH(x, y, width, height);
 
@@ -196,6 +200,7 @@ class DraftDepartmentShape {
     double? labelOffsetY,
     double? anchorOffsetX,
     double? anchorOffsetY,
+    double? labelFontScale,
   }) {
     return DraftDepartmentShape(
       x: x ?? this.x,
@@ -207,6 +212,7 @@ class DraftDepartmentShape {
       labelOffsetY: labelOffsetY ?? this.labelOffsetY,
       anchorOffsetX: anchorOffsetX ?? this.anchorOffsetX,
       anchorOffsetY: anchorOffsetY ?? this.anchorOffsetY,
+      labelFontScale: labelFontScale ?? this.labelFontScale,
     );
   }
 

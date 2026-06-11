@@ -7,6 +7,7 @@ import '../../../core/services/settings_service.dart';
 import '../../audit/providers/audit_providers.dart';
 import '../../calls/provider/lookup_provider.dart';
 import '../../settings/widgets/create_new_database_dialog.dart';
+import '../../tasks/providers/task_service_provider.dart';
 import '../../tasks/providers/tasks_provider.dart';
 import '../providers/database_browser_stats_provider.dart';
 import '../providers/database_maintenance_provider.dart';
@@ -267,7 +268,9 @@ class _DatabaseMaintenancePanelState
     ref.invalidate(databaseBrowserStatsProvider);
     ref.invalidate(lookupServiceProvider);
     ref.invalidate(tasksProvider);
+    ref.invalidate(totalTasksCountProvider);
     ref.invalidate(orphanCallsProvider);
+    ref.read(taskServiceProvider).resetSnoozeHistoryColumnCache();
   }
 
   Future<void> _onVacuum(BuildContext context) async {

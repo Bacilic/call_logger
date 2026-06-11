@@ -78,6 +78,8 @@ class CategoryDirectoryNotifier extends Notifier<CategoryDirectoryState> {
   void _invalidateCategoryLists() {
     ref.invalidate(historyCategoriesProvider);
     ref.invalidate(historyCategoryEntriesProvider);
+    ref.invalidate(historyCallsProvider);
+    ref.invalidate(historyCategoryDateCallCountProvider);
   }
 
   _CategoryColumnLayout? _parseColumnLayoutFromJson(String raw) {

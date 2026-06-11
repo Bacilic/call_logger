@@ -8,6 +8,43 @@ import 'providers/building_map_providers.dart';
 /// Μέγιστες γραμμές ετικέτας χάρτη (συμπ. ρητές αλλαγές γραμμής με Shift+Enter).
 const int kBuildingMapLabelMaxLines = 4;
 
+/// Προεπιλεγμένη κλίμακα μεγέθους ετικέτας (`departments.map_label_font_scale`).
+const double kBuildingMapLabelFontScaleDefault = 1.0;
+const double kBuildingMapLabelFontScaleStep = 0.1;
+const double kBuildingMapLabelFontScaleMin = 0.5;
+const double kBuildingMapLabelFontScaleMax = 2.0;
+
+double effectiveMapLabelFontScale(double? stored) =>
+    stored ?? kBuildingMapLabelFontScaleDefault;
+
+double computeBuildingMapLabelFontSize(Size canvasSize, double fontScale) {
+  final base = math.max(10.0, canvasSize.shortestSide * 0.018);
+  final scaled = base * fontScale;
+  return math.max(8.0, scaled);
+}
+
+/// Τιμή για αποθήκευση· `NULL` όταν ισούται με την προεπιλογή.
+double? mapLabelFontScaleForDatabase(double scale) {
+  final clamped = scale.clamp(
+    kBuildingMapLabelFontScaleMin,
+    kBuildingMapLabelFontScaleMax,
+  );
+  if ((clamped - kBuildingMapLabelFontScaleDefault).abs() < 0.001) {
+    return null;
+  }
+  return clamped;
+}
+
+double stepMapLabelFontScale(double current, {required bool increase}) {
+  final next = increase
+      ? current + kBuildingMapLabelFontScaleStep
+      : current - kBuildingMapLabelFontScaleStep;
+  return next.clamp(
+    kBuildingMapLabelFontScaleMin,
+    kBuildingMapLabelFontScaleMax,
+  );
+}
+
 /// Γεωμετρία ετικέτας χάρτη (ίδια λογική με [BuildingMapSheetPainter]).
 class MapLabelLayout {
   MapLabelLayout({
@@ -105,7 +142,13 @@ MapLabelLayout? computeMapLabelLayout({
     sheetRotationRadians,
   );
 
-  final fontSize = math.max(10.0, canvasSize.shortestSide * 0.018);
+  final effectiveFontScale = isEditingSelectedDraft
+      ? draft.labelFontScale
+      : effectiveMapLabelFontScale(dep.mapLabelFontScale);
+  final fontSize = computeBuildingMapLabelFontSize(
+    canvasSize,
+    effectiveFontScale,
+  );
   final labelText = labelTextOverride ?? dep.displayName;
   final tp = TextPainter(
     text: TextSpan(

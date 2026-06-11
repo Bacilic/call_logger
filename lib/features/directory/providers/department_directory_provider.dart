@@ -11,6 +11,7 @@ import '../../../core/utils/department_floor_sync.dart';
 import '../../calls/provider/lookup_provider.dart';
 import '../models/department_directory_column.dart';
 import '../models/department_model.dart';
+import 'directory_cache_refresh.dart';
 
 const _catalogDepartmentsVisibleColumnsKey =
     'catalog_departments_visible_columns';
@@ -464,7 +465,9 @@ class DepartmentDirectoryNotifier extends Notifier<DepartmentDirectoryState> {
     DepartmentModel d, {
     bool clearBuildingMapPlacement = false,
   }) async {
-    if (d.id == null) return;
+    if (d.id == null) {
+      throw ArgumentError.value(d.id, 'd.id', 'updateDepartment requires id');
+    }
     final dbUpd = await DatabaseHelper.instance.database;
     final dirUpd = DirectoryRepository(dbUpd);
     final nameTaken = await dirUpd.departmentNameExistsExcluding(d.name, d.id!);
@@ -491,6 +494,7 @@ class DepartmentDirectoryNotifier extends Notifier<DepartmentDirectoryState> {
     await dirUpd.updateDepartment(d.id!, map);
     await _refreshLookupCache();
     await loadDepartments();
+    await refreshDirectoryCaches(ref, users: true, equipment: true);
   }
 
   Future<void> updateDepartmentSharedAssets(
@@ -583,6 +587,7 @@ class DepartmentDirectoryNotifier extends Notifier<DepartmentDirectoryState> {
 
     await _refreshLookupCache();
     await loadDepartments();
+    await refreshDirectoryCaches(ref, users: true, equipment: true);
   }
 
   Future<void> deleteSelected() async {
@@ -653,18 +658,22 @@ class DepartmentDirectoryNotifier extends Notifier<DepartmentDirectoryState> {
   Future<void> undoLastBulkUpdate() async {
     final list = state.lastBulkUpdatedDepartments;
     if (list == null || list.isEmpty) return;
-    for (final d in list) {
-      if (d.id != null) {
-        final dbUndoBulk = await DatabaseHelper.instance.database;
-        await DirectoryRepository(
-          dbUndoBulk,
-        ).updateDepartment(d.id!, d.toMap());
-        if (!ref.mounted) return;
+    final dbUndoBulk = await DatabaseHelper.instance.database;
+    final dir = DirectoryRepository(dbUndoBulk);
+    try {
+      for (final d in list) {
+        if (d.id != null) {
+          await dir.updateDepartment(d.id!, d.toMap());
+          if (!ref.mounted) break;
+        }
+      }
+    } finally {
+      _patch(lastBulkUpdatedDepartments: null);
+      await _refreshLookupCache();
+      if (ref.mounted) {
+        await loadDepartments();
       }
     }
-    _patch(lastBulkUpdatedDepartments: null);
-    await _refreshLookupCache();
-    await loadDepartments();
   }
 }
 

@@ -230,12 +230,9 @@ class CallsRepository {
     return oldRow;
   }
 
-  /// Εισάγει νέα κλήση. date/time τίθενται από τώρα αν δεν δοθούν.
-  ///
-  /// Κλήση + audit στο ίδιο transaction· σε αποτυχία rollback ([CallSaveException]).
-  Future<int> insertCall(CallModel call) async {
+  Map<String, dynamic> _callInsertMap(CallModel call) {
     final now = DateTime.now();
-    final map = <String, dynamic>{
+    return <String, dynamic>{
       'date': call.date ?? DateFormat('yyyy-MM-dd').format(now),
       'time': call.time ?? DateFormat('HH:mm').format(now),
       'caller_id': call.callerId,
@@ -255,33 +252,48 @@ class CallsRepository {
       'lansweeper_last_sync_at': call.lansweeperLastSyncAt,
       'is_deleted': 0,
     };
+  }
+
+  /// Εισαγωγή κλήσης σε υπάρχον [DatabaseExecutor] (π.χ. κοινό transaction με task).
+  Future<int> insertCallOnExecutor(
+    DatabaseExecutor executor,
+    CallModel call,
+  ) async {
+    final map = _callInsertMap(call);
+    map['search_index'] = await _buildCallSearchIndex(executor, map);
+    final id = await executor.insert('calls', map);
+    final user = await AuditService.performingUser(executor);
+    final nv = <String, dynamic>{};
+    for (final k in _kCallAuditFields) {
+      if (map.containsKey(k) && map[k] != null) {
+        nv[k] = map[k];
+      }
+    }
+    final entityName = (await buildCallAuditDisplayLine(
+      id,
+      executor: executor,
+    )).trim();
+    await AuditService.log(
+      executor,
+      action: 'ΔΗΜΙΟΥΡΓΙΑ ΚΛΗΣΗΣ',
+      userPerforming: user,
+      details: 'calls id=$id',
+      entityType: AuditEntityTypes.call,
+      entityId: id,
+      entityName: entityName.isEmpty ? null : entityName,
+      newValues: nv.isEmpty ? null : nv,
+    );
+    return id;
+  }
+
+  /// Εισάγει νέα κλήση. date/time τίθενται από τώρα αν δεν δοθούν.
+  ///
+  /// Κλήση + audit στο ίδιο transaction· σε αποτυχία rollback ([CallSaveException]).
+  Future<int> insertCall(CallModel call) async {
     try {
-      return await db.transaction((txn) async {
-        map['search_index'] = await _buildCallSearchIndex(txn, map);
-        final id = await txn.insert('calls', map);
-        final user = await AuditService.performingUser(txn);
-        final nv = <String, dynamic>{};
-        for (final k in _kCallAuditFields) {
-          if (map.containsKey(k) && map[k] != null) {
-            nv[k] = map[k];
-          }
-        }
-        final entityName = (await buildCallAuditDisplayLine(
-          id,
-          executor: txn,
-        )).trim();
-        await AuditService.log(
-          txn,
-          action: 'ΔΗΜΙΟΥΡΓΙΑ ΚΛΗΣΗΣ',
-          userPerforming: user,
-          details: 'calls id=$id',
-          entityType: AuditEntityTypes.call,
-          entityId: id,
-          entityName: entityName.isEmpty ? null : entityName,
-          newValues: nv.isEmpty ? null : nv,
-        );
-        return id;
-      });
+      return await db.transaction(
+        (txn) => insertCallOnExecutor(txn, call),
+      );
     } catch (e) {
       if (e is CallSaveException) rethrow;
       throw CallSaveException('Η κλήση δεν αποθηκεύτηκε. Δοκιμάστε ξανά.');

@@ -121,6 +121,11 @@ class TaskService {
     return has;
   }
 
+  /// Καθαρισμός cache στηλής `snooze_history_json` μετά από migration ή αλλαγή βάσης.
+  void resetSnoozeHistoryColumnCache() {
+    _hasSnoozeHistoryColumnCache = null;
+  }
+
   /// Γενικές ρυθμίσεις εκκρεμοτήτων από `app_settings` (JSON).
   ///
   /// - Διαβάζει πρώτα από [TaskSettingsConfig.appSettingsKey].
@@ -273,8 +278,7 @@ class TaskService {
     return '$snippet | $right';
   }
 
-  /// Δημιουργεί εκκρεμότητα από κλήση ή αυτόνομα ([callId] null = χωρίς εγγραφή κλήσης).
-  Future<int> createFromCall({
+  Future<Map<String, dynamic>> buildCreateFromCallRow({
     int? callId,
     required String? callerName,
     required String description,
@@ -291,6 +295,7 @@ class TaskService {
     DateTime? titleTimestamp,
     int? priority,
     String? origin,
+    TaskSettingsConfig? config,
   }) async {
     final titleAt = titleTimestamp ?? callDate;
     final title = smartTaskTitleFromCallContext(
@@ -299,18 +304,17 @@ class TaskService {
       titleAt: titleAt,
       callerFallback: callerName,
     );
-    final config = await getTaskSettingsConfig();
+    final settings = config ?? await getTaskSettingsConfig();
     final dueDate = calculateNextDueDate(
-      config,
+      settings,
       option: TaskSettingsConfig.kOptionDefault,
       fromDate: DateTime.now(),
     );
-    final db = await _db;
     final nowIso = DateTime.now().toIso8601String();
     final resolvedOrigin = Task.normalizeOrigin(
       origin ?? (callId != null ? Task.originCallLinked : Task.originQuickAdd),
     );
-    final row = <String, dynamic>{
+    return <String, dynamic>{
       'call_id': callId,
       'created_at': nowIso,
       'updated_at': nowIso,
@@ -340,12 +344,60 @@ class TaskService {
         ].join(' '),
       ),
     };
+  }
+
+  /// Εισαγωγή εκκρεμότητας σε υπάρχον [DatabaseExecutor] (π.χ. κοινό transaction με κλήση).
+  Future<int> createFromCallOnExecutor(
+    DatabaseExecutor executor, {
+    required Map<String, dynamic> row,
+  }) async {
+    final id = await executor.insert('tasks', row);
+    await _auditTaskCreate(executor, id, row);
+    return id;
+  }
+
+  /// Δημιουργεί εκκρεμότητα από κλήση ή αυτόνομα ([callId] null = χωρίς εγγραφή κλήσης).
+  Future<int> createFromCall({
+    int? callId,
+    required String? callerName,
+    required String description,
+    required DateTime callDate,
+    int? callerId,
+    int? equipmentId,
+    int? departmentId,
+    int? phoneId,
+    String? phoneText,
+    String? userText,
+    String? equipmentText,
+    String? departmentText,
+    String? categoryName,
+    DateTime? titleTimestamp,
+    int? priority,
+    String? origin,
+  }) async {
     try {
-      return await db.transaction((txn) async {
-        final id = await txn.insert('tasks', row);
-        await _auditTaskCreate(txn, id, row);
-        return id;
-      });
+      final row = await buildCreateFromCallRow(
+        callId: callId,
+        callerName: callerName,
+        description: description,
+        callDate: callDate,
+        callerId: callerId,
+        equipmentId: equipmentId,
+        departmentId: departmentId,
+        phoneId: phoneId,
+        phoneText: phoneText,
+        userText: userText,
+        equipmentText: equipmentText,
+        departmentText: departmentText,
+        categoryName: categoryName,
+        titleTimestamp: titleTimestamp,
+        priority: priority,
+        origin: origin,
+      );
+      final db = await _db;
+      return await db.transaction(
+        (txn) => createFromCallOnExecutor(txn, row: row),
+      );
     } catch (e) {
       if (e is TaskSaveException) rethrow;
       throw TaskSaveException(

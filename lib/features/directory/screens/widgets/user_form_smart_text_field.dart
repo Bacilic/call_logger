@@ -128,9 +128,12 @@ class _UserFormSmartTextFieldState
     return found;
   }
 
-  void _selectWordAt(Offset globalPosition) {
+  void _selectWordAt(Offset listenerLocalPosition) {
     final ctx = _fieldKey.currentContext;
     if (ctx == null) return;
+    final listenerBox = context.findRenderObject() as RenderBox?;
+    if (listenerBox == null) return;
+    final globalPosition = listenerBox.localToGlobal(listenerLocalPosition);
     final editable = _findRenderEditable(ctx.findRenderObject());
     if (editable == null) return;
     final local = editable.globalToLocal(globalPosition);

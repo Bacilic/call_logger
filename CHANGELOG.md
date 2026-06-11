@@ -6,10 +6,25 @@
 
 **Σημείωση:** Μπορείτε να εμπλουτίσετε τις περιγραφές με λεπτομέρειες από μνήμη· το JSON `[assets/changelog.json](assets/changelog.json)` τροφοδοτεί την εφαρμογή και πρέπει να παραμένει συγχρονισμένο με αυτό το αρχείο.
 
+## [Unreleased]
+
+### Διορθώθηκε
+
+- **Εκκρεμότητες · Riverpod invalidations:** πλήρης ακύρωση `totalTasksCountProvider` και `orphanCallsProvider` σε όλες τις ροές δημιουργίας task (submit κλήσης, quick add, `addTask`)· σειριοποίηση `refresh()` και guard διπλής υποβολής.
+- **Κλήσεις · ατομικότητα submit:** εισαγωγή κλήσης και εκκρεμότητας σε κοινό transaction· ακύρωση ιστορικού/dashboard μετά από καταχώρηση.
+- **Κατάλογος · δια-καρτέλα συγχρονισμός:** κοινό helper `refreshDirectoryCaches`· ανανέωση lookup πριν το `load()` εξοπλισμού· `ref.watch(lookupServiceProvider)` στην καρτέλα εξοπλισμού.
+- **Κατηγορίες · ιστορικό:** ακύρωση `historyCallsProvider` / `historyCategoryDateCallCountProvider` σε rename, διαγραφή και undo κατηγορίας.
+- **Αναίρεση μαζικών αλλαγών:** καθαρισμός undo state σε `finally` (χρήστες, τμήματα, εξοπλισμός) ακόμα και σε μερική αποτυχία.
+- **Φόρμα κλήσης · race conditions:** generation token στο `performPhoneLookup`· `ref.mounted` guards σε `loadFromTask` / `loadFromCall`.
+- **Αναλυτικά εκκρεμοτήτων:** ακύρωση `taskAnalyticsProvider` και ανανέωση creation span μετά από add/delete/close.
+- **Έλεγχος διπλότυπου χρήστη:** φρέσκο lookup cache πριν τον έλεγχο (`hasDuplicateUserFresh`).
+- **Ροές βάσης:** ακύρωση `totalTasksCountProvider` και καθαρισμός cache `snooze_history_column` μετά από νέα βάση / συντήρηση / debug integrity.
+
 ## [0.12.0]
 
 ### Προστέθηκε
 
+- **Χάρτης κτιρίου (`building_map_edit_toolbar.dart`, v30):** κουμπιά αύξησης/μείωσης μεγέθους ονόματος τμήματος δίπλα στη «Σχεδίαση»· ενεργά μόνο σε κατάσταση επεξεργασίας επιλεγμένου τμήματος· κλίμακα ανά τμήμα (`map_label_font_scale`) στο draft· αποθήκευση με ✓ / ακύρωση με ✗.
 - **Νέα κλήση · δείκτες σύγκρουσης ✱ (`smart_entity_selector_provider.dart`, `smart_entity_selector_conflict_badge.dart`):** σύστημα οπτικής ειδοποίησης (v2 §Α) στα πεδία τηλέφωνο/καλούντας/τμήμα/εξοπλισμός — κόκκινο badge όταν η βάση γνωρίζει διαφορετική τιμή, κίτρινο όταν ο καλούντας δεν βρίσκεται στη βάση· tooltip με όλους τους λόγους· το πεδίο-πηγή δεν παίρνει ποτέ δείκτη· επανυπολογισμός εξ αρχής σε κάθε ολοκληρωμένο lookup (commit).
 - **Λεξικό · ορθογραφία (`spell_check_service.dart`, `dictionary_service.dart`):** παραλλαγές επιφάνειας ανά κανονικοποιημένο κλειδί — αποδοχή πολλών τονισμένων μορφών (π.χ. αίτημα / αίτημά) στον έλεγχο και στον πυρήνα TXT.
 - **Λεξικό · βάση v29 (`dictionary_repository.dart`, `database_v1_schema.dart`):** στήλη `display_word` στο `user_dictionary`· αποθήκευση ορθογραφημένης μορφής, προβολή στη Διαχείριση και merge στο `full_dictionary` (όχι μόνο κανονικοποιημένο κλειδί).

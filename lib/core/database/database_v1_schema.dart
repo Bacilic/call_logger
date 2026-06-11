@@ -30,7 +30,8 @@ import '../utils/search_text_normalizer.dart';
 /// v27: lansweeper sync state columns σε `calls` + πίνακας `call_external_links`.
 /// v28: phones.is_deleted (soft delete κοινόχρηστων τηλεφώνων).
 /// v29: user_dictionary.display_word (ορθογραφημένη μορφή, ξεχωριστά από κλειδί).
-const int databaseSchemaVersionV1 = 29;
+/// v30: departments.map_label_font_scale (κλίμακα μεγέθους ετικέτας χάρτη ανά τμήμα).
+const int databaseSchemaVersionV1 = 30;
 
 /// Προεπιλογές διαδρομών (ίδιες με SettingsService — χωρίς εξάρτηση Flutter εδώ).
 const String kDefaultVncExecutablePath =
@@ -165,6 +166,7 @@ Future<void> applyDatabaseV1Schema(Database db) async {
         map_anchor_offset_x REAL,
         map_anchor_offset_y REAL,
         map_custom_name TEXT,
+        map_label_font_scale REAL,
         group_name TEXT,
         floor_id INTEGER,
         is_deleted INTEGER DEFAULT 0
@@ -1082,6 +1084,17 @@ Future<void> migrateDatabaseToV27(Database db) async {
   await db.execute(
     'CREATE INDEX IF NOT EXISTS idx_call_external_links_created_at ON call_external_links(created_at)',
   );
+}
+
+/// v30: κλίμακα μεγέθους ετικέτας χάρτη ανά τμήμα (`NULL` = προεπιλογή 1.0).
+Future<void> migrateDatabaseToV30(Database db) async {
+  final info = await db.rawQuery('PRAGMA table_info(departments)');
+  final names = info.map((r) => r['name'] as String).toSet();
+  if (!names.contains('map_label_font_scale')) {
+    await db.execute(
+      'ALTER TABLE departments ADD COLUMN map_label_font_scale REAL',
+    );
+  }
 }
 
 /// v29: `user_dictionary.display_word` + backfill από `word`.

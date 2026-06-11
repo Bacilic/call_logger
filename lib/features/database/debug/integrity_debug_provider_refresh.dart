@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../features/calls/provider/lookup_provider.dart';
+import '../../../features/tasks/providers/task_service_provider.dart';
 import '../../../features/tasks/providers/tasks_provider.dart';
 import '../providers/database_browser_stats_provider.dart';
 import '../providers/database_integrity_provider.dart';
@@ -17,6 +18,8 @@ Future<void> refreshProvidersAfterIntegrityDebugSwitch(WidgetRef ref) async {
   ref.invalidate(databaseBrowserStatsProvider);
   ref.invalidate(lookupServiceProvider);
   ref.invalidate(tasksProvider);
+  ref.invalidate(totalTasksCountProvider);
   ref.invalidate(orphanCallsProvider);
+  ref.read(taskServiceProvider).resetSnoozeHistoryColumnCache();
   await ref.read(databaseIntegrityProvider.notifier).runCheck(force: true);
 }

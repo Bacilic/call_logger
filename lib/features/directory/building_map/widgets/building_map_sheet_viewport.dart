@@ -325,6 +325,13 @@ class _BuildingMapSheetViewportState
     final draftAnchorOffsetY = draft.anchorOffsetY ?? 0.0;
     if (!approxEq(anchorOffsetY, draftAnchorOffsetY)) return true;
 
+    if (!approxEq(
+      effectiveMapLabelFontScale(dept.mapLabelFontScale),
+      draft.labelFontScale,
+    )) {
+      return true;
+    }
+
     String? edited;
     if (_mapDisplayNameEditing && _mapDisplayNameDeptId == dept.id && _mapDisplayNameCtrl != null) {
       edited = _mapDisplayNameCtrl!.text;

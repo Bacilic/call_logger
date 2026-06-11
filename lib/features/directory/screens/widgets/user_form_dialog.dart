@@ -500,7 +500,7 @@ class _UserFormDialogState extends ConsumerState<UserFormDialog> {
     if (_isEdit && cloneAsNewEmployee) {
       final sourceId = widget.initialUser?.id;
       if (sourceId == null) return;
-      if (widget.notifier.hasDuplicateUser(
+      if (await widget.notifier.hasDuplicateUserFresh(
         user,
         mirrorEquipmentFromUserId: sourceId,
       )) {
@@ -526,7 +526,10 @@ class _UserFormDialogState extends ConsumerState<UserFormDialog> {
 
     if (_isEdit) {
       if (user.id != null &&
-          widget.notifier.hasDuplicateUser(user, excludeId: user.id)) {
+          await widget.notifier.hasDuplicateUserFresh(
+            user,
+            excludeId: user.id,
+          )) {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(_duplicateSnack);
         return;
@@ -551,7 +554,7 @@ class _UserFormDialogState extends ConsumerState<UserFormDialog> {
       ).showSnackBar(const SnackBar(content: Text('Αποθηκεύτηκε')));
       return;
     }
-    if (widget.notifier.hasDuplicateUser(user)) {
+    if (await widget.notifier.hasDuplicateUserFresh(user)) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(_duplicateSnack);
       return;

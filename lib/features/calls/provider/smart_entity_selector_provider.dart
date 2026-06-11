@@ -1,4 +1,6 @@
-﻿import 'package:flutter/material.dart';
+﻿import 'dart:developer' as developer;
+
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/database/database_helper.dart';
@@ -13,7 +15,7 @@ import '../models/user_model.dart';
 import '../../directory/models/department_model.dart';
 import '../../tasks/models/task.dart';
 import '../../tasks/providers/task_service_provider.dart';
-import '../../tasks/providers/tasks_provider.dart';
+import 'call_mutation_refresh.dart';
 import '../models/call_model.dart';
 import '../utils/remote_target_rules.dart';
 import '../utils/vnc_remote_target.dart';
@@ -464,6 +466,7 @@ class OrphanQuickAddResult {
 /// Focus και controllers ανήκουν στο widget· το notifier δουλεύει μόνο με state.
 class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
   bool _isFillingFromLookup = false;
+  int _phoneLookupGeneration = 0;
   static const int _criticalTaskPriority = 2;
 
   /// v2 §Β: ένα συμπληρωμένο πεδίο εξοπλισμού (isFilled) προστατεύεται και δεν
@@ -648,7 +651,14 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
               ? null
               : state.departmentText.trim(),
         );
-      } catch (_) {}
+      } catch (e, st) {
+        developer.log(
+          'orphan quick add task sync failed',
+          name: 'SmartEntitySelectorNotifier',
+          error: e,
+          stackTrace: st,
+        );
+      }
     }
 
     return OrphanQuickAddResult(
@@ -734,9 +744,9 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
 
   /// Φόρτωση πεδίων επιλογέα από υπάρχον `Task` (λειτουργία επεξεργασίας).
   Future<void> loadFromTask(Task task) async {
-    final lookupService = (await ref.read(
-      lookupServiceProvider.future,
-    )).service;
+    final lookupBundle = await ref.read(lookupServiceProvider.future);
+    if (!ref.mounted) return;
+    final lookupService = lookupBundle.service;
     final user = task.callerId != null
         ? lookupService.findUserById(task.callerId)
         : null;
@@ -784,9 +794,9 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
   /// fallback σε snapshot κειμένων της κλήσης όταν οι συσχετισμένες οντότητες
   /// λείπουν ή είναι soft-deleted.
   Future<void> loadFromCall(CallModel call) async {
-    final lookupService = (await ref.read(
-      lookupServiceProvider.future,
-    )).service;
+    final lookupBundle = await ref.read(lookupServiceProvider.future);
+    if (!ref.mounted) return;
+    final lookupService = lookupBundle.service;
 
     final user = call.callerId != null
         ? lookupService.findUserById(call.callerId)
@@ -1327,6 +1337,7 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
     if (_isFillingFromLookup) return;
 
     final digits = phone.replaceAll(RegExp(r'[^0-9]'), '');
+    final generation = ++_phoneLookupGeneration;
     if (digits.length < 3) {
       _isFillingFromLookup = true;
       try {
@@ -1350,7 +1361,9 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
 
     final snap = ref.read(lookupServiceProvider);
     if (snap.hasValue) {
-      _applyPhoneLookupWithCatalog(digits, snap.requireValue.service);
+      if (generation == _phoneLookupGeneration) {
+        _applyPhoneLookupWithCatalog(digits, snap.requireValue.service);
+      }
       return;
     }
     // Κατά το πρώτο frame το AsyncValue μπορεί να είναι ακόμα loading.
@@ -1358,9 +1371,20 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
         .read(lookupServiceProvider.future)
         .then((bundle) {
           if (!ref.mounted) return;
+          if (generation != _phoneLookupGeneration) return;
+          final currentDigits = (state.selectedPhone ?? '')
+              .replaceAll(RegExp(r'[^0-9]'), '');
+          if (currentDigits != digits) return;
           _applyPhoneLookupWithCatalog(digits, bundle.service);
         })
-        .catchError((_) {});
+        .catchError((Object e, StackTrace st) {
+          developer.log(
+            'performPhoneLookup async load failed',
+            name: 'SmartEntitySelectorNotifier',
+            error: e,
+            stackTrace: st,
+          );
+        });
   }
 
   void _applyPhoneLookupWithCatalog(String digits, LookupService lookup) {
@@ -2197,7 +2221,7 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
         departmentText: departmentText,
       );
       if (merged) touched = true;
-      if (touched) ref.invalidate(tasksProvider);
+      if (touched) invalidateTaskListProviders(ref);
       return;
     }
 
@@ -2215,7 +2239,7 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
       departmentText: departmentText,
     );
     _associationQuickTaskId = id;
-    ref.invalidate(tasksProvider);
+    invalidateTaskListProviders(ref);
   }
 
   Future<int> _insertQuickAddTask({

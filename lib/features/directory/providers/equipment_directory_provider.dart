@@ -11,6 +11,7 @@ import '../../calls/models/equipment_model.dart';
 import '../../calls/provider/lookup_provider.dart';
 import '../../calls/models/user_model.dart';
 import '../models/equipment_column.dart';
+import 'directory_cache_refresh.dart';
 
 const _catalogEquipmentLayoutKey = 'catalog_equipment_columns';
 
@@ -201,12 +202,30 @@ class EquipmentDirectoryState {
 /// Notifier: φόρτωση, φιλτράρισμα, ταξινόμηση, επιλογή, CRUD, undo, μαζική επεξεργασία.
 class EquipmentDirectoryNotifier extends Notifier<EquipmentDirectoryState> {
   bool _equipmentLayoutHydrated = false;
+  bool _loadInFlight = false;
 
   /// Σε unit tests (override → false) αποφεύγουμε `setSetting` χωρίς binding/βάση.
   bool get shouldPersistEquipmentLayout => true;
 
-  void _invalidateLookupCache() {
+  Future<void> _refreshLookupCache() async {
     ref.invalidate(lookupServiceProvider);
+    await ref.read(lookupServiceProvider.future);
+    if (!ref.mounted) return;
+  }
+
+  Future<void> _afterEquipmentMutation({
+    bool refreshUsers = true,
+    bool refreshDepartments = false,
+  }) async {
+    await _refreshLookupCache();
+    if (!ref.mounted) return;
+    await load();
+    if (!ref.mounted) return;
+    await refreshDirectoryCaches(
+      ref,
+      users: refreshUsers,
+      departments: refreshDepartments,
+    );
   }
 
   String _cellTextForColumn(EquipmentRow row, EquipmentColumn col) {
@@ -339,11 +358,7 @@ class EquipmentDirectoryNotifier extends Notifier<EquipmentDirectoryState> {
 
   @override
   EquipmentDirectoryState build() {
-    final initial = EquipmentDirectoryState();
-    Future.microtask(() async {
-      await load();
-    });
-    return initial;
+    return EquipmentDirectoryState();
   }
 
   Future<List<Map<String, dynamic>>> getEquipmentRows() async {
@@ -357,20 +372,35 @@ class EquipmentDirectoryNotifier extends Notifier<EquipmentDirectoryState> {
   }
 
   Future<void> load() async {
+    if (_loadInFlight) return;
+    _loadInFlight = true;
+    try {
+      await _loadInternal();
+    } finally {
+      _loadInFlight = false;
+    }
+  }
+
+  Future<void> _loadInternal() async {
     _EquipmentColumnLayout? parsed;
     if (!_equipmentLayoutHydrated) {
       parsed = await _readEquipmentLayoutFromSettings();
       _equipmentLayoutHydrated = true;
     }
+    if (!ref.mounted) return;
 
     final showBuildingInLocation =
         await SettingsService().getEquipmentLocationShowBuilding();
+    if (!ref.mounted) return;
 
     final equipmentRows = await getEquipmentRows();
+    if (!ref.mounted) return;
     final userRows = await getUserRows();
+    if (!ref.mounted) return;
     final dbLoad = await DatabaseHelper.instance.database;
     final linkRows =
         await DirectoryRepository(dbLoad).getAllUserEquipmentLinks();
+    if (!ref.mounted) return;
 
     final usersMap = <int, UserModel>{};
     for (final map in userRows) {
@@ -613,12 +643,13 @@ class EquipmentDirectoryNotifier extends Notifier<EquipmentDirectoryState> {
     if (ownerUserId != null) {
       await dirEq.replaceEquipmentUsers(id, [ownerUserId]);
     }
-    await load();
-    _invalidateLookupCache();
+    await _afterEquipmentMutation();
   }
 
   Future<void> updateEquipment(EquipmentModel eq, {int? ownerUserId}) async {
-    if (eq.id == null) return;
+    if (eq.id == null) {
+      throw ArgumentError.value(eq.id, 'eq.id', 'updateEquipment requires id');
+    }
     final dbUp = await DatabaseHelper.instance.database;
     final dirUp = DirectoryRepository(dbUp);
     await dirUp.updateEquipment(eq.id!, eq.toMap());
@@ -626,8 +657,7 @@ class EquipmentDirectoryNotifier extends Notifier<EquipmentDirectoryState> {
       eq.id!,
       ownerUserId != null ? [ownerUserId] : [],
     );
-    await load();
-    _invalidateLookupCache();
+    await _afterEquipmentMutation();
   }
 
   Future<void> deleteSelected() async {
@@ -640,77 +670,76 @@ class EquipmentDirectoryNotifier extends Notifier<EquipmentDirectoryState> {
 
     final dbDel = await DatabaseHelper.instance.database;
     final dirDel = DirectoryRepository(dbDel);
-    for (final row in toProcess) {
-      final eq = row.$1;
-      final owner = row.$2;
-      final eid = eq.id;
-      if (eid == null) continue;
+    await dbDel.transaction((_) async {
+      for (final row in toProcess) {
+        final eq = row.$1;
+        final owner = row.$2;
+        final eid = eq.id;
+        if (eid == null) continue;
 
-      final linkCount =
-          await dirDel.countUsersLinkedToEquipment(eid);
-      String? deptName;
-      if (owner == null && eq.departmentId != null) {
-        deptName = await dirDel
-            .getDepartmentNameById(eq.departmentId!);
-      }
+        final linkCount = await dirDel.countUsersLinkedToEquipment(eid);
+        String? deptName;
+        if (owner == null && eq.departmentId != null) {
+          deptName = await dirDel.getDepartmentNameById(eq.departmentId!);
+        }
 
-      if (linkCount > 1 && owner?.id == null) {
-        await dirDel.deleteEquipments([eid]);
-        final code = _equipmentCodeForMessage(eq);
-        undo.add(
-          EquipmentDeleteUndoEntry(
-            equipmentId: eid,
-            equipmentSnapshot: eq,
-            ownerSnapshot: null,
-            unlinkedUserId: null,
-            feedbackLine:
-                'Διαγράφηκε οριστικά ο εξοπλισμός: $code από τον οργανισμό σας',
-          ),
-        );
-        continue;
-      }
-
-      if (linkCount > 1 && owner?.id != null) {
-        await dirDel.unlinkUserFromEquipment(owner!.id!, eid);
-        undo.add(
-          EquipmentDeleteUndoEntry(
-            equipmentId: eid,
-            equipmentSnapshot: eq,
-            ownerSnapshot: owner,
-            unlinkedUserId: owner.id,
-            feedbackLine: _equipmentDeleteFeedbackLine(
-              unlinkOnly: true,
-              equipment: eq,
-              owner: owner,
-              departmentName: deptName,
+        if (linkCount > 1 && owner?.id == null) {
+          await dirDel.deleteEquipments([eid]);
+          final code = _equipmentCodeForMessage(eq);
+          undo.add(
+            EquipmentDeleteUndoEntry(
+              equipmentId: eid,
+              equipmentSnapshot: eq,
+              ownerSnapshot: null,
+              unlinkedUserId: null,
+              feedbackLine:
+                  'Διαγράφηκε οριστικά ο εξοπλισμός: $code από τον οργανισμό σας',
             ),
-          ),
-        );
-      } else {
-        await dirDel.deleteEquipments([eid]);
-        undo.add(
-          EquipmentDeleteUndoEntry(
-            equipmentId: eid,
-            equipmentSnapshot: eq,
-            ownerSnapshot: owner,
-            unlinkedUserId: null,
-            feedbackLine: _equipmentDeleteFeedbackLine(
-              unlinkOnly: false,
-              equipment: eq,
-              owner: owner,
-              departmentName: deptName,
+          );
+          continue;
+        }
+
+        if (linkCount > 1 && owner?.id != null) {
+          await dirDel.unlinkUserFromEquipment(owner!.id!, eid);
+          undo.add(
+            EquipmentDeleteUndoEntry(
+              equipmentId: eid,
+              equipmentSnapshot: eq,
+              ownerSnapshot: owner,
+              unlinkedUserId: owner.id,
+              feedbackLine: _equipmentDeleteFeedbackLine(
+                unlinkOnly: true,
+                equipment: eq,
+                owner: owner,
+                departmentName: deptName,
+              ),
             ),
-          ),
-        );
+          );
+        } else {
+          await dirDel.deleteEquipments([eid]);
+          undo.add(
+            EquipmentDeleteUndoEntry(
+              equipmentId: eid,
+              equipmentSnapshot: eq,
+              ownerSnapshot: owner,
+              unlinkedUserId: null,
+              feedbackLine: _equipmentDeleteFeedbackLine(
+                unlinkOnly: false,
+                equipment: eq,
+                owner: owner,
+                departmentName: deptName,
+              ),
+            ),
+          );
+        }
       }
-    }
+    });
 
     state = state.copyWith(
       selectedIds: {},
       lastDeleted: undo,
     );
-    await load();
-    _invalidateLookupCache();
+    await _afterEquipmentMutation();
   }
 
   Future<void> undoLastDelete() async {
@@ -729,8 +758,7 @@ class EquipmentDirectoryNotifier extends Notifier<EquipmentDirectoryState> {
       }
     }
     state = state.copyWith(clearLastDeleted: true);
-    await load();
-    _invalidateLookupCache();
+    await _afterEquipmentMutation();
   }
 
   Future<void> bulkUpdate(
@@ -758,8 +786,7 @@ class EquipmentDirectoryNotifier extends Notifier<EquipmentDirectoryState> {
       }
     }
     state = state.copyWith(lastBulkUpdated: toUpdate);
-    await load();
-    _invalidateLookupCache();
+    await _afterEquipmentMutation();
   }
 
   Future<void> undoLastBulkUpdate() async {
@@ -767,20 +794,24 @@ class EquipmentDirectoryNotifier extends Notifier<EquipmentDirectoryState> {
     if (list == null || list.isEmpty) return;
     final dbUb = await DatabaseHelper.instance.database;
     final dirUb = DirectoryRepository(dbUb);
-    for (final row in list) {
-      if (row.$1.id != null) {
-        await dirUb.updateEquipment(
-            row.$1.id!, row.$1.toMap());
+    try {
+      for (final row in list) {
+        final eid = row.$1.id;
+        if (eid == null) continue;
+        await dirUb.updateEquipment(eid, row.$1.toMap());
         final uid = row.$2?.id;
         await dirUb.replaceEquipmentUsers(
-          row.$1.id!,
+          eid,
           uid != null ? [uid] : [],
         );
+        if (!ref.mounted) break;
+      }
+    } finally {
+      state = state.copyWith(lastBulkUpdated: null);
+      if (ref.mounted) {
+        await _afterEquipmentMutation();
       }
     }
-    state = state.copyWith(lastBulkUpdated: null);
-    await load();
-    _invalidateLookupCache();
   }
 }
 

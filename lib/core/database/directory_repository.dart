@@ -2065,6 +2065,7 @@ ORDER BY p.number COLLATE NOCASE ASC
     'map_anchor_offset_x': null,
     'map_anchor_offset_y': null,
     'map_custom_name': null,
+    'map_label_font_scale': null,
     // Μηδενισμός ορατότητας: αν αργότερα το τμήμα ξαναχαρτογραφηθεί, ξεκινά ορατό.
     'map_hidden': 0,
   };
@@ -3191,6 +3192,7 @@ ORDER BY p.number COLLATE NOCASE ASC
       'map_anchor_offset_x': null,
       'map_anchor_offset_y': null,
       'map_custom_name': null,
+      'map_label_font_scale': null,
     };
     for (final r in deptRows) {
       final deptId = r['id'] as int?;

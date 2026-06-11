@@ -2,6 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/models/building_map_floor.dart';
+import '../../models/department_model.dart';
+import '../../providers/department_directory_provider.dart';
+import '../building_map_label_layout.dart';
+import '../controllers/building_map_controller.dart';
 import '../providers/building_map_providers.dart';
 import '../services/building_map_sheet_export.dart';
 import 'building_map_floor_departments_dialog.dart';
@@ -26,7 +30,30 @@ class BuildingMapEditToolbar extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final toolMode = ref.watch(buildingMapToolProvider);
     final deptToMap = ref.watch(buildingMapSelectedDepartmentIdToMapProvider);
+    final draftShape = ref.watch(buildingMapDraftShapeProvider);
     final sheetId = ref.watch(buildingMapSelectedSheetIdProvider);
+    final departments = ref.watch(departmentDirectoryProvider).allDepartments;
+    DepartmentModel? selectedDept;
+    if (deptToMap != null) {
+      for (final d in departments) {
+        if (d.id == deptToMap) {
+          selectedDept = d;
+          break;
+        }
+      }
+    }
+    final canAdjustLabelFont = hasActiveCanvas &&
+        toolMode == MapToolMode.edit &&
+        deptToMap != null &&
+        draftShape != null;
+    final currentScale = canAdjustLabelFont
+        ? draftShape.labelFontScale
+        : effectiveMapLabelFontScale(selectedDept?.mapLabelFontScale);
+    final atMinScale =
+        currentScale <= kBuildingMapLabelFontScaleMin + 0.001;
+    final atMaxScale =
+        currentScale >= kBuildingMapLabelFontScaleMax - 0.001;
+
     String? currentFloorLabel;
     if (sheetId != null) {
       for (final f in floors) {
@@ -93,11 +120,42 @@ class BuildingMapEditToolbar extends ConsumerWidget {
       toggles = Opacity(opacity: 0.42, child: IgnorePointer(child: toggles));
     }
 
+    void adjustFont({required bool increase}) {
+      if (!canAdjustLabelFont) return;
+      ref
+          .read(buildingMapControllerProvider)
+          .adjustDraftLabelFontScale(increase: increase);
+    }
+
+    final labelFontControls = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        IconButton(
+          tooltip: 'Μείωση μεγέθους ονόματος τμήματος στον χάρτη',
+          onPressed: !canAdjustLabelFont || atMinScale
+              ? null
+              : () => adjustFont(increase: false),
+          icon: const Icon(Icons.text_decrease),
+        ),
+        IconButton(
+          tooltip: 'Αύξηση μεγέθους ονόματος τμήματος στον χάρτη',
+          onPressed: !canAdjustLabelFont || atMaxScale
+              ? null
+              : () => adjustFont(increase: true),
+          icon: const Icon(Icons.text_increase),
+        ),
+      ],
+    );
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(8, 0, 8, 0),
       child: Row(
         children: [
           toggles,
+          if (!hasActiveCanvas)
+            Opacity(opacity: 0.42, child: IgnorePointer(child: labelFontControls))
+          else
+            labelFontControls,
           IconButton(
             tooltip: 'Επιλογή τμήματος για σχεδίαση',
             onPressed: !hasActiveCanvas

@@ -1,7 +1,11 @@
-﻿import 'package:flutter_riverpod/flutter_riverpod.dart';
+﻿import 'dart:async';
+
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/task.dart';
 import '../models/task_filter.dart';
 import '../services/task_service.dart';
+import 'task_analytics_date_provider.dart';
+import 'task_analytics_provider.dart';
 import 'task_service_provider.dart';
 
 class TaskFilterNotifier extends Notifier<TaskFilter> {
@@ -42,6 +46,8 @@ final totalTasksCountProvider = FutureProvider<int>((ref) async {
 });
 
 class TasksNotifier extends AsyncNotifier<List<Task>> {
+  Future<void>? _refreshInFlight;
+
   @override
   Future<List<Task>> build() async {
     final service = ref.read(taskServiceProvider);
@@ -49,18 +55,42 @@ class TasksNotifier extends AsyncNotifier<List<Task>> {
     return service.getFilteredTasks(filter);
   }
 
+  void _afterTasksMutated({bool refreshAnalytics = false}) {
+    ref.invalidate(totalTasksCountProvider);
+    ref.invalidate(orphanCallsProvider);
+    if (refreshAnalytics) {
+      ref.invalidate(taskAnalyticsProvider);
+      unawaited(
+        ref.read(taskAnalyticsDateProvider.notifier).refreshCreationSpan(),
+      );
+    }
+  }
+
   Future<void> refresh() async {
-    state = const AsyncLoading();
+    if (_refreshInFlight != null) {
+      await _refreshInFlight;
+      return;
+    }
     final service = ref.read(taskServiceProvider);
     final filter = ref.read(taskFilterProvider);
-    state = await AsyncValue.guard(() => service.getFilteredTasks(filter));
+    _refreshInFlight = () async {
+      state = await AsyncValue.guard(() => service.getFilteredTasks(filter));
+      if (state.hasError) {
+        ref.invalidateSelf();
+      }
+    }();
+    try {
+      await _refreshInFlight;
+    } finally {
+      _refreshInFlight = null;
+    }
   }
 
   Future<void> addTask(Task task) async {
     final service = ref.read(taskServiceProvider);
     await service.createTask(task);
+    _afterTasksMutated(refreshAnalytics: true);
     await refresh();
-    ref.invalidate(totalTasksCountProvider);
   }
 
   Future<void> updateTask(Task task) async {
@@ -72,20 +102,20 @@ class TasksNotifier extends AsyncNotifier<List<Task>> {
   Future<void> deleteTask(int id) async {
     final service = ref.read(taskServiceProvider);
     await service.deleteTask(id);
+    _afterTasksMutated(refreshAnalytics: true);
     await refresh();
-    ref.invalidate(orphanCallsProvider);
-    ref.invalidate(totalTasksCountProvider);
   }
 
   Future<void> closeTask(int id, String solutionNotes) async {
     final service = ref.read(taskServiceProvider);
     await service.closeTask(id, solutionNotes);
+    _afterTasksMutated(refreshAnalytics: true);
     await refresh();
   }
 }
 
 /// Κλήσεις pending/open χωρίς αντίστοιχο task. Invalidate μετά δημιουργία tasks.
 final orphanCallsProvider = FutureProvider<List<OrphanCall>>((ref) async {
-  final service = ref.watch(taskServiceProvider);
+  final service = ref.read(taskServiceProvider);
   return service.getCallsWithoutTask();
 });

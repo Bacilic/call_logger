@@ -67,6 +67,7 @@ class BuildingMapSheetPainter extends CustomPainter {
         Object.hash(
           d.color,
           d.mapCustomName,
+          effectiveMapLabelFontScale(d.mapLabelFontScale),
           d.isHiddenOnMap,
           d.displayName,
         ),
@@ -160,6 +161,7 @@ class BuildingMapSheetPainter extends CustomPainter {
       String text,
       Offset labelCenter,
       Offset anchorPoint,
+      double fontScale,
     })>[];
 
     canvas.save();
@@ -196,6 +198,9 @@ class BuildingMapSheetPainter extends CustomPainter {
       final effectiveAnchorOffsetY = isEditingSelectedDraft
           ? draftShape!.anchorOffsetY
           : d.mapAnchorOffsetY;
+      final effectiveFontScale = isEditingSelectedDraft
+          ? draftShape!.labelFontScale
+          : effectiveMapLabelFontScale(d.mapLabelFontScale);
       final r = Rect.fromLTWH(
         nx * size.width,
         ny * size.height,
@@ -266,6 +271,7 @@ class BuildingMapSheetPainter extends CustomPainter {
             text: override,
             labelCenter: labelCenter + hoverOffset,
             anchorPoint: anchorPoint + hoverOffset,
+            fontScale: effectiveFontScale,
           ),
         );
       }
@@ -285,12 +291,13 @@ class BuildingMapSheetPainter extends CustomPainter {
         sheetCenter,
         rotationRadians,
       );
+      final fontSize = computeBuildingMapLabelFontSize(size, label.fontScale);
       final tp = TextPainter(
         text: TextSpan(
           text: label.text,
           style: TextStyle(
             color: Colors.black87,
-            fontSize: math.max(10, size.shortestSide * 0.018),
+            fontSize: fontSize,
             fontWeight: FontWeight.w500,
           ),
         ),
