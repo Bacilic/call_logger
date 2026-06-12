@@ -9,6 +9,8 @@ const String kLansweeperHelpdeskAutoLoginSettingKey =
     'lansweeper_helpdesk_auto_login';
 const String kLansweeperHelpdeskLoginUrlSettingKey =
     'lansweeper_helpdesk_login_url';
+const String kLansweeperTicketViewUrlSettingKey =
+    'lansweeper_ticket_view_url';
 const String kLansweeperHelpdeskWebUsernameSettingKey =
     'lansweeper_helpdesk_web_username';
 const String kLansweeperHelpdeskWebPasswordSettingKey =
@@ -17,6 +19,10 @@ const String kLansweeperHelpdeskWebPasswordSettingKey =
 /// Προεπιλεγμένο URL φόρμας νέου αιτήματος Lansweeper (web).
 const String kDefaultLansweeperUrl =
     'http://10.10.201.22:81/helpdesk/NewTicket.aspx?tid=-7';
+
+/// Προεπιλεγμένο URL προβολής υπάρχοντος ticket (`{tid}` = αριθμός ticket).
+const String kDefaultLansweeperTicketViewUrl =
+    'http://10.10.201.22:81/helpdesk/ticket.aspx?tid={tid}';
 
 /// Προεπιλεγμένο URL σελίδας σύνδεσης Help Desk (browser).
 const String kDefaultLansweeperLoginUrl = 'http://10.10.201.22:81/login.aspx';

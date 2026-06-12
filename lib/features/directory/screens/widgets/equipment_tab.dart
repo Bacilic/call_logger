@@ -1,4 +1,4 @@
-// Προσωρινή χρήση DataTable – σε επόμενη φάση εξέτασε custom Table για sticky headers & row selection.
+﻿// Προσωρινή χρήση DataTable – σε επόμενη φάση εξέτασε custom Table για sticky headers & row selection.
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -159,7 +159,7 @@ class _EquipmentTabState extends ConsumerState<EquipmentTab> {
                   child: ReorderableListView(
                     scrollDirection: Axis.horizontal,
                     buildDefaultDragHandles: false,
-                    onReorder: (oldIndex, newIndex) {
+                    onReorderItem: (oldIndex, newIndex) {
                       notifier.reorderColumn(oldIndex, newIndex);
                     },
                     proxyDecorator: (child, index, animation) => Material(
@@ -463,7 +463,7 @@ class _EquipmentColumnSelectorOverlay extends ConsumerWidget {
               buildDefaultDragHandles: false,
               padding: const EdgeInsets.symmetric(vertical: 4),
               itemCount: orderRest.length,
-              onReorder: notifier.reorderEquipmentColumns,
+              onReorderItem: notifier.reorderEquipmentColumns,
               proxyDecorator: (child, index, animation) => Material(
                 elevation: 2,
                 color: theme.colorScheme.surfaceContainerHighest,

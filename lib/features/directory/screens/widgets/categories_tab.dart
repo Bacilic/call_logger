@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../models/category_directory_column.dart';
@@ -263,7 +263,7 @@ class _CategoryColumnSelectorOverlay extends ConsumerWidget {
               buildDefaultDragHandles: false,
               padding: const EdgeInsets.symmetric(vertical: 4),
               itemCount: orderRest.length,
-              onReorder: notifier.reorderCategoryColumns,
+              onReorderItem: notifier.reorderCategoryColumns,
               proxyDecorator: (child, index, animation) => Material(
                 elevation: 2,
                 color: theme.colorScheme.surfaceContainerHighest,

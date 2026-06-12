@@ -1,4 +1,4 @@
-import 'dart:convert';
+﻿import 'dart:convert';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -299,7 +299,6 @@ class CategoryDirectoryNotifier extends Notifier<CategoryDirectoryState> {
     final sel = CategoryDirectoryColumn.selection;
     final full = List<CategoryDirectoryColumn>.from(state.columnOrder);
     final rest = full.where((c) => c != sel).toList();
-    if (oldIndex < newIndex) newIndex -= 1;
     final item = rest.removeAt(oldIndex);
     rest.insert(newIndex, item);
     final newOrder = CategoryDirectoryColumn.pinSelectionFirst([sel, ...rest]);

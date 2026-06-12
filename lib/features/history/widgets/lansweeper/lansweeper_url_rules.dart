@@ -35,6 +35,40 @@ abstract final class LansweeperUrlRules {
     return isBrowserLaunchableUrl(t) ? t : kDefaultLansweeperUrl;
   }
 
+  /// Συναρμολογεί URL προβολής ticket από πρότυπο (`{tid}` ή `[id_ticket]` ή `tid=`).
+  static String? buildTicketViewUrl(String template, String ticketId) {
+    final id = ticketId.trim();
+    if (id.isEmpty) return null;
+    final t = template.trim();
+    if (t.isEmpty) return null;
+
+    final String result;
+    if (t.contains('{tid}')) {
+      result = t.replaceAll('{tid}', id);
+    } else if (t.contains('[id_ticket]')) {
+      result = t.replaceAll('[id_ticket]', id);
+    } else if (t.endsWith('=')) {
+      result = '$t$id';
+    } else {
+      final base = Uri.tryParse(t);
+      if (base == null || !base.hasScheme || base.host.isEmpty) return null;
+      result = base
+          .replace(queryParameters: {...base.queryParameters, 'tid': id})
+          .toString();
+    }
+
+    return isBrowserLaunchableUrl(result) ? result : null;
+  }
+
+  /// URL για έλεγχο συνδέσμου προβολής ticket (δοκιμαστικό id).
+  static String ticketViewUrlForHelpLink(String fieldText) {
+    final template = fieldText.trim().isEmpty
+        ? kDefaultLansweeperTicketViewUrl
+        : fieldText.trim();
+    return buildTicketViewUrl(template, '17132') ??
+        buildTicketViewUrl(kDefaultLansweeperTicketViewUrl, '17132')!;
+  }
+
   /// URL σελίδας σύνδεσης (`login.aspx`) στο ίδιο origin με τη φόρμα αιτήματος.
   static String loginUrlDerivedFromTicketFormUrl(String ticketFormUrl) {
     final t = ticketFormUrl.trim();

@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/providers/user_form_edit_intent_provider.dart';
@@ -650,7 +650,7 @@ class _UserColumnSelectorOverlay extends ConsumerWidget {
               buildDefaultDragHandles: false,
               padding: const EdgeInsets.symmetric(vertical: 4),
               itemCount: orderRest.length,
-              onReorder: notifier.reorderUserColumns,
+              onReorderItem: notifier.reorderUserColumns,
               proxyDecorator: (child, index, animation) => Material(
                 elevation: 2,
                 color: theme.colorScheme.surfaceContainerHighest,

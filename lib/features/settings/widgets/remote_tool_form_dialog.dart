@@ -685,10 +685,8 @@ class _RemoteToolFormDialogState extends ConsumerState<RemoteToolFormDialog> {
 
   void _onReorderArgs(int oldIndex, int newIndex) {
     setState(() {
-      var ni = newIndex;
-      if (ni > oldIndex) ni -= 1;
       final item = _argRows.removeAt(oldIndex);
-      _argRows.insert(ni, item);
+      _argRows.insert(newIndex, item);
     });
   }
 
@@ -1099,7 +1097,7 @@ class _RemoteToolFormDialogState extends ConsumerState<RemoteToolFormDialog> {
                               shrinkWrap: true,
                               physics: const NeverScrollableScrollPhysics(),
                               buildDefaultDragHandles: false,
-                              onReorder: (o, n) {
+                              onReorderItem: (o, n) {
                                 if (!_saving) _onReorderArgs(o, n);
                               },
                               children: [

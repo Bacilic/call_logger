@@ -384,7 +384,6 @@ class DepartmentDirectoryNotifier extends Notifier<DepartmentDirectoryState> {
     final sel = DepartmentDirectoryColumn.selection;
     final full = List<DepartmentDirectoryColumn>.from(state.columnOrder);
     final rest = full.where((c) => c != sel).toList();
-    if (oldIndex < newIndex) newIndex -= 1;
     final item = rest.removeAt(oldIndex);
     rest.insert(newIndex, item);
     final newOrder = DepartmentDirectoryColumn.pinSelectionFirst([

@@ -11,8 +11,8 @@ import '../models/lansweeper_sync_state.dart';
 import '../providers/dashboard_provider.dart';
 import '../providers/lansweeper_sync_provider.dart';
 import 'lansweeper/lansweeper_connection_settings_dialog.dart';
+import 'lansweeper/lansweeper_report_call_tile.dart';
 import 'lansweeper/lansweeper_url_rules.dart';
-import 'lansweeper/lansweeper_state_badge.dart';
 import 'lansweeper/lansweeper_sync_form.dart';
 import 'lansweeper/sync_history_list.dart';
 
@@ -39,6 +39,8 @@ class _LansweeperReportDialogState
       TextEditingController();
   final TextEditingController _lansweeperTicketFormUrlController =
       TextEditingController();
+  final TextEditingController _lansweeperTicketViewUrlController =
+      TextEditingController();
   final TextEditingController _lansweeperApiKeyController =
       TextEditingController();
   final TextEditingController _lansweeperLoginUrlController =
@@ -49,6 +51,7 @@ class _LansweeperReportDialogState
       TextEditingController();
   ProviderSubscription<String>? _lansweeperApiUrlSub;
   ProviderSubscription<String>? _lansweeperTicketFormUrlSub;
+  ProviderSubscription<String>? _lansweeperTicketViewUrlSub;
   ProviderSubscription<String>? _lansweeperApiKeySub;
   ProviderSubscription<String>? _lansweeperAgentUsernameSub;
   ProviderSubscription<String>? _lansweeperLoginUrlSub;
@@ -66,6 +69,9 @@ class _LansweeperReportDialogState
       _lansweeperApiUrlController.text = ref.read(lansweeperApiUrlProvider);
       _lansweeperTicketFormUrlController.text = ref.read(
         lansweeperTicketFormUrlProvider,
+      );
+      _lansweeperTicketViewUrlController.text = ref.read(
+        lansweeperTicketViewUrlProvider,
       );
       _lansweeperApiKeyController.text = ref.read(lansweeperApiKeyProvider);
       _lansweeperAgentUsernameController.text = ref.read(
@@ -93,6 +99,13 @@ class _LansweeperReportDialogState
       (_, next) {
         if (_lansweeperTicketFormUrlController.text == next) return;
         _lansweeperTicketFormUrlController.text = next;
+      },
+    );
+    _lansweeperTicketViewUrlSub = ref.listenManual<String>(
+      lansweeperTicketViewUrlProvider,
+      (_, next) {
+        if (_lansweeperTicketViewUrlController.text == next) return;
+        _lansweeperTicketViewUrlController.text = next;
       },
     );
     _lansweeperApiKeySub = ref.listenManual<String>(lansweeperApiKeyProvider, (
@@ -138,6 +151,7 @@ class _LansweeperReportDialogState
       builder: (ctx) => LansweeperConnectionSettingsDialog(
         apiUrlController: _lansweeperApiUrlController,
         ticketFormUrlController: _lansweeperTicketFormUrlController,
+        ticketViewUrlController: _lansweeperTicketViewUrlController,
         apiKeyController: _lansweeperApiKeyController,
         agentUsernameController: _lansweeperAgentUsernameController,
         loginUrlController: _lansweeperLoginUrlController,
@@ -149,6 +163,9 @@ class _LansweeperReportDialogState
         },
         onTicketFormHelpLink: () {
           unawaited(_lansweeperTicketFormHelpFromSettings());
+        },
+        onTicketViewHelpLink: () {
+          unawaited(_lansweeperTicketViewHelpFromSettings());
         },
         onLoginHelpLink: () {
           unawaited(_lansweeperLoginHelpFromSettings());
@@ -175,6 +192,21 @@ class _LansweeperReportDialogState
   Future<void> _lansweeperTicketFormHelpFromSettings() async {
     final chosen = LansweeperUrlRules.ticketFormUrlForHelpLink(
       _lansweeperTicketFormUrlController.text,
+    );
+    if (!mounted) return;
+    final uri = Uri.tryParse(chosen);
+    if (uri != null && uri.hasScheme) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Άνοιξε ο σύνδεσμος: $chosen')),
+    );
+  }
+
+  Future<void> _lansweeperTicketViewHelpFromSettings() async {
+    final chosen = LansweeperUrlRules.ticketViewUrlForHelpLink(
+      _lansweeperTicketViewUrlController.text,
     );
     if (!mounted) return;
     final uri = Uri.tryParse(chosen);
@@ -225,6 +257,11 @@ class _LansweeperReportDialogState
       );
       unawaited(
         ref
+            .read(lansweeperTicketViewUrlProvider.notifier)
+            .setTicketViewUrl(_lansweeperTicketViewUrlController.text),
+      );
+      unawaited(
+        ref
             .read(lansweeperApiKeyProvider.notifier)
             .setApiKey(_lansweeperApiKeyController.text),
       );
@@ -261,6 +298,7 @@ class _LansweeperReportDialogState
     _lansweeperSettingsDebounceTimer?.cancel();
     _lansweeperApiUrlSub?.close();
     _lansweeperTicketFormUrlSub?.close();
+    _lansweeperTicketViewUrlSub?.close();
     _lansweeperApiKeySub?.close();
     _lansweeperAgentUsernameSub?.close();
     _lansweeperLoginUrlSub?.close();
@@ -268,6 +306,7 @@ class _LansweeperReportDialogState
     _lansweeperHelpdeskPasswordSub?.close();
     _lansweeperApiUrlController.dispose();
     _lansweeperTicketFormUrlController.dispose();
+    _lansweeperTicketViewUrlController.dispose();
     _lansweeperApiKeyController.dispose();
     _lansweeperLoginUrlController.dispose();
     _lansweeperHelpdeskUsernameController.dispose();
@@ -472,6 +511,66 @@ class _LansweeperReportDialogState
       if (_selectedKeys.contains(item.key)) return item;
     }
     return null;
+  }
+
+  String _normalizedLansweeperState(_ReportCallItem item) {
+    final state = (item.call.lansweeperState ?? LansweeperSyncState.unsent)
+        .trim();
+    return state.isEmpty ? LansweeperSyncState.unsent : state;
+  }
+
+  bool _canSetSelectedToState(
+    List<_ReportCallItem> selected,
+    String targetState,
+  ) {
+    if (selected.isEmpty) return false;
+    final states = selected.map(_normalizedLansweeperState).toSet();
+    if (states.length > 1) return true;
+    return states.single != targetState;
+  }
+
+  String? _disabledStateButtonTooltip(
+    List<_ReportCallItem> selected,
+    String targetState, {
+    required bool isLoading,
+  }) {
+    if (isLoading) return 'Αναμονή λειτουργίας Lansweeper…';
+    if (selected.isEmpty) {
+      return 'Επιλέξτε μία ή περισσότερες κλήσεις';
+    }
+    final states = selected.map(_normalizedLansweeperState).toSet();
+    if (states.length > 1) return null;
+    if (states.single != targetState) return null;
+    return switch (targetState) {
+      LansweeperSyncState.excluded =>
+        'Όλες οι επιλεγμένες είναι ήδη εξαιρεσμένες',
+      LansweeperSyncState.unsent =>
+        'Όλες οι επιλεγμένες είναι ήδη ακαταχώρητες',
+      LansweeperSyncState.sent =>
+        'Όλες οι επιλεγμένες είναι ήδη καταχωρημένες',
+      _ => null,
+    };
+  }
+
+  Widget _buildLansweeperStateButton({
+    required List<_ReportCallItem> selected,
+    required bool isLoading,
+    required String targetState,
+    required String label,
+    required Future<void> Function() onPressed,
+  }) {
+    final enabled = !isLoading && _canSetSelectedToState(selected, targetState);
+    final tooltip = _disabledStateButtonTooltip(
+      selected,
+      targetState,
+      isLoading: isLoading,
+    );
+    final button = OutlinedButton(
+      onPressed: enabled ? () => unawaited(onPressed()) : null,
+      child: Text(label),
+    );
+    if (tooltip == null) return button;
+    return Tooltip(message: tooltip, child: button);
   }
 
   void _prefillForm(_ReportCallItem item) {
@@ -980,23 +1079,123 @@ class _LansweeperReportDialogState
     );
   }
 
-  Future<void> _setStateForSelected(
-    _ReportCallItem item,
+  Future<void> _applyBulkRegistration(List<_ReportCallItem> items) async {
+    final validItems = items.where((item) => item.call.id != null).toList();
+    if (validItems.isEmpty) return;
+
+    final count = validItems.length;
+    var initialTicket = count == 1
+        ? (validItems.first.call.lansweeperMainTicketId ?? '').trim()
+        : '';
+    initialTicket = await _resolveSuggestedTicketId(
+      initialTicket.isEmpty ? null : initialTicket,
+    );
+    if (!mounted) return;
+
+    while (mounted) {
+      final ticketId = await _promptOptionalTicketId(
+        initialTicketId: initialTicket.isEmpty ? null : initialTicket,
+        title: count == 1 ? 'Καταχώρηση κλήσης' : 'Καταχώρηση $count κλήσεων',
+        subtitle: count == 1
+            ? 'Ο αριθμός ticket Lansweeper είναι προαιρετικός (π.χ. 17132).'
+            : 'Ο αριθμός ticket Lansweeper είναι προαιρετικός και θα εφαρμοστεί σε όλες τις επιλεγμένες κλήσεις.',
+      );
+      if (ticketId == null) return;
+      if (ticketId.isNotEmpty) {
+        final duplicateAction = await _promptDuplicateTicketWarning(
+          ticketId: ticketId,
+          callId: validItems.first.call.id!,
+        );
+        if (duplicateAction == _DuplicateTicketAction.cancel) return;
+        if (duplicateAction == _DuplicateTicketAction.changeId) {
+          final next = await _promptOptionalTicketId(
+            initialTicketId: ticketId,
+            title: 'Αλλαγή Ticket ID',
+          );
+          if (next == null) return;
+          initialTicket = next;
+          continue;
+        }
+      }
+
+      final notifier = ref.read(lansweeperSyncProvider.notifier);
+      for (final item in validItems) {
+        await notifier.markRegistered(
+          callId: item.call.id!,
+          ticketId: ticketId.isEmpty ? null : ticketId,
+        );
+      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            count == 1
+                ? ticketId.isEmpty
+                      ? 'Η κλήση επισημάνθηκε ως καταχωρημένη.'
+                      : 'Η κλήση επισημάνθηκε ως καταχωρημένη (ticket #$ticketId).'
+                : ticketId.isEmpty
+                ? '$count κλήσεις επισημάνθηκαν ως καταχωρημένες.'
+                : '$count κλήσεις επισημάνθηκαν ως καταχωρημένες (ticket #$ticketId).',
+          ),
+        ),
+      );
+      return;
+    }
+  }
+
+  Future<void> _setStateForAllSelected(
+    List<_ReportCallItem> selected,
     String nextState,
   ) async {
-    final callId = item.call.id;
-    if (callId == null) return;
-    final notifier = ref.read(lansweeperSyncProvider.notifier);
+    final toUpdate = selected
+        .where((item) => _normalizedLansweeperState(item) != nextState)
+        .toList();
+    if (toUpdate.isEmpty) return;
+
     if (nextState == LansweeperSyncState.excluded) {
-      await notifier.setExcluded(callId);
-    } else if (nextState == LansweeperSyncState.unsent) {
-      await _markAsUnsentWithTicketPrompt(item);
-    } else if (nextState == LansweeperSyncState.sent) {
-      await _applyRegistration(
-        item: item,
-        title: 'Καταχώρηση κλήσης',
-        subtitle: 'Ο αριθμός ticket Lansweeper είναι προαιρετικός (π.χ. 17132).',
+      final notifier = ref.read(lansweeperSyncProvider.notifier);
+      var count = 0;
+      for (final item in toUpdate) {
+        final callId = item.call.id;
+        if (callId == null) continue;
+        await notifier.setExcluded(callId);
+        count++;
+      }
+      if (!mounted || count == 0) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            count == 1
+                ? 'Η κλήση επισημάνθηκε ως εξαιρεμένη.'
+                : '$count κλήσεις επισημάνθηκαν ως εξαιρεμένες.',
+          ),
+        ),
       );
+      return;
+    }
+
+    if (nextState == LansweeperSyncState.unsent) {
+      var count = 0;
+      for (final item in toUpdate) {
+        final changed = await _markAsUnsentWithTicketPrompt(item);
+        if (!changed) break;
+        count++;
+      }
+      if (!mounted || count == 0) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            count == 1
+                ? 'Η κλήση σημειώθηκε ως ακαταχώρητη.'
+                : '$count κλήσεις σημειώθηκαν ως ακαταχώρητες.',
+          ),
+        ),
+      );
+      return;
+    }
+
+    if (nextState == LansweeperSyncState.sent) {
+      await _applyBulkRegistration(toUpdate);
     }
   }
 
@@ -1005,6 +1204,7 @@ class _LansweeperReportDialogState
     final callsAsync = ref.watch(dashboardCallsForReportProvider);
     final lansweeperApiUrl = ref.watch(lansweeperApiUrlProvider);
     final lansweeperTicketFormUrl = ref.watch(lansweeperTicketFormUrlProvider);
+    final lansweeperTicketViewUrl = ref.watch(lansweeperTicketViewUrlProvider);
     final syncState = ref.watch(lansweeperSyncProvider);
     final canSubmitToApi = LansweeperUrlRules.isApiEndpointUrl(
       lansweeperApiUrl,
@@ -1155,75 +1355,32 @@ class _LansweeperReportDialogState
                                                         LansweeperSyncState
                                                             .unsent)
                                                     .trim();
-                                            return Padding(
-                                              padding:
-                                                  const EdgeInsets.symmetric(
-                                                    horizontal: 4,
-                                                    vertical: 2,
-                                                  ),
-                                              child: Row(
-                                                crossAxisAlignment:
-                                                    CrossAxisAlignment.start,
-                                                children: [
-                                                  Checkbox(
-                                                    visualDensity:
-                                                        VisualDensity.compact,
-                                                    materialTapTargetSize:
-                                                        MaterialTapTargetSize
-                                                            .shrinkWrap,
-                                                    value: _selectedKeys
-                                                        .contains(item.key),
-                                                    onChanged: (v) =>
-                                                        _toggleItem(item, v),
-                                                  ),
-                                                  Expanded(
-                                                    child: Column(
-                                                      crossAxisAlignment:
-                                                          CrossAxisAlignment
-                                                              .start,
-                                                      children: [
-                                                        Row(
-                                                          children: [
-                                                            Expanded(
-                                                              child: Text(
-                                                                '$date • ${_durationLabel(item.durationSeconds)}',
-                                                              ),
-                                                            ),
-                                                            LansweeperStateBadge(
-                                                              state: state,
-                                                              ticketId: item
-                                                                  .call
-                                                                  .lansweeperMainTicketId,
-                                                              onPressed: syncState
-                                                                      .isLoading
-                                                                  ? null
-                                                                  : () => unawaited(
-                                                                      _toggleRegistrationFromBadge(
-                                                                        item,
-                                                                      ),
-                                                                    ),
-                                                            ),
-                                                          ],
-                                                        ),
-                                                        const SizedBox(
-                                                          height: 4,
-                                                        ),
-                                                        Text(
-                                                          item.details.isNotEmpty
-                                                              ? '${item.notes}\n${item.details}'
-                                                              : item.notes,
-                                                          maxLines: 3,
-                                                          overflow: TextOverflow
-                                                              .ellipsis,
-                                                          style: Theme.of(
-                                                            context,
-                                                          ).textTheme.bodySmall,
-                                                        ),
-                                                      ],
+                                            return LansweeperReportCallTile(
+                                              checked: _selectedKeys.contains(
+                                                item.key,
+                                              ),
+                                              onCheckedChanged: (v) =>
+                                                  _toggleItem(item, v),
+                                              dateLabel: date,
+                                              durationLabel: _durationLabel(
+                                                item.durationSeconds,
+                                              ),
+                                              lansweeperState: state,
+                                              ticketId: item
+                                                  .call
+                                                  .lansweeperMainTicketId,
+                                              ticketViewUrlTemplate:
+                                                  lansweeperTicketViewUrl,
+                                              notes: item.notes,
+                                              details: item.details,
+                                              isSyncLoading:
+                                                  syncState.isLoading,
+                                              onBadgePressed: () =>
+                                                  unawaited(
+                                                    _toggleRegistrationFromBadge(
+                                                      item,
                                                     ),
                                                   ),
-                                                ],
-                                              ),
                                             );
                                           }),
                                         ],
@@ -1300,34 +1457,42 @@ class _LansweeperReportDialogState
                                                 'Χειροκίνητη Σήμανση',
                                               ),
                                             ),
-                                            OutlinedButton(
-                                              onPressed: primarySelected == null
-                                                  ? null
-                                                  : () => _setStateForSelected(
-                                                      primarySelected,
-                                                      LansweeperSyncState
-                                                          .excluded,
-                                                    ),
-                                              child: const Text('Εξαίρεση'),
+                                            _buildLansweeperStateButton(
+                                              selected: selected,
+                                              isLoading: syncState.isLoading,
+                                              targetState:
+                                                  LansweeperSyncState.excluded,
+                                              label: 'Εξαίρεση',
+                                              onPressed: () =>
+                                                  _setStateForAllSelected(
+                                                    selected,
+                                                    LansweeperSyncState
+                                                        .excluded,
+                                                  ),
                                             ),
-                                            OutlinedButton(
-                                              onPressed: primarySelected == null
-                                                  ? null
-                                                  : () => _setStateForSelected(
-                                                      primarySelected,
-                                                      LansweeperSyncState
-                                                          .unsent,
-                                                    ),
-                                              child: const Text('Ακαταχώρητη'),
+                                            _buildLansweeperStateButton(
+                                              selected: selected,
+                                              isLoading: syncState.isLoading,
+                                              targetState:
+                                                  LansweeperSyncState.unsent,
+                                              label: 'Ακαταχώρητη',
+                                              onPressed: () =>
+                                                  _setStateForAllSelected(
+                                                    selected,
+                                                    LansweeperSyncState.unsent,
+                                                  ),
                                             ),
-                                            OutlinedButton(
-                                              onPressed: primarySelected == null
-                                                  ? null
-                                                  : () => _setStateForSelected(
-                                                      primarySelected,
-                                                      LansweeperSyncState.sent,
-                                                    ),
-                                              child: const Text('Καταχωρημένη'),
+                                            _buildLansweeperStateButton(
+                                              selected: selected,
+                                              isLoading: syncState.isLoading,
+                                              targetState:
+                                                  LansweeperSyncState.sent,
+                                              label: 'Καταχωρημένη',
+                                              onPressed: () =>
+                                                  _setStateForAllSelected(
+                                                    selected,
+                                                    LansweeperSyncState.sent,
+                                                  ),
                                             ),
                                           ],
                                         ),

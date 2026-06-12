@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/database/database_helper.dart';
@@ -408,7 +408,7 @@ class _DepartmentColumnSelectorOverlay extends ConsumerWidget {
               buildDefaultDragHandles: false,
               padding: const EdgeInsets.symmetric(vertical: 4),
               itemCount: orderRest.length,
-              onReorder: notifier.reorderDepartmentColumns,
+              onReorderItem: notifier.reorderDepartmentColumns,
               proxyDecorator: (child, index, animation) => Material(
                 elevation: 2,
                 color: theme.colorScheme.surfaceContainerHighest,

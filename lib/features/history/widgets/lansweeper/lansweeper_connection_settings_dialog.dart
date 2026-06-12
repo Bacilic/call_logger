@@ -12,6 +12,7 @@ class LansweeperConnectionSettingsDialog extends ConsumerStatefulWidget {
   const LansweeperConnectionSettingsDialog({
     required this.apiUrlController,
     required this.ticketFormUrlController,
+    required this.ticketViewUrlController,
     required this.apiKeyController,
     required this.agentUsernameController,
     required this.loginUrlController,
@@ -20,12 +21,14 @@ class LansweeperConnectionSettingsDialog extends ConsumerStatefulWidget {
     required this.onSettingsChanged,
     required this.onApiHelpLink,
     required this.onTicketFormHelpLink,
+    required this.onTicketViewHelpLink,
     required this.onLoginHelpLink,
     super.key,
   });
 
   final TextEditingController apiUrlController;
   final TextEditingController ticketFormUrlController;
+  final TextEditingController ticketViewUrlController;
   final TextEditingController apiKeyController;
   final TextEditingController agentUsernameController;
   final TextEditingController loginUrlController;
@@ -34,6 +37,7 @@ class LansweeperConnectionSettingsDialog extends ConsumerStatefulWidget {
   final VoidCallback onSettingsChanged;
   final VoidCallback onApiHelpLink;
   final VoidCallback onTicketFormHelpLink;
+  final VoidCallback onTicketViewHelpLink;
   final VoidCallback onLoginHelpLink;
 
   @override
@@ -160,6 +164,27 @@ class _LansweeperConnectionSettingsDialogState
                 alignment: Alignment.centerLeft,
                 child: TextButton.icon(
                   onPressed: widget.onTicketFormHelpLink,
+                  icon: const Icon(Icons.open_in_new_rounded, size: 18),
+                  label: const Text('Έλεγχος συνδέσμου'),
+                ),
+              ),
+              const SizedBox(height: 8),
+              TextFormField(
+                controller: widget.ticketViewUrlController,
+                onChanged: (_) => widget.onSettingsChanged(),
+                decoration: const InputDecoration(
+                  labelText: 'URL προβολής ticket',
+                  hintText: '…/helpdesk/ticket.aspx?tid={tid}',
+                  helperText:
+                      'Χρησιμοποιήστε {tid} ως θέση του αριθμού ticket στη λίστα αναφοράς.',
+                  border: OutlineInputBorder(),
+                  isDense: true,
+                ),
+              ),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton.icon(
+                  onPressed: widget.onTicketViewHelpLink,
                   icon: const Icon(Icons.open_in_new_rounded, size: 18),
                   label: const Text('Έλεγχος συνδέσμου'),
                 ),

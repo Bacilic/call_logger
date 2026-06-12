@@ -1,4 +1,4 @@
-// Widget tests: EquipmentTab — chips ορατών στηλών, αφαίρεση/προσθήκη, reorder.
+﻿// Widget tests: EquipmentTab — chips ορατών στηλών, αφαίρεση/προσθήκη, reorder.
 //
 // Ολόκληρο αρχείο:
 //   flutter test test/features/directory/screens/widgets/equipment_tab_test.dart
@@ -113,7 +113,7 @@ void main() {
     expect(find.widgetWithText(Chip, 'Τοποθεσία'), findsOneWidget);
   });
 
-  // Άμεση κλήση onReorder(0,2) — ενημέρωση σειράς ορατών στη columnOrder.
+  // Άμεση κλήση onReorderItem(0,1) — ενημέρωση σειράς ορατών στη columnOrder.
   //   flutter test test/features/directory/screens/widgets/equipment_tab_test.dart --plain-name "EquipmentTab καλεί reorder και αλλάζει σειρά chips"
   testWidgets('EquipmentTab καλεί reorder και αλλάζει σειρά chips', (tester) async {
     final state = EquipmentDirectoryState(
@@ -142,7 +142,7 @@ void main() {
     await tester.pumpAndSettle();
 
     final list = tester.widget<ReorderableListView>(find.byType(ReorderableListView));
-    list.onReorder(0, 2);
+    list.onReorderItem!(0, 1);
     await tester.pumpAndSettle();
 
     final newOrder =

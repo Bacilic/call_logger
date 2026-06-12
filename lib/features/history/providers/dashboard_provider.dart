@@ -251,6 +251,49 @@ final lansweeperTicketFormUrlProvider =
       LansweeperTicketFormUrlNotifier.new,
     );
 
+/// URL προβολής υπάρχοντος ticket στον browser (`{tid}` placeholder).
+class LansweeperTicketViewUrlNotifier extends Notifier<String> {
+  bool _hydrated = false;
+
+  @override
+  String build() {
+    if (!_hydrated) {
+      _hydrated = true;
+      Future<void>(_hydrateFromDb);
+    }
+    return kDefaultLansweeperTicketViewUrl;
+  }
+
+  Future<void> _hydrateFromDb() async {
+    final db = await DatabaseHelper.instance.database;
+    if (!ref.mounted) return;
+    final saved =
+        (await SettingsRepository(db).getSetting(kLansweeperTicketViewUrlSettingKey))
+            ?.trim() ??
+        '';
+    if (!ref.mounted) return;
+    state = saved.isNotEmpty ? saved : kDefaultLansweeperTicketViewUrl;
+  }
+
+  Future<void> setTicketViewUrl(String value) async {
+    final normalized = value.trim();
+    final next = normalized.isEmpty
+        ? kDefaultLansweeperTicketViewUrl
+        : normalized;
+    state = next;
+    final db = await DatabaseHelper.instance.database;
+    if (!ref.mounted) return;
+    await SettingsRepository(
+      db,
+    ).saveSetting(kLansweeperTicketViewUrlSettingKey, next);
+  }
+}
+
+final lansweeperTicketViewUrlProvider =
+    NotifierProvider.autoDispose<LansweeperTicketViewUrlNotifier, String>(
+      LansweeperTicketViewUrlNotifier.new,
+    );
+
 class LansweeperApiKeyNotifier extends Notifier<String> {
   bool _hydrated = false;
 

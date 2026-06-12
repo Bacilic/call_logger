@@ -1,4 +1,4 @@
-// Unit tests: EquipmentDirectoryNotifier — αρχική κατάσταση, στήλες, reorder, toggle, load + join users.
+﻿// Unit tests: EquipmentDirectoryNotifier — αρχική κατάσταση, στήλες, reorder, toggle, load + join users.
 //
 // Ολόκληρο αρχείο:
 //   flutter test test/features/directory/providers/equipment_directory_provider_test.dart
@@ -135,7 +135,7 @@ void main() {
       );
     });
 
-    // reorderColumn(0, 3) — συμβατό με ReorderableListView indices.
+    // reorderColumn(0, 2) — συμβατό με ReorderableListView.onReorderItem indices.
     //   flutter test test/features/directory/providers/equipment_directory_provider_test.dart --plain-name "reorderColumn μετακινεί σωστά στήλη με Flutter index semantics"
     test('reorderColumn μετακινεί σωστά στήλη με Flutter index semantics', () {
       final initialVisible = [
@@ -160,7 +160,7 @@ void main() {
       addTearDown(container.dispose);
 
       final notifier = container.read(equipmentDirectoryProvider.notifier);
-      notifier.reorderColumn(0, 3);
+      notifier.reorderColumn(0, 2);
 
       final state = container.read(equipmentDirectoryProvider);
       expect(

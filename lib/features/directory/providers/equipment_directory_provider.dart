@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -574,7 +574,6 @@ class EquipmentDirectoryNotifier extends Notifier<EquipmentDirectoryState> {
     final sel = EquipmentColumn.selection;
     final full = List<EquipmentColumn>.from(state.columnOrder);
     final rest = full.where((c) => c.key != sel.key).toList();
-    if (oldIndex < newIndex) newIndex -= 1;
     final item = rest.removeAt(oldIndex);
     rest.insert(newIndex, item);
     final newOrder = EquipmentColumn.pinSelectionFirst([sel, ...rest]);
@@ -586,7 +585,6 @@ class EquipmentDirectoryNotifier extends Notifier<EquipmentDirectoryState> {
   void reorderColumn(int oldIndex, int newIndex) {
     final visible = state.orderedVisibleColumns;
     final list = List<EquipmentColumn>.from(visible);
-    if (oldIndex < newIndex) newIndex -= 1;
     final item = list.removeAt(oldIndex);
     list.insert(newIndex, item);
     final pinned = EquipmentColumn.pinSelectionFirst(list);
