@@ -56,7 +56,12 @@ class _CallEditDialogState extends ConsumerState<_CallEditDialog> {
     _durationController.dispose();
     _dateController.dispose();
     _timeController.dispose();
-    _providerContainer?.invalidate(historyEditSmartEntityProvider);
+    final container = _providerContainer;
+    if (container != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        container.invalidate(historyEditSmartEntityProvider);
+      });
+    }
     super.dispose();
   }
 

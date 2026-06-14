@@ -37,6 +37,29 @@ class LampScreen extends ConsumerStatefulWidget {
 }
 
 class _LampScreenState extends ConsumerState<LampScreen> {
+  static const double _searchFieldWidth = 180;
+  static const double _searchFieldSpacing = 12;
+  static const int _searchFieldCount = 5;
+
+  /// Πλάτος μπλοκ πεδίων φίλτρου (χωρίς κουμπί), όπως το [Wrap].
+  static double _searchFieldsBlockWidth(double maxWidth) {
+    if (maxWidth <= 0) return _searchFieldWidth;
+    var rowWidth = 0.0;
+    var maxRowWidth = 0.0;
+    for (var i = 0; i < _searchFieldCount; i++) {
+      if (rowWidth == 0) {
+        rowWidth = _searchFieldWidth;
+      } else if (rowWidth + _searchFieldSpacing + _searchFieldWidth > maxWidth) {
+        if (rowWidth > maxRowWidth) maxRowWidth = rowWidth;
+        rowWidth = _searchFieldWidth;
+      } else {
+        rowWidth += _searchFieldSpacing + _searchFieldWidth;
+      }
+    }
+    if (rowWidth > maxRowWidth) maxRowWidth = rowWidth;
+    return maxRowWidth;
+  }
+
   final _settings = LampSettingsStore();
   final _importer = OldExcelImporter();
   final _repository = OldEquipmentRepository();
@@ -48,9 +71,7 @@ class _LampScreenState extends ConsumerState<LampScreen> {
   final _outputDbController = TextEditingController();
   final _globalController = TextEditingController();
   final _codeController = TextEditingController();
-  final _descriptionController = TextEditingController();
   final _serialController = TextEditingController();
-  final _assetController = TextEditingController();
   final _ownerController = TextEditingController();
   final _officeController = TextEditingController();
   final _phoneController = TextEditingController();
@@ -105,9 +126,7 @@ class _LampScreenState extends ConsumerState<LampScreen> {
     _outputDbController.dispose();
     _globalController.dispose();
     _codeController.dispose();
-    _descriptionController.dispose();
     _serialController.dispose();
-    _assetController.dispose();
     _ownerController.dispose();
     _officeController.dispose();
     _phoneController.dispose();
@@ -118,13 +137,11 @@ class _LampScreenState extends ConsumerState<LampScreen> {
 
   List<TextEditingController> get _fieldSearchControllers =>
       <TextEditingController>[
+        _phoneController,
         _codeController,
-        _descriptionController,
-        _serialController,
-        _assetController,
         _ownerController,
         _officeController,
-        _phoneController,
+        _serialController,
       ];
 
   void _attachSearchListeners() {
@@ -143,6 +160,37 @@ class _LampScreenState extends ConsumerState<LampScreen> {
 
   bool get _hasAnyFieldSearchInput =>
       _fieldSearchControllers.any((c) => c.text.trim().isNotEmpty);
+
+  bool get _hasAnySearchInput =>
+      _globalController.text.trim().isNotEmpty || _hasAnyFieldSearchInput;
+
+  List<String> get _activeFieldSearchTerms => _fieldSearchControllers
+      .map((c) => c.text.trim())
+      .where((t) => t.isNotEmpty)
+      .toList();
+
+  String _emptyResultsCenterMessage() {
+    if (!_readPathReadyForQuery) {
+      final detail = _readPathCheck?.userMessageGreek.trim();
+      if (detail != null && detail.isNotEmpty) {
+        return detail;
+      }
+      return 'Υπάρχει πρόβλημα με τη βάση δεδομένων της Λάμπας';
+    }
+    if (!_hasAnySearchInput) {
+      return 'Ξεκινίστε την αναζήτηση: είτε καθολικά είτε σε συγκεκριμένο πεδίο';
+    }
+    final globalTerm = _globalController.text.trim();
+    if (globalTerm.isNotEmpty) {
+      return 'Η αναζήτηση του «$globalTerm» δεν αντιστοιχεί σε καμία εγγραφή στη βάση της Λάμπας';
+    }
+    final terms = _activeFieldSearchTerms;
+    if (terms.length == 1) {
+      return 'Η αναζήτηση του «${terms.first}» δεν αντιστοιχεί σε καμία εγγραφή στη βάση της Λάμπας';
+    }
+    final combined = terms.map((t) => '«$t»').join(' + ');
+    return 'Η αναζήτηση του $combined δεν αντιστοιχεί σε καμία εγγραφή στη βάση της Λάμπας';
+  }
 
   void _onGlobalSearchInputChanged() {
     if (_suppressLiveSearch) return;
@@ -692,13 +740,11 @@ class _LampScreenState extends ConsumerState<LampScreen> {
       () => _repository.searchByFields(
         _readDbController.text.trim(),
         OldEquipmentSearchFilters(
+          phone: _phoneController.text,
           code: _codeController.text,
-          description: _descriptionController.text,
-          serialNo: _serialController.text,
-          assetNo: _assetController.text,
           owner: _ownerController.text,
           office: _officeController.text,
-          phone: _phoneController.text,
+          serialNo: _serialController.text,
         ),
         maxDisplay: _maxSearchResults,
       ),
@@ -725,7 +771,8 @@ class _LampScreenState extends ConsumerState<LampScreen> {
     );
   }
 
-  String _searchOutcomeMessage(int totalCount) {
+  String? _searchOutcomeMessage(int totalCount) {
+    if (totalCount == 0) return null;
     final xStr = DatabaseStatsService.formatIntegerEl(totalCount);
     final n = _maxSearchResults;
     if (totalCount > 0 && n < totalCount) {
@@ -2297,46 +2344,49 @@ class _LampScreenState extends ConsumerState<LampScreen> {
       children: [
         ?banner,
         Padding(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-          child: Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: _globalController,
-                  decoration: InputDecoration(
-                    labelText: 'Αναζήτηση σαν Google',
-                    prefixIcon: const Icon(Icons.search),
-                    suffixIcon: _clearFieldSuffix(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final blockWidth = _searchFieldsBlockWidth(constraints.maxWidth);
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SizedBox(
+                    width: blockWidth,
+                    child: TextField(
                       controller: _globalController,
-                      tooltip: 'Καθαρισμός καθολικής αναζήτησης',
+                      decoration: InputDecoration(
+                        labelText: 'Καθολική Αναζήτηση',
+                        prefixIcon: const Icon(Icons.search),
+                        suffixIcon: _clearFieldSuffix(
+                          controller: _globalController,
+                          tooltip: 'Καθαρισμός καθολικής αναζήτησης',
+                        ),
+                        border: const OutlineInputBorder(),
+                      ),
+                      onSubmitted: (_) => _globalSearch(),
                     ),
-                    border: const OutlineInputBorder(),
                   ),
-                  onSubmitted: (_) => _globalSearch(),
-                ),
-              ),
-            ],
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-          child: Wrap(
-            spacing: 12,
-            runSpacing: 12,
-            children: [
-              _smallField(_codeController, 'Κωδικός'),
-              _smallField(_descriptionController, 'Περιγραφή'),
-              _smallField(_serialController, 'Serial No'),
-              _smallField(_assetController, 'Asset No'),
-              _smallField(_ownerController, 'Ιδιοκτήτης'),
-              _smallField(_officeController, 'Τμήμα/Γραφείο'),
-              _smallField(_phoneController, 'Τηλέφωνο'),
-              OutlinedButton.icon(
-                onPressed: _clearAllSearchInputs,
-                icon: const Icon(Icons.clear_all),
-                label: const Text('Καθαρισμός όλων'),
-              ),
-            ],
+                  const SizedBox(height: 12),
+                  Wrap(
+                    spacing: _searchFieldSpacing,
+                    runSpacing: _searchFieldSpacing,
+                    children: [
+                      _smallField(_phoneController, 'Τηλέφωνο'),
+                      _smallField(_codeController, 'Κωδικός Εξοπλισμού'),
+                      _smallField(_ownerController, 'Υπάλληλος'),
+                      _smallField(_officeController, 'Τμήμα'),
+                      _smallField(_serialController, 'Σειριακός Αριθμός'),
+                      OutlinedButton.icon(
+                        onPressed: _clearAllSearchInputs,
+                        icon: const Icon(Icons.clear_all),
+                        label: const Text('Καθαρισμός όλων'),
+                      ),
+                    ],
+                  ),
+                ],
+              );
+            },
           ),
         ),
         if (_message != null)
@@ -2504,7 +2554,7 @@ class _LampScreenState extends ConsumerState<LampScreen> {
 
   Widget _smallField(TextEditingController controller, String label) {
     return SizedBox(
-      width: 180,
+      width: _searchFieldWidth,
       child: TextField(
         controller: controller,
         decoration: InputDecoration(
@@ -2523,9 +2573,13 @@ class _LampScreenState extends ConsumerState<LampScreen> {
 
   Widget _resultsList(BuildContext context) {
     if (_results.isEmpty) {
-      return const Center(
-        child: Text(
-          'Δεν υπάρχουν αποτελέσματα. Εκτελέστε αναζήτηση με έγκυρη βάση.',
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          child: Text(
+            _emptyResultsCenterMessage(),
+            textAlign: TextAlign.center,
+          ),
         ),
       );
     }

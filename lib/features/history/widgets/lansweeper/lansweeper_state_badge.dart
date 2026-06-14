@@ -13,6 +13,8 @@ class LansweeperStateBadge extends StatelessWidget {
     this.ticketId,
     this.ticketViewUrlTemplate,
     this.onPressed,
+    this.inline = false,
+    this.ticketLinkEnabled = true,
     super.key,
   });
 
@@ -20,6 +22,10 @@ class LansweeperStateBadge extends StatelessWidget {
   final String? ticketId;
   final String? ticketViewUrlTemplate;
   final VoidCallback? onPressed;
+  /// Σε [true], το chip εμφανίζεται οριζόντια (δίπλα σε ημερομηνία/διάρκεια).
+  final bool inline;
+  /// Όταν [false], ο σύνδεσμος ticket είναι αδρανής (χωρίς σύνδεση Lansweeper).
+  final bool ticketLinkEnabled;
 
   @override
   Widget build(BuildContext context) {
@@ -64,46 +70,88 @@ class LansweeperStateBadge extends StatelessWidget {
       onPressed: onPressed,
     );
 
-    Widget statusColumn = Column(
+    final statusChip =
+        tooltip == null ? chip : Tooltip(message: tooltip, child: chip);
+
+    if (inline) {
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          statusChip,
+          if (ticketUrl != null) ...[
+            const SizedBox(width: 4),
+            _TicketIdLink(
+              ticketId: normalizedTicket,
+              url: ticketUrl,
+              enabled: ticketLinkEnabled,
+            ),
+          ],
+        ],
+      );
+    }
+
+    return Column(
       crossAxisAlignment: CrossAxisAlignment.end,
       mainAxisSize: MainAxisSize.min,
       children: [
-        tooltip == null ? chip : Tooltip(message: tooltip, child: chip),
+        statusChip,
         if (ticketUrl != null) ...[
           const SizedBox(height: 2),
-          _TicketIdLink(ticketId: normalizedTicket, url: ticketUrl),
+          _TicketIdLink(
+            ticketId: normalizedTicket,
+            url: ticketUrl,
+            enabled: ticketLinkEnabled,
+          ),
         ],
       ],
     );
-
-    return statusColumn;
   }
 }
 
 class _TicketIdLink extends StatelessWidget {
-  const _TicketIdLink({required this.ticketId, required this.url});
+  const _TicketIdLink({
+    required this.ticketId,
+    required this.url,
+    this.enabled = true,
+  });
 
   final String ticketId;
   final String url;
+  final bool enabled;
+
+  static const String _disabledTooltip =
+      'Δεν είναι εφυκτή η σύνδεση με το Lansweeper.';
 
   @override
   Widget build(BuildContext context) {
-    final linkColor = Theme.of(context).colorScheme.primary;
+    final theme = Theme.of(context);
+    final linkColor = enabled
+        ? theme.colorScheme.primary
+        : theme.colorScheme.onSurface.withValues(alpha: 0.45);
+    final tooltip = enabled
+        ? 'Άνοιγμα ticket #$ticketId στον περιηγητή'
+        : _disabledTooltip;
+
     return Tooltip(
-      message: 'Άνοιγμα ticket #$ticketId στον περιηγητή',
-      child: InkWell(
-        onTap: () => unawaited(
-          launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication),
-        ),
-        borderRadius: BorderRadius.circular(4),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 1),
-          child: Text(
-            '#$ticketId',
-            style: Theme.of(context).textTheme.labelSmall?.copyWith(
-              color: linkColor,
-              decoration: TextDecoration.underline,
-              decorationColor: linkColor,
+      message: tooltip,
+      child: MouseRegion(
+        cursor: enabled ? SystemMouseCursors.click : SystemMouseCursors.basic,
+        child: InkWell(
+          onTap: enabled
+              ? () => unawaited(
+                  launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication),
+                )
+              : null,
+          borderRadius: BorderRadius.circular(4),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 1),
+            child: Text(
+              '#$ticketId',
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: linkColor,
+                decoration: enabled ? TextDecoration.underline : null,
+                decorationColor: linkColor,
+              ),
             ),
           ),
         ),

@@ -15,6 +15,13 @@ const String kLansweeperHelpdeskWebUsernameSettingKey =
     'lansweeper_helpdesk_web_username';
 const String kLansweeperHelpdeskWebPasswordSettingKey =
     'lansweeper_helpdesk_web_password';
+const String kGeminiApiKeySettingKey = 'gemini_api_key';
+const String kGeminiPromptTemplateSettingKey = 'gemini_prompt_template';
+const String kGeminiEndpointSettingKey = 'gemini_endpoint';
+const String kGeminiPrimaryModelSettingKey = 'gemini_primary_model';
+const String kGeminiFallbackEnabledSettingKey = 'gemini_fallback_enabled';
+const String kGeminiFallbackModelSettingKey = 'gemini_fallback_model';
+const String kGeminiModelsProbeCacheSettingKey = 'gemini_models_probe_cache';
 
 /// Προεπιλεγμένο URL φόρμας νέου αιτήματος Lansweeper (web).
 const String kDefaultLansweeperUrl =

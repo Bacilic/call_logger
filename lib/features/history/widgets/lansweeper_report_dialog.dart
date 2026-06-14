@@ -3,15 +3,20 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../../core/services/gemini_ticket_service.dart';
+import '../../../core/widgets/spell_check_controller.dart';
 import '../../calls/models/call_model.dart';
+import '../models/lansweeper_connection_status.dart';
 import '../models/lansweeper_sync_state.dart';
 import '../providers/dashboard_provider.dart';
+import '../providers/lansweeper_connection_probe_provider.dart';
 import '../providers/lansweeper_sync_provider.dart';
 import 'lansweeper/lansweeper_connection_settings_dialog.dart';
-import 'lansweeper/lansweeper_report_call_tile.dart';
+import 'lansweeper/lansweeper_report_call_list.dart';
 import 'lansweeper/lansweeper_url_rules.dart';
 import 'lansweeper/lansweeper_sync_form.dart';
 import 'lansweeper/sync_history_list.dart';
@@ -31,8 +36,8 @@ class _LansweeperReportDialogState
   );
 
   final Set<String> _selectedKeys = <String>{};
-  final TextEditingController _titleController = TextEditingController();
-  final TextEditingController _notesController = TextEditingController();
+  final SpellCheckController _titleController = SpellCheckController();
+  final SpellCheckController _notesController = SpellCheckController();
   final TextEditingController _lansweeperAgentUsernameController =
       TextEditingController();
   final TextEditingController _lansweeperApiUrlController =
@@ -49,6 +54,15 @@ class _LansweeperReportDialogState
       TextEditingController();
   final TextEditingController _lansweeperHelpdeskPasswordController =
       TextEditingController();
+  final TextEditingController _geminiApiKeyController = TextEditingController();
+  final TextEditingController _geminiPromptTemplateController =
+      TextEditingController();
+  final TextEditingController _geminiEndpointController =
+      TextEditingController();
+  final TextEditingController _geminiPrimaryModelController =
+      TextEditingController();
+  final TextEditingController _geminiFallbackModelController =
+      TextEditingController();
   ProviderSubscription<String>? _lansweeperApiUrlSub;
   ProviderSubscription<String>? _lansweeperTicketFormUrlSub;
   ProviderSubscription<String>? _lansweeperTicketViewUrlSub;
@@ -57,8 +71,67 @@ class _LansweeperReportDialogState
   ProviderSubscription<String>? _lansweeperLoginUrlSub;
   ProviderSubscription<String>? _lansweeperHelpdeskUsernameSub;
   ProviderSubscription<String>? _lansweeperHelpdeskPasswordSub;
+  ProviderSubscription<String>? _geminiApiKeySub;
+  ProviderSubscription<String>? _geminiPromptTemplateSub;
+  ProviderSubscription<String>? _geminiEndpointSub;
+  ProviderSubscription<String>? _geminiPrimaryModelSub;
+  ProviderSubscription<String>? _geminiFallbackModelSub;
   Timer? _lansweeperSettingsDebounceTimer;
   String? _lastPrefilledKey;
+  bool _aiSuggestRunning = false;
+  Timer? _aiSuggestTicker;
+  final Stopwatch _aiSuggestStopwatch = Stopwatch();
+  double _aiSuggestElapsedSeconds = 0;
+  http.Client? _aiSuggestClient;
+  String? _aiCurrentModel;
+  final GlobalKey<ScaffoldMessengerState> _dialogMessengerKey =
+      GlobalKey<ScaffoldMessengerState>();
+
+  void _showDialogSnackBar(SnackBar snackBar, {String? copyText}) {
+    if (!mounted) return;
+    final messenger = _dialogMessengerKey.currentState;
+    if (messenger == null) return;
+
+    final textToCopy = (copyText ?? '').trim();
+    if (textToCopy.isEmpty) {
+      messenger.showSnackBar(snackBar);
+      return;
+    }
+
+    messenger.showSnackBar(
+      SnackBar(
+        content: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(child: snackBar.content),
+            IconButton(
+              tooltip: 'Αντιγραφή',
+              visualDensity: VisualDensity.compact,
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+              icon: const Icon(Icons.content_copy_outlined, size: 18),
+              color: Theme.of(context).colorScheme.inversePrimary,
+              onPressed: () => unawaited(_copyDialogSnackBarText(textToCopy)),
+            ),
+          ],
+        ),
+        duration: snackBar.duration,
+        behavior: snackBar.behavior,
+      ),
+    );
+  }
+
+  Future<void> _copyDialogSnackBarText(String text) async {
+    await Clipboard.setData(ClipboardData(text: text));
+    if (!mounted) return;
+    _dialogMessengerKey.currentState?.hideCurrentSnackBar();
+    _showDialogSnackBar(
+      const SnackBar(
+        content: Text('Αντιγραφή στο πρόχειρο.'),
+        duration: Duration(seconds: 2),
+      ),
+    );
+  }
   _LansweeperReportFilter _reportFilter = _LansweeperReportFilter.unsentOnly;
 
   @override
@@ -85,6 +158,19 @@ class _LansweeperReportDialogState
       );
       _lansweeperHelpdeskPasswordController.text = ref.read(
         lansweeperHelpdeskWebPasswordProvider,
+      );
+      _geminiApiKeyController.text = ref.read(geminiApiKeyProvider);
+      _geminiPromptTemplateController.text = ref.read(
+        geminiPromptTemplateProvider,
+      );
+      _geminiEndpointController.text = ref.read(geminiEndpointProvider);
+      _geminiPrimaryModelController.text = ref.read(geminiPrimaryModelProvider);
+      _geminiFallbackModelController.text = ref.read(
+        geminiFallbackModelProvider,
+      );
+      if (!mounted) return;
+      unawaited(
+        ref.read(lansweeperConnectionProbeProvider.notifier).ensureCheck(),
       );
     });
     _lansweeperApiUrlSub = ref.listenManual<String>(lansweeperApiUrlProvider, (
@@ -143,6 +229,41 @@ class _LansweeperReportDialogState
         _lansweeperHelpdeskPasswordController.text = next;
       },
     );
+    _geminiApiKeySub = ref.listenManual<String>(geminiApiKeyProvider, (
+      _,
+      next,
+    ) {
+      if (_geminiApiKeyController.text == next) return;
+      _geminiApiKeyController.text = next;
+    });
+    _geminiPromptTemplateSub = ref.listenManual<String>(
+      geminiPromptTemplateProvider,
+      (_, next) {
+        if (_geminiPromptTemplateController.text == next) return;
+        _geminiPromptTemplateController.text = next;
+      },
+    );
+    _geminiEndpointSub = ref.listenManual<String>(geminiEndpointProvider, (
+      _,
+      next,
+    ) {
+      if (_geminiEndpointController.text == next) return;
+      _geminiEndpointController.text = next;
+    });
+    _geminiPrimaryModelSub = ref.listenManual<String>(
+      geminiPrimaryModelProvider,
+      (_, next) {
+        if (_geminiPrimaryModelController.text == next) return;
+        _geminiPrimaryModelController.text = next;
+      },
+    );
+    _geminiFallbackModelSub = ref.listenManual<String>(
+      geminiFallbackModelProvider,
+      (_, next) {
+        if (_geminiFallbackModelController.text == next) return;
+        _geminiFallbackModelController.text = next;
+      },
+    );
   }
 
   Future<void> _openLansweeperConnectionSettingsDialog() async {
@@ -157,7 +278,14 @@ class _LansweeperReportDialogState
         loginUrlController: _lansweeperLoginUrlController,
         helpdeskUsernameController: _lansweeperHelpdeskUsernameController,
         helpdeskPasswordController: _lansweeperHelpdeskPasswordController,
-        onSettingsChanged: _scheduleLansweeperSettingsSave,
+        geminiApiKeyController: _geminiApiKeyController,
+        geminiPromptTemplateController: _geminiPromptTemplateController,
+        geminiEndpointController: _geminiEndpointController,
+        geminiPrimaryModelController: _geminiPrimaryModelController,
+        geminiFallbackModelController: _geminiFallbackModelController,
+        onSettingsChanged: () => _scheduleLansweeperSettingsSave(),
+        onLansweeperUrlChanged: () =>
+            _scheduleLansweeperSettingsSave(recheckConnection: true),
         onApiHelpLink: () {
           unawaited(_lansweeperApiHelpFromSettings());
         },
@@ -170,7 +298,23 @@ class _LansweeperReportDialogState
         onLoginHelpLink: () {
           unawaited(_lansweeperLoginHelpFromSettings());
         },
+        onAiHelpLink: () {
+          unawaited(_geminiApiHelpFromSettings());
+        },
       ),
+    );
+  }
+
+  Future<void> _geminiApiHelpFromSettings() async {
+    const url = 'https://aistudio.google.com/api-keys';
+    if (!mounted) return;
+    final uri = Uri.tryParse(url);
+    if (uri != null && uri.hasScheme) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
+    if (!mounted) return;
+    _showDialogSnackBar(
+      const SnackBar(content: Text('Άνοιξε ο σύνδεσμος: aistudio.google.com')),
     );
   }
 
@@ -184,7 +328,7 @@ class _LansweeperReportDialogState
       await launchUrl(uri, mode: LaunchMode.externalApplication);
     }
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
+    _showDialogSnackBar(
       SnackBar(content: Text('Άνοιξε ο σύνδεσμος: $chosen')),
     );
   }
@@ -199,7 +343,7 @@ class _LansweeperReportDialogState
       await launchUrl(uri, mode: LaunchMode.externalApplication);
     }
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
+    _showDialogSnackBar(
       SnackBar(content: Text('Άνοιξε ο σύνδεσμος: $chosen')),
     );
   }
@@ -214,7 +358,7 @@ class _LansweeperReportDialogState
       await launchUrl(uri, mode: LaunchMode.externalApplication);
     }
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
+    _showDialogSnackBar(
       SnackBar(content: Text('Άνοιξε ο σύνδεσμος: $chosen')),
     );
   }
@@ -229,16 +373,23 @@ class _LansweeperReportDialogState
       await launchUrl(uri, mode: LaunchMode.externalApplication);
     }
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
+    _showDialogSnackBar(
       SnackBar(content: Text('Άνοιξε ο σύνδεσμος: $chosen')),
     );
   }
 
-  void _scheduleLansweeperSettingsSave() {
+  void _scheduleLansweeperSettingsSave({bool recheckConnection = false}) {
     _lansweeperSettingsDebounceTimer?.cancel();
     _lansweeperSettingsDebounceTimer = Timer(
       _lansweeperSettingsDebounceDuration,
-      _persistLansweeperSettingsSafely,
+      () {
+        if (!mounted) return;
+        _persistLansweeperSettingsSafely();
+        if (!recheckConnection) return;
+        unawaited(
+          ref.read(lansweeperConnectionProbeProvider.notifier).check(),
+        );
+      },
     );
   }
 
@@ -285,6 +436,31 @@ class _LansweeperReportDialogState
             .read(lansweeperHelpdeskWebPasswordProvider.notifier)
             .setPassword(_lansweeperHelpdeskPasswordController.text),
       );
+      unawaited(
+        ref
+            .read(geminiApiKeyProvider.notifier)
+            .setApiKey(_geminiApiKeyController.text),
+      );
+      unawaited(
+        ref
+            .read(geminiPromptTemplateProvider.notifier)
+            .setPromptTemplate(_geminiPromptTemplateController.text),
+      );
+      unawaited(
+        ref
+            .read(geminiEndpointProvider.notifier)
+            .setEndpoint(_geminiEndpointController.text),
+      );
+      unawaited(
+        ref
+            .read(geminiPrimaryModelProvider.notifier)
+            .setPrimaryModel(_geminiPrimaryModelController.text),
+      );
+      unawaited(
+        ref
+            .read(geminiFallbackModelProvider.notifier)
+            .setFallbackModel(_geminiFallbackModelController.text),
+      );
     });
   }
 
@@ -293,8 +469,39 @@ class _LansweeperReportDialogState
     return value.isEmpty ? '-' : value;
   }
 
+  bool _connectionReady(LansweeperConnectionStatus status) {
+    return status is LansweeperConnectionAvailable;
+  }
+
+  Widget _wrapLansweeperConnectionTooltip({
+    required LansweeperConnectionStatus status,
+    required Widget child,
+  }) {
+    if (status case LansweeperConnectionUnavailable(:final reason)) {
+      return Tooltip(message: reason, child: child);
+    }
+    return child;
+  }
+
+  Widget _connectionAwareIcon({
+    required LansweeperConnectionStatus status,
+    required IconData icon,
+  }) {
+    if (status is LansweeperConnectionChecking) {
+      return const SizedBox(
+        width: 18,
+        height: 18,
+        child: CircularProgressIndicator(strokeWidth: 2),
+      );
+    }
+    return Icon(icon);
+  }
+
   @override
   void dispose() {
+    _aiSuggestTicker?.cancel();
+    _aiSuggestStopwatch.stop();
+    _aiSuggestClient?.close();
     _lansweeperSettingsDebounceTimer?.cancel();
     _lansweeperApiUrlSub?.close();
     _lansweeperTicketFormUrlSub?.close();
@@ -304,6 +511,11 @@ class _LansweeperReportDialogState
     _lansweeperLoginUrlSub?.close();
     _lansweeperHelpdeskUsernameSub?.close();
     _lansweeperHelpdeskPasswordSub?.close();
+    _geminiApiKeySub?.close();
+    _geminiPromptTemplateSub?.close();
+    _geminiEndpointSub?.close();
+    _geminiPrimaryModelSub?.close();
+    _geminiFallbackModelSub?.close();
     _lansweeperApiUrlController.dispose();
     _lansweeperTicketFormUrlController.dispose();
     _lansweeperTicketViewUrlController.dispose();
@@ -312,6 +524,11 @@ class _LansweeperReportDialogState
     _lansweeperHelpdeskUsernameController.dispose();
     _lansweeperHelpdeskPasswordController.dispose();
     _lansweeperAgentUsernameController.dispose();
+    _geminiApiKeyController.dispose();
+    _geminiPromptTemplateController.dispose();
+    _geminiEndpointController.dispose();
+    _geminiPrimaryModelController.dispose();
+    _geminiFallbackModelController.dispose();
     _titleController.dispose();
     _notesController.dispose();
     super.dispose();
@@ -321,6 +538,52 @@ class _LansweeperReportDialogState
     final issue = (call.issue ?? '').trim();
     if (issue.isNotEmpty) return issue;
     return '-';
+  }
+
+  String _selectedKeysSignature(List<_ReportCallItem> selected) {
+    final keys = selected.map((e) => e.key).toList()..sort();
+    return keys.join('|');
+  }
+
+  String _combinedSelectedNotes(List<_ReportCallItem> selected) {
+    if (selected.isEmpty) return '';
+    if (selected.length == 1) return selected.first.notes;
+    return selected
+        .map((e) {
+          final date = DateFormat(
+            'dd/MM/yyyy HH:mm',
+          ).format(_callDateTime(e.call));
+          final details = e.details.isNotEmpty ? ' • ${e.details}' : '';
+          return '[$date] ${e.caller}: ${e.notes}$details';
+        })
+        .join('\n');
+  }
+
+  String _combinedGeminiIssue(List<_ReportCallItem> selected) {
+    if (selected.isEmpty) return '';
+    if (selected.length == 1) {
+      return (selected.first.call.issue ?? '').trim();
+    }
+    final parts = <String>[];
+    for (final item in selected) {
+      final issue = (item.call.issue ?? '').trim();
+      if (issue.isEmpty) continue;
+      final date = DateFormat('dd/MM/yyyy HH:mm').format(_callDateTime(item.call));
+      parts.add('[$date] ${item.caller}: $issue');
+    }
+    return parts.join('\n');
+  }
+
+  String _combinedUniqueCallField(
+    List<_ReportCallItem> selected,
+    String? Function(CallModel call) read,
+  ) {
+    final values = <String>{};
+    for (final item in selected) {
+      final value = (read(item.call) ?? '').trim();
+      if (value.isNotEmpty) values.add(value);
+    }
+    return values.join(', ');
   }
 
   String _details(CallModel call) {
@@ -398,14 +661,31 @@ class _LansweeperReportDialogState
     return grouped;
   }
 
-  bool? _groupCheckedValue(List<_ReportCallItem> items) {
-    if (items.isEmpty) return false;
-    final selectedCount = items
-        .where((e) => _selectedKeys.contains(e.key))
-        .length;
-    if (selectedCount == 0) return false;
-    if (selectedCount == items.length) return true;
-    return null;
+  LansweeperReportCallRowData _toRowData(_ReportCallItem item) {
+    final state = (item.call.lansweeperState ?? LansweeperSyncState.unsent)
+        .trim();
+    return LansweeperReportCallRowData(
+      key: item.key,
+      call: item.call,
+      dateLabel: DateFormat(
+        'dd/MM/yyyy HH:mm',
+      ).format(_callDateTime(item.call)),
+      durationLabel: _durationLabel(item.durationSeconds),
+      lansweeperState: state,
+      ticketId: item.call.lansweeperMainTicketId,
+      notes: item.notes,
+      details: item.details,
+      durationSeconds: item.durationSeconds,
+    );
+  }
+
+  Map<String, List<LansweeperReportCallRowData>> _groupedRowData(
+    Map<String, List<_ReportCallItem>> grouped,
+  ) {
+    return grouped.map(
+      (caller, callerItems) =>
+          MapEntry(caller, callerItems.map(_toRowData).toList()),
+    );
   }
 
   void _toggleGroup(List<_ReportCallItem> items, bool? checked) {
@@ -433,17 +713,11 @@ class _LansweeperReportDialogState
   }
 
   Future<void> _copyAndOpen({
-    required List<_ReportCallItem> allItems,
     required String ticketFormUrl,
   }) async {
-    final selected = allItems
-        .where((e) => _selectedKeys.contains(e.key))
-        .toList();
-    if (selected.isEmpty) return;
-
     if (!LansweeperUrlRules.isBrowserLaunchableUrl(ticketFormUrl)) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      _showDialogSnackBar(
         const SnackBar(
           content: Text(
             'Ορίστε έγκυρο URL φόρμας νέου αιτήματος στις ρυθμίσεις Lansweeper.',
@@ -453,15 +727,13 @@ class _LansweeperReportDialogState
       return;
     }
 
-    final lines = selected.map((e) {
-      final details = e.details.isNotEmpty ? ' • ${e.details}' : '';
-      return '${e.caller}: ${e.notes}$details [${_durationLabel(e.durationSeconds)}]';
-    }).toList();
-    await Clipboard.setData(ClipboardData(text: lines.join('\n')));
+    final title = _titleController.text.trim();
+    final notes = _notesController.text.trim();
+    await Clipboard.setData(ClipboardData(text: '$title\n\n$notes'));
 
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Αντιγράφηκαν οι επιλεγμένες κλήσεις.')),
+    _showDialogSnackBar(
+      const SnackBar(content: Text('Αντιγράφηκαν τίτλος και σημειώσεις.')),
     );
 
     final autoLogin = ref.read(lansweeperHelpdeskAutoLoginProvider);
@@ -482,7 +754,7 @@ class _LansweeperReportDialogState
     final uri = Uri.tryParse(ticketFormUrl.trim());
     if (uri == null || !uri.hasScheme) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      _showDialogSnackBar(
         const SnackBar(content: Text('Μη έγκυρο URL φόρμας εισιτηρίου.')),
       );
       return;
@@ -490,13 +762,13 @@ class _LansweeperReportDialogState
 
     final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
     if (!opened && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
+      _showDialogSnackBar(
         const SnackBar(content: Text('Αποτυχία ανοίγματος URL φόρμας.')),
       );
       return;
     }
     if (mounted && openedLoginTab) {
-      ScaffoldMessenger.of(context).showSnackBar(
+      _showDialogSnackBar(
         const SnackBar(
           content: Text(
             'Ανοίχτηκαν καρτέλες στον περιηγητή· αν χρειάζεται, συνδεθείτε στη σελίδα σύνδεσης και επιστρέψτε στη φόρμα αιτήματος.',
@@ -573,16 +845,185 @@ class _LansweeperReportDialogState
     return Tooltip(message: tooltip, child: button);
   }
 
-  void _prefillForm(_ReportCallItem item) {
-    if (_lastPrefilledKey == item.key) return;
-    _lastPrefilledKey = item.key;
-    final category = (item.call.category ?? '').trim();
-    final id = item.call.id;
+  void _prefillForm(
+    _ReportCallItem primary,
+    List<_ReportCallItem> selected,
+  ) {
+    final signature = _selectedKeysSignature(selected);
+    if (_lastPrefilledKey == signature) return;
+    _lastPrefilledKey = signature;
+    final category = (primary.call.category ?? '').trim();
+    final id = primary.call.id;
     final idSuffix = id != null ? ' #$id' : '';
     _titleController.text = category.isEmpty
         ? 'Κλήση$idSuffix'
         : '[$category]$idSuffix';
-    _notesController.text = item.notes;
+    _notesController.text = _combinedSelectedNotes(selected);
+  }
+
+  Future<void> _suggestWithAi(List<_ReportCallItem> selected) async {
+    if (_aiSuggestRunning || selected.isEmpty) return;
+
+    final apiKey = ref.read(geminiApiKeyProvider).trim();
+    if (apiKey.isEmpty) {
+      if (!mounted) return;
+      _showDialogSnackBar(
+        const SnackBar(
+          content: Text('Ορίστε Gemini API key στις ρυθμίσεις Lansweeper.'),
+        ),
+      );
+      return;
+    }
+
+    final endpointTemplate = ref.read(geminiEndpointProvider);
+    final promptTemplate = ref.read(geminiPromptTemplateProvider);
+    final primaryModel = ref.read(geminiPrimaryModelProvider).trim();
+    if (primaryModel.isEmpty) {
+      if (!mounted) return;
+      _showDialogSnackBar(
+        const SnackBar(
+          content: Text('Ορίστε κύριο μοντέλο Gemini στις ρυθμίσεις Lansweeper.'),
+        ),
+      );
+      return;
+    }
+    final fallbackEnabled = ref.read(geminiFallbackEnabledProvider);
+    final fallbackModel = ref.read(geminiFallbackModelProvider).trim();
+
+    final attempts = <({String model, String endpoint})>[
+      (
+        model: primaryModel,
+        endpoint: GeminiTicketService.resolveEndpoint(
+          endpoint: endpointTemplate,
+          apiKey: apiKey,
+          primaryModel: primaryModel,
+        ),
+      ),
+    ];
+    if (fallbackEnabled &&
+        fallbackModel.isNotEmpty &&
+        fallbackModel != primaryModel) {
+      attempts.add((
+        model: fallbackModel,
+        endpoint: GeminiTicketService.resolveEndpoint(
+          endpoint: GeminiTicketService.endpointWithModel(
+            endpointTemplate,
+            fallbackModel,
+          ),
+          apiKey: apiKey,
+        ),
+      ));
+    }
+
+    final callerText = _combinedUniqueCallField(
+      selected,
+      (call) => call.callerText,
+    );
+    final equipmentText = _combinedUniqueCallField(
+      selected,
+      (call) => call.equipmentText,
+    );
+    final departmentText = _combinedUniqueCallField(
+      selected,
+      (call) => call.departmentText,
+    );
+    final category = _combinedUniqueCallField(selected, (call) => call.category);
+    final issue = _combinedGeminiIssue(selected);
+
+    setState(() => _aiSuggestRunning = true);
+    try {
+      for (var i = 0; i < attempts.length; i++) {
+        final attempt = attempts[i];
+        if (!mounted) return;
+        _startAiSuggestTicker(model: attempt.model);
+        final client = http.Client();
+        _aiSuggestClient = client;
+        try {
+          final result = await GeminiTicketService.suggest(
+            apiKey: apiKey,
+            endpoint: attempt.endpoint,
+            promptTemplate: promptTemplate,
+            callerText: callerText,
+            equipmentText: equipmentText,
+            departmentText: departmentText,
+            category: category,
+            issue: issue,
+            client: client,
+          );
+          if (!mounted) return;
+          setState(() {
+            _titleController.text = result.title;
+            _notesController.text = result.description;
+          });
+          return;
+        } catch (e) {
+          final statusCode = e is GeminiException ? e.statusCode : null;
+          final isLast = i == attempts.length - 1;
+          if (!isLast && statusCode == 503) {
+            final nextModel = attempts[i + 1].model;
+            if (mounted) {
+              _showDialogSnackBar(
+                SnackBar(
+                  content: Text(
+                    'Το μοντέλο «${attempt.model}» είναι υπερφορτωμένο (503). '
+                    'Υποβάθμιση σε εφεδρικό μοντέλο: «$nextModel».',
+                  ),
+                  duration: const Duration(seconds: 5),
+                ),
+              );
+            }
+            continue;
+          }
+          if (!mounted) return;
+          final errorMessage = e is GeminiException
+              ? e.message
+              : e.toString().replaceFirst('Exception: ', '');
+          _showDialogSnackBar(
+            SnackBar(
+              content: Text(errorMessage),
+              duration: const Duration(seconds: 8),
+            ),
+            copyText: errorMessage,
+          );
+          return;
+        } finally {
+          _aiSuggestClient = null;
+          client.close();
+          _stopAiSuggestTicker();
+        }
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _aiSuggestRunning = false);
+      }
+    }
+  }
+
+  void _startAiSuggestTicker({required String model}) {
+    _aiSuggestStopwatch
+      ..reset()
+      ..start();
+    setState(() {
+      _aiSuggestRunning = true;
+      _aiSuggestElapsedSeconds = 0;
+      _aiCurrentModel = model;
+    });
+    _aiSuggestTicker = Timer.periodic(
+      const Duration(milliseconds: 33),
+      (_) {
+        if (!mounted) return;
+        setState(() {
+          _aiSuggestElapsedSeconds =
+              _aiSuggestStopwatch.elapsedMilliseconds / 1000;
+        });
+      },
+    );
+  }
+
+  void _stopAiSuggestTicker() {
+    _aiSuggestTicker?.cancel();
+    _aiSuggestTicker = null;
+    _aiSuggestStopwatch.stop();
   }
 
   Future<void> _submitSelected(
@@ -593,7 +1034,7 @@ class _LansweeperReportDialogState
     if (callId == null) return;
     if (_titleController.text.trim().isEmpty) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      _showDialogSnackBar(
         const SnackBar(content: Text('Ο τίτλος είναι υποχρεωτικός.')),
       );
       return;
@@ -601,7 +1042,7 @@ class _LansweeperReportDialogState
 
     if (_lansweeperAgentUsernameController.text.trim().isEmpty) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      _showDialogSnackBar(
         const SnackBar(
           content: Text(
             'Ορίστε τον πράκτορα API (username) στις ρυθμίσεις Lansweeper.',
@@ -614,7 +1055,7 @@ class _LansweeperReportDialogState
     final apiUrl = ref.read(lansweeperApiUrlProvider);
     if (!LansweeperUrlRules.isApiEndpointUrl(apiUrl)) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      _showDialogSnackBar(
         const SnackBar(
           content: Text(
             'Ορίστε έγκυρο URL API (…/api.aspx) στις ρυθμίσεις Lansweeper για καταχώρηση.',
@@ -659,7 +1100,7 @@ class _LansweeperReportDialogState
         : await notifier.submitCall(callId: callId, input: input);
     if (!mounted) return;
     if (result.success) {
-      ScaffoldMessenger.of(context).showSnackBar(
+      _showDialogSnackBar(
         SnackBar(
           content: Text(
             'Καταχώρηση επιτυχής. Ticket: ${result.ticketId ?? '-'}',
@@ -669,8 +1110,13 @@ class _LansweeperReportDialogState
       return;
     }
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Αποτυχία καταχώρησης: ${result.message}')),
+    final failureMessage = 'Αποτυχία καταχώρησης: ${result.message}';
+    _showDialogSnackBar(
+      SnackBar(
+        content: Text(failureMessage),
+        duration: const Duration(seconds: 8),
+      ),
+      copyText: failureMessage,
     );
 
     final reportText = (result.failureReport ?? result.message).trim();
@@ -687,7 +1133,7 @@ class _LansweeperReportDialogState
             onPressed: () async {
               await Clipboard.setData(ClipboardData(text: reportText));
               if (!ctx.mounted) return;
-              ScaffoldMessenger.of(ctx).showSnackBar(
+              _showDialogSnackBar(
                 const SnackBar(
                   content: Text('Η αναφορά αντιγράφηκε στο πρόχειρο.'),
                 ),
@@ -825,7 +1271,7 @@ class _LansweeperReportDialogState
         comment: comment,
       );
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      _showDialogSnackBar(
         SnackBar(
           content: Text(
             ticketId.isEmpty
@@ -978,7 +1424,7 @@ class _LansweeperReportDialogState
           comment: comment,
         );
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
+        _showDialogSnackBar(
           SnackBar(
             content: Text(
               ticketId.isEmpty
@@ -1001,7 +1447,7 @@ class _LansweeperReportDialogState
     if (state == LansweeperSyncState.sent) {
       final changed = await _markAsUnsentWithTicketPrompt(item);
       if (!changed || !mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      _showDialogSnackBar(
         const SnackBar(content: Text('Η κλήση σημειώθηκε ως ακαταχώρητη.')),
       );
       return;
@@ -1037,45 +1483,144 @@ class _LansweeperReportDialogState
         .toList();
   }
 
-  Widget _buildReportFilterBar() {
+  Widget _reportFilterChip({
+    required String label,
+    required String tooltip,
+    required bool selected,
+    VoidCallback? onSelect,
+  }) {
+    return Tooltip(
+      message: tooltip,
+      child: FilterChip(
+        label: Text(label),
+        selected: selected,
+        onSelected: onSelect == null ? null : (_) => onSelect(),
+      ),
+    );
+  }
+
+  static const String _noCallsInRangeFilterTooltip =
+      'Δεν υπάρχουν κλήσεις στο τρέχον εύρος ημερομηνιών';
+
+  Widget _buildReportFilterBar({
+    required bool hasAnyCallsInRange,
+    required String reportRangeTitle,
+  }) {
+    final disabledTooltip =
+        '$_noCallsInRangeFilterTooltip («$reportRangeTitle»).';
+
     return Wrap(
       spacing: 6,
       runSpacing: 6,
       children: [
-        FilterChip(
-          label: const Text('Ακαταχώρητες'),
-          selected: _reportFilter == _LansweeperReportFilter.unsentOnly,
-          onSelected: (_) => setState(
-            () => _reportFilter = _LansweeperReportFilter.unsentOnly,
-          ),
+        _reportFilterChip(
+          label: 'Ακαταχώρητες',
+          tooltip: hasAnyCallsInRange
+              ? 'Οι κλήσεις που δεν έχουν καταχωρηθεί στο Lansweeper.'
+              : disabledTooltip,
+          selected: hasAnyCallsInRange &&
+              _reportFilter == _LansweeperReportFilter.unsentOnly,
+          onSelect: hasAnyCallsInRange
+              ? () => setState(
+                  () => _reportFilter = _LansweeperReportFilter.unsentOnly,
+                )
+              : null,
         ),
-        FilterChip(
-          label: const Text('Καταχωρημένες'),
-          selected: _reportFilter == _LansweeperReportFilter.sentOnly,
-          onSelected: (_) =>
-              setState(() => _reportFilter = _LansweeperReportFilter.sentOnly),
+        _reportFilterChip(
+          label: 'Καταχωρημένες',
+          tooltip: hasAnyCallsInRange
+              ? 'Οι κλήσεις που έχουν καταχωρηθεί στο Lansweeper. '
+                    'Δεν είναι υποχρεωτικό αλλά επιθυμητό το αναγνωριστικό αιτήματος (ticket id).'
+              : disabledTooltip,
+          selected: hasAnyCallsInRange &&
+              _reportFilter == _LansweeperReportFilter.sentOnly,
+          onSelect: hasAnyCallsInRange
+              ? () => setState(
+                  () => _reportFilter = _LansweeperReportFilter.sentOnly,
+                )
+              : null,
         ),
-        FilterChip(
-          label: const Text('Εξαιρεμένες'),
-          selected: _reportFilter == _LansweeperReportFilter.excludedOnly,
-          onSelected: (_) => setState(
-            () => _reportFilter = _LansweeperReportFilter.excludedOnly,
-          ),
+        _reportFilterChip(
+          label: 'Εξαιρεμένες',
+          tooltip: hasAnyCallsInRange
+              ? 'Οι κλήσεις που δεν υπάρχει λόγος να καταχωρηθούν στο Lansweeper.'
+              : disabledTooltip,
+          selected: hasAnyCallsInRange &&
+              _reportFilter == _LansweeperReportFilter.excludedOnly,
+          onSelect: hasAnyCallsInRange
+              ? () => setState(
+                  () => _reportFilter = _LansweeperReportFilter.excludedOnly,
+                )
+              : null,
         ),
-        FilterChip(
-          label: const Text('Αποτυχημένες'),
-          selected: _reportFilter == _LansweeperReportFilter.failedOnly,
-          onSelected: (_) => setState(
-            () => _reportFilter = _LansweeperReportFilter.failedOnly,
-          ),
+        _reportFilterChip(
+          label: 'Αποτυχημένες',
+          tooltip: hasAnyCallsInRange
+              ? 'Οι κλήσεις που απέτυχαν να καταχωρηθούν στο Lansweeper '
+                    'με αυτόματο τρόπο.'
+              : disabledTooltip,
+          selected: hasAnyCallsInRange &&
+              _reportFilter == _LansweeperReportFilter.failedOnly,
+          onSelect: hasAnyCallsInRange
+              ? () => setState(
+                  () => _reportFilter = _LansweeperReportFilter.failedOnly,
+                )
+              : null,
         ),
-        FilterChip(
-          label: const Text('Όλες'),
-          selected: _reportFilter == _LansweeperReportFilter.all,
-          onSelected: (_) =>
-              setState(() => _reportFilter = _LansweeperReportFilter.all),
+        _reportFilterChip(
+          label: 'Όλες',
+          tooltip: hasAnyCallsInRange
+              ? 'Εμφάνιση όλων των κλήσεων.'
+              : 'Εμφάνιση όλων των κλήσεων στο εύρος «$reportRangeTitle» (κενό).',
+          selected: !hasAnyCallsInRange ||
+              _reportFilter == _LansweeperReportFilter.all,
+          onSelect: hasAnyCallsInRange
+              ? () => setState(
+                  () => _reportFilter = _LansweeperReportFilter.all,
+                )
+              : null,
         ),
       ],
+    );
+  }
+
+  Widget _buildNoCallsInRangeEmptyState(
+    BuildContext context,
+    String reportRangeTitle,
+  ) {
+    final theme = Theme.of(context);
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.event_busy_outlined,
+              size: 48,
+              color: theme.colorScheme.outline,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Δεν βρέθηκαν κλήσεις',
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Στο εύρος «$reportRangeTitle» δεν υπάρχουν κλήσεις.\n\n'
+              'Αλλάξτε το φίλτρο ημερομηνίας στον πίνακα ελέγχου '
+              'και ανοίξτε ξανά την αναφορά.',
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -1126,7 +1671,7 @@ class _LansweeperReportDialogState
         );
       }
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      _showDialogSnackBar(
         SnackBar(
           content: Text(
             count == 1
@@ -1162,7 +1707,7 @@ class _LansweeperReportDialogState
         count++;
       }
       if (!mounted || count == 0) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      _showDialogSnackBar(
         SnackBar(
           content: Text(
             count == 1
@@ -1182,7 +1727,7 @@ class _LansweeperReportDialogState
         count++;
       }
       if (!mounted || count == 0) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      _showDialogSnackBar(
         SnackBar(
           content: Text(
             count == 1
@@ -1202,22 +1747,61 @@ class _LansweeperReportDialogState
   @override
   Widget build(BuildContext context) {
     final callsAsync = ref.watch(dashboardCallsForReportProvider);
+    final dashboardFilter = ref.watch(dashboardFilterProvider);
+    final statsAsync = ref.watch(dashboardStatsProvider);
+    final reportRangeTitle = statsAsync.when(
+      loading: () => dashboardFilter.dateFrom == null &&
+              dashboardFilter.dateTo == null
+          ? 'Όλες: …'
+          : dashboardFilter.kpiTotalCallsRangeTitle(),
+      error: (_, _) => dashboardFilter.lansweeperReportRangeTitle(),
+      data: (stats) => dashboardFilter.lansweeperReportRangeTitle(
+        historyDateFrom: stats.historyDateFrom,
+        historyDateTo: stats.historyDateTo,
+      ),
+    );
     final lansweeperApiUrl = ref.watch(lansweeperApiUrlProvider);
     final lansweeperTicketFormUrl = ref.watch(lansweeperTicketFormUrlProvider);
     final lansweeperTicketViewUrl = ref.watch(lansweeperTicketViewUrlProvider);
     final syncState = ref.watch(lansweeperSyncProvider);
+    final connectionStatus = ref.watch(lansweeperConnectionProbeProvider);
+    final geminiApiKey = ref.watch(geminiApiKeyProvider);
+    final connectionReady = _connectionReady(connectionStatus);
     final canSubmitToApi = LansweeperUrlRules.isApiEndpointUrl(
       lansweeperApiUrl,
     );
     final canOpenTicketForm = LansweeperUrlRules.isBrowserLaunchableUrl(
       lansweeperTicketFormUrl,
     );
+    final hasAnyCallsInRange = callsAsync.maybeWhen(
+      data: (calls) => calls.isNotEmpty,
+      orElse: () => true,
+    );
 
-    return AlertDialog(
+    ref.listen(dashboardCallsForReportProvider, (previous, next) {
+      next.whenData((calls) {
+        if (calls.isNotEmpty || !mounted) return;
+        if (_reportFilter == _LansweeperReportFilter.all) return;
+        setState(() => _reportFilter = _LansweeperReportFilter.all);
+      });
+    });
+
+    return ScaffoldMessenger(
+      key: _dialogMessengerKey,
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        body: Center(
+          child: AlertDialog(
       title: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          const Expanded(child: Text('Αναφορά Lansweeper')),
+          Expanded(
+            child: Text(
+              'Αναφορά Lansweeper · $reportRangeTitle',
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
           IconButton(
             tooltip:
                 'Ρυθμίσεις Lansweeper (API, φόρμα, πράκτορας, αυτόματη σύνδεση Help Desk)',
@@ -1241,7 +1825,10 @@ class _LansweeperReportDialogState
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _buildReportFilterBar(),
+            _buildReportFilterBar(
+              hasAnyCallsInRange: hasAnyCallsInRange,
+              reportRangeTitle: reportRangeTitle,
+            ),
             const SizedBox(height: 10),
             Expanded(
               child: callsAsync.when(
@@ -1252,18 +1839,30 @@ class _LansweeperReportDialogState
                   final allItems = _toItems(calls);
                   final items = _filterReportItems(allItems);
                   final grouped = _groupByCaller(items);
+                  final groupedRows = _groupedRowData(grouped);
+                  final itemByKey = {
+                    for (final item in items) item.key: item,
+                  };
                   final selected = items
                       .where((e) => _selectedKeys.contains(e.key))
                       .toList();
                   final primarySelected = _primarySelectedItem(items);
-                  if (primarySelected != null) {
-                    _prefillForm(primarySelected);
+                  if (primarySelected != null && selected.isNotEmpty) {
+                    _prefillForm(primarySelected, selected);
                   }
                   final totalSelectedSeconds = selected.fold<int>(
                     0,
                     (sum, item) => sum + item.durationSeconds,
                   );
                   final selectedCallId = primarySelected?.call.id;
+                  final geminiKeyReady = geminiApiKey.trim().isNotEmpty;
+                  final aiSuggestEnabled =
+                      selected.isNotEmpty && geminiKeyReady && !_aiSuggestRunning;
+                  final aiSuggestTooltip = selected.isEmpty
+                      ? 'Επιλέξτε κλήση'
+                      : !geminiKeyReady
+                      ? 'Ορίστε Gemini API key στις ρυθμίσεις'
+                      : null;
                   final linksAsync = selectedCallId != null
                       ? ref.watch(callExternalLinksProvider(selectedCallId))
                       : const AsyncData<List<Map<String, dynamic>>>(
@@ -1271,16 +1870,26 @@ class _LansweeperReportDialogState
                         );
 
                   if (allItems.isEmpty) {
-                    return const Center(
-                      child: Text(
-                        'Δεν βρέθηκαν κλήσεις για τα τρέχοντα φίλτρα ημερομηνίας.',
-                      ),
+                    return _buildNoCallsInRangeEmptyState(
+                      context,
+                      reportRangeTitle,
                     );
                   }
                   if (items.isEmpty) {
-                    return const Center(
-                      child: Text(
-                        'Δεν υπάρχουν κλήσεις σε αυτή την κατηγορία Lansweeper.',
+                    return Center(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 24),
+                        child: Text(
+                          'Δεν υπάρχουν κλήσεις στην επιλεγμένη κατηγορία '
+                          'Lansweeper.\n'
+                          'Δοκιμάστε άλλο φίλτρο (π.χ. «Όλες»).',
+                          style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                            color: Theme.of(context)
+                                .colorScheme
+                                .onSurfaceVariant,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
                       ),
                     );
                   }
@@ -1299,100 +1908,37 @@ class _LansweeperReportDialogState
                         child: Row(
                           children: [
                             Expanded(
-                              flex: 3,
-                              child: ListView(
-                                children: grouped.entries.map((entry) {
-                                  final caller = entry.key;
-                                  final callerItems = entry.value;
-                                  final groupSeconds = callerItems.fold<int>(
-                                    0,
-                                    (sum, item) => sum + item.durationSeconds,
+                              flex: 2,
+                              child: LansweeperReportCallList(
+                                grouped: groupedRows,
+                                selectedKeys: _selectedKeys,
+                                totalDurationLabel: _totalDurationLabel,
+                                ticketViewUrlTemplate: lansweeperTicketViewUrl,
+                                isSyncLoading: syncState.isLoading,
+                                ticketLinkEnabled: connectionReady,
+                                onToggleGroup: (groupItems, checked) {
+                                  _toggleGroup(
+                                    groupItems
+                                        .map((row) => itemByKey[row.key]!)
+                                        .toList(),
+                                    checked,
                                   );
-                                  return Card(
-                                    margin: const EdgeInsets.symmetric(
-                                      vertical: 6,
-                                    ),
-                                    child: Padding(
-                                      padding: const EdgeInsets.fromLTRB(
-                                        8,
-                                        8,
-                                        8,
-                                        10,
-                                      ),
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          CheckboxListTile(
-                                            tristate: true,
-                                            dense: true,
-                                            contentPadding:
-                                                const EdgeInsets.symmetric(
-                                                  horizontal: 8,
-                                                ),
-                                            value: _groupCheckedValue(
-                                              callerItems,
-                                            ),
-                                            onChanged: (v) =>
-                                                _toggleGroup(callerItems, v),
-                                            title: Text(
-                                              caller,
-                                              style: const TextStyle(
-                                                fontWeight: FontWeight.w700,
-                                              ),
-                                            ),
-                                            subtitle: Text(
-                                              '${callerItems.length} κλήσεις • ${_totalDurationLabel(groupSeconds)}',
-                                            ),
-                                          ),
-                                          const Divider(height: 8),
-                                          ...callerItems.map((item) {
-                                            final date = DateFormat(
-                                              'dd/MM/yyyy HH:mm',
-                                            ).format(_callDateTime(item.call));
-                                            final state =
-                                                (item.call.lansweeperState ??
-                                                        LansweeperSyncState
-                                                            .unsent)
-                                                    .trim();
-                                            return LansweeperReportCallTile(
-                                              checked: _selectedKeys.contains(
-                                                item.key,
-                                              ),
-                                              onCheckedChanged: (v) =>
-                                                  _toggleItem(item, v),
-                                              dateLabel: date,
-                                              durationLabel: _durationLabel(
-                                                item.durationSeconds,
-                                              ),
-                                              lansweeperState: state,
-                                              ticketId: item
-                                                  .call
-                                                  .lansweeperMainTicketId,
-                                              ticketViewUrlTemplate:
-                                                  lansweeperTicketViewUrl,
-                                              notes: item.notes,
-                                              details: item.details,
-                                              isSyncLoading:
-                                                  syncState.isLoading,
-                                              onBadgePressed: () =>
-                                                  unawaited(
-                                                    _toggleRegistrationFromBadge(
-                                                      item,
-                                                    ),
-                                                  ),
-                                            );
-                                          }),
-                                        ],
-                                      ),
+                                },
+                                onToggleItem: (row, checked) {
+                                  _toggleItem(itemByKey[row.key]!, checked);
+                                },
+                                onBadgePressed: (row) {
+                                  unawaited(
+                                    _toggleRegistrationFromBadge(
+                                      itemByKey[row.key]!,
                                     ),
                                   );
-                                }).toList(),
+                                },
                               ),
                             ),
                             const SizedBox(width: 10),
                             Expanded(
-                              flex: 2,
+                              flex: 3,
                               child: SingleChildScrollView(
                                 child: Column(
                                   crossAxisAlignment:
@@ -1401,6 +1947,20 @@ class _LansweeperReportDialogState
                                     LansweeperSyncForm(
                                       titleController: _titleController,
                                       notesController: _notesController,
+                                      isSuggesting: _aiSuggestRunning,
+                                      suggestModelLabel: _aiSuggestRunning
+                                          ? _aiCurrentModel
+                                          : null,
+                                      suggestElapsedLabel: _aiSuggestRunning
+                                          ? _aiSuggestElapsedSeconds
+                                              .toStringAsFixed(2)
+                                          : null,
+                                      suggestDisabledTooltip: aiSuggestTooltip,
+                                      onSuggest: aiSuggestEnabled
+                                          ? () => unawaited(
+                                              _suggestWithAi(selected),
+                                            )
+                                          : null,
                                     ),
                                     const SizedBox(height: 10),
                                     Card(
@@ -1410,37 +1970,50 @@ class _LansweeperReportDialogState
                                           spacing: 8,
                                           runSpacing: 8,
                                           children: [
-                                            FilledButton.icon(
-                                              onPressed:
-                                                  (primarySelected != null &&
-                                                      !syncState.isLoading &&
-                                                      canSubmitToApi)
-                                                  ? () => _submitSelected(
-                                                      primarySelected,
-                                                      resubmit: false,
-                                                    )
-                                                  : null,
-                                              icon: const Icon(
-                                                Icons.cloud_upload_rounded,
-                                              ),
-                                              label: const Text(
-                                                'Άμεση Καταχώρηση',
+                                            _wrapLansweeperConnectionTooltip(
+                                              status: connectionStatus,
+                                              child: FilledButton.icon(
+                                                onPressed:
+                                                    (primarySelected != null &&
+                                                        !syncState.isLoading &&
+                                                        canSubmitToApi &&
+                                                        connectionReady)
+                                                    ? () => _submitSelected(
+                                                        primarySelected,
+                                                        resubmit: false,
+                                                      )
+                                                    : null,
+                                                icon: _connectionAwareIcon(
+                                                  status: connectionStatus,
+                                                  icon: Icons
+                                                      .cloud_upload_rounded,
+                                                ),
+                                                label: const Text(
+                                                  'Άμεση Καταχώρηση',
+                                                ),
                                               ),
                                             ),
-                                            OutlinedButton.icon(
-                                              onPressed:
-                                                  (primarySelected != null &&
-                                                      !syncState.isLoading &&
-                                                      canSubmitToApi)
-                                                  ? () => _submitSelected(
-                                                      primarySelected,
-                                                      resubmit: true,
-                                                    )
-                                                  : null,
-                                              icon: const Icon(
-                                                Icons.refresh_rounded,
+                                            _wrapLansweeperConnectionTooltip(
+                                              status: connectionStatus,
+                                              child: OutlinedButton.icon(
+                                                onPressed:
+                                                    (primarySelected != null &&
+                                                        !syncState.isLoading &&
+                                                        canSubmitToApi &&
+                                                        connectionReady)
+                                                    ? () => _submitSelected(
+                                                        primarySelected,
+                                                        resubmit: true,
+                                                      )
+                                                    : null,
+                                                icon: _connectionAwareIcon(
+                                                  status: connectionStatus,
+                                                  icon: Icons.refresh_rounded,
+                                                ),
+                                                label: const Text(
+                                                  'Επαναϋποβολή',
+                                                ),
                                               ),
-                                              label: const Text('Επαναϋποβολή'),
                                             ),
                                             OutlinedButton.icon(
                                               onPressed:
@@ -1539,24 +2112,38 @@ class _LansweeperReportDialogState
         ),
         callsAsync.maybeWhen(
           data: (calls) {
+            if (calls.isEmpty) return const SizedBox.shrink();
             final items = _toItems(calls);
             final hasSelection = items.any(
               (e) => _selectedKeys.contains(e.key),
             );
-            return FilledButton.icon(
-              onPressed: hasSelection && canOpenTicketForm
-                  ? () => _copyAndOpen(
-                      allItems: items,
-                      ticketFormUrl: lansweeperTicketFormUrl,
-                    )
-                  : null,
-              icon: const Icon(Icons.open_in_new_rounded),
-              label: const Text('Αντιγραφή & Άνοιγμα Lansweeper'),
+            final hasFormText =
+                _titleController.text.trim().isNotEmpty ||
+                _notesController.text.trim().isNotEmpty;
+            return _wrapLansweeperConnectionTooltip(
+              status: connectionStatus,
+              child: FilledButton.icon(
+                onPressed: (hasSelection || hasFormText) &&
+                        canOpenTicketForm &&
+                        connectionReady
+                    ? () => _copyAndOpen(
+                        ticketFormUrl: lansweeperTicketFormUrl,
+                      )
+                    : null,
+                icon: _connectionAwareIcon(
+                  status: connectionStatus,
+                  icon: Icons.open_in_new_rounded,
+                ),
+                label: const Text('Αντιγραφή & Άνοιγμα Lansweeper'),
+              ),
             );
           },
           orElse: () => const SizedBox.shrink(),
         ),
       ],
+          ),
+        ),
+      ),
     );
   }
 }

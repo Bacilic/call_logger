@@ -16,6 +16,8 @@ class LansweeperReportCallTile extends StatelessWidget {
     this.details,
     required this.isSyncLoading,
     required this.onBadgePressed,
+    this.ticketLinkEnabled = true,
+    this.fixedNotesHeight = false,
     super.key,
   });
 
@@ -30,12 +32,33 @@ class LansweeperReportCallTile extends StatelessWidget {
   final String? details;
   final bool isSyncLoading;
   final VoidCallback? onBadgePressed;
+  final bool ticketLinkEnabled;
+  final bool fixedNotesHeight;
 
   @override
   Widget build(BuildContext context) {
     final bodyText = (details ?? '').trim().isNotEmpty
         ? '$notes\n${details!.trim()}'
         : notes;
+    final notesStyle = Theme.of(context).textTheme.bodySmall;
+    final notesBlock = fixedNotesHeight
+        ? SizedBox(
+            height: 42,
+            child: Text(
+              bodyText,
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
+              style: notesStyle?.copyWith(height: 1.25),
+            ),
+          )
+        : bodyText.trim().isEmpty
+        ? null
+        : Text(
+            bodyText,
+            maxLines: 3,
+            overflow: TextOverflow.ellipsis,
+            style: notesStyle,
+          );
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
@@ -49,34 +72,33 @@ class LansweeperReportCallTile extends StatelessWidget {
             onChanged: onCheckedChanged,
           ),
           Expanded(
-            child: Row(
+            child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
               children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text('$dateLabel • $durationLabel'),
-                      if (bodyText.trim().isNotEmpty) ...[
-                        const SizedBox(height: 2),
-                        Text(
-                          bodyText,
-                          maxLines: 3,
-                          overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.bodySmall,
-                        ),
-                      ],
-                    ],
-                  ),
+                Wrap(
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 6,
+                  runSpacing: 2,
+                  children: [
+                    Text(
+                      '$dateLabel • $durationLabel',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                    LansweeperStateBadge(
+                      state: lansweeperState,
+                      ticketId: ticketId,
+                      ticketViewUrlTemplate: ticketViewUrlTemplate,
+                      onPressed: isSyncLoading ? null : onBadgePressed,
+                      inline: true,
+                      ticketLinkEnabled: ticketLinkEnabled,
+                    ),
+                  ],
                 ),
-                const SizedBox(width: 8),
-                LansweeperStateBadge(
-                  state: lansweeperState,
-                  ticketId: ticketId,
-                  ticketViewUrlTemplate: ticketViewUrlTemplate,
-                  onPressed: isSyncLoading ? null : onBadgePressed,
-                ),
+                if (notesBlock != null) ...[
+                  const SizedBox(height: 2),
+                  notesBlock,
+                ],
               ],
             ),
           ),

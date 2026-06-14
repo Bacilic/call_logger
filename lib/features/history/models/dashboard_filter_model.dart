@@ -116,6 +116,44 @@ class DashboardFilterModel {
     return 'έως ${formatDisplayDate(dayOnly(dateTo!))}';
   }
 
+  /// Εύρος χωρίς φίλτρο ημερομηνιών — «Όλες: από – έως» με πραγματικές ημερομηνίες δεδομένων.
+  String allDatesDataRangeTitle({
+    DateTime? dataFrom,
+    DateTime? dataTo,
+  }) {
+    if (dataFrom == null) {
+      return String.fromCharCodes(const <int>[
+        0x038C,
+        0x03BB,
+        0x03B5,
+        0x03C2,
+        0x003A,
+        0x20,
+        0x2014,
+      ]);
+    }
+    final fromStr = formatDisplayDate(dayOnly(dataFrom));
+    if (dataTo == null) return 'Όλες: $fromStr';
+    final toStr = formatDisplayDate(dayOnly(dataTo));
+    if (fromStr == toStr) return 'Όλες: $fromStr';
+    return 'Όλες: $fromStr – $toStr';
+  }
+
+  /// Τίτλος εύρους για αναφορά Lansweeper (φίλτρο πίνακα ελέγχου).
+  String lansweeperReportRangeTitle({
+    DateTime? historyDateFrom,
+    DateTime? historyDateTo,
+    DateTime? now,
+  }) {
+    if (dateFrom == null && dateTo == null) {
+      return allDatesDataRangeTitle(
+        dataFrom: historyDateFrom,
+        dataTo: historyDateTo,
+      );
+    }
+    return kpiTotalCallsRangeTitle(now: now);
+  }
+
   /// Μικρή περιγραφή περιόδου σύγκρισης για υπότιτλους KPI.
   String kpiComparisonRangeHint({DateTime? now}) {
     final prev = previousComparisonRangeInclusive;
