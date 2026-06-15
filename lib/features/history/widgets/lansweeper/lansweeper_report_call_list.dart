@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 
 import '../../../calls/models/call_model.dart';
 import 'lansweeper_report_call_tile.dart';
@@ -65,8 +65,8 @@ final class _CallEntry extends _LansweeperReportListEntry {
   final LansweeperReportCallRowData item;
   final bool isLastInGroup;
 
-  // 4 pad + ~22 meta + 2 gap + 42 σημειώσεις + ~2 rounding ≈ 72· χρησιμοποιούμε 80 buffer.
-  static const double _kCallRowExtent = 80;
+  // 4 pad + ~28 meta + 2 gap + 42 σημειώσεις + ~4 rounding ≈ 80· buffer για badge/ticket.
+  static const double _kCallRowExtent = 90;
   static const double _kGroupBottomExtent = 16;
 }
 
@@ -303,7 +303,7 @@ class _LansweeperReportCallListState extends State<LansweeperReportCallList> {
           final entry = entries[index];
           return SizedBox(
             height: entry.extent,
-            child: _buildEntry(entry),
+            child: ClipRect(child: _buildEntry(entry)),
           );
         },
       ),

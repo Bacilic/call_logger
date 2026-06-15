@@ -17,6 +17,8 @@
       "Αναφορά Lansweeper · διάλογος ρυθμίσεων: ορατή scrollbar με κοινό controller και δεξιό gutter 16 px"
     ],
     "fixed": [
+      "Αναφορά Lansweeper · λίστα κλήσεων: διόρθωση overflow 10 px σε Καταχωρημένες/Αποτυχημένες/Εξαιρεμένες/Όλες — σταθερό ύψος γραμμής και μία γραμμή meta (badge + ticket)",
+      "Αναφορά Lansweeper · API πράκτορας/αιτών: Username και AgentUsername με domain\\username (π.χ. gnk\\v.drosos) αντί Displayname — διόρθωση σφαλμάτων «user/agent doesn't exist»",
       "Αναφορά Lansweeper · έλεγχος σύνδεσης: ακύρωση/προστασία ref.mounted μετά async ping — διόρθωση UnmountedRefException στο κλείσιμο διαλόγου",
       "Αναφορά Lansweeper · λίστα κλήσεων: διόρθωση overflow 2 px στις γραμμές (σταθερό ύψος γραμμής)",
       "Αναφορά Lansweeper · σύνδεσμος ticket: αδρανής χωρίς σύνδεση Lansweeper, tooltip επεξήγησης, κέρσορας δακτύλου όταν ενεργός",

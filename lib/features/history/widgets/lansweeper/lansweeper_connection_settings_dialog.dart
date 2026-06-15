@@ -283,8 +283,8 @@ class _LansweeperConnectionSettingsDialogState
                 controller: widget.agentUsernameController,
                 onChanged: (_) => widget.onSettingsChanged(),
                 decoration: const InputDecoration(
-                  labelText: 'Πράκτορας = αιτών (username / UPN)',
-                  hintText: 'π.χ. v.drosos ή v.drosos@gnk.local',
+                  labelText: 'Πράκτορας = αιτών (domain\\username)',
+                  hintText: 'π.χ. gnk\\v.drosos',
                   border: OutlineInputBorder(),
                   isDense: true,
                 ),
@@ -292,8 +292,8 @@ class _LansweeperConnectionSettingsDialogState
               Padding(
                 padding: const EdgeInsets.only(top: 6),
                 child: Text(
-                  'Στο AddTicket στέλνονται AgentUsername και Displayname με την ίδια τιμή· '
-                  'αν περιέχει @, στέλνεται και Email (UPN). '
+                  'Στο AddTicket στέλνονται Username και AgentUsername με την ίδια τιμή '
+                  '(όπως στο Lansweeper: domain\\username). '
                   'Ο έλεγχος καλεί το API με δοκιμαστικό αίτημα — αν επιτύχει, δημιουργείται ticket που μπορείτε να διαγράψετε.',
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         color: Theme.of(context).colorScheme.onSurfaceVariant,

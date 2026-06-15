@@ -1,15 +1,20 @@
 ﻿/// Πεδία για Lansweeper `AddTicket`: πράκτορας (agent) και αιτών (requester)
-/// με την **ίδια** καταχώριση — για περιβάλλοντα που απαιτούν και τα δύο.
+/// με την **ίδια** καταχώριση — χρήστης τομέα `domain\username`.
 ///
-/// - [AgentUsername] και [Displayname]: πάντα η τιμή του πράκτορα.
-/// - [Email]: μόνο όταν η τιμή μοιάζει με email/UPN (περιέχει `@`).
+/// - [Username] και [AgentUsername]: η ίδια τιμή (`domain\username`).
+/// - Αν περιέχει `@`: [Email] και [AgentEmail] αντί για username πεδία.
 Map<String, String> lansweeperAgentAsMatchingRequesterFields(
-  String agentUsername,
+  String domainUsername,
 ) {
-  final a = agentUsername.trim();
+  final value = domainUsername.trim();
+  if (value.contains('@')) {
+    return <String, String>{
+      'Email': value,
+      'AgentEmail': value,
+    };
+  }
   return <String, String>{
-    'AgentUsername': a,
-    'Displayname': a,
-    if (a.contains('@')) 'Email': a,
+    'Username': value,
+    'AgentUsername': value,
   };
 }

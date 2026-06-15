@@ -23,6 +23,8 @@
 
 ### Διορθώθηκε
 
+- **Αναφορά Lansweeper · λίστα κλήσεων:** διόρθωση overflow 10 px στις καρτέλες Καταχωρημένες, Αποτυχημένες, Εξαιρεμένες και Όλες — αύξηση σταθερού ύψους γραμμής και μία γραμμή meta (ημερομηνία + badge/ticket) αντί `Wrap`.
+- **Αναφορά Lansweeper · API πράκτορας/αιτών:** στο `AddTicket` στέλνονται `Username` και `AgentUsername` με `domain\username` (π.χ. `gnk\v.drosos`) αντί `Displayname` — διόρθωση σφαλμάτων «user/agent doesn't exist» κατά τον έλεγχο πράκτορα και την καταχώρηση ticket.
 - **Ιστορικό κλήσεων · επεξεργασία κλήσης:** αναβολή `invalidate` providers (`refreshAfterMutation`, `historyEditSmartEntityProvider`) στο επόμενο frame — διόρθωση `FlutterError` (locked widget tree / `UncontrolledProviderScope`) μετά την αποθήκευση και έξοδο.
 - **Αναφορά Lansweeper · έλεγχος σύνδεσης:** ακύρωση pending HTTP ping και έλεγχος `ref.mounted` μετά async κενά — διόρθωση `UnmountedRefException` όταν κλείνει γρήγορα ο διάλογος (π.χ. κενή αναφορά).
 - **Αναφορά Lansweeper · λίστα κλήσεων:** διόρθωση overflow 2 px στις γραμμές κλήσης (προσαρμογή σταθερού ύψους γραμμής).
