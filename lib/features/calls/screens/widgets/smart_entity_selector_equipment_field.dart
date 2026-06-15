@@ -673,6 +673,10 @@ class _SmartEntityEquipmentFieldState extends State<SmartEntityEquipmentField> {
                             _typedQuery = value;
                             _keyboardOptionIndex = -1;
                             _lastAutoScrollIndex = -1;
+                            if (value.trim().isEmpty) {
+                              notifier.clearEquipment();
+                              return;
+                            }
                             if (_isSelectingEquipment) {
                               notifier.checkContent(equipmentText: value);
                               return;

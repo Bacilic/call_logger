@@ -5,6 +5,8 @@ import '../../provider/call_entry_provider.dart';
 import '../../provider/call_header_provider.dart';
 import '../../provider/lookup_provider.dart';
 import '../../../../core/utils/search_text_normalizer.dart';
+import '../../../../core/utils/user_homonym_finder.dart';
+import '../../../directory/screens/widgets/homonym_warning_dialog.dart';
 import 'smart_entity_selector_widget.dart';
 
 /// Ελάχιστο πλάτος γραμμής πεδίων ώστε να χωράει Τηλ. + Καλών. + Τμήμα + Εξοπλισμός + κενά + ×.
@@ -123,10 +125,14 @@ class _CallHeaderFormState extends ConsumerState<CallHeaderForm> {
       final wantsDeptChange =
           caller?.id != null &&
           departmentText.isNotEmpty &&
-          (selectedDepartment?.id != caller?.departmentId) &&
-          (nextDeptNorm.isNotEmpty && nextDeptNorm != oldDeptNorm);
+          (nextDeptNorm.isNotEmpty && nextDeptNorm != oldDeptNorm) &&
+          (selectedDepartment?.id != caller?.departmentId ||
+              (caller?.departmentId == null && selectedDepartment == null));
 
       if (wantsDeptChange) {
+        if (oldDeptText.isEmpty) {
+          updatePrimaryDepartment = true;
+        } else {
         final askUpdate = await showDialog<bool>(
           context: context,
           builder: (dialogContext) {
@@ -150,6 +156,34 @@ class _CallHeaderFormState extends ConsumerState<CallHeaderForm> {
           },
         );
         updatePrimaryDepartment = askUpdate ?? false;
+        }
+      }
+
+      if (currentHeader.needsNewCallerCreation && lookupService != null) {
+        final homonym = UserHomonymFinder.findHomonymFromCallerText(
+          users: lookupService.users,
+          callerDisplayText: currentHeader.normalizedCallerDisplayText,
+        );
+        if (homonym != null) {
+          if (!context.mounted) return;
+          final parsed = UserHomonymFinder.parseCallerText(
+            currentHeader.normalizedCallerDisplayText,
+          );
+          final displayName = UserHomonymFinder.displayNameFor(
+            parsed.firstName,
+            parsed.lastName,
+          );
+          final choice = await showDialog<bool>(
+            context: context,
+            barrierDismissible: true,
+            builder: (dialogContext) => HomonymWarningDialog(
+              userDisplayName: displayName,
+              existingRecordDepartmentName:
+                  homonym.departmentName?.trim() ?? '',
+            ),
+          );
+          if (choice != true) return;
+        }
       }
 
       final msg = await notifier.associateCurrentIfNeeded(

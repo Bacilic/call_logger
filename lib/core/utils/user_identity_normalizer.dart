@@ -12,4 +12,12 @@ class UserIdentityNormalizer {
     final sigmaFolded = raw.replaceAll('ς', 'σ');
     return SearchTextNormalizer.normalizeForSearch(sigmaFolded);
   }
+
+  /// Κλειδί ταύτισης μόνο για το πεδίο όνομα (first_name).
+  static String firstNameKey(String? firstName) =>
+      identityKeyForPerson(firstName, '');
+
+  /// Κλειδί ταύτισης μόνο για το πεδίο επώνυμο (last_name).
+  static String lastNameKey(String? lastName) =>
+      identityKeyForPerson('', lastName);
 }

@@ -1,32 +1,28 @@
-﻿import 'dart:async';
+﻿// Οθόνη Λάμπας: συντονισμός καρτελών, controllers και dialogs.
+import 'dart:async';
 
-import 'package:file_picker/file_picker.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:path/path.dart' as p;
 
-import '../../../core/providers/lamp_open_settings_intent_provider.dart';
-import '../../../core/providers/lamp_read_path_health_provider.dart';
-import '../../../core/database/old_database/lamp_database_provider.dart';
-import '../../../core/database/old_database/lamp_data_issue_type_labels.dart';
 import '../../../core/database/old_database/lamp_issue_resolution_service.dart';
 import '../../../core/database/old_database/lamp_old_db_validator.dart';
-import '../../../core/database/old_database/resolution_log_entry.dart';
 import '../../../core/database/old_database/lamp_settings_store.dart';
-import '../../../core/services/portable_lamp_storage.dart';
 import '../../../core/database/old_database/old_equipment_repository.dart';
 import '../../../core/database/old_database/old_excel_importer.dart';
-import '../../../core/utils/file_picker_session.dart';
-import '../../database/services/database_stats_service.dart';
-import '../../settings/widgets/create_new_database_dialog.dart';
+import '../../../core/providers/lamp_open_settings_intent_provider.dart';
+import '../../../core/providers/lamp_read_path_health_provider.dart';
+import '../controllers/lamp_import_controller.dart';
+import '../controllers/lamp_integrity_controller.dart';
+import '../controllers/lamp_issue_resolution_controller.dart';
+import '../controllers/lamp_path_management.dart';
+import '../controllers/lamp_screen_host.dart';
+import '../controllers/lamp_search_controller.dart';
 import '../services/lamp_migration_service.dart';
 import '../widgets/lamp_db_tables_tab.dart';
-import '../widgets/lamp_issue_manual_review_dialog.dart';
-import '../widgets/lamp_resolution_progress_dialog.dart';
-import '../widgets/lamp_unresolved_resolution_dialog.dart';
+import '../widgets/lamp_issue_widgets.dart';
 import '../widgets/lamp_result_card.dart';
+import '../widgets/lamp_settings_dialog.dart';
 import '../widgets/lamp_transfer_wizard_dialog.dart';
 
 class LampScreen extends ConsumerStatefulWidget {
@@ -36,74 +32,111 @@ class LampScreen extends ConsumerStatefulWidget {
   ConsumerState<LampScreen> createState() => _LampScreenState();
 }
 
-class _LampScreenState extends ConsumerState<LampScreen> {
-  static const double _searchFieldWidth = 180;
-  static const double _searchFieldSpacing = 12;
-  static const int _searchFieldCount = 5;
+class _LampScreenState extends ConsumerState<LampScreen> implements LampScreenHost {
+  late final LampScreenShared _shared;
+  late final LampPathController _path;
+  late final LampSearchController _search;
+  late final LampImportController _import;
+  late final LampIntegrityController _integrity;
+  late final LampIssuesController _issues;
+  late final LampIssueResolutionController _resolution;
 
-  /// Πλάτος μπλοκ πεδίων φίλτρου (χωρίς κουμπί), όπως το [Wrap].
-  static double _searchFieldsBlockWidth(double maxWidth) {
-    if (maxWidth <= 0) return _searchFieldWidth;
-    var rowWidth = 0.0;
-    var maxRowWidth = 0.0;
-    for (var i = 0; i < _searchFieldCount; i++) {
-      if (rowWidth == 0) {
-        rowWidth = _searchFieldWidth;
-      } else if (rowWidth + _searchFieldSpacing + _searchFieldWidth > maxWidth) {
-        if (rowWidth > maxRowWidth) maxRowWidth = rowWidth;
-        rowWidth = _searchFieldWidth;
-      } else {
-        rowWidth += _searchFieldSpacing + _searchFieldWidth;
-      }
-    }
-    if (rowWidth > maxRowWidth) maxRowWidth = rowWidth;
-    return maxRowWidth;
-  }
-
-  final _settings = LampSettingsStore();
-  final _importer = OldExcelImporter();
-  final _repository = OldEquipmentRepository();
-  final _issueResolutionService = LampIssueResolutionService();
-  final _migrationService = LampMigrationService();
-
-  final _excelController = TextEditingController();
-  final _readDbController = TextEditingController();
-  final _outputDbController = TextEditingController();
-  final _globalController = TextEditingController();
-  final _codeController = TextEditingController();
-  final _serialController = TextEditingController();
-  final _ownerController = TextEditingController();
-  final _officeController = TextEditingController();
-  final _phoneController = TextEditingController();
-  final _maxSearchResultsController = TextEditingController();
   final _lampErrorDialogScroll = ScrollController();
-  int _maxSearchResults = LampSettingsStore.defaultMaxSearchResults;
-  Timer? _liveSearchDebounce;
-  Timer? _pathValidationDebounce;
-  bool _suppressLiveSearch = false;
 
   bool _loading = true;
-  bool _importing = false;
-  bool _integrityChecking = false;
-  LampIssueType? _resolvingIssueType;
-  String? _message;
   bool _lampSettingsDialogOpen = false;
   String? _lampDialogFeedback;
   bool _lampDialogFeedbackIsError = false;
-  void Function(void Function())? _lampSettingsDialogSetState;
+  StateSetter? _lampSettingsDialogSetState;
   bool _capturedLampRequestBaseline = false;
   int _lampRequestBaseline = 0;
-  List<Map<String, Object?>> _results = const <Map<String, Object?>>[];
-  List<Map<String, Object?>> _issues = const <Map<String, Object?>>[];
-  final Set<String> _expandedIssueGroupKeys = <String>{};
 
-  LampOldDbCheckResult? get _readPathCheck =>
+  @override
+  LampScreenShared get shared => _shared;
+
+  @override
+  LampOldDbCheckResult? get readPathCheck =>
       ref.watch(lampReadPathHealthProvider).value;
+
+  @override
+  bool get lampSettingsDialogOpen => _lampSettingsDialogOpen;
+
+  @override
+  set lampSettingsDialogOpen(bool value) => _lampSettingsDialogOpen = value;
+
+  @override
+  StateSetter? get lampSettingsDialogSetState => _lampSettingsDialogSetState;
+
+  @override
+  set lampSettingsDialogSetState(StateSetter? value) =>
+      _lampSettingsDialogSetState = value;
+
+  @override
+  String? get lampDialogFeedback => _lampDialogFeedback;
+
+  @override
+  set lampDialogFeedback(String? value) => _lampDialogFeedback = value;
+
+  @override
+  bool get lampDialogFeedbackIsError => _lampDialogFeedbackIsError;
+
+  @override
+  set lampDialogFeedbackIsError(bool value) =>
+      _lampDialogFeedbackIsError = value;
+
+  @override
+  void notifyState() => setState(() {});
+
+  @override
+  void clearLampDialogFeedback() {
+    if (_lampDialogFeedback == null && !_lampDialogFeedbackIsError) return;
+    if (!mounted) return;
+    setState(() {
+      _lampDialogFeedback = null;
+      _lampDialogFeedbackIsError = false;
+    });
+    _lampSettingsDialogSetState?.call(() {});
+  }
+
+  @override
+  void setLampDialogFeedback(String message, {bool isError = false}) {
+    if (!mounted) return;
+    setState(() {
+      _lampDialogFeedback = message;
+      _lampDialogFeedbackIsError = isError;
+    });
+    _lampSettingsDialogSetState?.call(() {});
+  }
+
+  @override
+  Future<void> runLiveSearch() => _search.runLiveSearch();
+
+  @override
+  Future<void> loadIssues() => _issues.loadIssues();
 
   @override
   void initState() {
     super.initState();
-    _attachSearchListeners();
+    _shared = LampScreenShared(
+      settings: LampSettingsStore(),
+      repository: OldEquipmentRepository(),
+      issueResolutionService: LampIssueResolutionService(),
+      migrationService: LampMigrationService(),
+      importer: OldExcelImporter(),
+    );
+    _path = LampPathController(host: this);
+    _search = LampSearchController(host: this, path: _path);
+    _import = LampImportController(host: this, path: _path);
+    _integrity = LampIntegrityController(host: this, path: _path);
+    _issues = LampIssuesController(host: this, path: _path, search: _search);
+    _resolution = LampIssueResolutionController(
+      host: this,
+      path: _path,
+      search: _search,
+      issuesList: () => _issues.issues,
+      issueCountFor: _issues.issueCountFor,
+    );
+    _search.attachListeners();
     _loadSettings();
   }
 
@@ -118,178 +151,41 @@ class _LampScreenState extends ConsumerState<LampScreen> {
 
   @override
   void dispose() {
-    _detachSearchListeners();
-    _liveSearchDebounce?.cancel();
-    _pathValidationDebounce?.cancel();
-    _excelController.dispose();
-    _readDbController.dispose();
-    _outputDbController.dispose();
-    _globalController.dispose();
-    _codeController.dispose();
-    _serialController.dispose();
-    _ownerController.dispose();
-    _officeController.dispose();
-    _phoneController.dispose();
-    _maxSearchResultsController.dispose();
+    _search.detachListeners();
+    _search.dispose();
+    _path.dispose();
     _lampErrorDialogScroll.dispose();
     super.dispose();
   }
 
-  List<TextEditingController> get _fieldSearchControllers =>
-      <TextEditingController>[
-        _phoneController,
-        _codeController,
-        _ownerController,
-        _officeController,
-        _serialController,
-      ];
-
-  void _attachSearchListeners() {
-    _globalController.addListener(_onGlobalSearchInputChanged);
-    for (final c in _fieldSearchControllers) {
-      c.addListener(_onFieldSearchInputChanged);
-    }
-  }
-
-  void _detachSearchListeners() {
-    _globalController.removeListener(_onGlobalSearchInputChanged);
-    for (final c in _fieldSearchControllers) {
-      c.removeListener(_onFieldSearchInputChanged);
-    }
-  }
-
-  bool get _hasAnyFieldSearchInput =>
-      _fieldSearchControllers.any((c) => c.text.trim().isNotEmpty);
-
-  bool get _hasAnySearchInput =>
-      _globalController.text.trim().isNotEmpty || _hasAnyFieldSearchInput;
-
-  List<String> get _activeFieldSearchTerms => _fieldSearchControllers
-      .map((c) => c.text.trim())
-      .where((t) => t.isNotEmpty)
-      .toList();
-
-  String _emptyResultsCenterMessage() {
-    if (!_readPathReadyForQuery) {
-      final detail = _readPathCheck?.userMessageGreek.trim();
-      if (detail != null && detail.isNotEmpty) {
-        return detail;
-      }
-      return 'Υπάρχει πρόβλημα με τη βάση δεδομένων της Λάμπας';
-    }
-    if (!_hasAnySearchInput) {
-      return 'Ξεκινίστε την αναζήτηση: είτε καθολικά είτε σε συγκεκριμένο πεδίο';
-    }
-    final globalTerm = _globalController.text.trim();
-    if (globalTerm.isNotEmpty) {
-      return 'Η αναζήτηση του «$globalTerm» δεν αντιστοιχεί σε καμία εγγραφή στη βάση της Λάμπας';
-    }
-    final terms = _activeFieldSearchTerms;
-    if (terms.length == 1) {
-      return 'Η αναζήτηση του «${terms.first}» δεν αντιστοιχεί σε καμία εγγραφή στη βάση της Λάμπας';
-    }
-    final combined = terms.map((t) => '«$t»').join(' + ');
-    return 'Η αναζήτηση του $combined δεν αντιστοιχεί σε καμία εγγραφή στη βάση της Λάμπας';
-  }
-
-  void _onGlobalSearchInputChanged() {
-    if (_suppressLiveSearch) return;
-    if (_globalController.text.trim().isNotEmpty && _hasAnyFieldSearchInput) {
-      _suppressLiveSearch = true;
-      for (final c in _fieldSearchControllers) {
-        if (c.text.isNotEmpty) c.clear();
-      }
-      _suppressLiveSearch = false;
-    }
-    _scheduleLiveSearch();
-  }
-
-  void _onFieldSearchInputChanged() {
-    if (_suppressLiveSearch) return;
-    if (_hasAnyFieldSearchInput && _globalController.text.trim().isNotEmpty) {
-      _suppressLiveSearch = true;
-      _globalController.clear();
-      _suppressLiveSearch = false;
-    }
-    _scheduleLiveSearch();
-  }
-
-  void _scheduleLiveSearch() {
-    _liveSearchDebounce?.cancel();
-    _liveSearchDebounce = Timer(const Duration(milliseconds: 320), () async {
-      await _runLiveSearch();
-    });
-  }
-
-  Future<void> _runLiveSearch() async {
-    if (!mounted) return;
-    final hasGlobal = _globalController.text.trim().isNotEmpty;
-    final hasFields = _hasAnyFieldSearchInput;
-    if (!hasGlobal && !hasFields) {
-      setState(() {
-        _results = const <Map<String, Object?>>[];
-        _message = null;
-      });
-      return;
-    }
-    if (hasGlobal) {
-      await _globalSearch(showProgressSnack: false);
-      return;
-    }
-    await _fieldSearch(showProgressSnack: false);
-  }
-
-  void _clearAllSearchInputs() {
-    _suppressLiveSearch = true;
-    _globalController.clear();
-    for (final c in _fieldSearchControllers) {
-      c.clear();
-    }
-    _suppressLiveSearch = false;
-    _liveSearchDebounce?.cancel();
-    setState(() {
-      _results = const <Map<String, Object?>>[];
-      _message = null;
-    });
-  }
-
-  Widget? _clearFieldSuffix({
-    required TextEditingController controller,
-    required String tooltip,
+  @override
+  void showSnack(
+    String message, {
+    bool isError = false,
+    Duration duration = const Duration(seconds: 5),
   }) {
-    if (controller.text.isEmpty) return null;
-    return IconButton(
-      tooltip: tooltip,
-      onPressed: controller.clear,
-      icon: const Icon(Icons.close),
+    if (!mounted) return;
+    if (_lampSettingsDialogOpen) {
+      if (isError) {
+        unawaited(showLampErrorDialog(message));
+      } else {
+        setLampDialogFeedback(message, isError: false);
+      }
+      return;
+    }
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.hideCurrentSnackBar();
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: isError ? Theme.of(context).colorScheme.error : null,
+        duration: duration,
+      ),
     );
   }
 
-  void _clearLampDialogFeedback() {
-    if (_lampDialogFeedback == null && !_lampDialogFeedbackIsError) return;
-    if (!mounted) return;
-    setState(() {
-      _lampDialogFeedback = null;
-      _lampDialogFeedbackIsError = false;
-    });
-    _lampSettingsDialogSetState?.call(() {});
-  }
-
-  void _setLampDialogFeedback(
-    String message, {
-    bool isError = false,
-  }) {
-    if (!mounted) return;
-    setState(() {
-      _lampDialogFeedback = message;
-      _lampDialogFeedbackIsError = isError;
-    });
-    _lampSettingsDialogSetState?.call(() {});
-  }
-
-  /// Ξεχωριστός διάλογος σφάλματος (μπροστά από το dialog ρυθμίσεων), με κύλιση
-  /// και αντιγραφή — αποφεύγει overflow από μεγάλα μηνύματα (π.χ. SQL errors).
-  Future<void> _showLampErrorDialog(String message) async {
+  @override
+  Future<void> showLampErrorDialog(String message) async {
     if (!mounted) return;
     await showDialog<void>(
       context: context,
@@ -333,1496 +229,75 @@ class _LampScreenState extends ConsumerState<LampScreen> {
     );
   }
 
-  void _showSnack(
-    String message, {
-    bool isError = false,
-    Duration duration = const Duration(seconds: 5),
-  }) {
-    if (!mounted) return;
-    if (_lampSettingsDialogOpen) {
-      if (isError) {
-        unawaited(_showLampErrorDialog(message));
-      } else {
-        _setLampDialogFeedback(message, isError: false);
-      }
-      return;
-    }
-    final messenger = ScaffoldMessenger.of(context);
-    messenger.hideCurrentSnackBar();
-    messenger.showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: isError ? Theme.of(context).colorScheme.error : null,
-        duration: duration,
-      ),
-    );
-  }
-
   Future<void> _loadSettings() async {
-    final excelPath = await _settings.getExcelPath();
-    final readRaw = await _settings.getReadPathRaw();
-    final outRaw = await _settings.getOutputPathRaw();
-    if (!mounted) return;
-    _excelController.text = excelPath ?? '';
-    if (readRaw != null && readRaw.isNotEmpty) {
-      _readDbController.text = readRaw;
-    } else {
-      _readDbController.text = outRaw ?? '';
-    }
-    _outputDbController.text = outRaw ?? '';
-    _maxSearchResults = await _settings.getMaxSearchResults();
-    _maxSearchResultsController.text = _maxSearchResults.toString();
-    await _applyPersistedReadAndValidate(announce: true, source: 'έναρξη');
+    await _path.loadPathsFromSettings();
+    _search.maxSearchResults = await _shared.settings.getMaxSearchResults();
+    _search.maxSearchResultsController.text =
+        _search.maxSearchResults.toString();
+    await _path.applyPersistedReadAndValidate(
+      announce: true,
+      source: 'έναρξη',
+      onDbOk: _onReadPathOk,
+      onDbNotOk: _onReadPathNotOk,
+    );
     if (!mounted) return;
     setState(() => _loading = false);
   }
 
-  /// Αποθήκευση διαβασμένου path από πεδία και πλήρης έλεγχος πρόσβασης/σχήματος.
-  Future<void> _applyPersistedReadAndValidate({
-    bool announce = true,
-    String source = 'αλλαγή',
-  }) async {
-    var read = _readDbController.text.trim();
-    final output = _outputDbController.text.trim();
-    if (read.isEmpty && output.isNotEmpty) {
-      read = output;
-      _readDbController.text = output;
-    }
-    await _settings.setReadPath(read);
-    await _settings.setOutputPath(output);
-    await ref.read(lampReadPathHealthProvider.notifier).refresh(
-      pathOverride: read,
-      outputPathOverride: output,
-      excelPathOverride: _excelController.text.trim(),
-    );
-    if (!mounted) return;
-    final result = _readPathCheck;
-    if (result == null) return;
-    if (result.status == LampOldDbStatus.ok) {
-      await _loadIssues();
-      await _repository.preloadSearchCache(read);
-      if (_lampSettingsDialogOpen) {
-        _clearLampDialogFeedback();
-      }
-    } else {
-      setState(() {
-        _issues = const <Map<String, Object?>>[];
-        _expandedIssueGroupKeys.clear();
-      });
-    }
-    if (announce) {
-      _announceCheck(result, source: source);
-    }
-  }
-
-  void _announceCheck(LampOldDbCheckResult result, {required String source}) {
-    if (result.status == LampOldDbStatus.ok ||
-        result.status == LampOldDbStatus.pendingCreation) {
-      return;
-    }
-    final prefix = source == 'έναρξη'
-        ? 'Λάμπα: '
-        : 'Έλεγχος βάσης ($source): ';
-    final message = _lampSettingsDialogOpen
-        ? result.userMessageGreek
-        : '$prefix${result.userMessageGreek}';
-    final isError = result.status != LampOldDbStatus.pathEmpty;
-    _showSnack(
-      message,
-      isError: isError,
-      duration: Duration(seconds: isError ? 8 : 7),
+  Future<void> _onReadPathOk() async {
+    await _issues.loadIssues();
+    await _shared.repository.preloadSearchCache(
+      _path.readDbController.text.trim(),
     );
   }
 
-  /// Ανανέωση αναζητήσεων μετά αλλαγή read path: κλείσιμο σύνδεσης, επανεπαλήθευση, μηνύματα.
+  void _onReadPathNotOk() {
+    _issues.clearIssues();
+    notifyState();
+  }
+
   Future<void> _refreshDataAfterReadPathChange({
     required String source,
     bool announce = true,
   }) async {
-    await LampDatabaseProvider.instance.close();
-    await _applyPersistedReadAndValidate(announce: announce, source: source);
-  }
-
-  Future<void> _pickExcel() async {
-    final session = await FilePickerSession.run(() async {
-      final result = await FilePicker.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: const <String>['xlsx', 'xls'],
-      );
-      if (result == null || result.files.isEmpty) return null;
-      return result.files.first.path;
-    });
-    if (session.refocusedExisting) return;
-    final path = session.value;
-    if (path == null) {
-      if (mounted) {
-        _showSnack('Η επιλογή αρχείου Excel ακυρώθηκε.');
-      }
-      return;
-    }
-    _excelController.text = path;
-    await _settings.setExcelPath(path);
-    if (mounted) {
-      _lampSettingsDialogSetState?.call(() {});
-      _showSnack('Ορίστηκε αρχείο Excel: ${p.basename(path)}');
-    }
-  }
-
-  Future<void> _pickReadDatabase() async {
-    final session = await FilePickerSession.run(() async {
-      final result = await FilePicker.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: const <String>['db'],
-      );
-      if (result == null || result.files.isEmpty) return null;
-      return result.files.first.path;
-    });
-    if (session.refocusedExisting) return;
-    final path = session.value;
-    if (path == null) {
-      if (mounted) {
-        _showSnack('Η επιλογή αρχείου .db (ανάγνωση) ακυρώθηκε.');
-      }
-      return;
-    }
-    final portablePath =
-        await PortableLampStorage.tryCopyLampDbToPortableDataBase(path);
-    _readDbController.text = portablePath;
-    await _settings.setReadPath(portablePath);
-    if (!mounted) return;
-    _lampSettingsDialogSetState?.call(() {});
-    _showSnack('Θα γίνει έλεγχος της βάσης προς ανάγνωση…');
-    await _refreshDataAfterReadPathChange(source: 'επιλογή αρχείου ανάγνωσης');
-  }
-
-  Future<void> _pickDatabaseOutput() async {
-    final oldOut = _outputDbController.text.trim();
-    final path = await pickSqliteDatabaseSavePath(
-      initialPathHint: oldOut.isNotEmpty ? oldOut : null,
-      dialogTitle: 'Θέση και όνομα βάσης εξόδου (.db) για import Excel',
-      defaultSuggestedFileName: 'old_equipment.db',
+    await _path.refreshDataAfterReadPathChange(
+      source: source,
+      announce: announce,
+      onDbOk: _onReadPathOk,
+      onDbNotOk: _onReadPathNotOk,
     );
-    if (FilePickerSession.takeLastRefocusedExisting()) return;
-    if (path == null) {
-      if (mounted) {
-        _showSnack('Η αποθήκευση/προορισμός αρχείου εξόδου ακυρώθηκε.');
-      }
-      return;
-    }
-    final validationError = validateNewDatabaseSavePath(path);
-    if (validationError != null) {
-      if (mounted) {
-        _showSnack(validationError, isError: true);
-      }
-      return;
-    }
-    final portablePath =
-        await PortableLampStorage.tryCopyLampDbToPortableDataBase(path);
-    _outputDbController.text = portablePath;
-    await _settings.setOutputPath(portablePath);
-    final readT = _readDbController.text.trim();
-    if (readT.isEmpty || (oldOut.isNotEmpty && readT == oldOut)) {
-      _readDbController.text = portablePath;
-      await _settings.setReadPath(portablePath);
-      if (mounted) {
-        _showSnack(
-          'Η διαδρομή εξόδου ενημερώθηκε. Η «ανάγνωση» συγχρονίστηκε (ίδιο αρχείο).',
-        );
-        _lampSettingsDialogSetState?.call(() {});
-      }
-      await _refreshDataAfterReadPathChange(source: 'αλλαγή αρχείου εξόδου');
-    } else {
-      if (mounted) {
-        _showSnack(
-          'Η διαδρομή εξόδου (δημιουργίας) ενημερώθηκε. Η βάση προς «ανάγνωση» παρέμεινε ξεχωριστή.',
-        );
-        _lampSettingsDialogSetState?.call(() {});
-      }
-    }
-  }
-
-  /// Λόγος απενεργοποίησης import Excel· `null` όταν μπορεί να εκτελεστεί.
-  String? _excelImportDisabledReason() {
-    final excelEmpty = _excelController.text.trim().isEmpty;
-    final outEmpty = _outputDbController.text.trim().isEmpty;
-    if (excelEmpty && outEmpty) {
-      return 'Λείπει το Excel και διαδρομή του αρχείου εξόδου .db';
-    }
-    if (excelEmpty) {
-      return 'Λείπει το αρχείο Excel';
-    }
-    if (outEmpty) {
-      return 'Δεν έχει οριστεί διαδρομή εξόδου';
-    }
-    final outputFormatError = LampOldDbValidator.validateDbPathFormat(
-      _outputDbController.text,
-    );
-    if (outputFormatError != null) {
-      return outputFormatError;
-    }
-    return null;
-  }
-
-  String? _outputPathFormatWarning() =>
-      LampOldDbValidator.validateDbPathFormat(_outputDbController.text);
-
-  String? _readPathFormatWarning() =>
-      LampOldDbValidator.validateDbPathFormat(_readDbController.text);
-
-  String _effectiveReadPathForValidation() {
-    var read = _readDbController.text.trim();
-    final output = _outputDbController.text.trim();
-    if (read.isEmpty && output.isNotEmpty) {
-      read = output;
-    }
-    return read;
-  }
-
-  void _schedulePathHealthRefresh() {
-    _pathValidationDebounce?.cancel();
-    _pathValidationDebounce = Timer(const Duration(milliseconds: 400), () {
-      if (!mounted) return;
-      unawaited(
-        ref.read(lampReadPathHealthProvider.notifier).refresh(
-          pathOverride: _effectiveReadPathForValidation(),
-          outputPathOverride: _outputDbController.text.trim(),
-          excelPathOverride: _excelController.text.trim(),
-        ),
-      );
-    });
-  }
-
-  void _notifyLampSettingsDialogFieldsChanged() {
-    if (!mounted) return;
-    _schedulePathHealthRefresh();
-    _lampSettingsDialogSetState?.call(() {});
-  }
-
-  Widget _excelImportButton(BuildContext context) {
-    final blockReason = _excelImportDisabledReason();
-    final enabled = !_importing && blockReason == null;
-    final button = FilledButton.icon(
-      onPressed: enabled ? _runImport : null,
-      icon: const Icon(Icons.play_arrow),
-      label: const Text('Δημιουργία/ενημέρωση βάσης από Excel'),
-    );
-    final tooltipMessage = _importing
-        ? 'Εκτελείται εισαγωγή Excel…'
-        : blockReason;
-    if (enabled || tooltipMessage == null) {
-      return button;
-    }
-    // Διαφανές επίπεδο πάνω από disabled κουμπί ώστε το Tooltip να λειτουργεί.
-    return Tooltip(
-      waitDuration: const Duration(milliseconds: 400),
-      showDuration: const Duration(seconds: 5),
-      message: tooltipMessage,
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(12),
-          onTap: () {},
-          child: IgnorePointer(child: button),
-        ),
-      ),
-    );
-  }
-
-  void _matchReadToOutput() {
-    _readDbController.text = _outputDbController.text;
-    if (mounted) {
-      _lampSettingsDialogSetState?.call(() {});
-      _showSnack(
-        'Η «ανάγνωση» ευθυγραμμίστηκε με τη διαδρομή εξόδου. Πατήστε αποθήκευση στο τέλος ή κάντε έλεγχο.',
-      );
-    }
   }
 
   Future<void> _runImport() async {
-    final excelPath = _excelController.text.trim();
-    final outPath = _outputDbController.text.trim();
-    final blockReason = _excelImportDisabledReason();
-    if (blockReason != null) {
-      setState(() {
-        _message = blockReason;
-      });
-      _lampSettingsDialogSetState?.call(() {});
-      _showSnack(blockReason, isError: true);
-      return;
-    }
-
-    await _settings.setExcelPath(excelPath);
-    await _settings.setOutputPath(outPath);
-    await LampDatabaseProvider.instance.close();
-    setState(() {
-      _importing = true;
-      _message = null;
-      _results = const <Map<String, Object?>>[];
-      _issues = const <Map<String, Object?>>[];
-      _expandedIssueGroupKeys.clear();
-    });
-    _lampSettingsDialogSetState?.call(() {});
-
-    try {
-      _showSnack(
-        'Ξεκίνησε η εισαγωγή Excel · περιμένετε…',
-        duration: const Duration(seconds: 3),
-      );
-      final result = await _importer.importExcel(
-        excelPath: excelPath,
-        databasePath: outPath,
-        onProgress: (_) {
-          if (!mounted) return;
-        },
-      );
-      if (!mounted) return;
-      await _settings.setOutputAndReadFromImportResult(result.databasePath);
-      _readDbController.text = result.databasePath;
-      _outputDbController.text = result.databasePath;
-      setState(() {
-        _message =
-            'Ολοκληρώθηκε η βάση ${p.basename(result.databasePath)}. Προβλήματα ETL: ${result.issueCount}. '
-            'Η αποθηκευμένη διαδρομή «ανάγνωση» ευθυγραμμίστηκε με το .db εξόδου (ίδιο αρχείο).';
-      });
-      _lampSettingsDialogSetState?.call(() {});
-      _showSnack(
-        'Η εισαγωγή τελείωσε. Έγινε επανασύνδεση· γίνεται έλεγχος αρχείου…',
-        duration: const Duration(seconds: 4),
-      );
-      await _applyPersistedReadAndValidate(
+    final failureMessage = await _import.runImport(
+      onImportStart: () {
+        _search.results = const <Map<String, Object?>>[];
+        _search.message = null;
+        _issues.clearIssues();
+        notifyState();
+      },
+      onImportSuccess: (message) {
+        _search.message = message;
+        notifyState();
+      },
+      afterImportValidate: () => _path.applyPersistedReadAndValidate(
         announce: true,
         source: 'μετά import',
-      );
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => _message = 'Η εισαγωγή Excel απέτυχε.');
-      _lampSettingsDialogSetState?.call(() {});
-      _showSnack(
-        'Η εισαγωγή Excel απέτυχε:\n\n$e',
-        isError: true,
-      );
-      if (mounted) {
+        onDbOk: _onReadPathOk,
+        onDbNotOk: _onReadPathNotOk,
+      ),
+      onImportFailureReload: () async {
         await ref.read(lampReadPathHealthProvider.notifier).refresh(
-          pathOverride: _readDbController.text.trim(),
-          outputPathOverride: _outputDbController.text.trim(),
-          excelPathOverride: _excelController.text.trim(),
+          pathOverride: _path.readDbController.text.trim(),
+          outputPathOverride: _path.outputDbController.text.trim(),
+          excelPathOverride: _path.excelController.text.trim(),
         );
-        await _loadIssues();
-      }
-    } finally {
-      if (mounted) {
-        setState(() {
-          _importing = false;
-        });
-        _lampSettingsDialogSetState?.call(() {});
-      }
-    }
-  }
-
-  bool get _readPathReadyForQuery =>
-      _readPathCheck?.status == LampOldDbStatus.ok;
-
-  bool _readPathCheckIsErrorForSnack(LampOldDbStatus? status) {
-    return status != LampOldDbStatus.pathEmpty &&
-        status != LampOldDbStatus.pendingCreation;
-  }
-
-  Future<void> _fieldSearch({bool showProgressSnack = true}) async {
-    if (!_readPathReadyForQuery) {
-      _showSnack(
-        _readPathCheck?.userMessageGreek ??
-            'Η βάση προς ανάγνωση δεν είναι έτοιμη. Ανοίξτε «Ρυθμίσεις διαδρομών».',
-        isError: _readPathCheckIsErrorForSnack(_readPathCheck?.status),
-      );
-      return;
-    }
-    await _runSearch(
-      () => _repository.searchByFields(
-        _readDbController.text.trim(),
-        OldEquipmentSearchFilters(
-          phone: _phoneController.text,
-          code: _codeController.text,
-          owner: _ownerController.text,
-          office: _officeController.text,
-          serialNo: _serialController.text,
-        ),
-        maxDisplay: _maxSearchResults,
-      ),
-      showProgressSnack: showProgressSnack,
+        await _issues.loadIssues();
+      },
     );
-  }
-
-  Future<void> _globalSearch({bool showProgressSnack = true}) async {
-    if (!_readPathReadyForQuery) {
-      _showSnack(
-        _readPathCheck?.userMessageGreek ??
-            'Η βάση προς ανάγνωση δεν είναι έτοιμη.',
-        isError: _readPathCheckIsErrorForSnack(_readPathCheck?.status),
-      );
-      return;
+    if (failureMessage != null && mounted) {
+      setState(() => _search.message = failureMessage);
     }
-    await _runSearch(
-      () => _repository.globalSearch(
-        _readDbController.text.trim(),
-        _globalController.text,
-        maxDisplay: _maxSearchResults,
-      ),
-      showProgressSnack: showProgressSnack,
-    );
-  }
-
-  String? _searchOutcomeMessage(int totalCount) {
-    if (totalCount == 0) return null;
-    final xStr = DatabaseStatsService.formatIntegerEl(totalCount);
-    final n = _maxSearchResults;
-    if (totalCount > 0 && n < totalCount) {
-      final nStr = DatabaseStatsService.formatIntegerEl(n);
-      return 'Εμφάνιση των πρώτων $nStr αποτελεσμάτων από $xStr.';
-    }
-    return 'Βρέθηκαν $xStr αποτελέσματα.';
-  }
-
-  Future<void> _runSearch(
-    Future<OldEquipmentSearchResult> Function() action, {
-    bool showProgressSnack = true,
-  }) async {
-    final pth = _readDbController.text.trim();
-    if (pth.isEmpty) {
-      setState(() {
-        // handled by status, still clear results
-        _message = 'Κενή διαδρομή βάσης προς ανάγνωση.';
-      });
-      return;
-    }
-    setState(() => _message = null);
-    if (showProgressSnack) {
-      _showSnack('Εκτέλεση αναζήτησης…', duration: const Duration(seconds: 2));
-    }
-    try {
-      final result = await action();
-      if (!mounted) return;
-      setState(() {
-        _results = result.rows;
-        _message = _searchOutcomeMessage(result.totalCount);
-      });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => _message = e.toString());
-      _showSnack(
-        'Η αναζήτηση απέτυχε. Ελέγξτε τη διαδρομή από «Ρυθμίσεις διαδρομών».',
-        isError: true,
-      );
-    }
-  }
-
-  Future<void> _loadIssues() async {
-    final path = _readDbController.text.trim();
-    if (path.isEmpty) return;
-    if (_readPathCheck?.status != LampOldDbStatus.ok) {
-      if (mounted) {
-        setState(() {
-        _issues = const <Map<String, Object?>>[];
-        _expandedIssueGroupKeys.clear();
-      });
-      }
-      return;
-    }
-    try {
-      final issues = await _repository.dataIssues(path);
-      if (!mounted) return;
-      setState(() => _issues = issues);
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _issues = const <Map<String, Object?>>[];
-        _expandedIssueGroupKeys.clear();
-      });
-      _showSnack('Δεν φορτώθηκαν τα προβλήματα ETL: $e', isError: true);
-    }
-  }
-
-  String _issueCategoryDisplayLabel(String rawIssueType) {
-    final t = rawIssueType.trim();
-    if (t.isEmpty) return 'Χωρίς κατηγορία';
-    return lampDataIssueTypeDisplayLabel(t);
-  }
-
-  LampIssueType? _lampIssueTypeForRaw(String rawIssueType) {
-    final raw = rawIssueType.trim();
-    if (raw.isEmpty) return null;
-    for (final v in LampIssueType.values) {
-      if (v.issueType == raw) return v;
-    }
-    return null;
-  }
-
-  IconData _resolveIssueIcon(LampIssueType issueType) {
-    return switch (issueType) {
-      LampIssueType.nonNumericFk => Icons.link_outlined,
-      LampIssueType.unknownId => Icons.tag_outlined,
-      LampIssueType.duplicateAssetNo => Icons.badge_outlined,
-      LampIssueType.duplicateModelSerial => Icons.memory_outlined,
-      LampIssueType.setMasterSelfReference => Icons.link_off_outlined,
-      LampIssueType.setMasterCycle => Icons.account_tree_outlined,
-    };
-  }
-
-  String _issueField(Map<String, Object?> issue, String key) {
-    final raw = issue[key];
-    if (raw == null) return '-';
-    final text = raw.toString().trim();
-    return text.isEmpty ? '-' : text;
-  }
-
-  String _issueEntityTypeValue(Map<String, Object?> issue) {
-    final explicit = _issueField(issue, 'entity_type');
-    if (explicit != '-') return explicit;
-    final legacySheet = _issueField(issue, 'sheet').toLowerCase();
-    if (legacySheet == '-' || legacySheet.isEmpty) return 'equipment';
-    if (legacySheet == 'integrity_scan') return 'equipment';
-    return legacySheet;
-  }
-
-  String _issueOriginValue(Map<String, Object?> issue) {
-    final explicit = _issueField(issue, 'origin');
-    if (explicit != '-') return explicit;
-    final legacySheet = _issueField(issue, 'sheet').toLowerCase();
-    if (legacySheet == 'integrity_scan') return 'integrity_scan';
-    return 'manual';
-  }
-
-  String _issueEntityTypeDisplayLabel(String value) {
-    switch (value.trim().toLowerCase()) {
-      case 'equipment':
-        return 'Εξοπλισμός';
-      default:
-        return value;
-    }
-  }
-
-  String _issueOriginDisplayLabel(String value) {
-    switch (value.trim().toLowerCase()) {
-      case 'integrity_scan':
-        return 'Έλεγχος ακεραιότητας';
-      case 'manual':
-        return 'Χειροκίνητη καταχώρηση';
-      default:
-        return value;
-    }
-  }
-
-  Map<String, List<Map<String, Object?>>> _groupedIssuesByType() {
-    final grouped = <String, List<Map<String, Object?>>>{};
-    for (final issue in _issues) {
-      final raw = issue['issue_type']?.toString().trim() ?? '';
-      grouped.putIfAbsent(raw, () => <Map<String, Object?>>[]).add(issue);
-    }
-    return grouped;
-  }
-
-  /// Σειρά εμφάνισης/επίλυσης: κλειδιά αναφοράς → διπλότυπα → set_master.
-  int _issueResolutionPriority(String rawIssueType) {
-    final raw = rawIssueType.trim();
-    if (raw.isEmpty) return 10000;
-    const order = <String>[
-      'non_numeric_fk',
-      'unknown_id',
-      'duplicate_asset_no',
-      'duplicate_model_serial',
-      'set_master_self_reference',
-      'set_master_missing_target',
-      'set_master_cycle',
-    ];
-    final i = order.indexOf(raw);
-    return i >= 0 ? i : 999;
-  }
-
-  List<MapEntry<String, List<Map<String, Object?>>>>
-  _sortedIssueGroupEntries() {
-    final grouped = _groupedIssuesByType();
-    final entries = grouped.entries.toList();
-    entries.sort((a, b) {
-      final pa = _issueResolutionPriority(a.key);
-      final pb = _issueResolutionPriority(b.key);
-      if (pa != pb) return pa.compareTo(pb);
-      return a.key.compareTo(b.key);
-    });
-    return entries;
-  }
-
-  int _flatIssuesItemCount(
-    List<MapEntry<String, List<Map<String, Object?>>>> groups,
-  ) {
-    var count = 0;
-    for (final group in groups) {
-      count++;
-      if (_expandedIssueGroupKeys.contains(group.key)) {
-        count += group.value.length;
-      }
-    }
-    return count;
-  }
-
-  ({int groupIndex, bool isHeader, int? issueIndex})? _flatIssueRefAt(
-    List<MapEntry<String, List<Map<String, Object?>>>> groups,
-    int flatIndex,
-  ) {
-    var i = 0;
-    for (var g = 0; g < groups.length; g++) {
-      if (i == flatIndex) {
-        return (groupIndex: g, isHeader: true, issueIndex: null);
-      }
-      i++;
-      if (_expandedIssueGroupKeys.contains(groups[g].key)) {
-        final issues = groups[g].value;
-        for (var j = 0; j < issues.length; j++) {
-          if (i == flatIndex) {
-            return (groupIndex: g, isHeader: false, issueIndex: j);
-          }
-          i++;
-        }
-      }
-    }
-    return null;
-  }
-
-  Widget _issueEntryListTile(Map<String, Object?> issue) {
-    final entityType = _issueEntityTypeDisplayLabel(
-      _issueEntityTypeValue(issue),
-    );
-    final origin = _issueOriginDisplayLabel(_issueOriginValue(issue));
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        const Divider(height: 1),
-        ListTile(
-          leading: const Icon(Icons.warning_amber),
-          title: Text(
-            'Οντότητα: $entityType | '
-            'Προέλευση: $origin | '
-            'Γραμμή: ${_issueField(issue, 'row_number')}',
-          ),
-          subtitle: Text(
-            'Στήλη: ${_issueField(issue, 'column_name')}\n'
-            'Τιμή: ${_issueField(issue, 'raw_value')}\n'
-            '${_issueField(issue, 'message')}',
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _issueGroupHeaderCard({
-    required BuildContext context,
-    required String rawIssueType,
-    required String categoryLabel,
-    required List<Map<String, Object?>> issues,
-    required LampIssueType? lampIssueType,
-  }) {
-    final expanded = _expandedIssueGroupKeys.contains(rawIssueType);
-    return Card(
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: () {
-          setState(() {
-            if (expanded) {
-              _expandedIssueGroupKeys.remove(rawIssueType);
-            } else {
-              _expandedIssueGroupKeys.add(rawIssueType);
-            }
-          });
-        },
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Icon(
-                expanded ? Icons.expand_less : Icons.expand_more,
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
-              const SizedBox(width: 8),
-              const Icon(Icons.category_outlined),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Text(
-                  categoryLabel,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                '${issues.length}',
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
-              if (lampIssueType != null) ...[
-                const SizedBox(width: 4),
-                IconButton(
-                  tooltip: '${lampIssueType.label} (${issues.length})',
-                  visualDensity: VisualDensity.compact,
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(
-                    minWidth: 36,
-                    minHeight: 36,
-                  ),
-                  onPressed: _canResolveIssueType(lampIssueType)
-                      ? () => _runIssueResolution(lampIssueType)
-                      : null,
-                  icon: _resolvingIssueType == lampIssueType
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : Icon(_resolveIssueIcon(lampIssueType)),
-                ),
-              ],
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Future<void> _showIssueResolutionOrderInfo(BuildContext context) {
-    return showDialog<void>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Σειρά επίλυσης προβλημάτων'),
-        content: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 520),
-          child: SingleChildScrollView(
-            child: SelectableText(
-              'Μη αριθμητικό κλειδί αναφοράς και ασύμβατο αναγνωριστικό\n'
-              'Στόχος: έγκυρα κλειδιά αναφοράς προς γραφεία, κατόχους, συμβόλαια και '
-              'μοντέλα. Έτσι κάθε γραμμή εξοπλισμού αποκτά σαφή νόημα πριν '
-              'συγκρίνεις γραφεία, κατόχους ή διπλότυπα.\n\n'
-              'Διπλότυποι αριθμοί παγίου και διπλότυποι συνδυασμοί μοντέλου / σειριακού\n'
-              'Στόχος: ένας ρόλος ανά παγίο και ανά συνδυασμό (μοντέλο, σειριακός)· '
-              'συχνά συγχώνευση ή διαγραφή διπλών γραμμών. Κατά τη διαγραφή, οι '
-              'δείκτες κύριου εξοπλισμού αναδρομολογούνται προς την εγγραφή που '
-              'διατηρείται.\n\n'
-              'Κύριος εξοπλισμός που δείχνει στον ίδιο εξοπλισμό\n'
-              'Στόχος: αφαίρεση αυτοαναφορών (ο δείκτης κύριου εξοπλισμού δείχνει '
-              'στον ίδιο κωδικό εξοπλισμού).\n\n'
-              'Κύκλοι ιεραρχίας κύριου εξοπλισμού\n'
-              'Στόχος: σπάσιμο κύκλων στην ιεραρχία (συχνά με καθαρισμό του δείκτη '
-              'κύριου εξοπλισμού σε επιλεγμένες γραμμές).',
-              style: Theme.of(context).textTheme.bodyMedium,
-            ),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Κλείσιμο'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  int _issueCountFor(LampIssueType issueType) {
-    return _issues
-        .where(
-          (issue) => issue['issue_type']?.toString() == issueType.issueType,
-        )
-        .length;
-  }
-
-  bool _canResolveIssueType(LampIssueType issueType) =>
-      _readPathReadyForQuery &&
-      _resolvingIssueType == null &&
-      _issueCountFor(issueType) > 0;
-
-  Future<void> _runIssueResolution(LampIssueType issueType) async {
-    if (_resolvingIssueType != null) return;
-    final path = _readDbController.text.trim();
-    if (!_readPathReadyForQuery || path.isEmpty) {
-      _showSnack('Η βάση προς ανάγνωση δεν είναι έτοιμη.', isError: true);
-      return;
-    }
-
-    setState(() => _resolvingIssueType = issueType);
-    try {
-      _showSnack('Ανάλυση προτάσεων: ${issueType.label}…');
-      final proposals = await _issueResolutionService.analyzeIssues(
-        databasePath: path,
-        issueType: issueType,
-      );
-      if (!mounted) return;
-      if (proposals.isEmpty) {
-        _showSnack(
-          'Δεν υπάρχουν ανοικτές προτάσεις για '
-          '${lampDataIssueTypeDisplayLabel(issueType.issueType)}.',
-        );
-        return;
-      }
-
-      final proceed = await _askResolutionPreview(issueType, proposals);
-      if (proceed != true || !mounted) return;
-
-      final mayRunDestructive = proposals.any(
-        (proposal) =>
-            _proposalDefaultActionIsDestructive(proposal) ||
-            _proposalHasDestructiveOption(proposal),
-      );
-      if (mayRunDestructive) {
-        final destructiveOk = await _askDestructiveResolutionConfirmation();
-        if (destructiveOk != true || !mounted) return;
-      }
-
-      final cancelToken = ResolutionCancelToken();
-      final logController = ResolutionLogController();
-      final apply = await showDialog<LampIssueResolutionApplyResult>(
-        context: context,
-        barrierDismissible: false,
-        builder: (dialogContext) => LampResolutionProgressDialog(
-          title: issueType.label,
-          logController: logController,
-          cancelToken: cancelToken,
-          apply: () => _executeIssueResolutionOrchestration(
-            dialogContext: dialogContext,
-            databasePath: path,
-            issueType: issueType,
-            proposals: proposals,
-            logController: logController,
-            cancelToken: cancelToken,
-          ),
-        ),
-      );
-      await _loadIssues();
-      if (!mounted) return;
-      if (apply == null) {
-        _showSnack(
-          'Η επίλυση δεν επέστρεψε τελικό αποτέλεσμα. Δείτε την αναφορά για λεπτομέρειες.',
-          isError: true,
-          duration: const Duration(seconds: 8),
-        );
-        return;
-      }
-      final errorSuffix = apply.errors.isEmpty
-          ? ''
-          : ' · Σφάλματα: ${apply.errors.length}';
-      _showSnack(
-        'Επίλυση ${lampDataIssueTypeDisplayLabel(issueType.issueType)}: '
-        'εφαρμόστηκαν ${apply.totalChanged} ενέργειες '
-        '(auto: ${apply.resolved}, manual: ${apply.manualApplied}, νέες: ${apply.created})$errorSuffix.',
-        isError: apply.errors.isNotEmpty,
-        duration: const Duration(seconds: 8),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      _showSnack('Η επίλυση απέτυχε: $e', isError: true);
-    } finally {
-      if (mounted) {
-        setState(() => _resolvingIssueType = null);
-      }
-    }
-  }
-
-  bool _proposalDefaultActionIsDestructive(
-    LampIssueResolutionProposal proposal,
-  ) {
-    final operation = proposal.metadata['operation']?.toString();
-    return operation != null && operation.startsWith('delete_duplicate');
-  }
-
-  bool _proposalHasDestructiveOption(LampIssueResolutionProposal proposal) {
-    for (final option in proposal.options) {
-      final operation = option.metadata['operation']?.toString();
-      if (operation != null && operation.startsWith('delete_duplicate')) {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  LampIssueResolutionApplyResult _emptyApplyResult() {
-    return LampIssueResolutionApplyResult(
-      resolved: 0,
-      manualApplied: 0,
-      created: 0,
-      unresolved: 0,
-      errors: <String>[],
-    );
-  }
-
-  LampIssueResolutionApplyResult _singleUnresolvedApplyResult() {
-    return LampIssueResolutionApplyResult(
-      resolved: 0,
-      manualApplied: 0,
-      created: 0,
-      unresolved: 1,
-      errors: <String>[],
-    );
-  }
-
-  LampIssueResolutionApplyResult _mergeApplyResults(
-    LampIssueResolutionApplyResult a,
-    LampIssueResolutionApplyResult b,
-  ) {
-    return LampIssueResolutionApplyResult(
-      resolved: a.resolved + b.resolved,
-      manualApplied: a.manualApplied + b.manualApplied,
-      created: a.created + b.created,
-      unresolved: a.unresolved + b.unresolved,
-      errors: <String>[...a.errors, ...b.errors],
-    );
-  }
-
-  /// Σειριακή εκτέλεση ανά πρόταση: αυτόματα, χειροκίνητα και ανεπίλυτα με διάλογο.
-  Future<LampIssueResolutionApplyResult> _executeIssueResolutionOrchestration({
-    required BuildContext dialogContext,
-    required String databasePath,
-    required LampIssueType issueType,
-    required List<LampIssueResolutionProposal> proposals,
-    required ResolutionLogController logController,
-    required ResolutionCancelToken cancelToken,
-  }) async {
-    var merged = _emptyApplyResult();
-    var skipRemainingUnresolved = false;
-
-    void emit(ResolutionLogEntry entry) => logController.add(entry);
-
-    emit(
-      ResolutionLogEntry.info(
-        'Σειριακή εκτέλεση ${proposals.length} προτάσεων: αυτόματες διορθώσεις '
-        'όπου είναι διαθέσιμες και διάλογος χρήστη όπου απαιτείται απόφαση.',
-      ),
-    );
-
-    for (final proposal in proposals) {
-      if (cancelToken.isCancelled) {
-        emit(
-          ResolutionLogEntry.warning(
-            'Η διαδικασία σταμάτησε πριν ολοκληρωθεί η σειρά προτάσεων.',
-          ),
-        );
-        break;
-      }
-      if (!dialogContext.mounted) {
-        break;
-      }
-
-      if (proposal.canApplyAutomatically) {
-        final step = await _issueResolutionService.applySingleDecision(
-          databasePath: databasePath,
-          decision: LampIssueResolutionDecision(proposal: proposal),
-          onLog: emit,
-          cancelToken: cancelToken,
-        );
-        merged = _mergeApplyResults(merged, step);
-        continue;
-      }
-
-      if (proposal.proposedAction == LampIssueResolutionAction.manualReview) {
-        final manualDecisions = await showLampIssueManualReviewDialog(
-          context: dialogContext,
-          issueType: issueType,
-          proposals: <LampIssueResolutionProposal>[proposal],
-        );
-        if (!dialogContext.mounted) {
-          break;
-        }
-
-        if (manualDecisions == null) {
-          cancelToken.cancel();
-          emit(
-            ResolutionLogEntry.warning(
-              'Ακυρώθηκε το χειροκίνητο βήμα — διακόπτεται η επίλυση.',
-            ),
-          );
-          break;
-        }
-        if (manualDecisions.isEmpty) {
-          emit(
-            ResolutionLogEntry.info(
-              'Παραβλήθηκε η χειροκίνητη πρόταση (γραμμή ${proposal.row ?? '-'}).',
-            ),
-          );
-          continue;
-        }
-
-        for (final decision in manualDecisions) {
-          final step = await _issueResolutionService.applySingleDecision(
-            databasePath: databasePath,
-            decision: decision,
-            onLog: emit,
-            cancelToken: cancelToken,
-          );
-          merged = _mergeApplyResults(merged, step);
-        }
-        continue;
-      }
-
-      if (proposal.proposedAction == LampIssueResolutionAction.unresolved) {
-        var shouldRecordUnresolved = true;
-        if (!skipRemainingUnresolved) {
-          final outcome = await showLampUnresolvedResolutionDialog(
-            context: dialogContext,
-            proposal: proposal,
-          );
-          if (!dialogContext.mounted) {
-            break;
-          }
-          switch (outcome) {
-            case null:
-            case LampUnresolvedCancelAll():
-              cancelToken.cancel();
-              shouldRecordUnresolved = false;
-              emit(
-                ResolutionLogEntry.warning(
-                  'Ακυρώθηκε η διαδικασία κατά την επισκόπηση ανεπίλυτων προτάσεων.',
-                ),
-              );
-              break;
-            case LampUnresolvedSkipAll():
-              skipRemainingUnresolved = true;
-              emit(
-                ResolutionLogEntry.info(
-                  'Ο χρήστης επέλεξε μαζική παράλειψη για τις υπόλοιπες ανεπίλυτες προτάσεις.',
-                ),
-              );
-              emit(
-                ResolutionLogEntry.info(
-                  'Παραλείφθηκε ανεπίλυτη πρόταση στη γραμμή ${proposal.row ?? '-'} '
-                  '(στήλη ${proposal.column ?? '-'}).',
-                ),
-              );
-              break;
-            case LampUnresolvedSkipCurrent():
-              emit(
-                ResolutionLogEntry.info(
-                  'Παραλείφθηκε ανεπίλυτη πρόταση στη γραμμή ${proposal.row ?? '-'} '
-                  '(στήλη ${proposal.column ?? '-'}).',
-                ),
-              );
-              break;
-          }
-        } else {
-          emit(
-            ResolutionLogEntry.info(
-              'Μαζική παράλειψη ανεπίλυτης πρότασης στη γραμμή ${proposal.row ?? '-'} '
-              '(στήλη ${proposal.column ?? '-'}).',
-            ),
-          );
-        }
-        if (shouldRecordUnresolved) {
-          merged = _mergeApplyResults(merged, _singleUnresolvedApplyResult());
-        }
-      }
-    }
-
-    if (cancelToken.isCancelled) {
-      emit(
-        ResolutionLogEntry.warning(
-          'Παραλείφθηκαν τα υπόλοιπα βήματα λόγω ακύρωσης.',
-        ),
-      );
-    }
-    return merged;
-  }
-
-  Future<bool?> _askDestructiveResolutionConfirmation() {
-    return showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Επιβεβαίωση διαγραφής διπλοεγγραφών'),
-        content: const Text(
-          'Έχετε επιλέξει ενέργεια που διαγράφει δευτερεύουσες εγγραφές εξοπλισμού. '
-          'Πριν τη διαγραφή θα μεταφερθούν τυχόν παιδιά του δείκτη κύριου εξοπλισμού '
-          'στην κύρια εγγραφή, αλλά η ενέργεια δεν έχει άμεση αναίρεση από την εφαρμογή. '
-          'Θέλετε να συνεχίσετε;',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Άκυρο'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Συνέχεια με διαγραφή'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// Ονόματα στηλών για προεπισκόπηση (οι τιμές στη βάση παραμένουν στα αγγλικά).
-  String _issueColumnDisplayForPreview(String? column) {
-    if (column == null || column.isEmpty) return '-';
-    switch (column.trim().toLowerCase()) {
-      case 'office':
-        return 'γραφείο';
-      case 'owner':
-        return 'υπάλληλος';
-      case 'model':
-        return 'μοντέλο';
-      case 'contract':
-        return 'συμβόλαιο';
-      case 'set_master':
-        return 'κύριος εξοπλισμός';
-      default:
-        return column;
-    }
-  }
-
-  Future<bool?> _askResolutionPreview(
-    LampIssueType issueType,
-    List<LampIssueResolutionProposal> proposals,
-  ) {
-    final autoCount = proposals
-        .where((p) => p.proposedAction == LampIssueResolutionAction.autoFix)
-        .length;
-    final createCount = proposals
-        .where((p) => p.proposedAction == LampIssueResolutionAction.createNew)
-        .length;
-    final manualCount = proposals
-        .where(
-          (p) => p.proposedAction == LampIssueResolutionAction.manualReview,
-        )
-        .length;
-    final unresolvedCount = proposals
-        .where((p) => p.proposedAction == LampIssueResolutionAction.unresolved)
-        .length;
-    final applicableCount = autoCount + createCount + manualCount;
-    final preview = proposals
-        .take(8)
-        .map(
-          (p) =>
-              '- γραμμή=${p.row ?? '-'} στήλη=${_issueColumnDisplayForPreview(p.column)} · '
-              '${p.proposedAction.labelEl} · ${p.proposedMatch ?? p.notes}',
-        )
-        .join('\n');
-    return showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(issueType.label),
-        content: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 680),
-          child: SingleChildScrollView(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                SelectableText(
-                  'Βρέθηκαν ${proposals.length} προτάσεις.\n\n'
-                  '- Αυτόματη διόρθωση: $autoCount\n'
-                  '- Νέα εγγραφή: $createCount\n'
-                  '- Χειροκίνητη επισκόπηση: $manualCount\n'
-                  '- Ανεπίλυτο: $unresolvedCount\n\n'
-                  'Δείγμα:\n$preview'
-                  '${proposals.length > 8 ? '\n...και ${proposals.length - 8} ακόμα.' : ''}\n\n'
-                  'Οι ενέργειες αυτόματης διόρθωσης και νέας εγγραφής θα εφαρμοστούν μόνο μετά '
-                  'από αυτή την επιβεβαίωση. Οι περιπτώσεις χειροκίνητης ή ανεπίλυτης '
-                  'επισκόπησης θα ανοίξουν σειριακά σε επόμενα παράθυρα επιλογών.',
-                ),
-                if (applicableCount == 0) ...[
-                  const SizedBox(height: 16),
-                  Text(
-                    'Οι προτάσεις αυτής της ομάδας είναι μόνο «ανεπίλυτο». Η «Συνέχεια» '
-                    'θα ανοίξει τον οδηγό επίλυσης για επισκόπηση, χωρίς αυτόματες αλλαγές.',
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.error,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Άκυρο'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Συνέχεια'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  String _buildIssuesClipboardText() {
-    final lines = <String>[
-      '# LAMP ETL Issues',
-      'Σύνολο προβλημάτων: ${_issues.length}',
-      '',
-      'Οδηγία προς Πράκτορα ΤΝ: Ανάλυσε τα προβλήματα ανά κατηγορία, πρότεινε αιτίες, '
-          'βήματα επιδιόρθωσης και προτεραιότητες.',
-      '',
-    ];
-    for (final entry in _sortedIssueGroupEntries()) {
-      lines.add(
-        '## ${_issueCategoryDisplayLabel(entry.key)} (${entry.value.length})',
-      );
-      for (final issue in entry.value) {
-        final entityType = _issueEntityTypeDisplayLabel(
-          _issueEntityTypeValue(issue),
-        );
-        final origin = _issueOriginDisplayLabel(_issueOriginValue(issue));
-        lines.add(
-          '- Entity type: $entityType | Origin: $origin | Row: ${_issueField(issue, 'row_number')} | '
-          'Column: ${_issueField(issue, 'column_name')}',
-        );
-        lines.add('  Value: ${_issueField(issue, 'raw_value')}');
-        lines.add('  Message: ${_issueField(issue, 'message')}');
-      }
-      lines.add('');
-    }
-    return lines.join('\n');
-  }
-
-  Future<void> _copyAllIssuesToClipboard() async {
-    if (_issues.isEmpty) {
-      _showSnack('Δεν υπάρχουν προβλήματα για αντιγραφή.');
-      return;
-    }
-    final payload = _buildIssuesClipboardText();
-    await Clipboard.setData(ClipboardData(text: payload));
-    _showSnack('Αντιγράφηκαν ${_issues.length} προβλήματα στο πρόχειρο.');
-  }
-
-  Future<void> _runIntegrityCheck() async {
-    if (_integrityChecking) return;
-    final path = _readDbController.text.trim();
-    if (path.isEmpty) {
-      _showSnack('Δεν έχει οριστεί βάση για έλεγχο.', isError: true);
-      return;
-    }
-    final cancellationToken = OldIntegrityCancellationToken();
-    final progressNotifier = ValueNotifier<OldIntegrityScanProgress?>(null);
-    setState(() => _integrityChecking = true);
-    _lampSettingsDialogSetState?.call(() {});
-    Future<void>? progressDialog;
-    var progressDialogOpen = false;
-
-    Future<void> closeProgressDialog() async {
-      if (!progressDialogOpen || !mounted) return;
-      progressDialogOpen = false;
-      Navigator.of(context, rootNavigator: true).pop();
-      await progressDialog;
-    }
-
-    try {
-      final historicalDurationsMs = await _settings
-          .getIntegrityStepDurationsMs();
-      if (!mounted) return;
-      final historicalDurations = <String, Duration>{
-        for (final entry in historicalDurationsMs.entries)
-          entry.key: Duration(milliseconds: entry.value),
-      };
-      progressDialog = showDialog<void>(
-        context: context,
-        barrierDismissible: false,
-        builder: (context) => _IntegrityProgressDialog(
-          progressListenable: progressNotifier,
-          onCancel: cancellationToken.cancel,
-        ),
-      );
-      progressDialogOpen = true;
-      final scan = await _repository.scanIntegrityIssues(
-        path,
-        cancellationToken: cancellationToken,
-        onProgress: (progress) {
-          progressNotifier.value = progress;
-        },
-        onStepError: _askIntegrityStepErrorDecision,
-        historicalStepDurations: historicalDurations,
-      );
-      if (!mounted) return;
-      await closeProgressDialog();
-      await _saveIntegrityStepDurations(scan);
-      final newIssues = await _repository.filterToNewDataIssuesOnly(
-        path,
-        scan.issues,
-      );
-      final reportScan = OldIntegrityScanResult(
-        issues: newIssues,
-        steps: scan.steps,
-        cancelled: scan.cancelled,
-        stoppedAfterError: scan.stoppedAfterError,
-      );
-      final persist = await _askPersistIntegrityIssues(
-        reportScan: reportScan,
-        rawTotalIssueCount: scan.issues.length,
-      );
-      if (persist != true) {
-        final suffix = scan.isPartial ? ' (μερική αναφορά)' : '';
-        _showSnack(
-          'Ο έλεγχος ολοκληρώθηκε χωρίς καταχώρηση στον πίνακα ασυμφωνίας δεδομένων$suffix.',
-        );
-        return;
-      }
-      final inserted = await _repository.insertDataIssues(path, newIssues);
-      await _loadIssues();
-      if (!mounted) return;
-      final suffix = scan.isPartial ? ' από μερικό έλεγχο' : '';
-      _showSnack(
-        'Καταχωρήθηκαν $inserted νέα προβλήματα$suffix στον πίνακα ασυμφωνίας δεδομένων.',
-      );
-    } catch (e) {
-      if (!mounted) return;
-      await closeProgressDialog();
-      _showSnack('Ο έλεγχος ακεραιότητας απέτυχε: $e', isError: true);
-    } finally {
-      progressNotifier.dispose();
-      if (mounted) {
-        setState(() => _integrityChecking = false);
-      }
-      _lampSettingsDialogSetState?.call(() {});
-    }
-  }
-
-  Future<OldIntegrityStepErrorDecision> _askIntegrityStepErrorDecision(
-    OldIntegrityScanStepState step,
-    Object error,
-    List<Map<String, Object?>> partialIssues,
-  ) async {
-    if (!mounted) return OldIntegrityStepErrorDecision.stopWithPartialReport;
-    final decision = await showDialog<OldIntegrityStepErrorDecision>(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        title: const Text('Σφάλμα σε βήμα ελέγχου'),
-        content: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 560),
-          child: SelectableText(
-            'Το βήμα «${step.label}» απέτυχε.\n\n'
-            'Σφάλμα: $error\n\n'
-            'Έχουν συλλεχθεί ${partialIssues.length} ευρήματα μέχρι τώρα. '
-            'Μπορείτε να συνεχίσετε με τα επόμενα βήματα ή να δείτε μερική αναφορά.',
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(
-              context,
-            ).pop(OldIntegrityStepErrorDecision.stopWithPartialReport),
-            child: const Text('Προβολή αναφοράς'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(
-              context,
-            ).pop(OldIntegrityStepErrorDecision.continueScan),
-            child: const Text('Συνέχεια'),
-          ),
-        ],
-      ),
-    );
-    return decision ?? OldIntegrityStepErrorDecision.stopWithPartialReport;
-  }
-
-  Future<void> _saveIntegrityStepDurations(OldIntegrityScanResult scan) async {
-    final completedDurations = <String, int>{
-      for (final step in scan.steps)
-        if (step.status == OldIntegrityStepStatus.success &&
-            step.elapsed.inMilliseconds > 0)
-          step.id: step.elapsed.inMilliseconds,
-    };
-    await _settings.updateIntegrityStepDurationsMs(completedDurations);
-  }
-
-  Future<bool?> _askPersistIntegrityIssues({
-    required OldIntegrityScanResult reportScan,
-    required int rawTotalIssueCount,
-  }) {
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
-    final breakdown = reportScan.countByType.entries
-        .map((e) => '- ${lampDataIssueTypeDisplayLabel(e.key)}: ${e.value}')
-        .join('\n');
-    final stepReport = reportScan.steps.isEmpty
-        ? ''
-        : '\n\nΒήματα:\n${reportScan.steps.map(_integrityStepReportLine).join('\n')}';
-    final partialPrefix = reportScan.cancelled
-        ? 'Ο έλεγχος ακυρώθηκε από τον χρήστη. Εμφανίζονται ευρήματα από ${reportScan.completedSteps} από ${reportScan.totalSteps} βήματα.\n\n'
-        : reportScan.stoppedAfterError
-        ? 'Ο έλεγχος σταμάτησε μετά από σφάλμα. Εμφανίζονται τα ευρήματα που συλλέχθηκαν μέχρι εκείνο το σημείο.\n\n'
-        : '';
-
-    final rawFmt = DatabaseStatsService.formatIntegerEl(rawTotalIssueCount);
-
-    return showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Αναφορά ελέγχου προβλημάτων'),
-        content: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 560),
-          child: SingleChildScrollView(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (partialPrefix.isNotEmpty)
-                  SelectableText(
-                    partialPrefix,
-                    style: theme.textTheme.bodyMedium,
-                  ),
-                if (reportScan.totalCount == 0) ...[
-                  SelectableText(
-                    'Δεν εντοπίστηκαν νέα προβλήματα.',
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      color: const Color(0xFF2E7D32),
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  if (rawTotalIssueCount > 0) ...[
-                    const SizedBox(height: 10),
-                    SelectableText(
-                      'Ο έλεγχος επανέλεγξε $rawFmt ευρήματα συνολικά· όλα είναι '
-                      'ήδη καταγεγραμμένα στον πίνακα ασυμφωνίας δεδομένων.',
-                      style: theme.textTheme.bodyMedium,
-                    ),
-                  ],
-                ] else ...[
-                  SelectableText(
-                    'Εντοπίστηκαν ${reportScan.totalCount} νέα προβλήματα σε '
-                    '${reportScan.countByType.length} κατηγορίες.',
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      color: scheme.error,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  SelectableText(breakdown, style: theme.textTheme.bodyMedium),
-                ],
-                if (stepReport.isNotEmpty)
-                  SelectableText(stepReport, style: theme.textTheme.bodySmall),
-              ],
-            ),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('Μόνο αναφορά'),
-          ),
-          FilledButton(
-            onPressed: reportScan.issues.isEmpty
-                ? null
-                : () => Navigator.of(dialogContext).pop(true),
-            child: const Text('Καταχώρηση στον πίνακα ασυμφωνίας δεδομένων'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  String _integrityStepReportLine(OldIntegrityScanStepState step) {
-    final status = switch (step.status) {
-      OldIntegrityStepStatus.pending => 'Σε αναμονή',
-      OldIntegrityStepStatus.running => 'Σε εξέλιξη',
-      OldIntegrityStepStatus.success =>
-        'Ολοκληρώθηκε (${step.issuesFound} ευρήματα)',
-      OldIntegrityStepStatus.error =>
-        'Σφάλμα (${step.errorMessage ?? 'άγνωστο σφάλμα'})',
-      OldIntegrityStepStatus.cancelled => 'Ακυρώθηκε',
-    };
-    return '- ${step.index}/${step.total}: ${step.label} - $status';
   }
 
   Future<EquipmentSectionSaveResult> _saveEquipmentSection({
@@ -1830,22 +305,21 @@ class _LampScreenState extends ConsumerState<LampScreen> {
     required InfoSectionType sectionType,
     required Map<String, Object?> updatedFields,
   }) async {
-    final path = _readDbController.text.trim();
-    if (path.isEmpty) {
+    final dbPath = _path.readDbController.text.trim();
+    if (dbPath.isEmpty) {
       return const EquipmentSectionSaveResult(
         success: false,
         message: 'Δεν έχει οριστεί βάση προς ενημέρωση.',
       );
     }
-    final effectiveFields = Map<String, Object?>.from(updatedFields);
-    final result = await _repository.updateSection(
-      databasePath: path,
+    final result = await _shared.repository.updateSection(
+      databasePath: dbPath,
       id: id,
       sectionType: sectionType.toRepositorySectionType(),
-      updatedFields: effectiveFields,
+      updatedFields: Map<String, Object?>.from(updatedFields),
     );
     if (result.success) {
-      Future<void>.microtask(_runLiveSearch);
+      Future<void>.microtask(_search.runLiveSearch);
     }
     return EquipmentSectionSaveResult(
       success: result.success,
@@ -1868,7 +342,7 @@ class _LampScreenState extends ConsumerState<LampScreen> {
   }) async {
     final target = _transferTargetForSection(sectionType);
     if (target == null) {
-      _showSnack('Η μεταφορά υποστηρίζεται μόνο για εξοπλισμό/κάτοχο/τμήμα.');
+      showSnack('Η μεταφορά υποστηρίζεται μόνο για εξοπλισμό/κάτοχο/τμήμα.');
       return;
     }
     final message = await showDialog<String>(
@@ -1877,29 +351,31 @@ class _LampScreenState extends ConsumerState<LampScreen> {
       builder: (context) => LampTransferWizardDialog(
         target: target,
         sourceRow: sourceRow,
-        service: _migrationService,
+        service: _shared.migrationService,
       ),
     );
     if (!mounted || message == null) return;
-    _showSnack(message);
-    await _runLiveSearch();
+    showSnack(message);
+    await _search.runLiveSearch();
   }
 
   Future<void> _closeLampSettingsDialog(void Function() pop) async {
-    if (_importing) return;
+    if (_import.importing) return;
     pop();
     _lampSettingsDialogOpen = false;
     _lampSettingsDialogSetState = null;
 
-    final parsedMax = int.tryParse(_maxSearchResultsController.text.trim());
+    final parsedMax = int.tryParse(
+      _search.maxSearchResultsController.text.trim(),
+    );
     if (parsedMax != null) {
-      await _settings.setMaxSearchResults(parsedMax);
+      await _shared.settings.setMaxSearchResults(parsedMax);
     }
     if (mounted) {
-      final max = await _settings.getMaxSearchResults();
+      final max = await _shared.settings.getMaxSearchResults();
       setState(() {
-        _maxSearchResults = max;
-        _maxSearchResultsController.text = max.toString();
+        _search.maxSearchResults = max;
+        _search.maxSearchResultsController.text = max.toString();
       });
     }
     await _refreshDataAfterReadPathChange(
@@ -1907,259 +383,78 @@ class _LampScreenState extends ConsumerState<LampScreen> {
       announce: false,
     );
     if (!mounted) return;
-    Future<void>.microtask(() async {
-      if (!mounted) return;
-      await _runLiveSearch();
-    });
-  }
-
-  Widget _lampSettingsDialogFeedbackPanel(BuildContext context) {
-    final message = _lampDialogFeedback;
-    if (message == null || message.isEmpty) {
-      return const SizedBox.shrink();
-    }
-    final scheme = Theme.of(context).colorScheme;
-    final isError = _lampDialogFeedbackIsError;
-    final Color bg = isError
-        ? scheme.errorContainer.withValues(alpha: 0.55)
-        : scheme.primaryContainer.withValues(alpha: 0.45);
-    final IconData icon =
-        isError ? Icons.error_outline : Icons.info_outline;
-    return Material(
-      color: bg,
-      borderRadius: BorderRadius.circular(8),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Icon(icon, size: 20, color: scheme.onSurface),
-            const SizedBox(width: 8),
-            Expanded(
-              child: SelectableText(
-                message,
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-            ),
-            Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (isError)
-                  IconButton(
-                    tooltip: 'Αντιγραφή μηνύματος',
-                    visualDensity: VisualDensity.compact,
-                    onPressed: () => _copyLampDialogFeedback(message),
-                    icon: const Icon(Icons.copy_outlined, size: 18),
-                  ),
-                IconButton(
-                  tooltip: 'Απόκρυψη μηνύματος',
-                  visualDensity: VisualDensity.compact,
-                  onPressed: _clearLampDialogFeedback,
-                  icon: const Icon(Icons.close, size: 18),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Future<void> _copyLampDialogFeedback(String message) async {
-    await Clipboard.setData(ClipboardData(text: message));
+    Future<void>.microtask(_search.runLiveSearch);
   }
 
   void _openLampSettingsDialog() {
     if (_lampSettingsDialogOpen) return;
     _lampSettingsDialogOpen = true;
-    _clearLampDialogFeedback();
-    showDialog<void>(
+    clearLampDialogFeedback();
+    final settingsController = LampSettingsDialogController(
+      path: _path,
+      search: _search,
+      importController: _import,
+      integrityController: _integrity,
+      getReadPathCheck: () => readPathCheck,
+      getDialogFeedback: () => _lampDialogFeedback,
+      getDialogFeedbackIsError: () => _lampDialogFeedbackIsError,
+      onClearDialogFeedback: clearLampDialogFeedback,
+      onCopyDialogFeedback: (message) =>
+          Clipboard.setData(ClipboardData(text: message)),
+      onPickExcel: _path.pickExcel,
+      onPickReadDatabase: () => _path.pickReadDatabase(
+        onPathChanged: ({required source}) =>
+            _refreshDataAfterReadPathChange(source: source),
+      ),
+      onPickDatabaseOutput: () => _path.pickDatabaseOutput(
+        onReadSynced: ({required source}) =>
+            _refreshDataAfterReadPathChange(source: source),
+      ),
+      onMatchReadToOutput: _path.matchReadToOutput,
+      onRunIntegrityCheck: () => _integrity.runIntegrityCheck(
+        reloadIssues: _issues.loadIssues,
+      ),
+      onApplyPersistedReadAndValidate: () => _path.applyPersistedReadAndValidate(
+        announce: true,
+        source: 'επαλήθευση',
+        onDbOk: _onReadPathOk,
+        onDbNotOk: _onReadPathNotOk,
+      ),
+      onRunImport: _runImport,
+      onClose: _closeLampSettingsDialog,
+      isImporting: () => _import.importing,
+      isIntegrityChecking: () => _integrity.integrityChecking,
+    );
+    openLampSettingsDialog(
       context: context,
-      builder: (dialogContext) {
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            _lampSettingsDialogSetState = setDialogState;
-            final maxDialogBodyHeight =
-                MediaQuery.sizeOf(context).height * 0.55;
-            return AlertDialog(
-              title: const Text('Ρυθμίσεις Λάμπας'),
-              content: SizedBox(
-                width: 720,
-                child: ConstrainedBox(
-                  constraints: BoxConstraints(
-                    maxHeight: maxDialogBodyHeight,
-                  ),
-                  child: SingleChildScrollView(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                    Text(
-                      'Ξεχωριστά: αρχείο εξόδου (import Excel) και αρχείο ανάγνωσης (αναζήτηση). '
-                      'Με το πρώτο import ευθυγραμμίζονται. Μπορείτε μετά να φορτώσετε άλλο .db μόνο για ανάγνωση (δοκιμές).',
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                    const SizedBox(height: 16),
-                    _pathRow(
-                      controller: _excelController,
-                      label: 'Αρχείο Excel (πηγή import)',
-                      onPick: _pickExcel,
-                      onChanged: _notifyLampSettingsDialogFieldsChanged,
-                    ),
-                    const SizedBox(height: 12),
-                    if (_outputPathFormatWarning() != null) ...[
-                      _pathFormatWarningBanner(
-                        context,
-                        _outputPathFormatWarning()!,
-                      ),
-                      const SizedBox(height: 6),
-                    ],
-                    _pathRow(
-                      controller: _outputDbController,
-                      label: 'Βάση εξόδου .db (δημιουργία / ενημέρωση)',
-                      onPick: _pickDatabaseOutput,
-                      onChanged: _notifyLampSettingsDialogFieldsChanged,
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Όπου αποθηκεύεται/φτιάχνεται το .db από το κουμπί import.',
-                      style: Theme.of(context).textTheme.labelSmall,
-                    ),
-                    const SizedBox(height: 12),
-                    if (_readPathFormatWarning() != null) ...[
-                      _pathFormatWarningBanner(
-                        context,
-                        _readPathFormatWarning()!,
-                      ),
-                      const SizedBox(height: 6),
-                    ],
-                    _pathRow(
-                      controller: _readDbController,
-                      label: 'Βάση .db προς ανάγνωση (αναζήτηση, ETL issues)',
-                      onPick: _pickReadDatabase,
-                      onChanged: _notifyLampSettingsDialogFieldsChanged,
-                    ),
-                    const SizedBox(height: 6),
-                    _lampReadPathCheckPanel(context),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Μπορεί να δείχνει και σε άλλο αντίγραφο .db (δοκιμές).',
-                      style: Theme.of(context).textTheme.labelSmall,
-                    ),
-                    const SizedBox(height: 12),
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: FilledButton.tonalIcon(
-                        onPressed: (_importing || _integrityChecking)
-                            ? null
-                            : () async {
-                                await _runIntegrityCheck();
-                                _lampSettingsDialogSetState?.call(() {});
-                              },
-                        icon: _integrityChecking
-                            ? const SizedBox(
-                                width: 16,
-                                height: 16,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
-                              )
-                            : const Icon(Icons.rule_folder_outlined),
-                        label: const Text('Έλεγχος Προβλημάτων'),
-                      ),
-                    ),
-                    Text(
-                      'Ίδιος έλεγχος με την καρτέλα «Προβλήματα ETL» — χρήσιμο όταν η καρτέλα δεν εμφανίζεται ακόμα.',
-                      style: Theme.of(context).textTheme.labelSmall,
-                    ),
-                    const SizedBox(height: 8),
-                    TextField(
-                      controller: _maxSearchResultsController,
-                      keyboardType: TextInputType.number,
-                      decoration: InputDecoration(
-                        labelText:
-                            'Μέγιστος αριθμός εμφανιζόμενων αποτελεσμάτων αναζήτησης (Ν)',
-                        border: const OutlineInputBorder(),
-                        helperText:
-                            'Εύρος ${LampSettingsStore.minMaxSearchResults}–'
-                            '${LampSettingsStore.maxMaxSearchResults} · προεπιλογή '
-                            '${LampSettingsStore.defaultMaxSearchResults}',
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: OutlinedButton.icon(
-                        onPressed: _importing
-                            ? null
-                            : () {
-                                _matchReadToOutput();
-                              },
-                        icon: const Icon(Icons.copy_all_outlined),
-                        label: const Text('Ίδιο με τη διαδρομή εξόδου'),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: FilledButton.tonalIcon(
-                        onPressed: _importing
-                            ? null
-                            : () async {
-                                await _applyPersistedReadAndValidate(
-                                  announce: true,
-                                  source: 'επαλήθευση',
-                                );
-                                if (!context.mounted) return;
-                                _lampSettingsDialogSetState?.call(() {});
-                              },
-                        icon: const Icon(Icons.verified_outlined),
-                        label: const Text('Έλεγχος & αποθήκευση διαδρομών'),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: _excelImportButton(context),
-                    ),
-                        if (_lampDialogFeedback != null) ...[
-                          const SizedBox(height: 12),
-                          _lampSettingsDialogFeedbackPanel(context),
-                        ],
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: _importing
-                      ? null
-                      : () async {
-                          await _closeLampSettingsDialog(
-                            () => Navigator.of(dialogContext).pop(),
-                          );
-                        },
-                  child: const Text('Κλείσιμο'),
-                ),
-              ],
-            );
-          },
-        );
+      controller: settingsController,
+      registerDialogSetState: (setDialogState) {
+        _lampSettingsDialogSetState = setDialogState;
       },
-    ).then((_) {
-      if (mounted) {
-        setState(() {
+      onDialogClosed: () {
+        if (mounted) {
+          setState(() {
+            _lampSettingsDialogOpen = false;
+            _lampDialogFeedback = null;
+            _lampDialogFeedbackIsError = false;
+          });
+        } else {
           _lampSettingsDialogOpen = false;
           _lampDialogFeedback = null;
           _lampDialogFeedbackIsError = false;
-        });
+        }
+        _lampSettingsDialogSetState = null;
+      },
+    );
+  }
+
+  void _toggleIssueGroup(String rawIssueType, bool expanded) {
+    setState(() {
+      if (expanded) {
+        _issues.expandedIssueGroupKeys.remove(rawIssueType);
       } else {
-        _lampSettingsDialogOpen = false;
-        _lampDialogFeedback = null;
-        _lampDialogFeedbackIsError = false;
+        _issues.expandedIssueGroupKeys.add(rawIssueType);
       }
-      _lampSettingsDialogSetState = null;
     });
   }
 
@@ -2177,8 +472,8 @@ class _LampScreenState extends ConsumerState<LampScreen> {
     if (_loading) {
       return const Center(child: CircularProgressIndicator());
     }
-    final dbOk = _readPathCheck?.status == LampOldDbStatus.ok;
-    final showEtlTab = dbOk && _issues.isNotEmpty;
+    final dbOk = readPathCheck?.status == LampOldDbStatus.ok;
+    final showEtlTab = dbOk && _issues.issues.isNotEmpty;
     final showTablesTab = dbOk;
     final tabCount = 1 + (showEtlTab ? 1 : 0) + (showTablesTab ? 1 : 0);
     return DefaultTabController(
@@ -2198,15 +493,28 @@ class _LampScreenState extends ConsumerState<LampScreen> {
             child: TabBarView(
               children: [
                 _searchTab(context),
-                if (showEtlTab) _issuesTab(context),
+                if (showEtlTab)
+                  LampIssuesTab(
+                    issuesController: _issues,
+                    resolutionController: _resolution,
+                    integrityChecking: _integrity.integrityChecking,
+                    onRunIntegrityCheck: () => _integrity.runIntegrityCheck(
+                      reloadIssues: _issues.loadIssues,
+                    ),
+                    onCopyAllIssues: () => copyAllIssuesToClipboard(
+                      issues: _issues.issues,
+                      showSnack: showSnack,
+                    ),
+                    onToggleGroup: _toggleIssueGroup,
+                  ),
                 if (showTablesTab)
                   LampDbTablesTab(
                     key: ValueKey(
-                      'lamp-tables-${_readDbController.text.trim()}',
+                      'lamp-tables-${_path.readDbController.text.trim()}',
                     ),
-                    databasePath: _readDbController.text.trim(),
-                    repository: _repository,
-                    onAfterDataIssuesPurge: _loadIssues,
+                    databasePath: _path.readDbController.text.trim(),
+                    repository: _shared.repository,
+                    onAfterDataIssuesPurge: _issues.loadIssues,
                   ),
               ],
             ),
@@ -2216,169 +524,55 @@ class _LampScreenState extends ConsumerState<LampScreen> {
     );
   }
 
-  /// Έλεγχος/κατάσταση της διαδρομής ανάγνωσης· εμφανίζεται κάτω από το αντίστοιχο
-  /// [TextField] στο dialog «Ρυθμίσεις Λάμπας».
-  Widget _lampReadPathCheckPanel(BuildContext context) {
-    final r = _readPathCheck;
-    if (r == null) {
-      return Text(
-        'Δεν έχει τρέξει ακόμη έλεγχος. Μετά την επικόλληση/επιλογή πατήστε «Έλεγχος & αποθήκευση διαδρομών».',
-        style: Theme.of(context).textTheme.labelSmall?.copyWith(
-          color: Theme.of(context).colorScheme.onSurfaceVariant,
-        ),
-      );
-    }
-    final scheme = Theme.of(context).colorScheme;
-    final Color? bg;
-    final IconData icon;
-    if (r.status == LampOldDbStatus.ok) {
-      bg = scheme.primaryContainer.withValues(alpha: 0.45);
-      icon = Icons.check_circle_outline;
-    } else if (r.status == LampOldDbStatus.pathEmpty ||
-        r.status == LampOldDbStatus.pendingCreation) {
-      bg = scheme.surfaceContainerHighest;
-      icon = Icons.info_outline;
-    } else {
-      bg = scheme.errorContainer.withValues(alpha: 0.55);
-      icon = Icons.error_outline;
-    }
-    return Material(
-      color: bg,
-      borderRadius: BorderRadius.circular(8),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Icon(icon, size: 20, color: scheme.onSurface),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (_readDbController.text.isNotEmpty)
-                    Text(
-                      p.basename(_readDbController.text),
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                  if (r.status != LampOldDbStatus.ok) ...[
-                    if (_readDbController.text.isNotEmpty &&
-                        r.status != LampOldDbStatus.pendingCreation)
-                      const SizedBox(height: 4),
-                    Text(
-                      r.userMessageGreek,
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  /// Μόνιμο banner όταν η βάση προς ανάγνωση δεν είναι έτοιμη (ίδια κατάσταση με το rail).
-  Widget? _searchTabReadPathBanner(BuildContext context) {
-    final check = _readPathCheck;
-    if (!lampReadPathNeedsAttention(check)) return null;
-    final scheme = Theme.of(context).colorScheme;
-    final Color bg;
-    final IconData icon;
-    if (check!.status == LampOldDbStatus.pathEmpty ||
-        check.status == LampOldDbStatus.pendingCreation) {
-      bg = scheme.surfaceContainerHighest;
-      icon = Icons.info_outline;
-    } else {
-      bg = scheme.errorContainer.withValues(alpha: 0.55);
-      icon = Icons.error_outline;
-    }
-    final bannerTitle = check.status == LampOldDbStatus.pendingCreation
-        ? 'Η βάση δεν έχει δημιουργηθεί ακόμα'
-        : 'Η παλιά βάση δεν είναι έτοιμη για αναζήτηση';
-    return Material(
-      color: bg,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Icon(icon, size: 22, color: scheme.onSurface),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    bannerTitle,
-                    style: Theme.of(context).textTheme.titleSmall,
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    check.userMessageGreek,
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 8),
-            FilledButton.tonalIcon(
-              onPressed: () {
-                ref.read(lampOpenSettingsRequestProvider.notifier).request();
-              },
-              icon: const Icon(Icons.settings_outlined, size: 18),
-              label: const Text('Ρυθμίσεις διαδρομών'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  /// Καθολική αναζήτηση πάνω, αναζήτηση ανά πεδίο κάτω, κοινά αποτελέσματα.
   Widget _searchTab(BuildContext context) {
-    final banner = _searchTabReadPathBanner(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        ?banner,
+        const LampSearchTabReadPathBanner(),
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
           child: LayoutBuilder(
             builder: (context, constraints) {
-              final blockWidth = _searchFieldsBlockWidth(constraints.maxWidth);
+              final blockWidth = LampSearchController.searchFieldsBlockWidth(
+                constraints.maxWidth,
+              );
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   SizedBox(
                     width: blockWidth,
                     child: TextField(
-                      controller: _globalController,
+                      controller: _search.globalController,
                       decoration: InputDecoration(
                         labelText: 'Καθολική Αναζήτηση',
                         prefixIcon: const Icon(Icons.search),
-                        suffixIcon: _clearFieldSuffix(
-                          controller: _globalController,
+                        suffixIcon: _search.clearFieldSuffix(
+                          controller: _search.globalController,
                           tooltip: 'Καθαρισμός καθολικής αναζήτησης',
                         ),
                         border: const OutlineInputBorder(),
                       ),
-                      onSubmitted: (_) => _globalSearch(),
+                      onSubmitted: (_) => _search.globalSearch(),
                     ),
                   ),
                   const SizedBox(height: 12),
                   Wrap(
-                    spacing: _searchFieldSpacing,
-                    runSpacing: _searchFieldSpacing,
+                    spacing: LampSearchController.searchFieldSpacing,
+                    runSpacing: LampSearchController.searchFieldSpacing,
                     children: [
-                      _smallField(_phoneController, 'Τηλέφωνο'),
-                      _smallField(_codeController, 'Κωδικός Εξοπλισμού'),
-                      _smallField(_ownerController, 'Υπάλληλος'),
-                      _smallField(_officeController, 'Τμήμα'),
-                      _smallField(_serialController, 'Σειριακός Αριθμός'),
+                      _smallField(_search.phoneController, 'Τηλέφωνο'),
+                      _smallField(
+                        _search.codeController,
+                        'Κωδικός Εξοπλισμού',
+                      ),
+                      _smallField(_search.ownerController, 'Υπάλληλος'),
+                      _smallField(_search.officeController, 'Τμήμα'),
+                      _smallField(
+                        _search.serialController,
+                        'Σειριακός Αριθμός',
+                      ),
                       OutlinedButton.icon(
-                        onPressed: _clearAllSearchInputs,
+                        onPressed: _search.clearAllSearchInputs,
                         icon: const Icon(Icons.clear_all),
                         label: const Text('Καθαρισμός όλων'),
                       ),
@@ -2389,11 +583,11 @@ class _LampScreenState extends ConsumerState<LampScreen> {
             },
           ),
         ),
-        if (_message != null)
+        if (_search.message != null)
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Text(
-              _message!,
+              _search.message!,
               maxLines: 4,
               overflow: TextOverflow.ellipsis,
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
@@ -2406,178 +600,32 @@ class _LampScreenState extends ConsumerState<LampScreen> {
     );
   }
 
-  Widget _issuesTab(BuildContext context) {
-    final groups = _sortedIssueGroupEntries();
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-          child: Wrap(
-            spacing: 12,
-            runSpacing: 8,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            alignment: WrapAlignment.spaceBetween,
-            children: [
-              Text(
-                'Σύνολο προβλημάτων: ${_issues.length} • Κατηγορίες: ${groups.length}',
-                style: Theme.of(context).textTheme.bodyMedium,
-              ),
-              FilledButton.tonalIcon(
-                onPressed: _copyAllIssuesToClipboard,
-                icon: const Icon(Icons.copy_all_outlined),
-                label: const Text('Αντιγραφή όλων για ΤΝ'),
-              ),
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  FilledButton.icon(
-                    onPressed: _integrityChecking ? null : _runIntegrityCheck,
-                    icon: _integrityChecking
-                        ? const SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(Icons.rule_folder_outlined),
-                    label: const Text('Έλεγχος για προβλήματα'),
-                  ),
-                  IconButton(
-                    tooltip: 'Σειρά επίλυσης προβλημάτων',
-                    onPressed: () => _showIssueResolutionOrderInfo(context),
-                    icon: const Icon(Icons.info_outline),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-        const Divider(height: 1),
-        Expanded(
-          child: ListView.separated(
-            padding: const EdgeInsets.all(16),
-            itemCount: _flatIssuesItemCount(groups),
-            separatorBuilder: (context, index) {
-              final next = _flatIssueRefAt(groups, index + 1);
-              if (next != null && next.isHeader) {
-                return const SizedBox(height: 12);
-              }
-              return const SizedBox.shrink();
-            },
-            itemBuilder: (context, flatIndex) {
-              final ref = _flatIssueRefAt(groups, flatIndex);
-              if (ref == null) return const SizedBox.shrink();
-              final group = groups[ref.groupIndex];
-              final rawIssueType = group.key;
-              final issues = group.value;
-              if (ref.isHeader) {
-                return _issueGroupHeaderCard(
-                  context: context,
-                  rawIssueType: rawIssueType,
-                  categoryLabel: _issueCategoryDisplayLabel(rawIssueType),
-                  issues: issues,
-                  lampIssueType: _lampIssueTypeForRaw(rawIssueType),
-                );
-              }
-              final issue = issues[ref.issueIndex!];
-              return Card(
-                margin: EdgeInsets.zero,
-                clipBehavior: Clip.antiAlias,
-                child: _issueEntryListTile(issue),
-              );
-            },
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _pathFormatWarningBanner(BuildContext context, String message) {
-    final scheme = Theme.of(context).colorScheme;
-    return Material(
-      color: scheme.errorContainer.withValues(alpha: 0.55),
-      borderRadius: BorderRadius.circular(8),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Icon(
-              Icons.warning_amber_rounded,
-              size: 20,
-              color: scheme.onErrorContainer,
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                message,
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: scheme.onErrorContainer,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _pathRow({
-    required TextEditingController controller,
-    required String label,
-    required VoidCallback onPick,
-    VoidCallback? onChanged,
-  }) {
-    return Row(
-      children: [
-        Expanded(
-          child: TextField(
-            controller: controller,
-            onChanged: onChanged == null ? null : (_) => onChanged(),
-            decoration: InputDecoration(
-              labelText: label,
-              border: const OutlineInputBorder(),
-              hintText:
-                  'Μπορείτε και επικόλληση (paste) — μετά: Έλεγχος & αποθήκευση',
-            ),
-          ),
-        ),
-        const SizedBox(width: 12),
-        OutlinedButton.icon(
-          onPressed: onPick,
-          icon: const Icon(Icons.folder_open),
-          label: const Text('Επιλογή'),
-        ),
-      ],
-    );
-  }
-
   Widget _smallField(TextEditingController controller, String label) {
     return SizedBox(
-      width: _searchFieldWidth,
+      width: LampSearchController.searchFieldWidth,
       child: TextField(
         controller: controller,
         decoration: InputDecoration(
           labelText: label,
           border: const OutlineInputBorder(),
           isDense: true,
-          suffixIcon: _clearFieldSuffix(
+          suffixIcon: _search.clearFieldSuffix(
             controller: controller,
             tooltip: 'Καθαρισμός πεδίου',
           ),
         ),
-        onSubmitted: (_) => _fieldSearch(),
+        onSubmitted: (_) => _search.fieldSearch(),
       ),
     );
   }
 
   Widget _resultsList(BuildContext context) {
-    if (_results.isEmpty) {
+    if (_search.results.isEmpty) {
       return Center(
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 24),
           child: Text(
-            _emptyResultsCenterMessage(),
+            _search.emptyResultsCenterMessage(),
             textAlign: TextAlign.center,
           ),
         ),
@@ -2585,194 +633,12 @@ class _LampScreenState extends ConsumerState<LampScreen> {
     }
     return ListView.builder(
       padding: const EdgeInsets.all(16),
-      itemCount: _results.length,
+      itemCount: _search.results.length,
       itemBuilder: (context, index) => EquipmentResultCard(
-        viewModel: EquipmentViewModel.fromRow(_results[index]),
+        viewModel: EquipmentViewModel.fromRow(_search.results[index]),
         onSaveSection: _saveEquipmentSection,
         onTransferSection: _openTransferWizard,
       ),
     );
-  }
-}
-
-class _IntegrityProgressDialog extends StatefulWidget {
-  const _IntegrityProgressDialog({
-    required this.progressListenable,
-    required this.onCancel,
-  });
-
-  final ValueListenable<OldIntegrityScanProgress?> progressListenable;
-  final VoidCallback onCancel;
-
-  @override
-  State<_IntegrityProgressDialog> createState() =>
-      _IntegrityProgressDialogState();
-}
-
-class _IntegrityProgressDialogState extends State<_IntegrityProgressDialog> {
-  bool _cancelRequested = false;
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('Έλεγχος ακεραιότητας'),
-      content: SizedBox(
-        width: 640,
-        child: ValueListenableBuilder<OldIntegrityScanProgress?>(
-          valueListenable: widget.progressListenable,
-          builder: (context, progress, _) {
-            if (progress == null) {
-              return const Padding(
-                padding: EdgeInsets.symmetric(vertical: 24),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    LinearProgressIndicator(),
-                    SizedBox(height: 16),
-                    Text('Προετοιμασία ελέγχου...'),
-                  ],
-                ),
-              );
-            }
-            OldIntegrityScanStepState? current;
-            for (final step in progress.steps) {
-              if (step.status == OldIntegrityStepStatus.running) {
-                current = step;
-                break;
-              }
-            }
-            return Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                LinearProgressIndicator(value: progress.fraction),
-                const SizedBox(height: 12),
-                Text(
-                  current == null
-                      ? 'Ολοκληρωμένα βήματα: ${progress.completedSteps}/${progress.steps.length}'
-                      : current.label,
-                  style: Theme.of(context).textTheme.titleSmall,
-                ),
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 16,
-                  runSpacing: 8,
-                  children: [
-                    Text('Ευρήματα: ${progress.totalIssuesFound}'),
-                    Text(
-                      'Χρόνος: ${_formatIntegrityDuration(progress.elapsed)}',
-                    ),
-                    Text(
-                      progress.estimatedRemaining == null
-                          ? 'Υπόλοιπο: υπολογίζεται...'
-                          : 'Υπόλοιπο: ~${_formatIntegrityDuration(progress.estimatedRemaining!)}',
-                    ),
-                  ],
-                ),
-                if (_cancelRequested || progress.cancelRequested) ...[
-                  const SizedBox(height: 8),
-                  Text(
-                    'Ζητήθηκε ακύρωση. Ο έλεγχος θα σταματήσει στο πρώτο ασφαλές σημείο.',
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.error,
-                    ),
-                  ),
-                ],
-                const SizedBox(height: 16),
-                ConstrainedBox(
-                  constraints: const BoxConstraints(maxHeight: 320),
-                  child: ListView.separated(
-                    shrinkWrap: true,
-                    itemCount: progress.steps.length,
-                    separatorBuilder: (context, index) =>
-                        const Divider(height: 1),
-                    itemBuilder: (context, index) {
-                      final step = progress.steps[index];
-                      return ListTile(
-                        dense: true,
-                        leading: Icon(
-                          _integrityStepIcon(step.status),
-                          color: _integrityStepColor(context, step.status),
-                        ),
-                        title: Text(step.label),
-                        subtitle: Text(_integrityStepSubtitle(step)),
-                      );
-                    },
-                  ),
-                ),
-              ],
-            );
-          },
-        ),
-      ),
-      actions: [
-        TextButton.icon(
-          onPressed: _cancelRequested
-              ? null
-              : () {
-                  setState(() => _cancelRequested = true);
-                  widget.onCancel();
-                },
-          icon: const Icon(Icons.cancel_outlined),
-          label: Text(_cancelRequested ? 'Ακύρωση ζητήθηκε' : 'Ακύρωση'),
-        ),
-      ],
-    );
-  }
-
-  IconData _integrityStepIcon(OldIntegrityStepStatus status) {
-    return switch (status) {
-      OldIntegrityStepStatus.pending => Icons.schedule,
-      OldIntegrityStepStatus.running => Icons.hourglass_top,
-      OldIntegrityStepStatus.success => Icons.check_circle_outline,
-      OldIntegrityStepStatus.error => Icons.error_outline,
-      OldIntegrityStepStatus.cancelled => Icons.block,
-    };
-  }
-
-  Color? _integrityStepColor(
-    BuildContext context,
-    OldIntegrityStepStatus status,
-  ) {
-    final scheme = Theme.of(context).colorScheme;
-    return switch (status) {
-      OldIntegrityStepStatus.pending => scheme.outline,
-      OldIntegrityStepStatus.running => scheme.primary,
-      OldIntegrityStepStatus.success => Colors.green,
-      OldIntegrityStepStatus.error => scheme.error,
-      OldIntegrityStepStatus.cancelled => scheme.outline,
-    };
-  }
-
-  String _integrityStepSubtitle(OldIntegrityScanStepState step) {
-    return switch (step.status) {
-      OldIntegrityStepStatus.pending => 'Σε αναμονή',
-      OldIntegrityStepStatus.running => 'Σε εξέλιξη...',
-      OldIntegrityStepStatus.success =>
-        'Ολοκληρώθηκε (${step.issuesFound} ευρήματα, ${_formatIntegrityDuration(step.elapsed)})',
-      OldIntegrityStepStatus.error =>
-        'Σφάλμα: ${step.errorMessage ?? 'άγνωστο σφάλμα'}',
-      OldIntegrityStepStatus.cancelled => 'Ακυρώθηκε',
-    };
-  }
-}
-
-String _formatIntegrityDuration(Duration duration) {
-  final totalSeconds = duration.inSeconds;
-  if (totalSeconds < 60) return '${totalSeconds}s';
-  final minutes = totalSeconds ~/ 60;
-  final seconds = totalSeconds % 60;
-  return '${minutes}m ${seconds.toString().padLeft(2, '0')}s';
-}
-
-extension on InfoSectionType {
-  OldEquipmentSectionType toRepositorySectionType() {
-    return switch (this) {
-      InfoSectionType.equipment => OldEquipmentSectionType.equipment,
-      InfoSectionType.model => OldEquipmentSectionType.model,
-      InfoSectionType.contract => OldEquipmentSectionType.contract,
-      InfoSectionType.owner => OldEquipmentSectionType.owner,
-      InfoSectionType.department => OldEquipmentSectionType.department,
-    };
   }
 }

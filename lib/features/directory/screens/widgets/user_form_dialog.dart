@@ -8,6 +8,7 @@ import '../../../../core/widgets/database_persistence_error_snackbar.dart';
 import '../../../../core/providers/settings_provider.dart';
 import '../../../../core/providers/spell_check_provider.dart';
 import '../../../../core/utils/search_text_normalizer.dart';
+import '../../../../core/utils/user_homonym_finder.dart';
 import '../../../../core/utils/user_identity_normalizer.dart';
 import '../../../../core/utils/phone_list_parser.dart';
 import '../../../../core/widgets/lexicon_spell_text_form_field.dart';
@@ -335,27 +336,18 @@ class _UserFormDialogState extends ConsumerState<UserFormDialog> {
     backgroundColor: Colors.orange,
   );
 
-  /// Χρήστης με ίδιο [UserIdentityNormalizer.identityKeyForPerson], εκτός τρέχουσας/πηγής αντίγραφου.
+  /// Χρήστης με συνωνυμία (όνομα / επώνυμο / και τα δύο), εκτός τρέχουσας/πηγής αντίγραφου.
   UserModel? _findSoftHomonymUser() {
-    final key = UserIdentityNormalizer.identityKeyForPerson(
-      _firstNameController.text,
-      _lastNameController.text,
-    );
-    if (key.isEmpty) return null;
     final int? excludeId =
         widget.initialUser != null && (_isEdit || widget.isClone)
         ? widget.initialUser!.id
         : null;
-    for (final u in widget.notifier.allUsersForUi) {
-      if (u.isDeleted) continue;
-      if (excludeId != null && u.id == excludeId) continue;
-      final otherKey = UserIdentityNormalizer.identityKeyForPerson(
-        u.firstName,
-        u.lastName,
-      );
-      if (otherKey == key) return u;
-    }
-    return null;
+    return UserHomonymFinder.findHomonymUser(
+      users: widget.notifier.allUsersForUi,
+      firstName: _firstNameController.text,
+      lastName: _lastNameController.text,
+      excludeUserId: excludeId,
+    );
   }
 
   Future<void> _save() async {

@@ -476,8 +476,13 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
   /// Έως ένα quick task ανά κύκλο φόρμας· set μόνο μετά επιτυχή insert.
   int? _associationQuickTaskId;
 
+  /// True μετά πράσινο (+) που δημιούργησε καλόντα χωρίς τηλέφωνο — το πρώτο
+  /// πληκτρολόγημα τηλεφώνου συμπληρώνει, όχι νέο lookup.
+  bool _callerAwaitingPhoneAssociation = false;
+
   void _resetAssociationQuickTaskCycle() {
     _associationQuickTaskId = null;
+    _callerAwaitingPhoneAssociation = false;
   }
 
   Future<OrphanQuickAddResult?> quickAddOrphanToDepartment({
@@ -855,6 +860,26 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
         clearPhoneError: true,
         clearPhoneCandidates: true,
       );
+      return;
+    }
+    // Πρώτο τηλέφωνο μετά πράσινο (+) χωρίς τηλέφωνο: συμπλήρωση συσχέτισης.
+    final committedCallerId = state.selectedCaller?.id;
+    final phoneFieldWasEmpty =
+        state.selectedPhone == null || state.selectedPhone!.trim().isEmpty;
+    if (committedCallerId != null &&
+        _callerAwaitingPhoneAssociation &&
+        phoneFieldWasEmpty &&
+        value != null &&
+        value.trim().isNotEmpty) {
+      state = state.copyWith(
+        selectedPhone: value,
+        clearSelectedPhone: false,
+        clearPhoneError: true,
+        clearPhoneCandidates: true,
+        isPhoneAmbiguous: false,
+        clearConflicts: true,
+      );
+      _callerAwaitingPhoneAssociation = false;
       return;
     }
     final preserveEquipment = _hasManualEquipmentSelection;
@@ -1971,6 +1996,7 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
               : name,
           departmentText: s.departmentText,
         );
+        _callerAwaitingPhoneAssociation = parsedPhones.isEmpty;
         ref.invalidate(lookupServiceProvider);
         final refreshedLookup = (await ref.read(
           lookupServiceProvider.future,
@@ -2064,7 +2090,17 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
     final newEquipmentRow =
         hadEqWork && !await directory.equipmentCodeExists(eqCode);
     final deptTrimAssoc = state.departmentText.trim();
-    final willCreateDept = updatePrimaryDepartment && deptTrimAssoc.isNotEmpty;
+    final callerHadNoPrimaryDept =
+        state.selectedCaller?.departmentId == null &&
+        (state.selectedCaller?.departmentName ?? '').trim().isEmpty;
+    // Όταν ο καλών δεν είχε κύριο τμήμα, η πρώτη ανάθεση τμήματος στο πορτοκαλί
+    // βήμα δεν μπλοκάρεται από dialog «Όχι» (δεν υπάρχει παλιό τμήμα προς διατήρηση).
+    final effectiveUpdatePrimaryDepartment = updatePrimaryDepartment ||
+        (state.hasPendingDepartmentChange &&
+            callerHadNoPrimaryDept &&
+            deptTrimAssoc.isNotEmpty);
+    final willCreateDept =
+        effectiveUpdatePrimaryDepartment && deptTrimAssoc.isNotEmpty;
     final newDepartmentRow =
         willCreateDept && !await directory.departmentNameExists(deptTrimAssoc);
     final newEntityEligible =
@@ -2084,7 +2120,7 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
               : null);
       var updatedDepartmentId = state.selectedCaller?.departmentId;
       var primaryDepartmentChanged = false;
-      if (updatePrimaryDepartment &&
+      if (effectiveUpdatePrimaryDepartment &&
           state.departmentText.trim().isNotEmpty &&
           state.selectedCaller?.id != null) {
         // Αν το τμήμα δεν υπάρχει ακόμα στη βάση, το δημιουργούμε ώστε να πάρουμε id.
@@ -2093,7 +2129,7 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
         );
       }
 
-      if (updatePrimaryDepartment &&
+      if (effectiveUpdatePrimaryDepartment &&
           selectedDepartmentId != null &&
           selectedDepartmentId != state.selectedCaller?.departmentId &&
           state.selectedCaller?.id != null) {
@@ -2127,6 +2163,9 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
           departmentId: updatedDepartmentId,
           notes: s.selectedCaller?.notes,
         ),
+        selectedDepartmentId: primaryDepartmentChanged
+            ? updatedDepartmentId
+            : s.selectedDepartmentId,
         selectedEquipment: eqCode?.isNotEmpty == true
             ? EquipmentModel(
                 id: s.selectedEquipment?.id,
