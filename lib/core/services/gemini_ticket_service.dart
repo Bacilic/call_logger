@@ -1,4 +1,4 @@
-import 'dart:convert';
+﻿import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
@@ -10,6 +10,8 @@ const List<GeminiPromptPlaceholder> kGeminiPromptPlaceholders = [
   (token: '{Εξοπλισμός}', label: 'Εξοπλισμός'),
   (token: '{Τμήμα}', label: 'Τμήμα'),
   (token: '{Κατηγορία}', label: 'Κατηγορία'),
+  (token: '{Τίτλος}', label: 'Τίτλος'),
+  (token: '{Σημειώσεις}', label: 'Σημειώσεις'),
   (token: '{Πρόβλημα}', label: 'Πρόβλημα'),
 ];
 
@@ -186,9 +188,12 @@ class GeminiException implements Exception {
 const String kDefaultGeminiPromptTemplate = '''Δημιούργησε τίτλο και πλήρη περιγραφή για ticket helpdesk στο Lansweeper.
 
 Υπάλληλος: {Υπάλληλος}. Εξοπλισμός: {Εξοπλισμός}. Τμήμα: {Τμήμα}.
+Κατηγορία: {Κατηγορία}.
 
-Κατηγορία: {Κατηγορία}. Πρόβλημα: {Πρόβλημα}.
+Τρέχον προσχέδιο τίτλου: {Τίτλος}
+Τρέχουσα περιγραφή: {Σημειώσεις}
 
+Βελτίωσε το προσχέδιο με βάση τα στοιχεία κλήσης.
 Απάντησε ΜΟΝΟ σε JSON χωρίς markdown: {"title":"...","description":"..."}''';
 
 abstract final class GeminiTicketService {
@@ -200,14 +205,23 @@ abstract final class GeminiTicketService {
     required String departmentText,
     required String category,
     required String issue,
+    required String titleText,
+    required String notesText,
   }) {
+    final trimmedNotes = notesText.trim();
+    final trimmedIssue = issue.trim();
+    final problemText = trimmedNotes.isNotEmpty
+        ? trimmedNotes
+        : (trimmedIssue.isEmpty ? '-' : trimmedIssue);
     final values = <String, String>{
       '{Υπάλληλος}': callerText.trim().isEmpty ? '-' : callerText.trim(),
       '{Εξοπλισμός}':
           equipmentText.trim().isEmpty ? '-' : equipmentText.trim(),
       '{Τμήμα}': departmentText.trim().isEmpty ? '-' : departmentText.trim(),
       '{Κατηγορία}': category.trim().isEmpty ? '-' : category.trim(),
-      '{Πρόβλημα}': issue.trim().isEmpty ? '-' : issue.trim(),
+      '{Τίτλος}': titleText.trim().isEmpty ? '-' : titleText.trim(),
+      '{Σημειώσεις}': trimmedNotes.isEmpty ? '-' : trimmedNotes,
+      '{Πρόβλημα}': problemText,
     };
 
     var prompt = promptTemplate.trim().isEmpty
@@ -515,6 +529,8 @@ abstract final class GeminiTicketService {
         departmentText: '-',
         category: '-',
         issue: 'δοκιμή',
+        titleText: 'δοκιμή',
+        notesText: 'δοκιμή',
         client: client,
       );
       return GeminiModelProbeResult(
@@ -549,6 +565,8 @@ abstract final class GeminiTicketService {
     required String departmentText,
     required String category,
     required String issue,
+    required String titleText,
+    required String notesText,
     http.Client? client,
   }) async {
     final key = apiKey.trim();
@@ -573,6 +591,8 @@ abstract final class GeminiTicketService {
       departmentText: departmentText,
       category: category,
       issue: issue,
+      titleText: titleText,
+      notesText: notesText,
     );
 
     final httpClient = client ?? http.Client();

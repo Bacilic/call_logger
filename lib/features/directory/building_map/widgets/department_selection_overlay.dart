@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../../core/models/building_map_floor.dart';
+import '../../../../core/utils/natural_string_compare.dart';
 import '../../../../core/utils/search_text_normalizer.dart';
 import '../../models/department_floor_display_extension.dart';
 import '../../models/department_model.dart';
@@ -60,6 +61,13 @@ class _DepartmentSelectionOverlayState extends State<DepartmentSelectionOverlay>
     return int.tryParse(d.mapFloor?.trim() ?? '');
   }
 
+  int _compareDepartmentByName(DepartmentModel a, DepartmentModel b) {
+    return naturalCompareStrings(
+      SearchTextNormalizer.normalizeForSearch(a.name),
+      SearchTextNormalizer.normalizeForSearch(b.name),
+    );
+  }
+
   List<DepartmentModel> _filtered() {
     final qRaw = _searchController.text;
     final qNorm = SearchTextNormalizer.normalizeForSearch(qRaw);
@@ -84,17 +92,17 @@ class _DepartmentSelectionOverlayState extends State<DepartmentSelectionOverlay>
         buckets.putIfAbsent(_effectiveFloorId(d), () => []).add(d);
       }
       for (final entry in buckets.entries) {
-        entry.value.sort(
-          (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
-        );
+        entry.value.sort(_compareDepartmentByName);
       }
       final ids = buckets.keys.whereType<int>().toList()
         ..sort((a, b) {
           final fa = floorById[a];
           final fb = floorById[b];
-          final oa = fa?.sortOrder ?? 0;
-          final ob = fb?.sortOrder ?? 0;
-          if (oa != ob) return oa.compareTo(ob);
+          if (fa != null && fb != null) {
+            return compareBuildingMapFloorsByNumericLabel(fa, fb);
+          }
+          if (fa != null) return -1;
+          if (fb != null) return 1;
           return a.compareTo(b);
         });
       final out = <({String title, List<DepartmentModel> deps})>[];
@@ -117,12 +125,15 @@ class _DepartmentSelectionOverlayState extends State<DepartmentSelectionOverlay>
       buckets.putIfAbsent(key, () => []).add(d);
     }
     for (final entry in buckets.entries) {
-      entry.value.sort(
-        (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
-      );
+      entry.value.sort(_compareDepartmentByName);
     }
     final keys = buckets.keys.whereType<String>().toList()
-      ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+      ..sort(
+        (a, b) => naturalCompareStrings(
+          SearchTextNormalizer.normalizeForSearch(a),
+          SearchTextNormalizer.normalizeForSearch(b),
+        ),
+      );
     final out = <({String title, List<DepartmentModel> deps})>[];
     for (final k in keys) {
       out.add((title: k, deps: buckets[k]!));

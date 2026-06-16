@@ -172,9 +172,10 @@ class _DepartmentFormDialogState extends State<DepartmentFormDialog> {
   }
 
   List<DropdownMenuItem<int?>> _floorDropdownItems() {
+    final sortedFloors = buildingMapFloorsSortedByDisplayLabel(_floors);
     final items = <DropdownMenuItem<int?>>[
       const DropdownMenuItem<int?>(value: null, child: Text('— χωρίς —')),
-      for (final f in _floors)
+      for (final f in sortedFloors)
         DropdownMenuItem<int?>(
           value: f.id,
           child: Text(

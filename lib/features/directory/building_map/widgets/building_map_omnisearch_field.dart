@@ -71,6 +71,7 @@ class _BuildingMapOmnisearchFieldState extends ConsumerState<BuildingMapOmnisear
       ref
           .read(buildingMapSearchRevealedDepartmentIdProvider.notifier)
           .clear();
+      ref.read(buildingMapSearchUnresolvedNoticeProvider.notifier).clear();
       setState(() {
         _hits = const [];
         _loading = false;
@@ -186,18 +187,60 @@ class _BuildingMapOmnisearchFieldState extends ConsumerState<BuildingMapOmnisear
                 itemCount: list.length,
                 itemBuilder: (context, index) {
                   final hit = list[index];
+                  final theme = Theme.of(context);
+                  final mapLabel = hit.mapDisplayLabel;
                   return ListTile(
                     dense: true,
                     leading: Icon(_iconForHit(hit), size: 18),
                     title: Text(
                       hit.title,
-                      maxLines: 1,
+                      maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                     ),
-                    subtitle: Text(
-                      '${_kindLabel(hit)}${hit.subtitle == null ? '' : ' • ${hit.subtitle}'}',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                    subtitle: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (hit.subtitle != null)
+                          Text(
+                            hit.subtitle!,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        if (mapLabel != null)
+                          Padding(
+                            padding: EdgeInsets.only(
+                              top: hit.subtitle != null ? 2 : 0,
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  Icons.map_outlined,
+                                  size: 14,
+                                  color: theme.colorScheme.onSurfaceVariant,
+                                ),
+                                const SizedBox(width: 4),
+                                Expanded(
+                                  child: Text(
+                                    'Στον χάρτη: $mapLabel',
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: theme.textTheme.bodySmall?.copyWith(
+                                      color: theme.colorScheme.onSurfaceVariant,
+                                      fontStyle: FontStyle.italic,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        if (hit.subtitle == null && mapLabel == null)
+                          Text(
+                            _kindLabel(hit),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                      ],
                     ),
                     onTap: () => onSelected(hit),
                   );

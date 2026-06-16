@@ -929,6 +929,8 @@ class _LansweeperReportDialogState
     );
     final category = _combinedUniqueCallField(selected, (call) => call.category);
     final issue = _combinedGeminiIssue(selected);
+    final draftTitle = _titleController.text;
+    final draftNotes = _notesController.text;
 
     setState(() => _aiSuggestRunning = true);
     try {
@@ -948,6 +950,8 @@ class _LansweeperReportDialogState
             departmentText: departmentText,
             category: category,
             issue: issue,
+            titleText: draftTitle,
+            notesText: draftNotes,
             client: client,
           );
           if (!mounted) return;

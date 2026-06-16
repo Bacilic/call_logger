@@ -131,7 +131,7 @@ class _AppShortcutsState extends ConsumerState<AppShortcuts>
     _windowCloseHandling = true;
     try {
       await _persistWindowBoundsIfNeeded();
-      await DatabaseHelper.instance.tryWalCheckpoint();
+      await DatabaseHelper.instance.tryWalCheckpoint(mode: 'FULL');
       await DatabaseExitBackup.runIfEnabled();
       await DatabaseHelper.instance.closeConnection();
     } catch (_) {

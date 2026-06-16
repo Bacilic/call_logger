@@ -145,7 +145,8 @@ class DatabaseHelper {
     final db = _database;
     if (db != null && db.isOpen) {
       try {
-        await db.rawQuery('PRAGMA wal_checkpoint(PASSIVE)');
+        final mode = _isUsingLocalDb ? 'FULL' : 'PASSIVE';
+        await db.rawQuery('PRAGMA wal_checkpoint($mode)');
       } catch (_) {}
       await db.close();
     }
@@ -219,6 +220,13 @@ class DatabaseHelper {
       buffer.writeln('Checkpoint/close warning: $e');
     }
 
+    final mergedOnDisk = await _tryEphemeralWalCheckpoint(dbPath);
+    if (!mergedOnDisk) {
+      buffer.writeln(
+        'Παραλείφθηκε διαγραφή WAL sidecars: αποτυχία checkpoint στο δίσκο.',
+      );
+    }
+
     try {
       progressNotifier?.setStep('Εντοπισμός διεργασίας');
       final diagnostic = await const LockDiagnosticService()
@@ -232,14 +240,12 @@ class DatabaseHelper {
 
     for (final suffix in const <String>['-wal', '-shm']) {
       final sidecarPath = '$dbPath$suffix';
-      try {
-        final f = File(sidecarPath);
-        if (await f.exists()) {
-          await f.delete();
-          buffer.writeln('Deleted sidecar file: $sidecarPath');
-        }
-      } catch (e) {
-        buffer.writeln('Failed to delete $sidecarPath: $e');
+      if (!mergedOnDisk && sidecarPath.endsWith('-wal')) {
+        continue;
+      }
+      final outcome = await _tryDeleteStaleSidecarIfSafe(sidecarPath);
+      if (outcome.message != null) {
+        buffer.writeln(outcome.message);
       }
     }
 
@@ -439,35 +445,115 @@ class DatabaseHelper {
     if (AppConfig.isUncDatabasePath(dbPath)) return null;
     progressNotifier?.setStep('Προληπτικός καθαρισμός WAL');
     final messages = <String>[];
+
+    final walPath = '$dbPath-wal';
+    final walFile = File(walPath);
+    if (await walFile.exists()) {
+      final walSize = (await walFile.stat()).size;
+      if (walSize > 0) {
+        final merged = await _tryEphemeralWalCheckpoint(dbPath);
+        if (!merged) {
+          messages.add(
+            'Παραλείφθηκε καθαρισμός WAL: αποτυχία checkpoint — τα δεδομένα διατηρήθηκαν.',
+          );
+          return messages.join('\n');
+        }
+      }
+    }
+
     for (final suffix in const <String>['-wal', '-shm']) {
       final sidecarPath = '$dbPath$suffix';
-      final file = File(sidecarPath);
-      try {
-        if (!await file.exists()) continue;
-        final stat = await file.stat();
-        if (stat.size <= 0) continue;
-
-        RandomAccessFile? raf;
-        try {
-          raf = await file.open(mode: FileMode.append);
-          await raf.close();
-          raf = null;
-        } catch (_) {
-          await raf?.close();
-          messages.add(
-            'Παραλείφθηκε διαγραφή $sidecarPath: το αρχείο φαίνεται ενεργά κλειδωμένο.',
-          );
-          continue;
-        }
-
-        await file.delete();
-        messages.add('Διαγράφηκε stale sidecar: $sidecarPath');
-      } catch (e) {
-        messages.add('Αποτυχία καθαρισμού $sidecarPath: $e');
+      final outcome = await _tryDeleteStaleSidecarIfSafe(sidecarPath);
+      if (outcome.message != null) {
+        messages.add(outcome.message!);
       }
     }
     if (messages.isEmpty) return null;
     return messages.join('\n');
+  }
+
+  /// Συγχώνευση WAL στο κύριο αρχείο με προσωρινή σύνδεση (μετά από crash).
+  Future<bool> _tryEphemeralWalCheckpoint(String dbPath) async {
+    if (!await File(dbPath).exists()) return false;
+    final walPath = '$dbPath-wal';
+    if (!await File(walPath).exists()) return true;
+
+    Database? db;
+    try {
+      db = await openDatabase(
+        dbPath,
+        readOnly: false,
+        singleInstance: true,
+      );
+      await db.rawQuery('PRAGMA wal_checkpoint(TRUNCATE)');
+      await db.close();
+      db = null;
+
+      final walFile = File(walPath);
+      if (!await walFile.exists()) return true;
+      return (await walFile.stat()).size <= 0;
+    } catch (_) {
+      return false;
+    } finally {
+      if (db != null && db.isOpen) {
+        try {
+          await db.close();
+        } catch (_) {}
+      }
+    }
+  }
+
+  /// Διαγραφή stale sidecar μόνο αν δεν είναι κλειδωμένο και (για WAL) κενό.
+  Future<({bool deleted, String? message})> _tryDeleteStaleSidecarIfSafe(
+    String sidecarPath,
+  ) async {
+    final file = File(sidecarPath);
+    try {
+      if (!await file.exists()) {
+        return (deleted: false, message: null);
+      }
+      final stat = await file.stat();
+      if (stat.size <= 0) {
+        await file.delete();
+        return (
+          deleted: true,
+          message: 'Διαγράφηκε κενό sidecar: $sidecarPath',
+        );
+      }
+
+      RandomAccessFile? raf;
+      try {
+        raf = await file.open(mode: FileMode.append);
+        await raf.close();
+        raf = null;
+      } catch (_) {
+        await raf?.close();
+        return (
+          deleted: false,
+          message:
+              'Παραλείφθηκε διαγραφή $sidecarPath: το αρχείο φαίνεται ενεργά κλειδωμένο.',
+        );
+      }
+
+      if (sidecarPath.endsWith('-wal')) {
+        return (
+          deleted: false,
+          message:
+              'Παραλείφθηκε διαγραφή $sidecarPath: παραμένει μη κενό μετά checkpoint.',
+        );
+      }
+
+      await file.delete();
+      return (
+        deleted: true,
+        message: 'Διαγράφηκε stale sidecar: $sidecarPath',
+      );
+    } catch (e) {
+      return (
+        deleted: false,
+        message: 'Αποτυχία καθαρισμού $sidecarPath: $e',
+      );
+    }
   }
 
   Future<Database> _openWithTimeout({

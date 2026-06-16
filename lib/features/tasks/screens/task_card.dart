@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 
 import '../../../core/widgets/deleted_catalog_entity_text.dart';
 import '../../../core/widgets/linkable_selectable_text.dart';
@@ -247,6 +247,8 @@ class _TaskCardState extends ConsumerState<TaskCard> {
             final result = await widget.onEditCaller!.call();
             if (!result || !mounted) return;
             await _handleQuickAddPostSave();
+            if (!mounted) return;
+            await deferTasksProviderInvalidate(ref);
           },
           icon: const Icon(Icons.person_outline, size: 16),
           label: const Text('Επεξεργασία Χρήστη'),
@@ -257,6 +259,8 @@ class _TaskCardState extends ConsumerState<TaskCard> {
             final result = await widget.onEditDepartment!.call();
             if (!result || !mounted) return;
             await _handleQuickAddPostSave();
+            if (!mounted) return;
+            await deferTasksProviderInvalidate(ref);
           },
           icon: const Icon(Icons.domain_outlined, size: 16),
           label: const Text('Επεξεργασία Τμήματος'),
@@ -267,6 +271,8 @@ class _TaskCardState extends ConsumerState<TaskCard> {
             final result = await widget.onEditEquipment!.call();
             if (!result || !mounted) return;
             await _handleQuickAddPostSave();
+            if (!mounted) return;
+            await deferTasksProviderInvalidate(ref);
           },
           icon: const Icon(Icons.computer_outlined, size: 16),
           label: const Text('Επεξεργασία Εξοπλισμού'),
@@ -341,6 +347,10 @@ class _TaskCardState extends ConsumerState<TaskCard> {
           status: TaskStatus.closed.toDbValue,
           solutionNotes: notes,
         ),
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Εκκρεμότητα ολοκληρώθηκε.')),
       );
     } on TaskSaveException catch (e) {
       if (!mounted) return;

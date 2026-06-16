@@ -1,13 +1,54 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/models/building_map_floor.dart';
+import '../../../../core/utils/natural_string_compare.dart';
 import '../controllers/building_map_controller.dart';
 
 /// Κείμενο εμφάνισης όπως στο dropdown · χρησιμοποιείται και για ταξινόμηση.
 String buildingMapFloorDisplayLabel(BuildingMapFloor f) {
   final g = f.floorGroup?.trim();
   return (g != null && g.isNotEmpty) ? '$g · ${f.label}' : f.label;
+}
+
+/// Φυσική αύξουσα σύγκριση ετικετών ορόφων (π.χ. 2ος πριν από 10ος).
+int compareBuildingMapFloorDisplayLabels(
+  BuildingMapFloor a,
+  BuildingMapFloor b,
+) {
+  return naturalCompareStrings(
+    buildingMapFloorDisplayLabel(a),
+    buildingMapFloorDisplayLabel(b),
+  );
+}
+
+/// Αριθμητικό κλειδί ταξινόμησης από την ετικέτα (π.χ. «-1», «0», «1ος» → -1, 0, 1).
+int buildingMapFloorNumericSortKey(BuildingMapFloor f) {
+  final match = RegExp(r'^(-?\d+)').firstMatch(f.label.trim());
+  if (match != null) {
+    return int.tryParse(match.group(1)!) ?? f.sortOrder;
+  }
+  return f.sortOrder;
+}
+
+/// Ταξινόμηση ορόφων κατά αριθμό ετικέτας (-1, 0, 1, 2, …), μετά φυσικά κατά εμφάνιση.
+int compareBuildingMapFloorsByNumericLabel(
+  BuildingMapFloor a,
+  BuildingMapFloor b,
+) {
+  final cmp = buildingMapFloorNumericSortKey(a).compareTo(
+    buildingMapFloorNumericSortKey(b),
+  );
+  if (cmp != 0) return cmp;
+  return compareBuildingMapFloorDisplayLabels(a, b);
+}
+
+/// Αντίγραφο λίστας ορόφων ταξινομημένο κατά ετικέτα εμφάνισης.
+List<BuildingMapFloor> buildingMapFloorsSortedByDisplayLabel(
+  List<BuildingMapFloor> floors,
+) {
+  return List<BuildingMapFloor>.from(floors)
+    ..sort(compareBuildingMapFloorDisplayLabels);
 }
 
 /// Μενού επιλογής / προσθήκης / επεξεργασίας / διαγραφής κατοψών (λειτουργία επεξεργασίας).
@@ -30,12 +71,7 @@ class BuildingMapFloorsMenuButton extends ConsumerWidget {
       onFloorsChanged();
     }
 
-    final sorted = List<BuildingMapFloor>.from(floors)
-      ..sort(
-        (a, b) => buildingMapFloorDisplayLabel(a).toLowerCase().compareTo(
-              buildingMapFloorDisplayLabel(b).toLowerCase(),
-            ),
-      );
+    final sorted = buildingMapFloorsSortedByDisplayLabel(floors);
 
     return PopupMenuButton<String>(
       tooltip: 'Κατόψεις ορόφων',

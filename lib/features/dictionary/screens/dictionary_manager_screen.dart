@@ -27,6 +27,7 @@ import '../../../core/widgets/main_nav_destination.dart';
 import '../../../core/services/core_lexicon_service.dart';
 import '../../../core/services/dictionary_service.dart';
 import '../../../core/services/master_dictionary_service.dart';
+import '../../../core/utils/lexicon_word_metrics.dart';
 import '../dictionary_table_layout.dart';
 import '../providers/lexicon_scroll_provider.dart';
 import '../widgets/dictionary_grid_row.dart';
@@ -632,6 +633,132 @@ class _DictionaryManagerScreenState extends ConsumerState<DictionaryManagerScree
     }
   }
 
+  String _lexiconRowWidgetKey(Map<String, dynamic> row) {
+    final entryId = row['entry_id'] as int?;
+    if (entryId != null) return 'lex_e_$entryId';
+    final normKey = row['norm_key'] as String? ?? '';
+    return 'lex_d_$normKey';
+  }
+
+  int _indexOfLexiconRow({
+    required int? entryId,
+    required String normKey,
+  }) {
+    return _rows.indexWhere((r) {
+      final id = r['entry_id'] as int?;
+      if (entryId != null && id == entryId) return true;
+      return (r['norm_key'] as String? ?? '') == normKey;
+    });
+  }
+
+  bool _rowPassesLettersFilter(Map<String, dynamic> row) {
+    final lettersText = _lettersCountField.text.trim();
+    if (lettersText.isEmpty) return true;
+    final parsed = int.tryParse(lettersText);
+    if (parsed == null || parsed < 1 || parsed > 100) return true;
+    final lettersCount = row['letters_count'] as int? ?? 0;
+    return switch (_lettersCompareOp) {
+      '>=' => lettersCount >= parsed,
+      '<=' => lettersCount <= parsed,
+      '=' => lettersCount == parsed,
+      _ => true,
+    };
+  }
+
+  bool _rowPassesDiacriticFilter(Map<String, dynamic> row) {
+    final filter = _diacriticMarksFilter;
+    if (filter == null || filter.isEmpty) return true;
+    final count = row['diacritic_mark_count'] as int? ?? 0;
+    return switch (filter) {
+      'none' => count == 0,
+      '1' => count == 1,
+      '2' => count == 2,
+      '3' => count == 3,
+      'gt3' => count > 3,
+      _ => true,
+    };
+  }
+
+  bool _localRowMatchesFilters(Map<String, dynamic> row) {
+    final search = _searchCtrl.text.trim();
+    if (search.isNotEmpty) {
+      final normKey = (row['norm_key'] as String? ?? '').toLowerCase();
+      final display = (row['display_word'] as String? ?? '').toLowerCase();
+      final needle = search.toLowerCase();
+      if (!normKey.contains(needle) && !display.contains(needle)) {
+        return false;
+      }
+    }
+
+    final category = _categoryFilter;
+    if (category != null && category.isNotEmpty) {
+      if ((row['cat'] as String? ?? '') != category) return false;
+    }
+
+    final src = row['src'] as String? ?? '';
+    final pending = (row['pending_user'] as int? ?? 0) == 1;
+    final sourceFilter = _sourceFilter;
+    if (sourceFilter == DictionaryRepository.kLexiconSourceDraft) {
+      if (src != DictionaryRepository.kLexiconSourceDraft) return false;
+    } else if (sourceFilter == DictionaryRepository.kLexiconPendingFilter) {
+      if (!pending) return false;
+    } else if (sourceFilter != null && sourceFilter.isNotEmpty) {
+      if (src != sourceFilter) return false;
+    }
+
+    final langFilter = _langFilter;
+    if (langFilter != null &&
+        langFilter.isNotEmpty &&
+        langFilter != DictionaryRepository.kLexiconMixedScriptsFilter) {
+      if ((row['lang'] as String? ?? '') != langFilter) return false;
+    }
+
+    if (!_rowPassesLettersFilter(row) || !_rowPassesDiacriticFilter(row)) {
+      return false;
+    }
+    return true;
+  }
+
+  void _patchLexiconRowLocally({
+    required int? entryId,
+    required String oldNormKey,
+    required String displayWord,
+    required String category,
+    bool promoteFromDraft = false,
+    int? promotedEntryId,
+    String? promotedSrc,
+    String? promotedLang,
+  }) {
+    final index = _indexOfLexiconRow(entryId: entryId, normKey: oldNormKey);
+    if (index < 0) return;
+
+    final trimmedWord = displayWord.trim();
+    final newKey = DictionaryService.canonicalLexiconKey(trimmedWord);
+    final metrics = LexiconWordMetrics.compute(trimmedWord);
+    final updated = Map<String, dynamic>.from(_rows[index]);
+    updated['display_word'] = trimmedWord;
+    updated['norm_key'] = newKey;
+    updated['cat'] = category;
+    updated['letters_count'] = metrics.lettersCount;
+    updated['diacritic_mark_count'] = metrics.diacriticMarkCount;
+    if (promoteFromDraft && promotedEntryId != null) {
+      updated['entry_id'] = promotedEntryId;
+      updated['src'] = promotedSrc ?? 'user';
+      if (promotedLang != null && promotedLang.isNotEmpty) {
+        updated['lang'] = promotedLang;
+      }
+    }
+
+    setState(() {
+      if (!_localRowMatchesFilters(updated)) {
+        _rows = [..._rows]..removeAt(index);
+        if (_totalCount > 0) _totalCount--;
+        return;
+      }
+      _rows[index] = updated;
+    });
+  }
+
   Future<void> _updateLexiconRow(
     Map<String, dynamic> row,
     String displayWord,
@@ -675,7 +802,38 @@ class _DictionaryManagerScreenState extends ConsumerState<DictionaryManagerScree
           }
         }
       }
-      await _refreshList();
+
+      final newKey = DictionaryService.canonicalLexiconKey(displayWord);
+      int? promotedEntryId;
+      String? promotedSrc;
+      String? promotedLang;
+      if (isDraft) {
+        final db = await DatabaseHelper.instance.database;
+        final promoted = await db.query(
+          AppConfig.fullDictionaryTable,
+          columns: ['id', 'source', 'language'],
+          where: 'normalized_word = ?',
+          whereArgs: [newKey],
+          limit: 1,
+        );
+        if (promoted.isNotEmpty) {
+          promotedEntryId = promoted.first['id'] as int?;
+          promotedSrc = promoted.first['source'] as String? ?? 'user';
+          promotedLang = promoted.first['language'] as String?;
+        }
+      }
+
+      if (!mounted) return;
+      _patchLexiconRowLocally(
+        entryId: entryId,
+        oldNormKey: normKey,
+        displayWord: displayWord,
+        category: category,
+        promoteFromDraft: isDraft,
+        promotedEntryId: promotedEntryId,
+        promotedSrc: promotedSrc,
+        promotedLang: promotedLang,
+      );
     } catch (e) {
       if (mounted) {
         final raw = e.toString();
@@ -1815,9 +1973,6 @@ class _DictionaryManagerScreenState extends ConsumerState<DictionaryManagerScree
                                               );
                                             }
                                             final r = _rows[rowIndex];
-                                            final normKey =
-                                                r['norm_key'] as String? ?? '';
-                                            final entryId = r['entry_id'];
                                             return _lexiconColumnGroupShell(
                                               context: context,
                                               groupIndex: colIndex,
@@ -1825,7 +1980,8 @@ class _DictionaryManagerScreenState extends ConsumerState<DictionaryManagerScree
                                                 width: layout.baseTotal,
                                                 child: DictionaryGridRow(
                                                   key: ValueKey(
-                                                      'lex_${normKey}_$entryId'),
+                                                    _lexiconRowWidgetKey(r),
+                                                  ),
                                                   row: r,
                                                   wordWidth: layout.wordWidth,
                                                   sourceWidth: layout.sourceWidth,
@@ -1835,8 +1991,12 @@ class _DictionaryManagerScreenState extends ConsumerState<DictionaryManagerScree
                                                       lexiconCategoryOptions,
                                                   onUpdate: (word, cat) =>
                                                       _updateLexiconRow(
-                                                          r, word, cat),
-                                                  onDelete: () => _deleteRow(r),
+                                                        _rows[rowIndex],
+                                                        word,
+                                                        cat,
+                                                      ),
+                                                  onDelete: () =>
+                                                      _deleteRow(_rows[rowIndex]),
                                                 ),
                                               ),
                                             );

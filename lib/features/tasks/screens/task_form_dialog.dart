@@ -92,7 +92,12 @@ class _TaskFormDialogState extends ConsumerState<_TaskFormDialog> {
 
   @override
   void dispose() {
-    _providerContainer?.invalidate(taskSmartEntityProvider);
+    final container = _providerContainer;
+    if (container != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        container.invalidate(taskSmartEntityProvider);
+      });
+    }
     _titleController.dispose();
     _descriptionController.dispose();
     super.dispose();

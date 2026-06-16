@@ -746,7 +746,6 @@ class _TasksScreenState extends ConsumerState<TasksScreen> {
       ),
     );
     if (!context.mounted) return false;
-    ref.invalidate(tasksProvider);
     return saved;
   }
 
@@ -779,7 +778,6 @@ class _TasksScreenState extends ConsumerState<TasksScreen> {
       ),
     );
     if (!context.mounted) return false;
-    ref.invalidate(tasksProvider);
     return saved;
   }
 
@@ -812,7 +810,6 @@ class _TasksScreenState extends ConsumerState<TasksScreen> {
       ),
     );
     if (!context.mounted) return false;
-    ref.invalidate(tasksProvider);
     return saved;
   }
 }

@@ -29,12 +29,15 @@ class BuildingMapOmnisearchHit {
     required this.title,
     required this.departmentIds,
     this.subtitle,
+    this.mapDisplayLabel,
   });
 
   final BuildingMapOmnisearchEntityKind kind;
   final int entityId;
   final String title;
   final String? subtitle;
+  /// Ετικέτα όπως εμφανίζεται στον χάρτη (αν διαφέρει από [title]).
+  final String? mapDisplayLabel;
   final List<int> departmentIds;
 }
 
@@ -1632,6 +1635,73 @@ class DirectoryRepository {
     return best;
   }
 
+  String _buildingMapFloorDisplayLabel(BuildingMapFloor f) {
+    final g = f.floorGroup?.trim();
+    return (g != null && g.isNotEmpty) ? '$g · ${f.label}' : f.label;
+  }
+
+  bool _isDepartmentMappedOnMap(
+    Map<String, dynamic> row,
+    Set<int> floorIds,
+  ) {
+    final w = (row['map_width'] as num?)?.toInt() ?? 0;
+    final h = (row['map_height'] as num?)?.toInt() ?? 0;
+    if (w <= 0 || h <= 0) return false;
+    if (row['map_x'] == null || row['map_y'] == null) return false;
+    final mf = int.tryParse((row['map_floor'] as String?)?.trim() ?? '');
+    return mf != null && floorIds.contains(mf);
+  }
+
+  String _omnisearchMapDisplayLabelFlat(String? mapCustomName) {
+    final custom = mapCustomName?.trim() ?? '';
+    if (custom.isEmpty) return '';
+    return custom.replaceAll(RegExp(r'\s+'), ' ');
+  }
+
+  String? _omnisearchDepartmentMapDisplayLabel(
+    String departmentName,
+    String? mapCustomName,
+  ) {
+    final flat = _omnisearchMapDisplayLabelFlat(mapCustomName);
+    if (flat.isEmpty) return null;
+    if (flat == departmentName.trim()) return null;
+    return flat;
+  }
+
+  String _omnisearchDepartmentSubtitle(
+    Map<String, dynamic> row,
+    Map<int, BuildingMapFloor> floorById,
+    Set<int> floorIds,
+  ) {
+    final parts = <String>['Τμήμα'];
+    final floorId = row['floor_id'] as int?;
+    final floor = floorId != null ? floorById[floorId] : null;
+    if (floor != null) {
+      parts.add(_buildingMapFloorDisplayLabel(floor));
+    }
+    if (!_isDepartmentMappedOnMap(row, floorIds)) {
+      parts.add('χωρίς σχεδίαση');
+    }
+    return parts.join(' • ');
+  }
+
+  String? _omnisearchUnmappedHintForDepartmentId(
+    int departmentId,
+    Map<int, Map<String, dynamic>> deptById,
+    Map<int, BuildingMapFloor> floorById,
+    Set<int> floorIds,
+  ) {
+    final row = deptById[departmentId];
+    if (row == null) return null;
+    if (_isDepartmentMappedOnMap(row, floorIds)) return null;
+    final floorId = row['floor_id'] as int?;
+    final floor = floorId != null ? floorById[floorId] : null;
+    if (floor != null) {
+      return 'χωρίς σχεδίαση · ${_buildingMapFloorDisplayLabel(floor)}';
+    }
+    return 'χωρίς σχεδίαση';
+  }
+
   Future<List<BuildingMapOmnisearchHit>> searchBuildingMapOmnisearch(
     String query, {
     int limit = 50,
@@ -1641,12 +1711,29 @@ class DirectoryRepository {
 
     await _ensurePhonesDepartmentColumn(db);
 
+    final floors = await listBuildingMapFloors();
+    final floorById = {for (final f in floors) f.id: f};
+    final floorIds = floorById.keys.toSet();
+
     final deptRows = await db.rawQuery('''
-      SELECT id, name, map_custom_name
+      SELECT
+        id,
+        name,
+        map_custom_name,
+        floor_id,
+        map_floor,
+        map_x,
+        map_y,
+        map_width,
+        map_height
       FROM departments
       WHERE COALESCE(is_deleted, 0) = 0
       ORDER BY name COLLATE NOCASE ASC
     ''');
+    final deptById = <int, Map<String, dynamic>>{
+      for (final row in deptRows)
+        if (row['id'] is int) row['id'] as int: row,
+    };
 
     final userRows = await db.rawQuery('''
       SELECT
@@ -1713,25 +1800,27 @@ class DirectoryRepository {
       final name = (row['name'] as String?)?.trim() ?? '';
       final customName = (row['map_custom_name'] as String?)?.trim() ?? '';
       if (id == null || name.isEmpty) continue;
-      
-      final searchableText = '$name $customName'.trim();
-      if (!SearchTextNormalizer.matchesNormalizedQuery(searchableText, normalized)) {
+
+      if (!SearchTextNormalizer.matchesNormalizedQuery(name, normalized)) {
         continue;
       }
-      
-      final title = customName.isNotEmpty && customName != name 
-          ? '$customName ($name)' 
-          : name;
-          
-      final rank = _omnisearchRank(query: normalized, fields: [name, customName]);
+
+      final mapDisplayLabel = _omnisearchDepartmentMapDisplayLabel(
+        name,
+        customName.isEmpty ? null : customName,
+      );
+
+      final rank = _omnisearchRank(query: normalized, fields: [name]);
       hits.add((
         rank,
         0,
-        title.toLowerCase(),
+        name.toLowerCase(),
         BuildingMapOmnisearchHit(
           kind: BuildingMapOmnisearchEntityKind.department,
           entityId: id,
-          title: title,
+          title: name,
+          subtitle: _omnisearchDepartmentSubtitle(row, floorById, floorIds),
+          mapDisplayLabel: mapDisplayLabel,
           departmentIds: [id],
         ),
       ));
@@ -1759,6 +1848,15 @@ class DirectoryRepository {
       final subtitleParts = <String>[];
       if (deptName.isNotEmpty) subtitleParts.add(deptName);
       if (phonesCsv.isNotEmpty) subtitleParts.add(phonesCsv);
+      if (departmentIds.length == 1) {
+        final hint = _omnisearchUnmappedHintForDepartmentId(
+          departmentIds.first,
+          deptById,
+          floorById,
+          floorIds,
+        );
+        if (hint != null) subtitleParts.add(hint);
+      }
       final rank = _omnisearchRank(
         query: normalized,
         fields: [title, deptName, phonesCsv],
@@ -1798,6 +1896,15 @@ class DirectoryRepository {
       final departmentIds = <int>[
         ?equipmentDepartmentId,
       ];
+      if (departmentIds.length == 1 && departmentIds.first > 0) {
+        final hint = _omnisearchUnmappedHintForDepartmentId(
+          departmentIds.first,
+          deptById,
+          floorById,
+          floorIds,
+        );
+        if (hint != null) subtitleParts.add(hint);
+      }
       final rank = _omnisearchRank(
         query: normalized,
         fields: [title, type, notes, deptName],

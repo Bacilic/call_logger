@@ -380,6 +380,38 @@ class BuildingMapSearchRevealedDeptNotifier extends Notifier<int?> {
   }
 }
 
+/// Ενημερωτικό μήνυμα όταν η αναζήτηση χάρτη βρίσκει τμήμα χωρίς σχεδιασμένη περιοχή.
+@immutable
+class BuildingMapSearchUnresolvedNotice {
+  const BuildingMapSearchUnresolvedNotice({
+    required this.message,
+    this.departmentId,
+  });
+
+  final String message;
+  final int? departmentId;
+}
+
+final buildingMapSearchUnresolvedNoticeProvider = NotifierProvider<
+    BuildingMapSearchUnresolvedNoticeNotifier,
+    BuildingMapSearchUnresolvedNotice?>(
+  BuildingMapSearchUnresolvedNoticeNotifier.new,
+);
+
+class BuildingMapSearchUnresolvedNoticeNotifier
+    extends Notifier<BuildingMapSearchUnresolvedNotice?> {
+  @override
+  BuildingMapSearchUnresolvedNotice? build() => null;
+
+  void setNotice(BuildingMapSearchUnresolvedNotice notice) {
+    state = notice;
+  }
+
+  void clear() {
+    state = null;
+  }
+}
+
 @immutable
 class BuildingMapPendingJumpPayload {
   const BuildingMapPendingJumpPayload({

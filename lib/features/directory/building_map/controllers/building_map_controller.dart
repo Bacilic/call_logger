@@ -23,6 +23,7 @@ import '../building_map_label_layout.dart';
 import '../providers/building_map_providers.dart';
 import '../widgets/building_map_commit_color_dialog.dart';
 import '../widgets/building_map_floor_edit_preview.dart';
+import '../widgets/building_map_floor_menu_button.dart';
 import '../widgets/building_map_portable_image_copy_dialog.dart';
 
 final buildingMapControllerProvider = Provider<BuildingMapController>(
@@ -100,6 +101,7 @@ class BuildingMapController {
       _ref
           .read(buildingMapSelectedDepartmentIdToMapProvider.notifier)
           .setDept(null);
+      _ref.read(buildingMapSearchUnresolvedNoticeProvider.notifier).clear();
     }
     _ref.read(buildingMapDraftShapeProvider.notifier).clear();
     _ref.read(buildingMapEditFromSelectionTapProvider.notifier).clear();
@@ -513,10 +515,7 @@ class BuildingMapController {
     }
     if (selected == null ||
         selected.mapFloor != floorId.toString() ||
-        selected.mapX == null ||
-        selected.mapY == null ||
-        selected.mapWidth == null ||
-        selected.mapHeight == null) {
+        !selected.isMapped) {
       _ref.read(buildingMapDraftShapeProvider.notifier).clear();
       _ref.read(buildingMapEditFromSelectionTapProvider.notifier).clear();
       return;
@@ -1260,6 +1259,7 @@ class BuildingMapController {
         floors.any((f) => f.id == mappedFloorId);
 
     if (isMapped) {
+      _ref.read(buildingMapSearchUnresolvedNoticeProvider.notifier).clear();
       await jumpToMappedDepartment(
         department: department,
         floors: floors,
@@ -1286,6 +1286,33 @@ class BuildingMapController {
     _ref
         .read(buildingMapSelectedDepartmentIdToMapProvider.notifier)
         .setDept(departmentId);
+
+    BuildingMapFloor? fallbackFloor;
+    for (final f in floors) {
+      if (f.id == fallbackFloorId) {
+        fallbackFloor = f;
+        break;
+      }
+    }
+    final deptName = department.displayName;
+    final String message;
+    if (preferredFloorId != null &&
+        fallbackFloorId == preferredFloorId &&
+        fallbackFloor != null) {
+      message =
+          'Το τμήμα «$deptName» βρίσκεται στον όροφο '
+          '«${buildingMapFloorDisplayLabel(fallbackFloor)}», αλλά δεν έχει '
+          'σχεδιαστεί ακόμα στον χάρτη.';
+    } else {
+      message =
+          'Το τμήμα «$deptName» δεν έχει καταχωρημένη θέση στον χάρτη.';
+    }
+    _ref.read(buildingMapSearchUnresolvedNoticeProvider.notifier).setNotice(
+          BuildingMapSearchUnresolvedNotice(
+            message: message,
+            departmentId: departmentId,
+          ),
+        );
   }
 
   Future<void> resolveAndJumpToEntity(
@@ -1450,6 +1477,7 @@ class BuildingMapController {
     required List<BuildingMapFloor> floors,
     required List<DepartmentModel> departments,
   }) async {
+    _ref.read(buildingMapSearchUnresolvedNoticeProvider.notifier).clear();
     final mf = department.mapFloor?.trim();
     if (mf == null || mf.isEmpty) return;
     final targetId = int.tryParse(mf);
