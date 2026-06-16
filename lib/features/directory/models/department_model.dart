@@ -32,6 +32,8 @@ class DepartmentModel {
     this.mapAnchorOffsetY,
     this.mapCustomName,
     this.mapLabelFontScale,
+    this.mapLabelWidth,
+    this.mapLabelHeight,
     this.groupName,
     this.floorId,
     this.directPhones,
@@ -62,6 +64,10 @@ class DepartmentModel {
   final String? mapCustomName;
   /// Πολλαπλασιαστής μεγέθους ετικέτας στον χάρτη (`NULL` = 1.0).
   final double? mapLabelFontScale;
+  /// Πλάτος πλαισίου ετικέτας χάρτη σε px καμβά (`NULL` = 150.0).
+  final double? mapLabelWidth;
+  /// Ύψος πλαισίου ετικέτας χάρτη σε px καμβά (`NULL` = 50.0).
+  final double? mapLabelHeight;
   /// “Ορφανά” τηλέφωνα που ανήκουν απευθείας στο τμήμα (δεν είναι των χρηστών).
   /// Δεν αποθηκεύονται μέσα στον πίνακα `departments`· φορτώνονται από `department_phones`.
   final List<String>? directPhones;
@@ -135,6 +141,8 @@ class DepartmentModel {
       mapAnchorOffsetY: (map['map_anchor_offset_y'] as num?)?.toDouble(),
       mapCustomName: map['map_custom_name'] as String?,
       mapLabelFontScale: (map['map_label_font_scale'] as num?)?.toDouble(),
+      mapLabelWidth: (map['map_label_width'] as num?)?.toDouble(),
+      mapLabelHeight: (map['map_label_height'] as num?)?.toDouble(),
       groupName: map['group_name'] as String?,
       floorId: (map['floor_id'] as num?)?.toInt(),
       directPhones: parseDirectPhones(map['direct_phones']),
@@ -165,6 +173,8 @@ class DepartmentModel {
     Object? mapAnchorOffsetY = _unset,
     Object? mapCustomName = _unset,
     Object? mapLabelFontScale = _unset,
+    Object? mapLabelWidth = _unset,
+    Object? mapLabelHeight = _unset,
     Object? groupName = _unset,
     Object? floorId = _unset,
     Object? directPhones = _unset,
@@ -209,6 +219,12 @@ class DepartmentModel {
       mapLabelFontScale: identical(mapLabelFontScale, _unset)
           ? this.mapLabelFontScale
           : (mapLabelFontScale as num?)?.toDouble(),
+      mapLabelWidth: identical(mapLabelWidth, _unset)
+          ? this.mapLabelWidth
+          : (mapLabelWidth as num?)?.toDouble(),
+      mapLabelHeight: identical(mapLabelHeight, _unset)
+          ? this.mapLabelHeight
+          : (mapLabelHeight as num?)?.toDouble(),
       directPhones: identical(directPhones, _unset)
           ? this.directPhones
           : directPhones as List<String>?,
@@ -236,6 +252,8 @@ class DepartmentModel {
       if (mapAnchorOffsetY != null) 'map_anchor_offset_y': mapAnchorOffsetY,
       if (mapCustomName != null) 'map_custom_name': mapCustomName,
       if (mapLabelFontScale != null) 'map_label_font_scale': mapLabelFontScale,
+      if (mapLabelWidth != null) 'map_label_width': mapLabelWidth,
+      if (mapLabelHeight != null) 'map_label_height': mapLabelHeight,
       if (groupName != null) 'group_name': groupName,
       if (floorId != null) 'floor_id': floorId,
       'is_deleted': isDeleted ? 1 : 0,

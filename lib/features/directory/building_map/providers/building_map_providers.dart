@@ -157,6 +157,10 @@ enum EditHandleType {
   move,
   label,
   anchor,
+  labelBoxTopLeft,
+  labelBoxTopRight,
+  labelBoxBottomLeft,
+  labelBoxBottomRight,
 }
 
 @immutable
@@ -172,6 +176,8 @@ class DraftDepartmentShape {
     this.anchorOffsetX,
     this.anchorOffsetY,
     this.labelFontScale = kBuildingMapLabelFontScaleDefault,
+    this.labelWidth = kBuildingMapLabelWidthDefault,
+    this.labelHeight = kBuildingMapLabelHeightDefault,
   });
 
   final double x;
@@ -185,6 +191,10 @@ class DraftDepartmentShape {
   final double? anchorOffsetY;
   /// Ενεργή κλίμακα μεγέθους ετικέτας (1.0 = προεπιλογή).
   final double labelFontScale;
+  /// Πλάτος πλαισίου ετικέτας σε px καμβά.
+  final double labelWidth;
+  /// Ύψος πλαισίου ετικέτας σε px καμβά.
+  final double labelHeight;
 
   Rect get rect => Rect.fromLTWH(x, y, width, height);
 
@@ -201,6 +211,8 @@ class DraftDepartmentShape {
     double? anchorOffsetX,
     double? anchorOffsetY,
     double? labelFontScale,
+    double? labelWidth,
+    double? labelHeight,
   }) {
     return DraftDepartmentShape(
       x: x ?? this.x,
@@ -213,6 +225,8 @@ class DraftDepartmentShape {
       anchorOffsetX: anchorOffsetX ?? this.anchorOffsetX,
       anchorOffsetY: anchorOffsetY ?? this.anchorOffsetY,
       labelFontScale: labelFontScale ?? this.labelFontScale,
+      labelWidth: labelWidth ?? this.labelWidth,
+      labelHeight: labelHeight ?? this.labelHeight,
     );
   }
 

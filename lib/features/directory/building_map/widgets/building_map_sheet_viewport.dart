@@ -332,6 +332,19 @@ class _BuildingMapSheetViewportState
       return true;
     }
 
+    if (!approxEq(
+      effectiveMapLabelWidth(dept.mapLabelWidth),
+      draft.labelWidth,
+    )) {
+      return true;
+    }
+    if (!approxEq(
+      effectiveMapLabelHeight(dept.mapLabelHeight),
+      draft.labelHeight,
+    )) {
+      return true;
+    }
+
     String? edited;
     if (_mapDisplayNameEditing && _mapDisplayNameDeptId == dept.id && _mapDisplayNameCtrl != null) {
       edited = _mapDisplayNameCtrl!.text;
@@ -575,6 +588,73 @@ class _BuildingMapSheetViewportState
     );
   }
 
+  DraftDepartmentShape _resizeLabelBoxFromHandle({
+    required DraftDepartmentShape startDraft,
+    required EditHandleType handle,
+    required Offset localPositionCanvas,
+    required Size canvasSize,
+    required double sheetRotationRad,
+    required String labelText,
+  }) {
+    final minWidth = computeMinMapLabelBoxWidthForText(labelText);
+    final sheetCenter = Offset(canvasSize.width / 2, canvasSize.height / 2);
+    final labelCenter = _rotateAroundCenter(
+      _draftLabelCenter(startDraft, canvasSize),
+      sheetCenter,
+      sheetRotationRad,
+    );
+    var newW = startDraft.labelWidth;
+    var newH = startDraft.labelHeight;
+    switch (handle) {
+      case EditHandleType.labelBoxTopLeft:
+        newW = math.max(
+          minWidth,
+          2 * (labelCenter.dx - localPositionCanvas.dx),
+        );
+        newH = math.max(
+          kBuildingMapLabelMinHeight,
+          2 * (labelCenter.dy - localPositionCanvas.dy),
+        );
+        break;
+      case EditHandleType.labelBoxTopRight:
+        newW = math.max(
+          minWidth,
+          2 * (localPositionCanvas.dx - labelCenter.dx),
+        );
+        newH = math.max(
+          kBuildingMapLabelMinHeight,
+          2 * (labelCenter.dy - localPositionCanvas.dy),
+        );
+        break;
+      case EditHandleType.labelBoxBottomLeft:
+        newW = math.max(
+          minWidth,
+          2 * (labelCenter.dx - localPositionCanvas.dx),
+        );
+        newH = math.max(
+          kBuildingMapLabelMinHeight,
+          2 * (localPositionCanvas.dy - labelCenter.dy),
+        );
+        break;
+      case EditHandleType.labelBoxBottomRight:
+        newW = math.max(
+          minWidth,
+          2 * (localPositionCanvas.dx - labelCenter.dx),
+        );
+        newH = math.max(
+          kBuildingMapLabelMinHeight,
+          2 * (localPositionCanvas.dy - labelCenter.dy),
+        );
+        break;
+      default:
+        break;
+    }
+    return startDraft.copyWith(
+      labelWidth: newW.clamp(minWidth, 2000.0),
+      labelHeight: newH.clamp(kBuildingMapLabelMinHeight, 2000.0),
+    );
+  }
+
   EditHandleType _hitTestDraftHandle(
     DraftDepartmentShape draft,
     Offset localPosition,
@@ -608,6 +688,23 @@ class _BuildingMapSheetViewportState
       sheetCenter,
       sheetRotationRad,
     );
+    final halfW = draft.labelWidth / 2;
+    final halfH = draft.labelHeight / 2;
+    final labelBoxCorners = <EditHandleType, Offset>{
+      EditHandleType.labelBoxTopLeft:
+          labelCenter + Offset(-halfW, -halfH),
+      EditHandleType.labelBoxTopRight:
+          labelCenter + Offset(halfW, -halfH),
+      EditHandleType.labelBoxBottomLeft:
+          labelCenter + Offset(-halfW, halfH),
+      EditHandleType.labelBoxBottomRight:
+          labelCenter + Offset(halfW, halfH),
+    };
+    for (final entry in labelBoxCorners.entries) {
+      if ((entry.value - localPosition).distance <= handleRadius) {
+        return entry.key;
+      }
+    }
     if ((labelCenter - localPosition).distance <= handleRadius) {
       return EditHandleType.label;
     }
@@ -699,6 +796,10 @@ class _BuildingMapSheetViewportState
       case EditHandleType.move:
       case EditHandleType.label:
       case EditHandleType.anchor:
+      case EditHandleType.labelBoxTopLeft:
+      case EditHandleType.labelBoxTopRight:
+      case EditHandleType.labelBoxBottomLeft:
+      case EditHandleType.labelBoxBottomRight:
         break;
     }
 
@@ -1040,6 +1141,29 @@ class _BuildingMapSheetViewportState
               ),
             );
         break;
+      case EditHandleType.labelBoxTopLeft:
+      case EditHandleType.labelBoxTopRight:
+      case EditHandleType.labelBoxBottomLeft:
+      case EditHandleType.labelBoxBottomRight:
+        final deptToMap = ref.read(buildingMapSelectedDepartmentIdToMapProvider);
+        final selectedDept = _departmentById(widget.activeDepartments, deptToMap);
+        final labelText = selectedDept != null
+            ? _effectiveMapLabelTextForDepartment(selectedDept)
+            : '';
+        final resized = _resizeLabelBoxFromHandle(
+          startDraft: startDraft,
+          handle: _activeHandle,
+          localPositionCanvas: local,
+          canvasSize: imageSize,
+          sheetRotationRad: rotationRad,
+          labelText: labelText,
+        );
+        ref.read(buildingMapControllerProvider).updateDepartmentLabelDimensions(
+              width: resized.labelWidth,
+              height: resized.labelHeight,
+              labelText: labelText,
+            );
+        break;
       case EditHandleType.none:
         break;
     }
@@ -1048,6 +1172,8 @@ class _BuildingMapSheetViewportState
   void _handlePointerUp({
     required MapToolMode toolMode,
     required bool drawEnabled,
+    required Size imageSize,
+    required double rotationRad,
   }) {
     if (toolMode == MapToolMode.draw && drawEnabled) {
       final draft = ref.read(buildingMapDraftShapeProvider);
@@ -1278,6 +1404,8 @@ class _BuildingMapSheetViewportState
                   _handlePointerUp(
                     toolMode: toolMode,
                     drawEnabled: drawEnabled,
+                    imageSize: sz,
+                    rotationRad: effectiveRotRad,
                   );
                 },
                 child: Stack(

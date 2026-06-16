@@ -68,6 +68,8 @@ class BuildingMapSheetPainter extends CustomPainter {
           d.color,
           d.mapCustomName,
           effectiveMapLabelFontScale(d.mapLabelFontScale),
+          effectiveMapLabelWidth(d.mapLabelWidth),
+          effectiveMapLabelHeight(d.mapLabelHeight),
           d.isHiddenOnMap,
           d.displayName,
         ),
@@ -162,6 +164,9 @@ class BuildingMapSheetPainter extends CustomPainter {
       Offset labelCenter,
       Offset anchorPoint,
       double fontScale,
+      double labelWidth,
+      double labelHeight,
+      bool showLabelBoxChrome,
     })>[];
 
     canvas.save();
@@ -201,6 +206,12 @@ class BuildingMapSheetPainter extends CustomPainter {
       final effectiveFontScale = isEditingSelectedDraft
           ? draftShape!.labelFontScale
           : effectiveMapLabelFontScale(d.mapLabelFontScale);
+      final effectiveLabelWidth = isEditingSelectedDraft
+          ? draftShape!.labelWidth
+          : effectiveMapLabelWidth(d.mapLabelWidth);
+      final effectiveLabelHeight = isEditingSelectedDraft
+          ? draftShape!.labelHeight
+          : effectiveMapLabelHeight(d.mapLabelHeight);
       final r = Rect.fromLTWH(
         nx * size.width,
         ny * size.height,
@@ -272,6 +283,9 @@ class BuildingMapSheetPainter extends CustomPainter {
             labelCenter: labelCenter + hoverOffset,
             anchorPoint: anchorPoint + hoverOffset,
             fontScale: effectiveFontScale,
+            labelWidth: effectiveLabelWidth,
+            labelHeight: effectiveLabelHeight,
+            showLabelBoxChrome: isEditingSelectedDraft,
           ),
         );
       }
@@ -291,24 +305,45 @@ class BuildingMapSheetPainter extends CustomPainter {
         sheetCenter,
         rotationRadians,
       );
-      final fontSize = computeBuildingMapLabelFontSize(size, label.fontScale);
-      final tp = TextPainter(
-        text: TextSpan(
-          text: label.text,
-          style: TextStyle(
-            color: Colors.black87,
-            fontSize: fontSize,
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-        textDirection: TextDirection.ltr,
-        maxLines: kBuildingMapLabelMaxLines,
-        ellipsis: '…',
-      )..layout(maxWidth: math.max(72, size.width * 0.24));
-      final textTopLeft = Offset(
-        labelCenter.dx - (tp.width / 2),
-        labelCenter.dy - (tp.height / 2),
+      final labelBoxRect = Rect.fromCenter(
+        center: labelCenter,
+        width: label.labelWidth,
+        height: label.labelHeight,
       );
+      final maxFontSize = computeBuildingMapLabelFontSize(size, label.fontScale);
+      final textLayout = layoutMapLabelTextInBox(
+        text: label.text,
+        boxWidth: label.labelWidth,
+        boxHeight: label.labelHeight,
+        maxFontSize: maxFontSize,
+      );
+      final textTopLeft = labelBoxRect.topLeft + textLayout.textTopLeft;
+      final tp = textLayout.textPainter;
+
+      if (label.showLabelBoxChrome) {
+        final boxBorder = Paint()
+          ..color = Colors.deepPurple.withValues(alpha: 0.55)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.25;
+        canvas.drawRect(labelBoxRect, boxBorder);
+        final handlePaint = Paint()
+          ..color = Colors.deepPurple
+          ..style = PaintingStyle.fill;
+        final handleStroke = Paint()
+          ..color = Colors.white
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.5;
+        for (final corner in [
+          labelBoxRect.topLeft,
+          labelBoxRect.topRight,
+          labelBoxRect.bottomLeft,
+          labelBoxRect.bottomRight,
+        ]) {
+          canvas.drawCircle(corner, 5, handlePaint);
+          canvas.drawCircle(corner, 5, handleStroke);
+        }
+      }
+
       tp.paint(canvas, textTopLeft);
 
       final underlineStart = Offset(textTopLeft.dx, textTopLeft.dy + tp.height + 2);

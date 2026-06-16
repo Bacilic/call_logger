@@ -1644,11 +1644,14 @@ class DirectoryRepository {
     Map<String, dynamic> row,
     Set<int> floorIds,
   ) {
-    final w = (row['map_width'] as num?)?.toInt() ?? 0;
-    final h = (row['map_height'] as num?)?.toInt() ?? 0;
+    final w = (row['map_width'] as num?)?.toDouble() ?? 0;
+    final h = (row['map_height'] as num?)?.toDouble() ?? 0;
     if (w <= 0 || h <= 0) return false;
     if (row['map_x'] == null || row['map_y'] == null) return false;
-    final mf = int.tryParse((row['map_floor'] as String?)?.trim() ?? '');
+    final mapFloorRaw = row['map_floor'];
+    final int? mf = mapFloorRaw is int
+        ? mapFloorRaw
+        : int.tryParse(mapFloorRaw?.toString().trim() ?? '');
     return mf != null && floorIds.contains(mf);
   }
 
@@ -2173,6 +2176,8 @@ ORDER BY p.number COLLATE NOCASE ASC
     'map_anchor_offset_y': null,
     'map_custom_name': null,
     'map_label_font_scale': null,
+    'map_label_width': null,
+    'map_label_height': null,
     // Μηδενισμός ορατότητας: αν αργότερα το τμήμα ξαναχαρτογραφηθεί, ξεκινά ορατό.
     'map_hidden': 0,
   };
@@ -3300,6 +3305,8 @@ ORDER BY p.number COLLATE NOCASE ASC
       'map_anchor_offset_y': null,
       'map_custom_name': null,
       'map_label_font_scale': null,
+      'map_label_width': null,
+      'map_label_height': null,
     };
     for (final r in deptRows) {
       final deptId = r['id'] as int?;

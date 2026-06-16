@@ -471,18 +471,6 @@ class _MiniMapCardState extends ConsumerState<MiniMapCard> {
                   ),
                 ),
               ),
-              IgnorePointer(
-                child: Center(
-                  child: Container(
-                    width: 10,
-                    height: 10,
-                    decoration: BoxDecoration(
-                      color: Theme.of(context).colorScheme.primary,
-                      shape: BoxShape.circle,
-                    ),
-                  ),
-                ),
-              ),
             ],
           ),
         );
@@ -558,7 +546,7 @@ class _MiniMapCardState extends ConsumerState<MiniMapCard> {
                   ? _mode
                   : data.initialMode;
               final target = _targetForMode(data, activeMode);
-              final pendingEntity = target.pendingEntity ?? target.departmentId;
+              final mapJumpEntity = target.departmentId ?? target.pendingEntity;
 
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -589,14 +577,14 @@ class _MiniMapCardState extends ConsumerState<MiniMapCard> {
                           icon: const Icon(Icons.swap_horiz),
                         ),
                       IconButton(
-                        tooltip: _exploreTooltip(data, target, pendingEntity),
-                        onPressed: pendingEntity == null
+                        tooltip: _exploreTooltip(data, target, mapJumpEntity),
+                        onPressed: mapJumpEntity == null
                             ? null
                             : () async {
                                 await showBuildingMapDialog(
                                   context,
                                   ref,
-                                  pendingEntity: pendingEntity,
+                                  pendingEntity: mapJumpEntity,
                                 );
                               },
                         icon: const Icon(Icons.explore),

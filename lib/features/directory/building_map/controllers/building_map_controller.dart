@@ -343,6 +343,8 @@ class BuildingMapController {
       'map_anchor_offset_x': draft.anchorOffsetX,
       'map_anchor_offset_y': draft.anchorOffsetY,
       'map_label_font_scale': mapLabelFontScaleForDatabase(draft.labelFontScale),
+      'map_label_width': mapLabelWidthForDatabase(draft.labelWidth),
+      'map_label_height': mapLabelHeightForDatabase(draft.labelHeight),
     };
     if (colorHex != null) {
       updates['color'] = colorHex;
@@ -370,6 +372,27 @@ class BuildingMapController {
         const SnackBar(content: Text('Αποθηκεύτηκε η θέση στο χάρτη.')),
       );
     }
+  }
+
+  /// Ενημέρωση διαστάσεων πλαισίου ετικέτας στο draft κατά τη διάρκεια resize.
+  void updateDepartmentLabelDimensions({
+    required double width,
+    required double height,
+    String? labelText,
+  }) {
+    final draft = _ref.read(buildingMapDraftShapeProvider);
+    if (draft == null) return;
+    final minW = labelText == null
+        ? kBuildingMapLabelMinWidth
+        : computeMinMapLabelBoxWidthForText(labelText);
+    final w = width.clamp(minW, 2000.0);
+    final h = height.clamp(kBuildingMapLabelMinHeight, 2000.0);
+    if ((w - draft.labelWidth).abs() < 0.5 && (h - draft.labelHeight).abs() < 0.5) {
+      return;
+    }
+    _ref
+        .read(buildingMapDraftShapeProvider.notifier)
+        .setDraft(draft.copyWith(labelWidth: w, labelHeight: h));
   }
 
   /// Αύξηση/μείωση κλίμακας ετικέτας στο τρέχον draft (αποθήκευση με ✓).
@@ -536,6 +559,8 @@ class BuildingMapController {
             labelFontScale: effectiveMapLabelFontScale(
               selected.mapLabelFontScale,
             ),
+            labelWidth: effectiveMapLabelWidth(selected.mapLabelWidth),
+            labelHeight: effectiveMapLabelHeight(selected.mapLabelHeight),
           ),
         );
   }

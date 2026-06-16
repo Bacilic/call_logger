@@ -31,7 +31,8 @@ import '../utils/search_text_normalizer.dart';
 /// v28: phones.is_deleted (soft delete κοινόχρηστων τηλεφώνων).
 /// v29: user_dictionary.display_word (ορθογραφημένη μορφή, ξεχωριστά από κλειδί).
 /// v30: departments.map_label_font_scale (κλίμακα μεγέθους ετικέτας χάρτη ανά τμήμα).
-const int databaseSchemaVersionV1 = 30;
+/// v31: departments.map_label_width / map_label_height (πλαίσιο ετικέτας χάρτη σε px καμβά).
+const int databaseSchemaVersionV1 = 31;
 
 /// Προεπιλογές διαδρομών (ίδιες με SettingsService — χωρίς εξάρτηση Flutter εδώ).
 const String kDefaultVncExecutablePath =
@@ -167,6 +168,8 @@ Future<void> applyDatabaseV1Schema(Database db) async {
         map_anchor_offset_y REAL,
         map_custom_name TEXT,
         map_label_font_scale REAL,
+        map_label_width REAL DEFAULT 150.0,
+        map_label_height REAL DEFAULT 50.0,
         group_name TEXT,
         floor_id INTEGER,
         is_deleted INTEGER DEFAULT 0
@@ -1093,6 +1096,22 @@ Future<void> migrateDatabaseToV30(Database db) async {
   if (!names.contains('map_label_font_scale')) {
     await db.execute(
       'ALTER TABLE departments ADD COLUMN map_label_font_scale REAL',
+    );
+  }
+}
+
+/// v31: διαστάσεις πλαισίου ετικέτας χάρτη (`NULL` = προεπιλογές 150×50 px).
+Future<void> migrateDatabaseToV31(Database db) async {
+  final info = await db.rawQuery('PRAGMA table_info(departments)');
+  final names = info.map((r) => r['name'] as String).toSet();
+  if (!names.contains('map_label_width')) {
+    await db.execute(
+      'ALTER TABLE departments ADD COLUMN map_label_width REAL DEFAULT 150.0',
+    );
+  }
+  if (!names.contains('map_label_height')) {
+    await db.execute(
+      'ALTER TABLE departments ADD COLUMN map_label_height REAL DEFAULT 50.0',
     );
   }
 }
