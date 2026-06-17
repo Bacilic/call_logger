@@ -30,8 +30,10 @@ import '../../../core/services/master_dictionary_service.dart';
 import '../../../core/utils/lexicon_word_metrics.dart';
 import '../dictionary_table_layout.dart';
 import '../providers/lexicon_scroll_provider.dart';
+import '../providers/lexicon_spelling_panel_provider.dart';
 import '../widgets/dictionary_grid_row.dart';
 import '../widgets/dictionary_settings_dialog.dart';
+import '../widgets/lexicon_spelling_panel.dart';
 
 const _kLexiconLangAssetAll = 'assets/greek_english.png';
 const _kLexiconLangAssetMix = 'assets/greek_english_mix.png';
@@ -400,6 +402,8 @@ class _DictionaryManagerScreenState extends ConsumerState<DictionaryManagerScree
 
       final dbLex = await DatabaseHelper.instance.database;
       final dictLex = DictionaryRepository(dbLex);
+      List<Map<String, dynamic>> mutableRows(List<Map<String, dynamic>> src) =>
+          src.map((r) => Map<String, dynamic>.from(r)).toList(growable: true);
 
       if (append) {
         final rows = await dictLex.queryCombinedLexiconPage(
@@ -419,7 +423,7 @@ class _DictionaryManagerScreenState extends ConsumerState<DictionaryManagerScree
             if (rows.isEmpty) {
               _totalCount = _rows.length;
             } else {
-              _rows = [..._rows, ...rows];
+              _rows = [..._rows, ...mutableRows(rows)];
             }
             _loadingMore = false;
           });
@@ -451,7 +455,7 @@ class _DictionaryManagerScreenState extends ConsumerState<DictionaryManagerScree
         if (mounted) {
           setState(() {
             _totalCount = count;
-            _rows = rows;
+            _rows = mutableRows(rows);
             _loading = false;
             _loadingMore = false;
           });
@@ -759,6 +763,19 @@ class _DictionaryManagerScreenState extends ConsumerState<DictionaryManagerScree
     });
   }
 
+  void _removeLexiconRowLocally({
+    required int? entryId,
+    required String normKey,
+  }) {
+    final index = _indexOfLexiconRow(entryId: entryId, normKey: normKey);
+    if (index < 0) return;
+
+    setState(() {
+      _rows = [..._rows]..removeAt(index);
+      if (_totalCount > 0) _totalCount--;
+    });
+  }
+
   Future<void> _updateLexiconRow(
     Map<String, dynamic> row,
     String displayWord,
@@ -853,6 +870,29 @@ class _DictionaryManagerScreenState extends ConsumerState<DictionaryManagerScree
     }
   }
 
+  Future<void> _applySpellingSuggestion(String suggestion) async {
+    final target = ref.read(lexiconSpellingPanelProvider).target;
+    if (target == null) return;
+    final index = _indexOfLexiconRow(
+      entryId: target.entryId,
+      normKey: target.normKey,
+    );
+    if (index < 0) return;
+    final row = _rows[index];
+    final cat = (row['cat'] as String?)?.trim().isNotEmpty == true
+        ? (row['cat'] as String).trim()
+        : 'Γενική';
+    await _updateLexiconRow(row, suggestion.trim(), cat);
+  }
+
+  void _onSpellingContextFromRow(Map<String, dynamic> row, String word) {
+    ref.read(lexiconSpellingPanelProvider.notifier).updateFromRow(
+          word: word,
+          normKey: row['norm_key'] as String? ?? '',
+          entryId: row['entry_id'] as int?,
+        );
+  }
+
   Future<void> _deleteRow(Map<String, dynamic> row) async {
     final entryId = row['entry_id'] as int?;
     final normKey = row['norm_key'] as String? ?? '';
@@ -887,7 +927,8 @@ class _DictionaryManagerScreenState extends ConsumerState<DictionaryManagerScree
         await dictDel.hardDeleteFullDictionaryById(entryId);
         await dictDel.deleteUserDictionaryWord(normKey);
       }
-      await _refreshList();
+      if (!mounted) return;
+      _removeLexiconRowLocally(entryId: entryId, normKey: normKey);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -1094,6 +1135,22 @@ class _DictionaryManagerScreenState extends ConsumerState<DictionaryManagerScree
                   style: TextStyle(fontSize: 36, height: 1),
                 ),
                 onPressed: _openAddCustomWordDialog,
+              ),
+              IconButton(
+                tooltip: ref.watch(lexiconSpellingPanelProvider).visible
+                    ? 'Απόκρυψη πάνελ ορθογραφίας'
+                    : 'Εμφάνιση πάνελ ορθογραφίας',
+                icon: Icon(
+                  ref.watch(lexiconSpellingPanelProvider).visible
+                      ? Icons.spellcheck
+                      : Icons.spellcheck_outlined,
+                  color: ref.watch(lexiconSpellingPanelProvider).visible
+                      ? theme.colorScheme.primary
+                      : null,
+                ),
+                onPressed: () => ref
+                    .read(lexiconSpellingPanelProvider.notifier)
+                    .toggleVisible(),
               ),
               IconButton(
                 tooltip: 'Ρυθμίσεις λεξικού (διαδρομές, import, compile)',
@@ -1847,7 +1904,11 @@ class _DictionaryManagerScreenState extends ConsumerState<DictionaryManagerScree
             ),
           const SizedBox(height: 8),
           Expanded(
-            child: LayoutBuilder(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(
+                  child: LayoutBuilder(
               builder: (context, constraints) {
                 final rowsForLayout =
                     _loading ? <Map<String, dynamic>>[] : _rows;
@@ -1997,6 +2058,12 @@ class _DictionaryManagerScreenState extends ConsumerState<DictionaryManagerScree
                                                       ),
                                                   onDelete: () =>
                                                       _deleteRow(_rows[rowIndex]),
+                                                  onSpellingContextChanged:
+                                                      (word) =>
+                                                          _onSpellingContextFromRow(
+                                                            _rows[rowIndex],
+                                                            word,
+                                                          ),
                                                 ),
                                               ),
                                             );
@@ -2012,6 +2079,22 @@ class _DictionaryManagerScreenState extends ConsumerState<DictionaryManagerScree
                   ),
                 );
               },
+            ),
+                ),
+                if (ref.watch(lexiconSpellingPanelProvider).visible) ...[
+                  VerticalDivider(
+                    width: 1,
+                    thickness: 1,
+                    color: Theme.of(context).dividerColor,
+                  ),
+                  SizedBox(
+                    width: kLexiconSpellingPanelWidth,
+                    child: LexiconSpellingPanel(
+                      onApplySuggestion: _applySpellingSuggestion,
+                    ),
+                  ),
+                ],
+              ],
             ),
           ),
         ],

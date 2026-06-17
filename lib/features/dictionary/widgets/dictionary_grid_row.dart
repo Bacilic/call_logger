@@ -180,6 +180,7 @@ class DictionaryGridRow extends StatefulWidget {
     required this.categoryOptions,
     required this.onUpdate,
     required this.onDelete,
+    this.onSpellingContextChanged,
   });
 
   final Map<String, dynamic> row;
@@ -190,6 +191,8 @@ class DictionaryGridRow extends StatefulWidget {
   final List<String> categoryOptions;
   final Future<void> Function(String displayWord, String category) onUpdate;
   final Future<void> Function() onDelete;
+  /// Ενημέρωση πάνελ ορθογραφίας όταν αλλάζει εστίαση ή κείμενο στο πεδίο λέξης.
+  final void Function(String word)? onSpellingContextChanged;
 
   @override
   State<DictionaryGridRow> createState() => _DictionaryGridRowState();
@@ -284,12 +287,24 @@ class _DictionaryGridRowState extends State<DictionaryGridRow> {
     _lastCat = _categoryValue;
     _wordFocus = FocusNode();
     _wordFocus.addListener(_onWordFocusChanged);
+    _wordCtrl.addListener(_onWordTextChanged);
   }
 
   @override
   void didUpdateWidget(covariant DictionaryGridRow oldWidget) {
     super.didUpdateWidget(oldWidget);
     final newWord = widget.row['display_word'] as String? ?? '';
+    final oldWord = oldWidget.row['display_word'] as String? ?? '';
+    if (newWord != oldWord) {
+      _wordCtrl.text = newWord;
+      _lastWord = newWord;
+      final nextCat = _normalizeCategoryFromRow();
+      if (nextCat != _categoryValue) {
+        setState(() => _categoryValue = nextCat);
+      }
+      _lastCat = _categoryValue;
+      return;
+    }
     if (!_wordFocus.hasFocus) {
       if (newWord != _wordCtrl.text) _wordCtrl.text = newWord;
       final nextCat = _normalizeCategoryFromRow();
@@ -304,13 +319,28 @@ class _DictionaryGridRowState extends State<DictionaryGridRow> {
   @override
   void dispose() {
     _wordFocus.removeListener(_onWordFocusChanged);
+    _wordCtrl.removeListener(_onWordTextChanged);
     _wordFocus.dispose();
     _wordCtrl.dispose();
     super.dispose();
   }
 
+  void _notifySpellingContext() {
+    final cb = widget.onSpellingContextChanged;
+    if (cb == null) return;
+    cb(_wordCtrl.text);
+  }
+
+  void _onWordTextChanged() {
+    if (!_wordFocus.hasFocus) return;
+    _notifySpellingContext();
+  }
+
   void _onWordFocusChanged() {
-    if (_wordFocus.hasFocus) return;
+    if (_wordFocus.hasFocus) {
+      _notifySpellingContext();
+      return;
+    }
     _commitIfChanged();
   }
 
