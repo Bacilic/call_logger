@@ -3,8 +3,12 @@ import 'package:flutter/material.dart';
 import '../../../core/config/app_config.dart';
 import '../../../core/database/dictionary_repository.dart';
 import '../../../core/services/settings_service.dart';
+import '../dictionary_table_layout.dart';
 
 const double kDictionaryGridActionsWidth = 108;
+
+/// Σταθερό ύψος γραμμής πίνακα λεξικού (για [ListView.itemExtent]).
+const double kDictionaryGridRowExtent = 48.0;
 
 /// Ζώνη ανάμεσα σε «Λέξη» και «Πηγή»· ίδιο πλάτος στην επικεφαλίδα (λαβή) και στις γραμμές (κενό).
 const double kDictionaryWordColumnResizeHandleWidth = 12.0;
@@ -47,14 +51,23 @@ class DictionaryLexiconHeaderRow extends StatelessWidget {
     required this.wordWidth,
     required this.sourceWidth,
     required this.categoryWidth,
-    required this.onWordColumnResize,
+    this.onWordColumnResizeStart,
+    this.onWordColumnResizeUpdate,
+    this.onWordColumnResizeEnd,
+    this.onWordColumnResizeCancel,
   });
 
   final double wordWidth;
   final double sourceWidth;
   final double categoryWidth;
-  /// Μεταβολή πλάτους στήλης «Λέξη» σε pixels (όπως drag στη λαβή).
-  final ValueChanged<double> onWordColumnResize;
+  /// Έναρξη σύρσιμου λαβής (αποθήκευση βάσης πλάτους).
+  final VoidCallback? onWordColumnResizeStart;
+  /// Συσσωρευμένη μεταβολή πλάτους κατά το σύρσιμο (throttled).
+  final ValueChanged<double>? onWordColumnResizeUpdate;
+  /// Οριστική μεταβολή στο τέλος του σύρσιμου.
+  final ValueChanged<double>? onWordColumnResizeEnd;
+  /// Ακύρωση σύρσιμου — επαναφορά χωρίς αποθήκευση.
+  final VoidCallback? onWordColumnResizeCancel;
 
   @override
   Widget build(BuildContext context) {
@@ -81,7 +94,12 @@ class DictionaryLexiconHeaderRow extends StatelessWidget {
                 ),
               ),
             ),
-            _LexiconWordColumnResizeHandle(onResize: onWordColumnResize),
+            _LexiconWordColumnResizeHandle(
+              onResizeStart: onWordColumnResizeStart,
+              onResizeUpdate: onWordColumnResizeUpdate,
+              onResizeEnd: onWordColumnResizeEnd,
+              onResizeCancel: onWordColumnResizeCancel,
+            ),
             SizedBox(
               width: sourceWidth,
               child: Padding(
@@ -121,9 +139,17 @@ class DictionaryLexiconHeaderRow extends StatelessWidget {
 }
 
 class _LexiconWordColumnResizeHandle extends StatefulWidget {
-  const _LexiconWordColumnResizeHandle({required this.onResize});
+  const _LexiconWordColumnResizeHandle({
+    this.onResizeStart,
+    this.onResizeUpdate,
+    this.onResizeEnd,
+    this.onResizeCancel,
+  });
 
-  final void Function(double delta) onResize;
+  final VoidCallback? onResizeStart;
+  final ValueChanged<double>? onResizeUpdate;
+  final ValueChanged<double>? onResizeEnd;
+  final VoidCallback? onResizeCancel;
 
   @override
   State<_LexiconWordColumnResizeHandle> createState() =>
@@ -131,8 +157,94 @@ class _LexiconWordColumnResizeHandle extends StatefulWidget {
 }
 
 class _LexiconWordColumnResizeHandleState extends State<_LexiconWordColumnResizeHandle> {
+  static const _previewThrottle = Duration(milliseconds: 16);
+
   bool _isHovered = false;
   bool _isDragging = false;
+  double _accumulatedDelta = 0;
+  DateTime? _lastPreviewEmit;
+  OverlayEntry? _dragCursorOverlay;
+
+  void _showDragCursorOverlay() {
+    _removeDragCursorOverlay();
+    final overlay = Overlay.of(context, rootOverlay: true);
+    _dragCursorOverlay = OverlayEntry(
+      builder: (context) => Positioned.fill(
+        child: MouseRegion(
+          cursor: SystemMouseCursors.resizeColumn,
+          child: IgnorePointer(
+            child: ColoredBox(
+              color: Colors.transparent,
+              child: const SizedBox.expand(),
+            ),
+          ),
+        ),
+      ),
+    );
+    overlay.insert(_dragCursorOverlay!);
+  }
+
+  void _removeDragCursorOverlay() {
+    _dragCursorOverlay?.remove();
+    _dragCursorOverlay = null;
+  }
+
+  void _emitPreview({bool force = false}) {
+    final cb = widget.onResizeUpdate;
+    if (cb == null) return;
+    final now = DateTime.now();
+    if (!force &&
+        _lastPreviewEmit != null &&
+        now.difference(_lastPreviewEmit!) < _previewThrottle) {
+      return;
+    }
+    _lastPreviewEmit = now;
+    cb(_accumulatedDelta);
+  }
+
+  void _onHorizontalDragStart(DragStartDetails _) {
+    _showDragCursorOverlay();
+    widget.onResizeStart?.call();
+    setState(() {
+      _isDragging = true;
+      _accumulatedDelta = 0;
+      _lastPreviewEmit = null;
+    });
+  }
+
+  void _onHorizontalDragUpdate(DragUpdateDetails details) {
+    _accumulatedDelta += details.delta.dx;
+    setState(() {});
+    _emitPreview();
+  }
+
+  void _onHorizontalDragEnd(DragEndDetails _) {
+    final total = _accumulatedDelta;
+    _removeDragCursorOverlay();
+    _emitPreview(force: true);
+    widget.onResizeEnd?.call(total);
+    setState(() {
+      _isDragging = false;
+      _accumulatedDelta = 0;
+      _lastPreviewEmit = null;
+    });
+  }
+
+  void _onHorizontalDragCancel() {
+    _removeDragCursorOverlay();
+    widget.onResizeCancel?.call();
+    setState(() {
+      _isDragging = false;
+      _accumulatedDelta = 0;
+      _lastPreviewEmit = null;
+    });
+  }
+
+  @override
+  void dispose() {
+    _removeDragCursorOverlay();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -143,23 +255,36 @@ class _LexiconWordColumnResizeHandleState extends State<_LexiconWordColumnResize
       child: MouseRegion(
         cursor: SystemMouseCursors.resizeColumn,
         onEnter: (_) => setState(() => _isHovered = true),
-        onExit: (_) => setState(() => _isHovered = false),
+        onExit: (_) {
+          if (!_isDragging) setState(() => _isHovered = false);
+        },
         child: GestureDetector(
           behavior: HitTestBehavior.opaque,
-          onHorizontalDragStart: (_) => setState(() => _isDragging = true),
-          onHorizontalDragEnd: (_) => setState(() => _isDragging = false),
-          onHorizontalDragCancel: () => setState(() => _isDragging = false),
-          onHorizontalDragUpdate: (details) => widget.onResize(details.delta.dx),
+          onHorizontalDragStart: _onHorizontalDragStart,
+          onHorizontalDragUpdate: _onHorizontalDragUpdate,
+          onHorizontalDragEnd: _onHorizontalDragEnd,
+          onHorizontalDragCancel: _onHorizontalDragCancel,
           child: Center(
             child: AnimatedContainer(
-              duration: const Duration(milliseconds: 120),
-              width: 2,
-              height: showActive ? 26 : 18,
+              duration: const Duration(milliseconds: 80),
+              width: _isDragging ? 4 : (showActive ? 3 : 2),
+              height: _isDragging ? 32 : (showActive ? 26 : 18),
               decoration: BoxDecoration(
-                color: showActive
+                color: _isDragging
                     ? theme.colorScheme.primary
-                    : theme.colorScheme.outlineVariant,
+                    : showActive
+                        ? theme.colorScheme.primary.withValues(alpha: 0.85)
+                        : theme.colorScheme.outlineVariant,
                 borderRadius: BorderRadius.circular(2),
+                boxShadow: _isDragging
+                    ? [
+                        BoxShadow(
+                          color: theme.colorScheme.primary.withValues(alpha: 0.45),
+                          blurRadius: 6,
+                          spreadRadius: 1,
+                        ),
+                      ]
+                    : null,
               ),
             ),
           ),
@@ -174,9 +299,7 @@ class DictionaryGridRow extends StatefulWidget {
   const DictionaryGridRow({
     super.key,
     required this.row,
-    required this.wordWidth,
-    required this.sourceWidth,
-    required this.categoryWidth,
+    required this.layout,
     required this.categoryOptions,
     required this.onUpdate,
     required this.onDelete,
@@ -184,15 +307,17 @@ class DictionaryGridRow extends StatefulWidget {
   });
 
   final Map<String, dynamic> row;
-  final double wordWidth;
-  final double sourceWidth;
-  final double categoryWidth;
+  final DictionaryTableLayout layout;
   /// Επιλογές dropdown (από ρυθμίσεις λεξικού).
   final List<String> categoryOptions;
   final Future<void> Function(String displayWord, String category) onUpdate;
   final Future<void> Function() onDelete;
   /// Ενημέρωση πάνελ ορθογραφίας όταν αλλάζει εστίαση ή κείμενο στο πεδίο λέξης.
   final void Function(String word)? onSpellingContextChanged;
+
+  double get wordWidth => layout.wordWidth;
+  double get sourceWidth => layout.sourceWidth;
+  double get categoryWidth => layout.categoryWidth;
 
   @override
   State<DictionaryGridRow> createState() => _DictionaryGridRowState();

@@ -1,6 +1,5 @@
 ﻿import 'dart:async';
 import 'dart:io';
-import 'dart:math' as math;
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -29,6 +28,9 @@ import '../../../core/services/dictionary_service.dart';
 import '../../../core/services/master_dictionary_service.dart';
 import '../../../core/utils/lexicon_word_metrics.dart';
 import '../dictionary_table_layout.dart';
+import '../providers/dictionary_layout_provider.dart';
+import '../models/lexicon_list_filters_model.dart';
+import '../providers/lexicon_list_filters_provider.dart';
 import '../providers/lexicon_scroll_provider.dart';
 import '../providers/lexicon_spelling_panel_provider.dart';
 import '../widgets/dictionary_grid_row.dart';
@@ -276,9 +278,6 @@ class DictionaryManagerScreen extends ConsumerStatefulWidget {
 }
 
 class _DictionaryManagerScreenState extends ConsumerState<DictionaryManagerScreen> {
-  static const double _lexiconWordColumnMin = 88.0;
-  static const double _lexiconWordColumnMax = 2000.0;
-
   /// Γιατί η λίστα μπορεί να έχει λίγες γραμμές ενώ η ορθογραφία «ξέρει» πολλές λέξεις.
   String _lexiconScopeInfoTooltip(CoreLexiconState core) {
     final coreSummary = core.loaded && (core.path?.trim().isNotEmpty ?? false)
@@ -297,39 +296,75 @@ class _DictionaryManagerScreenState extends ConsumerState<DictionaryManagerScree
   final _horizontalTableScroll = ScrollController();
   final _verticalTableScroll = ScrollController();
 
-  String? _langFilter;
-  String? _sourceFilter;
-  String? _categoryFilter;
-
-  int _page = 0;
   int _totalCount = 0;
-  /// null = αριθμός στηλών από πλάτος· 1–4 = σταθερός αριθμός ομάδων στηλών.
-  int? _lexiconColumnGroups;
   List<Map<String, dynamic>> _rows = [];
   bool _loading = true;
   bool _loadingMore = false;
   String? _loadError;
-  /// null = αυτόματο πλάτος από περιεχόμενο· αλλιώς πλάτος που όρισε ο χρήστης (λαβή).
-  double? _lexiconWordColumnWidthUser;
+  /// null = αυτόματο πλάτος από περιεχόμενο ομάδας· αλλιώς πλάτος από λαβή resize.
+  List<double?> _lexiconWordColumnWidthUser =
+      List<double?>.filled(kLexiconMaxColumnGroups, null);
+  /// Ζωντανό πλάτος κατά το σύρσιμο λαβής (χωρίς rebuild ολόκληρης οθόνης).
+  final List<ValueNotifier<double?>> _lexiconWordWidthDuringDrag = List.generate(
+    kLexiconMaxColumnGroups,
+    (_) => ValueNotifier<double?>(null),
+  );
+  final List<double?> _lexiconResizeDragBaseWidth =
+      List<double?>.filled(kLexiconMaxColumnGroups, null);
 
-  String _lettersCompareOp = '>=';
   final _lettersCountField = TextEditingController();
   Timer? _lettersFilterDebounce;
-  /// null = όλα· `none` | `1` | `2` | `3` | `gt3`
-  String? _diacriticMarksFilter;
+  bool _initialFiltersRefreshDone = false;
+  bool _bootstrapScheduled = false;
 
   Timer? _searchDebounce;
+
+  double _tableViewportWidth = 0;
+  double _tableViewportHeight = 0;
+
+  void _syncDictionaryLayout(
+    BuildContext context, {
+    required int? columnGroups,
+  }) {
+    if (_tableViewportWidth <= 0 || _tableViewportHeight <= 0) return;
+    ref.read(dictionaryLayoutProvider.notifier).calculateLayout(
+          rows: _loading ? const [] : _rows,
+          viewportWidth: _tableViewportWidth,
+          viewportHeight: _tableViewportHeight,
+          columnGroups: columnGroups,
+          userWordColumnWidths: _lexiconWordColumnWidthUser,
+          metrics: DictionaryLayoutMetrics.fromContext(context),
+        );
+  }
+
+  void _scheduleDictionaryLayoutSync(
+    BuildContext context, {
+    required double viewportWidth,
+    required double viewportHeight,
+    required int? columnGroups,
+  }) {
+    _tableViewportWidth = viewportWidth;
+    _tableViewportHeight = viewportHeight;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _syncDictionaryLayout(context, columnGroups: columnGroups);
+    });
+  }
 
   @override
   void initState() {
     super.initState();
-    if (widget.databaseResult.isSuccess) {
-      _refreshList();
-    } else {
+    if (!widget.databaseResult.isSuccess) {
       setState(() => _loading = false);
     }
     _searchCtrl.addListener(_onSearchChanged);
     _verticalTableScroll.addListener(_onVerticalLexiconScroll);
+  }
+
+  bool _isAtScrollEnd(ScrollPosition pos) {
+    const threshold = 400.0;
+    return pos.maxScrollExtent <= 0 ||
+        pos.pixels >= pos.maxScrollExtent - threshold;
   }
 
   void _onVerticalLexiconScroll() {
@@ -339,23 +374,55 @@ class _DictionaryManagerScreenState extends ConsumerState<DictionaryManagerScree
     if (_rows.isEmpty || _rows.length >= _totalCount) return;
     final c = _verticalTableScroll;
     if (!c.hasClients) return;
-    const threshold = 400.0;
     final pos = c.position;
-    final atEnd = pos.maxScrollExtent <= 0 ||
-        pos.pixels >= pos.maxScrollExtent - threshold;
+    final atEnd = _isAtScrollEnd(pos);
     if (atEnd) {
       _refreshList(append: true);
     }
   }
 
+  void _scheduleContinuousViewportFill() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(_fillContinuousViewportIfNeeded());
+    });
+  }
+
+  /// Συνεχής κύλιση: αν το περιεχόμενο χωράει στην οθόνη, φόρτωσε κι άλλες γραμμές
+  /// μέχρι να ενεργοποιηθεί scrollbar ή να εξαντληθούν τα αποτελέσματα.
+  Future<void> _fillContinuousViewportIfNeeded() async {
+    if (!mounted) return;
+    final continuous = ref.read(lexiconContinuousScrollProvider).value ?? true;
+    if (!continuous || _loadingMore || _loading) return;
+    if (_rows.isEmpty || _rows.length >= _totalCount) return;
+    final c = _verticalTableScroll;
+    if (!c.hasClients) {
+      _scheduleContinuousViewportFill();
+      return;
+    }
+    final maxExt = c.position.maxScrollExtent;
+    if (maxExt > 0) return;
+    await _refreshList(append: true);
+    if (!mounted) return;
+    _scheduleContinuousViewportFill();
+  }
+
+  void _scheduleContinuousViewportFillAfterLoad() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final continuous = ref.read(lexiconContinuousScrollProvider).value ?? true;
+      if (continuous && _rows.length < _totalCount) {
+        _scheduleContinuousViewportFill();
+      }
+    });
+  }
+
   void _onSearchChanged() {
     if (mounted) setState(() {});
     _searchDebounce?.cancel();
-    _searchDebounce = Timer(const Duration(milliseconds: 300), () {
-      if (mounted) {
-        setState(() => _page = 0);
-        _refreshList();
-      }
+    _searchDebounce = Timer(const Duration(milliseconds: 300), () async {
+      if (!mounted) return;
+      await ref.read(lexiconListFiltersProvider.notifier).resetPage();
+      if (mounted) _refreshList();
     });
   }
 
@@ -368,13 +435,52 @@ class _DictionaryManagerScreenState extends ConsumerState<DictionaryManagerScree
     _verticalTableScroll.removeListener(_onVerticalLexiconScroll);
     _verticalTableScroll.dispose();
     _horizontalTableScroll.dispose();
+    for (final n in _lexiconWordWidthDuringDrag) {
+      n.dispose();
+    }
     super.dispose();
+  }
+
+  void _onLexiconWordColumnResizeStart(int groupIndex, double currentWidth) {
+    _lexiconResizeDragBaseWidth[groupIndex] = currentWidth;
+  }
+
+  void _onLexiconWordColumnResizeUpdate(int groupIndex, double delta) {
+    final base = _lexiconResizeDragBaseWidth[groupIndex];
+    if (base == null) return;
+    _lexiconWordWidthDuringDrag[groupIndex].value = (base + delta).clamp(
+      kLexiconWordColumnMin,
+      kLexiconWordColumnMax,
+    );
+  }
+
+  void _onLexiconWordColumnResizeEnd(int groupIndex, double delta) {
+    final base = _lexiconResizeDragBaseWidth[groupIndex];
+    if (base != null) {
+      final w = (base + delta).clamp(
+        kLexiconWordColumnMin,
+        kLexiconWordColumnMax,
+      );
+      setState(() {
+        _lexiconWordColumnWidthUser =
+            List<double?>.from(_lexiconWordColumnWidthUser)
+              ..[groupIndex] = w;
+        _lexiconResizeDragBaseWidth[groupIndex] = null;
+      });
+    }
+    _lexiconWordWidthDuringDrag[groupIndex].value = null;
+  }
+
+  void _onLexiconWordColumnResizeCancel(int groupIndex) {
+    _lexiconResizeDragBaseWidth[groupIndex] = null;
+    _lexiconWordWidthDuringDrag[groupIndex].value = null;
   }
 
   Future<void> _refreshList({bool append = false}) async {
     if (!widget.databaseResult.isSuccess) return;
     final continuous = ref.read(lexiconContinuousScrollProvider).value ?? true;
     final pageSize = ref.read(lexiconPageSizeProvider).value ?? 40;
+    final filters = ref.read(lexiconListFiltersProvider);
 
     if (append) {
       if (!continuous || _loadingMore || _loading) return;
@@ -395,7 +501,7 @@ class _DictionaryManagerScreenState extends ConsumerState<DictionaryManagerScree
       if (lettersText.isNotEmpty) {
         final p = int.tryParse(lettersText);
         if (p != null && p >= 1 && p <= 100) {
-          lettersOp = _lettersCompareOp;
+          lettersOp = filters.lettersCompareOp;
           lettersVal = p;
         }
       }
@@ -407,14 +513,15 @@ class _DictionaryManagerScreenState extends ConsumerState<DictionaryManagerScree
 
       if (append) {
         final rows = await dictLex.queryCombinedLexiconPage(
-          language: _langFilter,
-          source: _sourceFilter,
-          category: _categoryFilter,
+          language: filters.langFilter,
+          source: filters.sourceFilter,
+          category: filters.categoryFilter,
           normalizedSearch: search.isEmpty ? null : search,
-          pendingOnly: _sourceFilter == DictionaryRepository.kLexiconPendingFilter,
+          pendingOnly:
+              filters.sourceFilter == DictionaryRepository.kLexiconPendingFilter,
           lettersCountOp: lettersOp,
           lettersCountValue: lettersVal,
-          diacriticMarksFilter: _diacriticMarksFilter,
+          diacriticMarksFilter: filters.diacriticMarksFilter,
           limit: pageSize,
           offset: _rows.length,
         );
@@ -427,28 +534,39 @@ class _DictionaryManagerScreenState extends ConsumerState<DictionaryManagerScree
             }
             _loadingMore = false;
           });
+          _scheduleContinuousViewportFillAfterLoad();
         }
       } else {
         final count = await dictLex.countCombinedLexiconRows(
-          language: _langFilter,
-          source: _sourceFilter,
-          category: _categoryFilter,
+          language: filters.langFilter,
+          source: filters.sourceFilter,
+          category: filters.categoryFilter,
           normalizedSearch: search.isEmpty ? null : search,
-          pendingOnly: _sourceFilter == DictionaryRepository.kLexiconPendingFilter,
+          pendingOnly:
+              filters.sourceFilter == DictionaryRepository.kLexiconPendingFilter,
           lettersCountOp: lettersOp,
           lettersCountValue: lettersVal,
-          diacriticMarksFilter: _diacriticMarksFilter,
+          diacriticMarksFilter: filters.diacriticMarksFilter,
         );
-        final offset = continuous ? 0 : _page * pageSize;
+        var page = filters.page;
+        if (!continuous) {
+          final maxPage = count == 0 ? 0 : ((count - 1) ~/ pageSize);
+          if (page > maxPage) {
+            page = maxPage;
+            await ref.read(lexiconListFiltersProvider.notifier).setPage(maxPage);
+          }
+        }
+        final offset = continuous ? 0 : page * pageSize;
         final rows = await dictLex.queryCombinedLexiconPage(
-          language: _langFilter,
-          source: _sourceFilter,
-          category: _categoryFilter,
+          language: filters.langFilter,
+          source: filters.sourceFilter,
+          category: filters.categoryFilter,
           normalizedSearch: search.isEmpty ? null : search,
-          pendingOnly: _sourceFilter == DictionaryRepository.kLexiconPendingFilter,
+          pendingOnly:
+              filters.sourceFilter == DictionaryRepository.kLexiconPendingFilter,
           lettersCountOp: lettersOp,
           lettersCountValue: lettersVal,
-          diacriticMarksFilter: _diacriticMarksFilter,
+          diacriticMarksFilter: filters.diacriticMarksFilter,
           limit: pageSize,
           offset: offset,
         );
@@ -459,6 +577,7 @@ class _DictionaryManagerScreenState extends ConsumerState<DictionaryManagerScree
             _loading = false;
             _loadingMore = false;
           });
+          _scheduleContinuousViewportFillAfterLoad();
         }
       }
     } catch (e) {
@@ -655,13 +774,16 @@ class _DictionaryManagerScreenState extends ConsumerState<DictionaryManagerScree
     });
   }
 
-  bool _rowPassesLettersFilter(Map<String, dynamic> row) {
+  bool _rowPassesLettersFilter(
+    Map<String, dynamic> row,
+    LexiconListFiltersModel filters,
+  ) {
     final lettersText = _lettersCountField.text.trim();
     if (lettersText.isEmpty) return true;
     final parsed = int.tryParse(lettersText);
     if (parsed == null || parsed < 1 || parsed > 100) return true;
     final lettersCount = row['letters_count'] as int? ?? 0;
-    return switch (_lettersCompareOp) {
+    return switch (filters.lettersCompareOp) {
       '>=' => lettersCount >= parsed,
       '<=' => lettersCount <= parsed,
       '=' => lettersCount == parsed,
@@ -669,8 +791,11 @@ class _DictionaryManagerScreenState extends ConsumerState<DictionaryManagerScree
     };
   }
 
-  bool _rowPassesDiacriticFilter(Map<String, dynamic> row) {
-    final filter = _diacriticMarksFilter;
+  bool _rowPassesDiacriticFilter(
+    Map<String, dynamic> row,
+    LexiconListFiltersModel filters,
+  ) {
+    final filter = filters.diacriticMarksFilter;
     if (filter == null || filter.isEmpty) return true;
     final count = row['diacritic_mark_count'] as int? ?? 0;
     return switch (filter) {
@@ -684,6 +809,7 @@ class _DictionaryManagerScreenState extends ConsumerState<DictionaryManagerScree
   }
 
   bool _localRowMatchesFilters(Map<String, dynamic> row) {
+    final filters = ref.read(lexiconListFiltersProvider);
     final search = _searchCtrl.text.trim();
     if (search.isNotEmpty) {
       final normKey = (row['norm_key'] as String? ?? '').toLowerCase();
@@ -694,14 +820,14 @@ class _DictionaryManagerScreenState extends ConsumerState<DictionaryManagerScree
       }
     }
 
-    final category = _categoryFilter;
+    final category = filters.categoryFilter;
     if (category != null && category.isNotEmpty) {
       if ((row['cat'] as String? ?? '') != category) return false;
     }
 
     final src = row['src'] as String? ?? '';
     final pending = (row['pending_user'] as int? ?? 0) == 1;
-    final sourceFilter = _sourceFilter;
+    final sourceFilter = filters.sourceFilter;
     if (sourceFilter == DictionaryRepository.kLexiconSourceDraft) {
       if (src != DictionaryRepository.kLexiconSourceDraft) return false;
     } else if (sourceFilter == DictionaryRepository.kLexiconPendingFilter) {
@@ -710,14 +836,15 @@ class _DictionaryManagerScreenState extends ConsumerState<DictionaryManagerScree
       if (src != sourceFilter) return false;
     }
 
-    final langFilter = _langFilter;
+    final langFilter = filters.langFilter;
     if (langFilter != null &&
         langFilter.isNotEmpty &&
         langFilter != DictionaryRepository.kLexiconMixedScriptsFilter) {
       if ((row['lang'] as String? ?? '') != langFilter) return false;
     }
 
-    if (!_rowPassesLettersFilter(row) || !_rowPassesDiacriticFilter(row)) {
+    if (!_rowPassesLettersFilter(row, filters) ||
+        !_rowPassesDiacriticFilter(row, filters)) {
       return false;
     }
     return true;
@@ -759,7 +886,7 @@ class _DictionaryManagerScreenState extends ConsumerState<DictionaryManagerScree
         if (_totalCount > 0) _totalCount--;
         return;
       }
-      _rows[index] = updated;
+      _rows = [..._rows]..[index] = updated;
     });
   }
 
@@ -999,11 +1126,36 @@ class _DictionaryManagerScreenState extends ConsumerState<DictionaryManagerScree
     );
   }
 
+  Future<void> _bootstrapLexiconList() async {
+    if (_initialFiltersRefreshDone) return;
+    await ref.read(lexiconListFiltersProvider.notifier).hydrationFuture;
+    if (!mounted || _initialFiltersRefreshDone) return;
+    _initialFiltersRefreshDone = true;
+    final filters = ref.read(lexiconListFiltersProvider);
+    if (_lettersCountField.text != filters.lettersCount) {
+      _lettersCountField.text = filters.lettersCount;
+    }
+    if (widget.databaseResult.isSuccess) {
+      await _refreshList();
+    } else {
+      setState(() => _loading = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (!_bootstrapScheduled) {
+      _bootstrapScheduled = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        unawaited(_bootstrapLexiconList());
+      });
+    }
+
     ref.listen<int>(lexiconMasterDataRevisionProvider, (prev, next) {
       _refreshList();
     });
+
+    final listFilters = ref.watch(lexiconListFiltersProvider);
 
     final immersive = ref.watch(lexiconFullModeProvider);
     final outerPadding = immersive
@@ -1051,6 +1203,7 @@ class _DictionaryManagerScreenState extends ConsumerState<DictionaryManagerScree
     final lexiconPageSize = lexiconPageSizeAsync.value ?? 40;
     final maxPage =
         _totalCount == 0 ? 0 : ((_totalCount - 1) ~/ lexiconPageSize);
+    final listPage = listFilters.page;
     final titleStyle = theme.textTheme.titleMedium?.copyWith(
       fontSize: 15,
       fontWeight: FontWeight.w600,
@@ -1213,7 +1366,7 @@ class _DictionaryManagerScreenState extends ConsumerState<DictionaryManagerScree
                     child: DropdownButton<String?>(
                       borderRadius: BorderRadius.circular(12),
                       isDense: true,
-                      value: _langFilter,
+                      value: listFilters.langFilter,
                       isExpanded: true,
                   hint: const Text('Γλώσσα'),
                   selectedItemBuilder: (context) {
@@ -1266,11 +1419,11 @@ class _DictionaryManagerScreenState extends ConsumerState<DictionaryManagerScree
                       ),
                     ),
                   ],
-                  onChanged: (v) {
-                    setState(() {
-                      _langFilter = v;
-                      _page = 0;
-                    });
+                  onChanged: (v) async {
+                    await ref
+                        .read(lexiconListFiltersProvider.notifier)
+                        .setLangFilter(v);
+                    if (!mounted) return;
                     _refreshList();
                   },
                     ),
@@ -1291,7 +1444,7 @@ class _DictionaryManagerScreenState extends ConsumerState<DictionaryManagerScree
                     child: DropdownButton<String?>(
                       borderRadius: BorderRadius.circular(12),
                       isDense: true,
-                      value: _sourceFilter,
+                      value: listFilters.sourceFilter,
                       isExpanded: true,
                   hint: const Text('Πηγή'),
                   selectedItemBuilder: (context) {
@@ -1316,11 +1469,11 @@ class _DictionaryManagerScreenState extends ConsumerState<DictionaryManagerScree
                       child: Text('Διπλές'),
                     ),
                   ],
-                  onChanged: (v) {
-                    setState(() {
-                      _sourceFilter = v;
-                      _page = 0;
-                    });
+                  onChanged: (v) async {
+                    await ref
+                        .read(lexiconListFiltersProvider.notifier)
+                        .setSourceFilter(v);
+                    if (!mounted) return;
                     _refreshList();
                   },
                     ),
@@ -1328,10 +1481,10 @@ class _DictionaryManagerScreenState extends ConsumerState<DictionaryManagerScree
                 ),
               );
 
-              final orphanCategory = _categoryFilter != null &&
-                  _categoryFilter!.isNotEmpty &&
-                  !lexiconCategoryOptions.contains(_categoryFilter) &&
-                  _categoryFilter != AppConfig.lexiconCategoryUnspecified;
+              final orphanCategory = listFilters.categoryFilter != null &&
+                  listFilters.categoryFilter!.isNotEmpty &&
+                  !lexiconCategoryOptions.contains(listFilters.categoryFilter) &&
+                  listFilters.categoryFilter != AppConfig.lexiconCategoryUnspecified;
               final categoryDropdown = SizedBox(
                 width: categoryFilterWidth,
                 height: 40,
@@ -1345,7 +1498,7 @@ class _DictionaryManagerScreenState extends ConsumerState<DictionaryManagerScree
                     child: DropdownButton<String?>(
                       borderRadius: BorderRadius.circular(12),
                       isDense: true,
-                      value: _categoryFilter,
+                      value: listFilters.categoryFilter,
                       isExpanded: true,
                   hint: const Text('Κατηγορία'),
                   selectedItemBuilder: (context) {
@@ -1364,7 +1517,7 @@ class _DictionaryManagerScreenState extends ConsumerState<DictionaryManagerScree
                       ),
                       if (orphanCategory)
                         Text(
-                          'Κατηγορία: $_categoryFilter',
+                          'Κατηγορία: ${listFilters.categoryFilter}',
                           overflow: TextOverflow.ellipsis,
                         ),
                     ];
@@ -1394,19 +1547,19 @@ class _DictionaryManagerScreenState extends ConsumerState<DictionaryManagerScree
                     ),
                     if (orphanCategory)
                       DropdownMenuItem<String?>(
-                        value: _categoryFilter,
+                        value: listFilters.categoryFilter,
                         child: Text(
-                          _categoryFilter!,
+                          listFilters.categoryFilter!,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
                   ],
-                  onChanged: (v) {
-                    setState(() {
-                      _categoryFilter = v;
-                      _page = 0;
-                    });
+                  onChanged: (v) async {
+                    await ref
+                        .read(lexiconListFiltersProvider.notifier)
+                        .setCategoryFilter(v);
+                    if (!mounted) return;
                     _refreshList();
                   },
                     ),
@@ -1497,7 +1650,7 @@ class _DictionaryManagerScreenState extends ConsumerState<DictionaryManagerScree
                               child: DropdownButton<int?>(
                                 borderRadius: BorderRadius.circular(12),
                                 isDense: true,
-                                value: _lexiconColumnGroups,
+                                value: listFilters.columnGroups,
                                 isExpanded: true,
                             selectedItemBuilder: (context) {
                               return const [
@@ -1533,8 +1686,11 @@ class _DictionaryManagerScreenState extends ConsumerState<DictionaryManagerScree
                               DropdownMenuItem(value: 3, child: Text('3')),
                               DropdownMenuItem(value: 4, child: Text('4')),
                             ],
-                            onChanged: (v) {
-                              setState(() => _lexiconColumnGroups = v);
+                            onChanged: (v) async {
+                              await ref
+                                  .read(lexiconListFiltersProvider.notifier)
+                                  .setColumnGroups(v);
+                              _scheduleContinuousViewportFillAfterLoad();
                             },
                               ),
                             ),
@@ -1573,7 +1729,7 @@ class _DictionaryManagerScreenState extends ConsumerState<DictionaryManagerScree
                                   child: DropdownButton<String>(
                                     borderRadius: BorderRadius.circular(12),
                                     isDense: true,
-                                    value: _lettersCompareOp,
+                                    value: listFilters.lettersCompareOp,
                                     isExpanded: true,
                                 selectedItemBuilder: (context) => const [
                                   Text('≥'),
@@ -1594,12 +1750,12 @@ class _DictionaryManagerScreenState extends ConsumerState<DictionaryManagerScree
                                     child: Text('='),
                                   ),
                                 ],
-                                onChanged: (v) {
+                                onChanged: (v) async {
                                   if (v == null) return;
-                                  setState(() {
-                                    _lettersCompareOp = v;
-                                    _page = 0;
-                                  });
+                                  await ref
+                                      .read(lexiconListFiltersProvider.notifier)
+                                      .setLettersCompareOp(v);
+                                  if (!mounted) return;
                                   _refreshList();
                                 },
                                   ),
@@ -1634,9 +1790,14 @@ class _DictionaryManagerScreenState extends ConsumerState<DictionaryManagerScree
                                   _lettersFilterDebounce?.cancel();
                                   _lettersFilterDebounce = Timer(
                                     const Duration(milliseconds: 350),
-                                    () {
+                                    () async {
                                       if (!mounted) return;
-                                      setState(() => _page = 0);
+                                      await ref
+                                          .read(lexiconListFiltersProvider.notifier)
+                                          .setLettersCount(
+                                            _lettersCountField.text,
+                                          );
+                                      if (!mounted) return;
                                       _refreshList();
                                     },
                                   );
@@ -1674,7 +1835,7 @@ class _DictionaryManagerScreenState extends ConsumerState<DictionaryManagerScree
                                       child: DropdownButton<String?>(
                                         borderRadius: BorderRadius.circular(12),
                                         isDense: true,
-                                        value: _diacriticMarksFilter,
+                                        value: listFilters.diacriticMarksFilter,
                                         isExpanded: true,
                                     selectedItemBuilder: (context) {
                                       return const [
@@ -1730,11 +1891,11 @@ class _DictionaryManagerScreenState extends ConsumerState<DictionaryManagerScree
                                         child: Text('Περισσότερα (>3)'),
                                       ),
                                     ],
-                                    onChanged: (v) {
-                                      setState(() {
-                                        _diacriticMarksFilter = v;
-                                        _page = 0;
-                                      });
+                                    onChanged: (v) async {
+                                      await ref
+                                          .read(lexiconListFiltersProvider.notifier)
+                                          .setDiacriticMarksFilter(v);
+                                      if (!mounted) return;
                                       _refreshList();
                                     },
                                       ),
@@ -1791,7 +1952,9 @@ class _DictionaryManagerScreenState extends ConsumerState<DictionaryManagerScree
                                 await ref.read(
                                     lexiconContinuousScrollProvider.future);
                                 if (!mounted) return;
-                                setState(() => _page = 0);
+                                await ref
+                                    .read(lexiconListFiltersProvider.notifier)
+                                    .resetPage();
                                 if (_verticalTableScroll.hasClients) {
                                   _verticalTableScroll.jumpTo(0);
                                 }
@@ -1808,9 +1971,12 @@ class _DictionaryManagerScreenState extends ConsumerState<DictionaryManagerScree
                                   tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                                   visualDensity: VisualDensity.compact,
                                 ),
-                                onPressed: _page > 0
-                                    ? () {
-                                        setState(() => _page--);
+                                onPressed: listPage > 0
+                                    ? () async {
+                                        await ref
+                                            .read(lexiconListFiltersProvider.notifier)
+                                            .setPage(listPage - 1);
+                                        if (!mounted) return;
                                         _refreshList();
                                       }
                                     : null,
@@ -1822,7 +1988,7 @@ class _DictionaryManagerScreenState extends ConsumerState<DictionaryManagerScree
                                 child: SizedBox(
                                   height: filterBarStripHeight,
                                   child: Center(
-                                    child: Text('${_page + 1} / ${maxPage + 1}'),
+                                    child: Text('${listPage + 1} / ${maxPage + 1}'),
                                   ),
                                 ),
                               ),
@@ -1835,9 +2001,12 @@ class _DictionaryManagerScreenState extends ConsumerState<DictionaryManagerScree
                                   tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                                   visualDensity: VisualDensity.compact,
                                 ),
-                                onPressed: _page < maxPage
-                                    ? () {
-                                        setState(() => _page++);
+                                onPressed: listPage < maxPage
+                                    ? () async {
+                                        await ref
+                                            .read(lexiconListFiltersProvider.notifier)
+                                            .setPage(listPage + 1);
+                                        if (!mounted) return;
                                         _refreshList();
                                       }
                                     : null,
@@ -1868,7 +2037,9 @@ class _DictionaryManagerScreenState extends ConsumerState<DictionaryManagerScree
                                   ref.invalidate(lexiconPageSizeProvider);
                                   await ref.read(lexiconPageSizeProvider.future);
                                   if (!mounted) return;
-                                  setState(() => _page = 0);
+                                  await ref
+                                      .read(lexiconListFiltersProvider.notifier)
+                                      .resetPage();
                                   await _refreshList();
                                 },
                                 itemBuilder: (context) => const [
@@ -1909,177 +2080,194 @@ class _DictionaryManagerScreenState extends ConsumerState<DictionaryManagerScree
               children: [
                 Expanded(
                   child: LayoutBuilder(
-              builder: (context, constraints) {
-                final rowsForLayout =
-                    _loading ? <Map<String, dynamic>>[] : _rows;
-                final baseLayout = computeDictionaryTableLayout(
-                  context: context,
-                  rows: rowsForLayout,
-                  viewportWidth: constraints.maxWidth,
-                );
-                final wordWidth = (_lexiconWordColumnWidthUser ??
-                        baseLayout.wordWidth)
-                    .clamp(_lexiconWordColumnMin, _lexiconWordColumnMax);
-                final layout = DictionaryTableLayout(
-                  wordWidth: wordWidth,
-                  sourceWidth: baseLayout.sourceWidth,
-                  categoryWidth: baseLayout.categoryWidth,
-                );
-                const groupSeparatorWidth = 3.0;
-                final autoColumns = math.max(
-                  1,
-                  (constraints.maxWidth + groupSeparatorWidth) ~/
-                      (layout.baseTotal + groupSeparatorWidth),
-                );
-                final int columnsCount = _lexiconColumnGroups == null
-                    ? autoColumns
-                    : math.min(4, math.max(1, _lexiconColumnGroups!));
-                final totalWidthNeeded = layout.baseTotal * columnsCount +
-                    (columnsCount > 0 ? (columnsCount - 1) * groupSeparatorWidth : 0);
-                final scrollW = math.max(constraints.maxWidth, totalWidthNeeded);
-                final gridRowCount =
-                    columnsCount == 0 ? 0 : (_rows.length / columnsCount).ceil();
-                final footerRows =
-                    lexiconContinuousScroll && _loadingMore ? 1 : 0;
-                final listItemCount = gridRowCount + footerRows;
+                    builder: (context, constraints) {
+                      _scheduleDictionaryLayoutSync(
+                        context,
+                        viewportWidth: constraints.maxWidth,
+                        viewportHeight: constraints.maxHeight,
+                        columnGroups: listFilters.columnGroups,
+                      );
+                      final tableLayout = ref.watch(dictionaryLayoutProvider);
+                      final columnsCount = tableLayout.columnsCount;
+                      final gridRowCount = tableLayout.gridRowCount;
+                      final footerRows =
+                          lexiconContinuousScroll && _loadingMore ? 1 : 0;
+                      final listItemCount = gridRowCount + footerRows;
 
-                return Scrollbar(
-                  controller: _horizontalTableScroll,
-                  thumbVisibility: true,
-                  child: SingleChildScrollView(
-                    controller: _horizontalTableScroll,
-                    scrollDirection: Axis.horizontal,
-                    primary: false,
-                    child: SizedBox(
-                      width: scrollW,
-                      height: constraints.maxHeight,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: List.generate(
-                              columnsCount,
-                              (groupIndex) => _lexiconColumnGroupShell(
-                                context: context,
-                                groupIndex: groupIndex,
-                                child: SizedBox(
-                                  width: layout.baseTotal,
-                                  child: DictionaryLexiconHeaderRow(
-                                    wordWidth: layout.wordWidth,
-                                    sourceWidth: layout.sourceWidth,
-                                    categoryWidth: layout.categoryWidth,
-                                    onWordColumnResize: (delta) {
-                                      setState(() {
-                                        final cur = _lexiconWordColumnWidthUser ??
-                                            baseLayout.wordWidth;
-                                        _lexiconWordColumnWidthUser =
-                                            (cur + delta).clamp(
-                                          _lexiconWordColumnMin,
-                                          _lexiconWordColumnMax,
-                                        );
-                                      });
-                                    },
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                          Expanded(
-                            child: _loading
-                                ? const Center(
-                                    child: Padding(
-                                      padding: EdgeInsets.all(24),
-                                      child: CircularProgressIndicator(),
-                                    ),
-                                  )
-                                : Scrollbar(
-                                    controller: _verticalTableScroll,
-                                    thumbVisibility: true,
-                                    child: ListView.builder(
-                                      controller: _verticalTableScroll,
-                                      primary: false,
-                                      padding: EdgeInsets.zero,
-                                      itemCount: listItemCount,
-                                      itemBuilder: (context, i) {
-                                        if (i >= gridRowCount) {
-                                          return SizedBox(
-                                            width: scrollW,
-                                            height: 48,
-                                            child: const Center(
-                                              child: SizedBox(
-                                                width: 28,
-                                                height: 28,
-                                                child: CircularProgressIndicator(
-                                                  strokeWidth: 2,
+                      return AnimatedBuilder(
+                        animation: Listenable.merge(_lexiconWordWidthDuringDrag),
+                        builder: (context, _) {
+                          final liveDragWidths = _lexiconWordWidthDuringDrag
+                              .map((n) => n.value)
+                              .toList(growable: false);
+                          final groupLayouts =
+                              tableLayout.groupLayoutsWithLiveDrag(liveDragWidths);
+                          final scrollW =
+                              tableLayout.effectiveScrollWidth(groupLayouts);
+
+                          return Scrollbar(
+                            controller: _horizontalTableScroll,
+                            thumbVisibility: true,
+                            child: SingleChildScrollView(
+                              controller: _horizontalTableScroll,
+                              scrollDirection: Axis.horizontal,
+                              primary: false,
+                              child: SizedBox(
+                                width: scrollW,
+                                height: constraints.maxHeight,
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: List.generate(
+                                        columnsCount,
+                                        (groupIndex) {
+                                          final groupLayout =
+                                              groupLayouts[groupIndex];
+                                          return _lexiconColumnGroupShell(
+                                            context: context,
+                                            groupIndex: groupIndex,
+                                            child: SizedBox(
+                                              width: groupLayout.baseTotal,
+                                              child: DictionaryLexiconHeaderRow(
+                                                wordWidth: groupLayout.wordWidth,
+                                                sourceWidth:
+                                                    groupLayout.sourceWidth,
+                                                categoryWidth:
+                                                    groupLayout.categoryWidth,
+                                                onWordColumnResizeStart: () =>
+                                                    _onLexiconWordColumnResizeStart(
+                                                  groupIndex,
+                                                  groupLayout.wordWidth,
+                                                ),
+                                                onWordColumnResizeUpdate: (delta) =>
+                                                    _onLexiconWordColumnResizeUpdate(
+                                                  groupIndex,
+                                                  delta,
+                                                ),
+                                                onWordColumnResizeEnd: (delta) =>
+                                                    _onLexiconWordColumnResizeEnd(
+                                                  groupIndex,
+                                                  delta,
+                                                ),
+                                                onWordColumnResizeCancel: () =>
+                                                    _onLexiconWordColumnResizeCancel(
+                                                  groupIndex,
                                                 ),
                                               ),
                                             ),
                                           );
-                                        }
-                                        return Row(
-                                          mainAxisSize: MainAxisSize.min,
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
-                                          children: List.generate(
-                                              columnsCount, (colIndex) {
-                                            final rowIndex =
-                                                i * columnsCount + colIndex;
-                                            if (rowIndex >= _rows.length) {
-                                              return _lexiconColumnGroupShell(
-                                                context: context,
-                                                groupIndex: colIndex,
-                                                child: SizedBox(
-                                                    width: layout.baseTotal),
-                                              );
-                                            }
-                                            final r = _rows[rowIndex];
-                                            return _lexiconColumnGroupShell(
-                                              context: context,
-                                              groupIndex: colIndex,
-                                              child: SizedBox(
-                                                width: layout.baseTotal,
-                                                child: DictionaryGridRow(
-                                                  key: ValueKey(
-                                                    _lexiconRowWidgetKey(r),
-                                                  ),
-                                                  row: r,
-                                                  wordWidth: layout.wordWidth,
-                                                  sourceWidth: layout.sourceWidth,
-                                                  categoryWidth:
-                                                      layout.categoryWidth,
-                                                  categoryOptions:
-                                                      lexiconCategoryOptions,
-                                                  onUpdate: (word, cat) =>
-                                                      _updateLexiconRow(
-                                                        _rows[rowIndex],
-                                                        word,
-                                                        cat,
-                                                      ),
-                                                  onDelete: () =>
-                                                      _deleteRow(_rows[rowIndex]),
-                                                  onSpellingContextChanged:
-                                                      (word) =>
-                                                          _onSpellingContextFromRow(
-                                                            _rows[rowIndex],
-                                                            word,
-                                                          ),
-                                                ),
-                                              ),
-                                            );
-                                          }),
-                                        );
-                                      },
+                                        },
+                                      ),
                                     ),
+                                    Expanded(
+                                      child: _loading
+                                          ? const Center(
+                                              child: Padding(
+                                                padding: EdgeInsets.all(24),
+                                                child:
+                                                    CircularProgressIndicator(),
+                                              ),
+                                            )
+                                          : Scrollbar(
+                                              controller: _verticalTableScroll,
+                                              thumbVisibility: true,
+                                              child: ListView.builder(
+                                                controller: _verticalTableScroll,
+                                                primary: false,
+                                                padding: EdgeInsets.zero,
+                                                itemExtent: kDictionaryGridRowExtent,
+                                                itemCount: listItemCount,
+                                                itemBuilder: (context, i) {
+                                                  if (i >= gridRowCount) {
+                                                    return SizedBox(
+                                                      width: scrollW,
+                                                      child: const Center(
+                                                        child: SizedBox(
+                                                          width: 28,
+                                                          height: 28,
+                                                          child:
+                                                              CircularProgressIndicator(
+                                                            strokeWidth: 2,
+                                                          ),
+                                                        ),
+                                                      ),
+                                                    );
+                                                  }
+                                                  return Row(
+                                                    mainAxisSize: MainAxisSize.min,
+                                                    crossAxisAlignment:
+                                                        CrossAxisAlignment.start,
+                                                    children: List.generate(
+                                                        columnsCount, (colIndex) {
+                                                      final groupLayout =
+                                                          groupLayouts[colIndex];
+                                                      final rowIndex =
+                                                          i * columnsCount +
+                                                              colIndex;
+                                                      if (rowIndex >= _rows.length) {
+                                                        return _lexiconColumnGroupShell(
+                                                          context: context,
+                                                          groupIndex: colIndex,
+                                                          child: SizedBox(
+                                                            width: groupLayout
+                                                                .baseTotal,
+                                                          ),
+                                                        );
+                                                      }
+                                                      final r = _rows[rowIndex];
+                                                      return _lexiconColumnGroupShell(
+                                                        context: context,
+                                                        groupIndex: colIndex,
+                                                        child: SizedBox(
+                                                          width:
+                                                              groupLayout.baseTotal,
+                                                          child: RepaintBoundary(
+                                                            child: DictionaryGridRow(
+                                                              key: ValueKey(
+                                                                _lexiconRowWidgetKey(
+                                                                    r),
+                                                              ),
+                                                              row: r,
+                                                              layout: groupLayout,
+                                                              categoryOptions:
+                                                                  lexiconCategoryOptions,
+                                                              onUpdate: (word, cat) =>
+                                                                  _updateLexiconRow(
+                                                                    _rows[rowIndex],
+                                                                    word,
+                                                                    cat,
+                                                                  ),
+                                                              onDelete: () =>
+                                                                  _deleteRow(
+                                                                      _rows[rowIndex]),
+                                                              onSpellingContextChanged:
+                                                                  (word) =>
+                                                                      _onSpellingContextFromRow(
+                                                                        _rows[
+                                                                            rowIndex],
+                                                                        word,
+                                                                      ),
+                                                            ),
+                                                          ),
+                                                        ),
+                                                      );
+                                                    }),
+                                                  );
+                                                },
+                                              ),
+                                            ),
+                                    ),
+                                  ],
+                                ),
+                              ),
                             ),
-                          ),
-                        ],
-                      ),
-                    ),
+                          );
+                        },
+                      );
+                    },
                   ),
-                );
-              },
-            ),
                 ),
                 if (ref.watch(lexiconSpellingPanelProvider).visible) ...[
                   VerticalDivider(
