@@ -712,6 +712,89 @@ class _LansweeperReportDialogState
     });
   }
 
+  Future<({bool opened, bool openedLoginTab})> _launchHelpdeskBrowserUrl(
+    String targetUrl, {
+    required String invalidUrlMessage,
+    required String openFailureMessage,
+  }) async {
+    if (!LansweeperUrlRules.isBrowserLaunchableUrl(targetUrl)) {
+      if (mounted) {
+        _showDialogSnackBar(SnackBar(content: Text(openFailureMessage)));
+      }
+      return (opened: false, openedLoginTab: false);
+    }
+
+    final autoLogin = ref.read(lansweeperHelpdeskAutoLoginProvider);
+    final loginPageRaw = ref.read(lansweeperHelpdeskLoginUrlProvider).trim();
+    var openedLoginTab = false;
+    if (autoLogin &&
+        LansweeperUrlRules.isBrowserLaunchableUrl(loginPageRaw)) {
+      final loginUri = Uri.tryParse(loginPageRaw);
+      if (loginUri != null && loginUri.hasScheme) {
+        openedLoginTab = await launchUrl(
+          loginUri,
+          mode: LaunchMode.externalApplication,
+        );
+        await Future<void>.delayed(const Duration(milliseconds: 450));
+      }
+    }
+
+    final uri = Uri.tryParse(targetUrl.trim());
+    if (uri == null || !uri.hasScheme) {
+      if (mounted) {
+        _showDialogSnackBar(SnackBar(content: Text(invalidUrlMessage)));
+      }
+      return (opened: false, openedLoginTab: openedLoginTab);
+    }
+
+    final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!opened && mounted) {
+      _showDialogSnackBar(SnackBar(content: Text(openFailureMessage)));
+    }
+    return (opened: opened, openedLoginTab: openedLoginTab);
+  }
+
+  Future<void> _openTicketViewInBrowser(String ticketId) async {
+    final templateRaw = _lansweeperTicketViewUrlController.text.trim();
+    final template = templateRaw.isNotEmpty
+        ? templateRaw
+        : ref.read(lansweeperTicketViewUrlProvider);
+    final url = LansweeperUrlRules.buildTicketViewUrl(template, ticketId);
+    if (url == null) {
+      if (!mounted) return;
+      _showDialogSnackBar(
+        const SnackBar(
+          content: Text(
+            'Ορίστε έγκυρο URL προβολής ticket στις ρυθμίσεις Lansweeper.',
+          ),
+        ),
+      );
+      return;
+    }
+
+    final result = await _launchHelpdeskBrowserUrl(
+      url,
+      invalidUrlMessage: 'Μη έγκυρο URL προβολής ticket.',
+      openFailureMessage: 'Αποτυχία ανοίγματος ticket στον περιηγητή.',
+    );
+    if (!mounted) return;
+    if (result.openedLoginTab) {
+      _showDialogSnackBar(
+        const SnackBar(
+          content: Text(
+            'Ανοίχτηκαν καρτέλες στον περιηγητή· αν χρειάζεται, συνδεθείτε στη σελίδα σύνδεσης και επιστρέψτε στο ticket.',
+          ),
+        ),
+      );
+    } else if (!result.opened) {
+      _showDialogSnackBar(
+        const SnackBar(
+          content: Text('Αποτυχία ανοίγματος ticket στον περιηγητή.'),
+        ),
+      );
+    }
+  }
+
   Future<void> _copyAndOpen({
     required String ticketFormUrl,
   }) async {
@@ -736,38 +819,12 @@ class _LansweeperReportDialogState
       const SnackBar(content: Text('Αντιγράφηκαν τίτλος και σημειώσεις.')),
     );
 
-    final autoLogin = ref.read(lansweeperHelpdeskAutoLoginProvider);
-    final loginPageRaw = ref.read(lansweeperHelpdeskLoginUrlProvider).trim();
-    var openedLoginTab = false;
-    if (autoLogin &&
-        LansweeperUrlRules.isBrowserLaunchableUrl(loginPageRaw)) {
-      final loginUri = Uri.tryParse(loginPageRaw);
-      if (loginUri != null && loginUri.hasScheme) {
-        openedLoginTab = await launchUrl(
-          loginUri,
-          mode: LaunchMode.externalApplication,
-        );
-        await Future<void>.delayed(const Duration(milliseconds: 450));
-      }
-    }
-
-    final uri = Uri.tryParse(ticketFormUrl.trim());
-    if (uri == null || !uri.hasScheme) {
-      if (!mounted) return;
-      _showDialogSnackBar(
-        const SnackBar(content: Text('Μη έγκυρο URL φόρμας εισιτηρίου.')),
-      );
-      return;
-    }
-
-    final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
-    if (!opened && mounted) {
-      _showDialogSnackBar(
-        const SnackBar(content: Text('Αποτυχία ανοίγματος URL φόρμας.')),
-      );
-      return;
-    }
-    if (mounted && openedLoginTab) {
+    final result = await _launchHelpdeskBrowserUrl(
+      ticketFormUrl,
+      invalidUrlMessage: 'Μη έγκυρο URL φόρμας εισιτηρίου.',
+      openFailureMessage: 'Αποτυχία ανοίγματος URL φόρμας.',
+    );
+    if (mounted && result.openedLoginTab) {
       _showDialogSnackBar(
         const SnackBar(
           content: Text(
@@ -789,6 +846,20 @@ class _LansweeperReportDialogState
     final state = (item.call.lansweeperState ?? LansweeperSyncState.unsent)
         .trim();
     return state.isEmpty ? LansweeperSyncState.unsent : state;
+  }
+
+  bool _isRegisteredCall(_ReportCallItem item) =>
+      _normalizedLansweeperState(item) == LansweeperSyncState.sent;
+
+  bool _isFailedCall(_ReportCallItem item) =>
+      _normalizedLansweeperState(item) == LansweeperSyncState.failed;
+
+  Widget _wrapOptionalTooltip({
+    required Widget child,
+    String? message,
+  }) {
+    if (message == null || message.isEmpty) return child;
+    return Tooltip(message: message, child: child);
   }
 
   bool _canSetSelectedToState(
@@ -830,13 +901,19 @@ class _LansweeperReportDialogState
     required String targetState,
     required String label,
     required Future<void> Function() onPressed,
+    bool allowWhen = true,
+    String? blockedTooltip,
   }) {
-    final enabled = !isLoading && _canSetSelectedToState(selected, targetState);
-    final tooltip = _disabledStateButtonTooltip(
-      selected,
-      targetState,
-      isLoading: isLoading,
-    );
+    final baseEnabled =
+        !isLoading && _canSetSelectedToState(selected, targetState);
+    final enabled = baseEnabled && allowWhen;
+    final tooltip = !allowWhen && blockedTooltip != null
+        ? blockedTooltip
+        : _disabledStateButtonTooltip(
+            selected,
+            targetState,
+            isLoading: isLoading,
+          );
     final button = OutlinedButton(
       onPressed: enabled ? () => unawaited(onPressed()) : null,
       child: Text(label),
@@ -1104,13 +1181,21 @@ class _LansweeperReportDialogState
         : await notifier.submitCall(callId: callId, input: input);
     if (!mounted) return;
     if (result.success) {
+      final ticketId = (result.ticketId ?? '').trim();
       _showDialogSnackBar(
         SnackBar(
           content: Text(
-            'Καταχώρηση επιτυχής. Ticket: ${result.ticketId ?? '-'}',
+            'Καταχώρηση επιτυχής. Ticket: ${ticketId.isEmpty ? '-' : ticketId}',
           ),
         ),
       );
+      if (!resubmit && ticketId.isNotEmpty) {
+        final openTicketAfterSubmit =
+            await readLansweeperOpenTicketAfterApiSubmitSetting();
+        if (openTicketAfterSubmit) {
+          await _openTicketViewInBrowser(ticketId);
+        }
+      }
       return;
     }
 
@@ -1851,6 +1936,16 @@ class _LansweeperReportDialogState
                       .where((e) => _selectedKeys.contains(e.key))
                       .toList();
                   final primarySelected = _primarySelectedItem(items);
+                  final isPrimaryRegistered = primarySelected != null &&
+                      _isRegisteredCall(primarySelected);
+                  final isPrimaryFailed =
+                      primarySelected != null && _isFailedCall(primarySelected);
+                  final canImmediateApiSubmit = primarySelected != null &&
+                      !syncState.isLoading &&
+                      canSubmitToApi &&
+                      connectionReady &&
+                      !isPrimaryRegistered;
+                  final canResubmitApi = canImmediateApiSubmit && isPrimaryFailed;
                   if (primarySelected != null && selected.isNotEmpty) {
                     _prefillForm(primarySelected, selected);
                   }
@@ -1974,51 +2069,49 @@ class _LansweeperReportDialogState
                                           spacing: 8,
                                           runSpacing: 8,
                                           children: [
-                                            _wrapLansweeperConnectionTooltip(
-                                              status: connectionStatus,
-                                              child: FilledButton.icon(
-                                                onPressed:
-                                                    (primarySelected != null &&
-                                                        !syncState.isLoading &&
-                                                        canSubmitToApi &&
-                                                        connectionReady)
-                                                    ? () => _submitSelected(
-                                                        primarySelected,
-                                                        resubmit: false,
-                                                      )
-                                                    : null,
-                                                icon: _connectionAwareIcon(
-                                                  status: connectionStatus,
-                                                  icon: Icons
-                                                      .cloud_upload_rounded,
-                                                ),
-                                                label: const Text(
-                                                  'Άμεση Καταχώρηση',
-                                                ),
-                                              ),
-                                            ),
-                                            _wrapLansweeperConnectionTooltip(
-                                              status: connectionStatus,
-                                              child: OutlinedButton.icon(
-                                                onPressed:
-                                                    (primarySelected != null &&
-                                                        !syncState.isLoading &&
-                                                        canSubmitToApi &&
-                                                        connectionReady)
-                                                    ? () => _submitSelected(
-                                                        primarySelected,
-                                                        resubmit: true,
-                                                      )
-                                                    : null,
-                                                icon: _connectionAwareIcon(
-                                                  status: connectionStatus,
-                                                  icon: Icons.refresh_rounded,
-                                                ),
-                                                label: const Text(
-                                                  'Επαναϋποβολή',
+                                            _wrapOptionalTooltip(
+                                              message: isPrimaryRegistered
+                                                  ? 'Η κλήση είναι ήδη καταχωρημένη'
+                                                  : null,
+                                              child: _wrapLansweeperConnectionTooltip(
+                                                status: connectionStatus,
+                                                child: FilledButton.icon(
+                                                  onPressed: canImmediateApiSubmit
+                                                      ? () => _submitSelected(
+                                                          primarySelected,
+                                                          resubmit: false,
+                                                        )
+                                                      : null,
+                                                  icon: _connectionAwareIcon(
+                                                    status: connectionStatus,
+                                                    icon: Icons
+                                                        .cloud_upload_rounded,
+                                                  ),
+                                                  label: const Text(
+                                                    'Άμεση Καταχώρηση',
+                                                  ),
                                                 ),
                                               ),
                                             ),
+                                            if (isPrimaryFailed)
+                                              _wrapLansweeperConnectionTooltip(
+                                                status: connectionStatus,
+                                                child: OutlinedButton.icon(
+                                                  onPressed: canResubmitApi
+                                                      ? () => _submitSelected(
+                                                          primarySelected,
+                                                          resubmit: true,
+                                                        )
+                                                      : null,
+                                                  icon: _connectionAwareIcon(
+                                                    status: connectionStatus,
+                                                    icon: Icons.refresh_rounded,
+                                                  ),
+                                                  label: const Text(
+                                                    'Επαναϋποβολή',
+                                                  ),
+                                                ),
+                                              ),
                                             OutlinedButton.icon(
                                               onPressed:
                                                   (primarySelected != null &&
@@ -2040,6 +2133,9 @@ class _LansweeperReportDialogState
                                               targetState:
                                                   LansweeperSyncState.excluded,
                                               label: 'Εξαίρεση',
+                                              allowWhen: !isPrimaryRegistered,
+                                              blockedTooltip:
+                                                  'Η κλήση είναι ήδη καταχωρημένη',
                                               onPressed: () =>
                                                   _setStateForAllSelected(
                                                     selected,

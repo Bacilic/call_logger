@@ -1601,12 +1601,12 @@ class DirectoryRepository {
     });
   }
 
-  /// Όλα τα τμήματα (συμπεριλαμβανομένων soft-deleted) — για διαχείριση Καταλόγου.
+  /// Όλα τα τμήματα (συμπεριλαμβανομένων soft-deleted) — migration, ακεραιότητα.
   Future<List<Map<String, dynamic>>> getDepartments() async {
     return db.query('departments', orderBy: 'name COLLATE NOCASE ASC');
   }
 
-  /// Μόνο ενεργά τμήματα — dropdown κλήσης, lookup, dashboard, χάρτης.
+  /// Μόνο ενεργά τμήματα — Κατάλογος, dropdown κλήσης, lookup, dashboard, χάρτης.
   Future<List<Map<String, dynamic>>> getActiveDepartments() async {
     return db.query(
       'departments',
@@ -2311,12 +2311,13 @@ ORDER BY p.number COLLATE NOCASE ASC
         final deptName = nameRows.isEmpty
             ? null
             : (nameRows.first['name'] as String?)?.trim();
-        await txn.update(
+        final updated = await txn.update(
           'departments',
           {'is_deleted': 1},
-          where: 'id = ?',
+          where: 'id = ? AND COALESCE(is_deleted, 0) = 0',
           whereArgs: [id],
         );
+        if (updated == 0) continue;
         await AuditService.log(
           txn,
           action: DatabaseHelper.auditActionDelete,

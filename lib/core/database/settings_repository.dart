@@ -11,6 +11,8 @@ const String kLansweeperHelpdeskLoginUrlSettingKey =
     'lansweeper_helpdesk_login_url';
 const String kLansweeperTicketViewUrlSettingKey =
     'lansweeper_ticket_view_url';
+const String kLansweeperOpenTicketAfterApiSubmitSettingKey =
+    'lansweeper_open_ticket_after_api_submit';
 const String kLansweeperHelpdeskWebUsernameSettingKey =
     'lansweeper_helpdesk_web_username';
 const String kLansweeperHelpdeskWebPasswordSettingKey =

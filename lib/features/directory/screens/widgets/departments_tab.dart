@@ -249,8 +249,14 @@ class _DepartmentsTabState extends ConsumerState<DepartmentsTab> {
     if (ok != true || !context.mounted) return;
 
     final toDelete = state.allDepartments
-        .where((d) => d.id != null && state.selectedIds.contains(d.id))
+        .where(
+          (d) =>
+              d.id != null &&
+              !d.isDeleted &&
+              state.selectedIds.contains(d.id),
+        )
         .toList();
+    if (toDelete.isEmpty) return;
     final db = await DatabaseHelper.instance.database;
     final dir = DirectoryRepository(db);
     final lookup = LookupService.instance;

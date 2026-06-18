@@ -180,7 +180,7 @@ class DepartmentDirectoryNotifier extends Notifier<DepartmentDirectoryState> {
       _columnLayoutHydrated = true;
     }
     final dbLoad = await DatabaseHelper.instance.database;
-    final rows = await DirectoryRepository(dbLoad).getDepartments();
+    final rows = await DirectoryRepository(dbLoad).getActiveDepartments();
     if (!ref.mounted) return;
     final list = rows.map((m) => DepartmentModel.fromMap(m)).toList();
     state = DepartmentDirectoryState(
@@ -232,7 +232,6 @@ class DepartmentDirectoryNotifier extends Notifier<DepartmentDirectoryState> {
           phonesText,
           equipmentText,
           '${d.id ?? ''}',
-          if (d.isDeleted) 'Διεγραμμένο',
         ].join(' ');
         return SearchTextNormalizer.containsAllTokens(blob, state.searchQuery);
       }).toList();
@@ -592,12 +591,17 @@ class DepartmentDirectoryNotifier extends Notifier<DepartmentDirectoryState> {
   Future<void> deleteSelected() async {
     if (state.selectedIds.isEmpty) return;
     final toDelete = state.allDepartments
-        .where((d) => d.id != null && state.selectedIds.contains(d.id))
+        .where(
+          (d) =>
+              d.id != null &&
+              !d.isDeleted &&
+              state.selectedIds.contains(d.id),
+        )
         .toList();
+    if (toDelete.isEmpty) return;
+    final ids = toDelete.map((d) => d.id!).toList();
     final dbDel = await DatabaseHelper.instance.database;
-    await DirectoryRepository(
-      dbDel,
-    ).softDeleteDepartments(state.selectedIds.toList());
+    await DirectoryRepository(dbDel).softDeleteDepartments(ids);
     await _refreshLookupCache();
     if (!ref.mounted) return;
     state = DepartmentDirectoryState(

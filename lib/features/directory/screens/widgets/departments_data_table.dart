@@ -1,9 +1,8 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../../../core/models/building_map_floor.dart';
 import '../../../../core/services/lookup_service.dart';
-import '../../../../core/utils/department_display_utils.dart';
 import '../../models/department_directory_column.dart';
 import '../../models/department_floor_display_extension.dart';
 import '../../models/department_model.dart';
@@ -769,13 +768,6 @@ class _DepartmentsTableSource extends DataTableSource {
   void _onDoubleTap(DepartmentModel d, DepartmentDirectoryColumn col) =>
       _onEditDepartment?.call(d, focusedField: col.editFocusField);
 
-  String _displayName(DepartmentModel d) {
-    if (d.isDeleted) {
-      return '${d.name}$kDepartmentDeletedDisplaySuffix';
-    }
-    return d.name;
-  }
-
   DataCell _cellForColumn(
     DepartmentModel d,
     int? id,
@@ -809,7 +801,7 @@ class _DepartmentsTableSource extends DataTableSource {
       case 'name':
         return DataCell(
           Text(
-            _displayName(d),
+            d.name,
             maxLines: 1,
             softWrap: false,
             overflow: TextOverflow.ellipsis,

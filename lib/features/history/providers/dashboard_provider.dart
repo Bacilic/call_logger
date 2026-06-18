@@ -370,9 +370,19 @@ final lansweeperAgentUsernameProvider =
       LansweeperAgentUsernameNotifier.new,
     );
 
-bool _parseBoolAppSetting(String? raw) {
+bool parseBoolAppSetting(String? raw) {
   final t = (raw ?? '').trim().toLowerCase();
   return t == '1' || t == 'true' || t == 'yes';
+}
+
+/// Ανάγνωση ρύθμισης από βάση — αξιόπιστη μετά κλείσιμο διαλόγου ρυθμίσεων
+/// (αποφυγή race του autoDispose provider πριν το async hydrate).
+Future<bool> readLansweeperOpenTicketAfterApiSubmitSetting() async {
+  final db = await DatabaseHelper.instance.database;
+  final raw = await SettingsRepository(
+    db,
+  ).getSetting(kLansweeperOpenTicketAfterApiSubmitSettingKey);
+  return parseBoolAppSetting(raw);
 }
 
 /// Αυτόματο άνοιγμα σελίδας σύνδεσης πριν τη φόρμα αιτήματος (ίδιος host).
@@ -395,7 +405,7 @@ class LansweeperHelpdeskAutoLoginNotifier extends Notifier<bool> {
       db,
     ).getSetting(kLansweeperHelpdeskAutoLoginSettingKey);
     if (!ref.mounted) return;
-    state = _parseBoolAppSetting(raw);
+    state = parseBoolAppSetting(raw);
   }
 
   Future<void> setEnabled(bool value) async {
@@ -412,6 +422,45 @@ class LansweeperHelpdeskAutoLoginNotifier extends Notifier<bool> {
 final lansweeperHelpdeskAutoLoginProvider =
     NotifierProvider.autoDispose<LansweeperHelpdeskAutoLoginNotifier, bool>(
       LansweeperHelpdeskAutoLoginNotifier.new,
+    );
+
+/// Μετά επιτυχή «Άμεση Καταχώρηση», άνοιγμα ticket στον περιηγητή (URL προβολής).
+class LansweeperOpenTicketAfterApiSubmitNotifier extends Notifier<bool> {
+  bool _hydrated = false;
+
+  @override
+  bool build() {
+    if (!_hydrated) {
+      _hydrated = true;
+      Future<void>(_hydrateFromDb);
+    }
+    return false;
+  }
+
+  Future<void> _hydrateFromDb() async {
+    final db = await DatabaseHelper.instance.database;
+    if (!ref.mounted) return;
+    final raw = await SettingsRepository(
+      db,
+    ).getSetting(kLansweeperOpenTicketAfterApiSubmitSettingKey);
+    if (!ref.mounted) return;
+    state = parseBoolAppSetting(raw);
+  }
+
+  Future<void> setEnabled(bool value) async {
+    state = value;
+    final db = await DatabaseHelper.instance.database;
+    if (!ref.mounted) return;
+    await SettingsRepository(db).saveSetting(
+      kLansweeperOpenTicketAfterApiSubmitSettingKey,
+      value ? '1' : '0',
+    );
+  }
+}
+
+final lansweeperOpenTicketAfterApiSubmitProvider =
+    NotifierProvider<LansweeperOpenTicketAfterApiSubmitNotifier, bool>(
+      LansweeperOpenTicketAfterApiSubmitNotifier.new,
     );
 
 /// URL σελίδας σύνδεσης Help Desk (`login.aspx`).
@@ -725,7 +774,7 @@ class GeminiFallbackEnabledNotifier extends Notifier<bool> {
       db,
     ).getSetting(kGeminiFallbackEnabledSettingKey);
     if (!ref.mounted) return;
-    state = raw == null ? true : _parseBoolAppSetting(raw);
+    state = raw == null ? true : parseBoolAppSetting(raw);
   }
 
   Future<void> setEnabled(bool value) async {

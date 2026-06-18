@@ -277,6 +277,24 @@ class _LansweeperConnectionSettingsDialogState
                   label: const Text('Έλεγχος συνδέσμου'),
                 ),
               ),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text(
+                  'Άνοιγμα ticket μετά την Άμεση Καταχώρηση',
+                ),
+                subtitle: const Text(
+                  'Μετά επιτυχή καταχώρηση μέσω API, άνοιγμα του αιτήματος '
+                  'στον περιηγητή με βάση το URL προβολής ticket.',
+                ),
+                value: ref.watch(lansweeperOpenTicketAfterApiSubmitProvider),
+                onChanged: (v) {
+                  unawaited(
+                    ref
+                        .read(lansweeperOpenTicketAfterApiSubmitProvider.notifier)
+                        .setEnabled(v),
+                  );
+                },
+              ),
               const Divider(height: 24),
               _sectionTitle('Πράκτορας & αιτών API (ίδια τιμή)'),
               TextFormField(

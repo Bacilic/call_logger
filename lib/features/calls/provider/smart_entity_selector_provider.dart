@@ -1839,7 +1839,7 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
         callerCandidates = lookup.getUsersByDepartment(departmentId);
       }
       if (!hasEquipmentInput) {
-        equipmentCandidates = lookup.getEquipmentByDepartment(departmentId);
+        equipmentCandidates = lookup.getAllEquipmentByDepartment(departmentId);
       }
       if (!hasPhoneInput) {
         phoneCandidates = lookup.getPhonesByDepartment(departmentId);
