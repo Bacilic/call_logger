@@ -1,7 +1,7 @@
 // Widget test: εκκρεμότητα (pending) — checkbox, υποβολή μέσω notifier, έλεγχος calls/tasks στη βάση.
 //
 // Ολόκληρο αρχείο:
-//   flutter test test/pending_task_test.dart
+//   flutter test test/features/tasks/pending_task_test.dart
 
 import 'package:call_logger/core/database/database_helper.dart';
 import 'package:call_logger/features/calls/provider/call_entry_provider.dart';
@@ -10,16 +10,16 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'call_logger_test_material_app.dart';
-import 'test_reporter.dart';
-import 'test_setup.dart';
+import '../../call_logger_test_material_app.dart';
+import '../../test_reporter.dart';
+import '../../test_setup.dart';
 
 void main() {
   registerCallLoggerIsolatedDatabaseHooks();
 
   group('Ροή εκκρεμότητας (widget)', () {
     // Ενεργοποίηση pending, submitCall μέσω provider, επαλήθευση κλήσης pending και δημιουργίας task.
-    //   flutter test test/pending_task_test.dart --plain-name "Ενεργοποίηση εκκρεμότητας, υποβολή κλήσης και εγγραφή task"
+    //   flutter test test/features/tasks/pending_task_test.dart --plain-name "Ενεργοποίηση εκκρεμότητας, υποβολή κλήσης και εγγραφή task"
     testWidgets(
       'Ενεργοποίηση εκκρεμότητας, υποβολή κλήσης και εγγραφή task',
       (tester) async {

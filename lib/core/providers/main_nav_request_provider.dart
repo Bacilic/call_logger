@@ -10,6 +10,7 @@ class MainNavRequest {
     this.equipmentFocusEntityId,
     this.taskFocusEntityId,
     this.callFocusEntityId,
+    this.callPrefillDepartmentName,
   });
 
   final MainNavDestination destination;
@@ -25,6 +26,9 @@ class MainNavRequest {
 
   /// `calls.id` για μελλοντική εστίαση στην οθόνη κλήσεων (προαιρετικό).
   final int? callFocusEntityId;
+
+  /// Όνομα τμήματος για προσυμπλήρωση πεδίου «Τμήμα» στην οθόνη Νέα Κλήση.
+  final String? callPrefillDepartmentName;
 }
 
 class MainNavRequestNotifier extends Notifier<MainNavRequest?> {

@@ -675,14 +675,18 @@ class _DepartmentFormDialogState extends State<DepartmentFormDialog> {
     );
 
     if (result == null) return null;
+    final conflictKeys = {for (final item in conflicts) item.key};
     final acceptedPhones = <String>[];
     final acceptedEquipment = <String>[];
     final phonesToMoveFromUsers = <String>{};
     final equipmentToMoveFromUsers = <String>{};
     for (final phone in sharedPhones) {
       final key = 'phone::$phone';
+      if (!conflictKeys.contains(key)) {
+        acceptedPhones.add(phone);
+        continue;
+      }
       final decision = result[key];
-      if (decision == null) continue;
       if (decision == _ConflictResolutionChoice.moveToDepartment) {
         acceptedPhones.add(phone);
         phonesToMoveFromUsers.add(phone);
@@ -690,8 +694,11 @@ class _DepartmentFormDialogState extends State<DepartmentFormDialog> {
     }
     for (final code in sharedEquipmentCodes) {
       final key = 'equipment::$code';
+      if (!conflictKeys.contains(key)) {
+        acceptedEquipment.add(code);
+        continue;
+      }
       final decision = result[key];
-      if (decision == null) continue;
       if (decision == _ConflictResolutionChoice.moveToDepartment) {
         acceptedEquipment.add(code);
         equipmentToMoveFromUsers.add(code);
@@ -888,22 +895,7 @@ class _DepartmentFormDialogState extends State<DepartmentFormDialog> {
           sharedEquipmentCodes = resolved.acceptedEquipmentCodes;
           phonesToMoveFromUsers = resolved.phonesToMoveFromUsers;
           equipmentToMoveFromUsers = resolved.equipmentToMoveFromUsers;
-        }
-        await widget.notifier.updateDepartment(
-          model,
-          clearBuildingMapPlacement: clearBuildingMapPlacement,
-        );
-        if (clearBuildingMapPlacement && ini?.id != null) {
-          final fid = int.tryParse(ini!.mapFloor?.trim() ?? '');
-          final removedHex = tryParseDepartmentHex(ini.color);
-          if (fid != null && removedHex != null) {
-            FloorColorAssignmentService.instance.removeColorFromFloor(
-              fid,
-              removedHex,
-            );
-          }
-        }
-        if (did != null) {
+
           if (!mounted) return;
           final confirmed = await _applySharedOnlyRemovalConfirmations(
             departmentId: did,
@@ -926,6 +918,20 @@ class _DepartmentFormDialogState extends State<DepartmentFormDialog> {
             phonesToSoftDelete: confirmed.phonesToDelete,
             equipmentToSoftDelete: confirmed.equipmentToDelete,
           );
+        }
+        await widget.notifier.updateDepartment(
+          model,
+          clearBuildingMapPlacement: clearBuildingMapPlacement,
+        );
+        if (clearBuildingMapPlacement && ini?.id != null) {
+          final fid = int.tryParse(ini!.mapFloor?.trim() ?? '');
+          final removedHex = tryParseDepartmentHex(ini.color);
+          if (fid != null && removedHex != null) {
+            FloorColorAssignmentService.instance.removeColorFromFloor(
+              fid,
+              removedHex,
+            );
+          }
         }
       } else {
         final resolved = await _resolveCrossUsageConflicts(

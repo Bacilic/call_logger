@@ -3,7 +3,7 @@
 #
 # Usage:
 #   pwsh -File scripts/flutter_test_windows.ps1
-#   pwsh -File scripts/flutter_test_windows.ps1 test/call_form_test.dart
+#   pwsh -File scripts/flutter_test_windows.ps1 test/features/calls/call_form_test.dart
 #   pwsh -File scripts/flutter_test_windows.ps1 -Clean   # runs flutter clean first (if DLL/folder is locked)
 
 param(

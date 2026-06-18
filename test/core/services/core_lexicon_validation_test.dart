@@ -1,4 +1,4 @@
-﻿import 'dart:io';
+import 'dart:io';
 
 import 'package:call_logger/core/services/core_lexicon_validation.dart';
 import 'package:flutter_test/flutter_test.dart';

@@ -257,7 +257,11 @@ void registerCallLoggerIsolatedDatabaseHooks() {
   });
   tearDown(() async {
     // Το sqflite χρησιμοποιεί Timer 10s σε lock retry· χωρίς pump το τεστ αποτυγχάνει στο dispose.
-    await TestWidgetsFlutterBinding.instance.pump(const Duration(seconds: 11));
+    // Μετά από αποτυχημένο expect/fail το binding δεν είναι πλέον inTest — αποφυγή δεύτερου σφάλματος.
+    final binding = TestWidgetsFlutterBinding.instance;
+    if (binding.inTest) {
+      await binding.pump(const Duration(seconds: 11));
+    }
   });
   tearDownAll(() async {
     await releaseCallLoggerTestDatabase();

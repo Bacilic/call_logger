@@ -1,4 +1,4 @@
-﻿import 'dart:io';
+import 'dart:io';
 
 import 'package:call_logger/core/services/dictionary_service.dart';
 import 'package:call_logger/core/utils/bundled_dictionary_assets.dart';

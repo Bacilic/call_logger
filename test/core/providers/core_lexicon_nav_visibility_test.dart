@@ -1,4 +1,4 @@
-﻿import 'package:call_logger/core/providers/core_lexicon_provider.dart';
+import 'package:call_logger/core/providers/core_lexicon_provider.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

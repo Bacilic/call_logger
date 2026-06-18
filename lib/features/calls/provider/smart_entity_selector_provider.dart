@@ -1077,6 +1077,21 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
     return state.selectedPhone?.trim().isEmpty ?? true;
   }
 
+  /// Μετά επιλογή εξοπλισμού, διατηρεί τους υποψήφιους αριθμούς του επιλεγμένου τμήματος.
+  void _restoreDepartmentPhoneCandidatesIfNeeded(LookupService? lookup) {
+    final deptId = state.selectedDepartmentId;
+    if (lookup == null || deptId == null) return;
+    if (state.selectedPhone?.trim().isNotEmpty == true) return;
+    final phones = lookup.getPhonesByDepartment(deptId);
+    if (phones.isEmpty) return;
+    state = state.copyWith(
+      phoneCandidates: phones,
+      clearSelectedPhone: true,
+      isPhoneAmbiguous: phones.length > 1,
+      clearPhoneError: true,
+    );
+  }
+
   bool _canAutofillDepartmentForUser(UserModel user) {
     // v2 §Β.1: το τμήμα συμπληρώνεται αυτόματα μόνο όταν το πεδίο είναι κενό.
     // Συμπληρωμένο τμήμα (isFilled) δεν αντικαθίσταται — η τυχόν σύγκρουση
@@ -1665,7 +1680,6 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
       state = state.copyWith(
         selectedEquipment: equipment,
         equipmentText: resolvedText,
-        clearPhoneCandidates: true,
         equipmentCandidates: [],
         isEquipmentAmbiguous: false,
         equipmentNoMatch: false,
@@ -1691,7 +1705,9 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
       }
 
       final user = owners.isNotEmpty ? owners.first : null;
-      if (user == null) return;
+      if (user == null) {
+        return;
+      }
 
       final shouldAutofillDepartment = _canAutofillDepartmentForUser(user);
       final canAutofillCaller = state.callerDisplayText.trim().isEmpty;
@@ -1721,10 +1737,16 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
         );
       }
 
-      if (_shouldApplyEquipmentOwnerPhoneAutofill()) {
+      if (_shouldApplyEquipmentOwnerPhoneAutofill() &&
+          !hasLockedDepartmentSelection) {
         _autofillPhoneFromUserProfile(user);
       }
     } finally {
+      final lookupForRestore =
+          ref.read(lookupServiceProvider).value?.service;
+      if (state.selectedDepartmentId != null) {
+        _restoreDepartmentPhoneCandidatesIfNeeded(lookupForRestore);
+      }
       _recomputeConflicts(
         SelectorField.equipment,
         ref.read(lookupServiceProvider).value?.service,

@@ -123,8 +123,8 @@ class _CoreLexiconSetupDialogState extends ConsumerState<CoreLexiconSetupDialog>
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     Text(
-                      'Για ορθογραφικό έλεγχο χρειάζεται λεξικό-πυρήνας. '
-                      'Το αρχείο αποθηκεύεται στον φάκελο dictionaries δίπλα στην εφαρμογή '
+                      'Για τον ορθογραφικό έλεγχο χρειάζεται ένα λεξικό-πυρήνας. '
+                      'Το αρχείο αποθηκεύεται στον φάκελο dictionaries δίπλα στο εκτελέσιμο της εφαρμογής '
                       '(portable, όπως η βάση δεδομένων).',
                       style: theme.textTheme.bodyMedium,
                     ),
@@ -161,7 +161,7 @@ class _CoreLexiconSetupDialogState extends ConsumerState<CoreLexiconSetupDialog>
                       ),
                     ] else
                       Text(
-                        'Δεν βρέθηκαν bundled αρχεία .txt. Επιλέξτε αρχείο από τον δίσκο.',
+                        'Δεν βρέθηκε προφορτωμένο αρχείο κειμένου (.txt). Επιλέξτε ένα αρχείο από τον δίσκο.',
                         style: theme.textTheme.bodyMedium?.copyWith(
                           color: theme.colorScheme.secondary,
                         ),

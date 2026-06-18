@@ -40,6 +40,15 @@ class IntegrityDebugSeederService {
 
   static const String databaseFileName = 'integrity_debug.db';
 
+  /// Τμήμα δοκιμής UX: μη εμφάνιση τηλεφώνων τμήματος (κοινόχρηστα στοιχεία).
+  static const String dokimastikoDepartmentName = 'Δοκιμαστικό';
+  static const List<String> dokimastikoSharedPhones = ['2001', '2002', '2003'];
+  static const List<String> dokimastikoSharedEquipmentCodes = [
+    '1001',
+    '1002',
+    '1003',
+  ];
+
   /// Διαθέσιμο μόνο σε debug builds σε desktop (Windows/macOS/Linux).
   static bool get isEnabled {
     if (!kDebugMode) return false;
@@ -121,6 +130,7 @@ class IntegrityDebugSeederService {
         await _insertTasksDeletedLinkedEntities(txn);
         await _insertTasksTemporalInconsistency(txn);
         await _insertAuditMissingSearchText(txn);
+        await _insertDokimastikoSharedAssetsScenario(txn);
       });
     } finally {
       await db.close();
@@ -411,6 +421,35 @@ class IntegrityDebugSeederService {
       'updated_at': '2026-06-09T12:00:00.000',
       'is_deleted': 0,
     });
+  }
+
+  Future<void> _insertDokimastikoSharedAssetsScenario(Transaction txn) async {
+    final deptId = await txn.insert('departments', {
+      'name': dokimastikoDepartmentName,
+      'name_key': SearchTextNormalizer.normalizeForSearch(
+        dokimastikoDepartmentName,
+      ),
+      'is_deleted': 0,
+    });
+
+    for (final phone in dokimastikoSharedPhones) {
+      final phoneId = await txn.insert('phones', {
+        'number': phone,
+        'is_deleted': 0,
+      });
+      await txn.insert('department_phones', {
+        'department_id': deptId,
+        'phone_id': phoneId,
+      });
+    }
+
+    for (final code in dokimastikoSharedEquipmentCodes) {
+      await txn.insert('equipment', {
+        'code_equipment': code,
+        'department_id': deptId,
+        'is_deleted': 0,
+      });
+    }
   }
 
   Future<void> _insertAuditMissingSearchText(Transaction txn) async {

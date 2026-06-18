@@ -3,7 +3,7 @@
 Η σουίτα ακολουθεί την **Πυραμίδα Δοκιμών (test pyramid)**:
 
 - **Βάση:** δοκιμές providers / λογικής (`test/features/...`), χωρίς πλήρες UI.
-- **Μέση / widget:** ροές φόρμας, εκκρεμότητα, αναζήτηση (`test/call_form_test.dart`, `test/pending_task_test.dart`, `test/search_test.dart`) με **απομονωμένη βάση SQLite** (βλ. `test/test_setup.dart`).
+- **Μέση / widget:** ροές φόρμας, εκκρεμότητα, αναζήτηση (`test/features/calls/call_form_test.dart`, `test/features/tasks/pending_task_test.dart`, `test/features/history/history_search_test.dart`, `test/features/directory/directory_user_search_test.dart`) με **απομονωμένη βάση SQLite** (βλ. `test/test_setup.dart`).
 - **Κορυφή:** `integration_test/call_logger_integration_test.dart` για εκκίνηση εφαρμογής και βασική πλοήγηση.
 
 ## Απαιτήσεις (Windows desktop)
@@ -32,8 +32,9 @@
 # Όλα τα unit/widget tests (φάκελος test/)
 flutter test
 
-# Συγκεκριμένο αρχείο
-flutter test test/call_form_test.dart
+# Συγκεκριμένο αρχείο ή feature scope (βλ. docs/scope_map.md)
+flutter test test/features/calls/call_form_test.dart
+flutter test test/features/calls/
 
 # Integration (χρειάζεται συσκευή / εκτελέσιμο — π.χ. Windows)
 flutter test integration_test/call_logger_integration_test.dart

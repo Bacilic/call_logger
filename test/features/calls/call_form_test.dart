@@ -1,9 +1,9 @@
 // Widget tests: πλήρης / αρνητική ροή φόρμας κλήσης με απομονωμένη βάση.
 //
 // Ολόκληρο αρχείο:
-//   flutter test test/call_form_test.dart
+//   flutter test test/features/calls/call_form_test.dart
 // Ολόκληρη ομάδα «Ροή φόρμας κλήσεων (widget)» (και τα δύο τεστ):
-//   flutter test test/call_form_test.dart --plain-name "Ροή φόρμας κλήσεων (widget)"
+//   flutter test test/features/calls/call_form_test.dart --plain-name "Ροή φόρμας κλήσεων (widget)"
 
 import 'package:call_logger/core/database/database_helper.dart';
 import 'package:call_logger/core/services/lookup_service.dart';
@@ -15,8 +15,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'test_reporter.dart';
-import 'test_setup.dart';
+import '../../test_reporter.dart';
+import '../../test_setup.dart';
 
 void main() {
   registerCallLoggerIsolatedDatabaseHooks();
@@ -31,7 +31,7 @@ void main() {
     });
 
     // Happy path: τηλέφωνο → lookup → κατηγορία/σημειώσεις → υποβολή και έλεγχος εγγραφής στη SQLite.
-    //   flutter test test/call_form_test.dart --plain-name "Happy path: τηλέφωνο, lookup, πεδία, κατηγορία, σημειώσεις, καταγραφή κλήσης"
+    //   flutter test test/features/calls/call_form_test.dart --plain-name "Happy path: τηλέφωνο, lookup, πεδία, κατηγορία, σημειώσεις, καταγραφή κλήσης"
     testWidgets(
       'Happy path: τηλέφωνο, lookup, πεδία, κατηγορία, σημειώσεις, καταγραφή κλήσης',
       (tester) async {
@@ -183,7 +183,7 @@ void main() {
     );
 
     // Χωρίς τηλέφωνο (μόνο σημειώσεις) το κουμπί «Καταγραφή» πρέπει να έχει onPressed == null.
-    //   flutter test test/call_form_test.dart --plain-name "Unhappy path: απενεργοποιημένο κουμπί χωρίς τηλέφωνο"
+    //   flutter test test/features/calls/call_form_test.dart --plain-name "Unhappy path: απενεργοποιημένο κουμπί χωρίς τηλέφωνο"
     testWidgets(
       'Unhappy path: απενεργοποιημένο κουμπί χωρίς τηλέφωνο',
       (tester) async {

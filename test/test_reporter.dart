@@ -1,6 +1,8 @@
 /// Συγκεντρωτική αναφορά δοκιμών στα ελληνικά (custom reporter helpers).
 library;
 
+import 'package:flutter_test/flutter_test.dart';
+
 /// Καταγραφή ενός ελέγχου για τελική αναφορά.
 class GreekTestCheckRecord {
   GreekTestCheckRecord({
@@ -43,8 +45,25 @@ class GreekTestReportCollector {
 
   /// Βήμα ροής widget/integration (ελληνικά μηνύματα στο τερματικό).
   void logStep(String message) {
+    logProgress(message);
+  }
+
+  /// Έναρξη βήματος — χωρίς σημάδι επιτυχίας (αποφεύγει παραπλάνηση πριν τον έλεγχο).
+  void logProgress(String message) {
     // ignore: avoid_print
-    print('✅ $message');
+    print('  → $message');
+  }
+
+  /// Ολοκλήρωση βήματος μετά από επιτυχημένο έλεγχο.
+  void logStepDone(String message) {
+    // ignore: avoid_print
+    print('  ✅ $message');
+  }
+
+  /// Σύντομη αποτυχία: εκτύπωση ❌ και fail με ένα ελληνικό μήνυμα (λιγότερο θόρυβος από expect).
+  Never failGreek(String checkName, String detail) {
+    recordFail(checkName, hint: detail);
+    fail(detail);
   }
 
   void printFinalSummary({String title = 'Συγκεντρωτική αναφορά δοκιμών'}) {

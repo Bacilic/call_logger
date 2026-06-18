@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../provider/call_entry_provider.dart';
 import '../../provider/call_header_provider.dart';
 import '../../provider/lookup_provider.dart';
+import '../../../../core/providers/call_department_prefill_intent_provider.dart';
 import '../../../../core/utils/search_text_normalizer.dart';
 import '../../../../core/utils/user_homonym_finder.dart';
 import '../../../directory/screens/widgets/homonym_warning_dialog.dart';
@@ -51,6 +52,22 @@ class _CallHeaderFormState extends ConsumerState<CallHeaderForm> {
 
   @override
   Widget build(BuildContext context) {
+    ref.listen<String?>(callDepartmentPrefillIntentProvider, (previous, next) {
+      if (next == null || next.trim().isEmpty) return;
+      ref.read(callDepartmentPrefillIntentProvider.notifier).clear();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        final lookup = ref.read(lookupServiceProvider).value?.service;
+        final dept = lookup?.findDepartmentByName(next.trim());
+        final notifier = ref.read(callHeaderProvider.notifier);
+        if (dept != null) {
+          notifier.selectDepartment(dept);
+        } else {
+          notifier.updateDepartmentText(next.trim());
+        }
+      });
+    });
+
     final header = ref.watch(callHeaderProvider);
     final lookupAsync = ref.watch(lookupServiceProvider);
     final lookupBundle = lookupAsync.value;

@@ -4,7 +4,7 @@
 // Κάνουμε enterText στο ίδιο πεδίο (έγκυρα ψηφία) και μετά updatePhone('210-LAB')
 // για να εξομοιώσουμε άκυρη τιμή (π.χ. επικόλληση / φόρτωση κατάστασης).
 //
-//   flutter test test/call_validation_test.dart
+//   flutter test test/features/calls/call_validation_test.dart
 
 import 'package:call_logger/features/calls/provider/call_header_provider.dart';
 import 'package:call_logger/features/calls/provider/lookup_provider.dart';
@@ -15,8 +15,8 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'test_reporter.dart';
-import 'test_setup.dart';
+import '../../test_reporter.dart';
+import '../../test_setup.dart';
 
 void main() {
   registerCallLoggerIsolatedDatabaseHooks();

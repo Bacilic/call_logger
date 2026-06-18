@@ -2,6 +2,8 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/providers/main_nav_request_provider.dart';
+import '../../../core/widgets/main_nav_destination.dart';
 import '../widgets/database_integrity_panel.dart';
 import 'integrity_debug_provider_refresh.dart';
 import 'integrity_debug_seeder_service.dart';
@@ -52,6 +54,30 @@ class _ErrorScenariosScreenState extends ConsumerState<ErrorScenariosScreen> {
     DatabaseIntegrityDialog.show(context);
   }
 
+  void _openNewCallWithDokimastikoDepartment() {
+    ref.read(mainNavRequestProvider.notifier).request(
+          MainNavRequest(
+            destination: MainNavDestination.calls,
+            callPrefillDepartmentName:
+                IntegrityDebugSeederService.dokimastikoDepartmentName,
+          ),
+        );
+  }
+
+  String _formatGreekList(List<String> items) {
+    if (items.isEmpty) return '';
+    if (items.length == 1) return items.first;
+    if (items.length == 2) return '${items[0]} και ${items[1]}';
+    return '${items.sublist(0, items.length - 1).join(', ')} και ${items.last}';
+  }
+
+  String get _dokimastikoPhonesLabel =>
+      _formatGreekList(IntegrityDebugSeederService.dokimastikoSharedPhones);
+
+  String get _dokimastikoEquipmentLabel => _formatGreekList(
+        IntegrityDebugSeederService.dokimastikoSharedEquipmentCodes,
+      );
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -87,30 +113,11 @@ class _ErrorScenariosScreenState extends ConsumerState<ErrorScenariosScreen> {
                   Icon(Icons.check_circle_outline, color: scheme.primary),
                   const SizedBox(width: 12),
                   Expanded(
-                    child: RichText(
-                      text: TextSpan(
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          color: scheme.onSurface,
-                        ),
-                        children: [
-                          TextSpan(
-                            text:
-                                'Η βάση ${IntegrityDebugSeederService.databaseFileName} '
-                                'δημιουργήθηκε και φορτώθηκε από την εφαρμογή. '
-                                'Κάντε κλικ ',
-                          ),
-                          TextSpan(
-                            text: 'εδώ',
-                            style: TextStyle(
-                              color: scheme.primary,
-                              fontWeight: FontWeight.w600,
-                              decoration: TextDecoration.underline,
-                            ),
-                            recognizer: TapGestureRecognizer()
-                              ..onTap = _openIntegrityCheck,
-                          ),
-                          const TextSpan(text: ' για έλεγχο.'),
-                        ],
+                    child: Text(
+                      'Η βάση ${IntegrityDebugSeederService.databaseFileName} '
+                      'δημιουργήθηκε και φορτώθηκε από την εφαρμογή.',
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: scheme.onSurface,
                       ),
                     ),
                   ),
@@ -165,18 +172,97 @@ class _ErrorScenariosScreenState extends ConsumerState<ErrorScenariosScreen> {
         ),
         const SizedBox(height: 32),
         Text(
-          'Πρόσθετα σενάρια',
+          'Σενάρια',
           style: theme.textTheme.titleMedium?.copyWith(
             fontWeight: FontWeight.w600,
           ),
         ),
         const SizedBox(height: 8),
-        Text(
-          'Εδώ θα προστεθούν επιπλέον κουμπιά για άλλους τύπους δοκιμών.',
-          style: theme.textTheme.bodySmall?.copyWith(
-            color: scheme.onSurfaceVariant,
+        if (_seedSucceeded) ...[
+          Text(
+            'Έλεγχος ακεραιότητας βάσης',
+            style: theme.textTheme.titleSmall?.copyWith(
+              fontWeight: FontWeight.w600,
+            ),
           ),
-        ),
+          const SizedBox(height: 8),
+          RichText(
+            text: TextSpan(
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: scheme.onSurface,
+              ),
+              children: [
+                const TextSpan(text: 'Κάντε κλικ '),
+                TextSpan(
+                  text: 'εδώ',
+                  style: TextStyle(
+                    color: scheme.primary,
+                    fontWeight: FontWeight.w600,
+                    decoration: TextDecoration.underline,
+                  ),
+                  recognizer: TapGestureRecognizer()
+                    ..onTap = _openIntegrityCheck,
+                ),
+                const TextSpan(
+                  text: ' για να ελέγξετε την ορθή επίλυση των διαφορών.',
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 20),
+          Material(
+            color: scheme.secondaryContainer.withValues(alpha: 0.35),
+            borderRadius: BorderRadius.circular(12),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(Icons.phone_in_talk_outlined, color: scheme.secondary),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: RichText(
+                      text: TextSpan(
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: scheme.onSurface,
+                        ),
+                        children: [
+                          const TextSpan(
+                            text: 'Μη εμφάνιση τηλεφώνων τμήματος. ',
+                          ),
+                          TextSpan(
+                            text:
+                                'Το τμήμα ${IntegrityDebugSeederService.dokimastikoDepartmentName} '
+                                'με κοινόχρηστα τηλέφωνα: $_dokimastikoPhonesLabel '
+                                'και κοινόχρηστο εξοπλισμό: $_dokimastikoEquipmentLabel '
+                                'δημιουργήθηκε. Κάντε κλικ ',
+                          ),
+                          TextSpan(
+                            text: 'εδώ',
+                            style: TextStyle(
+                              color: scheme.primary,
+                              fontWeight: FontWeight.w600,
+                              decoration: TextDecoration.underline,
+                            ),
+                            recognizer: TapGestureRecognizer()
+                              ..onTap = _openNewCallWithDokimastikoDepartment,
+                          ),
+                          const TextSpan(text: ' για έλεγχο.'),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ] else
+          Text(
+            'Δημιουργήστε πρώτα την προβληματική βάση για να ενεργοποιηθούν τα σενάρια.',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: scheme.onSurfaceVariant,
+            ),
+          ),
       ],
     );
   }

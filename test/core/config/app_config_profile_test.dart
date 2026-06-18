@@ -1,4 +1,4 @@
-﻿import 'package:call_logger/core/config/app_config.dart';
+import 'package:call_logger/core/config/app_config.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
