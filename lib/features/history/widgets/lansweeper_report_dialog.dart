@@ -1108,9 +1108,11 @@ class _LansweeperReportDialogState
   }
 
   Future<void> _submitSelected(
-    _ReportCallItem item, {
+    _ReportCallItem primary,
+    List<_ReportCallItem> selected, {
     required bool resubmit,
   }) async {
+    final item = primary;
     final callId = item.call.id;
     if (callId == null) return;
     if (_titleController.text.trim().isEmpty) {
@@ -1176,16 +1178,34 @@ class _LansweeperReportDialogState
       notes: _notesController.text,
       agentUsername: _lansweeperAgentUsernameController.text,
     );
+    final companionCallIds = selected
+        .map((entry) => entry.call.id)
+        .whereType<int>()
+        .where((id) => id != callId)
+        .toList();
     final result = resubmit
-        ? await notifier.resubmitCall(callId: callId, input: input)
-        : await notifier.submitCall(callId: callId, input: input);
+        ? await notifier.resubmitCall(
+            callId: callId,
+            input: input,
+            companionCallIds: companionCallIds,
+          )
+        : await notifier.submitCall(
+            callId: callId,
+            input: input,
+            companionCallIds: companionCallIds,
+          );
     if (!mounted) return;
     if (result.success) {
       final ticketId = (result.ticketId ?? '').trim();
+      final totalMarked = 1 + companionCallIds.length;
       _showDialogSnackBar(
         SnackBar(
           content: Text(
-            'Καταχώρηση επιτυχής. Ticket: ${ticketId.isEmpty ? '-' : ticketId}',
+            totalMarked == 1
+                ? 'Καταχώρηση επιτυχής. Ticket: ${ticketId.isEmpty ? '-' : ticketId}'
+                : ticketId.isEmpty
+                ? '$totalMarked κλήσεις επισημάνθηκαν ως καταχωρημένες.'
+                : '$totalMarked κλήσεις επισημάνθηκαν ως καταχωρημένες (ticket #$ticketId).',
           ),
         ),
       );
@@ -2077,9 +2097,12 @@ class _LansweeperReportDialogState
                                                 status: connectionStatus,
                                                 child: FilledButton.icon(
                                                   onPressed: canImmediateApiSubmit
-                                                      ? () => _submitSelected(
-                                                          primarySelected,
-                                                          resubmit: false,
+                                                      ? () => unawaited(
+                                                          _submitSelected(
+                                                            primarySelected,
+                                                            selected,
+                                                            resubmit: false,
+                                                          ),
                                                         )
                                                       : null,
                                                   icon: _connectionAwareIcon(
@@ -2098,9 +2121,12 @@ class _LansweeperReportDialogState
                                                 status: connectionStatus,
                                                 child: OutlinedButton.icon(
                                                   onPressed: canResubmitApi
-                                                      ? () => _submitSelected(
-                                                          primarySelected,
-                                                          resubmit: true,
+                                                      ? () => unawaited(
+                                                          _submitSelected(
+                                                            primarySelected,
+                                                            selected,
+                                                            resubmit: true,
+                                                          ),
                                                         )
                                                       : null,
                                                   icon: _connectionAwareIcon(

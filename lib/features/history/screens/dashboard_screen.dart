@@ -268,7 +268,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       case TopEntityMode.issue:
         final i = data.byIssue.isNotEmpty ? data.byIssue.first : null;
         return KpiTopEntity(
-          title: 'Κορυφαία Βλάβη',
+          title: 'Κορυφαία Κατηγορία',
           label: i?.name ?? '-',
           count: i?.count ?? 0,
           icon: Icons.build_circle_outlined,
@@ -494,7 +494,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                                                       Icons.build_outlined,
                                                     ),
                                                     title: const Text(
-                                                      'Κορυφαία Βλάβη',
+                                                      'Κορυφαία Κατηγορία',
                                                     ),
                                                     onTap: () => Navigator.pop(
                                                       context,

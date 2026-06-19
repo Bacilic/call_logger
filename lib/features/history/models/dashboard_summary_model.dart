@@ -4,9 +4,9 @@ import 'package:intl/intl.dart';
 
 import 'dashboard_filter_model.dart';
 
-/// Ετικέτα για κενή/NULL περιγραφή βλάβης (`issue`) — συμφωνεί με το SQL του dashboard.
-const String kDashboardNoIssueLabel =
-    '\u03a7\u03c9\u03c1\u03af\u03c2 \u03c0\u03b5\u03c1\u03b9\u03b3\u03c1\u03b1\u03c6\u03ae';
+/// Ετικέτα για κλήσεις χωρίς κατηγορία προβλήματος — συμφωνεί με το SQL του dashboard.
+const String kDashboardNoCategoryLabel =
+    '\u03a7\u03c9\u03c1\u03af\u03c2 \u039a\u03b1\u03c4\u03b7\u03b3\u03bf\u03c1\u03af\u03b1';
 
 DateTime? parseDashboardSqlDate(String? raw) {
   if (raw == null) return null;
@@ -30,7 +30,7 @@ class DepartmentStat {
   final int sumDurationSeconds;
 }
 
-/// Στατιστικά ανά περιγραφή βλάβης (`calls.issue`).
+/// Στατιστικά ανά κατηγορία προβλήματος (`categories` / `calls.category_text`).
 class IssueStat {
   const IssueStat({
     required this.name,
@@ -172,6 +172,18 @@ String formatKpiAggregateDurationSeconds(num seconds) {
   return '${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
 }
 
+/// Συνολική διάρκεια στη λεζάντα «Κατανομή Βλαβών» — `ωω:λλ:δδ`.
+String formatIssueChartDurationSeconds(num seconds) {
+  final safeSeconds = seconds.isNaN ? 0 : seconds.round();
+  final absSeconds = math.max(0, safeSeconds);
+  final h = absSeconds ~/ 3600;
+  final m = (absSeconds % 3600) ~/ 60;
+  final s = absSeconds % 60;
+  return '${h.toString().padLeft(2, '0')}:'
+      '${m.toString().padLeft(2, '0')}:'
+      '${s.toString().padLeft(2, '0')}';
+}
+
 String formatKpiMonthCallsTooltip(String monthKey, num count) {
   final parsed = DateTime.tryParse('$monthKey-01');
   final label = parsed != null
@@ -261,6 +273,19 @@ List<KpiBarSparklinePoint> runnerUpPointsFromIssueStats(
         .toList(growable: false),
     take,
   );
+}
+
+/// Τοπικό φίλτρο κατηγοριών για το γράφημα «Κατανομή Βλαβών» (χωρίς επανάληψη SQL).
+List<IssueStat> visibleDashboardIssueStats(
+  List<IssueStat> issues, {
+  required bool excludeCallsWithoutCategory,
+}) {
+  if (!excludeCallsWithoutCategory) {
+    return issues;
+  }
+  return issues
+      .where((issue) => issue.name != kDashboardNoCategoryLabel)
+      .toList(growable: false);
 }
 
 /// Υπολογισμός διάμεσου (median) από ταξινομημένη λίστα δευτερολέπτων.

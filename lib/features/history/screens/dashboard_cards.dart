@@ -2,9 +2,11 @@
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/widgets/ellipsis_tooltip_text.dart';
 import '../models/dashboard_summary_model.dart';
+import '../providers/dashboard_provider.dart';
 import 'dashboard_charts.dart';
 import 'dashboard_palette_colors.dart';
 
@@ -489,6 +491,80 @@ class LongestCallsCard extends StatelessWidget {
   }
 }
 
+class CategoryDistributionChartCard extends ConsumerWidget {
+  const CategoryDistributionChartCard({
+    super.key,
+    required this.issues,
+    required this.colors,
+  });
+
+  final List<IssueStat> issues;
+  final DashboardPaletteColors colors;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final excludeCallsWithoutCategory =
+        ref.watch(dashboardExcludeCallsWithoutCategoryProvider);
+    final visibleIssues = visibleDashboardIssueStats(
+      issues,
+      excludeCallsWithoutCategory: excludeCallsWithoutCategory,
+    );
+
+    return ChartCard(
+      title: 'Κατανομή Βλαβών',
+      fill: colors.chartCardFill,
+      border: colors.chartCardBorder,
+      titleTrailing: Tooltip(
+        message: 'Αγνόηση κλήσεων χωρίς κατηγορία',
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'Χωρίς Κατηγορία',
+              style: TextStyle(
+                fontSize: 11,
+                color: colors.kpiSubtitle,
+              ),
+            ),
+            const SizedBox(width: 4),
+            Transform.scale(
+              scale: 0.82,
+              child: Switch(
+                value: excludeCallsWithoutCategory,
+                onChanged: (value) {
+                  ref
+                      .read(
+                        dashboardExcludeCallsWithoutCategoryProvider.notifier,
+                      )
+                      .set(value);
+                },
+                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+            ),
+          ],
+        ),
+      ),
+      child: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 220),
+        switchInCurve: Curves.easeOutCubic,
+        switchOutCurve: Curves.easeInCubic,
+        layoutBuilder: (currentChild, previousChildren) =>
+            currentChild ?? const SizedBox.shrink(),
+        transitionBuilder: (child, animation) => FadeTransition(
+          opacity: animation,
+          child: child,
+        ),
+        child: IssuePieChart(
+          key: ValueKey<bool>(excludeCallsWithoutCategory),
+          issues: visibleIssues,
+          pieColors: colors.pieColors,
+          legendMutedColor: colors.kpiSubtitle,
+        ),
+      ),
+    );
+  }
+}
+
 class MoreSection extends StatelessWidget {
   const MoreSection({
     super.key,
@@ -504,6 +580,13 @@ class MoreSection extends StatelessWidget {
   final DashboardSummaryModel data;
   final DashboardPaletteColors colors;
   final String Function(num) formatDuration;
+
+  Widget _categoryDistributionCard() {
+    return CategoryDistributionChartCard(
+      issues: data.byIssue,
+      colors: colors,
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -577,17 +660,7 @@ class MoreSection extends StatelessWidget {
                                   ],
                                 ),
                                 const SizedBox(height: 14),
-                                ChartCard(
-                                  title: 'Κατανομή Βλαβών',
-                                  fill: colors.chartCardFill,
-                                  border: colors.chartCardBorder,
-                                  child: IssuePieChart(
-                                    issues: data.byIssue,
-                                    formatDuration: formatDuration,
-                                    pieColors: colors.pieColors,
-                                    legendMutedColor: colors.kpiSubtitle,
-                                  ),
-                                ),
+                                _categoryDistributionCard(),
                               ],
                             );
                           }
@@ -614,17 +687,7 @@ class MoreSection extends StatelessWidget {
                                 ),
                               ),
                               const SizedBox(height: 14),
-                              ChartCard(
-                                title: 'Κατανομή Βλαβών',
-                                fill: colors.chartCardFill,
-                                border: colors.chartCardBorder,
-                                child: IssuePieChart(
-                                  issues: data.byIssue,
-                                  formatDuration: formatDuration,
-                                  pieColors: colors.pieColors,
-                                  legendMutedColor: colors.kpiSubtitle,
-                                ),
-                              ),
+                              _categoryDistributionCard(),
                             ],
                           );
                         },

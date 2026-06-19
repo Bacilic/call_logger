@@ -36,6 +36,8 @@ class SettingsService {
   static const String _keyDashboardDatePreset = 'dashboard_date_preset';
   static const String _keyDashboardDateFrom = 'dashboard_date_from';
   static const String _keyDashboardDateTo = 'dashboard_date_to';
+  static const String _keyDashboardExcludeCallsWithoutCategory =
+      'dashboard_exclude_calls_without_category';
   static const String _keyTaskAnalyticsDatePreset =
       'task_analytics_date_preset_v1';
   static const String _keyTaskAnalyticsDateFrom =
@@ -404,7 +406,7 @@ class SettingsService {
     await prefs.setString(_prefKey(_keyDashboardDatePreset), preset);
     if (preset == 'custom' && customFrom != null && customTo != null) {
       await prefs.setString(
-        _keyDashboardDateFrom,
+        _prefKey(_keyDashboardDateFrom),
         _formatStoredDate(customFrom),
       );
       await prefs.setString(_prefKey(_keyDashboardDateTo), _formatStoredDate(customTo));
@@ -412,6 +414,21 @@ class SettingsService {
       await prefs.remove(_prefKey(_keyDashboardDateFrom));
       await prefs.remove(_prefKey(_keyDashboardDateTo));
     }
+  }
+
+  /// Απόκρυψη κλήσεων χωρίς κατηγορία στο γράφημα «Κατανομή Βλαβών». Προεπιλογή: false.
+  Future<bool> getDashboardExcludeCallsWithoutCategory() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_prefKey(_keyDashboardExcludeCallsWithoutCategory)) ??
+        false;
+  }
+
+  Future<void> setDashboardExcludeCallsWithoutCategory(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(
+      _prefKey(_keyDashboardExcludeCallsWithoutCategory),
+      value,
+    );
   }
 
   /// Τελευταία επιλογή εύρους ημερομηνιών στις αναφορές εκκρεμοτήτων.

@@ -903,6 +903,12 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
         equipmentNoMatch: false,
         clearConflicts: true,
       );
+      final lookupForRestore =
+          ref.read(lookupServiceProvider).value?.service;
+      _restoreDepartmentPhoneCandidatesIfNeeded(lookupForRestore);
+      if (!preserveEquipment) {
+        _restoreDepartmentEquipmentCandidatesIfNeeded(lookupForRestore);
+      }
     } else {
       state = state.copyWith(
         clearCallerCandidates: true,
@@ -1089,6 +1095,21 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
       clearSelectedPhone: true,
       isPhoneAmbiguous: phones.length > 1,
       clearPhoneError: true,
+    );
+  }
+
+  /// Μετά καθαρισμό εξοπλισμού, επαναφέρει τους υποψήφιους εξοπλισμούς του τμήματος.
+  void _restoreDepartmentEquipmentCandidatesIfNeeded(LookupService? lookup) {
+    final deptId = state.selectedDepartmentId;
+    if (lookup == null || deptId == null) return;
+    if (state.equipmentText.trim().isNotEmpty) return;
+    final equipment = lookup.getAllEquipmentByDepartment(deptId);
+    if (equipment.isEmpty) return;
+    state = state.copyWith(
+      equipmentCandidates: equipment,
+      clearSelectedEquipment: true,
+      isEquipmentAmbiguous: equipment.length > 1,
+      equipmentNoMatch: false,
     );
   }
 
@@ -1912,6 +1933,11 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
       hasAnyContent: _computeHasAnyContent(equipmentText: ''),
       clearConflicts: true,
     );
+    final lookupForRestore = ref.read(lookupServiceProvider).value?.service;
+    _restoreDepartmentEquipmentCandidatesIfNeeded(lookupForRestore);
+    if (state.selectedPhone?.trim().isEmpty ?? true) {
+      _restoreDepartmentPhoneCandidatesIfNeeded(lookupForRestore);
+    }
   }
 
   void setPhoneError(String? message) {

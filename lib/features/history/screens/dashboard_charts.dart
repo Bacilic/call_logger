@@ -582,13 +582,11 @@ class IssuePieChart extends StatelessWidget {
   const IssuePieChart({
     super.key,
     required this.issues,
-    required this.formatDuration,
     required this.pieColors,
     required this.legendMutedColor,
   });
 
   final List<IssueStat> issues;
-  final String Function(num) formatDuration;
   final List<Color> pieColors;
   final Color legendMutedColor;
 
@@ -660,7 +658,7 @@ class IssuePieChart extends StatelessWidget {
                     Text('${issue.count}'),
                     const SizedBox(width: 8),
                     Text(
-                      formatDuration(issue.sumDurationSeconds),
+                      formatIssueChartDurationSeconds(issue.sumDurationSeconds),
                       style: TextStyle(color: legendMutedColor),
                     ),
                   ],
@@ -681,12 +679,14 @@ class ChartCard extends StatelessWidget {
     required this.child,
     required this.fill,
     required this.border,
+    this.titleTrailing,
   });
 
   final String title;
   final Widget child;
   final Color fill;
   final Color border;
+  final Widget? titleTrailing;
 
   @override
   Widget build(BuildContext context) {
@@ -700,11 +700,18 @@ class ChartCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            title,
-            style: Theme.of(
-              context,
-            ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  title,
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+                ),
+              ),
+              ?titleTrailing,
+            ],
           ),
           const SizedBox(height: 8),
           child,

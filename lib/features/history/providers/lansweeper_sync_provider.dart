@@ -46,6 +46,7 @@ class LansweeperSyncNotifier extends AsyncNotifier<void> {
   Future<LansweeperCommandResult> submitCall({
     required int callId,
     required LansweeperSubmitInput input,
+    List<int> companionCallIds = const <int>[],
   }) async {
     if (_isRunning) {
       return const LansweeperCommandResult(
@@ -85,9 +86,10 @@ class LansweeperSyncNotifier extends AsyncNotifier<void> {
       );
 
       if (result.success && (result.ticketId?.trim().isNotEmpty ?? false)) {
+        final ticketId = result.ticketId!.trim();
         await repo.markLansweeperSynced(
           callId: callId,
-          ticketId: result.ticketId!.trim(),
+          ticketId: ticketId,
           provider: 'lansweeper',
           metadata: <String, dynamic>{
             'mode': 'api',
@@ -95,7 +97,23 @@ class LansweeperSyncNotifier extends AsyncNotifier<void> {
             'payload': result.rawPayload,
           },
         );
-        state = const AsyncData(null);
+        for (final companionId in companionCallIds) {
+          if (companionId == callId) continue;
+          await repo.markLansweeperSynced(
+            callId: companionId,
+            ticketId: ticketId,
+            provider: 'lansweeper',
+            metadata: <String, dynamic>{
+              'mode': 'api_batch',
+              'message': result.message,
+              'payload': result.rawPayload,
+              'primaryCallId': callId,
+            },
+          );
+        }
+        if (ref.mounted) {
+          state = const AsyncData(null);
+        }
         _invalidateDashboardData();
         return LansweeperCommandResult(
           success: true,
@@ -166,8 +184,13 @@ class LansweeperSyncNotifier extends AsyncNotifier<void> {
   Future<LansweeperCommandResult> resubmitCall({
     required int callId,
     required LansweeperSubmitInput input,
+    List<int> companionCallIds = const <int>[],
   }) async {
-    return submitCall(callId: callId, input: input);
+    return submitCall(
+      callId: callId,
+      input: input,
+      companionCallIds: companionCallIds,
+    );
   }
 
   Future<void> markAsPassedManually({

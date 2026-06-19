@@ -1042,18 +1042,21 @@ WHERE ${wherePreviousPeriod.join(' AND ')}
       ORDER BY cnt DESC
       ''', args);
 
-    final escapedNoIssue = kDashboardNoIssueLabel.replaceAll("'", "''");
-    final issueLabelExpr =
-        "CASE WHEN calls.issue IS NULL OR TRIM(calls.issue) = '' "
-        "THEN '$escapedNoIssue' "
-        "ELSE TRIM(calls.issue) END";
+    const categoryNameRawExpr =
+        "COALESCE(NULLIF(TRIM(cat.name), ''), NULLIF(TRIM(calls.category_text), ''))";
+    final escapedNoCategory =
+        kDashboardNoCategoryLabel.replaceAll("'", "''");
+    final categoryLabelExpr =
+        "CASE WHEN $categoryNameRawExpr IS NULL "
+        "THEN '$escapedNoCategory' "
+        "ELSE $categoryNameRawExpr END";
 
     final issueRows = await db.rawQuery('''
-      SELECT $issueLabelExpr AS issue_label,
+      SELECT $categoryLabelExpr AS issue_label,
              COUNT(*) AS cnt,
              COALESCE(SUM(calls.duration), 0) AS sum_dur
       $fromJoin
-      GROUP BY $issueLabelExpr
+      GROUP BY $categoryLabelExpr
       ORDER BY cnt DESC
       LIMIT 15
       ''', args);

@@ -143,10 +143,55 @@ final dashboardFilterProvider =
       DashboardFilterNotifier.new,
     );
 
+/// Τοπική εμφάνιση γραφήματος «Κατανομή Βλαβών» — δεν επηρεάζει [dashboardStatsProvider].
+class DashboardExcludeCallsWithoutCategoryNotifier extends Notifier<bool> {
+  bool _hydrated = false;
+
+  @override
+  bool build() {
+    if (!_hydrated) {
+      _hydrated = true;
+      Future<void>(_hydrateFromSettings);
+    }
+    return false;
+  }
+
+  Future<void> _hydrateFromSettings() async {
+    final value =
+        await SettingsService().getDashboardExcludeCallsWithoutCategory();
+    if (!ref.mounted) return;
+    state = value;
+  }
+
+  Future<void> set(bool value) async {
+    if (state == value) return;
+    state = value;
+    await SettingsService().setDashboardExcludeCallsWithoutCategory(value);
+  }
+}
+
+final dashboardExcludeCallsWithoutCategoryProvider =
+    NotifierProvider.autoDispose<
+      DashboardExcludeCallsWithoutCategoryNotifier,
+      bool
+    >(DashboardExcludeCallsWithoutCategoryNotifier.new);
+
 /// Στατιστικά κλήσεων με βάση το τρέχον [DashboardFilterModel].
 final dashboardStatsProvider =
     FutureProvider.autoDispose<DashboardSummaryModel>((ref) async {
-      final filter = ref.watch(dashboardFilterProvider);
+      ref.watch(
+        dashboardFilterProvider.select(
+          (filter) => (
+            filter.keyword,
+            filter.dateFrom,
+            filter.dateTo,
+            filter.department,
+            filter.userName,
+            filter.equipmentCode,
+          ),
+        ),
+      );
+      final filter = ref.read(dashboardFilterProvider);
       final db = await DatabaseHelper.instance.database;
       return CallsRepository(db).getDashboardStatistics(filter);
     });

@@ -6,6 +6,8 @@
 //   flutter test test/features/calls/call_form_department_assets_test.dart --plain-name "επιλογή τμήματος"
 // Σενάριο ροής χρήστη (τμήμα → εξοπλισμός → τηλέφωνο):
 //   flutter test test/features/calls/call_form_department_assets_test.dart --plain-name "select_department"
+// Σενάρια Δοκιμαστικό (regression overlay μετά καθαρισμό πεδίων):
+//   flutter test test/features/calls/call_form_department_assets_test.dart --plain-name "Δοκιμαστικό"
 
 import 'package:call_logger/core/database/database_helper.dart';
 import 'package:call_logger/core/services/lookup_service.dart';
@@ -15,9 +17,11 @@ import 'package:call_logger/features/calls/provider/call_header_provider.dart';
 import 'package:call_logger/features/calls/provider/lookup_provider.dart';
 import 'package:call_logger/features/calls/screens/widgets/smart_entity_selector_department_field.dart';
 import 'package:call_logger/features/calls/screens/widgets/smart_entity_selector_equipment_field.dart';
+import 'package:call_logger/features/calls/screens/widgets/smart_entity_selector_equipment_suggestion_list.dart';
 import 'package:call_logger/features/calls/screens/widgets/smart_entity_selector_phone_suggestion_list.dart';
 import 'package:call_logger/main.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -32,6 +36,12 @@ const _kSharedPhone = '333';
 const _kUserOnlyPhone = '444';
 const _kSharedEquipmentCodes = ['2001', '2002', '2003'];
 const _kUserEquipmentCode = 'PC-MARIA';
+
+const _kDokimastikoDepartmentName = 'Δοκιμαστικό';
+const _kDokimastikoSharedPhones = ['2001', '2002', '2003'];
+const _kDokimastikoSharedEquipmentCodes = ['1001', '1002', '1003'];
+const _kDokimastikoScenarioEquipment = '1002';
+const _kDokimastikoScenarioPhone = '2003';
 
 Finder _callLoggerDepartmentTextField() {
   return find.descendant(
@@ -143,6 +153,49 @@ Future<int> _seedFantasmaDepartmentAssetsScenario() async {
   return deptId;
 }
 
+/// Τμήμα «Δοκιμαστικό»: κοινόχρηστα τηλέφωνα 2001–2003, κοινόχρηστος εξοπλισμός 1001–1003.
+Future<int> _seedDokimastikoDepartmentAssetsScenario() async {
+  final db = await DatabaseHelper.instance.database;
+  await db.delete('user_equipment');
+  await db.delete('user_phones');
+  await db.delete('department_phones');
+  await db.delete('phones');
+  await db.delete('equipment');
+  await db.delete('users');
+  await db.delete('departments');
+
+  final deptId = await db.insert('departments', {
+    'name': _kDokimastikoDepartmentName,
+    'name_key': SearchTextNormalizer.normalizeForSearch(
+      _kDokimastikoDepartmentName,
+    ),
+    'is_deleted': 0,
+  });
+
+  for (final phone in _kDokimastikoSharedPhones) {
+    final phoneId = await db.insert('phones', {
+      'number': phone,
+      'is_deleted': 0,
+    });
+    await db.insert('department_phones', {
+      'department_id': deptId,
+      'phone_id': phoneId,
+    });
+  }
+
+  for (final code in _kDokimastikoSharedEquipmentCodes) {
+    await db.insert('equipment', {
+      'code_equipment': code,
+      'department_id': deptId,
+      'is_deleted': 0,
+    });
+  }
+
+  LookupService.instance.resetForReload();
+  await LookupService.instance.loadFromDatabase();
+  return deptId;
+}
+
 Future<void> _loadCallFormApp(WidgetTester tester) async {
   await tester.runAsync(() async {
     await tester.pumpWidget(
@@ -221,6 +274,154 @@ Future<void> _selectEquipmentFromList(
   );
   await tester.tap(tile.first);
   await pumpUntilSettled(tester);
+}
+
+Future<void> _selectPhoneFromDepartmentOverlay(
+  WidgetTester tester,
+  String phone,
+) async {
+  final overlay = find.byType(SmartEntityPhoneSuggestionList);
+  await _pumpUntilFinderVisible(
+    tester,
+    overlay,
+    failDescription:
+        'Η overlay λίστα τηλεφώνων τμήματος (SmartEntityPhoneSuggestionList) '
+        'δεν εμφανίστηκε πριν την επιλογή $phone',
+  );
+  final tile = find.descendant(
+    of: overlay,
+    matching: find.widgetWithText(ListTile, phone),
+  );
+  expect(
+    tile,
+    findsOneWidget,
+    reason: greekExpectMsg(
+      'Στην overlay λίστα τμήματος εμφανίζεται ο αριθμός $phone',
+    ),
+  );
+  await tester.tap(tile);
+  await pumpUntilSettled(tester);
+}
+
+Future<void> _clearTextFieldWithBackspace(
+  WidgetTester tester,
+  Finder field,
+) async {
+  await tester.tap(field);
+  await pumpUntilSettled(tester);
+  final text = tester.widget<TextField>(field).controller?.text ?? '';
+  for (var i = 0; i < text.length; i++) {
+    await tester.sendKeyEvent(LogicalKeyboardKey.backspace);
+    await tester.pump(const Duration(milliseconds: 30));
+  }
+  await pumpUntilSettled(tester);
+}
+
+Future<void> _clearEquipmentWithClearButton(WidgetTester tester) async {
+  await tester.tap(_callLoggerEquipmentTextField());
+  await pumpUntilSettled(tester);
+  final clearButton = find.descendant(
+    of: find.byType(SmartEntityEquipmentField),
+    matching: find.byIcon(Icons.close),
+  );
+  expect(
+    clearButton,
+    findsOneWidget,
+    reason: greekExpectMsg('Κουμπί «χ» καθαρισμού εξοπλισμού'),
+  );
+  await tester.tap(clearButton);
+  await pumpUntilSettled(tester);
+}
+
+Future<void> _runDokimastikoDepartmentEquipPhoneBaseFlow(
+  WidgetTester tester,
+) async {
+  await _selectDepartmentFromAutocomplete(
+    tester,
+    _kDokimastikoDepartmentName,
+  );
+
+  await tester.tap(_callLoggerEquipmentTextField());
+  await pumpUntilSettled(tester);
+  await _selectEquipmentFromList(tester, _kDokimastikoScenarioEquipment);
+
+  await tester.tap(callLoggerPhoneTextField());
+  await pumpUntilSettled(tester);
+  await _selectPhoneFromDepartmentOverlay(tester, _kDokimastikoScenarioPhone);
+}
+
+Future<void> _expectDepartmentEquipmentOverlayVisible(
+  WidgetTester tester, {
+  required String failContext,
+}) async {
+  await tester.tap(_callLoggerEquipmentTextField());
+  await pumpUntilSettled(tester);
+
+  final overlay = find.byType(SmartEntityEquipmentSuggestionList);
+  await _pumpUntilFinderVisible(
+    tester,
+    overlay,
+    failDescription:
+        'Η overlay λίστα εξοπλισμού τμήματος (SmartEntityEquipmentSuggestionList) '
+        'δεν εμφανίστηκε — $failContext',
+  );
+  expect(
+    overlay,
+    findsOneWidget,
+    reason: greekExpectMsg(
+      'Ορατή overlay λίστα εξοπλισμού τμήματος — $failContext',
+    ),
+  );
+  for (final code in _kDokimastikoSharedEquipmentCodes) {
+    final codeInOverlay = find.descendant(
+      of: overlay,
+      matching: _equipmentCodeInListFinder(code),
+    );
+    expect(
+      codeInOverlay,
+      findsOneWidget,
+      reason: greekExpectMsg(
+        'Στην overlay εμφανίζεται ο εξοπλισμός $code — $failContext',
+      ),
+    );
+  }
+}
+
+Future<void> _expectDepartmentPhoneOverlayVisible(
+  WidgetTester tester, {
+  required String failContext,
+}) async {
+  await tester.tap(callLoggerPhoneTextField());
+  await pumpUntilSettled(tester);
+
+  final overlay = find.byType(SmartEntityPhoneSuggestionList);
+  await _pumpUntilFinderVisible(
+    tester,
+    overlay,
+    failDescription:
+        'Η overlay λίστα τηλεφώνων τμήματος (SmartEntityPhoneSuggestionList) '
+        'δεν εμφανίστηκε — $failContext',
+  );
+  expect(
+    overlay,
+    findsOneWidget,
+    reason: greekExpectMsg(
+      'Ορατή overlay λίστα τηλεφώνων τμήματος — $failContext',
+    ),
+  );
+  for (final phone in _kDokimastikoSharedPhones) {
+    final phoneInOverlay = find.descendant(
+      of: overlay,
+      matching: find.widgetWithText(ListTile, phone),
+    );
+    expect(
+      phoneInOverlay,
+      findsOneWidget,
+      reason: greekExpectMsg(
+        'Στην overlay εμφανίζεται ο αριθμός $phone — $failContext',
+      ),
+    );
+  }
 }
 
 Future<void> _finishCallFormWidgetTest(WidgetTester tester) async {
@@ -546,6 +747,163 @@ void main() {
         reporter.recordPass(
           'select_department: τμήμα → εξοπλισμός → τηλέφωνο',
         );
+      },
+      semanticsEnabled: false,
+    );
+  });
+
+  group('Φόρμα κλήσης — Δοκιμαστικό overlay μετά καθαρισμό (widget)', () {
+    setUp(() async {
+      await _seedDokimastikoDepartmentAssetsScenario();
+    });
+
+    // Σενάριο 1: τμήμα → εξοπλισμός 1002 → τηλέφωνο 2003 → καθαρισμός εξοπλισμού → overlay.
+    //   flutter test test/features/calls/call_form_department_assets_test.dart --plain-name "καθαρισμό εξοπλισμού"
+    testWidgets(
+      'Δοκιμαστικό: μετά καθαρισμό εξοπλισμού επαναεμφανίζεται overlay λίστας τμήματος',
+      (tester) async {
+        _configureDesktopViewport(tester);
+        final reporter = GreekTestReportCollector();
+
+        reporter.logProgress('Οθόνη «Νέα Κλήση» — σενάριο Δοκιμαστικό (σενάριο 1)');
+        await _loadCallFormApp(tester);
+        reporter.logStepDone('Εφαρμογή φορτώθηκε');
+
+        reporter.logProgress(
+          'Ροή: τμήμα → εξοπλισμός $_kDokimastikoScenarioEquipment → '
+          'τηλέφωνο $_kDokimastikoScenarioPhone',
+        );
+        await _runDokimastikoDepartmentEquipPhoneBaseFlow(tester);
+        reporter.logStepDone('Βασική ροή ολοκληρώθηκε');
+
+        reporter.logProgress('Καθαρισμός εξοπλισμού με backspace');
+        await _clearTextFieldWithBackspace(
+          tester,
+          _callLoggerEquipmentTextField(),
+        );
+        final headerAfterClear = await _readCallHeaderState(tester);
+        expect(
+          headerAfterClear.equipmentText,
+          isEmpty,
+          reason: greekExpectMsg('Το πεδίο εξοπλισμού είναι κενό μετά backspace'),
+        );
+        reporter.logStepDone('Εξοπλισμός καθαρίστηκε');
+
+        reporter.logProgress(
+          'Κλικ εξοπλισμός — αναμένεται ορατή overlay λίστα τμήματος',
+        );
+        await _expectDepartmentEquipmentOverlayVisible(
+          tester,
+          failContext: 'μετά backspace εξοπλισμού με επιλεγμένο τηλέφωνο',
+        );
+        reporter.logStepDone('Overlay εξοπλισμού τμήματος εμφανίστηκε');
+
+        await _finishCallFormWidgetTest(tester);
+        reporter.recordPass('Σενάριο 1 — overlay εξοπλισμού μετά καθαρισμό');
+      },
+      semanticsEnabled: false,
+    );
+
+    // Σενάριο 2: τμήμα → εξοπλισμός 1002 → τηλέφωνο 2003 → καθαρισμός τηλεφώνου → overlay.
+    //   flutter test test/features/calls/call_form_department_assets_test.dart --plain-name "καθαρισμό τηλεφώνου"
+    testWidgets(
+      'Δοκιμαστικό: μετά καθαρισμό τηλεφώνου επαναεμφανίζεται overlay λίστας τμήματος',
+      (tester) async {
+        _configureDesktopViewport(tester);
+        final reporter = GreekTestReportCollector();
+
+        reporter.logProgress('Οθόνη «Νέα Κλήση» — σενάριο Δοκιμαστικό (σενάριο 2)');
+        await _loadCallFormApp(tester);
+        reporter.logStepDone('Εφαρμογή φορτώθηκε');
+
+        await _runDokimastikoDepartmentEquipPhoneBaseFlow(tester);
+        reporter.logStepDone('Βασική ροή ολοκληρώθηκε');
+
+        reporter.logProgress('Καθαρισμός τηλεφώνου με backspace');
+        await _clearTextFieldWithBackspace(
+          tester,
+          callLoggerPhoneTextField(),
+        );
+        final headerAfter = await _readCallHeaderState(tester);
+        expect(
+          headerAfter.selectedPhone,
+          anyOf(isNull, ''),
+          reason: greekExpectMsg('Το πεδίο τηλεφώνου είναι κενό μετά backspace'),
+        );
+        reporter.logStepDone('Τηλέφωνο καθαρίστηκε');
+
+        reporter.logProgress(
+          'Κλικ τηλέφωνο — αναμένεται ορατή overlay λίστα τμήματος',
+        );
+        await _expectDepartmentPhoneOverlayVisible(
+          tester,
+          failContext: 'μετά backspace τηλεφώνου με επιλεγμένο εξοπλισμό',
+        );
+        reporter.logStepDone('Overlay τηλεφώνων τμήματος εμφανίστηκε');
+
+        await _finishCallFormWidgetTest(tester);
+        reporter.recordPass('Σενάριο 2 — overlay τηλεφώνων μετά καθαρισμό');
+      },
+      semanticsEnabled: false,
+    );
+
+    // Σενάριο 3: καθαρισμός τηλεφώνου και εξοπλισμού → overlay και στα δύο πεδία.
+    //   flutter test test/features/calls/call_form_department_assets_test.dart --plain-name "καθαρισμό τηλεφώνου και εξοπλισμού"
+    testWidgets(
+      'Δοκιμαστικό: μετά καθαρισμό τηλεφώνου και εξοπλισμού επαναεμφανίζονται overlays τμήματος',
+      (tester) async {
+        _configureDesktopViewport(tester);
+        final reporter = GreekTestReportCollector();
+
+        reporter.logProgress('Οθόνη «Νέα Κλήση» — σενάριο Δοκιμαστικό (σενάριο 3)');
+        await _loadCallFormApp(tester);
+        reporter.logStepDone('Εφαρμογή φορτώθηκε');
+
+        await _runDokimastikoDepartmentEquipPhoneBaseFlow(tester);
+        reporter.logStepDone('Βασική ροή ολοκληρώθηκε');
+
+        reporter.logProgress('Καθαρισμός τηλεφώνου με backspace');
+        await _clearTextFieldWithBackspace(
+          tester,
+          callLoggerPhoneTextField(),
+        );
+        reporter.logStepDone('Τηλέφωνο καθαρίστηκε');
+
+        reporter.logProgress('Καθαρισμός εξοπλισμού με κουμπί «χ»');
+        await _clearEquipmentWithClearButton(tester);
+        final headerAfter = await _readCallHeaderState(tester);
+        expect(
+          headerAfter.equipmentText,
+          isEmpty,
+          reason: greekExpectMsg('Το πεδίο εξοπλισμού είναι κενό μετά «χ»'),
+        );
+        expect(
+          headerAfter.selectedPhone,
+          anyOf(isNull, ''),
+          reason: greekExpectMsg('Το πεδίο τηλεφώνου είναι κενό'),
+        );
+        reporter.logStepDone('Εξοπλισμός καθαρίστηκε');
+
+        reporter.logProgress(
+          'Κλικ τηλέφωνο — αναμένεται ορατή overlay λίστα τμήματος',
+        );
+        await _expectDepartmentPhoneOverlayVisible(
+          tester,
+          failContext: 'μετά καθαρισμό και των δύο πεδίων (τηλέφωνο)',
+        );
+        reporter.logStepDone('Overlay τηλεφώνων τμήματος εμφανίστηκε');
+
+        reporter.logProgress(
+          'Κλικ εξοπλισμός — αναμένεται ορατή overlay λίστα τμήματος',
+        );
+        await _expectDepartmentEquipmentOverlayVisible(
+          tester,
+          failContext: 'μετά καθαρισμό και των δύο πεδίων (εξοπλισμός)',
+        );
+        reporter.logStepDone('Overlay εξοπλισμού τμήματος εμφανίστηκε');
+
+        await _finishCallFormWidgetTest(tester);
+        reporter.recordPass('Σενάριο 3 — overlays μετά διπλό καθαρισμό');
       },
       semanticsEnabled: false,
     );

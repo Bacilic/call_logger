@@ -1,4 +1,4 @@
-import 'package:flutter/gestures.dart';
+﻿import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -179,82 +179,38 @@ class _ErrorScenariosScreenState extends ConsumerState<ErrorScenariosScreen> {
         ),
         const SizedBox(height: 8),
         if (_seedSucceeded) ...[
-          Text(
-            'Έλεγχος ακεραιότητας βάσης',
-            style: theme.textTheme.titleSmall?.copyWith(
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 8),
-          RichText(
-            text: TextSpan(
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: scheme.onSurface,
+          _ErrorScenarioCard(
+            icon: Icons.fact_check_outlined,
+            title: 'Έλεγχος ακεραιότητας βάσης',
+            descriptionSpans: [
+              const TextSpan(text: 'Κάντε κλικ '),
+              _linkSpan(
+                scheme: scheme,
+                onTap: _openIntegrityCheck,
               ),
-              children: [
-                const TextSpan(text: 'Κάντε κλικ '),
-                TextSpan(
-                  text: 'εδώ',
-                  style: TextStyle(
-                    color: scheme.primary,
-                    fontWeight: FontWeight.w600,
-                    decoration: TextDecoration.underline,
-                  ),
-                  recognizer: TapGestureRecognizer()
-                    ..onTap = _openIntegrityCheck,
-                ),
-                const TextSpan(
-                  text: ' για να ελέγξετε την ορθή επίλυση των διαφορών.',
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 20),
-          Material(
-            color: scheme.secondaryContainer.withValues(alpha: 0.35),
-            borderRadius: BorderRadius.circular(12),
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Icon(Icons.phone_in_talk_outlined, color: scheme.secondary),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: RichText(
-                      text: TextSpan(
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          color: scheme.onSurface,
-                        ),
-                        children: [
-                          const TextSpan(
-                            text: 'Μη εμφάνιση τηλεφώνων τμήματος. ',
-                          ),
-                          TextSpan(
-                            text:
-                                'Το τμήμα ${IntegrityDebugSeederService.dokimastikoDepartmentName} '
-                                'με κοινόχρηστα τηλέφωνα: $_dokimastikoPhonesLabel '
-                                'και κοινόχρηστο εξοπλισμό: $_dokimastikoEquipmentLabel '
-                                'δημιουργήθηκε. Κάντε κλικ ',
-                          ),
-                          TextSpan(
-                            text: 'εδώ',
-                            style: TextStyle(
-                              color: scheme.primary,
-                              fontWeight: FontWeight.w600,
-                              decoration: TextDecoration.underline,
-                            ),
-                            recognizer: TapGestureRecognizer()
-                              ..onTap = _openNewCallWithDokimastikoDepartment,
-                          ),
-                          const TextSpan(text: ' για έλεγχο.'),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
+              const TextSpan(
+                text: ' για να ελέγξετε την ορθή επίλυση των διαφορών.',
               ),
-            ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          _ErrorScenarioCard(
+            icon: Icons.phone_in_talk_outlined,
+            title: 'Μη εμφάνιση τηλεφώνων τμήματος',
+            descriptionSpans: [
+              TextSpan(
+                text:
+                    'Το τμήμα ${IntegrityDebugSeederService.dokimastikoDepartmentName} '
+                    'με κοινόχρηστα τηλέφωνα: $_dokimastikoPhonesLabel '
+                    'και κοινόχρηστο εξοπλισμό: $_dokimastikoEquipmentLabel '
+                    'δημιουργήθηκε. Κάντε κλικ ',
+              ),
+              _linkSpan(
+                scheme: scheme,
+                onTap: _openNewCallWithDokimastikoDepartment,
+              ),
+              const TextSpan(text: ' για έλεγχο.'),
+            ],
           ),
         ] else
           Text(
@@ -264,6 +220,72 @@ class _ErrorScenariosScreenState extends ConsumerState<ErrorScenariosScreen> {
             ),
           ),
       ],
+    );
+  }
+}
+
+TextSpan _linkSpan({
+  required ColorScheme scheme,
+  required VoidCallback onTap,
+}) {
+  return TextSpan(
+    text: 'εδώ',
+    style: TextStyle(
+      color: scheme.primary,
+      fontWeight: FontWeight.w600,
+      decoration: TextDecoration.underline,
+    ),
+    recognizer: TapGestureRecognizer()..onTap = onTap,
+  );
+}
+
+/// Κάρτα ενός σεναρίου σφάλματος: εικονίδιο + τίτλος (έντονα:) + περιγραφή σε μία γραμμή.
+class _ErrorScenarioCard extends StatelessWidget {
+  const _ErrorScenarioCard({
+    required this.icon,
+    required this.title,
+    required this.descriptionSpans,
+  });
+
+  final IconData icon;
+  final String title;
+  final List<InlineSpan> descriptionSpans;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final bodyStyle = theme.textTheme.bodyMedium?.copyWith(
+      color: scheme.onSurface,
+    );
+
+    return Material(
+      color: scheme.secondaryContainer.withValues(alpha: 0.35),
+      borderRadius: BorderRadius.circular(12),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(icon, color: scheme.secondary),
+            const SizedBox(width: 12),
+            Expanded(
+              child: RichText(
+                text: TextSpan(
+                  style: bodyStyle,
+                  children: [
+                    TextSpan(
+                      text: '$title: ',
+                      style: bodyStyle?.copyWith(fontWeight: FontWeight.w600),
+                    ),
+                    ...descriptionSpans,
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
