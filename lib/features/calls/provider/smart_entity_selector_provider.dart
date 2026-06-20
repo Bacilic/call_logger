@@ -1847,6 +1847,12 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
     // αλλιώς μένει stale id (π.χ. από autofill) και το hasPendingDepartmentChange
     // συγκρίνει λάθος μόνο ids → κρύβεται το «Προσθήκη».
     final clearDeptId = trimmed.isEmpty || matchedDepartmentId == null;
+    final hasPhoneInput = state.selectedPhone?.trim().isNotEmpty == true;
+    final hasEquipmentInput = state.equipmentText.trim().isNotEmpty;
+    final hasCallerInput =
+        state.callerDisplayText.trim().isNotEmpty ||
+        state.selectedCaller != null;
+
     state = state.copyWith(
       // Αποθηκεύουμε το raw κείμενο (με κενά) ώστε ο χρήστης να βλέπει
       // ακριβώς αυτό που πληκτρολόγησε. Το trimming χρησιμοποιείται μόνο
@@ -1855,6 +1861,16 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
       selectedDepartmentId: matchedDepartmentId,
       clearSelectedDepartmentId: clearDeptId,
       clearConflicts: true,
+      clearPhoneCandidates: clearDeptId && !hasPhoneInput,
+      clearEquipmentCandidates: clearDeptId && !hasEquipmentInput,
+      clearCallerCandidates: clearDeptId && !hasCallerInput,
+      isPhoneAmbiguous: clearDeptId && !hasPhoneInput
+          ? false
+          : state.isPhoneAmbiguous,
+      isEquipmentAmbiguous: clearDeptId && !hasEquipmentInput
+          ? false
+          : state.isEquipmentAmbiguous,
+      hasAnyContent: _computeHasAnyContent(departmentText: text),
     );
   }
 

@@ -8,6 +8,11 @@
 //   flutter test test/features/calls/call_form_department_assets_test.dart --plain-name "select_department"
 // Σενάρια Δοκιμαστικό (regression overlay μετά καθαρισμό πεδίων):
 //   flutter test test/features/calls/call_form_department_assets_test.dart --plain-name "Δοκιμαστικό"
+// Σενάριο καθαρισμού τμήματος (regression φιλτραρίσματος + κόκκινο Χ):
+//   flutter test test/features/calls/call_form_department_assets_test.dart --plain-name "καθαρισμό τμήματος"
+
+// Σενάριο καθαρισμού τμήματος (regression φιλτραρίσματος + κόκκινο Χ):
+//   flutter test test/features/calls/call_form_department_assets_test.dart --plain-name "καθαρισμό τμήματος"
 
 import 'package:call_logger/core/database/database_helper.dart';
 import 'package:call_logger/core/services/lookup_service.dart';
@@ -15,6 +20,7 @@ import 'package:call_logger/core/utils/search_text_normalizer.dart';
 import 'package:call_logger/features/calls/models/equipment_model.dart';
 import 'package:call_logger/features/calls/provider/call_header_provider.dart';
 import 'package:call_logger/features/calls/provider/lookup_provider.dart';
+import 'package:call_logger/features/calls/screens/widgets/smart_entity_selector_caller_field.dart';
 import 'package:call_logger/features/calls/screens/widgets/smart_entity_selector_department_field.dart';
 import 'package:call_logger/features/calls/screens/widgets/smart_entity_selector_equipment_field.dart';
 import 'package:call_logger/features/calls/screens/widgets/smart_entity_selector_equipment_suggestion_list.dart';
@@ -48,6 +54,168 @@ Finder _callLoggerDepartmentTextField() {
     of: find.byType(SmartEntityDepartmentField),
     matching: find.byType(TextField),
   );
+}
+
+Finder _callLoggerCallerTextField() {
+  return find.descendant(
+    of: find.byType(SmartEntityCallerField),
+    matching: find.byType(TextField),
+  );
+}
+
+Finder _clearAllFieldsButton() {
+  return find.byTooltip('Καθαρισμός όλων των πεδίων');
+}
+
+Finder _departmentFieldClearButton() {
+  return find.descendant(
+    of: find.byType(SmartEntityDepartmentField),
+    matching: find.byIcon(Icons.close),
+  );
+}
+
+Future<void> _clearDepartmentField(WidgetTester tester) async {
+  await tester.tap(_callLoggerDepartmentTextField());
+  await pumpUntilSettled(tester);
+  final clearButton = _departmentFieldClearButton();
+  expect(
+    clearButton,
+    findsOneWidget,
+    reason: greekExpectMsg('Κουμπί «χ» καθαρισμού πεδίου τμήματος'),
+  );
+  await tester.tap(clearButton);
+  await pumpUntilSettled(tester);
+}
+
+Future<void> _expectClearAllButtonVisible(
+  WidgetTester tester, {
+  required bool visible,
+  required String failContext,
+}) async {
+  final header = await _readCallHeaderState(tester);
+  expect(
+    header.hasAnyContent,
+    visible,
+    reason: greekExpectMsg(
+      visible
+          ? 'hasAnyContent=true — εμφανές κουμπί καθαρισμού όλων ($failContext)'
+          : 'hasAnyContent=false — κρυφό κουμπί καθαρισμού όλων ($failContext)',
+    ),
+  );
+
+  final clearAllButton = _clearAllFieldsButton();
+  expect(
+    clearAllButton,
+    findsOneWidget,
+    reason: greekExpectMsg('Υπάρχει το κουμπί «Καθαρισμός όλων των πεδίων»'),
+  );
+  final animatedOpacity = tester.widget<AnimatedOpacity>(
+    find.ancestor(
+      of: clearAllButton,
+      matching: find.byType(AnimatedOpacity),
+    ).first,
+  );
+  expect(
+    animatedOpacity.opacity,
+    visible ? 1.0 : 0.0,
+    reason: greekExpectMsg(
+      visible
+          ? 'Ορατό κόκκινο Χ καθαρισμού όλων ($failContext)'
+          : 'Κρυφό κόκκινο Χ καθαρισμού όλων ($failContext)',
+    ),
+  );
+}
+
+Future<void> _expectNoDepartmentScopedOverlays(
+  WidgetTester tester, {
+  required String failContext,
+  String? departmentCallerName,
+  Iterable<String> departmentPhones = const [],
+  Iterable<String> departmentEquipmentCodes = const [],
+}) async {
+  final header = await _readCallHeaderState(tester);
+  expect(
+    header.phoneCandidates,
+    isEmpty,
+    reason: greekExpectMsg(
+      'Κενοί υποψήφιοι τηλεφώνων μετά καθαρισμό τμήματος — $failContext',
+    ),
+  );
+  expect(
+    header.equipmentCandidates,
+    isEmpty,
+    reason: greekExpectMsg(
+      'Κενοί υποψήφιοι εξοπλισμού μετά καθαρισμό τμήματος — $failContext',
+    ),
+  );
+  expect(
+    header.callerCandidates,
+    isEmpty,
+    reason: greekExpectMsg(
+      'Κενοί υποψήφιοι καλούντα μετά καθαρισμό τμήματος — $failContext',
+    ),
+  );
+
+  await tester.tap(callLoggerPhoneTextField());
+  await pumpUntilSettled(tester);
+  expect(
+    find.byType(SmartEntityPhoneSuggestionList),
+    findsNothing,
+    reason: greekExpectMsg(
+      'Χωρίς overlay τηλεφώνων τμήματος — $failContext',
+    ),
+  );
+  for (final phone in departmentPhones) {
+    expect(
+      find.widgetWithText(ListTile, phone),
+      findsNothing,
+      reason: greekExpectMsg(
+        'Δεν εμφανίζεται φιλτραρισμένος αριθμός $phone — $failContext',
+      ),
+    );
+  }
+
+  await tester.tap(_callLoggerEquipmentTextField());
+  await pumpUntilSettled(tester);
+  expect(
+    find.byType(SmartEntityEquipmentSuggestionList),
+    findsNothing,
+    reason: greekExpectMsg(
+      'Χωρίς overlay εξοπλισμού τμήματος — $failContext',
+    ),
+  );
+  for (final code in departmentEquipmentCodes) {
+    expect(
+      _equipmentCodeInListFinder(code),
+      findsNothing,
+      reason: greekExpectMsg(
+        'Δεν εμφανίζεται φιλτραρισμένος εξοπλισμός $code — $failContext',
+      ),
+    );
+  }
+
+  await tester.tap(_callLoggerCallerTextField());
+  await pumpUntilSettled(tester);
+  if (departmentCallerName != null && departmentCallerName.trim().isNotEmpty) {
+    expect(
+      find.descendant(
+        of: find.byType(SmartEntityCallerSuggestionList),
+        matching: find.textContaining(departmentCallerName),
+      ),
+      findsNothing,
+      reason: greekExpectMsg(
+        'Η overlay καλούντα δεν περιέχει «$departmentCallerName» — $failContext',
+      ),
+    );
+  } else {
+    expect(
+      find.byType(SmartEntityCallerSuggestionList),
+      findsNothing,
+      reason: greekExpectMsg(
+        'Χωρίς overlay καλούντα τμήματος — $failContext',
+      ),
+    );
+  }
 }
 
 Finder _callLoggerEquipmentTextField() {
@@ -602,6 +770,98 @@ void main() {
         reporter.recordPass(
           'Επιλογή τμήματος — εξοπλισμός και τηλέφωνα εμφανίζονται σωστά στη φόρμα',
         );
+      },
+      semanticsEnabled: false,
+    );
+
+    // Σενάριο: επιλογή τμήματος → καθαρισμός τμήματος → χωρίς φιλτραρισμένες λίστες / κόκκινο Χ.
+    //   flutter test test/features/calls/call_form_department_assets_test.dart --plain-name "καθαρισμό τμήματος"
+    testWidgets(
+      'καθαρισμό τμήματος: οι λίστες ξεφιλτράρονται και εξαφανίζεται το κόκκινο Χ',
+      (tester) async {
+        _configureDesktopViewport(tester);
+
+        final reporter = GreekTestReportCollector();
+        final expectedCallerName = '$_kMariaFirstName $_kMariaLastName';
+
+        reporter.logProgress('Φόρτωση οθόνης «Νέα Κλήση»');
+        await _loadCallFormApp(tester);
+        reporter.logStepDone('Εφαρμογή φορτώθηκε');
+
+        reporter.logProgress('Επιλογή τμήματος «$_kFantasmaDepartmentName»');
+        await _selectDepartmentFromAutocomplete(
+          tester,
+          _kFantasmaDepartmentName,
+        );
+
+        final headerWithDept = await _readCallHeaderState(tester);
+        expect(
+          headerWithDept.selectedDepartmentId,
+          deptId,
+          reason: greekExpectMsg('Επιλεγμένο τμήμα στο state'),
+        );
+        expect(
+          headerWithDept.phoneCandidates,
+          isNotEmpty,
+          reason: greekExpectMsg('Φιλτραρισμένοι υποψήφιοι τηλεφώνων τμήματος'),
+        );
+        expect(
+          headerWithDept.equipmentCandidates,
+          isNotEmpty,
+          reason: greekExpectMsg('Φιλτραρισμένοι υποψήφιοι εξοπλισμού τμήματος'),
+        );
+        expect(
+          headerWithDept.callerCandidates
+              .map((u) => u.name ?? u.fullNameWithDepartment)
+              .toList(),
+          contains(expectedCallerName),
+          reason: greekExpectMsg('Φιλτραρισμένοι υποψήφιοι καλούντα τμήματος'),
+        );
+        await _expectClearAllButtonVisible(
+          tester,
+          visible: true,
+          failContext: 'μετά επιλογή τμήματος',
+        );
+        reporter.logStepDone('Τμήμα επιλέχθηκε — φιλτραρισμένες λίστες ενεργές');
+
+        reporter.logProgress('Καθαρισμός πεδίου τμήματος');
+        await _clearDepartmentField(tester);
+
+        final headerAfterClear = await _readCallHeaderState(tester);
+        expect(
+          headerAfterClear.departmentText.trim(),
+          isEmpty,
+          reason: greekExpectMsg('Κενό πεδίο τμήματος μετά καθαρισμό'),
+        );
+        expect(
+          headerAfterClear.selectedDepartmentId,
+          isNull,
+          reason: greekExpectMsg('Μηδενισμένο id τμήματος μετά καθαρισμό'),
+        );
+        reporter.logStepDone('Τμήμα καθαρίστηκε');
+
+        reporter.logProgress(
+          'Έλεγχος: χωρίς φιλτραρισμένες λίστες και κρυφό κόκκινο Χ',
+        );
+        await _expectNoDepartmentScopedOverlays(
+          tester,
+          failContext: 'μετά καθαρισμό τμήματος',
+          departmentCallerName: expectedCallerName,
+          departmentPhones: [_kSharedPhone, _kUserOnlyPhone],
+          departmentEquipmentCodes: [
+            ..._kSharedEquipmentCodes,
+            _kUserEquipmentCode,
+          ],
+        );
+        await _expectClearAllButtonVisible(
+          tester,
+          visible: false,
+          failContext: 'μετά καθαρισμό τμήματος',
+        );
+        reporter.logStepDone('Λίστες ξεφιλτράρονται — κόκκινο Χ κρυφό');
+
+        await _finishCallFormWidgetTest(tester);
+        reporter.recordPass('Καθαρισμός τμήματος — regression overlay / κόκκινο Χ');
       },
       semanticsEnabled: false,
     );

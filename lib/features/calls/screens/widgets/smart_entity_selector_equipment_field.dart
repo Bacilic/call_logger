@@ -10,6 +10,7 @@ import '../../../../core/utils/search_text_normalizer.dart';
 import '../../models/equipment_model.dart';
 import '../../provider/smart_entity_selector_provider.dart';
 import '../../utils/vnc_remote_target.dart';
+import 'smart_entity_equipment_initial_suggestions.dart';
 import 'smart_entity_selector_equipment_models.dart';
 import 'smart_entity_selector_equipment_suggestion_list.dart';
 import 'smart_entity_selector_conflict_badge.dart';
@@ -160,91 +161,11 @@ class _SmartEntityEquipmentFieldState extends State<SmartEntityEquipmentField> {
     return result;
   }
 
-  List<EquipmentModel> _phoneEquipments(
-    SmartEntitySelectorState header,
-    LookupService? lookupService,
-  ) {
-    final phone = header.selectedPhone?.trim() ?? '';
-    if (phone.isEmpty || lookupService == null) {
-      return const [];
-    }
-    final users = lookupService.findUsersByPhone(phone);
-    final result = <EquipmentModel>[];
-    for (final user in users) {
-      if (user.id != null) {
-        result.addAll(lookupService.findEquipmentsForUser(user.id!));
-      }
-    }
-    return _dedupeEquipments(result);
-  }
-
-  List<EquipmentModel> _callerEquipments(
-    SmartEntitySelectorState header,
-    LookupService? lookupService,
-  ) {
-    if (lookupService == null) {
-      return _dedupeEquipments(header.equipmentCandidates);
-    }
-    final callerId = header.selectedCaller?.id;
-    if (callerId == null) {
-      return _dedupeEquipments(header.equipmentCandidates);
-    }
-    final direct = lookupService.findEquipmentsForUser(callerId);
-    if (direct.isNotEmpty) {
-      return _dedupeEquipments(direct);
-    }
-    return _dedupeEquipments(header.equipmentCandidates);
-  }
-
   List<SmartEntityEquipmentSuggestion> _initialSuggestions(
     SmartEntitySelectorState header,
     LookupService? lookupService,
   ) {
-    final phoneEquipments = _phoneEquipments(header, lookupService);
-    final callerEquipments = _callerEquipments(header, lookupService);
-    final phoneKeys = phoneEquipments.map(_equipmentKey).toSet();
-    final callerKeys = callerEquipments.map(_equipmentKey).toSet();
-
-    final combined = <SmartEntityEquipmentSuggestion>[];
-    final seen = <String>{};
-
-    for (final equipment in phoneEquipments) {
-      final key = _equipmentKey(equipment);
-      if (callerKeys.contains(key) && seen.add(key)) {
-        combined.add(
-          SmartEntityEquipmentSuggestion(
-            equipment: equipment,
-            sourceLabel: 'Τηλ. + Όνομα',
-          ),
-        );
-      }
-    }
-
-    for (final equipment in phoneEquipments) {
-      final key = _equipmentKey(equipment);
-      if (!callerKeys.contains(key) && seen.add(key)) {
-        combined.add(
-          SmartEntityEquipmentSuggestion(
-            equipment: equipment,
-            sourceLabel: 'Τηλέφωνο',
-          ),
-        );
-      }
-    }
-
-    for (final equipment in callerEquipments) {
-      final key = _equipmentKey(equipment);
-      if (!phoneKeys.contains(key) && seen.add(key)) {
-        combined.add(
-          SmartEntityEquipmentSuggestion(
-            equipment: equipment,
-            sourceLabel: 'Όνομα',
-          ),
-        );
-      }
-    }
-
-    return combined;
+    return buildInitialEquipmentSuggestions(header, lookupService);
   }
 
   List<EquipmentModel> _querySuggestions(
