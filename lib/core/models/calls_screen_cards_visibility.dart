@@ -4,24 +4,29 @@ import 'dart:convert';
 class CallsScreenCardsVisibility {
   const CallsScreenCardsVisibility({
     this.showUserCard = true,
-    this.showEquipmentCard = true,
+    this.showMapCard = true,
     this.showEmployeeRecentCard = true,
     this.showEquipmentRecentPanel = true,
     this.showGlobalRecentCard = true,
   });
 
   final bool showUserCard;
-  final bool showEquipmentCard;
+
+  /// Mini map card visibility (renamed from [showEquipmentCard]).
+  final bool showMapCard;
   final bool showEmployeeRecentCard;
   final bool showEquipmentRecentPanel;
   final bool showGlobalRecentCard;
+
+  /// Backward-compatible alias.
+  bool get showEquipmentCard => showMapCard;
 
   static const CallsScreenCardsVisibility defaults =
       CallsScreenCardsVisibility();
 
   int get enabledCount => [
     showUserCard,
-    showEquipmentCard,
+    showMapCard,
     showEmployeeRecentCard,
     showEquipmentRecentPanel,
     showGlobalRecentCard,
@@ -29,6 +34,7 @@ class CallsScreenCardsVisibility {
 
   CallsScreenCardsVisibility copyWith({
     bool? showUserCard,
+    bool? showMapCard,
     bool? showEquipmentCard,
     bool? showEmployeeRecentCard,
     bool? showEquipmentRecentPanel,
@@ -36,7 +42,7 @@ class CallsScreenCardsVisibility {
   }) {
     return CallsScreenCardsVisibility(
       showUserCard: showUserCard ?? this.showUserCard,
-      showEquipmentCard: showEquipmentCard ?? this.showEquipmentCard,
+      showMapCard: showMapCard ?? showEquipmentCard ?? this.showMapCard,
       showEmployeeRecentCard:
           showEmployeeRecentCard ?? this.showEmployeeRecentCard,
       showEquipmentRecentPanel:
@@ -47,7 +53,7 @@ class CallsScreenCardsVisibility {
 
   Map<String, dynamic> toJson() => {
     'u': showUserCard,
-    'e': showEquipmentCard,
+    'e': showMapCard,
     'er': showEmployeeRecentCard,
     'ep': showEquipmentRecentPanel,
     'g': showGlobalRecentCard,
@@ -63,7 +69,7 @@ class CallsScreenCardsVisibility {
 
     return CallsScreenCardsVisibility(
       showUserCard: read('u', true),
-      showEquipmentCard: read('e', true),
+      showMapCard: read('e', true),
       showEmployeeRecentCard: read('er', true),
       showEquipmentRecentPanel: read('ep', true),
       showGlobalRecentCard: read('g', true),

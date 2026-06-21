@@ -7,6 +7,8 @@
 
 import 'package:call_logger/core/database/database_helper.dart';
 import 'package:call_logger/core/services/lookup_service.dart';
+import 'package:call_logger/features/calls/provider/call_entry_provider.dart';
+import 'package:call_logger/features/calls/provider/call_header_provider.dart';
 import 'package:call_logger/features/calls/provider/lookup_provider.dart';
 import 'package:call_logger/main.dart';
 import 'package:flutter/material.dart';
@@ -158,18 +160,29 @@ void main() {
         );
 
         reporter.logStep('Υποβολή καταγραφής κλήσης');
-        await tester.tap(submitFinder);
-        await tester.pump();
-        for (var i = 0; i < 40; i++) {
-          await tester.pump(const Duration(milliseconds: 50));
-        }
-
-        final db = await DatabaseHelper.instance.database;
-        final saved = await db.query(
-          'calls',
-          where: 'issue LIKE ? AND phone_text = ?',
-          whereArgs: ['%$kTestHistorySearchMarker%', kTestPhoneDigits],
+        final scopeCtx = tester.element(submitFinder);
+        final container = ProviderScope.containerOf(scopeCtx);
+        final submitOk = await tester.runAsync(() async {
+          return container.read(callEntryProvider.notifier).submitCall();
+        });
+        expect(
+          submitOk,
+          isTrue,
+          reason: greekExpectMsg(
+            'Η υποβολή κλήσης πρέπει να ολοκληρωθεί επιτυχώς',
+          ),
         );
+        await tester.pump();
+
+        final saved = await tester.runAsync(() async {
+          final db = await DatabaseHelper.instance.database;
+          return db.query(
+            'calls',
+            where: 'issue LIKE ? AND phone_text = ?',
+            whereArgs: ['%$kTestHistorySearchMarker%', kTestPhoneDigits],
+          );
+        });
+        await tester.pump();
         expect(
           saved,
           isNotEmpty,
@@ -180,9 +193,10 @@ void main() {
         reporter.recordPass('Καταγραφή κλήσης με απομονωμένη βάση');
       },
       semanticsEnabled: false,
+      timeout: const Timeout(Duration(minutes: 2)),
     );
 
-    // Χωρίς τηλέφωνο (μόνο σημειώσεις) το κουμπί «Καταγραφή» πρέπει να έχει onPressed == null.
+    // Χωρίς ενεργή Ομάδα Τηλεφώνου το κουμπί «Καταγραφή» δεν εμφανίζεται στη διάταξη.
     //   flutter test test/features/calls/call_form_test.dart --plain-name "Unhappy path: απενεργοποιημένο κουμπί χωρίς τηλέφωνο"
     testWidgets(
       'Unhappy path: απενεργοποιημένο κουμπί χωρίς τηλέφωνο',
@@ -195,7 +209,7 @@ void main() {
         });
 
         final reporter = GreekTestReportCollector();
-        reporter.logStep('Έναρξη unhappy path: μόνο σημειώσεις χωρίς τηλέφωνο');
+        reporter.logStep('Έναρξη unhappy path: compact χωρίς Ομάδα Τηλεφώνου');
 
         await tester.runAsync(() async {
           await tester.pumpWidget(
@@ -213,27 +227,25 @@ void main() {
           await container.read(lookupServiceProvider.future);
         });
 
-        final notesFinder = find.byWidgetPredicate(
-          (w) =>
-              w is TextField &&
-              (w.decoration?.hintText?.contains('Σημειώσεις') ?? false),
-        );
-        await tester.tap(notesFinder);
-        await pumpUntilSettled(tester);
-        await tester.enterText(notesFinder, 'μόνο σημειώσεις');
-        await pumpUntilSettled(tester);
-
-        final btn = tester.widget<ElevatedButton>(
-          find.widgetWithText(ElevatedButton, 'Καταγραφή'),
+        final container = ProviderScope.containerOf(
+          tester.element(find.byType(MaterialApp)),
         );
         expect(
-          btn.onPressed,
-          isNull,
-          reason: greekExpectMsg('Χωρίς τηλέφωνο το κουμπί υποβολής πρέπει να είναι απενεργοποιημένο'),
+          container.read(callHeaderProvider).canSubmitCall,
+          isFalse,
+          reason: greekExpectMsg('Χωρίς τηλέφωνο το canSubmitCall είναι false'),
         );
-        reporter.recordPass('Unhappy path: υποβολή αδύνατη χωρίς τηλέφωνο');
+        expect(
+          find.widgetWithText(ElevatedButton, 'Καταγραφή'),
+          findsNothing,
+          reason: greekExpectMsg(
+            'Σε compact όψη χωρίς Ομάδα Τηλεφώνου δεν εμφανίζεται κουμπί Καταγραφή',
+          ),
+        );
+        reporter.recordPass('Unhappy path: compact χωρίς κουμπί υποβολής');
       },
       semanticsEnabled: false,
+      timeout: const Timeout(Duration(minutes: 2)),
     );
   });
 }

@@ -2,6 +2,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../provider/call_entry_provider.dart';
+import '../../layout/calls_field_groups.dart';
 import '../../provider/call_header_provider.dart';
 import '../../provider/lookup_provider.dart';
 import '../../../../core/providers/call_department_prefill_intent_provider.dart';
@@ -19,7 +20,7 @@ const double _kHeaderFieldGap = 12.0;
 
 /// Κενό πριν τα trailing στοιχεία + ελάχιστο πλάτος κουμπιού «Καθαρισμός όλων».
 const double _kHeaderTrailingGap = 4.0;
-const double _kHeaderClearAllButtonWidth = 40.0;
+const double _kHeaderClearAllButtonWidth = 48.0;
 
 /// Χώρος εκτός πεδίων στην ίδια Row: 3 κενά, trailing gap, κουμπί ×.
 const double _kHeaderGapsAndIcons =
@@ -223,7 +224,7 @@ class _CallHeaderFormState extends ConsumerState<CallHeaderForm> {
         var w2 = available * _kHeaderWidthRatioCaller / _kHeaderWidthRatioSum;
         var wDept = available * _kHeaderWidthRatioDept / _kHeaderWidthRatioSum;
         var w3 = available * _kHeaderWidthRatioEquipment / _kHeaderWidthRatioSum;
-        // Ασφάλεια αριθμητικής ακρίβειας: ποτέ overflow στη Row.
+        // Ασφάλεια αριθμητικής ακρίβειας: ποτέ overflow στη Row (υπολογισμός υπολοίπου στο τελευταίο πεδίο).
         final fieldsSum = w1 + w2 + wDept + w3;
         if (fieldsSum > available && fieldsSum > 0) {
           final scale = available / fieldsSum;
@@ -232,6 +233,7 @@ class _CallHeaderFormState extends ConsumerState<CallHeaderForm> {
           wDept *= scale;
           w3 *= scale;
         }
+        w3 = (available - w1 - w2 - wDept).clamp(0.0, double.infinity);
         final equipmentColumnOffset =
             w1 + _kHeaderFieldGap + w2 + _kHeaderFieldGap + wDept + _kHeaderFieldGap;
 
@@ -246,7 +248,7 @@ class _CallHeaderFormState extends ConsumerState<CallHeaderForm> {
                   Align(
                     alignment: Alignment.centerLeft,
                     child: Text(
-                      'Νέα Κλήση',
+                      CallsScreenTitleResolver.resolve(header),
                       style: theme.textTheme.titleMedium?.copyWith(
                         fontWeight: FontWeight.w700,
                       ),
@@ -367,10 +369,12 @@ class _CallHeaderFormState extends ConsumerState<CallHeaderForm> {
               ),
               trailingRowChildren: [
                 const SizedBox(width: _kHeaderTrailingGap),
-                Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
+                SizedBox(
+                  width: _kHeaderClearAllButtonWidth,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
                     // Αόρατος placeholder ίδιου ύψους με τη γραμμή ετικέτας (label)
                     // των πεδίων, ώστε το κόκκινο × να κατέβει στο κέντρο του
                     // TextField και να ευθυγραμμιστεί με τα × των πεδίων.
@@ -415,6 +419,7 @@ class _CallHeaderFormState extends ConsumerState<CallHeaderForm> {
                     ),
                   ],
                 ),
+              ),
               ],
             ),
           ],

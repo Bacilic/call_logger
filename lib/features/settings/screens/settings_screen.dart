@@ -621,10 +621,10 @@ class _CallsScreenCardsEditorDialogState
                     setState(() => _v = _v.copyWith(showUserCard: b)),
               ),
               row(
-                title: 'Κάρτα εξοπλισμού',
-                value: _v.showEquipmentCard,
+                title: 'Χάρτης',
+                value: _v.showMapCard,
                 onChanged: (b) =>
-                    setState(() => _v = _v.copyWith(showEquipmentCard: b)),
+                    setState(() => _v = _v.copyWith(showMapCard: b)),
               ),
               row(
                 title: 'Πρόσφατο ιστορικό υπαλλήλου',

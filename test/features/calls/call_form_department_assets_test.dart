@@ -593,13 +593,8 @@ Future<void> _expectDepartmentPhoneOverlayVisible(
 }
 
 Future<void> _finishCallFormWidgetTest(WidgetTester tester) async {
-  final notesFinder = find.byWidgetPredicate(
-    (w) =>
-        w is TextField &&
-        (w.decoration?.hintText?.contains('Σημειώσεις') ?? false),
-  );
-  await tester.tap(notesFinder);
-  await pumpUntilSettled(tester);
+  // sqflite lock retry timer (10s) — βλ. test_setup.dart tearDown.
+  // Σημειώσεις εμφανίζονται μόνο με ενεργή Ομάδα Τηλεφώνου· μην απαιτείται εδώ.
   await tester.pump(const Duration(seconds: 11));
   while (tester.takeException() != null) {}
 }

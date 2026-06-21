@@ -15,7 +15,7 @@ import '../../../directory/models/department_model.dart';
 import '../../models/equipment_model.dart';
 import '../../models/user_model.dart';
 
-enum _MiniMapMode { equipment, phone, user }
+enum _MiniMapMode { department, equipment, phone, user }
 
 class MiniMapCard extends ConsumerStatefulWidget {
   const MiniMapCard({
@@ -25,6 +25,7 @@ class MiniMapCard extends ConsumerStatefulWidget {
     required this.phoneText,
     required this.user,
     this.callerDisplayText = '',
+    this.departmentId,
   });
 
   final EquipmentModel? equipment;
@@ -32,6 +33,8 @@ class MiniMapCard extends ConsumerStatefulWidget {
   final String phoneText;
   final UserModel? user;
   final String callerDisplayText;
+  /// Selected department from header (priority source for map).
+  final int? departmentId;
 
   @override
   ConsumerState<MiniMapCard> createState() => _MiniMapCardState();
@@ -64,7 +67,8 @@ class _MiniMapCardState extends ConsumerState<MiniMapCard> {
         oldWidget.phoneText != widget.phoneText ||
         oldWidget.callerDisplayText != widget.callerDisplayText ||
         oldWidget.user?.id != widget.user?.id ||
-        oldWidget.user?.departmentId != widget.user?.departmentId;
+        oldWidget.user?.departmentId != widget.user?.departmentId ||
+        oldWidget.departmentId != widget.departmentId;
     if (changed) {
       _dataFuture = _loadData();
     }
@@ -195,17 +199,22 @@ class _MiniMapCardState extends ConsumerState<MiniMapCard> {
     final userDeptId = widget.user?.departmentId;
     final userDeptIds = userDeptId == null ? const <int>[] : <int>[userDeptId];
 
+    final headerDeptId = widget.departmentId;
     final equipmentDeptId = equipmentDeptIds.isNotEmpty ? equipmentDeptIds.first : null;
     final phoneDeptId = phoneDeptIds.isNotEmpty ? phoneDeptIds.first : null;
     final userDeptFallback = userDeptIds.isNotEmpty ? userDeptIds.first : null;
 
-    _MiniMapMode mode = _MiniMapMode.equipment;
-    if (equipmentDeptId == null && phoneDeptId != null) {
-      mode = _MiniMapMode.phone;
-    } else if (equipmentDeptId == null &&
-        phoneDeptId == null &&
-        userDeptFallback != null) {
-      mode = _MiniMapMode.user;
+    // Priority: Department → Equipment → Caller (design doc §7).
+    _MiniMapMode mode = _MiniMapMode.department;
+    if (headerDeptId == null) {
+      mode = _MiniMapMode.equipment;
+      if (equipmentDeptId == null && phoneDeptId != null) {
+        mode = _MiniMapMode.phone;
+      } else if (equipmentDeptId == null &&
+          phoneDeptId == null &&
+          userDeptFallback != null) {
+        mode = _MiniMapMode.user;
+      }
     }
 
     final hasToggle =
@@ -213,6 +222,7 @@ class _MiniMapCardState extends ConsumerState<MiniMapCard> {
         phoneDeptId != null &&
         equipmentDeptId != phoneDeptId;
     final selectedDeptId = switch (mode) {
+      _MiniMapMode.department => headerDeptId ?? equipmentDeptId ?? userDeptFallback ?? phoneDeptId,
       _MiniMapMode.equipment => equipmentDeptId ?? phoneDeptId ?? userDeptFallback,
       _MiniMapMode.phone => phoneDeptId ?? equipmentDeptId ?? userDeptFallback,
       _MiniMapMode.user => userDeptFallback ?? equipmentDeptId ?? phoneDeptId,
@@ -314,6 +324,13 @@ class _MiniMapCardState extends ConsumerState<MiniMapCard> {
     _MiniMapMode mode,
   ) {
     final fallback = data.selectedDepartmentId;
+    if (mode == _MiniMapMode.department) {
+      return _MiniMapTarget(
+        label: 'Θέση τμήματος',
+        departmentId: widget.departmentId ?? fallback,
+        pendingEntity: widget.departmentId,
+      );
+    }
     if (mode == _MiniMapMode.phone) {
       return _MiniMapTarget(
         label: 'Θέση τηλεφώνου',

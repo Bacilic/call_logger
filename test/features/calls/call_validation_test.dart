@@ -6,6 +6,7 @@
 //
 //   flutter test test/features/calls/call_validation_test.dart
 
+import 'package:call_logger/features/calls/layout/calls_field_groups_provider.dart';
 import 'package:call_logger/features/calls/provider/call_header_provider.dart';
 import 'package:call_logger/features/calls/provider/lookup_provider.dart';
 import 'package:call_logger/features/calls/screens/calls_screen.dart';
@@ -68,26 +69,14 @@ void main() {
           reason: greekExpectMsg('Οθόνη Κλήσεων για πρόσβαση στο callHeaderProvider'),
         );
 
-        final phoneField = callLoggerPhoneTextField();
-        expect(
-          phoneField,
-          findsOneWidget,
-          reason: greekExpectMsg('Πεδίο εσωτερικού τηλεφώνου (CallHeaderForm)'),
-        );
-
-        report.logStep('Πληκτρολόγηση στο πεδίο τηλεφώνου (έγκυρα ψηφία seed)');
-        await tester.tap(phoneField);
-        await pumpUntilSettled(tester);
-        await tester.enterText(phoneField, kTestPhoneDigits);
-        await pumpUntilSettled(tester);
-
         report.logStep(
-          'Ορισμός 210-LAB στο provider (άκυρο για υποβολή· δεν περνάει από digitsOnly πεδίο)',
+          'Ορισμός 210-LAB στο provider (άκυρο για υποβολή· χωρίς lookup)',
         );
         final container = ProviderScope.containerOf(
           tester.element(find.byType(CallsScreen)),
         );
         container.read(callHeaderProvider.notifier).updatePhone('210-LAB');
+        container.read(callsFieldConfirmationsProvider.notifier).confirmPhone();
         await tester.pump();
         await pumpUntilSettled(tester);
 
@@ -108,6 +97,9 @@ void main() {
           ),
         );
         report.logStep('Επιβεβαιώθηκε απενεργοποιημένο κουμπί για 210-LAB');
+        report.recordPass('210-LAB κρατά απενεργοποιημένο το κουμπί Καταγραφή');
+        // sqflite lock retry timer (10s) — βλ. test_setup tearDown σχόλιο.
+        await tester.pump(const Duration(seconds: 11));
       },
       semanticsEnabled: false,
     );

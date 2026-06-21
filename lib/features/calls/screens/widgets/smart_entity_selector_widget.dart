@@ -8,6 +8,7 @@ import 'smart_entity_selector_department_field.dart';
 import 'smart_entity_selector_equipment_field.dart';
 import 'smart_entity_selector_phone_field.dart';
 import 'smart_entity_selector_phone_presentational.dart';
+import '../../layout/calls_field_groups_provider.dart';
 
 /// Προαιρετικές γέφυρες προς χρονόμετρο κλήσης (call entry) — null = no-op για επαναχρήση αλλού.
 class SmartEntityCallEntryHooks {
@@ -70,6 +71,7 @@ class SmartEntitySelectorWidgetState
       departmentText: _departmentController.text,
       equipmentText: _equipmentController.text,
     );
+    _syncFieldConfirmations();
   }
 
   void _onPhoneFocusOut() {
@@ -129,10 +131,22 @@ class SmartEntitySelectorWidgetState
     }
   }
 
+  void _syncFieldConfirmations() {
+    final conf = ref.read(callsFieldConfirmationsProvider.notifier);
+    final header = ref.read(widget.provider);
+    final phoneDigits =
+        _phoneController.text.replaceAll(RegExp(r'[^0-9]'), '');
+    if (phoneDigits.length >= 2) conf.confirmPhone();
+    if (_equipmentController.text.trim().isNotEmpty) conf.confirmEquipment();
+    if (header.selectedDepartmentId != null) conf.confirmDepartment();
+    if (header.selectedCaller?.id != null) conf.confirmCaller();
+  }
+
   void requestPhoneFocus() => _phoneFocusNode.requestFocus();
 
   /// Ίδια συμπεριφορά με το προηγούμενο κουμπί «Καθαρισμός όλων»: controllers + state + timer.
   void performClearAllFields() {
+    ref.read(callsScreenExpandedLatchProvider.notifier).engage();
     _phoneController.clear();
     _callerController.clear();
     _departmentController.clear();
@@ -171,6 +185,23 @@ class SmartEntitySelectorWidgetState
             ),
           );
         }
+      }
+      if (next.selectedCaller?.id != null &&
+          next.selectedCaller?.id != previous?.selectedCaller?.id) {
+        ref.read(callsFieldConfirmationsProvider.notifier).confirmCaller();
+      }
+      if (next.selectedDepartmentId != null &&
+          next.selectedDepartmentId != previous?.selectedDepartmentId) {
+        ref.read(callsFieldConfirmationsProvider.notifier).confirmDepartment();
+      }
+      if (next.selectedEquipment != null &&
+          next.selectedEquipment?.id != previous?.selectedEquipment?.id) {
+        ref.read(callsFieldConfirmationsProvider.notifier).confirmEquipment();
+      }
+      final phoneDigits =
+          (next.selectedPhone ?? '').replaceAll(RegExp(r'[^0-9]'), '');
+      if (phoneDigits.length >= 2) {
+        ref.read(callsFieldConfirmationsProvider.notifier).confirmPhone();
       }
       if (next.callerDisplayText != _callerController.text) {
         if (!(_callerFocusNode.hasFocus &&
@@ -227,6 +258,7 @@ class SmartEntitySelectorWidgetState
         departmentText: _departmentController.text,
         equipmentText: _equipmentController.text,
       );
+      _syncFieldConfirmations();
     }
 
     return Column(
