@@ -1,3 +1,5 @@
+import 'dart:io' show Platform;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -35,6 +37,8 @@ class CallsScreenLayout extends ConsumerWidget {
   static const double _kSharedAxisMaxWidth = 424;
   static const double _kSharedAxisMaxWidthWithRemote = 340;
   static const double _kGlobalRecentCardMaxWidth = 560;
+  static const double _kScreenPadding = 16;
+  static const Duration _kHeaderMoveDuration = Duration(milliseconds: 350);
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -42,35 +46,137 @@ class CallsScreenLayout extends ConsumerWidget {
     final anyGroupActive = ref.watch(
       callsFieldGroupsProvider.select((g) => g.anyGroupActive),
     );
+    final cardsVis = ref
+        .watch(callsScreenCardsVisibilityProvider)
+        .maybeWhen(
+          data: (v) => v,
+          orElse: () => CallsScreenCardsVisibility.defaults,
+        );
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final width = constraints.maxWidth.isFinite
-              ? constraints.maxWidth
-              : MediaQuery.sizeOf(context).width;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final width = constraints.maxWidth.isFinite
+            ? constraints.maxWidth
+            : MediaQuery.sizeOf(context).width;
+        final innerHeight = constraints.maxHeight.isFinite
+            ? (constraints.maxHeight - 2 * _kScreenPadding)
+                .clamp(0.0, double.infinity)
+            : double.infinity;
 
-          if (!isExpanded) {
-            return _CompactShell(width: width);
-          }
-
-          return SizedBox(
+        return Padding(
+          padding: const EdgeInsets.all(_kScreenPadding),
+          child: SizedBox(
             width: width,
-            child: Column(
+            height: innerHeight.isFinite ? innerHeight : null,
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Positioned.fill(
+                  child: _CallsMainContent(
+                    isExpanded: isExpanded,
+                    anyGroupActive: anyGroupActive,
+                  ),
+                ),
+                if (cardsVis.showGlobalRecentCard)
+                  Positioned(
+                    right: 0,
+                    bottom: 0,
+                    child: _TkBottomRightAnchor(
+                      width: width,
+                      isExpanded: isExpanded,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// Κύριο περιεχόμενο: συμπτυγμένα κεντραρισμένα πεδία ή αναπτυγμένη κεφαλίδα + πλέγμα.
+class _CallsMainContent extends StatelessWidget {
+  const _CallsMainContent({
+    required this.isExpanded,
+    required this.anyGroupActive,
+  });
+
+  final bool isExpanded;
+  final bool anyGroupActive;
+
+  @override
+  Widget build(BuildContext context) {
+    final duration = Platform.isWindows
+        ? CallsScreenLayout._kHeaderMoveDuration
+        : Duration.zero;
+
+    return AnimatedSwitcher(
+      duration: duration,
+      switchInCurve: Curves.easeOutCubic,
+      switchOutCurve: Curves.easeOutCubic,
+      layoutBuilder: (currentChild, previousChildren) {
+        return Stack(
+          alignment: isExpanded ? Alignment.topCenter : Alignment.center,
+          fit: StackFit.expand,
+          children: [
+            ...previousChildren,
+            if (currentChild != null) currentChild,
+          ],
+        );
+      },
+      child: isExpanded
+          ? Column(
+              key: const ValueKey('expanded'),
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 const CallHeaderForm(),
                 const SizedBox(height: 16),
-                if (!anyGroupActive)
-                  const _EditingLatchBody()
-                else
-                  const _ExpandedPlanBody(),
+                Expanded(
+                  child: SingleChildScrollView(
+                    child: anyGroupActive
+                        ? const _ExpandedPlanBody()
+                        : const _EditingLatchBody(),
+                  ),
+                ),
               ],
+            )
+          : Center(
+              key: const ValueKey('compact'),
+              child: const CallHeaderForm(),
             ),
-          );
-        },
-      ),
+    );
+  }
+}
+
+/// Διακόπτης ΤΚ — κάτω δεξιά μόνο όταν η κάρτα είναι κλειστή.
+/// Συμπτυγμένη ανοιχτή: κάρτα εδώ (με δικό της Switch). Αναπτυγμένη ανοιχτή: κάρτα στο πλάνο.
+class _TkBottomRightAnchor extends ConsumerWidget {
+  const _TkBottomRightAnchor({
+    required this.width,
+    required this.isExpanded,
+  });
+
+  final double width;
+  final bool isExpanded;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final showGlobal = ref.watch(showGlobalCallsToggleProvider);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (!isExpanded && showGlobal)
+          ConstrainedBox(
+            constraints: const BoxConstraints(
+              maxWidth: CallsScreenLayout._kGlobalRecentCardMaxWidth,
+            ),
+            child: const GlobalRecentCallsList(),
+          ),
+        if (!showGlobal) const _GlobalRecentToggle(showExpanded: false),
+      ],
     );
   }
 }
@@ -125,9 +231,7 @@ class _ExpandedPlanBody extends ConsumerWidget {
     final hasEquipmentHistory = selectedEquipmentCode.isNotEmpty &&
         groups.equipmentTier == EquipmentGroupTier.matchedRecord;
 
-    final showGlobalRecent =
-        cardsVis.showGlobalRecentCard &&
-        ref.watch(showGlobalCallsToggleProvider);
+    final tkOpenInGrid = ref.watch(showGlobalCallsToggleProvider);
 
     final visibility = CallsLayoutVisibility.from(
       cards: cardsVis,
@@ -135,7 +239,8 @@ class _ExpandedPlanBody extends ConsumerWidget {
       showRemoteTools: showRemoteButtons,
       hasCallerHistoryData: hasCallerHistory,
       hasEquipmentHistoryData: hasEquipmentHistory,
-      showGlobalRecentCard: showGlobalRecent,
+      showGlobalRecentCard:
+          cardsVis.showGlobalRecentCard && tkOpenInGrid,
     );
 
     final plan = CallsLayoutEngine.build(groups, visibility);
@@ -193,49 +298,6 @@ class _EditingLatchShell extends ConsumerWidget {
         const SizedBox(height: 12),
         _SubmitActionsRow(header: header, sharedAxisWidth: sharedAxisWidth),
       ],
-    );
-  }
-}
-
-class _CompactShell extends ConsumerWidget {
-  const _CompactShell({required this.width});
-
-  final double width;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final showGlobal = ref.watch(showGlobalCallsToggleProvider);
-    final cardsVis = ref
-        .watch(callsScreenCardsVisibilityProvider)
-        .maybeWhen(
-          data: (v) => v,
-          orElse: () => CallsScreenCardsVisibility.defaults,
-        );
-
-    return SizedBox(
-      width: width,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          const CallHeaderForm(),
-          if (cardsVis.showGlobalRecentCard) ...[
-            const SizedBox(height: 24),
-            Align(
-              alignment: Alignment.centerRight,
-              child: _GlobalRecentToggle(showExpanded: showGlobal),
-            ),
-            if (showGlobal) ...[
-              const SizedBox(height: 12),
-              ConstrainedBox(
-                constraints: const BoxConstraints(
-                  maxWidth: CallsScreenLayout._kGlobalRecentCardMaxWidth,
-                ),
-                child: const GlobalRecentCallsList(),
-              ),
-            ],
-          ],
-        ],
-      ),
     );
   }
 }
@@ -462,18 +524,23 @@ class _CategoryPendingRow extends ConsumerWidget {
           const SizedBox(width: 6),
           Checkbox(
             value: isPending,
-            onChanged: notesNonEmpty ? (_) => ref.read(callEntryProvider.notifier).togglePending() : null,
+            onChanged: notesNonEmpty
+                ? (_) => ref.read(callEntryProvider.notifier).togglePending()
+                : null,
           ),
           GestureDetector(
             onTap: notesNonEmpty
                 ? ref.read(callEntryProvider.notifier).togglePending
-                : () => ref.read(notesFieldHintTickProvider.notifier).requestHintFlash(),
+                : () =>
+                      ref.read(notesFieldHintTickProvider.notifier).requestHintFlash(),
             child: Text(
               'Εκκρεμότητα',
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                 color: notesNonEmpty
                     ? null
-                    : Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.38),
+                    : Theme.of(context).colorScheme.onSurface.withValues(
+                        alpha: 0.38,
+                      ),
               ),
             ),
           ),
@@ -510,7 +577,8 @@ class _SubmitActionsRow extends ConsumerWidget {
     final notifier = ref.read(callEntryProvider.notifier);
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    final submitPadding = const EdgeInsets.symmetric(vertical: 14, horizontal: 14);
+    final submitPadding =
+        const EdgeInsets.symmetric(vertical: 14, horizontal: 14);
     final primarySubmit = ElevatedButton.icon(
       onPressed: header.canSubmitCall
           ? () async {
