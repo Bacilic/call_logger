@@ -25,6 +25,8 @@ import 'user_name_change_confirm_dialog.dart';
 import 'user_phone_department_conflict_dialog.dart';
 import 'user_form_smart_text_field.dart';
 
+enum _UserFormDismissChoice { keep, discard, continueEditing }
+
 /// Διάλογος φόρμας για δημιουργία/επεξεργασία/αντίγραφο χρήστη.
 class UserFormDialog extends ConsumerStatefulWidget {
   const UserFormDialog({
@@ -86,6 +88,100 @@ class _UserFormDialogState extends ConsumerState<UserFormDialog> {
     // Εμφανιζόμενο κείμενο (όχι μόνο κανονικοποίηση): τόνοι/κεφαλαία μετράνε ως αλλαγή.
     if (_departmentController.text.trim() != _initialDepartmentText) return true;
     return false;
+  }
+
+  /// Νέος/αντίγραφο χρήστη: υποχρεωτικά όνομα και επώνυμο πριν εμφανιστεί προειδοποίηση.
+  bool get _createHasRequiredFields =>
+      _lastNameController.text.trim().isNotEmpty &&
+      _firstNameController.text.trim().isNotEmpty;
+
+  bool get _shouldConfirmDismiss =>
+      _isEdit ? _isDirty : _createHasRequiredFields;
+
+  List<String> _changedFieldLabels() {
+    final changes = <String>[];
+    if (_lastNameController.text.trim() != _snapLastName) {
+      changes.add('Επώνυμο');
+    }
+    if (_firstNameController.text.trim() != _snapFirstName) {
+      changes.add('Όνομα');
+    }
+    if (_phoneController.text.trim() != _snapPhone) {
+      changes.add('Τηλέφωνο');
+    }
+    if (_departmentController.text.trim() != _initialDepartmentText) {
+      changes.add('Τμήμα');
+    }
+    if (_notesController.text.trim() != _snapNotes) {
+      changes.add('Σημειώσεις');
+    }
+    return changes;
+  }
+
+  Future<_UserFormDismissChoice?> _showDismissConfirmationDialog() async {
+    final changes = _changedFieldLabels();
+    return showDialog<_UserFormDismissChoice>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Μη αποθηκευμένες αλλαγές'),
+        content: SizedBox(
+          width: 420,
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text('Έχουν γίνει αλλαγές:'),
+                const SizedBox(height: 8),
+                for (final label in changes) Text('• $label'),
+                const SizedBox(height: 12),
+                const Text('Θέλεται να γίνει:'),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(
+              ctx,
+            ).pop(_UserFormDismissChoice.continueEditing),
+            child: const Text('Επεξεργασία'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(_UserFormDismissChoice.discard),
+            child: const Text('Ακύρωση Αλλαγών'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(_UserFormDismissChoice.keep),
+            child: const Text('Διατήρηση'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _requestClose() async {
+    if (!_shouldConfirmDismiss) {
+      if (mounted) Navigator.of(context).pop();
+      return;
+    }
+    final choice = await _showDismissConfirmationDialog();
+    if (!mounted ||
+        choice == null ||
+        choice == _UserFormDismissChoice.continueEditing) {
+      return;
+    }
+    if (choice == _UserFormDismissChoice.discard) {
+      Navigator.of(context).pop();
+      return;
+    }
+    await _save();
+  }
+
+  /// Κουμπί «Ακύρωση»: κλείσιμο χωρίς διάλογο επιβεβαίωσης (εκούσια απόρριψη).
+  void _cancelAndClose() {
+    if (mounted) Navigator.of(context).pop();
   }
 
   void _selectAll(TextEditingController c) {
@@ -563,9 +659,9 @@ class _UserFormDialogState extends ConsumerState<UserFormDialog> {
   }
 
   String get _title {
-    if (_isEdit) return 'Επεξεργασία χρήστη';
-    if (widget.isClone) return 'Αντίγραφο χρήστη';
-    return 'Νέος χρήστης';
+    if (_isEdit) return 'Επεξεργασία Υπαλλήλου';
+    if (widget.isClone) return 'Αντίγραφο Υπαλλήλου';
+    return 'Νέος Υπάλληλος';
   }
 
   /// Μοναδικά επώνυμα από κατάλογο· ίδιο [UserIdentityNormalizer] κλειδί επωνύμου → μία πρόταση.
@@ -646,6 +742,32 @@ class _UserFormDialogState extends ConsumerState<UserFormDialog> {
     );
   }
 
+  String _phoneDisplayStringForAutocompleteOption(String option) {
+    final text = _phoneController.text;
+    final offset = _phoneController.selection.isValid
+        ? _phoneController.selection.extentOffset
+        : text.length;
+    return PhoneListParser.replaceActiveSegment(
+      text: text,
+      cursor: offset,
+      replacement: option,
+    ).text;
+  }
+
+  Iterable<String> _phoneAutocompleteOptions(TextEditingValue value) {
+    final offset = value.selection.isValid
+        ? value.selection.extentOffset
+        : value.text.length;
+    final segment = PhoneListParser.activeSegmentBounds(
+      value.text,
+      offset,
+    ).segmentIn(value.text);
+    return PhoneListParser.autocompletePhonesForSegment(
+      allKnownPhones: LookupService.instance.getAllKnownPhones(),
+      segmentQuery: segment,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     ref
@@ -673,7 +795,13 @@ class _UserFormDialogState extends ConsumerState<UserFormDialog> {
     final firstNameOptions = _catalogFirstNameOptionsSortedForLast(
       _lastNameController.text,
     );
-    return AlertDialog(
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) async {
+        if (didPop) return;
+        await _requestClose();
+      },
+      child: AlertDialog(
       title: Text(_title),
       content: Form(
         key: _formKey,
@@ -764,14 +892,49 @@ class _UserFormDialogState extends ConsumerState<UserFormDialog> {
                 },
               ),
               const SizedBox(height: 12),
-              UserFormSmartTextField(
-                controller: _phoneController,
+              RawAutocomplete<String>(
+                textEditingController: _phoneController,
                 focusNode: _phoneFocusNode,
-                decoration: const InputDecoration(
-                  labelText: 'Τηλέφωνο',
-                  border: OutlineInputBorder(),
-                ),
-                keyboardType: TextInputType.phone,
+                optionsBuilder: _phoneAutocompleteOptions,
+                displayStringForOption: _phoneDisplayStringForAutocompleteOption,
+                onSelected: (option) {
+                  final offset = _phoneController.selection.isValid
+                      ? _phoneController.selection.extentOffset
+                      : _phoneController.text.length;
+                  final updated = PhoneListParser.replaceActiveSegment(
+                    text: _phoneController.text,
+                    cursor: offset,
+                    replacement: option,
+                  );
+                  final cursorPos = updated.cursor;
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    if (!mounted) return;
+                    _phoneController.selection = TextSelection.collapsed(
+                      offset: cursorPos.clamp(0, _phoneController.text.length),
+                    );
+                  });
+                  _onFieldChanged();
+                },
+                fieldViewBuilder: (context, controller, focusNode, _) {
+                  return UserFormSmartTextField(
+                    controller: controller,
+                    focusNode: focusNode,
+                    decoration: const InputDecoration(
+                      labelText: 'Τηλέφωνο',
+                      border: OutlineInputBorder(),
+                      hintText: 'Πολλαπλά τηλέφωνα χωρισμένα με κόμμα',
+                    ),
+                    keyboardType: TextInputType.phone,
+                    onChanged: (_) => _onFieldChanged(),
+                  );
+                },
+                optionsViewBuilder: (context, onSelected, options) {
+                  return _nameAutocompleteOptionsView(
+                    context,
+                    onSelected,
+                    options,
+                  );
+                },
               ),
               const SizedBox(height: 12),
               RawAutocomplete<String>(
@@ -831,7 +994,7 @@ class _UserFormDialogState extends ConsumerState<UserFormDialog> {
       ),
       actions: [
         TextButton(
-          onPressed: () => Navigator.of(context).pop(),
+          onPressed: _cancelAndClose,
           child: const Text('Ακύρωση'),
         ),
         FilledButton(
@@ -839,6 +1002,7 @@ class _UserFormDialogState extends ConsumerState<UserFormDialog> {
           child: Text(_isEdit ? 'Αποθήκευση' : 'Προσθήκη'),
         ),
       ],
+    ),
     );
   }
 }

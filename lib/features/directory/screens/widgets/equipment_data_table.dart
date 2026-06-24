@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 
 import '../../../../core/services/default_remote_tool_display.dart';
 import '../../models/equipment_column.dart';
+import 'catalog_table_hover_focus.dart';
 
 const _minColumnWidth = 40.0;
 const _maxColumnWidth = 600.0;
@@ -578,7 +579,8 @@ class _EquipmentDataTableState extends State<EquipmentDataTable> {
       focusNode: _tableFocusNode,
       onKeyEvent: _handleKey,
       child: MouseRegion(
-        onEnter: (_) => _tableFocusNode.requestFocus(),
+        onEnter: (_) =>
+            requestCatalogTableKeyboardFocusOnHover(_tableFocusNode),
         child: LayoutBuilder(
           builder: (context, constraints) {
             final Widget tableContent;

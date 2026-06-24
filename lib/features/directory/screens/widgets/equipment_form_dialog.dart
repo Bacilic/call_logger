@@ -22,6 +22,8 @@ import '../../../calls/utils/equipment_remote_param_key.dart';
 import '../../../calls/utils/vnc_remote_target.dart';
 import '../../providers/equipment_directory_provider.dart';
 
+enum _EditDismissAction { save, discard, keepEditing }
+
 /// Διάλογος φόρμας για δημιουργία/επεξεργασία/αντίγραφο εξοπλισμού.
 class EquipmentFormDialog extends StatefulWidget {
   const EquipmentFormDialog({
@@ -81,6 +83,204 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog> {
   bool _didPruneUnknownRemoteKeys = false;
 
   bool get _isEdit => widget.initialEquipment != null && !widget.isClone;
+
+  /// Στιγμιότυπο αρχικής κατάστασης μετά ολοκλήρωση bootstrap (prefill/async).
+  late String _initialFormSignature;
+  bool _formBaselineCaptured = false;
+
+  bool get _isDirty =>
+      _formBaselineCaptured && _formStateSignature() != _initialFormSignature;
+
+  /// Νέος εξοπλισμός: υποχρεωτικός κωδικός πριν επιτραπεί αποθήκευση.
+  bool get _createHasRequiredFields => _codeController.text.trim().isNotEmpty;
+
+  bool get _canSubmitSave =>
+      _isDirty && (_isEdit ? true : _createHasRequiredFields);
+
+  bool get _shouldConfirmDismissOnClose {
+    if (!_formBaselineCaptured) return false;
+    if (_isEdit) return _isDirty;
+    return _createHasRequiredFields && _isDirty;
+  }
+
+  void _markFormChanged() => setState(() {});
+
+  String _formStateSignature() {
+    final sb = StringBuffer()
+      ..write(_codeController.text)
+      ..write('\u001e')
+      ..write(_selectedType ?? '')
+      ..write('\u001e')
+      ..write(_notesController.text)
+      ..write('\u001e')
+      ..write(_selectedUserId ?? '')
+      ..write('\u001e')
+      ..write(_ownerController.text)
+      ..write('\u001e')
+      ..write(_departmentController.text)
+      ..write('\u001e')
+      ..write(_locationController.text)
+      ..write('\u001e')
+      ..write(_defaultRemoteToolId ?? '');
+    final remoteKeys = <String>{
+      ..._expandedRemoteKeys,
+      ..._remoteParamValues.keys,
+    }.toList()
+      ..sort();
+    for (final k in remoteKeys) {
+      sb
+        ..write('\u001e')
+        ..write(k)
+        ..write('\u001f')
+        ..write(_remoteParamValues[k] ?? '')
+        ..write('\u001f')
+        ..write(_expandedRemoteKeys.contains(k));
+    }
+    return sb.toString();
+  }
+
+  void _tryCaptureFormBaseline() {
+    if (_formBaselineCaptured) return;
+    if (widget.initialOwner?.id != null && !_ownerTextInitialized) return;
+    if (!_equipmentDepartmentTextInitialized) return;
+    if (widget.initialEquipment != null && !_didPruneUnknownRemoteKeys) {
+      return;
+    }
+    _initialFormSignature = _formStateSignature();
+    _formBaselineCaptured = true;
+  }
+
+  List<String> _buildChangedFieldLabels() {
+    if (!_formBaselineCaptured) return const [];
+    final init = _initialFormSignature.split('\u001e');
+    String initAt(int i) => i < init.length ? init[i] : '';
+
+    final labels = <String>[];
+    if (_codeController.text != initAt(0)) labels.add('Κωδικός');
+    if ((_selectedType ?? '') != initAt(1)) labels.add('Τύπος');
+    if (_notesController.text != initAt(2)) labels.add('Σημειώσεις');
+    if ('${_selectedUserId ?? ''}' != initAt(3) ||
+        _ownerController.text != initAt(4)) {
+      labels.add('Κάτοχος');
+    }
+    if (_departmentController.text != initAt(5)) labels.add('Τμήμα');
+    if (_locationController.text != initAt(6)) labels.add('Τοποθεσία');
+    if ('${_defaultRemoteToolId ?? ''}' != initAt(7)) {
+      labels.add('Προεπιλεγμένο εργαλείο');
+    }
+    final initRemote = init.length > 8 ? init.sublist(8).join('\u001e') : '';
+    final curRemote = _formStateSignature().split('\u001e');
+    final curRemoteTail =
+        curRemote.length > 8 ? curRemote.sublist(8).join('\u001e') : '';
+    if (initRemote != curRemoteTail) {
+      labels.add('Απομακρυσμένη σύνδεση');
+    }
+    return labels;
+  }
+
+  Future<_EditDismissAction?> _showEditDismissDialog(
+    List<String> changedLabels,
+  ) {
+    return showDialog<_EditDismissAction>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Μη αποθηκευμένες αλλαγές'),
+        content: SizedBox(
+          width: 420,
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text('Έχουν γίνει αλλαγές:'),
+                const SizedBox(height: 8),
+                for (final label in changedLabels) Text('• $label'),
+                const SizedBox(height: 12),
+                const Text('Θέλεται να γίνει:'),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(_EditDismissAction.save),
+            child: const Text('Διατήρηση'),
+          ),
+          FilledButton.tonal(
+            onPressed: () => Navigator.of(ctx).pop(_EditDismissAction.discard),
+            child: const Text('Ακύρωση Αλλαγών'),
+          ),
+          TextButton(
+            onPressed: () =>
+                Navigator.of(ctx).pop(_EditDismissAction.keepEditing),
+            child: const Text('Επεξεργασία'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<bool?> _showNewDismissDialog() {
+    return showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Μη αποθηκευμένα στοιχεία'),
+        content: const Text(
+          'Έχετε συμπληρώσει κωδικό εξοπλισμού χωρίς αποθήκευση. '
+          'Να κλείσει ο διάλογος;',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Επεξεργασία'),
+          ),
+          FilledButton.tonal(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Ακύρωση Αλλαγών'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _requestClose() async {
+    _tryCaptureFormBaseline();
+    if (!_shouldConfirmDismissOnClose) {
+      if (mounted) Navigator.of(context).pop();
+      return;
+    }
+
+    if (_isEdit) {
+      final labels = _buildChangedFieldLabels();
+      if (labels.isEmpty) {
+        if (mounted) Navigator.of(context).pop();
+        return;
+      }
+      final action = await _showEditDismissDialog(labels);
+      switch (action) {
+        case _EditDismissAction.save:
+          await _save();
+        case _EditDismissAction.discard:
+          if (mounted) Navigator.of(context).pop();
+        case _EditDismissAction.keepEditing:
+        case null:
+          break;
+      }
+      return;
+    }
+
+    final discard = await _showNewDismissDialog();
+    if (discard == true && mounted) {
+      Navigator.of(context).pop();
+    }
+  }
+
+  /// Κουμπί «Ακύρωση»: κλείσιμο χωρίς διάλογο επιβεβαίωσης (εκούσια απόρριψη).
+  void _cancelAndClose() {
+    if (mounted) Navigator.of(context).pop();
+  }
 
   void _initRemoteParamsFromEquipment(EquipmentModel? e) {
     _remoteParamValues.clear();
@@ -149,6 +349,7 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog> {
     setState(() {
       _pruneUnknownRemoteParamKeys(catalog);
       _recomputeDefaultRemoteFromChips(pairs, catalog);
+      _tryCaptureFormBaseline();
     });
   }
 
@@ -253,10 +454,35 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog> {
         _pruneRemoteParamsAfterCatalogLoad();
       });
     }
+    if (_selectedUserId == null) {
+      _ownerTextInitialized = true;
+    }
+    for (final c in [
+      _codeController,
+      _ownerController,
+      _departmentController,
+      _locationController,
+    ]) {
+      c.addListener(_markFormChanged);
+    }
+    _notesController.addListener(_markFormChanged);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _tryCaptureFormBaseline();
+    });
   }
 
   @override
   void dispose() {
+    for (final c in [
+      _codeController,
+      _ownerController,
+      _departmentController,
+      _locationController,
+    ]) {
+      c.removeListener(_markFormChanged);
+    }
+    _notesController.removeListener(_markFormChanged);
     _codeController.dispose();
     _notesController.dispose();
     for (final c in _remoteParamControllers.values) {
@@ -626,7 +852,13 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) async {
+        if (didPop) return;
+        await _requestClose();
+      },
+      child: AlertDialog(
       title: Text(_title),
       content: Form(
         key: _formKey,
@@ -759,7 +991,6 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog> {
                         } else {
                           final did = widget.initialEquipment?.departmentId;
                           if (did != null) {
-                            _equipmentDepartmentTextInitialized = true;
                             WidgetsBinding.instance.addPostFrameCallback((_) {
                               if (!mounted) return;
                               final name = LookupService.instance
@@ -769,7 +1000,10 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog> {
                               if (name.isNotEmpty) {
                                 _departmentController.text = name;
                               }
-                              setState(() {});
+                              setState(() {
+                                _equipmentDepartmentTextInitialized = true;
+                              });
+                              _tryCaptureFormBaseline();
                             });
                           } else {
                             _equipmentDepartmentTextInitialized = true;
@@ -922,10 +1156,12 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog> {
                             if (mounted) {
                               _ownerController.text = u.fullNameWithDepartment;
                               setState(() => _ownerTextInitialized = true);
+                              _tryCaptureFormBaseline();
                             }
                           });
                         } else {
                           _ownerTextInitialized = true;
+                          _tryCaptureFormBaseline();
                         }
                       }
                       final theme = Theme.of(context);
@@ -1048,14 +1284,15 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog> {
       ),
       actions: [
         TextButton(
-          onPressed: () => Navigator.of(context).pop(),
+          onPressed: _cancelAndClose,
           child: const Text('Ακύρωση'),
         ),
         FilledButton(
-          onPressed: _save,
+          onPressed: _canSubmitSave ? _save : null,
           child: Text(_isEdit ? 'Αποθήκευση' : 'Προσθήκη'),
         ),
       ],
+    ),
     );
   }
 }

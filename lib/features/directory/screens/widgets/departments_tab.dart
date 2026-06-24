@@ -18,6 +18,8 @@ import 'catalog_column_selector_shell.dart';
 import 'department_form_dialog.dart';
 import 'departments_data_table.dart';
 import '../../building_map/screens/building_map_dialog.dart';
+import 'catalog_tab_lookup_reload_mixin.dart';
+import 'catalog_search_field_sync.dart';
 
 /// Καρτέλα τμημάτων: αναζήτηση, πίνακας, επιλογή, διαγραφή με undo, προσθήκη.
 class DepartmentsTab extends ConsumerStatefulWidget {
@@ -27,12 +29,15 @@ class DepartmentsTab extends ConsumerStatefulWidget {
   ConsumerState<DepartmentsTab> createState() => _DepartmentsTabState();
 }
 
-class _DepartmentsTabState extends ConsumerState<DepartmentsTab> {
+class _DepartmentsTabState extends ConsumerState<DepartmentsTab>
+    with CatalogTabLookupReloadMixin {
   final TextEditingController _searchController = TextEditingController();
+  final FocusNode _searchFocus = FocusNode();
 
   @override
   void initState() {
     super.initState();
+    attachCatalogLookupReloadListener();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(departmentDirectoryProvider.notifier).loadDepartments();
     });
@@ -40,13 +45,14 @@ class _DepartmentsTabState extends ConsumerState<DepartmentsTab> {
 
   @override
   void dispose() {
+    detachCatalogLookupReloadListener();
+    _searchFocus.dispose();
     _searchController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    ref.watch(lookupServiceProvider);
     final floorsCatalogAsync = ref.watch(buildingMapFloorsCatalogProvider);
     final floorsById = <int, BuildingMapFloor>{
       for (final f in floorsCatalogAsync.value ?? <BuildingMapFloor>[])
@@ -58,12 +64,11 @@ class _DepartmentsTabState extends ConsumerState<DepartmentsTab> {
     final continuousScrollAsync =
         ref.watch(catalogDepartmentsContinuousScrollProvider);
     final continuousScroll = continuousScrollAsync.value ?? true;
-    if (_searchController.text != state.searchQuery) {
-      _searchController.text = state.searchQuery;
-      _searchController.selection = TextSelection.collapsed(
-        offset: _searchController.text.length,
-      );
-    }
+    syncCatalogSearchControllerFromState(
+      controller: _searchController,
+      focusNode: _searchFocus,
+      query: state.searchQuery,
+    );
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -75,6 +80,7 @@ class _DepartmentsTabState extends ConsumerState<DepartmentsTab> {
               Expanded(
                 child: TextField(
                   controller: _searchController,
+                  focusNode: _searchFocus,
                   onChanged: notifier.setSearchQuery,
                   decoration: InputDecoration(
                     labelText: 'Αναζήτηση',
@@ -85,7 +91,10 @@ class _DepartmentsTabState extends ConsumerState<DepartmentsTab> {
                         ? IconButton(
                             icon: const Icon(Icons.close),
                             tooltip: 'Καθαρισμός',
-                            onPressed: () => notifier.setSearchQuery(''),
+                            onPressed: () => clearCatalogSearchField(
+                              controller: _searchController,
+                              setSearchQuery: notifier.setSearchQuery,
+                            ),
                           )
                         : null,
                   ),

@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import '../../models/category_directory_column.dart';
 import '../../models/category_model.dart';
+import 'catalog_table_hover_focus.dart';
 
 /// Πίνακας κατηγοριών: sort, επιλογή, κύλιση (χωρίς σελιδοποίηση).
 class CategoriesDataTable extends StatefulWidget {
@@ -439,7 +440,8 @@ class _CategoriesDataTableState extends State<CategoriesDataTable> {
           focusNode: _tableFocusNode,
           onKeyEvent: _handleKey,
           child: MouseRegion(
-            onEnter: (_) => _tableFocusNode.requestFocus(),
+            onEnter: (_) =>
+                requestCatalogTableKeyboardFocusOnHover(_tableFocusNode),
             child: tableContent,
           ),
         );

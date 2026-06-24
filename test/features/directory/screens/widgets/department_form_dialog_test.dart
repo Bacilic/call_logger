@@ -44,7 +44,57 @@ bool _sameEquipmentCodes(List<String> actual, List<String> expected) {
 }
 
 const _kDepartmentFormTitle = 'Επεξεργασία τμήματος';
+const _kNewDepartmentFormTitle = 'Νέο τμήμα';
 const _kConflictDialogTitle = 'Εκκρεμή τηλέφωνα / εξοπλισμοί';
+const _kUnsavedChangesPrompt = 'Θέλεται να γίνει:';
+const _kOpenDepartmentFormButton = 'OPEN_DEPT_FORM';
+
+Finder _fieldByLabel(String label) {
+  return find.descendant(
+    of: find.byWidgetPredicate(
+      (w) => w is InputDecorator && w.decoration.labelText == label,
+    ),
+    matching: find.byType(EditableText),
+  );
+}
+
+Finder _buildingField() => _fieldByLabel('Κτίριο');
+
+Finder _departmentNameField() => _fieldByLabel('Όνομα');
+
+Future<void> _openDepartmentFormInDialog(
+  WidgetTester tester,
+  ProviderContainer container, {
+  DepartmentModel? initialDepartment,
+  required DepartmentDirectoryNotifier notifier,
+}) async {
+  await tester.pumpWidget(
+    UncontrolledProviderScope(
+      container: container,
+      child: MaterialApp(
+        home: Builder(
+          builder: (context) => Scaffold(
+            body: Center(
+              child: FilledButton(
+                onPressed: () => showDialog<void>(
+                  context: context,
+                  barrierDismissible: true,
+                  builder: (ctx) => DepartmentFormDialog(
+                    initialDepartment: initialDepartment,
+                    notifier: notifier,
+                  ),
+                ),
+                child: const Text(_kOpenDepartmentFormButton),
+              ),
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+  await tester.tap(find.text(_kOpenDepartmentFormButton));
+  await pumpUntilSettledLong(tester);
+}
 
 /// Περιμένει κλείσιμο διαλόγων (σύγκρουσης + κύρια φόρμα) = επιτυχής `_save`.
 /// Εναλλάσσει [runAsync] (πραγματικό I/O SQLite) με pump (frames για async UI).
@@ -351,6 +401,312 @@ void main() {
         );
       },
       semanticsEnabled: false,
+    );
+  });
+
+  group('Φόρμα τμήματος — προστασία μη αποθηκευμένων αλλαγών', () {
+    late int deptId;
+
+    setUp(() async {
+      deptId = await _seedFantasmaMixedSharedAssetsScenario();
+    });
+
+    testWidgets(
+      'επεξεργασία χωρίς αλλαγές: ακύρωση κλείνει χωρίς επιβεβαίωση',
+      (tester) async {
+        final container = ProviderContainer(
+          overrides: callLoggerTestProviderOverrides(),
+        );
+        addTearDown(container.dispose);
+
+        late DepartmentDirectoryNotifier notifier;
+        await tester.runAsync(() async {
+          await container.read(lookupServiceProvider.future);
+          notifier = container.read(departmentDirectoryProvider.notifier);
+          await notifier.loadDepartments();
+          await _openDepartmentFormInDialog(
+            tester,
+            container,
+            initialDepartment: DepartmentModel(
+              id: deptId,
+              name: _kFantasmaDepartmentName,
+              color: '#33691F',
+            ),
+            notifier: notifier,
+          );
+        });
+
+        await tester.tap(find.widgetWithText(TextButton, 'Ακύρωση'));
+        await pumpUntilSettled(tester);
+
+        expect(find.text(_kDepartmentFormTitle), findsNothing);
+        expect(find.text(_kUnsavedChangesPrompt), findsNothing);
+      },
+    );
+
+    testWidgets(
+      'επεξεργασία με αλλαγή κτιρίου: κουμπί ακύρωσης κλείνει χωρίς επιβεβαίωση',
+      (tester) async {
+        final container = ProviderContainer(
+          overrides: callLoggerTestProviderOverrides(),
+        );
+        addTearDown(container.dispose);
+
+        late DepartmentDirectoryNotifier notifier;
+        await tester.runAsync(() async {
+          await container.read(lookupServiceProvider.future);
+          notifier = container.read(departmentDirectoryProvider.notifier);
+          await notifier.loadDepartments();
+          await _openDepartmentFormInDialog(
+            tester,
+            container,
+            initialDepartment: DepartmentModel(
+              id: deptId,
+              name: _kFantasmaDepartmentName,
+              color: '#33691F',
+            ),
+            notifier: notifier,
+          );
+        });
+
+        await tester.enterText(_buildingField(), 'Νέο κτίριο');
+        await pumpUntilSettled(tester);
+        await tester.tap(find.widgetWithText(TextButton, 'Ακύρωση'));
+        await pumpUntilSettled(tester);
+
+        expect(find.text(_kDepartmentFormTitle), findsNothing);
+        expect(find.textContaining(_kUnsavedChangesPrompt), findsNothing);
+      },
+    );
+
+    testWidgets(
+      'επεξεργασία με αλλαγή: «Επεξεργασία» επιστρέφει στη φόρμα',
+      (tester) async {
+        tester.view.physicalSize = const Size(1600, 900);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        final container = ProviderContainer(
+          overrides: callLoggerTestProviderOverrides(),
+        );
+        addTearDown(container.dispose);
+
+        late DepartmentDirectoryNotifier notifier;
+        await tester.runAsync(() async {
+          await container.read(lookupServiceProvider.future);
+          notifier = container.read(departmentDirectoryProvider.notifier);
+          await notifier.loadDepartments();
+          await _openDepartmentFormInDialog(
+            tester,
+            container,
+            initialDepartment: DepartmentModel(
+              id: deptId,
+              name: _kFantasmaDepartmentName,
+              color: '#33691F',
+            ),
+            notifier: notifier,
+          );
+        });
+
+        await tester.enterText(_buildingField(), 'Νέο κτίριο');
+        await pumpUntilSettled(tester);
+        await tester.tapAt(const Offset(8, 8));
+        await pumpUntilSettled(tester);
+        await tester.tap(find.widgetWithText(TextButton, 'Επεξεργασία').last);
+        await pumpUntilSettled(tester);
+
+        expect(find.text(_kUnsavedChangesPrompt), findsNothing);
+        expect(find.text(_kDepartmentFormTitle), findsOneWidget);
+        expect(find.textContaining('Νέο κτίριο'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'επεξεργασία με αλλαγή: «Ακύρωση Αλλαγών» κλείνει τη φόρμα',
+      (tester) async {
+        tester.view.physicalSize = const Size(1600, 900);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        final container = ProviderContainer(
+          overrides: callLoggerTestProviderOverrides(),
+        );
+        addTearDown(container.dispose);
+
+        late DepartmentDirectoryNotifier notifier;
+        await tester.runAsync(() async {
+          await container.read(lookupServiceProvider.future);
+          notifier = container.read(departmentDirectoryProvider.notifier);
+          await notifier.loadDepartments();
+          await _openDepartmentFormInDialog(
+            tester,
+            container,
+            initialDepartment: DepartmentModel(
+              id: deptId,
+              name: _kFantasmaDepartmentName,
+              color: '#33691F',
+            ),
+            notifier: notifier,
+          );
+        });
+
+        await tester.enterText(_buildingField(), 'Νέο κτίριο');
+        await pumpUntilSettled(tester);
+        await tester.tapAt(const Offset(8, 8));
+        await pumpUntilSettled(tester);
+        await tester.tap(find.widgetWithText(FilledButton, 'Ακύρωση Αλλαγών'));
+        await pumpUntilSettled(tester);
+
+        expect(find.text(_kDepartmentFormTitle), findsNothing);
+      },
+    );
+
+    testWidgets(
+      'νέο τμήμα χωρίς όνομα: ακύρωση κλείνει χωρίς επιβεβαίωση',
+      (tester) async {
+        final container = ProviderContainer(
+          overrides: callLoggerTestProviderOverrides(),
+        );
+        addTearDown(container.dispose);
+
+        late DepartmentDirectoryNotifier notifier;
+        await tester.runAsync(() async {
+          await container.read(lookupServiceProvider.future);
+          notifier = container.read(departmentDirectoryProvider.notifier);
+          await notifier.loadDepartments();
+          await _openDepartmentFormInDialog(
+            tester,
+            container,
+            notifier: notifier,
+          );
+        });
+
+        expect(find.text(_kNewDepartmentFormTitle), findsOneWidget);
+        await tester.tap(find.widgetWithText(TextButton, 'Ακύρωση'));
+        await pumpUntilSettled(tester);
+
+        expect(find.text(_kNewDepartmentFormTitle), findsNothing);
+        expect(find.text(_kUnsavedChangesPrompt), findsNothing);
+      },
+    );
+
+    testWidgets(
+      'νέο τμήμα με όνομα: κουμπί ακύρωσης κλείνει χωρίς επιβεβαίωση',
+      (tester) async {
+        final container = ProviderContainer(
+          overrides: callLoggerTestProviderOverrides(),
+        );
+        addTearDown(container.dispose);
+
+        late DepartmentDirectoryNotifier notifier;
+        await tester.runAsync(() async {
+          await container.read(lookupServiceProvider.future);
+          notifier = container.read(departmentDirectoryProvider.notifier);
+          await notifier.loadDepartments();
+          await _openDepartmentFormInDialog(
+            tester,
+            container,
+            notifier: notifier,
+          );
+        });
+
+        await tester.enterText(_departmentNameField(), 'Πειραματικό');
+        await pumpUntilSettled(tester);
+        await tester.tap(find.widgetWithText(TextButton, 'Ακύρωση'));
+        await pumpUntilSettled(tester);
+
+        expect(find.text(_kNewDepartmentFormTitle), findsNothing);
+        expect(find.textContaining(_kUnsavedChangesPrompt), findsNothing);
+      },
+    );
+
+    testWidgets(
+      'νέο τμήμα με όνομα: κλικ εκτός εμφανίζει προειδοποίηση',
+      (tester) async {
+        tester.view.physicalSize = const Size(1600, 900);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        final container = ProviderContainer(
+          overrides: callLoggerTestProviderOverrides(),
+        );
+        addTearDown(container.dispose);
+
+        late DepartmentDirectoryNotifier notifier;
+        await tester.runAsync(() async {
+          await container.read(lookupServiceProvider.future);
+          notifier = container.read(departmentDirectoryProvider.notifier);
+          await notifier.loadDepartments();
+          await _openDepartmentFormInDialog(
+            tester,
+            container,
+            notifier: notifier,
+          );
+        });
+
+        await tester.enterText(_departmentNameField(), 'Πειραματικό');
+        await pumpUntilSettled(tester);
+        await tester.tapAt(const Offset(8, 8));
+        await pumpUntilSettled(tester);
+
+        expect(
+          find.textContaining('Το τμήμα δεν έχει αποθηκευτεί.'),
+          findsOneWidget,
+        );
+        expect(find.textContaining(_kUnsavedChangesPrompt), findsOneWidget);
+        expect(find.text(_kNewDepartmentFormTitle), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'επεξεργασία με αλλαγή: κλικ εκτός (barrier) εμφανίζει επιβεβαίωση',
+      (tester) async {
+        tester.view.physicalSize = const Size(1600, 900);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        final container = ProviderContainer(
+          overrides: callLoggerTestProviderOverrides(),
+        );
+        addTearDown(container.dispose);
+
+        late DepartmentDirectoryNotifier notifier;
+        await tester.runAsync(() async {
+          await container.read(lookupServiceProvider.future);
+          notifier = container.read(departmentDirectoryProvider.notifier);
+          await notifier.loadDepartments();
+          await _openDepartmentFormInDialog(
+            tester,
+            container,
+            initialDepartment: DepartmentModel(
+              id: deptId,
+              name: _kFantasmaDepartmentName,
+              color: '#33691F',
+            ),
+            notifier: notifier,
+          );
+        });
+
+        await tester.enterText(_buildingField(), 'Barrier test');
+        await pumpUntilSettled(tester);
+        await tester.tapAt(const Offset(8, 8));
+        await pumpUntilSettled(tester);
+
+        expect(find.textContaining('- Κτίριο'), findsOneWidget);
+        expect(find.text(_kDepartmentFormTitle), findsOneWidget);
+      },
     );
   });
 }

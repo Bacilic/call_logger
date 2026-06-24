@@ -17,6 +17,7 @@ Future<void> refreshProvidersAfterIntegrityDebugSwitch(WidgetRef ref) async {
   ref.read(databaseIntegrityProvider.notifier).reset();
   ref.invalidate(databaseBrowserStatsProvider);
   ref.invalidate(lookupServiceProvider);
+  await ref.read(lookupServiceProvider.future);
   ref.invalidate(tasksProvider);
   ref.invalidate(totalTasksCountProvider);
   ref.invalidate(orphanCallsProvider);

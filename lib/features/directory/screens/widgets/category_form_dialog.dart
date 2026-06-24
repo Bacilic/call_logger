@@ -7,6 +7,8 @@ import 'category_undo_snackbar.dart';
 
 enum _EditSaveChoice { cancel, rename, newRow }
 
+enum _CategoryFormDismissChoice { keep, discard, continueEditing }
+
 /// Διάλογος προσθήκης ή επεξεργασίας κατηγορίας.
 class CategoryFormDialog extends StatefulWidget {
   const CategoryFormDialog({
@@ -43,10 +45,91 @@ class _CategoryFormDialogState extends State<CategoryFormDialog> {
     super.dispose();
   }
 
+  bool get _isEdit => widget.initialCategory != null;
+
+  /// Αλλαγή ονόματος σε σχέση με την αρχική τιμή (ίδια σύγκριση με `_saveEnabled`).
+  bool get _isDirty => _controller.text != _initialFieldText;
+
+  /// Νέα κατηγορία: υποχρεωτικό μη κενό «Όνομα» πριν εμφανιστεί προειδοποίηση κλεισίματος.
+  bool get _createHasRequiredFields => _controller.text.trim().isNotEmpty;
+
+  bool get _shouldConfirmDismiss =>
+      _isEdit ? _isDirty : _createHasRequiredFields;
+
   /// Ενεργή αποθήκευση μόνο αν το πεδίο διαφέρει από το αρχικό και δεν είναι κενό (μετά το trim).
-  bool get _saveEnabled =>
-      _controller.text.trim().isNotEmpty &&
-      _controller.text != _initialFieldText;
+  bool get _saveEnabled => _createHasRequiredFields && _isDirty;
+
+  List<String> _changedFieldLabels() {
+    if (_isDirty) return const ['Όνομα'];
+    return const [];
+  }
+
+  Future<_CategoryFormDismissChoice?> _showDismissConfirmationDialog() async {
+    final changes = _changedFieldLabels();
+    return showDialog<_CategoryFormDismissChoice>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Μη αποθηκευμένες αλλαγές'),
+        content: SizedBox(
+          width: 420,
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text('Έχουν γίνει αλλαγές:'),
+                const SizedBox(height: 8),
+                for (final label in changes) Text('• $label'),
+                const SizedBox(height: 12),
+                const Text('Θέλεται να γίνει:'),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(
+              ctx,
+            ).pop(_CategoryFormDismissChoice.continueEditing),
+            child: const Text('Επεξεργασία'),
+          ),
+          TextButton(
+            onPressed: () =>
+                Navigator.of(ctx).pop(_CategoryFormDismissChoice.discard),
+            child: const Text('Ακύρωση Αλλαγών'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(_CategoryFormDismissChoice.keep),
+            child: const Text('Διατήρηση'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _requestClose() async {
+    if (!_shouldConfirmDismiss) {
+      if (mounted) Navigator.of(context).pop();
+      return;
+    }
+    final choice = await _showDismissConfirmationDialog();
+    if (!mounted ||
+        choice == null ||
+        choice == _CategoryFormDismissChoice.continueEditing) {
+      return;
+    }
+    if (choice == _CategoryFormDismissChoice.discard) {
+      Navigator.of(context).pop();
+      return;
+    }
+    await _onSave();
+  }
+
+  /// Κουμπί «Ακύρωση»: κλείσιμο χωρίς διάλογο επιβεβαίωσης (εκούσια απόρριψη).
+  void _cancelAndClose() {
+    if (mounted) Navigator.of(context).pop();
+  }
 
   void _showError(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
@@ -173,41 +256,47 @@ class _CategoryFormDialogState extends State<CategoryFormDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final isEdit = widget.initialCategory != null;
-    return AlertDialog(
-      title: Text(isEdit ? 'Επεξεργασία κατηγορίας' : 'Νέα κατηγορία'),
-      content: SizedBox(
-        width: 400,
-        child: TextField(
-          controller: _controller,
-          decoration: const InputDecoration(
-            labelText: 'Όνομα',
-            border: OutlineInputBorder(),
-          ),
-          autofocus: true,
-          onSubmitted: (_) {
-            if (_saveEnabled) _onSave();
-          },
-        ),
-      ),
-      actions: [
-        if (isEdit)
-          TextButton(
-            onPressed: _onDelete,
-            style: TextButton.styleFrom(
-              foregroundColor: Theme.of(context).colorScheme.error,
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) async {
+        if (didPop) return;
+        await _requestClose();
+      },
+      child: AlertDialog(
+        title: Text(_isEdit ? 'Επεξεργασία κατηγορίας' : 'Νέα κατηγορία'),
+        content: SizedBox(
+          width: 400,
+          child: TextField(
+            controller: _controller,
+            decoration: const InputDecoration(
+              labelText: 'Όνομα',
+              border: OutlineInputBorder(),
             ),
-            child: const Text('Διαγραφή'),
+            autofocus: true,
+            onSubmitted: (_) {
+              if (_saveEnabled) _onSave();
+            },
           ),
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Ακύρωση'),
         ),
-        FilledButton(
-          onPressed: _saveEnabled ? _onSave : null,
-          child: const Text('Αποθήκευση'),
-        ),
-      ],
+        actions: [
+          if (_isEdit)
+            TextButton(
+              onPressed: _onDelete,
+              style: TextButton.styleFrom(
+                foregroundColor: Theme.of(context).colorScheme.error,
+              ),
+              child: const Text('Διαγραφή'),
+            ),
+          TextButton(
+            onPressed: _cancelAndClose,
+            child: const Text('Ακύρωση'),
+          ),
+          FilledButton(
+            onPressed: _saveEnabled ? _onSave : null,
+            child: const Text('Αποθήκευση'),
+          ),
+        ],
+      ),
     );
   }
 }

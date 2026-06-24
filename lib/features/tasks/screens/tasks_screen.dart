@@ -801,6 +801,7 @@ class _TasksScreenState extends ConsumerState<TasksScreen> {
     var saved = false;
     await showDialog<bool>(
       context: context,
+      barrierDismissible: true,
       builder: (_) => EquipmentFormDialog(
         initialEquipment: row.$1,
         initialOwner: row.$2,

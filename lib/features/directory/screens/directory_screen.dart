@@ -10,7 +10,7 @@ import 'widgets/users_tab.dart';
 /// Δείκτης καρτέλας «Διάφορα» στον Κατάλογο (0-based).
 const int kDirectoryCategoriesTabIndex = 3;
 
-/// Οθόνη Κατάλογου: TabBar Χρήστες | Τμήματα | Εξοπλισμός | Διάφορα.
+/// Οθόνη Κατάλογου: TabBar Υπάλληλοι | Τμήματα | Εξοπλισμός | Διάφορα.
 class DirectoryScreen extends ConsumerStatefulWidget {
   const DirectoryScreen({super.key});
 
@@ -64,7 +64,7 @@ class _DirectoryScreenState extends ConsumerState<DirectoryScreen>
           bottom: TabBar(
             controller: _tabController,
             tabs: const [
-              Tab(text: 'Χρήστες'),
+              Tab(text: 'Υπάλληλοι'),
               Tab(text: 'Τμήματα'),
               Tab(text: 'Εξοπλισμός'),
               Tab(text: 'Διάφορα'),

@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import '../../../calls/models/user_model.dart';
 import '../../models/user_directory_column.dart';
+import 'catalog_table_hover_focus.dart';
 
 /// Πίνακας χρηστών με σελιδοποίηση, sortable headers, επιλογή γραμμής (αν η στήλη εμφανίζεται), διπλό κλικ = επεξεργασία.
 /// Single tap = toggle επιλογής (μόνο με ορατή στήλη επιλογής), double tap = άνοιγμα modal επεξεργασίας.
@@ -586,7 +587,8 @@ class _UsersDataTableState extends State<UsersDataTable> {
           focusNode: _tableFocusNode,
           onKeyEvent: _handleKey,
           child: MouseRegion(
-            onEnter: (_) => _tableFocusNode.requestFocus(),
+            onEnter: (_) =>
+                requestCatalogTableKeyboardFocusOnHover(_tableFocusNode),
             child: tableContent,
           ),
         );

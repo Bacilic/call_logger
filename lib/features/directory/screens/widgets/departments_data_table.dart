@@ -6,6 +6,7 @@ import '../../../../core/services/lookup_service.dart';
 import '../../models/department_directory_column.dart';
 import '../../models/department_floor_display_extension.dart';
 import '../../models/department_model.dart';
+import 'catalog_table_hover_focus.dart';
 
 /// Πίνακας τμημάτων: sort, επιλογή, πληκτρολόγιο όπως οι χρήστες.
 class DepartmentsDataTable extends StatefulWidget {
@@ -606,7 +607,8 @@ class _DepartmentsDataTableState extends State<DepartmentsDataTable> {
           focusNode: _tableFocusNode,
           onKeyEvent: _handleKey,
           child: MouseRegion(
-            onEnter: (_) => _tableFocusNode.requestFocus(),
+            onEnter: (_) =>
+                requestCatalogTableKeyboardFocusOnHover(_tableFocusNode),
             child: tableContent,
           ),
         );

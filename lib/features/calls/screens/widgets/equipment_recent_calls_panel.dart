@@ -97,6 +97,7 @@ Future<void> _openEquipmentCatalogForm(
   if (!context.mounted) return;
   await showDialog<void>(
     context: context,
+    barrierDismissible: true,
     builder: (ctx) => EquipmentFormDialog(
       initialEquipment: equipment,
       initialOwner: owner,

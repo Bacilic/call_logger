@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../calls/models/equipment_model.dart';
-import '../../../calls/provider/lookup_provider.dart';
 import '../../../calls/provider/remote_paths_provider.dart';
 import '../../../../core/database/database_helper.dart';
 import '../../../../core/database/directory_repository.dart';
@@ -19,6 +18,8 @@ import 'bulk_equipment_edit_dialog.dart';
 import 'catalog_column_selector_shell.dart';
 import 'equipment_data_table.dart';
 import 'equipment_form_dialog.dart';
+import 'catalog_tab_lookup_reload_mixin.dart';
+import 'catalog_search_field_sync.dart';
 import 'equipment_settings_dialog.dart';
 
 /// Καρτέλα εξοπλισμού: mirror του UsersTab – αναζήτηση, πίνακας, επιλογή, διαγραφή με undo, προσθήκη, μαζική επεξεργασία.
@@ -29,12 +30,15 @@ class EquipmentTab extends ConsumerStatefulWidget {
   ConsumerState<EquipmentTab> createState() => _EquipmentTabState();
 }
 
-class _EquipmentTabState extends ConsumerState<EquipmentTab> {
+class _EquipmentTabState extends ConsumerState<EquipmentTab>
+    with CatalogTabLookupReloadMixin {
   final TextEditingController _searchController = TextEditingController();
+  final FocusNode _searchFocus = FocusNode();
 
   @override
   void initState() {
     super.initState();
+    attachCatalogLookupReloadListener();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(equipmentDirectoryProvider.notifier).load();
     });
@@ -42,13 +46,14 @@ class _EquipmentTabState extends ConsumerState<EquipmentTab> {
 
   @override
   void dispose() {
+    detachCatalogLookupReloadListener();
+    _searchFocus.dispose();
     _searchController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    ref.watch(lookupServiceProvider);
     ref.listen<int?>(equipmentFocusIntentProvider, (previous, next) {
       if (next == null) return;
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -68,12 +73,11 @@ class _EquipmentTabState extends ConsumerState<EquipmentTab> {
     final allToolsCatalog =
         ref.watch(remoteToolsAllCatalogProvider).value ?? const <RemoteTool>[];
 
-    if (_searchController.text != state.searchQuery) {
-      _searchController.text = state.searchQuery;
-      _searchController.selection = TextSelection.collapsed(
-        offset: _searchController.text.length,
-      );
-    }
+    syncCatalogSearchControllerFromState(
+      controller: _searchController,
+      focusNode: _searchFocus,
+      query: state.searchQuery,
+    );
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -100,6 +104,7 @@ class _EquipmentTabState extends ConsumerState<EquipmentTab> {
                   ),
                   child: TextField(
                     controller: _searchController,
+                    focusNode: _searchFocus,
                     onChanged: notifier.setSearchQuery,
                     decoration: InputDecoration(
                       labelText: 'Αναζήτηση',
@@ -110,7 +115,10 @@ class _EquipmentTabState extends ConsumerState<EquipmentTab> {
                           ? IconButton(
                               icon: const Icon(Icons.close),
                               tooltip: 'Καθαρισμός',
-                              onPressed: () => notifier.setSearchQuery(''),
+                              onPressed: () => clearCatalogSearchField(
+                                controller: _searchController,
+                                setSearchQuery: notifier.setSearchQuery,
+                              ),
                             )
                           : null,
                     ),
@@ -321,6 +329,7 @@ class _EquipmentTabState extends ConsumerState<EquipmentTab> {
   }) async {
     await showDialog<void>(
       context: context,
+      barrierDismissible: true,
       builder: (ctx) => EquipmentFormDialog(
         initialEquipment: initialEquipment,
         initialOwner: initialOwner,

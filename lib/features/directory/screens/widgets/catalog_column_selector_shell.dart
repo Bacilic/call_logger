@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 /// Κοινό overlay επιλογής στηλών καταλόγου: κλικ στο σκοτεινό φόντο κλείνει,
-/// πάνελ δεξιά (ίδια δομή Χρήστες / Εξοπλισμός).
+/// πάνελ δεξιά (ίδια δομή Υπάλληλοι / Εξοπλισμός).
 class CatalogColumnSelectorShell extends StatelessWidget {
   const CatalogColumnSelectorShell({
     super.key,

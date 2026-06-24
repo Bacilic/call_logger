@@ -1,6 +1,6 @@
 # Call Logger — Project Anatomy
 
-**Ημερομηνία τροποποίησης εγγράφου:** 17 Ιουνίου 2026
+**Ημερομηνία τροποποίησης εγγράφου:** 24 Ιουνίου 2026
 
 Συμπυκνωμένη «ακτινογραφία» για εξωτερικό LLM (Καθοδηγητής): Flutter για Windows 11, δομή ανά `features/`, Riverpod, SQLite μέσω `sqflite_common_ffi`.
 
@@ -25,7 +25,8 @@ lib/
 │   │       └── version_chip.dart
 │   ├── config/
 │   │   ├── app_config.dart
-│   │   └── audit_retention_config.dart
+│   │   ├── audit_retention_config.dart
+│   │   └── calls_layout_config.dart
 │   ├── database/
 │   │   ├── calls_repository.dart
 │   │   ├── database_access_probe.dart
@@ -80,6 +81,7 @@ lib/
 │   ├── providers/
 │   │   ├── app_profile_provider.dart
 │   │   ├── application_reset_provider.dart
+│   │   ├── call_department_prefill_intent_provider.dart
 │   │   ├── core_lexicon_provider.dart
 │   │   ├── directory_tab_intent_provider.dart
 │   │   ├── equipment_focus_intent_provider.dart
@@ -188,6 +190,15 @@ lib/
 │   │       ├── audit_formatter_service.dart
 │   │       └── audit_reference_label_resolver.dart
 │   ├── calls/
+│   │   ├── layout/
+│   │   │   ├── calls_field_confirmations.dart
+│   │   │   ├── calls_field_groups.dart
+│   │   │   ├── calls_field_groups_provider.dart
+│   │   │   ├── calls_layout_engine.dart
+│   │   │   ├── calls_layout_plan.dart
+│   │   │   ├── calls_layout_template.dart
+│   │   │   ├── calls_screen_layout.dart
+│   │   │   └── calls_screen_mode.dart
 │   │   ├── models/
 │   │   │   ├── .gitkeep
 │   │   │   ├── call_model.dart
@@ -216,6 +227,7 @@ lib/
 │   │   │       ├── notes_sticky_field.dart
 │   │   │       ├── recent_calls_list.dart
 │   │   │       ├── remote_connection_buttons.dart
+│   │   │       ├── smart_entity_equipment_initial_suggestions.dart
 │   │   │       ├── smart_entity_selector_caller_field.dart
 │   │   │       ├── smart_entity_selector_caller_presentational.dart
 │   │   │       ├── smart_entity_selector_conflict_badge.dart
@@ -285,6 +297,7 @@ lib/
 │   │   ├── models/
 │   │   │   └── lexicon_list_filters_model.dart
 │   │   ├── providers/
+│   │   │   ├── dictionary_layout_provider.dart
 │   │   │   ├── lexicon_list_filters_provider.dart
 │   │   │   ├── lexicon_scroll_provider.dart
 │   │   │   └── lexicon_spelling_panel_provider.dart
@@ -354,6 +367,9 @@ lib/
 │   │   │       ├── bulk_equipment_edit_dialog.dart
 │   │   │       ├── bulk_user_edit_dialog.dart
 │   │   │       ├── catalog_column_selector_shell.dart
+│   │   │       ├── catalog_search_field_sync.dart
+│   │   │       ├── catalog_tab_lookup_reload_mixin.dart
+│   │   │       ├── catalog_table_hover_focus.dart
 │   │   │       ├── categories_data_table.dart
 │   │   │       ├── categories_tab.dart
 │   │   │       ├── category_form_dialog.dart
@@ -582,7 +598,10 @@ lib/
 - **RemoteToolArg, RemoteToolArgument, ToolRole** (enum)
 - **BuildingMapFloor** — id, sortOrder, label, floorGroup, imagePath, rotationDegrees
 - **DictionaryImportMode** (enum), **WindowPlacementMode** (enum)
-- **CallsScreenCardsVisibility** — toggles καρτών οθόνης Κλήσεων
+- **CallsScreenCardsVisibility** — toggles καρτών οθόνης Κλήσεων (showMapCard κ.λπ.)
+
+### `lib/core/utils/` (τύποι βοηθητικών)
+- **PhoneFieldSegmentBounds** — `phone_list_parser.dart`: όρια ενεργού τμήματος τηλεφώνου μετά κόμμα (autocomplete φόρμας υπαλλήλου)
 
 ### `lib/core/about/models/`
 - **ChangelogEntry** — version, date, added, changed, fixed
@@ -598,7 +617,7 @@ lib/
 | Εφαρμογή | `AppInitResult` |
 | Ρυθμίσεις | `AuditRetentionConfig` |
 | Υπηρεσίες | `LookupResult`, `ImportResult` (excel), `ImportLogLevel` (enum) |
-| Κλήσεις | `CallEntryState`, `SmartEntitySelectorState`, `OrphanQuickAddResult`, `LookupLoadResult` |
+| Κλήσεις | `CallEntryState`, `SmartEntitySelectorState`, `OrphanQuickAddResult`, `LookupLoadResult`, `CallsFieldGroups`, `CallsFieldConfirmations`, `CallsLayoutPlan`, `CallsLayoutTemplate` (enum) |
 | Κατάλογος | `DirectoryState`, `CategoryDirectoryState`, `DepartmentDirectoryState`, `EquipmentDirectoryState`, `EquipmentDeleteUndoEntry`, `BuildingMapFloorDeleteChoice` |
 | Βάση | `ReplaceDatabaseResult`, `DatabaseBackupResult`, `BackupDestinationValidationResult` |
 | Εργασίες | `TaskSnoozeEntry` (nested στο Task) |
@@ -619,8 +638,11 @@ lib/
 ### Κλήσεις
 - **callEntryProvider** — φόρμα καταχώρησης κλήσης
 - **callSmartEntityProvider / taskSmartEntityProvider / historyEditSmartEntityProvider** — έξυπνος επιλογέας οντοτήτων
+- **callsFieldGroupsProvider, callsFieldConfirmationsProvider** — ομαδοποίηση πεδίων & επιβεβαιώσεις (layout engine)
+- **callsScreenIsExpandedProvider / callsScreenExpandedLatchProvider** — compact vs expanded όψη Νέας κλήσης
 - **recentCallsProvider, globalRecentCallsProvider** — πρόσφατες κλήσεις
 - **remoteToolsCatalogProvider** — κατάλογος απομακρυσμένων εργαλείων
+- **callDepartmentPrefillIntentProvider** — πρόθεση προ-συμπλήρωσης τμήματος από εξωτερική ροή
 
 ### Ιστορικό & dashboard
 - **historyFilterProvider, historyCallsProvider** — φίλτρα και λίστα ιστορικού
@@ -636,6 +658,7 @@ lib/
 - **directoryProvider, departmentDirectoryProvider, equipmentDirectoryProvider, categoryDirectoryProvider**
 - **buildingMapControllerProvider** + undo/jump providers — χάρτης κτιρίου
 - **directoryTabIntentProvider, equipmentFocusIntentProvider, userFormEditIntentProvider**
+- Οθόνη καταλόγου: καρτέλες **Υπάλληλοι** · Τμήματα · Εξοπλισμός · Διάφορα (`directory_screen.dart`)
 
 ### Audit
 - **auditFilterProvider, auditListProvider, selectedAuditEntryIdProvider, auditEntityPreviewProvider**
@@ -647,7 +670,7 @@ lib/
 ### Λεξικό & ορθογραφία
 - **coreLexiconProvider, greekDictionaryServiceProvider, spellCheckServiceProvider**
 - **lexiconFullModeProvider, lexiconCategoriesProvider, lexiconLanguageRecalcProvider**
-- **lexiconListFiltersProvider** — απομνημόνευση φίλτρων λίστας (όχι αναζήτηση)
+- **lexiconListFiltersProvider, dictionaryLayoutProvider** — απομνημόνευση φίλτρων/διάταξης λίστας
 - **lexiconContinuousScrollProvider, lexiconPageSizeProvider**
 - **lexiconSpellingPanelProvider** — πάνελ ορθογραφίας (ΤΝ / διαδίκτυο κατόπιν αιτήματος)
 
@@ -661,7 +684,7 @@ lib/
 
 ## 5) DEPENDENCIES (pubspec.yaml)
 
-**SDK:** `^3.10.7` · **Έκδοση εφαρμογής:** `0.14.0+19`
+**SDK:** `^3.10.7` · **Έκδοση εφαρμογής:** `0.15.0+17`
 
 ### dependencies
 | Πακέτο | Έκδοση |
@@ -669,8 +692,8 @@ lib/
 | flutter / flutter_localizations | sdk |
 | cupertino_icons | ^1.0.9 |
 | flutter_riverpod | ^3.3.1 |
-| sqflite_common | 2.5.8 |
-| sqflite_common_ffi | 2.4.0+3 |
+| sqflite_common | ^2.5.11 |
+| sqflite_common_ffi | ^2.4.2 |
 | sqlite3_flutter_libs | ^0.6.0+eol |
 | path_provider | ^2.1.2 |
 | path | ^1.9.0 |

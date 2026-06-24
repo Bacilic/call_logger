@@ -23,6 +23,8 @@ import 'shared_asset_disconnect_dialog.dart';
 
 enum _ConflictResolutionChoice { moveToDepartment, keepCurrentOwnership }
 
+enum _UnsavedChangesAction { save, discard, continueEditing }
+
 class _SharedConflictItem {
   _SharedConflictItem({
     required this.key,
@@ -46,6 +48,31 @@ class _SharedConflictItem {
 const TextStyle _kSharedConflictEmphasisStyle = TextStyle(
   fontWeight: FontWeight.bold,
 );
+
+const _kDepartmentDistinctSuffixLetters = <String>[
+  'Α', 'Β', 'Γ', 'Δ', 'Ε', 'Ζ', 'Η', 'Θ', 'Ι', 'Κ', 'Λ', 'Μ',
+  'Ν', 'Ξ', 'Ο', 'Π', 'Ρ', 'Σ', 'Τ', 'Υ', 'Φ', 'Χ', 'Ψ', 'Ω',
+];
+
+/// Παράδειγμα διακριτού ονόματος τμήματος (π.χ. «Μαγειρείο Α») όταν υπάρχει σύγκρουση.
+String suggestDistinctDepartmentNameExample(String name) {
+  final base = name.trim();
+  if (base.isEmpty) return 'Τμήμα Α';
+  final lookup = LookupService.instance;
+  for (final letter in _kDepartmentDistinctSuffixLetters) {
+    final candidate = '$base $letter';
+    if (lookup.findDepartmentByName(candidate) == null) {
+      return candidate;
+    }
+  }
+  for (var i = 2; i <= 99; i++) {
+    final candidate = '$base $i';
+    if (lookup.findDepartmentByName(candidate) == null) {
+      return candidate;
+    }
+  }
+  return '$base Α';
+}
 
 Widget _sharedConflictMoveLabel(
   _SharedConflictItem item,
@@ -229,6 +256,106 @@ class _DepartmentFormDialogState extends State<DepartmentFormDialog> {
     }
     if (_selectedFloorId != _snapFloorId) return true;
     return false;
+  }
+
+  bool _needsDismissConfirmation() {
+    if (_isEdit) return _isDirty;
+    return _nameController.text.trim().isNotEmpty;
+  }
+
+  List<String> _buildChangedFieldLabels() {
+    final labels = <String>[];
+    if (_nameController.text.trim() != _snapName) labels.add('Όνομα');
+    if (_buildingController.text.trim() != _snapBuilding) labels.add('Κτίριο');
+    if (_notesController.text.trim() != _snapNotes) labels.add('Σημειώσεις');
+    final parsedHex = tryParseDepartmentHex(_hexController.text.trim());
+    final effectiveHex = colorToDepartmentHex(parsedHex ?? _selectedColor);
+    if (effectiveHex != _snapColorHex) labels.add('Χρώμα');
+
+    final currentPhones =
+        _sharedPhones
+            .map((v) => v.trim())
+            .where((v) => v.isNotEmpty)
+            .toSet()
+            .toList()
+          ..sort((a, b) => a.compareTo(b));
+    final currentEquipment =
+        _sharedEquipmentCodes
+            .map((v) => v.trim())
+            .where((v) => v.isNotEmpty)
+            .toSet()
+            .toList()
+          ..sort((a, b) => a.compareTo(b));
+    if (currentPhones.join('|') != _snapSharedPhones.join('|')) {
+      labels.add('Κοινόχρηστα τηλέφωνα');
+    }
+    if (currentEquipment.join('|') != _snapSharedEquipmentCodes.join('|')) {
+      labels.add('Κοινόχρηστος εξοπλισμός');
+    }
+    if (_selectedFloorId != _snapFloorId) labels.add('Όροφος (κατόψη)');
+    return labels;
+  }
+
+  String _unsavedChangesDialogMessage() {
+    if (_isEdit) {
+      final labels = _buildChangedFieldLabels();
+      final buf = StringBuffer('Έχουν γίνει αλλαγές:');
+      for (final label in labels) {
+        buf.write('\n- $label');
+      }
+      buf.write('\n\nΘέλεται να γίνει:');
+      return buf.toString();
+    }
+    return 'Το τμήμα δεν έχει αποθηκευτεί.\n\nΘέλεται να γίνει:';
+  }
+
+  Future<_UnsavedChangesAction?> _showUnsavedChangesDialog() {
+    return showDialog<_UnsavedChangesAction>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        content: Text(_unsavedChangesDialogMessage()),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(_UnsavedChangesAction.save),
+            child: const Text('Διατήρηση'),
+          ),
+          FilledButton.tonal(
+            onPressed: () =>
+                Navigator.of(ctx).pop(_UnsavedChangesAction.discard),
+            child: const Text('Ακύρωση Αλλαγών'),
+          ),
+          TextButton(
+            onPressed: () =>
+                Navigator.of(ctx).pop(_UnsavedChangesAction.continueEditing),
+            child: const Text('Επεξεργασία'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _requestClose() async {
+    if (!_needsDismissConfirmation()) {
+      if (mounted) Navigator.of(context).pop();
+      return;
+    }
+    final action = await _showUnsavedChangesDialog();
+    if (!mounted) return;
+    switch (action) {
+      case _UnsavedChangesAction.save:
+        await _save();
+      case _UnsavedChangesAction.discard:
+        Navigator.of(context).pop();
+      case _UnsavedChangesAction.continueEditing:
+      case null:
+        break;
+    }
+  }
+
+  /// Κουμπί «Ακύρωση»: κλείσιμο χωρίς διάλογο επιβεβαίωσης (εκούσια απόρριψη).
+  void _cancelAndClose() {
+    if (mounted) Navigator.of(context).pop();
   }
 
   @override
@@ -1045,19 +1172,36 @@ class _DepartmentFormDialogState extends State<DepartmentFormDialog> {
       } else {
         await showDialog<void>(
           context: context,
-          builder: (ctx) => AlertDialog(
-            title: const Text('Όνομα σε χρήση'),
-            content: const Text(
-              'Υπάρχει ήδη ενεργό τμήμα με αυτό το όνομα. '
-              'Η διαδικασία σταματά εδώ — δώστε ένα νέο, διακριτό όνομα (π.χ. «Μαγειρείο 2026»).',
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(ctx).pop(),
-                child: const Text('OK'),
+          builder: (ctx) {
+            final example = suggestDistinctDepartmentNameExample(name);
+            final bodyStyle = Theme.of(ctx).textTheme.bodyMedium;
+            return AlertDialog(
+              title: const Text('Όνομα σε χρήση'),
+              content: Text.rich(
+                TextSpan(
+                  style: bodyStyle,
+                  children: [
+                    const TextSpan(text: 'Υπάρχει ήδη τμήμα με το όνομα '),
+                    TextSpan(
+                      text: name,
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    const TextSpan(
+                      text: '. Δώστε νέο διακριτικό όνομα (π.χ. ',
+                    ),
+                    TextSpan(text: '«$example»'),
+                    const TextSpan(text: ').'),
+                  ],
+                ),
               ),
-            ],
-          ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(ctx).pop(),
+                  child: const Text('OK'),
+                ),
+              ],
+            );
+          },
         );
       }
     } on StateError catch (e) {
@@ -1167,6 +1311,46 @@ class _DepartmentFormDialogState extends State<DepartmentFormDialog> {
     );
   }
 
+  Widget _departmentNameAutocompleteOptionsView(
+    BuildContext context,
+    void Function(String) onSelected,
+    Iterable<String> options,
+  ) {
+    return Align(
+      alignment: Alignment.topLeft,
+      child: Material(
+        elevation: 4,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 380, maxHeight: 200),
+          child: ListView(
+            padding: EdgeInsets.zero,
+            shrinkWrap: true,
+            children: [
+              for (final opt in options)
+                ListTile(
+                  dense: true,
+                  title: Text(opt),
+                  onTap: () => onSelected(opt),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Iterable<String> _departmentNameAutocompleteOptions(String query) {
+    final excludeId = _isEdit ? widget.initialDepartment?.id : null;
+    final departments = LookupService.instance.searchDepartments(query);
+    final names = departments
+        .where((d) => excludeId == null || d.id != excludeId)
+        .map((d) => d.name.trim())
+        .where((n) => n.isNotEmpty)
+        .toList()
+      ..sort((a, b) => a.compareTo(b));
+    return names;
+  }
+
   @override
   Widget build(BuildContext context) {
     final title = _isEdit
@@ -1174,7 +1358,13 @@ class _DepartmentFormDialogState extends State<DepartmentFormDialog> {
         : widget.isClone
         ? 'Νέο τμήμα (αντίγραφο)'
         : 'Νέο τμήμα';
-    return AlertDialog(
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) async {
+        if (didPop) return;
+        await _requestClose();
+      },
+      child: AlertDialog(
       title: Text(title),
       content: SizedBox(
         width: 420,
@@ -1187,20 +1377,41 @@ class _DepartmentFormDialogState extends State<DepartmentFormDialog> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  LexiconSpellTextFormField(
-                    controller: _nameController,
+                  RawAutocomplete<String>(
+                    textEditingController: _nameController,
                     focusNode: _nameFocus,
-                    decoration: const InputDecoration(
-                      labelText: 'Όνομα',
-                      border: OutlineInputBorder(),
-                    ),
-                    validator: (v) {
-                      if (v == null || v.trim().isEmpty) {
-                        return 'Απαιτείται όνομα';
-                      }
-                      return null;
+                    optionsBuilder: (value) =>
+                        _departmentNameAutocompleteOptions(value.text),
+                    displayStringForOption: (v) => v,
+                    onSelected: (selection) {
+                      _nameController.text = selection;
+                      _onFieldChanged();
                     },
-                    onChanged: (_) => _onFieldChanged(),
+                    fieldViewBuilder: (context, controller, focusNode, _) {
+                      return LexiconSpellTextFormField(
+                        controller: _nameController,
+                        focusNode: focusNode,
+                        decoration: const InputDecoration(
+                          labelText: 'Όνομα',
+                          border: OutlineInputBorder(),
+                        ),
+                        textCapitalization: TextCapitalization.words,
+                        validator: (v) {
+                          if (v == null || v.trim().isEmpty) {
+                            return 'Απαιτείται όνομα';
+                          }
+                          return null;
+                        },
+                        onChanged: (_) => _onFieldChanged(),
+                      );
+                    },
+                    optionsViewBuilder: (context, onSelected, options) {
+                      return _departmentNameAutocompleteOptionsView(
+                        context,
+                        onSelected,
+                        options,
+                      );
+                    },
                   ),
                   const SizedBox(height: 12),
                   Text(
@@ -1577,7 +1788,7 @@ class _DepartmentFormDialogState extends State<DepartmentFormDialog> {
       ),
       actions: [
         TextButton(
-          onPressed: () => Navigator.of(context).pop(),
+          onPressed: _cancelAndClose,
           child: const Text('Ακύρωση'),
         ),
         FilledButton(
@@ -1585,6 +1796,7 @@ class _DepartmentFormDialogState extends State<DepartmentFormDialog> {
           child: Text(_isEdit ? 'Αποθήκευση' : 'Προσθήκη'),
         ),
       ],
+    ),
     );
   }
 }

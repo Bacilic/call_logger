@@ -21,6 +21,8 @@ import 'department_form_dialog.dart';
 import 'non_user_phones_data_table.dart';
 import 'shared_asset_disconnect_dialog.dart';
 import 'user_form_dialog.dart';
+import 'catalog_tab_lookup_reload_mixin.dart';
+import 'catalog_search_field_sync.dart';
 import 'users_data_table.dart';
 
 /// Καρτέλα χρηστών: αναζήτηση, πίνακας, επιλογή, διαγραφή με undo, προσθήκη.
@@ -31,12 +33,15 @@ class UsersTab extends ConsumerStatefulWidget {
   ConsumerState<UsersTab> createState() => _UsersTabState();
 }
 
-class _UsersTabState extends ConsumerState<UsersTab> {
+class _UsersTabState extends ConsumerState<UsersTab>
+    with CatalogTabLookupReloadMixin {
   final TextEditingController _searchController = TextEditingController();
+  final FocusNode _searchFocus = FocusNode();
 
   @override
   void initState() {
     super.initState();
+    attachCatalogLookupReloadListener();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(directoryProvider.notifier).loadUsers();
       final pending = ref.read(userFormEditIntentProvider);
@@ -49,13 +54,14 @@ class _UsersTabState extends ConsumerState<UsersTab> {
 
   @override
   void dispose() {
+    detachCatalogLookupReloadListener();
+    _searchFocus.dispose();
     _searchController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    ref.watch(lookupServiceProvider);
     ref.listen<UserModel?>(userFormEditIntentProvider, (previous, next) {
       if (next == null || !mounted) return;
       ref.read(userFormEditIntentProvider.notifier).clear();
@@ -72,12 +78,11 @@ class _UsersTabState extends ConsumerState<UsersTab> {
         (personal && hasQuery) ? state.filteredNonUserPhones.length : 0;
     final continuousScrollAsync = ref.watch(catalogUsersContinuousScrollProvider);
     final continuousScroll = continuousScrollAsync.value ?? true;
-    if (_searchController.text != state.searchQuery) {
-      _searchController.text = state.searchQuery;
-      _searchController.selection = TextSelection.collapsed(
-        offset: _searchController.text.length,
-      );
-    }
+    syncCatalogSearchControllerFromState(
+      controller: _searchController,
+      focusNode: _searchFocus,
+      query: state.searchQuery,
+    );
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -89,6 +94,7 @@ class _UsersTabState extends ConsumerState<UsersTab> {
               Expanded(
                 child: TextField(
                   controller: _searchController,
+                  focusNode: _searchFocus,
                   onChanged: notifier.setSearchQuery,
                   decoration: InputDecoration(
                     labelText: 'Αναζήτηση',
@@ -101,7 +107,10 @@ class _UsersTabState extends ConsumerState<UsersTab> {
                         ? IconButton(
                             icon: const Icon(Icons.close),
                             tooltip: 'Καθαρισμός',
-                            onPressed: () => notifier.setSearchQuery(''),
+                            onPressed: () => clearCatalogSearchField(
+                              controller: _searchController,
+                              setSearchQuery: notifier.setSearchQuery,
+                            ),
                           )
                         : null,
                   ),

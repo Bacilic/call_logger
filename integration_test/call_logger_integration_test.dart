@@ -21,7 +21,7 @@
 // 3. **Έλεγχος κύριας οθόνης**: `expect` ότι εμφανίζεται το κείμενο
 //    «Καταγραφή Κλήσεων» (τίτλος AppBar).
 // 4. **Πλοήγηση (NavigationRail + Ρυθμίσεις)**: με `semanticsEnabled: false`, διαδοχικά
-//    Ιστορικό, Κατάλογο (καρτέλα «Χρήστες»), Εκκρεμότητες, Βάση Δεδομένων, push
+//    Ιστορικό, Κατάλογο (καρτέλα «Υπάλληλοι»), Εκκρεμότητες, Βάση Δεδομένων, push
 //    Ρυθμίσεις από AppBar (`tooltip` «Ρυθμίσεις»), `pageBack`, επιστροφή σε Κλήσεις
 //    (`nav_rail_calls`). Τα κλειδιά rail: `main_shell.dart`.
 //
@@ -104,7 +104,7 @@ void main() {
         await tester.tap(find.byKey(const ValueKey('nav_rail_directory')));
         await pumpUntilSettled(tester);
         expect(
-          find.text('Χρήστες'),
+          find.text('Υπάλληλοι'),
           findsOneWidget,
           reason: greekExpectMsg(
             'Οθόνη Καταλόγου: καρτέλα TabBar (ο τίτλος AppBar είναι κρυφός)',
