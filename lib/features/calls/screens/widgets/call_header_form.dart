@@ -41,7 +41,10 @@ const double _kHeaderWidthRatioSum =
 
 /// Header φόρμα εισαγωγής κλήσης: Τηλέφωνο, Καλούντας, Τμήμα, Κωδικός Εξοπλισμού.
 class CallHeaderForm extends ConsumerStatefulWidget {
-  const CallHeaderForm({super.key});
+  const CallHeaderForm({super.key, this.compactFieldCentering = false});
+
+  /// Συμπτυγμένη όψη: κάθετο κέντρο της γραμμής πεδίων (όχι ολόκληρου μπλοκ με κενό τίτλο).
+  final bool compactFieldCentering;
 
   @override
   ConsumerState<CallHeaderForm> createState() => _CallHeaderFormState();
@@ -236,62 +239,68 @@ class _CallHeaderFormState extends ConsumerState<CallHeaderForm> {
         w3 = (available - w1 - w2 - wDept).clamp(0.0, double.infinity);
         final equipmentColumnOffset =
             w1 + _kHeaderFieldGap + w2 + _kHeaderFieldGap + wDept + _kHeaderFieldGap;
+        final titleText = CallsScreenTitleResolver.resolve(header);
+        final showTitleRow = !widget.compactFieldCentering ||
+            titleText.isNotEmpty ||
+            header.needsAssociation(lookupService);
 
-        return Column(
+        final formCore = Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           mainAxisSize: MainAxisSize.min,
           children: [
-            SizedBox(
-              height: 34,
-              child: Stack(
-                children: [
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      CallsScreenTitleResolver.resolve(header),
-                      style: theme.textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w700,
+            if (showTitleRow) ...[
+              SizedBox(
+                height: 34,
+                child: Stack(
+                  children: [
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        titleText,
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
                     ),
-                  ),
-                  if (header.needsAssociation(lookupService))
-                    Positioned(
-                      left: equipmentColumnOffset,
-                      width: w3,
-                      child: Align(
-                        alignment: Alignment.centerLeft,
-                        child: Tooltip(
-                          message:
-                              header.associationTooltip(lookupService) ?? '',
-                          child: TextButton(
-                            onPressed: onAddAssociationPressed,
-                            style: TextButton.styleFrom(
-                              foregroundColor: header.associationColor(
-                                lookupService,
+                    if (header.needsAssociation(lookupService))
+                      Positioned(
+                        left: equipmentColumnOffset,
+                        width: w3,
+                        child: Align(
+                          alignment: Alignment.centerLeft,
+                          child: Tooltip(
+                            message:
+                                header.associationTooltip(lookupService) ?? '',
+                            child: TextButton(
+                              onPressed: onAddAssociationPressed,
+                              style: TextButton.styleFrom(
+                                foregroundColor: header.associationColor(
+                                  lookupService,
+                                ),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 6,
+                                ),
+                                minimumSize: Size.zero,
+                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                visualDensity: VisualDensity.compact,
                               ),
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 6,
-                              ),
-                              minimumSize: Size.zero,
-                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                              visualDensity: VisualDensity.compact,
-                            ),
-                            child: Text(
-                              'Προσθήκη',
-                              style: theme.textTheme.labelLarge?.copyWith(
-                                color: header.associationColor(lookupService),
-                                fontWeight: FontWeight.w600,
+                              child: Text(
+                                'Προσθήκη',
+                                style: theme.textTheme.labelLarge?.copyWith(
+                                  color: header.associationColor(lookupService),
+                                  fontWeight: FontWeight.w600,
+                                ),
                               ),
                             ),
                           ),
                         ),
                       ),
-                    ),
-                ],
+                  ],
+                ),
               ),
-            ),
-            const SizedBox(height: 8),
+              const SizedBox(height: 8),
+            ],
             if (lookupLoadError != null && lookupLoadError.isNotEmpty)
               Material(
                 color: theme.colorScheme.errorContainer,
@@ -424,6 +433,19 @@ class _CallHeaderFormState extends ConsumerState<CallHeaderForm> {
             ),
           ],
         );
+
+        if (widget.compactFieldCentering) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Spacer(),
+              formCore,
+              const Spacer(),
+            ],
+          );
+        }
+
+        return formCore;
       },
     );
   }

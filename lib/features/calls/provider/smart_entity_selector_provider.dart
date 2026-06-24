@@ -1475,6 +1475,9 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
               ? orphanDept.id
               : state.selectedDepartmentId,
         );
+        if (orphanDept?.id != null) {
+          _applyDepartmentEquipmentLookup(lookup, orphanDept!.id!);
+        }
         return;
       }
       if (users.length == 1) {
@@ -1578,6 +1581,36 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
           equipmentNoMatch: false,
         );
       }
+      return;
+    }
+    state = state.copyWith(
+      equipmentCandidates: list,
+      clearSelectedEquipment: !_hasManualEquipmentSelection,
+      isEquipmentAmbiguous: true,
+      equipmentNoMatch: false,
+    );
+  }
+
+  /// Εξοπλισμός τμήματος μετά από lookup ορφανού τηλεφώνου (χωρίς καλούντα).
+  void _applyDepartmentEquipmentLookup(LookupService lookup, int departmentId) {
+    if (state.equipmentText.trim().isNotEmpty) return;
+    final list = lookup.getAllEquipmentByDepartment(departmentId);
+    if (list.isEmpty) {
+      state = state.copyWith(
+        equipmentCandidates: [],
+        clearSelectedEquipment: !_hasManualEquipmentSelection,
+        isEquipmentAmbiguous: false,
+        equipmentNoMatch: true,
+      );
+      return;
+    }
+    if (list.length == 1) {
+      state = state.copyWith(
+        selectedEquipment: list.first,
+        equipmentCandidates: list,
+        isEquipmentAmbiguous: false,
+        equipmentNoMatch: false,
+      );
       return;
     }
     state = state.copyWith(

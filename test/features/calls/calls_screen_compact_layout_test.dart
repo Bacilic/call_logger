@@ -1,4 +1,4 @@
-// Widget tests: θέση Τελευταίες Κλήσεις — κλειστό = κάτω δεξιά, ανοιχτό expanded = slot πλάνου.
+﻿// Widget tests: θέση Τελευταίες Κλήσεις — κλειστό = κάτω δεξιά, ανοιχτό expanded = slot πλάνου.
 //
 //   flutter test test/features/calls/calls_screen_compact_layout_test.dart
 
@@ -8,6 +8,7 @@ import 'package:call_logger/features/calls/provider/lookup_provider.dart';
 import 'package:call_logger/features/calls/screens/calls_screen.dart';
 import 'package:call_logger/features/calls/screens/widgets/global_recent_calls_list.dart';
 import 'package:call_logger/features/calls/screens/widgets/notes_sticky_field.dart';
+import 'package:call_logger/features/calls/screens/widgets/smart_entity_selector_widget.dart';
 import 'package:call_logger/main.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -23,6 +24,10 @@ const double kTkBottomRightAnchorInset = 96;
 
 /// Κατώφλι: κάτω από αυτό το ποσοστό του viewport θεωρείται «γωνία οθόνης».
 const double kTkBottomCornerMaxCenterRatio = 0.82;
+
+/// Αποδεκτή ζώνη κάθετου κέντρου γραμμής πεδίων στη συμπτυγμένη όψη.
+const double kCompactFieldRowCenterMinRatio = 0.44;
+const double kCompactFieldRowCenterMaxRatio = 0.56;
 
 Finder _globalRecentToggleFinder() =>
     find.widgetWithText(TextButton, 'Τελευταίες Κλήσεις');
@@ -224,6 +229,37 @@ void main() {
       GoogleFonts.config.allowRuntimeFetching = false;
       await seedTestCallRowForHistorySearch();
     });
+
+    testWidgets(
+      'συμπτυγμένη: η γραμμή πεδίων είναι κάθετα κεντραρισμένη στο viewport',
+      (tester) async {
+        tester.view.physicalSize = const Size(1600, 900);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        await _pumpCallsApp(tester);
+
+        final viewport = _callsViewportRect(tester);
+        final selectorRect = tester.getRect(find.byType(SmartEntitySelectorWidget));
+        final ratio = _verticalCenterRatio(selectorRect, viewport);
+
+        expect(
+          ratio,
+          inInclusiveRange(
+            kCompactFieldRowCenterMinRatio,
+            kCompactFieldRowCenterMaxRatio,
+          ),
+          reason: greekExpectMsg(
+            'Συμπτυγμένη όψη: το κάθετο κέντρο της γραμμής πεδίων πρέπει '
+            'να βρίσκεται κοντά στο μέσο του viewport',
+          ),
+        );
+      },
+      semanticsEnabled: false,
+    );
 
     testWidgets(
       'κλειστή: διακόπτης κάτω δεξιά· ανοιχτή expanded: κάρτα στο slot του πλάνου',

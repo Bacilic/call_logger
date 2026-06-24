@@ -1,4 +1,4 @@
-import 'dart:io' show Platform;
+﻿import 'dart:io' show Platform;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -121,7 +121,7 @@ class _CallsMainContent extends StatelessWidget {
           fit: StackFit.expand,
           children: [
             ...previousChildren,
-            if (currentChild != null) currentChild,
+            ?currentChild,
           ],
         );
       },
@@ -141,9 +141,9 @@ class _CallsMainContent extends StatelessWidget {
                 ),
               ],
             )
-          : Center(
-              key: const ValueKey('compact'),
-              child: const CallHeaderForm(),
+          : const SizedBox.expand(
+              key: ValueKey('compact'),
+              child: CallHeaderForm(compactFieldCentering: true),
             ),
     );
   }

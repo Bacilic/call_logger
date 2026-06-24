@@ -1,4 +1,4 @@
-// Widget test: φόρμα κλήσης — εμφάνιση εξοπλισμού και τηλεφώνων μετά την επιλογή τμήματος.
+﻿// Widget test: φόρμα κλήσης — εμφάνιση εξοπλισμού και τηλεφώνων μετά την επιλογή τμήματος.
 //
 // Ολόκληρο αρχείο:
 //   flutter test test/features/calls/call_form_department_assets_test.dart
@@ -10,9 +10,8 @@
 //   flutter test test/features/calls/call_form_department_assets_test.dart --plain-name "Δοκιμαστικό"
 // Σενάριο καθαρισμού τμήματος (regression φιλτραρίσματος + κόκκινο Χ):
 //   flutter test test/features/calls/call_form_department_assets_test.dart --plain-name "καθαρισμό τμήματος"
-
-// Σενάριο καθαρισμού τμήματος (regression φιλτραρίσματος + κόκκινο Χ):
-//   flutter test test/features/calls/call_form_department_assets_test.dart --plain-name "καθαρισμό τμήματος"
+// Σενάριο ορφανού τηλεφώνου τμήματος (2580 → τμήμα + εξοπλισμός 3856):
+//   flutter test test/features/calls/call_form_department_assets_test.dart --plain-name "ορφανό τηλέφωνο τμήματος"
 
 import 'package:call_logger/core/database/database_helper.dart';
 import 'package:call_logger/core/services/lookup_service.dart';
@@ -48,6 +47,11 @@ const _kDokimastikoSharedPhones = ['2001', '2002', '2003'];
 const _kDokimastikoSharedEquipmentCodes = ['1001', '1002', '1003'];
 const _kDokimastikoScenarioEquipment = '1002';
 const _kDokimastikoScenarioPhone = '2003';
+
+/// Αναπαραγωγή παραγωγικού σενάριου: τηλέφωνο μόνο σε τμήμα (χωρίς χρήστη).
+const _kOrphanDepartmentPhone = '2580';
+const _kOrphanDepartmentName = 'ΤΕΙ Ορθοπεδικό';
+const _kOrphanDepartmentEquipment = '3856';
 
 Finder _callLoggerDepartmentTextField() {
   return find.descendant(
@@ -322,6 +326,67 @@ Future<int> _seedFantasmaDepartmentAssetsScenario() async {
 }
 
 /// Τμήμα «Δοκιμαστικό»: κοινόχρηστα τηλέφωνα 2001–2003, κοινόχρηστος εξοπλισμός 1001–1003.
+/// Τμήμα με ορφανό τηλέφωνο (department_phones χωρίς user_phones) και κοινόχρηστο εξοπλισμό.
+Future<int> _seedOrphanDepartmentPhoneEquipmentScenario() async {
+  final db = await DatabaseHelper.instance.database;
+  await db.delete('user_equipment');
+  await db.delete('user_phones');
+  await db.delete('department_phones');
+  await db.delete('phones');
+  await db.delete('equipment');
+  await db.delete('users');
+  await db.delete('departments');
+
+  final deptId = await db.insert('departments', {
+    'name': _kOrphanDepartmentName,
+    'name_key': SearchTextNormalizer.normalizeForSearch(_kOrphanDepartmentName),
+    'is_deleted': 0,
+  });
+
+  final phoneId = await db.insert('phones', {
+    'number': _kOrphanDepartmentPhone,
+    'is_deleted': 0,
+  });
+  await db.insert('department_phones', {
+    'department_id': deptId,
+    'phone_id': phoneId,
+  });
+
+  await db.insert('equipment', {
+    'code_equipment': _kOrphanDepartmentEquipment,
+    'department_id': deptId,
+    'is_deleted': 0,
+  });
+
+  LookupService.instance.resetForReload();
+  await LookupService.instance.loadFromDatabase();
+  return deptId;
+}
+
+Future<void> _enterPhoneDigitsAndRunLookup(
+  WidgetTester tester,
+  String digits,
+) async {
+  final phoneField = callLoggerPhoneTextField();
+  await tester.tap(phoneField);
+  await pumpUntilSettled(tester);
+  await tester.enterText(phoneField, digits);
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 500));
+  await pumpUntilSettled(tester);
+  await tester.runAsync(() async {
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(MaterialApp)),
+    );
+    final notifier = container.read(callHeaderProvider.notifier);
+    notifier.updatePhone(digits);
+    notifier.performPhoneLookup(digits);
+  });
+  await tester.pump();
+  await pumpUntilSettled(tester, steps: 40, step: const Duration(milliseconds: 60));
+  await pumpUntilSettledLong(tester);
+}
+
 Future<int> _seedDokimastikoDepartmentAssetsScenario() async {
   final db = await DatabaseHelper.instance.database;
   await db.delete('user_equipment');
@@ -1159,6 +1224,129 @@ void main() {
 
         await _finishCallFormWidgetTest(tester);
         reporter.recordPass('Σενάριο 3 — overlays μετά διπλό καθαρισμό');
+      },
+      semanticsEnabled: false,
+    );
+  });
+
+  group('Φόρμα κλήσης — ορφανό τηλέφωνο τμήματος (widget)', () {
+    late int deptId;
+
+    setUp(() async {
+      deptId = await _seedOrphanDepartmentPhoneEquipmentScenario();
+    });
+
+    // Σενάριο: τηλέφωνο 2580 → αυτόματο τμήμα, χωρίς χρήστη, αναμενόμενος εξοπλισμός 3856.
+    //   flutter test test/features/calls/call_form_department_assets_test.dart --plain-name "ορφανό τηλέφωνο τμήματος"
+    testWidgets(
+      'ορφανό τηλέφωνο τμήματος: lookup τηλεφώνου συμπληρώνει τμήμα και εξοπλισμό',
+      (tester) async {
+        _configureDesktopViewport(tester);
+
+        final reporter = GreekTestReportCollector();
+
+        reporter.logProgress(
+          'Οθόνη «Νέα Κλήση» — τηλέφωνο $_kOrphanDepartmentPhone χωρίς καλούντα',
+        );
+        await _loadCallFormApp(tester);
+        reporter.logStepDone('Εφαρμογή φορτώθηκε');
+
+        reporter.logProgress(
+          'Πληκτρολόγηση $_kOrphanDepartmentPhone — αναμενόμενο τμήμα «$_kOrphanDepartmentName»',
+        );
+        await _enterPhoneDigitsAndRunLookup(tester, _kOrphanDepartmentPhone);
+
+        final headerAfterLookup = await _readCallHeaderState(tester);
+        expect(
+          headerAfterLookup.departmentText,
+          _kOrphanDepartmentName,
+          reason: greekExpectMsg(
+            'Το lookup τηλεφώνου πρέπει να συμπληρώνει το τμήμα από department_phones',
+          ),
+        );
+        expect(
+          headerAfterLookup.selectedDepartmentId,
+          deptId,
+          reason: greekExpectMsg('Επιλεγμένο id τμήματος μετά το lookup'),
+        );
+        expect(
+          headerAfterLookup.callerNoMatch,
+          isTrue,
+          reason: greekExpectMsg(
+            'Χωρίς χρήστη στο τηλέφωνο εμφανίζεται «Καμία αντιστοιχία» καλούντα',
+          ),
+        );
+        expect(
+          find.descendant(
+            of: find.byType(SmartEntityCallerField),
+            matching: find.text('Καμία αντιστοιχία'),
+          ),
+          findsOneWidget,
+          reason: greekExpectMsg('Υπόδειξη «Καμία αντιστοιχία» στο πεδίο καλούντα'),
+        );
+        reporter.logStepDone('Τμήμα συμπληρώθηκε — καλούντας χωρίς αντιστοιχία');
+
+        reporter.logProgress(
+          'Έλεγχος αυτόματης συμπλήρωσης εξοπλισμού $_kOrphanDepartmentEquipment',
+        );
+        expect(
+          headerAfterLookup.selectedEquipment?.code,
+          _kOrphanDepartmentEquipment,
+          reason: greekExpectMsg(
+            'Με μοναδικό εξοπλισμό τμήματος, το lookup τηλεφώνου πρέπει να '
+            'επιλέγει τον κωδικό $_kOrphanDepartmentEquipment',
+          ),
+        );
+        expect(
+          headerAfterLookup.equipmentCandidates
+              .map((EquipmentModel e) => e.code?.trim())
+              .whereType<String>()
+              .toSet(),
+          {_kOrphanDepartmentEquipment},
+          reason: greekExpectMsg(
+            'Ο εξοπλισμός τμήματος είναι διαθέσιμος στους υποψήφιους μετά το lookup',
+          ),
+        );
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 100));
+        expect(
+          find.descendant(
+            of: find.byType(SmartEntityEquipmentField),
+            matching: find.textContaining(_kOrphanDepartmentEquipment),
+          ),
+          findsWidgets,
+          reason: greekExpectMsg(
+            'Ο κωδικός $_kOrphanDepartmentEquipment εμφανίζεται στο πεδίο εξοπλισμού',
+          ),
+        );
+        reporter.logStepDone('Εξοπλισμός συμπληρώθηκε αυτόματα');
+
+        reporter.logProgress('Κλικ στο πεδίο εξοπλισμού — αναμένεται στη λίστα');
+        await tester.tap(_callLoggerEquipmentTextField());
+        await pumpUntilSettled(tester);
+
+        final equipmentTile =
+            _equipmentCodeInListFinder(_kOrphanDepartmentEquipment);
+        await _pumpUntilFinderVisible(
+          tester,
+          equipmentTile,
+          failDescription:
+              'Ο εξοπλισμός $_kOrphanDepartmentEquipment δεν εμφανίστηκε στη λίστα '
+              'μετά lookup ορφανού τηλεφώνου τμήματος',
+        );
+        expect(
+          equipmentTile,
+          findsWidgets,
+          reason: greekExpectMsg(
+            'Με κλικ στο πεδίο εξοπλισμού εμφανίζεται ο $_kOrphanDepartmentEquipment',
+          ),
+        );
+        reporter.logStepDone('Εξοπλισμός ορατός στη λίστα overlay');
+
+        await _finishCallFormWidgetTest(tester);
+        reporter.recordPass(
+          'ορφανό τηλέφωνο τμήματος: τμήμα + εξοπλισμός από lookup',
+        );
       },
       semanticsEnabled: false,
     );
