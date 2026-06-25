@@ -247,9 +247,7 @@ class _CallHeaderFormState extends ConsumerState<CallHeaderForm> {
         final equipmentColumnOffset =
             w1 + _kHeaderFieldGap + w2 + _kHeaderFieldGap + wDept + _kHeaderFieldGap;
         final titleText = CallsScreenTitleResolver.resolve(header);
-        final showTitleRow = !widget.compactFieldCentering ||
-            titleText.isNotEmpty ||
-            header.needsAssociation(lookupService);
+        final showTitleRow = !widget.compactFieldCentering;
 
         final formCore = Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,

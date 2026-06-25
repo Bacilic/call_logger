@@ -29,6 +29,23 @@ const double kTkBottomCornerMaxCenterRatio = 0.82;
 const double kCompactFieldRowCenterMinRatio = 0.44;
 const double kCompactFieldRowCenterMaxRatio = 0.56;
 
+void _expectScreenTitleAbsent({required String phase}) {
+  expect(
+    find.text('Νέα Κλήση'),
+    findsNothing,
+    reason: greekExpectMsg(
+      'Συμπτυγμένη όψη: ο τίτλος «Νέα Κλήση» δεν εμφανίζεται ($phase)',
+    ),
+  );
+  expect(
+    find.text('Πληροφορίες'),
+    findsNothing,
+    reason: greekExpectMsg(
+      'Συμπτυγμένη όψη: ο τίτλος «Πληροφορίες» δεν εμφανίζεται ($phase)',
+    ),
+  );
+}
+
 Finder _globalRecentToggleFinder() =>
     find.widgetWithText(TextButton, 'Τελευταίες Κλήσεις');
 
@@ -276,6 +293,7 @@ void main() {
 
         await _pumpCallsApp(tester);
         await _setGlobalRecentOpen(tester, false);
+        _expectScreenTitleAbsent(phase: 'αρχική συμπτυγμένη');
 
         final viewport = _callsViewportRect(tester);
         final selectorRect = tester.getRect(find.byType(SmartEntitySelectorWidget));
@@ -292,6 +310,87 @@ void main() {
             'να βρίσκεται κοντά στο μέσο του viewport',
           ),
         );
+      },
+      semanticsEnabled: false,
+    );
+
+    testWidgets(
+      'συμπτυγμένη: πληκτρολόγηση ≥2 ψηφίων χωρίς commit δεν αναπτύσσει την όψη',
+      (tester) async {
+        tester.view.physicalSize = const Size(1600, 900);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        await _pumpCallsApp(tester);
+        await _setGlobalRecentOpen(tester, false);
+
+        final container = ProviderScope.containerOf(
+          tester.element(find.byType(CallsScreen)),
+        );
+
+        // Πληκτρολόγηση ψηφίων με εστίαση στο πεδίο, ΧΩΡΙΣ Enter/Tab/blur.
+        final phoneField = callLoggerPhoneTextField();
+        await tester.tap(phoneField);
+        await pumpUntilSettled(tester);
+        await tester.enterText(phoneField, '2345');
+        await tester.pump();
+        await pumpUntilSettled(tester);
+
+        expect(
+          container.read(callsScreenIsExpandedProvider),
+          isFalse,
+          reason: greekExpectMsg(
+            'Πληκτρολόγηση ≥2 ψηφίων χωρίς οριστική καταχώρηση: η όψη πρέπει '
+            'να παραμένει συμπτυγμένη (χωρίς expanded latch)',
+          ),
+        );
+        _expectScreenTitleAbsent(phase: 'πληκτρολόγηση ≥2 ψηφίων');
+
+        final viewport = _callsViewportRect(tester);
+        final selectorRect =
+            tester.getRect(find.byType(SmartEntitySelectorWidget));
+        final ratio = _verticalCenterRatio(selectorRect, viewport);
+        expect(
+          ratio,
+          inInclusiveRange(
+            kCompactFieldRowCenterMinRatio,
+            kCompactFieldRowCenterMaxRatio,
+          ),
+          reason: greekExpectMsg(
+            'Κατά την πληκτρολόγηση: η γραμμή πεδίων πρέπει να μένει '
+            'κάθετα κεντραρισμένη στο viewport',
+          ),
+        );
+      },
+      semanticsEnabled: false,
+    );
+
+    testWidgets(
+      'expanded: στενό παράθυρο (~1050px) με επιβεβαιωμένο τηλέφωνο χωρίς overflow',
+      (tester) async {
+        tester.view.physicalSize = const Size(1050, 900);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        await _pumpCallsApp(tester);
+        await _setGlobalRecentOpen(tester, false);
+
+        await _confirmPhoneField(tester);
+
+        expect(
+          tester.takeException(),
+          isNull,
+          reason: greekExpectMsg(
+            'Στενό expanded παράθυρο: χωρίς RenderFlex overflow στα πεδία συμπλήρωσης',
+          ),
+        );
+        await tester.pump(const Duration(seconds: 11));
       },
       semanticsEnabled: false,
     );
@@ -354,6 +453,13 @@ void main() {
           isTrue,
           reason: greekExpectMsg('Μετά επιβεβαίωση τηλεφώνου → expanded'),
         );
+        expect(
+          find.text('Νέα Κλήση'),
+          findsOneWidget,
+          reason: greekExpectMsg(
+            'Αναπτυγμένη όψη: εμφανίζεται ο τίτλος «Νέα Κλήση»',
+          ),
+        );
 
         reporter.logStep('Αναπτυγμένη + κλειστή ΤΚ — διακόπτης κάτω δεξιά');
         await _setGlobalRecentOpen(tester, false);
@@ -389,6 +495,23 @@ void main() {
           container.read(callsScreenIsExpandedProvider),
           isFalse,
           reason: greekExpectMsg('Μετά Εκκαθάριση → συμπτυγμένη'),
+        );
+        _expectScreenTitleAbsent(phase: 'μετά Εκκαθάριση');
+        final viewportAfterClear = _callsViewportRect(tester);
+        final selectorRectAfterClear =
+            tester.getRect(find.byType(SmartEntitySelectorWidget));
+        final ratioAfterClear =
+            _verticalCenterRatio(selectorRectAfterClear, viewportAfterClear);
+        expect(
+          ratioAfterClear,
+          inInclusiveRange(
+            kCompactFieldRowCenterMinRatio,
+            kCompactFieldRowCenterMaxRatio,
+          ),
+          reason: greekExpectMsg(
+            'Μετά Εκκαθάριση: η γραμμή πεδίων πρέπει να επανέρχεται '
+            'κάθετα στο κέντρο του viewport',
+          ),
         );
         _expectToggleAnchoredBottomRight(
           tester,

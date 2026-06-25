@@ -476,7 +476,13 @@ void main() {
         expect(find.byType(CategoryAutocompleteField), findsNothing);
         expect(find.byType(CallStatusBar), findsNothing);
         expect(find.widgetWithText(ElevatedButton, 'Καταγραφή'), findsNothing);
-        expect(find.widgetWithText(OutlinedButton, 'Εκκαθάριση'), findsNothing);
+        expect(
+          find.widgetWithText(OutlinedButton, 'Εκκαθάριση'),
+          findsOneWidget,
+          reason: greekExpectMsg(
+            'Expanded latch κενά πεδία: το Εκκαθάριση παραμένει στο anchor κάτω δεξιά',
+          ),
+        );
 
         await tester.runAsync(() async {
           await container

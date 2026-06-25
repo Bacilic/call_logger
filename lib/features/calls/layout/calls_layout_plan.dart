@@ -1,3 +1,4 @@
+import '../../../core/config/calls_layout_config.dart';
 import 'calls_layout_template.dart';
 
 /// Identifiers for widgets placed by [CallsLayoutEngine].
@@ -87,4 +88,21 @@ class CallsLayoutPlan {
         for (final row in rows)
           for (final col in row.columns) ...col.slots,
       ];
+}
+
+/// Αποφασίζει αν οι στήλες μιας γραμμής στοιβάζονται κάθετα αντί για οριζόντιο πλέγμα.
+bool callsLayoutShouldStackColumns({
+  required double contentWidth,
+  required CallsLayoutPlan plan,
+  double columnGap = 16,
+}) {
+  if (contentWidth < callsLayoutNarrowViewportBreakpoint) return true;
+  for (final row in plan.rows) {
+    final colCount = row.columns.where((c) => !c.isEmpty).length;
+    if (colCount <= 1) continue;
+    final gutters = (colCount - 1) * columnGap;
+    final perCol = (contentWidth - gutters) / colCount;
+    if (perCol < callsLayoutMinColumnWidth) return true;
+  }
+  return false;
 }

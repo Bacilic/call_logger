@@ -1,9 +1,9 @@
-﻿import 'dart:io' show Platform;
+﻿import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/config/calls_layout_config.dart';
 import '../../../core/models/calls_screen_cards_visibility.dart';
 import '../../../core/models/remote_tool.dart';
 import '../../../core/providers/settings_provider.dart';
@@ -40,6 +40,21 @@ class CallsScreenLayout extends ConsumerWidget {
   static const double _kScreenPadding = 16;
   static const Duration _kHeaderMoveDuration = Duration(milliseconds: 350);
   static const double _kCompactFormToRecentCardGap = 12;
+
+  /// Ανώτατο πλάτος στήλης πλέγματος — ταιριάζει με εσωτερικό πλάτος [MiniMapCard].
+  static const double kMapCardColumnMaxWidth = 336;
+
+  /// Ανώτατο πλάτος στήλης για [UserInfoCard] (περιεχόμενο με [IntrinsicWidth]).
+  static const double kUserInfoCardColumnMaxWidth = 400;
+
+  /// Ανώτατο πλάτος στήλης — ταιριάζει με [RecentCallsList].
+  static const double kRecentCallsCardColumnMaxWidth = 560;
+
+  /// Ανώτατο πλάτος στήλης — ταιριάζει με [GlobalRecentCallsList].
+  static const double kGlobalRecentCardColumnMaxWidth = _kGlobalRecentCardMaxWidth;
+
+  /// Ανώτατο πλάτος στήλης για [EquipmentRecentCallsPanel].
+  static const double kEquipmentRecentCardColumnMaxWidth = 560;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -82,11 +97,13 @@ class CallsScreenLayout extends ConsumerWidget {
                     showGlobalRecentCard: cardsVis.showGlobalRecentCard,
                   ),
                 ),
-                if (cardsVis.showGlobalRecentCard && isExpanded)
-                  const Positioned(
+                if (isExpanded)
+                  Positioned(
                     right: 0,
                     bottom: 0,
-                    child: _TkBottomRightAnchor(),
+                    child: _ExpandedBottomRightAnchors(
+                      showGlobalRecentCard: cardsVis.showGlobalRecentCard,
+                    ),
                   ),
               ],
             ),
@@ -220,16 +237,53 @@ class _CompactCallsLayout extends ConsumerWidget {
   }
 }
 
-/// Διακόπτης ΤΚ — κάτω δεξιά μόνο στην αναπτυγμένη όψη όταν η κάρτα είναι κλειστή.
-/// Ανοιχτή αναπτυγμένη: κάρτα στο πλάνο. Συμπτυγμένη: [_CompactCallsLayout].
-class _TkBottomRightAnchor extends ConsumerWidget {
-  const _TkBottomRightAnchor();
+/// Κάτω δεξιά στην αναπτυγμένη όψη: «Εκκαθάριση» + (προαιρετικά) διακόπτης ΤΚ.
+/// Στήλη για αποφυγή επικάλυψης όταν η κάρτα ΤΚ είναι κλειστή.
+class _ExpandedBottomRightAnchors extends ConsumerWidget {
+  const _ExpandedBottomRightAnchors({required this.showGlobalRecentCard});
+
+  final bool showGlobalRecentCard;
+
+  static const double _kAnchorSpacing = 8;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final showGlobal = ref.watch(showGlobalCallsToggleProvider);
-    if (showGlobal) return const SizedBox.shrink();
-    return const _GlobalRecentToggle(showExpanded: false);
+    final showTkToggle = showGlobalRecentCard && !showGlobal;
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        const _ClearFormButton(),
+        if (showTkToggle) ...[
+          const SizedBox(height: _kAnchorSpacing),
+          const _GlobalRecentToggle(showExpanded: false),
+        ],
+      ],
+    );
+  }
+}
+
+/// Κουμπί καθαρισμού φόρμας — ανεξάρτητο από πυλώνα τηλεφώνου και slot submitActions.
+class _ClearFormButton extends ConsumerWidget {
+  const _ClearFormButton();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return OutlinedButton.icon(
+      icon: const Icon(Icons.cleaning_services_outlined),
+      label: const Text('Εκκαθάριση'),
+      style: OutlinedButton.styleFrom(
+        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
+      ),
+      onPressed: () {
+        ref.read(callHeaderProvider.notifier).clearAll();
+        ref.read(callEntryProvider.notifier).reset();
+        ref.read(callsFieldConfirmationsProvider.notifier).resetAll();
+        ref.read(callsScreenExpandedLatchProvider.notifier).release();
+      },
+    );
   }
 }
 
@@ -286,7 +340,10 @@ class _ExpandedPlanBody extends ConsumerWidget {
         ? CallsScreenLayout._kSharedAxisMaxWidthWithRemote
         : CallsScreenLayout._kSharedAxisMaxWidth;
     final width = MediaQuery.sizeOf(context).width - 32;
-    final isNarrowViewport = width < callsLayoutNarrowViewportBreakpoint;
+    final isNarrowViewport = callsLayoutShouldStackColumns(
+      contentWidth: width,
+      plan: plan,
+    );
 
     return Column(
       children: [
@@ -378,19 +435,120 @@ class _LayoutRowWidget extends ConsumerWidget {
           if (!row.columns[i].isEmpty) ...[
             if (i > 0) const SizedBox(width: 16),
             Expanded(
-              child: _LayoutColumnWidget(
-                column: row.columns[i],
-                sharedAxisWidth: sharedAxisWidth,
-                header: header,
-                tools: tools,
-                selectedEquipmentCode: selectedEquipmentCode,
-                showRemoteButtons: showRemoteButtons,
+              child: Align(
+                alignment: Alignment.topCenter,
+                child: _LayoutColumnWidthCap(
+                  maxWidth: _layoutColumnMaxWidth(
+                    row.columns[i],
+                    sharedAxisCap,
+                  ),
+                  fillCappedWidth: _columnFillsCappedWidth(row.columns[i]),
+                  child: _LayoutColumnWidget(
+                    column: row.columns[i],
+                    sharedAxisWidth: sharedAxisWidth,
+                    header: header,
+                    tools: tools,
+                    selectedEquipmentCode: selectedEquipmentCode,
+                    showRemoteButtons: showRemoteButtons,
+                  ),
+                ),
               ),
             ),
           ],
       ],
     );
   }
+}
+
+/// Περιορίζει το πλάτος στήλης σε ευρύ viewport· σε στενό χώρο το [Expanded] συνεχίζει να συρρικνώνει.
+class _LayoutColumnWidthCap extends StatelessWidget {
+  const _LayoutColumnWidthCap({
+    required this.maxWidth,
+    required this.fillCappedWidth,
+    required this.child,
+  });
+
+  final double? maxWidth;
+  final bool fillCappedWidth;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    if (maxWidth == null) return child;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final cappedMax = math.min(constraints.maxWidth, maxWidth!);
+        if (fillCappedWidth) {
+          return Align(
+            alignment: Alignment.topCenter,
+            child: SizedBox(
+              width: cappedMax,
+              child: child,
+            ),
+          );
+        }
+        return Align(
+          alignment: Alignment.topCenter,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: cappedMax),
+            child: child,
+          ),
+        );
+      },
+    );
+  }
+}
+
+double? _layoutColumnMaxWidth(
+  CallsLayoutColumn column,
+  double sharedAxisCap,
+) {
+  double? cap;
+  for (final slot in column.slots) {
+    final slotCap = _layoutSlotMaxWidth(slot, sharedAxisCap);
+    if (slotCap == null) continue;
+    cap = cap == null ? slotCap : math.max(cap, slotCap);
+  }
+  return cap;
+}
+
+double? _layoutSlotMaxWidth(CallsLayoutSlot slot, double sharedAxisCap) {
+  switch (slot) {
+    case CallsLayoutSlot.map:
+      return CallsScreenLayout.kMapCardColumnMaxWidth;
+    case CallsLayoutSlot.callerCard:
+      return CallsScreenLayout.kUserInfoCardColumnMaxWidth;
+    case CallsLayoutSlot.callerHistory:
+      return CallsScreenLayout.kRecentCallsCardColumnMaxWidth;
+    case CallsLayoutSlot.globalRecent:
+      return CallsScreenLayout.kGlobalRecentCardColumnMaxWidth;
+    case CallsLayoutSlot.equipmentHistory:
+      return CallsScreenLayout.kEquipmentRecentCardColumnMaxWidth;
+    case CallsLayoutSlot.notes:
+    case CallsLayoutSlot.categoryPending:
+    case CallsLayoutSlot.submitActions:
+    case CallsLayoutSlot.remoteTools:
+      return sharedAxisCap;
+  }
+}
+
+bool _columnFillsCappedWidth(CallsLayoutColumn column) {
+  for (final slot in column.slots) {
+    switch (slot) {
+      case CallsLayoutSlot.notes:
+      case CallsLayoutSlot.categoryPending:
+      case CallsLayoutSlot.submitActions:
+      case CallsLayoutSlot.remoteTools:
+        return true;
+      case CallsLayoutSlot.map:
+      case CallsLayoutSlot.callerCard:
+      case CallsLayoutSlot.callerHistory:
+      case CallsLayoutSlot.globalRecent:
+      case CallsLayoutSlot.equipmentHistory:
+        continue;
+    }
+  }
+  return false;
 }
 
 class _LayoutColumnWidget extends ConsumerWidget {
@@ -513,44 +671,74 @@ class _CategoryPendingRow extends ConsumerWidget {
       callEntryProvider.select((s) => s.notes.trim().isNotEmpty),
     );
 
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Expanded(
-          child: CategoryAutocompleteField(
-              onCategoryChanged: (text, categoryId) {
-                ref
-                    .read(callEntryProvider.notifier)
-                    .setCategory(text, categoryId: categoryId);
-              },
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final trailing = Wrap(
+          spacing: 6,
+          runSpacing: 4,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            Checkbox(
+              value: isPending,
+              onChanged: notesNonEmpty
+                  ? (_) => ref.read(callEntryProvider.notifier).togglePending()
+                  : null,
             ),
-          ),
-          const SizedBox(width: 6),
-          Checkbox(
-            value: isPending,
-            onChanged: notesNonEmpty
-                ? (_) => ref.read(callEntryProvider.notifier).togglePending()
-                : null,
-          ),
-          GestureDetector(
-            onTap: notesNonEmpty
-                ? ref.read(callEntryProvider.notifier).togglePending
-                : () =>
-                      ref.read(notesFieldHintTickProvider.notifier).requestHintFlash(),
-            child: Text(
-              'Εκκρεμότητα',
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: notesNonEmpty
-                    ? null
-                    : Theme.of(context).colorScheme.onSurface.withValues(
-                        alpha: 0.38,
-                      ),
+            GestureDetector(
+              onTap: notesNonEmpty
+                  ? ref.read(callEntryProvider.notifier).togglePending
+                  : () => ref
+                        .read(notesFieldHintTickProvider.notifier)
+                        .requestHintFlash(),
+              child: Text(
+                'Εκκρεμότητα',
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: notesNonEmpty
+                      ? null
+                      : Theme.of(context).colorScheme.onSurface.withValues(
+                          alpha: 0.38,
+                        ),
+                ),
               ),
             ),
-          ),
-          const SizedBox(width: 8),
-          const CallStatusBar(showPendingToggle: false),
-        ],
+            const CallStatusBar(showPendingToggle: false),
+          ],
+        );
+
+        if (constraints.maxWidth < 420) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              CategoryAutocompleteField(
+                onCategoryChanged: (text, categoryId) {
+                  ref
+                      .read(callEntryProvider.notifier)
+                      .setCategory(text, categoryId: categoryId);
+                },
+              ),
+              const SizedBox(height: 8),
+              trailing,
+            ],
+          );
+        }
+
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: CategoryAutocompleteField(
+                onCategoryChanged: (text, categoryId) {
+                  ref
+                      .read(callEntryProvider.notifier)
+                      .setCategory(text, categoryId: categoryId);
+                },
+              ),
+            ),
+            const SizedBox(width: 6),
+            trailing,
+          ],
+        );
+      },
     );
   }
 }
@@ -572,7 +760,6 @@ class _SubmitActionsRow extends ConsumerWidget {
       crossAxisAlignment: WrapCrossAlignment.center,
       children: [
         _buildSubmitButton(context, ref),
-        _buildClearButton(context, ref),
       ],
     );
   }
@@ -629,19 +816,4 @@ class _SubmitActionsRow extends ConsumerWidget {
           );
   }
 
-  Widget _buildClearButton(BuildContext context, WidgetRef ref) {
-    return OutlinedButton.icon(
-      icon: const Icon(Icons.cleaning_services_outlined),
-      label: const Text('Εκκαθάριση'),
-      style: OutlinedButton.styleFrom(
-        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
-      ),
-      onPressed: () {
-        ref.read(callHeaderProvider.notifier).clearAll();
-        ref.read(callEntryProvider.notifier).reset();
-        ref.read(callsFieldConfirmationsProvider.notifier).resetAll();
-        ref.read(callsScreenExpandedLatchProvider.notifier).release();
-      },
-    );
-  }
 }

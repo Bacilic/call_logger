@@ -76,7 +76,7 @@ class SmartEntitySelectorWidgetState
 
   void _onPhoneFocusChange() {
     if (_phoneFocusNode.hasFocus) {
-      ref.read(callsScreenExpandedLatchProvider.notifier).engage();
+      // Μην κλειδώνουμε expanded σε autofocus/απλή εστίαση· μόνο με πληκτρολόγηση (phoneEditing).
       return;
     }
     if (_isSelectingFromList) return;
@@ -294,7 +294,8 @@ class SmartEntitySelectorWidgetState
     }
 
     void phoneEditing() {
-      ref.read(callsScreenExpandedLatchProvider.notifier).engage();
+      // Η πληκτρολόγηση ΔΕΝ κλειδώνει expanded latch· η όψη μένει συμπτυγμένη μέχρι
+      // οριστική καταχώρηση (Enter/blur/επιλογή λίστας). Μόνο καθαρίζει την επιβεβαίωση.
       ref.read(callsFieldConfirmationsProvider.notifier).unconfirmPhone();
     }
 
