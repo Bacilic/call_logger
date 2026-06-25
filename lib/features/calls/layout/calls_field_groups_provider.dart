@@ -1,4 +1,4 @@
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+﻿import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../provider/call_header_provider.dart';
 import '../provider/lookup_provider.dart';
@@ -19,6 +19,11 @@ class CallsFieldConfirmationsNotifier extends Notifier<CallsFieldConfirmations> 
     ref.read(callsScreenExpandedLatchProvider.notifier).engage();
     if (state.phone) return;
     state = state.copyWith(phone: true);
+  }
+
+  void unconfirmPhone() {
+    if (!state.phone) return;
+    state = state.copyWith(phone: false);
   }
 
   void confirmEquipment() {

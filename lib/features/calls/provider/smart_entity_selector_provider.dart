@@ -1551,6 +1551,12 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
     }
   }
 
+  String _equipmentAutofillText(EquipmentModel equipment) {
+    final code = equipment.code?.trim();
+    if (code != null && code.isNotEmpty) return code;
+    return equipment.displayLabel.trim();
+  }
+
   void _performEquipmentLookupForUser(int userId) {
     final asyncLookup = ref.read(lookupServiceProvider);
     final lookup = asyncLookup.value?.service;
@@ -1568,11 +1574,15 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
     if (list.length == 1) {
       final canAutofillEquipment = state.equipmentText.trim().isEmpty;
       if (canAutofillEquipment) {
+        final equipment = list.first;
+        final text = _equipmentAutofillText(equipment);
         state = state.copyWith(
-          selectedEquipment: list.first,
+          selectedEquipment: equipment,
+          equipmentText: text,
           equipmentCandidates: [],
           isEquipmentAmbiguous: false,
           equipmentNoMatch: false,
+          hasAnyContent: _computeHasAnyContent(equipmentText: text),
         );
       } else {
         state = state.copyWith(
@@ -1605,11 +1615,15 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
       return;
     }
     if (list.length == 1) {
+      final equipment = list.first;
+      final text = _equipmentAutofillText(equipment);
       state = state.copyWith(
-        selectedEquipment: list.first,
+        selectedEquipment: equipment,
+        equipmentText: text,
         equipmentCandidates: list,
         isEquipmentAmbiguous: false,
         equipmentNoMatch: false,
+        hasAnyContent: _computeHasAnyContent(equipmentText: text),
       );
       return;
     }

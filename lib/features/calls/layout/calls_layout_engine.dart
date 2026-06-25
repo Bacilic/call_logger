@@ -1,4 +1,4 @@
-import '../../../core/models/calls_screen_cards_visibility.dart';
+﻿import '../../../core/models/calls_screen_cards_visibility.dart';
 import 'calls_field_groups.dart';
 import 'calls_layout_plan.dart';
 import 'calls_layout_template.dart';
@@ -74,6 +74,50 @@ class CallsLayoutEngine {
     CallsFieldGroups groups,
     CallsLayoutVisibility v,
   ) {
+    if (groups.isPhoneOnlyTemplateA) {
+      return _templateAPhoneOnly(groups, v);
+    }
+    return _templateAFull(groups, v);
+  }
+
+  /// Πρότυπο Α #1 — μόνο τηλέφωνο (`1- τηλέφωνο.png`).
+  static CallsLayoutPlan _templateAPhoneOnly(
+    CallsFieldGroups groups,
+    CallsLayoutVisibility v,
+  ) {
+    final rows = <CallsLayoutRow>[];
+
+    if (groups.isPhoneGroupActive) {
+      rows.add(
+        CallsLayoutRow([
+          CallsLayoutColumn.singleSlot(CallsLayoutSlot.notes),
+        ]),
+      );
+    }
+
+    if (groups.isPhoneGroupActive) {
+      final actionCols = <CallsLayoutColumn>[
+        CallsLayoutColumn.singleSlot(CallsLayoutSlot.categoryPending),
+        CallsLayoutColumn.singleSlot(CallsLayoutSlot.submitActions),
+        if (v.showEquipmentRecentPanel)
+          CallsLayoutColumn.singleSlot(CallsLayoutSlot.equipmentHistory),
+      ];
+      rows.add(CallsLayoutRow(actionCols));
+    }
+
+    final infoCols = _templateAInfoColumns(v);
+    if (infoCols.any((c) => !c.isEmpty)) {
+      rows.add(CallsLayoutRow(infoCols));
+    }
+
+    return CallsLayoutPlan(template: CallsLayoutTemplate.a, rows: rows);
+  }
+
+  /// Πρότυπο Α πλήρες — σημειώσεις μοιράζονται γραμμή 2 με ενέργειες/εξοπλισμό.
+  static CallsLayoutPlan _templateAFull(
+    CallsFieldGroups groups,
+    CallsLayoutVisibility v,
+  ) {
     final row2Cols = <CallsLayoutColumn>[
       if (groups.isPhoneGroupActive)
         CallsLayoutColumn.stack([
@@ -88,7 +132,19 @@ class CallsLayoutEngine {
         CallsLayoutColumn.singleSlot(CallsLayoutSlot.equipmentHistory),
     ];
 
-    final row3Cols = <CallsLayoutColumn>[
+    final rows = <CallsLayoutRow>[
+      if (row2Cols.any((c) => !c.isEmpty)) CallsLayoutRow(row2Cols),
+      if (_templateAInfoColumns(v).any((c) => !c.isEmpty))
+        CallsLayoutRow(_templateAInfoColumns(v)),
+    ];
+
+    return CallsLayoutPlan(template: CallsLayoutTemplate.a, rows: rows);
+  }
+
+  static List<CallsLayoutColumn> _templateAInfoColumns(
+    CallsLayoutVisibility v,
+  ) {
+    return [
       CallsLayoutColumn.stack([
         if (v.showUserCard) CallsLayoutSlot.callerCard,
         if (v.showEmployeeRecentCard) CallsLayoutSlot.callerHistory,
@@ -97,13 +153,6 @@ class CallsLayoutEngine {
       if (v.showGlobalRecentCard)
         CallsLayoutColumn.singleSlot(CallsLayoutSlot.globalRecent),
     ];
-
-    final rows = <CallsLayoutRow>[
-      if (row2Cols.any((c) => !c.isEmpty)) CallsLayoutRow(row2Cols),
-      if (row3Cols.any((c) => !c.isEmpty)) CallsLayoutRow(row3Cols),
-    ];
-
-    return CallsLayoutPlan(template: CallsLayoutTemplate.a, rows: rows);
   }
 
   static CallsLayoutPlan _templateB(

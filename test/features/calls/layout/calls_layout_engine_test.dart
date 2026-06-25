@@ -1,4 +1,4 @@
-import 'package:flutter_test/flutter_test.dart';
+﻿import 'package:flutter_test/flutter_test.dart';
 
 import 'package:call_logger/features/calls/layout/calls_field_groups.dart';
 import 'package:call_logger/features/calls/layout/calls_layout_engine.dart';
@@ -43,12 +43,32 @@ CallsLayoutVisibility _visFor(CallsFieldGroups groups, {bool globalRecent = true
 
 void main() {
   group('CallsLayoutEngine — 15 combinations (table 8.8)', () {
-    test('#1 phone only — template A row2 control slots', () {
+    test('#1 phone only — template A: σημειώσεις, ενέργειες, χωρίς χάρτη', () {
       final g = _groups(phone: true);
       final plan = CallsLayoutEngine.build(g, _visFor(g));
       expect(plan.template, CallsLayoutTemplate.a);
-      expect(plan.allSlots, contains(CallsLayoutSlot.notes));
+      expect(plan.rows.length, 3);
+      expect(plan.rows[0].columns.single.slots, [CallsLayoutSlot.notes]);
+      expect(
+        plan.rows[1].columns.map((c) => c.slots.first).toList(),
+        [
+          CallsLayoutSlot.categoryPending,
+          CallsLayoutSlot.submitActions,
+        ],
+      );
+      expect(plan.allSlots, isNot(contains(CallsLayoutSlot.map)));
+      expect(plan.allSlots, contains(CallsLayoutSlot.globalRecent));
       expect(plan.allSlots, isNot(contains(CallsLayoutSlot.callerCard)));
+    });
+
+    test('#1+ΧΑ phone only + map — template A: χάρτης/ΤΚ στη 3η γραμμή', () {
+      final g = _groups(phone: true, map: true);
+      final plan = CallsLayoutEngine.build(g, _visFor(g));
+      expect(plan.rows.length, 3);
+      expect(
+        plan.rows[2].columns.map((c) => c.single).whereType<CallsLayoutSlot>(),
+        containsAll([CallsLayoutSlot.map, CallsLayoutSlot.globalRecent]),
+      );
     });
 
     test('#2 phone + caller — template A with row3 caller stack', () {
@@ -97,7 +117,7 @@ void main() {
       expect(plan.allSlots, contains(CallsLayoutSlot.map));
     });
 
-    test('#8 full template A — all major slots', () {
+    test('#8 full template A — all major slots, σημειώσεις στη γραμμή 2', () {
       final g = _groups(
         phone: true,
         caller: true,
@@ -106,6 +126,13 @@ void main() {
       );
       final plan = CallsLayoutEngine.build(g, _visFor(g));
       expect(plan.template, CallsLayoutTemplate.a);
+      expect(
+        plan.rows[0].columns.first.slots,
+        containsAll([
+          CallsLayoutSlot.notes,
+          CallsLayoutSlot.categoryPending,
+        ]),
+      );
       expect(plan.allSlots, containsAll([
         CallsLayoutSlot.notes,
         CallsLayoutSlot.remoteTools,

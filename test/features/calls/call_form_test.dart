@@ -1,4 +1,4 @@
-// Widget tests: πλήρης / αρνητική ροή φόρμας κλήσης με απομονωμένη βάση.
+﻿// Widget tests: πλήρης / αρνητική ροή φόρμας κλήσης με απομονωμένη βάση.
 //
 // Ολόκληρο αρχείο:
 //   flutter test test/features/calls/call_form_test.dart
@@ -7,9 +7,15 @@
 
 import 'package:call_logger/core/database/database_helper.dart';
 import 'package:call_logger/core/services/lookup_service.dart';
+import 'package:call_logger/features/calls/layout/calls_field_groups_provider.dart';
 import 'package:call_logger/features/calls/provider/call_entry_provider.dart';
 import 'package:call_logger/features/calls/provider/call_header_provider.dart';
+import 'package:call_logger/features/calls/provider/calls_dashboard_providers.dart';
 import 'package:call_logger/features/calls/provider/lookup_provider.dart';
+import 'package:call_logger/features/calls/screens/widgets/call_status_bar.dart';
+import 'package:call_logger/features/calls/screens/widgets/category_autocomplete_field.dart';
+import 'package:call_logger/features/calls/screens/widgets/notes_sticky_field.dart';
+import 'package:call_logger/features/calls/screens/widgets/global_recent_calls_list.dart';
 import 'package:call_logger/main.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -196,6 +202,162 @@ void main() {
       timeout: const Timeout(Duration(minutes: 2)),
     );
 
+    // Συμπτυγμένη όψη: η επέκταση μόνο μετά ολοκλήρωση καταχώρησης τηλεφώνου (όχι στα 2 ψηφία).
+    testWidgets(
+      'συμπτυγμένη: 2 ψηφία κατά την πληκτρολόγηση δεν επεκτείνουν οθόνη',
+      (tester) async {
+        tester.view.physicalSize = const Size(1600, 900);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        await tester.runAsync(() async {
+          await tester.pumpWidget(
+            ProviderScope(
+              overrides: callLoggerTestProviderOverrides(),
+              child: const MyApp(),
+            ),
+          );
+          await tester.pump();
+          await pumpUntilSettledLong(tester);
+          await GoogleFonts.pendingFonts();
+          final container = ProviderScope.containerOf(
+            tester.element(find.byType(MaterialApp)),
+          );
+          await container.read(lookupServiceProvider.future);
+        });
+
+        final container = ProviderScope.containerOf(
+          tester.element(find.byType(MaterialApp)),
+        );
+        final phoneField = callLoggerPhoneTextField();
+
+        await tester.tap(phoneField);
+        await pumpUntilSettled(tester);
+        await tester.enterText(phoneField, '28');
+        await tester.pump();
+
+        expect(
+          container.read(callsScreenIsExpandedProvider),
+          isTrue,
+          reason: greekExpectMsg(
+            'Με εστίαση/πληκτρολόγηση τηλεφώνου η κεφαλίδα μένει πάνω (expanded latch)',
+          ),
+        );
+        expect(
+          container.read(callsFieldGroupsProvider).anyGroupActive,
+          isFalse,
+          reason: greekExpectMsg(
+            'Με 2 ψηφία κατά την πληκτρολόγηση καμία ομάδα πεδίων δεν είναι ενεργή',
+          ),
+        );
+        expect(
+          find.widgetWithText(ElevatedButton, 'Καταγραφή'),
+          findsNothing,
+          reason: greekExpectMsg(
+            'Χωρίς επιβεβαίωση τηλεφώνου δεν εμφανίζεται κουμπί Καταγραφή',
+          ),
+        );
+        expect(
+          find.byType(NotesStickyField),
+          findsNothing,
+          reason: greekExpectMsg(
+            'Με 2 ψηφία κατά την πληκτρολόγηση δεν εμφανίζονται σημειώσεις',
+          ),
+        );
+
+        await tester.testTextInput.receiveAction(TextInputAction.done);
+        await tester.pump(const Duration(milliseconds: 300));
+        await pumpUntilSettled(tester);
+
+        expect(
+          container.read(callsScreenIsExpandedProvider),
+          isTrue,
+          reason: greekExpectMsg(
+            'Μετά submit (Done) του τηλεφώνου η οθόνη επεκτείνεται',
+          ),
+        );
+        expect(
+          find.byType(NotesStickyField),
+          findsOneWidget,
+          reason: greekExpectMsg(
+            'Μετά submit (Done) εμφανίζονται σημειώσεις',
+          ),
+        );
+
+        await tester.pump(const Duration(seconds: 11));
+      },
+      semanticsEnabled: false,
+      timeout: const Timeout(Duration(minutes: 2)),
+    );
+
+    testWidgets(
+      'συμπτυγμένη: submit τηλεφώνου συμπληρώνει καλούντα και εξοπλισμό μετά την επέκταση',
+      (tester) async {
+        tester.view.physicalSize = const Size(1600, 900);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        await tester.runAsync(() async {
+          await tester.pumpWidget(
+            ProviderScope(
+              overrides: callLoggerTestProviderOverrides(),
+              child: const MyApp(),
+            ),
+          );
+          await tester.pump();
+          await pumpUntilSettledLong(tester);
+          await GoogleFonts.pendingFonts();
+          final container = ProviderScope.containerOf(
+            tester.element(find.byType(MaterialApp)),
+          );
+          await container.read(lookupServiceProvider.future);
+        });
+
+        final container = ProviderScope.containerOf(
+          tester.element(find.byType(MaterialApp)),
+        );
+        final phoneField = callLoggerPhoneTextField();
+
+        await tester.tap(phoneField);
+        await pumpUntilSettled(tester);
+        await tester.enterText(phoneField, kTestPhoneDigits);
+        await tester.pump();
+        await tester.testTextInput.receiveAction(TextInputAction.done);
+        await tester.pump(const Duration(milliseconds: 300));
+        await pumpUntilSettled(tester);
+
+        expect(
+          container.read(callsScreenIsExpandedProvider),
+          isTrue,
+          reason: greekExpectMsg('Μετά submit τηλεφώνου η οθόνη επεκτείνεται'),
+        );
+        expect(
+          find.textContaining(kTestUserFirstName),
+          findsWidgets,
+          reason: greekExpectMsg(
+            'Μετά submit στη συμπτυγμένη όψη συμπληρώνεται ο καλούντας',
+          ),
+        );
+        expect(
+          find.text(kTestEquipmentCode),
+          findsOneWidget,
+          reason: greekExpectMsg(
+            'Μετά submit στη συμπτυγμένη όψη συμπληρώνεται ο εξοπλισμός',
+          ),
+        );
+
+        await tester.pump(const Duration(seconds: 11));
+      },
+      semanticsEnabled: false,
+      timeout: const Timeout(Duration(minutes: 2)),
+    );
+
     // Χωρίς ενεργή Ομάδα Τηλεφώνου το κουμπί «Καταγραφή» δεν εμφανίζεται στη διάταξη.
     //   flutter test test/features/calls/call_form_test.dart --plain-name "Unhappy path: απενεργοποιημένο κουμπί χωρίς τηλέφωνο"
     testWidgets(
@@ -243,6 +405,95 @@ void main() {
           ),
         );
         reporter.recordPass('Unhappy path: compact χωρίς κουμπί υποβολής');
+      },
+      semanticsEnabled: false,
+      timeout: const Timeout(Duration(minutes: 2)),
+    );
+
+    testWidgets(
+      'expanded latch κενά πεδία: κεφαλίδα πάνω, χωρίς widget κάτω',
+      (tester) async {
+        tester.view.physicalSize = const Size(1600, 900);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        await tester.runAsync(() async {
+          await tester.pumpWidget(
+            ProviderScope(
+              overrides: callLoggerTestProviderOverrides(),
+              child: const MyApp(),
+            ),
+          );
+          await tester.pump();
+          await pumpUntilSettledLong(tester);
+          await GoogleFonts.pendingFonts();
+          final container = ProviderScope.containerOf(
+            tester.element(find.byType(MaterialApp)),
+          );
+          await container.read(lookupServiceProvider.future);
+        });
+
+        final container = ProviderScope.containerOf(
+          tester.element(find.byType(MaterialApp)),
+        );
+        final phoneField = callLoggerPhoneTextField();
+
+        await tester.tap(phoneField);
+        await pumpUntilSettled(tester);
+        await tester.enterText(phoneField, kTestPhoneDigits);
+        await tester.pump();
+        await tester.testTextInput.receiveAction(TextInputAction.done);
+        await pumpUntilSettled(tester);
+
+        expect(
+          container.read(callsScreenIsExpandedProvider),
+          isTrue,
+          reason: greekExpectMsg('Μετά επιβεβαίωση τηλεφώνου → expanded'),
+        );
+        expect(
+          find.byType(NotesStickyField),
+          findsOneWidget,
+          reason: greekExpectMsg('Με ενεργή ομάδα τηλεφώνου εμφανίζονται σημειώσεις'),
+        );
+
+        await tester.tap(find.byTooltip('Καθαρισμός όλων των πεδίων'));
+        await pumpUntilSettled(tester);
+
+        expect(
+          container.read(callsFieldGroupsProvider).anyGroupActive,
+          isFalse,
+          reason: greekExpectMsg('Μετά κόκκινο × καμία ενεργή ομάδα'),
+        );
+        expect(
+          container.read(callsScreenIsExpandedProvider),
+          isTrue,
+          reason: greekExpectMsg('Μετά κόκκινο × η κεφαλίδα μένει expanded'),
+        );
+        expect(find.byType(NotesStickyField), findsNothing);
+        expect(find.byType(CategoryAutocompleteField), findsNothing);
+        expect(find.byType(CallStatusBar), findsNothing);
+        expect(find.widgetWithText(ElevatedButton, 'Καταγραφή'), findsNothing);
+        expect(find.widgetWithText(OutlinedButton, 'Εκκαθάριση'), findsNothing);
+
+        await tester.runAsync(() async {
+          await container
+              .read(showGlobalCallsToggleProvider.notifier)
+              .setVisible(true);
+        });
+        await pumpUntilSettled(tester);
+
+        expect(
+          find.byType(GlobalRecentCallsList),
+          findsOneWidget,
+          reason: greekExpectMsg(
+            'Expanded latch + κενά πεδία: η κάρτα ΤΚ εμφανίζεται στο πλάνο',
+          ),
+        );
+
+        await tester.pump(const Duration(seconds: 11));
       },
       semanticsEnabled: false,
       timeout: const Timeout(Duration(minutes: 2)),

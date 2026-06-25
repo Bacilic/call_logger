@@ -26,9 +26,10 @@ class SmartEntityPhoneField extends StatefulWidget {
     required this.notifier,
     required this.onLessThan2DigitsSubmit,
     required this.onClearAll,
-    required this.onContentChecked,
+    required this.onPhoneCommitted,
     required this.onPhoneSubmitted,
     required this.onPhoneBecameEmpty,
+    required this.onPhoneEditing,
     required this.onPhoneSelectedFromList,
   });
 
@@ -41,9 +42,10 @@ class SmartEntityPhoneField extends StatefulWidget {
   final SmartEntitySelectorNotifier notifier;
   final VoidCallback onLessThan2DigitsSubmit;
   final VoidCallback onClearAll;
-  final VoidCallback onContentChecked;
+  final VoidCallback onPhoneCommitted;
   final VoidCallback onPhoneSubmitted;
   final VoidCallback onPhoneBecameEmpty;
+  final VoidCallback onPhoneEditing;
   final ValueChanged<String> onPhoneSelectedFromList;
 
   @override
@@ -72,16 +74,6 @@ class _SmartEntityPhoneFieldState extends State<SmartEntityPhoneField> {
     }
   }
 
-  void _scheduleCompletedLookup() {
-    if (_isSelectingFromList) return;
-    _debounce?.cancel();
-    _debounce = Timer(const Duration(milliseconds: 250), () {
-      if (!mounted) return;
-      if (_isSelectingFromList) return;
-      _performLookup();
-    });
-  }
-
   void _onFocusChange() {
     if (mounted) {
       setState(() {});
@@ -94,11 +86,11 @@ class _SmartEntityPhoneFieldState extends State<SmartEntityPhoneField> {
     _lastAutoScrollIndex = -1;
     _isKeyboardPreview = false;
     if (_isSelectingFromList) return;
+    _performLookup();
     Future.delayed(const Duration(milliseconds: 150), () {
       if (!mounted) return;
       if (widget.focusNode.hasFocus) return;
       setState(() => _showSuggestionList = false);
-      _scheduleCompletedLookup();
     });
   }
 
@@ -119,6 +111,8 @@ class _SmartEntityPhoneFieldState extends State<SmartEntityPhoneField> {
     }
     if (digits.isEmpty) {
       widget.onPhoneBecameEmpty();
+    } else if (widget.focusNode.hasFocus) {
+      widget.onPhoneEditing();
     }
     // v2 §Ζ: το entity lookup ΔΕΝ τρέχει κατά την πληκτρολόγηση. Εκτελείται
     // μόνο σε commit (focus-out, Enter, επιλογή από λίστα). Η ζωντανή λίστα
@@ -191,7 +185,7 @@ class _SmartEntityPhoneFieldState extends State<SmartEntityPhoneField> {
     required FocusNode nextFocusNode,
     required SmartEntitySelectorState header,
     required SmartEntitySelectorNotifier notifier,
-    required VoidCallback onContentChecked,
+    required VoidCallback onPhoneCommitted,
   }) {
     setState(() {
       _isSelectingFromList = true;
@@ -212,7 +206,7 @@ class _SmartEntityPhoneFieldState extends State<SmartEntityPhoneField> {
         notifier.performPhoneLookup(value.replaceAll(RegExp(r'[^0-9]'), ''));
       }
       widget.onPhoneSelectedFromList(value);
-      onContentChecked();
+      onPhoneCommitted();
       if (focusNode.hasFocus) {
         nextFocusNode.requestFocus();
       }
@@ -256,7 +250,7 @@ class _SmartEntityPhoneFieldState extends State<SmartEntityPhoneField> {
     final notifier = widget.notifier;
     final onLessThan2DigitsSubmit = widget.onLessThan2DigitsSubmit;
     final onClearAll = widget.onClearAll;
-    final onContentChecked = widget.onContentChecked;
+    final onPhoneCommitted = widget.onPhoneCommitted;
     final showPhoneCandidates =
         header.phoneCandidates.isNotEmpty &&
         _showSuggestionList &&
@@ -324,6 +318,7 @@ class _SmartEntityPhoneFieldState extends State<SmartEntityPhoneField> {
                             _showSuggestionList = false;
                           });
                           notifier.selectPhoneFromCandidates(value);
+                          onPhoneCommitted();
                           focusNode.requestFocus();
                           widget.onPhoneSelectedFromList(value);
                           Future.delayed(const Duration(milliseconds: 300), () {
@@ -426,7 +421,7 @@ class _SmartEntityPhoneFieldState extends State<SmartEntityPhoneField> {
                       nextFocusNode: nextFocusNode,
                       header: header,
                       notifier: notifier,
-                      onContentChecked: onContentChecked,
+                      onPhoneCommitted: onPhoneCommitted,
                     );
                   },
                   fieldViewBuilder: (
@@ -500,7 +495,7 @@ class _SmartEntityPhoneFieldState extends State<SmartEntityPhoneField> {
                                 nextFocusNode: nextFocusNode,
                                 header: header,
                                 notifier: notifier,
-                                onContentChecked: onContentChecked,
+                                onPhoneCommitted: onPhoneCommitted,
                               );
                               return KeyEventResult.handled;
                             }
@@ -555,7 +550,7 @@ class _SmartEntityPhoneFieldState extends State<SmartEntityPhoneField> {
                               nextFocusNode: nextFocusNode,
                               header: header,
                               notifier: notifier,
-                              onContentChecked: onContentChecked,
+                              onPhoneCommitted: onPhoneCommitted,
                             );
                             return KeyEventResult.handled;
                           }
@@ -612,7 +607,7 @@ class _SmartEntityPhoneFieldState extends State<SmartEntityPhoneField> {
                                 nextFocusNode: nextFocusNode,
                                 header: header,
                                 notifier: notifier,
-                                onContentChecked: onContentChecked,
+                                onPhoneCommitted: onPhoneCommitted,
                               );
                               return;
                             }
@@ -624,10 +619,11 @@ class _SmartEntityPhoneFieldState extends State<SmartEntityPhoneField> {
                               onLessThan2DigitsSubmit();
                               return;
                             }
-                            onContentChecked();
+                            // Lookup πριν την επέκταση· το debounced timer ακυρώνεται σε dispose.
+                            _performLookup();
+                            onPhoneCommitted();
                             widget.onPhoneSubmitted();
                             nextFocusNode.requestFocus();
-                            _scheduleCompletedLookup();
                           },
                         ),
                       ),

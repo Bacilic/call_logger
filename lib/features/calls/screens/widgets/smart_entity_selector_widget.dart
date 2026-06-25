@@ -71,10 +71,14 @@ class SmartEntitySelectorWidgetState
       departmentText: _departmentController.text,
       equipmentText: _equipmentController.text,
     );
-    _syncFieldConfirmations();
+    _syncNonPhoneFieldConfirmations();
   }
 
-  void _onPhoneFocusOut() {
+  void _onPhoneFocusChange() {
+    if (_phoneFocusNode.hasFocus) {
+      ref.read(callsScreenExpandedLatchProvider.notifier).engage();
+      return;
+    }
     if (_isSelectingFromList) return;
     _notifier.checkContent(
       phoneText: _phoneController.text,
@@ -82,9 +86,9 @@ class SmartEntitySelectorWidgetState
       departmentText: _departmentController.text,
       equipmentText: _equipmentController.text,
     );
-    if (!_phoneFocusNode.hasFocus) {
-      widget.callEntryHooks.syncTimerFromPhoneText?.call(_phoneController.text);
-    }
+    widget.callEntryHooks.syncTimerFromPhoneText?.call(_phoneController.text);
+    _confirmPhoneOnCommit();
+    _syncNonPhoneFieldConfirmations();
   }
 
   @override
@@ -94,13 +98,15 @@ class SmartEntitySelectorWidgetState
     _phoneController = TextEditingController(text: initial.selectedPhone ?? '');
     _callerController = TextEditingController(text: initial.callerDisplayText);
     _departmentController = TextEditingController(text: initial.departmentText);
-    _equipmentController = TextEditingController(text: initial.equipmentText);
+    _equipmentController = TextEditingController(
+      text: _equipmentControllerTextFromState(initial),
+    );
     _phoneFocusNode = FocusNode();
     _callerFocusNode = FocusNode();
     _departmentFocusNode = FocusNode();
     _equipmentFocusNode = FocusNode();
     _notifier = ref.read(widget.provider.notifier);
-    _phoneFocusNode.addListener(_onPhoneFocusOut);
+    _phoneFocusNode.addListener(_onPhoneFocusChange);
     _callerFocusNode.addListener(_onFocusOut);
     _departmentFocusNode.addListener(_onFocusOut);
     _equipmentFocusNode.addListener(_onFocusOut);
@@ -108,7 +114,7 @@ class SmartEntitySelectorWidgetState
 
   @override
   void dispose() {
-    _phoneFocusNode.removeListener(_onPhoneFocusOut);
+    _phoneFocusNode.removeListener(_onPhoneFocusChange);
     _callerFocusNode.removeListener(_onFocusOut);
     _departmentFocusNode.removeListener(_onFocusOut);
     _equipmentFocusNode.removeListener(_onFocusOut);
@@ -131,15 +137,29 @@ class SmartEntitySelectorWidgetState
     }
   }
 
-  void _syncFieldConfirmations() {
-    final conf = ref.read(callsFieldConfirmationsProvider.notifier);
-    final header = ref.read(widget.provider);
+  void _confirmPhoneOnCommit() {
     final phoneDigits =
         _phoneController.text.replaceAll(RegExp(r'[^0-9]'), '');
-    if (phoneDigits.length >= 2) conf.confirmPhone();
+    if (phoneDigits.length >= 2) {
+      ref.read(callsFieldConfirmationsProvider.notifier).confirmPhone();
+    }
+  }
+
+  void _syncNonPhoneFieldConfirmations() {
+    final conf = ref.read(callsFieldConfirmationsProvider.notifier);
+    final header = ref.read(widget.provider);
     if (_equipmentController.text.trim().isNotEmpty) conf.confirmEquipment();
     if (header.selectedDepartmentId != null) conf.confirmDepartment();
     if (header.selectedCaller?.id != null) conf.confirmCaller();
+  }
+
+  static String _equipmentControllerTextFromState(SmartEntitySelectorState state) {
+    if (state.equipmentText.trim().isNotEmpty) return state.equipmentText;
+    final equipment = state.selectedEquipment;
+    if (equipment == null) return '';
+    final code = equipment.code?.trim();
+    if (code != null && code.isNotEmpty) return code;
+    return equipment.displayLabel.trim();
   }
 
   void requestPhoneFocus() => _phoneFocusNode.requestFocus();
@@ -147,6 +167,7 @@ class SmartEntitySelectorWidgetState
   /// Ίδια συμπεριφορά με το προηγούμενο κουμπί «Καθαρισμός όλων»: controllers + state + timer.
   void performClearAllFields() {
     ref.read(callsScreenExpandedLatchProvider.notifier).engage();
+    ref.read(callsFieldConfirmationsProvider.notifier).resetAll();
     _phoneController.clear();
     _callerController.clear();
     _departmentController.clear();
@@ -198,9 +219,15 @@ class SmartEntitySelectorWidgetState
           next.selectedEquipment?.id != previous?.selectedEquipment?.id) {
         ref.read(callsFieldConfirmationsProvider.notifier).confirmEquipment();
       }
-      final phoneDigits =
+      final prevPhoneDigits =
+          (previous?.selectedPhone ?? '').replaceAll(RegExp(r'[^0-9]'), '');
+      final nextPhoneDigits =
           (next.selectedPhone ?? '').replaceAll(RegExp(r'[^0-9]'), '');
-      if (phoneDigits.length >= 2) {
+      // Επιβεβαίωση τηλεφώνου μόνο εκτός εστίασης πεδίου (autofill / επιλογή λίστας).
+      // Κατά την πληκτρολόγηση η επιβεβαίωση γίνεται σε submit ή blur — όπως στο Εξοπλισμό.
+      if (nextPhoneDigits.length >= 2 &&
+          nextPhoneDigits != prevPhoneDigits &&
+          !_phoneFocusNode.hasFocus) {
         ref.read(callsFieldConfirmationsProvider.notifier).confirmPhone();
       }
       if (next.callerDisplayText != _callerController.text) {
@@ -258,7 +285,17 @@ class SmartEntitySelectorWidgetState
         departmentText: _departmentController.text,
         equipmentText: _equipmentController.text,
       );
-      _syncFieldConfirmations();
+      _syncNonPhoneFieldConfirmations();
+    }
+
+    void phoneCommitted() {
+      contentChecked();
+      _confirmPhoneOnCommit();
+    }
+
+    void phoneEditing() {
+      ref.read(callsScreenExpandedLatchProvider.notifier).engage();
+      ref.read(callsFieldConfirmationsProvider.notifier).unconfirmPhone();
     }
 
     return Column(
@@ -279,7 +316,8 @@ class SmartEntitySelectorWidgetState
                 notifier: _notifier,
                 onLessThan2DigitsSubmit: () {},
                 onClearAll: performClearAllFields,
-                onContentChecked: contentChecked,
+                onPhoneCommitted: phoneCommitted,
+                onPhoneEditing: phoneEditing,
                 onPhoneSubmitted: () =>
                     hooks.syncTimerFromPhoneText?.call(_phoneController.text),
                 onPhoneBecameEmpty: () => hooks.resetTimerToStandby?.call(),

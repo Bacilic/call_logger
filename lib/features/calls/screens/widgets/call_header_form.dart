@@ -41,10 +41,17 @@ const double _kHeaderWidthRatioSum =
 
 /// Header φόρμα εισαγωγής κλήσης: Τηλέφωνο, Καλούντας, Τμήμα, Κωδικός Εξοπλισμού.
 class CallHeaderForm extends ConsumerStatefulWidget {
-  const CallHeaderForm({super.key, this.compactFieldCentering = false});
+  const CallHeaderForm({
+    super.key,
+    this.compactFieldCentering = false,
+    this.compactExternalVerticalCentering = false,
+  });
 
   /// Συμπτυγμένη όψη: κάθετο κέντρο της γραμμής πεδίων (όχι ολόκληρου μπλοκ με κενό τίτλο).
   final bool compactFieldCentering;
+
+  /// Συμπτυγμένη όψη: ο γονέας διαχειρίζεται τα Spacer· δεν εισάγονται εσωτερικά.
+  final bool compactExternalVerticalCentering;
 
   @override
   ConsumerState<CallHeaderForm> createState() => _CallHeaderFormState();
@@ -434,7 +441,7 @@ class _CallHeaderFormState extends ConsumerState<CallHeaderForm> {
           ],
         );
 
-        if (widget.compactFieldCentering) {
+        if (widget.compactFieldCentering && !widget.compactExternalVerticalCentering) {
           return Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [

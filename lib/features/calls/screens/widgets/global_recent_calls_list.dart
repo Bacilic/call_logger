@@ -220,7 +220,7 @@ class GlobalRecentCallsList extends ConsumerWidget {
               children: [
                 Expanded(
                   child: Text(
-                    'Τελευταίες 7 Κλήσεις',
+                    'Τελευταίες Κλήσεις',
                     style: theme.textTheme.titleSmall,
                   ),
                 ),

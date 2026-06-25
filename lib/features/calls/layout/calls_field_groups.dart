@@ -1,7 +1,8 @@
-import '../../../core/services/lookup_service.dart';
+﻿import '../../../core/services/lookup_service.dart';
 import '../provider/smart_entity_selector_provider.dart';
 import 'calls_field_confirmations.dart';
 import 'calls_layout_template.dart';
+import 'calls_map_gate.dart';
 
 /// Equipment group activation tier (free text vs matched catalog record).
 enum EquipmentGroupTier { none, freeTextOnly, matchedRecord }
@@ -23,6 +24,13 @@ class CallsFieldGroups {
   final CallsLayoutTemplate template;
 
   bool get isEquipmentGroupActive => equipmentTier != EquipmentGroupTier.none;
+
+  /// Πρότυπο Α με μόνο ΟΕ (χωρίς ΟΚ/ΟΞ): σημειώσεις σε δική τους γραμμή.
+  bool get isPhoneOnlyTemplateA =>
+      template == CallsLayoutTemplate.a &&
+      isPhoneGroupActive &&
+      !isCallerGroupActive &&
+      !isEquipmentGroupActive;
 
   bool get anyGroupActive =>
       isPhoneGroupActive ||
@@ -75,7 +83,7 @@ class CallsFieldGroupsResolver {
     final isCallerGroupActive =
         confirmations.caller && callerId != null;
 
-    final isMapActive = _isMapActive(header, lookup);
+    final isMapActive = CallsMapGate.isMapActive(header, lookup, confirmations);
 
     final template = CallsLayoutTemplateSelector.select(
       isPhoneGroupActive: isPhoneGroupActive,
@@ -91,13 +99,6 @@ class CallsFieldGroupsResolver {
       isMapActive: isMapActive,
       template: template,
     );
-  }
-
-  static bool _isMapActive(SmartEntitySelectorState header, LookupService? lookup) {
-    if (header.selectedDepartmentId != null) return true;
-    if (header.selectedEquipment?.id != null) return true;
-    if (header.selectedCaller?.id != null) return true;
-    return false;
   }
 }
 

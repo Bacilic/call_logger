@@ -172,6 +172,40 @@ void _expectGlobalRecentListInPlanSlot(
   );
 }
 
+void _expectCompactFieldsDoNotOverlapCard(
+  WidgetTester tester, {
+  required String phase,
+}) {
+  final selectorRect = tester.getRect(find.byType(SmartEntitySelectorWidget));
+  final cardRect = tester.getRect(find.byType(GlobalRecentCallsList));
+  expect(
+    selectorRect.bottom,
+    lessThanOrEqualTo(cardRect.top),
+    reason: greekExpectMsg(
+      'Συμπτυγμένη ανοιχτή: τα πεδία δεν πρέπει να επικαλύπτουν την κάρτα ($phase)',
+    ),
+  );
+}
+
+/// Μέγιστο αποδεκτό κενό μεταξύ γραμμής πεδίων και κάρτας ΤΚ (px).
+const double kCompactFormToCardMaxGap = 16;
+
+void _expectCompactFormToCardGapMinimal(
+  WidgetTester tester, {
+  required String phase,
+}) {
+  final selectorRect = tester.getRect(find.byType(SmartEntitySelectorWidget));
+  final cardRect = tester.getRect(find.byType(GlobalRecentCallsList));
+  final gap = cardRect.top - selectorRect.bottom;
+  expect(
+    gap,
+    inInclusiveRange(0, kCompactFormToCardMaxGap),
+    reason: greekExpectMsg(
+      'Συμπτυγμένη ανοιχτή: ελάχιστο κενό μεταξύ πεδίων και κάρτας ($phase)',
+    ),
+  );
+}
+
 Future<void> _pumpCallsApp(WidgetTester tester) async {
   await tester.runAsync(() async {
     await tester.pumpWidget(
@@ -241,6 +275,7 @@ void main() {
         });
 
         await _pumpCallsApp(tester);
+        await _setGlobalRecentOpen(tester, false);
 
         final viewport = _callsViewportRect(tester);
         final selectorRect = tester.getRect(find.byType(SmartEntitySelectorWidget));
@@ -293,15 +328,23 @@ void main() {
         );
         _expectGlobalRecentListAbsent(phase: 'συμπτυγμένη, κλειστή');
 
-        reporter.logStep('Συμπτυγμένη + ανοιχτή ΤΚ — κάρτα κάτω δεξιά, χωρίς εξωτερικό διακόπτη');
+        reporter.logStep('Συμπτυγμένη + ανοιχτή ΤΚ — κάρτα στη ροή, ελάχιστο κενό');
         await _tapGlobalRecentToggle(tester);
         _expectToggleAbsent(phase: 'συμπτυγμένη, ανοιχτή');
         expect(
           find.byType(GlobalRecentCallsList),
           findsOneWidget,
           reason: greekExpectMsg(
-            'Συμπτυγμένη ανοιχτή: η κάρτα εμφανίζεται κάτω δεξιά',
+            'Συμπτυγμένη ανοιχτή: η κάρτα εμφανίζεται κάτω στη ροή layout',
           ),
+        );
+        _expectCompactFieldsDoNotOverlapCard(
+          tester,
+          phase: 'συμπτυγμένη, ανοιχτή',
+        );
+        _expectCompactFormToCardGapMinimal(
+          tester,
+          phase: 'συμπτυγμένη, ανοιχτή',
         );
 
         reporter.logStep('Αναπτυγμένη — επιβεβαίωση τηλεφώνου (Πρότυπο-Α #1)');
