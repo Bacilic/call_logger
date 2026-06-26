@@ -2,18 +2,16 @@
 
 import 'package:http/http.dart' as http;
 
-/// Placeholder προτροπής Gemini (token → ετικέτα UI).
-typedef GeminiPromptPlaceholder = ({String token, String label});
+import 'gemini_prompt_template_syntax.dart';
 
-const List<GeminiPromptPlaceholder> kGeminiPromptPlaceholders = [
-  (token: '{Υπάλληλος}', label: 'Υπάλληλος'),
-  (token: '{Εξοπλισμός}', label: 'Εξοπλισμός'),
-  (token: '{Τμήμα}', label: 'Τμήμα'),
-  (token: '{Κατηγορία}', label: 'Κατηγορία'),
-  (token: '{Τίτλος}', label: 'Τίτλος'),
-  (token: '{Σημειώσεις}', label: 'Σημειώσεις'),
-  (token: '{Πρόβλημα}', label: 'Πρόβλημα'),
-];
+export 'gemini_prompt_template_syntax.dart'
+    show
+        GeminiPromptPlaceholder,
+        GeminiPromptTemplateSyntax,
+        GeminiPromptTemplateValidation,
+        GeminiPromptTokenKind,
+        GeminiPromptTokenSpan,
+        kGeminiPromptPlaceholders;
 
 const String kGeminiPrimaryModelPlaceholder = '{προτεύων μοντέλο}';
 const String kGeminiApiKeyPlaceholder = '{κλειδί API}';
@@ -187,14 +185,20 @@ class GeminiException implements Exception {
 
 const String kDefaultGeminiPromptTemplate = '''Δημιούργησε τίτλο και πλήρη περιγραφή για ticket helpdesk στο Lansweeper.
 
-Υπάλληλος: {Υπάλληλος}. Εξοπλισμός: {Εξοπλισμός}. Τμήμα: {Τμήμα}.
-Κατηγορία: {Κατηγορία}.
+Υπάλληλος: {Υπάλληλος}. Τμήμα: {Τμήμα}.
+{@Εξοπλισμός}Εξοπλισμός: {Εξοπλισμός}. {@/Εξοπλισμός}
+{@Κατηγορία}Κατηγορία: {Κατηγορία}. {@/Κατηγορία}
+
+Πρόβλημα: {Πρόβλημα}
+{@Λύση}Λύση (προσχέδιο): {Λύση}. {@/Λύση}
 
 Τρέχον προσχέδιο τίτλου: {Τίτλος}
 Τρέχουσα περιγραφή: {Σημειώσεις}
 
 Βελτίωσε το προσχέδιο με βάση τα στοιχεία κλήσης.
-Απάντησε ΜΟΝΟ σε JSON χωρίς markdown: {"title":"...","description":"..."}''';
+Η περιγραφή (description) να περιέχει ΜΟΝΟ το πρόβλημα/αιτιολόγηση.
+Η λύση/αντιμετώπιση να μπει στο πεδίο solution, όχι στην description.
+Απάντησε ΜΟΝΟ σε JSON χωρίς markdown: {"title":"...","description":"...","solution":"..."}''';
 
 abstract final class GeminiTicketService {
 
@@ -207,30 +211,41 @@ abstract final class GeminiTicketService {
     required String issue,
     required String titleText,
     required String notesText,
+    required String solutionText,
   }) {
     final trimmedNotes = notesText.trim();
     final trimmedIssue = issue.trim();
     final problemText = trimmedNotes.isNotEmpty
         ? trimmedNotes
-        : (trimmedIssue.isEmpty ? '-' : trimmedIssue);
+        : trimmedIssue.trim();
     final values = <String, String>{
-      '{Υπάλληλος}': callerText.trim().isEmpty ? '-' : callerText.trim(),
-      '{Εξοπλισμός}':
-          equipmentText.trim().isEmpty ? '-' : equipmentText.trim(),
-      '{Τμήμα}': departmentText.trim().isEmpty ? '-' : departmentText.trim(),
-      '{Κατηγορία}': category.trim().isEmpty ? '-' : category.trim(),
-      '{Τίτλος}': titleText.trim().isEmpty ? '-' : titleText.trim(),
-      '{Σημειώσεις}': trimmedNotes.isEmpty ? '-' : trimmedNotes,
+      '{Υπάλληλος}': callerText.trim(),
+      '{Εξοπλισμός}': equipmentText.trim(),
+      '{Τμήμα}': departmentText.trim(),
+      '{Κατηγορία}': category.trim(),
+      '{Τίτλος}': titleText.trim(),
+      '{Σημειώσεις}': trimmedNotes,
       '{Πρόβλημα}': problemText,
+      '{Λύση}': solutionText.trim(),
+    };
+
+    final emptyTokens = <String>{
+      for (final entry in values.entries)
+        if (entry.value.isEmpty) entry.key,
     };
 
     var prompt = promptTemplate.trim().isEmpty
         ? kDefaultGeminiPromptTemplate
         : promptTemplate;
+    prompt = GeminiPromptTemplateSyntax.stripEmptyOptionalBlocks(
+      prompt,
+      emptyTokens,
+    );
     for (final entry in values.entries) {
       prompt = prompt.replaceAll(entry.key, entry.value);
     }
-    return prompt;
+    prompt = GeminiPromptTemplateSyntax.stripBlockMarkers(prompt);
+    return GeminiPromptTemplateSyntax.compactWhitespace(prompt);
   }
 
   /// Κανονικοποιεί παλιά endpoints (`{apiKey}`, σταθερό μοντέλο) στο πρότυπο placeholders.
@@ -523,7 +538,7 @@ abstract final class GeminiTicketService {
         apiKey: apiKey,
         endpoint: endpointWithModel(endpointTemplate, modelId),
         promptTemplate:
-            'Απάντησε ΜΟΝΟ σε JSON: {"title":"OK","description":"OK"}',
+            'Απάντησε ΜΟΝΟ σε JSON: {"title":"OK","description":"OK","solution":"OK"}',
         callerText: 'δοκιμή',
         equipmentText: '-',
         departmentText: '-',
@@ -531,6 +546,7 @@ abstract final class GeminiTicketService {
         issue: 'δοκιμή',
         titleText: 'δοκιμή',
         notesText: 'δοκιμή',
+        solutionText: '-',
         client: client,
       );
       return GeminiModelProbeResult(
@@ -556,7 +572,7 @@ abstract final class GeminiTicketService {
     }
   }
 
-  static Future<({String title, String description})> suggest({
+  static Future<({String title, String description, String solution})> suggest({
     required String apiKey,
     required String endpoint,
     required String promptTemplate,
@@ -567,6 +583,7 @@ abstract final class GeminiTicketService {
     required String issue,
     required String titleText,
     required String notesText,
+    required String solutionText,
     http.Client? client,
   }) async {
     final key = apiKey.trim();
@@ -593,6 +610,7 @@ abstract final class GeminiTicketService {
       issue: issue,
       titleText: titleText,
       notesText: notesText,
+      solutionText: solutionText,
     );
 
     final httpClient = client ?? http.Client();
@@ -635,15 +653,43 @@ abstract final class GeminiTicketService {
       throw const GeminiException('Η απάντηση Gemini ήταν κενή.');
     }
 
-    final parsed = _parseSuggestionJson(text);
+    final parsed = parseSuggestionJson(text);
     if (parsed == null) {
       throw const GeminiException('Μη έγκυρη μορφή JSON στην απάντηση Gemini.');
     }
 
+    final normalized = normalizeSuggestionFields(
+      description: parsed.description,
+      solution: parsed.solution,
+    );
+
     return (
       title: parsed.title.trim(),
-      description: parsed.description.trim(),
+      description: normalized.description,
+      solution: normalized.solution,
     );
+  }
+
+  /// Αν η περιγραφή περιέχει ενσωματωμένη «Λύση:» (παλιά προτροπή), τη χωρίζει.
+  static ({String description, String solution}) normalizeSuggestionFields({
+    required String description,
+    required String solution,
+  }) {
+    final solutionTrim = solution.trim();
+    if (solutionTrim.isNotEmpty) {
+      return (description: description.trim(), solution: solutionTrim);
+    }
+    final desc = description.trim();
+    final match = RegExp(
+      r'(?:\n\n|\n)Λύση:\s*',
+      caseSensitive: false,
+    ).firstMatch(desc);
+    if (match == null) {
+      return (description: desc, solution: '');
+    }
+    final problem = desc.substring(0, match.start).trim();
+    final embedded = desc.substring(match.end).trim();
+    return (description: problem, solution: embedded);
   }
 
   static String? _extractApiErrorMessage(String body) {
@@ -681,7 +727,9 @@ abstract final class GeminiTicketService {
     }
   }
 
-  static ({String title, String description})? _parseSuggestionJson(String text) {
+  static ({String title, String description, String solution})? parseSuggestionJson(
+    String text,
+  ) {
     try {
       var payload = text.trim();
       if (payload.startsWith('```')) {
@@ -693,8 +741,11 @@ abstract final class GeminiTicketService {
       if (decoded is! Map) return null;
       final title = decoded['title']?.toString().trim() ?? '';
       final description = decoded['description']?.toString().trim() ?? '';
-      if (title.isEmpty && description.isEmpty) return null;
-      return (title: title, description: description);
+      final solution = decoded['solution']?.toString().trim() ?? '';
+      if (title.isEmpty && description.isEmpty && solution.isEmpty) {
+        return null;
+      }
+      return (title: title, description: description, solution: solution);
     } catch (_) {
       return null;
     }

@@ -8,21 +8,27 @@ class LansweeperSyncForm extends ConsumerWidget {
   const LansweeperSyncForm({
     required this.titleController,
     required this.notesController,
+    required this.solutionController,
     this.onSuggest,
+    this.onPreviewPrompt,
     this.isSuggesting = false,
     this.suggestModelLabel,
     this.suggestElapsedLabel,
     this.suggestDisabledTooltip,
+    this.previewDisabledTooltip,
     super.key,
   });
 
   final SpellCheckController titleController;
   final SpellCheckController notesController;
+  final SpellCheckController solutionController;
   final VoidCallback? onSuggest;
+  final VoidCallback? onPreviewPrompt;
   final bool isSuggesting;
   final String? suggestModelLabel;
   final String? suggestElapsedLabel;
   final String? suggestDisabledTooltip;
+  final String? previewDisabledTooltip;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -42,8 +48,13 @@ class LansweeperSyncForm extends ConsumerWidget {
       ),
     );
 
+    final previewButton = OutlinedButton.icon(
+      onPressed: isSuggesting ? null : onPreviewPrompt,
+      icon: const Icon(Icons.article_outlined, size: 18),
+      label: const Text('Προεπισκόπηση προτροπής'),
+    );
+
     final suggestRow = Row(
-      mainAxisSize: MainAxisSize.min,
       children: [
         if (suggestDisabledTooltip != null && onSuggest == null)
           Tooltip(message: suggestDisabledTooltip!, child: suggestButton)
@@ -59,22 +70,40 @@ class LansweeperSyncForm extends ConsumerWidget {
                 ),
           ),
         ],
+        const Spacer(),
+        Flexible(
+          child: Align(
+            alignment: Alignment.centerRight,
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerRight,
+              child: previewDisabledTooltip != null && onPreviewPrompt == null
+                  ? Tooltip(
+                      message: previewDisabledTooltip!,
+                      child: previewButton,
+                    )
+                  : previewButton,
+            ),
+          ),
+        ),
       ],
     );
 
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            suggestRow,
+            const SizedBox(height: 8),
             Text(
               'Φόρμα καταχώρησης Lansweeper',
-              style: Theme.of(context).textTheme.titleSmall,
+              style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
             ),
-            const SizedBox(height: 10),
-            suggestRow,
-            const SizedBox(height: 10),
+            const SizedBox(height: 8),
             LexiconSpellTextFormField(
               controller: titleController,
               decoration: const InputDecoration(
@@ -88,9 +117,21 @@ class LansweeperSyncForm extends ConsumerWidget {
               minLines: 2,
               maxLines: null,
               decoration: const InputDecoration(
-                labelText: 'Σημειώσεις (περιγραφή ticket)',
+                labelText: 'Σημειώσεις - Πρόβλημα (περιγραφή ticket)',
                 hintText:
                     'Καλών και εξοπλισμό συμπληρώνετε χειροκίνητα στο Lansweeper.',
+                border: OutlineInputBorder(),
+                alignLabelWithHint: true,
+              ),
+            ),
+            const SizedBox(height: 10),
+            LexiconSpellTextFormField(
+              controller: solutionController,
+              minLines: 2,
+              maxLines: null,
+              decoration: const InputDecoration(
+                labelText: 'Λύση',
+                hintText: 'Ενσωματώνεται στην περιγραφή ticket κατά την αποστολή.',
                 border: OutlineInputBorder(),
                 alignLabelWithHint: true,
               ),

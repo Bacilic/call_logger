@@ -13,12 +13,16 @@ class LansweeperSubmitInput {
   const LansweeperSubmitInput({
     required this.title,
     required this.notes,
+    required this.solution,
     required this.agentUsername,
+    this.durationSeconds,
   });
 
   final String title;
   final String notes;
+  final String solution;
   final String agentUsername;
+  final int? durationSeconds;
 }
 
 class LansweeperCommandResult {
@@ -81,7 +85,9 @@ class LansweeperSyncNotifier extends AsyncNotifier<void> {
           call: call,
           title: input.title,
           notes: input.notes,
+          solution: input.solution,
           agentUsername: input.agentUsername,
+          durationSeconds: input.durationSeconds,
         ),
       );
 

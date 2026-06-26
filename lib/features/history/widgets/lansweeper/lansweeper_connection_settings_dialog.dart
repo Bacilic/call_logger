@@ -9,6 +9,7 @@ import '../../../../core/services/lansweeper_helpdesk_login_probe.dart';
 import '../../providers/dashboard_provider.dart';
 import '../../providers/lansweeper_connection_probe_provider.dart';
 import 'gemini_model_field.dart';
+import 'gemini_prompt_template_field.dart';
 import 'lansweeper_connection_status_indicator.dart';
 
 /// Διάλογος: API (`api.aspx`), φόρμα αιτήματος, πράκτορας, αυτόματη σύνδεση Help Desk.
@@ -112,18 +113,30 @@ class _LansweeperConnectionSettingsDialogState
     });
   }
 
-  void _insertPromptPlaceholder(String token) {
+  void _insertAtCursor(String insert, {int? cursorOffset}) {
     final controller = widget.geminiPromptTemplateController;
     final selection = controller.selection;
     final text = controller.text;
     final start = selection.start >= 0 ? selection.start : text.length;
     final end = selection.end >= 0 ? selection.end : text.length;
-    final newText = text.replaceRange(start, end, token);
+    final newText = text.replaceRange(start, end, insert);
+    final caret = start + (cursorOffset ?? insert.length);
     controller.value = TextEditingValue(
       text: newText,
-      selection: TextSelection.collapsed(offset: start + token.length),
+      selection: TextSelection.collapsed(offset: caret),
     );
     widget.onSettingsChanged();
+    setState(() {});
+  }
+
+  void _insertPromptPlaceholder(String token) {
+    _insertAtCursor(token);
+  }
+
+  void _insertPromptBlock(String placeholderName) {
+    final open = GeminiPromptTemplateSyntax.blockOpenTag(placeholderName);
+    final close = GeminiPromptTemplateSyntax.blockCloseTag(placeholderName);
+    _insertAtCursor('$open$close', cursorOffset: open.length);
   }
 
   Future<void> _runCredentialTest() async {
@@ -550,7 +563,7 @@ class _LansweeperConnectionSettingsDialogState
               const SizedBox(height: 10),
               Text(
                 'Προτροπή (prompt) για πρόταση τίτλου/περιγραφής. '
-                'Εισάγετε placeholders στη θέση του κέρσορα:',
+                'Placeholders: {Όνομα}. Προαιρετικά πεδία: {@Όνομα}…{@/Όνομα}.',
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
                       color: Theme.of(context).colorScheme.onSurfaceVariant,
                     ),
@@ -568,17 +581,31 @@ class _LansweeperConnectionSettingsDialogState
                     ),
                 ],
               ),
+              const SizedBox(height: 6),
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: [
+                  for (final placeholder in kGeminiPromptPlaceholders)
+                    ActionChip(
+                      avatar: Icon(
+                        Icons.view_day_outlined,
+                        size: 16,
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
+                      label: Text('Block ${placeholder.label}'),
+                      onPressed: () => _insertPromptBlock(
+                        GeminiPromptTemplateSyntax.placeholderNameFromToken(
+                          placeholder.token,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
               const SizedBox(height: 8),
-              TextFormField(
+              GeminiPromptTemplateField(
                 controller: widget.geminiPromptTemplateController,
                 onChanged: (_) => widget.onSettingsChanged(),
-                minLines: 5,
-                maxLines: 10,
-                decoration: const InputDecoration(
-                  labelText: 'Προτροπή Gemini',
-                  border: OutlineInputBorder(),
-                  alignLabelWithHint: true,
-                ),
               ),
               const SizedBox(height: 8),
               TextFormField(

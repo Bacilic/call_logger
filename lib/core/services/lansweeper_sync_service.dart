@@ -30,13 +30,18 @@ class LansweeperSyncRequest {
     required this.call,
     required this.title,
     required this.notes,
+    required this.solution,
     required this.agentUsername,
+    this.durationSeconds,
   });
 
   final CallModel call;
   final String title;
   final String notes;
+  final String solution;
   final String agentUsername;
+  /// Συνολική διάρκεια (δευτερόλεπτα) για την αποστολή· αν λείπει, χρησιμοποιείται η διάρκεια της κλήσης.
+  final int? durationSeconds;
 }
 
 class LansweeperSyncResult {
@@ -96,7 +101,11 @@ class LansweeperSyncService {
     final subject = request.title.trim().isNotEmpty
         ? request.title.trim()
         : _buildSubject(request.call);
-    final description = _buildDescription(notes: request.notes);
+    final description = _buildDescription(
+      notes: request.notes,
+      solution: request.solution,
+      durationSeconds: request.durationSeconds ?? request.call.duration,
+    );
 
     final form = <String, String>{
       'Subject': subject,
@@ -157,7 +166,49 @@ class LansweeperSyncService {
     return '[$category]$suffix';
   }
 
-  String _buildDescription({required String notes}) => notes.trim();
+  static String formatCallDurationLabel(int seconds) {
+    final safe = seconds < 0 ? 0 : seconds;
+    final h = safe ~/ 3600;
+    final m = (safe % 3600) ~/ 60;
+    final s = safe % 60;
+    if (h > 0) {
+      return '${h.toString().padLeft(2, '0')}:${m.toString().padLeft(2, '0')}';
+    }
+    return '${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
+  }
+
+  static String buildTicketDescription({
+    required String notes,
+    required String solution,
+    int? durationSeconds,
+  }) {
+    final notesTrim = notes.trim();
+    final solutionTrim = solution.trim();
+    final String body;
+    if (solutionTrim.isEmpty) {
+      body = notesTrim;
+    } else if (notesTrim.isEmpty) {
+      body = 'Λύση:\n$solutionTrim';
+    } else {
+      body = '$notesTrim\n\nΛύση:\n$solutionTrim';
+    }
+    if (durationSeconds == null) return body;
+    final durationLine =
+        'Χρόνος: ${formatCallDurationLabel(durationSeconds)}';
+    if (body.isEmpty) return durationLine;
+    return '$body\n\n$durationLine';
+  }
+
+  String _buildDescription({
+    required String notes,
+    required String solution,
+    int? durationSeconds,
+  }) =>
+      buildTicketDescription(
+        notes: notes,
+        solution: solution,
+        durationSeconds: durationSeconds,
+      );
 
   Map<String, dynamic>? _tryDecodeJson(String body) {
     try {

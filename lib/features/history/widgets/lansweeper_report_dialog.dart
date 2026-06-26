@@ -8,6 +8,7 @@ import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/services/gemini_ticket_service.dart';
+import '../../../core/services/lansweeper_sync_service.dart';
 import '../../../core/widgets/spell_check_controller.dart';
 import '../../calls/models/call_model.dart';
 import '../models/lansweeper_connection_status.dart';
@@ -15,6 +16,7 @@ import '../models/lansweeper_sync_state.dart';
 import '../providers/dashboard_provider.dart';
 import '../providers/lansweeper_connection_probe_provider.dart';
 import '../providers/lansweeper_sync_provider.dart';
+import 'lansweeper/lansweeper_gemini_prompt_preview_dialog.dart';
 import 'lansweeper/lansweeper_connection_settings_dialog.dart';
 import 'lansweeper/lansweeper_report_call_list.dart';
 import 'lansweeper/lansweeper_url_rules.dart';
@@ -38,6 +40,7 @@ class _LansweeperReportDialogState
   final Set<String> _selectedKeys = <String>{};
   final SpellCheckController _titleController = SpellCheckController();
   final SpellCheckController _notesController = SpellCheckController();
+  final SpellCheckController _solutionController = SpellCheckController();
   final TextEditingController _lansweeperAgentUsernameController =
       TextEditingController();
   final TextEditingController _lansweeperApiUrlController =
@@ -531,6 +534,7 @@ class _LansweeperReportDialogState
     _geminiFallbackModelController.dispose();
     _titleController.dispose();
     _notesController.dispose();
+    _solutionController.dispose();
     super.dispose();
   }
 
@@ -797,6 +801,7 @@ class _LansweeperReportDialogState
 
   Future<void> _copyAndOpen({
     required String ticketFormUrl,
+    int? durationSeconds,
   }) async {
     if (!LansweeperUrlRules.isBrowserLaunchableUrl(ticketFormUrl)) {
       if (!mounted) return;
@@ -812,11 +817,25 @@ class _LansweeperReportDialogState
 
     final title = _titleController.text.trim();
     final notes = _notesController.text.trim();
-    await Clipboard.setData(ClipboardData(text: '$title\n\n$notes'));
+    final solution = _solutionController.text.trim();
+    final description = LansweeperSyncService.buildTicketDescription(
+      notes: notes,
+      solution: solution,
+      durationSeconds: durationSeconds,
+    );
+    final clipboardParts = <String>[
+      if (title.isNotEmpty) title,
+      if (description.isNotEmpty) description,
+    ];
+    await Clipboard.setData(
+      ClipboardData(text: clipboardParts.join('\n\n')),
+    );
 
     if (!mounted) return;
     _showDialogSnackBar(
-      const SnackBar(content: Text('Αντιγράφηκαν τίτλος και σημειώσεις.')),
+      const SnackBar(
+        content: Text('Αντιγράφηκαν τίτλος, σημειώσεις και λύση.'),
+      ),
     );
 
     final result = await _launchHelpdeskBrowserUrl(
@@ -936,6 +955,62 @@ class _LansweeperReportDialogState
         ? 'Κλήση$idSuffix'
         : '[$category]$idSuffix';
     _notesController.text = _combinedSelectedNotes(selected);
+    _solutionController.text = '';
+  }
+
+  String _buildGeminiPromptForSelected(List<_ReportCallItem> selected) {
+    final inputs = _geminiPromptInputs(selected);
+    return GeminiTicketService.buildPrompt(
+      promptTemplate: ref.read(geminiPromptTemplateProvider),
+      callerText: inputs.callerText,
+      equipmentText: inputs.equipmentText,
+      departmentText: inputs.departmentText,
+      category: inputs.category,
+      issue: inputs.issue,
+      titleText: inputs.titleText,
+      notesText: inputs.notesText,
+      solutionText: inputs.solutionText,
+    );
+  }
+
+  ({
+    String callerText,
+    String equipmentText,
+    String departmentText,
+    String category,
+    String issue,
+    String titleText,
+    String notesText,
+    String solutionText,
+  }) _geminiPromptInputs(List<_ReportCallItem> selected) {
+    return (
+      callerText: _combinedUniqueCallField(
+        selected,
+        (call) => call.callerText,
+      ),
+      equipmentText: _combinedUniqueCallField(
+        selected,
+        (call) => call.equipmentText,
+      ),
+      departmentText: _combinedUniqueCallField(
+        selected,
+        (call) => call.departmentText,
+      ),
+      category: _combinedUniqueCallField(selected, (call) => call.category),
+      issue: _combinedGeminiIssue(selected),
+      titleText: _titleController.text,
+      notesText: _notesController.text,
+      solutionText: _solutionController.text,
+    );
+  }
+
+  Future<void> _showGeminiPromptPreview(List<_ReportCallItem> selected) async {
+    if (selected.isEmpty || _aiSuggestRunning || !mounted) return;
+    final prompt = _buildGeminiPromptForSelected(selected);
+    await showLansweeperGeminiPromptPreviewDialog(
+      context,
+      promptText: prompt,
+    );
   }
 
   Future<void> _suggestWithAi(List<_ReportCallItem> selected) async {
@@ -992,22 +1067,7 @@ class _LansweeperReportDialogState
       ));
     }
 
-    final callerText = _combinedUniqueCallField(
-      selected,
-      (call) => call.callerText,
-    );
-    final equipmentText = _combinedUniqueCallField(
-      selected,
-      (call) => call.equipmentText,
-    );
-    final departmentText = _combinedUniqueCallField(
-      selected,
-      (call) => call.departmentText,
-    );
-    final category = _combinedUniqueCallField(selected, (call) => call.category);
-    final issue = _combinedGeminiIssue(selected);
-    final draftTitle = _titleController.text;
-    final draftNotes = _notesController.text;
+    final inputs = _geminiPromptInputs(selected);
 
     setState(() => _aiSuggestRunning = true);
     try {
@@ -1022,19 +1082,21 @@ class _LansweeperReportDialogState
             apiKey: apiKey,
             endpoint: attempt.endpoint,
             promptTemplate: promptTemplate,
-            callerText: callerText,
-            equipmentText: equipmentText,
-            departmentText: departmentText,
-            category: category,
-            issue: issue,
-            titleText: draftTitle,
-            notesText: draftNotes,
+            callerText: inputs.callerText,
+            equipmentText: inputs.equipmentText,
+            departmentText: inputs.departmentText,
+            category: inputs.category,
+            issue: inputs.issue,
+            titleText: inputs.titleText,
+            notesText: inputs.notesText,
+            solutionText: inputs.solutionText,
             client: client,
           );
           if (!mounted) return;
           setState(() {
             _titleController.text = result.title;
             _notesController.text = result.description;
+            _solutionController.text = result.solution;
           });
           return;
         } catch (e) {
@@ -1173,10 +1235,16 @@ class _LansweeperReportDialogState
     }
 
     final notifier = ref.read(lansweeperSyncProvider.notifier);
+    final durationSeconds = selected.fold<int>(
+      0,
+      (sum, item) => sum + item.durationSeconds,
+    );
     final input = LansweeperSubmitInput(
       title: _titleController.text,
       notes: _notesController.text,
+      solution: _solutionController.text,
       agentUsername: _lansweeperAgentUsernameController.text,
+      durationSeconds: durationSeconds,
     );
     final companionCallIds = selected
         .map((entry) => entry.call.id)
@@ -1938,7 +2006,7 @@ class _LansweeperReportDialogState
               hasAnyCallsInRange: hasAnyCallsInRange,
               reportRangeTitle: reportRangeTitle,
             ),
-            const SizedBox(height: 10),
+            const SizedBox(height: 6),
             Expanded(
               child: callsAsync.when(
                 loading: () => const Center(child: CircularProgressIndicator()),
@@ -1982,6 +2050,13 @@ class _LansweeperReportDialogState
                       : !geminiKeyReady
                       ? 'Ορίστε Gemini API key στις ρυθμίσεις'
                       : null;
+                  final promptPreviewEnabled =
+                      selected.isNotEmpty && !_aiSuggestRunning;
+                  final promptPreviewTooltip = selected.isEmpty
+                      ? 'Επιλέξτε κλήση'
+                      : _aiSuggestRunning
+                      ? 'Περιμένετε την ολοκλήρωση της πρότασης'
+                      : null;
                   final linksAsync = selectedCallId != null
                       ? ref.watch(callExternalLinksProvider(selectedCallId))
                       : const AsyncData<List<Map<String, dynamic>>>(
@@ -2013,74 +2088,85 @@ class _LansweeperReportDialogState
                     );
                   }
 
-                  return Column(
+                  return Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Align(
-                        alignment: Alignment.centerLeft,
-                        child: Text(
-                          'Επιλεγμένες: ${selected.length} | Σύνολο διάρκειας: ${_totalDurationLabel(totalSelectedSeconds)}',
-                          style: Theme.of(context).textTheme.titleSmall,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Expanded(
-                        child: Row(
-                          children: [
-                            Expanded(
-                              flex: 2,
-                              child: LansweeperReportCallList(
-                                grouped: groupedRows,
-                                selectedKeys: _selectedKeys,
-                                totalDurationLabel: _totalDurationLabel,
-                                ticketViewUrlTemplate: lansweeperTicketViewUrl,
-                                isSyncLoading: syncState.isLoading,
-                                ticketLinkEnabled: connectionReady,
-                                onToggleGroup: (groupItems, checked) {
-                                  _toggleGroup(
-                                    groupItems
-                                        .map((row) => itemByKey[row.key]!)
-                                        .toList(),
-                                    checked,
-                                  );
-                                },
-                                onToggleItem: (row, checked) {
-                                  _toggleItem(itemByKey[row.key]!, checked);
-                                },
-                                onBadgePressed: (row) {
-                                  unawaited(
-                                    _toggleRegistrationFromBadge(
-                                      itemByKey[row.key]!,
-                                    ),
-                                  );
-                                },
+                        Expanded(
+                          flex: 2,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              Text(
+                                'Επιλεγμένες: ${selected.length} | '
+                                'Σύνολο διάρκειας: '
+                                '${_totalDurationLabel(totalSelectedSeconds)}',
+                                style: Theme.of(context).textTheme.titleSmall,
                               ),
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              flex: 3,
-                              child: SingleChildScrollView(
-                                child: Column(
-                                  crossAxisAlignment:
-                                      CrossAxisAlignment.stretch,
-                                  children: [
-                                    LansweeperSyncForm(
-                                      titleController: _titleController,
-                                      notesController: _notesController,
-                                      isSuggesting: _aiSuggestRunning,
-                                      suggestModelLabel: _aiSuggestRunning
-                                          ? _aiCurrentModel
-                                          : null,
-                                      suggestElapsedLabel: _aiSuggestRunning
-                                          ? _aiSuggestElapsedSeconds
-                                              .toStringAsFixed(2)
-                                          : null,
-                                      suggestDisabledTooltip: aiSuggestTooltip,
-                                      onSuggest: aiSuggestEnabled
-                                          ? () => unawaited(
-                                              _suggestWithAi(selected),
-                                            )
-                                          : null,
-                                    ),
+                              const SizedBox(height: 4),
+                              Expanded(
+                                child: LansweeperReportCallList(
+                                  grouped: groupedRows,
+                                  selectedKeys: _selectedKeys,
+                                  totalDurationLabel: _totalDurationLabel,
+                                  ticketViewUrlTemplate:
+                                      lansweeperTicketViewUrl,
+                                  isSyncLoading: syncState.isLoading,
+                                  ticketLinkEnabled: connectionReady,
+                                  onToggleGroup: (groupItems, checked) {
+                                    _toggleGroup(
+                                      groupItems
+                                          .map((row) => itemByKey[row.key]!)
+                                          .toList(),
+                                      checked,
+                                    );
+                                  },
+                                  onToggleItem: (row, checked) {
+                                    _toggleItem(itemByKey[row.key]!, checked);
+                                  },
+                                  onBadgePressed: (row) {
+                                    unawaited(
+                                      _toggleRegistrationFromBadge(
+                                        itemByKey[row.key]!,
+                                      ),
+                                    );
+                                  },
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          flex: 3,
+                          child: SingleChildScrollView(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                LansweeperSyncForm(
+                                  titleController: _titleController,
+                                  notesController: _notesController,
+                                  solutionController: _solutionController,
+                                  isSuggesting: _aiSuggestRunning,
+                                  suggestModelLabel: _aiSuggestRunning
+                                      ? _aiCurrentModel
+                                      : null,
+                                  suggestElapsedLabel: _aiSuggestRunning
+                                      ? _aiSuggestElapsedSeconds
+                                          .toStringAsFixed(2)
+                                      : null,
+                                  suggestDisabledTooltip: aiSuggestTooltip,
+                                  onSuggest: aiSuggestEnabled
+                                      ? () => unawaited(
+                                          _suggestWithAi(selected),
+                                        )
+                                      : null,
+                                  previewDisabledTooltip: promptPreviewTooltip,
+                                  onPreviewPrompt: promptPreviewEnabled
+                                      ? () => unawaited(
+                                          _showGeminiPromptPreview(selected),
+                                        )
+                                      : null,
+                                ),
                                     const SizedBox(height: 10),
                                     Card(
                                       child: Padding(
@@ -2220,9 +2306,6 @@ class _LansweeperReportDialogState
                                 ),
                               ),
                             ),
-                          ],
-                        ),
-                      ),
                     ],
                   );
                 },
@@ -2240,12 +2323,18 @@ class _LansweeperReportDialogState
           data: (calls) {
             if (calls.isEmpty) return const SizedBox.shrink();
             final items = _toItems(calls);
-            final hasSelection = items.any(
-              (e) => _selectedKeys.contains(e.key),
+            final selected = items
+                .where((e) => _selectedKeys.contains(e.key))
+                .toList();
+            final totalSelectedSeconds = selected.fold<int>(
+              0,
+              (sum, item) => sum + item.durationSeconds,
             );
+            final hasSelection = selected.isNotEmpty;
             final hasFormText =
                 _titleController.text.trim().isNotEmpty ||
-                _notesController.text.trim().isNotEmpty;
+                _notesController.text.trim().isNotEmpty ||
+                _solutionController.text.trim().isNotEmpty;
             return _wrapLansweeperConnectionTooltip(
               status: connectionStatus,
               child: FilledButton.icon(
@@ -2254,6 +2343,7 @@ class _LansweeperReportDialogState
                         connectionReady
                     ? () => _copyAndOpen(
                         ticketFormUrl: lansweeperTicketFormUrl,
+                        durationSeconds: hasSelection ? totalSelectedSeconds : null,
                       )
                     : null,
                 icon: _connectionAwareIcon(

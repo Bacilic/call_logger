@@ -126,8 +126,9 @@ class KpiGrid extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 10),
-                  Text(
-                    card.title,
+                  EllipsisTooltipText(
+                    text: card.title,
+                    maxLines: 2,
                     style: Theme.of(context).textTheme.labelLarge?.copyWith(
                       fontWeight: FontWeight.w600,
                       color: paletteColors.kpiTitle,
@@ -135,16 +136,23 @@ class KpiGrid extends StatelessWidget {
                   ),
                   const SizedBox(height: 6),
                   Expanded(
-                    child: Text(
-                      card.value,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.headlineSmall
-                          ?.copyWith(
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: -0.8,
-                            color: card.colors.valueColor,
-                          ),
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          card.value,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.headlineSmall
+                              ?.copyWith(
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: -0.8,
+                                color: card.colors.valueColor,
+                              ),
+                        ),
+                      ),
                     ),
                   ),
                   Row(
