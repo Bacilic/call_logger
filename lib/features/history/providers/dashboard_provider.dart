@@ -709,6 +709,50 @@ final geminiPromptTemplateProvider =
       GeminiPromptTemplateNotifier.new,
     );
 
+/// Προσωπική προεπιλογή προτύπου προτροπής Gemini (`app_settings`, null = δεν έχει οριστεί).
+class GeminiPromptTemplateUserDefaultNotifier extends Notifier<String?> {
+  bool _hydrated = false;
+
+  @override
+  String? build() {
+    if (!_hydrated) {
+      _hydrated = true;
+      Future<void>(_hydrateFromDb);
+    }
+    return null;
+  }
+
+  Future<void> _hydrateFromDb() async {
+    final db = await DatabaseHelper.instance.database;
+    if (!ref.mounted) return;
+    final raw = (await SettingsRepository(db).getSetting(
+      kGeminiPromptTemplateUserDefaultSettingKey,
+    ))?.trim();
+    if (!ref.mounted) return;
+    state = raw == null || raw.isEmpty ? null : raw;
+  }
+
+  Future<void> setUserDefault(String value) async {
+    final normalized = value.trim();
+    if (normalized.isEmpty) {
+      state = null;
+      return;
+    }
+    state = normalized;
+    final db = await DatabaseHelper.instance.database;
+    if (!ref.mounted) return;
+    await SettingsRepository(db).saveSetting(
+      kGeminiPromptTemplateUserDefaultSettingKey,
+      normalized,
+    );
+  }
+}
+
+final geminiPromptTemplateUserDefaultProvider =
+    NotifierProvider.autoDispose<GeminiPromptTemplateUserDefaultNotifier, String?>(
+      GeminiPromptTemplateUserDefaultNotifier.new,
+    );
+
 class GeminiEndpointNotifier extends Notifier<String> {
   bool _hydrated = false;
 

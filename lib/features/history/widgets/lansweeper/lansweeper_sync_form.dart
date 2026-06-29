@@ -11,6 +11,7 @@ class LansweeperSyncForm extends ConsumerWidget {
     required this.solutionController,
     this.onSuggest,
     this.onPreviewPrompt,
+    this.onEditPromptTemplate,
     this.isSuggesting = false,
     this.suggestModelLabel,
     this.suggestElapsedLabel,
@@ -24,6 +25,7 @@ class LansweeperSyncForm extends ConsumerWidget {
   final SpellCheckController solutionController;
   final VoidCallback? onSuggest;
   final VoidCallback? onPreviewPrompt;
+  final VoidCallback? onEditPromptTemplate;
   final bool isSuggesting;
   final String? suggestModelLabel;
   final String? suggestElapsedLabel;
@@ -54,6 +56,18 @@ class LansweeperSyncForm extends ConsumerWidget {
       label: const Text('Προεπισκόπηση προτροπής'),
     );
 
+    final promptEditorButton = onEditPromptTemplate == null
+        ? null
+        : IconButton(
+            tooltip: 'Επεξεργασία προτύπου προτροπής',
+            onPressed: isSuggesting ? null : onEditPromptTemplate,
+            icon: Image.asset(
+              'assets/prompt_editor.png',
+              width: 20,
+              height: 20,
+            ),
+          );
+
     final suggestRow = Row(
       children: [
         if (suggestDisabledTooltip != null && onSuggest == null)
@@ -71,6 +85,10 @@ class LansweeperSyncForm extends ConsumerWidget {
           ),
         ],
         const Spacer(),
+        if (promptEditorButton != null) ...[
+          promptEditorButton,
+          const SizedBox(width: 4),
+        ],
         Flexible(
           child: Align(
             alignment: Alignment.centerRight,

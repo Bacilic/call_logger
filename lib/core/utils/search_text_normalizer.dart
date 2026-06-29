@@ -9,6 +9,7 @@ class SearchTextNormalizer {
   static String normalizeForSearch(String value) {
     return value
         .toLowerCase()
+        .replaceAll('ς', 'σ')
         .replaceAll('_', ' ')
         .replaceAll('ά', 'α')
         .replaceAll('έ', 'ε')

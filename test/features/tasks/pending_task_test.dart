@@ -142,6 +142,7 @@ void main() {
         );
 
         reporter.recordPass('Εκκρεμότητα με απομονωμένη βάση');
+        await flushCallLoggerSqfliteLockTimers(tester);
       },
       semanticsEnabled: false,
     );

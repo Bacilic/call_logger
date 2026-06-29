@@ -54,6 +54,7 @@ class SettingsService {
   static const String _keyShowDictionaryNav = 'show_dictionary_nav';
   static const String _keyCallsScreenCardsVisibility =
       'calls_screen_cards_visibility_v1';
+  static const String _keyShowQuickCallFab = 'show_quick_call_fab';
   static const String _keyRemoteToolPrioritySwapMode =
       'remote_tool_priority_swap_mode';
   static const int _maxRecentPaths = 3;
@@ -605,6 +606,17 @@ class SettingsService {
   ) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_prefKey(_keyCallsScreenCardsVisibility), value.toJsonString());
+  }
+
+  /// Εμφάνιση ιπτάμενου κουμπιού γρήγορης καταγραφής κλήσης. Προεπιλογή: true.
+  Future<bool> getShowQuickCallFab() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_prefKey(_keyShowQuickCallFab)) ?? true;
+  }
+
+  Future<void> setShowQuickCallFab(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_prefKey(_keyShowQuickCallFab), value);
   }
 
   /// Πολιτική εκκαθάρισης audit log (ηλικία / max rows).

@@ -7,8 +7,10 @@ import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../../core/services/gemini_prompt_template_controller.dart';
 import '../../../core/services/gemini_ticket_service.dart';
 import '../../../core/services/lansweeper_sync_service.dart';
+import '../../../core/widgets/quick_call_fab.dart';
 import '../../../core/widgets/spell_check_controller.dart';
 import '../../calls/models/call_model.dart';
 import '../models/lansweeper_connection_status.dart';
@@ -17,6 +19,7 @@ import '../providers/dashboard_provider.dart';
 import '../providers/lansweeper_connection_probe_provider.dart';
 import '../providers/lansweeper_sync_provider.dart';
 import 'lansweeper/lansweeper_gemini_prompt_preview_dialog.dart';
+import 'lansweeper/gemini_prompt_template_editor_dialog.dart';
 import 'lansweeper/lansweeper_connection_settings_dialog.dart';
 import 'lansweeper/lansweeper_report_call_list.dart';
 import 'lansweeper/lansweeper_url_rules.dart';
@@ -58,8 +61,9 @@ class _LansweeperReportDialogState
   final TextEditingController _lansweeperHelpdeskPasswordController =
       TextEditingController();
   final TextEditingController _geminiApiKeyController = TextEditingController();
-  final TextEditingController _geminiPromptTemplateController =
-      TextEditingController();
+  final GeminiPromptTemplateTextEditingController
+      _geminiPromptTemplateController =
+      GeminiPromptTemplateTextEditingController();
   final TextEditingController _geminiEndpointController =
       TextEditingController();
   final TextEditingController _geminiPrimaryModelController =
@@ -282,7 +286,6 @@ class _LansweeperReportDialogState
         helpdeskUsernameController: _lansweeperHelpdeskUsernameController,
         helpdeskPasswordController: _lansweeperHelpdeskPasswordController,
         geminiApiKeyController: _geminiApiKeyController,
-        geminiPromptTemplateController: _geminiPromptTemplateController,
         geminiEndpointController: _geminiEndpointController,
         geminiPrimaryModelController: _geminiPrimaryModelController,
         geminiFallbackModelController: _geminiFallbackModelController,
@@ -303,6 +306,24 @@ class _LansweeperReportDialogState
         },
         onAiHelpLink: () {
           unawaited(_geminiApiHelpFromSettings());
+        },
+      ),
+    );
+  }
+
+  Future<void> _openGeminiPromptTemplateEditorDialog() async {
+    final savedTemplate = ref.read(geminiPromptTemplateProvider);
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => GeminiPromptTemplateEditorDialog(
+        savedTemplate: savedTemplate,
+        onSave: (text) async {
+          await ref
+              .read(geminiPromptTemplateProvider.notifier)
+              .setPromptTemplate(text);
+          if (_geminiPromptTemplateController.text != text) {
+            _geminiPromptTemplateController.text = text;
+          }
         },
       ),
     );
@@ -1967,8 +1988,11 @@ class _LansweeperReportDialogState
       key: _dialogMessengerKey,
       child: Scaffold(
         backgroundColor: Colors.transparent,
-        body: Center(
-          child: AlertDialog(
+        body: Stack(
+          fit: StackFit.expand,
+          children: [
+            Center(
+              child: AlertDialog(
       title: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
@@ -2166,6 +2190,9 @@ class _LansweeperReportDialogState
                                           _showGeminiPromptPreview(selected),
                                         )
                                       : null,
+                                  onEditPromptTemplate: () => unawaited(
+                                    _openGeminiPromptTemplateEditorDialog(),
+                                  ),
                                 ),
                                     const SizedBox(height: 10),
                                     Card(
@@ -2358,6 +2385,17 @@ class _LansweeperReportDialogState
         ),
       ],
           ),
+            ),
+            Positioned(
+              right: 20,
+              bottom: 20,
+              child: SafeArea(
+                child: QuickCallFloatingButton(
+                  scope: QuickCallFabScope.overlayRoute,
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );

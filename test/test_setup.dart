@@ -81,6 +81,22 @@ Future<void> pumpUntilSettledLong(WidgetTester tester) async {
   await pumpUntilSettled(tester, steps: 45, step: const Duration(milliseconds: 60));
 }
 
+/// Περιμένει ολοκλήρωση lookup cache (πραγματικό async I/O).
+Future<void> awaitCallLoggerLookupLoaded(WidgetTester tester) async {
+  await tester.runAsync(() async {
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(MaterialApp)),
+    );
+    await container.read(lookupServiceProvider.future);
+  });
+  await tester.pump();
+}
+
+/// Ξεπερνά pending sqflite lock timers (~10s) στο fake clock του binding.
+Future<void> flushCallLoggerSqfliteLockTimers(WidgetTester tester) async {
+  await tester.pump(const Duration(seconds: 11));
+}
+
 /// Αρχικοποίηση sqflite FFI (υποχρεωτικό για desktop/unit tests).
 void initSqfliteFfiForTests() {
   sqfliteFfiInit();

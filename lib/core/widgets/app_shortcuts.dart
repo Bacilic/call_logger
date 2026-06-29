@@ -13,12 +13,10 @@ import '../database/database_helper.dart';
 import '../database/database_init_result.dart';
 import '../database/database_init_runner.dart';
 import '../providers/core_lexicon_provider.dart';
+import '../providers/quick_call_providers.dart';
+import '../../features/calls/screens/widgets/quick_call_dialog.dart';
 import 'main_shell.dart';
-
-/// Intent για γρήγορη καταγραφή κλήσης (εστίαση στο πεδίο εσωτερικού).
-class QuickCaptureIntent extends Intent {
-  const QuickCaptureIntent();
-}
+import 'quick_call_shortcuts.dart';
 
 /// Root-level Shortcuts και Actions για την εφαρμογή.
 /// Κρατά σε state το τρέχον αποτέλεσμα βάσης και ξανατρέχει τους ελέγχους
@@ -46,13 +44,7 @@ class _AppShortcutsState extends ConsumerState<AppShortcuts>
   AppLifecycleListener? _appLifecycleListener;
   bool _windowCloseHandling = false;
 
-  static final Map<ShortcutActivator, Intent> _shortcuts =
-      <ShortcutActivator, Intent>{
-        SingleActivator(LogicalKeyboardKey.keyL, control: true, alt: true):
-            const QuickCaptureIntent(),
-        SingleActivator(LogicalKeyboardKey.keyC, control: true, alt: true):
-            const QuickCaptureIntent(),
-      };
+  static final Map<ShortcutActivator, Intent> _shortcuts = quickCallShortcuts;
 
   @override
   void initState() {
@@ -77,10 +69,35 @@ class _AppShortcutsState extends ConsumerState<AppShortcuts>
       if (!mounted) return;
       unawaited(ref.read(coreLexiconProvider.notifier).bootstrapFromSavedPath());
     });
+    HardwareKeyboard.instance.addHandler(_handleGlobalQuickCallKey);
+  }
+
+  void _invokeQuickCapture() {
+    if (!isQuickCallCaptureAvailable(ref)) return;
+    unawaited(showQuickCallDialog(context));
+  }
+
+  bool _handleGlobalQuickCallKey(KeyEvent event) {
+    if (event is! KeyDownEvent || !mounted) return false;
+
+    final keyboard = HardwareKeyboard.instance;
+    Intent? matched;
+    for (final entry in _shortcuts.entries) {
+      if (entry.key.accepts(event, keyboard)) {
+        matched = entry.value;
+        break;
+      }
+    }
+    if (matched is! QuickCaptureIntent) return false;
+    if (!isQuickCallCaptureAvailable(ref)) return true;
+
+    _invokeQuickCapture();
+    return true;
   }
 
   @override
   void dispose() {
+    HardwareKeyboard.instance.removeHandler(_handleGlobalQuickCallKey);
     _windowBoundsSaveTimer?.cancel();
     _appLifecycleListener?.dispose();
     _appLifecycleListener = null;
@@ -191,7 +208,10 @@ class _AppShortcutsState extends ConsumerState<AppShortcuts>
       child: Actions(
         actions: <Type, Action<Intent>>{
           QuickCaptureIntent: CallbackAction<QuickCaptureIntent>(
-            onInvoke: (QuickCaptureIntent intent) => null,
+            onInvoke: (QuickCaptureIntent intent) {
+              _invokeQuickCapture();
+              return null;
+            },
           ),
         },
         child: MainShell(

@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../services/lamp_migration_service.dart';
+import '../services/lamp_transfer_preview.dart';
+import 'lamp_transfer_operations_preview_panel.dart';
 
 class LampTransferWizardDialog extends StatefulWidget {
   const LampTransferWizardDialog({
@@ -39,9 +41,22 @@ class _LampTransferWizardDialogState extends State<LampTransferWizardDialog> {
   @override
   void dispose() {
     for (final controller in _controllers.values) {
+      controller.removeListener(_onFormValuesChanged);
       controller.dispose();
     }
     super.dispose();
+  }
+
+  void _onFormValuesChanged() {
+    if (!mounted) return;
+    setState(() {});
+  }
+
+  Map<String, String> _currentFormValues() {
+    return <String, String>{
+      for (final entry in _controllers.entries)
+        entry.key: entry.value.text.trim(),
+    };
   }
 
   Future<void> _loadDraft() async {
@@ -50,8 +65,11 @@ class _LampTransferWizardDialogState extends State<LampTransferWizardDialog> {
         target: widget.target,
         sourceRow: widget.sourceRow,
       );
-      for (final entry in draft.formValues.entries) {
-        _controllers[entry.key] = TextEditingController(text: entry.value);
+      for (final spec in lampTransferFormFieldSpecs(draft.target)) {
+        final value = draft.formValues[spec.formKey] ?? '';
+        final controller = TextEditingController(text: value);
+        controller.addListener(_onFormValuesChanged);
+        _controllers[spec.formKey] = controller;
       }
       if (!mounted) return;
       setState(() {
@@ -102,12 +120,75 @@ class _LampTransferWizardDialogState extends State<LampTransferWizardDialog> {
             return;
           }
         }
+      } else if (draft.target == LampTransferTarget.department) {
+        final conflicts = await widget.service.detectDepartmentConflicts(
+          formValues: formValues,
+          selectedCandidateId: _selectedCandidateId,
+        );
+        if (conflicts.isNotEmpty) {
+          ownerConflictDecisions = await _showOwnerConflictsDialog(conflicts);
+          if (ownerConflictDecisions == null) {
+            if (!mounted) return;
+            setState(() => _saving = false);
+            return;
+          }
+        }
+      } else if (draft.target == LampTransferTarget.equipment) {
+        final conflicts = await widget.service.detectEquipmentConflicts(
+          formValues: formValues,
+          selectedCandidateId: _selectedCandidateId,
+        );
+        if (conflicts.isNotEmpty) {
+          ownerConflictDecisions = await _showOwnerConflictsDialog(conflicts);
+          if (ownerConflictDecisions == null) {
+            if (!mounted) return;
+            setState(() => _saving = false);
+            return;
+          }
+        }
+      }
+      var confirmEntityCreations = false;
+      final pendingCreations = await widget.service.detectPendingEntityCreations(
+        target: draft.target,
+        formValues: formValues,
+        selectedCandidateId: _selectedCandidateId,
+      );
+      if (pendingCreations.isNotEmpty) {
+        final confirmed = await _showPendingEntityCreationsDialog(
+          pendingCreations,
+        );
+        if (confirmed != true) {
+          if (!mounted) return;
+          setState(() => _saving = false);
+          return;
+        }
+        confirmEntityCreations = true;
+      }
+      LampSoftDeletedDecision? softDeletedDecision;
+      if (_selectedCandidateId == null) {
+        final softDeletedMatch = await widget.service.detectSoftDeletedMatch(
+          target: draft.target,
+          formValues: formValues,
+          selectedCandidateId: null,
+        );
+        if (softDeletedMatch != null) {
+          softDeletedDecision = await _showSoftDeletedMatchDialog(
+            softDeletedMatch,
+          );
+          if (softDeletedDecision == null) {
+            if (!mounted) return;
+            setState(() => _saving = false);
+            return;
+          }
+        }
       }
       final result = await widget.service.save(
         target: draft.target,
         formValues: formValues,
         selectedCandidateId: _selectedCandidateId,
         ownerConflictDecisions: ownerConflictDecisions,
+        confirmEntityCreations: confirmEntityCreations,
+        softDeletedDecision: softDeletedDecision,
       );
       if (!mounted) return;
       Navigator.of(context).pop(result.message);
@@ -181,8 +262,8 @@ class _LampTransferWizardDialogState extends State<LampTransferWizardDialog> {
     return AlertDialog(
       title: const Text('Οδηγός Μεταφοράς'),
       content: SizedBox(
-        width: 1120,
-        height: 620,
+        width: 1180,
+        height: 640,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -223,7 +304,7 @@ class _LampTransferWizardDialogState extends State<LampTransferWizardDialog> {
         const SizedBox(width: 12),
         Expanded(flex: 3, child: _suggestionPane(draft)),
         const SizedBox(width: 12),
-        Expanded(flex: 4, child: _editPane(draft)),
+        Expanded(flex: 4, child: _rightPane(draft)),
       ],
     );
   }
@@ -239,7 +320,7 @@ class _LampTransferWizardDialogState extends State<LampTransferWizardDialog> {
               const SizedBox(height: 12),
               _suggestionPane(draft, fixedHeight: 280),
               const SizedBox(height: 12),
-              _editPane(draft, fixedHeight: 360),
+              _rightPane(draft, fixedHeight: 420),
             ],
           ),
         ),
@@ -287,41 +368,24 @@ class _LampTransferWizardDialogState extends State<LampTransferWizardDialog> {
     );
   }
 
-  Widget _editPane(LampMigrationDraft draft, {double? fixedHeight}) {
+  Widget _rightPane(LampMigrationDraft draft, {double? fixedHeight}) {
+    final preview = buildLampTransferPreview(
+      draft: draft,
+      currentFormValues: _currentFormValues(),
+      selectedCandidateId: _selectedCandidateId,
+    );
+
     return _paneCard(
-      title: 'Πεδία επεξεργασίας',
+      title: 'Προεπισκόπηση ενεργειών',
       fixedHeight: fixedHeight,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Expanded(
-            child: SingleChildScrollView(child: _formForTarget(draft.target)),
-          ),
-          const SizedBox(height: 12),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [
-              TextButton(
-                onPressed: _saving ? null : () => Navigator.of(context).pop(),
-                child: const Text('Άκυρο'),
-              ),
-              const SizedBox(width: 8),
-              FilledButton.icon(
-                onPressed: _loading || _error != null || _saving ? null : _save,
-                icon: _saving
-                    ? const SizedBox(
-                        width: 14,
-                        height: 14,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.save_outlined),
-                label: Text(
-                  _selectedCandidateId == null ? 'Δημιουργία' : 'Ενημέρωση',
-                ),
-              ),
-            ],
-          ),
-        ],
+      child: LampTransferMigrationForm(
+        target: draft.target,
+        preview: preview,
+        controllers: _controllers,
+        saving: _saving,
+        saveLabel: _selectedCandidateId == null ? 'Δημιουργία' : 'Ενημέρωση',
+        onCancel: () => Navigator.of(context).pop(),
+        onSave: _save,
       ),
     );
   }
@@ -358,6 +422,16 @@ class _LampTransferWizardDialogState extends State<LampTransferWizardDialog> {
           style: Theme.of(context).textTheme.titleSmall,
         ),
         const SizedBox(height: 4),
+        if (draft.candidates.isEmpty)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Text(
+              'Καμία πιθανή αντιστοίχιση',
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ),
         RadioGroup<int?>(
           groupValue: _selectedCandidateId,
           onChanged: (value) => _handleCandidateSelectionChanged(draft, value),
@@ -384,76 +458,6 @@ class _LampTransferWizardDialogState extends State<LampTransferWizardDialog> {
           ),
         ),
       ],
-    );
-  }
-
-  Widget _formForTarget(LampTransferTarget target) {
-    return switch (target) {
-      LampTransferTarget.department => Column(
-        children: [
-          _field('name', 'Τμήμα', required: true),
-          const SizedBox(height: 8),
-          _field('building', 'Κτίριο'),
-          const SizedBox(height: 8),
-          _field('level', 'Όροφος', keyboardType: TextInputType.number),
-          const SizedBox(height: 8),
-          _field('notes', 'Σημειώσεις', maxLines: 3),
-        ],
-      ),
-      LampTransferTarget.owner => Column(
-        children: [
-          _field('last_name', 'Επώνυμο'),
-          const SizedBox(height: 8),
-          _field('first_name', 'Όνομα'),
-          const SizedBox(height: 8),
-          _field('phones', 'Τηλέφωνα'),
-          const SizedBox(height: 8),
-          _field('equipment_codes', 'Εξοπλισμός'),
-          const SizedBox(height: 8),
-          _field('department_name', 'Τμήμα'),
-          const SizedBox(height: 8),
-          _field('location', 'Τοποθεσία'),
-          const SizedBox(height: 8),
-          _field('notes', 'Σημειώσεις', maxLines: 3),
-        ],
-      ),
-      LampTransferTarget.equipment => Column(
-        children: [
-          _field('code_equipment', 'Κωδικός', required: true),
-          const SizedBox(height: 8),
-          _field('type', 'Τύπος/Περιγραφή'),
-          const SizedBox(height: 8),
-          _field('department_name', 'Τμήμα'),
-          const SizedBox(height: 8),
-          _field('owner_name', 'Κάτοχος'),
-          const SizedBox(height: 8),
-          _field('location', 'Τοποθεσία'),
-          const SizedBox(height: 8),
-          _field('notes', 'Σημειώσεις', maxLines: 3),
-        ],
-      ),
-    };
-  }
-
-  Widget _field(
-    String key,
-    String label, {
-    bool required = false,
-    int maxLines = 1,
-    TextInputType keyboardType = TextInputType.text,
-  }) {
-    final controller = _controllers.putIfAbsent(
-      key,
-      () => TextEditingController(),
-    );
-    return TextFormField(
-      controller: controller,
-      maxLines: maxLines,
-      keyboardType: keyboardType,
-      decoration: InputDecoration(
-        labelText: required ? '$label *' : label,
-        border: const OutlineInputBorder(),
-      ),
     );
   }
 
@@ -563,6 +567,105 @@ class _LampTransferWizardDialogState extends State<LampTransferWizardDialog> {
     );
   }
 
+  Future<LampSoftDeletedDecision?> _showSoftDeletedMatchDialog(
+    LampSoftDeletedMatch match,
+  ) {
+    return showDialog<LampSoftDeletedDecision>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Διαγραμμένη όμοια εγγραφή'),
+          content: SizedBox(
+            width: 560,
+            child: Text(
+              'Υπάρχει διαγραμμένη όμοια εγγραφή: ${match.label}.\n'
+              'Επαναφορά της υπάρχουσας ή δημιουργία νέας;',
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(null),
+              child: const Text('Άκυρο'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(
+                LampSoftDeletedDecision(
+                  action: LampSoftDeletedDecisionAction.createNew,
+                  recordId: match.id,
+                ),
+              ),
+              child: const Text('Δημιουργία νέας'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(dialogContext).pop(
+                LampSoftDeletedDecision(
+                  action: LampSoftDeletedDecisionAction.reactivate,
+                  recordId: match.id,
+                ),
+              ),
+              child: const Text('Επαναφορά'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<bool?> _showPendingEntityCreationsDialog(
+    List<LampPendingEntityCreation> pending,
+  ) {
+    return showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Επιβεβαίωση δημιουργίας'),
+          content: SizedBox(
+            width: 640,
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Θα δημιουργηθούν οι παρακάτω συσχετιζόμενες εγγραφές:',
+                  ),
+                  const SizedBox(height: 12),
+                  for (final item in pending) ...[
+                    Text(
+                      _pendingCreationDescription(item),
+                      style: Theme.of(dialogContext).textTheme.bodyMedium,
+                    ),
+                    const SizedBox(height: 8),
+                  ],
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('Άκυρο'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: const Text('Δημιουργία'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  String _pendingCreationDescription(LampPendingEntityCreation item) {
+    return switch (item.entityKind) {
+      LampPendingEntityKind.user =>
+        'Θα δημιουργηθεί νέος χρήστης: ${item.label} χωρίς τηλέφωνα',
+      LampPendingEntityKind.equipment =>
+        'Θα δημιουργηθεί νέος εξοπλισμός: ${item.label} χωρίς τμήμα/τύπο',
+    };
+  }
+
   String _conflictTitle(LampOwnerConflict conflict) {
     final ownersText = conflict.currentOwners.join(', ');
     return switch (conflict.kind) {
@@ -600,7 +703,11 @@ class _LampTransferWizardDialogState extends State<LampTransferWizardDialog> {
       for (final entry in selectedValues.entries) {
         final controller = _controllers.putIfAbsent(
           entry.key,
-          () => TextEditingController(),
+          () {
+            final created = TextEditingController();
+            created.addListener(_onFormValuesChanged);
+            return created;
+          },
         );
         if (controller.text != entry.value) {
           controller.text = entry.value;

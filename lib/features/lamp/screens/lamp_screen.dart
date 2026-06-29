@@ -12,6 +12,7 @@ import '../../../core/database/old_database/old_equipment_repository.dart';
 import '../../../core/database/old_database/old_excel_importer.dart';
 import '../../../core/providers/lamp_open_settings_intent_provider.dart';
 import '../../../core/providers/lamp_read_path_health_provider.dart';
+import '../../calls/provider/lookup_provider.dart';
 import '../controllers/lamp_import_controller.dart';
 import '../controllers/lamp_integrity_controller.dart';
 import '../controllers/lamp_issue_resolution_controller.dart';
@@ -355,6 +356,9 @@ class _LampScreenState extends ConsumerState<LampScreen> implements LampScreenHo
       ),
     );
     if (!mounted || message == null) return;
+    ref.invalidate(lookupServiceProvider);
+    await ref.read(lookupServiceProvider.future);
+    if (!mounted) return;
     showSnack(message);
     await _search.runLiveSearch();
   }

@@ -1,6 +1,8 @@
 ﻿import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/providers/quick_call_providers.dart';
+import '../../../../core/widgets/quick_call_fab.dart';
 import '../../../../core/database/directory_repository.dart';
 import '../../../../core/models/building_map_floor.dart';
 import '../controllers/building_map_controller.dart';
@@ -29,12 +31,17 @@ Future<void> showBuildingMapDialog(
     pendingJump.setEntity(pendingEntity);
   }
   ref.read(buildingMapControllerProvider).resetSession();
-  await showDialog<void>(
-    context: context,
-    barrierDismissible: false,
-    useSafeArea: false,
-    builder: (ctx) => const Dialog.fullscreen(child: BuildingMapDialog()),
-  );
+  ref.read(buildingMapQuickCallBlockedProvider.notifier).setBlocked(false);
+  try {
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      useSafeArea: false,
+      builder: (ctx) => const Dialog.fullscreen(child: BuildingMapDialog()),
+    );
+  } finally {
+    ref.read(buildingMapQuickCallBlockedProvider.notifier).setBlocked(false);
+  }
 }
 
 /// Κέλυφας fullscreen· εναλλαγή προβολής / επεξεργασίας μέσω [buildingMapUiEditModeProvider].
@@ -45,6 +52,9 @@ class BuildingMapDialog extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final floorsAsync = ref.watch(buildingMapDirectoryRepositoryProvider);
     final editMode = ref.watch(buildingMapUiEditModeProvider);
+    ref.listen(buildingMapUiEditModeProvider, (previous, next) {
+      ref.read(buildingMapQuickCallBlockedProvider.notifier).setBlocked(next);
+    });
 
     return Scaffold(
       appBar: AppBar(
@@ -96,6 +106,9 @@ class BuildingMapDialog extends ConsumerWidget {
           ),
         ],
       ),
+      floatingActionButton: editMode
+          ? null
+          : const QuickCallFloatingButton(scope: QuickCallFabScope.overlayRoute),
       body: floorsAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('Σφάλμα: $e')),

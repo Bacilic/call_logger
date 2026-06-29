@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/widgets/calendar_range_picker.dart';
+import '../../../core/widgets/quick_call_fab.dart';
 import '../models/dashboard_date_preset.dart';
 import '../models/dashboard_filter_model.dart';
 import '../models/dashboard_summary_model.dart';
@@ -290,6 +291,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
 
     return Scaffold(
       backgroundColor: colors.pageBg,
+      floatingActionButton: const QuickCallFloatingButton(
+        scope: QuickCallFabScope.overlayRoute,
+      ),
       body: Container(
         decoration: BoxDecoration(
           gradient: LinearGradient(

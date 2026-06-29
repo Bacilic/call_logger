@@ -41,6 +41,19 @@ class BuildingMapOmnisearchHit {
   final List<int> departmentIds;
 }
 
+/// Αποτέλεσμα επαναϋπολογισμού `departments.name_key`.
+class DepartmentNameKeyBackfillResult {
+  const DepartmentNameKeyBackfillResult({
+    required this.updated,
+    required this.skippedCollision,
+    required this.alreadyCorrect,
+  });
+
+  final int updated;
+  final int skippedCollision;
+  final int alreadyCorrect;
+}
+
 /// Persistence καταλόγου: χρήστες, τμήματα, εξοπλισμός, κατηγορίες, ρυθμίσεις, εισαγωγές.
 ///
 /// Δεν εισάγει [CallsRepository] — το rebuild `search_index` γίνεται μέσω [RebuildCallSearchIndexForCategoryInTxn].
@@ -1143,6 +1156,13 @@ class DirectoryRepository {
         .toList();
   }
 
+  /// Τρέχοντες ενεργοί κάτοχοι εξοπλισμού (`user_id`, `first_name`, `last_name`) — μόνο ανάγνωση.
+  Future<List<Map<String, dynamic>>> getEquipmentOwnerSnapshots(
+    int equipmentId,
+  ) async {
+    return _linkedUserSnapshotsForEquipment(db, equipmentId);
+  }
+
   Future<List<Map<String, dynamic>>> _linkedUserSnapshotsForEquipment(
     DatabaseExecutor e,
     int equipmentId,
@@ -2155,6 +2175,77 @@ ORDER BY p.number COLLATE NOCASE ASC
       count++;
     }
     return count;
+  }
+
+  /// Επαναϋπολογίζει `name_key` για όλα τα τμήματα (ενεργά και soft-deleted)
+  /// ως [SearchTextNormalizer.normalizeForSearch] του `name`.
+  ///
+  /// Ίδια λογική σύγκρισης με [DatabaseIntegrityService] (`name_key` vs expected).
+  /// Σε σύγκρουση unique index (δύο εγγραφές → ίδιο κλειδί) ενημερώνεται μόνο
+  /// η εγγραφή με το μικρότερο `id`· οι υπόλοιπες μένουν αμετάβλητες (εύρημα
+  /// ακεραιότητας — όχι συγχώνευση).
+  Future<DepartmentNameKeyBackfillResult> backfillAllDepartmentNameKeys() async {
+    final rows = await db.query(
+      'departments',
+      columns: ['id', 'name', 'name_key'],
+      orderBy: 'id ASC',
+    );
+
+    final assignedKeys = <String, int>{};
+    for (final r in rows) {
+      final id = r['id'] as int?;
+      if (id == null) continue;
+      final name = (r['name'] as String?)?.trim() ?? '';
+      final nameKey = (r['name_key'] as String?)?.trim() ?? '';
+      final expected = SearchTextNormalizer.normalizeForSearch(name);
+      if (expected.isNotEmpty && nameKey == expected) {
+        assignedKeys[expected] = id;
+      }
+    }
+
+    var updated = 0;
+    var skippedCollision = 0;
+    var alreadyCorrect = 0;
+
+    for (final r in rows) {
+      final id = r['id'] as int?;
+      if (id == null) continue;
+      final name = (r['name'] as String?)?.trim() ?? '';
+      final nameKey = (r['name_key'] as String?)?.trim() ?? '';
+      final expected = SearchTextNormalizer.normalizeForSearch(name);
+      if (expected.isEmpty) continue;
+      if (nameKey == expected) {
+        alreadyCorrect++;
+        continue;
+      }
+
+      final existingOwner = assignedKeys[expected];
+      if (existingOwner != null && existingOwner != id) {
+        skippedCollision++;
+        continue;
+      }
+
+      try {
+        final n = await db.update(
+          'departments',
+          {'name_key': expected},
+          where: 'id = ?',
+          whereArgs: [id],
+        );
+        if (n > 0) {
+          assignedKeys[expected] = id;
+          updated++;
+        }
+      } catch (_) {
+        skippedCollision++;
+      }
+    }
+
+    return DepartmentNameKeyBackfillResult(
+      updated: updated,
+      skippedCollision: skippedCollision,
+      alreadyCorrect: alreadyCorrect,
+    );
   }
 
   /// Πυρήνας «τοποθέτησης χάρτη» (χωρίς `floor_id`, `color`): οι στήλες

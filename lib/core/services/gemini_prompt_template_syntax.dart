@@ -14,6 +14,10 @@ const List<GeminiPromptPlaceholder> kGeminiPromptPlaceholders = [
   (token: '{Λύση}', label: 'Λύση'),
 ];
 
+/// Blueprint οδηγίας μορφής JSON απάντησης ΤΝ (εισαγωγή στο πρότυπο).
+const String kGeminiJsonResponseBlueprint =
+    '{"title":"...","description":"...","solution":"..."}';
+
 /// Είδος token προτροπής για χρωματισμό / έλεγχο.
 enum GeminiPromptTokenKind {
   plain,
@@ -22,6 +26,7 @@ enum GeminiPromptTokenKind {
   blockOpen,
   blockClose,
   unknownBlock,
+  jsonResponseInstruction,
 }
 
 /// Ένα τμήμα κειμένου προτροπής μετά την tokenization.
@@ -42,17 +47,31 @@ class GeminiPromptTemplateValidation {
   const GeminiPromptTemplateValidation({
     required this.isValid,
     this.errors = const [],
+    this.warnings = const [],
   });
 
   final bool isValid;
   final List<String> errors;
 
-  static const valid = GeminiPromptTemplateValidation(isValid: true);
+  /// Προειδοποιήσεις που δεν επηρεάζουν την εγκυρότητα (`isValid`).
+  final List<String> warnings;
+
+  static const valid = GeminiPromptTemplateValidation(
+    isValid: true,
+    errors: <String>[],
+    warnings: <String>[],
+  );
 }
 
 /// Σύνταξη προαιρετικών blocks `{@Όνομα}…{@/Όνομα}` και placeholders `{Όνομα}`.
 abstract final class GeminiPromptTemplateSyntax {
   static final RegExp _braceTokenPattern = RegExp(r'\{[^}]+\}');
+
+  static const List<String> _jsonResponseKeys = [
+    'title',
+    'description',
+    'solution',
+  ];
 
   static Set<String> get knownPlaceholderTokens => {
         for (final p in kGeminiPromptPlaceholders) p.token,
@@ -113,12 +132,85 @@ abstract final class GeminiPromptTemplateSyntax {
     return result.trim();
   }
 
+  /// Αν το token είναι το block οδηγίας JSON απάντησης (όχι placeholder).
+  static bool isJsonResponseInstructionToken(String token) {
+    if (!token.startsWith('{') || !token.endsWith('}')) return false;
+    final inner = token.substring(1, token.length - 1);
+    for (final key in _jsonResponseKeys) {
+      if (inner.contains('"$key"')) return true;
+    }
+    return false;
+  }
+
+  static bool templateContainsJsonResponseKey(String template, String key) {
+    return template.contains('"$key"');
+  }
+
+  static List<String> missingJsonResponseKeys(String template) {
+    return <String>[
+      for (final key in _jsonResponseKeys)
+        if (!templateContainsJsonResponseKey(template, key)) key,
+    ];
+  }
+
+  static List<String> validateJsonResponseKeys(String template) {
+    final missing = missingJsonResponseKeys(template);
+    if (missing.length == _jsonResponseKeys.length) {
+      return <String>[
+        'Η προτροπή δεν περιλαμβάνει οδηγίες μορφής JSON απάντησης '
+        '($kGeminiJsonResponseBlueprint) — η ΤΝ δεν θα γνωρίζει σε ποια μορφή να απαντήσει.',
+      ];
+    }
+    if (missing.isEmpty) return const <String>[];
+    return <String>[
+      for (final key in missing)
+        'Λείπει το πεδίο `$key` από το αναμενόμενο JSON αποτέλεσμα — '
+        'η απάντηση της ΤΝ δεν θα περιέχει ${_jsonKeyLabel(key)}.',
+    ];
+  }
+
+  /// Μετρά `{…}` tokens που περιέχουν και τα τρία κλειδιά JSON απάντησης.
+  static int countJsonResponseInstructionBlocks(String template) {
+    var count = 0;
+    for (final match in _braceTokenPattern.allMatches(template)) {
+      if (isJsonResponseInstructionToken(match.group(0)!)) {
+        count++;
+      }
+    }
+    return count;
+  }
+
+  static List<String> validateDuplicateJsonResponseBlocks(String template) {
+    if (countJsonResponseInstructionBlocks(template) <= 1) {
+      return const <String>[];
+    }
+    return <String>[
+      'Η προτροπή περιλαμβάνει περισσότερες από μία οδηγίες μορφής JSON '
+      '($kGeminiJsonResponseBlueprint) — η ΤΝ μπορεί να μπερδευτεί. '
+      'Κρατήστε μόνο μία υπόδειξη απάντησης σε JSON.',
+    ];
+  }
+
+  static String _jsonKeyLabel(String key) => switch (key) {
+        'title' => 'τίτλο',
+        'description' => 'περιγραφή/πρόβλημα',
+        'solution' => 'λύση',
+        _ => key,
+      };
+
   static GeminiPromptTemplateValidation validate(String template) {
     final errors = <String>[];
+    final warnings = <String>[];
     final stack = <String>[];
+
+    errors.addAll(validateJsonResponseKeys(template));
+    errors.addAll(validateDuplicateJsonResponseBlocks(template));
 
     for (final match in _braceTokenPattern.allMatches(template)) {
       final token = match.group(0)!;
+      if (isJsonResponseInstructionToken(token)) {
+        continue;
+      }
       if (token.startsWith('{@/')) {
         final name = token.substring(3, token.length - 1);
         if (!knownPlaceholderNames.contains(name)) {
@@ -143,7 +235,31 @@ abstract final class GeminiPromptTemplateSyntax {
           errors.add('Άγνωστο άνοιγμα block: `$token`.');
           continue;
         }
+        // Εμφωλιασμένα blocks διαφορετικού ονόματος ({@A}…{@B}…{@/B}…{@/A})
+        // είναι έγκυρα συντακτικά — η στοίβα τα χειρίζεται κανονικά.
+        if (stack.contains(name)) {
+          errors.add(
+            'Το block `{@$name}` ανοίγει ξανά ενώ είναι ήδη ανοιχτό — '
+            'πιθανό λάθος αντιγραφής.',
+          );
+        }
         stack.add(name);
+        continue;
+      }
+
+      if (knownPlaceholderTokens.contains(token)) {
+        if (stack.isNotEmpty) {
+          final blockName = stack.last;
+          final placeholderName = placeholderNameFromToken(token);
+          if (placeholderName != blockName) {
+            warnings.add(
+              'Το `$token` βρίσκεται μέσα στο block `{@$blockName}` — '
+              'αν το `{$blockName}` είναι κενό, θα αφαιρεθεί ολόκληρη η '
+              'περιοχή μαζί με αυτό το placeholder, ακόμη κι αν το `$token` '
+              'έχει τιμή.',
+            );
+          }
+        }
         continue;
       }
 
@@ -163,10 +279,14 @@ abstract final class GeminiPromptTemplateSyntax {
       errors.add('Το block `{@$openName}` δεν κλείνει.');
     }
 
-    if (errors.isEmpty) {
+    if (errors.isEmpty && warnings.isEmpty) {
       return GeminiPromptTemplateValidation.valid;
     }
-    return GeminiPromptTemplateValidation(isValid: false, errors: errors);
+    return GeminiPromptTemplateValidation(
+      isValid: errors.isEmpty,
+      errors: errors,
+      warnings: warnings,
+    );
   }
 
   static String? _suggestPlaceholder(String token) {
@@ -263,6 +383,12 @@ abstract final class GeminiPromptTemplateSyntax {
         placeholderName: placeholderNameFromToken(token),
       );
     }
+    if (isJsonResponseInstructionToken(token)) {
+      return GeminiPromptTokenSpan(
+        text: token,
+        kind: GeminiPromptTokenKind.jsonResponseInstruction,
+      );
+    }
     return GeminiPromptTokenSpan(
       text: token,
       kind: GeminiPromptTokenKind.unknownPlaceholder,
@@ -290,6 +416,11 @@ abstract final class GeminiPromptTemplateSyntax {
         GeminiPromptTokenKind.blockOpen ||
         GeminiPromptTokenKind.blockClose =>
           baseStyle.copyWith(color: block, fontWeight: FontWeight.w600),
+        GeminiPromptTokenKind.jsonResponseInstruction =>
+          baseStyle.copyWith(
+            color: const Color(0xFF7C3AED),
+            fontWeight: FontWeight.w500,
+          ),
         GeminiPromptTokenKind.unknownPlaceholder ||
         GeminiPromptTokenKind.unknownBlock =>
           baseStyle.copyWith(

@@ -8,6 +8,7 @@ import '../../../core/models/calls_screen_cards_visibility.dart';
 import '../../../core/models/window_placement_mode.dart';
 import '../../../core/config/app_config.dart';
 import '../../../core/providers/settings_provider.dart';
+import '../../../core/widgets/quick_call_fab.dart';
 import '../../../core/services/settings_service.dart';
 import '../../calls/provider/remote_paths_provider.dart';
 import '../widgets/create_new_database_dialog.dart';
@@ -41,6 +42,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   bool _showDatabaseNav = true;
   bool _showLampNav = true;
   bool _showDictionaryNav = true;
+  bool _showQuickCallFab = true;
   bool _spellCheckFlashHighlight = false;
   bool _spellCheckFlashPlaying = false;
   int _databaseOpenTimeoutSeconds = AppConfig.databaseOpenTimeoutSeconds;
@@ -78,6 +80,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       final showDatabaseNav = await _settings.getShowDatabaseNav();
       final showLampNav = await _settings.getShowLampNav();
       final showDictionaryNav = await _settings.getShowDictionaryNav();
+      final showQuickCallFab = await _settings.getShowQuickCallFab();
       final dbOpenTimeout = await _settings.getDatabaseOpenTimeoutSeconds();
       final dbOpenMaxAttempts = await _settings.getDatabaseOpenMaxAttempts();
       final callsCardsVisibility = await _settings
@@ -98,6 +101,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           _showDatabaseNav = showDatabaseNav;
           _showLampNav = showLampNav;
           _showDictionaryNav = dictionaryNavVisible;
+          _showQuickCallFab = showQuickCallFab;
           _databaseOpenTimeoutSeconds = dbOpenTimeout;
           _databaseOpenMaxAttempts = dbOpenMaxAttempts;
           _callsCardsVisibility = callsCardsVisibility;
@@ -319,6 +323,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
     return Scaffold(
       appBar: AppBar(title: const Text('Ρυθμίσεις')),
+      floatingActionButton: const QuickCallFloatingButton(
+        scope: QuickCallFabScope.overlayRoute,
+      ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(24),
         child: Column(
@@ -420,6 +427,20 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               ),
               trailing: const Icon(Icons.chevron_right),
               onTap: () => _openCallsCardsVisibilityEditor(),
+            ),
+            SwitchListTile(
+              value: _showQuickCallFab,
+              onChanged: _isLoadingSettings
+                  ? null
+                  : (value) async {
+                      await _settings.setShowQuickCallFab(value);
+                      if (mounted) setState(() => _showQuickCallFab = value);
+                      ref.invalidate(showQuickCallFabProvider);
+                    },
+              title: const Text('Υπτάμενο κουμπί γρήγορης κλήσης (Ctrl+Shift+N)'),
+              subtitle: const Text(
+                'Εμφάνιση FAB γρήγορης καταγραφής σε λεξικό, στατιστικά, ρυθμίσεις και προβολή χάρτη.',
+              ),
             ),
             SwitchListTile(
               value: _showActiveTimer,

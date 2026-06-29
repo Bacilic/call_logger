@@ -21,14 +21,16 @@ void main() {
   testWidgets(
     'Η εφαρμογή εμφανίζει το κύριο κέλυφος και τα πεδία εισαγωγής κλήσης',
     (WidgetTester tester) async {
-      await tester.pumpWidget(
-        ProviderScope(
-          overrides: callLoggerTestProviderOverrides(),
-          child: const MyApp(),
-        ),
-      );
-      await tester.pump();
-      await pumpUntilSettledLong(tester);
+      await tester.runAsync(() async {
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: callLoggerTestProviderOverrides(),
+            child: const MyApp(),
+          ),
+        );
+        await tester.pump();
+        await pumpUntilSettledLong(tester);
+      });
 
       expect(
         find.byType(NavigationRail),
@@ -36,6 +38,8 @@ void main() {
       );
       // Τηλέφωνο, Καλών, Τμήμα, Εξοπλισμός, Σημειώσεις, Κατηγορία (κ.ά.)
       expect(find.byType(TextField), findsAtLeastNWidgets(4));
+
+      await flushCallLoggerSqfliteLockTimers(tester);
     },
     semanticsEnabled: false,
   );
@@ -45,14 +49,16 @@ void main() {
   testWidgets(
     'Πεδίο Καλούντας: πληκτρολόγηση ονόματος και κενό χωρίς αντικατάσταση όλου του κειμένου',
     (WidgetTester tester) async {
-      await tester.pumpWidget(
-        ProviderScope(
-          overrides: callLoggerTestProviderOverrides(),
-          child: const MyApp(),
-        ),
-      );
-      await tester.pump();
-      await pumpUntilSettledLong(tester);
+      await tester.runAsync(() async {
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: callLoggerTestProviderOverrides(),
+            child: const MyApp(),
+          ),
+        );
+        await tester.pump();
+        await pumpUntilSettledLong(tester);
+      });
 
       final callerField = callLoggerCallerTextField();
       expect(callerField, findsOneWidget);
@@ -77,6 +83,8 @@ void main() {
 
       await tester.pump(const Duration(milliseconds: 300));
       await pumpUntilSettled(tester);
+
+      await flushCallLoggerSqfliteLockTimers(tester);
     },
     semanticsEnabled: false,
   );

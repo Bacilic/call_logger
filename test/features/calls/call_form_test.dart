@@ -241,9 +241,9 @@ void main() {
 
         expect(
           container.read(callsScreenIsExpandedProvider),
-          isTrue,
+          isFalse,
           reason: greekExpectMsg(
-            'Με εστίαση/πληκτρολόγηση τηλεφώνου η κεφαλίδα μένει πάνω (expanded latch)',
+            'Με 2 ψηφία κατά την πληκτρολόγηση η όψη μένει συμπτυγμένη (χωρίς expanded latch)',
           ),
         );
         expect(

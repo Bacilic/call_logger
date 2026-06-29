@@ -19,6 +19,8 @@ const String kLansweeperHelpdeskWebPasswordSettingKey =
     'lansweeper_helpdesk_web_password';
 const String kGeminiApiKeySettingKey = 'gemini_api_key';
 const String kGeminiPromptTemplateSettingKey = 'gemini_prompt_template';
+const String kGeminiPromptTemplateUserDefaultSettingKey =
+    'gemini_prompt_template_user_default';
 const String kGeminiEndpointSettingKey = 'gemini_endpoint';
 const String kGeminiPrimaryModelSettingKey = 'gemini_primary_model';
 const String kGeminiFallbackEnabledSettingKey = 'gemini_fallback_enabled';

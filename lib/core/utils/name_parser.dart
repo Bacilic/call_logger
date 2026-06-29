@@ -35,4 +35,45 @@ class NameParserUtility {
       lastName: parts.sublist(1).join(' '),
     );
   }
+
+  /// Επιστρέφει όλες τις εύλογες ερμηνείες διάταξης ονόματος/επωνύμου.
+  ///
+  /// - Μονή λέξη → ταιριάζει είτε ως όνομα είτε ως επώνυμο.
+  /// - Δύο+ λέξεις → πρώτη-υπόλοιπες ΚΑΙ τελευταία-προηγούμενες (αν διαφέρουν).
+  static List<({String firstName, String lastName})> parseBothOrders(
+    String fullName,
+  ) {
+    final normalized = stripParentheticalSuffix(fullName)
+        .trim()
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+    if (normalized.isEmpty) return const [];
+
+    final commaIndex = normalized.indexOf(',');
+    if (commaIndex > 0) {
+      final lastName = normalized.substring(0, commaIndex).trim();
+      final firstName = normalized.substring(commaIndex + 1).trim();
+      if (lastName.isNotEmpty && firstName.isNotEmpty) {
+        return [(firstName: firstName, lastName: lastName)];
+      }
+    }
+
+    final parts = normalized.split(' ');
+    if (parts.length == 1) {
+      final word = parts.single;
+      return [
+        (firstName: word, lastName: ''),
+        (firstName: '', lastName: word),
+      ];
+    }
+
+    final interpretations = <({String firstName, String lastName})>{
+      (firstName: parts.first, lastName: parts.sublist(1).join(' ')),
+      (
+        firstName: parts.last,
+        lastName: parts.sublist(0, parts.length - 1).join(' '),
+      ),
+    };
+    return interpretations.toList(growable: false);
+  }
 }

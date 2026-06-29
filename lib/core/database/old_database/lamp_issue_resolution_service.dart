@@ -1,5 +1,6 @@
 ﻿import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
+import '../../utils/name_parser.dart';
 import '../../utils/search_text_normalizer.dart';
 import '../../utils/user_identity_normalizer.dart';
 import 'lamp_database_provider.dart';
@@ -178,15 +179,64 @@ class LampIssueResolutionService {
 
   final LampDatabaseProvider _databaseProvider;
 
+  /// Confidence για ταύτιση «το ένα περιέχει το άλλο» (substring containment).
+  static const int substringContainmentConfidence = 72;
+
   /// Κοινή βαθμολόγηση ομοιότητας που επαναχρησιμοποιείται σε flows migration.
-  int similarityConfidenceScore(String source, String candidate) {
+  int similarityConfidenceScore(
+    String source,
+    String candidate, {
+    String? sourceDepartment,
+    String? candidateDepartment,
+  }) {
     final a = _normalizeReferenceText(source);
     final b = _normalizeReferenceText(candidate);
     if (a.isEmpty || b.isEmpty) return 0;
     if (a == b) return 100;
-    if (a.contains(b) || b.contains(a)) return 72;
-    final distance = _levenshtein(a, b);
-    return (100 - (distance * 20)).clamp(20, 95);
+    if (a.contains(b) || b.contains(a)) {
+      return _substringContainmentScore(
+        sourceDepartment: sourceDepartment,
+        candidateDepartment: candidateDepartment,
+      );
+    }
+    final maxLen = a.length > b.length ? a.length : b.length;
+    final distance1 = _levenshtein(a, b);
+    final s1 = 1 - distance1 / maxLen;
+
+    final aSorted = _sortedTokensNormalized(a);
+    final bSorted = _sortedTokensNormalized(b);
+    final sortedMaxLen = aSorted.length > bSorted.length
+        ? aSorted.length
+        : bSorted.length;
+    final distance2 = _levenshtein(aSorted, bSorted);
+    final s2 = sortedMaxLen == 0 ? 0.0 : 1 - distance2 / sortedMaxLen;
+
+    final best = s1 > s2 ? s1 : s2;
+    return (best * 100).round().clamp(0, 95);
+  }
+
+  String _sortedTokensNormalized(String normalized) {
+    final tokens = normalized
+        .split(' ')
+        .where((token) => token.isNotEmpty)
+        .toList()
+      ..sort();
+    return tokens.join(' ');
+  }
+
+  int _substringContainmentScore({
+    String? sourceDepartment,
+    String? candidateDepartment,
+  }) {
+    final sourceDept = _normalizeReferenceText(sourceDepartment ?? '');
+    final candidateDept = _normalizeReferenceText(candidateDepartment ?? '');
+    if (sourceDept.isEmpty || candidateDept.isEmpty) {
+      return substringContainmentConfidence;
+    }
+    if (sourceDept == candidateDept) {
+      return substringContainmentConfidence;
+    }
+    return (substringContainmentConfidence - 32).clamp(20, 67);
   }
 
   Future<List<LampIssueResolutionProposal>> analyzeIssues({
@@ -765,7 +815,9 @@ class LampIssueResolutionService {
           candidates.add(
             _FuzzyReferenceMatch(
               ref,
-              contains ? 72 : (100 - (distance * 20)).clamp(20, 95),
+              contains
+                  ? _substringContainmentScore()
+                  : (100 - (distance * 20)).clamp(20, 95),
               distance,
             ),
           );
@@ -2396,6 +2448,7 @@ class LampIssueResolutionService {
   ({String lastName, String firstName})? _parseOwnerNameInput(String? raw) {
     final input = raw?.trim() ?? '';
     if (input.isEmpty) return null;
+
     final commaParts = input
         .split(',')
         .map((part) => part.trim())
@@ -2408,16 +2461,12 @@ class LampIssueResolutionService {
       return (lastName: lastName, firstName: firstName);
     }
 
-    final wsParts = input
-        .split(RegExp(r'\s+'))
-        .map((part) => part.trim())
-        .where((part) => part.isNotEmpty)
-        .toList();
-    if (wsParts.length < 2) return null;
-    final lastName = wsParts.first;
-    final firstName = wsParts.sublist(1).join(' ').trim();
-    if (lastName.isEmpty || firstName.isEmpty) return null;
-    return (lastName: lastName, firstName: firstName);
+    final parsed = NameParserUtility.parse(input);
+    if (parsed.firstName.isEmpty && parsed.lastName.isEmpty) return null;
+    if (parsed.lastName.isEmpty) {
+      return (lastName: parsed.firstName, firstName: '');
+    }
+    return (lastName: parsed.lastName, firstName: parsed.firstName);
   }
 
   String _equipmentSummary(Map<String, Object?> row) {

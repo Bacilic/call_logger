@@ -33,3 +33,10 @@ final callsScreenCardsVisibilityProvider =
     FutureProvider<CallsScreenCardsVisibility>(
   (ref) => SettingsService().getCallsScreenCardsVisibility(),
 );
+
+/// Εμφάνιση ιπτάμενου κουμπιού γρήγορης καταγραφής. Invalidate μετά από Ρυθμίσεις.
+final showQuickCallFabProvider =
+    FutureProvider<bool>((ref) => SettingsService().getShowQuickCallFab());
+
+// Πρότυπο/προεπιλογή προτροπής Gemini (SQLite app_settings): βλ. dashboard_provider —
+// [geminiPromptTemplateProvider], [geminiPromptTemplateUserDefaultProvider].

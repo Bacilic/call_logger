@@ -5,11 +5,19 @@ import '../../../../core/providers/settings_provider.dart';
 import '../../provider/call_entry_provider.dart';
 import '../../provider/notes_field_hint_provider.dart';
 
+/// Οριζόντιος ή κάθετος συνδυασμός εκκρεμότητας και χρονομέτρου.
+enum CallStatusBarAxis { vertical, horizontal }
+
 /// Μπάρα κατάστασης κλήσης: εκκρεμότητα (checkbox) και χρονόμετρο (MM:SS ή εικονίδιο) με Play/Pause και χειροκίνητη εισαγωγή.
 class CallStatusBar extends ConsumerWidget {
-  const CallStatusBar({super.key, this.showPendingToggle = true});
+  const CallStatusBar({
+    super.key,
+    this.showPendingToggle = true,
+    this.axis = CallStatusBarAxis.vertical,
+  });
 
   final bool showPendingToggle;
+  final CallStatusBarAxis axis;
 
   static String _formatDuration(int seconds) {
     final m = seconds ~/ 60;
@@ -43,21 +51,19 @@ class CallStatusBar extends ConsumerWidget {
     final showPlayPause =
         durationSeconds > 0 || isTimerRunning || retainPlayPauseAfterManualZero;
 
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        if (showPendingToggle)
-          _PendingCheckboxRow(
+    final pendingRow = showPendingToggle
+        ? _PendingCheckboxRow(
+            compact: axis == CallStatusBarAxis.horizontal,
             isPending: isPending,
             notesNonEmpty: notesNonEmpty,
             onTogglePending: () => notifier.togglePending(),
             onDisabledTap: () => ref
                 .read(notesFieldHintTickProvider.notifier)
                 .requestHintFlash(),
-          ),
-        if (showPendingToggle) const SizedBox(height: 0),
-        showTimerAsync.when(
+          )
+        : null;
+
+    final timerRow = showTimerAsync.when(
           data: (showActiveTimer) {
             Widget timerContent;
             if (showActiveTimer) {
@@ -142,7 +148,26 @@ class CallStatusBar extends ConsumerWidget {
             ),
           ),
           error: (e, s) => const SizedBox.shrink(),
-        ),
+        );
+
+    if (axis == CallStatusBarAxis.horizontal) {
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          ?pendingRow,
+          if (pendingRow != null) const SizedBox(width: 12),
+          timerRow,
+        ],
+      );
+    }
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        ?pendingRow,
+        timerRow,
       ],
     );
   }
@@ -278,12 +303,14 @@ class CallStatusBar extends ConsumerWidget {
 
 class _PendingCheckboxRow extends StatelessWidget {
   const _PendingCheckboxRow({
+    required this.compact,
     required this.isPending,
     required this.notesNonEmpty,
     required this.onTogglePending,
     required this.onDisabledTap,
   });
 
+  final bool compact;
   final bool isPending;
   final bool notesNonEmpty;
   final VoidCallback onTogglePending;
@@ -291,28 +318,36 @@ class _PendingCheckboxRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final label = Text(
+      'Εκκρεμότητα',
+      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+        color: notesNonEmpty
+            ? null
+            : Theme.of(
+                context,
+              ).colorScheme.onSurface.withValues(alpha: 0.38),
+      ),
+      softWrap: !compact,
+    );
     final row = Row(
+      mainAxisSize: compact ? MainAxisSize.min : MainAxisSize.max,
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         Checkbox(
           value: isPending,
           onChanged: notesNonEmpty ? (_) => onTogglePending() : null,
           tristate: false,
+          visualDensity: compact ? VisualDensity.compact : VisualDensity.standard,
+          materialTapTargetSize: compact
+              ? MaterialTapTargetSize.shrinkWrap
+              : MaterialTapTargetSize.padded,
         ),
-        const SizedBox(width: 4),
-        Expanded(
-          child: Text(
-            'Εκκρεμότητα',
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: notesNonEmpty
-                  ? null
-                  : Theme.of(
-                      context,
-                    ).colorScheme.onSurface.withValues(alpha: 0.38),
-            ),
-            softWrap: true,
-          ),
-        ),
+        if (compact)
+          label
+        else ...[
+          const SizedBox(width: 4),
+          Expanded(child: label),
+        ],
       ],
     );
     if (notesNonEmpty) return row;

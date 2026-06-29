@@ -1155,10 +1155,11 @@ void main() {
         },
       );
 
-      // Cross-field 6: νέο τηλέφωνο (χωρίς ακόμη lookup) → καθαρισμός selectedCaller και selectedEquipment.
-      //   flutter test test/features/calls/smart_entity_selector_notifier_test.dart --plain-name "Σενάριο 6: όλα γεμάτα → αλλαγή τηλεφώνου καθαρίζει καλούντα και εξοπλισμό"
+      // Cross-field 6: νέο τηλέφωνο (χωρίς ακόμη lookup) → καθαρισμός caller· εξοπλισμός
+      // διατηρείται όταν equipmentText είναι γεμάτο (v2 §Ζ.3 preserveEquipment).
+      //   flutter test test/features/calls/smart_entity_selector_notifier_test.dart --plain-name "Σενάριο 6: όλα γεμάτα → αλλαγή τηλεφώνου καθαρίζει καλούντα, διατηρεί εξοπλισμό"
       test(
-        'Σενάριο 6: όλα γεμάτα → αλλαγή τηλεφώνου καθαρίζει καλούντα και εξοπλισμό',
+        'Σενάριο 6: όλα γεμάτα → αλλαγή τηλεφώνου καθαρίζει καλούντα, διατηρεί εξοπλισμό',
         () async {
           try {
             final u1 = _u(
@@ -1205,21 +1206,23 @@ void main() {
               reason: greekExpectMsg('Νέο τηλέφωνο — εκκαθάριση επιλεγμένου καλούντα'),
             );
             expect(
-              s.selectedEquipment,
-              isNull,
-              reason: greekExpectMsg('Νέο τηλέφωνο — εκκαθάριση επιλεγμένου εξοπλισμού'),
+              s.selectedEquipment?.code,
+              'XF-PH-1',
+              reason: greekExpectMsg(
+                'Νέο τηλέφωνο — ο εξοπλισμός διατηρείται όταν equipmentText είναι γεμάτο',
+              ),
             );
             expect(s.selectedPhone, '55222');
 
             _recordCrossFieldScenario(
               6,
-              'Αλλαγή τηλεφώνου — καθαρισμός caller/equipment',
+              'Αλλαγή τηλεφώνου — καθαρισμός caller, διατήρηση εξοπλισμού',
               passed: true,
             );
           } catch (e, st) {
             _recordCrossFieldScenario(
               6,
-              'Αλλαγή τηλεφώνου — καθαρισμός caller/equipment',
+              'Αλλαγή τηλεφώνου — καθαρισμός caller, διατήρηση εξοπλισμού',
               passed: false,
               failures: ['$e', '$st'],
             );

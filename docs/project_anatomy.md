@@ -1,6 +1,6 @@
 # Call Logger — Project Anatomy
 
-**Ημερομηνία τροποποίησης εγγράφου:** 24 Ιουνίου 2026
+**Ημερομηνία τροποποίησης εγγράφου:** 29 Ιουνίου 2026
 
 Συμπυκνωμένη «ακτινογραφία» για εξωτερικό LLM (Καθοδηγητής): Flutter για Windows 11, δομή ανά `features/`, Riverpod, SQLite μέσω `sqflite_common_ffi`.
 
@@ -93,6 +93,7 @@ lib/
 │   │   ├── lexicon_full_mode_provider.dart
 │   │   ├── lexicon_language_recalc_provider.dart
 │   │   ├── main_nav_request_provider.dart
+│   │   ├── quick_call_providers.dart
 │   │   ├── settings_provider.dart
 │   │   ├── shell_navigation_intent_provider.dart
 │   │   ├── spell_check_provider.dart
@@ -110,6 +111,8 @@ lib/
 │   │   ├── default_remote_tool_display.dart
 │   │   ├── desktop_window_service.dart
 │   │   ├── dictionary_service.dart
+│   │   ├── gemini_prompt_template_controller.dart
+│   │   ├── gemini_prompt_template_syntax.dart
 │   │   ├── gemini_runtime_settings.dart
 │   │   ├── gemini_ticket_service.dart
 │   │   ├── lansweeper_agent_api_probe.dart
@@ -162,6 +165,7 @@ lib/
 │       ├── database_error_screen.dart
 │       ├── database_persistence_error_snackbar.dart
 │       ├── deleted_catalog_entity_text.dart
+│       ├── dialog_outside_tap_hint.dart
 │       ├── ellipsis_tooltip_text.dart
 │       ├── fatal_error_screen.dart
 │       ├── global_fatal_error_notifier.dart
@@ -171,6 +175,8 @@ lib/
 │       ├── main_nav_destination.dart
 │       ├── main_shell.dart
 │       ├── nav_rail_attention_badge.dart
+│       ├── quick_call_fab.dart
+│       ├── quick_call_shortcuts.dart
 │       ├── remote_tool_icon.dart
 │       └── spell_check_controller.dart
 ├── features/
@@ -197,6 +203,7 @@ lib/
 │   │   │   ├── calls_layout_engine.dart
 │   │   │   ├── calls_layout_plan.dart
 │   │   │   ├── calls_layout_template.dart
+│   │   │   ├── calls_map_gate.dart
 │   │   │   ├── calls_screen_layout.dart
 │   │   │   └── calls_screen_mode.dart
 │   │   ├── models/
@@ -225,6 +232,7 @@ lib/
 │   │   │       ├── global_recent_calls_list.dart
 │   │   │       ├── mini_map_card.dart
 │   │   │       ├── notes_sticky_field.dart
+│   │   │       ├── quick_call_dialog.dart
 │   │   │       ├── recent_calls_list.dart
 │   │   │       ├── remote_connection_buttons.dart
 │   │   │       ├── smart_entity_equipment_initial_suggestions.dart
@@ -443,8 +451,11 @@ lib/
 │   │       ├── history_deleted_entity_text.dart
 │   │       ├── lansweeper/
 │   │       │   ├── gemini_model_field.dart
+│   │       │   ├── gemini_prompt_template_editor_dialog.dart
+│   │       │   ├── gemini_prompt_template_field.dart
 │   │       │   ├── lansweeper_connection_settings_dialog.dart
 │   │       │   ├── lansweeper_connection_status_indicator.dart
+│   │       │   ├── lansweeper_gemini_prompt_preview_dialog.dart
 │   │       │   ├── lansweeper_report_call_list.dart
 │   │       │   ├── lansweeper_report_call_tile.dart
 │   │       │   ├── lansweeper_state_badge.dart
@@ -610,13 +621,33 @@ lib/
 - **HistoryFilterModel** — `history_provider.dart` (keyword, dates, category, department, …)
 - **EquipmentViewModel** — `lamp_result_card.dart` (προβολή Λάμπας)
 
+### `lib/features/lamp/services/lamp_migration_service.dart` (μεταφορά / προεπισκόπηση)
+- **LampTransferTarget** (enum) — equipment, owner, department
+- **LampMigrationCandidate** — id, label, confidence, isExact
+- **LampMigrationDraft** — target, oldValues, formValues, newRecordFormValues, candidateFormValues, candidates, selectedCandidateId, updatesExistingRecord, hint
+- **LampMigrationSaveResult** — id, updated, message
+- **LampOwnerConflictKind / LampOwnerConflictAction** (enum)
+- **LampOwnerConflict** — conflictId, kind, value, currentOwners
+- **LampOwnerConflictDecision** — conflictId, action
+- **TransferFieldAction** (enum) — unchanged, linked, created, updated, unlinked
+- **TransferItemPlan** — value, action, hasWarning, warningMessage
+- **TransferFieldPlan\<TKey\>** — fieldKey, action, lampValue, destinationValue, items, hasWarning, warningMessage
+- **DepartmentTransferField / OwnerTransferField / EquipmentTransferField** (enum) — κλειδιά πεδίων με `.formKey` → `formValues`
+- **TransferEntityMode** (enum) — newEntry, updateExisting
+- **TransferEntityPlan\<TKey\>** — target, mode, matchedEntityId, matchedEntityLabel, fields
+- **TransferEntityKind / TransferOperationKind** (enum)
+- **TransferOperationResult** — kind, entityKind, label, entityId, hasWarning, warningMessage
+- **TransferResult** — target, mainEntityMode, mainEntityId, mainEntityLabel, operations, hasAnyWarning
+- **OwnerResolveOutcome** (record) — ownerId, kind, label
+- **evaluateField / evaluateItemsField** — καθαρές συναρτήσεις αξιολόγησης πεδίων (χωρίς πρόσβαση βάσης)
+
 ### Σημαντικοί τύποι χωρίς επίθημα Model
 | Περιοχή | Τύποι |
 |---------|--------|
 | Αρχικοποίηση βάσης | `DatabaseStatus`, `DatabaseInitResult`, `DatabaseInitException`, `DatabaseInitRunnerResult`, `DatabaseInitProgressState`, `ConnectionCheckResult`, `TablePreviewResult` |
 | Εφαρμογή | `AppInitResult` |
 | Ρυθμίσεις | `AuditRetentionConfig` |
-| Υπηρεσίες | `LookupResult`, `ImportResult` (excel), `ImportLogLevel` (enum) |
+| Υπηρεσίες | `LookupResult`, `ImportResult` (excel), `ImportLogLevel` (enum), `GeminiPromptTemplateController` / σύνταξη προτύπων (`gemini_prompt_template_*`) |
 | Κλήσεις | `CallEntryState`, `SmartEntitySelectorState`, `OrphanQuickAddResult`, `LookupLoadResult`, `CallsFieldGroups`, `CallsFieldConfirmations`, `CallsLayoutPlan`, `CallsLayoutTemplate` (enum) |
 | Κατάλογος | `DirectoryState`, `CategoryDirectoryState`, `DepartmentDirectoryState`, `EquipmentDirectoryState`, `EquipmentDeleteUndoEntry`, `BuildingMapFloorDeleteChoice` |
 | Βάση | `ReplaceDatabaseResult`, `DatabaseBackupResult`, `BackupDestinationValidationResult` |
@@ -643,12 +674,13 @@ lib/
 - **recentCallsProvider, globalRecentCallsProvider** — πρόσφατες κλήσεις
 - **remoteToolsCatalogProvider** — κατάλογος απομακρυσμένων εργαλείων
 - **callDepartmentPrefillIntentProvider** — πρόθεση προ-συμπλήρωσης τμήματος από εξωτερική ροή
+- **mainShellEffectiveDestinationProvider, settingsRouteOpenForQuickCallProvider, buildingMapQuickCallBlockedProvider** — γρήγορη κλήση (FAB μέσω `showQuickCallFabProvider`, προορισμός κελύφους, αποκλεισμός όταν ανοιχτές Ρυθμίσεις ή επεξεργασία χάρτη)
 
 ### Ιστορικό & dashboard
 - **historyFilterProvider, historyCallsProvider** — φίλτρα και λίστα ιστορικού
 - **dashboardFilterProvider, dashboardStatsProvider** — στατιστικά KPI
 - **lansweeperSyncProvider, lansweeperConnectionProbeProvider** — Lansweeper integration
-- **lansweeperApiUrlProvider … geminiModelsProbeCacheProvider** — ρυθμίσεις API/Gemini
+- **lansweeperApiUrlProvider … geminiModelsProbeCacheProvider** — ρυθμίσεις API/Gemini & επεξεργασία προτύπου prompt (`gemini_prompt_template_*`)
 
 ### Εκκρεμότητες
 - **taskFilterProvider, tasksProvider, globalPendingTasksCountProvider**
@@ -684,7 +716,7 @@ lib/
 
 ## 5) DEPENDENCIES (pubspec.yaml)
 
-**SDK:** `^3.10.7` · **Έκδοση εφαρμογής:** `0.15.0+17`
+**SDK:** `^3.10.7` · **Έκδοση εφαρμογής:** `0.18.0+18`
 
 ### dependencies
 | Πακέτο | Έκδοση |
@@ -712,8 +744,8 @@ lib/
 | win32 | ^6.3.0 |
 | ffi | ^2.2.0 |
 | custom_mouse_cursor | ^1.1.3 |
-| package_info_plus | ^10.1.0 |
-| image | ^4.9.0 |
+| package_info_plus | ^10.2.0 |
+| image | ^4.9.1 |
 
 ### dev_dependencies
 - flutter_test, integration_test (sdk)

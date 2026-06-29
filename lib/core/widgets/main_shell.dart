@@ -31,7 +31,9 @@ import '../providers/call_department_prefill_intent_provider.dart';
 import '../providers/settings_provider.dart';
 import '../providers/shell_navigation_intent_provider.dart';
 import '../providers/task_focus_intent_provider.dart';
+import '../providers/quick_call_providers.dart';
 import 'main_nav_destination.dart';
+import 'quick_call_fab.dart';
 import '../services/settings_service.dart';
 import '../about/widgets/version_chip.dart';
 import 'nav_rail_attention_badge.dart';
@@ -371,14 +373,19 @@ class _MainShellState extends ConsumerState<MainShell> {
   Future<void> _openSettingsScreen() async {
     final pathBefore = await SettingsService().getDatabasePath();
     if (!mounted) return;
-    await Navigator.of(context).push<void>(
-      MaterialPageRoute<void>(
-        builder: (context) => SettingsScreen(
-          onAfterDatabaseChanged:
-              widget.onDatabaseReopened ?? widget.onReturnFromSettings,
+    ref.read(settingsRouteOpenForQuickCallProvider.notifier).setOpen(true);
+    try {
+      await Navigator.of(context).push<void>(
+        MaterialPageRoute<void>(
+          builder: (context) => SettingsScreen(
+            onAfterDatabaseChanged:
+                widget.onDatabaseReopened ?? widget.onReturnFromSettings,
+          ),
         ),
-      ),
-    );
+      );
+    } finally {
+      ref.read(settingsRouteOpenForQuickCallProvider.notifier).setOpen(false);
+    }
     if (!mounted) return;
     await widget.onReturnFromSettings?.call();
     if (!mounted) return;
@@ -389,6 +396,7 @@ class _MainShellState extends ConsumerState<MainShell> {
     ref.invalidate(showLampNavProvider);
     ref.invalidate(showDatabaseNavProvider);
     ref.invalidate(showDictionaryNavProvider);
+    ref.invalidate(showQuickCallFabProvider);
     ref.invalidate(coreLexiconProvider);
     if (mounted) setState(() {});
   }
@@ -626,9 +634,20 @@ class _MainShellState extends ConsumerState<MainShell> {
         NavigationRailTheme.of(context).unselectedLabelTextStyle ??
         Theme.of(context).textTheme.labelMedium;
 
+    final currentNavForQuickCall = ref.watch(mainShellEffectiveDestinationProvider);
+    if (currentNavForQuickCall != effectiveDestination) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        ref
+            .read(mainShellEffectiveDestinationProvider.notifier)
+            .setDestination(effectiveDestination);
+      });
+    }
+
     if (dictionaryImmersive || historyImmersive) {
       return Scaffold(
         appBar: null,
+        floatingActionButton: const QuickCallFloatingButton(),
         body: SafeArea(
           child: _destinationContentColumn(
             dictionaryImmersive
