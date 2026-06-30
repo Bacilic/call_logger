@@ -144,8 +144,8 @@ void main() {
         await insertPhoneForDepartment(departmentId: deptSource, phone: phone);
         await reloadLookup();
 
-        expect(
-          () => service.save(
+        await expectLater(
+          service.save(
             target: LampTransferTarget.owner,
             formValues: ownerForm(phones: phone, departmentName: 'Τμήμα Προορισμού'),
             selectedCandidateId: null,

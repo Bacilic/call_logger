@@ -1,5 +1,6 @@
 import 'database_helper.dart';
-import 'directory_repository.dart';
+import 'department_repository.dart';
+import 'settings_repository.dart';
 
 /// Εφάπαξ συμπλήρωση `floor_id` από `map_floor` (χωρίς αλλαγή `building`).
 class DepartmentFloorMigrationRunner {
@@ -9,10 +10,9 @@ class DepartmentFloorMigrationRunner {
 
   static Future<void> runIfNeeded() async {
     final db = await DatabaseHelper.instance.database;
-    final repo = DirectoryRepository(db);
-    final done = await repo.getSetting(_kSettingKey);
+    final done = await SettingsRepository(db).getSetting(_kSettingKey);
     if (done == '1') return;
-    await repo.backfillDepartmentFloorIdsFromMapFloor();
-    await repo.setSetting(_kSettingKey, '1');
+    await DepartmentRepository(db).backfillDepartmentFloorIdsFromMapFloor();
+    await SettingsRepository(db).saveSetting(_kSettingKey, '1');
   }
 }

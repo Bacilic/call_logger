@@ -5,7 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart' hide TextDirection;
 
 import '../../../core/database/database_helper.dart';
-import '../../../core/database/directory_repository.dart';
+import '../../../core/database/settings_repository.dart';
 import '../../../core/database/database_init_result.dart';
 import '../../../core/services/settings_service.dart';
 import '../models/database_stats.dart';
@@ -31,7 +31,7 @@ class DatabaseBrowserZoomByTableNotifier extends Notifier<Map<String, double>> {
   Future<void> load() async {
     try {
       final dbZoom = await DatabaseHelper.instance.database;
-      final raw = await DirectoryRepository(dbZoom)
+      final raw = await SettingsRepository(dbZoom)
           .getSetting(_kDatabaseBrowserZoomByTableSettingsKey);
       if (raw == null || raw.trim().isEmpty) {
         state = {};
@@ -57,7 +57,7 @@ class DatabaseBrowserZoomByTableNotifier extends Notifier<Map<String, double>> {
 
   Future<void> _persist() async {
     final dbZoom = await DatabaseHelper.instance.database;
-    await DirectoryRepository(dbZoom).setSetting(
+    await SettingsRepository(dbZoom).saveSetting(
       _kDatabaseBrowserZoomByTableSettingsKey,
       jsonEncode(state),
     );

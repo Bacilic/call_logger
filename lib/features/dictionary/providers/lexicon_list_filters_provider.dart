@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/database/database_helper.dart';
-import '../../../core/database/directory_repository.dart';
+import '../../../core/database/settings_repository.dart';
 import '../models/lexicon_list_filters_model.dart';
 
 const kLexiconListFiltersSettingKey = 'lexicon_list_filters';
@@ -25,7 +25,7 @@ class LexiconListFiltersNotifier extends Notifier<LexiconListFiltersModel> {
     try {
       final db = await DatabaseHelper.instance.database;
       if (!ref.mounted) return;
-      final raw = await DirectoryRepository(db)
+      final raw = await SettingsRepository(db)
           .getSetting(kLexiconListFiltersSettingKey);
       if (!ref.mounted) return;
       state = LexiconListFiltersModel.decodeFromStorage(raw);
@@ -39,7 +39,7 @@ class LexiconListFiltersNotifier extends Notifier<LexiconListFiltersModel> {
   Future<void> _persist() async {
     final db = await DatabaseHelper.instance.database;
     if (!ref.mounted) return;
-    await DirectoryRepository(db).setSetting(
+    await SettingsRepository(db).saveSetting(
       kLexiconListFiltersSettingKey,
       state.encodeForStorage(),
     );

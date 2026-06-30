@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/database/database_helper.dart';
-import '../../../core/database/directory_repository.dart';
+import '../../../core/database/equipment_repository.dart';
 import '../../../core/models/remote_tool.dart';
 import '../../../core/widgets/remote_tool_icon.dart';
 import '../../calls/provider/remote_paths_provider.dart';
@@ -45,7 +45,7 @@ class _RemoteToolsManagementScreenState
 
   Future<Map<int, int>> _fetchEquipmentUsage() async {
     final db = await DatabaseHelper.instance.database;
-    return DirectoryRepository(db).getEquipmentDefaultRemoteToolUsageCounts();
+    return EquipmentRepository(db).getEquipmentDefaultRemoteToolUsageCounts();
   }
 
   void _refreshEquipmentUsage() {

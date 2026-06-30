@@ -1,5 +1,6 @@
 import 'database_helper.dart';
-import 'directory_repository.dart';
+import 'department_repository.dart';
+import 'settings_repository.dart';
 
 /// Εφάπαξ επαναϋπολογισμός `departments.name_key` με τον κανόνα τελικού σίγματος (ς/σ).
 class DepartmentNameKeyMigrationRunner {
@@ -10,10 +11,9 @@ class DepartmentNameKeyMigrationRunner {
 
   static Future<void> runIfNeeded() async {
     final db = await DatabaseHelper.instance.database;
-    final repo = DirectoryRepository(db);
-    final done = await repo.getSetting(_kSettingKey);
+    final done = await SettingsRepository(db).getSetting(_kSettingKey);
     if (done == '1') return;
-    await repo.backfillAllDepartmentNameKeys();
-    await repo.setSetting(_kSettingKey, '1');
+    await DepartmentRepository(db).backfillAllDepartmentNameKeys();
+    await SettingsRepository(db).saveSetting(_kSettingKey, '1');
   }
 }

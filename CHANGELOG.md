@@ -40,6 +40,9 @@
 
 ### Διορθώθηκε
 
+- **Λάμπα · μεταφορά τμήματος (ΖΤ-18/1):** ατομική αποθήκευση τμήματος και `department_phones` σε μία transaction — executor-aware μέθοδοι `DirectoryRepository`, αυτόματο rollback σε μερική αποτυχία.
+- **Λάμπα · μεταφορά εξοπλισμού (ΖΤ-18/2):** ατομική αποθήκευση εξοπλισμού και `user_equipment` σε μία transaction — executor-aware μέθοδοι `DirectoryRepository`, αυτόματο rollback σε μερική αποτυχία.
+- **Λάμπα · μεταφορά κατόχου (ΖΤ-18/3):** ατομική αποθήκευση κατόχου, `user_phones` και `user_equipment` σε μία transaction — executor-aware `insertUser`/`updateUser`/`removePhoneFromAllUsers`, κλείσιμο residuals 10Α/10Β (`removePhoneFromAllUsers` και `_resolveOwnerId` εντός transaction).
 - **Γρήγορη καταγραφή κλήσης:** η συντόμευση Ctrl+Shift+N λειτουργεί πλέον και στην οθόνη Βάσης Δεδομένων (αφαίρεση σκόπιμου αποκλεισμού στον έλεγχο διαθεσιμότητας).
 - **Έλεγχοι:** ευθυγράμμιση 6 widget/notifier tests με τρέχουσα συμπεριφορά (συμπτυγμένη όψη, preserveEquipment, φίλτρα Ιστορικού) και κοινό helper αναμονής lookup/sqflite timers στο `test_setup.dart`.
 - **Lansweeper · πεδίο προτροπής Gemini:** αντικατάσταση διπλού Stack (`Text.rich` + διαφανές `TextField`) με ενιαίο `TextField` και custom `buildTextSpan` controller — διόρθωση ασυμφωνίας scroll/ύψους σε πολυγραμμικό κείμενο.

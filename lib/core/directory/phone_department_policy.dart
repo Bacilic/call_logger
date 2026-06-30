@@ -1,4 +1,6 @@
-import '../database/directory_repository.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+
+import '../database/phone_repository.dart';
 import '../services/lookup_service.dart';
 import '../../features/calls/models/user_model.dart';
 
@@ -124,17 +126,26 @@ class PhoneDepartmentPolicy {
 
   /// Εφαρμογή επιλογών πριν/μετά την αποθήκευση χρήστη.
   static Future<void> applyUserPhoneConflictResolutions({
-    required DirectoryRepository dir,
+    required PhoneRepository phones,
     required UserPhoneConflictBatchResult resolutions,
     required int? targetDepartmentId,
+    DatabaseExecutor? executor,
   }) async {
     for (final phone in resolutions.phonesToRemoveFromOtherUsers) {
-      await dir.removePhoneFromAllUsers(phone);
+      await phones.removePhoneFromAllUsers(phone, executor: executor);
     }
     for (final entry in resolutions.phonesToTransferShared.entries) {
-      await dir.removeDepartmentDirectPhone(entry.value, entry.key);
+      await phones.removeDepartmentDirectPhone(
+        entry.value,
+        entry.key,
+        executor: executor,
+      );
       if (targetDepartmentId != null) {
-        await dir.addDepartmentDirectPhone(targetDepartmentId, entry.key);
+        await phones.addDepartmentDirectPhone(
+          targetDepartmentId,
+          entry.key,
+          executor: executor,
+        );
       }
     }
   }

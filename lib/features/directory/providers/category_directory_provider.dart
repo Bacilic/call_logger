@@ -3,8 +3,9 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/database/calls_repository.dart';
+import '../../../core/database/category_repository.dart';
 import '../../../core/database/database_helper.dart';
-import '../../../core/database/directory_repository.dart';
+import '../../../core/database/settings_repository.dart';
 import '../../../core/utils/search_text_normalizer.dart';
 import '../../history/providers/history_provider.dart';
 import '../models/category_directory_column.dart';
@@ -136,7 +137,7 @@ class CategoryDirectoryNotifier extends Notifier<CategoryDirectoryState> {
   Future<_CategoryColumnLayout?> _readColumnLayoutFromSettings() async {
     final db = await DatabaseHelper.instance.database;
     final raw =
-        await DirectoryRepository(db).getSetting(_catalogCategoriesVisibleColumnsKey);
+        await SettingsRepository(db).getSetting(_catalogCategoriesVisibleColumnsKey);
     if (raw == null || raw.trim().isEmpty) return null;
     return _parseColumnLayoutFromJson(raw);
   }
@@ -152,7 +153,7 @@ class CategoryDirectoryNotifier extends Notifier<CategoryDirectoryState> {
       ],
     });
     final dbSet = await DatabaseHelper.instance.database;
-    await DirectoryRepository(dbSet).setSetting(
+    await SettingsRepository(dbSet).saveSetting(
       _catalogCategoriesVisibleColumnsKey,
       payload,
     );
@@ -165,7 +166,7 @@ class CategoryDirectoryNotifier extends Notifier<CategoryDirectoryState> {
       _columnLayoutHydrated = true;
     }
     final dbLoad = await DatabaseHelper.instance.database;
-    final rows = await DirectoryRepository(dbLoad).getActiveCategoryRows();
+    final rows = await CategoryRepository(dbLoad).getActiveCategoryRows();
     if (!ref.mounted) return;
     final list = rows.map(CategoryModel.fromMap).toList();
     state = CategoryDirectoryState(
@@ -347,9 +348,9 @@ class CategoryDirectoryNotifier extends Notifier<CategoryDirectoryState> {
   /// Επιστρέφει `true` αν επαναφέρθηκε soft-deleted κατηγορία (ίδιο normalized όνομα).
   Future<bool> addCategory(String name) async {
     final db = await DatabaseHelper.instance.database;
-    final dir = DirectoryRepository(db);
+    final categories = CategoryRepository(db);
     final calls = CallsRepository(db);
-    final r = await dir.insertCategoryAndGetId(
+    final r = await categories.insertCategoryAndGetId(
       name,
       rebuildSearchIndexInTxn: calls.rebuildSearchIndexForCallsByCategoryId,
     );
@@ -360,9 +361,9 @@ class CategoryDirectoryNotifier extends Notifier<CategoryDirectoryState> {
 
   Future<void> renameCategory(int id, String newCanonicalName) async {
     final db = await DatabaseHelper.instance.database;
-    final dir = DirectoryRepository(db);
+    final categories = CategoryRepository(db);
     final calls = CallsRepository(db);
-    await dir.updateCategoryNameAndSyncCalls(
+    await categories.updateCategoryNameAndSyncCalls(
       id: id,
       newCanonicalName: newCanonicalName,
       rebuildSearchIndexInTxn: calls.rebuildSearchIndexForCallsByCategoryId,
@@ -382,7 +383,7 @@ class CategoryDirectoryNotifier extends Notifier<CategoryDirectoryState> {
         .where((c) => c.id != null && ids.contains(c.id))
         .toList();
     final dbDel = await DatabaseHelper.instance.database;
-    await DirectoryRepository(dbDel).softDeleteCategories(ids);
+    await CategoryRepository(dbDel).softDeleteCategories(ids);
     _invalidateCategoryLists();
     if (!ref.mounted) return;
     state = CategoryDirectoryState(
@@ -405,7 +406,7 @@ class CategoryDirectoryNotifier extends Notifier<CategoryDirectoryState> {
     if (list == null || list.isEmpty) return;
     final ids = list.map((c) => c.id).whereType<int>().toList();
     final dbRest = await DatabaseHelper.instance.database;
-    await DirectoryRepository(dbRest).restoreCategories(ids);
+    await CategoryRepository(dbRest).restoreCategories(ids);
     _invalidateCategoryLists();
     if (!ref.mounted) return;
     _patch(lastDeleted: null);

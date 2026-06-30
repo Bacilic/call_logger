@@ -1,7 +1,8 @@
 ﻿import 'package:flutter/material.dart';
 
 import '../../../../core/database/database_helper.dart';
-import '../../../../core/database/directory_repository.dart';
+import '../../../../core/database/equipment_repository.dart';
+import '../../../../core/database/phone_repository.dart';
 import '../../../../core/utils/search_text_normalizer.dart';
 import '../../models/department_model.dart';
 
@@ -569,18 +570,19 @@ Future<bool?> _confirmDelete({
   required String value,
 }) async {
   final db = await DatabaseHelper.instance.database;
-  final dir = DirectoryRepository(db);
+  final phones = PhoneRepository(db);
+  final equipment = EquipmentRepository(db);
   final int refCount;
   if (isPhone) {
-    final id = await dir.getPhoneIdByNumber(value);
+    final id = await phones.getPhoneIdByNumber(value);
     refCount = id == null
         ? 0
-        : await dir.countPhoneReferencesExcludingAudit(id, value);
+        : await phones.countPhoneReferencesExcludingAudit(id, value);
   } else {
-    final id = await dir.getEquipmentIdByCode(value);
+    final id = await equipment.getEquipmentIdByCode(value);
     refCount = id == null
         ? 0
-        : await dir.countEquipmentReferencesExcludingAudit(id);
+        : await equipment.countEquipmentReferencesExcludingAudit(id);
   }
 
   if (!context.mounted) return null;

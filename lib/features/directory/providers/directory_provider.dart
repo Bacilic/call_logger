@@ -4,6 +4,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/database/database_helper.dart';
 import '../../../core/database/directory_repository.dart';
+import '../../../core/database/phone_repository.dart';
+import '../../../core/database/settings_repository.dart';
+import '../../../core/database/user_repository.dart';
 import '../../../core/directory/phone_department_policy.dart';
 import '../../../core/services/lookup_service.dart';
 import '../../../core/utils/phone_list_parser.dart';
@@ -208,7 +211,7 @@ class DirectoryNotifier extends Notifier<DirectoryState> {
   Future<_UserColumnLayout?> _readColumnLayoutFromSettings() async {
     final dbRead = await DatabaseHelper.instance.database;
     final raw =
-        await DirectoryRepository(dbRead).getSetting(_catalogUsersVisibleColumnsKey);
+        await SettingsRepository(dbRead).getSetting(_catalogUsersVisibleColumnsKey);
     if (raw == null || raw.trim().isEmpty) return null;
     return _parseColumnLayoutFromJson(raw);
   }
@@ -224,7 +227,7 @@ class DirectoryNotifier extends Notifier<DirectoryState> {
       ],
     });
     final dbPersist = await DatabaseHelper.instance.database;
-    await DirectoryRepository(dbPersist).setSetting(
+    await SettingsRepository(dbPersist).saveSetting(
       _catalogUsersVisibleColumnsKey,
       payload,
     );
@@ -238,9 +241,9 @@ class DirectoryNotifier extends Notifier<DirectoryState> {
       _columnLayoutHydrated = true;
     }
     final dbUsers = await DatabaseHelper.instance.database;
-    final repo = DirectoryRepository(dbUsers);
+    final repo = UserRepository(dbUsers);
     final rows = await repo.getAllUsers();
-    final nonUserRows = await repo.getNonUserPhonesCatalogRows();
+    final nonUserRows = await DirectoryRepository(dbUsers).getNonUserPhonesCatalogRows();
     if (!ref.mounted) return;
     final list = rows.map((m) => UserModel.fromMap(m)).toList();
     final nonUserList = <NonUserPhoneEntry>[];
@@ -569,7 +572,7 @@ class DirectoryNotifier extends Notifier<DirectoryState> {
 
   Future<void> addUser(UserModel u) async {
     final db = await DatabaseHelper.instance.database;
-    await DirectoryRepository(db).insertUserFromMap(u.toMap());
+    await UserRepository(db).insertUserFromMap(u.toMap());
     await _refreshLookupCache();
     await loadUsers();
     await refreshDirectoryCaches(ref, equipment: true);
@@ -582,9 +585,9 @@ class DirectoryNotifier extends Notifier<DirectoryState> {
     int sourceUserId,
   ) async {
     final dbClone = await DatabaseHelper.instance.database;
-    final dir = DirectoryRepository(dbClone);
-    final newId = await dir.insertUserFromMap(u.toMap());
-    await dir.copyUserEquipmentLinks(sourceUserId, newId);
+    final users = UserRepository(dbClone);
+    final newId = await users.insertUserFromMap(u.toMap());
+    await DirectoryRepository(dbClone).copyUserEquipmentLinks(sourceUserId, newId);
     await _refreshLookupCache();
     await loadUsers();
     await refreshDirectoryCaches(ref, equipment: true);
@@ -594,7 +597,7 @@ class DirectoryNotifier extends Notifier<DirectoryState> {
   Future<void> updateUser(UserModel u) async {
     if (u.id == null) return;
     final dbUp = await DatabaseHelper.instance.database;
-    await DirectoryRepository(dbUp).updateUser(u.id!, u.toMap());
+    await UserRepository(dbUp).updateUser(u.id!, u.toMap());
     await _refreshLookupCache();
     await loadUsers();
     await refreshDirectoryCaches(ref, equipment: true);
@@ -606,7 +609,7 @@ class DirectoryNotifier extends Notifier<DirectoryState> {
         .where((u) => u.id != null && state.selectedIds.contains(u.id))
         .toList();
     final dbDel = await DatabaseHelper.instance.database;
-    await DirectoryRepository(dbDel).deleteUsers(state.selectedIds.toList());
+    await UserRepository(dbDel).deleteUsers(state.selectedIds.toList());
     await _refreshLookupCache();
     if (!ref.mounted) return;
     state = state.copyWith(
@@ -622,7 +625,7 @@ class DirectoryNotifier extends Notifier<DirectoryState> {
     if (list == null || list.isEmpty) return;
     final ids = list.map((u) => u.id).whereType<int>().toList();
     final dbRestore = await DatabaseHelper.instance.database;
-    await DirectoryRepository(dbRestore).restoreUsers(ids);
+    await UserRepository(dbRestore).restoreUsers(ids);
     await _refreshLookupCache();
     if (!ref.mounted) return;
     state = state.copyWith(lastDeleted: null);
@@ -650,7 +653,7 @@ class DirectoryNotifier extends Notifier<DirectoryState> {
       final targetDepartmentId = deptIds.length == 1 ? deptIds.first : null;
       final db = await DatabaseHelper.instance.database;
       await PhoneDepartmentPolicy.applyUserPhoneConflictResolutions(
-        dir: DirectoryRepository(db),
+        phones: PhoneRepository(db),
         resolutions: phoneConflictResolutions,
         targetDepartmentId: targetDepartmentId,
       );
@@ -658,7 +661,7 @@ class DirectoryNotifier extends Notifier<DirectoryState> {
     }
 
     final dbBulk = await DatabaseHelper.instance.database;
-    await DirectoryRepository(dbBulk).bulkUpdateUsers(ids, changes);
+    await UserRepository(dbBulk).bulkUpdateUsers(ids, changes);
     await _refreshLookupCache();
     if (!ref.mounted) return;
     state = state.copyWith(lastBulkUpdatedUsers: toUpdate);
@@ -675,11 +678,11 @@ class DirectoryNotifier extends Notifier<DirectoryState> {
     final list = state.lastBulkUpdatedUsers;
     if (list == null || list.isEmpty) return;
     final dbUndo = await DatabaseHelper.instance.database;
-    final dir = DirectoryRepository(dbUndo);
+    final users = UserRepository(dbUndo);
     try {
       for (final u in list) {
         if (u.id != null) {
-          await dir.updateUser(
+          await users.updateUser(
             u.id!,
             u.toMap(),
             recordAudit: false,
@@ -710,12 +713,12 @@ const kCatalogContinuousScrollUsersKey = 'catalog_continuous_scroll_users';
 const kCatalogContinuousScrollDepartmentsKey = 'catalog_continuous_scroll_departments';
 
 Future<bool> _readCatalogContinuousScrollPerTable(
-  DirectoryRepository repo,
+  SettingsRepository settings,
   String perTableKey,
 ) async {
-  final specific = await repo.getSetting(perTableKey);
+  final specific = await settings.getSetting(perTableKey);
   if (specific != null) return specific == 'true';
-  final legacy = await repo.getSetting(kCatalogContinuousScrollLegacyKey);
+  final legacy = await settings.getSetting(kCatalogContinuousScrollLegacyKey);
   if (legacy != null) return legacy == 'true';
   return true;
 }
@@ -725,7 +728,7 @@ final catalogEquipmentContinuousScrollProvider =
     FutureProvider.autoDispose<bool>((ref) async {
   final db = await DatabaseHelper.instance.database;
   return _readCatalogContinuousScrollPerTable(
-    DirectoryRepository(db),
+    SettingsRepository(db),
     kCatalogContinuousScrollEquipmentKey,
   );
 });
@@ -735,7 +738,7 @@ final catalogUsersContinuousScrollProvider =
     FutureProvider.autoDispose<bool>((ref) async {
   final db = await DatabaseHelper.instance.database;
   return _readCatalogContinuousScrollPerTable(
-    DirectoryRepository(db),
+    SettingsRepository(db),
     kCatalogContinuousScrollUsersKey,
   );
 });
@@ -745,7 +748,7 @@ final catalogDepartmentsContinuousScrollProvider =
     FutureProvider.autoDispose<bool>((ref) async {
   final db = await DatabaseHelper.instance.database;
   return _readCatalogContinuousScrollPerTable(
-    DirectoryRepository(db),
+    SettingsRepository(db),
     kCatalogContinuousScrollDepartmentsKey,
   );
 });

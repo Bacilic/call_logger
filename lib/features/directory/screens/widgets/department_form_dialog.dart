@@ -4,7 +4,9 @@ import '../../../../core/errors/department_exists_exception.dart';
 import '../../../../core/models/building_map_floor.dart';
 import '../../../../core/services/lookup_service.dart';
 import '../../../../core/database/database_helper.dart';
-import '../../../../core/database/directory_repository.dart';
+import '../../../../core/database/building_map_repository.dart';
+import '../../../../core/database/department_repository.dart';
+import '../../../../core/database/directory_support.dart';
 import '../../../../core/widgets/database_persistence_error_snackbar.dart';
 import '../../../../core/utils/search_text_normalizer.dart';
 import '../../../../core/utils/spell_check.dart';
@@ -465,7 +467,8 @@ class _DepartmentFormDialogState extends State<DepartmentFormDialog> {
   Future<void> _loadFloors() async {
     try {
       final db = await DatabaseHelper.instance.database;
-      final list = await DirectoryRepository(db).listBuildingMapFloors();
+      final list =
+          await BuildingMapRepository(db, DirectorySupport(db)).listBuildingMapFloors();
       if (!mounted) return;
       setState(() {
         _floors = list;
@@ -903,7 +906,7 @@ class _DepartmentFormDialogState extends State<DepartmentFormDialog> {
       ..sort();
 
     final db = await DatabaseHelper.instance.database;
-    final dir = DirectoryRepository(db);
+    final dir = DepartmentRepository(db);
     final phoneTransfers = <String, int>{};
     final equipmentTransfers = <String, int>{};
 
@@ -1096,7 +1099,7 @@ class _DepartmentFormDialogState extends State<DepartmentFormDialog> {
           ),
         );
         final dbDid = await DatabaseHelper.instance.database;
-        final did = await DirectoryRepository(
+        final did = await DepartmentRepository(
           dbDid,
         ).getOrCreateDepartmentIdByName(name);
         if (did != null) {

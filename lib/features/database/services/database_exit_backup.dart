@@ -1,5 +1,5 @@
 import '../../../core/database/database_helper.dart';
-import '../../../core/database/directory_repository.dart';
+import '../../../core/database/settings_repository.dart';
 import '../models/database_backup_settings.dart';
 import '../utils/backup_schedule_status.dart';
 import '../utils/backup_schedule_utils.dart';
@@ -13,7 +13,7 @@ class DatabaseExitBackup {
 
   static Future<void> runIfEnabled() async {
     final db = await DatabaseHelper.instance.database;
-    final repo = DirectoryRepository(db);
+    final repo = SettingsRepository(db);
     final raw = await repo.getSetting(DatabaseBackupSettings.appSettingsKey);
     final settings = DatabaseBackupSettings.fromJsonString(raw);
     if (!BackupScheduleStatusFormatter.shouldRunExitBackup(
@@ -37,7 +37,7 @@ class DatabaseExitBackup {
               ? BackupScheduleStatus.folderMissing
               : BackupScheduleStatus.failed),
     );
-    await repo.setSetting(
+    await repo.saveSetting(
       DatabaseBackupSettings.appSettingsKey,
       updated.toJsonString(),
     );

@@ -3,7 +3,7 @@ import 'package:path/path.dart' as p;
 
 import '../../../core/database/calls_repository.dart';
 import '../../../core/database/database_helper.dart';
-import '../../../core/database/directory_repository.dart';
+import '../../../core/database/category_repository.dart';
 import '../../../core/services/settings_service.dart';
 import '../../../core/utils/search_text_normalizer.dart';
 
@@ -135,14 +135,14 @@ final historyCategoriesProvider = FutureProvider.autoDispose<List<String>>((
   ref,
 ) async {
   final db = await DatabaseHelper.instance.database;
-  return DirectoryRepository(db).getCategoryNames();
+  return CategoryRepository(db).getCategoryNames();
 });
 
 /// Ενεργές κατηγορίες (id + όνομα) για φόρμα κλήσης / επίλυση category_id.
 final historyCategoryEntriesProvider =
     FutureProvider.autoDispose<List<({int id, String name})>>((ref) async {
       final db = await DatabaseHelper.instance.database;
-      final rows = await DirectoryRepository(db).getActiveCategoryRows();
+      final rows = await CategoryRepository(db).getActiveCategoryRows();
       return rows
           .map(
             (m) => (

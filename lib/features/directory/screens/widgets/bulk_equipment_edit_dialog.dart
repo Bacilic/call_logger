@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/database/database_helper.dart';
-import '../../../../core/database/directory_repository.dart';
+import '../../../../core/database/user_repository.dart';
 import '../../../../core/services/lookup_service.dart';
 import '../../../../core/services/settings_service.dart';
 import '../../../../core/utils/name_parser.dart';
@@ -134,7 +134,7 @@ class _BulkEquipmentEditDialogState extends State<BulkEquipmentEditDialog> {
     }
     final parsed = NameParserUtility.parse(textForSearch);
     final dbIns = await DatabaseHelper.instance.database;
-    return DirectoryRepository(dbIns).insertUser(
+    return UserRepository(dbIns).insertUser(
       firstName: parsed.firstName,
       lastName: parsed.lastName,
     );

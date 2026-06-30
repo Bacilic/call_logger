@@ -2,7 +2,7 @@
 
 import '../../../core/database/calls_repository.dart';
 import '../../../core/database/database_helper.dart';
-import '../../../core/database/directory_repository.dart';
+import '../../../core/database/department_repository.dart';
 import '../../../core/database/settings_repository.dart';
 import '../../../core/services/gemini_ticket_service.dart';
 import '../../../core/services/settings_service.dart';
@@ -980,7 +980,7 @@ final dashboardDepartmentsProvider = FutureProvider.autoDispose<List<String>>((
   ref,
 ) async {
   final db = await DatabaseHelper.instance.database;
-  final rows = await DirectoryRepository(db).getActiveDepartments();
+  final rows = await DepartmentRepository(db).getActiveDepartments();
   return rows
       .map((r) => (r['name'] as String?)?.trim() ?? '')
       .where((s) => s.isNotEmpty)

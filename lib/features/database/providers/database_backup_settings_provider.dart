@@ -1,7 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/database/database_helper.dart';
-import '../../../core/database/directory_repository.dart';
+import '../../../core/database/settings_repository.dart';
 import '../models/database_backup_settings.dart';
 import '../utils/backup_schedule_utils.dart';
 
@@ -19,7 +19,7 @@ class DatabaseBackupSettingsNotifier
   Future<void> load() async {
     try {
       final db = await DatabaseHelper.instance.database;
-      final raw = await DirectoryRepository(db)
+      final raw = await SettingsRepository(db)
           .getSetting(DatabaseBackupSettings.appSettingsKey);
       state = DatabaseBackupSettings.fromJsonString(raw);
     } catch (_) {
@@ -29,7 +29,7 @@ class DatabaseBackupSettingsNotifier
 
   Future<void> _persist() async {
     final db = await DatabaseHelper.instance.database;
-    await DirectoryRepository(db).setSetting(
+    await SettingsRepository(db).saveSetting(
       DatabaseBackupSettings.appSettingsKey,
       state.toJsonString(),
     );

@@ -1,4 +1,8 @@
-import '../../../core/database/directory_repository.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+
+import '../../../core/database/department_repository.dart';
+import '../../../core/database/equipment_repository.dart';
+import '../../../core/database/phone_repository.dart';
 import '../../../core/services/lookup_service.dart';
 import '../screens/widgets/shared_asset_disconnect_dialog.dart';
 
@@ -11,9 +15,10 @@ Future<void> reloadLookupAfterNewDepartments(
 }
 
 Future<Map<String, int>> _resolvePhoneTransferTargets(
-  DirectoryRepository dir,
+  Database db,
   Map<String, SharedAssetTransferTarget> transfers,
 ) async {
+  final departments = DepartmentRepository(db);
   final out = <String, int>{};
   for (final entry in transfers.entries) {
     final target = entry.value;
@@ -23,7 +28,7 @@ Future<Map<String, int>> _resolvePhoneTransferTargets(
     }
     final newName = target.newDepartmentName?.trim();
     if (newName == null || newName.isEmpty) continue;
-    final deptId = await dir.getOrCreateDepartmentIdByName(newName);
+    final deptId = await departments.getOrCreateDepartmentIdByName(newName);
     if (deptId != null) out[entry.key] = deptId;
   }
   return out;
@@ -31,7 +36,7 @@ Future<Map<String, int>> _resolvePhoneTransferTargets(
 
 /// Μετά από αποσύνδεση προσωπικού τηλεφώνου χρήστη (φόρμα ή διαγραφή χρήστη).
 Future<void> applyPersonalPhoneDisconnectBatch(
-  DirectoryRepository dir,
+  Database db,
   SharedAssetDisconnectBatchResult batch, {
   required int? sourceDepartmentId,
 }) async {
@@ -44,36 +49,37 @@ Future<void> applyPersonalPhoneDisconnectBatch(
 
   await reloadLookupAfterNewDepartments(batch);
 
+  final phones = PhoneRepository(db);
   final phoneTransfers = await _resolvePhoneTransferTargets(
-    dir,
+    db,
     batch.phoneTransfers,
   );
 
   if (sourceDepartmentId != null) {
     for (final phone in batch.phonesToKeep) {
-      await dir.addDepartmentDirectPhone(sourceDepartmentId, phone);
+      await phones.addDepartmentDirectPhone(sourceDepartmentId, phone);
     }
   }
 
   for (final entry in phoneTransfers.entries) {
-    await dir.addDepartmentDirectPhone(entry.value, entry.key);
+    await phones.addDepartmentDirectPhone(entry.value, entry.key);
   }
 
   if (batch.phonesToDelete.isNotEmpty) {
     final phoneIds = <int>[];
     for (final p in batch.phonesToDelete) {
-      final id = await dir.getPhoneIdByNumber(p);
+      final id = await phones.getPhoneIdByNumber(p);
       if (id != null) phoneIds.add(id);
     }
     if (phoneIds.isNotEmpty) {
-      await dir.softDeletePhones(phoneIds);
+      await phones.softDeletePhones(phoneIds);
     }
   }
 }
 
 /// Μετά από αποδέσμευση κοινόχρηστων στοιχείων τμήματος (φόρμα ή διαγραφή τμήματος).
 Future<void> applyDepartmentSharedAssetDisconnectBatch(
-  DirectoryRepository dir,
+  Database db,
   SharedAssetDisconnectBatchResult batch, {
   required int sourceDepartmentId,
 }) async {
@@ -89,20 +95,22 @@ Future<void> applyDepartmentSharedAssetDisconnectBatch(
 
   await reloadLookupAfterNewDepartments(batch);
 
+  final phones = PhoneRepository(db);
+  final equipment = EquipmentRepository(db);
   final phoneTransfers = await _resolvePhoneTransferTargets(
-    dir,
+    db,
     batch.phoneTransfers,
   );
   final equipmentTransfers = await _resolvePhoneTransferTargets(
-    dir,
+    db,
     batch.equipmentTransfers,
   );
 
   for (final phone in batch.phonesToKeep) {
-    await dir.addDepartmentDirectPhone(sourceDepartmentId, phone);
+    await phones.addDepartmentDirectPhone(sourceDepartmentId, phone);
   }
   for (final code in batch.equipmentToKeep) {
-    await dir.updateEquipmentDepartment(code, sourceDepartmentId);
+    await equipment.updateEquipmentDepartment(code, sourceDepartmentId);
   }
 
   final phonesLeavingSource = <String>{
@@ -110,10 +118,10 @@ Future<void> applyDepartmentSharedAssetDisconnectBatch(
     ...phoneTransfers.keys,
   };
   for (final phone in phonesLeavingSource) {
-    await dir.removeDepartmentDirectPhone(sourceDepartmentId, phone);
+    await phones.removeDepartmentDirectPhone(sourceDepartmentId, phone);
   }
   for (final entry in phoneTransfers.entries) {
-    await dir.addDepartmentDirectPhone(entry.value, entry.key);
+    await phones.addDepartmentDirectPhone(entry.value, entry.key);
   }
 
   final equipmentLeavingSource = <String>{
@@ -121,31 +129,31 @@ Future<void> applyDepartmentSharedAssetDisconnectBatch(
     ...equipmentTransfers.keys,
   };
   for (final code in equipmentLeavingSource) {
-    await dir.clearEquipmentSharedDepartment(code, sourceDepartmentId);
+    await equipment.clearEquipmentSharedDepartment(code, sourceDepartmentId);
   }
   for (final entry in equipmentTransfers.entries) {
-    await dir.updateEquipmentDepartment(entry.key, entry.value);
+    await equipment.updateEquipmentDepartment(entry.key, entry.value);
   }
 
   if (batch.phonesToDelete.isNotEmpty) {
     final phoneIds = <int>[];
     for (final p in batch.phonesToDelete) {
-      final id = await dir.getPhoneIdByNumber(p);
+      final id = await phones.getPhoneIdByNumber(p);
       if (id != null) phoneIds.add(id);
     }
     if (phoneIds.isNotEmpty) {
-      await dir.softDeletePhones(phoneIds);
+      await phones.softDeletePhones(phoneIds);
     }
   }
 
   if (batch.equipmentToDelete.isNotEmpty) {
     final equipmentIds = <int>[];
     for (final code in batch.equipmentToDelete) {
-      final id = await dir.getEquipmentIdByCode(code);
+      final id = await equipment.getEquipmentIdByCode(code);
       if (id != null) equipmentIds.add(id);
     }
     if (equipmentIds.isNotEmpty) {
-      await dir.deleteEquipments(equipmentIds);
+      await equipment.deleteEquipments(equipmentIds);
     }
   }
 }

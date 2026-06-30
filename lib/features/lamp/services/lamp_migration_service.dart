@@ -1,5 +1,8 @@
-﻿import '../../../core/database/database_helper.dart';
+﻿import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+
+import '../../../core/database/database_helper.dart';
 import '../../../core/database/directory_repository.dart';
+import '../../../core/database/phone_repository.dart';
 import '../../../core/database/old_database/lamp_issue_resolution_service.dart';
 import '../../../core/directory/phone_department_policy.dart';
 import '../../../core/services/lookup_service.dart';
@@ -453,6 +456,18 @@ const String _kPendingEntityCreationError =
 
 const String _kSoftDeletedDecisionError =
     'Υπάρχει διαγραμμένη όμοια εγγραφή· απαιτείται απόφαση.';
+
+class _DepartmentPhoneApplyPlan {
+  const _DepartmentPhoneApplyPlan({
+    required this.phones,
+    required this.transferPhones,
+    required this.skipPhones,
+  });
+
+  final List<String> phones;
+  final Set<String> transferPhones;
+  final Set<String> skipPhones;
+}
 
 class LampMigrationService {
   /// Ελάχιστο ποσοστό confidence (%) για fuzzy αντιστοίχιση στις Top-3 προτάσεις.
@@ -1218,56 +1233,73 @@ class LampMigrationService {
         ? softDeletedDecision!.recordId
         : null;
     final updateId = selectedCandidateId ?? reactivateId;
-    final int departmentId;
-    final bool updated;
-    final String message;
-    if (updateId != null) {
-      await dir.updateDepartment(updateId, map);
-      departmentId = updateId;
-      updated = true;
-      message = reactivateId != null && selectedCandidateId == null
-          ? 'Επαναφέρθηκε διαγραμμένο τμήμα.'
-          : 'Ενημερώθηκε υπάρχον τμήμα.';
-    } else {
+
+    if (updateId == null) {
       await _requireSoftDeletedDecisionBeforeInsert(
         target: LampTransferTarget.department,
         formValues: formValues,
         softDeletedDecision: softDeletedDecision,
       );
-      if (softDeletedDecision?.action == LampSoftDeletedDecisionAction.createNew) {
-        await _tombstoneSoftDeletedDepartmentNameKey(
-          softDeletedDecision!.recordId,
-        );
-      }
-      departmentId = await dir.insertDepartment(map);
-      updated = false;
-      message = 'Δημιουργήθηκε νέο τμήμα.';
     }
 
-    await _applyDepartmentDirectPhones(
-      dir: dir,
-      departmentId: departmentId,
+    final phoneApplyPlan = await _buildDepartmentPhoneApplyPlan(
       formValues: formValues,
       selectedCandidateId: selectedCandidateId,
       ownerConflictDecisions: ownerConflictDecisions,
     );
 
-    return LampMigrationSaveResult(
-      id: departmentId,
-      updated: updated,
-      message: message,
-    );
+    return db.transaction((txn) async {
+      final int departmentId;
+      final bool updated;
+      final String message;
+      if (updateId != null) {
+        await dir.updateDepartment(updateId, map, executor: txn);
+        departmentId = updateId;
+        updated = true;
+        message = reactivateId != null && selectedCandidateId == null
+            ? 'Επαναφέρθηκε διαγραμμένο τμήμα.'
+            : 'Ενημερώθηκε υπάρχον τμήμα.';
+      } else {
+        if (softDeletedDecision?.action ==
+            LampSoftDeletedDecisionAction.createNew) {
+          await _tombstoneSoftDeletedDepartmentNameKey(
+            softDeletedDecision!.recordId,
+            executor: txn,
+          );
+        }
+        departmentId = await dir.insertDepartment(map, executor: txn);
+        updated = false;
+        message = 'Δημιουργήθηκε νέο τμήμα.';
+      }
+
+      await _applyDepartmentDirectPhones(
+        dir: dir,
+        departmentId: departmentId,
+        plan: phoneApplyPlan,
+        executor: txn,
+      );
+
+      return LampMigrationSaveResult(
+        id: departmentId,
+        updated: updated,
+        message: message,
+      );
+    });
   }
 
-  Future<void> _applyDepartmentDirectPhones({
-    required DirectoryRepository dir,
-    required int departmentId,
+  Future<_DepartmentPhoneApplyPlan> _buildDepartmentPhoneApplyPlan({
     required Map<String, String> formValues,
     required int? selectedCandidateId,
     List<LampOwnerConflictDecision>? ownerConflictDecisions,
   }) async {
     final phones = PhoneListParser.splitPhones(formValues['phones']);
-    if (phones.isEmpty) return;
+    if (phones.isEmpty) {
+      return const _DepartmentPhoneApplyPlan(
+        phones: <String>[],
+        transferPhones: <String>{},
+        skipPhones: <String>{},
+      );
+    }
 
     final conflicts = await detectDepartmentConflicts(
       formValues: formValues,
@@ -1299,18 +1331,41 @@ class LampMigrationService {
           conflict.value,
     };
 
-    for (final phone in transferPhones) {
-      await dir.removePhoneFromAllUsers(phone);
+    return _DepartmentPhoneApplyPlan(
+      phones: phones,
+      transferPhones: transferPhones,
+      skipPhones: skipPhones,
+    );
+  }
+
+  Future<void> _applyDepartmentDirectPhones({
+    required DirectoryRepository dir,
+    required int departmentId,
+    required _DepartmentPhoneApplyPlan plan,
+    DatabaseExecutor? executor,
+  }) async {
+    if (plan.phones.isEmpty) return;
+
+    for (final phone in plan.transferPhones) {
+      await dir.removePhoneFromAllUsers(phone, executor: executor);
       final usage = LookupService.instance.checkPhoneUsage(phone);
       final sourceDeptId = usage.departmentId;
       if (sourceDeptId != null && sourceDeptId != departmentId) {
-        await dir.removeDepartmentDirectPhone(sourceDeptId, phone);
+        await dir.removeDepartmentDirectPhone(
+          sourceDeptId,
+          phone,
+          executor: executor,
+        );
       }
     }
 
-    for (final phone in phones) {
-      if (skipPhones.contains(phone)) continue;
-      await dir.addDepartmentDirectPhone(departmentId, phone);
+    for (final phone in plan.phones) {
+      if (plan.skipPhones.contains(phone)) continue;
+      await dir.addDepartmentDirectPhone(
+        departmentId,
+        phone,
+        executor: executor,
+      );
     }
   }
 
@@ -1329,9 +1384,6 @@ class LampMigrationService {
     final db = await DatabaseHelper.instance.database;
     final dir = DirectoryRepository(db);
     final departmentName = (formValues['department_name'] ?? '').trim();
-    final departmentId = departmentName.isEmpty
-        ? null
-        : await dir.getOrCreateDepartmentIdByName(departmentName);
     final phones = PhoneListParser.splitPhones(formValues['phones']);
     final equipmentCodes = LampMigrationService.parseEquipmentCodes(
       formValues['equipment_codes'],
@@ -1377,18 +1429,6 @@ class LampMigrationService {
       conflicts: conflicts,
       decisionsById: decisionsById,
     );
-    if (!phonePolicyBatch.isEmpty) {
-      await PhoneDepartmentPolicy.applyUserPhoneConflictResolutions(
-        dir: dir,
-        resolutions: phonePolicyBatch,
-        targetDepartmentId: departmentId,
-      );
-      LookupService.instance.resetForReload();
-      await LookupService.instance.loadFromDatabase();
-    }
-    for (final code in transferEquipmentCodes) {
-      await dir.removeEquipmentFromAllUsers(code);
-    }
     final resolvedPhones = <String>[
       for (final phone in phones)
         if (!skipPhones.contains(phone)) phone,
@@ -1398,59 +1438,103 @@ class LampMigrationService {
         if (!skipEquipmentCodes.contains(code)) code,
     ];
 
-    final int savedUserId;
-    final bool updated;
-    final String message;
-    if (selectedCandidateId != null ||
-        softDeletedDecision?.action == LampSoftDeletedDecisionAction.reactivate) {
-      final updateUserId = selectedCandidateId ?? softDeletedDecision!.recordId;
-      await dir.updateUser(updateUserId, <String, dynamic>{
-        'first_name': firstName,
-        'last_name': lastName,
-        'phones': resolvedPhones,
-        'department_id': departmentId,
-        'location': _nullable(formValues['location']),
-        'notes': _nullable(formValues['notes']),
-        'is_deleted': 0,
-      });
-      savedUserId = updateUserId;
-      updated = true;
-      message = selectedCandidateId != null
-          ? 'Ενημερώθηκε υπάρχων χρήστης.'
-          : 'Επαναφέρθηκε διαγραμμένος χρήστης.';
-    } else {
+    final reactivateId =
+        softDeletedDecision?.action == LampSoftDeletedDecisionAction.reactivate
+        ? softDeletedDecision!.recordId
+        : null;
+    final updateUserId = selectedCandidateId ?? reactivateId;
+
+    if (updateUserId == null) {
       await _requireSoftDeletedDecisionBeforeInsert(
         target: LampTransferTarget.owner,
         formValues: formValues,
         softDeletedDecision: softDeletedDecision,
       );
-      savedUserId = await dir.insertUser(
-        firstName: firstName,
-        lastName: lastName,
-        phones: resolvedPhones,
-        departmentId: departmentId,
-        location: _nullable(formValues['location']),
-        notes: _nullable(formValues['notes']),
-      );
-      updated = false;
-      message = 'Δημιουργήθηκε νέος χρήστης.';
     }
 
-    await _assignUserPhonesToDepartment(
-      dir: dir,
-      departmentId: departmentId,
-      phones: resolvedPhones,
-    );
-    await _syncOwnerEquipmentLinks(
-      userId: savedUserId,
-      equipmentCodes: resolvedEquipmentCodes,
-      confirmEntityCreations: confirmEntityCreations,
-    );
-    return LampMigrationSaveResult(
-      id: savedUserId,
-      updated: updated,
-      message: message,
-    );
+    return db.transaction((txn) async {
+      final departmentId = departmentName.isEmpty
+          ? null
+          : await dir.getOrCreateDepartmentIdByName(
+              departmentName,
+              executor: txn,
+            );
+
+      if (!phonePolicyBatch.isEmpty) {
+        await PhoneDepartmentPolicy.applyUserPhoneConflictResolutions(
+          phones: PhoneRepository(db),
+          resolutions: phonePolicyBatch,
+          targetDepartmentId: departmentId,
+          executor: txn,
+        );
+      }
+
+      for (final code in transferEquipmentCodes) {
+        await dir.removeEquipmentFromAllUsers(code, executor: txn);
+      }
+
+      final int savedUserId;
+      final bool updated;
+      final String message;
+      if (updateUserId != null) {
+        await dir.updateUser(
+          updateUserId,
+          <String, dynamic>{
+            'first_name': firstName,
+            'last_name': lastName,
+            'phones': resolvedPhones,
+            'department_id': departmentId,
+            'location': _nullable(formValues['location']),
+            'notes': _nullable(formValues['notes']),
+            'is_deleted': 0,
+          },
+          executor: txn,
+          skipPhonePolicyValidation: !phonePolicyBatch.isEmpty,
+        );
+        savedUserId = updateUserId;
+        updated = true;
+        message = selectedCandidateId != null
+            ? 'Ενημερώθηκε υπάρχων χρήστης.'
+            : 'Επαναφέρθηκε διαγραμμένος χρήστης.';
+      } else {
+        savedUserId = await dir.insertUser(
+          firstName: firstName,
+          lastName: lastName,
+          phones: resolvedPhones,
+          departmentId: departmentId,
+          location: _nullable(formValues['location']),
+          notes: _nullable(formValues['notes']),
+          executor: txn,
+          skipPhonePolicyValidation: !phonePolicyBatch.isEmpty,
+        );
+        updated = false;
+        message = 'Δημιουργήθηκε νέος χρήστης.';
+      }
+
+      await _assignUserPhonesToDepartment(
+        dir: dir,
+        departmentId: departmentId,
+        phones: resolvedPhones,
+        executor: txn,
+      );
+      await _syncOwnerEquipmentLinks(
+        userId: savedUserId,
+        equipmentCodes: resolvedEquipmentCodes,
+        confirmEntityCreations: confirmEntityCreations,
+        executor: txn,
+      );
+      return LampMigrationSaveResult(
+        id: savedUserId,
+        updated: updated,
+        message: message,
+      );
+    }).then((result) async {
+      if (!phonePolicyBatch.isEmpty) {
+        LookupService.instance.resetForReload();
+        await LookupService.instance.loadFromDatabase();
+      }
+      return result;
+    });
   }
 
   /// Μετατροπή αποφάσεων οδηγού Λάμπας σε batch πολιτικής (ίδιο με user_form_dialog).
@@ -1489,12 +1573,17 @@ class LampMigrationService {
     required DirectoryRepository dir,
     required int? departmentId,
     required List<String> phones,
+    DatabaseExecutor? executor,
   }) async {
     if (departmentId == null) return;
     for (final phone in phones) {
       final trimmed = phone.trim();
       if (trimmed.isEmpty) continue;
-      await dir.updatePhoneDepartment(trimmed, departmentId);
+      await dir.addDepartmentDirectPhone(
+        departmentId,
+        trimmed,
+        executor: executor,
+      );
     }
   }
 
@@ -1502,10 +1591,16 @@ class LampMigrationService {
     required int userId,
     required List<String> equipmentCodes,
     required bool confirmEntityCreations,
+    DatabaseExecutor? executor,
   }) async {
     final db = await DatabaseHelper.instance.database;
     final dir = DirectoryRepository(db);
-    final allEquipment = await dir.getAllEquipment();
+    final e = executor ?? db;
+    final allEquipment = await e.query(
+      'equipment',
+      where: 'COALESCE(is_deleted, 0) = ?',
+      whereArgs: [0],
+    );
     final operations = <TransferOperationResult>[];
     final desiredEquipmentIds = <int>{};
     final equipmentLabelById = <int, String>{
@@ -1529,10 +1624,13 @@ class LampMigrationService {
       if (!confirmEntityCreations) {
         throw StateError(_kPendingEntityCreationError);
       }
-      final createdId = await dir.insertEquipmentFromMap(<String, dynamic>{
-        'code_equipment': trimmedCode,
-        'is_deleted': 0,
-      });
+      final createdId = await dir.insertEquipmentFromMap(
+        <String, dynamic>{
+          'code_equipment': trimmedCode,
+          'is_deleted': 0,
+        },
+        executor: executor,
+      );
       desiredEquipmentIds.add(createdId);
       equipmentLabelById[createdId] = trimmedCode;
       operations.add(
@@ -1544,7 +1642,7 @@ class LampMigrationService {
         ),
       );
     }
-    final existingLinks = await db.query(
+    final existingLinks = await e.query(
       'user_equipment',
       columns: <String>['equipment_id'],
       where: 'user_id = ?',
@@ -1556,7 +1654,11 @@ class LampMigrationService {
     };
     for (final equipmentId
         in existingEquipmentIds.difference(desiredEquipmentIds)) {
-      await dir.unlinkUserFromEquipment(userId, equipmentId);
+      await dir.unlinkUserFromEquipment(
+        userId,
+        equipmentId,
+        executor: executor,
+      );
       operations.add(
         TransferOperationResult(
           kind: TransferOperationKind.unlinked,
@@ -1568,7 +1670,11 @@ class LampMigrationService {
     }
     for (final equipmentId
         in desiredEquipmentIds.difference(existingEquipmentIds)) {
-      await dir.linkUserToEquipment(userId, equipmentId);
+      await dir.linkUserToEquipment(
+        userId,
+        equipmentId,
+        executor: executor,
+      );
       operations.add(
         TransferOperationResult(
           kind: TransferOperationKind.linked,
@@ -1596,27 +1702,15 @@ class LampMigrationService {
     final db = await DatabaseHelper.instance.database;
     final dir = DirectoryRepository(db);
     final departmentName = (formValues['department_name'] ?? '').trim();
-    final departmentId = departmentName.isEmpty
-        ? null
-        : await dir.getOrCreateDepartmentIdByName(departmentName);
-    final ownerOutcome = await _resolveOwnerId(
-      formValues['owner_name'],
-      confirmEntityCreations: confirmEntityCreations,
-    );
-    final ownerId = ownerOutcome?.ownerId;
-    final values = <String, dynamic>{
-      'code_equipment': code,
-      'type': _nullable(formValues['type']),
-      'notes': _nullable(formValues['notes']),
-      'department_id': departmentId,
-      'location': _nullable(formValues['location']),
-      'is_deleted': 0,
-    };
 
-    if (selectedCandidateId != null ||
-        softDeletedDecision?.action == LampSoftDeletedDecisionAction.reactivate) {
-      final updateEquipmentId =
-          selectedCandidateId ?? softDeletedDecision!.recordId;
+    final reactivateId =
+        softDeletedDecision?.action == LampSoftDeletedDecisionAction.reactivate
+        ? softDeletedDecision!.recordId
+        : null;
+    final updateEquipmentId = selectedCandidateId ?? reactivateId;
+
+    bool? keepCurrentOwners;
+    if (updateEquipmentId != null) {
       final conflicts = await detectEquipmentConflicts(
         formValues: formValues,
         selectedCandidateId: updateEquipmentId,
@@ -1635,51 +1729,89 @@ class LampMigrationService {
         );
       }
 
-      final keepCurrentOwners = conflicts.isNotEmpty &&
+      keepCurrentOwners = conflicts.isNotEmpty &&
           decisionsById[conflicts.first.conflictId] ==
               LampOwnerConflictAction.keepWithoutAssignment;
-
-      await dir.updateEquipment(updateEquipmentId, values);
-      if (!keepCurrentOwners) {
-        await dir.replaceEquipmentUsers(
-          updateEquipmentId,
-          ownerId == null ? const <int>[] : <int>[ownerId],
-        );
-      }
-      return LampMigrationSaveResult(
-        id: updateEquipmentId,
-        updated: true,
-        message: selectedCandidateId != null
-            ? 'Ενημερώθηκε υπάρχων εξοπλισμός.'
-            : 'Επαναφέρθηκε διαγραμμένος εξοπλισμός.',
+    } else {
+      await _requireSoftDeletedDecisionBeforeInsert(
+        target: LampTransferTarget.equipment,
+        formValues: formValues,
+        softDeletedDecision: softDeletedDecision,
       );
     }
-    await _requireSoftDeletedDecisionBeforeInsert(
-      target: LampTransferTarget.equipment,
-      formValues: formValues,
-      softDeletedDecision: softDeletedDecision,
-    );
-    final id = await dir.insertEquipmentFromMap(values);
-    await dir.replaceEquipmentUsers(
-      id,
-      ownerId == null ? const <int>[] : <int>[ownerId],
-    );
-    return LampMigrationSaveResult(
-      id: id,
-      updated: false,
-      message: 'Δημιουργήθηκε νέος εξοπλισμός.',
-    );
+
+    return db.transaction((txn) async {
+      final departmentId = departmentName.isEmpty
+          ? null
+          : await dir.getOrCreateDepartmentIdByName(
+              departmentName,
+              executor: txn,
+            );
+      final ownerOutcome = await _resolveOwnerId(
+        formValues['owner_name'],
+        confirmEntityCreations: confirmEntityCreations,
+        executor: txn,
+      );
+      final ownerId = ownerOutcome?.ownerId;
+      final ownerUserIds = ownerId == null ? const <int>[] : <int>[ownerId];
+      final values = <String, dynamic>{
+        'code_equipment': code,
+        'type': _nullable(formValues['type']),
+        'notes': _nullable(formValues['notes']),
+        'department_id': departmentId,
+        'location': _nullable(formValues['location']),
+        'is_deleted': 0,
+      };
+
+      if (updateEquipmentId != null) {
+        await dir.updateEquipment(
+          updateEquipmentId,
+          values,
+          executor: txn,
+        );
+        if (keepCurrentOwners != true) {
+          await dir.replaceEquipmentUsers(
+            updateEquipmentId,
+            ownerUserIds,
+            executor: txn,
+          );
+        }
+        return LampMigrationSaveResult(
+          id: updateEquipmentId,
+          updated: true,
+          message: selectedCandidateId != null
+              ? 'Ενημερώθηκε υπάρχων εξοπλισμός.'
+              : 'Επαναφέρθηκε διαγραμμένος εξοπλισμός.',
+        );
+      }
+
+      final id = await dir.insertEquipmentFromMap(values, executor: txn);
+      await dir.replaceEquipmentUsers(
+        id,
+        ownerUserIds,
+        executor: txn,
+      );
+      return LampMigrationSaveResult(
+        id: id,
+        updated: false,
+        message: 'Δημιουργήθηκε νέος εξοπλισμός.',
+      );
+    });
   }
 
   Future<OwnerResolveOutcome?> _resolveOwnerId(
     String? ownerName, {
     required bool confirmEntityCreations,
+    DatabaseExecutor? executor,
   }) async {
     final text = ownerName?.trim() ?? '';
     if (text.isEmpty) return null;
     final parsed = NameParserUtility.parse(text);
     final label = _fullName(parsed.firstName, parsed.lastName);
-    final existingId = await _lookupOwnerIdByName(ownerName);
+    final existingId = await _lookupOwnerIdByName(
+      ownerName,
+      executor: executor,
+    );
     if (existingId != null) {
       return (
         ownerId: existingId,
@@ -1695,6 +1827,7 @@ class LampMigrationService {
     final createdId = await dir.insertUser(
       firstName: parsed.firstName,
       lastName: parsed.lastName,
+      executor: executor,
     );
     return (
       ownerId: createdId,
@@ -1703,7 +1836,10 @@ class LampMigrationService {
     );
   }
 
-  Future<int?> _lookupOwnerIdByName(String? ownerName) async {
+  Future<int?> _lookupOwnerIdByName(
+    String? ownerName, {
+    DatabaseExecutor? executor,
+  }) async {
     final text = ownerName?.trim() ?? '';
     if (text.isEmpty) return null;
     final parsed = NameParserUtility.parse(text);
@@ -1713,8 +1849,11 @@ class LampMigrationService {
     );
     if (target.isEmpty) return null;
     final db = await DatabaseHelper.instance.database;
-    final dir = DirectoryRepository(db);
-    final users = await dir.getAllUsers();
+    final e = executor ?? db;
+    final users = await e.query(
+      'users',
+      where: 'COALESCE(is_deleted, 0) = 0',
+    );
     for (final row in users) {
       if ((row['is_deleted'] as int?) == 1) continue;
       final key = UserIdentityNormalizer.identityKeyForPerson(
@@ -1944,9 +2083,13 @@ class LampMigrationService {
     return null;
   }
 
-  Future<void> _tombstoneSoftDeletedDepartmentNameKey(int departmentId) async {
+  Future<void> _tombstoneSoftDeletedDepartmentNameKey(
+    int departmentId, {
+    DatabaseExecutor? executor,
+  }) async {
     final db = await DatabaseHelper.instance.database;
-    final rows = await db.query(
+    final e = executor ?? db;
+    final rows = await e.query(
       'departments',
       columns: <String>['name_key'],
       where: 'id = ?',
@@ -1956,7 +2099,7 @@ class LampMigrationService {
     if (rows.isEmpty) return;
     final key = _text(rows.first['name_key']);
     if (key.isEmpty) return;
-    await db.update(
+    await e.update(
       'departments',
       <String, Object?>{'name_key': '${key}__deleted__$departmentId'},
       where: 'id = ?',

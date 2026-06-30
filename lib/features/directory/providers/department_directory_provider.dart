@@ -2,8 +2,12 @@
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/database/building_map_repository.dart';
 import '../../../core/database/database_helper.dart';
-import '../../../core/database/directory_repository.dart';
+import '../../../core/database/department_repository.dart';
+import '../../../core/database/equipment_repository.dart';
+import '../../../core/database/phone_repository.dart';
+import '../../../core/database/settings_repository.dart';
 import '../../../core/errors/department_exists_exception.dart';
 import '../../../core/services/lookup_service.dart';
 import '../../../core/utils/search_text_normalizer.dart';
@@ -148,7 +152,7 @@ class DepartmentDirectoryNotifier extends Notifier<DepartmentDirectoryState> {
 
   Future<_DepartmentColumnLayout?> _readColumnLayoutFromSettings() async {
     final dbCols = await DatabaseHelper.instance.database;
-    final raw = await DirectoryRepository(
+    final raw = await SettingsRepository(
       dbCols,
     ).getSetting(_catalogDepartmentsVisibleColumnsKey);
     if (raw == null || raw.trim().isEmpty) return null;
@@ -168,9 +172,9 @@ class DepartmentDirectoryNotifier extends Notifier<DepartmentDirectoryState> {
       ],
     });
     final dbPersist = await DatabaseHelper.instance.database;
-    await DirectoryRepository(
+    await SettingsRepository(
       dbPersist,
-    ).setSetting(_catalogDepartmentsVisibleColumnsKey, payload);
+    ).saveSetting(_catalogDepartmentsVisibleColumnsKey, payload);
   }
 
   Future<void> loadDepartments() async {
@@ -180,7 +184,7 @@ class DepartmentDirectoryNotifier extends Notifier<DepartmentDirectoryState> {
       _columnLayoutHydrated = true;
     }
     final dbLoad = await DatabaseHelper.instance.database;
-    final rows = await DirectoryRepository(dbLoad).getActiveDepartments();
+    final rows = await DepartmentRepository(dbLoad).getActiveDepartments();
     if (!ref.mounted) return;
     final list = rows.map((m) => DepartmentModel.fromMap(m)).toList();
     state = DepartmentDirectoryState(
@@ -433,7 +437,7 @@ class DepartmentDirectoryNotifier extends Notifier<DepartmentDirectoryState> {
   Future<void> addDepartment(DepartmentModel d) async {
     try {
       final dbAdd = await DatabaseHelper.instance.database;
-      await DirectoryRepository(dbAdd).insertDepartment(d.toMap());
+      await DepartmentRepository(dbAdd).insertDepartment(d.toMap());
     } on DepartmentExistsException {
       rethrow;
     }
@@ -449,7 +453,7 @@ class DepartmentDirectoryNotifier extends Notifier<DepartmentDirectoryState> {
     String? notes,
   }) async {
     final dbRestoreName = await DatabaseHelper.instance.database;
-    await DirectoryRepository(dbRestoreName).restoreDepartmentByName(
+    await DepartmentRepository(dbRestoreName).restoreDepartmentByName(
       name,
       building: building,
       color: color,
@@ -467,8 +471,9 @@ class DepartmentDirectoryNotifier extends Notifier<DepartmentDirectoryState> {
       throw ArgumentError.value(d.id, 'd.id', 'updateDepartment requires id');
     }
     final dbUpd = await DatabaseHelper.instance.database;
-    final dirUpd = DirectoryRepository(dbUpd);
-    final nameTaken = await dirUpd.departmentNameExistsExcluding(d.name, d.id!);
+    final departments = DepartmentRepository(dbUpd);
+    final nameTaken =
+        await departments.departmentNameExistsExcluding(d.name, d.id!);
     if (nameTaken) {
       throw StateError('Υπάρχει ήδη άλλο τμήμα με αυτό το όνομα.');
     }
@@ -482,14 +487,14 @@ class DepartmentDirectoryNotifier extends Notifier<DepartmentDirectoryState> {
       map['floor_id'] = null;
       if (clearBuildingMapPlacement) {
         map.addAll(
-          DirectoryRepository.clearedBuildingMapPlacementColumns(
+          BuildingMapRepository.clearedBuildingMapPlacementColumns(
             clearFloorId: false,
             clearDepartmentHex: false,
           ),
         );
       }
     }
-    await dirUpd.updateDepartment(d.id!, map);
+    await departments.updateDepartment(d.id!, map);
     await _refreshLookupCache();
     await loadDepartments();
     await refreshDirectoryCaches(ref, users: true, equipment: true);
@@ -516,15 +521,16 @@ class DepartmentDirectoryNotifier extends Notifier<DepartmentDirectoryState> {
         .toSet();
 
     final dbShared = await DatabaseHelper.instance.database;
-    final dirShared = DirectoryRepository(dbShared);
+    final phones = PhoneRepository(dbShared);
+    final equipment = EquipmentRepository(dbShared);
     for (final p in nextPhones.difference(existingPhones)) {
       if (phonesToMoveFromUsers.contains(p)) {
-        await dirShared.removePhoneFromAllUsers(p);
+        await phones.removePhoneFromAllUsers(p);
       }
-      await dirShared.addDepartmentDirectPhone(departmentId, p);
+      await phones.addDepartmentDirectPhone(departmentId, p);
     }
     for (final p in existingPhones.difference(nextPhones)) {
-      await dirShared.removeDepartmentDirectPhone(departmentId, p);
+      await phones.removeDepartmentDirectPhone(departmentId, p);
     }
 
     final existingEq = lookup
@@ -539,47 +545,47 @@ class DepartmentDirectoryNotifier extends Notifier<DepartmentDirectoryState> {
 
     for (final code in nextEq.difference(existingEq)) {
       if (equipmentToMoveFromUsers.contains(code)) {
-        await dirShared.removeEquipmentFromAllUsers(code);
+        await equipment.removeEquipmentFromAllUsers(code);
       }
-      await dirShared.updateEquipmentDepartment(code, departmentId);
+      await equipment.updateEquipmentDepartment(code, departmentId);
     }
     for (final code in existingEq.difference(nextEq)) {
-      await dirShared.clearEquipmentSharedDepartment(code, departmentId);
+      await equipment.clearEquipmentSharedDepartment(code, departmentId);
     }
 
     for (final entry in phoneTransfers.entries) {
       final phone = entry.key.trim();
       final targetId = entry.value;
       if (phone.isEmpty) continue;
-      await dirShared.removeDepartmentDirectPhone(departmentId, phone);
-      await dirShared.addDepartmentDirectPhone(targetId, phone);
+      await phones.removeDepartmentDirectPhone(departmentId, phone);
+      await phones.addDepartmentDirectPhone(targetId, phone);
     }
     for (final entry in equipmentTransfers.entries) {
       final code = entry.key.trim();
       final targetId = entry.value;
       if (code.isEmpty) continue;
-      await dirShared.clearEquipmentSharedDepartment(code, departmentId);
-      await dirShared.updateEquipmentDepartment(code, targetId);
+      await equipment.clearEquipmentSharedDepartment(code, departmentId);
+      await equipment.updateEquipmentDepartment(code, targetId);
     }
 
     if (phonesToSoftDelete.isNotEmpty) {
       final phoneIds = <int>[];
       for (final p in phonesToSoftDelete) {
-        final id = await dirShared.getPhoneIdByNumber(p);
+        final id = await phones.getPhoneIdByNumber(p);
         if (id != null) phoneIds.add(id);
       }
       if (phoneIds.isNotEmpty) {
-        await dirShared.softDeletePhones(phoneIds);
+        await phones.softDeletePhones(phoneIds);
       }
     }
     if (equipmentToSoftDelete.isNotEmpty) {
       final equipmentIds = <int>[];
       for (final code in equipmentToSoftDelete) {
-        final id = await dirShared.getEquipmentIdByCode(code);
+        final id = await equipment.getEquipmentIdByCode(code);
         if (id != null) equipmentIds.add(id);
       }
       if (equipmentIds.isNotEmpty) {
-        await dirShared.deleteEquipments(equipmentIds);
+        await equipment.deleteEquipments(equipmentIds);
       }
     }
 
@@ -601,7 +607,7 @@ class DepartmentDirectoryNotifier extends Notifier<DepartmentDirectoryState> {
     if (toDelete.isEmpty) return;
     final ids = toDelete.map((d) => d.id!).toList();
     final dbDel = await DatabaseHelper.instance.database;
-    await DirectoryRepository(dbDel).softDeleteDepartments(ids);
+    await DepartmentRepository(dbDel).softDeleteDepartments(ids);
     await _refreshLookupCache();
     if (!ref.mounted) return;
     state = DepartmentDirectoryState(
@@ -625,7 +631,7 @@ class DepartmentDirectoryNotifier extends Notifier<DepartmentDirectoryState> {
     if (list == null || list.isEmpty) return;
     final ids = list.map((d) => d.id).whereType<int>().toList();
     final dbUndoDel = await DatabaseHelper.instance.database;
-    await DirectoryRepository(dbUndoDel).restoreDepartments(ids);
+    await DepartmentRepository(dbUndoDel).restoreDepartments(ids);
     await _refreshLookupCache();
     if (!ref.mounted) return;
     _patch(lastDeleted: null);
@@ -639,7 +645,7 @@ class DepartmentDirectoryNotifier extends Notifier<DepartmentDirectoryState> {
         .toList();
     if (toUpdate.isEmpty) return;
     final dbBulk = await DatabaseHelper.instance.database;
-    await DirectoryRepository(dbBulk).bulkUpdateDepartments(ids, changes);
+    await DepartmentRepository(dbBulk).bulkUpdateDepartments(ids, changes);
     await _refreshLookupCache();
     if (!ref.mounted) return;
     state = DepartmentDirectoryState(
@@ -662,11 +668,11 @@ class DepartmentDirectoryNotifier extends Notifier<DepartmentDirectoryState> {
     final list = state.lastBulkUpdatedDepartments;
     if (list == null || list.isEmpty) return;
     final dbUndoBulk = await DatabaseHelper.instance.database;
-    final dir = DirectoryRepository(dbUndoBulk);
+    final departments = DepartmentRepository(dbUndoBulk);
     try {
       for (final d in list) {
         if (d.id != null) {
-          await dir.updateDepartment(d.id!, d.toMap());
+          await departments.updateDepartment(d.id!, d.toMap());
           if (!ref.mounted) break;
         }
       }

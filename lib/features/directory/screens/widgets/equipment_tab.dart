@@ -6,7 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../calls/models/equipment_model.dart';
 import '../../../calls/provider/remote_paths_provider.dart';
 import '../../../../core/database/database_helper.dart';
-import '../../../../core/database/directory_repository.dart';
+import '../../../../core/database/settings_repository.dart';
 import '../../../../core/models/remote_tool.dart';
 import '../../../../core/providers/equipment_focus_intent_provider.dart';
 import '../../../../core/services/default_remote_tool_display.dart';
@@ -545,7 +545,7 @@ class _EquipmentColumnSelectorOverlay extends ConsumerWidget {
             value: continuousScroll,
             onChanged: (bool val) async {
               final db = await DatabaseHelper.instance.database;
-              await DirectoryRepository(db).setSetting(
+              await SettingsRepository(db).saveSetting(
                 kCatalogContinuousScrollEquipmentKey,
                 val.toString(),
               );

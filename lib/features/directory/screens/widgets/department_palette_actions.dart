@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../../core/database/database_helper.dart';
-import '../../../../core/database/directory_repository.dart';
+import '../../../../core/database/department_repository.dart';
 import '../../../../core/services/lookup_service.dart';
 import '../../models/department_model.dart';
 import 'department_color_palette.dart';
@@ -342,7 +342,7 @@ class DepartmentPaletteActions {
     }
 
     final db = await DatabaseHelper.instance.database;
-    final dir = DirectoryRepository(db);
+    final dir = DepartmentRepository(db);
     for (final d in departments) {
       if (d.id == null) continue;
       final map = Map<String, dynamic>.from(d.toMap());

@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/database/database_helper.dart';
 import '../../../../core/models/building_map_floor.dart';
-import '../../../../core/database/directory_repository.dart';
+import '../../../../core/database/settings_repository.dart';
 import '../../../calls/provider/lookup_provider.dart';
 import '../../../../core/services/lookup_service.dart';
 import '../../services/shared_asset_disconnect_apply.dart';
@@ -267,7 +267,6 @@ class _DepartmentsTabState extends ConsumerState<DepartmentsTab>
         .toList();
     if (toDelete.isEmpty) return;
     final db = await DatabaseHelper.instance.database;
-    final dir = DirectoryRepository(db);
     final lookup = LookupService.instance;
     final deletingIds = state.selectedIds.toSet();
 
@@ -301,7 +300,7 @@ class _DepartmentsTabState extends ConsumerState<DepartmentsTab>
       if (!context.mounted || batch == null) return;
 
       await applyDepartmentSharedAssetDisconnectBatch(
-        dir,
+        db,
         batch,
         sourceDepartmentId: deptId,
       );
@@ -479,7 +478,7 @@ class _DepartmentColumnSelectorOverlay extends ConsumerWidget {
             value: continuousScroll,
             onChanged: (bool val) async {
               final db = await DatabaseHelper.instance.database;
-              await DirectoryRepository(db).setSetting(
+              await SettingsRepository(db).saveSetting(
                 kCatalogContinuousScrollDepartmentsKey,
                 val.toString(),
               );

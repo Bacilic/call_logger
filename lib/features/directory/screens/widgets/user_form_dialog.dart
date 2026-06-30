@@ -2,7 +2,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/database/database_helper.dart';
-import '../../../../core/database/directory_repository.dart';
+import '../../../../core/database/department_repository.dart';
+import '../../../../core/database/phone_repository.dart';
 import '../../../../core/directory/phone_department_policy.dart';
 import '../../../../core/widgets/database_persistence_error_snackbar.dart';
 import '../../../../core/providers/settings_provider.dart';
@@ -355,14 +356,14 @@ class _UserFormDialogState extends ConsumerState<UserFormDialog> {
     if (name.isEmpty) return (id: null, name: '');
 
     final id = await _resolveDepartmentIdForSave(
-      DirectoryRepository(await DatabaseHelper.instance.database),
+      DepartmentRepository(await DatabaseHelper.instance.database),
     );
     return (id: id, name: name);
   }
 
   /// Αν το πεδίο τμήματος δείχνει σε υπάρχον τμήμα (ίδιο name_key), επιστρέφει το id του·
   /// όταν αλλάζει μόνο η εμφάνιση (τόνοι/κεφαλαία), ενημερώνει και το `departments.name`.
-  Future<int?> _resolveDepartmentIdForSave(DirectoryRepository dir) async {
+  Future<int?> _resolveDepartmentIdForSave(DepartmentRepository dir) async {
     final typed = _departmentController.text.trim();
     if (typed.isEmpty) return null;
 
@@ -492,7 +493,7 @@ class _UserFormDialogState extends ConsumerState<UserFormDialog> {
       if (initialDeptNorm != currentDeptNorm) {
         final existsInOrg = currentDeptNorm.isEmpty
             ? true
-            : await DirectoryRepository(await DatabaseHelper.instance.database)
+            : await DepartmentRepository(await DatabaseHelper.instance.database)
                 .departmentNameExists(
                 _departmentController.text,
               );
@@ -561,12 +562,12 @@ class _UserFormDialogState extends ConsumerState<UserFormDialog> {
     UserPhoneConflictBatchResult? phoneConflictBatch,
   }) async {
     final db = await DatabaseHelper.instance.database;
-    final dir = DirectoryRepository(db);
+    final dir = DepartmentRepository(db);
     final departmentId = await _resolveDepartmentIdForSave(dir);
 
     if (phoneConflictBatch != null && !phoneConflictBatch.isEmpty) {
       await PhoneDepartmentPolicy.applyUserPhoneConflictResolutions(
-        dir: dir,
+        phones: PhoneRepository(db),
         resolutions: phoneConflictBatch,
         targetDepartmentId: departmentId,
       );
@@ -626,7 +627,7 @@ class _UserFormDialogState extends ConsumerState<UserFormDialog> {
       if (phoneDisconnectBatch != null) {
         final db = await DatabaseHelper.instance.database;
         await applyPersonalPhoneDisconnectBatch(
-          DirectoryRepository(db),
+          db,
           phoneDisconnectBatch,
           sourceDepartmentId: departmentId,
         );

@@ -2,7 +2,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/database/database_helper.dart';
-import '../../../../core/database/directory_repository.dart';
+import '../../../../core/database/department_repository.dart';
+import '../../../../core/database/user_repository.dart';
 import '../../../../core/widgets/database_persistence_error_snackbar.dart';
 import '../../../../core/services/lookup_service.dart';
 import '../../../../core/services/settings_service.dart';
@@ -565,7 +566,7 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog> {
     }
     final parsed = NameParserUtility.parse(textForSearch);
     final dbOwn = await DatabaseHelper.instance.database;
-    final newId = await DirectoryRepository(dbOwn).insertUser(
+    final newId = await UserRepository(dbOwn).insertUser(
       firstName: parsed.firstName,
       lastName: parsed.lastName,
     );
@@ -602,7 +603,7 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog> {
       equipmentDepartmentId = null;
     } else {
       final dbDept = await DatabaseHelper.instance.database;
-      equipmentDepartmentId = await DirectoryRepository(dbDept)
+      equipmentDepartmentId = await DepartmentRepository(dbDept)
           .getOrCreateDepartmentIdByName(deptText);
     }
     final locTrim = _locationController.text.trim();

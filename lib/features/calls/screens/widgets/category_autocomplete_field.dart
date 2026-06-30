@@ -4,9 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/database/category_repository.dart';
 import '../../../../core/database/calls_repository.dart';
 import '../../../../core/database/database_helper.dart';
-import '../../../../core/database/directory_repository.dart';
 import '../../../../core/utils/spell_check.dart';
 import '../../../history/providers/history_provider.dart';
 import '../../provider/call_entry_provider.dart';
@@ -106,9 +106,9 @@ class _CategoryAutocompleteFieldState
     if (value.isEmpty) return;
     try {
       final db = await DatabaseHelper.instance.database;
-      final dir = DirectoryRepository(db);
+      final categories = CategoryRepository(db);
       final calls = CallsRepository(db);
-      final insert = await dir.insertCategoryAndGetId(
+      final insert = await categories.insertCategoryAndGetId(
         value,
         rebuildSearchIndexInTxn: calls.rebuildSearchIndexForCallsByCategoryId,
       );

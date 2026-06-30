@@ -11,7 +11,7 @@ import '../../../core/config/app_config.dart';
 import '../../../core/database/database_helper.dart';
 import '../../../core/database/database_init_result.dart';
 import '../../../core/database/dictionary_repository.dart';
-import '../../../core/database/directory_repository.dart';
+import '../../../core/database/settings_repository.dart';
 import '../../../core/errors/dictionary_export_exception.dart';
 import '../../../core/models/dictionary_import_mode.dart';
 import '../../../core/providers/core_lexicon_provider.dart';
@@ -1944,7 +1944,7 @@ class _DictionaryManagerScreenState extends ConsumerState<DictionaryManagerScree
                                     true;
                                 final newVal = !cur;
                                 final dbSet = await DatabaseHelper.instance.database;
-                                await DirectoryRepository(dbSet).setSetting(
+                                await SettingsRepository(dbSet).saveSetting(
                                   'lexicon_continuous_scroll',
                                   newVal.toString(),
                                 );
@@ -2030,7 +2030,7 @@ class _DictionaryManagerScreenState extends ConsumerState<DictionaryManagerScree
                                 onSelected: (v) async {
                                   final dbPs =
                                       await DatabaseHelper.instance.database;
-                                  await DirectoryRepository(dbPs).setSetting(
+                                  await SettingsRepository(dbPs).saveSetting(
                                     'lexicon_page_size',
                                     '$v',
                                   );

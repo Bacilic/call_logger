@@ -31,6 +31,9 @@
       "Γρήγορη καταγραφή κλήσης: διόρθωση αναβόσβησης πλαισίου σε κλικ εκτός διαλόγου (πλήρες overlay scrim + foregroundDecoration πάνω από το περιεχόμενο)",
       "Έλεγχοι: ευθυγράμμιση 6 widget/notifier tests με τρέχουσα συμπεριφορά και κοινό helper lookup/sqflite timers στο test_setup.dart",
       "Οθόνη Κλήσεων · σημειώσεις: ο μετρητής χαρακτήρων N / 500 μετακινήθηκε κάτω από το πεδίο (footer) αντί επικάλυψης — το κείμενο δεν τέμνεται πλέον κατά την πληκτρολόγηση",
+      "Λάμπα · μεταφορά τμήματος (ΖΤ-18/1): ατομική αποθήκευση τμήματος + department_phones σε μία transaction — executor-aware μέθοδοι DirectoryRepository, rollback σε μερική αποτυχία",
+      "Λάμπα · μεταφορά εξοπλισμού (ΖΤ-18/2): ατομική αποθήκευση εξοπλισμού + user_equipment σε μία transaction — executor-aware μέθοδοι DirectoryRepository, rollback σε μερική αποτυχία",
+      "Λάμπα · μεταφορά κατόχου (ΖΤ-18/3): ατομική αποθήκευση κατόχου + user_phones + user_equipment σε μία transaction — executor-aware insertUser/updateUser/removePhoneFromAllUsers, κλείσιμο residuals 10Α/10Β"
     ]
   },
   {

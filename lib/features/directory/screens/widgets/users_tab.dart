@@ -3,7 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/providers/user_form_edit_intent_provider.dart';
 import '../../../../core/database/database_helper.dart';
-import '../../../../core/database/directory_repository.dart';
+import '../../../../core/database/department_repository.dart';
+import '../../../../core/database/settings_repository.dart';
+import '../../../../core/database/user_repository.dart';
 import '../../../../core/database/user_delete_phone_policy.dart';
 import '../../../calls/models/user_model.dart';
 import '../../../calls/provider/lookup_provider.dart';
@@ -289,8 +291,8 @@ class _UsersTabState extends ConsumerState<UsersTab>
 
     final ids = state.selectedIds.toList();
     final db = await DatabaseHelper.instance.database;
-    final dir = DirectoryRepository(db);
-    final exclusivePhones = await dir.findExclusivePhonesForUserDelete(ids);
+    final exclusivePhones =
+        await UserRepository(db).findExclusivePhonesForUserDelete(ids);
     final usersToDelete = state.allUsers
         .where((u) => u.id != null && ids.contains(u.id))
         .toList();
@@ -320,7 +322,7 @@ class _UsersTabState extends ConsumerState<UsersTab>
 
     for (final pending in pendingPhoneBatches) {
       await applyPersonalPhoneDisconnectBatch(
-        dir,
+        db,
         pending.batch,
         sourceDepartmentId: pending.sourceDepartmentId,
       );
@@ -404,7 +406,7 @@ class _UsersTabState extends ConsumerState<UsersTab>
     }
     await ref.read(departmentDirectoryProvider.notifier).loadDepartments();
     final db = await DatabaseHelper.instance.database;
-    final row = await DirectoryRepository(db).getDepartmentRowById(deptId);
+    final row = await DepartmentRepository(db).getDepartmentRowById(deptId);
     if (!context.mounted) return;
     if (row == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -715,7 +717,7 @@ class _UserColumnSelectorOverlay extends ConsumerWidget {
             value: continuousScroll,
             onChanged: (bool val) async {
               final db = await DatabaseHelper.instance.database;
-              await DirectoryRepository(db).setSetting(
+              await SettingsRepository(db).saveSetting(
                 kCatalogContinuousScrollUsersKey,
                 val.toString(),
               );
