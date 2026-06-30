@@ -297,7 +297,9 @@ class NotesStickyFieldState extends ConsumerState<NotesStickyField> {
                   _lastSecondaryPointerGlobal = event.position;
                 }
               },
-              child: Stack(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   TextField(
                     focusNode: _focusNode,
@@ -328,28 +330,30 @@ class NotesStickyFieldState extends ConsumerState<NotesStickyField> {
                     onChanged: (value) =>
                         ref.read(callEntryProvider.notifier).setNotes(value),
                   ),
-                  Positioned(
-                    right: 0,
-                    bottom: 0,
-                    child: IgnorePointer(
-                      child: ValueListenableBuilder<TextEditingValue>(
-                        valueListenable: _controller,
-                        builder: (context, value, _) {
-                          return Text(
-                            '${value.text.length} / 500',
-                            style: Theme.of(context)
-                                .textTheme
-                                .bodySmall
-                                ?.copyWith(
-                                  color: Theme.of(context)
-                                      .colorScheme
-                                      .onSurfaceVariant,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                          );
-                        },
+                  const SizedBox(height: 2),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      IgnorePointer(
+                        child: ValueListenableBuilder<TextEditingValue>(
+                          valueListenable: _controller,
+                          builder: (context, value, _) {
+                            return Text(
+                              '${value.text.length} / 500',
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodySmall
+                                  ?.copyWith(
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .onSurfaceVariant,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                            );
+                          },
+                        ),
                       ),
-                    ),
+                    ],
                   ),
                 ],
               ),
