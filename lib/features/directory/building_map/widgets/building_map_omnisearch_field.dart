@@ -1,7 +1,7 @@
 ﻿import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../../core/database/directory_repository.dart';
+import '../../../../core/database/omnisearch_service.dart';
 import '../../../../core/utils/search_debouncer.dart';
 import '../providers/building_map_providers.dart';
 
@@ -16,7 +16,7 @@ class BuildingMapOmnisearchField extends ConsumerStatefulWidget {
   });
 
   final bool enabled;
-  final DirectoryRepository repo;
+  final BuildingMapRepos repo;
   final TextEditingController controller;
   final FocusNode focusNode;
   final Future<void> Function(dynamic entity) onResolveEntity;
@@ -82,7 +82,7 @@ class _BuildingMapOmnisearchFieldState extends ConsumerState<BuildingMapOmnisear
     if (mounted && !_loading) {
       setState(() => _loading = true);
     }
-    final hits = await widget.repo.searchBuildingMapOmnisearch(trimmed);
+    final hits = await widget.repo.search.searchBuildingMapOmnisearch(trimmed);
     if (!mounted || !isCurrent()) return;
 
     setState(() {

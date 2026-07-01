@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:call_logger/core/database/database_helper.dart';
-import 'package:call_logger/core/database/directory_repository.dart';
+import 'package:call_logger/core/database/phone_repository.dart';
 import 'package:call_logger/core/utils/search_text_normalizer.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -12,7 +12,7 @@ import '../../test_setup.dart';
 /// Κλείδωμα συμπεριφοράς τηλεφώνων πριν από Φάση Γ.2γ (PhoneRepository).
 void main() {
   group('PhoneRepository behavior — lock πριν εξαγωγή', () {
-    late DirectoryRepository repo;
+    late PhoneRepository repo;
     late Database db;
     late int userId;
 
@@ -37,7 +37,7 @@ void main() {
         'last_name': 'Τηλεφώνου',
         'is_deleted': 0,
       });
-      repo = DirectoryRepository(db);
+      repo = PhoneRepository(db);
     });
 
     tearDownAll(() async {

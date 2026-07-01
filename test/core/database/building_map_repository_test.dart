@@ -1,7 +1,9 @@
 import 'dart:io';
 
+import 'package:call_logger/core/database/building_map_repository.dart';
 import 'package:call_logger/core/database/database_helper.dart';
-import 'package:call_logger/core/database/directory_repository.dart';
+import 'package:call_logger/core/database/department_repository.dart';
+import 'package:call_logger/core/database/directory_support.dart';
 import 'package:call_logger/core/utils/search_text_normalizer.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -11,7 +13,8 @@ import '../../test_setup.dart';
 /// Κλείδωμα συμπεριφοράς χάρτη κτιρίου πριν από Φάση Γ.1β (BuildingMapRepository).
 void main() {
   group('BuildingMapRepository behavior — lock πριν εξαγωγή', () {
-    late DirectoryRepository repo;
+    late BuildingMapRepository repo;
+    late DepartmentRepository departments;
     late Database db;
 
     setUpAll(() async {
@@ -28,7 +31,13 @@ void main() {
       await seedIsolatedTestDatabase();
       await db.delete('departments');
       await db.delete('building_map_floors');
-      repo = DirectoryRepository(db);
+      departments = DepartmentRepository(db);
+      repo = BuildingMapRepository(db, DirectorySupport(db));
+      repo.bindUpdateDepartment(
+        (deptId, fields) async {
+          await departments.updateDepartment(deptId, fields);
+        },
+      );
     });
 
     tearDownAll(() async {
@@ -200,7 +209,7 @@ void main() {
     test(
       'static clearedBuildingMapPlacementColumns / buildingMapPlacementColumnNames',
       () async {
-        final defaults = DirectoryRepository.clearedBuildingMapPlacementColumns();
+        final defaults = BuildingMapRepository.clearedBuildingMapPlacementColumns();
         expect(defaults['map_floor'], isNull);
         expect(defaults['map_x'], 0.0);
         expect(defaults['map_y'], 0.0);
@@ -212,7 +221,7 @@ void main() {
         expect(defaults.containsKey('color'), isFalse);
 
         final withExtras =
-            DirectoryRepository.clearedBuildingMapPlacementColumns(
+            BuildingMapRepository.clearedBuildingMapPlacementColumns(
           clearFloorId: true,
           clearDepartmentHex: true,
         );
@@ -220,7 +229,7 @@ void main() {
         expect(withExtras['color'], isNull);
         expect(withExtras['map_hidden'], 0);
 
-        final names = DirectoryRepository.buildingMapPlacementColumnNames.toList();
+        final names = BuildingMapRepository.buildingMapPlacementColumnNames.toList();
         expect(names, containsAll([
           'map_floor',
           'map_x',

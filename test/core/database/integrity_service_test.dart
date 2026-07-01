@@ -1,7 +1,7 @@
 import 'dart:io';
 
 import 'package:call_logger/core/database/database_helper.dart';
-import 'package:call_logger/core/database/directory_repository.dart';
+import 'package:call_logger/core/database/integrity_service.dart';
 import 'package:call_logger/core/services/audit_service.dart';
 import 'package:call_logger/core/utils/search_text_normalizer.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -12,7 +12,7 @@ import '../../test_setup.dart';
 /// Κλείδωμα συμπεριφοράς integrity πριν από Φάση Γ.3β (IntegrityService).
 void main() {
   group('Integrity behavior — lock πριν εξαγωγή', () {
-    late DirectoryRepository repo;
+    late IntegrityService repo;
     late Database db;
 
     setUpAll(() async {
@@ -45,7 +45,7 @@ void main() {
         },
         conflictAlgorithm: ConflictAlgorithm.replace,
       );
-      repo = DirectoryRepository(db);
+      repo = IntegrityService(db);
     });
 
     tearDownAll(() async {

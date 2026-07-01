@@ -1,6 +1,7 @@
 ﻿import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
@@ -64,6 +65,18 @@ class DatabaseHelper {
 
   /// Squashed schema ([_onCreate] + [_onUpgradeSquashed] για v1→v2). Παλιά αρχεία: `dart run tool/migrate_to_v1.dart`.
   static const int _kDatabaseSchemaVersion = databaseSchemaVersionV1;
+
+  /// Timeout για ephemeral WAL checkpoint και PRAGMA wal_checkpoint στο κλείσιμο.
+  static const int _walCheckpointTimeoutSeconds = 5;
+
+  /// Αποτυχίες ανοίγματος προς προσομοίωση (δοκιμές retry χωρίς πραγματικό lock).
+  @visibleForTesting
+  static int testSimulatedRetriableOpenFailures = 0;
+
+  @visibleForTesting
+  static void resetTestOpenSimulation() {
+    testSimulatedRetriableOpenFailures = 0;
+  }
 
   static final DatabaseHelper _instance = DatabaseHelper._();
 
@@ -146,7 +159,15 @@ class DatabaseHelper {
     if (db != null && db.isOpen) {
       try {
         final mode = _isUsingLocalDb ? 'FULL' : 'PASSIVE';
-        await db.rawQuery('PRAGMA wal_checkpoint($mode)');
+        await db
+            .rawQuery('PRAGMA wal_checkpoint($mode)')
+            .timeout(
+              Duration(seconds: _walCheckpointTimeoutSeconds),
+              onTimeout: () => throw TimeoutException(
+                'wal_checkpoint($mode) timed out after '
+                '${_walCheckpointTimeoutSeconds}s',
+              ),
+            );
       } catch (_) {}
       await db.close();
     }
@@ -203,21 +224,43 @@ class DatabaseHelper {
     final db = _database;
     if (db == null || !db.isOpen) return;
     try {
-      await db.rawQuery('PRAGMA wal_checkpoint($effective)');
+      await db
+          .rawQuery('PRAGMA wal_checkpoint($effective)')
+          .timeout(
+            Duration(seconds: _walCheckpointTimeoutSeconds),
+            onTimeout: () => throw TimeoutException(
+              'wal_checkpoint($effective) timed out after '
+              '${_walCheckpointTimeoutSeconds}s',
+            ),
+          );
     } catch (_) {}
   }
 
   Future<String> forceReleaseLock(
     String dbPath, {
     DatabaseInitProgressNotifier? progressNotifier,
+  }) {
+    return _forceReleaseLockCore(
+      dbPath,
+      progressNotifier: progressNotifier,
+      allowCloseConnection: true,
+    );
+  }
+
+  Future<String> _forceReleaseLockCore(
+    String dbPath, {
+    DatabaseInitProgressNotifier? progressNotifier,
+    required bool allowCloseConnection,
   }) async {
     final buffer = StringBuffer();
-    try {
-      progressNotifier?.setStep('Απελευθέρωση lock');
-      await tryWalCheckpoint(mode: 'FULL');
-      await closeConnection();
-    } catch (e) {
-      buffer.writeln('Checkpoint/close warning: $e');
+    progressNotifier?.setStep('Απελευθέρωση lock');
+    if (allowCloseConnection) {
+      try {
+        await tryWalCheckpoint(mode: 'FULL');
+        await closeConnection();
+      } catch (e) {
+        buffer.writeln('Checkpoint/close warning: $e');
+      }
     }
 
     final mergedOnDisk = await _tryEphemeralWalCheckpoint(dbPath);
@@ -259,10 +302,10 @@ class DatabaseHelper {
     String dbPath, {
     DatabaseInitProgressNotifier? progressNotifier,
   }) async {
-    progressNotifier?.setStep('Απελευθέρωση lock');
-    final diagnostic = await forceReleaseLock(
+    final diagnostic = await _forceReleaseLockCore(
       dbPath,
       progressNotifier: progressNotifier,
+      allowCloseConnection: false,
     );
     progressNotifier?.setDiagnostic(diagnostic);
     return diagnostic;
@@ -361,9 +404,10 @@ class DatabaseHelper {
         lastError = e;
         lastStack = st;
         if (e is DatabaseOpeningAbortedException) {
-          final abortDiagnostic = await forceReleaseLock(
+          final abortDiagnostic = await _forceReleaseLockCore(
             dbPath,
             progressNotifier: progressNotifier,
+            allowCloseConnection: false,
           );
           var result = DatabaseInitResult(
             status: DatabaseStatus.applicationError,
@@ -484,8 +528,22 @@ class DatabaseHelper {
         dbPath,
         readOnly: false,
         singleInstance: true,
+      ).timeout(
+        Duration(seconds: _walCheckpointTimeoutSeconds),
+        onTimeout: () => throw TimeoutException(
+          'ephemeral openDatabase timed out after '
+          '${_walCheckpointTimeoutSeconds}s',
+        ),
       );
-      await db.rawQuery('PRAGMA wal_checkpoint(TRUNCATE)');
+      await db
+          .rawQuery('PRAGMA wal_checkpoint(TRUNCATE)')
+          .timeout(
+            Duration(seconds: _walCheckpointTimeoutSeconds),
+            onTimeout: () => throw TimeoutException(
+              'ephemeral wal_checkpoint(TRUNCATE) timed out after '
+              '${_walCheckpointTimeoutSeconds}s',
+            ),
+          );
       await db.close();
       db = null;
 
@@ -588,6 +646,12 @@ class DatabaseHelper {
     }
 
     try {
+      if (testSimulatedRetriableOpenFailures > 0) {
+        testSimulatedRetriableOpenFailures--;
+        throw TimeoutException(
+          'simulated retriable open failure (attempt $attempt/$maxAttempts)',
+        );
+      }
       final openFuture = openDatabase(
         targetPath,
         version: _kDatabaseSchemaVersion,

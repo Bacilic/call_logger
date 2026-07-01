@@ -1,7 +1,8 @@
 import 'dart:io';
 
 import 'package:call_logger/core/database/database_helper.dart';
-import 'package:call_logger/core/database/directory_repository.dart';
+import 'package:call_logger/core/database/phone_repository.dart';
+import 'package:call_logger/core/database/user_repository.dart';
 import 'package:call_logger/core/utils/search_text_normalizer.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -11,7 +12,8 @@ import '../../test_setup.dart';
 /// Κλείδωμα συμπεριφοράς upsert τηλεφώνου (insert ignore + lookup id) πριν από Φάση Β.
 void main() {
   group('DirectoryRepository phone upsert pattern — lock', () {
-    late DirectoryRepository repo;
+    late UserRepository users;
+    late PhoneRepository phones;
     late Database db;
 
     setUpAll(() async {
@@ -28,7 +30,8 @@ void main() {
       await db.delete('phones');
       await db.delete('users');
       await db.delete('departments');
-      repo = DirectoryRepository(db);
+      users = UserRepository(db);
+      phones = PhoneRepository(db);
     });
 
     tearDownAll(() async {
@@ -59,7 +62,7 @@ void main() {
           'is_deleted': 0,
         });
 
-        await repo.replaceUserPhones(userId, [existingNumber, newNumber]);
+        await users.replaceUserPhones(userId, [existingNumber, newNumber]);
 
         final phonesForExisting = await db.query(
           'phones',
@@ -95,7 +98,7 @@ void main() {
         const phoneNumber = '2310888801';
         final deptId = await insertDepartment('Τμήμα Upsert Τηλεφώνου');
 
-        await repo.addDepartmentDirectPhone(deptId, phoneNumber);
+        await phones.addDepartmentDirectPhone(deptId, phoneNumber);
 
         final phoneRows = await db.query(
           'phones',
@@ -123,7 +126,7 @@ void main() {
         const phoneNumber = '2310888802';
         final deptId = await insertDepartment('Τμήμα Update Νέου');
 
-        await repo.updatePhoneDepartment(phoneNumber, deptId);
+        await phones.updatePhoneDepartment(phoneNumber, deptId);
 
         final phoneRows = await db.query(
           'phones',
@@ -161,7 +164,7 @@ void main() {
           'phone_id': phoneId,
         });
 
-        await repo.updatePhoneDepartment(phoneNumber, newDeptId);
+        await phones.updatePhoneDepartment(phoneNumber, newDeptId);
 
         final phoneRows = await db.query(
           'phones',

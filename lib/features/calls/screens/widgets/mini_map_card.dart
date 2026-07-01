@@ -5,7 +5,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sqflite_common/sqlite_api.dart';
 
 import '../../../../core/database/database_helper.dart';
-import '../../../../core/database/directory_repository.dart';
+import '../../../../core/database/building_map_repository.dart';
+import '../../../../core/database/department_repository.dart';
+import '../../../../core/database/directory_support.dart';
 import '../../../../core/models/building_map_floor.dart';
 import '../../../../core/services/building_map_storage.dart';
 import '../../../../core/services/lookup_service.dart';
@@ -179,9 +181,9 @@ class _MiniMapCardState extends ConsumerState<MiniMapCard> {
 
   Future<_MiniMapCardData> _loadData() async {
     final db = await DatabaseHelper.instance.database;
-    final repo = DirectoryRepository(db);
-    final floors = await repo.listBuildingMapFloors();
-    final departmentRows = await repo.getActiveDepartments();
+    final floors =
+        await BuildingMapRepository(db, DirectorySupport(db)).listBuildingMapFloors();
+    final departmentRows = await DepartmentRepository(db).getActiveDepartments();
     final departments = departmentRows
         .map(DepartmentModel.fromMap)
         .toList(growable: false);

@@ -4,7 +4,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/database/database_helper.dart';
-import '../../../core/database/directory_repository.dart';
+import '../../../core/database/department_repository.dart';
+import '../../../core/database/equipment_repository.dart';
+import '../../../core/database/phone_repository.dart';
+import '../../../core/database/user_repository.dart';
 import '../../../core/services/lookup_service.dart';
 import '../../../core/utils/name_parser.dart';
 import '../../../core/utils/phone_list_parser.dart';
@@ -511,14 +514,16 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
         : s.equipmentText.trim();
 
     final dbOrphan = await DatabaseHelper.instance.database;
-    final dirOrphan = DirectoryRepository(dbOrphan);
+    final departmentsOrphan = DepartmentRepository(dbOrphan);
+    final phonesOrphan = PhoneRepository(dbOrphan);
+    final equipmentOrphan = EquipmentRepository(dbOrphan);
     final deptExistedBefore =
-        deptText.isNotEmpty && await dirOrphan.departmentNameExists(deptText);
+        deptText.isNotEmpty && await departmentsOrphan.departmentNameExists(deptText);
     final phoneExistedBefore = (phone != null && phone.isNotEmpty)
-        ? await dirOrphan.phoneNumberExists(phone)
+        ? await phonesOrphan.phoneNumberExists(phone)
         : true;
     final equipmentExistedBefore = (equipmentCode != null)
-        ? await dirOrphan.equipmentCodeExists(equipmentCode)
+        ? await equipmentOrphan.equipmentCodeExists(equipmentCode)
         : true;
 
     final phoneUsage = (phone != null && phone.isNotEmpty)
@@ -593,7 +598,7 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
       );
     }
 
-    departmentId ??= await dirOrphan.getOrCreateDepartmentIdByName(deptText);
+    departmentId ??= await departmentsOrphan.getOrCreateDepartmentIdByName(deptText);
     if (departmentId == null) {
       return const OrphanQuickAddResult(
         requiresConfirmation: false,
@@ -602,10 +607,10 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
     }
 
     if (phoneNeedsShared) {
-      await dirOrphan.updatePhoneDepartment(phone, departmentId);
+      await phonesOrphan.updatePhoneDepartment(phone, departmentId);
     }
     if (equipmentNeedsShared) {
-      await dirOrphan.updateEquipmentDepartment(equipmentCode, departmentId);
+      await equipmentOrphan.updateEquipmentDepartment(equipmentCode, departmentId);
     }
 
     ref.invalidate(lookupServiceProvider);
@@ -2034,9 +2039,11 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
     if (!state.needsAssociation(lookupForAssoc)) return null;
 
     final msg = state.associationTooltip(lookupForAssoc);
-    final directory = DirectoryRepository(
-      await DatabaseHelper.instance.database,
-    );
+    final dbAssoc = await DatabaseHelper.instance.database;
+    final departments = DepartmentRepository(dbAssoc);
+    final phones = PhoneRepository(dbAssoc);
+    final equipmentRepo = EquipmentRepository(dbAssoc);
+    final users = UserRepository(dbAssoc);
     if (state.needsNewCallerCreation) {
       final name = NameParserUtility.stripParentheticalSuffix(
         state.normalizedCallerDisplayText,
@@ -2047,12 +2054,12 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
       final deptTextRaw = state.departmentText.trim();
       final departmentExistedBefore =
           deptTextRaw.isNotEmpty &&
-          await directory.departmentNameExists(deptTextRaw);
+          await departments.departmentNameExists(deptTextRaw);
       final phoneExistedBefore = (phone != null && phone.isNotEmpty)
-          ? await directory.phoneNumberExists(phone)
+          ? await phones.phoneNumberExists(phone)
           : false;
       final equipmentExistedBefore = equipmentCode.isNotEmpty
-          ? await directory.equipmentCodeExists(equipmentCode)
+          ? await equipmentRepo.equipmentCodeExists(equipmentCode)
           : false;
 
       final lookup = ref.read(lookupServiceProvider).value?.service;
@@ -2062,20 +2069,20 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
               ? lookup.findDepartmentByName(state.departmentText)?.id
               : null);
       if (departmentId == null && state.departmentText.trim().isNotEmpty) {
-        departmentId = await directory.getOrCreateDepartmentIdByName(
+        departmentId = await departments.getOrCreateDepartmentIdByName(
           state.departmentText.trim(),
         );
       }
       try {
         final parsedPhones = PhoneListParser.splitPhones(phone);
-        final userId = await directory.insertUser(
+        final userId = await users.insertUser(
           firstName: parsed.firstName,
           lastName: parsed.lastName,
           phones: parsedPhones.isEmpty ? null : parsedPhones,
           departmentId: departmentId,
         );
 
-        await directory.updateAssociationsIfNeeded(
+        await users.updateAssociationsIfNeeded(
           userId,
           phone,
           equipmentCode.isNotEmpty ? equipmentCode : null,
@@ -2197,9 +2204,9 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
     final hadPhoneWork = phone != null && phone.isNotEmpty;
     final hadEqWork = eqCode != null && eqCode.isNotEmpty;
     final newPhoneRow =
-        hadPhoneWork && !await directory.phoneNumberExists(phone);
+        hadPhoneWork && !await phones.phoneNumberExists(phone);
     final newEquipmentRow =
-        hadEqWork && !await directory.equipmentCodeExists(eqCode);
+        hadEqWork && !await equipmentRepo.equipmentCodeExists(eqCode);
     final deptTrimAssoc = state.departmentText.trim();
     final callerHadNoPrimaryDept =
         state.selectedCaller?.departmentId == null &&
@@ -2213,11 +2220,11 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
     final willCreateDept =
         effectiveUpdatePrimaryDepartment && deptTrimAssoc.isNotEmpty;
     final newDepartmentRow =
-        willCreateDept && !await directory.departmentNameExists(deptTrimAssoc);
+        willCreateDept && !await departments.departmentNameExists(deptTrimAssoc);
     final newEntityEligible =
         newPhoneRow || newEquipmentRow || newDepartmentRow;
     try {
-      await directory.updateAssociationsIfNeeded(
+      await users.updateAssociationsIfNeeded(
         userId,
         phone,
         eqCode?.isNotEmpty == true ? eqCode : null,
@@ -2235,7 +2242,7 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
           state.departmentText.trim().isNotEmpty &&
           state.selectedCaller?.id != null) {
         // Αν το τμήμα δεν υπάρχει ακόμα στη βάση, το δημιουργούμε ώστε να πάρουμε id.
-        selectedDepartmentId ??= await directory.getOrCreateDepartmentIdByName(
+        selectedDepartmentId ??= await departments.getOrCreateDepartmentIdByName(
           state.departmentText.trim(),
         );
       }
@@ -2248,7 +2255,7 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
           state.selectedCaller!.toMap(),
         );
         updatedMap['department_id'] = selectedDepartmentId;
-        await directory.updateUser(state.selectedCaller!.id!, updatedMap);
+        await users.updateUser(state.selectedCaller!.id!, updatedMap);
         updatedDepartmentId = selectedDepartmentId;
         primaryDepartmentChanged = true;
       }

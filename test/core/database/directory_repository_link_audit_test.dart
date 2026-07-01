@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:call_logger/core/database/database_helper.dart';
-import 'package:call_logger/core/database/directory_repository.dart';
+import 'package:call_logger/core/database/user_repository.dart';
 import 'package:call_logger/core/services/audit_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -13,7 +13,7 @@ import '../../test_setup.dart';
 /// (μέσω `_auditPhoneUserLinkDeltaInTxn` / `_auditEquipmentUserLinkDeltaInTxn`).
 void main() {
   group('DirectoryRepository user↔entity link audit — lock', () {
-    late DirectoryRepository repo;
+    late UserRepository repo;
     late Database db;
 
     setUpAll(() async {
@@ -31,7 +31,7 @@ void main() {
       await db.delete('phones');
       await db.delete('equipment');
       await db.delete('users');
-      repo = DirectoryRepository(db);
+      repo = UserRepository(db);
     });
 
     tearDownAll(() async {

@@ -1,7 +1,10 @@
 import 'dart:io';
 
 import 'package:call_logger/core/database/database_helper.dart';
-import 'package:call_logger/core/database/directory_repository.dart';
+import 'package:call_logger/core/database/department_repository.dart';
+import 'package:call_logger/core/database/equipment_repository.dart';
+import 'package:call_logger/core/database/phone_repository.dart';
+import 'package:call_logger/core/database/user_repository.dart';
 import 'package:call_logger/core/utils/search_text_normalizer.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -10,8 +13,11 @@ import '../../test_setup.dart';
 
 /// Κλείδωμα συμπεριφοράς COALESCE clause, IN-placeholders και PRAGMA phones columns.
 void main() {
-  group('DirectoryRepository query helpers — lock', () {
-    late DirectoryRepository repo;
+  group('Repository query helpers — lock', () {
+    late UserRepository users;
+    late DepartmentRepository departments;
+    late EquipmentRepository equipment;
+    late PhoneRepository phones;
     late Database db;
 
     setUpAll(() async {
@@ -30,7 +36,10 @@ void main() {
       await db.delete('equipment');
       await db.delete('users');
       await db.delete('departments');
-      repo = DirectoryRepository(db);
+      users = UserRepository(db);
+      departments = DepartmentRepository(db);
+      equipment = EquipmentRepository(db);
+      phones = PhoneRepository(db);
     });
 
     tearDownAll(() async {
@@ -73,16 +82,16 @@ void main() {
         'is_deleted': 1,
       });
 
-      final users = await repo.getAllUsers();
-      final departments = await repo.getActiveDepartments();
-      final equipment = await repo.getAllEquipment();
+      final userRows = await users.getAllUsers();
+      final departmentRows = await departments.getActiveDepartments();
+      final equipmentRows = await equipment.getAllEquipment();
 
-      expect(users, hasLength(1));
-      expect(users.single['id'], activeUserId);
-      expect(departments, hasLength(1));
-      expect(departments.single['id'], activeDeptId);
-      expect(equipment, hasLength(1));
-      expect(equipment.single['code_equipment'], 'PC-ACTIVE');
+      expect(userRows, hasLength(1));
+      expect(userRows.single['id'], activeUserId);
+      expect(departmentRows, hasLength(1));
+      expect(departmentRows.single['id'], activeDeptId);
+      expect(equipmentRows, hasLength(1));
+      expect(equipmentRows.single['code_equipment'], 'PC-ACTIVE');
     });
 
     test('IN-placeholders: findExclusivePhonesForUserDelete για 0, 1 και πολλά id',
@@ -123,14 +132,14 @@ void main() {
       });
       await linkPhone(userB, '2345999103');
 
-      expect(await repo.findExclusivePhonesForUserDelete([]), isEmpty);
+      expect(await users.findExclusivePhonesForUserDelete([]), isEmpty);
 
-      final one = await repo.findExclusivePhonesForUserDelete([userA]);
+      final one = await users.findExclusivePhonesForUserDelete([userA]);
       expect(one, hasLength(1));
       expect(one.single.userId, userA);
       expect(one.single.number, '2345999101');
 
-      final many = await repo.findExclusivePhonesForUserDelete([userA, userB]);
+      final many = await users.findExclusivePhonesForUserDelete([userA, userB]);
       expect(many, hasLength(2));
       expect(
         many.map((e) => e.number).toSet(),
@@ -148,8 +157,8 @@ void main() {
         'is_deleted': 0,
       });
 
-      await repo.updatePhoneDepartment(phoneNumber, deptId);
-      await repo.updatePhoneDepartment(phoneNumber, deptId);
+      await phones.updatePhoneDepartment(phoneNumber, deptId);
+      await phones.updatePhoneDepartment(phoneNumber, deptId);
 
       final info = await db.rawQuery('PRAGMA table_info(phones)');
       final names = info.map((r) => r['name'] as String).toSet();

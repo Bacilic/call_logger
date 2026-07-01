@@ -1,8 +1,12 @@
 ﻿import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import '../../../core/database/database_helper.dart';
-import '../../../core/database/directory_repository.dart';
+import '../../../core/database/building_map_repository.dart';
+import '../../../core/database/department_repository.dart';
+import '../../../core/database/directory_support.dart';
+import '../../../core/database/equipment_repository.dart';
 import '../../../core/database/phone_repository.dart';
+import '../../../core/database/user_repository.dart';
 import '../../../core/database/old_database/lamp_issue_resolution_service.dart';
 import '../../../core/directory/phone_department_policy.dart';
 import '../../../core/services/lookup_service.dart';
@@ -562,8 +566,8 @@ class LampMigrationService {
         );
         if (equipmentCodes.isNotEmpty) {
           final db = await DatabaseHelper.instance.database;
-          final dir = DirectoryRepository(db);
-          final allEquipment = await dir.getAllEquipment();
+          final equipment = EquipmentRepository(db);
+          final allEquipment = await equipment.getAllEquipment();
           for (final code in equipmentCodes) {
             final exists = allEquipment.any(
               (row) =>
@@ -739,8 +743,8 @@ class LampMigrationService {
     if (code.isEmpty) return const <LampOwnerConflict>[];
 
     final db = await DatabaseHelper.instance.database;
-    final dir = DirectoryRepository(db);
-    final currentOwners = await dir.getEquipmentOwnerSnapshots(
+    final users = UserRepository(db);
+    final currentOwners = await users.getEquipmentOwnerSnapshots(
       selectedCandidateId,
     );
     if (currentOwners.isEmpty) return const <LampOwnerConflict>[];
@@ -789,10 +793,12 @@ class LampMigrationService {
     final oldEmail = _text(sourceRow['office_email']);
 
     final db = await DatabaseHelper.instance.database;
-    final dir = DirectoryRepository(db);
-    final departments = await dir.getDepartments();
-    final buildingMapFloors = await dir.listBuildingMapFloors();
-    final departmentPhonesMap = await dir.getDepartmentDirectPhonesMap();
+    final departmentsRepo = DepartmentRepository(db);
+    final buildingMap = BuildingMapRepository(db, DirectorySupport(db));
+    final phonesRepo = PhoneRepository(db);
+    final departments = await departmentsRepo.getDepartments();
+    final buildingMapFloors = await buildingMap.listBuildingMapFloors();
+    final departmentPhonesMap = await phonesRepo.getDepartmentDirectPhonesMap();
     final active = departments
         .where((row) => (row['is_deleted'] as int?) != 1)
         .toList(growable: false);
@@ -892,8 +898,9 @@ class LampMigrationService {
       sourceRow['code'],
     );
     final db = await DatabaseHelper.instance.database;
-    final dir = DirectoryRepository(db);
-    final users = await dir.getAllUsers();
+    final usersRepo = UserRepository(db);
+    final departmentsRepo = DepartmentRepository(db);
+    final users = await usersRepo.getAllUsers();
     final active = users
         .where((row) => (row['is_deleted'] as int?) != 1)
         .toList(growable: false);
@@ -999,7 +1006,7 @@ class LampMigrationService {
           () => '',
         );
         if (departmentName.isEmpty) {
-          final fetched = await dir.getDepartmentNameById(departmentId);
+          final fetched = await departmentsRepo.getDepartmentNameById(departmentId);
           departmentName = fetched?.trim() ?? '';
           departmentNameCache[departmentId] = departmentName;
         }
@@ -1084,8 +1091,9 @@ class LampMigrationService {
     );
 
     final db = await DatabaseHelper.instance.database;
-    final dir = DirectoryRepository(db);
-    final equipmentRows = await dir.getAllEquipment();
+    final equipment = EquipmentRepository(db);
+    final departmentsRepo = DepartmentRepository(db);
+    final equipmentRows = await equipment.getAllEquipment();
     final active = equipmentRows
         .where((row) => (row['is_deleted'] as int?) != 1)
         .toList(growable: false);
@@ -1139,7 +1147,7 @@ class LampMigrationService {
           () => '',
         );
         if (departmentName.isEmpty) {
-          final fetched = await dir.getDepartmentNameById(departmentId);
+          final fetched = await departmentsRepo.getDepartmentNameById(departmentId);
           departmentName = fetched?.trim() ?? '';
           departmentNameCache[departmentId] = departmentName;
         }
@@ -1210,9 +1218,11 @@ class LampMigrationService {
     if (name.isEmpty) throw StateError('Το πεδίο τμήμα είναι υποχρεωτικό.');
 
     final db = await DatabaseHelper.instance.database;
-    final dir = DirectoryRepository(db);
+    final departments = DepartmentRepository(db);
+    final buildingMap = BuildingMapRepository(db, DirectorySupport(db));
+    final phones = PhoneRepository(db);
     final levelText = (formValues['level'] ?? '').trim();
-    final buildingMapFloors = await dir.listBuildingMapFloors();
+    final buildingMapFloors = await buildingMap.listBuildingMapFloors();
     final matchedFloorId = LampFloorResolver.resolveFloorId(
       levelText: levelText,
       floors: buildingMapFloors,
@@ -1253,7 +1263,7 @@ class LampMigrationService {
       final bool updated;
       final String message;
       if (updateId != null) {
-        await dir.updateDepartment(updateId, map, executor: txn);
+        await departments.updateDepartment(updateId, map, executor: txn);
         departmentId = updateId;
         updated = true;
         message = reactivateId != null && selectedCandidateId == null
@@ -1267,13 +1277,13 @@ class LampMigrationService {
             executor: txn,
           );
         }
-        departmentId = await dir.insertDepartment(map, executor: txn);
+        departmentId = await departments.insertDepartment(map, executor: txn);
         updated = false;
         message = 'Δημιουργήθηκε νέο τμήμα.';
       }
 
       await _applyDepartmentDirectPhones(
-        dir: dir,
+        phones: phones,
         departmentId: departmentId,
         plan: phoneApplyPlan,
         executor: txn,
@@ -1339,7 +1349,7 @@ class LampMigrationService {
   }
 
   Future<void> _applyDepartmentDirectPhones({
-    required DirectoryRepository dir,
+    required PhoneRepository phones,
     required int departmentId,
     required _DepartmentPhoneApplyPlan plan,
     DatabaseExecutor? executor,
@@ -1347,11 +1357,11 @@ class LampMigrationService {
     if (plan.phones.isEmpty) return;
 
     for (final phone in plan.transferPhones) {
-      await dir.removePhoneFromAllUsers(phone, executor: executor);
+      await phones.removePhoneFromAllUsers(phone, executor: executor);
       final usage = LookupService.instance.checkPhoneUsage(phone);
       final sourceDeptId = usage.departmentId;
       if (sourceDeptId != null && sourceDeptId != departmentId) {
-        await dir.removeDepartmentDirectPhone(
+        await phones.removeDepartmentDirectPhone(
           sourceDeptId,
           phone,
           executor: executor,
@@ -1361,7 +1371,7 @@ class LampMigrationService {
 
     for (final phone in plan.phones) {
       if (plan.skipPhones.contains(phone)) continue;
-      await dir.addDepartmentDirectPhone(
+      await phones.addDepartmentDirectPhone(
         departmentId,
         phone,
         executor: executor,
@@ -1382,7 +1392,10 @@ class LampMigrationService {
       throw StateError('Απαιτείται όνομα ή επώνυμο.');
     }
     final db = await DatabaseHelper.instance.database;
-    final dir = DirectoryRepository(db);
+    final users = UserRepository(db);
+    final departments = DepartmentRepository(db);
+    final equipment = EquipmentRepository(db);
+    final phoneRepo = PhoneRepository(db);
     final departmentName = (formValues['department_name'] ?? '').trim();
     final phones = PhoneListParser.splitPhones(formValues['phones']);
     final equipmentCodes = LampMigrationService.parseEquipmentCodes(
@@ -1455,14 +1468,14 @@ class LampMigrationService {
     return db.transaction((txn) async {
       final departmentId = departmentName.isEmpty
           ? null
-          : await dir.getOrCreateDepartmentIdByName(
+          : await departments.getOrCreateDepartmentIdByName(
               departmentName,
               executor: txn,
             );
 
       if (!phonePolicyBatch.isEmpty) {
         await PhoneDepartmentPolicy.applyUserPhoneConflictResolutions(
-          phones: PhoneRepository(db),
+          phones: phoneRepo,
           resolutions: phonePolicyBatch,
           targetDepartmentId: departmentId,
           executor: txn,
@@ -1470,14 +1483,14 @@ class LampMigrationService {
       }
 
       for (final code in transferEquipmentCodes) {
-        await dir.removeEquipmentFromAllUsers(code, executor: txn);
+        await equipment.removeEquipmentFromAllUsers(code, executor: txn);
       }
 
       final int savedUserId;
       final bool updated;
       final String message;
       if (updateUserId != null) {
-        await dir.updateUser(
+        await users.updateUser(
           updateUserId,
           <String, dynamic>{
             'first_name': firstName,
@@ -1497,7 +1510,7 @@ class LampMigrationService {
             ? 'Ενημερώθηκε υπάρχων χρήστης.'
             : 'Επαναφέρθηκε διαγραμμένος χρήστης.';
       } else {
-        savedUserId = await dir.insertUser(
+        savedUserId = await users.insertUser(
           firstName: firstName,
           lastName: lastName,
           phones: resolvedPhones,
@@ -1512,7 +1525,7 @@ class LampMigrationService {
       }
 
       await _assignUserPhonesToDepartment(
-        dir: dir,
+        phoneRepo: phoneRepo,
         departmentId: departmentId,
         phones: resolvedPhones,
         executor: txn,
@@ -1570,7 +1583,7 @@ class LampMigrationService {
 
   /// Συγχρονισμός phones.department_id με το τμήμα του χρήστη (όπως Κατάλογος).
   Future<void> _assignUserPhonesToDepartment({
-    required DirectoryRepository dir,
+    required PhoneRepository phoneRepo,
     required int? departmentId,
     required List<String> phones,
     DatabaseExecutor? executor,
@@ -1579,7 +1592,7 @@ class LampMigrationService {
     for (final phone in phones) {
       final trimmed = phone.trim();
       if (trimmed.isEmpty) continue;
-      await dir.addDepartmentDirectPhone(
+      await phoneRepo.addDepartmentDirectPhone(
         departmentId,
         trimmed,
         executor: executor,
@@ -1594,7 +1607,7 @@ class LampMigrationService {
     DatabaseExecutor? executor,
   }) async {
     final db = await DatabaseHelper.instance.database;
-    final dir = DirectoryRepository(db);
+    final equipment = EquipmentRepository(db);
     final e = executor ?? db;
     final allEquipment = await e.query(
       'equipment',
@@ -1624,7 +1637,7 @@ class LampMigrationService {
       if (!confirmEntityCreations) {
         throw StateError(_kPendingEntityCreationError);
       }
-      final createdId = await dir.insertEquipmentFromMap(
+      final createdId = await equipment.insertEquipmentFromMap(
         <String, dynamic>{
           'code_equipment': trimmedCode,
           'is_deleted': 0,
@@ -1654,7 +1667,7 @@ class LampMigrationService {
     };
     for (final equipmentId
         in existingEquipmentIds.difference(desiredEquipmentIds)) {
-      await dir.unlinkUserFromEquipment(
+      await equipment.unlinkUserFromEquipment(
         userId,
         equipmentId,
         executor: executor,
@@ -1670,7 +1683,7 @@ class LampMigrationService {
     }
     for (final equipmentId
         in desiredEquipmentIds.difference(existingEquipmentIds)) {
-      await dir.linkUserToEquipment(
+      await equipment.linkUserToEquipment(
         userId,
         equipmentId,
         executor: executor,
@@ -1700,7 +1713,8 @@ class LampMigrationService {
     }
 
     final db = await DatabaseHelper.instance.database;
-    final dir = DirectoryRepository(db);
+    final departments = DepartmentRepository(db);
+    final equipment = EquipmentRepository(db);
     final departmentName = (formValues['department_name'] ?? '').trim();
 
     final reactivateId =
@@ -1743,7 +1757,7 @@ class LampMigrationService {
     return db.transaction((txn) async {
       final departmentId = departmentName.isEmpty
           ? null
-          : await dir.getOrCreateDepartmentIdByName(
+          : await departments.getOrCreateDepartmentIdByName(
               departmentName,
               executor: txn,
             );
@@ -1764,13 +1778,13 @@ class LampMigrationService {
       };
 
       if (updateEquipmentId != null) {
-        await dir.updateEquipment(
+        await equipment.updateEquipment(
           updateEquipmentId,
           values,
           executor: txn,
         );
         if (keepCurrentOwners != true) {
-          await dir.replaceEquipmentUsers(
+          await equipment.replaceEquipmentUsers(
             updateEquipmentId,
             ownerUserIds,
             executor: txn,
@@ -1785,8 +1799,8 @@ class LampMigrationService {
         );
       }
 
-      final id = await dir.insertEquipmentFromMap(values, executor: txn);
-      await dir.replaceEquipmentUsers(
+      final id = await equipment.insertEquipmentFromMap(values, executor: txn);
+      await equipment.replaceEquipmentUsers(
         id,
         ownerUserIds,
         executor: txn,
@@ -1823,8 +1837,8 @@ class LampMigrationService {
       throw StateError(_kPendingEntityCreationError);
     }
     final db = await DatabaseHelper.instance.database;
-    final dir = DirectoryRepository(db);
-    final createdId = await dir.insertUser(
+    final users = UserRepository(db);
+    final createdId = await users.insertUser(
       firstName: parsed.firstName,
       lastName: parsed.lastName,
       executor: executor,

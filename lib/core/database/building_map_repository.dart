@@ -5,7 +5,8 @@ import 'directory_support.dart';
 
 /// Persistence χάρτη κτιρίου (`building_map_floors` + σχετικές τοποθετήσεις τμημάτων).
 class BuildingMapRepository {
-  BuildingMapRepository(this.db, this._support);
+  BuildingMapRepository(this.db, [DirectorySupport? support])
+      : _support = support ?? DirectorySupport(db);
 
   final Database db;
   // Κρατιέται για κοινούς βοηθούς σε επόμενες φάσεις (ίδιο συμβόλαιο με CategoryRepository).
@@ -15,7 +16,7 @@ class BuildingMapRepository {
   Future<void> Function(int deptId, Map<String, dynamic> fields)?
       _updateDepartment;
 
-  /// Σύνδεση με [DirectoryRepository.updateDepartment] — ορίζεται από orchestrator.
+  /// Σύνδεση με `DepartmentRepository.updateDepartment` — ορίζεται από orchestrator.
   void bindUpdateDepartment(
     Future<void> Function(int deptId, Map<String, dynamic> fields) fn,
   ) {

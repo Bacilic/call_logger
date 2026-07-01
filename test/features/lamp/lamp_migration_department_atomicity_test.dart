@@ -1,7 +1,7 @@
 import 'dart:io';
 
 import 'package:call_logger/core/database/database_helper.dart';
-import 'package:call_logger/core/database/directory_repository.dart';
+import 'package:call_logger/core/database/phone_repository.dart';
 import 'package:call_logger/core/services/lookup_service.dart';
 import 'package:call_logger/core/utils/search_text_normalizer.dart';
 import 'package:call_logger/features/lamp/services/lamp_migration_service.dart';
@@ -46,13 +46,13 @@ void main() {
       required String phone,
     }) async {
       final db = await DatabaseHelper.instance.database;
-      final dir = DirectoryRepository(db);
+      final phones = PhoneRepository(db);
       final id = await db.insert('departments', {
         'name': name,
         'name_key': SearchTextNormalizer.normalizeForSearch(name),
         'is_deleted': 0,
       });
-      await dir.addDepartmentDirectPhone(id, phone);
+      await phones.addDepartmentDirectPhone(id, phone);
       await reloadLookup();
       return id;
     }
@@ -118,8 +118,8 @@ void main() {
         );
 
         final db = await DatabaseHelper.instance.database;
-        final dir = DirectoryRepository(db);
-        final phonesMap = await dir.getDepartmentDirectPhonesMap();
+        final phones = PhoneRepository(db);
+        final phonesMap = await phones.getDepartmentDirectPhonesMap();
         final saved = phonesMap[result.id] ?? const <String>[];
         expect(saved, containsAll(['2310502000', '2310502001']));
         expect(saved.length, 2);

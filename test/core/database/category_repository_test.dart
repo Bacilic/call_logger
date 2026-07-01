@@ -1,7 +1,8 @@
 import 'dart:io';
 
 import 'package:call_logger/core/database/database_helper.dart';
-import 'package:call_logger/core/database/directory_repository.dart';
+import 'package:call_logger/core/database/category_repository.dart';
+import 'package:call_logger/core/database/settings_repository.dart';
 import 'package:call_logger/core/services/audit_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -11,7 +12,8 @@ import '../../test_setup.dart';
 /// Κλείδωμα συμπεριφοράς κατηγοριών πριν από Φάση Γ.1α (CategoryRepository).
 void main() {
   group('CategoryRepository behavior — lock πριν εξαγωγή', () {
-    late DirectoryRepository repo;
+    late CategoryRepository repo;
+    late SettingsRepository settings;
     late Database db;
 
     setUpAll(() async {
@@ -27,7 +29,8 @@ void main() {
       await db.delete('audit_log');
       await db.delete('calls');
       await db.delete('categories');
-      repo = DirectoryRepository(db);
+      repo = CategoryRepository(db);
+      settings = SettingsRepository(db);
     });
 
     tearDownAll(() async {
@@ -150,7 +153,7 @@ void main() {
           'is_deleted': 0,
         });
 
-        await repo.setSetting(
+        await settings.saveSetting(
           DatabaseHelper.auditUserPerformingSettingsKey,
           'Editor Κατηγορίας',
         );
@@ -212,7 +215,7 @@ void main() {
         'is_deleted': 0,
       });
 
-      await repo.setSetting(
+      await settings.saveSetting(
         DatabaseHelper.auditUserPerformingSettingsKey,
         'Admin Κατηγοριών',
       );

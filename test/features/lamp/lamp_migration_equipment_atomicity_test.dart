@@ -1,7 +1,7 @@
 import 'dart:io';
 
 import 'package:call_logger/core/database/database_helper.dart';
-import 'package:call_logger/core/database/directory_repository.dart';
+import 'package:call_logger/core/database/user_repository.dart';
 import 'package:call_logger/features/lamp/services/lamp_migration_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -114,8 +114,8 @@ void main() {
         );
 
         final db = await DatabaseHelper.instance.database;
-        final dir = DirectoryRepository(db);
-        final owners = await dir.getEquipmentOwnerSnapshots(result.id);
+        final users = UserRepository(db);
+        final owners = await users.getEquipmentOwnerSnapshots(result.id);
         expect(owners, hasLength(1));
         expect(owners.single['id'], userXId);
       },

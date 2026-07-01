@@ -5,7 +5,8 @@ import 'package:intl/intl.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import '../../../core/database/database_helper.dart';
-import '../../../core/database/directory_repository.dart';
+import '../../../core/database/integrity_service.dart';
+import '../../../core/database/settings_repository.dart';
 import '../../../core/errors/task_save_exception.dart';
 import '../../../core/services/audit_service.dart';
 import '../../../core/utils/search_text_normalizer.dart';
@@ -132,10 +133,10 @@ class TaskService {
   /// - Αν λείπει, κάνει fallback στο [TaskSettingsConfig.legacyAppSettingsKey].
   Future<TaskSettingsConfig> getTaskSettingsConfig() async {
     final dbConn = await DatabaseHelper.instance.database;
-    final dir = DirectoryRepository(dbConn);
+    final settings = SettingsRepository(dbConn);
     final raw =
-        await dir.getSetting(TaskSettingsConfig.appSettingsKey) ??
-        await dir.getSetting(TaskSettingsConfig.legacyAppSettingsKey);
+        await settings.getSetting(TaskSettingsConfig.appSettingsKey) ??
+        await settings.getSetting(TaskSettingsConfig.legacyAppSettingsKey);
     if (raw == null || raw.trim().isEmpty) {
       return TaskSettingsConfig.defaultConfig();
     }
@@ -231,9 +232,9 @@ class TaskService {
   /// Αποθήκευση ρυθμίσεων εκκρεμοτήτων στο `app_settings`.
   Future<void> saveTaskSettingsConfig(TaskSettingsConfig config) async {
     final dbSave = await DatabaseHelper.instance.database;
-    await DirectoryRepository(
+    await SettingsRepository(
       dbSave,
-    ).setSetting(TaskSettingsConfig.appSettingsKey, jsonEncode(config.toMap()));
+    ).saveSetting(TaskSettingsConfig.appSettingsKey, jsonEncode(config.toMap()));
   }
 
   /// Τίτλος εκκρεμότητας από σημειώσεις/κατηγορία (μορφή φόρμας κλήσης).
@@ -1135,10 +1136,10 @@ class TaskService {
     }
   }
 
-  /// Soft delete εγγραφής βάσει ID (audit στο [DirectoryRepository]).
+  /// Soft delete εγγραφής βάσει ID (audit στο [IntegrityService]).
   Future<void> deleteTask(int id) async {
     final dbDel = await DatabaseHelper.instance.database;
-    await DirectoryRepository(dbDel).softDeleteTask(id);
+    await IntegrityService(dbDel).softDeleteTask(id);
   }
 
   /// Επαναδόμηση `search_index` για μία εκκρεμότητα (integrity fix).
@@ -1169,7 +1170,7 @@ class TaskService {
   Future<Map<String, dynamic>?> integritySyncTaskTimestamps(int taskId) async {
     final db = await _db;
     return db.transaction((txn) async {
-      return DirectoryRepository(db).integritySyncTaskTimestamps(txn, taskId);
+      return IntegrityService(db).integritySyncTaskTimestamps(txn, taskId);
     });
   }
 
@@ -1181,7 +1182,7 @@ class TaskService {
   ) async {
     final db = await _db;
     return db.transaction((txn) async {
-      return DirectoryRepository(db).integrityUpdateTaskFk(
+      return IntegrityService(db).integrityUpdateTaskFk(
         txn,
         taskId,
         field,

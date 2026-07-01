@@ -2,7 +2,8 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:call_logger/core/database/database_helper.dart';
-import 'package:call_logger/core/database/directory_repository.dart';
+import 'package:call_logger/core/database/user_repository.dart';
+import 'package:call_logger/core/database/phone_repository.dart';
 import 'package:call_logger/core/directory/phone_department_policy.dart';
 import 'package:call_logger/core/services/audit_service.dart';
 import 'package:call_logger/core/services/lookup_service.dart';
@@ -15,7 +16,8 @@ import '../../test_setup.dart';
 /// Κλείδωμα συμπεριφοράς χρηστών πριν από Φάση Γ.2δ (UserRepository).
 void main() {
   group('UserRepository behavior — lock πριν εξαγωγή', () {
-    late DirectoryRepository repo;
+    late UserRepository repo;
+    late PhoneRepository phones;
     late Database db;
 
     setUpAll(() async {
@@ -36,7 +38,8 @@ void main() {
       await db.delete('equipment');
       await db.delete('users');
       await db.delete('departments');
-      repo = DirectoryRepository(db);
+      repo = UserRepository(db);
+      phones = PhoneRepository(db);
     });
 
     tearDownAll(() async {
@@ -346,7 +349,7 @@ void main() {
         final deptA = await insertDepartment('Τμήμα Policy A');
         final deptB = await insertDepartment('Τμήμα Policy B');
 
-        await repo.addDepartmentDirectPhone(deptA, sharedPhone);
+        await phones.addDepartmentDirectPhone(deptA, sharedPhone);
         await reloadLookup();
 
         final allowedId = await repo.insertUser(

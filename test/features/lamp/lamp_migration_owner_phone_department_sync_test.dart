@@ -1,7 +1,8 @@
 import 'dart:io';
 
 import 'package:call_logger/core/database/database_helper.dart';
-import 'package:call_logger/core/database/directory_repository.dart';
+import 'package:call_logger/core/database/phone_repository.dart';
+import 'package:call_logger/core/database/user_repository.dart';
 import 'package:call_logger/core/services/lookup_service.dart';
 import 'package:call_logger/core/utils/search_text_normalizer.dart';
 import 'package:call_logger/features/lamp/services/lamp_migration_service.dart';
@@ -62,8 +63,8 @@ void main() {
       required String phone,
     }) async {
       final db = await DatabaseHelper.instance.database;
-      final dir = DirectoryRepository(db);
-      final userId = await dir.insertUser(
+      final users = UserRepository(db);
+      final userId = await users.insertUser(
         firstName: firstName,
         lastName: lastName,
         phones: [phone],
@@ -91,8 +92,8 @@ void main() {
       required String phone,
     }) async {
       final db = await DatabaseHelper.instance.database;
-      final dir = DirectoryRepository(db);
-      await dir.addDepartmentDirectPhone(departmentId, phone);
+      final phones = PhoneRepository(db);
+      await phones.addDepartmentDirectPhone(departmentId, phone);
       await reloadLookup();
     }
 
@@ -128,8 +129,8 @@ void main() {
         expect(result.id, isNotNull);
 
         final db = await DatabaseHelper.instance.database;
-        final dir = DirectoryRepository(db);
-        final phonesMap = await dir.getDepartmentDirectPhonesMap();
+        final phones = PhoneRepository(db);
+        final phonesMap = await phones.getDepartmentDirectPhonesMap();
         expect(phonesMap[deptId], contains(phone));
         expect(await phoneDepartmentId(phone), deptId);
       },
@@ -154,8 +155,8 @@ void main() {
         );
 
         final db = await DatabaseHelper.instance.database;
-        final dir = DirectoryRepository(db);
-        var phonesMap = await dir.getDepartmentDirectPhonesMap();
+        final phones = PhoneRepository(db);
+        var phonesMap = await phones.getDepartmentDirectPhonesMap();
         expect(phonesMap[deptSource], contains(phone));
         expect(phonesMap[deptTarget], isNull);
 
@@ -171,7 +172,7 @@ void main() {
           ],
         );
 
-        phonesMap = await dir.getDepartmentDirectPhonesMap();
+        phonesMap = await phones.getDepartmentDirectPhonesMap();
         expect(phonesMap[deptTarget], contains(phone));
         expect(phonesMap[deptSource] ?? const <String>[], isNot(contains(phone)));
         expect(await phoneDepartmentId(phone), deptTarget);
@@ -190,7 +191,7 @@ void main() {
           departmentId: deptA,
           phone: phone,
         );
-        await dirUpdatePhoneDepartment(deptA, phone);
+        await updatePhoneDepartment(deptA, phone);
 
         await service.save(
           target: LampTransferTarget.owner,
@@ -206,8 +207,8 @@ void main() {
         expect(await phoneDepartmentId(phone), deptB);
 
         final db = await DatabaseHelper.instance.database;
-        final dir = DirectoryRepository(db);
-        final phonesMap = await dir.getDepartmentDirectPhonesMap();
+        final phones = PhoneRepository(db);
+        final phonesMap = await phones.getDepartmentDirectPhonesMap();
         expect(phonesMap[deptB], contains(phone));
         expect(phonesMap[deptA] ?? const <String>[], isNot(contains(phone)));
       },
@@ -215,8 +216,8 @@ void main() {
   });
 }
 
-Future<void> dirUpdatePhoneDepartment(int departmentId, String phone) async {
+Future<void> updatePhoneDepartment(int departmentId, String phone) async {
   final db = await DatabaseHelper.instance.database;
-  final dir = DirectoryRepository(db);
-  await dir.updatePhoneDepartment(phone, departmentId);
+  final phones = PhoneRepository(db);
+  await phones.updatePhoneDepartment(phone, departmentId);
 }

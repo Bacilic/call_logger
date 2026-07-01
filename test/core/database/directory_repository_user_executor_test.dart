@@ -1,15 +1,17 @@
 import 'dart:io';
 
 import 'package:call_logger/core/database/database_helper.dart';
-import 'package:call_logger/core/database/directory_repository.dart';
+import 'package:call_logger/core/database/user_repository.dart';
+import 'package:call_logger/core/database/phone_repository.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import '../../test_setup.dart';
 
 void main() {
-  group('DirectoryRepository user writes — executor awareness', () {
-    late DirectoryRepository repo;
+  group('UserRepository user writes — executor awareness', () {
+    late UserRepository users;
+    late PhoneRepository phones;
     late Database db;
 
     setUpAll(() async {
@@ -24,7 +26,8 @@ void main() {
       await db.delete('user_phones');
       await db.delete('phones');
       await db.delete('users');
-      repo = DirectoryRepository(db);
+      users = UserRepository(db);
+      phones = PhoneRepository(db);
     });
 
     tearDownAll(() async {
@@ -36,7 +39,7 @@ void main() {
       () async {
         await expectLater(
           db.transaction((txn) async {
-            await repo.insertUser(
+            await users.insertUser(
               firstName: 'Ρollback',
               lastName: 'Χρήστης',
               phones: ['23451111'],
@@ -57,7 +60,7 @@ void main() {
       'atomicity: failure μετά removePhoneFromAllUsers κάνει rollback user_phones',
       () async {
         const phone = '23452222';
-        final userId = await repo.insertUser(
+        final userId = await users.insertUser(
           firstName: 'Κάτοχος',
           lastName: 'Τηλεφώνου',
           phones: [phone],
@@ -65,7 +68,7 @@ void main() {
 
         await expectLater(
           db.transaction((txn) async {
-            await repo.removePhoneFromAllUsers(phone, executor: txn);
+            await phones.removePhoneFromAllUsers(phone, executor: txn);
             throw StateError('προσομοίωση σφάλματος μετά την αποσύνδεση');
           }),
           throwsA(isA<StateError>()),
@@ -84,13 +87,13 @@ void main() {
       'executor participation: συμμετοχή σε εξωτερική transaction χωρίς nested transaction',
       () async {
         await db.transaction((txn) async {
-          final id = await repo.insertUser(
+          final id = await users.insertUser(
             firstName: 'Εξωτερικό',
             lastName: 'Txn',
             phones: ['23453333'],
             executor: txn,
           );
-          await repo.updateUser(
+          await users.updateUser(
             id,
             {'notes': 'ενημέρωση εντός txn'},
             executor: txn,
@@ -108,18 +111,18 @@ void main() {
       'regression: insertUser / updateUser / removePhoneFromAllUsers χωρίς executor',
       () async {
         const phone = '23454444';
-        final id = await repo.insertUser(
+        final id = await users.insertUser(
           firstName: 'Regression',
           lastName: 'Χρήστης',
           phones: [phone],
         );
         expect(id, greaterThan(0));
 
-        await repo.updateUser(id, {'location': 'Αίθουσα'});
+        await users.updateUser(id, {'location': 'Αίθουσα'});
         final row = await db.query('users', where: 'id = ?', whereArgs: [id]);
         expect(row.single['location'], 'Αίθουσα');
 
-        await repo.removePhoneFromAllUsers(phone);
+        await phones.removePhoneFromAllUsers(phone);
         expect(await db.query('user_phones', where: 'user_id = ?', whereArgs: [id]), isEmpty);
       },
     );

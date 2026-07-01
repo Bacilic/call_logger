@@ -1,7 +1,7 @@
 import 'dart:io';
 
 import 'package:call_logger/core/database/database_helper.dart';
-import 'package:call_logger/core/database/directory_repository.dart';
+import 'package:call_logger/core/database/department_repository.dart';
 import 'package:call_logger/core/utils/search_text_normalizer.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -9,7 +9,7 @@ import '../../test_setup.dart';
 
 void main() {
   group('DirectoryRepository.getOrCreateDepartmentIdByName', () {
-    late DirectoryRepository repo;
+    late DepartmentRepository repo;
 
     setUpAll(() async {
       initSqfliteFfiForTests();
@@ -22,7 +22,7 @@ void main() {
       await seedIsolatedTestDatabase();
       final db = await DatabaseHelper.instance.database;
       await db.delete('departments');
-      repo = DirectoryRepository(db);
+      repo = DepartmentRepository(db);
     });
 
     tearDownAll(() async {

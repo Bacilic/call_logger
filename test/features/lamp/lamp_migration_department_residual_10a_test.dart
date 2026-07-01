@@ -1,7 +1,8 @@
 import 'dart:io';
 
 import 'package:call_logger/core/database/database_helper.dart';
-import 'package:call_logger/core/database/directory_repository.dart';
+import 'package:call_logger/core/database/phone_repository.dart';
+import 'package:call_logger/core/database/user_repository.dart';
 import 'package:call_logger/core/services/lookup_service.dart';
 import 'package:call_logger/core/utils/search_text_normalizer.dart';
 import 'package:call_logger/features/lamp/services/lamp_migration_service.dart';
@@ -12,7 +13,8 @@ import '../../test_setup.dart';
 void main() {
   group('ΖΤ-18 residual 10Α — removePhoneFromAllUsers μέσα σε transaction', () {
     late LampMigrationService service;
-    late DirectoryRepository repo;
+    late UserRepository users;
+    late PhoneRepository phones;
 
     setUpAll(() async {
       initSqfliteFfiForTests();
@@ -32,7 +34,8 @@ void main() {
       await db.delete('users');
       LookupService.instance.resetForReload();
       await LookupService.instance.loadFromDatabase();
-      repo = DirectoryRepository(db);
+      users = UserRepository(db);
+      phones = PhoneRepository(db);
     });
 
     tearDownAll(() async {
@@ -43,7 +46,7 @@ void main() {
       'repository: removePhoneFromAllUsers σε αποτυχημένη transaction επαναφέρει user_phones',
       () async {
         const phone = '2310666000';
-        final userId = await repo.insertUser(
+        final userId = await users.insertUser(
           firstName: 'Κάτοχος',
           lastName: 'Τηλεφώνου',
           phones: [phone],
@@ -52,7 +55,7 @@ void main() {
 
         await expectLater(
           db.transaction((txn) async {
-            await repo.removePhoneFromAllUsers(phone, executor: txn);
+            await phones.removePhoneFromAllUsers(phone, executor: txn);
             throw StateError('προσομοίωση αποτυχίας αποθήκευσης τμήματος');
           }),
           throwsA(isA<StateError>()),
@@ -80,8 +83,8 @@ void main() {
           'name_key': SearchTextNormalizer.normalizeForSearch(sourceDept),
           'is_deleted': 0,
         });
-        await repo.addDepartmentDirectPhone(sourceDeptId, phone);
-        await repo.insertUser(
+        await phones.addDepartmentDirectPhone(sourceDeptId, phone);
+        await users.insertUser(
           firstName: 'Χρήστης',
           lastName: 'Πηγής',
           phones: [phone],
@@ -107,7 +110,7 @@ void main() {
           ],
         );
 
-        final phonesMap = await repo.getDepartmentDirectPhonesMap();
+        final phonesMap = await phones.getDepartmentDirectPhonesMap();
         expect(phonesMap[result.id], contains(phone));
       },
     );

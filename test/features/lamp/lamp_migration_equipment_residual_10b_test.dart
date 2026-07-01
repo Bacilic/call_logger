@@ -1,7 +1,7 @@
 import 'dart:io';
 
 import 'package:call_logger/core/database/database_helper.dart';
-import 'package:call_logger/core/database/directory_repository.dart';
+import 'package:call_logger/core/database/user_repository.dart';
 import 'package:call_logger/features/lamp/services/lamp_migration_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -10,7 +10,7 @@ import '../../test_setup.dart';
 void main() {
   group('ΖΤ-18 residual 10Β — _resolveOwnerId μέσα σε transaction', () {
     late LampMigrationService service;
-    late DirectoryRepository repo;
+    late UserRepository users;
 
     setUpAll(() async {
       initSqfliteFfiForTests();
@@ -28,7 +28,7 @@ void main() {
       await db.delete('phones');
       await db.delete('equipment');
       await db.delete('users');
-      repo = DirectoryRepository(db);
+      users = UserRepository(db);
     });
 
     tearDownAll(() async {
@@ -42,7 +42,7 @@ void main() {
 
         await expectLater(
           db.transaction((txn) async {
-            await repo.insertUser(
+            await users.insertUser(
               firstName: 'Ορφανός',
               lastName: 'Κάτοχος',
               executor: txn,
@@ -77,7 +77,6 @@ void main() {
         );
 
         final db = await DatabaseHelper.instance.database;
-        final dir = DirectoryRepository(db);
         expect(
           await db.query('users', where: 'first_name = ?', whereArgs: ['Νέος']),
           hasLength(1),
@@ -86,7 +85,7 @@ void main() {
           await db.query('equipment', where: 'code_equipment = ?', whereArgs: ['PC-RES-10B']),
           hasLength(1),
         );
-        final owners = await dir.getEquipmentOwnerSnapshots(result.id);
+        final owners = await users.getEquipmentOwnerSnapshots(result.id);
         expect(owners, hasLength(1));
         expect(owners.single['first_name'], 'Νέος');
       },

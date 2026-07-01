@@ -7,7 +7,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/database/database_helper.dart';
-import '../../../../core/database/directory_repository.dart';
+import '../../../../core/database/building_map_repository.dart';
+import '../../../../core/database/department_repository.dart';
+import '../../../../core/database/omnisearch_service.dart';
 import '../../../../core/models/building_map_floor.dart';
 import '../../../../core/services/lookup_service.dart';
 import '../../../calls/models/equipment_model.dart';
@@ -197,7 +199,7 @@ class BuildingMapController {
     final old = tryParseDepartmentHex(dept.color);
     final hex = colorToDepartmentHex(newColor);
     final db = await DatabaseHelper.instance.database;
-    await DirectoryRepository(db).updateDepartment(dept.id!, {'color': hex});
+    await DepartmentRepository(db).updateDepartment(dept.id!, {'color': hex});
     FloorColorAssignmentService.instance.overrideColor(
       floorId,
       newColor,
@@ -349,7 +351,7 @@ class BuildingMapController {
     if (colorHex != null) {
       updates['color'] = colorHex;
     }
-    await DirectoryRepository(db).saveDepartmentWithFloorContext(
+    await DepartmentRepository(db).saveDepartmentWithFloorContext(
       dept.id!,
       updates,
       drawingFloorId: floorId,
@@ -418,7 +420,7 @@ class BuildingMapController {
     final canon = canonicalDepartmentName.trim();
     final String? custom = trimmed.isEmpty || trimmed == canon ? null : trimmed;
     final db = await DatabaseHelper.instance.database;
-    await DirectoryRepository(
+    await DepartmentRepository(
       db,
     ).updateDepartment(departmentId, {'map_custom_name': custom});
     await _ref.read(departmentDirectoryProvider.notifier).loadDepartments();
@@ -488,9 +490,9 @@ class BuildingMapController {
         );
     final db = await DatabaseHelper.instance.database;
     final removedColor = tryParseDepartmentHex(dept.color);
-    await DirectoryRepository(db).updateDepartment(
+    await DepartmentRepository(db).updateDepartment(
       dept.id!,
-      DirectoryRepository.clearedBuildingMapPlacementColumns(
+      BuildingMapRepository.clearedBuildingMapPlacementColumns(
         clearFloorId: true,
         clearDepartmentHex: true,
       ),
@@ -611,7 +613,7 @@ class BuildingMapController {
     int floorId,
   ) async {
     final db = await DatabaseHelper.instance.database;
-    final floors = await DirectoryRepository(db).listBuildingMapFloors();
+    final floors = await BuildingMapRepository(db).listBuildingMapFloors();
     BuildingMapFloor? floor;
     for (final f in floors) {
       if (f.id == floorId) {
@@ -642,7 +644,7 @@ class BuildingMapController {
     try {
       final db = await DatabaseHelper.instance.database;
       final previousPath = floor.imagePath;
-      await DirectoryRepository(db).updateBuildingMapFloor(
+      await BuildingMapRepository(db).updateBuildingMapFloor(
         floor.id,
         rotationDegrees: floor.rotationDegrees,
         imagePath: stored,
@@ -737,15 +739,15 @@ class BuildingMapController {
     if (copied == null || !context.mounted) return;
 
     final db = await DatabaseHelper.instance.database;
-    final repo = DirectoryRepository(db);
-    final id = await repo.insertBuildingMapFloor(
+    final maps = BuildingMapRepository(db);
+    final id = await maps.insertBuildingMapFloor(
       label: label,
       floorGroup: groupCtrl.text.trim().isEmpty ? null : groupCtrl.text.trim(),
       copiedImagePath: copied,
       rotationDegrees: 0,
     );
     _ref.read(buildingMapSelectedSheetIdProvider.notifier).setSheet(id);
-    final floors = await repo.listBuildingMapFloors();
+    final floors = await maps.listBuildingMapFloors();
     if (!context.mounted) return;
     await syncSheetSelection(floors);
     appliedInitialFloorSync = false;
@@ -897,7 +899,7 @@ class BuildingMapController {
     }
 
     final db = await DatabaseHelper.instance.database;
-    await DirectoryRepository(db).updateBuildingMapFloor(
+    await BuildingMapRepository(db).updateBuildingMapFloor(
       floor.id,
       rotationDegrees: floor.rotationDegrees,
       label: label,
@@ -1016,9 +1018,10 @@ class BuildingMapController {
     if (choice == null || !context.mounted) return;
     try {
       final db = await DatabaseHelper.instance.database;
-      await DirectoryRepository(
-        db,
-      ).deleteBuildingMapFloorClearingDepartmentMaps(sheetId);
+      final departments = DepartmentRepository(db);
+      final maps = BuildingMapRepository(db);
+      maps.bindUpdateDepartment(departments.updateDepartment);
+      await maps.deleteBuildingMapFloorClearingDepartmentMaps(sheetId);
       var imageRemoved = false;
       if (choice.deleteImageFile) {
         imageRemoved = await BuildingMapStorage.deleteStoredImageBestEffort(
@@ -1054,7 +1057,7 @@ class BuildingMapController {
 
   Future<void> applySheetRotation(int sheetId, double degrees) async {
     final db = await DatabaseHelper.instance.database;
-    await DirectoryRepository(
+    await BuildingMapRepository(
       db,
     ).updateBuildingMapFloor(sheetId, rotationDegrees: degrees);
     _ref.read(buildingMapFloorReloadSeqProvider.notifier).bump();
@@ -1064,7 +1067,7 @@ class BuildingMapController {
     final snap = _ref.read(buildingMapUndoProvider);
     if (snap == null) return;
     final db = await DatabaseHelper.instance.database;
-    await DirectoryRepository(db).updateDepartment(snap.departmentId, {
+    await DepartmentRepository(db).updateDepartment(snap.departmentId, {
       'map_floor': snap.mapFloor,
       'map_x': snap.mapX,
       'map_y': snap.mapY,
@@ -1344,12 +1347,12 @@ class BuildingMapController {
     BuildContext context,
     dynamic entity,
   ) async {
-    final repo = _ref.read(buildingMapDirectoryRepositoryProvider).asData?.value;
-    if (repo == null) {
+    final repos = _ref.read(buildingMapReposProvider).asData?.value;
+    if (repos == null) {
       _showMapSnack(context, 'Ο χάρτης δεν είναι έτοιμος ακόμη.');
       return;
     }
-    final floors = await repo.listBuildingMapFloors();
+    final floors = await repos.maps.listBuildingMapFloors();
     if (!context.mounted) return;
     if (floors.isEmpty) {
       _showMapSnack(context, 'Δεν υπάρχουν διαθέσιμα φύλλα χάρτη.');

@@ -4,13 +4,13 @@ import 'package:call_logger/core/database/building_map_repository.dart';
 import 'package:call_logger/core/database/category_repository.dart';
 import 'package:call_logger/core/database/database_helper.dart';
 import 'package:call_logger/core/database/department_repository.dart';
-import 'package:call_logger/core/database/directory_repository.dart';
 import 'package:call_logger/core/database/directory_support.dart';
 import 'package:call_logger/core/database/equipment_repository.dart';
 import 'package:call_logger/core/database/phone_repository.dart';
 import 'package:call_logger/core/database/settings_repository.dart';
 import 'package:call_logger/core/database/user_repository.dart';
 import 'package:call_logger/core/errors/department_exists_exception.dart';
+import 'package:call_logger/core/database/integrity_service.dart';
 import 'package:call_logger/core/services/audit_service.dart';
 import 'package:call_logger/core/utils/search_text_normalizer.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -411,21 +411,21 @@ void main() {
     );
 
     test(
-      'BuildingMapRepository.clearedBuildingMapPlacementColumns ≡ DirectoryRepository',
+      'BuildingMapRepository.clearedBuildingMapPlacementColumns static helpers',
       () {
-        expect(
-          BuildingMapRepository.clearedBuildingMapPlacementColumns(),
-          DirectoryRepository.clearedBuildingMapPlacementColumns(),
+        final defaults = BuildingMapRepository.clearedBuildingMapPlacementColumns();
+        expect(defaults['map_floor'], isNull);
+        expect(defaults['map_x'], 0.0);
+
+        final withExtras = BuildingMapRepository.clearedBuildingMapPlacementColumns(
+          clearFloorId: true,
+          clearDepartmentHex: true,
         );
+        expect(withExtras['floor_id'], isNull);
+        expect(withExtras['color'], isNull);
         expect(
-          BuildingMapRepository.clearedBuildingMapPlacementColumns(
-            clearFloorId: true,
-            clearDepartmentHex: true,
-          ),
-          DirectoryRepository.clearedBuildingMapPlacementColumns(
-            clearFloorId: true,
-            clearDepartmentHex: true,
-          ),
+          BuildingMapRepository.buildingMapPlacementColumnNames.toList(),
+          hasLength(defaults.keys.length),
         );
       },
     );
@@ -637,6 +637,202 @@ void main() {
         final floors = await buildingMap.listBuildingMapFloors();
         expect(floors, hasLength(1));
         expect(floors.single.label, 'Όροφος Tier 4d-3');
+      },
+    );
+
+    test(
+      'Tier 5b — IntegrityService(db) integrity + task paths',
+      () async {
+        final integrity = IntegrityService(db);
+        final userId = await db.insert('users', {
+          'first_name': 'Integrity',
+          'last_name': 'Standalone',
+          'is_deleted': 0,
+        });
+
+        expect(await integrity.integrityUserLabel(db, userId), contains('Integrity Standalone'));
+        expect(await integrity.integrityUserLabel(db, null), '—');
+
+        final phoneId = await db.insert('phones', {
+          'number': '2100555501',
+          'is_deleted': 0,
+        });
+        await integrity.softDeletePhoneForIntegrity(
+          phoneId: phoneId,
+          details: 'Tier 5b standalone',
+        );
+        final integrityAudits = await db.query(
+          'audit_log',
+          where: 'action = ?',
+          whereArgs: [DatabaseHelper.auditActionIntegrityFix],
+        );
+        expect(integrityAudits, hasLength(1));
+        expect(integrityAudits.single['details'], 'Tier 5b standalone');
+
+        await db.delete('audit_log');
+        final now = DateTime.now().toIso8601String();
+        final taskId = await db.insert('tasks', {
+          'title': 'Tier 5b Task',
+          'status': 'open',
+          'search_index': 'x',
+          'caller_id': 9,
+          'created_at': now,
+          'updated_at': now,
+          'is_deleted': 0,
+        });
+
+        final oldRow =
+            await integrity.integrityUpdateTaskFk(db, taskId, 'caller_id', null);
+        expect(oldRow!['caller_id'], 9);
+        expect(
+          (await db.query('tasks', where: 'id = ?', whereArgs: [taskId]))
+              .single['caller_id'],
+          isNull,
+        );
+
+        await expectLater(
+          integrity.integrityUpdateTaskFk(db, taskId, 'invalid_field', 1),
+          throwsA(isA<ArgumentError>()),
+        );
+
+        await db.delete('audit_log');
+        await integrity.softDeleteTask(taskId);
+        expect(
+          (await db.query('tasks', where: 'id = ?', whereArgs: [taskId]))
+              .single['is_deleted'],
+          1,
+        );
+        final deleteAudits = await db.query(
+          'audit_log',
+          where: 'action = ? AND entity_id = ?',
+          whereArgs: [DatabaseHelper.auditActionDelete, taskId],
+        );
+        expect(deleteAudits, hasLength(1));
+        expect(deleteAudits.single['entity_type'], AuditEntityTypes.task);
+      },
+    );
+
+    test(
+      'Tier 5c — Phone/Equipment/User/Department/BuildingMap lookup paths',
+      () async {
+        final phones = PhoneRepository(db);
+        final equipment = EquipmentRepository(db);
+        final users = UserRepository(db);
+        final departments = DepartmentRepository(db);
+        final buildingMap = BuildingMapRepository(db, DirectorySupport(db));
+
+        final deptId = await db.insert('departments', {
+          'name': 'Τμήμα Tier 5c',
+          'name_key': SearchTextNormalizer.normalizeForSearch('Τμήμα Tier 5c'),
+          'is_deleted': 0,
+        });
+        final phoneId = await db.insert('phones', {
+          'number': '2345111501',
+          'department_id': deptId,
+          'is_deleted': 0,
+        });
+        await db.insert('department_phones', {
+          'department_id': deptId,
+          'phone_id': phoneId,
+        });
+        final linkedPhoneId = await db.insert('phones', {
+          'number': '2345111502',
+          'is_deleted': 0,
+        });
+        final userId = await db.insert('users', {
+          'first_name': 'Tier',
+          'last_name': '5c',
+          'is_deleted': 0,
+        });
+        await db.insert('user_phones', {
+          'user_id': userId,
+          'phone_id': linkedPhoneId,
+        });
+
+        final directMap = await phones.getDepartmentDirectPhonesMap();
+        expect(directMap[deptId], contains('2345111501'));
+
+        final catalog = await phones.getNonUserPhonesCatalogRows();
+        expect(catalog.any((r) => r['phone_id'] == phoneId), isTrue);
+        expect(catalog.any((r) => r['phone_id'] == linkedPhoneId), isFalse);
+
+        final eqId = await equipment.insertEquipmentFromMap({
+          'code_equipment': 'PC-TIER-5C',
+          'department_id': deptId,
+          'is_deleted': 0,
+        });
+        await equipment.replaceEquipmentUsers(eqId, [userId]);
+        final sourceUserId = userId;
+        final newUserId = await users.insertUser(
+          firstName: 'Κλώνος',
+          lastName: '5c',
+        );
+        await equipment.copyUserEquipmentLinks(sourceUserId, newUserId);
+        expect(await equipment.countUsersLinkedToEquipment(eqId), 2);
+
+        expect((await users.getAllUsers()).any((r) => r['id'] == newUserId), isTrue);
+        expect((await equipment.getAllEquipment()).any((r) => r['id'] == eqId), isTrue);
+        expect(
+          (await equipment.getAllUserEquipmentLinks()).any(
+            (r) => r['user_id'] == newUserId && r['equipment_id'] == eqId,
+          ),
+          isTrue,
+        );
+
+        final active = await departments.getActiveDepartments();
+        expect(active.any((r) => r['id'] == deptId), isTrue);
+
+        await db.insert('building_map_floors', {
+          'sort_order': 0,
+          'label': 'Όροφος Tier 5c',
+          'image_path': 'f.png',
+          'rotation_degrees': 0.0,
+        });
+        expect((await buildingMap.listBuildingMapFloors()), hasLength(1));
+      },
+    );
+
+    test(
+      'Tier 6 — Lamp migration repository paths',
+      () async {
+        final users = UserRepository(db);
+        final equipment = EquipmentRepository(db);
+        final departments = DepartmentRepository(db);
+
+        final deptId = await departments.insertDepartment({
+          'name': 'Τμήμα Tier 6',
+          'name_key': SearchTextNormalizer.normalizeForSearch('Τμήμα Tier 6'),
+          'is_deleted': 0,
+        });
+        final allDepts = await departments.getDepartments();
+        expect(allDepts.any((r) => r['id'] == deptId), isTrue);
+
+        final userId = await db.insert('users', {
+          'first_name': 'Κάτοχος',
+          'last_name': 'Tier6',
+          'is_deleted': 0,
+        });
+        final eqId = await equipment.insertEquipmentFromMap({
+          'code_equipment': 'PC-TIER-6',
+          'is_deleted': 0,
+        });
+        await equipment.linkUserToEquipment(userId, eqId);
+
+        final snapshots = await users.getEquipmentOwnerSnapshots(eqId);
+        expect(snapshots.any((r) => r['id'] == userId), isTrue);
+
+        final otherUserId = await db.insert('users', {
+          'first_name': 'Άλλος',
+          'last_name': 'Κάτοχος',
+          'is_deleted': 0,
+        });
+        await equipment.linkUserToEquipment(otherUserId, eqId);
+        await equipment.removeEquipmentFromAllUsers('PC-TIER-6');
+        expect(await equipment.countUsersLinkedToEquipment(eqId), 0);
+
+        await equipment.linkUserToEquipment(userId, eqId);
+        await equipment.unlinkUserFromEquipment(userId, eqId);
+        expect(await equipment.countUsersLinkedToEquipment(eqId), 0);
       },
     );
   });

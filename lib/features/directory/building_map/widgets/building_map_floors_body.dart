@@ -4,7 +4,6 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../../core/database/directory_repository.dart';
 import '../../../../core/models/building_map_floor.dart';
 import '../../../../core/services/building_map_storage.dart';
 import '../../providers/department_directory_provider.dart';
@@ -24,7 +23,7 @@ import 'views/building_map_view_layout.dart';
 class BuildingMapFloorsBody extends ConsumerStatefulWidget {
   const BuildingMapFloorsBody({super.key, required this.repo});
 
-  final DirectoryRepository repo;
+  final BuildingMapRepos repo;
 
   @override
   ConsumerState<BuildingMapFloorsBody> createState() =>
@@ -84,7 +83,7 @@ class _BuildingMapFloorsBodyState extends ConsumerState<BuildingMapFloorsBody> {
 
     return FutureBuilder<List<BuildingMapFloor>>(
       key: ValueKey<int>(reloadSeq),
-      future: widget.repo.listBuildingMapFloors(),
+      future: widget.repo.maps.listBuildingMapFloors(),
       builder: (context, snap) {
         if (!snap.hasData) {
           return const Center(child: CircularProgressIndicator());

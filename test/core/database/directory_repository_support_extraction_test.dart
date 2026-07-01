@@ -2,7 +2,9 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:call_logger/core/database/database_helper.dart';
-import 'package:call_logger/core/database/directory_repository.dart';
+import 'package:call_logger/core/database/phone_repository.dart';
+import 'package:call_logger/core/database/settings_repository.dart';
+import 'package:call_logger/core/database/user_repository.dart';
 import 'package:call_logger/core/services/audit_service.dart';
 import 'package:call_logger/core/utils/search_text_normalizer.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -10,10 +12,12 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import '../../test_setup.dart';
 
-/// Κλείδωμα συμπεριφοράς κοινών βοηθών DirectoryRepositoryBase πριν από Φάση Γ.0.
+/// Κλείδωμα συμπεριφοράς κοινών βοηθών DirectorySupport πριν από Φάση Γ.0.
 void main() {
-  group('DirectoryRepository support helpers — lock πριν εξαγωγή', () {
-    late DirectoryRepository repo;
+  group('DirectorySupport helpers — lock πριν εξαγωγή', () {
+    late UserRepository users;
+    late PhoneRepository phones;
+    late SettingsRepository settings;
     late Database db;
 
     setUpAll(() async {
@@ -34,7 +38,9 @@ void main() {
       await db.delete('equipment');
       await db.delete('users');
       await db.delete('departments');
-      repo = DirectoryRepository(db);
+      users = UserRepository(db);
+      phones = PhoneRepository(db);
+      settings = SettingsRepository(db);
     });
 
     tearDownAll(() async {
@@ -62,13 +68,13 @@ void main() {
     test('audit performing user: setSetting + ενέργεια audit → σωστό user_performing',
         () async {
       const performer = 'Χρήστης Δοκιμής Audit';
-      await repo.setSetting(
+      await settings.saveSetting(
         DatabaseHelper.auditUserPerformingSettingsKey,
         performer,
       );
 
       const phoneNumber = '2345999901';
-      final userId = await repo.insertUser(
+      final userId = await users.insertUser(
         firstName: 'Audit',
         lastName: 'Performer',
         phones: [phoneNumber],
@@ -88,7 +94,7 @@ void main() {
       );
 
       await db.delete('audit_log');
-      await repo.updateUser(
+      await users.updateUser(
         userId,
         {'notes': 'δοκιμή'},
         skipPhonePolicyValidation: true,
@@ -119,7 +125,7 @@ void main() {
           'is_deleted': 0,
         });
 
-        await repo.replaceUserPhones(userId, [existingNumber, newNumber]);
+        await users.replaceUserPhones(userId, [existingNumber, newNumber]);
 
         final phonesForExisting = await db.query(
           'phones',
@@ -148,7 +154,7 @@ void main() {
     test('link-delta audit: σύνδεση τηλεφώνου μέσω insertUser', () async {
       const phoneNumber = '2345999904';
 
-      final userId = await repo.insertUser(
+      final userId = await users.insertUser(
         firstName: 'Link',
         lastName: 'Phone',
         phones: [phoneNumber],
@@ -199,7 +205,7 @@ void main() {
       });
 
       await db.delete('audit_log');
-      await repo.deleteUsers([userId]);
+      await users.deleteUsers([userId]);
 
       final rows = await db.query(
         'audit_log',
@@ -238,7 +244,7 @@ void main() {
         });
 
         await db.delete('audit_log');
-        await repo.updatePhoneDepartment(phoneNumber, newDeptId);
+        await phones.updatePhoneDepartment(phoneNumber, newDeptId);
 
         final rows = await db.query(
           'audit_log',

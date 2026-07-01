@@ -1,10 +1,20 @@
 import 'package:flutter/material.dart';
 
+/// Εξωτερική λαβή για αναβόσβηση πλαισίου χωρίς νέο άνοιγμα διαλόγου.
+class DialogOutsideTapHintController {
+  _DialogOutsideTapHintScopeState? _state;
+
+  bool get isAttached => _state != null;
+
+  void flash() => _state?._playDoubleFlash();
+}
+
 /// Modal διάλογος που δεν κλείνει με κλικ στο φόντο· αντί αυτού αναβοσβήνει πλαίσιο
 /// (primary) γύρω από το περιεχόμενο, ως υπενθύμιση κλεισίματος με Χ ή ολοκλήρωσης.
 Future<T?> showDialogWithOutsideTapHint<T>({
   required BuildContext context,
   required WidgetBuilder builder,
+  DialogOutsideTapHintController? controller,
   bool useRootNavigator = true,
   RouteSettings? routeSettings,
   Offset? anchorPoint,
@@ -22,6 +32,7 @@ Future<T?> showDialogWithOutsideTapHint<T>({
     transitionDuration: const Duration(milliseconds: 200),
     pageBuilder: (dialogContext, animation, secondaryAnimation) {
       return DialogOutsideTapHintScope(
+        controller: controller,
         child: Builder(builder: builder),
       );
     },
@@ -32,9 +43,14 @@ Future<T?> showDialogWithOutsideTapHint<T>({
 }
 
 class DialogOutsideTapHintScope extends StatefulWidget {
-  const DialogOutsideTapHintScope({required this.child, super.key});
+  const DialogOutsideTapHintScope({
+    required this.child,
+    this.controller,
+    super.key,
+  });
 
   final Widget child;
+  final DialogOutsideTapHintController? controller;
 
   @override
   State<DialogOutsideTapHintScope> createState() =>
@@ -44,6 +60,20 @@ class DialogOutsideTapHintScope extends StatefulWidget {
 class _DialogOutsideTapHintScopeState extends State<DialogOutsideTapHintScope> {
   bool _flashHighlight = false;
   bool _flashPlaying = false;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.controller?._state = this;
+  }
+
+  @override
+  void dispose() {
+    if (identical(widget.controller?._state, this)) {
+      widget.controller?._state = null;
+    }
+    super.dispose();
+  }
 
   Future<void> _playDoubleFlash() async {
     if (_flashPlaying || !mounted) return;
@@ -62,19 +92,16 @@ class _DialogOutsideTapHintScopeState extends State<DialogOutsideTapHintScope> {
     }
   }
 
-  BorderRadiusGeometry _dialogBorderRadius(BuildContext context) {
-    final shape = Theme.of(context).dialogTheme.shape;
-    if (shape is RoundedRectangleBorder) {
-      return shape.borderRadius;
-    }
-    return BorderRadius.circular(28);
-  }
-
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final borderRadius = _dialogBorderRadius(context);
-    final scrim = scheme.scrim.withValues(alpha: 0.54);
+    // Υπόστρωμα σε ηρεμία: σκοτεινό πέπλο. Κατά το flash: στιγμιαία primary απόχρωση,
+    // ώστε να είναι ορατό χωρίς να σκεπάζει τον διάλογο (που επιπλέει από πάνω).
+    final restScrim = scheme.scrim.withValues(alpha: 0.54);
+    final flashScrim = Color.alphaBlend(
+      scheme.primary.withValues(alpha: 0.35),
+      restScrim,
+    );
 
     return SizedBox.expand(
       child: Stack(
@@ -83,36 +110,21 @@ class _DialogOutsideTapHintScopeState extends State<DialogOutsideTapHintScope> {
           GestureDetector(
             onTap: _playDoubleFlash,
             behavior: HitTestBehavior.opaque,
-            child: ColoredBox(color: scrim),
-          ),
-          Center(
-            child: TapRegion(
-              onTapOutside: (_) => _playDoubleFlash(),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 120),
-                curve: Curves.easeInOut,
-                decoration: _flashHighlight
-                    ? BoxDecoration(
-                        borderRadius: borderRadius,
-                        boxShadow: [
-                          BoxShadow(
-                            color: scheme.primary.withValues(alpha: 0.35),
-                            blurRadius: 10,
-                            offset: Offset.zero,
-                          ),
-                        ],
-                      )
-                    : null,
-                foregroundDecoration: _flashHighlight
-                    ? BoxDecoration(
-                        borderRadius: borderRadius,
-                        border: Border.all(color: scheme.primary, width: 3),
-                      )
-                    : null,
-                child: widget.child,
+            child: AnimatedContainer(
+              key: const ValueKey('dialog_flash_backdrop'),
+              duration: const Duration(milliseconds: 120),
+              curve: Curves.easeInOut,
+              decoration: BoxDecoration(
+                color: _flashHighlight ? flashScrim : restScrim,
               ),
+              foregroundDecoration: _flashHighlight
+                  ? BoxDecoration(
+                      border: Border.all(color: scheme.primary, width: 4),
+                    )
+                  : null,
             ),
           ),
+          Center(child: widget.child),
         ],
       ),
     );

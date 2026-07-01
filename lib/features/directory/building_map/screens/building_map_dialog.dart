@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/providers/quick_call_providers.dart';
 import '../../../../core/widgets/quick_call_fab.dart';
-import '../../../../core/database/directory_repository.dart';
 import '../../../../core/models/building_map_floor.dart';
 import '../controllers/building_map_controller.dart';
 import '../providers/building_map_providers.dart';
@@ -50,7 +49,7 @@ class BuildingMapDialog extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final floorsAsync = ref.watch(buildingMapDirectoryRepositoryProvider);
+    final floorsAsync = ref.watch(buildingMapReposProvider);
     final editMode = ref.watch(buildingMapUiEditModeProvider);
     ref.listen(buildingMapUiEditModeProvider, (previous, next) {
       ref.read(buildingMapQuickCallBlockedProvider.notifier).setBlocked(next);
@@ -133,15 +132,15 @@ class BuildingMapDialog extends ConsumerWidget {
 Widget _buildingMapEditModeTitle(WidgetRef ref) {
   final reloadSeq = ref.watch(buildingMapFloorReloadSeqProvider);
   final sheetId = ref.watch(buildingMapSelectedSheetIdProvider);
-  final repoAsync = ref.watch(buildingMapDirectoryRepositoryProvider);
+  final repoAsync = ref.watch(buildingMapReposProvider);
 
   Widget fallback() => const Text('Επεξεργασία Χάρτη');
 
   return repoAsync.when(
-    data: (DirectoryRepository repo) {
+    data: (BuildingMapRepos repo) {
       return FutureBuilder<List<BuildingMapFloor>>(
         key: ValueKey<int>(reloadSeq),
-        future: repo.listBuildingMapFloors(),
+        future: repo.maps.listBuildingMapFloors(),
         builder: (context, snapshot) {
           if (!snapshot.hasData) return fallback();
           final floors = snapshot.data!;

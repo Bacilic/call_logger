@@ -1,7 +1,11 @@
 import 'dart:io';
 
+import 'package:call_logger/core/database/category_repository.dart';
 import 'package:call_logger/core/database/database_helper.dart';
-import 'package:call_logger/core/database/directory_repository.dart';
+import 'package:call_logger/core/database/department_repository.dart';
+import 'package:call_logger/core/database/equipment_repository.dart';
+import 'package:call_logger/core/database/phone_repository.dart';
+import 'package:call_logger/core/database/user_repository.dart';
 import 'package:call_logger/core/utils/search_text_normalizer.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -10,8 +14,12 @@ import '../../test_setup.dart';
 
 /// Κλείδωμα δεδομένων πριν από ομογενοποίηση τύπων (Transaction→DatabaseExecutor, Map dynamic).
 void main() {
-  group('DirectoryRepository type homogenization — data lock', () {
-    late DirectoryRepository repo;
+  group('Repository type homogenization — data lock', () {
+    late UserRepository users;
+    late DepartmentRepository departments;
+    late CategoryRepository categories;
+    late EquipmentRepository equipment;
+    late PhoneRepository phones;
     late Database db;
     late int deptId;
     late int userId;
@@ -40,7 +48,11 @@ void main() {
       await db.delete('users');
       await db.delete('categories');
       await db.delete('departments');
-      repo = DirectoryRepository(db);
+      users = UserRepository(db);
+      departments = DepartmentRepository(db);
+      categories = CategoryRepository(db);
+      equipment = EquipmentRepository(db);
+      phones = PhoneRepository(db);
 
       deptId = await db.insert('departments', {
         'name': 'Τμήμα Τύπων',
@@ -91,10 +103,10 @@ void main() {
     });
 
     test('getAllUsers: σωστά κλειδιά, τιμές και πλήθος', () async {
-      final users = await repo.getAllUsers();
+      final userRows = await users.getAllUsers();
 
-      expect(users, hasLength(1));
-      final row = users.single;
+      expect(userRows, hasLength(1));
+      final row = userRows.single;
       expect(row['id'], userId);
       expect(row['first_name'], 'Έλεγχος');
       expect(row['last_name'], 'Τύπων');
@@ -104,7 +116,7 @@ void main() {
     });
 
     test('getDepartmentRowById: σωστή εγγραφή τμήματος', () async {
-      final row = await repo.getDepartmentRowById(deptId);
+      final row = await departments.getDepartmentRowById(deptId);
 
       expect(row, isNotNull);
       expect(row!['id'], deptId);
@@ -118,7 +130,7 @@ void main() {
         'is_deleted': 1,
       });
 
-      final rows = await repo.getActiveCategoryRows();
+      final rows = await categories.getActiveCategoryRows();
 
       expect(rows, hasLength(1));
       expect(rows.single['id'], categoryId);
@@ -131,7 +143,7 @@ void main() {
         'is_deleted': 1,
       });
 
-      final rows = await repo.getAllEquipment();
+      final rows = await equipment.getAllEquipment();
 
       expect(rows, hasLength(1));
       expect(rows.single['id'], equipmentId);
@@ -140,7 +152,7 @@ void main() {
     });
 
     test('getNonUserPhonesCatalogRows: μόνο τηλέφωνα χωρίς χρήστη', () async {
-      final rows = await repo.getNonUserPhonesCatalogRows();
+      final rows = await phones.getNonUserPhonesCatalogRows();
 
       expect(rows, hasLength(1));
       final row = rows.single;

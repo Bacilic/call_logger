@@ -1,7 +1,8 @@
 import 'dart:io';
 
 import 'package:call_logger/core/database/database_helper.dart';
-import 'package:call_logger/core/database/directory_repository.dart';
+import 'package:call_logger/core/database/department_repository.dart';
+import 'package:call_logger/core/database/phone_repository.dart';
 import 'package:call_logger/core/utils/search_text_normalizer.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -9,8 +10,9 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import '../../test_setup.dart';
 
 void main() {
-  group('DirectoryRepository department writes — executor awareness', () {
-    late DirectoryRepository repo;
+  group('DepartmentRepository department writes — executor awareness', () {
+    late DepartmentRepository departments;
+    late PhoneRepository phones;
     late Database db;
 
     setUpAll(() async {
@@ -25,7 +27,8 @@ void main() {
       await db.delete('department_phones');
       await db.delete('phones');
       await db.delete('departments');
-      repo = DirectoryRepository(db);
+      departments = DepartmentRepository(db);
+      phones = PhoneRepository(db);
     });
 
     tearDownAll(() async {
@@ -45,7 +48,7 @@ void main() {
 
         await expectLater(
           db.transaction((txn) async {
-            await repo.insertDepartment(
+            await departments.insertDepartment(
               departmentRow(deptName),
               executor: txn,
             );
@@ -70,11 +73,11 @@ void main() {
 
         await expectLater(
           db.transaction((txn) async {
-            final id = await repo.insertDepartment(
+            final id = await departments.insertDepartment(
               departmentRow(deptName),
               executor: txn,
             );
-            await repo.addDepartmentDirectPhone(
+            await phones.addDepartmentDirectPhone(
               id,
               '2310999888',
               executor: txn,
@@ -102,16 +105,16 @@ void main() {
         const deptName = 'Τμήμα Εξωτερικής Συναλλαγής';
 
         await db.transaction((txn) async {
-          final id = await repo.insertDepartment(
+          final id = await departments.insertDepartment(
             departmentRow(deptName),
             executor: txn,
           );
-          await repo.addDepartmentDirectPhone(
+          await phones.addDepartmentDirectPhone(
             id,
             '2310111222',
             executor: txn,
           );
-          await repo.updateDepartment(
+          await departments.updateDepartment(
             id,
             {'notes': 'ενημέρωση εντός txn'},
             executor: txn,
@@ -138,10 +141,10 @@ void main() {
     test(
       'regression: χωρίς executor insertDepartment / updateDepartment ίδια συμπεριφορά',
       () async {
-        final id = await repo.insertDepartment(departmentRow('Τμήμα Regression'));
+        final id = await departments.insertDepartment(departmentRow('Τμήμα Regression'));
         expect(id, greaterThan(0));
 
-        final updated = await repo.updateDepartment(
+        final updated = await departments.updateDepartment(
           id,
           {'notes': 'σημείωση'},
         );
@@ -159,11 +162,11 @@ void main() {
     test(
       'regression: getOrCreateDepartmentIdByName χωρίς executor δημιουργεί μία φορά',
       () async {
-        final first = await repo.getOrCreateDepartmentIdByName(
+        final first = await departments.getOrCreateDepartmentIdByName(
           'Τμήμα GetOrCreate',
           recordAudit: false,
         );
-        final second = await repo.getOrCreateDepartmentIdByName(
+        final second = await departments.getOrCreateDepartmentIdByName(
           'Τμήμα GetOrCreate',
           recordAudit: false,
         );
@@ -176,15 +179,15 @@ void main() {
     test(
       'regression: add/removeDepartmentDirectPhone χωρίς executor',
       () async {
-        final id = await repo.insertDepartment(departmentRow('Τμήμα Τηλέφωνα'));
-        await repo.addDepartmentDirectPhone(id, '2310333444');
+        final id = await departments.insertDepartment(departmentRow('Τμήμα Τηλέφωνα'));
+        await phones.addDepartmentDirectPhone(id, '2310333444');
         expect(
-          await repo.getDepartmentDirectPhonesMap(),
+          await phones.getDepartmentDirectPhonesMap(),
           containsPair(id, ['2310333444']),
         );
 
-        await repo.removeDepartmentDirectPhone(id, '2310333444');
-        expect(await repo.getDepartmentDirectPhonesMap(), isNot(contains(id)));
+        await phones.removeDepartmentDirectPhone(id, '2310333444');
+        expect(await phones.getDepartmentDirectPhonesMap(), isNot(contains(id)));
       },
     );
   });

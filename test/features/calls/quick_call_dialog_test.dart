@@ -48,6 +48,20 @@ Finder _quickCallFab() => find.byKey(QuickCallTrigger.triggerKey);
 
 Finder _quickCallDialog() => find.byKey(const ValueKey('quick_call_dialog'));
 
+bool _isQuickCallDialogFlashActive(WidgetTester tester) {
+  final containerFinder = find.descendant(
+    of: find.byType(TapRegion),
+    matching: find.byType(AnimatedContainer),
+  );
+  if (containerFinder.evaluate().isEmpty) return false;
+  final container = tester.widget<AnimatedContainer>(containerFinder.first);
+  final fg = container.foregroundDecoration;
+  if (fg is! BoxDecoration) return false;
+  final border = fg.border;
+  if (border is! Border) return false;
+  return border.top.color != Colors.transparent;
+}
+
 Future<void> _goToHistory(WidgetTester tester) async {
   await tester.tap(find.byKey(const ValueKey('nav_rail_history')));
   await pumpUntilSettled(tester);
@@ -72,6 +86,17 @@ Future<void> _invokeQuickCaptureIntent(WidgetTester tester) async {
   await pumpUntilSettled(tester, steps: 25);
 }
 
+Future<void> _dismissQuickCallDialog(WidgetTester tester) async {
+  final dialog = _quickCallDialog();
+  if (dialog.evaluate().isEmpty) return;
+  await tester.tap(
+    find.descendant(of: dialog, matching: find.byTooltip('Κλείσιμο')),
+  );
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 300));
+  await pumpUntilSettled(tester);
+}
+
 void main() {
   registerCallLoggerIsolatedDatabaseHooks();
 
@@ -90,6 +115,9 @@ void main() {
         addTearDown(() {
           tester.view.resetPhysicalSize();
           tester.view.resetDevicePixelRatio();
+        });
+        addTearDown(() async {
+          await _dismissQuickCallDialog(tester);
         });
 
         await _pumpCallLoggerApp(tester);
@@ -114,6 +142,9 @@ void main() {
           tester.view.resetPhysicalSize();
           tester.view.resetDevicePixelRatio();
         });
+        addTearDown(() async {
+          await _dismissQuickCallDialog(tester);
+        });
 
         await _pumpCallLoggerApp(tester);
         await _goToHistoryImmersive(tester);
@@ -129,6 +160,57 @@ void main() {
         await tester.tap(_quickCallFab());
         await pumpUntilSettled(tester);
         expect(_quickCallDialog(), findsOneWidget);
+
+        await flushCallLoggerSqfliteLockTimers(tester);
+      },
+      semanticsEnabled: false,
+    );
+
+    testWidgets(
+      'δεύτερο άνοιγμα (FAB + συντόμευση) δεν στοιβάζει διάλογο — flash στον υπάρχοντα',
+      (tester) async {
+        tester.view.physicalSize = const Size(1600, 900);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+        addTearDown(() async {
+          await _dismissQuickCallDialog(tester);
+        });
+
+        await _pumpCallLoggerApp(tester);
+        await _goToHistoryImmersive(tester);
+
+        await tester.tap(_quickCallFab());
+        await pumpUntilSettled(tester);
+        expect(_quickCallDialog(), findsOneWidget);
+
+        await _invokeQuickCaptureIntent(tester);
+        await tester.pump(const Duration(milliseconds: 150));
+        expect(
+          _quickCallDialog(),
+          findsOneWidget,
+          reason: greekExpectMsg(
+            'Δεύτερο άνοιγμα δεν πρέπει να ανοίξει δεύτερο QuickCallDialog',
+          ),
+        );
+        expect(
+          _isQuickCallDialogFlashActive(tester),
+          isTrue,
+          reason: greekExpectMsg(
+            'Δεύτερο άνοιγμα πρέπει να αναβοσβήνει τον ήδη ανοιχτό διάλογο',
+          ),
+        );
+
+        await _invokeQuickCaptureIntent(tester);
+        expect(
+          _quickCallDialog(),
+          findsOneWidget,
+          reason: greekExpectMsg(
+            'Συντόμευση με ήδη ανοιχτό διάλογο δεν πρέπει να στοιβάξει δεύτερο',
+          ),
+        );
 
         await flushCallLoggerSqfliteLockTimers(tester);
       },

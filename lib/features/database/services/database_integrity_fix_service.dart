@@ -2,7 +2,7 @@ import 'package:sqflite_common/sqflite.dart';
 
 import '../../../core/database/calls_repository.dart';
 import '../../../core/database/database_helper.dart';
-import '../../../core/database/directory_repository.dart';
+import '../../../core/database/integrity_service.dart';
 import '../../../core/services/audit_service.dart';
 import '../../../features/tasks/services/task_service.dart';
 import '../models/database_integrity_finding.dart';
@@ -12,16 +12,16 @@ import 'integrity_audit_details_builder.dart';
 /// Μηχανισμός εκτέλεσης επιδιορθώσεων ακεραιότητας (transactions + audit).
 class DatabaseIntegrityFixService {
   DatabaseIntegrityFixService({
-    DirectoryRepository Function(Database db)? directoryFactory,
+    IntegrityService Function(Database db)? integrityFactory,
     CallsRepository Function(Database db)? callsFactory,
     TaskService Function()? taskServiceFactory,
     IntegrityAuditDetailsBuilder? auditBuilder,
-  })  : _directoryFactory = directoryFactory ?? ((db) => DirectoryRepository(db)),
+  })  : _integrityFactory = integrityFactory ?? ((db) => IntegrityService(db)),
         _callsFactory = callsFactory ?? ((db) => CallsRepository(db)),
         _taskServiceFactory = taskServiceFactory ?? TaskService.new,
         _audit = auditBuilder ?? const IntegrityAuditDetailsBuilder();
 
-  final DirectoryRepository Function(Database db) _directoryFactory;
+  final IntegrityService Function(Database db) _integrityFactory;
   final CallsRepository Function(Database db) _callsFactory;
   final TaskService Function() _taskServiceFactory;
   final IntegrityAuditDetailsBuilder _audit;
@@ -80,7 +80,7 @@ class DatabaseIntegrityFixService {
     IntegrityFixDecision decision,
   ) async {
     final db = await DatabaseHelper.instance.database;
-    final dir = _directoryFactory(db);
+    final dir = _integrityFactory(db);
     final calls = _callsFactory(db);
     final tasks = _taskServiceFactory();
 
@@ -121,7 +121,7 @@ class DatabaseIntegrityFixService {
   }
 
   Future<void> _fixOrphanPhone(
-    DirectoryRepository dir,
+    IntegrityService dir,
     DatabaseIntegrityFinding finding,
     IntegrityFixDecision decision,
   ) async {
@@ -172,7 +172,7 @@ class DatabaseIntegrityFixService {
   Future<void> _fixCallSearchIndex(
     Database db,
     CallsRepository calls,
-    DirectoryRepository dir,
+    IntegrityService dir,
     DatabaseIntegrityFinding finding,
   ) async {
     final callId = _ctxInt(finding, 'call_id') ?? finding.affectedId;
@@ -209,7 +209,7 @@ class DatabaseIntegrityFixService {
   Future<void> _fixTaskSearchIndex(
     Database db,
     TaskService tasks,
-    DirectoryRepository dir,
+    IntegrityService dir,
     DatabaseIntegrityFinding finding,
   ) async {
     final taskId = _ctxInt(finding, 'task_id') ?? finding.affectedId;
@@ -247,7 +247,7 @@ class DatabaseIntegrityFixService {
   }
 
   Future<void> _fixUserWithoutDepartment(
-    DirectoryRepository dir,
+    IntegrityService dir,
     Database db,
     DatabaseIntegrityFinding finding,
     IntegrityFixDecision decision,
@@ -293,7 +293,7 @@ class DatabaseIntegrityFixService {
   }
 
   Future<void> _fixUserInvalidDepartment(
-    DirectoryRepository dir,
+    IntegrityService dir,
     Database db,
     DatabaseIntegrityFinding finding,
     IntegrityFixDecision decision,
@@ -328,7 +328,7 @@ class DatabaseIntegrityFixService {
 
   Future<void> _fixTaskInvalidCall(
     Database db,
-    DirectoryRepository dir,
+    IntegrityService dir,
     TaskService tasks,
     DatabaseIntegrityFinding finding,
     IntegrityFixDecision decision,
@@ -372,7 +372,7 @@ class DatabaseIntegrityFixService {
   }
 
   Future<void> _fixDepartmentNameKey(
-    DirectoryRepository dir,
+    IntegrityService dir,
     DatabaseIntegrityFinding finding,
   ) async {
     final departmentId =
@@ -397,7 +397,7 @@ class DatabaseIntegrityFixService {
   }
 
   Future<void> _fixOrphanCallExternalLink(
-    DirectoryRepository dir,
+    IntegrityService dir,
     DatabaseIntegrityFinding finding,
   ) async {
     final linkId = _ctxInt(finding, 'link_id') ?? finding.affectedId;
@@ -417,7 +417,7 @@ class DatabaseIntegrityFixService {
   }
 
   Future<void> _fixOrphanUserPhones(
-    DirectoryRepository dir,
+    IntegrityService dir,
     DatabaseIntegrityFinding finding,
   ) async {
     final userId = _ctxInt(finding, 'user_id');
@@ -434,7 +434,7 @@ class DatabaseIntegrityFixService {
   }
 
   Future<void> _fixOrphanDepartmentPhones(
-    DirectoryRepository dir,
+    IntegrityService dir,
     DatabaseIntegrityFinding finding,
   ) async {
     final departmentId = _ctxInt(finding, 'department_id');
@@ -451,7 +451,7 @@ class DatabaseIntegrityFixService {
   }
 
   Future<void> _fixOrphanUserEquipment(
-    DirectoryRepository dir,
+    IntegrityService dir,
     DatabaseIntegrityFinding finding,
   ) async {
     final userId = _ctxInt(finding, 'user_id');
@@ -470,7 +470,7 @@ class DatabaseIntegrityFixService {
   Future<void> _fixCallDeletedFk(
     Database db,
     CallsRepository calls,
-    DirectoryRepository dir,
+    IntegrityService dir,
     DatabaseIntegrityFinding finding,
     IntegrityFixDecision decision,
   ) async {
@@ -517,7 +517,7 @@ class DatabaseIntegrityFixService {
 
   Future<void> _fixTaskDeletedFk(
     Database db,
-    DirectoryRepository dir,
+    IntegrityService dir,
     DatabaseIntegrityFinding finding,
     IntegrityFixDecision decision,
   ) async {
@@ -565,7 +565,7 @@ class DatabaseIntegrityFixService {
 
   Future<void> _fixTaskTemporal(
     Database db,
-    DirectoryRepository dir,
+    IntegrityService dir,
     DatabaseIntegrityFinding finding,
   ) async {
     final taskId = _ctxInt(finding, 'task_id') ?? finding.affectedId;
@@ -604,7 +604,7 @@ class DatabaseIntegrityFixService {
 
   Future<void> _fixAuditSearchText(
     Database db,
-    DirectoryRepository dir,
+    IntegrityService dir,
     DatabaseIntegrityFinding finding,
   ) async {
     final auditId = _ctxInt(finding, 'audit_id') ?? finding.affectedId;

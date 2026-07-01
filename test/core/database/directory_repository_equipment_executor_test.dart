@@ -1,15 +1,15 @@
 import 'dart:io';
 
 import 'package:call_logger/core/database/database_helper.dart';
-import 'package:call_logger/core/database/directory_repository.dart';
+import 'package:call_logger/core/database/equipment_repository.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import '../../test_setup.dart';
 
 void main() {
-  group('DirectoryRepository equipment writes — executor awareness', () {
-    late DirectoryRepository repo;
+  group('EquipmentRepository equipment writes — executor awareness', () {
+    late EquipmentRepository repo;
     late Database db;
     late int userId;
 
@@ -30,7 +30,7 @@ void main() {
         'last_name': 'Χρήστης',
         'is_deleted': 0,
       });
-      repo = DirectoryRepository(db);
+      repo = EquipmentRepository(db);
     });
 
     tearDownAll(() async {

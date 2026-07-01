@@ -3,7 +3,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/database/database_helper.dart';
-import '../../../core/database/directory_repository.dart';
+import '../../../core/database/equipment_repository.dart';
 import '../../../core/database/phone_repository.dart';
 import '../../../core/database/settings_repository.dart';
 import '../../../core/database/user_repository.dart';
@@ -243,7 +243,7 @@ class DirectoryNotifier extends Notifier<DirectoryState> {
     final dbUsers = await DatabaseHelper.instance.database;
     final repo = UserRepository(dbUsers);
     final rows = await repo.getAllUsers();
-    final nonUserRows = await DirectoryRepository(dbUsers).getNonUserPhonesCatalogRows();
+    final nonUserRows = await PhoneRepository(dbUsers).getNonUserPhonesCatalogRows();
     if (!ref.mounted) return;
     final list = rows.map((m) => UserModel.fromMap(m)).toList();
     final nonUserList = <NonUserPhoneEntry>[];
@@ -587,7 +587,7 @@ class DirectoryNotifier extends Notifier<DirectoryState> {
     final dbClone = await DatabaseHelper.instance.database;
     final users = UserRepository(dbClone);
     final newId = await users.insertUserFromMap(u.toMap());
-    await DirectoryRepository(dbClone).copyUserEquipmentLinks(sourceUserId, newId);
+    await EquipmentRepository(dbClone).copyUserEquipmentLinks(sourceUserId, newId);
     await _refreshLookupCache();
     await loadUsers();
     await refreshDirectoryCaches(ref, equipment: true);

@@ -15,7 +15,7 @@ import '../utils/search_text_normalizer.dart';
 
 /// Πρόσβαση σε πίνακα `calls` και επαναδόμηση `search_index`.
 ///
-/// Δεν εξαρτάται από [DirectoryRepository] / [DictionaryRepository].
+/// Δεν εξαρτάται από repositories καταλόγου ούτε από [DictionaryRepository].
 class CallsRepository {
   CallsRepository(this.db);
 

@@ -150,9 +150,14 @@ class TaskCard extends ConsumerStatefulWidget {
         ];
         for (final entry in snoozeEntries.asMap().entries) {
           final i = entry.key + 1;
-          lines.add(
-            '$iη: ${DateFormat('dd/MM HH:mm').format(entry.value.snoozedAt)}',
-          );
+          final line =
+              '$iη: ${DateFormat('dd/MM HH:mm').format(entry.value.snoozedAt)}';
+          final note = entry.value.note?.trim();
+          if (note != null && note.isNotEmpty) {
+            lines.add('$line — λόγος: $note');
+          } else {
+            lines.add(line);
+          }
         }
         return lines.join('\n');
       case TaskStatus.closed:

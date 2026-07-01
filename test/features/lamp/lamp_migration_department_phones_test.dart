@@ -1,7 +1,7 @@
 import 'dart:io';
 
 import 'package:call_logger/core/database/database_helper.dart';
-import 'package:call_logger/core/database/directory_repository.dart';
+import 'package:call_logger/core/database/phone_repository.dart';
 import 'package:call_logger/core/services/lookup_service.dart';
 import 'package:call_logger/core/utils/search_text_normalizer.dart';
 import 'package:call_logger/features/lamp/services/lamp_migration_service.dart';
@@ -46,14 +46,14 @@ void main() {
       List<String> phones = const [],
     }) async {
       final db = await DatabaseHelper.instance.database;
-      final dir = DirectoryRepository(db);
+      final phoneRepo = PhoneRepository(db);
       final id = await db.insert('departments', {
         'name': name,
         'name_key': SearchTextNormalizer.normalizeForSearch(name),
         'is_deleted': 0,
       });
       for (final phone in phones) {
-        await dir.addDepartmentDirectPhone(id, phone);
+        await phoneRepo.addDepartmentDirectPhone(id, phone);
       }
       await reloadLookup();
       return id;
@@ -87,8 +87,8 @@ void main() {
         );
 
         final db = await DatabaseHelper.instance.database;
-        final dir = DirectoryRepository(db);
-        final phonesMap = await dir.getDepartmentDirectPhonesMap();
+        final phoneRepo = PhoneRepository(db);
+        final phonesMap = await phoneRepo.getDepartmentDirectPhonesMap();
         final saved = phonesMap[result.id] ?? const <String>[];
         expect(saved, containsAll(['2310501000', '2310501001']));
         expect(saved.length, 2);
@@ -128,8 +128,8 @@ void main() {
       );
 
       final db = await DatabaseHelper.instance.database;
-      final dir = DirectoryRepository(db);
-      final before = await dir.getDepartmentDirectPhonesMap();
+      final phoneRepo = PhoneRepository(db);
+      final before = await phoneRepo.getDepartmentDirectPhonesMap();
 
       await service.save(
         target: LampTransferTarget.department,
@@ -140,7 +140,7 @@ void main() {
         selectedCandidateId: deptId,
       );
 
-      final after = await dir.getDepartmentDirectPhonesMap();
+      final after = await phoneRepo.getDepartmentDirectPhonesMap();
       expect(after[deptId], before[deptId]);
     });
 

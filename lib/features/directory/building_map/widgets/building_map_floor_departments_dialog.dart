@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/database/database_helper.dart';
-import '../../../../core/database/directory_repository.dart';
+import '../../../../core/database/building_map_repository.dart';
+import '../../../../core/database/department_repository.dart';
 import '../../../../core/utils/search_text_normalizer.dart';
 import '../../models/department_model.dart';
 import '../../providers/department_directory_provider.dart';
@@ -97,7 +98,7 @@ class BuildingMapFloorDepartmentsButton extends ConsumerWidget {
 }
 
 /// Διάλογος «Τμήματα ορόφου». Εμφανίζει μόνο όσα τμήματα είναι χαρτογραφημένα
-/// στο [currentSheetId]. Ρίχνει άμεσα αλλαγές μέσω [DirectoryRepository].
+/// στο [currentSheetId]. Ρίχνει άμεσα αλλαγές μέσω standalone repositories.
 Future<void> showBuildingMapFloorDepartmentsDialog(
   BuildContext context, {
   required WidgetRef ref,
@@ -199,7 +200,7 @@ class _BuildingMapFloorDepartmentsDialogState
   Future<void> _setHidden(DepartmentModel d, bool hidden) async {
     if (d.id == null) return;
     final db = await DatabaseHelper.instance.database;
-    await DirectoryRepository(db).updateDepartment(d.id!, {
+    await DepartmentRepository(db).updateDepartment(d.id!, {
       'map_hidden': hidden ? 1 : 0,
     });
     await ref.read(departmentDirectoryProvider.notifier).loadDepartments();
@@ -209,7 +210,7 @@ class _BuildingMapFloorDepartmentsDialogState
   Future<void> _setHiddenBulk(Iterable<int> ids, bool hidden) async {
     if (ids.isEmpty) return;
     final db = await DatabaseHelper.instance.database;
-    final repo = DirectoryRepository(db);
+    final repo = DepartmentRepository(db);
     for (final id in ids) {
       await repo.updateDepartment(id, {'map_hidden': hidden ? 1 : 0});
     }
@@ -300,14 +301,14 @@ class _BuildingMapFloorDepartmentsDialogState
     );
     if (go != true || !mounted) return;
     final db = await DatabaseHelper.instance.database;
-    final repo = DirectoryRepository(db);
+    final repo = DepartmentRepository(db);
     final fid = widget.currentSheetId;
     for (final d in selected) {
       if (d.id == null) continue;
       final removedColor = tryParseDepartmentHex(d.color);
       await repo.updateDepartment(
         d.id!,
-        DirectoryRepository.clearedBuildingMapPlacementColumns(
+        BuildingMapRepository.clearedBuildingMapPlacementColumns(
           clearFloorId: true,
           clearDepartmentHex: true,
         ),

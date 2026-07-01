@@ -3,7 +3,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import '../services/audit_service.dart';
 import 'database_helper.dart';
 
-/// Κοινοί βοηθοί persistence καταλόγου — εξαγόμενοι από [DirectoryRepositoryBase].
+/// Κοινοί βοηθοί persistence καταλόγου — κοινό υπόβαθρο των repositories καταλόγου.
 class DirectorySupport {
   DirectorySupport(this.db);
 

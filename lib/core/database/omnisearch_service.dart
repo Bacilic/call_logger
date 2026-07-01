@@ -28,8 +28,9 @@ class BuildingMapOmnisearchHit {
 
 /// Read-only αναζήτηση καταλόγου για τον χάρτη κτιρίου (τμήματα, χρήστες, εξοπλισμός).
 class OmnisearchService {
-  OmnisearchService(this.db, this._support)
-      : _buildingMap = BuildingMapRepository(db, _support);
+  OmnisearchService(this.db, [DirectorySupport? support])
+      : _support = support ?? DirectorySupport(db),
+        _buildingMap = BuildingMapRepository(db, support);
 
   final Database db;
   final DirectorySupport _support;

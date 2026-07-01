@@ -2,7 +2,8 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:call_logger/core/database/database_helper.dart';
-import 'package:call_logger/core/database/directory_repository.dart';
+import 'package:call_logger/core/database/equipment_repository.dart';
+import 'package:call_logger/core/database/settings_repository.dart';
 import 'package:call_logger/core/services/audit_service.dart';
 import 'package:call_logger/core/utils/search_text_normalizer.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -13,7 +14,8 @@ import '../../test_setup.dart';
 /// Κλείδωμα συμπεριφοράς εξοπλισμού πριν από Φάση Γ.2β (EquipmentRepository).
 void main() {
   group('EquipmentRepository behavior — lock πριν εξαγωγή', () {
-    late DirectoryRepository repo;
+    late EquipmentRepository repo;
+    late SettingsRepository settings;
     late Database db;
     late int userId;
     late int userId2;
@@ -47,7 +49,8 @@ void main() {
         'last_name': 'Β',
         'is_deleted': 0,
       });
-      repo = DirectoryRepository(db);
+      repo = EquipmentRepository(db);
+      settings = SettingsRepository(db);
     });
 
     tearDownAll(() async {
@@ -112,7 +115,7 @@ void main() {
       () async {
         final deptId = await insertDepartment('Τμήμα Εξοπλισμού');
 
-        await repo.setSetting(
+        await settings.saveSetting(
           DatabaseHelper.auditUserPerformingSettingsKey,
           'Editor Εξοπλισμού',
         );
@@ -315,7 +318,7 @@ void main() {
 
     test('deleteEquipments / restoreEquipment: is_deleted και audit', () async {
       final eqId = await repo.insertEquipmentFromMap(equipmentRow('PC-DELETE'));
-      await repo.setSetting(
+      await settings.saveSetting(
         DatabaseHelper.auditUserPerformingSettingsKey,
         'Admin Εξοπλισμού',
       );

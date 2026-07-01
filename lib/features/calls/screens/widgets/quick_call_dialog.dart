@@ -18,10 +18,24 @@ import 'notes_sticky_field.dart';
 import 'remote_connection_buttons.dart';
 import 'smart_entity_selector_widget.dart';
 
+DialogOutsideTapHintController? _openQuickCallController;
+
 /// Εμφανίζει modal διάλογο γρήγορης καταγραφής με ανεξάρτητο provider scope.
 Future<void> showQuickCallDialog(BuildContext context) {
+  final existing = _openQuickCallController;
+  if (existing != null) {
+    if (existing.isAttached) {
+      existing.flash();
+      return Future<void>.value();
+    }
+    _openQuickCallController = null;
+  }
+
+  final controller = DialogOutsideTapHintController();
+  _openQuickCallController = controller;
   return showDialogWithOutsideTapHint<void>(
     context: context,
+    controller: controller,
     builder: (dialogContext) => ProviderScope(
       overrides: [
         callSmartEntityProvider.overrideWith(SmartEntitySelectorNotifier.new),
@@ -35,7 +49,11 @@ Future<void> showQuickCallDialog(BuildContext context) {
       ],
       child: const QuickCallDialog(),
     ),
-  );
+  ).whenComplete(() {
+    if (identical(_openQuickCallController, controller)) {
+      _openQuickCallController = null;
+    }
+  });
 }
 
 /// Modal γρήγορης καταγραφής — ξεχωριστό scope, χωρίς επαφή με την κύρια φόρμα.

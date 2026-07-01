@@ -463,99 +463,18 @@ class _TasksScreenState extends ConsumerState<TasksScreen> {
         ? 'Μέγιστο εύρος: 1 ημέρα'
         : 'Μέγιστο εύρος: ${config.maxSnoozeDays} ημέρες';
 
-    final choice = await showDialog<String>(
+    final result = await showDialog<({String choice, String? note})>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Αναβολή'),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text(
-                'Γρήγορη επιλογή',
-                style: Theme.of(ctx).textTheme.titleSmall,
-              ),
-              const SizedBox(height: 8),
-              Tooltip(
-                message: TaskDueOptionTooltips.plusOneHour(),
-                child: FilledButton.tonal(
-                  onPressed: () =>
-                      Navigator.of(ctx).pop(TaskSettingsConfig.kOneHour),
-                  child: const Text('+1 ώρα'),
-                ),
-              ),
-              const SizedBox(height: 8),
-              Tooltip(
-                message: TaskDueOptionTooltips.withinSchedule(
-                  config.nextBusinessHour,
-                  config.dayEndTime,
-                ),
-                child: FilledButton.tonal(
-                  onPressed: () =>
-                      Navigator.of(ctx).pop(TaskSettingsConfig.kDayEnd),
-                  child: const Text('Μέσα στο ωράριο'),
-                ),
-              ),
-              const SizedBox(height: 8),
-              Tooltip(
-                message: TaskDueOptionTooltips.nextBusiness(
-                  config.nextBusinessHour,
-                ),
-                child: FilledButton.tonal(
-                  onPressed: () =>
-                      Navigator.of(ctx).pop(TaskSettingsConfig.kNextBusiness),
-                  child: const Text('Επόμενη εργάσιμη'),
-                ),
-              ),
-              const SizedBox(height: 16),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  Expanded(
-                    child: Text(
-                      maxRangeText,
-                      style: Theme.of(ctx).textTheme.bodySmall?.copyWith(
-                        fontWeight: FontWeight.bold,
-                        color: Theme.of(ctx).colorScheme.onSurface,
-                      ),
-                    ),
-                  ),
-                  TextButton.icon(
-                    style: TextButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 4,
-                      ),
-                      visualDensity: VisualDensity.compact,
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    ),
-                    onPressed: () => Navigator.of(ctx).pop('custom'),
-                    icon: const Icon(Icons.edit_calendar_outlined, size: 20),
-                    label: const Text('Άλλη ημερομηνία…'),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 4),
-              Text(
-                'Ο επιλογέας ημερομηνίας περιορίζεται στο παραπάνω εύρος.',
-                style: Theme.of(ctx).textTheme.bodySmall?.copyWith(
-                  color: Theme.of(ctx).colorScheme.onSurfaceVariant,
-                ),
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Ακύρωση'),
-          ),
-        ],
+      builder: (ctx) => _SnoozeChoiceDialog(
+        config: config,
+        maxRangeText: maxRangeText,
       ),
     );
 
-    if (!context.mounted || choice == null) return;
+    if (!context.mounted || result == null) return;
+
+    final choice = result.choice;
+    final snoozeNote = result.note;
 
     if (choice != 'custom') {
       final newDue = service.calculateNextDueDate(
@@ -568,7 +487,7 @@ class _TasksScreenState extends ConsumerState<TasksScreen> {
             dueDate: newDue.toIso8601String(),
             status: TaskStatus.snoozed.toDbValue,
           )
-          .addSnoozeEntry(newDue);
+          .addSnoozeEntry(newDue, note: snoozeNote);
       try {
         await ref.read(tasksProvider.notifier).updateTask(updatedTask);
         if (!context.mounted) return;
@@ -622,7 +541,7 @@ class _TasksScreenState extends ConsumerState<TasksScreen> {
           dueDate: newDue.toIso8601String(),
           status: TaskStatus.snoozed.toDbValue,
         )
-        .addSnoozeEntry(newDue);
+        .addSnoozeEntry(newDue, note: snoozeNote);
     try {
       await ref.read(tasksProvider.notifier).updateTask(updatedTask);
       if (!context.mounted) return;
@@ -963,6 +882,140 @@ class _OrphanCallsBanner extends ConsumerWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _SnoozeChoiceDialog extends StatefulWidget {
+  const _SnoozeChoiceDialog({
+    required this.config,
+    required this.maxRangeText,
+  });
+
+  final TaskSettingsConfig config;
+  final String maxRangeText;
+
+  @override
+  State<_SnoozeChoiceDialog> createState() => _SnoozeChoiceDialogState();
+}
+
+class _SnoozeChoiceDialogState extends State<_SnoozeChoiceDialog> {
+  final _noteController = TextEditingController();
+
+  @override
+  void dispose() {
+    _noteController.dispose();
+    super.dispose();
+  }
+
+  String? get _trimmedNote {
+    final trimmed = _noteController.text.trim();
+    return trimmed.isEmpty ? null : trimmed;
+  }
+
+  void _pop(String choice) {
+    Navigator.of(context).pop((choice: choice, note: _trimmedNote));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final config = widget.config;
+    final maxRangeText = widget.maxRangeText;
+
+    return AlertDialog(
+      title: const Text('Αναβολή'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              'Γρήγορη επιλογή',
+              style: Theme.of(context).textTheme.titleSmall,
+            ),
+            const SizedBox(height: 8),
+            Tooltip(
+              message: TaskDueOptionTooltips.plusOneHour(),
+              child: FilledButton.tonal(
+                onPressed: () => _pop(TaskSettingsConfig.kOneHour),
+                child: const Text('+1 ώρα'),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Tooltip(
+              message: TaskDueOptionTooltips.withinSchedule(
+                config.nextBusinessHour,
+                config.dayEndTime,
+              ),
+              child: FilledButton.tonal(
+                onPressed: () => _pop(TaskSettingsConfig.kDayEnd),
+                child: const Text('Μέσα στο ωράριο'),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Tooltip(
+              message: TaskDueOptionTooltips.nextBusiness(
+                config.nextBusinessHour,
+              ),
+              child: FilledButton.tonal(
+                onPressed: () => _pop(TaskSettingsConfig.kNextBusiness),
+                child: const Text('Επόμενη εργάσιμη'),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Expanded(
+                  child: Text(
+                    maxRangeText,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      color: Theme.of(context).colorScheme.onSurface,
+                    ),
+                  ),
+                ),
+                TextButton.icon(
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
+                    visualDensity: VisualDensity.compact,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                  onPressed: () => _pop('custom'),
+                  icon: const Icon(Icons.edit_calendar_outlined, size: 20),
+                  label: const Text('Άλλη ημερομηνία…'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Ο επιλογέας ημερομηνίας περιορίζεται στο παραπάνω εύρος.',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _noteController,
+              maxLines: 3,
+              decoration: const InputDecoration(
+                labelText: 'Λόγος αναβολής (προαιρετικό)',
+                border: OutlineInputBorder(),
+                isDense: true,
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Ακύρωση'),
+        ),
+      ],
     );
   }
 }

@@ -1,7 +1,7 @@
 import 'dart:io';
 
 import 'package:call_logger/core/database/database_helper.dart';
-import 'package:call_logger/core/database/directory_repository.dart';
+import 'package:call_logger/core/database/omnisearch_service.dart';
 import 'package:call_logger/core/utils/search_text_normalizer.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -11,7 +11,7 @@ import '../../test_setup.dart';
 /// Κλείδωμα συμπεριφοράς omnisearch πριν από Φάση Γ.3α (OmnisearchService).
 void main() {
   group('Omnisearch behavior — lock πριν εξαγωγή', () {
-    late DirectoryRepository repo;
+    late OmnisearchService repo;
     late Database db;
 
     setUpAll(() async {
@@ -33,7 +33,7 @@ void main() {
       await db.delete('equipment');
       await db.delete('users');
       await db.delete('departments');
-      repo = DirectoryRepository(db);
+      repo = OmnisearchService(db);
     });
 
     tearDownAll(() async {

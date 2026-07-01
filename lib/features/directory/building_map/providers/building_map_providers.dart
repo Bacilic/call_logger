@@ -5,7 +5,9 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/database/database_helper.dart';
-import '../../../../core/database/directory_repository.dart';
+import '../../../../core/database/building_map_repository.dart';
+import '../../../../core/database/department_repository.dart';
+import '../../../../core/database/omnisearch_service.dart';
 import '../../../../core/models/building_map_floor.dart';
 import '../building_map_label_layout.dart';
 
@@ -81,11 +83,24 @@ final buildingMapUndoProvider =
       BuildingMapUndoController.new,
     );
 
-final buildingMapDirectoryRepositoryProvider =
-    FutureProvider<DirectoryRepository>((ref) async {
-      final db = await DatabaseHelper.instance.database;
-      return DirectoryRepository(db);
-    });
+/// Standalone repositories για το subfeature χάρτη κτιρίου (Φάση Γ.4 / Tier 5a).
+typedef BuildingMapRepos = ({
+  BuildingMapRepository maps,
+  OmnisearchService search,
+  DepartmentRepository departments,
+});
+
+final buildingMapReposProvider = FutureProvider<BuildingMapRepos>((ref) async {
+  final db = await DatabaseHelper.instance.database;
+  final departments = DepartmentRepository(db);
+  final maps = BuildingMapRepository(db);
+  maps.bindUpdateDepartment(departments.updateDepartment);
+  return (
+    maps: maps,
+    search: OmnisearchService(db),
+    departments: departments,
+  );
+});
 
 final buildingMapSelectedSheetIdProvider =
     NotifierProvider<BuildingMapSelectedSheetIdNotifier, int?>(
@@ -355,7 +370,7 @@ final buildingMapFloorsCatalogProvider =
     FutureProvider<List<BuildingMapFloor>>((ref) async {
   ref.watch(buildingMapFloorReloadSeqProvider);
   final db = await DatabaseHelper.instance.database;
-  return DirectoryRepository(db).listBuildingMapFloors();
+  return BuildingMapRepository(db).listBuildingMapFloors();
 });
 
 /// Αύξων αριθμός όταν η αναζήτηση χάρτη ζητά κεντράρισμα στο επιλεγμένο τμήμα (μόνο pan, ίδιο zoom).

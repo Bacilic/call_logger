@@ -7,11 +7,14 @@ import 'user_repository.dart';
 
 /// Orchestrator επιδιορθώσεων ακεραιότητας καταλόγου και εκκρεμοτήτων.
 class IntegrityService {
-  IntegrityService(this.db, this._support, this._users);
+  IntegrityService(this.db, {DirectorySupport? support, UserRepository? users})
+      : _support = support ?? DirectorySupport(db) {
+    _users = users ?? UserRepository(db, support: _support);
+  }
 
   final Database db;
   final DirectorySupport _support;
-  final UserRepository _users;
+  late final UserRepository _users;
 
   Future<void> softDeleteTask(int id) async {
     final user = await _support.auditPerformingUser();

@@ -1,7 +1,10 @@
 import 'package:flutter/foundation.dart';
 
 import '../database/database_helper.dart';
-import '../database/directory_repository.dart';
+import '../database/department_repository.dart';
+import '../database/equipment_repository.dart';
+import '../database/phone_repository.dart';
+import '../database/user_repository.dart';
 import '../utils/department_display_utils.dart';
 import '../utils/search_text_normalizer.dart';
 import '../../features/calls/models/equipment_model.dart';
@@ -96,10 +99,11 @@ class LookupService {
     }
     if (_loaded) return;
     final db = await DatabaseHelper.instance.database;
-    final dir = DirectoryRepository(db);
-    final userMaps = await dir.getAllUsers();
-    final equipmentMaps = await dir.getAllEquipment();
-    final linkMaps = await dir.getAllUserEquipmentLinks();
+    final users = UserRepository(db);
+    final equipmentRepo = EquipmentRepository(db);
+    final userMaps = await users.getAllUsers();
+    final equipmentMaps = await equipmentRepo.getAllEquipment();
+    final linkMaps = await equipmentRepo.getAllUserEquipmentLinks();
     // Καθαρισμός πριν επαναπλήρωση: αποφυγή διπλοτύπων / stale entries μετά από reload στα tests.
     _users.clear();
     _equipment.clear();
@@ -131,9 +135,10 @@ class LookupService {
   Future<void> loadDepartments() async {
     if (_loadedDepartments) return;
     final db = await DatabaseHelper.instance.database;
-    final dir = DirectoryRepository(db);
-    final maps = await dir.getActiveDepartments();
-    _departmentDirectPhones = await dir.getDepartmentDirectPhonesMap();
+    final departmentRepo = DepartmentRepository(db);
+    final phones = PhoneRepository(db);
+    final maps = await departmentRepo.getActiveDepartments();
+    _departmentDirectPhones = await phones.getDepartmentDirectPhonesMap();
     _phoneDepartmentByNumber
       ..clear()
       ..addAll(_buildPhoneDepartmentIndex(_departmentDirectPhones));

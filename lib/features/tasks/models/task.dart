@@ -242,6 +242,10 @@ class Task {
     phoneText ?? '',
     equipmentText ?? '',
     departmentText ?? '',
+    snoozeEntries
+        .map((e) => e.note ?? '')
+        .where((s) => s.isNotEmpty)
+        .join(' '),
   ].join(' ');
 
   DateTime? get dueDateTime => _parseDateTime(dueDate);
@@ -263,8 +267,12 @@ class Task {
           final map = Map<String, dynamic>.from(item);
           final snoozedAt = _parseDateTime(map['snoozedAt']?.toString());
           final dueAt = _parseDateTime(map['dueAt']?.toString());
+          final noteRaw = map['note']?.toString().trim();
+          final note = (noteRaw != null && noteRaw.isNotEmpty) ? noteRaw : null;
           if (snoozedAt != null) {
-            entries.add(TaskSnoozeEntry(snoozedAt: snoozedAt, dueAt: dueAt));
+            entries.add(
+              TaskSnoozeEntry(snoozedAt: snoozedAt, dueAt: dueAt, note: note),
+            );
           }
           continue;
         }
@@ -284,13 +292,21 @@ class Task {
       snoozeEntries.map((e) => e.dueAt ?? e.snoozedAt).toList();
 
   /// Επιστρέφει νέο Task με append στο ιστορικό αναβολών.
-  Task addSnoozeEntry(DateTime date) {
-    final entry = TaskSnoozeEntry(snoozedAt: DateTime.now(), dueAt: date);
+  Task addSnoozeEntry(DateTime date, {String? note}) {
+    final trimmedNote = note?.trim();
+    final effectiveNote =
+        (trimmedNote != null && trimmedNote.isNotEmpty) ? trimmedNote : null;
+    final entry = TaskSnoozeEntry(
+      snoozedAt: DateTime.now(),
+      dueAt: date,
+      note: effectiveNote,
+    );
     final next = [...snoozeEntries, entry]
         .map(
           (e) => {
             'snoozedAt': e.snoozedAt.toIso8601String(),
             if (e.dueAt != null) 'dueAt': e.dueAt!.toIso8601String(),
+            if (e.note != null) 'note': e.note,
           },
         )
         .toList();
@@ -327,8 +343,9 @@ class Task {
 }
 
 class TaskSnoozeEntry {
-  const TaskSnoozeEntry({required this.snoozedAt, this.dueAt});
+  const TaskSnoozeEntry({required this.snoozedAt, this.dueAt, this.note});
 
   final DateTime snoozedAt;
   final DateTime? dueAt;
+  final String? note;
 }

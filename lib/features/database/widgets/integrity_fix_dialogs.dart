@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/database/database_helper.dart';
-import '../../../core/database/directory_repository.dart';
+import '../../../core/database/department_repository.dart';
+import '../../../core/database/user_repository.dart';
 import '../../../core/database/lock_diagnostic_service.dart';
 import '../../../core/utils/search_text_normalizer.dart';
 import '../models/database_integrity_finding.dart';
@@ -241,16 +242,17 @@ class _IntegrityChoiceDialogState extends State<_IntegrityChoiceDialog> {
   Future<void> _loadChoices() async {
     try {
       final db = await DatabaseHelper.instance.database;
-      final dir = DirectoryRepository(db);
+      final departments = DepartmentRepository(db);
+      final users = UserRepository(db);
       switch (widget.finding.checkType) {
         case IntegrityCheckType.orphanPhone:
-          _departments = await dir.getActiveDepartments();
-          _users = await dir.getAllUsers();
+          _departments = await departments.getActiveDepartments();
+          _users = await users.getAllUsers();
           _rebuildDepartmentIndex();
           _rebuildUserIndex();
         case IntegrityCheckType.usersWithoutDepartment:
         case IntegrityCheckType.usersInvalidDepartment:
-          _departments = await dir.getActiveDepartments();
+          _departments = await departments.getActiveDepartments();
           _rebuildDepartmentIndex();
         default:
           break;

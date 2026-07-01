@@ -1,7 +1,8 @@
 import 'dart:io';
 
 import 'package:call_logger/core/database/database_helper.dart';
-import 'package:call_logger/core/database/directory_repository.dart';
+import 'package:call_logger/core/database/department_repository.dart';
+import 'package:call_logger/core/database/settings_repository.dart';
 import 'package:call_logger/core/errors/department_exists_exception.dart';
 import 'package:call_logger/core/utils/search_text_normalizer.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -12,7 +13,8 @@ import '../../test_setup.dart';
 /// Κλείδωμα συμπεριφοράς τμημάτων πριν από Φάση Γ.2α (DepartmentRepository).
 void main() {
   group('DepartmentRepository behavior — lock πριν εξαγωγή', () {
-    late DirectoryRepository repo;
+    late DepartmentRepository repo;
+    late SettingsRepository settings;
     late Database db;
 
     setUpAll(() async {
@@ -29,7 +31,8 @@ void main() {
       await seedIsolatedTestDatabase();
       await db.delete('audit_log');
       await db.delete('departments');
-      repo = DirectoryRepository(db);
+      repo = DepartmentRepository(db);
+      settings = SettingsRepository(db);
     });
 
     tearDownAll(() async {
@@ -132,7 +135,7 @@ void main() {
 
     test('softDeleteDepartment / restoreDepartments: is_deleted και audit', () async {
       final id = await repo.insertDepartment(departmentRow('Τμήμα Audit'));
-      await repo.setSetting(
+      await settings.saveSetting(
         DatabaseHelper.auditUserPerformingSettingsKey,
         'Admin Τμημάτων',
       );
