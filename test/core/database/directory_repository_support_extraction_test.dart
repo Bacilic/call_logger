@@ -5,7 +5,7 @@ import 'package:call_logger/core/database/database_helper.dart';
 import 'package:call_logger/core/database/phone_repository.dart';
 import 'package:call_logger/core/database/settings_repository.dart';
 import 'package:call_logger/core/database/user_repository.dart';
-import 'package:call_logger/core/services/audit_service.dart';
+import 'package:call_logger/core/database/audit_service.dart';
 import 'package:call_logger/core/utils/search_text_normalizer.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';

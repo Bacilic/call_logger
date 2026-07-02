@@ -1,5 +1,4 @@
-import 'package:sqflite_common_ffi/sqflite_ffi.dart';
-
+import '../database/sqlite_types.dart';
 import '../database/phone_repository.dart';
 import '../services/lookup_service.dart';
 import '../../features/calls/models/user_model.dart';

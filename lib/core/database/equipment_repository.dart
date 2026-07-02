@@ -2,7 +2,7 @@ import 'dart:convert';
 
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
-import '../services/audit_service.dart';
+import 'audit_service.dart';
 import 'calls_repository.dart';
 import 'database_helper.dart';
 import 'directory_support.dart';
@@ -816,5 +816,19 @@ class EquipmentRepository {
         );
       }
     });
+  }
+
+  Future<List<int>> getUserIdsLinkedToEquipment(int equipmentId) async {
+    final rows = await db.query(
+      'user_equipment',
+      columns: ['user_id'],
+      where: 'equipment_id = ?',
+      whereArgs: [equipmentId],
+      orderBy: 'user_id ASC',
+    );
+    return rows
+        .map((row) => row['user_id'] as int?)
+        .whereType<int>()
+        .toList(growable: false);
   }
 }

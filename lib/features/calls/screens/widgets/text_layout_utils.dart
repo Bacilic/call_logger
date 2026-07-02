@@ -12,8 +12,13 @@ bool textOverflowsSingleLine({
     text: TextSpan(text: text, style: style),
     maxLines: 1,
     textDirection: textDirection,
-  )..layout(maxWidth: double.infinity);
-  return painter.width > maxWidth;
+  );
+  try {
+    painter.layout(maxWidth: double.infinity);
+    return painter.width > maxWidth;
+  } finally {
+    painter.dispose();
+  }
 }
 
 /// Εμφάνιση κουμπιού καθαρισμού πεδίου (suffix ×): τουλάχιστον 1 μη-κενός χαρακτήρας.

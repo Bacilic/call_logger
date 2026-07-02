@@ -1,13 +1,18 @@
-import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import '../../../core/database/department_repository.dart';
+import '../../../core/database/sqlite_types.dart';
 
 import '../models/audit_log_model.dart';
 import '../models/audit_reference_labels.dart';
 
 /// Batch επίλυση id τμημάτων σε ονόματα για εμφάνιση audit.
 class AuditReferenceLabelResolver {
-  AuditReferenceLabelResolver(this._db);
+  AuditReferenceLabelResolver(this._departments);
 
-  final Database _db;
+  final DepartmentRepository _departments;
+
+  factory AuditReferenceLabelResolver.fromDatabase(Database db) {
+    return AuditReferenceLabelResolver(DepartmentRepository(db));
+  }
 
   Future<AuditReferenceLabels> resolveForRows(Iterable<AuditLogModel> rows) async {
     final ids = <int>{};
@@ -15,7 +20,7 @@ class AuditReferenceLabelResolver {
       collectDepartmentIds(row, ids);
     }
     if (ids.isEmpty) return AuditReferenceLabels.empty;
-    final names = await _loadDepartmentNames(ids);
+    final names = await _departments.getDepartmentNamesByIds(ids);
     return AuditReferenceLabels(departmentNames: names);
   }
 
@@ -45,24 +50,5 @@ class AuditReferenceLabelResolver {
     }
     final parsed = int.tryParse(value.toString().trim());
     if (parsed != null) ids.add(parsed);
-  }
-
-  Future<Map<int, String>> _loadDepartmentNames(Set<int> ids) async {
-    if (ids.isEmpty) return const {};
-    final sorted = ids.toList()..sort();
-    final placeholders = List.filled(sorted.length, '?').join(',');
-    final rows = await _db.rawQuery(
-      'SELECT id, name FROM departments WHERE id IN ($placeholders)',
-      sorted,
-    );
-    final out = <int, String>{};
-    for (final row in rows) {
-      final id = row['id'] as int?;
-      final name = (row['name'] as String?)?.trim();
-      if (id != null && name != null && name.isNotEmpty) {
-        out[id] = name;
-      }
-    }
-    return out;
   }
 }

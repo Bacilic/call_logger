@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../../../core/services/audit_service.dart';
+import '../../../../core/database/audit_service.dart';
 import '../../../audit/services/audit_entity_preview_resolver.dart';
 import 'backup_preview_widget.dart';
 import 'call_preview_widget.dart';

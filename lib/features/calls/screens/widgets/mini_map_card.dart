@@ -2,12 +2,13 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:sqflite_common/sqlite_api.dart';
 
 import '../../../../core/database/database_helper.dart';
 import '../../../../core/database/building_map_repository.dart';
 import '../../../../core/database/department_repository.dart';
 import '../../../../core/database/directory_support.dart';
+import '../../../../core/database/equipment_repository.dart';
+import '../../../../core/database/sqlite_types.dart';
 import '../../../../core/models/building_map_floor.dart';
 import '../../../../core/services/building_map_storage.dart';
 import '../../../../core/services/lookup_service.dart';
@@ -76,94 +77,27 @@ class _MiniMapCardState extends ConsumerState<MiniMapCard> {
     }
   }
 
-  Future<List<int>> _departmentIdsForUserId(
-    Database db,
-    int userId,
-  ) async {
-    final rows = await db.rawQuery(
-      '''
-      WITH phone_dept AS (
-        SELECT p.id AS phone_id, p.department_id AS department_id
-        FROM phones p
-        WHERE p.department_id IS NOT NULL
-        UNION
-        SELECT dp.phone_id AS phone_id, dp.department_id AS department_id
-        FROM department_phones dp
-      )
-      SELECT DISTINCT src.department_id AS department_id
-      FROM (
-        SELECT u.department_id AS department_id
-        FROM users u
-        WHERE u.id = ? AND u.department_id IS NOT NULL
-        UNION
-        SELECT pd.department_id AS department_id
-        FROM user_phones up
-        JOIN phone_dept pd ON pd.phone_id = up.phone_id
-        WHERE up.user_id = ?
-      ) src
-      JOIN departments d ON d.id = src.department_id
-      WHERE COALESCE(d.is_deleted, 0) = 0
-      ORDER BY src.department_id ASC
-      ''',
-      [userId, userId],
-    );
-    return rows
-        .map((row) => row['department_id'] as int?)
-        .whereType<int>()
-        .toList(growable: false);
-  }
-
-  Future<List<int>> _departmentIdsForPhone(Database db, String phone) async {
-    final trimmed = phone.trim();
-    if (trimmed.isEmpty) return const [];
-    final rows = await db.rawQuery(
-      '''
-      WITH phone_dept AS (
-        SELECT p.id AS phone_id, p.department_id AS department_id
-        FROM phones p
-        WHERE p.department_id IS NOT NULL
-        UNION
-        SELECT dp.phone_id AS phone_id, dp.department_id AS department_id
-        FROM department_phones dp
-      )
-      SELECT DISTINCT pd.department_id AS department_id
-      FROM phones p
-      JOIN phone_dept pd ON pd.phone_id = p.id
-      JOIN departments d ON d.id = pd.department_id
-      WHERE COALESCE(d.is_deleted, 0) = 0
-        AND p.number = ?
-      ORDER BY pd.department_id ASC
-      ''',
-      [trimmed],
-    );
-    return rows
-        .map((row) => row['department_id'] as int?)
-        .whereType<int>()
-        .toList(growable: false);
-  }
+  Future<List<int>> _departmentIdsForPhone(
+    DepartmentRepository departments,
+    String phone,
+  ) =>
+      departments.resolveActiveDepartmentIdsForPhone(phone);
 
   Future<List<int>> _departmentIdsForEquipment(
-    Database db,
+    DepartmentRepository departments,
+    EquipmentRepository equipmentRepo,
     EquipmentModel equipment,
   ) async {
     final direct = equipment.departmentId;
     if (direct != null) return [direct];
     final equipmentId = equipment.id;
     if (equipmentId == null) return const [];
-    final linkedUsers = await db.rawQuery(
-      '''
-      SELECT user_id
-      FROM user_equipment
-      WHERE equipment_id = ?
-      ORDER BY user_id ASC
-      ''',
-      [equipmentId],
+    final linkedUsers = await equipmentRepo.getUserIdsLinkedToEquipment(
+      equipmentId,
     );
     final ids = <int>{};
-    for (final row in linkedUsers) {
-      final uid = row['user_id'] as int?;
-      if (uid == null) continue;
-      ids.addAll(await _departmentIdsForUserId(db, uid));
+    for (final uid in linkedUsers) {
+      ids.addAll(await departments.resolveActiveDepartmentIdsForUserId(uid));
     }
     return ids.toList()..sort();
   }
@@ -181,9 +115,11 @@ class _MiniMapCardState extends ConsumerState<MiniMapCard> {
 
   Future<_MiniMapCardData> _loadData() async {
     final db = await DatabaseHelper.instance.database;
+    final departmentsRepo = DepartmentRepository(db);
+    final equipmentRepo = EquipmentRepository(db);
     final floors =
         await BuildingMapRepository(db, DirectorySupport(db)).listBuildingMapFloors();
-    final departmentRows = await DepartmentRepository(db).getActiveDepartments();
+    final departmentRows = await departmentsRepo.getActiveDepartments();
     final departments = departmentRows
         .map(DepartmentModel.fromMap)
         .toList(growable: false);
@@ -195,8 +131,15 @@ class _MiniMapCardState extends ConsumerState<MiniMapCard> {
     final equipment = await _resolveEquipment(db);
     final equipmentDeptIds = equipment == null
         ? const <int>[]
-        : await _departmentIdsForEquipment(db, equipment);
-    final phoneDeptIds = await _departmentIdsForPhone(db, widget.phoneText);
+        : await _departmentIdsForEquipment(
+            departmentsRepo,
+            equipmentRepo,
+            equipment,
+          );
+    final phoneDeptIds = await _departmentIdsForPhone(
+      departmentsRepo,
+      widget.phoneText,
+    );
 
     final userDeptId = widget.user?.departmentId;
     final userDeptIds = userDeptId == null ? const <int>[] : <int>[userDeptId];

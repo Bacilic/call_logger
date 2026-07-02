@@ -277,7 +277,11 @@ class _GeminiPromptTemplateFieldState extends State<GeminiPromptTemplateField> {
   }
 
   void _closeOverlay() {
-    _overlayEntry?.remove();
+    final entry = _overlayEntry;
+    if (entry != null) {
+      entry.remove();
+      entry.dispose();
+    }
     _overlayEntry = null;
     _triggerStart = null;
     _filtered = const <_PromptSuggestion>[];

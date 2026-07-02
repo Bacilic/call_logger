@@ -1,6 +1,6 @@
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
-import '../services/audit_service.dart';
+import 'audit_service.dart';
 import 'database_helper.dart';
 import 'directory_support.dart';
 

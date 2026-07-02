@@ -4,7 +4,8 @@ import 'dart:typed_data';
 import 'package:archive/archive.dart';
 import 'package:intl/intl.dart';
 import 'package:path/path.dart' as p;
-import 'package:sqflite_common/sqflite.dart';
+import '../../../core/database/database_maintenance_repository.dart';
+import '../../../core/database/sqlite_types.dart';
 
 import '../../../core/config/app_config.dart';
 import '../../../core/database/database_helper.dart';
@@ -99,9 +100,6 @@ class DatabaseBackupFileOperation {
 /// προαιρετική συμπίεση zip και εφαρμογή πολιτικής διατήρησης.
 class DatabaseBackupService {
   DatabaseBackupService._();
-
-  static String _sqlEscapeSingleQuotedPath(String path) =>
-      path.replaceAll("'", "''");
 
   /// Διαδρομή για SQLite: forward slashes, απόλυτη.
   static String _sqlitePathLiteral(String absoluteNativePath) {
@@ -259,11 +257,8 @@ class DatabaseBackupService {
       return DatabaseBackupResult(success: false, message: message);
     }
 
-    final vacuumLiteral =
-        _sqlEscapeSingleQuotedPath(_sqlitePathLiteral(outDbPath));
-
     try {
-      await db.execute("VACUUM INTO '$vacuumLiteral'");
+      await DatabaseBackupRepository(db).vacuumInto(_sqlitePathLiteral(outDbPath));
     } catch (e) {
       try {
         if (await outDbFile.exists()) await outDbFile.delete();

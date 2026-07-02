@@ -67,8 +67,13 @@ double _globalRecentTextWidth(
     textDirection: TextDirection.ltr,
     textScaler: textScaler,
     maxLines: 1,
-  )..layout(maxWidth: double.infinity);
-  return painter.size.width;
+  );
+  try {
+    painter.layout(maxWidth: double.infinity);
+    return painter.size.width;
+  } finally {
+    painter.dispose();
+  }
 }
 
 class _RecentCallColumnWidths {

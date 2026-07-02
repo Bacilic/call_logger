@@ -1,7 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/database/database_helper.dart';
-import '../../../core/services/audit_service.dart';
+import '../../../core/database/audit_service.dart';
 import '../../../core/utils/search_text_normalizer.dart';
 import '../models/audit_filter_model.dart';
 import '../models/audit_log_model.dart';
@@ -73,7 +73,7 @@ final auditPageReferenceLabelsProvider =
     FutureProvider.autoDispose<AuditReferenceLabels>((ref) async {
       final page = await ref.watch(auditListProvider.future);
       final db = await DatabaseHelper.instance.database;
-      return AuditReferenceLabelResolver(db).resolveForRows(page.items);
+      return AuditReferenceLabelResolver.fromDatabase(db).resolveForRows(page.items);
     });
 
 /// Διαθέσιμες ενέργειες για dropdown φίλτρου, βάσει τρέχοντος τύπου οντότητας.

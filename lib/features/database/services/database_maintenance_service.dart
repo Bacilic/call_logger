@@ -3,8 +3,9 @@ import 'dart:io';
 import 'package:path/path.dart' as p;
 
 import '../../../core/database/database_helper.dart';
+import '../../../core/database/database_maintenance_repository.dart';
 import '../../../core/database/settings_repository.dart';
-import '../../../core/services/audit_service.dart';
+import '../../../core/database/audit_service.dart';
 import '../../../core/services/settings_service.dart';
 import '../../tasks/models/task.dart';
 import '../models/database_backup_settings.dart';
@@ -121,12 +122,12 @@ class DatabaseMaintenanceService {
   }
 
   Future<void> runVacuum() async {
-    final db = await DatabaseHelper.instance.database;
-    await db.execute('VACUUM');
+    final repo = await DatabaseMaintenanceRepositoryFactory.fromHelper();
+    await repo.vacuum();
     try {
-      final user = await AuditService.performingUser(db);
+      final user = await AuditService.performingUser(repo.db);
       await AuditService.log(
-        db,
+        repo.db,
         action: 'VACUUM ΒΑΣΗΣ',
         userPerforming: user,
         entityType: AuditEntityTypes.maintenance,
@@ -136,12 +137,12 @@ class DatabaseMaintenanceService {
   }
 
   Future<void> runReindex() async {
-    final db = await DatabaseHelper.instance.database;
-    await db.execute('REINDEX');
+    final repo = await DatabaseMaintenanceRepositoryFactory.fromHelper();
+    await repo.reindex();
     try {
-      final user = await AuditService.performingUser(db);
+      final user = await AuditService.performingUser(repo.db);
       await AuditService.log(
-        db,
+        repo.db,
         action: 'REINDEX ΒΑΣΗΣ',
         userPerforming: user,
         entityType: AuditEntityTypes.maintenance,

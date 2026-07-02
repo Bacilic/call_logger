@@ -8,7 +8,13 @@
 
 ## [Unreleased]
 
+### Προστέθηκε
+
+- **Άξονας 2 — συμβάσεις βάσης:** αυτοματοποιημένα τεστ `test/architecture/sql_isolation_test.dart`, `test/core/database/schema_model_consistency_test.dart`, `test/core/database/model_null_safety_test.dart` για SQL isolation, στοίχιση σχήματος↔model και null-safety.
+
 ### Άλλαξε
+
+- **SQL isolation:** μεταφορά `audit_service`, `tasks_repository`, `database_integrity_diagnostics`, `lamp_migration_service` στο `core/database/`· δρομολόγηση raw SQL από widgets/services μέσω repositories (`DepartmentRepository`, `DatabaseStatsRepository`, κ.λπ.)· re-export τύπων sqflite από `sqlite_types.dart`.
 
 - **Εξαρτήσεις:** αναβάθμιση `dependency_overrides` (analyzer 14, test 1.31.2, meta, dbus, hooks, image 4.9.1 κ.ά.) και `package_info_plus` ^10.2.0· το `intl` παραμένει 0.20.2 (pin από Flutter SDK).
 - **Γρήγορη καταγραφή κλήσης:** υπτάμενο κουμπί (FAB) σε immersive λεξικό/ιστορικό, Στατιστικά, Ρυθμίσεις, προβολή χάρτη, παράλληλα με διάλογο Lansweeper (κάτω δεξιά έξω από το modal)· απενεργοποίηση μόνο σε επεξεργασία χάρτη· μόνη συντόμευση Ctrl+Shift+N (EN/EL).

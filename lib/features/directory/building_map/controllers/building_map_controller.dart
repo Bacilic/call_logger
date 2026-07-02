@@ -1095,67 +1095,12 @@ class BuildingMapController {
 
   Future<List<int>> _departmentIdsForUserId(int userId) async {
     final db = await DatabaseHelper.instance.database;
-    final rows = await db.rawQuery(
-      '''
-      WITH phone_dept AS (
-        SELECT p.id AS phone_id, p.department_id AS department_id
-        FROM phones p
-        WHERE p.department_id IS NOT NULL
-        UNION
-        SELECT dp.phone_id AS phone_id, dp.department_id AS department_id
-        FROM department_phones dp
-      )
-      SELECT DISTINCT src.department_id AS department_id
-      FROM (
-        SELECT u.department_id AS department_id
-        FROM users u
-        WHERE u.id = ? AND u.department_id IS NOT NULL
-        UNION
-        SELECT pd.department_id AS department_id
-        FROM user_phones up
-        JOIN phone_dept pd ON pd.phone_id = up.phone_id
-        WHERE up.user_id = ?
-      ) src
-      JOIN departments d ON d.id = src.department_id
-      WHERE COALESCE(d.is_deleted, 0) = 0
-      ORDER BY src.department_id ASC
-      ''',
-      [userId, userId],
-    );
-    return rows
-        .map((row) => row['department_id'] as int?)
-        .whereType<int>()
-        .toList(growable: false);
+    return DepartmentRepository(db).resolveActiveDepartmentIdsForUserId(userId);
   }
 
   Future<List<int>> _departmentIdsForPhone(String phoneText) async {
-    final trimmed = phoneText.trim();
-    if (trimmed.isEmpty) return const [];
     final db = await DatabaseHelper.instance.database;
-    final rows = await db.rawQuery(
-      '''
-      WITH phone_dept AS (
-        SELECT p.id AS phone_id, p.department_id AS department_id
-        FROM phones p
-        WHERE p.department_id IS NOT NULL
-        UNION
-        SELECT dp.phone_id AS phone_id, dp.department_id AS department_id
-        FROM department_phones dp
-      )
-      SELECT DISTINCT pd.department_id AS department_id
-      FROM phones p
-      JOIN phone_dept pd ON pd.phone_id = p.id
-      JOIN departments d ON d.id = pd.department_id
-      WHERE COALESCE(d.is_deleted, 0) = 0
-        AND p.number = ?
-      ORDER BY pd.department_id ASC
-      ''',
-      [trimmed],
-    );
-    return rows
-        .map((row) => row['department_id'] as int?)
-        .whereType<int>()
-        .toList(growable: false);
+    return DepartmentRepository(db).resolveActiveDepartmentIdsForPhone(phoneText);
   }
 
   Future<UserModel?> _pickUserForEquipment(

@@ -9,7 +9,7 @@ import '../../features/history/models/dashboard_filter_model.dart';
 import '../../features/history/models/dashboard_summary_model.dart';
 import 'database_helper.dart';
 import '../errors/call_save_exception.dart';
-import '../services/audit_service.dart';
+import 'audit_service.dart';
 import '../utils/history_entity_display_utils.dart';
 import '../utils/search_text_normalizer.dart';
 

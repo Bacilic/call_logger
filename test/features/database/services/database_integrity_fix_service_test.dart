@@ -2,7 +2,7 @@ import 'dart:io';
 
 import 'package:call_logger/core/database/calls_repository.dart';
 import 'package:call_logger/core/database/database_helper.dart';
-import 'package:call_logger/core/services/audit_service.dart';
+import 'package:call_logger/core/database/audit_service.dart';
 import 'package:call_logger/features/database/models/database_integrity_finding.dart';
 import 'package:call_logger/features/database/models/integrity_fix_models.dart';
 import 'package:call_logger/features/database/services/database_integrity_fix_service.dart';

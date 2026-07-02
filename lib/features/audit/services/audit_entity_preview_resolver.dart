@@ -1,6 +1,6 @@
-import 'package:sqflite_common/sqlite_api.dart';
-
-import '../../../core/services/audit_service.dart';
+import '../../../core/database/sqlite_types.dart';
+import '../../../core/database/user_repository.dart';
+import '../../../core/database/audit_service.dart';
 import '../../tasks/models/task.dart';
 import 'audit_formatter_service.dart';
 
@@ -112,25 +112,15 @@ class AuditEntityPreviewResolver {
   }
 
   Future<AuditEntityPreview?> _user(int id) async {
-    final rows = await _db.rawQuery(
-      '''
-      SELECT u.first_name, u.last_name, d.name AS dept
-      FROM users u
-      LEFT JOIN departments d ON u.department_id = d.id
-      WHERE u.id = ?
-      LIMIT 1
-      ''',
-      [id],
-    );
-    if (rows.isEmpty) return null;
-    final r = rows.first;
-    final fn = r['first_name'] as String? ?? '';
-    final ln = r['last_name'] as String? ?? '';
+    final row = await UserRepository(_db).getUserPreviewJoinRow(id);
+    if (row == null) return null;
+    final fn = row['first_name'] as String? ?? '';
+    final ln = row['last_name'] as String? ?? '';
     final name = '$fn $ln'.trim();
     return AuditEntityPreview(
       title: name.isEmpty ? 'Χρήστης #$id' : name,
       lines: [
-        'Τμήμα: ${r['dept'] ?? '—'}',
+        'Τμήμα: ${row['dept'] ?? '—'}',
         'Id: $id',
       ],
     );

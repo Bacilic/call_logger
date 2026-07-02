@@ -5,7 +5,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import '../directory/phone_department_policy.dart';
 import '../utils/phone_list_parser.dart';
 import 'user_delete_phone_policy.dart';
-import '../services/audit_service.dart';
+import 'audit_service.dart';
 import 'calls_repository.dart';
 import 'database_helper.dart';
 import 'directory_audit_helpers.dart';
@@ -821,5 +821,20 @@ class UserRepository {
         );
       }
     });
+  }
+
+  Future<Map<String, dynamic>?> getUserPreviewJoinRow(int id) async {
+    final rows = await db.rawQuery(
+      '''
+      SELECT u.first_name, u.last_name, d.name AS dept
+      FROM users u
+      LEFT JOIN departments d ON u.department_id = d.id
+      WHERE u.id = ?
+      LIMIT 1
+      ''',
+      [id],
+    );
+    if (rows.isEmpty) return null;
+    return rows.first;
   }
 }

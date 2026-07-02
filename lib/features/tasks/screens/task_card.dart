@@ -33,19 +33,23 @@ class _TaskDescription extends StatelessWidget {
           maxLines: null,
           textDirection: textDirection,
         );
-        painter.layout(maxWidth: constraints.maxWidth);
-        final lineHeight = painter.preferredLineHeight;
-        final lineCount = (painter.height / lineHeight).ceil();
-        if (lineCount <= _maxLines) {
-          return Text(description, style: style);
+        try {
+          painter.layout(maxWidth: constraints.maxWidth);
+          final lineHeight = painter.preferredLineHeight;
+          final lineCount = (painter.height / lineHeight).ceil();
+          if (lineCount <= _maxLines) {
+            return Text(description, style: style);
+          }
+          return SizedBox(
+            height: lineHeight * _maxLines,
+            child: SingleChildScrollView(
+              physics: const ClampingScrollPhysics(),
+              child: Text(description, style: style),
+            ),
+          );
+        } finally {
+          painter.dispose();
         }
-        return SizedBox(
-          height: lineHeight * _maxLines,
-          child: SingleChildScrollView(
-            physics: const ClampingScrollPhysics(),
-            child: Text(description, style: style),
-          ),
-        );
       },
     );
   }

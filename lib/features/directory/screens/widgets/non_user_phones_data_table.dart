@@ -70,8 +70,12 @@ class _NonUserPhonesDataTableState extends State<NonUserPhonesDataTable> {
       textDirection: TextDirection.ltr,
       maxLines: 1,
     );
-    tp.layout();
-    return tp.width;
+    try {
+      tp.layout();
+      return tp.width;
+    } finally {
+      tp.dispose();
+    }
   }
 
   /// Ευρύτερη γραμμή για πεδία που ενδέχεται να σπάσουν σε 2 γραμμές στην εμφάνιση.

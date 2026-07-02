@@ -11,7 +11,7 @@ import 'package:call_logger/core/database/settings_repository.dart';
 import 'package:call_logger/core/database/user_repository.dart';
 import 'package:call_logger/core/errors/department_exists_exception.dart';
 import 'package:call_logger/core/database/integrity_service.dart';
-import 'package:call_logger/core/services/audit_service.dart';
+import 'package:call_logger/core/database/audit_service.dart';
 import 'package:call_logger/core/utils/search_text_normalizer.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';

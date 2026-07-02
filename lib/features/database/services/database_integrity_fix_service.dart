@@ -3,7 +3,7 @@ import 'package:sqflite_common/sqflite.dart';
 import '../../../core/database/calls_repository.dart';
 import '../../../core/database/database_helper.dart';
 import '../../../core/database/integrity_service.dart';
-import '../../../core/services/audit_service.dart';
+import '../../../core/database/audit_service.dart';
 import '../../../features/tasks/services/task_service.dart';
 import '../models/database_integrity_finding.dart';
 import '../models/integrity_fix_models.dart';

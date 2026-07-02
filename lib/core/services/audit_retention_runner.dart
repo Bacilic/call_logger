@@ -1,6 +1,6 @@
 import '../database/database_helper.dart';
 import '../config/audit_retention_config.dart';
-import 'audit_service.dart';
+import '../database/audit_service.dart';
 import 'settings_service.dart';
 
 /// Εφαρμογή πολιτικής retention για `audit_log` (εκκίνηση ή χειροκίνητα).

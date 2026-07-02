@@ -2,11 +2,10 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
-import 'package:sqflite_common_ffi/sqflite_ffi.dart';
-
+import '../../../core/database/sqlite_types.dart';
 import '../../../core/database/database_helper.dart';
 import '../../../core/database/database_path_resolution.dart';
-import '../../../core/services/audit_service.dart';
+import '../../../core/database/audit_service.dart';
 import '../../../core/services/lookup_service.dart';
 import '../../../core/services/settings_service.dart';
 import '../../../core/utils/search_text_normalizer.dart';

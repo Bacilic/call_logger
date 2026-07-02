@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:path/path.dart' as p;
 
 import '../../../core/database/database_helper.dart';
+import '../../../core/database/database_maintenance_repository.dart';
 import '../../../core/database/settings_repository.dart';
 import '../models/database_backup_settings.dart';
 import '../models/database_stats.dart';
@@ -10,9 +11,6 @@ import '../models/database_stats.dart';
 /// Συλλογή στατιστικών αρχείου βάσης και `COUNT(*)` ανά πίνακα.
 class DatabaseStatsService {
   DatabaseStatsService._();
-
-  static String _quoteId(String tableName) =>
-      '"${tableName.replaceAll('"', '""')}"';
 
   /// Εμφάνιση μεγέθους αρχείου (π.χ. `4.8 MB`).
   static String formatFileSizeBytes(int bytes) {
@@ -85,14 +83,8 @@ class DatabaseStatsService {
     } catch (_) {}
 
     final tableNames = await DatabaseHelper.instance.getTableNames();
-    final rowCounts = <String, int>{};
-    for (final name in tableNames) {
-      final q = _quoteId(name);
-      final r = await db.rawQuery('SELECT COUNT(*) AS c FROM $q');
-      final n = r.first['c'];
-      final count = n is int ? n : int.tryParse(n.toString()) ?? 0;
-      rowCounts[name] = count;
-    }
+    final statsRepo = DatabaseStatsRepository(db);
+    final rowCounts = await statsRepo.countRowsForTables(tableNames);
 
     final baseName = p.basenameWithoutExtension(dbPath);
     DateTime? lastBackup;

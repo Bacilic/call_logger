@@ -3,11 +3,13 @@
     "version": "Unreleased",
     "date": "",
     "added": [
+      "Άξονας 2 — συμβάσεις βάσης: αυτοματοποιημένα τεστ sql_isolation, schema_model_consistency και model_null_safety",
       "Εκκρεμότητες · αναβολή: προαιρετικός λόγος αναβολής στο διάλογο — αποθήκευση μόνο στο ιστορικό αναβολών, εμφάνιση στο tooltip κάρτας και συμμετοχή στην αναζήτηση· συμβατότητα με παλιό format χωρίς note",
       "Γρήγορη καταγραφή κλήσης: modal QuickCallDialog με ανεξάρτητο provider scope, μόνη συντόμευση Ctrl+Shift+N (EN/EL διάταξη) εκτός οθόνης Κλήσεων, ρύθμιση on/off στις Ρυθμίσεις",
       "Lansweeper · έλεγχος προτροπής Gemini: πεδίο warnings στο validation (διακριτό από errors, δεν επηρεάζει isValid), έλεγχος διπλής οδηγίας JSON και επανειλημμένου block, προειδοποίηση για placeholder μέσα σε block άλλου ονόματος, εμφάνιση warnings στο πεδίο (amber)"
     ],
     "changed": [
+      "SQL isolation: μεταφορά audit/tasks/integrity/lamp SQL στο core/database και δρομολόγηση raw SQL μέσω repositories",
       "Εξαρτήσεις: αναβάθμιση dependency_overrides (analyzer 14, test 1.31.2, meta, dbus, hooks, image 4.9.1 κ.ά.) και package_info_plus ^10.2.0· το intl παραμένει 0.20.2 (pin από Flutter SDK).",
       "Lansweeper · πρότυπο προτροπής Gemini: μεταφορά επεξεργασίας σε ξεχωριστό διάλογο (εικονίδιο στη φόρμα καταχώρησης)· έλεγχος κλειδιών JSON title/description/solution και υπόδειξη blueprint",
       "Lansweeper · επεξεργαστής προτροπής: dirty-state (Αποθήκευση/Ακύρωση), προστασία κλεισίματος, προσωπική προεπιλογή (app_settings) και επαναφορά εργοστασιακής/προσωπικής",

@@ -5,7 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/providers/main_nav_request_provider.dart';
-import '../../../core/services/audit_service.dart';
+import '../../../core/database/audit_service.dart';
 import '../../../core/widgets/main_nav_destination.dart';
 import '../../../core/utils/search_text_normalizer.dart';
 import '../../directory/screens/directory_screen.dart';

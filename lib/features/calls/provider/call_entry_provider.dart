@@ -2,9 +2,8 @@ import 'dart:async';
 import 'dart:developer' as developer;
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:sqflite_common_ffi/sqflite_ffi.dart';
-
 import '../../../core/database/calls_repository.dart';
+import '../../../core/database/sqlite_types.dart';
 import '../../../core/errors/call_save_exception.dart';
 import '../../../core/errors/task_save_exception.dart';
 import '../../../core/database/database_helper.dart';

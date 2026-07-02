@@ -2,7 +2,7 @@ import 'dart:convert';
 
 import 'package:sqflite_common/sqlite_api.dart';
 
-import '../database/database_helper.dart';
+import 'database_helper.dart';
 import '../utils/search_text_normalizer.dart';
 
 /// Κεντρική εγγραφή στον πίνακα `audit_log` (μόνο από εδώ).

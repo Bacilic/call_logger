@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/services/audit_service.dart';
+import '../../../core/database/audit_service.dart';
 import '../../audit/models/audit_log_model.dart';
 import '../../audit/models/audit_reference_labels.dart';
 import '../../audit/providers/audit_providers.dart';

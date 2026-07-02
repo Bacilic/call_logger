@@ -1,7 +1,7 @@
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import '../errors/department_exists_exception.dart';
-import '../services/audit_service.dart';
+import 'audit_service.dart';
 import '../utils/department_display_utils.dart';
 import '../utils/department_floor_sync.dart';
 import '../utils/search_text_normalizer.dart';
@@ -535,5 +535,84 @@ class DepartmentRepository {
     );
     if (rows.isEmpty) return null;
     return rows.first['name'] as String?;
+  }
+
+  Future<Map<int, String>> getDepartmentNamesByIds(Set<int> ids) async {
+    if (ids.isEmpty) return const {};
+    final sorted = ids.toList()..sort();
+    final placeholders = List.filled(sorted.length, '?').join(',');
+    final rows = await db.rawQuery(
+      'SELECT id, name FROM departments WHERE id IN ($placeholders)',
+      sorted,
+    );
+    final out = <int, String>{};
+    for (final row in rows) {
+      final id = row['id'] as int?;
+      final name = (row['name'] as String?)?.trim();
+      if (id != null && name != null && name.isNotEmpty) {
+        out[id] = name;
+      }
+    }
+    return out;
+  }
+
+  static const String _phoneDeptCte = '''
+      WITH phone_dept AS (
+        SELECT p.id AS phone_id, p.department_id AS department_id
+        FROM phones p
+        WHERE p.department_id IS NOT NULL
+        UNION
+        SELECT dp.phone_id AS phone_id, dp.department_id AS department_id
+        FROM department_phones dp
+      )
+    ''';
+
+  Future<List<int>> resolveActiveDepartmentIdsForUserId(int userId) async {
+    final rows = await db.rawQuery(
+      '''
+      $_phoneDeptCte
+      SELECT DISTINCT src.department_id AS department_id
+      FROM (
+        SELECT u.department_id AS department_id
+        FROM users u
+        WHERE u.id = ? AND u.department_id IS NOT NULL
+        UNION
+        SELECT pd.department_id AS department_id
+        FROM user_phones up
+        JOIN phone_dept pd ON pd.phone_id = up.phone_id
+        WHERE up.user_id = ?
+      ) src
+      JOIN departments d ON d.id = src.department_id
+      WHERE COALESCE(d.is_deleted, 0) = 0
+      ORDER BY src.department_id ASC
+      ''',
+      [userId, userId],
+    );
+    return rows
+        .map((row) => row['department_id'] as int?)
+        .whereType<int>()
+        .toList(growable: false);
+  }
+
+  Future<List<int>> resolveActiveDepartmentIdsForPhone(String phone) async {
+    final trimmed = phone.trim();
+    if (trimmed.isEmpty) return const [];
+    final rows = await db.rawQuery(
+      '''
+      $_phoneDeptCte
+      SELECT DISTINCT pd.department_id AS department_id
+      FROM phones p
+      JOIN phone_dept pd ON pd.phone_id = p.id
+      JOIN departments d ON d.id = pd.department_id
+      WHERE COALESCE(d.is_deleted, 0) = 0
+        AND p.number = ?
+      ORDER BY pd.department_id ASC
+      ''',
+      [trimmed],
+    );
+    return rows
+        .map((row) => row['department_id'] as int?)
+        .whereType<int>()
+        .toList(growable: false);
   }
 }

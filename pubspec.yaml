@@ -69,6 +69,7 @@ dev_dependencies:
   # `analysis_options.yaml` στη ρίζα του πακέτου. Δείτε εκεί πληροφορίες για
   # απενεργοποίηση συγκεκριμένων κανόνων και ενεργοποίηση επιπλέον.
   flutter_lints: ^6.0.0
+  leak_tracker_flutter_testing: ^3.0.10
 
 # Αναγκαστικές εκδόσεις μεταβλητών εξαρτήσεων (αντίστοιχα με flutter pub outdated «Latest»).
 dependency_overrides:
