@@ -72,6 +72,12 @@ extension IntegrityCheckTypeFixUi on IntegrityCheckType {
       IntegrityCheckType.tasksDeletedLinkedEntities =>
         'Θέλετε να γίνει εκκαθάριση των $count ανύπαρκτων αναφορών στις εκκρεμότητες; '
         'Το αποθηκευμένο κείμενο κάθε εκκρεμότητας διατηρείται.',
+      IntegrityCheckType.phoneInvalidDepartment =>
+        'Θέλετε να αποσυνδεθούν τα $count τηλέφωνα από ανύπαρκτα τμήματα;',
+      IntegrityCheckType.equipmentInvalidDepartment =>
+        'Θέλετε να αποσυνδεθούν οι $count εξοπλισμοί από ανύπαρκτα τμήματα;',
+      IntegrityCheckType.departmentInvalidFloor =>
+        'Θέλετε να καθαριστεί ο όροφος χάρτη για τα $count τμήματα;',
       _ => 'Θέλετε να επιδιορθωθούν τα $count ευρήματα;',
     };
   }
@@ -103,6 +109,12 @@ extension IntegrityCheckTypeFixUi on IntegrityCheckType {
       IntegrityCheckType.tasksDeletedLinkedEntities =>
         '${finding.description} Θα γίνει εκκαθάριση της αναφοράς· '
         'το αποθηκευμένο κείμενο (snapshot) διατηρείται.',
+      IntegrityCheckType.phoneInvalidDepartment =>
+        '${finding.description} Θα γίνει αποσύνδεση από το ανύπαρκτο τμήμα.',
+      IntegrityCheckType.equipmentInvalidDepartment =>
+        '${finding.description} Θα γίνει αποσύνδεση από το ανύπαρκτο τμήμα.',
+      IntegrityCheckType.departmentInvalidFloor =>
+        '${finding.description} Θα καθαριστεί η θέση στον χάρτη.',
       _ => finding.description,
     };
   }

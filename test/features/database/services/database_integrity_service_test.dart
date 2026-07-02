@@ -55,7 +55,7 @@ void main() {
         ),
         isEmpty,
       );
-      expect(progressSteps, equals(List.generate(16, (i) => i + 1)));
+      expect(progressSteps, equals(List.generate(19, (i) => i + 1)));
     });
 
     test('detects orphan phone without user or department link', () async {
@@ -198,10 +198,10 @@ VALUES ('Κενό κλειδί', '', 0)
         onProgress: (p) => progress.add(p),
       );
 
-      expect(progress, hasLength(16));
+      expect(progress, hasLength(19));
       expect(progress.first.currentStep, 1);
-      expect(progress.last.currentStep, 16);
-      expect(progress.first.totalSteps, 16);
+      expect(progress.last.currentStep, 19);
+      expect(progress.first.totalSteps, 19);
       expect(
         progress.any((p) => p.currentCheckName == 'Ορφανά τηλέφωνα'),
         isTrue,
@@ -315,6 +315,132 @@ VALUES ('Κενό κλειδί', '', 0)
       expect(findings, hasLength(1));
       expect(findings.first.context['user_id'], userId);
       expect(findings.first.context['phone_id'], phoneId);
+    });
+
+    group('equipmentInvalidDepartment', () {
+      test('detects equipment with hard-missing department_id', () async {
+        final db = await DatabaseHelper.instance.database;
+        final equipmentId = await db.insert('equipment', {
+          'code_equipment': 'EQ-MISSING-DEPT',
+          'department_id': 990301,
+          'is_deleted': 0,
+        });
+
+        final findings = await service.runCheck(
+          IntegrityCheckType.equipmentInvalidDepartment,
+        );
+        final mine = findings.where((f) => f.affectedId == equipmentId).toList();
+
+        expect(mine, hasLength(1));
+        expect(mine.first.severity, IntegritySeverity.critical);
+        expect(mine.first.category, IntegrityCategory.referential);
+        expect(mine.first.title, 'Εξοπλισμός με ανύπαρκτο τμήμα');
+        expect(mine.first.context['department_id'], 990301);
+      });
+
+      test('ignores equipment linked to soft-deleted department', () async {
+        final db = await DatabaseHelper.instance.database;
+        final deptId = await db.insert('departments', {
+          'name': 'Soft Dept Eq',
+          'name_key': 'soft_dept_eq',
+          'is_deleted': 1,
+        });
+        final equipmentId = await db.insert('equipment', {
+          'code_equipment': 'EQ-SOFT-DEPT',
+          'department_id': deptId,
+          'is_deleted': 0,
+        });
+
+        final findings = await service.runCheck(
+          IntegrityCheckType.equipmentInvalidDepartment,
+        );
+        expect(findings.where((f) => f.affectedId == equipmentId), isEmpty);
+      });
+    });
+
+    group('departmentInvalidFloor', () {
+      test('detects department with hard-missing floor_id', () async {
+        final db = await DatabaseHelper.instance.database;
+        final deptId = await db.insert('departments', {
+          'name': 'Dept Missing Floor',
+          'name_key': 'dept_missing_floor',
+          'floor_id': 990201,
+          'map_x': 10.0,
+          'map_y': 20.0,
+          'is_deleted': 0,
+        });
+
+        final findings = await service.runCheck(
+          IntegrityCheckType.departmentInvalidFloor,
+        );
+        final mine = findings.where((f) => f.affectedId == deptId).toList();
+
+        expect(mine, hasLength(1));
+        expect(mine.first.severity, IntegritySeverity.warning);
+        expect(mine.first.category, IntegrityCategory.referential);
+        expect(mine.first.title, 'Τμήμα με ανύπαρκτο όροφο χάρτη');
+        expect(mine.first.context['floor_id'], 990201);
+      });
+    });
+
+    group('phoneInvalidDepartment', () {
+      test('detects phone with hard-missing department_id', () async {
+        final db = await DatabaseHelper.instance.database;
+        final phoneId = await db.insert('phones', {
+          'number': '6999-missing-dept',
+          'department_id': 990101,
+          'is_deleted': 0,
+        });
+
+        final findings = await service.runCheck(
+          IntegrityCheckType.phoneInvalidDepartment,
+        );
+        final mine = findings.where((f) => f.affectedId == phoneId).toList();
+
+        expect(mine, hasLength(1));
+        expect(mine.first.severity, IntegritySeverity.critical);
+        expect(mine.first.category, IntegrityCategory.referential);
+        expect(mine.first.title, 'Τηλέφωνο με ανύπαρκτο τμήμα');
+        expect(mine.first.context['department_id'], 990101);
+      });
+
+      test('ignores phone linked to soft-deleted department', () async {
+        final db = await DatabaseHelper.instance.database;
+        final deptId = await db.insert('departments', {
+          'name': 'Soft Dept Phone',
+          'name_key': 'soft_dept_phone',
+          'is_deleted': 1,
+        });
+        final phoneId = await db.insert('phones', {
+          'number': '6999-soft-dept',
+          'department_id': deptId,
+          'is_deleted': 0,
+        });
+
+        final findings = await service.runCheck(
+          IntegrityCheckType.phoneInvalidDepartment,
+        );
+        expect(findings.where((f) => f.affectedId == phoneId), isEmpty);
+      });
+
+      test('does not flag orphan phone without department', () async {
+        final db = await DatabaseHelper.instance.database;
+        final phoneId = await db.insert('phones', {
+          'number': '6999-orphan-only',
+          'department_id': null,
+          'is_deleted': 0,
+        });
+
+        final invalidDeptFindings = await service.runCheck(
+          IntegrityCheckType.phoneInvalidDepartment,
+        );
+        expect(invalidDeptFindings.where((f) => f.affectedId == phoneId), isEmpty);
+
+        final orphanFindings = await service.runCheck(
+          IntegrityCheckType.orphanPhone,
+        );
+        expect(orphanFindings.any((f) => f.affectedId == phoneId), isTrue);
+      });
     });
   });
 

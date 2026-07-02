@@ -9,20 +9,23 @@ enum IntegrityCategory {
   temporal,
 }
 
-/// Τύπος διαγνωστικού ελέγχου (1:1 με τα 16 βήματα του [DatabaseIntegrityService]).
+/// Τύπος διαγνωστικού ελέγχου (1:1 με τα βήματα του [DatabaseIntegrityService]).
 enum IntegrityCheckType {
   pragmaQuickCheck,
   orphanPhone,
+  phoneInvalidDepartment,
   callsMissingSearchIndex,
   tasksMissingSearchIndex,
   usersWithoutDepartment,
   usersInvalidDepartment,
   tasksInvalidCall,
   departmentsInvalidNameKey,
+  departmentInvalidFloor,
   orphanCallExternalLinks,
   orphanUserPhones,
   orphanDepartmentPhones,
   orphanUserEquipment,
+  equipmentInvalidDepartment,
   callsDeletedLinkedEntities,
   tasksDeletedLinkedEntities,
   tasksTemporalInconsistency,
@@ -33,6 +36,8 @@ extension IntegrityCheckTypeLabels on IntegrityCheckType {
   String get displayNameEl => switch (this) {
         IntegrityCheckType.pragmaQuickCheck => 'Έλεγχος SQLite (PRAGMA)',
         IntegrityCheckType.orphanPhone => 'Ορφανά τηλέφωνα',
+        IntegrityCheckType.phoneInvalidDepartment =>
+          'Τηλέφωνα με ανύπαρκτο τμήμα',
         IntegrityCheckType.callsMissingSearchIndex => 'Κλήσεις χωρίς ευρετήριο',
         IntegrityCheckType.tasksMissingSearchIndex =>
           'Εκκρεμότητες χωρίς ευρετήριο',
@@ -42,12 +47,16 @@ extension IntegrityCheckTypeLabels on IntegrityCheckType {
         IntegrityCheckType.tasksInvalidCall => 'Εκκρεμότητες με άκυρη κλήση',
         IntegrityCheckType.departmentsInvalidNameKey =>
           'Τμήματα χωρίς έγκυρο name_key',
+        IntegrityCheckType.departmentInvalidFloor =>
+          'Τμήματα με ανύπαρκτο όροφο χάρτη',
         IntegrityCheckType.orphanCallExternalLinks => 'Ορφανά call_external_links',
         IntegrityCheckType.orphanUserPhones =>
           'Ορφανές συσχετίσεις χρήστη–τηλεφώνου',
         IntegrityCheckType.orphanDepartmentPhones => 'Ορφανά department_phones',
         IntegrityCheckType.orphanUserEquipment =>
           'Ορφανές συσχετίσεις χρήστη–εξοπλισμού',
+        IntegrityCheckType.equipmentInvalidDepartment =>
+          'Εξοπλισμός με ανύπαρκτο τμήμα',
         IntegrityCheckType.callsDeletedLinkedEntities =>
           'Κλήσεις με ανύπαρκτες αναφορές',
         IntegrityCheckType.tasksDeletedLinkedEntities =>

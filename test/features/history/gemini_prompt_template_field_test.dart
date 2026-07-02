@@ -49,14 +49,16 @@ void main() {
       (tester) async {
         late TextSpan span;
         const baseStyle = TextStyle(fontSize: 14, height: 1.45);
+        final controller = GeminiPromptTemplateTextEditingController(
+          text:
+              'Υπάλληλος: {Υπάλληλος}. {@Τμήμα}Τμήμα: {Τμήμα}. {@/Τμήμα}',
+        );
+        addTearDown(controller.dispose);
 
         await tester.pumpWidget(
           MaterialApp(
             home: Builder(
               builder: (context) {
-                final controller = GeminiPromptTemplateTextEditingController(
-                  text: 'Υπάλληλος: {Υπάλληλος}. {@Τμήμα}Τμήμα: {Τμήμα}. {@/Τμήμα}',
-                );
                 span = controller.buildTextSpan(
                   context: context,
                   style: baseStyle,

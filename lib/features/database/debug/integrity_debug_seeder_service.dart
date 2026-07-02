@@ -115,16 +115,19 @@ class IntegrityDebugSeederService {
       await db.transaction((txn) async {
         await _insertBaseCatalog(txn);
         await _insertOrphanPhone(txn);
+        await _insertPhoneInvalidDepartment(txn);
         await _insertCallsMissingSearchIndex(txn);
         await _insertTasksMissingSearchIndex(txn);
         await _insertUsersWithoutDepartment(txn);
         await _insertUsersInvalidDepartment(txn);
         await _insertTasksInvalidCall(txn);
         await _insertDepartmentsInvalidNameKey(txn);
+        await _insertDepartmentInvalidFloor(txn);
         await _insertOrphanCallExternalLinks(txn);
         await _insertOrphanUserPhones(txn);
         await _insertOrphanDepartmentPhones(txn);
         await _insertOrphanUserEquipment(txn);
+        await _insertEquipmentInvalidDepartment(txn);
         await _insertCallsDeletedLinkedEntities(txn);
         await _insertTasksDeletedLinkedEntities(txn);
         await _insertTasksTemporalInconsistency(txn);
@@ -199,6 +202,26 @@ class IntegrityDebugSeederService {
     await txn.insert('phones', {
       'number': 'debug-orphan-phone',
       'department_id': null,
+      'is_deleted': 0,
+    });
+  }
+
+  /// Τηλέφωνο με department_id που λείπει εντελώς (hard-missing).
+  Future<void> _insertPhoneInvalidDepartment(Transaction txn) async {
+    await txn.insert('phones', {
+      'number': 'debug-phone-missing-dept',
+      'department_id': 990101,
+      'is_deleted': 0,
+    });
+    // Soft-deleted τμήμα — ΔΕΝ πρέπει να εμφανιστεί ως εύρημα.
+    final softDeletedDeptId = await txn.insert('departments', {
+      'name': 'Debug Soft-Deleted Phone Dept',
+      'name_key': 'debug_soft_del_phone_dept',
+      'is_deleted': 1,
+    });
+    await txn.insert('phones', {
+      'number': 'debug-phone-softdeleted-dept',
+      'department_id': softDeletedDeptId,
       'is_deleted': 0,
     });
   }
@@ -281,6 +304,23 @@ class IntegrityDebugSeederService {
     });
   }
 
+  /// Τμήμα με floor_id που λείπει εντελώς + μισή τοποθέτηση χάρτη.
+  Future<void> _insertDepartmentInvalidFloor(Transaction txn) async {
+    await txn.insert('departments', {
+      'name': 'Debug Τμήμα Ανύπαρκτος Όροφος',
+      'name_key': SearchTextNormalizer.normalizeForSearch(
+        'Debug Τμήμα Ανύπαρκτος Όροφος',
+      ),
+      'floor_id': 990201,
+      'map_floor': 990201,
+      'map_x': 120.0,
+      'map_y': 80.0,
+      'map_width': 40.0,
+      'map_height': 30.0,
+      'is_deleted': 0,
+    });
+  }
+
   Future<void> _insertOrphanCallExternalLinks(Transaction txn) async {
     await txn.insert('call_external_links', {
       'call_id': 999_999,
@@ -336,6 +376,28 @@ class IntegrityDebugSeederService {
     await txn.insert('user_equipment', {
       'user_id': deletedUserId,
       'equipment_id': equipmentId,
+    });
+  }
+
+  /// Εξοπλισμός με department_id που λείπει εντελώς (hard-missing).
+  Future<void> _insertEquipmentInvalidDepartment(Transaction txn) async {
+    await txn.insert('equipment', {
+      'code_equipment': 'DEBUG-EQ-MISSING-DEPT',
+      'type': 'Desktop',
+      'department_id': 990301,
+      'is_deleted': 0,
+    });
+    // Soft-deleted τμήμα — ΔΕΝ πρέπει να εμφανιστεί ως εύρημα.
+    final softDeletedDeptId = await txn.insert('departments', {
+      'name': 'Debug Soft-Deleted Eq Dept',
+      'name_key': 'debug_soft_del_eq_dept',
+      'is_deleted': 1,
+    });
+    await txn.insert('equipment', {
+      'code_equipment': 'DEBUG-EQ-SOFTDEL-DEPT',
+      'type': 'Laptop',
+      'department_id': softDeletedDeptId,
+      'is_deleted': 0,
     });
   }
 

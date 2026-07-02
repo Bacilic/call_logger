@@ -403,6 +403,133 @@ void main() {
       );
       expect(after.where((f) => f.affectedId == userId), isEmpty);
     });
+
+    test('disconnects phone from hard-missing department', () async {
+      final db = await DatabaseHelper.instance.database;
+      final phoneId = await db.insert('phones', {
+        'number': '6100-missing-dept',
+        'department_id': 990101,
+        'is_deleted': 0,
+      });
+
+      final findings = await checkService.runCheck(
+        IntegrityCheckType.phoneInvalidDepartment,
+      );
+      final mine = findings.where((f) => f.affectedId == phoneId).toList();
+      expect(mine, hasLength(1));
+
+      final result = await fixService.applyFix(
+        mine.first,
+        const IntegrityFixConfirm(),
+      );
+      expect(result.success, isTrue);
+
+      final row = await db.query('phones', where: 'id = ?', whereArgs: [phoneId]);
+      expect(row.first['department_id'], isNull);
+
+      final after = await checkService.runCheck(
+        IntegrityCheckType.phoneInvalidDepartment,
+      );
+      expect(after.where((f) => f.affectedId == phoneId), isEmpty);
+
+      final audits = await db.query(
+        'audit_log',
+        where: 'action = ? AND entity_id = ?',
+        whereArgs: [DatabaseHelper.auditActionIntegrityFix, phoneId],
+      );
+      expect(audits, isNotEmpty);
+    });
+
+    test('disconnects equipment from hard-missing department', () async {
+      final db = await DatabaseHelper.instance.database;
+      final equipmentId = await db.insert('equipment', {
+        'code_equipment': 'EQ-FIX-MISSING-DEPT',
+        'department_id': 990301,
+        'is_deleted': 0,
+      });
+
+      final findings = await checkService.runCheck(
+        IntegrityCheckType.equipmentInvalidDepartment,
+      );
+      final mine = findings.where((f) => f.affectedId == equipmentId).toList();
+      expect(mine, hasLength(1));
+
+      final result = await fixService.applyFix(
+        mine.first,
+        const IntegrityFixConfirm(),
+      );
+      expect(result.success, isTrue);
+
+      final row = await db.query(
+        'equipment',
+        where: 'id = ?',
+        whereArgs: [equipmentId],
+      );
+      expect(row.first['department_id'], isNull);
+
+      final after = await checkService.runCheck(
+        IntegrityCheckType.equipmentInvalidDepartment,
+      );
+      expect(after.where((f) => f.affectedId == equipmentId), isEmpty);
+
+      final audits = await db.query(
+        'audit_log',
+        where: 'action = ? AND entity_id = ?',
+        whereArgs: [DatabaseHelper.auditActionIntegrityFix, equipmentId],
+      );
+      expect(audits, isNotEmpty);
+    });
+
+    test('clears department floor and map placement columns', () async {
+      final db = await DatabaseHelper.instance.database;
+      final deptId = await db.insert('departments', {
+        'name': 'Dept Fix Floor',
+        'name_key': 'dept_fix_floor',
+        'floor_id': 990201,
+        'map_floor': 990201,
+        'map_x': 50.0,
+        'map_y': 60.0,
+        'map_width': 30.0,
+        'map_height': 20.0,
+        'map_rotation': 15.0,
+        'color': '#FF0000',
+        'is_deleted': 0,
+      });
+
+      final findings = await checkService.runCheck(
+        IntegrityCheckType.departmentInvalidFloor,
+      );
+      final mine = findings.where((f) => f.affectedId == deptId).toList();
+      expect(mine, hasLength(1));
+
+      final result = await fixService.applyFix(
+        mine.first,
+        const IntegrityFixConfirm(),
+      );
+      expect(result.success, isTrue);
+
+      final row = await db.query('departments', where: 'id = ?', whereArgs: [deptId]);
+      expect(row.first['floor_id'], isNull);
+      expect(row.first['map_floor'], isNull);
+      expect(row.first['map_x'], 0.0);
+      expect(row.first['map_y'], 0.0);
+      expect(row.first['map_width'], 0.0);
+      expect(row.first['map_height'], 0.0);
+      expect(row.first['map_rotation'], 0.0);
+      expect(row.first['color'], '#FF0000');
+
+      final after = await checkService.runCheck(
+        IntegrityCheckType.departmentInvalidFloor,
+      );
+      expect(after.where((f) => f.affectedId == deptId), isEmpty);
+
+      final audits = await db.query(
+        'audit_log',
+        where: 'action = ? AND entity_id = ?',
+        whereArgs: [DatabaseHelper.auditActionIntegrityFix, deptId],
+      );
+      expect(audits, isNotEmpty);
+    });
   });
 }
 

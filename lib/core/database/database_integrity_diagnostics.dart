@@ -29,7 +29,7 @@ class _IntegrityCheckStep {
 
 /// Read-only διαγνωστικά SQL για ακεραιότητα δεδομένων SQLite.
 class DatabaseIntegrityDiagnostics {
-  static const int totalSteps = 16;
+  static const int totalSteps = 19;
 
   static const String _activePhones = 'COALESCE(is_deleted, 0) = 0';
   static const String _activeCalls = 'COALESCE(c.is_deleted, 0) = 0';
@@ -86,7 +86,7 @@ class DatabaseIntegrityDiagnostics {
     );
   }
 
-  /// Στοχευμένη επαν-επαλήθευση ενός τύπου ελέγχου (χωρίς πλήρες 16-βηματικό scan).
+  /// Στοχευμένη επαν-επαλήθευση ενός τύπου ελέγχου (χωρίς πλήρες 19-βηματικό scan).
   Future<List<DatabaseIntegrityFinding>> runCheck(IntegrityCheckType type) async {
     final db = await DatabaseHelper.instance.database;
     if (type == IntegrityCheckType.pragmaQuickCheck) {
@@ -104,6 +104,16 @@ class DatabaseIntegrityDiagnostics {
         tableScopeLabel: 'συνολικά τηλέφωνα',
         countSql: 'SELECT COUNT(*) FROM phones WHERE $_activePhones',
         run: _checkOrphanPhones,
+      ),
+      _IntegrityCheckStep(
+        checkType: IntegrityCheckType.phoneInvalidDepartment,
+        name: IntegrityCheckType.phoneInvalidDepartment.displayNameEl,
+        tableScopeLabel: 'τηλέφωνα με τμήμα',
+        countSql: '''
+SELECT COUNT(*) FROM phones
+WHERE $_activePhones AND department_id IS NOT NULL
+''',
+        run: _checkPhonesInvalidDepartment,
       ),
       _IntegrityCheckStep(
         checkType: IntegrityCheckType.callsMissingSearchIndex,
@@ -155,6 +165,16 @@ WHERE COALESCE(is_deleted, 0) = 0 AND call_id IS NOT NULL
         run: _checkDepartmentsInvalidNameKey,
       ),
       _IntegrityCheckStep(
+        checkType: IntegrityCheckType.departmentInvalidFloor,
+        name: IntegrityCheckType.departmentInvalidFloor.displayNameEl,
+        tableScopeLabel: 'τμήματα με όροφο χάρτη',
+        countSql: '''
+SELECT COUNT(*) FROM departments
+WHERE COALESCE(is_deleted, 0) = 0 AND floor_id IS NOT NULL
+''',
+        run: _checkDepartmentsInvalidFloor,
+      ),
+      _IntegrityCheckStep(
         checkType: IntegrityCheckType.orphanCallExternalLinks,
         name: IntegrityCheckType.orphanCallExternalLinks.displayNameEl,
         tableScopeLabel: 'call_external_links',
@@ -181,6 +201,16 @@ WHERE COALESCE(is_deleted, 0) = 0 AND call_id IS NOT NULL
         tableScopeLabel: 'συσχετίσεις χρήστη–εξοπλισμού',
         countSql: 'SELECT COUNT(*) FROM user_equipment',
         run: _checkOrphanUserEquipment,
+      ),
+      _IntegrityCheckStep(
+        checkType: IntegrityCheckType.equipmentInvalidDepartment,
+        name: IntegrityCheckType.equipmentInvalidDepartment.displayNameEl,
+        tableScopeLabel: 'εξοπλισμός με τμήμα',
+        countSql: '''
+SELECT COUNT(*) FROM equipment
+WHERE COALESCE(is_deleted, 0) = 0 AND department_id IS NOT NULL
+''',
+        run: _checkEquipmentInvalidDepartment,
       ),
       _IntegrityCheckStep(
         checkType: IntegrityCheckType.callsDeletedLinkedEntities,
@@ -265,6 +295,105 @@ WHERE $_activePhones
             affectedId: r['id'] as int?,
             affectedEntity: 'phones',
             context: {'phone_id': r['id']},
+          ),
+        )
+        .toList();
+  }
+
+  static Future<List<DatabaseIntegrityFinding>> _checkPhonesInvalidDepartment(
+    Database db,
+  ) async {
+    // Soft-deleted τμήμα (is_deleted=1) ΔΕΝ είναι εύρημα — ιστορική αλήθεια.
+    // Εύρημα μόνο όταν η εγγραφή λείπει εντελώς από τον πίνακα departments.
+    final rows = await db.rawQuery('''
+SELECT p.id, p.number, p.department_id
+FROM phones p
+LEFT JOIN departments d ON d.id = p.department_id
+WHERE COALESCE(p.is_deleted, 0) = 0
+  AND p.department_id IS NOT NULL
+  AND d.id IS NULL
+''');
+    return rows
+        .map(
+          (r) => DatabaseIntegrityFinding(
+            severity: IntegritySeverity.critical,
+            category: IntegrityCategory.referential,
+            checkType: IntegrityCheckType.phoneInvalidDepartment,
+            title: 'Τηλέφωνο με ανύπαρκτο τμήμα',
+            description:
+                'Το τηλέφωνο ${_formatPhoneLabel(r['id'] as int?, r['number'] as String?)} '
+                'δείχνει σε τμήμα (id=${r['department_id']}) που λείπει εντελώς από τη βάση.',
+            affectedId: r['id'] as int?,
+            affectedEntity: 'phones',
+            context: {
+              'phone_id': r['id'],
+              'department_id': r['department_id'],
+            },
+          ),
+        )
+        .toList();
+  }
+
+  static Future<List<DatabaseIntegrityFinding>> _checkDepartmentsInvalidFloor(
+    Database db,
+  ) async {
+    final rows = await db.rawQuery('''
+SELECT d.id, d.name, d.floor_id
+FROM departments d
+LEFT JOIN building_map_floors f ON f.id = d.floor_id
+WHERE COALESCE(d.is_deleted, 0) = 0
+  AND d.floor_id IS NOT NULL
+  AND f.id IS NULL
+''');
+    return rows
+        .map(
+          (r) => DatabaseIntegrityFinding(
+            severity: IntegritySeverity.warning,
+            category: IntegrityCategory.referential,
+            checkType: IntegrityCheckType.departmentInvalidFloor,
+            title: 'Τμήμα με ανύπαρκτο όροφο χάρτη',
+            description:
+                'Το τμήμα ${_formatDepartmentLabel(r['id'] as int?, r['name'] as String?)} '
+                'δείχνει σε όροφο χάρτη (id=${r['floor_id']}) που λείπει εντελώς από τη βάση.',
+            affectedId: r['id'] as int?,
+            affectedEntity: 'departments',
+            context: {
+              'department_id': r['id'],
+              'floor_id': r['floor_id'],
+            },
+          ),
+        )
+        .toList();
+  }
+
+  static Future<List<DatabaseIntegrityFinding>> _checkEquipmentInvalidDepartment(
+    Database db,
+  ) async {
+    // Soft-deleted τμήμα (is_deleted=1) ΔΕΝ είναι εύρημα — ιστορική αλήθεια.
+    final rows = await db.rawQuery('''
+SELECT e.id, e.code_equipment, e.department_id
+FROM equipment e
+LEFT JOIN departments d ON d.id = e.department_id
+WHERE COALESCE(e.is_deleted, 0) = 0
+  AND e.department_id IS NOT NULL
+  AND d.id IS NULL
+''');
+    return rows
+        .map(
+          (r) => DatabaseIntegrityFinding(
+            severity: IntegritySeverity.critical,
+            category: IntegrityCategory.referential,
+            checkType: IntegrityCheckType.equipmentInvalidDepartment,
+            title: 'Εξοπλισμός με ανύπαρκτο τμήμα',
+            description:
+                'Ο εξοπλισμός ${_formatEquipmentLabel(r['id'] as int?, r['code_equipment'] as String?)} '
+                'δείχνει σε τμήμα (id=${r['department_id']}) που λείπει εντελώς από τη βάση.',
+            affectedId: r['id'] as int?,
+            affectedEntity: 'equipment',
+            context: {
+              'equipment_id': r['id'],
+              'department_id': r['department_id'],
+            },
           ),
         )
         .toList();

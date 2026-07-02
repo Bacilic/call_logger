@@ -462,5 +462,90 @@ void main() {
       expect(audits.single['entity_type'], AuditEntityTypes.task);
       expect(audits.single['entity_name'], 'Διαγραφή Task');
     });
+
+    test('disconnectPhoneFromDepartmentForIntegrity: NULL department_id + audit',
+        () async {
+      final phoneId = await db.insert('phones', {
+        'number': '21008888',
+        'department_id': 990101,
+        'is_deleted': 0,
+      });
+
+      await repo.disconnectPhoneFromDepartmentForIntegrity(
+        phoneId: phoneId,
+        details: 'test disconnect phone dept',
+        oldValues: {'department_id': 990101},
+        newValues: {'department_id': null},
+      );
+
+      final row = await db.query('phones', where: 'id = ?', whereArgs: [phoneId]);
+      expect(row.single['department_id'], isNull);
+
+      final audits = await integrityAuditRows();
+      expect(audits, hasLength(1));
+      expect(audits.single['entity_type'], AuditEntityTypes.phone);
+      expect(audits.single['entity_id'], phoneId);
+    });
+
+    test('disconnectEquipmentFromDepartmentForIntegrity: NULL department_id + audit',
+        () async {
+      final equipmentId = await db.insert('equipment', {
+        'code_equipment': 'EQ-DISCONNECT',
+        'department_id': 990301,
+        'is_deleted': 0,
+      });
+
+      await repo.disconnectEquipmentFromDepartmentForIntegrity(
+        equipmentId: equipmentId,
+        details: 'test disconnect equipment dept',
+        oldValues: {'department_id': 990301},
+        newValues: {'department_id': null},
+      );
+
+      final row = await db.query(
+        'equipment',
+        where: 'id = ?',
+        whereArgs: [equipmentId],
+      );
+      expect(row.single['department_id'], isNull);
+
+      final audits = await integrityAuditRows();
+      expect(audits, hasLength(1));
+      expect(audits.single['entity_type'], AuditEntityTypes.equipment);
+      expect(audits.single['entity_id'], equipmentId);
+    });
+
+    test('clearDepartmentFloorForIntegrity: καθαρισμός floor_id και map_* + audit',
+        () async {
+      final deptId = await db.insert('departments', {
+        'name': 'Χάρτης Dept',
+        'name_key': 'χαρτης_dept',
+        'floor_id': 990201,
+        'map_floor': 990201,
+        'map_x': 100.0,
+        'map_y': 200.0,
+        'map_width': 50.0,
+        'map_height': 40.0,
+        'is_deleted': 0,
+      });
+
+      await repo.clearDepartmentFloorForIntegrity(
+        departmentId: deptId,
+        details: 'test clear department floor',
+        oldValues: {'floor_id': 990201},
+        newValues: {'floor_id': null},
+      );
+
+      final row = await db.query('departments', where: 'id = ?', whereArgs: [deptId]);
+      expect(row.single['floor_id'], isNull);
+      expect(row.single['map_floor'], isNull);
+      expect(row.single['map_x'], 0.0);
+      expect(row.single['map_y'], 0.0);
+
+      final audits = await integrityAuditRows();
+      expect(audits, hasLength(1));
+      expect(audits.single['entity_type'], AuditEntityTypes.department);
+      expect(audits.single['entity_id'], deptId);
+    });
   });
 }

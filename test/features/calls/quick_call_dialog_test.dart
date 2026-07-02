@@ -49,12 +49,10 @@ Finder _quickCallFab() => find.byKey(QuickCallTrigger.triggerKey);
 Finder _quickCallDialog() => find.byKey(const ValueKey('quick_call_dialog'));
 
 bool _isQuickCallDialogFlashActive(WidgetTester tester) {
-  final containerFinder = find.descendant(
-    of: find.byType(TapRegion),
-    matching: find.byType(AnimatedContainer),
-  );
-  if (containerFinder.evaluate().isEmpty) return false;
-  final container = tester.widget<AnimatedContainer>(containerFinder.first);
+  // Flash στο backdrop του DialogOutsideTapHintScope (όχι μέσα στο TapRegion του dialog).
+  final backdropFinder = find.byKey(const ValueKey('dialog_flash_backdrop'));
+  if (backdropFinder.evaluate().isEmpty) return false;
+  final container = tester.widget<AnimatedContainer>(backdropFinder);
   final fg = container.foregroundDecoration;
   if (fg is! BoxDecoration) return false;
   final border = fg.border;

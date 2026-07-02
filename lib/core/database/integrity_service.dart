@@ -1,6 +1,7 @@
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import 'audit_service.dart';
+import 'building_map_repository.dart';
 import 'database_helper.dart';
 import 'directory_support.dart';
 import 'user_repository.dart';
@@ -448,5 +449,119 @@ class IntegrityService {
     final status = deleted ? '[Διαγραμμένος]' : '[Ενεργός]';
     if (name.isEmpty) return 'Χρήστης ID $userId $status';
     return 'Χρήστης $name $status (ID $userId)';
+  }
+
+  Future<void> disconnectPhoneFromDepartmentForIntegrity({
+    required int phoneId,
+    required String details,
+    Map<String, dynamic>? oldValues,
+    Map<String, dynamic>? newValues,
+  }) async {
+    await db.transaction((txn) async {
+      final rows = await txn.query(
+        'phones',
+        columns: ['number', 'department_id'],
+        where: 'id = ?',
+        whereArgs: [phoneId],
+        limit: 1,
+      );
+      if (rows.isEmpty) return;
+      final number = (rows.first['number'] as String?)?.trim() ?? '';
+      await txn.update(
+        'phones',
+        {'department_id': null},
+        where: 'id = ?',
+        whereArgs: [phoneId],
+      );
+      final ap = await _support.auditPerformingUser(executor: txn);
+      await AuditService.log(
+        txn,
+        action: DatabaseHelper.auditActionIntegrityFix,
+        userPerforming: ap,
+        details: details,
+        entityType: AuditEntityTypes.phone,
+        entityId: phoneId,
+        entityName: number.isEmpty ? null : number,
+        oldValues: oldValues,
+        newValues: newValues,
+      );
+    });
+  }
+
+  Future<void> disconnectEquipmentFromDepartmentForIntegrity({
+    required int equipmentId,
+    required String details,
+    Map<String, dynamic>? oldValues,
+    Map<String, dynamic>? newValues,
+  }) async {
+    await db.transaction((txn) async {
+      final rows = await txn.query(
+        'equipment',
+        columns: ['code_equipment', 'department_id'],
+        where: 'id = ?',
+        whereArgs: [equipmentId],
+        limit: 1,
+      );
+      if (rows.isEmpty) return;
+      final code = (rows.first['code_equipment'] as String?)?.trim() ?? '';
+      await txn.update(
+        'equipment',
+        {'department_id': null},
+        where: 'id = ?',
+        whereArgs: [equipmentId],
+      );
+      final ap = await _support.auditPerformingUser(executor: txn);
+      await AuditService.log(
+        txn,
+        action: DatabaseHelper.auditActionIntegrityFix,
+        userPerforming: ap,
+        details: details,
+        entityType: AuditEntityTypes.equipment,
+        entityId: equipmentId,
+        entityName: code.isEmpty ? null : code,
+        oldValues: oldValues,
+        newValues: newValues,
+      );
+    });
+  }
+
+  Future<void> clearDepartmentFloorForIntegrity({
+    required int departmentId,
+    required String details,
+    Map<String, dynamic>? oldValues,
+    Map<String, dynamic>? newValues,
+  }) async {
+    final placementClear = BuildingMapRepository.clearedBuildingMapPlacementColumns(
+      clearFloorId: true,
+    );
+    await db.transaction((txn) async {
+      final rows = await txn.query(
+        'departments',
+        columns: ['name'],
+        where: 'id = ?',
+        whereArgs: [departmentId],
+        limit: 1,
+      );
+      if (rows.isEmpty) return;
+      final name = (rows.first['name'] as String?)?.trim();
+      await txn.update(
+        'departments',
+        placementClear,
+        where: 'id = ?',
+        whereArgs: [departmentId],
+      );
+      final ap = await _support.auditPerformingUser(executor: txn);
+      await AuditService.log(
+        txn,
+        action: DatabaseHelper.auditActionIntegrityFix,
+        userPerforming: ap,
+        details: details,
+        entityType: AuditEntityTypes.department,
+        entityId: departmentId,
+        entityName: (name == null || name.isEmpty) ? null : name,
+        oldValues: oldValues,
+        newValues: newValues,
+      );
+    });
   }
 }

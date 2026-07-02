@@ -68,15 +68,21 @@ void main() {
   group('LansweeperSyncForm · επεξεργασία προτύπου', () {
     testWidgets('εικονίδιο ανοίγει τον διάλογο επεξεργασίας', (tester) async {
       var dialogOpened = false;
+      final titleController = SpellCheckController();
+      addTearDown(titleController.dispose);
+      final notesController = SpellCheckController();
+      addTearDown(notesController.dispose);
+      final solutionController = SpellCheckController();
+      addTearDown(solutionController.dispose);
 
       await tester.pumpWidget(
         ProviderScope(
           child: MaterialApp(
             home: Scaffold(
               body: LansweeperSyncForm(
-                titleController: SpellCheckController(),
-                notesController: SpellCheckController(),
-                solutionController: SpellCheckController(),
+                titleController: titleController,
+                notesController: notesController,
+                solutionController: solutionController,
                 onEditPromptTemplate: () {
                   dialogOpened = true;
                 },

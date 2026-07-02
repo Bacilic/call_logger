@@ -87,6 +87,8 @@ class DatabaseIntegrityFixService {
     switch (finding.checkType) {
       case IntegrityCheckType.orphanPhone:
         await _fixOrphanPhone(dir, finding, decision);
+      case IntegrityCheckType.phoneInvalidDepartment:
+        await _fixPhoneInvalidDepartment(dir, finding, decision);
       case IntegrityCheckType.callsMissingSearchIndex:
         await _fixCallSearchIndex(db, calls, dir, finding);
       case IntegrityCheckType.tasksMissingSearchIndex:
@@ -99,6 +101,8 @@ class DatabaseIntegrityFixService {
         await _fixTaskInvalidCall(db, dir, tasks, finding, decision);
       case IntegrityCheckType.departmentsInvalidNameKey:
         await _fixDepartmentNameKey(dir, finding);
+      case IntegrityCheckType.departmentInvalidFloor:
+        await _fixDepartmentInvalidFloor(dir, finding, decision);
       case IntegrityCheckType.orphanCallExternalLinks:
         await _fixOrphanCallExternalLink(dir, finding);
       case IntegrityCheckType.orphanUserPhones:
@@ -107,6 +111,8 @@ class DatabaseIntegrityFixService {
         await _fixOrphanDepartmentPhones(dir, finding);
       case IntegrityCheckType.orphanUserEquipment:
         await _fixOrphanUserEquipment(dir, finding);
+      case IntegrityCheckType.equipmentInvalidDepartment:
+        await _fixEquipmentInvalidDepartment(dir, finding, decision);
       case IntegrityCheckType.callsDeletedLinkedEntities:
         await _fixCallDeletedFk(db, calls, dir, finding, decision);
       case IntegrityCheckType.tasksDeletedLinkedEntities:
@@ -167,6 +173,94 @@ class DatabaseIntegrityFixService {
       default:
         throw ArgumentError('Απαιτείται επιλογή για ορφανό τηλέφωνο.');
     }
+  }
+
+  Future<void> _fixPhoneInvalidDepartment(
+    IntegrityService dir,
+    DatabaseIntegrityFinding finding,
+    IntegrityFixDecision decision,
+  ) async {
+    final phoneId = _ctxInt(finding, 'phone_id') ?? finding.affectedId;
+    final oldDeptId = _ctxInt(finding, 'department_id');
+    if (phoneId == null) return;
+
+    if (decision is! IntegrityFixConfirm) {
+      throw ArgumentError('Μόνο αποσύνδεση (NULL) επιτρέπεται.');
+    }
+
+    final pack = _audit.fkChange(
+      entityLabel: 'Τηλέφωνο ID $phoneId',
+      fieldLabel: 'department_id',
+      oldValue: oldDeptId,
+      newValue: null,
+      actionDescription: 'Αποσύνδεση τηλεφώνου από ανύπαρκτο τμήμα',
+    );
+    await dir.disconnectPhoneFromDepartmentForIntegrity(
+      phoneId: phoneId,
+      details: pack.details,
+      oldValues: pack.oldValues,
+      newValues: pack.newValues,
+    );
+  }
+
+  Future<void> _fixEquipmentInvalidDepartment(
+    IntegrityService dir,
+    DatabaseIntegrityFinding finding,
+    IntegrityFixDecision decision,
+  ) async {
+    final equipmentId = _ctxInt(finding, 'equipment_id') ?? finding.affectedId;
+    final oldDeptId = _ctxInt(finding, 'department_id');
+    if (equipmentId == null) return;
+
+    if (decision is! IntegrityFixConfirm) {
+      throw ArgumentError('Μόνο αποσύνδεση (NULL) επιτρέπεται.');
+    }
+
+    final pack = _audit.fkChange(
+      entityLabel: 'Εξοπλισμός ID $equipmentId',
+      fieldLabel: 'department_id',
+      oldValue: oldDeptId,
+      newValue: null,
+      actionDescription: 'Αποσύνδεση εξοπλισμού από ανύπαρκτο τμήμα',
+    );
+    await dir.disconnectEquipmentFromDepartmentForIntegrity(
+      equipmentId: equipmentId,
+      details: pack.details,
+      oldValues: pack.oldValues,
+      newValues: pack.newValues,
+    );
+  }
+
+  Future<void> _fixDepartmentInvalidFloor(
+    IntegrityService dir,
+    DatabaseIntegrityFinding finding,
+    IntegrityFixDecision decision,
+  ) async {
+    final departmentId =
+        _ctxInt(finding, 'department_id') ?? finding.affectedId;
+    final oldFloorId = _ctxInt(finding, 'floor_id');
+    if (departmentId == null) return;
+
+    if (decision is! IntegrityFixConfirm) {
+      throw ArgumentError('Μόνο καθαρισμός ορόφου επιτρέπεται.');
+    }
+
+    final pack = _audit.fkChange(
+      entityLabel: 'Τμήμα ID $departmentId',
+      fieldLabel: 'floor_id',
+      oldValue: oldFloorId,
+      newValue: null,
+      actionDescription: 'Καθαρισμός ανύπαρκτου ορόφου χάρτη',
+    );
+    await dir.clearDepartmentFloorForIntegrity(
+      departmentId: departmentId,
+      details: pack.details,
+      oldValues: pack.oldValues,
+      newValues: {
+        ...pack.newValues,
+        'building_map_placement_cleared': true,
+      },
+    );
   }
 
   Future<void> _fixCallSearchIndex(
