@@ -116,6 +116,7 @@ class TasksNotifier extends AsyncNotifier<List<Task>> {
   Future<void> updateTask(Task task) async {
     final service = ref.read(taskServiceProvider);
     await service.updateTask(task);
+    _afterTasksMutated(refreshAnalytics: true);
     await refresh();
   }
 

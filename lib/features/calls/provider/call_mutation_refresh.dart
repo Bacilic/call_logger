@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../history/providers/dashboard_provider.dart';
 import '../../history/providers/history_provider.dart';
+import '../../tasks/providers/task_analytics_provider.dart';
 import '../../tasks/providers/tasks_provider.dart';
 import 'calls_dashboard_providers.dart';
 
@@ -34,4 +35,5 @@ void invalidateTaskListProviders(Ref ref) {
   ref.invalidate(tasksProvider);
   ref.invalidate(totalTasksCountProvider);
   ref.invalidate(orphanCallsProvider);
+  ref.invalidate(taskAnalyticsProvider);
 }
