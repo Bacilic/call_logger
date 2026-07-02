@@ -16,6 +16,7 @@ import 'lookup_provider.dart';
 import '../models/equipment_model.dart';
 import '../models/user_model.dart';
 import '../../directory/models/department_model.dart';
+import '../../directory/providers/directory_cache_refresh.dart';
 import '../../tasks/models/task.dart';
 import '../../tasks/providers/task_service_provider.dart';
 import 'call_mutation_refresh.dart';
@@ -613,7 +614,18 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
       await equipmentOrphan.updateEquipmentDepartment(equipmentCode, departmentId);
     }
 
-    ref.invalidate(lookupServiceProvider);
+    await refreshDirectoryCaches(
+      ref,
+      users: phoneNeedsShared,
+      equipment: equipmentNeedsShared,
+      departments: true,
+    );
+    if (!ref.mounted) {
+      return const OrphanQuickAddResult(
+        requiresConfirmation: false,
+        message: 'Η συσχέτιση ολοκληρώθηκε αλλά το container δεν είναι ενεργό.',
+      );
+    }
     final refreshed = (await ref.read(lookupServiceProvider.future)).service;
     final finalDepartment = refreshed.findDepartmentByName(deptText);
     state = state.copyWith(
@@ -2115,7 +2127,15 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
           departmentText: s.departmentText,
         );
         _callerAwaitingPhoneAssociation = parsedPhones.isEmpty;
-        ref.invalidate(lookupServiceProvider);
+        await refreshDirectoryCaches(
+          ref,
+          users: true,
+          equipment: equipmentCode.isNotEmpty,
+          departments: deptTextRaw.isNotEmpty,
+        );
+        if (!ref.mounted) {
+          return 'Σφάλμα αποθήκευσης: το container δεν είναι ενεργό.';
+        }
         final refreshedLookup = (await ref.read(
           lookupServiceProvider.future,
         )).service;
@@ -2189,6 +2209,12 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
         }
         return lines.join('\n');
       } catch (e) {
+        await refreshDirectoryCaches(
+          ref,
+          users: true,
+          equipment: true,
+          departments: true,
+        );
         return 'Σφάλμα αποθήκευσης: $e';
       }
     }
@@ -2294,7 +2320,15 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
             : s.selectedEquipment,
       );
 
-      ref.invalidate(lookupServiceProvider);
+      await refreshDirectoryCaches(
+        ref,
+        users: true,
+        equipment: hadEqWork,
+        departments: primaryDepartmentChanged || newDepartmentRow,
+      );
+      if (!ref.mounted) {
+        return 'Σφάλμα αποθήκευσης: το container δεν είναι ενεργό.';
+      }
       final refreshedLookup = (await ref.read(
         lookupServiceProvider.future,
       )).service;

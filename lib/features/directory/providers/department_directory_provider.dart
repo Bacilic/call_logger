@@ -443,6 +443,7 @@ class DepartmentDirectoryNotifier extends Notifier<DepartmentDirectoryState> {
     }
     await _refreshLookupCache();
     await loadDepartments();
+    await refreshDirectoryCaches(ref, users: true, equipment: true);
   }
 
   /// Επαναφορά soft-deleted τμήματος με ακριβές όνομα + προαιρετική ενημέρωση πεδίων από τη φόρμα.
@@ -461,6 +462,7 @@ class DepartmentDirectoryNotifier extends Notifier<DepartmentDirectoryState> {
     );
     await _refreshLookupCache();
     await loadDepartments();
+    await refreshDirectoryCaches(ref, users: true, equipment: true);
   }
 
   Future<void> updateDepartment(
@@ -624,6 +626,7 @@ class DepartmentDirectoryNotifier extends Notifier<DepartmentDirectoryState> {
       visibleColumnKeys: state.visibleColumnKeys,
     );
     await loadDepartments();
+    await refreshDirectoryCaches(ref, users: true, equipment: true);
   }
 
   Future<void> undoLastDelete() async {
@@ -636,6 +639,7 @@ class DepartmentDirectoryNotifier extends Notifier<DepartmentDirectoryState> {
     if (!ref.mounted) return;
     _patch(lastDeleted: null);
     await loadDepartments();
+    await refreshDirectoryCaches(ref, users: true, equipment: true);
   }
 
   Future<void> bulkUpdate(List<int> ids, Map<String, dynamic> changes) async {
@@ -662,6 +666,7 @@ class DepartmentDirectoryNotifier extends Notifier<DepartmentDirectoryState> {
       visibleColumnKeys: state.visibleColumnKeys,
     );
     await loadDepartments();
+    await refreshDirectoryCaches(ref, users: true, equipment: true);
   }
 
   Future<void> undoLastBulkUpdate() async {
@@ -681,6 +686,7 @@ class DepartmentDirectoryNotifier extends Notifier<DepartmentDirectoryState> {
       await _refreshLookupCache();
       if (ref.mounted) {
         await loadDepartments();
+        await refreshDirectoryCaches(ref, users: true, equipment: true);
       }
     }
   }

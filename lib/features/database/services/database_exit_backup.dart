@@ -11,35 +11,43 @@ import 'database_backup_service.dart';
 class DatabaseExitBackup {
   DatabaseExitBackup._();
 
+  static bool _runInProgress = false;
+
   static Future<void> runIfEnabled() async {
-    final db = await DatabaseHelper.instance.database;
-    final repo = SettingsRepository(db);
-    final raw = await repo.getSetting(DatabaseBackupSettings.appSettingsKey);
-    final settings = DatabaseBackupSettings.fromJsonString(raw);
-    if (!BackupScheduleStatusFormatter.shouldRunExitBackup(
-      settings,
-      DateTime.now(),
-    )) {
-      return;
+    if (_runInProgress) return;
+    _runInProgress = true;
+    try {
+      final db = await DatabaseHelper.instance.database;
+      final repo = SettingsRepository(db);
+      final raw = await repo.getSetting(DatabaseBackupSettings.appSettingsKey);
+      final settings = DatabaseBackupSettings.fromJsonString(raw);
+      if (!BackupScheduleStatusFormatter.shouldRunExitBackup(
+        settings,
+        DateTime.now(),
+      )) {
+        return;
+      }
+
+      final result = await DatabaseBackupService.runBackup(
+        settings,
+        requireDestination: true,
+        auditTrigger: BackupAuditTrigger.onExit,
+      );
+
+      final updated = settings.copyWith(
+        lastBackupAttempt: DateTime.now(),
+        lastBackupStatus: result.success
+            ? BackupScheduleStatus.success
+            : (result.failureCode == DatabaseBackupFailureCode.folderMissing
+                ? BackupScheduleStatus.folderMissing
+                : BackupScheduleStatus.failed),
+      );
+      await repo.saveSetting(
+        DatabaseBackupSettings.appSettingsKey,
+        updated.toJsonString(),
+      );
+    } finally {
+      _runInProgress = false;
     }
-
-    final result = await DatabaseBackupService.runBackup(
-      settings,
-      requireDestination: true,
-      auditTrigger: BackupAuditTrigger.onExit,
-    );
-
-    final updated = settings.copyWith(
-      lastBackupAttempt: DateTime.now(),
-      lastBackupStatus: result.success
-          ? BackupScheduleStatus.success
-          : (result.failureCode == DatabaseBackupFailureCode.folderMissing
-              ? BackupScheduleStatus.folderMissing
-              : BackupScheduleStatus.failed),
-    );
-    await repo.saveSetting(
-      DatabaseBackupSettings.appSettingsKey,
-      updated.toJsonString(),
-    );
   }
 }
