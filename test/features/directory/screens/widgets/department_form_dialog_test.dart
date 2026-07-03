@@ -709,4 +709,103 @@ void main() {
       },
     );
   });
+
+  group('Φόρμα τμήματος — χαρακτηρισμός split', () {
+    const kCharSplitDeptName = 'CharSplitDeptMarker';
+    const kCharSplitFloorLabel = 'CharSplitFloorMarker';
+
+    Future<int> seedCharacterizationFloor() async {
+      final db = await DatabaseHelper.instance.database;
+      return db.insert('building_map_floors', {
+        'sort_order': 0,
+        'label': kCharSplitFloorLabel,
+        'image_path': 'char_split_test.png',
+        'rotation_degrees': 0.0,
+      });
+    }
+
+    Finder floorDropdown() {
+      return find.byWidgetPredicate(
+        (w) => w is DropdownButtonFormField<int?>,
+      );
+    }
+
+    testWidgets(
+      'δημιουργία νέου τμήματος με όνομα και όροφο αποθηκεύεται στη βάση',
+      (tester) async {
+        tester.view.physicalSize = const Size(1600, 900);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        late int floorId;
+        final container = ProviderContainer(
+          overrides: callLoggerTestProviderOverrides(),
+        );
+        addTearDown(container.dispose);
+
+        late DepartmentDirectoryNotifier notifier;
+        await tester.runAsync(() async {
+          await seedIsolatedTestDatabase();
+          floorId = await seedCharacterizationFloor();
+          await container.read(lookupServiceProvider.future);
+          notifier = container.read(departmentDirectoryProvider.notifier);
+          await notifier.loadDepartments();
+          await _openDepartmentFormInDialog(
+            tester,
+            container,
+            notifier: notifier,
+          );
+        });
+
+        expect(find.text(_kNewDepartmentFormTitle), findsOneWidget);
+        await tester.runAsync(() async {
+          for (var i = 0; i < 30; i++) {
+            await Future<void>.delayed(const Duration(milliseconds: 50));
+            await tester.pump(const Duration(milliseconds: 50));
+          }
+        });
+        await pumpUntilSettledLong(tester);
+
+        await tester.enterText(_departmentNameField(), kCharSplitDeptName);
+        await pumpUntilSettled(tester);
+
+        final floorDropdownFinder = floorDropdown();
+        await tester.ensureVisible(floorDropdownFinder);
+        await pumpUntilSettled(tester);
+        await tester.tap(floorDropdownFinder);
+        await pumpUntilSettled(tester);
+        await tester.tap(find.text(kCharSplitFloorLabel));
+        await pumpUntilSettled(tester);
+        await tester.tap(find.widgetWithText(FilledButton, 'Προσθήκη'));
+        await tester.runAsync(() async {
+          for (var i = 0; i < 40; i++) {
+            if (find.text(_kNewDepartmentFormTitle).evaluate().isEmpty) {
+              return;
+            }
+            await Future<void>.delayed(const Duration(milliseconds: 50));
+            await tester.pump(const Duration(milliseconds: 50));
+          }
+        });
+
+        expect(find.text(_kNewDepartmentFormTitle), findsNothing);
+
+        final row = await tester.runAsync(() async {
+          final db = await DatabaseHelper.instance.database;
+          final rows = await db.query(
+            'departments',
+            where: 'name = ?',
+            whereArgs: [kCharSplitDeptName],
+            limit: 1,
+          );
+          return rows.isEmpty ? null : rows.first;
+        });
+        expect(row?['name'], kCharSplitDeptName);
+        expect(row?['floor_id'], floorId);
+        expect(row?['is_deleted'], 0);
+      },
+    );
+  });
 }

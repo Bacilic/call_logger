@@ -40,6 +40,9 @@ import 'nav_rail_attention_badge.dart';
 import '../../features/tasks/providers/tasks_provider.dart';
 import '../../features/calls/provider/call_entry_provider.dart';
 
+part 'main_shell_nav_icons.dart';
+part 'main_shell_destination_content.dart';
+
 /// Κύριο κέλυφος εφαρμογής: πλευρική πλοήγηση και περιοχή περιεχομένου.
 class MainShell extends ConsumerStatefulWidget {
   const MainShell({
@@ -63,7 +66,8 @@ class MainShell extends ConsumerStatefulWidget {
   ConsumerState<MainShell> createState() => _MainShellState();
 }
 
-class _MainShellState extends ConsumerState<MainShell> {
+class _MainShellState extends ConsumerState<MainShell>
+    with MainShellDestinationContentMixin {
   /// True αν άλλαξε η διαδρομή βάσης από Ρυθμίσεις και απαιτείται επανεκκίνηση.
   bool _pendingRestartDueToPathChange = false;
   MainNavDestination _selectedDestination = MainNavDestination.calls;
@@ -148,21 +152,6 @@ class _MainShellState extends ConsumerState<MainShell> {
     }
   }
 
-  Widget _tasksNavigationIcon(bool showBadge, int pendingCount) {
-    final core = Tooltip(
-      waitDuration: const Duration(milliseconds: 600),
-      showDuration: const Duration(seconds: 4),
-      message:
-          'Προβλήματα που χρήζουν παρακολούθησης\nΑνοιχτές εργασίες & υπενθυμίσεις',
-      child: const Icon(Icons.task_alt, key: ValueKey('nav_rail_tasks')),
-    );
-    return Badge(
-      isLabelVisible: showBadge && pendingCount > 0,
-      label: Text(pendingCount.toString()),
-      child: core,
-    );
-  }
-
   static List<MainNavDestination> _visibleDestinations(
     bool showLampNav,
     bool showDatabaseNav,
@@ -186,62 +175,6 @@ class _MainShellState extends ConsumerState<MainShell> {
     ];
   }
 
-  Widget _dictionaryNavigationIcon({required bool showWarning}) {
-    const book = Icon(
-      Icons.menu_book,
-      key: ValueKey('nav_rail_dictionary'),
-    );
-    final child = showWarning
-        ? Stack(
-            clipBehavior: Clip.none,
-            children: [
-              book,
-              const Positioned(
-                right: -4,
-                top: -4,
-                child: NavRailAttentionBadge(),
-              ),
-            ],
-          )
-        : book;
-    return Tooltip(
-      waitDuration: const Duration(milliseconds: 600),
-      showDuration: const Duration(seconds: 4),
-      message: showWarning
-          ? 'Δεν έχει φορτωθεί λεξικό-πυρήνας — πατήστε για ρύθμιση'
-          : 'Διαχείριση λεξικού ορθογραφίας\nΕισαγωγές, συγχώνευση και εξαγωγή (compile) σε αρχείο',
-      child: child,
-    );
-  }
-
-  Widget _lampNavigationIcon({required bool showWarning}) {
-    const lamp = Icon(
-      Icons.lightbulb_outline,
-      key: ValueKey('nav_rail_lamp'),
-    );
-    final child = showWarning
-        ? Stack(
-            clipBehavior: Clip.none,
-            children: [
-              lamp,
-              const Positioned(
-                right: -4,
-                top: -4,
-                child: NavRailAttentionBadge(),
-              ),
-            ],
-          )
-        : lamp;
-    return Tooltip(
-      waitDuration: const Duration(milliseconds: 600),
-      showDuration: const Duration(seconds: 4),
-      message: showWarning
-          ? 'Η παλιά βάση δεν είναι προσπελάσιμη — ανοίξτε τη Λάμπα για διόρθωση διαδρομών'
-          : 'Παλιά βάση εξοπλισμού\nΜετατροπή Excel, αναζήτηση και προβλήματα ETL',
-      child: child,
-    );
-  }
-
   NavigationRailDestination _railDestination(
     MainNavDestination dest,
     bool showBadge,
@@ -259,9 +192,13 @@ class _MainShellState extends ConsumerState<MainShell> {
           label: const Text('Κλήσεις'),
         );
       case MainNavDestination.tasks:
+        final tasksIcon = _TasksNavigationIcon(
+          showBadge: showBadge,
+          pendingCount: pendingCount,
+        );
         return NavigationRailDestination(
-          icon: _tasksNavigationIcon(showBadge, pendingCount),
-          selectedIcon: _tasksNavigationIcon(showBadge, pendingCount),
+          icon: tasksIcon,
+          selectedIcon: tasksIcon,
           label: const Text('Εκκρεμότητες'),
         );
       case MainNavDestination.directory:
@@ -305,12 +242,12 @@ class _MainShellState extends ConsumerState<MainShell> {
         );
       case MainNavDestination.dictionary:
         return NavigationRailDestination(
-          icon: _dictionaryNavigationIcon(showWarning: showCoreLexiconWarning),
+          icon: _DictionaryNavigationIcon(showWarning: showCoreLexiconWarning),
           label: const Text('Λεξικό'),
         );
       case MainNavDestination.lamp:
         return NavigationRailDestination(
-          icon: _lampNavigationIcon(showWarning: showLampReadPathWarning),
+          icon: _LampNavigationIcon(showWarning: showLampReadPathWarning),
           label: const Text('Λάμπα'),
         );
       case MainNavDestination.debugScenarios:
@@ -320,54 +257,6 @@ class _MainShellState extends ConsumerState<MainShell> {
           label: Text('Σενάρια'),
         );
     }
-  }
-
-  Widget _contentForDestination(MainNavDestination dest) {
-    switch (dest) {
-      case MainNavDestination.calls:
-        return const CallsScreen();
-      case MainNavDestination.tasks:
-        return PrimaryScrollController.none(
-          child: const TasksScreen(),
-        );
-      case MainNavDestination.directory:
-        return const DirectoryScreen();
-      case MainNavDestination.history:
-        return const HistoryScreen();
-      case MainNavDestination.database:
-        return DatabaseBrowserScreen(
-          databaseResult: widget.databaseResult,
-          onOpenDatabaseSettings: _openDatabaseSettingsDialog,
-          onDatabaseReopened: widget.onDatabaseReopened,
-        );
-      case MainNavDestination.dictionary:
-        return DictionaryManagerScreen(databaseResult: widget.databaseResult);
-      case MainNavDestination.lamp:
-        return const LampScreen();
-      case MainNavDestination.debugScenarios:
-        return const ErrorScenariosScreen();
-    }
-  }
-
-  Future<void> _openDatabaseSettingsDialog() async {
-    if (!mounted) return;
-    await showDialog<void>(
-      context: context,
-      builder: (dialogContext) {
-        return Dialog(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 920, maxHeight: 720),
-            child: Padding(
-              padding: const EdgeInsets.all(8),
-              child: DatabaseSettingsPanel(
-                onDatabaseLifecycleChanged:
-                    widget.onDatabaseReopened ?? () async {},
-              ),
-            ),
-          ),
-        );
-      },
-    );
   }
 
   Future<void> _openSettingsScreen() async {
@@ -399,132 +288,6 @@ class _MainShellState extends ConsumerState<MainShell> {
     ref.invalidate(showQuickCallFabProvider);
     ref.invalidate(coreLexiconProvider);
     if (mounted) setState(() {});
-  }
-
-  /// Απορροφά scroll notifications από εκκρεμότητες ώστε το εξωτερικό AppBar
-  /// να μην ενεργοποιεί Material 3 scrolled-under tint.
-  Widget _absorbTasksScrollForOuterAppBar(MainNavDestination dest, Widget child) {
-    if (dest != MainNavDestination.tasks) return child;
-    return NotificationListener<ScrollNotification>(
-      onNotification: (_) => true,
-      child: child,
-    );
-  }
-
-  Widget _destinationContentColumn(MainNavDestination dest) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        if (widget.isLocalDevMode)
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(vertical: 6),
-            color: Colors.amber,
-            child: Text(
-              'ΛΕΙΤΟΥΡΓΙΑ ΑΝΑΠΤΥΞΗΣ - Τοπική Βάση Δεδομένων',
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                color: Colors.black87,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-        if (dest == MainNavDestination.database &&
-            !widget.databaseResult.isSuccess)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        widget.databaseResult.message ??
-                            'Άγνωστο σφάλμα με τη βάση δεδομένων.',
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: Colors.red.shade700,
-                        ),
-                      ),
-                      if (widget.databaseResult.details != null) ...[
-                        const SizedBox(height: 4),
-                        Tooltip(
-                          message: widget.databaseResult.details!,
-                          child: Text(
-                            widget.databaseResult.details!,
-                            style: Theme.of(context).textTheme.bodySmall
-                                ?.copyWith(
-                                  color: Colors.red.shade300,
-                                  fontSize: 11,
-                                ),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-                IconButton(
-                  tooltip: 'Ρυθμίσεις βάσης δεδομένων',
-                  icon: const Icon(Icons.dataset_linked),
-                  onPressed: _openDatabaseSettingsDialog,
-                ),
-              ],
-            ),
-          ),
-        Expanded(child: _contentForDestination(dest)),
-        if (_pendingRestartDueToPathChange)
-          Material(
-            color: Colors.grey.shade800,
-            child: SafeArea(
-              top: false,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 12,
-                ),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: RichText(
-                        text: TextSpan(
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 13,
-                          ),
-                          children: [
-                            const TextSpan(
-                              text:
-                                  'Έγινε αλλαγή διαδρομής βάσης. Παρακαλώ επανεκκινήστε την εφαρμογή για να ισχύσει πλήρως. ',
-                            ),
-                            TextSpan(
-                              text: 'Επανεκκίνηση...',
-                              style: TextStyle(
-                                color: Theme.of(
-                                  context,
-                                ).colorScheme.primaryContainer,
-                                fontWeight: FontWeight.w600,
-                                decoration: TextDecoration.underline,
-                              ),
-                              recognizer: TapGestureRecognizer()
-                                ..onTap = () {
-                                  exit(0);
-                                },
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-      ],
-    );
   }
 
   @override
@@ -653,6 +416,7 @@ class _MainShellState extends ConsumerState<MainShell> {
             dictionaryImmersive
                 ? MainNavDestination.dictionary
                 : MainNavDestination.history,
+            pendingRestartDueToPathChange: _pendingRestartDueToPathChange,
           ),
         ),
       );
@@ -785,47 +549,14 @@ class _MainShellState extends ConsumerState<MainShell> {
           Expanded(
             child: _absorbTasksScrollForOuterAppBar(
               effectiveDestination,
-              _destinationContentColumn(effectiveDestination),
+              _destinationContentColumn(
+                effectiveDestination,
+                pendingRestartDueToPathChange: _pendingRestartDueToPathChange,
+              ),
             ),
           ),
         ],
       ),
-    );
-  }
-}
-
-/// Εικονίδιο πλοήγησης «Κλήσεις» — ίδιο στυλ μπάλωματος με τις εκκρεμότητες.
-class _CallsNavigationIcon extends ConsumerWidget {
-  const _CallsNavigationIcon({required this.isOnCallsScreen});
-
-  final bool isOnCallsScreen;
-
-  static bool _hasActiveCallSession(CallEntryState s) =>
-      s.durationSeconds > 0 ||
-      s.isCallTimerRunning ||
-      s.retainPlayPauseAfterManualZero;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final hasActiveCall = ref.watch(
-      callEntryProvider.select(_hasActiveCallSession),
-    );
-    final showBadge = hasActiveCall && !isOnCallsScreen;
-
-    final core = Tooltip(
-      waitDuration: const Duration(milliseconds: 600),
-      showDuration: const Duration(seconds: 4),
-      message:
-          'Καταγραφή νέας κλήσης τεχνικής υποστήριξης\nΚύρια οθόνη – πατήστε εδώ όταν χτυπά τηλέφωνο',
-      child: const Icon(
-        Icons.phone_in_talk,
-        key: ValueKey('nav_rail_calls'),
-      ),
-    );
-    return Badge(
-      isLabelVisible: showBadge,
-      label: const Icon(Icons.phone, size: 10, color: Colors.white),
-      child: core,
     );
   }
 }

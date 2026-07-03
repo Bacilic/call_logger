@@ -23,7 +23,9 @@ import '../../../calls/utils/equipment_remote_param_key.dart';
 import '../../../calls/utils/vnc_remote_target.dart';
 import '../../providers/equipment_directory_provider.dart';
 
-enum _EditDismissAction { save, discard, keepEditing }
+
+part 'equipment_form_dismiss_guard.dart';
+part 'equipment_form_remote_params.dart';
 
 /// Διάλογος φόρμας για δημιουργία/επεξεργασία/αντίγραφο εξοπλισμού.
 class EquipmentFormDialog extends StatefulWidget {
@@ -51,332 +53,101 @@ class EquipmentFormDialog extends StatefulWidget {
   State<EquipmentFormDialog> createState() => _EquipmentFormDialogState();
 }
 
-class _EquipmentFormDialogState extends State<EquipmentFormDialog> {
+/// Δηλώσεις πεδίων/μεθόδων του [_EquipmentFormDialogState] για τα θεματικά mixins.
+mixin EquipmentFormDialogStateHost on State<EquipmentFormDialog> {
+  TextEditingController get _codeController;
+  SpellCheckController get _notesController;
+  TextEditingController get _ownerController;
+  TextEditingController get _departmentController;
+  TextEditingController get _locationController;
+  String? get _selectedType;
+  int? get _selectedUserId;
+  int? get _defaultRemoteToolId;
+  set _defaultRemoteToolId(int? value);
+  Map<String, String> get _remoteParamValues;
+  Set<String> get _expandedRemoteKeys;
+  Map<String, TextEditingController> get _remoteParamControllers;
+  bool get _ownerTextInitialized;
+  bool get _equipmentDepartmentTextInitialized;
+  bool get _didPruneUnknownRemoteKeys;
+  set _didPruneUnknownRemoteKeys(bool value);
+  bool get _formBaselineCaptured;
+  set _formBaselineCaptured(bool value);
+  String get _initialFormSignature;
+  set _initialFormSignature(String value);
+  bool get _isEdit;
+  bool get _isDirty;
+  Future<void> _save();
+  void _tryCaptureFormBaseline();
+}
+
+class _EquipmentFormDialogState extends State<EquipmentFormDialog>
+    with
+        EquipmentFormDialogStateHost,
+        EquipmentFormDismissGuardMixin,
+        EquipmentFormRemoteParamsMixin {
   final _formKey = GlobalKey<FormState>();
+  @override
   late final TextEditingController _codeController;
+  @override
   late final SpellCheckController _notesController;
+  @override
   late final TextEditingController _ownerController;
   late final FocusNode _ownerFocusNode;
+  @override
   bool _ownerTextInitialized = false;
 
+  @override
   late final TextEditingController _departmentController;
   late final FocusNode _departmentFocusNode;
+  @override
   bool _equipmentDepartmentTextInitialized = false;
 
+  @override
   late final TextEditingController _locationController;
 
+  @override
   int? _selectedUserId;
   /// Αποφυγή επανάληψης postFrame για συγχρονισμό τμήματος/τοποθεσίας από κάτοχο.
   int? _deptLocScheduledForUserId;
 
   /// Επιλογή τύπου εξοπλισμού· null = Κανένας.
+  @override
   String? _selectedType;
 
   /// Προεπιλεγμένο εργαλείο (id)· υπολογίζεται από τα επιλεγμένα chips κατά `sort_order`.
+  @override
   int? _defaultRemoteToolId;
 
   /// Τιμές παραμέτρων ανά κλειδί εργαλείου (συγχρονίζεται με `remote_params`).
+  @override
   final Map<String, String> _remoteParamValues = {};
   /// Εργαλεία με ανοιχτό πεδίο επεξεργασίας (επιλεγμένο FilterChip).
+  @override
   final Set<String> _expandedRemoteKeys = {};
+  @override
   final Map<String, TextEditingController> _remoteParamControllers = {};
   /// Μία φορά μετά φόρτωση καταλόγου: αφαίρεση κλειδιών που δεν αντιστοιχούν σε ενεργό εργαλείο.
+  @override
   bool _didPruneUnknownRemoteKeys = false;
 
+  @override
   bool get _isEdit => widget.initialEquipment != null && !widget.isClone;
 
   /// Στιγμιότυπο αρχικής κατάστασης μετά ολοκλήρωση bootstrap (prefill/async).
+  @override
   late String _initialFormSignature;
+  @override
   bool _formBaselineCaptured = false;
 
+  @override
   bool get _isDirty =>
       _formBaselineCaptured && _formStateSignature() != _initialFormSignature;
-
-  /// Νέος εξοπλισμός: υποχρεωτικός κωδικός πριν επιτραπεί αποθήκευση.
-  bool get _createHasRequiredFields => _codeController.text.trim().isNotEmpty;
 
   bool get _canSubmitSave =>
       _isDirty && (_isEdit ? true : _createHasRequiredFields);
 
-  bool get _shouldConfirmDismissOnClose {
-    if (!_formBaselineCaptured) return false;
-    if (_isEdit) return _isDirty;
-    return _createHasRequiredFields && _isDirty;
-  }
-
   void _markFormChanged() => setState(() {});
-
-  String _formStateSignature() {
-    final sb = StringBuffer()
-      ..write(_codeController.text)
-      ..write('\u001e')
-      ..write(_selectedType ?? '')
-      ..write('\u001e')
-      ..write(_notesController.text)
-      ..write('\u001e')
-      ..write(_selectedUserId ?? '')
-      ..write('\u001e')
-      ..write(_ownerController.text)
-      ..write('\u001e')
-      ..write(_departmentController.text)
-      ..write('\u001e')
-      ..write(_locationController.text)
-      ..write('\u001e')
-      ..write(_defaultRemoteToolId ?? '');
-    final remoteKeys = <String>{
-      ..._expandedRemoteKeys,
-      ..._remoteParamValues.keys,
-    }.toList()
-      ..sort();
-    for (final k in remoteKeys) {
-      sb
-        ..write('\u001e')
-        ..write(k)
-        ..write('\u001f')
-        ..write(_remoteParamValues[k] ?? '')
-        ..write('\u001f')
-        ..write(_expandedRemoteKeys.contains(k));
-    }
-    return sb.toString();
-  }
-
-  void _tryCaptureFormBaseline() {
-    if (_formBaselineCaptured) return;
-    if (widget.initialOwner?.id != null && !_ownerTextInitialized) return;
-    if (!_equipmentDepartmentTextInitialized) return;
-    if (widget.initialEquipment != null && !_didPruneUnknownRemoteKeys) {
-      return;
-    }
-    _initialFormSignature = _formStateSignature();
-    _formBaselineCaptured = true;
-  }
-
-  List<String> _buildChangedFieldLabels() {
-    if (!_formBaselineCaptured) return const [];
-    final init = _initialFormSignature.split('\u001e');
-    String initAt(int i) => i < init.length ? init[i] : '';
-
-    final labels = <String>[];
-    if (_codeController.text != initAt(0)) labels.add('Κωδικός');
-    if ((_selectedType ?? '') != initAt(1)) labels.add('Τύπος');
-    if (_notesController.text != initAt(2)) labels.add('Σημειώσεις');
-    if ('${_selectedUserId ?? ''}' != initAt(3) ||
-        _ownerController.text != initAt(4)) {
-      labels.add('Κάτοχος');
-    }
-    if (_departmentController.text != initAt(5)) labels.add('Τμήμα');
-    if (_locationController.text != initAt(6)) labels.add('Τοποθεσία');
-    if ('${_defaultRemoteToolId ?? ''}' != initAt(7)) {
-      labels.add('Προεπιλεγμένο εργαλείο');
-    }
-    final initRemote = init.length > 8 ? init.sublist(8).join('\u001e') : '';
-    final curRemote = _formStateSignature().split('\u001e');
-    final curRemoteTail =
-        curRemote.length > 8 ? curRemote.sublist(8).join('\u001e') : '';
-    if (initRemote != curRemoteTail) {
-      labels.add('Απομακρυσμένη σύνδεση');
-    }
-    return labels;
-  }
-
-  Future<_EditDismissAction?> _showEditDismissDialog(
-    List<String> changedLabels,
-  ) {
-    return showDialog<_EditDismissAction>(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Μη αποθηκευμένες αλλαγές'),
-        content: SizedBox(
-          width: 420,
-          child: SingleChildScrollView(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Text('Έχουν γίνει αλλαγές:'),
-                const SizedBox(height: 8),
-                for (final label in changedLabels) Text('• $label'),
-                const SizedBox(height: 12),
-                const Text('Θέλεται να γίνει:'),
-              ],
-            ),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(_EditDismissAction.save),
-            child: const Text('Διατήρηση'),
-          ),
-          FilledButton.tonal(
-            onPressed: () => Navigator.of(ctx).pop(_EditDismissAction.discard),
-            child: const Text('Ακύρωση Αλλαγών'),
-          ),
-          TextButton(
-            onPressed: () =>
-                Navigator.of(ctx).pop(_EditDismissAction.keepEditing),
-            child: const Text('Επεξεργασία'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<bool?> _showNewDismissDialog() {
-    return showDialog<bool>(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Μη αποθηκευμένα στοιχεία'),
-        content: const Text(
-          'Έχετε συμπληρώσει κωδικό εξοπλισμού χωρίς αποθήκευση. '
-          'Να κλείσει ο διάλογος;',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Επεξεργασία'),
-          ),
-          FilledButton.tonal(
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('Ακύρωση Αλλαγών'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _requestClose() async {
-    _tryCaptureFormBaseline();
-    if (!_shouldConfirmDismissOnClose) {
-      if (mounted) Navigator.of(context).pop();
-      return;
-    }
-
-    if (_isEdit) {
-      final labels = _buildChangedFieldLabels();
-      if (labels.isEmpty) {
-        if (mounted) Navigator.of(context).pop();
-        return;
-      }
-      final action = await _showEditDismissDialog(labels);
-      switch (action) {
-        case _EditDismissAction.save:
-          await _save();
-        case _EditDismissAction.discard:
-          if (mounted) Navigator.of(context).pop();
-        case _EditDismissAction.keepEditing:
-        case null:
-          break;
-      }
-      return;
-    }
-
-    final discard = await _showNewDismissDialog();
-    if (discard == true && mounted) {
-      Navigator.of(context).pop();
-    }
-  }
-
-  /// Κουμπί «Ακύρωση»: κλείσιμο χωρίς διάλογο επιβεβαίωσης (εκούσια απόρριψη).
-  void _cancelAndClose() {
-    if (mounted) Navigator.of(context).pop();
-  }
-
-  void _initRemoteParamsFromEquipment(EquipmentModel? e) {
-    _remoteParamValues.clear();
-    _expandedRemoteKeys.clear();
-    if (e == null) return;
-    final nonStashEntries = <MapEntry<String, String>>[];
-    final stashEntries = <MapEntry<String, String>>[];
-    for (final entry in e.remoteParams.entries) {
-      final t = entry.value.trim();
-      if (t.isEmpty) continue;
-      final real = EquipmentRemoteParamKey.remoteParamStashRealKeyOrNull(
-        entry.key,
-      );
-      if (real != null) {
-        stashEntries.add(MapEntry(real, entry.value));
-      } else {
-        nonStashEntries.add(entry);
-      }
-    }
-    for (final entry in nonStashEntries) {
-      _remoteParamValues[entry.key] = entry.value;
-      _expandedRemoteKeys.add(entry.key);
-    }
-    for (final entry in stashEntries) {
-      final k = entry.key;
-      if (_expandedRemoteKeys.contains(k)) continue;
-      _remoteParamValues[k] = entry.value;
-    }
-  }
-
-  RemoteTool? _toolForParamKey(String key, List<RemoteTool> catalog) {
-    final id = int.tryParse(key);
-    if (id == null) return null;
-    for (final t in catalog) {
-      if (t.id == id) return t;
-    }
-    return null;
-  }
-
-  bool _isVncLikeParamKey(String key, List<RemoteTool> catalog) =>
-      _toolForParamKey(key, catalog)?.role == ToolRole.vnc;
-
-  void _pruneUnknownRemoteParamKeys(List<RemoteTool> catalog) {
-    for (final k in _expandedRemoteKeys.toList()) {
-      if (_toolForParamKey(k, catalog) == null) {
-        _expandedRemoteKeys.remove(k);
-        _remoteParamValues.remove(k);
-        _disposeRemoteController(k);
-      }
-    }
-    for (final k in _remoteParamValues.keys.toList()) {
-      if (EquipmentRemoteParamKey.isRemoteParamStashKey(k)) continue;
-      if (int.tryParse(k) == null) {
-        _remoteParamValues.remove(k);
-        _disposeRemoteController(k);
-      }
-    }
-  }
-
-  Future<void> _pruneRemoteParamsAfterCatalogLoad() async {
-    if (!mounted || _didPruneUnknownRemoteKeys) return;
-    final pairs = await widget.ref.read(remoteToolFormPairsProvider.future);
-    final catalog = await widget.ref.read(remoteToolsCatalogProvider.future);
-    if (!mounted || _didPruneUnknownRemoteKeys) return;
-    _didPruneUnknownRemoteKeys = true;
-    setState(() {
-      _pruneUnknownRemoteParamKeys(catalog);
-      _recomputeDefaultRemoteFromChips(pairs, catalog);
-      _tryCaptureFormBaseline();
-    });
-  }
-
-  void _ensureRemoteController(String key) {
-    if (_remoteParamControllers.containsKey(key)) return;
-    _remoteParamControllers[key] = TextEditingController(
-      text: _remoteParamValues[key] ?? '',
-    );
-  }
-
-  void _disposeRemoteController(String key) {
-    final c = _remoteParamControllers.remove(key);
-    c?.dispose();
-  }
-
-  void _syncRemoteValueFromController(String key) {
-    final c = _remoteParamControllers[key];
-    if (c == null) return;
-    final t = c.text.trim();
-    if (t.isEmpty) {
-      _remoteParamValues.remove(key);
-    } else {
-      _remoteParamValues[key] = c.text;
-    }
-  }
-
   Map<String, String> _remoteParamsForSave(
     List<RemoteToolFormPair> pairs,
     List<RemoteTool> catalog,
@@ -405,31 +176,6 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog> {
     }
     return out;
   }
-
-  void _recomputeDefaultRemoteFromChips(
-    List<RemoteToolFormPair> pairs,
-    List<RemoteTool> catalog,
-  ) {
-    final selected = <RemoteTool>[];
-    for (final p in pairs) {
-      if (!_expandedRemoteKeys.contains(p.key)) continue;
-      final id = int.tryParse(p.key);
-      if (id == null) continue;
-      for (final c in catalog) {
-        if (c.id == id) {
-          selected.add(c);
-          break;
-        }
-      }
-    }
-    selected.sort((a, b) {
-      final cmp = a.sortOrder.compareTo(b.sortOrder);
-      if (cmp != 0) return cmp;
-      return a.name.compareTo(b.name);
-    });
-    _defaultRemoteToolId = selected.isEmpty ? null : selected.first.id;
-  }
-
   @override
   void initState() {
     super.initState();
@@ -577,6 +323,7 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog> {
   String? _requiredValidator(String? v) =>
       (v?.trim().isEmpty ?? true) ? 'Υποχρεωτικό' : null;
 
+  @override
   Future<void> _save() async {
     if (!(_formKey.currentState?.validate() ?? false)) return;
     for (final k in _expandedRemoteKeys.toList()) {
@@ -675,176 +422,6 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog> {
       context,
     ).showSnackBar(const SnackBar(content: Text('Αποθηκεύτηκε')));
   }
-
-  static const Duration _remoteAnimDuration = Duration(milliseconds: 240);
-
-  Widget _buildRemoteParamsChipsSection(
-    List<RemoteToolFormPair> pairs,
-    List<RemoteTool> catalog,
-  ) {
-    final theme = Theme.of(context);
-    if (pairs.isEmpty) {
-      return Text(
-        'Δεν υπάρχουν ενεργά εργαλεία απομακρυσμένης — δεν μπορείτε να επιλέξετε παραμέτρους μέσω chips.',
-        style: theme.textTheme.bodySmall?.copyWith(
-          color: theme.colorScheme.onSurfaceVariant,
-        ),
-      );
-    }
-    for (final k in _expandedRemoteKeys) {
-      _ensureRemoteController(k);
-    }
-    final orderedExpanded = <String>[];
-    final seen = <String>{};
-    for (final p in pairs) {
-      if (_expandedRemoteKeys.contains(p.key) && seen.add(p.key)) {
-        orderedExpanded.add(p.key);
-      }
-    }
-    for (final k in _expandedRemoteKeys) {
-      if (!seen.contains(k)) {
-        orderedExpanded.add(k);
-        seen.add(k);
-      }
-    }
-    String labelForKey(String key) {
-      for (final p in pairs) {
-        if (p.key == key) return p.label;
-      }
-      return key;
-    }
-    final defaultLabel = _defaultRemoteToolId == null
-        ? 'Κανένα'
-        : () {
-            for (final c in catalog) {
-              if (c.id == _defaultRemoteToolId) return c.name;
-            }
-            return '#$_defaultRemoteToolId';
-          }();
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Text(
-          'Παράμετροι απομακρυσμένης',
-          style: theme.textTheme.titleSmall,
-        ),
-        const SizedBox(height: 4),
-        Text(
-          'Προεπιλεγμένο εργαλείο (πρώτο κατά σειρά ταξινόμησης μεταξύ επιλεγμένων): $defaultLabel',
-          style: theme.textTheme.bodySmall?.copyWith(
-            color: theme.colorScheme.onSurfaceVariant,
-          ),
-        ),
-        const SizedBox(height: 8),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: [
-            for (final p in pairs)
-              FilterChip(
-                label: Text(p.label),
-                selected: _expandedRemoteKeys.contains(p.key),
-                showCheckmark: true,
-                onSelected: (sel) {
-                  setState(() {
-                    if (sel) {
-                      _expandedRemoteKeys.add(p.key);
-                      _ensureRemoteController(p.key);
-                    } else {
-                      _syncRemoteValueFromController(p.key);
-                      _expandedRemoteKeys.remove(p.key);
-                      _disposeRemoteController(p.key);
-                    }
-                    _recomputeDefaultRemoteFromChips(pairs, catalog);
-                  });
-                },
-              ),
-          ],
-        ),
-        AnimatedSize(
-          duration: _remoteAnimDuration,
-          curve: Curves.easeInOutCubic,
-          alignment: Alignment.topCenter,
-          child: orderedExpanded.isEmpty
-              ? const SizedBox.shrink()
-              : Padding(
-                  padding: const EdgeInsets.only(top: 12),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      for (var i = 0; i < orderedExpanded.length; i++) ...[
-                        if (i > 0) const SizedBox(height: 10),
-                        AnimatedSwitcher(
-                          duration: _remoteAnimDuration,
-                          switchInCurve: Curves.easeOutCubic,
-                          switchOutCurve: Curves.easeInCubic,
-                          transitionBuilder: (child, anim) => FadeTransition(
-                            opacity: anim,
-                            child: SlideTransition(
-                              position: Tween<Offset>(
-                                begin: const Offset(0, -0.04),
-                                end: Offset.zero,
-                              ).animate(anim),
-                              child: child,
-                            ),
-                          ),
-                          child: KeyedSubtree(
-                            key: ValueKey<String>(orderedExpanded[i]),
-                            child: _buildRemoteParamField(
-                              orderedExpanded[i],
-                              labelForKey(orderedExpanded[i]),
-                              pairs,
-                              catalog,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildRemoteParamField(
-    String paramKey,
-    String toolLabel,
-    List<RemoteToolFormPair> pairs,
-    List<RemoteTool> catalog,
-  ) {
-    final c = _remoteParamControllers[paramKey];
-    if (c == null) return const SizedBox.shrink();
-    final isVnc = _isVncLikeParamKey(paramKey, catalog);
-    final acceptsFileParam = _toolAcceptsFileParam(paramKey, pairs);
-    return TextFormField(
-      controller: c,
-      decoration: InputDecoration(
-        labelText: 'Παράμετρος · $toolLabel',
-        border: const OutlineInputBorder(),
-        hintText: acceptsFileParam
-            ? 'Αρχείο παραμέτρων πχ .rdp'
-            : (isVnc ? 'IP ή hostname' : null),
-      ),
-      keyboardType: isVnc
-          ? const TextInputType.numberWithOptions(decimal: true, signed: false)
-          : TextInputType.text,
-      inputFormatters:
-          isVnc ? [CommaToDotDecimalSeparatorFormatter()] : null,
-      onChanged: (_) => _syncRemoteValueFromController(paramKey),
-    );
-  }
-
-  bool _toolAcceptsFileParam(
-    String key,
-    List<RemoteToolFormPair> pairs,
-  ) {
-    for (final p in pairs) {
-      if (p.key == key) return p.acceptsFileParam;
-    }
-    return false;
-  }
-
   String get _title {
     if (_isEdit) return 'Επεξεργασία εξοπλισμού';
     if (widget.isClone) return 'Αντίγραφο εξοπλισμού';

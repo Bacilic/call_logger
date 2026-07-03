@@ -2,20 +2,21 @@
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
-import 'package:path/path.dart' as p;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import '../config/app_config.dart';
 import '../services/settings_service.dart';
-import '../utils/lexicon_word_metrics.dart';
 import '../utils/search_text_normalizer.dart';
 import 'database_access_probe.dart';
 import 'database_init_result.dart';
 import 'database_init_progress_provider.dart';
+import 'database_lexicon_open_normalizations.dart';
+import 'database_lock_recovery.dart';
+import 'database_schema_migrations.dart';
 import 'lock_diagnostic_service.dart';
 import 'database_path_resolution.dart';
-import 'database_v1_schema.dart';
-import 'dictionary_repository.dart';
+
+part 'database_table_inspection.dart';
 
 class DatabaseOpeningAbortedException implements Exception {
   const DatabaseOpeningAbortedException([
@@ -50,7 +51,7 @@ class TablePreviewResult {
 
 /// Singleton helper για πρόσβαση στη SQLite βάση δεδομένων (sqflite_common_ffi).
 /// Υποστηρίζει δυναμική διαδρομή, WAL και έξυπνο fallback σε τοπική βάση.
-class DatabaseHelper {
+class DatabaseHelper with DatabaseTableInspectionMixin {
   DatabaseHelper._();
 
   /// Κλειδί `app_settings` για το όνομα χρήστη στις εγγραφές audit (προαιρετικό).
@@ -62,12 +63,6 @@ class DatabaseHelper {
 
   /// Επιδιόρθωση ευρημάτων ακεραιότητας (Integrity Fixer Engine).
   static const String auditActionIntegrityFix = 'ΕΠΙΔΙΟΡΘΩΣΗ ΑΚΕΡΑΙΟΤΗΤΑΣ';
-
-  /// Squashed schema ([_onCreate] + [_onUpgradeSquashed] για v1→v2). Παλιά αρχεία: `dart run tool/migrate_to_v1.dart`.
-  static const int _kDatabaseSchemaVersion = databaseSchemaVersionV1;
-
-  /// Timeout για ephemeral WAL checkpoint και PRAGMA wal_checkpoint στο κλείσιμο.
-  static const int _walCheckpointTimeoutSeconds = 5;
 
   /// Αποτυχίες ανοίγματος προς προσομοίωση (δοκιμές retry χωρίς πραγματικό lock).
   @visibleForTesting
@@ -162,10 +157,10 @@ class DatabaseHelper {
         await db
             .rawQuery('PRAGMA wal_checkpoint($mode)')
             .timeout(
-              Duration(seconds: _walCheckpointTimeoutSeconds),
+              Duration(seconds: databaseWalCheckpointTimeoutSeconds),
               onTimeout: () => throw TimeoutException(
                 'wal_checkpoint($mode) timed out after '
-                '${_walCheckpointTimeoutSeconds}s',
+                '${databaseWalCheckpointTimeoutSeconds}s',
               ),
             );
       } catch (_) {}
@@ -227,10 +222,10 @@ class DatabaseHelper {
       await db
           .rawQuery('PRAGMA wal_checkpoint($effective)')
           .timeout(
-            Duration(seconds: _walCheckpointTimeoutSeconds),
+            Duration(seconds: databaseWalCheckpointTimeoutSeconds),
             onTimeout: () => throw TimeoutException(
               'wal_checkpoint($effective) timed out after '
-              '${_walCheckpointTimeoutSeconds}s',
+              '${databaseWalCheckpointTimeoutSeconds}s',
             ),
           );
     } catch (_) {}
@@ -263,7 +258,7 @@ class DatabaseHelper {
       }
     }
 
-    final mergedOnDisk = await _tryEphemeralWalCheckpoint(dbPath);
+    final mergedOnDisk = await tryEphemeralWalCheckpoint(dbPath);
     if (!mergedOnDisk) {
       buffer.writeln(
         'Παραλείφθηκε διαγραφή WAL sidecars: αποτυχία checkpoint στο δίσκο.',
@@ -286,7 +281,7 @@ class DatabaseHelper {
       if (!mergedOnDisk && sidecarPath.endsWith('-wal')) {
         continue;
       }
-      final outcome = await _tryDeleteStaleSidecarIfSafe(sidecarPath);
+      final outcome = await tryDeleteStaleSidecarIfSafe(sidecarPath);
       if (outcome.message != null) {
         buffer.writeln(outcome.message);
       }
@@ -312,8 +307,6 @@ class DatabaseHelper {
   }
 
   /// Αρχικοποίηση βάσης: επίλυση διαδρομής (UNC fallback), ύπαρξη αρχείου, WAL, σχήμα (fail-fast).
-  /// Δεν δημιουργεί αυτόματα αρχείο· ρίχνει [DatabaseInitException] σε αποτυχία.
-  /// Σε δοκιμές με [bindTestDatabaseFile] δημιουργείται το αρχείο αν λείπει.
   Future<Database> _initDatabase({
     DatabaseInitProgressNotifier? progressNotifier,
   }) async {
@@ -359,7 +352,7 @@ class DatabaseHelper {
       }
       throw DatabaseInitException(result);
     }
-    final staleCleanupDiagnostic = await _cleanStaleSidecarsIfSafe(
+    final staleCleanupDiagnostic = await cleanStaleSidecarsIfSafe(
       dbPath,
       progressNotifier: progressNotifier,
     );
@@ -482,138 +475,6 @@ class DatabaseHelper {
     }
   }
 
-  Future<String?> _cleanStaleSidecarsIfSafe(
-    String dbPath, {
-    DatabaseInitProgressNotifier? progressNotifier,
-  }) async {
-    if (AppConfig.isUncDatabasePath(dbPath)) return null;
-    progressNotifier?.setStep('Προληπτικός καθαρισμός WAL');
-    final messages = <String>[];
-
-    final walPath = '$dbPath-wal';
-    final walFile = File(walPath);
-    if (await walFile.exists()) {
-      final walSize = (await walFile.stat()).size;
-      if (walSize > 0) {
-        final merged = await _tryEphemeralWalCheckpoint(dbPath);
-        if (!merged) {
-          messages.add(
-            'Παραλείφθηκε καθαρισμός WAL: αποτυχία checkpoint — τα δεδομένα διατηρήθηκαν.',
-          );
-          return messages.join('\n');
-        }
-      }
-    }
-
-    for (final suffix in const <String>['-wal', '-shm']) {
-      final sidecarPath = '$dbPath$suffix';
-      final outcome = await _tryDeleteStaleSidecarIfSafe(sidecarPath);
-      if (outcome.message != null) {
-        messages.add(outcome.message!);
-      }
-    }
-    if (messages.isEmpty) return null;
-    return messages.join('\n');
-  }
-
-  /// Συγχώνευση WAL στο κύριο αρχείο με προσωρινή σύνδεση (μετά από crash).
-  Future<bool> _tryEphemeralWalCheckpoint(String dbPath) async {
-    if (!await File(dbPath).exists()) return false;
-    final walPath = '$dbPath-wal';
-    if (!await File(walPath).exists()) return true;
-
-    Database? db;
-    try {
-      db = await openDatabase(
-        dbPath,
-        readOnly: false,
-        singleInstance: true,
-      ).timeout(
-        Duration(seconds: _walCheckpointTimeoutSeconds),
-        onTimeout: () => throw TimeoutException(
-          'ephemeral openDatabase timed out after '
-          '${_walCheckpointTimeoutSeconds}s',
-        ),
-      );
-      await db
-          .rawQuery('PRAGMA wal_checkpoint(TRUNCATE)')
-          .timeout(
-            Duration(seconds: _walCheckpointTimeoutSeconds),
-            onTimeout: () => throw TimeoutException(
-              'ephemeral wal_checkpoint(TRUNCATE) timed out after '
-              '${_walCheckpointTimeoutSeconds}s',
-            ),
-          );
-      await db.close();
-      db = null;
-
-      final walFile = File(walPath);
-      if (!await walFile.exists()) return true;
-      return (await walFile.stat()).size <= 0;
-    } catch (_) {
-      return false;
-    } finally {
-      if (db != null && db.isOpen) {
-        try {
-          await db.close();
-        } catch (_) {}
-      }
-    }
-  }
-
-  /// Διαγραφή stale sidecar μόνο αν δεν είναι κλειδωμένο και (για WAL) κενό.
-  Future<({bool deleted, String? message})> _tryDeleteStaleSidecarIfSafe(
-    String sidecarPath,
-  ) async {
-    final file = File(sidecarPath);
-    try {
-      if (!await file.exists()) {
-        return (deleted: false, message: null);
-      }
-      final stat = await file.stat();
-      if (stat.size <= 0) {
-        await file.delete();
-        return (
-          deleted: true,
-          message: 'Διαγράφηκε κενό sidecar: $sidecarPath',
-        );
-      }
-
-      RandomAccessFile? raf;
-      try {
-        raf = await file.open(mode: FileMode.append);
-        await raf.close();
-        raf = null;
-      } catch (_) {
-        await raf?.close();
-        return (
-          deleted: false,
-          message:
-              'Παραλείφθηκε διαγραφή $sidecarPath: το αρχείο φαίνεται ενεργά κλειδωμένο.',
-        );
-      }
-
-      if (sidecarPath.endsWith('-wal')) {
-        return (
-          deleted: false,
-          message:
-              'Παραλείφθηκε διαγραφή $sidecarPath: παραμένει μη κενό μετά checkpoint.',
-        );
-      }
-
-      await file.delete();
-      return (
-        deleted: true,
-        message: 'Διαγράφηκε stale sidecar: $sidecarPath',
-      );
-    } catch (e) {
-      return (
-        deleted: false,
-        message: 'Αποτυχία καθαρισμού $sidecarPath: $e',
-      );
-    }
-  }
-
   Future<Database> _openWithTimeout({
     required String targetPath,
     required bool singleInstance,
@@ -654,12 +515,12 @@ class DatabaseHelper {
       }
       final openFuture = openDatabase(
         targetPath,
-        version: _kDatabaseSchemaVersion,
-        onCreate: _onCreate,
-        onUpgrade: _onUpgradeSquashed,
-        onDowngrade: _onDowngradeSquashed,
+        version: kDatabaseSchemaVersion,
+        onCreate: onDatabaseCreate,
+        onUpgrade: onDatabaseUpgradeSquashed,
+        onDowngrade: onDatabaseDowngradeSquashed,
         singleInstance: singleInstance,
-        onOpen: (db) => _applyLexiconOpenNormalizations(db),
+        onOpen: applyLexiconOpenNormalizations,
       );
       final timeoutFuture = openFuture.timeout(
         Duration(seconds: safeTimeout),
@@ -699,489 +560,25 @@ class DatabaseHelper {
 
   /// Επαληθεύει ότι υπάρχει ο πίνακας `calls`. Αλλιώς ρίχνει [DatabaseInitException].
   static Future<void> validateSchema(Database db, String dbPath) async {
-    final r = await db.rawQuery('PRAGMA table_info(calls)');
-    if (r.isEmpty) {
-      throw DatabaseInitException(
-        DatabaseInitResult.corruptedOrInvalid(
-          dbPath,
-          'Λείπει ο πίνακας calls· το αρχείο δεν φαίνεται έγκυρη βάση.',
-        ),
-      );
-    }
-  }
-
-  static Future<void> _applyLexiconOpenNormalizations(Database db) async {
-    await _normalizeLexiconSourceOnOpen(db);
-    await _normalizeLexiconCategoryLegacyOnOpen(db);
-    await ensureDepartmentsMapRotationColumn(db);
-    await ensureDepartmentsMapHiddenColumn(db);
-    await ensureCallsNoSolutionColumn(db);
-  }
-
-  /// Παλιά τιμή πηγής `system` (asset) → `imported` (ίδια κατηγορία με TXT).
-  static Future<void> _normalizeLexiconSourceOnOpen(Database db) async {
-    try {
-      await db.rawUpdate(
-        'UPDATE ${AppConfig.fullDictionaryTable} SET source = ? WHERE source = ?',
-        ['imported', 'system'],
-      );
-    } catch (_) {
-      // Πίνακας μπορεί να λείπει σε ασυνήθιστα σενάρια.
-    }
-  }
-
-  /// Παλιές ετικέτες κατηγορίας `general` / `user` → `Γενική`.
-  static Future<void> _normalizeLexiconCategoryLegacyOnOpen(Database db) async {
-    try {
-      await db.rawUpdate(
-        'UPDATE ${AppConfig.fullDictionaryTable} SET category = ? WHERE category = ?',
-        ['Γενική', 'general'],
-      );
-      await db.rawUpdate(
-        'UPDATE ${AppConfig.fullDictionaryTable} SET category = ? WHERE category = ?',
-        ['Γενική', 'user'],
-      );
-    } catch (_) {
-      // Πίνακας μπορεί να λείπει σε ασυνήθιστα σενάρια.
-    }
+    return validateDatabaseSchema(db, dbPath);
   }
 
   /// Δημιουργεί νέο αρχείο βάσης στο [filePath] με το τρέχον σχήμα.
-  /// Δεν αλλάζει την ενεργή σύνδεση (_database). Για χρήση από Ρυθμίσεις (δημιουργία από μηδέν).
   Future<void> createNewDatabaseFile(String filePath) async {
     final db = await openDatabase(
       filePath,
-      version: _kDatabaseSchemaVersion,
-      onCreate: _onCreate,
-      onUpgrade: _onUpgradeSquashed,
-      onDowngrade: _onDowngradeSquashed,
+      version: kDatabaseSchemaVersion,
+      onCreate: onDatabaseCreate,
+      onUpgrade: onDatabaseUpgradeSquashed,
+      onDowngrade: onDatabaseDowngradeSquashed,
       singleInstance: false,
-      onOpen: (db) => _applyLexiconOpenNormalizations(db),
+      onOpen: applyLexiconOpenNormalizations,
     );
     await db.execute('PRAGMA journal_mode = WAL;');
     await db.close();
   }
 
-  /// Δημιουργία σχήματος v1 (squashed): όλοι οι πίνακες σε μία δημιουργία.
-  Future<void> _onCreate(Database db, int version) async {
-    await applyDatabaseV1Schema(db);
-  }
-
-  /// Μήνυμα αναντιστοιχίας user_version (αρχείο) έναντι έκδοσης σχήματος εφαρμογής.
-  static String _schemaVersionMismatchUserMessage(
-    Database db,
-    int fileUserVersion,
-    int appSchemaVersion,
-  ) {
-    final fileName = p.basename(db.path);
-    return 'Το αρχείο της βάσης σας $fileName είναι στην έκδοση '
-        '$fileUserVersion. Η εφαρμογή τρέχει την έκδοση '
-        '$appSchemaVersion.\n\n'
-        'Μπορείτε να:\n'
-        '• Μετασχηματίσετε την βάση σας στη σωστή έκδοση με κάποιο script.\n'
-        '• Να εντοπίσετε το σωστό αρχείο βάσης (μέσα από τις ρυθμίσεις).\n'
-        '• Να δημιουργήσετε μια νέα βάση χωρίς δεδομένα (μέσα από τις ρυθμίσεις).';
-  }
-
-  /// Αναβάθμιση squashed σχήματος (π.χ. v1 → v2: στήλες `equipment.department_id`, `location`).
-  Future<void> _onUpgradeSquashed(
-    Database db,
-    int oldVersion,
-    int newVersion,
-  ) async {
-    if (oldVersion >= newVersion) return;
-    if (oldVersion == 0) return;
-    // Sequential, idempotent migrations για άλματα εκδόσεων (π.χ. 2 -> 5).
-    if (oldVersion < 2 && newVersion >= 2) {
-      await _migrateEquipmentDepartmentLocationColumns(db);
-    }
-    if (oldVersion < 3 && newVersion >= 3) {
-      await _migrateDepartmentPhonesTable(db);
-    }
-    if (oldVersion < 4 && newVersion >= 4) {
-      await _migrateDepartmentNameKey(db);
-    }
-    if (oldVersion < 5 && newVersion >= 5) {
-      await _migratePhonesDepartmentColumn(db);
-    }
-    if (oldVersion < 6 && newVersion >= 6) {
-      await _migrateUserDictionaryTable(db);
-    }
-    if (oldVersion < 7 && newVersion >= 7) {
-      await _migrateFullDictionaryTable(db);
-    }
-    if (oldVersion < 8 && newVersion >= 8) {
-      await _migrateUserDictionaryLanguageColumn(db);
-    }
-    if (oldVersion < 9 && newVersion >= 9) {
-      await _migrateLexiconWordMetricsColumns(db);
-    }
-    if (oldVersion < 10 && newVersion >= 10) {
-      await _migrateEquipmentRemoteParamsColumn(db);
-    }
-    if (oldVersion < 11 && newVersion >= 11) {
-      await migrateDatabaseToV11(db);
-    }
-    if (oldVersion < 12 && newVersion >= 12) {
-      await migrateDatabaseToV12(db);
-    }
-    if (oldVersion < 13 && newVersion >= 13) {
-      await migrateDatabaseToV13(db);
-    }
-    if (oldVersion < 14 && newVersion >= 14) {
-      await migrateDatabaseToV14(db);
-    }
-    if (oldVersion < 15 && newVersion >= 15) {
-      await migrateDatabaseToV15(db);
-    }
-    if (oldVersion < 16 && newVersion >= 16) {
-      await migrateDatabaseToV16(db);
-    }
-    if (oldVersion < 17 && newVersion >= 17) {
-      await migrateDatabaseToV17(db);
-    }
-    if (oldVersion < 18 && newVersion >= 18) {
-      await migrateDatabaseToV18(db);
-    }
-    if (oldVersion < 19 && newVersion >= 19) {
-      await migrateDatabaseToV19(db);
-    }
-    if (oldVersion < 20 && newVersion >= 20) {
-      await migrateDatabaseToV20(db);
-    }
-    if (oldVersion < 21 && newVersion >= 21) {
-      await migrateDatabaseToV21(db);
-    }
-    if (oldVersion < 22 && newVersion >= 22) {
-      await migrateDatabaseToV22(db);
-    }
-    if (oldVersion < 23 && newVersion >= 23) {
-      await migrateDatabaseToV23(db);
-    }
-    if (oldVersion < 24 && newVersion >= 24) {
-      await migrateDatabaseToV24(db);
-    }
-    if (oldVersion < 25 && newVersion >= 25) {
-      await migrateDatabaseToV25(db);
-    }
-    if (oldVersion < 26 && newVersion >= 26) {
-      await migrateDatabaseToV26(db);
-    }
-    if (oldVersion < 27 && newVersion >= 27) {
-      await migrateDatabaseToV27(db);
-    }
-    if (oldVersion < 28 && newVersion >= 28) {
-      await migrateDatabaseToV28(db);
-    }
-    if (oldVersion < 29 && newVersion >= 29) {
-      await migrateDatabaseToV29(db);
-    }
-    if (oldVersion < 30 && newVersion >= 30) {
-      await migrateDatabaseToV30(db);
-    }
-    if (oldVersion < 31 && newVersion >= 31) {
-      await migrateDatabaseToV31(db);
-    }
-  }
-
-  /// Πίνακας προσωπικών λέξεων ορθογραφίας (Windows / custom lexicon).
-  static Future<void> _migrateUserDictionaryTable(Database db) async {
-    await db.execute('''
-      CREATE TABLE IF NOT EXISTS user_dictionary (
-        word TEXT PRIMARY KEY
-      )
-    ''');
-  }
-
-  /// v8: στήλη `language` + backfill με [detectDictionaryLanguage].
-  static Future<void> _migrateUserDictionaryLanguageColumn(Database db) async {
-    final info = await db.rawQuery(
-      'PRAGMA table_info(${AppConfig.userDictionaryTable})',
-    );
-    final names = info.map((r) => r['name'] as String).toSet();
-    if (!names.contains('language')) {
-      await db.execute(
-        'ALTER TABLE ${AppConfig.userDictionaryTable} ADD COLUMN language TEXT',
-      );
-    }
-    final rows = await db.query(
-      AppConfig.userDictionaryTable,
-      columns: ['word', 'language'],
-    );
-    final batch = db.batch();
-    var pending = 0;
-    for (final r in rows) {
-      final w = (r['word'] as String?)?.trim() ?? '';
-      if (w.isEmpty) continue;
-      final next = DictionaryRepository.detectDictionaryLanguage(w);
-      final cur = r['language'] as String? ?? '';
-      if (cur == next) continue;
-      batch.update(
-        AppConfig.userDictionaryTable,
-        {'language': next},
-        where: 'word = ?',
-        whereArgs: [w],
-      );
-      pending++;
-    }
-    if (pending > 0) await batch.commit(noResult: true);
-  }
-
-  /// v9: `letters_count`, `diacritic_mark_count` + backfill + ευρετήρια.
-  static Future<void> _migrateLexiconWordMetricsColumns(Database db) async {
-    Future<void> ensureColumns(String table) async {
-      final info = await db.rawQuery('PRAGMA table_info($table)');
-      final names = info.map((r) => r['name'] as String).toSet();
-      if (!names.contains('letters_count')) {
-        await db.execute(
-          'ALTER TABLE $table ADD COLUMN letters_count INTEGER NOT NULL DEFAULT 0',
-        );
-      }
-      if (!names.contains('diacritic_mark_count')) {
-        await db.execute(
-          'ALTER TABLE $table ADD COLUMN diacritic_mark_count INTEGER NOT NULL DEFAULT 0',
-        );
-      }
-    }
-
-    await ensureColumns(AppConfig.fullDictionaryTable);
-    await ensureColumns(AppConfig.userDictionaryTable);
-
-    Future<void> backfillTable(String table, {required bool hasRowId}) async {
-      final rows = await db.query(
-        table,
-        columns: hasRowId ? ['id', 'word'] : ['word'],
-      );
-      const chunk = 400;
-      for (var i = 0; i < rows.length; i += chunk) {
-        final end = (i + chunk > rows.length) ? rows.length : i + chunk;
-        final slice = rows.sublist(i, end);
-        final batch = db.batch();
-        for (final r in slice) {
-          final w = (r['word'] as String?) ?? '';
-          final m = LexiconWordMetrics.compute(w);
-          if (hasRowId) {
-            final idRaw = r['id'];
-            final id = idRaw is int ? idRaw : (idRaw as num).toInt();
-            batch.update(
-              table,
-              {
-                'letters_count': m.lettersCount,
-                'diacritic_mark_count': m.diacriticMarkCount,
-              },
-              where: 'id = ?',
-              whereArgs: [id],
-            );
-          } else {
-            batch.update(
-              table,
-              {
-                'letters_count': m.lettersCount,
-                'diacritic_mark_count': m.diacriticMarkCount,
-              },
-              where: 'word = ?',
-              whereArgs: [w],
-            );
-          }
-        }
-        await batch.commit(noResult: true);
-      }
-    }
-
-    await backfillTable(AppConfig.fullDictionaryTable, hasRowId: true);
-    await backfillTable(AppConfig.userDictionaryTable, hasRowId: false);
-
-    await db.execute(
-      'CREATE INDEX IF NOT EXISTS idx_full_dictionary_letters_count ON ${AppConfig.fullDictionaryTable}(letters_count)',
-    );
-    await db.execute(
-      'CREATE INDEX IF NOT EXISTS idx_full_dictionary_diacritic_mark_count ON ${AppConfig.fullDictionaryTable}(diacritic_mark_count)',
-    );
-  }
-
-  /// Πίνακας master λεξικού (v7).
-  static Future<void> _migrateFullDictionaryTable(Database db) async {
-    await db.execute('''
-      CREATE TABLE IF NOT EXISTS full_dictionary (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        word TEXT NOT NULL UNIQUE,
-        normalized_word TEXT NOT NULL,
-        source TEXT NOT NULL,
-        language TEXT NOT NULL,
-        category TEXT NOT NULL,
-        created_at TEXT NOT NULL DEFAULT (datetime('now'))
-      )
-    ''');
-    await db.execute(
-      'CREATE INDEX IF NOT EXISTS idx_full_dictionary_norm ON full_dictionary(normalized_word)',
-    );
-    await db.execute(
-      'CREATE INDEX IF NOT EXISTS idx_full_dictionary_filters ON full_dictionary(language, source, category)',
-    );
-  }
-
-  /// v10: στήλη `equipment.remote_params` για JSON παραμέτρων ανά εργαλείο.
-  static Future<void> _migrateEquipmentRemoteParamsColumn(Database db) async {
-    final info = await db.rawQuery('PRAGMA table_info(equipment)');
-    final names = info.map((r) => r['name'] as String).toSet();
-    if (!names.contains('remote_params')) {
-      await db.execute('ALTER TABLE equipment ADD COLUMN remote_params TEXT');
-    }
-  }
-
-  /// Προσθέτει στήλες τμήμα/τοποθεσία στον πίνακα `equipment` αν λείπουν (idempotent).
-  static Future<void> _migrateEquipmentDepartmentLocationColumns(
-    Database db,
-  ) async {
-    final info = await db.rawQuery('PRAGMA table_info(equipment)');
-    final names = info.map((r) => r['name'] as String).toSet();
-    if (!names.contains('department_id')) {
-      await db.execute(
-        'ALTER TABLE equipment ADD COLUMN department_id INTEGER',
-      );
-    }
-    if (!names.contains('location')) {
-      await db.execute('ALTER TABLE equipment ADD COLUMN location TEXT');
-    }
-  }
-
-  /// Δημιουργεί πίνακα `department_phones` αν λείπει (idempotent).
-  static Future<void> _migrateDepartmentPhonesTable(Database db) async {
-    await db.execute('''
-      CREATE TABLE IF NOT EXISTS department_phones (
-        department_id INTEGER NOT NULL,
-        phone_id INTEGER NOT NULL,
-        PRIMARY KEY (department_id, phone_id)
-      )
-    ''');
-  }
-
-  static const String _kDepartmentsNameKeyColumn = 'name_key';
-
-  /// Προσθέτει `departments.name_key` και το γεμίζει για υπάρχουσες εγγραφές.
-  /// Στόχος: `name` = εμφανίσιμο, `name_key` = κανονικοποιημένο μοναδικό κλειδί.
-  static Future<void> _migrateDepartmentNameKey(Database db) async {
-    const tableName = 'departments';
-    final info = await db.rawQuery('PRAGMA table_info($tableName)');
-    if (info.isEmpty) {
-      throw Exception(
-        'Μετάβαση σχήματος: δεν υπάρχει ο πίνακας `$tableName` (PRAGMA table_info '
-        'επέστρεψε κενό). no such table: $tableName',
-      );
-    }
-    final names = info.map((r) => r['name'] as String).toSet();
-    if (!names.contains(_kDepartmentsNameKeyColumn)) {
-      const stmt = 'ALTER TABLE departments ADD COLUMN name_key TEXT';
-      try {
-        await db.execute(stmt);
-      } catch (e) {
-        throw Exception(
-          'Μετάβαση σχήματος απέτυχε: πίνακας `$tableName`, εντολή: `$stmt`. $e',
-        );
-      }
-    }
-
-    // Backfill name_key για παλιές εγγραφές.
-    final rows = await db.query(
-      'departments',
-      columns: ['id', 'name', 'name_key'],
-    );
-    for (final r in rows) {
-      final id = r['id'] as int?;
-      if (id == null) continue;
-      final existing = (r['name_key'] as String?)?.trim() ?? '';
-      if (existing.isNotEmpty) continue;
-      final name = (r['name'] as String?)?.trim() ?? '';
-      final key = SearchTextNormalizer.normalizeForSearch(name);
-      if (key.isEmpty) continue;
-      await db.update(
-        'departments',
-        {_kDepartmentsNameKeyColumn: key},
-        where: 'id = ?',
-        whereArgs: [id],
-      );
-    }
-
-    // Unique index για το name_key (πλήρης μοναδικότητα).
-    await db.execute(
-      'CREATE UNIQUE INDEX IF NOT EXISTS idx_departments_name_key ON departments(name_key)',
-    );
-  }
-
-  /// Προσθέτει `phones.department_id` για πολιτική shared-location.
-  static Future<void> _migratePhonesDepartmentColumn(Database db) async {
-    final info = await db.rawQuery('PRAGMA table_info(phones)');
-    final names = info.map((r) => r['name'] as String).toSet();
-    if (!names.contains('department_id')) {
-      await db.execute('ALTER TABLE phones ADD COLUMN department_id INTEGER');
-    }
-  }
-
-  /// Αρχείο με νεότερο user_version (π.χ. 17) ενώ η εφαρμογή αναμένει v1.
-  Future<void> _onDowngradeSquashed(
-    Database db,
-    int oldVersion,
-    int newVersion,
-  ) async {
-    throw DatabaseInitException(
-      DatabaseInitResult(
-        status: DatabaseStatus.applicationError,
-        message: _schemaVersionMismatchUserMessage(db, oldVersion, newVersion),
-      ),
-    );
-  }
-
-  /// Λίστα ονομάτων πινάκων (χωρίς εσωτερικά sqlite_*). Για προβολή Βάσης Δεδομένων.
-  Future<List<String>> getTableNames() async {
-    final db = await database;
-    final r = await db.rawQuery(
-      "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name",
-    );
-    return r.map((e) => e['name'] as String).toList();
-  }
-
-  /// Επιστρέφει συμβολοσειρά σχήματος πίνακα: `όνομα ΤΥΠΟΣ, ...` (από PRAGMA table_info).
-  Future<String> getTableSchema(String tableName) async {
-    final db = await database;
-    final quoted = _sqliteQuoteIdentifier(tableName);
-    final info = await db.rawQuery('PRAGMA table_info($quoted)');
-    if (info.isEmpty) return '';
-    final parts = <String>[];
-    for (final row in info) {
-      final colName = row['name'] as String? ?? '';
-      final rawType = (row['type'] as String?)?.trim();
-      final typeSuffix = (rawType == null || rawType.isEmpty)
-          ? ''
-          : ' $rawType';
-      parts.add('$colName$typeSuffix');
-    }
-    return parts.join(', ');
-  }
-
-  static String _sqliteQuoteIdentifier(String identifier) {
-    return '"${identifier.replaceAll('"', '""')}"';
-  }
-
-  /// Προεπισκόπηση πίνακα: στήλες + γραμμές (μέγ. [rowLimit]). Για προβολή τύπου Excel.
-  Future<TablePreviewResult> getTablePreview(
-    String tableName, {
-    int rowLimit = 500,
-  }) async {
-    final db = await database;
-    final quoted = _sqliteQuoteIdentifier(tableName);
-    final info = await db.rawQuery('PRAGMA table_info($quoted)');
-    final columns = (info
-        .map((e) => e['name'] as String?)
-        .whereType<String>()
-        .toList());
-    if (columns.isEmpty) return TablePreviewResult(columns: [], rows: []);
-
-    final rows = await db.rawQuery('SELECT * FROM $quoted LIMIT $rowLimit');
-    return TablePreviewResult(columns: columns, rows: rows);
-  }
-
   /// Ελέγχει υγεία βάσης: ύπαρξη πίνακα 'calls' (και βασικών πινάκων).
-  /// Καλείται αφού η σύνδεση είναι ανοιχτή. Επιστρέφει [DatabaseInitResult].
   Future<DatabaseInitResult> checkDatabaseHealth() async {
     try {
       final db = await database;
@@ -1218,7 +615,7 @@ class DatabaseHelper {
 
       final db = await openDatabase(
         dbPath,
-        version: _kDatabaseSchemaVersion,
+        version: kDatabaseSchemaVersion,
         readOnly: true,
         singleInstance: false,
       );

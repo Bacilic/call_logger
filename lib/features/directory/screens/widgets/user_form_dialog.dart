@@ -26,7 +26,9 @@ import 'user_name_change_confirm_dialog.dart';
 import 'user_phone_department_conflict_dialog.dart';
 import 'user_form_smart_text_field.dart';
 
-enum _UserFormDismissChoice { keep, discard, continueEditing }
+part 'user_form_dismiss_guard.dart';
+part 'user_form_phone_policy.dart';
+part 'user_form_save.dart';
 
 /// Διάλογος φόρμας για δημιουργία/επεξεργασία/αντίγραφο χρήστη.
 class UserFormDialog extends ConsumerStatefulWidget {
@@ -51,22 +53,81 @@ class UserFormDialog extends ConsumerStatefulWidget {
   ConsumerState<UserFormDialog> createState() => _UserFormDialogState();
 }
 
-class _UserFormDialogState extends ConsumerState<UserFormDialog> {
+mixin UserFormDialogStateHost on ConsumerState<UserFormDialog> {
+  GlobalKey<FormState> get _formKey;
+  TextEditingController get _lastNameController;
+  SpellCheckController get _firstNameController;
+  TextEditingController get _phoneController;
+  SpellCheckController get _departmentController;
+  SpellCheckController get _notesController;
+
+  String get _initialDepartmentText;
+  String get _snapDepartmentNorm;
+  String get _snapLastName;
+  String get _snapFirstName;
+  String get _snapPhone;
+  String get _snapNotes;
+
+  bool get _isEdit;
+
+  // ignore: unused_element — απαιτείται από part mixins· ο analyzer δεν το ανιχνεύει.
+  void _onFieldChanged();
+
+  // ignore: unused_element
+  bool get _isDirty;
+
+  String _buildUserDisplayName();
+  String _snapDisplayName();
+  bool _nameIdentityChanged();
+  UserModel? _findSoftHomonymUser();
+
+  Future<void> _save();
+
+  ({int? id, String? name}) _resolveSourceDepartmentForDisconnect();
+
+  Future<({int? id, String name})> _resolveTargetDepartmentForSave();
+
+  Future<UserPhoneConflictBatchResult?> _confirmUserPhoneAssignmentConflicts({
+    required int? editingUserId,
+  });
+
+  Future<SharedAssetDisconnectBatchResult?>
+  _confirmExclusiveRemovedPhonesDisconnect();
+}
+
+class _UserFormDialogState extends ConsumerState<UserFormDialog>
+    with
+        UserFormDialogStateHost,
+        UserFormDismissGuardMixin,
+        UserFormPhonePolicyMixin,
+        UserFormSaveMixin {
+  @override
   final _formKey = GlobalKey<FormState>();
 
   /// Αρχικό κείμενο τμήματος όπως στη βάση (εμφάνιση· επαναφορά στον διάλογο μεταφοράς).
+  @override
   late final String _initialDepartmentText;
 
   /// Κανονικοποιημένο κλειδί αρχικού τμήματος μόνο για σύγκριση dirty / διάλογο.
+  @override
   late final String _snapDepartmentNorm;
+  @override
   late final String _snapLastName;
+  @override
   late final String _snapFirstName;
+  @override
   late final String _snapPhone;
+  @override
   late final String _snapNotes;
+  @override
   late final TextEditingController _lastNameController;
+  @override
   late final SpellCheckController _firstNameController;
+  @override
   late final TextEditingController _phoneController;
+  @override
   late final SpellCheckController _departmentController;
+  @override
   late final SpellCheckController _notesController;
 
   final FocusNode _lastNameFocusNode = FocusNode();
@@ -75,115 +136,8 @@ class _UserFormDialogState extends ConsumerState<UserFormDialog> {
   final FocusNode _departmentFocusNode = FocusNode();
   final FocusNode _notesFocusNode = FocusNode();
 
+  @override
   bool get _isEdit => widget.initialUser != null && !widget.isClone;
-
-  void _onFieldChanged() {
-    if (mounted) setState(() {});
-  }
-
-  bool get _isDirty {
-    if (_lastNameController.text.trim() != _snapLastName) return true;
-    if (_firstNameController.text.trim() != _snapFirstName) return true;
-    if (_phoneController.text.trim() != _snapPhone) return true;
-    if (_notesController.text.trim() != _snapNotes) return true;
-    // Εμφανιζόμενο κείμενο (όχι μόνο κανονικοποίηση): τόνοι/κεφαλαία μετράνε ως αλλαγή.
-    if (_departmentController.text.trim() != _initialDepartmentText) return true;
-    return false;
-  }
-
-  /// Νέος/αντίγραφο χρήστη: υποχρεωτικά όνομα και επώνυμο πριν εμφανιστεί προειδοποίηση.
-  bool get _createHasRequiredFields =>
-      _lastNameController.text.trim().isNotEmpty &&
-      _firstNameController.text.trim().isNotEmpty;
-
-  bool get _shouldConfirmDismiss =>
-      _isEdit ? _isDirty : _createHasRequiredFields;
-
-  List<String> _changedFieldLabels() {
-    final changes = <String>[];
-    if (_lastNameController.text.trim() != _snapLastName) {
-      changes.add('Επώνυμο');
-    }
-    if (_firstNameController.text.trim() != _snapFirstName) {
-      changes.add('Όνομα');
-    }
-    if (_phoneController.text.trim() != _snapPhone) {
-      changes.add('Τηλέφωνο');
-    }
-    if (_departmentController.text.trim() != _initialDepartmentText) {
-      changes.add('Τμήμα');
-    }
-    if (_notesController.text.trim() != _snapNotes) {
-      changes.add('Σημειώσεις');
-    }
-    return changes;
-  }
-
-  Future<_UserFormDismissChoice?> _showDismissConfirmationDialog() async {
-    final changes = _changedFieldLabels();
-    return showDialog<_UserFormDismissChoice>(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Μη αποθηκευμένες αλλαγές'),
-        content: SizedBox(
-          width: 420,
-          child: SingleChildScrollView(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Text('Έχουν γίνει αλλαγές:'),
-                const SizedBox(height: 8),
-                for (final label in changes) Text('• $label'),
-                const SizedBox(height: 12),
-                const Text('Θέλεται να γίνει:'),
-              ],
-            ),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(
-              ctx,
-            ).pop(_UserFormDismissChoice.continueEditing),
-            child: const Text('Επεξεργασία'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(_UserFormDismissChoice.discard),
-            child: const Text('Ακύρωση Αλλαγών'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(ctx).pop(_UserFormDismissChoice.keep),
-            child: const Text('Διατήρηση'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _requestClose() async {
-    if (!_shouldConfirmDismiss) {
-      if (mounted) Navigator.of(context).pop();
-      return;
-    }
-    final choice = await _showDismissConfirmationDialog();
-    if (!mounted ||
-        choice == null ||
-        choice == _UserFormDismissChoice.continueEditing) {
-      return;
-    }
-    if (choice == _UserFormDismissChoice.discard) {
-      Navigator.of(context).pop();
-      return;
-    }
-    await _save();
-  }
-
-  /// Κουμπί «Ακύρωση»: κλείσιμο χωρίς διάλογο επιβεβαίωσης (εκούσια απόρριψη).
-  void _cancelAndClose() {
-    if (mounted) Navigator.of(context).pop();
-  }
 
   void _selectAll(TextEditingController c) {
     c.selection = TextSelection(baseOffset: 0, extentOffset: c.text.length);
@@ -270,6 +224,7 @@ class _UserFormDialogState extends ConsumerState<UserFormDialog> {
   String? _requiredValidator(String? v) =>
       (v?.trim().isEmpty ?? true) ? 'Υποχρεωτικό' : null;
 
+  @override
   String _buildUserDisplayName() {
     final f = _firstNameController.text.trim();
     final l = _lastNameController.text.trim();
@@ -277,6 +232,7 @@ class _UserFormDialogState extends ConsumerState<UserFormDialog> {
     return '$f $l'.trim();
   }
 
+  @override
   String _snapDisplayName() {
     final f = _snapFirstName.trim();
     final l = _snapLastName.trim();
@@ -284,6 +240,7 @@ class _UserFormDialogState extends ConsumerState<UserFormDialog> {
     return '$f $l'.trim();
   }
 
+  @override
   bool _nameIdentityChanged() {
     return UserIdentityNormalizer.identityKeyForPerson(
           _snapFirstName,
@@ -295,145 +252,8 @@ class _UserFormDialogState extends ConsumerState<UserFormDialog> {
         );
   }
 
-  List<String> _removedPhonesFromField() {
-    final before = PhoneListParser.splitPhones(_snapPhone);
-    final after = PhoneListParser.splitPhones(_phoneController.text).toSet();
-    return before.where((p) => !after.contains(p)).toList();
-  }
-
-  /// Τηλέφωνα που αφαιρούνται από το πεδίο και συνδέονται μόνο με τον τρέχοντα χρήστη.
-  List<String> _exclusiveRemovedPhones() {
-    final editingId = widget.initialUser?.id;
-    if (!_isEdit || editingId == null) return const [];
-
-    final removed = _removedPhonesFromField();
-    if (removed.isEmpty) return const [];
-
-    final exclusive = <String>[];
-    for (final phone in removed) {
-      final owners = widget.notifier.allUsersForUi.where((u) {
-        if (u.isDeleted) return false;
-        return u.phones.any((p) => p.trim() == phone.trim());
-      }).toList();
-      if (owners.length == 1 && owners.first.id == editingId) {
-        exclusive.add(phone);
-      }
-    }
-    return exclusive;
-  }
-
-  ({int? id, String? name}) _resolveSourceDepartmentForDisconnect() {
-    final typed = _departmentController.text.trim();
-    if (typed.isEmpty) return (id: null, name: null);
-
-    final key = SearchTextNormalizer.normalizeForSearch(typed);
-    if (key.isEmpty) return (id: null, name: null);
-
-    for (final d in LookupService.instance.departments) {
-      if (d.isDeleted) continue;
-      if (SearchTextNormalizer.normalizeForSearch(d.name) == key) {
-        return (id: d.id, name: d.name.trim());
-      }
-    }
-    return (id: null, name: null);
-  }
-
-  List<String> _phonesToValidateForPolicy() {
-    final current = PhoneListParser.splitPhones(_phoneController.text);
-    if (!_isEdit || widget.isClone) return current;
-    final deptChanged =
-        SearchTextNormalizer.normalizeForSearch(_departmentController.text) !=
-        _snapDepartmentNorm;
-    if (deptChanged) return current;
-    return PhoneDepartmentPolicy.addedPhones(
-      beforePhones: PhoneListParser.splitPhones(_snapPhone),
-      afterPhones: current,
-    );
-  }
-
-  Future<({int? id, String name})> _resolveTargetDepartmentForSave() async {
-    final name = _departmentController.text.trim();
-    if (name.isEmpty) return (id: null, name: '');
-
-    final id = await _resolveDepartmentIdForSave(
-      DepartmentRepository(await DatabaseHelper.instance.database),
-    );
-    return (id: id, name: name);
-  }
-
-  /// Αν το πεδίο τμήματος δείχνει σε υπάρχον τμήμα (ίδιο name_key), επιστρέφει το id του·
-  /// όταν αλλάζει μόνο η εμφάνιση (τόνοι/κεφαλαία), ενημερώνει και το `departments.name`.
-  Future<int?> _resolveDepartmentIdForSave(DepartmentRepository dir) async {
-    final typed = _departmentController.text.trim();
-    if (typed.isEmpty) return null;
-
-    final matched = _resolveSourceDepartmentForDisconnect();
-    if (matched.id != null) {
-      final stored = (matched.name ?? '').trim();
-      if (stored != typed) {
-        await dir.updateDepartment(matched.id!, {'name': typed});
-      }
-      return matched.id;
-    }
-
-    return dir.getOrCreateDepartmentIdByName(typed);
-  }
-
-  Future<UserPhoneConflictBatchResult?> _confirmUserPhoneAssignmentConflicts({
-    required int? editingUserId,
-  }) async {
-    final phones = _phonesToValidateForPolicy();
-    if (phones.isEmpty) return const UserPhoneConflictBatchResult();
-
-    final target = await _resolveTargetDepartmentForSave();
-    final conflicts = PhoneDepartmentPolicy.findConflictsForUserAssignment(
-      phones: phones,
-      targetDepartmentId: target.id,
-      editingUserId: editingUserId,
-    );
-    if (conflicts.isEmpty) return const UserPhoneConflictBatchResult();
-
-    if (!mounted) return null;
-    return showUserPhoneDepartmentConflictDialog(
-      context,
-      conflicts: conflicts,
-      userDisplayName: _buildUserDisplayName(),
-      targetDepartmentName: target.name,
-      targetDepartmentId: target.id,
-    );
-  }
-
-  Future<SharedAssetDisconnectBatchResult?>
-  _confirmExclusiveRemovedPhonesDisconnect() async {
-    final phones = _exclusiveRemovedPhones();
-    if (phones.isEmpty) return const SharedAssetDisconnectBatchResult();
-
-    final lookup = LookupService.instance;
-    final source = _resolveSourceDepartmentForDisconnect();
-    final departments = lookup.departments
-        .where((d) => !d.isDeleted && d.name.trim().isNotEmpty)
-        .toList();
-
-    if (!mounted) return null;
-    return showSharedAssetDisconnectFlow(
-      context: context,
-      sourceDepartmentId: source.id,
-      sourceDepartmentName: source.name,
-      phones: phones,
-      availableDepartments: departments,
-      mode: SharedAssetDisconnectMode.personalPhone,
-      personalPhoneUserDisplayName: _buildUserDisplayName(),
-    );
-  }
-
-  static const _duplicateSnack = SnackBar(
-    content: Text(
-      'Υπάρχει ήδη χρήστης με το ίδιο ονοματεπώνυμο (ισοδύναμη γραφή), το ίδιο τηλέφωνο και τους ίδιους κωδικούς εξοπλισμού. Διορθώστε τα δεδομένα.',
-    ),
-    backgroundColor: Colors.orange,
-  );
-
   /// Χρήστης με συνωνυμία (όνομα / επώνυμο / και τα δύο), εκτός τρέχουσας/πηγής αντίγραφου.
+  @override
   UserModel? _findSoftHomonymUser() {
     final int? excludeId =
         widget.initialUser != null && (_isEdit || widget.isClone)
@@ -445,218 +265,6 @@ class _UserFormDialogState extends ConsumerState<UserFormDialog> {
       lastName: _lastNameController.text,
       excludeUserId: excludeId,
     );
-  }
-
-  Future<void> _save() async {
-    if (!(_formKey.currentState?.validate() ?? false)) return;
-    if (!_isDirty) return;
-
-    final homonym = _findSoftHomonymUser();
-    if (homonym != null) {
-      if (!mounted) return;
-      final existingDept = homonym.departmentName?.trim() ?? '';
-      final choice = await showDialog<bool>(
-        context: context,
-        barrierDismissible: true,
-        builder: (ctx) => HomonymWarningDialog(
-          userDisplayName: _buildUserDisplayName(),
-          existingRecordDepartmentName: existingDept,
-        ),
-      );
-      if (!mounted) return;
-      if (choice != true) return;
-    }
-
-    var cloneAsNewEmployee = false;
-
-    if (_isEdit && _nameIdentityChanged()) {
-      if (!mounted) return;
-      final nameChoice = await showUserNameChangeConfirmDialog(
-        context: context,
-        oldDisplayName: _snapDisplayName(),
-        newDisplayName: _buildUserDisplayName(),
-      );
-      if (!mounted) return;
-      if (nameChoice == null) return;
-      if (nameChoice == UserNameChangeDialogChoice.newEmployee) {
-        cloneAsNewEmployee = true;
-      }
-    }
-
-    try {
-      final initialDeptNorm = SearchTextNormalizer.normalizeForSearch(
-        _initialDepartmentText,
-      );
-      final currentDeptNorm = SearchTextNormalizer.normalizeForSearch(
-        _departmentController.text,
-      );
-      if (initialDeptNorm != currentDeptNorm) {
-        final existsInOrg = currentDeptNorm.isEmpty
-            ? true
-            : await DepartmentRepository(await DatabaseHelper.instance.database)
-                .departmentNameExists(
-                _departmentController.text,
-              );
-        if (!mounted) return;
-        final useAddToDepartmentMessage =
-            !_isEdit || widget.isClone || _initialDepartmentText.trim().isEmpty;
-        final result = await showDepartmentTransferConfirmDialog(
-          context: context,
-          userDisplayName: _buildUserDisplayName(),
-          oldDepartment: _initialDepartmentText,
-          newDepartment: _departmentController.text,
-          newDepartmentExistsInOrg: existsInOrg,
-          useAddToDepartmentMessage: useAddToDepartmentMessage,
-        );
-        final effective =
-            result ?? DepartmentTransferDialogResult.cancelTransfer;
-        if (effective == DepartmentTransferDialogResult.cancelTransfer) {
-          _departmentController.text = _initialDepartmentText;
-          return;
-        }
-      }
-
-      SharedAssetDisconnectBatchResult? phoneDisconnectBatch;
-      if (_isEdit && !cloneAsNewEmployee) {
-        phoneDisconnectBatch = await _confirmExclusiveRemovedPhonesDisconnect();
-        if (!mounted) return;
-        if (phoneDisconnectBatch == null) return;
-      }
-
-      final editingUserId =
-          _isEdit && !cloneAsNewEmployee && !widget.isClone
-          ? widget.initialUser?.id
-          : null;
-      final phoneConflictBatch = await _confirmUserPhoneAssignmentConflicts(
-        editingUserId: editingUserId,
-      );
-      if (!mounted) return;
-      if (phoneConflictBatch == null) return;
-
-      await _persistUser(
-        cloneAsNewEmployee: cloneAsNewEmployee,
-        phoneDisconnectBatch: phoneDisconnectBatch,
-        phoneConflictBatch: phoneConflictBatch,
-      );
-    } on PhoneDepartmentPolicyException catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Απορρίφθηκε η αποθήκευση: το(α) τηλέφωνο(α) '
-            '${e.conflicts.map((c) => c.phone).join(', ')} '
-            'συγκρούεται με τμήμα άλλου καταλόγου.',
-          ),
-          backgroundColor: Colors.orange,
-        ),
-      );
-    } catch (e, st) {
-      if (!mounted) return;
-      showDatabasePersistenceErrorSnackBar(context, e, st);
-    }
-  }
-
-  Future<void> _persistUser({
-    bool cloneAsNewEmployee = false,
-    SharedAssetDisconnectBatchResult? phoneDisconnectBatch,
-    UserPhoneConflictBatchResult? phoneConflictBatch,
-  }) async {
-    final db = await DatabaseHelper.instance.database;
-    final dir = DepartmentRepository(db);
-    final departmentId = await _resolveDepartmentIdForSave(dir);
-
-    if (phoneConflictBatch != null && !phoneConflictBatch.isEmpty) {
-      await PhoneDepartmentPolicy.applyUserPhoneConflictResolutions(
-        phones: PhoneRepository(db),
-        resolutions: phoneConflictBatch,
-        targetDepartmentId: departmentId,
-      );
-      LookupService.instance.resetForReload();
-      await LookupService.instance.loadFromDatabase();
-    }
-
-    final user = UserModel(
-      id: (_isEdit && !cloneAsNewEmployee) ? widget.initialUser?.id : null,
-      lastName: _lastNameController.text.trim(),
-      firstName: _firstNameController.text.trim(),
-      phones: PhoneListParser.splitPhones(_phoneController.text),
-      departmentId: departmentId,
-      notes: _notesController.text.trim().isEmpty
-          ? null
-          : _notesController.text.trim(),
-    );
-
-    if (_isEdit && cloneAsNewEmployee) {
-      final sourceId = widget.initialUser?.id;
-      if (sourceId == null) return;
-      if (await widget.notifier.hasDuplicateUserFresh(
-        user,
-        mirrorEquipmentFromUserId: sourceId,
-      )) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(_duplicateSnack);
-        return;
-      }
-      await widget.notifier.addUserCloningEquipmentFrom(user, sourceId);
-      ref.invalidate(lookupServiceProvider);
-      await ref.read(lookupServiceProvider.future);
-      if (!mounted) return;
-      widget.onSaved?.call();
-      Navigator.of(context).pop(true);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Δημιουργήθηκε νέος υπάλληλος· αντιγράφηκαν οι συνδέσεις εξοπλισμού.',
-          ),
-        ),
-      );
-      return;
-    }
-
-    if (_isEdit) {
-      if (user.id != null &&
-          await widget.notifier.hasDuplicateUserFresh(
-            user,
-            excludeId: user.id,
-          )) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(_duplicateSnack);
-        return;
-      }
-      await widget.notifier.updateUser(user);
-      if (phoneDisconnectBatch != null) {
-        final db = await DatabaseHelper.instance.database;
-        await applyPersonalPhoneDisconnectBatch(
-          db,
-          phoneDisconnectBatch,
-          sourceDepartmentId: departmentId,
-        );
-        await widget.notifier.loadUsers();
-      }
-      ref.invalidate(lookupServiceProvider);
-      await ref.read(lookupServiceProvider.future);
-      if (!mounted) return;
-      widget.onSaved?.call();
-      Navigator.of(context).pop(true);
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Αποθηκεύτηκε')));
-      return;
-    }
-    if (await widget.notifier.hasDuplicateUserFresh(user)) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(_duplicateSnack);
-      return;
-    }
-    await widget.notifier.addUser(user);
-    ref.invalidate(lookupServiceProvider);
-    await ref.read(lookupServiceProvider.future);
-    if (!mounted) return;
-    widget.onSaved?.call();
-    Navigator.of(context).pop(true);
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('Αποθηκεύτηκε')));
   }
 
   String get _title {
