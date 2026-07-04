@@ -1,4 +1,6 @@
-﻿import 'package:flutter/material.dart';
+﻿import 'dart:math' as math;
+
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -11,6 +13,7 @@ import '../../models/call_model.dart';
 import '../../models/equipment_model.dart';
 import '../../models/user_model.dart';
 import '../../provider/calls_dashboard_providers.dart';
+import 'text_layout_utils.dart';
 
 DateTime? _equipmentRecentParseSqlDateOnly(String? raw) {
   final s = raw?.trim();
@@ -61,6 +64,49 @@ String _equipmentRecentCardClipboardText(
 }
 
 enum _EquipmentRecentTitleMenu { copyAll, openHistory, openEquipmentEdit }
+
+/// Οροφή πλάτους κάρτας ιστορικού εξοπλισμού (βλ. σταθερά στήλης layout).
+const double _kEquipmentRecentCardMaxWidth = 560;
+
+/// Σταθερό πλάτος στήλης ημερομηνίας/ώρας στις γραμμές της κάρτας.
+const double _kEquipmentRecentDateColWidth = 132;
+
+/// Εσωτερικό περιθώριο κάρτας (12px αριστερά + 12px δεξιά).
+const double _kEquipmentRecentCardHorizontalPadding = 24;
+
+/// Ελάχιστο ωφέλιμο πλάτος ώστε τίτλος + μενού ⋮ να μη συνθλίβονται.
+const double _kEquipmentRecentMinContentWidth = 280;
+
+/// ΚΑΝΟΝΑΣ: «έξυπνο» πλάτος κάρτας ιστορικού — καθορίζεται από την πιο
+/// επιμήκη εγγραφή που εμφανίζεται, με οροφή [_kEquipmentRecentCardMaxWidth].
+/// Οι κάρτες ιστορικού δεν απλώνονται ανεξέλεγκτα ούτε αφήνουν νεκρό κενό.
+double _equipmentRecentSmartCardWidth(
+  BuildContext context,
+  ThemeData theme,
+  List<CallModel> calls,
+) {
+  final textScaler = MediaQuery.textScalerOf(context);
+  final lineStyle = theme.textTheme.bodyMedium ?? const TextStyle();
+
+  var maxLine = 0.0;
+  for (final c in calls) {
+    final w = singleLineTextWidth(
+      text: _equipmentRecentCategoryOrNotesLine(c),
+      style: lineStyle,
+      textScaler: textScaler,
+    );
+    if (w > maxLine) maxLine = w;
+  }
+
+  final contentW = math.max(
+    _kEquipmentRecentMinContentWidth,
+    _kEquipmentRecentDateColWidth + 8 + maxLine,
+  );
+  return math.min(
+    _kEquipmentRecentCardMaxWidth,
+    contentW + _kEquipmentRecentCardHorizontalPadding,
+  );
+}
 
 Future<void> _openEquipmentCatalogForm(
   BuildContext context,
@@ -121,7 +167,22 @@ class EquipmentRecentCallsPanel extends ConsumerWidget {
       data: (calls) {
         if (calls.isEmpty) return const SizedBox.shrink();
         final theme = Theme.of(context);
-        return Card(
+        return LayoutBuilder(
+          builder: (context, constraints) {
+            final parentMax = constraints.maxWidth.isFinite
+                ? constraints.maxWidth
+                : MediaQuery.sizeOf(context).width;
+            final cardWidth = math.min(
+              _equipmentRecentSmartCardWidth(context, theme, calls),
+              parentMax,
+            );
+            return Align(
+              alignment: Alignment.topLeft,
+              widthFactor: 1,
+              heightFactor: 1,
+              child: SizedBox(
+                width: cardWidth,
+                child: Card(
           margin: EdgeInsets.zero,
           child: Padding(
             padding: const EdgeInsets.all(12),
@@ -253,6 +314,10 @@ class EquipmentRecentCallsPanel extends ConsumerWidget {
               ],
             ),
           ),
+                ),
+              ),
+            );
+          },
         );
       },
       loading: () => const Card(

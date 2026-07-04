@@ -1,4 +1,6 @@
-﻿import 'package:flutter/material.dart';
+﻿import 'dart:math' as math;
+
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -8,6 +10,7 @@ import '../../../history/providers/history_provider.dart';
 import '../../models/call_model.dart';
 import '../../models/user_model.dart';
 import '../../provider/calls_dashboard_providers.dart';
+import 'text_layout_utils.dart';
 
 /// Λέξη-κλειδί για αναζήτηση ιστορικού: όνομα, αλλιώς πρώτο μη κενό τηλέφωνο.
 String _recentCallsHistorySearchKeyword(UserModel user) {
@@ -37,6 +40,51 @@ enum _RecentCallsTitleMenu { copyAll, openHistory }
 /// Σε φαρδύ παράθυρο η κάρτα σταματά εδώ· σε στενό «κόβεται» στο διαθέσιμο πλάτος.
 const double _kRecentCallsCardMaxWidth = 560;
 
+/// Εσωτερικό περιθώριο κάρτας (12px αριστερά + 12px δεξιά).
+const double _kRecentCallsCardHorizontalPadding = 24;
+
+/// Κενό ανάμεσα στη στήλη ημερομηνίας και στη στήλη σημειώσεων.
+const double _kRecentCallsRowGap = 12;
+
+/// Ελάχιστο ωφέλιμο πλάτος ώστε τίτλος + μενού ⋮ να μη συνθλίβονται.
+const double _kRecentCallsMinContentWidth = 280;
+
+/// ΚΑΝΟΝΑΣ: «έξυπνο» πλάτος κάρτας ιστορικού — καθορίζεται από την πιο
+/// επιμήκη εγγραφή που εμφανίζεται, με οροφή [_kRecentCallsCardMaxWidth].
+/// Οι κάρτες ιστορικού δεν απλώνονται ανεξέλεγκτα ούτε αφήνουν νεκρό κενό.
+double _recentCallsSmartCardWidth(
+  BuildContext context,
+  ThemeData theme,
+  List<CallModel> calls,
+) {
+  final textScaler = MediaQuery.textScalerOf(context);
+  final dateStyle = theme.textTheme.bodySmall ?? const TextStyle();
+  final issueStyle = theme.textTheme.bodyMedium ?? const TextStyle();
+
+  var maxRow = 0.0;
+  for (final c in calls) {
+    final dateW = singleLineTextWidth(
+      text: '${c.date ?? ''} ${c.time ?? ''}',
+      style: dateStyle,
+      textScaler: textScaler,
+    );
+    final issue = (c.issue ?? '').trim();
+    final issueW = singleLineTextWidth(
+      text: issue.isEmpty ? '—' : issue,
+      style: issueStyle,
+      textScaler: textScaler,
+    );
+    final rowW = dateW + _kRecentCallsRowGap + issueW;
+    if (rowW > maxRow) maxRow = rowW;
+  }
+
+  final contentW = math.max(_kRecentCallsMinContentWidth, maxRow);
+  return math.min(
+    _kRecentCallsCardMaxWidth,
+    contentW + _kRecentCallsCardHorizontalPadding,
+  );
+}
+
 /// Λίστα τελευταίων κλήσεων για τον επιλεγμένο καλούντα (`calls.caller_id`).
 class RecentCallsList extends ConsumerWidget {
   const RecentCallsList({super.key, required this.user});
@@ -58,12 +106,17 @@ class RecentCallsList extends ConsumerWidget {
             final parentMax = constraints.maxWidth.isFinite
                 ? constraints.maxWidth
                 : MediaQuery.sizeOf(context).width;
-            final cardMaxWidth = parentMax.clamp(0.0, _kRecentCallsCardMaxWidth);
+            final smartWidth = _recentCallsSmartCardWidth(
+              context,
+              theme,
+              calls,
+            );
+            final cardWidth = math.min(smartWidth, parentMax);
             return Align(
               alignment: Alignment.centerLeft,
               widthFactor: 1,
-              child: ConstrainedBox(
-                constraints: BoxConstraints(maxWidth: cardMaxWidth),
+              child: SizedBox(
+                width: cardWidth,
                 child: Card(
                   margin: const EdgeInsets.symmetric(vertical: 8),
                   child: Padding(

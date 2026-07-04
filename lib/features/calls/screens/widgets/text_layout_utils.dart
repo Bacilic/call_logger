@@ -1,5 +1,26 @@
 ﻿import 'package:flutter/material.dart';
 
+/// Πλάτος κειμένου σε μία γραμμή (TextPainter) — για «έξυπνο» πλάτος καρτών
+/// που καθορίζεται από την πιο επιμήκη εγγραφή, με οροφή ένα μέγιστο.
+double singleLineTextWidth({
+  required String text,
+  required TextStyle style,
+  required TextScaler textScaler,
+}) {
+  final painter = TextPainter(
+    text: TextSpan(text: text, style: style),
+    maxLines: 1,
+    textDirection: TextDirection.ltr,
+    textScaler: textScaler,
+  );
+  try {
+    painter.layout(maxWidth: double.infinity);
+    return painter.size.width;
+  } finally {
+    painter.dispose();
+  }
+}
+
 /// Ελέγχει αν το κείμενο ξεπερνά το διαθέσιμο πλάτος σε μία γραμμή (TextPainter).
 bool textOverflowsSingleLine({
   required String text,
