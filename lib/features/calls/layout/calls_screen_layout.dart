@@ -428,29 +428,29 @@ class _LayoutRowWidget extends ConsumerWidget {
       );
     }
 
+    // Πυκνό πλέγμα: οι στήλες πακετάρονται κεντραρισμένες με σταθερό κενό 16px
+    // αντί για ισόποσους Expanded διαδρόμους (που άφηναν μεγάλα νεκρά κενά).
     return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         for (var i = 0; i < row.columns.length; i++)
           if (!row.columns[i].isEmpty) ...[
             if (i > 0) const SizedBox(width: 16),
-            Expanded(
-              child: Align(
-                alignment: Alignment.topCenter,
-                child: _LayoutColumnWidthCap(
-                  maxWidth: _layoutColumnMaxWidth(
-                    row.columns[i],
-                    sharedAxisCap,
-                  ),
-                  fillCappedWidth: _columnFillsCappedWidth(row.columns[i]),
-                  child: _LayoutColumnWidget(
-                    column: row.columns[i],
-                    sharedAxisWidth: sharedAxisWidth,
-                    header: header,
-                    tools: tools,
-                    selectedEquipmentCode: selectedEquipmentCode,
-                    showRemoteButtons: showRemoteButtons,
-                  ),
+            Flexible(
+              child: _LayoutColumnWidthCap(
+                maxWidth: _layoutColumnMaxWidth(
+                  row.columns[i],
+                  sharedAxisCap,
+                ),
+                fillCappedWidth: _columnFillsCappedWidth(row.columns[i]),
+                child: _LayoutColumnWidget(
+                  column: row.columns[i],
+                  sharedAxisWidth: sharedAxisWidth,
+                  header: header,
+                  tools: tools,
+                  selectedEquipmentCode: selectedEquipmentCode,
+                  showRemoteButtons: showRemoteButtons,
                 ),
               ),
             ),
@@ -479,20 +479,14 @@ class _LayoutColumnWidthCap extends StatelessWidget {
       builder: (context, constraints) {
         final cappedMax = math.min(constraints.maxWidth, maxWidth!);
         if (fillCappedWidth) {
-          return Align(
-            alignment: Alignment.topCenter,
-            child: SizedBox(
-              width: cappedMax,
-              child: child,
-            ),
+          return SizedBox(
+            width: cappedMax,
+            child: child,
           );
         }
-        return Align(
-          alignment: Alignment.topCenter,
-          child: ConstrainedBox(
-            constraints: BoxConstraints(maxWidth: cappedMax),
-            child: child,
-          ),
+        return ConstrainedBox(
+          constraints: BoxConstraints(maxWidth: cappedMax),
+          child: child,
         );
       },
     );
@@ -628,7 +622,11 @@ class _SlotWidget extends ConsumerWidget {
         );
       case CallsLayoutSlot.remoteTools:
         if (!showRemoteButtons) return const SizedBox.shrink();
-        return RemoteConnectionButtons(header: header, tools: tools);
+        // Η κάρτα αγκαλιάζει το περιεχόμενό της — όχι νεκρό κενό στα δεξιά.
+        return Align(
+          alignment: Alignment.topLeft,
+          child: RemoteConnectionButtons(header: header, tools: tools),
+        );
       case CallsLayoutSlot.equipmentHistory:
         return EquipmentRecentCallsPanel(
           equipmentCode: selectedEquipmentCode,
@@ -636,7 +634,11 @@ class _SlotWidget extends ConsumerWidget {
       case CallsLayoutSlot.callerCard:
         final user = header.selectedCaller;
         if (user == null || user.id == null) return const SizedBox.shrink();
-        return UserInfoCard(user: user);
+        // Η κάρτα αγκαλιάζει το περιεχόμενό της — όχι νεκρό κενό στα δεξιά.
+        return Align(
+          alignment: Alignment.topLeft,
+          child: UserInfoCard(user: user),
+        );
       case CallsLayoutSlot.callerHistory:
         final user = header.selectedCaller;
         if (user == null || user.id == null) return const SizedBox.shrink();

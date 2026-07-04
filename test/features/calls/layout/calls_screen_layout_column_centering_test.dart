@@ -1,4 +1,8 @@
-// Widget tests: οριζόντιο κεντράρισμα περιεχομένου στήλης σε ευρύ viewport (μη-στενή όψη).
+// Widget tests: πυκνό πλέγμα σε ευρύ viewport (μη-στενή όψη).
+//
+// Οι στήλες της γραμμής πακετάρονται κεντραρισμένες με σταθερό κενό (16px)
+// αντί για ισόποσους Expanded διαδρόμους που άφηναν μεγάλα νεκρά κενά,
+// και οι κάρτες περιεχομένου (π.χ. κάρτα χρήστη) αγκαλιάζουν το περιεχόμενό τους.
 //
 //   flutter test test/features/calls/layout/calls_screen_layout_column_centering_test.dart
 
@@ -6,7 +10,7 @@ import 'package:call_logger/core/database/calls_repository.dart';
 import 'package:call_logger/core/database/database_helper.dart';
 import 'package:call_logger/features/calls/models/call_model.dart';
 import 'package:call_logger/features/calls/provider/lookup_provider.dart';
-import 'package:call_logger/features/calls/screens/widgets/equipment_recent_calls_panel.dart';
+import 'package:call_logger/features/calls/screens/widgets/global_recent_calls_list.dart';
 import 'package:call_logger/features/calls/screens/widgets/mini_map_card.dart';
 import 'package:call_logger/features/calls/screens/widgets/user_info_card.dart';
 import 'package:call_logger/main.dart';
@@ -18,8 +22,13 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../../test_reporter.dart';
 import '../../../test_setup.dart';
 
-/// Ανοχή οριζόντιας απόκλισης κέντρου περιεχομένου από κέντρο διαδρόμου (px).
-const double kColumnCenteringTolerance = 12;
+/// Μέγιστο αποδεκτό οριζόντιο κενό ανάμεσα σε γειτονικές στήλες πλέγματος (px).
+/// Το ονομαστικό κενό είναι 16px — ανοχή για στρογγυλοποιήσεις layout.
+const double kMaxAdjacentLaneGap = 28;
+
+/// Ελάχιστο «κέρδος» πλάτους ώστε να αποδεικνύεται ότι η κάρτα αγκαλιάζει
+/// το περιεχόμενό της αντί να γεμίζει ολόκληρη τη στήλη (px).
+const double kMinHugSlack = 40;
 
 Future<void> _pumpExpandedCallsScreen(
   WidgetTester tester, {
@@ -75,69 +84,51 @@ Future<void> _seedRecentCallsForCardPanels() async {
   );
 }
 
-/// Διάδρομος [Expanded] στη γραμμή πλέγματος (μη-στενή όψη) που φιλοξενεί την κάρτα.
-Rect _layoutColumnLaneRect(WidgetTester tester, Finder cardFinder) {
-  Element? expandedElement;
-  for (final cardElement in cardFinder.evaluate()) {
-    cardElement.visitAncestorElements((ancestor) {
-      if (ancestor.widget is! Expanded) return true;
-      final inLayoutGrid = ancestor
-              .findAncestorWidgetOfExactType<SingleChildScrollView>() !=
-          null;
-      if (!inLayoutGrid) return true;
-
-      Element? rowHost;
-      ancestor.visitAncestorElements((rowAncestor) {
-        if (rowAncestor.widget is Row) {
-          rowHost = rowAncestor;
-          return false;
-        }
-        return true;
-      });
-      if (rowHost == null) return true;
-
-      expandedElement = ancestor;
+/// Στήλη πλέγματος (capped ConstrainedBox του [_LayoutColumnWidthCap]) που
+/// φιλοξενεί την κάρτα — επιστρέφει το ορθογώνιό της.
+Rect _laneRect(WidgetTester tester, Finder cardFinder) {
+  Element? layoutBuilder;
+  final cardElement = tester.element(cardFinder);
+  cardElement.visitAncestorElements((ancestor) {
+    if (ancestor.widget is LayoutBuilder &&
+        ancestor.findAncestorWidgetOfExactType<SingleChildScrollView>() !=
+            null) {
+      layoutBuilder = ancestor;
       return false;
-    });
-    if (expandedElement != null) break;
-  }
+    }
+    return true;
+  });
 
   expect(
-    expandedElement,
+    layoutBuilder,
     isNotNull,
     reason: greekExpectMsg(
-      'Η κάρτα πρέπει να βρίσκεται σε στήλη Expanded του πλέγματος (ευρύ viewport)',
+      'Η κάρτα πρέπει να βρίσκεται μέσα σε capped στήλη πλέγματος',
     ),
+  );
+
+  Element? columnCap;
+  void walkCap(Element element) {
+    if (columnCap != null) return;
+    final widget = element.widget;
+    if (widget is ConstrainedBox && widget.constraints.maxWidth.isFinite ||
+        widget is SizedBox && (widget.width ?? double.infinity).isFinite) {
+      columnCap = element;
+      return;
+    }
+    element.visitChildren(walkCap);
+  }
+
+  walkCap(layoutBuilder!);
+
+  expect(
+    columnCap,
+    isNotNull,
+    reason: greekExpectMsg('Αναμενόταν στήλη πλέγματος με περιορισμό πλάτους'),
   );
 
   return tester.getRect(
-    find.byElementPredicate((element) => element == expandedElement),
-  );
-}
-
-void _expectContentHorizontallyCenteredInLane(
-  WidgetTester tester,
-  Finder cardFinder,
-) {
-  final cardRect = tester.getRect(cardFinder);
-  final laneRect = _layoutColumnLaneRect(tester, cardFinder);
-
-  final leftInset = cardRect.left - laneRect.left;
-  final rightInset = laneRect.right - cardRect.right;
-  expect(
-    (leftInset - rightInset).abs(),
-    lessThan(kColumnCenteringTolerance),
-    reason: greekExpectMsg(
-      'Το περιεχόμενο πρέπει να κεντράρεται οριζόντια μέσα στον ισόποσο διάδρομο',
-    ),
-  );
-
-  expect(
-    cardRect.top - laneRect.top,
-    lessThan(16),
-    reason: greekExpectMsg(
-      'Το περιεχόμενο παραμένει στοιχισμένο στην κορυφή του διαδρόμου',
-    ),
+    find.byElementPredicate((element) => element == columnCap),
   );
 }
 
@@ -148,43 +139,103 @@ void main() {
     await _seedRecentCallsForCardPanels();
   });
 
-  group('ανάπτυγμένο πλέγμα — κεντράρισμα στήλης (ευρύ viewport)', () {
-    testWidgets('MiniMapCard: κεντραρισμένη οριζόντια στον διάδρομο στήλης', (
-      tester,
-    ) async {
-      await _pumpExpandedCallsScreen(tester);
-      expect(find.byType(MiniMapCard), findsOneWidget);
-      await pumpUntilSettled(tester, steps: 20);
-
-      _expectContentHorizontallyCenteredInLane(
-        tester,
-        find.byType(MiniMapCard),
-      );
-      await tester.pump(const Duration(seconds: 11));
-    }, semanticsEnabled: false);
-
-    testWidgets('UserInfoCard: κεντραρισμένη οριζόντια στον διάδρομο στήλης', (
-      tester,
-    ) async {
-      await _pumpExpandedCallsScreen(tester);
-      expect(find.byType(UserInfoCard), findsOneWidget);
-
-      _expectContentHorizontallyCenteredInLane(
-        tester,
-        find.byType(UserInfoCard),
-      );
-      await tester.pump(const Duration(seconds: 11));
-    }, semanticsEnabled: false);
-
+  group('ανάπτυγμένο πλέγμα — πυκνή διάταξη (ευρύ viewport)', () {
     testWidgets(
-      'EquipmentRecentCallsPanel: κεντραρισμένη οριζόντια στον διάδρομο στήλης',
+      'γειτονικές στήλες: μικρό σταθερό κενό, όχι σκόρπιοι διάδρομοι',
       (tester) async {
         await _pumpExpandedCallsScreen(tester);
-        expect(find.byType(EquipmentRecentCallsPanel), findsOneWidget);
+        expect(find.byType(UserInfoCard), findsOneWidget);
+        expect(find.byType(MiniMapCard), findsOneWidget);
+        await pumpUntilSettled(tester, steps: 20);
 
-        _expectContentHorizontallyCenteredInLane(
-          tester,
-          find.byType(EquipmentRecentCallsPanel),
+        final callerLane = _laneRect(tester, find.byType(UserInfoCard));
+        final mapLane = _laneRect(tester, find.byType(MiniMapCard));
+
+        // Σειρά στηλών: caller stack αριστερά, χάρτης δεξιά.
+        final leftLane = callerLane.left <= mapLane.left ? callerLane : mapLane;
+        final rightLane = identical(leftLane, callerLane) ? mapLane : callerLane;
+
+        final gap = rightLane.left - leftLane.right;
+        expect(
+          gap,
+          lessThanOrEqualTo(kMaxAdjacentLaneGap),
+          reason: greekExpectMsg(
+            'Οι γειτονικές στήλες πρέπει να πακετάρονται με μικρό σταθερό κενό '
+            '(βρέθηκε κενό ${gap.toStringAsFixed(1)}px)',
+          ),
+        );
+        await tester.pump(const Duration(seconds: 11));
+      },
+      semanticsEnabled: false,
+    );
+
+    testWidgets(
+      'η ομάδα στηλών κεντράρεται στη γραμμή ως σύνολο',
+      (tester) async {
+        await _pumpExpandedCallsScreen(tester);
+        expect(find.byType(MiniMapCard), findsOneWidget);
+        await pumpUntilSettled(tester, steps: 20);
+
+        final lanes = <Rect>[
+          _laneRect(tester, find.byType(UserInfoCard)),
+          _laneRect(tester, find.byType(MiniMapCard)),
+          if (find.byType(GlobalRecentCallsList).evaluate().isNotEmpty)
+            _laneRect(tester, find.byType(GlobalRecentCallsList)),
+        ];
+        final scrollRect = tester.getRect(
+          find
+              .ancestor(
+                of: find.byType(MiniMapCard),
+                matching: find.byType(SingleChildScrollView),
+              )
+              .first,
+        );
+
+        final clusterLeft =
+            lanes.map((r) => r.left).reduce((a, b) => a < b ? a : b);
+        final clusterRight =
+            lanes.map((r) => r.right).reduce((a, b) => a > b ? a : b);
+        final leftSpace = clusterLeft - scrollRect.left;
+        final rightSpace = scrollRect.right - clusterRight;
+
+        expect(
+          (leftSpace - rightSpace).abs(),
+          lessThan(32),
+          reason: greekExpectMsg(
+            'Η ομάδα στηλών πρέπει να κεντράρεται οριζόντια στη γραμμή',
+          ),
+        );
+        await tester.pump(const Duration(seconds: 11));
+      },
+      semanticsEnabled: false,
+    );
+
+    testWidgets(
+      'UserInfoCard: αγκαλιάζει το περιεχόμενο — όχι νεκρό κενό στα δεξιά',
+      (tester) async {
+        await _pumpExpandedCallsScreen(tester);
+        expect(find.byType(UserInfoCard), findsOneWidget);
+        await pumpUntilSettled(tester, steps: 20);
+
+        final cardRect = tester.getRect(find.byType(UserInfoCard));
+        final laneRect = _laneRect(tester, find.byType(UserInfoCard));
+
+        expect(
+          cardRect.width,
+          lessThanOrEqualTo(laneRect.width - kMinHugSlack),
+          reason: greekExpectMsg(
+            'Η κάρτα χρήστη πρέπει να είναι στενότερη από τη στήλη της '
+            '(κάρτα ${cardRect.width.toStringAsFixed(1)}px, '
+            'στήλη ${laneRect.width.toStringAsFixed(1)}px)',
+          ),
+        );
+
+        expect(
+          cardRect.top - laneRect.top,
+          lessThan(16),
+          reason: greekExpectMsg(
+            'Το περιεχόμενο παραμένει στοιχισμένο στην κορυφή της στήλης',
+          ),
         );
         await tester.pump(const Duration(seconds: 11));
       },
