@@ -170,7 +170,7 @@ void main() {
     );
 
     testWidgets(
-      'η ομάδα στηλών κεντράρεται στη γραμμή ως σύνολο',
+      'η ομάδα στηλών ξεκινά από αριστερά — ο ελεύθερος χώρος μένει δεξιά',
       (tester) async {
         await _pumpExpandedCallsScreen(tester);
         expect(find.byType(MiniMapCard), findsOneWidget);
@@ -193,16 +193,14 @@ void main() {
 
         final clusterLeft =
             lanes.map((r) => r.left).reduce((a, b) => a < b ? a : b);
-        final clusterRight =
-            lanes.map((r) => r.right).reduce((a, b) => a > b ? a : b);
         final leftSpace = clusterLeft - scrollRect.left;
-        final rightSpace = scrollRect.right - clusterRight;
 
         expect(
-          (leftSpace - rightSpace).abs(),
-          lessThan(32),
+          leftSpace,
+          lessThan(24),
           reason: greekExpectMsg(
-            'Η ομάδα στηλών πρέπει να κεντράρεται οριζόντια στη γραμμή',
+            'Η ομάδα στηλών πρέπει να στοιχίζεται αριστερά (χωρίς νεκρό '
+            'αριστερό περιθώριο — βρέθηκε ${leftSpace.toStringAsFixed(1)}px)',
           ),
         );
         await tester.pump(const Duration(seconds: 11));

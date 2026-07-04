@@ -173,5 +173,58 @@ void main() {
       },
       semanticsEnabled: false,
     );
+
+    testWidgets(
+      'η γραμμή κατηγορίας απλώνεται στο πλάτος του μπλοκ σημειώσεων',
+      (tester) async {
+        await _pumpExpandedCallsScreen(tester);
+
+        final notesRect = tester.getRect(find.byType(NotesStickyField));
+        final categoryRowRect = tester.getRect(
+          find
+              .ancestor(
+                of: find.byType(CategoryAutocompleteField),
+                matching: find.byType(Row),
+              )
+              .first,
+        );
+
+        // Το χαρτί παίρνει τον χώρο του με οροφή ~700px.
+        expect(
+          notesRect.width,
+          lessThanOrEqualTo(700 + 4),
+          reason: greekExpectMsg(
+            'Το χαρτί σημειώσεων δεν πρέπει να ξεπερνά το όριο ~700px',
+          ),
+        );
+        expect(
+          notesRect.width,
+          greaterThan(500),
+          reason: greekExpectMsg(
+            'Σε ευρύ viewport το χαρτί πρέπει να παίρνει τον ελεύθερο χώρο '
+            '(βρέθηκε ${notesRect.width.toStringAsFixed(1)}px)',
+          ),
+        );
+
+        // Η γραμμή κατηγορίας ευθυγραμμίζεται με τις άκρες του μπλοκ.
+        expect(
+          (categoryRowRect.left - notesRect.left).abs(),
+          lessThan(4),
+          reason: greekExpectMsg(
+            'Η γραμμή κατηγορίας πρέπει να ξεκινά στην αριστερή άκρη του χαρτιού',
+          ),
+        );
+        expect(
+          categoryRowRect.right,
+          greaterThanOrEqualTo(notesRect.right - 4),
+          reason: greekExpectMsg(
+            'Η γραμμή κατηγορίας πρέπει να φτάνει τουλάχιστον ως τη δεξιά '
+            'άκρη του χαρτιού (κανόνας: καταλαμβάνει τον χώρο του μπλοκ)',
+          ),
+        );
+        await tester.pump(const Duration(seconds: 11));
+      },
+      semanticsEnabled: false,
+    );
   });
 }

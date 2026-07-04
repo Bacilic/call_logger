@@ -33,9 +33,19 @@ import 'calls_layout_plan.dart';
 class CallsScreenLayout extends ConsumerWidget {
   const CallsScreenLayout({super.key});
 
-  static const double _kSharedAxisMaxWidth = 424;
-  static const double _kSharedAxisMaxWidthWithRemote = 340;
   static const double _kGlobalRecentCardMaxWidth = 560;
+
+  /// ΚΑΝΟΝΑΣ: το χαρτί σημειώσεων παίρνει τον ελεύθερο χώρο της γραμμής του
+  /// («θέλω χώρο») με λογικό όριο ~700px για αναγνώσιμες γραμμές κειμένου.
+  static const double kNotesColumnMaxWidth = 700;
+
+  /// Ανώτατο πλάτος στήλης εργαλείων απομακρυσμένης σύνδεσης.
+  static const double kRemoteToolsColumnMaxWidth = 340;
+
+  /// Ανώτατο πλάτος του μπλοκ «Σημειώσεις + Εργαλεία» — η γραμμή Κατηγορίας
+  /// απλώνεται ακριβώς κάτω από αυτό (κανόνας: καταλαμβάνει τον χώρο τους).
+  static const double kNotesRemoteBlockMaxWidth =
+      kNotesColumnMaxWidth + 16 + kRemoteToolsColumnMaxWidth;
   static const double _kScreenPadding = 16;
   static const Duration _kHeaderMoveDuration = Duration(milliseconds: 350);
   static const double _kCompactFormToRecentCardGap = 12;
@@ -335,9 +345,6 @@ class _ExpandedPlanBody extends ConsumerWidget {
     );
 
     final plan = CallsLayoutEngine.build(groups, visibility);
-    final sharedAxisCap = showRemoteButtons
-        ? CallsScreenLayout._kSharedAxisMaxWidthWithRemote
-        : CallsScreenLayout._kSharedAxisMaxWidth;
     final width = MediaQuery.sizeOf(context).width - 32;
     final isNarrowViewport = callsLayoutShouldStackColumns(
       contentWidth: width,
@@ -352,8 +359,6 @@ class _ExpandedPlanBody extends ConsumerWidget {
             child: _LayoutRowWidget(
               row: row,
               isNarrowViewport: isNarrowViewport,
-              sharedAxisCap: sharedAxisCap,
-              sharedAxisWidth: width.clamp(180.0, sharedAxisCap).toDouble(),
               header: header,
               tools: tools,
               cardsVis: cardsVis,
@@ -385,8 +390,6 @@ class _LayoutRowWidget extends ConsumerWidget {
   const _LayoutRowWidget({
     required this.row,
     required this.isNarrowViewport,
-    required this.sharedAxisCap,
-    required this.sharedAxisWidth,
     required this.header,
     required this.tools,
     required this.cardsVis,
@@ -396,24 +399,75 @@ class _LayoutRowWidget extends ConsumerWidget {
 
   final CallsLayoutRow row;
   final bool isNarrowViewport;
-  final double sharedAxisCap;
-  final double sharedAxisWidth;
   final CallHeaderState header;
   final List<RemoteTool> tools;
   final CallsScreenCardsVisibility cardsVis;
   final String selectedEquipmentCode;
   final bool showRemoteButtons;
 
-  /// Γραμμή αποκλειστικά σημειώσεων (πρότυπο «μόνο τηλέφωνο»):
-  /// το χαρτί παίρνει ολόκληρη τη γραμμή, χωρίς cap στήλης.
-  bool get _isFullRowNotes =>
-      row.columns.length == 1 &&
-      row.columns.single.slots.length == 1 &&
-      row.columns.single.slots.single == CallsLayoutSlot.notes;
+  /// Στήλη φόρμας: σημειώσεις + γραμμή κατηγορίας (πρότυπο Α).
+  static bool _isNotesCategoryColumn(CallsLayoutColumn c) =>
+      c.slots.contains(CallsLayoutSlot.notes) &&
+      c.slots.contains(CallsLayoutSlot.categoryPending);
+
+  static bool _isRemoteToolsColumn(CallsLayoutColumn c) =>
+      c.slots.length == 1 && c.slots.single == CallsLayoutSlot.remoteTools;
+
+  Widget _slotWidget(CallsLayoutSlot slot) {
+    return _SlotWidget(
+      slot: slot,
+      header: header,
+      tools: tools,
+      selectedEquipmentCode: selectedEquipmentCode,
+      showRemoteButtons: showRemoteButtons,
+    );
+  }
+
+  /// ΚΑΝΟΝΑΣ: η γραμμή Κατηγορία+Χρονόμετρο+Καταγραφή καταλαμβάνει το πλάτος
+  /// «Σημειώσεις + Εργαλεία απομακρυσμένης»: πάνω το χαρτί (παίρνει τον
+  /// ελεύθερο χώρο, όριο 700px) με τα εργαλεία δεξιά του, από κάτω η γραμμή
+  /// κατηγορίας σε ΟΛΟ το πλάτος του μπλοκ.
+  Widget _buildNotesRemoteBlock({required bool withRemote}) {
+    final blockCap = withRemote
+        ? CallsScreenLayout.kNotesRemoteBlockMaxWidth
+        : CallsScreenLayout.kNotesColumnMaxWidth;
+
+    return ConstrainedBox(
+      constraints: BoxConstraints(maxWidth: blockCap),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (withRemote)
+            Row(
+              // spaceBetween: το χαρτί αριστερά, τα εργαλεία καρφωμένα στη
+              // δεξιά άκρη του μπλοκ — η γραμμή κατηγορίας τελειώνει εκεί.
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Flexible(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(
+                      maxWidth: CallsScreenLayout.kNotesColumnMaxWidth,
+                    ),
+                    child: _slotWidget(CallsLayoutSlot.notes),
+                  ),
+                ),
+                const SizedBox(width: 16),
+                _slotWidget(CallsLayoutSlot.remoteTools),
+              ],
+            )
+          else
+            _slotWidget(CallsLayoutSlot.notes),
+          const SizedBox(height: 12),
+          _slotWidget(CallsLayoutSlot.categoryPending),
+        ],
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final fullRowNotes = _isFullRowNotes;
     if (isNarrowViewport) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -424,22 +478,60 @@ class _LayoutRowWidget extends ConsumerWidget {
                 padding: const EdgeInsets.only(bottom: 12),
                 child: _LayoutColumnWidget(
                   column: col,
-                  sharedAxisWidth: sharedAxisWidth,
                   header: header,
                   tools: tools,
                   selectedEquipmentCode: selectedEquipmentCode,
                   showRemoteButtons: showRemoteButtons,
-                  expandNotes: fullRowNotes,
                 ),
               ),
         ],
       );
     }
 
-    // Πυκνό πλέγμα: οι στήλες πακετάρονται κεντραρισμένες με σταθερό κενό 16px
-    // αντί για ισόποσους Expanded διαδρόμους (που άφηναν μεγάλα νεκρά κενά).
+    // Πρότυπο Α: σημειώσεις+κατηγορία (+εργαλεία) αποδίδονται ως ενιαίο
+    // μπλοκ ώστε η γραμμή κατηγορίας να απλώνεται κάτω και από τα δύο.
+    final notesColIdx = row.columns.indexWhere(_isNotesCategoryColumn);
+    if (notesColIdx != -1) {
+      final remoteColIdx = row.columns.indexWhere(_isRemoteToolsColumn);
+      final withRemote = remoteColIdx != -1 && showRemoteButtons;
+      final otherCols = <CallsLayoutColumn>[
+        for (var i = 0; i < row.columns.length; i++)
+          if (i != notesColIdx && i != remoteColIdx && !row.columns[i].isEmpty)
+            row.columns[i],
+      ];
+      return Row(
+        mainAxisAlignment: MainAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // flex 2: το μπλοκ σημειώσεων παίρνει προτεραιότητα στον χώρο.
+          Flexible(
+            flex: 2,
+            child: _buildNotesRemoteBlock(withRemote: withRemote),
+          ),
+          for (final col in otherCols) ...[
+            const SizedBox(width: 16),
+            Flexible(
+              child: _LayoutColumnWidthCap(
+                maxWidth: _layoutColumnMaxWidth(col),
+                fillCappedWidth: _columnFillsCappedWidth(col),
+                child: _LayoutColumnWidget(
+                  column: col,
+                  header: header,
+                  tools: tools,
+                  selectedEquipmentCode: selectedEquipmentCode,
+                  showRemoteButtons: showRemoteButtons,
+                ),
+              ),
+            ),
+          ],
+        ],
+      );
+    }
+
+    // Πυκνό πλέγμα με αριστερή στοίχιση: οι στήλες πακετάρονται με σταθερό
+    // κενό 16px από αριστερά — ο ελεύθερος χώρος μένει δεξιά, όχι σκόρπιος.
     return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
+      mainAxisAlignment: MainAxisAlignment.start,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         for (var i = 0; i < row.columns.length; i++)
@@ -447,21 +539,14 @@ class _LayoutRowWidget extends ConsumerWidget {
             if (i > 0) const SizedBox(width: 16),
             Flexible(
               child: _LayoutColumnWidthCap(
-                maxWidth: fullRowNotes
-                    ? null
-                    : _layoutColumnMaxWidth(
-                        row.columns[i],
-                        sharedAxisCap,
-                      ),
+                maxWidth: _layoutColumnMaxWidth(row.columns[i]),
                 fillCappedWidth: _columnFillsCappedWidth(row.columns[i]),
                 child: _LayoutColumnWidget(
                   column: row.columns[i],
-                  sharedAxisWidth: sharedAxisWidth,
                   header: header,
                   tools: tools,
                   selectedEquipmentCode: selectedEquipmentCode,
                   showRemoteButtons: showRemoteButtons,
-                  expandNotes: fullRowNotes,
                 ),
               ),
             ),
@@ -504,20 +589,17 @@ class _LayoutColumnWidthCap extends StatelessWidget {
   }
 }
 
-double? _layoutColumnMaxWidth(
-  CallsLayoutColumn column,
-  double sharedAxisCap,
-) {
+double? _layoutColumnMaxWidth(CallsLayoutColumn column) {
   double? cap;
   for (final slot in column.slots) {
-    final slotCap = _layoutSlotMaxWidth(slot, sharedAxisCap);
+    final slotCap = _layoutSlotMaxWidth(slot);
     if (slotCap == null) continue;
     cap = cap == null ? slotCap : math.max(cap, slotCap);
   }
   return cap;
 }
 
-double? _layoutSlotMaxWidth(CallsLayoutSlot slot, double sharedAxisCap) {
+double? _layoutSlotMaxWidth(CallsLayoutSlot slot) {
   switch (slot) {
     case CallsLayoutSlot.map:
       return CallsScreenLayout.kMapCardColumnMaxWidth;
@@ -531,8 +613,9 @@ double? _layoutSlotMaxWidth(CallsLayoutSlot slot, double sharedAxisCap) {
       return CallsScreenLayout.kEquipmentRecentCardColumnMaxWidth;
     case CallsLayoutSlot.notes:
     case CallsLayoutSlot.categoryPending:
+      return CallsScreenLayout.kNotesColumnMaxWidth;
     case CallsLayoutSlot.remoteTools:
-      return sharedAxisCap;
+      return CallsScreenLayout.kRemoteToolsColumnMaxWidth;
   }
 }
 
@@ -557,21 +640,17 @@ bool _columnFillsCappedWidth(CallsLayoutColumn column) {
 class _LayoutColumnWidget extends ConsumerWidget {
   const _LayoutColumnWidget({
     required this.column,
-    required this.sharedAxisWidth,
     required this.header,
     required this.tools,
     required this.selectedEquipmentCode,
     required this.showRemoteButtons,
-    this.expandNotes = false,
   });
 
   final CallsLayoutColumn column;
-  final double sharedAxisWidth;
   final CallHeaderState header;
   final List<RemoteTool> tools;
   final String selectedEquipmentCode;
   final bool showRemoteButtons;
-  final bool expandNotes;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -589,12 +668,10 @@ class _LayoutColumnWidget extends ConsumerWidget {
           if (i > 0) const SizedBox(height: 12),
           _SlotWidget(
             slot: slots[i],
-            sharedAxisWidth: sharedAxisWidth,
             header: header,
             tools: tools,
             selectedEquipmentCode: selectedEquipmentCode,
             showRemoteButtons: showRemoteButtons,
-            expandNotes: expandNotes,
           ),
         ],
       ],
@@ -605,29 +682,25 @@ class _LayoutColumnWidget extends ConsumerWidget {
 class _SlotWidget extends ConsumerWidget {
   const _SlotWidget({
     required this.slot,
-    required this.sharedAxisWidth,
     required this.header,
     required this.tools,
     required this.selectedEquipmentCode,
     required this.showRemoteButtons,
-    this.expandNotes = false,
   });
 
   final CallsLayoutSlot slot;
-  final double sharedAxisWidth;
   final CallHeaderState header;
   final List<RemoteTool> tools;
   final String selectedEquipmentCode;
   final bool showRemoteButtons;
-  final bool expandNotes;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     switch (slot) {
       case CallsLayoutSlot.notes:
-        return SizedBox(
+        return const SizedBox(
           width: double.infinity,
-          child: NotesStickyField(expandContent: expandNotes),
+          child: NotesStickyField(),
         );
       case CallsLayoutSlot.categoryPending:
         return _CategoryTimerSubmitRow(header: header);
@@ -690,7 +763,7 @@ class _CategoryTimerSubmitRow extends ConsumerWidget {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        if (constraints.maxWidth < 420) {
+        if (constraints.maxWidth < 560) {
           // Πολύ στενή στήλη: η κατηγορία από πάνω, χρονόμετρο+Καταγραφή
           // παραμένουν μαζί στην ίδια (δεύτερη) γραμμή.
           return Column(
@@ -709,13 +782,15 @@ class _CategoryTimerSubmitRow extends ConsumerWidget {
           );
         }
 
+        // Απλωμένη γραμμή: σταθερό πεδίο κατηγορίας αριστερά, χρονόμετρο
+        // δίπλα του, «Καταγραφή» καρφωμένη στη δεξιά άκρη του μπλοκ.
         return Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            Expanded(child: categoryField),
-            const SizedBox(width: 10),
+            SizedBox(width: 380, child: categoryField),
+            const SizedBox(width: 12),
             const CallStatusBar(showPendingToggle: false),
-            const SizedBox(width: 10),
+            const Spacer(),
             _buildSubmitButton(context, ref),
           ],
         );

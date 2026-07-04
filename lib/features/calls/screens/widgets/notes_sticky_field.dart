@@ -1,5 +1,4 @@
 ﻿import 'dart:async';
-import 'dart:math' as math;
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -23,12 +22,7 @@ import '../../provider/notes_field_hint_provider.dart';
 /// Το χαρτί ΔΕΝ ντύνεται ποτέ με κάρτα/τίτλο — είναι αυτόνομο widget που
 /// μοιάζει μόνο με χαρτί σημειώσεων (ρητή απόφαση σχεδίασης).
 class NotesStickyField extends ConsumerStatefulWidget {
-  const NotesStickyField({super.key, this.expandContent = false});
-
-  /// `true`: το κείμενο απλώνεται σε όλο το πλάτος του χαρτιού (γραμμή
-  /// αποκλειστικά σημειώσεων στο πρότυπο «μόνο τηλέφωνο»). `false`: το
-  /// περιεχόμενο περιορίζεται στα 400px για αναγνώσιμες γραμμές.
-  final bool expandContent;
+  const NotesStickyField({super.key});
 
   @override
   ConsumerState<NotesStickyField> createState() => NotesStickyFieldState();
@@ -276,11 +270,12 @@ class NotesStickyFieldState extends ConsumerState<NotesStickyField> {
       _controller.text = '';
     }
     final scheme = Theme.of(context).colorScheme;
+    // Το πλάτος του χαρτιού το ορίζει το layout της οθόνης (οροφή ~700px,
+    // βλ. CallsScreenLayout.kNotesColumnMaxWidth) — το κείμενο το γεμίζει.
     return LayoutBuilder(
       builder: (context, c) {
-        final contentCap = widget.expandContent ? double.infinity : 400.0;
         final maxW = c.maxWidth.isFinite && c.maxWidth > 0
-            ? math.min(contentCap, c.maxWidth)
+            ? c.maxWidth
             : 400.0;
 
         return AnimatedContainer(
