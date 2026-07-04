@@ -25,6 +25,7 @@ import '../screens/widgets/remote_connection_buttons.dart';
 import '../screens/widgets/user_info_card.dart';
 import '../../../core/errors/call_save_exception.dart';
 import '../../../core/errors/task_save_exception.dart';
+import '../../../core/widgets/section_card.dart';
 import 'calls_field_groups.dart';
 import 'calls_field_groups_provider.dart';
 import 'calls_layout_engine.dart';
@@ -562,23 +563,67 @@ class _LayoutColumnWidget extends ConsumerWidget {
   final String selectedEquipmentCode;
   final bool showRemoteButtons;
 
+  /// Slots που ντύνονται μαζί σε κοινή [SectionCard] («Στοιχεία κλήσης»).
+  static const Set<CallsLayoutSlot> _kFormClusterSlots = {
+    CallsLayoutSlot.notes,
+    CallsLayoutSlot.categoryPending,
+  };
+
+  Widget _slotWidget(CallsLayoutSlot slot) {
+    return _SlotWidget(
+      slot: slot,
+      sharedAxisWidth: sharedAxisWidth,
+      header: header,
+      tools: tools,
+      selectedEquipmentCode: selectedEquipmentCode,
+      showRemoteButtons: showRemoteButtons,
+    );
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final slots = column.slots;
+
+    // Συνεχόμενα slots φόρμας (σημειώσεις + κατηγορία/εκκρεμότητα)
+    // ομαδοποιούνται σε μία SectionCard ώστε να μην αιωρούνται «γυμνά».
+    final children = <Widget>[];
+    var i = 0;
+    while (i < slots.length) {
+      if (_kFormClusterSlots.contains(slots[i])) {
+        final run = <CallsLayoutSlot>[];
+        while (i < slots.length && _kFormClusterSlots.contains(slots[i])) {
+          run.add(slots[i]);
+          i++;
+        }
+        children.add(
+          SectionCard(
+            icon: Icons.edit_note,
+            title: 'Στοιχεία κλήσης',
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                for (var j = 0; j < run.length; j++) ...[
+                  if (j > 0) const SizedBox(height: 12),
+                  _slotWidget(run[j]),
+                ],
+              ],
+            ),
+          ),
+        );
+      } else {
+        children.add(_slotWidget(slots[i]));
+        i++;
+      }
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
       children: [
-        for (var i = 0; i < slots.length; i++) ...[
-          if (i > 0) const SizedBox(height: 12),
-          _SlotWidget(
-            slot: slots[i],
-            sharedAxisWidth: sharedAxisWidth,
-            header: header,
-            tools: tools,
-            selectedEquipmentCode: selectedEquipmentCode,
-            showRemoteButtons: showRemoteButtons,
-          ),
+        for (var k = 0; k < children.length; k++) ...[
+          if (k > 0) const SizedBox(height: 12),
+          children[k],
         ],
       ],
     );
@@ -625,7 +670,18 @@ class _SlotWidget extends ConsumerWidget {
         // Η κάρτα αγκαλιάζει το περιεχόμενό της — όχι νεκρό κενό στα δεξιά.
         return Align(
           alignment: Alignment.topLeft,
-          child: RemoteConnectionButtons(header: header, tools: tools),
+          child: SectionCard(
+            icon: Icons.desktop_windows_outlined,
+            title: 'Απομακρυσμένη σύνδεση',
+            accent: const Color(0xFF1976D2),
+            hugContent: true,
+            contentPadding: EdgeInsets.zero,
+            child: RemoteConnectionButtons(
+              header: header,
+              tools: tools,
+              framed: false,
+            ),
+          ),
         );
       case CallsLayoutSlot.equipmentHistory:
         return EquipmentRecentCallsPanel(

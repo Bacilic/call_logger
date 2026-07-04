@@ -19,10 +19,15 @@ class RemoteConnectionButtons extends ConsumerStatefulWidget {
     super.key,
     required this.header,
     required this.tools,
+    this.framed = true,
   });
 
   final CallHeaderState header;
   final List<RemoteTool> tools;
+
+  /// `false`: χωρίς δική του Card — όταν φιλοξενείται σε εξωτερική κάρτα
+  /// (π.χ. SectionCard στην οθόνη κλήσεων).
+  final bool framed;
 
   @override
   ConsumerState<RemoteConnectionButtons> createState() =>
@@ -124,10 +129,7 @@ class _RemoteConnectionButtonsState extends ConsumerState<RemoteConnectionButton
     );
     final toolsForTargets = widget.tools.isEmpty ? <RemoteTool>[] : widget.tools;
 
-    return Card(
-      elevation: 1,
-      margin: EdgeInsets.zero,
-      child: allCatalogAsync.when(
+    final content = allCatalogAsync.when(
           data: (allTools) {
             final noRows = allTools.isEmpty;
             final allInactive = allTools.isNotEmpty &&
@@ -354,7 +356,12 @@ class _RemoteConnectionButtonsState extends ConsumerState<RemoteConnectionButton
             padding: const EdgeInsets.all(12),
             child: Text('Κατάλογος εργαλείων: $e'),
           ),
-        ),
+        );
+    if (!widget.framed) return content;
+    return Card(
+      elevation: 1,
+      margin: EdgeInsets.zero,
+      child: content,
     );
   }
 
