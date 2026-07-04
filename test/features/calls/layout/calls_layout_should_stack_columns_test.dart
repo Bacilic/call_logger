@@ -11,7 +11,7 @@ void main() {
             CallsLayoutRow([
               CallsLayoutColumn.singleSlot(CallsLayoutSlot.notes),
               CallsLayoutColumn.singleSlot(CallsLayoutSlot.categoryPending),
-              CallsLayoutColumn.singleSlot(CallsLayoutSlot.submitActions),
+              CallsLayoutColumn.singleSlot(CallsLayoutSlot.remoteTools),
             ]),
           ],
         );

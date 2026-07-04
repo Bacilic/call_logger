@@ -49,12 +49,10 @@ void main() {
       expect(plan.template, CallsLayoutTemplate.a);
       expect(plan.rows.length, 3);
       expect(plan.rows[0].columns.single.slots, [CallsLayoutSlot.notes]);
+      // Κατηγορία+χρονόμετρο+Καταγραφή = ενιαίο slot (μία γραμμή, κανόνας 3).
       expect(
         plan.rows[1].columns.map((c) => c.slots.first).toList(),
-        [
-          CallsLayoutSlot.categoryPending,
-          CallsLayoutSlot.submitActions,
-        ],
+        [CallsLayoutSlot.categoryPending],
       );
       expect(plan.allSlots, isNot(contains(CallsLayoutSlot.map)));
       expect(plan.allSlots, contains(CallsLayoutSlot.globalRecent));

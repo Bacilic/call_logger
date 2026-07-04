@@ -96,9 +96,9 @@ class CallsLayoutEngine {
     }
 
     if (groups.isPhoneGroupActive) {
+      // Κατηγορία+χρονόμετρο+Καταγραφή = ενιαία γραμμή (ένα slot).
       final actionCols = <CallsLayoutColumn>[
         CallsLayoutColumn.singleSlot(CallsLayoutSlot.categoryPending),
-        CallsLayoutColumn.singleSlot(CallsLayoutSlot.submitActions),
         if (v.showEquipmentRecentPanel)
           CallsLayoutColumn.singleSlot(CallsLayoutSlot.equipmentHistory),
       ];
@@ -124,10 +124,8 @@ class CallsLayoutEngine {
           CallsLayoutSlot.notes,
           CallsLayoutSlot.categoryPending,
         ]),
-      CallsLayoutColumn.stack([
-        if (v.showRemoteTools) CallsLayoutSlot.remoteTools,
-        if (groups.isPhoneGroupActive) CallsLayoutSlot.submitActions,
-      ]),
+      if (v.showRemoteTools)
+        CallsLayoutColumn.singleSlot(CallsLayoutSlot.remoteTools),
       if (v.showEquipmentRecentPanel)
         CallsLayoutColumn.singleSlot(CallsLayoutSlot.equipmentHistory),
     ];

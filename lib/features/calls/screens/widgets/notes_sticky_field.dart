@@ -13,8 +13,22 @@ import '../../provider/call_entry_provider.dart';
 import '../../provider/notes_field_hint_provider.dart';
 
 /// Πεδίο σημειώσεων σε στυλ post-it (εκτός state για αποφυγή διαρροής μνήμης).
+///
+/// ΚΑΝΟΝΑΣ: Το τικ «Εκκρεμότητα» ζει ΜΟΝΙΜΑ μέσα στο χαρτί σημειώσεων
+/// (υποσέλιδο, κάτω-αριστερά, απέναντι από τον μετρητή χαρακτήρων), γιατί
+/// εκκρεμότητα δημιουργείται ΜΟΝΟ από τις σημειώσεις — η αποθήκευση απαιτεί
+/// μη κενές σημειώσεις για να επιτρέψει εκκρεμότητα. Καμία μελλοντική
+/// αναδιάταξη της οθόνης δεν επιτρέπεται να βγάλει το τικ έξω από το χαρτί.
+///
+/// Το χαρτί ΔΕΝ ντύνεται ποτέ με κάρτα/τίτλο — είναι αυτόνομο widget που
+/// μοιάζει μόνο με χαρτί σημειώσεων (ρητή απόφαση σχεδίασης).
 class NotesStickyField extends ConsumerStatefulWidget {
-  const NotesStickyField({super.key});
+  const NotesStickyField({super.key, this.expandContent = false});
+
+  /// `true`: το κείμενο απλώνεται σε όλο το πλάτος του χαρτιού (γραμμή
+  /// αποκλειστικά σημειώσεων στο πρότυπο «μόνο τηλέφωνο»). `false`: το
+  /// περιεχόμενο περιορίζεται στα 400px για αναγνώσιμες γραμμές.
+  final bool expandContent;
 
   @override
   ConsumerState<NotesStickyField> createState() => NotesStickyFieldState();
@@ -264,8 +278,9 @@ class NotesStickyFieldState extends ConsumerState<NotesStickyField> {
     final scheme = Theme.of(context).colorScheme;
     return LayoutBuilder(
       builder: (context, c) {
+        final contentCap = widget.expandContent ? double.infinity : 400.0;
         final maxW = c.maxWidth.isFinite && c.maxWidth > 0
-            ? math.min(400.0, c.maxWidth)
+            ? math.min(contentCap, c.maxWidth)
             : 400.0;
 
         return AnimatedContainer(
@@ -331,9 +346,12 @@ class NotesStickyFieldState extends ConsumerState<NotesStickyField> {
                         ref.read(callEntryProvider.notifier).setNotes(value),
                   ),
                   const SizedBox(height: 2),
+                  // Υποσέλιδο χαρτιού: Εκκρεμότητα αριστερά, μετρητής δεξιά.
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
+                    crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
+                      const Expanded(child: _StickyPendingToggle()),
+                      const SizedBox(width: 4),
                       IgnorePointer(
                         child: ValueListenableBuilder<TextEditingValue>(
                           valueListenable: _controller,
@@ -361,6 +379,90 @@ class NotesStickyFieldState extends ConsumerState<NotesStickyField> {
           ),
         );
       },
+    );
+  }
+}
+
+/// Τικ «Εκκρεμότητα» μέσα στο χαρτί σημειώσεων (βλ. ΚΑΝΟΝΑ στην κλάση
+/// [NotesStickyField]): ενεργό μόνο όταν υπάρχουν σημειώσεις· με άδειο χαρτί
+/// το πάτημα αναβοσβήνει το πεδίο ως υπόδειξη.
+class _StickyPendingToggle extends ConsumerWidget {
+  const _StickyPendingToggle();
+
+  /// Σκούρο πορτοκαλί «προσοχής» όταν η εκκρεμότητα είναι ενεργή —
+  /// διακριτό πάνω στο κίτρινο χαρτί.
+  static const Color _kActiveColor = Color(0xFFB25E00);
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final isPending = ref.watch(callEntryProvider.select((s) => s.isPending));
+    final notesNonEmpty = ref.watch(
+      callEntryProvider.select((s) => s.notes.trim().isNotEmpty),
+    );
+    final theme = Theme.of(context);
+
+    final labelColor = !notesNonEmpty
+        ? theme.colorScheme.onSurface.withValues(alpha: 0.38)
+        : isPending
+            ? _kActiveColor
+            : theme.colorScheme.onSurfaceVariant;
+
+    final label = Text(
+      'Εκκρεμότητα',
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: theme.textTheme.bodySmall?.copyWith(
+        color: labelColor,
+        fontWeight: isPending ? FontWeight.w600 : FontWeight.w500,
+      ),
+    );
+
+    final row = Row(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Checkbox(
+          value: isPending,
+          onChanged: notesNonEmpty
+              ? (_) => ref.read(callEntryProvider.notifier).togglePending()
+              : null,
+          activeColor: _kActiveColor,
+          visualDensity: VisualDensity.compact,
+          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          side: BorderSide(
+            color: notesNonEmpty
+                ? theme.colorScheme.onSurfaceVariant
+                : theme.colorScheme.onSurface.withValues(alpha: 0.38),
+            width: 1.5,
+          ),
+        ),
+        const SizedBox(width: 2),
+        if (notesNonEmpty)
+          Flexible(
+            child: GestureDetector(
+              onTap: () => ref.read(callEntryProvider.notifier).togglePending(),
+              child: MouseRegion(
+                cursor: SystemMouseCursors.click,
+                child: label,
+              ),
+            ),
+          )
+        else
+          Flexible(child: label),
+      ],
+    );
+
+    if (notesNonEmpty) return row;
+    // Άδειο χαρτί: το πάτημα οπουδήποτε στη ζώνη του τικ αναβοσβήνει το πεδίο.
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        behavior: HitTestBehavior.translucent,
+        onTap: () => ref
+            .read(notesFieldHintTickProvider.notifier)
+            .requestHintFlash(),
+        child: row,
+      ),
     );
   }
 }

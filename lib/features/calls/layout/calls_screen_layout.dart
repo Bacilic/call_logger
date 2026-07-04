@@ -10,7 +10,6 @@ import '../../../core/providers/settings_provider.dart';
 import '../provider/call_entry_provider.dart';
 import '../provider/call_header_provider.dart';
 import '../provider/calls_dashboard_providers.dart';
-import '../provider/notes_field_hint_provider.dart';
 import '../provider/remote_paths_provider.dart';
 import '../utils/call_remote_targets.dart';
 import '../screens/widgets/call_header_form.dart';
@@ -25,7 +24,6 @@ import '../screens/widgets/remote_connection_buttons.dart';
 import '../screens/widgets/user_info_card.dart';
 import '../../../core/errors/call_save_exception.dart';
 import '../../../core/errors/task_save_exception.dart';
-import '../../../core/widgets/section_card.dart';
 import 'calls_field_groups.dart';
 import 'calls_field_groups_provider.dart';
 import 'calls_layout_engine.dart';
@@ -266,7 +264,7 @@ class _ExpandedBottomRightAnchors extends ConsumerWidget {
   }
 }
 
-/// Κουμπί καθαρισμού φόρμας — ανεξάρτητο από πυλώνα τηλεφώνου και slot submitActions.
+/// Κουμπί καθαρισμού φόρμας — ανεξάρτητο από τον πυλώνα τηλεφώνου.
 class _ClearFormButton extends ConsumerWidget {
   const _ClearFormButton();
 
@@ -406,8 +404,16 @@ class _LayoutRowWidget extends ConsumerWidget {
   final String selectedEquipmentCode;
   final bool showRemoteButtons;
 
+  /// Γραμμή αποκλειστικά σημειώσεων (πρότυπο «μόνο τηλέφωνο»):
+  /// το χαρτί παίρνει ολόκληρη τη γραμμή, χωρίς cap στήλης.
+  bool get _isFullRowNotes =>
+      row.columns.length == 1 &&
+      row.columns.single.slots.length == 1 &&
+      row.columns.single.slots.single == CallsLayoutSlot.notes;
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final fullRowNotes = _isFullRowNotes;
     if (isNarrowViewport) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -423,6 +429,7 @@ class _LayoutRowWidget extends ConsumerWidget {
                   tools: tools,
                   selectedEquipmentCode: selectedEquipmentCode,
                   showRemoteButtons: showRemoteButtons,
+                  expandNotes: fullRowNotes,
                 ),
               ),
         ],
@@ -440,10 +447,12 @@ class _LayoutRowWidget extends ConsumerWidget {
             if (i > 0) const SizedBox(width: 16),
             Flexible(
               child: _LayoutColumnWidthCap(
-                maxWidth: _layoutColumnMaxWidth(
-                  row.columns[i],
-                  sharedAxisCap,
-                ),
+                maxWidth: fullRowNotes
+                    ? null
+                    : _layoutColumnMaxWidth(
+                        row.columns[i],
+                        sharedAxisCap,
+                      ),
                 fillCappedWidth: _columnFillsCappedWidth(row.columns[i]),
                 child: _LayoutColumnWidget(
                   column: row.columns[i],
@@ -452,6 +461,7 @@ class _LayoutRowWidget extends ConsumerWidget {
                   tools: tools,
                   selectedEquipmentCode: selectedEquipmentCode,
                   showRemoteButtons: showRemoteButtons,
+                  expandNotes: fullRowNotes,
                 ),
               ),
             ),
@@ -521,7 +531,6 @@ double? _layoutSlotMaxWidth(CallsLayoutSlot slot, double sharedAxisCap) {
       return CallsScreenLayout.kEquipmentRecentCardColumnMaxWidth;
     case CallsLayoutSlot.notes:
     case CallsLayoutSlot.categoryPending:
-    case CallsLayoutSlot.submitActions:
     case CallsLayoutSlot.remoteTools:
       return sharedAxisCap;
   }
@@ -532,14 +541,13 @@ bool _columnFillsCappedWidth(CallsLayoutColumn column) {
     switch (slot) {
       case CallsLayoutSlot.notes:
       case CallsLayoutSlot.categoryPending:
-      case CallsLayoutSlot.submitActions:
-      case CallsLayoutSlot.remoteTools:
         return true;
       case CallsLayoutSlot.map:
       case CallsLayoutSlot.callerCard:
       case CallsLayoutSlot.callerHistory:
       case CallsLayoutSlot.globalRecent:
       case CallsLayoutSlot.equipmentHistory:
+      case CallsLayoutSlot.remoteTools:
         continue;
     }
   }
@@ -554,6 +562,7 @@ class _LayoutColumnWidget extends ConsumerWidget {
     required this.tools,
     required this.selectedEquipmentCode,
     required this.showRemoteButtons,
+    this.expandNotes = false,
   });
 
   final CallsLayoutColumn column;
@@ -562,68 +571,31 @@ class _LayoutColumnWidget extends ConsumerWidget {
   final List<RemoteTool> tools;
   final String selectedEquipmentCode;
   final bool showRemoteButtons;
-
-  /// Slots που ντύνονται μαζί σε κοινή [SectionCard] («Στοιχεία κλήσης»).
-  static const Set<CallsLayoutSlot> _kFormClusterSlots = {
-    CallsLayoutSlot.notes,
-    CallsLayoutSlot.categoryPending,
-  };
-
-  Widget _slotWidget(CallsLayoutSlot slot) {
-    return _SlotWidget(
-      slot: slot,
-      sharedAxisWidth: sharedAxisWidth,
-      header: header,
-      tools: tools,
-      selectedEquipmentCode: selectedEquipmentCode,
-      showRemoteButtons: showRemoteButtons,
-    );
-  }
+  final bool expandNotes;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final slots = column.slots;
-
-    // Συνεχόμενα slots φόρμας (σημειώσεις + κατηγορία/εκκρεμότητα)
-    // ομαδοποιούνται σε μία SectionCard ώστε να μην αιωρούνται «γυμνά».
-    final children = <Widget>[];
-    var i = 0;
-    while (i < slots.length) {
-      if (_kFormClusterSlots.contains(slots[i])) {
-        final run = <CallsLayoutSlot>[];
-        while (i < slots.length && _kFormClusterSlots.contains(slots[i])) {
-          run.add(slots[i]);
-          i++;
-        }
-        children.add(
-          SectionCard(
-            icon: Icons.edit_note,
-            title: 'Στοιχεία κλήσης',
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                for (var j = 0; j < run.length; j++) ...[
-                  if (j > 0) const SizedBox(height: 12),
-                  _slotWidget(run[j]),
-                ],
-              ],
-            ),
-          ),
-        );
-      } else {
-        children.add(_slotWidget(slots[i]));
-        i++;
-      }
-    }
-
+    // Στήλες με slots φόρμας τεντώνονται στο πλάτος της στήλης· στήλες με
+    // κάρτες περιεχομένου αφήνουν τις κάρτες να αγκαλιάσουν το περιεχόμενο
+    // (έξυπνο πλάτος από την πιο επιμήκη εγγραφή, με οροφή το cap στήλης).
+    final stretch = _columnFillsCappedWidth(column);
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
+      crossAxisAlignment:
+          stretch ? CrossAxisAlignment.stretch : CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        for (var k = 0; k < children.length; k++) ...[
-          if (k > 0) const SizedBox(height: 12),
-          children[k],
+        for (var i = 0; i < slots.length; i++) ...[
+          if (i > 0) const SizedBox(height: 12),
+          _SlotWidget(
+            slot: slots[i],
+            sharedAxisWidth: sharedAxisWidth,
+            header: header,
+            tools: tools,
+            selectedEquipmentCode: selectedEquipmentCode,
+            showRemoteButtons: showRemoteButtons,
+            expandNotes: expandNotes,
+          ),
         ],
       ],
     );
@@ -638,6 +610,7 @@ class _SlotWidget extends ConsumerWidget {
     required this.tools,
     required this.selectedEquipmentCode,
     required this.showRemoteButtons,
+    this.expandNotes = false,
   });
 
   final CallsLayoutSlot slot;
@@ -646,55 +619,32 @@ class _SlotWidget extends ConsumerWidget {
   final List<RemoteTool> tools;
   final String selectedEquipmentCode;
   final bool showRemoteButtons;
+  final bool expandNotes;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     switch (slot) {
       case CallsLayoutSlot.notes:
-        return const SizedBox(
+        return SizedBox(
           width: double.infinity,
-          child: NotesStickyField(),
+          child: NotesStickyField(expandContent: expandNotes),
         );
       case CallsLayoutSlot.categoryPending:
-        return const _CategoryPendingRow();
-      case CallsLayoutSlot.submitActions:
-        return Align(
-          alignment: Alignment.centerRight,
-          child: _SubmitActionsRow(
-            header: header,
-            sharedAxisWidth: sharedAxisWidth,
-          ),
-        );
+        return _CategoryTimerSubmitRow(header: header);
       case CallsLayoutSlot.remoteTools:
         if (!showRemoteButtons) return const SizedBox.shrink();
-        // Η κάρτα αγκαλιάζει το περιεχόμενό της — όχι νεκρό κενό στα δεξιά.
-        return Align(
-          alignment: Alignment.topLeft,
-          child: SectionCard(
-            icon: Icons.desktop_windows_outlined,
-            title: 'Απομακρυσμένη σύνδεση',
-            accent: const Color(0xFF1976D2),
-            hugContent: true,
-            contentPadding: EdgeInsets.zero,
-            child: RemoteConnectionButtons(
-              header: header,
-              tools: tools,
-              framed: false,
-            ),
-          ),
-        );
+        // Χωρίς ετικέτα-τίτλο: τα εικονίδια των εργαλείων σηματοδοτούν την
+        // κάρτα. Σε στήλη start η κάρτα αγκαλιάζει το περιεχόμενό της.
+        return RemoteConnectionButtons(header: header, tools: tools);
       case CallsLayoutSlot.equipmentHistory:
         return EquipmentRecentCallsPanel(
           equipmentCode: selectedEquipmentCode,
         );
       case CallsLayoutSlot.callerCard:
+        // Σε στήλη με start alignment η κάρτα αγκαλιάζει το περιεχόμενό της.
         final user = header.selectedCaller;
         if (user == null || user.id == null) return const SizedBox.shrink();
-        // Η κάρτα αγκαλιάζει το περιεχόμενό της — όχι νεκρό κενό στα δεξιά.
-        return Align(
-          alignment: Alignment.topLeft,
-          child: UserInfoCard(user: user),
-        );
+        return UserInfoCard(user: user);
       case CallsLayoutSlot.callerHistory:
         final user = header.selectedCaller;
         if (user == null || user.id == null) return const SizedBox.shrink();
@@ -719,106 +669,57 @@ class _SlotWidget extends ConsumerWidget {
   }
 }
 
-class _CategoryPendingRow extends ConsumerWidget {
-  const _CategoryPendingRow();
+/// ΚΑΝΟΝΑΣ: Κατηγορία προβλήματος + χρονόμετρο + κουμπί «Καταγραφή» είναι μία
+/// λειτουργική ομάδα και αποδίδονται ΠΑΝΤΑ στην ίδια γραμμή. Καμία μελλοντική
+/// αναδιάταξη δεν επιτρέπεται να τα χωρίσει. (Το τικ «Εκκρεμότητα» ΔΕΝ ανήκει
+/// εδώ — ζει μόνιμα μέσα στο χαρτί σημειώσεων, βλ. NotesStickyField.)
+class _CategoryTimerSubmitRow extends ConsumerWidget {
+  const _CategoryTimerSubmitRow({required this.header});
+
+  final CallHeaderState header;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final isPending = ref.watch(callEntryProvider.select((s) => s.isPending));
-    final notesNonEmpty = ref.watch(
-      callEntryProvider.select((s) => s.notes.trim().isNotEmpty),
+    final categoryField = CategoryAutocompleteField(
+      onCategoryChanged: (text, categoryId) {
+        ref
+            .read(callEntryProvider.notifier)
+            .setCategory(text, categoryId: categoryId);
+      },
     );
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final trailing = Wrap(
-          spacing: 6,
-          runSpacing: 4,
-          crossAxisAlignment: WrapCrossAlignment.center,
-          children: [
-            Checkbox(
-              value: isPending,
-              onChanged: notesNonEmpty
-                  ? (_) => ref.read(callEntryProvider.notifier).togglePending()
-                  : null,
-            ),
-            GestureDetector(
-              onTap: notesNonEmpty
-                  ? ref.read(callEntryProvider.notifier).togglePending
-                  : () => ref
-                        .read(notesFieldHintTickProvider.notifier)
-                        .requestHintFlash(),
-              child: Text(
-                'Εκκρεμότητα',
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: notesNonEmpty
-                      ? null
-                      : Theme.of(context).colorScheme.onSurface.withValues(
-                          alpha: 0.38,
-                        ),
-                ),
-              ),
-            ),
-            const CallStatusBar(showPendingToggle: false),
-          ],
-        );
-
         if (constraints.maxWidth < 420) {
+          // Πολύ στενή στήλη: η κατηγορία από πάνω, χρονόμετρο+Καταγραφή
+          // παραμένουν μαζί στην ίδια (δεύτερη) γραμμή.
           return Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              CategoryAutocompleteField(
-                onCategoryChanged: (text, categoryId) {
-                  ref
-                      .read(callEntryProvider.notifier)
-                      .setCategory(text, categoryId: categoryId);
-                },
-              ),
+              categoryField,
               const SizedBox(height: 8),
-              trailing,
+              Row(
+                children: [
+                  const CallStatusBar(showPendingToggle: false),
+                  const Spacer(),
+                  _buildSubmitButton(context, ref),
+                ],
+              ),
             ],
           );
         }
 
         return Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            Expanded(
-              child: CategoryAutocompleteField(
-                onCategoryChanged: (text, categoryId) {
-                  ref
-                      .read(callEntryProvider.notifier)
-                      .setCategory(text, categoryId: categoryId);
-                },
-              ),
-            ),
-            const SizedBox(width: 6),
-            trailing,
+            Expanded(child: categoryField),
+            const SizedBox(width: 10),
+            const CallStatusBar(showPendingToggle: false),
+            const SizedBox(width: 10),
+            _buildSubmitButton(context, ref),
           ],
         );
       },
-    );
-  }
-}
-
-class _SubmitActionsRow extends ConsumerWidget {
-  const _SubmitActionsRow({
-    required this.header,
-    required this.sharedAxisWidth,
-  });
-
-  final CallHeaderState header;
-  final double sharedAxisWidth;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    return Wrap(
-      spacing: 4,
-      runSpacing: 10,
-      crossAxisAlignment: WrapCrossAlignment.center,
-      children: [
-        _buildSubmitButton(context, ref),
-      ],
     );
   }
 

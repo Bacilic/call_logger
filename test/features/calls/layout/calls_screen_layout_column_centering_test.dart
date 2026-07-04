@@ -211,25 +211,26 @@ void main() {
     );
 
     testWidgets(
-      'UserInfoCard: αγκαλιάζει το περιεχόμενο — όχι νεκρό κενό στα δεξιά',
+      'κάρτες περιεχομένου: πλάτος από το περιεχόμενο, όχι πλήρωση στήλης',
       (tester) async {
         await _pumpExpandedCallsScreen(tester);
         expect(find.byType(UserInfoCard), findsOneWidget);
         await pumpUntilSettled(tester, steps: 20);
 
-        final cardRect = tester.getRect(find.byType(UserInfoCard));
-        final laneRect = _laneRect(tester, find.byType(UserInfoCard));
-
+        // Με τα σύντομα δεδομένα δοκιμής, οι κάρτες πρέπει να μένουν πολύ
+        // κάτω από το παλιό γέμισμα στήλης (560px) — «έξυπνο» πλάτος.
+        final userCardWidth = tester.getSize(find.byType(UserInfoCard)).width;
         expect(
-          cardRect.width,
-          lessThanOrEqualTo(laneRect.width - kMinHugSlack),
+          userCardWidth,
+          lessThan(560 - kMinHugSlack),
           reason: greekExpectMsg(
-            'Η κάρτα χρήστη πρέπει να είναι στενότερη από τη στήλη της '
-            '(κάρτα ${cardRect.width.toStringAsFixed(1)}px, '
-            'στήλη ${laneRect.width.toStringAsFixed(1)}px)',
+            'Η κάρτα χρήστη πρέπει να αγκαλιάζει το περιεχόμενό της '
+            '(βρέθηκε ${userCardWidth.toStringAsFixed(1)}px)',
           ),
         );
 
+        final laneRect = _laneRect(tester, find.byType(UserInfoCard));
+        final cardRect = tester.getRect(find.byType(UserInfoCard));
         expect(
           cardRect.top - laneRect.top,
           lessThan(16),

@@ -245,8 +245,11 @@ class _QuickCallDialogState extends ConsumerState<QuickCallDialog> {
                               return Column(
                                 crossAxisAlignment: CrossAxisAlignment.stretch,
                                 children: [
+                                  // Η Εκκρεμότητα ζει μέσα στο χαρτί σημειώσεων
+                                  // (βλ. NotesStickyField) — εδώ μόνο χρονόμετρο.
                                   const CallStatusBar(
                                     axis: CallStatusBarAxis.horizontal,
+                                    showPendingToggle: false,
                                   ),
                                   const SizedBox(height: 8),
                                   categoryField,
@@ -263,6 +266,7 @@ class _QuickCallDialogState extends ConsumerState<QuickCallDialog> {
                               children: [
                                 const CallStatusBar(
                                   axis: CallStatusBarAxis.horizontal,
+                                  showPendingToggle: false,
                                 ),
                                 const SizedBox(width: 12),
                                 Expanded(child: categoryField),

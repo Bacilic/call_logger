@@ -4,13 +4,17 @@ import 'calls_layout_template.dart';
 /// Identifiers for widgets placed by [CallsLayoutEngine].
 enum CallsLayoutSlot {
   /// Notes sticky field (phone control group).
+  ///
+  /// ΚΑΝΟΝΑΣ: το τικ «Εκκρεμότητα» ζει ΜΟΝΙΜΑ μέσα στο χαρτί σημειώσεων
+  /// (βλ. NotesStickyField) γιατί εκκρεμότητα δημιουργείται μόνο από
+  /// σημειώσεις — καμία αναδιάταξη δεν επιτρέπεται να τα χωρίσει.
   notes,
 
-  /// Category field + pending toggle + timer (phone control group).
+  /// Κατηγορία + χρονόμετρο + κουμπί «Καταγραφή» (phone control group).
+  ///
+  /// ΚΑΝΟΝΑΣ: τα τρία αυτά στοιχεία είναι μία λειτουργική ομάδα και
+  /// αποδίδονται ΠΑΝΤΑ στην ίδια γραμμή (βλ. _CategoryTimerSubmitRow).
   categoryPending,
-
-  /// Status bar, submit, Εκκαθάριση (phone control group).
-  submitActions,
 
   /// Remote connection buttons (equipment group).
   remoteTools,
