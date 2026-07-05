@@ -36,6 +36,61 @@ class RemoteConnectionButtons extends ConsumerStatefulWidget {
 
 class _RemoteConnectionButtonsState extends ConsumerState<RemoteConnectionButtons> {
   bool _isConnecting = false;
+  bool _showAll = false;
+
+  @override
+  void didUpdateWidget(RemoteConnectionButtons oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final oldEq = oldWidget.header.selectedEquipment;
+    final newEq = widget.header.selectedEquipment;
+    final equipmentChanged =
+        oldEq?.id != newEq?.id ||
+        oldWidget.header.equipmentText.trim() !=
+            widget.header.equipmentText.trim();
+    if (equipmentChanged) {
+      _showAll = false;
+    }
+  }
+
+  Widget _buildExclusiveToolsBanner(ThemeData theme) {
+    final message = _showAll
+        ? 'Εμφανίζονται όλα τα εργαλεία'
+        : 'Εμφανίζονται μόνο τα κύρια εργαλεία';
+    final actionLabel = _showAll ? 'Μόνο τα κύρια' : 'Εμφάνιση όλων';
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            Icons.info_outline,
+            size: 18,
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              message,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ),
+          TextButton(
+            onPressed: _isConnecting
+                ? null
+                : () => setState(() => _showAll = !_showAll),
+            child: Text(actionLabel),
+          ),
+        ],
+      ),
+    );
+  }
 
   List<RemoteTool> _orderedForUi(
     List<RemoteTool> visible,
@@ -126,6 +181,11 @@ class _RemoteConnectionButtonsState extends ConsumerState<RemoteConnectionButton
     final visible = CallRemoteTargets.visibleRemoteToolsForCallState(
       widget.header,
       widget.tools,
+      applyExclusive: !_showAll,
+    );
+    final exclusiveHides = CallRemoteTargets.exclusiveHidesTools(
+      widget.header,
+      widget.tools,
     );
     final toolsForTargets = widget.tools.isEmpty ? <RemoteTool>[] : widget.tools;
 
@@ -189,6 +249,7 @@ class _RemoteConnectionButtonsState extends ConsumerState<RemoteConnectionButton
                       mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
+                        if (exclusiveHides) _buildExclusiveToolsBanner(theme),
                         Wrap(
                           spacing: 12,
                           runSpacing: 8,

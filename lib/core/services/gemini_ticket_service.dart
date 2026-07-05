@@ -1,17 +1,20 @@
-﻿import 'dart:convert';
+﻿import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
 
 import 'package:http/http.dart' as http;
 
-import 'gemini_prompt_template_syntax.dart';
+import 'ai_prompt_template_syntax.dart';
 
-export 'gemini_prompt_template_syntax.dart'
+export 'ai_prompt_template_syntax.dart'
     show
-        GeminiPromptPlaceholder,
-        GeminiPromptTemplateSyntax,
-        GeminiPromptTemplateValidation,
-        GeminiPromptTokenKind,
-        GeminiPromptTokenSpan,
-        kGeminiPromptPlaceholders;
+        AiPromptPlaceholder,
+        AiPromptTemplateSyntax,
+        AiPromptTemplateValidation,
+        AiPromptTokenKind,
+        AiPromptTokenSpan,
+        kAiPromptPlaceholders,
+        kDefaultAiPromptTemplate;
 
 const String kGeminiPrimaryModelPlaceholder = '{προτεύων μοντέλο}';
 const String kGeminiApiKeyPlaceholder = '{κλειδί API}';
@@ -172,33 +175,122 @@ class GeminiModelsProbeCache {
   }
 }
 
+/// Εύρος αποτυχίας κλήσης Gemini — καθορίζει αν αξίζει εφεδρικό μοντέλο.
+enum GeminiFailureScope {
+  /// Σφάλμα συγκεκριμένου μοντέλου (ποσόστωση, υπερφόρτωση, timeout).
+  model,
+
+  /// Σφάλμα ρύθμισης ή υποδομής — το εφεδρικό δεν θα βοηθήσει.
+  infrastructure,
+}
+
 /// Εξαίρεση κλήσης Gemini με προαιρετικό κωδικό κατάστασης HTTP.
 class GeminiException implements Exception {
-  const GeminiException(this.message, {this.statusCode});
+  const GeminiException(
+    this.message, {
+    this.statusCode,
+    this.scope,
+    this.retryAfter,
+  });
 
   final String message;
   final int? statusCode;
+  final GeminiFailureScope? scope;
+  final Duration? retryAfter;
+
+  static final RegExp _retryMessagePattern = RegExp(
+    r'retry in ([0-9.]+)s',
+    caseSensitive: false,
+  );
+
+  static final RegExp _retryDelayPattern = RegExp(r'^([0-9.]+)s$');
+
+  /// Εξάγει χρόνο αναμονής από σώμα σφάλματος Gemini (RetryInfo ή μήνυμα).
+  static Duration? extractRetryAfterFromErrorBody(String body) {
+    try {
+      final decoded = jsonDecode(body);
+      if (decoded is Map) {
+        final error = decoded['error'];
+        if (error is Map) {
+          final details = error['details'];
+          if (details is List) {
+            for (final item in details) {
+              if (item is! Map) continue;
+              final type = item['@type']?.toString() ?? '';
+              if (!type.contains('google.rpc.RetryInfo')) continue;
+              final delayRaw = item['retryDelay']?.toString().trim() ?? '';
+              final parsed = _parseRetryDelaySeconds(delayRaw);
+              if (parsed != null) return _roundedRetryDuration(parsed);
+            }
+          }
+          final message = error['message']?.toString();
+          final fromMessage = _retrySecondsFromMessage(message);
+          if (fromMessage != null) return _roundedRetryDuration(fromMessage);
+        }
+      }
+    } catch (_) {}
+    final fromBody = _retrySecondsFromMessage(body);
+    if (fromBody != null) return _roundedRetryDuration(fromBody);
+    return null;
+  }
+
+  static double? _parseRetryDelaySeconds(String raw) {
+    final match = _retryDelayPattern.firstMatch(raw.trim());
+    if (match == null) return null;
+    return double.tryParse(match.group(1)!);
+  }
+
+  static double? _retrySecondsFromMessage(String? text) {
+    if (text == null || text.isEmpty) return null;
+    final match = _retryMessagePattern.firstMatch(text);
+    if (match == null) return null;
+    return double.tryParse(match.group(1)!);
+  }
+
+  static Duration _roundedRetryDuration(double seconds) {
+    final roundedUp = seconds.ceil();
+    return Duration(seconds: roundedUp + 1);
+  }
+
+  /// Ταξινομεί σφάλμα σε model vs infrastructure.
+  static GeminiFailureScope classifyFailureScope({
+    int? statusCode,
+    Object? error,
+    String? message,
+  }) {
+    if (error is TimeoutException) return GeminiFailureScope.model;
+    if (error is SocketException || error is http.ClientException) {
+      return GeminiFailureScope.infrastructure;
+    }
+
+    final msg = message?.trim() ?? '';
+    if (msg.contains('Δεν έχει οριστεί Gemini API key.') ||
+        msg.contains('Μη έγκυρο URL endpoint Gemini.')) {
+      return GeminiFailureScope.infrastructure;
+    }
+    if (msg.contains('Η απάντηση Gemini ήταν κενή.') ||
+        msg.contains('Μη έγκυρη μορφή JSON στην απάντηση Gemini.')) {
+      return GeminiFailureScope.model;
+    }
+
+    switch (statusCode) {
+      case 400:
+      case 401:
+      case 403:
+        return GeminiFailureScope.infrastructure;
+      case 404:
+      case 429:
+      case 500:
+      case 503:
+        return GeminiFailureScope.model;
+      default:
+        return GeminiFailureScope.model;
+    }
+  }
 
   @override
   String toString() => message;
 }
-
-const String kDefaultGeminiPromptTemplate = '''Δημιούργησε τίτλο και πλήρη περιγραφή για ticket helpdesk στο Lansweeper.
-
-Υπάλληλος: {Υπάλληλος}. Τμήμα: {Τμήμα}.
-{@Εξοπλισμός}Εξοπλισμός: {Εξοπλισμός}. {@/Εξοπλισμός}
-{@Κατηγορία}Κατηγορία: {Κατηγορία}. {@/Κατηγορία}
-
-Πρόβλημα: {Πρόβλημα}
-{@Λύση}Λύση (προσχέδιο): {Λύση}. {@/Λύση}
-
-Τρέχον προσχέδιο τίτλου: {Τίτλος}
-Τρέχουσα περιγραφή: {Σημειώσεις}
-
-Βελτίωσε το προσχέδιο με βάση τα στοιχεία κλήσης.
-Η περιγραφή (description) να περιέχει ΜΟΝΟ το πρόβλημα/αιτιολόγηση.
-Η λύση/αντιμετώπιση να μπει στο πεδίο solution, όχι στην description.
-Απάντησε ΜΟΝΟ σε JSON χωρίς markdown: {"title":"...","description":"...","solution":"..."}''';
 
 abstract final class GeminiTicketService {
 
@@ -235,17 +327,17 @@ abstract final class GeminiTicketService {
     };
 
     var prompt = promptTemplate.trim().isEmpty
-        ? kDefaultGeminiPromptTemplate
+        ? kDefaultAiPromptTemplate
         : promptTemplate;
-    prompt = GeminiPromptTemplateSyntax.stripEmptyOptionalBlocks(
+    prompt = AiPromptTemplateSyntax.stripEmptyOptionalBlocks(
       prompt,
       emptyTokens,
     );
     for (final entry in values.entries) {
       prompt = prompt.replaceAll(entry.key, entry.value);
     }
-    prompt = GeminiPromptTemplateSyntax.stripBlockMarkers(prompt);
-    return GeminiPromptTemplateSyntax.compactWhitespace(prompt);
+    prompt = AiPromptTemplateSyntax.stripBlockMarkers(prompt);
+    return AiPromptTemplateSyntax.compactWhitespace(prompt);
   }
 
   /// Κανονικοποιεί παλιά endpoints (`{apiKey}`, σταθερό μοντέλο) στο πρότυπο placeholders.
@@ -331,7 +423,10 @@ abstract final class GeminiTicketService {
   }) async {
     final key = apiKey.trim();
     if (key.isEmpty) {
-      throw const GeminiException('Δεν έχει οριστεί Gemini API key.');
+      throw const GeminiException(
+        'Δεν έχει οριστεί Gemini API key.',
+        scope: GeminiFailureScope.infrastructure,
+      );
     }
 
     final httpClient = client ?? http.Client();
@@ -588,7 +683,10 @@ abstract final class GeminiTicketService {
   }) async {
     final key = apiKey.trim();
     if (key.isEmpty) {
-      throw const GeminiException('Δεν έχει οριστεί Gemini API key.');
+      throw const GeminiException(
+        'Δεν έχει οριστεί Gemini API key.',
+        scope: GeminiFailureScope.infrastructure,
+      );
     }
 
     final resolvedEndpoint = resolveEndpoint(
@@ -598,7 +696,10 @@ abstract final class GeminiTicketService {
     );
     final uri = Uri.tryParse(resolvedEndpoint);
     if (uri == null || !uri.hasScheme || uri.host.isEmpty) {
-      throw const GeminiException('Μη έγκυρο URL endpoint Gemini.');
+      throw const GeminiException(
+        'Μη έγκυρο URL endpoint Gemini.',
+        scope: GeminiFailureScope.infrastructure,
+      );
     }
 
     final prompt = buildPrompt(
@@ -616,46 +717,78 @@ abstract final class GeminiTicketService {
     final httpClient = client ?? http.Client();
     final http.Response response;
     try {
-      response = await httpClient
-          .post(
-            uri,
-            headers: const {'Content-Type': 'application/json'},
-            body: jsonEncode(<String, dynamic>{
-              'contents': [
-                <String, dynamic>{
-                  'parts': [
-                    <String, String>{'text': prompt},
-                  ],
+      try {
+        response = await httpClient
+            .post(
+              uri,
+              headers: const {'Content-Type': 'application/json'},
+              body: jsonEncode(<String, dynamic>{
+                'contents': [
+                  <String, dynamic>{
+                    'parts': [
+                      <String, String>{'text': prompt},
+                    ],
+                  },
+                ],
+                'generationConfig': <String, String>{
+                  'responseMimeType': 'application/json',
                 },
-              ],
-              'generationConfig': <String, String>{
-                'responseMimeType': 'application/json',
-              },
-            }),
-          )
-          .timeout(const Duration(seconds: 30));
+              }),
+            )
+            .timeout(const Duration(seconds: 30));
+      } on TimeoutException {
+        throw const GeminiException(
+          'Η κλήση Gemini έληξε (timeout).',
+          scope: GeminiFailureScope.model,
+        );
+      } on SocketException catch (e) {
+        throw GeminiException(
+          e.message,
+          scope: GeminiFailureScope.infrastructure,
+        );
+      } on http.ClientException catch (e) {
+        throw GeminiException(
+          e.message,
+          scope: GeminiFailureScope.infrastructure,
+        );
+      }
     } finally {
       if (client == null) httpClient.close();
     }
 
     if (response.statusCode < 200 || response.statusCode >= 300) {
       final apiMessage = _extractApiErrorMessage(response.body);
+      final scope = GeminiException.classifyFailureScope(
+        statusCode: response.statusCode,
+        message: apiMessage,
+      );
+      final retryAfter = GeminiException.extractRetryAfterFromErrorBody(
+        response.body,
+      );
       throw GeminiException(
         apiMessage == null
             ? 'Αποτυχία HTTP (${response.statusCode}) κατά την κλήση Gemini.'
             : 'Αποτυχία Gemini (${response.statusCode}): $apiMessage',
         statusCode: response.statusCode,
+        scope: scope,
+        retryAfter: retryAfter,
       );
     }
 
     final text = _extractResponseText(response.body);
     if (text == null || text.trim().isEmpty) {
-      throw const GeminiException('Η απάντηση Gemini ήταν κενή.');
+      throw const GeminiException(
+        'Η απάντηση Gemini ήταν κενή.',
+        scope: GeminiFailureScope.model,
+      );
     }
 
     final parsed = parseSuggestionJson(text);
     if (parsed == null) {
-      throw const GeminiException('Μη έγκυρη μορφή JSON στην απάντηση Gemini.');
+      throw const GeminiException(
+        'Μη έγκυρη μορφή JSON στην απάντηση Gemini.',
+        scope: GeminiFailureScope.model,
+      );
     }
 
     final normalized = normalizeSuggestionFields(

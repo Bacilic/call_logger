@@ -4,6 +4,7 @@ import 'package:call_logger/core/models/remote_tool_role.dart';
 import 'package:call_logger/features/calls/models/equipment_model.dart';
 import 'package:call_logger/features/calls/provider/smart_entity_selector_provider.dart';
 import 'package:call_logger/features/calls/utils/call_remote_targets.dart';
+import 'package:call_logger/features/calls/utils/equipment_remote_param_key.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 RemoteTool _tool({
@@ -91,18 +92,122 @@ void main() {
       expect(vis, isEmpty);
     });
 
-    test('visibleRemoteToolsForCallState: exclusive suppression κρατά μόνο αποκλειστικά', () {
-      final eq = EquipmentModel(
-        code: '99',
-        remoteParams: const {'2': '123456789'},
-        defaultRemoteTool: '1',
-      );
-      final s = SmartEntitySelectorState(selectedEquipment: eq);
-      final vnc = _tool(id: 1, role: ToolRole.vnc, isExclusive: false);
-      final ad = _tool(id: 2, role: ToolRole.anydesk, isExclusive: true);
-      final vis = CallRemoteTargets.visibleRemoteToolsForCallState(s, [vnc, ad]);
-      expect(vis.map((t) => t.id).toList(), [2]);
-    });
+    test(
+      'visibleRemoteToolsForCallState: exclusiveToolKey στον εξοπλισμό κρατά μόνο το εργαλείο',
+      () {
+        final eq = EquipmentModel(
+          code: '999',
+          remoteParams: {
+            '2': '123456789',
+            EquipmentRemoteParamKey.exclusiveToolKey: '2',
+          },
+          defaultRemoteTool: '1',
+        );
+        final s = SmartEntitySelectorState(selectedEquipment: eq);
+        final vnc = _tool(id: 1, role: ToolRole.vnc);
+        final ad = _tool(id: 2, role: ToolRole.anydesk);
+        final vis = CallRemoteTargets.visibleRemoteToolsForCallState(s, [vnc, ad]);
+        expect(vis.map((t) => t.id).toList(), [2]);
+      },
+    );
+
+    test(
+      'visibleRemoteToolsForCallState: χωρίς exclusiveToolKey εμφανίζονται όλα ακόμα κι αν tool.isExclusive',
+      () {
+        final eq = EquipmentModel(
+          code: '999',
+          remoteParams: const {'2': '123456789'},
+          defaultRemoteTool: '1',
+        );
+        final s = SmartEntitySelectorState(selectedEquipment: eq);
+        final vnc = _tool(id: 1, role: ToolRole.vnc, isExclusive: false);
+        final ad = _tool(id: 2, role: ToolRole.anydesk, isExclusive: true);
+        final vis = CallRemoteTargets.visibleRemoteToolsForCallState(s, [vnc, ad]);
+        expect(vis.map((t) => t.id).toList(), [2, 1]);
+      },
+    );
+
+    test(
+      'visibleRemoteToolsForCallState: exclusiveToolKey σε άγνωστο id → όλα τα έγκυρα',
+      () {
+        final eq = EquipmentModel(
+          code: '999',
+          remoteParams: {
+            '2': '123456789',
+            EquipmentRemoteParamKey.exclusiveToolKey: '99',
+          },
+          defaultRemoteTool: '1',
+        );
+        final s = SmartEntitySelectorState(selectedEquipment: eq);
+        final vnc = _tool(id: 1, role: ToolRole.vnc);
+        final ad = _tool(id: 2, role: ToolRole.anydesk);
+        final vis = CallRemoteTargets.visibleRemoteToolsForCallState(s, [vnc, ad]);
+        expect(vis.map((t) => t.id).toList(), [2, 1]);
+      },
+    );
+
+    test(
+      'visibleRemoteToolsForCallState: applyExclusive false vs true με exclusiveToolKey',
+      () {
+        final eq = EquipmentModel(
+          code: '999',
+          remoteParams: {
+            '2': '123456789',
+            EquipmentRemoteParamKey.exclusiveToolKey: '2',
+          },
+          defaultRemoteTool: '1',
+        );
+        final s = SmartEntitySelectorState(selectedEquipment: eq);
+        final vnc = _tool(id: 1, role: ToolRole.vnc);
+        final ad = _tool(id: 2, role: ToolRole.anydesk);
+        final catalog = [vnc, ad];
+
+        final withExclusive = CallRemoteTargets.visibleRemoteToolsForCallState(
+          s,
+          catalog,
+          applyExclusive: true,
+        );
+        final withoutExclusive = CallRemoteTargets.visibleRemoteToolsForCallState(
+          s,
+          catalog,
+          applyExclusive: false,
+        );
+
+        expect(withExclusive.map((t) => t.id).toList(), [2]);
+        expect(withoutExclusive.map((t) => t.id).toList(), [2, 1]);
+        expect(CallRemoteTargets.exclusiveHidesTools(s, catalog), isTrue);
+      },
+    );
+
+    test(
+      'exclusiveHidesTools: false χωρίς exclusiveToolKey — ίδια λίστα true/false',
+      () {
+        final eq = EquipmentModel(
+          code: '999',
+          remoteParams: const {'2': '123456789'},
+          defaultRemoteTool: '1',
+        );
+        final s = SmartEntitySelectorState(selectedEquipment: eq);
+        final vnc = _tool(id: 1, role: ToolRole.vnc);
+        final ad = _tool(id: 2, role: ToolRole.anydesk);
+        final catalog = [vnc, ad];
+
+        final withExclusive = CallRemoteTargets.visibleRemoteToolsForCallState(
+          s,
+          catalog,
+          applyExclusive: true,
+        );
+        final withoutExclusive = CallRemoteTargets.visibleRemoteToolsForCallState(
+          s,
+          catalog,
+          applyExclusive: false,
+        );
+
+        expect(withExclusive.map((t) => t.id).toList(), [2, 1]);
+        expect(withoutExclusive.map((t) => t.id).toList(), [2, 1]);
+        expect(CallRemoteTargets.exclusiveHidesTools(s, catalog), isFalse);
+      },
+    );
 
     test('όλα chips αποεπιλεγμένα → default id null (parse)', () {
       expect(RemoteToolsRepository.parseDefaultRemoteToolId(null), isNull);

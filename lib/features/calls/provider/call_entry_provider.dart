@@ -11,17 +11,12 @@ import '../../tasks/models/task_filter.dart';
 import '../../tasks/providers/task_service_provider.dart';
 import '../../tasks/providers/tasks_provider.dart';
 import '../models/call_model.dart';
-import '../models/equipment_model.dart';
-import '../models/user_model.dart';
 import 'call_header_provider.dart';
 import 'call_mutation_refresh.dart';
 
 /// Κατάσταση φόρμας εισαγωγής κλήσης.
 class CallEntryState {
   CallEntryState({
-    this.internalDigits = '',
-    this.selectedUser,
-    this.selectedEquipment,
     this.notes = '',
     this.category = '',
     this.categoryId,
@@ -32,9 +27,6 @@ class CallEntryState {
     this.isSubmitting = false,
   });
 
-  final String internalDigits;
-  final UserModel? selectedUser;
-  final EquipmentModel? selectedEquipment;
   final String notes;
   final String category;
   final int? categoryId;
@@ -51,9 +43,6 @@ class CallEntryState {
   final bool isSubmitting;
 
   CallEntryState copyWith({
-    String? internalDigits,
-    UserModel? selectedUser,
-    EquipmentModel? selectedEquipment,
     String? notes,
     String? category,
     int? categoryId,
@@ -64,9 +53,6 @@ class CallEntryState {
     bool? isSubmitting,
   }) {
     return CallEntryState(
-      internalDigits: internalDigits ?? this.internalDigits,
-      selectedUser: selectedUser ?? this.selectedUser,
-      selectedEquipment: selectedEquipment ?? this.selectedEquipment,
       notes: notes ?? this.notes,
       category: category ?? this.category,
       categoryId: categoryId ?? this.categoryId,
@@ -236,10 +222,7 @@ class CallEntryNotifier extends Notifier<CallEntryState> {
         final callerName =
             user?.name ??
             (callerTextRaw.trim().isEmpty ? null : callerTextRaw.trim());
-        final taskFields = callsFormPendingTaskFields(
-          ref,
-          internalDigits: state.internalDigits,
-        );
+        final taskFields = callsFormPendingTaskFields(ref);
         final categoryName = state.category.trim().isEmpty
             ? null
             : state.category.trim();
@@ -326,10 +309,7 @@ class CallEntryNotifier extends Notifier<CallEntryState> {
     state = state.copyWith(isSubmitting: true);
     try {
       stopTimer();
-      final taskFields = callsFormPendingTaskFields(
-        ref,
-        internalDigits: state.internalDigits,
-      );
+      final taskFields = callsFormPendingTaskFields(ref);
       final categoryName = state.category.trim().isEmpty
           ? null
           : state.category.trim();
@@ -376,9 +356,6 @@ class CallEntryNotifier extends Notifier<CallEntryState> {
   void reset() {
     stopTimer();
     state = CallEntryState(
-      internalDigits: '',
-      selectedUser: null,
-      selectedEquipment: null,
       notes: '',
       category: '',
       categoryId: null,
@@ -405,10 +382,8 @@ final callEntryProvider = NotifierProvider<CallEntryNotifier, CallEntryState>(
   String? equipmentText,
   String? departmentText,
 })
-callsFormPendingTaskFields(Ref ref, {required String internalDigits}) {
+callsFormPendingTaskFields(Ref ref) {
   final smart = ref.read(callSmartEntityProvider);
-  final digitsOnly = internalDigits.replaceAll(RegExp(r'[^0-9]'), '');
-  final phoneId = digitsOnly.isEmpty ? null : int.tryParse(digitsOnly);
   final phone = smart.selectedPhone?.trim();
   final phoneText = (phone == null || phone.isEmpty) ? null : phone;
   final userTrim = smart.callerDisplayText.trim();
@@ -422,7 +397,8 @@ callsFormPendingTaskFields(Ref ref, {required String internalDigits}) {
     equipmentId: smart.selectedEquipment?.id,
     departmentId:
         smart.selectedDepartmentId ?? smart.selectedCaller?.departmentId,
-    phoneId: phoneId,
+    // phones.id δεν επιτρέπεται ποτέ να προκύπτει από τα ψηφία του αριθμού.
+    phoneId: null,
     phoneText: phoneText,
     userText: userText,
     equipmentText: equipmentText,

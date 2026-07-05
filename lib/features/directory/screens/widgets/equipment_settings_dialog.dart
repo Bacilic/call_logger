@@ -1,3 +1,4 @@
+import '../../../../core/widgets/dialog_snackbar_scope.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -27,7 +28,7 @@ class _EquipmentSettingsDialog extends ConsumerStatefulWidget {
 }
 
 class _EquipmentSettingsDialogState
-    extends ConsumerState<_EquipmentSettingsDialog> {
+    extends ConsumerState<_EquipmentSettingsDialog> with DialogSnackbarHost {
   final SettingsService _settings = SettingsService();
   late final SpellCheckController _controller;
 
@@ -58,7 +59,7 @@ class _EquipmentSettingsDialogState
       await _settings.setEquipmentTypes(_controller.text);
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        showDialogSnackBar(
           SnackBar(
             content: Text('Σφάλμα αποθήκευσης: $e'),
             backgroundColor: Theme.of(context).colorScheme.error,
@@ -86,16 +87,24 @@ class _EquipmentSettingsDialogState
     spellEnabledAsync.whenData(_controller.setSpellCheckEnabled);
 
     if (_loading) {
-      return AlertDialog(
+      return DialogSnackbarScope(
+        messengerKey: dialogMessengerKey,
+        child: Center(
+          child: AlertDialog(
         content: const SizedBox(
           width: 360,
           height: 100,
           child: Center(child: CircularProgressIndicator()),
         ),
+          ),
+        ),
       );
     }
 
-    return AlertDialog(
+    return DialogSnackbarScope(
+      messengerKey: dialogMessengerKey,
+      child: Center(
+        child: AlertDialog(
       title: const Text('Τύποι εξοπλισμού'),
       content: SizedBox(
         width: 480,
@@ -139,6 +148,8 @@ class _EquipmentSettingsDialogState
           child: const Text('Αποθήκευση'),
         ),
       ],
+        ),
+      ),
     );
   }
 }

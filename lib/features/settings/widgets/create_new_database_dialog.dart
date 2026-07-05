@@ -147,7 +147,15 @@ class CreateNewDatabaseFlow {
     Future<void> Function()? onReloadSettingsState,
     VoidCallback? onFlowSuccessCloseParent,
     bool showSuccessSnackBar = true,
+    void Function(SnackBar snackBar)? showSnackBar,
   }) async {
+    void showFlowSnackBar(SnackBar snackBar) {
+      if (showSnackBar != null) {
+        showSnackBar(snackBar);
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(snackBar);
+      }
+    }
     String? currentDb;
     try {
       currentDb = (await DatabaseHelper.instance.database).path;
@@ -173,7 +181,7 @@ class CreateNewDatabaseFlow {
       currentDbForCompare = (await DatabaseHelper.instance.database).path;
     } catch (_) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        showFlowSnackBar(
           SnackBar(
             content: const Text('Δεν ήταν δυνατή η ανάγνωση της τρέχουσας βάσης.'),
             backgroundColor: Theme.of(context).colorScheme.error,
@@ -290,7 +298,7 @@ class CreateNewDatabaseFlow {
     }
 
     if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
+      showFlowSnackBar(
         SnackBar(
           content: Text(result.errorMessage ?? 'Αποτυχία.'),
           backgroundColor: Theme.of(context).colorScheme.error,

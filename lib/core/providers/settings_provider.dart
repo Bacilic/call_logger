@@ -38,5 +38,5 @@ final callsScreenCardsVisibilityProvider =
 final showQuickCallFabProvider =
     FutureProvider<bool>((ref) => SettingsService().getShowQuickCallFab());
 
-// Πρότυπο/προεπιλογή προτροπής Gemini (SQLite app_settings): βλ. dashboard_provider —
+// Πρότυπο/προεπιλογή προτροπής Gemini (SQLite app_settings): βλ. gemini_settings_provider —
 // [geminiPromptTemplateProvider], [geminiPromptTemplateUserDefaultProvider].

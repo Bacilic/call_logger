@@ -1,3 +1,4 @@
+import '../../../../core/widgets/dialog_snackbar_scope.dart';
 import 'package:flutter/material.dart';
 
 import '../../../../core/utils/spell_check.dart';
@@ -22,7 +23,8 @@ class BulkDepartmentEditDialog extends StatefulWidget {
       _BulkDepartmentEditDialogState();
 }
 
-class _BulkDepartmentEditDialogState extends State<BulkDepartmentEditDialog> {
+class _BulkDepartmentEditDialogState extends State<BulkDepartmentEditDialog>
+    with DialogSnackbarHost {
   static const _fieldKeys = ['building', 'color', 'notes'];
 
   static const _conflictHint =
@@ -151,7 +153,10 @@ class _BulkDepartmentEditDialogState extends State<BulkDepartmentEditDialog> {
     final theme = Theme.of(context);
     final outlineColor = theme.colorScheme.outline;
     final bodyW = _dialogBodyWidth();
-    return AlertDialog(
+    return DialogSnackbarScope(
+      messengerKey: dialogMessengerKey,
+      child: Center(
+        child: AlertDialog(
       constraints: BoxConstraints(maxWidth: bodyW + 72),
       title: Text(
         'Μαζική επεξεργασία (${widget.selectedDepartments.length} τμήματα)',
@@ -238,6 +243,8 @@ class _BulkDepartmentEditDialogState extends State<BulkDepartmentEditDialog> {
           child: const Text('Αποθήκευση'),
         ),
       ],
+        ),
+      ),
     );
   }
 }

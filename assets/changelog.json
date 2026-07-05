@@ -1,6 +1,6 @@
 ﻿[
   {
-    "version": "Unreleased",
+    "version": "0.19.0",
     "date": "",
     "added": [
       "Άξονας 2 — συμβάσεις βάσης: αυτοματοποιημένα τεστ sql_isolation, schema_model_consistency και model_null_safety",
@@ -9,6 +9,7 @@
       "Lansweeper · έλεγχος προτροπής Gemini: πεδίο warnings στο validation (διακριτό από errors, δεν επηρεάζει isValid), έλεγχος διπλής οδηγίας JSON και επανειλημμένου block, προειδοποίηση για placeholder μέσα σε block άλλου ονόματος, εμφάνιση warnings στο πεδίο (amber)"
     ],
     "changed": [
+      "Ιστορικό αλλαγών (διάλογος): η ενότητα Unreleased εμφανίζεται ως «Προς Δημοσίευση» στην κορυφή της λίστας όταν έχει καταχωρήσεις· αποκρύπτεται όταν είναι κενή",
       "SQL isolation: μεταφορά audit/tasks/integrity/lamp SQL στο core/database και δρομολόγηση raw SQL μέσω repositories",
       "Εξαρτήσεις: αναβάθμιση dependency_overrides (analyzer 14, test 1.31.2, meta, dbus, hooks, image 4.9.1 κ.ά.) και package_info_plus ^10.2.0· το intl παραμένει 0.20.2 (pin από Flutter SDK).",
       "Lansweeper · πρότυπο προτροπής Gemini: μεταφορά επεξεργασίας σε ξεχωριστό διάλογο (εικονίδιο στη φόρμα καταχώρησης)· έλεγχος κλειδιών JSON title/description/solution και υπόδειξη blueprint",
@@ -19,6 +20,8 @@
       "Γρήγορη καταγραφή κλήσης: προστασία από άστοχο κλικ εκτός διαλόγου — διπλό αναβόσβημα πλαισίου (χωρίς μήνυμα), όπως στις σημειώσεις/εκκρεμότητα"
     ],
     "fixed": [
+      "Ξεκίνα από την αρχή: έλεγχος ανοιχτής κλήσης με πεδία έξυπνου επιλογέα (όχι νεκρά πεδία CallEntryState)",
+      "Εκκρεμότητα από φόρμα κλήσεων: phone_id ποτέ από ψηφία αριθμού· αφαίρεση νεκρών πεδίων CallEntryState",
       "Λάμπα · μεταφορά κάτοχου: συγχρονισμός phones.department_id με τμήμα μέσω PhoneDepartmentPolicy (ίδια ροή με Κατάλογο)",
       "Λάμπα · μεταφορά τμήματος: αποθήκευση office_phones στη department_phones — επεξεργάσιμο πεδίο, ένωση υπαρχόντων ∪ Λάμπα, PhoneDepartmentPolicy",
       "Λάμπα · μεταφορά τμήματος: ιστορικό level ως κείμενο — αντιστοίχιση σε building_map_floors, όχι int.tryParse ως floor_id",

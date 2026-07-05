@@ -12,6 +12,7 @@ import 'package:call_logger/core/services/lookup_service.dart';
 import 'package:call_logger/features/calls/models/equipment_model.dart';
 import 'package:call_logger/features/calls/provider/lookup_provider.dart';
 import 'package:call_logger/features/calls/provider/remote_paths_provider.dart';
+import 'package:call_logger/features/calls/utils/equipment_remote_param_key.dart';
 import 'package:call_logger/features/directory/providers/equipment_directory_provider.dart';
 import 'package:call_logger/features/directory/screens/widgets/equipment_form_dialog.dart';
 import 'package:flutter/material.dart';
@@ -30,6 +31,8 @@ const _kNewEquipmentCode = 'EQ-CHAR-9001';
 const _kRemoteVncToolName = 'UltraVNC Test';
 const _kRemoteVncParamValue = '10.0.0.55';
 
+const _kRemoteAnyDeskToolName = 'AnyDesk Test';
+
 RemoteTool get _kTestVncRemoteTool => RemoteTool(
       id: 1,
       name: _kRemoteVncToolName,
@@ -43,6 +46,22 @@ RemoteTool get _kTestVncRemoteTool => RemoteTool(
 RemoteToolFormPair get _kTestVncFormPair => (
       label: _kRemoteVncToolName,
       key: '1',
+      acceptsFileParam: false,
+    );
+
+RemoteTool get _kTestAnyDeskRemoteTool => RemoteTool(
+      id: 2,
+      name: _kRemoteAnyDeskToolName,
+      role: ToolRole.anydesk,
+      executablePath: r'C:\anydesk\ad.exe',
+      launchMode: 'direct_exec',
+      sortOrder: 2,
+      isActive: true,
+    );
+
+RemoteToolFormPair get _kTestAnyDeskFormPair => (
+      label: _kRemoteAnyDeskToolName,
+      key: '2',
       acceptsFileParam: false,
     );
 
@@ -284,7 +303,7 @@ void main() {
 
         expect(find.text(_kEditEquipmentTitle), findsOneWidget);
 
-        await tester.tapAt(const Offset(8, 8));
+        await tester.tap(find.widgetWithText(TextButton, 'Ακύρωση'));
         await pumpUntilSettled(tester);
         expect(find.textContaining(_kUnsavedChangesPrompt), findsNothing);
         expect(find.text(_kEditEquipmentTitle), findsNothing);
@@ -301,8 +320,23 @@ void main() {
           );
         });
 
+        await pumpUntilSettledLong(tester);
+        expect(
+          find.textContaining('Δεν υπάρχουν ενεργά εργαλεία'),
+          findsOneWidget,
+          reason: greekExpectMsg(
+            'Η φόρμα ολοκληρώνει bootstrap πριν την επεξεργασία πεδίων',
+          ),
+        );
+
         await tester.enterText(_locationField(), 'Νέα τοποθεσία δοκιμής');
         await pumpUntilSettled(tester);
+        final saveButton = find.widgetWithText(FilledButton, 'Αποθήκευση');
+        expect(
+          tester.widget<FilledButton>(saveButton).onPressed,
+          isNotNull,
+          reason: greekExpectMsg('Η αλλαγή τοποθεσίας ενεργοποιεί την αποθήκευση'),
+        );
         await tester.tapAt(const Offset(8, 8));
         await pumpUntilSettled(tester);
 
@@ -367,6 +401,110 @@ void main() {
           reason: greekExpectMsg(
             'Η αποθηκευμένη τιμή παραμέτρου εμφανίζεται στο πεδίο',
           ),
+        );
+      },
+    );
+
+    testWidgets(
+      'αποκλειστικό εργαλείο: αποθήκευση __exclusive_tool__ και καθάρισμα με αποεπιλογή chip',
+      (tester) async {
+        tester.view.physicalSize = const Size(1600, 900);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        const code = 'EQ-EXCLUSIVE-01';
+        final container = ProviderContainer(
+          overrides: _equipmentFormProviderOverrides(
+            catalog: [_kTestVncRemoteTool, _kTestAnyDeskRemoteTool],
+            pairs: [_kTestVncFormPair, _kTestAnyDeskFormPair],
+          ),
+        );
+        addTearDown(container.dispose);
+
+        late EquipmentDirectoryNotifier notifier;
+        await tester.runAsync(() async {
+          await container.read(lookupServiceProvider.future);
+          notifier = container.read(equipmentDirectoryProvider.notifier);
+          await notifier.load();
+          await _openEquipmentFormInDialog(tester, container, notifier: notifier);
+        });
+
+        await tester.enterText(_codeField(), code);
+        await pumpUntilSettled(tester);
+
+        await tester.tap(find.widgetWithText(FilterChip, _kRemoteVncToolName));
+        await pumpUntilSettled(tester);
+        await tester.tap(find.widgetWithText(FilterChip, _kRemoteAnyDeskToolName));
+        await pumpUntilSettled(tester);
+
+        await tester.enterText(
+          find.widgetWithText(
+            TextFormField,
+            'Παράμετρος · $_kRemoteVncToolName',
+          ),
+          '10.0.0.55',
+        );
+        await pumpUntilSettled(tester);
+        await tester.enterText(
+          find.widgetWithText(
+            TextFormField,
+            'Παράμετρος · $_kRemoteAnyDeskToolName',
+          ),
+          '123456789',
+        );
+        await pumpUntilSettled(tester);
+
+        await tester.tap(
+          find.byWidgetPredicate(
+            (w) =>
+                w is DropdownButtonFormField<int?> &&
+                w.decoration.labelText ==
+                    'Αποκλειστικό εργαλείο (μόνο αυτό στην κλήση)',
+          ),
+        );
+        await pumpUntilSettled(tester);
+        await tester.tap(find.text(_kRemoteAnyDeskToolName).last);
+        await pumpUntilSettled(tester);
+
+        await tester.tap(find.widgetWithText(FilledButton, 'Προσθήκη'));
+        await pumpUntilSettled(tester);
+        await _pumpUntilEquipmentSaveCompletes(tester);
+
+        final savedFirst = await tester.runAsync(() => _loadEquipmentByCode(code));
+        expect(savedFirst, isNotNull);
+        expect(
+          savedFirst!.remoteParams[EquipmentRemoteParamKey.exclusiveToolKey],
+          '2',
+        );
+
+        await tester.runAsync(() async {
+          await container.read(lookupServiceProvider.future);
+          await notifier.load();
+          await _openEquipmentFormInDialog(
+            tester,
+            container,
+            initialEquipment: savedFirst,
+            notifier: notifier,
+          );
+        });
+
+        await tester.tap(find.widgetWithText(FilterChip, _kRemoteAnyDeskToolName));
+        await pumpUntilSettled(tester);
+
+        await tester.tap(find.widgetWithText(FilledButton, 'Αποθήκευση'));
+        await pumpUntilSettled(tester);
+        await _pumpUntilEquipmentSaveCompletes(tester);
+
+        final savedAfter = await tester.runAsync(() => _loadEquipmentByCode(code));
+        expect(savedAfter, isNotNull);
+        expect(
+          savedAfter!.remoteParams.containsKey(
+            EquipmentRemoteParamKey.exclusiveToolKey,
+          ),
+          isFalse,
         );
       },
     );

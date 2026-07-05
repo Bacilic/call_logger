@@ -1,4 +1,5 @@
-﻿import 'package:flutter/material.dart';
+﻿import '../../../../core/widgets/dialog_snackbar_scope.dart' show DialogSnackbarHost;
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/database/database_helper.dart';
@@ -64,6 +65,8 @@ mixin EquipmentFormDialogStateHost on State<EquipmentFormDialog> {
   int? get _selectedUserId;
   int? get _defaultRemoteToolId;
   set _defaultRemoteToolId(int? value);
+  int? get _exclusiveRemoteToolId;
+  set _exclusiveRemoteToolId(int? value);
   Map<String, String> get _remoteParamValues;
   Set<String> get _expandedRemoteKeys;
   Map<String, TextEditingController> get _remoteParamControllers;
@@ -83,6 +86,7 @@ mixin EquipmentFormDialogStateHost on State<EquipmentFormDialog> {
 
 class _EquipmentFormDialogState extends State<EquipmentFormDialog>
     with
+        DialogSnackbarHost,
         EquipmentFormDialogStateHost,
         EquipmentFormDismissGuardMixin,
         EquipmentFormRemoteParamsMixin {
@@ -118,6 +122,10 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog>
   /// Προεπιλεγμένο εργαλείο (id)· υπολογίζεται από τα επιλεγμένα chips κατά `sort_order`.
   @override
   int? _defaultRemoteToolId;
+
+  /// Αποκλειστικό εργαλείο για κλήση (id)· αποθηκεύεται στο `remote_params`.
+  @override
+  int? _exclusiveRemoteToolId;
 
   /// Τιμές παραμέτρων ανά κλειδί εργαλείου (συγχρονίζεται με `remote_params`).
   @override
@@ -166,7 +174,7 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog>
     }
     for (final entry in _remoteParamValues.entries) {
       if (_expandedRemoteKeys.contains(entry.key)) continue;
-      if (EquipmentRemoteParamKey.isRemoteParamStashKey(entry.key)) continue;
+      if (EquipmentRemoteParamKey.isReservedKey(entry.key)) continue;
       final v = entry.value.trim();
       if (v.isEmpty) continue;
       final norm = _isVncLikeParamKey(entry.key, catalog)
@@ -174,7 +182,11 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog>
           : v;
       out[EquipmentRemoteParamKey.remoteParamStashKeyFor(entry.key)] = norm;
     }
-    return out;
+    final effectiveId = (_exclusiveRemoteToolId != null &&
+            _expandedRemoteKeys.contains('$_exclusiveRemoteToolId'))
+        ? _exclusiveRemoteToolId
+        : null;
+    return EquipmentRemoteParamKey.withExclusiveToolId(out, effectiveId);
   }
   @override
   void initState() {
@@ -375,7 +387,7 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog>
       if (equipment.id != null &&
           widget.notifier.hasDuplicateCode(code, excludeId: equipment.id)) {
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
+        showDialogSnackBar(
           const SnackBar(
             content: Text(
               'Υπάρχει ήδη εξοπλισμός με αυτόν τον κωδικό. Διορθώστε τα δεδομένα.',
@@ -400,7 +412,7 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog>
     }
     if (widget.notifier.hasDuplicateCode(code)) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      showDialogSnackBar(
         const SnackBar(
           content: Text(
             'Υπάρχει ήδη εξοπλισμός με αυτόν τον κωδικό. Διορθώστε τα δεδομένα.',
@@ -430,7 +442,9 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog>
 
   @override
   Widget build(BuildContext context) {
-    return PopScope(
+    return ScaffoldMessenger(
+      key: dialogMessengerKey,
+      child: PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) async {
         if (didPop) return;
@@ -870,7 +884,8 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog>
           child: Text(_isEdit ? 'Αποθήκευση' : 'Προσθήκη'),
         ),
       ],
-    ),
+      ),
+      ),
     );
   }
 }

@@ -1,19 +1,19 @@
 // Widget test: μηχανισμός trigger-based overlay εισαγωγής στο πεδίο προτροπής Gemini.
 //
 // Ολόκληρο αρχείο:
-//   flutter test test/features/history/gemini_prompt_template_trigger_overlay_test.dart
+//   flutter test test/features/history/ai_prompt_template_trigger_overlay_test.dart
 
-import 'package:call_logger/core/services/gemini_prompt_template_controller.dart';
-import 'package:call_logger/features/history/widgets/lansweeper/gemini_prompt_template_field.dart';
+import 'package:call_logger/core/services/ai_prompt_template_controller.dart';
+import 'package:call_logger/features/history/widgets/lansweeper/ai_prompt_template_field.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-Future<GeminiPromptTemplateTextEditingController> _pumpField(
+Future<AiPromptTemplateTextEditingController> _pumpField(
   WidgetTester tester, {
   String initialText = '',
 }) async {
-  final controller = GeminiPromptTemplateTextEditingController(
+  final controller = AiPromptTemplateTextEditingController(
     text: initialText,
   );
   addTearDown(controller.dispose);
@@ -23,7 +23,7 @@ Future<GeminiPromptTemplateTextEditingController> _pumpField(
       home: Scaffold(
         body: Padding(
           padding: const EdgeInsets.all(24),
-          child: GeminiPromptTemplateField(controller: controller),
+          child: AiPromptTemplateField(controller: controller),
         ),
       ),
     ),
@@ -33,7 +33,7 @@ Future<GeminiPromptTemplateTextEditingController> _pumpField(
 }
 
 void main() {
-  group('GeminiPromptTemplateField · trigger overlay', () {
+  group('AiPromptTemplateField · trigger overlay', () {
     testWidgets('το πληκτρολόγημα { ενεργοποιεί το overlay προτάσεων',
         (tester) async {
       await _pumpField(tester);

@@ -1,6 +1,7 @@
 ﻿import 'dart:io';
 import 'dart:typed_data';
 
+import '../../../core/widgets/dialog_snackbar_scope.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -51,7 +52,7 @@ class DictionarySettingsDialog extends ConsumerStatefulWidget {
 }
 
 class _DictionarySettingsDialogState
-    extends ConsumerState<DictionarySettingsDialog> {
+    extends ConsumerState<DictionarySettingsDialog> with DialogSnackbarHost {
   final _settings = SettingsService();
   late final TextEditingController _sourcePathCtrl;
   late final TextEditingController _exportPathCtrl;
@@ -157,7 +158,7 @@ class _DictionarySettingsDialogState
       if (mounted) {
         _markSourcePathSaved('');
         setState(() {});
-        ScaffoldMessenger.of(context).showSnackBar(
+        showDialogSnackBar(
           const SnackBar(content: Text('Αφαιρέθηκε διαδρομή πυρήνα λεξικού')),
         );
       }
@@ -167,7 +168,7 @@ class _DictionarySettingsDialogState
     final validation = await validateCoreDictionaryFile(t);
     if (validation != null) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        showDialogSnackBar(
           SnackBar(content: Text(validation)),
         );
       }
@@ -178,12 +179,12 @@ class _DictionarySettingsDialogState
     if (!mounted) return;
     if (!ok) {
       final err = ref.read(coreLexiconProvider).lastError ?? 'Αποτυχία φόρτωσης.';
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(err)));
+      showDialogSnackBar(SnackBar(content: Text(err)));
       return;
     }
     _markSourcePathSaved(t);
     setState(() {});
-    ScaffoldMessenger.of(context).showSnackBar(
+    showDialogSnackBar(
       const SnackBar(content: Text('Αποθηκεύτηκε και φορτώθηκε λεξικό-πυρήνας')),
     );
   }
@@ -192,7 +193,7 @@ class _DictionarySettingsDialogState
     final t = _exportPathCtrl.text.trim();
     await _settings.setDictionaryExportPath(t.isEmpty ? null : t);
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
+      showDialogSnackBar(
         const SnackBar(content: Text('Αποθηκεύτηκε διαδρομή εξαγωγής')),
       );
     }
@@ -202,7 +203,7 @@ class _DictionarySettingsDialogState
     final t = _lexiconCategoriesCtrl.text.trim();
     if (t.isEmpty) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        showDialogSnackBar(
           const SnackBar(
             content: Text('Ορίστε τουλάχιστον μία κατηγορία (χωρισμένες με κόμμα)'),
           ),
@@ -215,7 +216,7 @@ class _DictionarySettingsDialogState
     if (mounted) {
       _markLexiconCategoriesSaved(t);
       setState(() {});
-      ScaffoldMessenger.of(context).showSnackBar(
+      showDialogSnackBar(
         const SnackBar(content: Text('Αποθηκεύτηκαν κατηγορίες λεξικού')),
       );
     }
@@ -241,7 +242,7 @@ class _DictionarySettingsDialogState
         final path = CoreLexiconService.instance.state.path ?? p;
         _sourcePathCtrl.text = path;
         _markSourcePathSaved(path);
-        ScaffoldMessenger.of(context).showSnackBar(
+        showDialogSnackBar(
           const SnackBar(
             content: Text('Το λεξικό-πυρήνας αντιγράφηκε και φορτώθηκε'),
           ),
@@ -249,7 +250,7 @@ class _DictionarySettingsDialogState
       } else {
         final err =
             ref.read(coreLexiconProvider).lastError ?? 'Αποτυχία εγκατάστασης.';
-        ScaffoldMessenger.of(context).showSnackBar(
+        showDialogSnackBar(
           SnackBar(content: Text(err)),
         );
       }
@@ -313,14 +314,14 @@ class _DictionarySettingsDialogState
     ref.listen<LexiconLanguageRecalcState>(lexiconLanguageRecalcProvider,
         (prev, next) {
       if (next is LexiconLanguageRecalcSuccess) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        showDialogSnackBar(
           const SnackBar(
             content: Text('Ολοκληρώθηκε ο επανέλεγχος γλωσσών'),
           ),
         );
         ref.read(lexiconLanguageRecalcProvider.notifier).acknowledge();
       } else if (next is LexiconLanguageRecalcError) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        showDialogSnackBar(
           SnackBar(content: Text(next.message)),
         );
         ref.read(lexiconLanguageRecalcProvider.notifier).acknowledge();
@@ -329,7 +330,10 @@ class _DictionarySettingsDialogState
 
     final theme = Theme.of(context);
 
-    return AlertDialog(
+    return DialogSnackbarScope(
+      messengerKey: dialogMessengerKey,
+      child: Center(
+        child: AlertDialog(
       title: const Text('Ρυθμίσεις λεξικού'),
       content: SizedBox(
         width: 480,
@@ -500,6 +504,8 @@ class _DictionarySettingsDialogState
           child: const Text('Κλείσιμο'),
         ),
       ],
+        ),
+      ),
     );
   }
 }

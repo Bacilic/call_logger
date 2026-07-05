@@ -4,8 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 
-import '../../../../core/services/gemini_prompt_template_controller.dart';
-import '../../../../core/services/gemini_prompt_template_syntax.dart';
+import '../../../../core/services/ai_prompt_template_controller.dart';
+import '../../../../core/services/ai_prompt_template_syntax.dart';
 
 /// Είδος πρότασης στο overlay εισαγωγής: μεμονωμένος δεσμευτής θέσης ή block.
 enum _PromptSuggestionKind { placeholder, block }
@@ -25,13 +25,13 @@ class _PromptSuggestion {
 
 /// Πεδίο προτροπής Gemini με χρωματισμό placeholders/blocks και έλεγχο συντακτικού.
 ///
-/// Πέρα από τον χρωματισμό (μέσω [GeminiPromptTemplateTextEditingController]),
+/// Πέρα από τον χρωματισμό (μέσω [AiPromptTemplateTextEditingController]),
 /// προσφέρει μηχανισμό trigger-based εισαγωγής: όταν ο χρήστης πληκτρολογεί `{`
 /// (και δεν βρίσκεται ήδη μέσα σε ολοκληρωμένο token `{...}`), εμφανίζεται
 /// floating overlay κάτω από τον δρομέα με φιλτραρισμένη λίστα δεσμευτών θέσης
 /// και blocks.
-class GeminiPromptTemplateField extends StatefulWidget {
-  const GeminiPromptTemplateField({
+class AiPromptTemplateField extends StatefulWidget {
+  const AiPromptTemplateField({
     required this.controller,
     this.onChanged,
     this.minLines = 5,
@@ -39,19 +39,19 @@ class GeminiPromptTemplateField extends StatefulWidget {
     super.key,
   });
 
-  final GeminiPromptTemplateTextEditingController controller;
+  final AiPromptTemplateTextEditingController controller;
   final ValueChanged<String>? onChanged;
   final int minLines;
   final int maxLines;
 
   @override
-  State<GeminiPromptTemplateField> createState() =>
-      _GeminiPromptTemplateFieldState();
+  State<AiPromptTemplateField> createState() =>
+      _AiPromptTemplateFieldState();
 }
 
-class _GeminiPromptTemplateFieldState extends State<GeminiPromptTemplateField> {
-  GeminiPromptTemplateValidation _validation =
-      GeminiPromptTemplateValidation.valid;
+class _AiPromptTemplateFieldState extends State<AiPromptTemplateField> {
+  AiPromptTemplateValidation _validation =
+      AiPromptTemplateValidation.valid;
 
   static const _kShortColorHint =
       'Πράσινο: Δεσμευτές Θέσης · Μπλε: Περιοχές · Μωβ: JSON απάντησης';
@@ -82,24 +82,24 @@ class _GeminiPromptTemplateFieldState extends State<GeminiPromptTemplateField> {
   void initState() {
     super.initState();
     _allSuggestions = _buildAllSuggestions();
-    _focusNode = FocusNode(debugLabel: 'GeminiPromptTemplateField')
+    _focusNode = FocusNode(debugLabel: 'AiPromptTemplateField')
       ..onKeyEvent = _handleKeyEvent;
     _focusNode.addListener(_handleFocusChange);
     _scrollController.addListener(_handleFieldScroll);
     _lastText = widget.controller.text;
     widget.controller.addListener(_onTextChanged);
-    _validation = GeminiPromptTemplateSyntax.validate(widget.controller.text);
+    _validation = AiPromptTemplateSyntax.validate(widget.controller.text);
   }
 
   @override
-  void didUpdateWidget(covariant GeminiPromptTemplateField oldWidget) {
+  void didUpdateWidget(covariant AiPromptTemplateField oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.controller != widget.controller) {
       _closeOverlay();
       oldWidget.controller.removeListener(_onTextChanged);
       widget.controller.addListener(_onTextChanged);
       _lastText = widget.controller.text;
-      _validation = GeminiPromptTemplateSyntax.validate(widget.controller.text);
+      _validation = AiPromptTemplateSyntax.validate(widget.controller.text);
     }
   }
 
@@ -116,17 +116,17 @@ class _GeminiPromptTemplateFieldState extends State<GeminiPromptTemplateField> {
 
   static List<_PromptSuggestion> _buildAllSuggestions() {
     return <_PromptSuggestion>[
-      for (final placeholder in kGeminiPromptPlaceholders)
+      for (final placeholder in kAiPromptPlaceholders)
         _PromptSuggestion(
-          name: GeminiPromptTemplateSyntax.placeholderNameFromToken(
+          name: AiPromptTemplateSyntax.placeholderNameFromToken(
             placeholder.token,
           ),
           label: placeholder.label,
           kind: _PromptSuggestionKind.placeholder,
         ),
-      for (final placeholder in kGeminiPromptPlaceholders)
+      for (final placeholder in kAiPromptPlaceholders)
         _PromptSuggestion(
-          name: GeminiPromptTemplateSyntax.placeholderNameFromToken(
+          name: AiPromptTemplateSyntax.placeholderNameFromToken(
             placeholder.token,
           ),
           label: 'Block ${placeholder.label}',
@@ -137,7 +137,7 @@ class _GeminiPromptTemplateFieldState extends State<GeminiPromptTemplateField> {
 
   void _onTextChanged() {
     final text = widget.controller.text;
-    final next = GeminiPromptTemplateSyntax.validate(text);
+    final next = AiPromptTemplateSyntax.validate(text);
     if (next.isValid != _validation.isValid ||
         next.errors.join() != _validation.errors.join() ||
         next.warnings.join() != _validation.warnings.join()) {
@@ -314,8 +314,8 @@ class _GeminiPromptTemplateFieldState extends State<GeminiPromptTemplateField> {
       insert = '{${suggestion.name}}';
       caretOffset = insert.length;
     } else {
-      final open = GeminiPromptTemplateSyntax.blockOpenTag(suggestion.name);
-      final close = GeminiPromptTemplateSyntax.blockCloseTag(suggestion.name);
+      final open = AiPromptTemplateSyntax.blockOpenTag(suggestion.name);
+      final close = AiPromptTemplateSyntax.blockCloseTag(suggestion.name);
       insert = '$open$close';
       caretOffset = open.length;
     }
@@ -465,7 +465,7 @@ class _GeminiPromptTemplateFieldState extends State<GeminiPromptTemplateField> {
     final text = controller.text;
     final start = selection.start >= 0 ? selection.start : text.length;
     final end = selection.end >= 0 ? selection.end : text.length;
-    final insert = kGeminiJsonResponseBlueprint;
+    final insert = kAiJsonResponseBlueprint;
     final newText = text.replaceRange(start, end, insert);
     controller.value = TextEditingValue(
       text: newText,
@@ -584,7 +584,7 @@ class _GeminiPromptTemplateFieldState extends State<GeminiPromptTemplateField> {
           child: InputDecorator(
             key: _fieldKey,
             decoration: InputDecoration(
-              labelText: 'Προτροπή Gemini',
+              labelText: 'Προτροπή Τεχνητής Νοημοσύνης',
               border: const OutlineInputBorder(),
               alignLabelWithHint: true,
               errorText: validation.isValid ? null : validation.errors.first,

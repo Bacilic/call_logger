@@ -17,7 +17,9 @@ void refreshAfterCallMutation(
   if (invalidateHistory) {
     ref.invalidate(historyCallsProvider);
     ref.invalidate(historyCategoryDateCallCountProvider);
+    ref.invalidate(totalCallsCountProvider);
     ref.invalidate(dashboardStatsProvider);
+    ref.invalidate(dashboardCallsForReportProvider);
   }
   ref.invalidate(globalRecentCallsProvider);
   if (callerId != null) {

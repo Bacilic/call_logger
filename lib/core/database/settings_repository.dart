@@ -25,6 +25,7 @@ const String kGeminiEndpointSettingKey = 'gemini_endpoint';
 const String kGeminiPrimaryModelSettingKey = 'gemini_primary_model';
 const String kGeminiFallbackEnabledSettingKey = 'gemini_fallback_enabled';
 const String kGeminiFallbackModelSettingKey = 'gemini_fallback_model';
+const String kGeminiAutoResubmitSettingKey = 'gemini_auto_resubmit';
 const String kGeminiModelsProbeCacheSettingKey = 'gemini_models_probe_cache';
 
 /// Προεπιλεγμένο URL φόρμας νέου αιτήματος Lansweeper (web).

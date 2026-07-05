@@ -32,6 +32,7 @@ mixin EquipmentFormDismissGuardMixin on EquipmentFormDialogStateHost {
     }.toList()
       ..sort();
     for (final k in remoteKeys) {
+      if (EquipmentRemoteParamKey.isReservedKey(k)) continue;
       sb
         ..write('\u001e')
         ..write(k)
@@ -40,7 +41,18 @@ mixin EquipmentFormDismissGuardMixin on EquipmentFormDialogStateHost {
         ..write('\u001f')
         ..write(_expandedRemoteKeys.contains(k));
     }
+    sb
+      ..write('\u001e')
+      ..write(_exclusiveRemoteToolId ?? '');
     return sb.toString();
+  }
+
+  String _signatureExclusiveSegment(List<String> parts) =>
+      parts.length > 8 ? parts.last : '';
+
+  String _signatureRemoteTail(List<String> parts) {
+    if (parts.length <= 9) return '';
+    return parts.sublist(8, parts.length - 1).join('\u001e');
   }
 
   @override
@@ -73,11 +85,12 @@ mixin EquipmentFormDismissGuardMixin on EquipmentFormDialogStateHost {
     if ('${_defaultRemoteToolId ?? ''}' != initAt(7)) {
       labels.add('Προεπιλεγμένο εργαλείο');
     }
-    final initRemote = init.length > 8 ? init.sublist(8).join('\u001e') : '';
-    final curRemote = _formStateSignature().split('\u001e');
-    final curRemoteTail =
-        curRemote.length > 8 ? curRemote.sublist(8).join('\u001e') : '';
-    if (initRemote != curRemoteTail) {
+    final curParts = _formStateSignature().split('\u001e');
+    if (_signatureExclusiveSegment(init) !=
+        _signatureExclusiveSegment(curParts)) {
+      labels.add('Αποκλειστικό εργαλείο');
+    }
+    if (_signatureRemoteTail(init) != _signatureRemoteTail(curParts)) {
       labels.add('Απομακρυσμένη σύνδεση');
     }
     return labels;
@@ -151,7 +164,9 @@ mixin EquipmentFormDismissGuardMixin on EquipmentFormDialogStateHost {
   }
 
   Future<void> _requestClose() async {
-    _tryCaptureFormBaseline();
+    if (widget.initialEquipment != null && !_didPruneUnknownRemoteKeys) {
+      return;
+    }
     if (!_shouldConfirmDismissOnClose) {
       if (mounted) Navigator.of(context).pop();
       return;

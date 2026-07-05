@@ -1,10 +1,10 @@
 // Widget test: επεξεργασία προτύπου προτροπής — dirty-state, αποθήκευση, προεπιλογές.
 //
 // Ολόκληρο αρχείο:
-//   flutter test test/features/history/gemini_prompt_template_editor_dialog_test.dart
+//   flutter test test/features/history/ai_prompt_template_editor_dialog_test.dart
 
-import 'package:call_logger/features/history/providers/dashboard_provider.dart';
-import 'package:call_logger/features/history/widgets/lansweeper/gemini_prompt_template_editor_dialog.dart';
+import 'package:call_logger/features/history/providers/gemini_settings_provider.dart';
+import 'package:call_logger/features/history/widgets/lansweeper/ai_prompt_template_editor_dialog.dart';
 import 'package:call_logger/features/history/widgets/lansweeper/lansweeper_sync_form.dart';
 import 'package:call_logger/core/widgets/spell_check_controller.dart';
 import 'package:flutter/material.dart';
@@ -47,7 +47,7 @@ Widget _wrapDialog({
     overrides: _editorDialogOverrides(),
     child: MaterialApp(
       home: Scaffold(
-        body: GeminiPromptTemplateEditorDialog(
+        body: AiPromptTemplateEditorDialog(
           savedTemplate: savedTemplate,
           onSave: onSave,
         ),
@@ -100,7 +100,7 @@ void main() {
     });
   });
 
-  group('GeminiPromptTemplateEditorDialog · dirty-state', () {
+  group('AiPromptTemplateEditorDialog · dirty-state', () {
     testWidgets('Αποθήκευση ανενεργή χωρίς αλλαγές', (tester) async {
       tester.view.physicalSize = const Size(1200, 1600);
       tester.view.devicePixelRatio = 1.0;
@@ -215,7 +215,7 @@ void main() {
                       context: context,
                       builder: (ctx) => ProviderScope(
                         overrides: _editorDialogOverrides(),
-                        child: GeminiPromptTemplateEditorDialog(
+                        child: AiPromptTemplateEditorDialog(
                           savedTemplate: _kValidSavedTemplate,
                           onSave: (_) async {},
                         ),
@@ -233,12 +233,12 @@ void main() {
 
       await tester.tap(find.text('Άνοιγμα'));
       await tester.pumpAndSettle();
-      expect(find.text('Πρότυπο προτροπής Gemini'), findsOneWidget);
+      expect(find.text('Πρότυπο προτροπής Τεχνητής Νοημοσύνης'), findsOneWidget);
 
       await tester.tap(_closeButton);
       await tester.pumpAndSettle();
 
-      expect(find.text('Πρότυπο προτροπής Gemini'), findsNothing);
+      expect(find.text('Πρότυπο προτροπής Τεχνητής Νοημοσύνης'), findsNothing);
     });
 
     testWidgets('μπλοκάρει αποθήκευση μη έγκυρου προτύπου', (tester) async {
@@ -270,7 +270,7 @@ void main() {
     });
   });
 
-  group('GeminiPromptTemplateEditorDialog · προεπιλογές', () {
+  group('AiPromptTemplateEditorDialog · προεπιλογές', () {
     testWidgets(
       'Επαναφορά χωρίς προσωπική προεπιλογή φορτώνει εργοστασιακό πρότυπο',
       (tester) async {
@@ -297,7 +297,7 @@ void main() {
         expect(
           find.textContaining('Δημιούργησε τίτλο'),
           findsOneWidget,
-          reason: 'Φορτώθηκε το kDefaultGeminiPromptTemplate',
+          reason: 'Φορτώθηκε το kDefaultAiPromptTemplate',
         );
       },
     );

@@ -16,15 +16,31 @@ class ChangelogService {
         'Το changelog.json πρέπει να είναι λίστα εγγραφών.',
       );
     }
-    final entries = decoded
+    final parsed = decoded
         .cast<dynamic>()
         .map(
           (e) => ChangelogEntry.fromJson(Map<String, dynamic>.from(e as Map)),
         )
         .where((e) => e.version.isNotEmpty)
         .toList();
-    entries.sort((a, b) => _compareVersionsDesc(a.version, b.version));
-    return entries;
+
+    ChangelogEntry? unreleased;
+    final released = <ChangelogEntry>[];
+
+    for (final entry in parsed) {
+      if (entry.isUnreleased) {
+        unreleased = entry;
+      } else {
+        released.add(entry);
+      }
+    }
+
+    released.sort((a, b) => _compareVersionsDesc(a.version, b.version));
+
+    if (unreleased != null && unreleased.hasContent) {
+      return [unreleased, ...released];
+    }
+    return released;
   }
 
   /// Σύγκριση semver τύπου major.minor.patch (φθίνουσα σειρά).

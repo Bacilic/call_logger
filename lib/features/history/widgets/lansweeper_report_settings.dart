@@ -41,18 +41,18 @@ mixin LansweeperReportSettingsMixin on LansweeperReportDialogStateHost {
     );
   }
 
-  Future<void> _openGeminiPromptTemplateEditorDialog() async {
+  Future<void> _openAiPromptTemplateEditorDialog() async {
     final savedTemplate = ref.read(geminiPromptTemplateProvider);
     await showDialog<void>(
       context: context,
-      builder: (ctx) => GeminiPromptTemplateEditorDialog(
+      builder: (ctx) => AiPromptTemplateEditorDialog(
         savedTemplate: savedTemplate,
         onSave: (text) async {
           await ref
               .read(geminiPromptTemplateProvider.notifier)
               .setPromptTemplate(text);
-          if (_geminiPromptTemplateController.text != text) {
-            _geminiPromptTemplateController.text = text;
+          if (_aiPromptTemplateController.text != text) {
+            _aiPromptTemplateController.text = text;
           }
         },
       ),
@@ -67,7 +67,7 @@ mixin LansweeperReportSettingsMixin on LansweeperReportDialogStateHost {
       await launchUrl(uri, mode: LaunchMode.externalApplication);
     }
     if (!mounted) return;
-    _showDialogSnackBar(
+    showDialogSnackBar(
       const SnackBar(content: Text('Άνοιξε ο σύνδεσμος: aistudio.google.com')),
     );
   }
@@ -82,7 +82,7 @@ mixin LansweeperReportSettingsMixin on LansweeperReportDialogStateHost {
       await launchUrl(uri, mode: LaunchMode.externalApplication);
     }
     if (!mounted) return;
-    _showDialogSnackBar(
+    showDialogSnackBar(
       SnackBar(content: Text('Άνοιξε ο σύνδεσμος: $chosen')),
     );
   }
@@ -97,7 +97,7 @@ mixin LansweeperReportSettingsMixin on LansweeperReportDialogStateHost {
       await launchUrl(uri, mode: LaunchMode.externalApplication);
     }
     if (!mounted) return;
-    _showDialogSnackBar(
+    showDialogSnackBar(
       SnackBar(content: Text('Άνοιξε ο σύνδεσμος: $chosen')),
     );
   }
@@ -112,7 +112,7 @@ mixin LansweeperReportSettingsMixin on LansweeperReportDialogStateHost {
       await launchUrl(uri, mode: LaunchMode.externalApplication);
     }
     if (!mounted) return;
-    _showDialogSnackBar(
+    showDialogSnackBar(
       SnackBar(content: Text('Άνοιξε ο σύνδεσμος: $chosen')),
     );
   }
@@ -127,7 +127,7 @@ mixin LansweeperReportSettingsMixin on LansweeperReportDialogStateHost {
       await launchUrl(uri, mode: LaunchMode.externalApplication);
     }
     if (!mounted) return;
-    _showDialogSnackBar(
+    showDialogSnackBar(
       SnackBar(content: Text('Άνοιξε ο σύνδεσμος: $chosen')),
     );
   }
@@ -150,70 +150,23 @@ mixin LansweeperReportSettingsMixin on LansweeperReportDialogStateHost {
   void _persistLansweeperSettingsSafely() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      unawaited(
-        ref
-            .read(lansweeperApiUrlProvider.notifier)
-            .setApiUrl(_lansweeperApiUrlController.text),
-      );
-      unawaited(
-        ref
-            .read(lansweeperTicketFormUrlProvider.notifier)
-            .setTicketFormUrl(_lansweeperTicketFormUrlController.text),
-      );
-      unawaited(
-        ref
-            .read(lansweeperTicketViewUrlProvider.notifier)
-            .setTicketViewUrl(_lansweeperTicketViewUrlController.text),
-      );
-      unawaited(
-        ref
-            .read(lansweeperApiKeyProvider.notifier)
-            .setApiKey(_lansweeperApiKeyController.text),
-      );
-      unawaited(
-        ref
-            .read(lansweeperAgentUsernameProvider.notifier)
-            .setAgentUsername(_lansweeperAgentUsernameController.text),
-      );
-      unawaited(
-        ref
-            .read(lansweeperHelpdeskLoginUrlProvider.notifier)
-            .setLoginUrl(_lansweeperLoginUrlController.text),
-      );
-      unawaited(
-        ref
-            .read(lansweeperHelpdeskWebUsernameProvider.notifier)
-            .setUsername(_lansweeperHelpdeskUsernameController.text),
-      );
-      unawaited(
-        ref
-            .read(lansweeperHelpdeskWebPasswordProvider.notifier)
-            .setPassword(_lansweeperHelpdeskPasswordController.text),
-      );
-      unawaited(
-        ref
-            .read(geminiApiKeyProvider.notifier)
-            .setApiKey(_geminiApiKeyController.text),
-      );
-      unawaited(
-        ref
-            .read(geminiPromptTemplateProvider.notifier)
-            .setPromptTemplate(_geminiPromptTemplateController.text),
-      );
-      unawaited(
-        ref
-            .read(geminiEndpointProvider.notifier)
-            .setEndpoint(_geminiEndpointController.text),
-      );
-      unawaited(
-        ref
-            .read(geminiPrimaryModelProvider.notifier)
-            .setPrimaryModel(_geminiPrimaryModelController.text),
-      );
-      unawaited(
-        ref
-            .read(geminiFallbackModelProvider.notifier)
-            .setFallbackModel(_geminiFallbackModelController.text),
+      persistLansweeperSettings(
+        ref,
+        LansweeperSettingsValues(
+          apiUrl: _lansweeperApiUrlController.text,
+          ticketFormUrl: _lansweeperTicketFormUrlController.text,
+          ticketViewUrl: _lansweeperTicketViewUrlController.text,
+          apiKey: _lansweeperApiKeyController.text,
+          agentUsername: _lansweeperAgentUsernameController.text,
+          loginUrl: _lansweeperLoginUrlController.text,
+          helpdeskUsername: _lansweeperHelpdeskUsernameController.text,
+          helpdeskPassword: _lansweeperHelpdeskPasswordController.text,
+          geminiApiKey: _geminiApiKeyController.text,
+          geminiPromptTemplate: _aiPromptTemplateController.text,
+          geminiEndpoint: _geminiEndpointController.text,
+          geminiPrimaryModel: _geminiPrimaryModelController.text,
+          geminiFallbackModel: _geminiFallbackModelController.text,
+        ),
       );
     });
   }

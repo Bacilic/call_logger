@@ -6,7 +6,7 @@ import '../../../core/services/lansweeper_agent_api_probe.dart';
 import '../../../core/services/lansweeper_host_reachability.dart';
 import '../models/lansweeper_connection_status.dart';
 import '../widgets/lansweeper/lansweeper_url_rules.dart';
-import 'dashboard_provider.dart';
+import 'lansweeper_settings_provider.dart';
 
 class LansweeperConnectionProbeNotifier
     extends Notifier<LansweeperConnectionStatus> {

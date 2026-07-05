@@ -1,3 +1,4 @@
+import '../../../../core/widgets/dialog_snackbar_scope.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -136,7 +137,8 @@ class _BuildingMapFloorDepartmentsDialog extends ConsumerStatefulWidget {
 }
 
 class _BuildingMapFloorDepartmentsDialogState
-    extends ConsumerState<_BuildingMapFloorDepartmentsDialog> {
+    extends ConsumerState<_BuildingMapFloorDepartmentsDialog>
+    with DialogSnackbarHost {
   final TextEditingController _searchCtrl = TextEditingController();
   final ScrollController _floorDeptListScrollController =
       ScrollController();
@@ -324,7 +326,7 @@ class _BuildingMapFloorDepartmentsDialogState
     if (!mounted) return;
     _selected.clear();
     setState(() {});
-    ScaffoldMessenger.of(context).showSnackBar(
+    showDialogSnackBar(
       SnackBar(
         content: Text(
           'Αφαιρέθηκαν ${selected.length} τμήματα από αυτό το φύλλο.',
@@ -479,7 +481,10 @@ class _BuildingMapFloorDepartmentsDialogState
 
     final allVisible = all.isNotEmpty && all.every((d) => !d.isHiddenOnMap);
 
-    return AlertDialog(
+    return DialogSnackbarScope(
+      messengerKey: dialogMessengerKey,
+      child: Center(
+        child: AlertDialog(
       titlePadding: const EdgeInsets.fromLTRB(24, 20, 8, 0),
       contentPadding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
       title: Row(
@@ -654,6 +659,8 @@ class _BuildingMapFloorDepartmentsDialogState
           child: const Text('Κλείσιμο'),
         ),
       ],
+        ),
+      ),
     );
   }
 }

@@ -4,14 +4,60 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/database/database_helper.dart';
 import '../../../core/database/equipment_repository.dart';
 import '../../../core/models/remote_tool.dart';
+import '../../../core/models/remote_tool_role.dart';
 import '../../../core/widgets/remote_tool_icon.dart';
+import '../../../core/widgets/reorder_grab_handle.dart';
 import '../../calls/provider/remote_paths_provider.dart';
 import '../../../core/services/settings_service.dart';
-import '../widgets/remote_tool_form_dialog.dart';
+import '../widgets/remote_tool_form/remote_tool_form_dialog.dart';
+
+/// Μετατροπή δεικτών [ReorderableListView] σε θέση 1-based για [reorderToolToPosition].
+int reorderedPositionOneBased(int oldIndex, int newIndex) {
+  var adjusted = newIndex;
+  if (newIndex > oldIndex) {
+    adjusted -= 1;
+  }
+  return adjusted + 1;
+}
 
 /// Προεπισκόπηση εικονιδίου στη λίστα — συμβατό με `iconAssetKey`.
 Widget _remoteToolListIcon(RemoteTool t, {double size = 22}) {
   return RemoteToolIcon(iconAssetKey: t.iconAssetKey, size: size);
+}
+
+Widget _roleTypeBadge(
+  BuildContext context,
+  String text, {
+  String? tooltip,
+}) {
+  final theme = Theme.of(context);
+  final chip = Container(
+    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+    decoration: BoxDecoration(
+      color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.55),
+      borderRadius: BorderRadius.circular(6),
+      border: Border.all(color: theme.colorScheme.outlineVariant),
+    ),
+    child: Text(
+      text,
+      style: theme.textTheme.labelSmall?.copyWith(
+        color: theme.colorScheme.onSurfaceVariant,
+      ),
+    ),
+  );
+  if (tooltip != null) {
+    return Tooltip(message: tooltip, child: chip);
+  }
+  return chip;
+}
+
+Widget _roleTypeCell(BuildContext context, RemoteTool t) {
+  return Row(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      _roleTypeBadge(context, t.role.shortLabel),
+    ],
+  );
 }
 
 /// CRUD ορισμών `remote_tools` + ρυθμίσεις κύριου εργαλείου / overflow στην οθόνη κλήσεων.
@@ -306,6 +352,149 @@ class _RemoteToolsManagementScreenState
     }
   }
 
+  Future<void> _reorderToolAt(
+    List<RemoteTool> tools,
+    int oldIndex,
+    int newIndex,
+  ) async {
+    try {
+      final position = reorderedPositionOneBased(oldIndex, newIndex);
+      await ref.read(remoteToolsRepositoryProvider).reorderToolToPosition(
+            toolId: tools[oldIndex].id,
+            positionOneBased: position,
+          );
+      _invalidateRemoteCatalog();
+      _refreshEquipmentUsage();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('$e'),
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
+        );
+      }
+    }
+  }
+
+  Widget _buildReorderableToolRow(
+    BuildContext context, {
+    required List<RemoteTool> tools,
+    required Map<int, int>? usage,
+    required int index,
+  }) {
+    final t = tools[index];
+    final theme = Theme.of(context);
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+      child: Card(
+        margin: EdgeInsets.zero,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          child: Row(
+            children: [
+              ReorderGrabHandle(
+                index: index,
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+              Switch.adaptive(
+                value: t.isActive,
+                onChanged: (v) => _setToolActive(t, v),
+              ),
+              Expanded(
+                flex: 3,
+                child: Tooltip(
+                  message: usage == null
+                      ? 'Φόρτωση…'
+                      : _tooltipForToolUsage(usage[t.id] ?? 0),
+                  waitDuration: const Duration(milliseconds: 400),
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onDoubleTap: () => _openToolEditor(t),
+                    child: Row(
+                      children: [
+                        if ((t.iconAssetKey?.trim() ?? '').isNotEmpty) ...[
+                          _remoteToolListIcon(t),
+                          const SizedBox(width: 8),
+                        ],
+                        Expanded(
+                          child: Text(
+                            t.name,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              Expanded(
+                flex: 2,
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onDoubleTap: () => _openToolEditor(t),
+                  child: _roleTypeCell(context, t),
+                ),
+              ),
+              Expanded(
+                flex: 3,
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onDoubleTap: () => _openToolEditor(t),
+                  child: Text(
+                    t.executablePath,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      fontFamily: 'monospace',
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 2,
+                  ),
+                ),
+              ),
+              Expanded(
+                flex: 3,
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onDoubleTap: () => _openToolEditor(t),
+                  child: Text(
+                    _argumentsSummary(t),
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 2,
+                  ),
+                ),
+              ),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(
+                    tooltip: 'Επεξεργασία',
+                    icon: const Icon(Icons.edit_outlined),
+                    onPressed: () => _openToolEditor(t),
+                  ),
+                  IconButton(
+                    tooltip:
+                        'Αντίγραφο (ίδιες ρυθμίσεις, νέο όνομα με «$_cloneNameSuffix»)',
+                    icon: const Icon(Icons.copy_outlined),
+                    onPressed: () => _cloneTool(t),
+                  ),
+                  IconButton(
+                    tooltip: 'Απομάκρυνση από τη λίστα (soft delete)',
+                    icon: Icon(
+                      Icons.delete_outline,
+                      color: theme.colorScheme.error,
+                    ),
+                    onPressed: () => _softDeleteTool(t),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   void dispose() {
     _pageScrollController.dispose();
@@ -377,155 +566,37 @@ class _RemoteToolsManagementScreenState
                         ),
                   ),
                 ),
-                const SizedBox(height: 8),
-                SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: SingleChildScrollView(
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                        child: DataTable(
-                          headingRowHeight: 40,
-                          dataRowMinHeight: 48,
-                          dataRowMaxHeight: 64,
-                          columns: const [
-                            DataColumn(label: Text('Ενεργό')),
-                            DataColumn(label: Text('Όνομα')),
-                            DataColumn(label: Text('Εκτελέσιμο')),
-                            DataColumn(label: Text('Ορίσματα (ενεργά)')),
-                            DataColumn(label: Text('Ενέργειες')),
-                          ],
-                          rows: [
-                            for (final t in tools)
-                              DataRow(
-                                key: ValueKey(t.id),
-                                cells: [
-                                  DataCell(
-                                    Switch.adaptive(
-                                      value: t.isActive,
-                                      onChanged: (v) =>
-                                          _setToolActive(t, v),
-                                    ),
-                                  ),
-                                  DataCell(
-                                    Tooltip(
-                                      message: usage == null
-                                          ? 'Φόρτωση…'
-                                          : _tooltipForToolUsage(
-                                              usage[t.id] ?? 0,
-                                            ),
-                                      waitDuration:
-                                          const Duration(milliseconds: 400),
-                                      child: GestureDetector(
-                                        behavior: HitTestBehavior.opaque,
-                                        onDoubleTap: () =>
-                                            _openToolEditor(t),
-                                        child: ConstrainedBox(
-                                          constraints: const BoxConstraints(
-                                            maxWidth: 220,
-                                          ),
-                                          child: Row(
-                                            children: [
-                                              if ((t.iconAssetKey
-                                                          ?.trim() ??
-                                                      '')
-                                                  .isNotEmpty) ...[
-                                                _remoteToolListIcon(t),
-                                                const SizedBox(width: 8),
-                                              ],
-                                              Expanded(
-                                                child: Text(
-                                                  t.name,
-                                                  overflow:
-                                                      TextOverflow.ellipsis,
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                  DataCell(
-                                    GestureDetector(
-                                      behavior: HitTestBehavior.opaque,
-                                      onDoubleTap: () =>
-                                          _openToolEditor(t),
-                                      child: ConstrainedBox(
-                                        constraints: const BoxConstraints(
-                                          maxWidth: 280,
-                                        ),
-                                        child: Text(
-                                          t.executablePath,
-                                          style: Theme.of(context)
-                                              .textTheme
-                                              .bodySmall
-                                              ?.copyWith(
-                                                fontFamily: 'monospace',
-                                              ),
-                                          overflow: TextOverflow.ellipsis,
-                                          maxLines: 2,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                  DataCell(
-                                    GestureDetector(
-                                      behavior: HitTestBehavior.opaque,
-                                      onDoubleTap: () =>
-                                          _openToolEditor(t),
-                                      child: ConstrainedBox(
-                                        constraints: const BoxConstraints(
-                                          maxWidth: 260,
-                                        ),
-                                        child: Text(
-                                          _argumentsSummary(t),
-                                          overflow: TextOverflow.ellipsis,
-                                          maxLines: 2,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                  DataCell(
-                                    Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        IconButton(
-                                          tooltip: 'Επεξεργασία',
-                                          icon: const Icon(
-                                            Icons.edit_outlined,
-                                          ),
-                                          onPressed: () =>
-                                              _openToolEditor(t),
-                                        ),
-                                        IconButton(
-                                          tooltip:
-                                              'Αντίγραφο (ίδιες ρυθμίσεις, νέο όνομα με «$_cloneNameSuffix»)',
-                                          icon: const Icon(
-                                            Icons.copy_outlined,
-                                          ),
-                                          onPressed: () => _cloneTool(t),
-                                        ),
-                                        IconButton(
-                                          tooltip:
-                                              'Απομάκρυνση από τη λίστα (soft delete)',
-                                          icon: Icon(
-                                            Icons.delete_outline,
-                                            color: Theme.of(context)
-                                                .colorScheme
-                                                .error,
-                                          ),
-                                          onPressed: () =>
-                                              _softDeleteTool(t),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ],
-                              ),
-                          ],
+                const SizedBox(height: 4),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Text(
+                    'Σύρετε μια γραμμή για να αλλάξετε τη σειρά εμφάνισης.',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
                         ),
-                      ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                ReorderableListView.builder(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  buildDefaultDragHandles: false,
+                  itemCount: tools.length,
+                  onReorderItem: (oldIndex, newIndex) {
+                    _reorderToolAt(tools, oldIndex, newIndex);
+                  },
+                  itemBuilder: (context, i) => KeyedSubtree(
+                    key: ValueKey(tools[i].id),
+                    child: _buildReorderableToolRow(
+                      context,
+                      tools: tools,
+                      usage: usage,
+                      index: i,
                     ),
+                  ),
+                ),
+                const Padding(
+                  padding: EdgeInsets.only(bottom: 16),
                 ),
                 const Divider(height: 1),
                 Padding(

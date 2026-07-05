@@ -6,21 +6,32 @@ import '../../../core/services/application_reset_service.dart';
 import '../../../core/services/backup_reset_metadata.dart';
 import '../../../core/widgets/main_nav_destination.dart';
 import '../../../features/calls/provider/call_entry_provider.dart';
+import '../../../features/calls/provider/call_header_provider.dart';
 import '../../../features/database/providers/backup_scheduler_provider.dart';
+
+/// True όταν υπάρχει ενεργή ή μη αποθηκευμένη καταγραφή κλήσης.
+bool hasOpenCallSession(
+  CallEntryState entry,
+  SmartEntitySelectorState header,
+) {
+  if (entry.isCallTimerRunning || entry.retainPlayPauseAfterManualZero) {
+    return true;
+  }
+  if (entry.durationSeconds > 0) return true;
+  if (entry.isPending) return true;
+  if (entry.notes.trim().isNotEmpty) return true;
+  if (header.selectedPhone?.trim().isNotEmpty == true) return true;
+  if (header.callerDisplayText.trim().isNotEmpty) return true;
+  if (header.departmentText.trim().isNotEmpty) return true;
+  if (header.equipmentText.trim().isNotEmpty) return true;
+  if (header.selectedCaller != null) return true;
+  if (header.selectedEquipment != null) return true;
+  return false;
+}
 
 /// Ροή «Ξεκίνα από την αρχή» από τις Γενικές ρυθμίσεις.
 class StartFromBeginningFlow {
   StartFromBeginningFlow._();
-
-  static bool _hasOpenCallSession(CallEntryState s) {
-    if (s.isCallTimerRunning || s.retainPlayPauseAfterManualZero) return true;
-    if (s.durationSeconds > 0) return true;
-    if (s.isPending) return true;
-    if (s.internalDigits.trim().isNotEmpty) return true;
-    if (s.selectedUser != null || s.selectedEquipment != null) return true;
-    if (s.notes.trim().isNotEmpty) return true;
-    return false;
-  }
 
   static void _returnToCallsScreen(BuildContext context, WidgetRef ref) {
     ref.read(mainNavRequestProvider.notifier).request(
@@ -31,7 +42,8 @@ class StartFromBeginningFlow {
 
   static Future<void> run(BuildContext context, WidgetRef ref) async {
     final callState = ref.read(callEntryProvider);
-    if (_hasOpenCallSession(callState)) {
+    final headerState = ref.read(callHeaderProvider);
+    if (hasOpenCallSession(callState, headerState)) {
       final proceed = await showDialog<bool>(
         context: context,
         builder: (ctx) => AlertDialog(

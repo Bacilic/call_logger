@@ -3,16 +3,17 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../../core/services/gemini_prompt_template_controller.dart';
+import '../../../../core/widgets/dialog_snackbar_scope.dart';
+import '../../../../core/services/ai_prompt_template_controller.dart';
 import '../../../../core/services/gemini_ticket_service.dart';
-import '../../providers/dashboard_provider.dart';
-import 'gemini_prompt_template_field.dart';
+import '../../providers/gemini_settings_provider.dart';
+import 'ai_prompt_template_field.dart';
 
 enum _PromptEditorDismissChoice { continueEditing, discard }
 
 /// Διάλογος επεξεργασίας προτύπου προτροπής Gemini (placeholders, blocks, JSON).
-class GeminiPromptTemplateEditorDialog extends ConsumerStatefulWidget {
-  const GeminiPromptTemplateEditorDialog({
+class AiPromptTemplateEditorDialog extends ConsumerStatefulWidget {
+  const AiPromptTemplateEditorDialog({
     required this.savedTemplate,
     required this.onSave,
     super.key,
@@ -25,14 +26,15 @@ class GeminiPromptTemplateEditorDialog extends ConsumerStatefulWidget {
   final Future<void> Function(String text) onSave;
 
   @override
-  ConsumerState<GeminiPromptTemplateEditorDialog> createState() =>
-      _GeminiPromptTemplateEditorDialogState();
+  ConsumerState<AiPromptTemplateEditorDialog> createState() =>
+      _AiPromptTemplateEditorDialogState();
 }
 
-class _GeminiPromptTemplateEditorDialogState
-    extends ConsumerState<GeminiPromptTemplateEditorDialog> {
+class _AiPromptTemplateEditorDialogState
+    extends ConsumerState<AiPromptTemplateEditorDialog>
+    with DialogSnackbarHost {
   final ScrollController _scrollController = ScrollController();
-  late final GeminiPromptTemplateTextEditingController _draftController;
+  late final AiPromptTemplateTextEditingController _draftController;
   late String _savedSnapshot;
   bool _saving = false;
 
@@ -40,7 +42,7 @@ class _GeminiPromptTemplateEditorDialogState
   void initState() {
     super.initState();
     _savedSnapshot = widget.savedTemplate;
-    _draftController = GeminiPromptTemplateTextEditingController(
+    _draftController = AiPromptTemplateTextEditingController(
       text: _savedSnapshot,
     );
     _draftController.addListener(_onDraftChanged);
@@ -66,7 +68,7 @@ class _GeminiPromptTemplateEditorDialogState
 
   Future<bool> _confirmInvalidSave() async {
     final validation =
-        GeminiPromptTemplateSyntax.validate(_draftController.text);
+        AiPromptTemplateSyntax.validate(_draftController.text);
     if (validation.isValid) return true;
 
     final proceed = await showDialog<bool>(
@@ -110,13 +112,13 @@ class _GeminiPromptTemplateEditorDialogState
         _savedSnapshot = next;
         _saving = false;
       });
-      ScaffoldMessenger.of(context).showSnackBar(
+      showDialogSnackBar(
         const SnackBar(content: Text('Το πρότυπο αποθηκεύτηκε.')),
       );
     } catch (e) {
       if (!mounted) return;
       setState(() => _saving = false);
-      ScaffoldMessenger.of(context).showSnackBar(
+      showDialogSnackBar(
         SnackBar(content: Text('Αποτυχία αποθήκευσης: $e')),
       );
     }
@@ -190,7 +192,7 @@ class _GeminiPromptTemplateEditorDialogState
         .read(geminiPromptTemplateUserDefaultProvider.notifier)
         .setUserDefault(_draftController.text);
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
+    showDialogSnackBar(
       const SnackBar(content: Text('Ορίστηκε προσωπική προεπιλογή προτροπής.')),
     );
   }
@@ -222,7 +224,7 @@ class _GeminiPromptTemplateEditorDialogState
         ),
       );
       if (confirmed != true || !mounted) return;
-      _draftController.text = kDefaultGeminiPromptTemplate;
+      _draftController.text = kDefaultAiPromptTemplate;
       return;
     }
 
@@ -255,7 +257,7 @@ class _GeminiPromptTemplateEditorDialogState
       return;
     }
     _draftController.text = switch (choice) {
-      _RestoreDefaultChoice.factory => kDefaultGeminiPromptTemplate,
+      _RestoreDefaultChoice.factory => kDefaultAiPromptTemplate,
       _RestoreDefaultChoice.personal => userDefault,
       _RestoreDefaultChoice.cancel => _draftController.text,
     };
@@ -268,14 +270,16 @@ class _GeminiPromptTemplateEditorDialogState
       color: theme.colorScheme.onSurfaceVariant,
     );
 
-    return PopScope(
+    return DialogSnackbarScope(
+      messengerKey: dialogMessengerKey,
+      child: PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, result) {
         if (didPop) return;
         unawaited(_requestClose());
       },
       child: AlertDialog(
-        title: const Text('Πρότυπο προτροπής Gemini'),
+        title: const Text('Πρότυπο προτροπής Τεχνητής Νοημοσύνης'),
         content: SizedBox(
           width: 520,
           child: Scrollbar(
@@ -296,7 +300,7 @@ class _GeminiPromptTemplateEditorDialogState
                     ),
                   ),
                   const SizedBox(height: 8),
-                  GeminiPromptTemplateField(
+                  AiPromptTemplateField(
                     controller: _draftController,
                   ),
                   const SizedBox(height: 8),
@@ -347,6 +351,7 @@ class _GeminiPromptTemplateEditorDialogState
             child: const Text('Κλείσιμο'),
           ),
         ],
+      ),
       ),
     );
   }

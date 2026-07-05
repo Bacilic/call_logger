@@ -1,15 +1,17 @@
 ﻿import 'package:call_logger/core/services/gemini_ticket_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+//   flutter test test/core/services/ai_prompt_template_syntax_test.dart
+
 void main() {
-  group('GeminiPromptTemplateSyntax.stripEmptyOptionalBlocks', () {
+  group('AiPromptTemplateSyntax.stripEmptyOptionalBlocks', () {
     test('αφαιρεί block όταν το placeholder είναι κενό', () {
       const template = '''
 Υπάλληλος: {Υπάλληλος}.
 {@Εξοπλισμός}Εξοπλισμός: {Εξοπλισμός}. {@/Εξοπλισμός}
 Πρόβλημα: {Πρόβλημα}''';
 
-      final result = GeminiPromptTemplateSyntax.stripEmptyOptionalBlocks(
+      final result = AiPromptTemplateSyntax.stripEmptyOptionalBlocks(
         template,
         const {'{Εξοπλισμός}'},
       );
@@ -23,7 +25,7 @@ void main() {
     test('κρατά block όταν το placeholder δεν είναι κενό', () {
       const template =
           '{@Λύση}Λύση: {Λύση}. {@/Λύση}';
-      final result = GeminiPromptTemplateSyntax.stripEmptyOptionalBlocks(
+      final result = AiPromptTemplateSyntax.stripEmptyOptionalBlocks(
         template,
         const <String>{},
       );
@@ -31,19 +33,19 @@ void main() {
     });
   });
 
-  group('GeminiPromptTemplateSyntax.validate', () {
+  group('AiPromptTemplateSyntax.validate', () {
     test('επιτρέπει σωστό template με blocks', () {
       const template = '''
 {@Εξοπλισμός}Εξοπλισμός: {Εξοπλισμός}. {@/Εξοπλισμός}
 Κατηγορία: {Κατηγορία}
 Απάντησε σε JSON: {"title":"...","description":"...","solution":"..."}''';
-      final validation = GeminiPromptTemplateSyntax.validate(template);
+      final validation = AiPromptTemplateSyntax.validate(template);
       expect(validation.isValid, isTrue);
     });
 
     test('εντοπίζει αναντιστοιχία block', () {
       const template = '{@Εξοπλισμός}κείμενο {@/Τμήμα}';
-      final validation = GeminiPromptTemplateSyntax.validate(template);
+      final validation = AiPromptTemplateSyntax.validate(template);
       expect(validation.isValid, isFalse);
       expect(validation.errors.join(' '), contains('Αναντιστοιχία'));
     });
@@ -52,7 +54,7 @@ void main() {
       const template = '''
 Κατηγορία: {Κατηγορίαα}
 Απάντησε σε JSON: {"title":"...","description":"...","solution":"..."}''';
-      final validation = GeminiPromptTemplateSyntax.validate(template);
+      final validation = AiPromptTemplateSyntax.validate(template);
       expect(validation.isValid, isFalse);
       expect(
         validation.errors.any((e) => e.contains('{Κατηγορία}')),
@@ -65,7 +67,7 @@ void main() {
 Δημιούργησε τίτλο και περιγραφή.
 Απάντησε ΜΟΝΟ σε JSON: {"title":"...","description":"...","solution":"..."}''';
 
-      final validation = GeminiPromptTemplateSyntax.validate(template);
+      final validation = AiPromptTemplateSyntax.validate(template);
 
       expect(
         validation.errors,
@@ -78,7 +80,7 @@ void main() {
       const template = '''
 Απάντησε σε JSON με "solution":"...", "title":"...", "description":"..."''';
 
-      final validation = GeminiPromptTemplateSyntax.validate(template);
+      final validation = AiPromptTemplateSyntax.validate(template);
 
       expect(
         validation.errors.where(
@@ -92,7 +94,7 @@ void main() {
       const template = '''
 Απάντησε σε JSON: {"title":"...","description":"..."}''';
 
-      final validation = GeminiPromptTemplateSyntax.validate(template);
+      final validation = AiPromptTemplateSyntax.validate(template);
 
       expect(validation.isValid, isFalse);
       expect(
@@ -108,7 +110,7 @@ void main() {
     test('εντοπίζει πλήρη απουσία οδηγιών JSON', () {
       const template = 'Δημιούργησε τίτλο και περιγραφή για ticket.';
 
-      final validation = GeminiPromptTemplateSyntax.validate(template);
+      final validation = AiPromptTemplateSyntax.validate(template);
 
       expect(validation.isValid, isFalse);
       expect(
@@ -123,7 +125,7 @@ void main() {
 Απάντησε σε JSON: {"title":"...","description":"...","solution":"..."}
 Επανάλαβε: {"title":"...","description":"...","solution":"..."}''';
 
-      final validation = GeminiPromptTemplateSyntax.validate(template);
+      final validation = AiPromptTemplateSyntax.validate(template);
 
       expect(validation.isValid, isFalse);
       expect(
@@ -139,7 +141,7 @@ void main() {
 {@Εξοπλισμός}Εξοπλισμός: {Εξοπλισμός}.{Τμήμα} {@/Εξοπλισμός}
 Απάντησε σε JSON: {"title":"...","description":"...","solution":"..."}''';
 
-        final validation = GeminiPromptTemplateSyntax.validate(template);
+        final validation = AiPromptTemplateSyntax.validate(template);
 
         expect(validation.isValid, isTrue);
         expect(validation.errors, isEmpty);
@@ -158,7 +160,7 @@ void main() {
 {@Εξοπλισμός}Εξοπλισμός: {Εξοπλισμός}. {@Τμήμα}Τμήμα: {Τμήμα}. {@/Τμήμα}{@/Εξοπλισμός}
 Απάντησε σε JSON: {"title":"...","description":"...","solution":"..."}''';
 
-        final validation = GeminiPromptTemplateSyntax.validate(template);
+        final validation = AiPromptTemplateSyntax.validate(template);
 
         expect(validation.isValid, isTrue);
         expect(validation.errors, isEmpty);
@@ -171,7 +173,7 @@ void main() {
 {@Εξοπλισμός}Εξωτερικό {@Εξοπλισμός}Εσωτερικό {@/Εξοπλισμός}{@/Εξοπλισμός}
 Απάντησε σε JSON: {"title":"...","description":"...","solution":"..."}''';
 
-      final validation = GeminiPromptTemplateSyntax.validate(template);
+      final validation = AiPromptTemplateSyntax.validate(template);
 
       expect(validation.isValid, isFalse);
       expect(
@@ -185,7 +187,7 @@ void main() {
 {@Εξοπλισμός}Εξοπλισμός: {Εξοπλισμός}.
 Απάντησε σε JSON: {"title":"...","description":"...","solution":"..."}''';
 
-      final validation = GeminiPromptTemplateSyntax.validate(template);
+      final validation = AiPromptTemplateSyntax.validate(template);
 
       expect(validation.isValid, isFalse);
       expect(

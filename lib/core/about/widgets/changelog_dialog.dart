@@ -88,7 +88,7 @@ class ChangelogDialog extends ConsumerWidget {
                             final e = entries[index];
                             return _VersionExpansionTile(
                               entry: e,
-                              initiallyExpanded: index < 2,
+                              initiallyExpanded: index == 0,
                             );
                           },
                         ),
@@ -130,9 +130,19 @@ class _VersionExpansionTile extends StatelessWidget {
     }
   }
 
+  String _headerTitle(BuildContext context) {
+    if (entry.isUnreleased) {
+      return ChangelogEntry.unreleasedDisplayTitle;
+    }
+    if (entry.date.isEmpty) {
+      return 'v${entry.version}';
+    }
+    return 'v${entry.version} — ${_formatDateHeader(context)}';
+  }
+
   @override
   Widget build(BuildContext context) {
-    final header = 'v${entry.version} — ${_formatDateHeader(context)}';
+    final header = _headerTitle(context);
 
     return Card(
       margin: const EdgeInsets.only(bottom: 8),

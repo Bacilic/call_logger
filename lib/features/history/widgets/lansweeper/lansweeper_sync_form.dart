@@ -17,6 +17,9 @@ class LansweeperSyncForm extends ConsumerWidget {
     this.suggestElapsedLabel,
     this.suggestDisabledTooltip,
     this.previewDisabledTooltip,
+    this.cooldownRemainingSeconds,
+    this.cooldownModelLabel,
+    this.onCancelAutoResubmit,
     super.key,
   });
 
@@ -31,11 +34,29 @@ class LansweeperSyncForm extends ConsumerWidget {
   final String? suggestElapsedLabel;
   final String? suggestDisabledTooltip;
   final String? previewDisabledTooltip;
+  final int? cooldownRemainingSeconds;
+  final String? cooldownModelLabel;
+  final VoidCallback? onCancelAutoResubmit;
+
+  static Color cooldownRemainingColor(int seconds) {
+    if (seconds > 30) return Colors.red;
+    if (seconds >= 10) return Colors.orange;
+    return Colors.green;
+  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final inCooldown = cooldownRemainingSeconds != null;
+    final suggestEnabled = !isSuggesting && !inCooldown && onSuggest != null;
+
+    final suggestButtonLabel = inCooldown
+        ? (cooldownModelLabel ?? 'Αναμονή ποσόστωσης')
+        : isSuggesting
+        ? (suggestModelLabel ?? 'Πρόταση…')
+        : 'Πρόταση ΤΝ';
+
     final suggestButton = FilledButton.tonalIcon(
-      onPressed: isSuggesting ? null : onSuggest,
+      onPressed: suggestEnabled ? onSuggest : null,
       icon: isSuggesting
           ? const SizedBox(
               width: 18,
@@ -43,15 +64,11 @@ class LansweeperSyncForm extends ConsumerWidget {
               child: CircularProgressIndicator(strokeWidth: 2),
             )
           : const Text('✨', style: TextStyle(fontSize: 16)),
-      label: Text(
-        isSuggesting
-            ? (suggestModelLabel ?? 'Πρόταση…')
-            : 'Πρόταση ΤΝ',
-      ),
+      label: Text(suggestButtonLabel),
     );
 
     final previewButton = OutlinedButton.icon(
-      onPressed: isSuggesting ? null : onPreviewPrompt,
+      onPressed: isSuggesting || inCooldown ? null : onPreviewPrompt,
       icon: const Icon(Icons.article_outlined, size: 18),
       label: const Text('Προεπισκόπηση προτροπής'),
     );
@@ -60,7 +77,7 @@ class LansweeperSyncForm extends ConsumerWidget {
         ? null
         : IconButton(
             tooltip: 'Επεξεργασία προτύπου προτροπής',
-            onPressed: isSuggesting ? null : onEditPromptTemplate,
+            onPressed: isSuggesting || inCooldown ? null : onEditPromptTemplate,
             icon: Image.asset(
               'assets/prompt_editor.png',
               width: 20,
@@ -68,10 +85,15 @@ class LansweeperSyncForm extends ConsumerWidget {
             ),
           );
 
+    final cooldownTooltip = inCooldown
+        ? 'Αναμένεται διαθεσιμότητα ποσόστωσης για το μοντέλο '
+            '${cooldownModelLabel ?? 'ΤΝ'}.'
+        : suggestDisabledTooltip;
+
     final suggestRow = Row(
       children: [
-        if (suggestDisabledTooltip != null && onSuggest == null)
-          Tooltip(message: suggestDisabledTooltip!, child: suggestButton)
+        if (!suggestEnabled && cooldownTooltip != null)
+          Tooltip(message: cooldownTooltip, child: suggestButton)
         else
           suggestButton,
         if (isSuggesting && suggestElapsedLabel != null) ...[
@@ -83,6 +105,24 @@ class LansweeperSyncForm extends ConsumerWidget {
                   color: Theme.of(context).colorScheme.primary,
                 ),
           ),
+        ],
+        if (inCooldown) ...[
+          const SizedBox(width: 10),
+          Text(
+            '${cooldownRemainingSeconds!} δλ',
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                  color: cooldownRemainingColor(cooldownRemainingSeconds!),
+                  fontWeight: FontWeight.w600,
+                ),
+          ),
+          if (onCancelAutoResubmit != null) ...[
+            const SizedBox(width: 6),
+            TextButton(
+              onPressed: onCancelAutoResubmit,
+              child: const Text('Ακύρωση'),
+            ),
+          ],
         ],
         const Spacer(),
         if (promptEditorButton != null) ...[

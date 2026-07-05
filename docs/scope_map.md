@@ -56,6 +56,16 @@
 
 ---
 
+## Αντιστοίχιση provider αρχείων → τεστ (`lib/features/history/providers/`)
+
+| Αρχείο `lib/` | Αρχείο `test/` |
+|---------------|----------------|
+| `gemini_settings_provider.dart` | `test/features/history/gemini_settings_provider_test.dart` |
+| `lansweeper_settings_provider.dart` | `test/features/history/lansweeper_settings_provider_test.dart` |
+| `dashboard_provider.dart` | `test/features/history/dashboard_filter_notifier_test.dart` |
+
+---
+
 ## Εντολές στοχευμένης εκτέλεσης (παραδείγματα)
 
 ```bash
@@ -97,7 +107,7 @@ flutter test
 | `features/floor_map/` | `floor_color_assignment_service` |
 | `features/directory/building_map/` | Χάρτης κτιρίου — ετικέτες, resize, omnisearch, export (CHANGELOG Unreleased 0.14+) |
 | `features/directory/` (μερική κάλυψη) | Υπάρχει `directory_user_search_test.dart` (αναζήτηση χρήστη)· `department_form_dialog_test.dart` (μικτή σύγκρουση κοινόχρηστων)· `equipment_data_table_test`, `equipment_tab_test`· λείπουν departments/users tabs, building map, υπόλοιπες φόρμες |
-| `features/history/` (μερική κάλυψη) | Υπάρχει `history_search_test.dart` (αναζήτηση ιστορικού)· λείπουν dashboard, επεξεργασία κλήσης, Lansweeper UI/sync, application audit tab |
+| `features/history/` (μερική κάλυψη) | Υπάρχει `history_search_test.dart` (αναζήτηση ιστορικού)· καλύπτονται dashboard φίλτρο (`dashboard_filter_notifier_test.dart`), ρυθμίσεις Lansweeper/Gemini (`lansweeper_settings_provider_test.dart`, `gemini_settings_provider_test.dart`) και Lansweeper sync/UI (`lansweeper_sync_invalidates_history_test.dart`, `lansweeper_report_dialog_characterization_test.dart`)· απομένουν ακάλυπτα κυρίως το dashboard UI (γραφήματα/κάρτες/στατιστικά), η επεξεργασία κλήσης και το application audit tab |
 | `features/dictionary/` (μερική κάλυψη) | Μόνο `dictionary_table_layout`· λείπουν οθόνη διαχείρισης, πάνελ ορθογραφίας, φίλτρα λίστας (CHANGELOG Unreleased) |
 | `features/tasks/` (μερική κάλυψη) | Μόνο ροή pending μέσω κλήσης· λείπουν οθόνη εκκρεμοτήτων, analytics, φόρμα κλεισίματος |
 | `features/database/debug/` | Integrity debug seeder / error scenarios |

@@ -418,8 +418,11 @@ lib/
 │   │   │   ├── lansweeper_connection_status.dart
 │   │   │   └── lansweeper_sync_state.dart
 │   │   ├── providers/
+│   │   │   ├── app_settings_bool.dart
 │   │   │   ├── dashboard_provider.dart
+│   │   │   ├── gemini_settings_provider.dart
 │   │   │   ├── history_application_audit_view_provider.dart
+│   │   │   ├── lansweeper_settings_provider.dart
 │   │   │   ├── history_call_actions_provider.dart
 │   │   │   ├── history_provider.dart
 │   │   │   ├── lansweeper_connection_probe_provider.dart
@@ -679,8 +682,9 @@ lib/
 ### Ιστορικό & dashboard
 - **historyFilterProvider, historyCallsProvider** — φίλτρα και λίστα ιστορικού
 - **dashboardFilterProvider, dashboardStatsProvider** — στατιστικά KPI
-- **lansweeperSyncProvider, lansweeperConnectionProbeProvider** — Lansweeper integration
-- **lansweeperApiUrlProvider … geminiModelsProbeCacheProvider** — ρυθμίσεις API/Gemini & επεξεργασία προτύπου prompt (`gemini_prompt_template_*`)
+- **lansweeperSyncProvider, lansweeperConnectionProbeProvider** — Lansweeper integration (σύγχρονη κατάσταση / έλεγχος σύνδεσης)
+- **lansweeperApiUrlProvider … lansweeperHelpdeskWebPasswordProvider** — ρυθμίσεις Lansweeper API/Help Desk (`lansweeper_settings_provider.dart`, κλειδιά `lansweeper_*`)
+- **geminiApiKeyProvider … geminiModelsProbeCacheProvider** — ρυθμίσεις Gemini & επεξεργασία προτύπου prompt (`gemini_settings_provider.dart`, κλειδιά `gemini_*` / `gemini_prompt_template_*`)
 
 ### Εκκρεμότητες
 - **taskFilterProvider, tasksProvider, globalPendingTasksCountProvider**

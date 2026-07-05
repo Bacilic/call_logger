@@ -6,8 +6,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/services/gemini_ticket_service.dart';
 import '../../../../core/services/lansweeper_agent_api_probe.dart';
 import '../../../../core/services/lansweeper_helpdesk_login_probe.dart';
-import '../../providers/dashboard_provider.dart';
+import '../../providers/gemini_settings_provider.dart';
 import '../../providers/lansweeper_connection_probe_provider.dart';
+import '../../providers/lansweeper_settings_provider.dart';
 import 'gemini_model_field.dart';
 import 'lansweeper_connection_status_indicator.dart';
 
@@ -558,6 +559,23 @@ class _LansweeperConnectionSettingsDialogState
                   unawaited(
                     ref
                         .read(geminiFallbackEnabledProvider.notifier)
+                        .setEnabled(v),
+                  );
+                },
+              ),
+              const SizedBox(height: 10),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Αυτόματη επανυποβολή μέχρι την επιτυχία'),
+                subtitle: const Text(
+                  'Μετά από αναμονή ποσόστωσης, επαναλαμβάνεται αυτόματα '
+                  'η πρόταση ΤΝ όσο το παράθυρο παραμένει ανοιχτό.',
+                ),
+                value: ref.watch(geminiAutoResubmitEnabledProvider),
+                onChanged: (v) {
+                  unawaited(
+                    ref
+                        .read(geminiAutoResubmitEnabledProvider.notifier)
                         .setEnabled(v),
                   );
                 },

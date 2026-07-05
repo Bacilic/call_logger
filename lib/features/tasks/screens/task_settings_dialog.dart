@@ -1,3 +1,4 @@
+import '../../../core/widgets/dialog_snackbar_scope.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -15,7 +16,8 @@ class TaskSettingsDialog extends ConsumerStatefulWidget {
   ConsumerState<TaskSettingsDialog> createState() => _TaskSettingsDialogState();
 }
 
-class _TaskSettingsDialogState extends ConsumerState<TaskSettingsDialog> {
+class _TaskSettingsDialogState extends ConsumerState<TaskSettingsDialog>
+    with DialogSnackbarHost {
   final _formKey = GlobalKey<FormState>();
   final SettingsService _settings = SettingsService();
   late final TextEditingController _maxDaysController;
@@ -223,28 +225,38 @@ class _TaskSettingsDialogState extends ConsumerState<TaskSettingsDialog> {
       if (mounted) Navigator.of(context).pop();
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        showDialogSnackBar(
           SnackBar(content: Text('Αποτυχία αποθήκευσης: $e')),
         );
       }
     }
   }
 
+  Widget _wrapDialog(Widget child) {
+    return DialogSnackbarScope(
+      messengerKey: dialogMessengerKey,
+      child: Center(child: child),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_loading || _draft == null) {
-      return const AlertDialog(
-        title: Text('Ρυθμίσεις εκκρεμοτήτων'),
-        content: SizedBox(
-          height: 120,
-          child: Center(child: CircularProgressIndicator()),
+      return _wrapDialog(
+        const AlertDialog(
+          title: Text('Ρυθμίσεις εκκρεμοτήτων'),
+          content: SizedBox(
+            height: 120,
+            child: Center(child: CircularProgressIndicator()),
+          ),
         ),
       );
     }
 
     final d = _draft!;
 
-    return PopScope<Object?>(
+    return _wrapDialog(
+      PopScope<Object?>(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) async {
         if (didPop) return;
@@ -431,6 +443,7 @@ class _TaskSettingsDialogState extends ConsumerState<TaskSettingsDialog> {
             child: const Text('Αποθήκευση'),
           ),
         ],
+      ),
       ),
     );
   }

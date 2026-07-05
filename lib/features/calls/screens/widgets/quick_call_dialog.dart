@@ -1,3 +1,4 @@
+import '../../../../core/widgets/dialog_snackbar_scope.dart';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -64,7 +65,8 @@ class QuickCallDialog extends ConsumerStatefulWidget {
   ConsumerState<QuickCallDialog> createState() => _QuickCallDialogState();
 }
 
-class _QuickCallDialogState extends ConsumerState<QuickCallDialog> {
+class _QuickCallDialogState extends ConsumerState<QuickCallDialog>
+    with DialogSnackbarHost {
   final GlobalKey<SmartEntitySelectorWidgetState> _selectorKey =
       GlobalKey<SmartEntitySelectorWidgetState>();
 
@@ -108,18 +110,18 @@ class _QuickCallDialogState extends ConsumerState<QuickCallDialog> {
           ),
         );
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
+        showDialogSnackBar(
           const SnackBar(content: Text('Αποτυχία αποθήκευσης')),
         );
       }
     } on CallSaveException catch (e) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      showDialogSnackBar(
         SnackBar(content: Text(e.message)),
       );
     } on TaskSaveException catch (e) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      showDialogSnackBar(
         SnackBar(content: Text(e.message)),
       );
     }
@@ -146,7 +148,9 @@ class _QuickCallDialogState extends ConsumerState<QuickCallDialog> {
     );
     final theme = Theme.of(context);
 
-    return Dialog(
+    return DialogSnackbarScope(
+      messengerKey: dialogMessengerKey,
+      child: Dialog(
       key: const ValueKey('quick_call_dialog'),
       insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
       child: ConstrainedBox(
@@ -247,12 +251,17 @@ class _QuickCallDialogState extends ConsumerState<QuickCallDialog> {
                                 children: [
                                   // Η Εκκρεμότητα ζει μέσα στο χαρτί σημειώσεων
                                   // (βλ. NotesStickyField) — εδώ μόνο χρονόμετρο.
-                                  const CallStatusBar(
-                                    axis: CallStatusBarAxis.horizontal,
-                                    showPendingToggle: false,
+                                  Row(
+                                    crossAxisAlignment: CrossAxisAlignment.center,
+                                    children: [
+                                      Expanded(child: categoryField),
+                                      const SizedBox(width: 8),
+                                      const CallStatusBar(
+                                        axis: CallStatusBarAxis.horizontal,
+                                        showPendingToggle: false,
+                                      ),
+                                    ],
                                   ),
-                                  const SizedBox(height: 8),
-                                  categoryField,
                                   const SizedBox(height: 8),
                                   Align(
                                     alignment: Alignment.centerRight,
@@ -264,12 +273,12 @@ class _QuickCallDialogState extends ConsumerState<QuickCallDialog> {
                             return Row(
                               crossAxisAlignment: CrossAxisAlignment.center,
                               children: [
+                                Expanded(child: categoryField),
+                                const SizedBox(width: 12),
                                 const CallStatusBar(
                                   axis: CallStatusBarAxis.horizontal,
                                   showPendingToggle: false,
                                 ),
-                                const SizedBox(width: 12),
-                                Expanded(child: categoryField),
                                 const SizedBox(width: 8),
                                 submitButton,
                               ],
@@ -285,6 +294,7 @@ class _QuickCallDialogState extends ConsumerState<QuickCallDialog> {
           ),
         ),
       ),
+    ),
     );
   }
 }

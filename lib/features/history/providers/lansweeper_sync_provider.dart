@@ -6,8 +6,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/database/calls_repository.dart';
 import '../../../core/database/database_helper.dart';
 import '../../../core/services/lansweeper_sync_service.dart';
+import '../../calls/provider/call_mutation_refresh.dart';
 import '../models/lansweeper_sync_state.dart';
-import 'dashboard_provider.dart';
 
 class LansweeperSubmitInput {
   const LansweeperSubmitInput({
@@ -120,7 +120,7 @@ class LansweeperSyncNotifier extends AsyncNotifier<void> {
         if (ref.mounted) {
           state = const AsyncData(null);
         }
-        _invalidateDashboardData();
+        _refreshAfterLansweeperMutation();
         return LansweeperCommandResult(
           success: true,
           message: result.message,
@@ -145,7 +145,7 @@ class LansweeperSyncNotifier extends AsyncNotifier<void> {
         );
       }
       state = const AsyncData(null);
-      _invalidateDashboardData();
+      _refreshAfterLansweeperMutation();
       return LansweeperCommandResult(
         success: false,
         message: result.message,
@@ -171,7 +171,7 @@ class LansweeperSyncNotifier extends AsyncNotifier<void> {
         callId: callId,
         state: LansweeperSyncState.failed,
       );
-      _invalidateDashboardData();
+      _refreshAfterLansweeperMutation();
       return LansweeperCommandResult(
         success: false,
         message: e.toString(),
@@ -215,7 +215,7 @@ class LansweeperSyncNotifier extends AsyncNotifier<void> {
         comment: comment,
       );
       state = const AsyncData(null);
-      _invalidateDashboardData();
+      _refreshAfterLansweeperMutation();
     } catch (e, st) {
       state = AsyncError(e, st);
     } finally {
@@ -233,7 +233,7 @@ class LansweeperSyncNotifier extends AsyncNotifier<void> {
       state: LansweeperSyncState.unsent,
       clearTicketId: !retainTicketId,
     );
-    _invalidateDashboardData();
+    _refreshAfterLansweeperMutation();
   }
 
   Future<int> countRegisteredCallsWithTicketId(
@@ -266,7 +266,7 @@ class LansweeperSyncNotifier extends AsyncNotifier<void> {
       ticketId: normalized,
       updateTicketId: true,
     );
-    _invalidateDashboardData();
+    _refreshAfterLansweeperMutation();
   }
 
   /// Χειροκίνητη καταχώρηση· το ticket id είναι προαιρετικό.
@@ -295,7 +295,7 @@ class LansweeperSyncNotifier extends AsyncNotifier<void> {
         );
       }
       state = const AsyncData(null);
-      _invalidateDashboardData();
+      _refreshAfterLansweeperMutation();
     } catch (e, st) {
       state = AsyncError(e, st);
     } finally {
@@ -308,12 +308,11 @@ class LansweeperSyncNotifier extends AsyncNotifier<void> {
     await CallsRepository(
       db,
     ).updateLansweeperState(callId: callId, state: nextState);
-    _invalidateDashboardData();
+    _refreshAfterLansweeperMutation();
   }
 
-  void _invalidateDashboardData() {
-    ref.invalidate(dashboardCallsForReportProvider);
-    ref.invalidate(dashboardStatsProvider);
+  void _refreshAfterLansweeperMutation() {
+    refreshAfterCallMutation(ref);
   }
 
   String _buildFailureReport({

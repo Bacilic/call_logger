@@ -35,6 +35,18 @@ void main() {
       expect(entry.added, isEmpty);
       expect(entry.changed, isEmpty);
       expect(entry.fixed, isEmpty);
+      expect(entry.hasContent, isFalse);
+    });
+
+    test('hasContent is true when any category has items', () {
+      final entry = ChangelogEntry.fromJson({
+        'version': 'Unreleased',
+        'date': '',
+        'fixed': ['Διόρθωση'],
+      });
+
+      expect(entry.isUnreleased, isTrue);
+      expect(entry.hasContent, isTrue);
     });
   });
 
@@ -64,7 +76,23 @@ void main() {
       final pubVersion = match!.group(1)!;
 
       final entries = await ChangelogService().load();
-      expect(entries.first.version, pubVersion);
+      final latestReleased = entries.firstWhere(
+        (e) => !e.isUnreleased,
+        orElse: () => throw StateError('No released version in changelog'),
+      );
+      expect(latestReleased.version, pubVersion);
+    });
+
+    test('unreleased entry is first when it has content', () async {
+      final entries = await ChangelogService().load();
+      final unreleased = entries.where((e) => e.isUnreleased).toList();
+
+      if (unreleased.isEmpty) {
+        return;
+      }
+
+      expect(unreleased.single.hasContent, isTrue);
+      expect(entries.first.isUnreleased, isTrue);
     });
 
     test('load sorts semver versions descending', () async {

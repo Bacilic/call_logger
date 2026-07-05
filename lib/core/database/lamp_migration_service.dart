@@ -459,7 +459,7 @@ const String _kPendingEntityCreationError =
     'Απαιτείται επιβεβαίωση δημιουργίας νέας οντότητας.';
 
 const String _kSoftDeletedDecisionError =
-    'Υπάρχει διαγραμμένη όμοια εγγραφ��· απαιτείται απόφαση.';
+    'Υπάρχει διαγραμμένη όμοια εγγραφή· απαιτείται απόφαση.';
 
 class _DepartmentPhoneApplyPlan {
   const _DepartmentPhoneApplyPlan({
@@ -526,7 +526,7 @@ class LampMigrationService {
     };
   }
 
-  /// Ανίχνευση soft-deleted εγγραφ��ς που ταιριάζει με τη φόρμα (μόνο για νέα εγγραφ��).
+  /// Ανίχνευση soft-deleted εγγραφής που ταιριάζει με τη φόρμα (μόνο για νέα εγγραφή).
   Future<LampSoftDeletedMatch?> detectSoftDeletedMatch({
     required LampTransferTarget target,
     required Map<String, String> formValues,
@@ -692,7 +692,7 @@ class LampMigrationService {
     return conflicts;
   }
 
-  /// Συγκρούσεις κοινόχρηστων τηλεφώνων κατά μεταφορά τμ��ματος.
+  /// Συγκρούσεις κοινόχρηστων τηλεφώνων κατά μεταφορά τμήματος.
   Future<List<LampOwnerConflict>> detectDepartmentConflicts({
     required Map<String, String> formValues,
     required int? selectedCandidateId,
@@ -850,7 +850,7 @@ class LampMigrationService {
     return LampMigrationDraft(
       target: LampTransferTarget.department,
       oldValues: <String, String>{
-        'Παλιό τμ��μα': oldName,
+        'Παλιό τμήμα': oldName,
         'Παλιό email': oldEmail,
         'Παλιό τηλέφωνο': oldPhones,
         'Παλιό κτίριο': oldBuilding,
@@ -863,7 +863,7 @@ class LampMigrationService {
       selectedCandidateId: selected,
       updatesExistingRecord: selected != null,
       hint: selected == null && oldName.isNotEmpty
-          ? 'Παλιό τμ��μα: $oldName'
+          ? 'Παλιό τμήμα: $oldName'
           : null,
       buildingMapFloors: buildingMapFloors,
     );
@@ -963,7 +963,7 @@ class LampMigrationService {
             row['code'].toString().trim(),
       ];
       selectedHint =
-          'Υπάρχων χρ��στης: '
+          'Υπάρχων χρήστης: '
           '${selectedPhones.length} τηλέφωνα · '
           '${linkedEquipmentCodes.length} εξοπλισμοί στη νέα βάση.';
     }
@@ -1055,7 +1055,7 @@ class LampMigrationService {
         'Παλιό email': oldEmail,
         'Παλιά τηλέφωνα': oldPhones,
         'Παλιός εξοπλισμός': oldEquipmentCodes,
-        'Παλιό τμ��μα': oldDepartment,
+        'Παλιό τμήμα': oldDepartment,
       },
       formValues: formValues,
       newRecordFormValues: newRecordFormValues,
@@ -1066,7 +1066,7 @@ class LampMigrationService {
       hint: selected != null
           ? selectedHint
           : oldDepartment.isNotEmpty
-          ? 'Παλιό τμ��μα: $oldDepartment'
+          ? 'Παλιό τμήμα: $oldDepartment'
           : null,
     );
   }
@@ -1192,9 +1192,9 @@ class LampMigrationService {
       target: LampTransferTarget.equipment,
       oldValues: <String, String>{
         'Παλιός κωδικός': oldCode,
-        'Παλιά περιγραφ��': oldDescription,
+        'Παλιά περιγραφή': oldDescription,
         'Παλιός κάτοχος': oldOwnerName,
-        'Παλιό τμ��μα': oldDepartment,
+        'Παλιό τμήμα': oldDepartment,
       },
       formValues: formValues,
       newRecordFormValues: newRecordFormValues,
@@ -1203,7 +1203,7 @@ class LampMigrationService {
       selectedCandidateId: selectedId,
       updatesExistingRecord: selectedId != null,
       hint: selectedId == null && oldDepartment.isNotEmpty
-          ? 'Παλιό τμ��μα: $oldDepartment'
+          ? 'Παλιό τμήμα: $oldDepartment'
           : null,
     );
   }
@@ -1215,7 +1215,7 @@ class LampMigrationService {
     LampSoftDeletedDecision? softDeletedDecision,
   }) async {
     final name = formValues['name']?.trim() ?? '';
-    if (name.isEmpty) throw StateError('Το πεδίο τμ��μα είναι υποχρεωτικό.');
+    if (name.isEmpty) throw StateError('Το πεδίο τμήμα είναι υποχρεωτικό.');
 
     final db = await DatabaseHelper.instance.database;
     final departments = DepartmentRepository(db);
@@ -1267,8 +1267,8 @@ class LampMigrationService {
         departmentId = updateId;
         updated = true;
         message = reactivateId != null && selectedCandidateId == null
-            ? 'Επαναφέρθηκε διαγραμμένο τμ��μα.'
-            : 'Ενημερώθηκε υπάρχον τμ��μα.';
+            ? 'Επαναφέρθηκε διαγραμμένο τμήμα.'
+            : 'Ενημερώθηκε υπάρχον τμήμα.';
       } else {
         if (softDeletedDecision?.action ==
             LampSoftDeletedDecisionAction.createNew) {
@@ -1279,7 +1279,7 @@ class LampMigrationService {
         }
         departmentId = await departments.insertDepartment(map, executor: txn);
         updated = false;
-        message = 'Δημιουργ��θηκε νέο τμ��μα.';
+        message = 'Δημιουργήθηκε νέο τμήμα.';
       }
 
       await _applyDepartmentDirectPhones(
@@ -1389,7 +1389,7 @@ class LampMigrationService {
     final firstName = (formValues['first_name'] ?? '').trim();
     final lastName = (formValues['last_name'] ?? '').trim();
     if (firstName.isEmpty && lastName.isEmpty) {
-      throw StateError('Απαιτείται όνομα �� επώνυμο.');
+      throw StateError('Απαιτείται όνομα ή επώνυμο.');
     }
     final db = await DatabaseHelper.instance.database;
     final users = UserRepository(db);
@@ -1507,8 +1507,8 @@ class LampMigrationService {
         savedUserId = updateUserId;
         updated = true;
         message = selectedCandidateId != null
-            ? 'Ενημερώθηκε υπάρχων χρ��στης.'
-            : 'Επαναφέρθηκε διαγραμμένος χρ��στης.';
+            ? 'Ενημερώθηκε υπάρχων χρήστης.'
+            : 'Επαναφέρθηκε διαγραμμένος χρήστης.';
       } else {
         savedUserId = await users.insertUser(
           firstName: firstName,
@@ -1521,7 +1521,7 @@ class LampMigrationService {
           skipPhonePolicyValidation: !phonePolicyBatch.isEmpty,
         );
         updated = false;
-        message = 'Δημιουργ��θηκε νέος χρ��στης.';
+        message = 'Δημιουργήθηκε νέος χρήστης.';
       }
 
       await _assignUserPhonesToDepartment(
@@ -1550,7 +1550,7 @@ class LampMigrationService {
     });
   }
 
-  /// Μετατροπ�� αποφάσεων οδηγού Λάμπας σε batch πολιτικ��ς (ίδιο με user_form_dialog).
+  /// Μετατροπή αποφάσεων οδηγού Λάμπας σε batch πολιτικής (ίδιο με user_form_dialog).
   UserPhoneConflictBatchResult _buildUserPhoneConflictBatch({
     required List<LampOwnerConflict> conflicts,
     required Map<String, LampOwnerConflictAction> decisionsById,
@@ -1581,7 +1581,7 @@ class LampMigrationService {
     );
   }
 
-  /// Συγχρονισμός phones.department_id με το τμ��μα του χρ��στη (όπως Κατάλογος).
+  /// Συγχρονισμός phones.department_id με το τμήμα του χρήστη (όπως Κατάλογος).
   Future<void> _assignUserPhonesToDepartment({
     required PhoneRepository phoneRepo,
     required int? departmentId,
@@ -1808,7 +1808,7 @@ class LampMigrationService {
       return LampMigrationSaveResult(
         id: id,
         updated: false,
-        message: 'Δημιουργ��θηκε νέος εξοπλισμός.',
+        message: 'Δημιουργήθηκε νέος εξοπλισμός.',
       );
     });
   }

@@ -3,6 +3,14 @@
 import '../../../../core/services/lookup_service.dart';
 import '../../provider/smart_entity_selector_provider.dart';
 
+/// Ετικέτα πλήθους εξοπλισμών (ενικός/πληθυντικός), ίδιο μοτίβο με [BackupScheduleStatusFormatter].
+String equipmentFoundLabel(int count) {
+  if (count == 1) {
+    return 'Βρέθηκε 1 εξοπλισμός';
+  }
+  return 'Βρέθηκαν $count εξοπλισμοί';
+}
+
 class SmartEntityPhoneHelperAndError extends StatelessWidget {
   const SmartEntityPhoneHelperAndError({
     super.key,
@@ -40,7 +48,7 @@ class SmartEntityPhoneHelperAndError extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.only(top: 2),
             child: Text(
-              'Βρέθηκαν $equipmentCount εξοπλισμοί',
+              equipmentFoundLabel(equipmentCount),
               style: theme.textTheme.bodySmall?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
               ),

@@ -1,3 +1,4 @@
+import '../../../core/widgets/dialog_snackbar_scope.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -44,7 +45,8 @@ class _CallDeleteDialog extends ConsumerStatefulWidget {
   ConsumerState<_CallDeleteDialog> createState() => _CallDeleteDialogState();
 }
 
-class _CallDeleteDialogState extends ConsumerState<_CallDeleteDialog> {
+class _CallDeleteDialogState extends ConsumerState<_CallDeleteDialog>
+    with DialogSnackbarHost {
   bool _loading = true;
   bool _busy = false;
   int _linkedTasks = 0;
@@ -103,15 +105,18 @@ class _CallDeleteDialogState extends ConsumerState<_CallDeleteDialog> {
     } catch (e) {
       if (!mounted) return;
       setState(() => _busy = false);
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Αποτυχία διαγραφής: $e')));
+      showDialogSnackBar(
+        SnackBar(content: Text('Αποτυχία διαγραφής: $e')),
+      );
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
+    return DialogSnackbarScope(
+      messengerKey: dialogMessengerKey,
+      child: Center(
+        child: AlertDialog(
       title: const Text('Διαγραφή κλήσης'),
       content: _loading
           ? const SizedBox(
@@ -175,6 +180,8 @@ class _CallDeleteDialogState extends ConsumerState<_CallDeleteDialog> {
                   child: const Text('Διαγραφή κλήσης'),
                 ),
             ],
+        ),
+      ),
     );
   }
 }
@@ -189,7 +196,8 @@ class _CallBulkDeleteDialog extends ConsumerStatefulWidget {
       _CallBulkDeleteDialogState();
 }
 
-class _CallBulkDeleteDialogState extends ConsumerState<_CallBulkDeleteDialog> {
+class _CallBulkDeleteDialogState extends ConsumerState<_CallBulkDeleteDialog>
+    with DialogSnackbarHost {
   bool _loading = true;
   bool _busy = false;
   int _linkedTasksCount = 0;
@@ -228,15 +236,18 @@ class _CallBulkDeleteDialogState extends ConsumerState<_CallBulkDeleteDialog> {
     } catch (e) {
       if (!mounted) return;
       setState(() => _busy = false);
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Αποτυχία μαζικής διαγραφής: $e')));
+      showDialogSnackBar(
+        SnackBar(content: Text('Αποτυχία μαζικής διαγραφής: $e')),
+      );
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
+    return DialogSnackbarScope(
+      messengerKey: dialogMessengerKey,
+      child: Center(
+        child: AlertDialog(
       title: const Text('Μαζική διαγραφή κλήσεων'),
       content: _loading
           ? const SizedBox(
@@ -277,6 +288,8 @@ class _CallBulkDeleteDialogState extends ConsumerState<_CallBulkDeleteDialog> {
                   child: const Text('Μαζική διαγραφή'),
                 ),
             ],
+        ),
+      ),
     );
   }
 }

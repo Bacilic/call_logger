@@ -5,7 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import '../../../../core/services/gemini_ticket_service.dart';
-import '../../providers/dashboard_provider.dart';
+import '../../providers/gemini_settings_provider.dart';
 
 enum _GeminiModelSlot { primary, fallback }
 

@@ -1,5 +1,9 @@
 /// Εγγραφή ιστορικού αλλαγών (changelog) ανά έκδοση.
 class ChangelogEntry {
+  static const String unreleasedVersion = 'Unreleased';
+
+  static const String unreleasedDisplayTitle = 'Προς Δημοσίευση';
+
   const ChangelogEntry({
     required this.version,
     required this.date,
@@ -15,6 +19,11 @@ class ChangelogEntry {
   final List<String> added;
   final List<String> changed;
   final List<String> fixed;
+
+  bool get isUnreleased => version == unreleasedVersion;
+
+  bool get hasContent =>
+      added.isNotEmpty || changed.isNotEmpty || fixed.isNotEmpty;
 
   factory ChangelogEntry.fromJson(Map<String, dynamic> json) {
     List<String> strings(String key) {

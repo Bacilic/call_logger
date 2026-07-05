@@ -1,3 +1,4 @@
+import '../../../../core/widgets/dialog_snackbar_scope.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -25,7 +26,7 @@ class _DepartmentColorPickerDialog extends StatefulWidget {
 }
 
 class _DepartmentColorPickerDialogState
-    extends State<_DepartmentColorPickerDialog> {
+    extends State<_DepartmentColorPickerDialog> with DialogSnackbarHost {
   late final TextEditingController _hexController;
   late double _hue;
   late double _saturation;
@@ -97,7 +98,10 @@ class _DepartmentColorPickerDialogState
     const pickerHeight = 140.0;
     const previewWidth = 52.0;
 
-    return AlertDialog(
+    return DialogSnackbarScope(
+      messengerKey: dialogMessengerKey,
+      child: Center(
+        child: AlertDialog(
       title: const Text('Επιλογέας χρώματος'),
       content: SizedBox(
         width: 300,
@@ -250,7 +254,7 @@ class _DepartmentColorPickerDialogState
                     Clipboard.setData(
                       ClipboardData(text: _hexController.text),
                     );
-                    ScaffoldMessenger.of(context).showSnackBar(
+                    showDialogSnackBar(
                       const SnackBar(
                         content: Text('Αντιγράφηκε το hex'),
                         duration: Duration(seconds: 1),
@@ -278,6 +282,8 @@ class _DepartmentColorPickerDialogState
           child: const Text('OK'),
         ),
       ],
+        ),
+      ),
     );
   }
 }

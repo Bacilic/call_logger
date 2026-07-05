@@ -3,6 +3,7 @@ import '../../../core/models/remote_tool.dart';
 import '../../../core/models/remote_tool_role.dart';
 import '../models/equipment_model.dart';
 import '../provider/smart_entity_selector_provider.dart';
+import 'equipment_remote_param_key.dart';
 import 'remote_target_rules.dart';
 import 'vnc_remote_target.dart';
 
@@ -220,8 +221,9 @@ abstract final class CallRemoteTargets {
   /// Με ελεύθερο κείμενο: όσα ενεργά εργαλεία [toolMatchesFreeEquipmentText] επιστρέφει true.
   static List<RemoteTool> visibleRemoteToolsForCallState(
     SmartEntitySelectorState s,
-    List<RemoteTool> catalog,
-  ) {
+    List<RemoteTool> catalog, {
+    bool applyExclusive = true,
+  }) {
     if (catalog.isEmpty) return [];
     final candidates = <RemoteTool>[];
     if (s.selectedEquipment != null) {
@@ -260,15 +262,46 @@ abstract final class CallRemoteTargets {
     }
     if (validTools.isEmpty) return [];
 
-    // Stage B: suppression (αν υπάρχει αποκλειστικό, κρατάμε μόνο αποκλειστικά).
-    final hasExclusive = validTools.any((t) => t.isExclusive);
-    final finalTools = hasExclusive
-        ? validTools.where((t) => t.isExclusive).toList()
-        : validTools;
+    // Stage B: suppression (αποκλειστικό εργαλείο από remote_params εξοπλισμού).
+    final List<RemoteTool> finalTools;
+    if (applyExclusive) {
+      final exclusiveId = s.selectedEquipment == null
+          ? null
+          : EquipmentRemoteParamKey.exclusiveToolIdFrom(
+              s.selectedEquipment!.remoteParams,
+            );
+      if (exclusiveId != null) {
+        final exclusive =
+            validTools.where((t) => t.id == exclusiveId).toList();
+        finalTools = exclusive.isEmpty ? validTools : exclusive;
+      } else {
+        finalTools = validTools;
+      }
+    } else {
+      finalTools = validTools;
+    }
 
     // Stage C: sorting (sort_order, name, id).
     finalTools.sort(_compareSortOrder);
     return finalTools;
+  }
+
+  /// True όταν η per-equipment αποκλειστικότητα κρύβει τουλάχιστον ένα έγκυρο εργαλείο.
+  static bool exclusiveHidesTools(
+    SmartEntitySelectorState s,
+    List<RemoteTool> catalog,
+  ) {
+    final withExclusive = visibleRemoteToolsForCallState(
+      s,
+      catalog,
+      applyExclusive: true,
+    );
+    final withoutExclusive = visibleRemoteToolsForCallState(
+      s,
+      catalog,
+      applyExclusive: false,
+    );
+    return withExclusive.length < withoutExclusive.length;
   }
 
   /// Κρύβει πλήρως τα κουμπιά σύνδεσης όταν το προεπιλεγμένο εργαλείο (id) είναι ανενεργό / διαγραμμένο / ορφανό.

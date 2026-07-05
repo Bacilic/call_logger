@@ -16,7 +16,7 @@ import 'database_helper.dart';
 import 'integrity_service.dart';
 import 'settings_repository.dart';
 
-/// Κλ��ση με status pending που δεν έχει αντίστοιχο task.
+/// Κλήση με status pending που δεν έχει αντίστοιχο task.
 class OrphanCall {
   const OrphanCall({
     required this.id,
@@ -123,12 +123,12 @@ class TasksRepository {
     return has;
   }
 
-  /// Καθαρισμός cache στηλ��ς `snooze_history_json` μετά από migration �� αλλαγ�� βάσης.
+  /// Καθαρισμός cache στηλής `snooze_history_json` μετά από migration ή αλλαγή βάσης.
   void resetSnoozeHistoryColumnCache() {
     _hasSnoozeHistoryColumnCache = null;
   }
 
-  /// Γενικές ρυθμίσεις εκκρεμοτ��των από `app_settings` (JSON).
+  /// Γενικές ρυθμίσεις εκκρεμοτήτων από `app_settings` (JSON).
   ///
   /// - Διαβάζει πρώτα από [TaskSettingsConfig.appSettingsKey].
   /// - Αν λείπει, κάνει fallback στο [TaskSettingsConfig.legacyAppSettingsKey].
@@ -153,9 +153,9 @@ class TasksRepository {
     return TaskSettingsConfig.defaultConfig();
   }
 
-  /// Επόμενη προτεινόμενη ημερομηνία/ώρα λ��ξης βάσει ρυθμίσεων.
+  /// Επόμενη προτεινόμενη ημερομηνία/ώρα λήξης βάσει ρυθμίσεων.
   ///
-  /// [option]: `TaskSettingsConfig.kOptionDefault` → χρ��ση [TaskSettingsConfig.defaultSnoozeOption],
+  /// [option]: `TaskSettingsConfig.kOptionDefault` → χρήση [TaskSettingsConfig.defaultSnoozeOption],
   /// αλλιώς `one_hour` / `day_end` («Μέσα στο ωράριο») / `next_business`.
   DateTime calculateNextDueDate(
     TaskSettingsConfig config, {
@@ -192,10 +192,10 @@ class TasksRepository {
     );
   }
 
-  /// Επιλογ�� «Μέσα στο ωράριο» (`kDayEnd`): αν η [base] την ίδια ημερολογιακ�� ημέρα
+  /// Επιλογή «Μέσα στο ωράριο» (`kDayEnd`): αν η [base] την ίδια ημερολογιακή ημέρα
   /// βρίσκεται από [nextBusinessHour] έως [dayEndTime] (συμπεριλαμβανομένων), +1 ώρα·
   /// αλλιώς επόμενη εργάσιμη στην [nextBusinessHour]. Αν το ωράριο δεν είναι έγκυρο
-  /// (λ��ξη πριν την έναρξη), εφαρμόζεται +1 ώρα.
+  /// (λήξη πριν την έναρξη), εφαρμόζεται +1 ώρα.
   DateTime _withinScheduleOrNextBusinessDue(
     TaskSettingsConfig config,
     DateTime base,
@@ -230,7 +230,7 @@ class TasksRepository {
     return candidate;
   }
 
-  /// Αποθ��κευση ρυθμίσεων εκκρεμοτ��των στο `app_settings`.
+  /// Αποθήκευση ρυθμίσεων εκκρεμοτήτων στο `app_settings`.
   Future<void> saveTaskSettingsConfig(TaskSettingsConfig config) async {
     final dbSave = await DatabaseHelper.instance.database;
     await SettingsRepository(
@@ -238,10 +238,10 @@ class TasksRepository {
     ).saveSetting(TaskSettingsConfig.appSettingsKey, jsonEncode(config.toMap()));
   }
 
-  /// Τίτλος εκκρεμότητας από σημειώσεις/κατηγορία (μορφ�� φόρμας κλ��σης).
+  /// Τίτλος εκκρεμότητας από σημειώσεις/κατηγορία (μορφή φόρμας κλήσης).
   /// Ο εξοπλισμός περνά μόνο ως metadata (`equipment_text` / FK), όχι στον τίτλο.
   ///
-  /// `description` = πλ��ρες κείμενο σημειώσεων (το ίδιο αποθηκεύεται στο task.description).
+  /// `description` = πλήρες κείμενο σημειώσεων (το ίδιο αποθηκεύεται στο task.description).
   static String smartTaskTitleFromCallContext({
     required String description,
     String? categoryName,
@@ -348,7 +348,7 @@ class TasksRepository {
     };
   }
 
-  /// Εισαγωγ�� εκκρεμότητας σε υπάρχον [DatabaseExecutor] (π.χ. κοινό transaction με κλ��ση).
+  /// Εισαγωγή εκκρεμότητας σε υπάρχον [DatabaseExecutor] (π.χ. κοινό transaction με κλήση).
   Future<int> createFromCallOnExecutor(
     DatabaseExecutor executor, {
     required Map<String, dynamic> row,
@@ -358,7 +358,7 @@ class TasksRepository {
     return id;
   }
 
-  /// Δημιουργεί εκκρεμότητα από κλ��ση �� αυτόνομα ([callId] null = χωρίς εγγραφ�� κλ��σης).
+  /// Δημιουργεί εκκρεμότητα από κλήση ή αυτόνομα ([callId] null = χωρίς εγγραφή κλήσης).
   Future<int> createFromCall({
     int? callId,
     required String? callerName,
@@ -403,13 +403,13 @@ class TasksRepository {
     } catch (e) {
       if (e is TaskSaveException) rethrow;
       throw TaskSaveException(
-        'Η εκκρεμότητα δεν δημιουργ��θηκε. Δοκιμάστε ξανά.',
+        'Η εκκρεμότητα δεν δημιουργήθηκε. Δοκιμάστε ξανά.',
       );
     }
   }
 
-  /// Προσθέτει γραμμ�� στην περιγραφ�� ανοιχτ��ς γρ��γορης εκκρεμότητας (ίδιο [taskId]).
-  /// Επιστρέφει false αν λείπει η εγγραφ��, είναι διαγραμμένη/κλειστ�� �� δεν είναι quick-add.
+  /// Προσθέτει γραμμή στην περιγραφή ανοιχτής γρήγορης εκκρεμότητας (ίδιο [taskId]).
+  /// Επιστρέφει false αν λείπει η εγγραφή, είναι διαγραμμένη/κλειστή ή δεν είναι quick-add.
   Future<bool> appendToQuickAddDescription(int taskId, String addition) async {
     final a = addition.trim();
     if (a.isEmpty) return false;
@@ -430,7 +430,7 @@ class TasksRepository {
     return true;
   }
 
-  /// Συμπληρώνει κενά FK/snapshot πεδία σε γρ��γορη εκκρεμότητα (χωρίς αντικατάσταση μη κενών).
+  /// Συμπληρώνει κενά FK/snapshot πεδία σε γρήγορη εκκρεμότητα (χωρίς αντικατάσταση μη κενών).
   Future<bool> mergeQuickAddEntitySnapshot({
     required int taskId,
     int? callerId,
@@ -526,7 +526,7 @@ class TasksRepository {
     return rows.map((row) => Task.fromMap(row)).toList();
   }
 
-  /// Συνολικό πλ��θος εκκρεμοτ��των `open` + `snoozed` (για badge μενού).
+  /// Συνολικό πλήθος εκκρεμοτήτων `open` + `snoozed` (για badge μενού).
   Future<int> getGlobalPendingTasksCount() async {
     final db = await _db;
     final rows = await db.rawQuery(
@@ -537,7 +537,7 @@ class TasksRepository {
     return n is int ? n : (n is num ? n.toInt() : int.tryParse('$n') ?? 0);
   }
 
-  /// Συνολικό πλ��θος μη διαγραμμένων εγγραφών στον πίνακα `tasks`.
+  /// Συνολικό πλήθος μη διαγραμμένων εγγραφών στον πίνακα `tasks`.
   Future<int> getTotalTaskCount() async {
     final db = await _db;
     final rows = await db.rawQuery(
@@ -548,7 +548,7 @@ class TasksRepository {
     return n is int ? n : (n is num ? n.toInt() : int.tryParse('$n') ?? 0);
   }
 
-  /// Ελάχιστη/μέγιστη ημερομηνία δημιουργίας εκκρεμοτ��των (ημέρα μόνο).
+  /// Ελάχιστη/μέγιστη ημερομηνία δημιουργίας εκκρεμοτήτων (ημέρα μόνο).
   Future<({DateTime start, DateTime end})> getTaskCreationDateSpan() async {
     final db = await _db;
     final rows = await db.rawQuery(
@@ -850,7 +850,7 @@ class TasksRepository {
   String _originLabel(String origin) {
     return switch (origin) {
       Task.originManualFab => 'Χειροκίνητη',
-      Task.originCallLinked => 'Από κλ��ση',
+      Task.originCallLinked => 'Από κλήση',
       Task.originQuickAdd => 'Quick add',
       _ => 'Legacy',
     };
@@ -984,7 +984,7 @@ class TasksRepository {
     }
   }
 
-  /// Πλ��θος ανά `status` με ίδια φίλτρα αναζ��τησης/ημερομηνίας με [getFilteredTasks],
+  /// Πλήθος ανά `status` με ίδια φίλτρα αναζήτησης/ημερομηνίας με [getFilteredTasks],
   /// χωρίς φίλτρο επιλεγμένων statuses (για μετρητές στα chips).
   Future<Map<TaskStatus, int>> getTaskCounts(TaskFilter filter) async {
     final db = await _db;
@@ -1030,7 +1030,7 @@ class TasksRepository {
 
     final where = conditions.isEmpty ? '' : 'WHERE ${conditions.join(' AND ')}';
 
-    // Στ��λη λ��ξης στο σχ��μα: `due_date` (όχι due_at).
+    // Στήλη λήξης στο σχήμα: `due_date` (όχι due_at).
     final sortColumn = switch (filter.sortBy) {
       TaskSortOption.createdAt => 'created_at',
       TaskSortOption.dueAt => 'due_date',
@@ -1059,9 +1059,9 @@ class TasksRepository {
     return rows.map((row) => Task.fromMap(row)).toList();
   }
 
-  /// Δημιουργεί νέα εγγραφ�� στον πίνακα tasks. Επιστρέφει το νέο id.
+  /// Δημιουργεί νέα εγγραφή στον πίνακα tasks. Επιστρέφει το νέο id.
   ///
-  /// Εγγραφ�� + audit στο ίδιο transaction ([TaskSaveException] σε αποτυχία).
+  /// Εγγραφή + audit στο ίδιο transaction ([TaskSaveException] σε αποτυχία).
   Future<int> createTask(Task task) async {
     final db = await _db;
     final map = task.toMap();
@@ -1090,9 +1090,9 @@ class TasksRepository {
     }
   }
 
-  /// Ενημερώνει μια υπάρχουσα εγγραφ�� στον πίνακα tasks.
+  /// Ενημερώνει μια υπάρχουσα εγγραφή στον πίνακα tasks.
   ///
-  /// Εγγραφ�� + audit στο ίδιο transaction ([TaskSaveException] σε αποτυχία).
+  /// Εγγραφή + audit στο ίδιο transaction ([TaskSaveException] σε αποτυχία).
   Future<void> updateTask(Task task) async {
     if (task.id == null) return;
     final db = await _db;
@@ -1137,7 +1137,7 @@ class TasksRepository {
     }
   }
 
-  /// Soft delete εγγραφ��ς βάσει ID (audit στο [IntegrityService]).
+  /// Soft delete εγγραφής βάσει ID (audit στο [IntegrityService]).
   Future<void> deleteTask(int id) async {
     final dbDel = await DatabaseHelper.instance.database;
     await IntegrityService(dbDel).softDeleteTask(id);
@@ -1226,11 +1226,11 @@ class TasksRepository {
     } catch (_) {}
   }
 
-  /// Κλ��σεις με status pending που δεν έχουν αντίστοιχο task.
+  /// Κλήσεις με status pending που δεν έχουν αντίστοιχο task.
   Future<List<OrphanCall>> getCallsWithoutTask() async {
     final db = await _db;
-    // Ορφαν�� = pending κλ��ση χωρίς καμία εγγραφ�� στο `tasks` για αυτό το `call_id`.
-    // Αν υπ��ρχε task (ακόμη και soft-deleted), δεν ξαναπροτείνουμε μαζικ�� δημιουργία.
+    // Ορφανή = pending κλήση χωρίς καμία εγγραφή στο `tasks` για αυτό το `call_id`.
+    // Αν υπήρχε task (ακόμη και soft-deleted), δεν ξαναπροτείνουμε μαζική δημιουργία.
     final rows = await db.rawQuery('''
       SELECT c.id, c.date, c.time, c.caller_id, c.caller_text, c.issue
       FROM calls c
@@ -1253,7 +1253,7 @@ class TasksRepository {
         .toList();
   }
 
-  /// Δημιουργεί task για κάθε κλ��ση χωρίς εκκρεμότητα. Επιστρέφει πλ��θος δημιουργημένων.
+  /// Δημιουργεί task για κάθε κλήση χωρίς εκκρεμότητα. Επιστρέφει πλήθος δημιουργημένων.
   Future<int> createTasksForOrphanCalls() async {
     final orphans = await getCallsWithoutTask();
     if (orphans.isEmpty) return 0;

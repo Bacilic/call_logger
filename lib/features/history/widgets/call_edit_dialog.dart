@@ -1,3 +1,4 @@
+import '../../../core/widgets/dialog_snackbar_scope.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -27,7 +28,8 @@ class _CallEditDialog extends ConsumerStatefulWidget {
   ConsumerState<_CallEditDialog> createState() => _CallEditDialogState();
 }
 
-class _CallEditDialogState extends ConsumerState<_CallEditDialog> {
+class _CallEditDialogState extends ConsumerState<_CallEditDialog>
+    with DialogSnackbarHost {
   late final SpellCheckController _issueController;
   final TextEditingController _durationController = TextEditingController();
   final TextEditingController _dateController = TextEditingController();
@@ -171,7 +173,7 @@ class _CallEditDialogState extends ConsumerState<_CallEditDialog> {
     final durationRaw = _durationController.text.trim();
     final duration = durationRaw.isEmpty ? null : int.tryParse(durationRaw);
     if (durationRaw.isNotEmpty && duration == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
+      showDialogSnackBar(
         const SnackBar(
           content: Text('Η διάρκεια πρέπει να είναι ακέραιος αριθμός.'),
         ),
@@ -224,9 +226,9 @@ class _CallEditDialogState extends ConsumerState<_CallEditDialog> {
     } catch (e) {
       if (!mounted) return;
       setState(() => _saving = false);
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Αποτυχία ενημέρωσης κλήσης: $e')));
+      showDialogSnackBar(
+        SnackBar(content: Text('Αποτυχία ενημέρωσης κλήσης: $e')),
+      );
     }
   }
 
@@ -245,9 +247,9 @@ class _CallEditDialogState extends ConsumerState<_CallEditDialog> {
     } catch (e) {
       if (!mounted) return;
       setState(() => _hardCloneBusy = false);
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Αποτυχία κλωνοποίησης: $e')));
+      showDialogSnackBar(
+        SnackBar(content: Text('Αποτυχία κλωνοποίησης: $e')),
+      );
     }
   }
 
@@ -261,7 +263,10 @@ class _CallEditDialogState extends ConsumerState<_CallEditDialog> {
         (original?.lansweeperMainTicketId?.trim().isNotEmpty ?? false) ||
         original?.lansweeperState == 'sent';
 
-    return AlertDialog(
+    return DialogSnackbarScope(
+      messengerKey: dialogMessengerKey,
+      child: Center(
+        child: AlertDialog(
       title: const Text('Επεξεργασία κλήσης'),
       content: SizedBox(
         width: 980,
@@ -493,6 +498,8 @@ class _CallEditDialogState extends ConsumerState<_CallEditDialog> {
           label: const Text('Αποθήκευση'),
         ),
       ],
+        ),
+      ),
     );
   }
 }

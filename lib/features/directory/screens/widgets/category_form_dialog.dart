@@ -1,3 +1,4 @@
+import '../../../../core/widgets/dialog_snackbar_scope.dart';
 import 'package:flutter/material.dart';
 
 import '../../../../core/database/database_helper.dart';
@@ -24,7 +25,8 @@ class CategoryFormDialog extends StatefulWidget {
   State<CategoryFormDialog> createState() => _CategoryFormDialogState();
 }
 
-class _CategoryFormDialogState extends State<CategoryFormDialog> {
+class _CategoryFormDialogState extends State<CategoryFormDialog>
+    with DialogSnackbarHost {
   late final TextEditingController _controller;
   late final String _initialFieldText;
 
@@ -132,7 +134,7 @@ class _CategoryFormDialogState extends State<CategoryFormDialog> {
   }
 
   void _showError(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
+    showDialogSnackBar(
       SnackBar(content: Text(message)),
     );
   }
@@ -149,7 +151,7 @@ class _CategoryFormDialogState extends State<CategoryFormDialog> {
         final restored = await widget.notifier.addCategory(t);
         if (!mounted) return;
         if (restored) {
-          ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+          showDialogSnackBar(
             SnackBar(
               content: Text(kCategoryRestoredFromDeletedUserMessage),
             ),
@@ -202,7 +204,7 @@ class _CategoryFormDialogState extends State<CategoryFormDialog> {
         final restored = await widget.notifier.addCategory(t);
         if (!mounted) return;
         if (restored) {
-          ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+          showDialogSnackBar(
             SnackBar(
               content: Text(kCategoryRestoredFromDeletedUserMessage),
             ),
@@ -256,7 +258,9 @@ class _CategoryFormDialogState extends State<CategoryFormDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return PopScope(
+    return DialogSnackbarScope(
+      messengerKey: dialogMessengerKey,
+      child: PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) async {
         if (didPop) return;
@@ -296,6 +300,7 @@ class _CategoryFormDialogState extends State<CategoryFormDialog> {
             child: const Text('Αποθήκευση'),
           ),
         ],
+      ),
       ),
     );
   }

@@ -4,10 +4,14 @@ mixin EquipmentFormRemoteParamsMixin on EquipmentFormDialogStateHost {
   void _initRemoteParamsFromEquipment(EquipmentModel? e) {
     _remoteParamValues.clear();
     _expandedRemoteKeys.clear();
+    _exclusiveRemoteToolId = null;
     if (e == null) return;
+    _exclusiveRemoteToolId =
+        EquipmentRemoteParamKey.exclusiveToolIdFrom(e.remoteParams);
     final nonStashEntries = <MapEntry<String, String>>[];
     final stashEntries = <MapEntry<String, String>>[];
     for (final entry in e.remoteParams.entries) {
+      if (EquipmentRemoteParamKey.isReservedKey(entry.key)) continue;
       final t = entry.value.trim();
       if (t.isEmpty) continue;
       final real = EquipmentRemoteParamKey.remoteParamStashRealKeyOrNull(
@@ -51,7 +55,7 @@ mixin EquipmentFormRemoteParamsMixin on EquipmentFormDialogStateHost {
       }
     }
     for (final k in _remoteParamValues.keys.toList()) {
-      if (EquipmentRemoteParamKey.isRemoteParamStashKey(k)) continue;
+      if (EquipmentRemoteParamKey.isReservedKey(k)) continue;
       if (int.tryParse(k) == null) {
         _remoteParamValues.remove(k);
         _disposeRemoteController(k);
@@ -176,6 +180,41 @@ mixin EquipmentFormRemoteParamsMixin on EquipmentFormDialogStateHost {
             color: theme.colorScheme.onSurfaceVariant,
           ),
         ),
+        if (orderedExpanded.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          DropdownButtonFormField<int?>(
+            key: ValueKey(
+              'exclusive-${_exclusiveRemoteToolId ?? 'none'}-${orderedExpanded.join(',')}',
+            ),
+            initialValue: _exclusiveRemoteToolId != null &&
+                    _expandedRemoteKeys.contains('$_exclusiveRemoteToolId')
+                ? _exclusiveRemoteToolId
+                : null,
+            decoration: const InputDecoration(
+              labelText: 'Αποκλειστικό εργαλείο (μόνο αυτό στην κλήση)',
+              helperText:
+                  'Εκκαθάριση θορύβου: στην κλήση εμφανίζεται μόνο αυτό το εργαλείο για τον συγκεκριμένο εξοπλισμό.',
+              border: OutlineInputBorder(),
+            ),
+            items: [
+              const DropdownMenuItem<int?>(
+                value: null,
+                child: Text('Κανένα'),
+              ),
+              for (final key in orderedExpanded)
+                DropdownMenuItem<int?>(
+                  value: int.tryParse(key),
+                  child: Text(labelForKey(key)),
+                ),
+            ],
+            onChanged: (v) {
+              setState(() {
+                _exclusiveRemoteToolId = v;
+              });
+              _tryCaptureFormBaseline();
+            },
+          ),
+        ],
         const SizedBox(height: 8),
         Wrap(
           spacing: 8,
@@ -195,6 +234,10 @@ mixin EquipmentFormRemoteParamsMixin on EquipmentFormDialogStateHost {
                       _syncRemoteValueFromController(p.key);
                       _expandedRemoteKeys.remove(p.key);
                       _disposeRemoteController(p.key);
+                      final id = int.tryParse(p.key);
+                      if (id != null && id == _exclusiveRemoteToolId) {
+                        _exclusiveRemoteToolId = null;
+                      }
                     }
                     _recomputeDefaultRemoteFromChips(pairs, catalog);
                   });

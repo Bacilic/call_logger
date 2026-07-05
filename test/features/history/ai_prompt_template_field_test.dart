@@ -1,10 +1,10 @@
 // Widget/controller test: πεδίο προτροπής Gemini — ενιαίος μηχανισμός απόδοσης.
 //
 // Ολόκληρο αρχείο:
-//   flutter test test/features/history/gemini_prompt_template_field_test.dart
+//   flutter test test/features/history/ai_prompt_template_field_test.dart
 
-import 'package:call_logger/core/services/gemini_prompt_template_controller.dart';
-import 'package:call_logger/features/history/widgets/lansweeper/gemini_prompt_template_field.dart';
+import 'package:call_logger/core/services/ai_prompt_template_controller.dart';
+import 'package:call_logger/features/history/widgets/lansweeper/ai_prompt_template_field.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -43,13 +43,13 @@ Color? _firstMatchingColor(TextSpan span, String fragment) {
 }
 
 void main() {
-  group('GeminiPromptTemplateTextEditingController', () {
+  group('AiPromptTemplateTextEditingController', () {
     testWidgets(
       'buildTextSpan χρωματίζει placeholders και blocks',
       (tester) async {
         late TextSpan span;
         const baseStyle = TextStyle(fontSize: 14, height: 1.45);
-        final controller = GeminiPromptTemplateTextEditingController(
+        final controller = AiPromptTemplateTextEditingController(
           text:
               'Υπάλληλος: {Υπάλληλος}. {@Τμήμα}Τμήμα: {Τμήμα}. {@/Τμήμα}',
         );
@@ -89,11 +89,11 @@ void main() {
     );
   });
 
-  group('GeminiPromptTemplateField (widget)', () {
+  group('AiPromptTemplateField (widget)', () {
     testWidgets(
       'δεν χρησιμοποιεί διπλό Stack/Transform για highlight',
       (tester) async {
-        final controller = GeminiPromptTemplateTextEditingController(
+        final controller = AiPromptTemplateTextEditingController(
           text: _multiLineOverflowTemplate(),
         );
         addTearDown(controller.dispose);
@@ -101,7 +101,7 @@ void main() {
         await tester.pumpWidget(
           MaterialApp(
             home: Scaffold(
-              body: GeminiPromptTemplateField(controller: controller),
+              body: AiPromptTemplateField(controller: controller),
             ),
           ),
         );
@@ -136,7 +136,7 @@ void main() {
     testWidgets(
       'πολλές γραμμές: scroll χωρίς ξεχωριστό highlight layer',
       (tester) async {
-        final controller = GeminiPromptTemplateTextEditingController(
+        final controller = AiPromptTemplateTextEditingController(
           text: _multiLineOverflowTemplate(),
         );
         addTearDown(controller.dispose);
@@ -147,7 +147,7 @@ void main() {
               body: SingleChildScrollView(
                 child: SizedBox(
                   width: 480,
-                  child: GeminiPromptTemplateField(
+                  child: AiPromptTemplateField(
                     controller: controller,
                     minLines: 5,
                     maxLines: 10,

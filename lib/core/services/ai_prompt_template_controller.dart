@@ -1,16 +1,16 @@
 import 'package:flutter/material.dart';
 
-import 'gemini_prompt_template_syntax.dart';
+import 'ai_prompt_template_syntax.dart';
 
 /// [TextEditingController] με χρωματισμό placeholders/blocks μέσω [buildTextSpan].
 ///
 /// Η επιλογή/composing (IME) χειρίζεται χωριστά ώστε να μην «σπάει» ο κέρσορας σε Windows.
-class GeminiPromptTemplateTextEditingController extends TextEditingController {
-  GeminiPromptTemplateTextEditingController({super.text});
+class AiPromptTemplateTextEditingController extends TextEditingController {
+  AiPromptTemplateTextEditingController({super.text});
 
   static List<InlineSpan> highlightedChildren(String text, TextStyle? style) {
     if (text.isEmpty) return const <InlineSpan>[];
-    final span = GeminiPromptTemplateSyntax.buildHighlightedTextSpan(
+    final span = AiPromptTemplateSyntax.buildHighlightedTextSpan(
       template: text,
       baseStyle: style ?? const TextStyle(),
     );

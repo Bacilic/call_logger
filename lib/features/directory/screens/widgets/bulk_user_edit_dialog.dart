@@ -1,3 +1,4 @@
+import '../../../../core/widgets/dialog_snackbar_scope.dart';
 import 'package:flutter/material.dart';
 
 import '../../../../core/directory/phone_department_policy.dart';
@@ -23,7 +24,8 @@ class BulkUserEditDialog extends StatefulWidget {
   State<BulkUserEditDialog> createState() => _BulkUserEditDialogState();
 }
 
-class _BulkUserEditDialogState extends State<BulkUserEditDialog> {
+class _BulkUserEditDialogState extends State<BulkUserEditDialog>
+    with DialogSnackbarHost {
   static const _fieldKeys = ['lastName', 'firstName', 'phone', 'notes'];
   static const _dbKeys = ['last_name', 'first_name', 'phone', 'notes'];
 
@@ -109,7 +111,7 @@ class _BulkUserEditDialogState extends State<BulkUserEditDialog> {
         .toSet();
     if (deptIds.length > 1) {
       if (!mounted) return null;
-      ScaffoldMessenger.of(context).showSnackBar(
+      showDialogSnackBar(
         const SnackBar(
           content: Text(
             'Η μαζική ανάθεση συγκρουόμενου τηλέφωνου απαιτεί '
@@ -182,7 +184,7 @@ class _BulkUserEditDialogState extends State<BulkUserEditDialog> {
       );
     } on PhoneDepartmentPolicyException catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      showDialogSnackBar(
         SnackBar(
           content: Text(
             'Απορρίφθηκε η μαζική ενημέρωση: '
@@ -218,7 +220,10 @@ class _BulkUserEditDialogState extends State<BulkUserEditDialog> {
       'phone': 'Τηλέφωνο',
       'notes': 'Σημειώσεις',
     };
-    return AlertDialog(
+    return DialogSnackbarScope(
+      messengerKey: dialogMessengerKey,
+      child: Center(
+        child: AlertDialog(
       title: Text('Μαζική επεξεργασία (${widget.selectedUsers.length} χρήστες)'),
       content: SingleChildScrollView(
         child: Column(
@@ -268,6 +273,8 @@ class _BulkUserEditDialogState extends State<BulkUserEditDialog> {
           child: const Text('Αποθήκευση'),
         ),
       ],
+        ),
+      ),
     );
   }
 }

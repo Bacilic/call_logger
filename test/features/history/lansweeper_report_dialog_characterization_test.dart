@@ -5,15 +5,13 @@
 
 import 'package:call_logger/core/database/calls_repository.dart';
 import 'package:call_logger/core/database/database_helper.dart';
-import 'package:call_logger/core/services/gemini_ticket_service.dart';
 import 'package:call_logger/features/calls/models/call_model.dart';
-import 'package:call_logger/features/history/models/dashboard_date_preset.dart';
-import 'package:call_logger/features/history/models/dashboard_filter_model.dart';
 import 'package:call_logger/features/history/models/dashboard_summary_model.dart';
-import 'package:call_logger/features/history/models/lansweeper_connection_status.dart';
 import 'package:call_logger/features/history/models/lansweeper_sync_state.dart';
 import 'package:call_logger/features/history/providers/dashboard_provider.dart';
+import 'package:call_logger/features/history/providers/gemini_settings_provider.dart';
 import 'package:call_logger/features/history/providers/lansweeper_connection_probe_provider.dart';
+import 'package:call_logger/features/history/providers/lansweeper_settings_provider.dart';
 import 'package:call_logger/features/history/widgets/lansweeper_report_dialog.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -22,13 +20,13 @@ import 'package:riverpod/misc.dart' show Override;
 
 import '../../test_reporter.dart';
 import '../../test_setup.dart';
+import 'lansweeper_report_test_doubles.dart';
 
 const _kCharRenderMarkerA = 'LS_CHAR_RENDER_A';
 const _kCharRenderMarkerB = 'LS_CHAR_RENDER_B';
 const _kCharFilterUnsent = 'LS_UNSENT';
 const _kCharFilterSent = 'LS_SENT';
 const _kCharSelectMarker = 'LS_CHAR_SELECT_ONE';
-const _kFakeLansweeperApiUrl = 'https://test.example.com/api.aspx';
 
 const _kEmptyDashboardStats = DashboardSummaryModel(
   totalCalls: 2,
@@ -47,123 +45,41 @@ const _kEmptyDashboardStats = DashboardSummaryModel(
   byIssue: <IssueStat>[],
 );
 
-class _AlwaysAvailableLansweeperConnectionProbe
-    extends LansweeperConnectionProbeNotifier {
-  @override
-  LansweeperConnectionStatus build() => const LansweeperConnectionAvailable();
-
-  @override
-  Future<void> ensureCheck() async {}
-
-  @override
-  Future<void> check({bool force = true}) async {
-    state = const LansweeperConnectionAvailable();
-  }
-}
-
-class _AllDatesDashboardFilterNotifier extends DashboardFilterNotifier {
-  @override
-  DashboardFilterModel build() {
-    return DashboardDatePreset.applyToFilter(
-      const DashboardFilterModel(),
-      DashboardDatePreset.all,
-    );
-  }
-}
-
-class _FixedLansweeperApiUrlNotifier extends LansweeperApiUrlNotifier {
-  @override
-  String build() => _kFakeLansweeperApiUrl;
-}
-
-class _FixedLansweeperTicketFormUrlNotifier
-    extends LansweeperTicketFormUrlNotifier {
-  @override
-  String build() => 'https://test.example.com/ticketform.aspx';
-}
-
-class _FixedLansweeperTicketViewUrlNotifier
-    extends LansweeperTicketViewUrlNotifier {
-  @override
-  String build() => 'https://test.example.com/ticket.aspx?tid={tid}';
-}
-
-class _FixedLansweeperApiKeyNotifier extends LansweeperApiKeyNotifier {
-  @override
-  String build() => 'test-api-key';
-}
-
-class _FixedLansweeperAgentUsernameNotifier
-    extends LansweeperAgentUsernameNotifier {
-  @override
-  String build() => 'test.agent@example.com';
-}
-
-class _FixedGeminiApiKeyNotifier extends GeminiApiKeyNotifier {
-  @override
-  String build() => '';
-}
-
-class _FixedGeminiPromptTemplateNotifier extends GeminiPromptTemplateNotifier {
-  @override
-  String build() => kDefaultGeminiPromptTemplate;
-}
-
-class _FixedGeminiEndpointNotifier extends GeminiEndpointNotifier {
-  @override
-  String build() => kDefaultGeminiEndpoint;
-}
-
-class _FixedGeminiPrimaryModelNotifier extends GeminiPrimaryModelNotifier {
-  @override
-  String build() => '';
-}
-
-class _FixedGeminiFallbackEnabledNotifier extends GeminiFallbackEnabledNotifier {
-  @override
-  bool build() => false;
-}
-
-class _FixedGeminiFallbackModelNotifier extends GeminiFallbackModelNotifier {
-  @override
-  String build() => '';
-}
-
 List<Override> _lansweeperCharacterizationOverrides({
   required List<CallModel> reportCalls,
 }) {
   return <Override>[
     ...callLoggerTestProviderOverrides(),
     lansweeperConnectionProbeProvider.overrideWith(
-      _AlwaysAvailableLansweeperConnectionProbe.new,
+      AlwaysAvailableLansweeperConnectionProbe.new,
     ),
-    lansweeperApiUrlProvider.overrideWith(_FixedLansweeperApiUrlNotifier.new),
+    lansweeperApiUrlProvider.overrideWith(FixedLansweeperApiUrlNotifier.new),
     lansweeperTicketFormUrlProvider.overrideWith(
-      _FixedLansweeperTicketFormUrlNotifier.new,
+      FixedLansweeperTicketFormUrlNotifier.new,
     ),
     lansweeperTicketViewUrlProvider.overrideWith(
-      _FixedLansweeperTicketViewUrlNotifier.new,
+      FixedLansweeperTicketViewUrlNotifier.new,
     ),
-    lansweeperApiKeyProvider.overrideWith(_FixedLansweeperApiKeyNotifier.new),
+    lansweeperApiKeyProvider.overrideWith(FixedLansweeperApiKeyNotifier.new),
     lansweeperAgentUsernameProvider.overrideWith(
-      _FixedLansweeperAgentUsernameNotifier.new,
+      FixedLansweeperAgentUsernameNotifier.new,
     ),
-    dashboardFilterProvider.overrideWith(_AllDatesDashboardFilterNotifier.new),
+    dashboardFilterProvider.overrideWith(AllDatesDashboardFilterNotifier.new),
     dashboardStatsProvider.overrideWith((ref) async => _kEmptyDashboardStats),
     dashboardCallsForReportProvider.overrideWith((ref) async => reportCalls),
-    geminiApiKeyProvider.overrideWith(_FixedGeminiApiKeyNotifier.new),
+    geminiApiKeyProvider.overrideWith(FixedGeminiApiKeyNotifier.new),
     geminiPromptTemplateProvider.overrideWith(
-      _FixedGeminiPromptTemplateNotifier.new,
+      FixedGeminiPromptTemplateNotifier.new,
     ),
-    geminiEndpointProvider.overrideWith(_FixedGeminiEndpointNotifier.new),
+    geminiEndpointProvider.overrideWith(FixedGeminiEndpointNotifier.new),
     geminiPrimaryModelProvider.overrideWith(
-      _FixedGeminiPrimaryModelNotifier.new,
+      FixedGeminiPrimaryModelNotifier.new,
     ),
     geminiFallbackEnabledProvider.overrideWith(
-      _FixedGeminiFallbackEnabledNotifier.new,
+      FixedGeminiFallbackEnabledNotifier.new,
     ),
     geminiFallbackModelProvider.overrideWith(
-      _FixedGeminiFallbackModelNotifier.new,
+      FixedGeminiFallbackModelNotifier.new,
     ),
   ];
 }
@@ -305,6 +221,8 @@ void main() {
         await _pumpLansweeperReportDialog(tester, container);
 
         expect(find.textContaining('Αναφορά Lansweeper'), findsOneWidget);
+        expect(find.textContaining('Ακαταχώρητες (2)'), findsOneWidget);
+        expect(find.textContaining('Όλες (2)'), findsOneWidget);
         expect(find.textContaining(_kCharRenderMarkerA), findsOneWidget);
         expect(find.textContaining(_kCharRenderMarkerB), findsOneWidget);
         await tester.pump(const Duration(seconds: 11));
@@ -384,16 +302,18 @@ void main() {
 
         await _pumpLansweeperReportDialog(tester, container);
 
+        expect(find.textContaining('Ακαταχώρητες (1)'), findsOneWidget);
+        expect(find.textContaining('Όλες (2)'), findsOneWidget);
         expect(find.textContaining(_kCharFilterUnsent), findsOneWidget);
         expect(find.textContaining(_kCharFilterSent), findsNothing);
 
-        await tester.tap(find.text('Καταχωρημένες'));
+        await tester.tap(find.textContaining('Καταχωρημένες'));
         await pumpUntilSettled(tester);
 
         expect(find.textContaining(_kCharFilterUnsent), findsNothing);
         expect(find.textContaining(_kCharFilterSent), findsOneWidget);
 
-        await tester.tap(find.text('Όλες'));
+        await tester.tap(find.textContaining('Όλες ('));
         await pumpUntilSettled(tester);
 
         expect(find.textContaining(_kCharFilterUnsent), findsOneWidget);

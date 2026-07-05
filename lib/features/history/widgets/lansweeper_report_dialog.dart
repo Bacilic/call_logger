@@ -4,24 +4,33 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
-import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import '../../../core/services/gemini_prompt_template_controller.dart';
-import '../../../core/services/gemini_ticket_service.dart';
+import '../../../core/widgets/dialog_snackbar_scope.dart';
+import '../../../core/services/ai_prompt_template_controller.dart';
+import '../../../core/services/ai_ticket_suggestion_service.dart';
 import '../../../core/services/lansweeper_sync_service.dart';
 import '../../../core/widgets/quick_call_fab.dart';
 import '../../../core/widgets/spell_check_controller.dart';
-import '../../calls/models/call_model.dart';
 import '../models/lansweeper_connection_status.dart';
 import '../models/lansweeper_sync_state.dart';
+import '../providers/ai_ticket_suggestion_provider.dart';
 import '../providers/dashboard_provider.dart';
+import '../providers/gemini_settings_provider.dart';
 import '../providers/lansweeper_connection_probe_provider.dart';
+import '../providers/lansweeper_settings_provider.dart';
 import '../providers/lansweeper_sync_provider.dart';
-import 'lansweeper/lansweeper_gemini_prompt_preview_dialog.dart';
-import 'lansweeper/gemini_prompt_template_editor_dialog.dart';
+import 'lansweeper/lansweeper_ai_prompt_preview_dialog.dart';
+import 'lansweeper/ai_prompt_template_editor_dialog.dart';
 import 'lansweeper/lansweeper_connection_settings_dialog.dart';
+import 'lansweeper/lansweeper_registration_dialogs.dart';
+import 'lansweeper/lansweeper_ai_presenter.dart';
+import 'lansweeper/lansweeper_settings_persistence.dart';
 import 'lansweeper/lansweeper_report_call_list.dart';
+import 'lansweeper/lansweeper_browser_launcher.dart';
+import 'lansweeper/lansweeper_report_filter.dart';
+import 'lansweeper/lansweeper_report_filter_bar.dart';
+import 'lansweeper/lansweeper_report_item_mapper.dart';
 import 'lansweeper/lansweeper_url_rules.dart';
 import 'lansweeper/lansweeper_sync_form.dart';
 import 'lansweeper/sync_history_list.dart';
@@ -29,7 +38,7 @@ import 'lansweeper/sync_history_list.dart';
 part 'lansweeper_report_settings.dart';
 part 'lansweeper_report_items.dart';
 part 'lansweeper_report_browser.dart';
-part 'lansweeper_report_gemini.dart';
+part 'lansweeper_report_ai.dart';
 part 'lansweeper_report_registration.dart';
 
 class LansweeperReportDialog extends ConsumerStatefulWidget {
@@ -68,7 +77,7 @@ mixin LansweeperReportDialogStateHost on ConsumerState<LansweeperReportDialog> {
   // ignore: unused_element
   TextEditingController get _geminiApiKeyController;
   // ignore: unused_element
-  GeminiPromptTemplateTextEditingController get _geminiPromptTemplateController;
+  AiPromptTemplateTextEditingController get _aiPromptTemplateController;
   // ignore: unused_element
   TextEditingController get _geminiEndpointController;
   // ignore: unused_element
@@ -115,61 +124,58 @@ mixin LansweeperReportDialogStateHost on ConsumerState<LansweeperReportDialog> {
   set _aiSuggestClient(http.Client? value);
 
   // ignore: unused_element
-  _LansweeperReportFilter get _reportFilter;
+  DateTime? get _aiCooldownUntil;
   // ignore: unused_element
-  set _reportFilter(_LansweeperReportFilter value);
+  set _aiCooldownUntil(DateTime? value);
 
-  void _showDialogSnackBar(SnackBar snackBar, {String? copyText});
+  // ignore: unused_element
+  String? get _aiCooldownModel;
+  // ignore: unused_element
+  set _aiCooldownModel(String? value);
+
+  // ignore: unused_element
+  Timer? get _aiCooldownTicker;
+  // ignore: unused_element
+  set _aiCooldownTicker(Timer? value);
+
+  // ignore: unused_element
+  bool get _aiAutoResubmitArmed;
+  // ignore: unused_element
+  set _aiAutoResubmitArmed(bool value);
+
+  // ignore: unused_element
+  List<ReportCallItem>? get _aiLastSuggestSelection;
+  // ignore: unused_element
+  set _aiLastSuggestSelection(List<ReportCallItem>? value);
+
+  // ignore: unused_element
+  LansweeperReportFilter get _reportFilter;
+  // ignore: unused_element
+  set _reportFilter(LansweeperReportFilter value);
+
+  void showDialogSnackBar(SnackBar snackBar, {String? copyText});
 
   // ignore: unused_element — απαιτείται από part mixins· ο analyzer δεν το ανιχνεύει.
   Future<void> _openTicketViewInBrowser(String ticketId);
 
   // ignore: unused_element
-  String _callerLabel(CallModel call);
+  void _toggleGroup(List<ReportCallItem> items, bool? checked);
   // ignore: unused_element
-  String _notes(CallModel call);
+  void _toggleItem(ReportCallItem item, bool? checked);
   // ignore: unused_element
-  String _selectedKeysSignature(List<_ReportCallItem> selected);
+  ReportCallItem? _primarySelectedItem(List<ReportCallItem> allItems);
   // ignore: unused_element
-  String _combinedSelectedNotes(List<_ReportCallItem> selected);
-  // ignore: unused_element
-  String _combinedGeminiIssue(List<_ReportCallItem> selected);
-  // ignore: unused_element
-  String _combinedUniqueCallField(
-    List<_ReportCallItem> selected,
-    String? Function(CallModel call) read,
-  );
-  // ignore: unused_element
-  String _details(CallModel call);
-  // ignore: unused_element
-  String _durationLabel(int seconds);
-  // ignore: unused_element
-  String _totalDurationLabel(int totalSeconds);
-  // ignore: unused_element
-  List<_ReportCallItem> _toItems(List<CallModel> calls);
-  // ignore: unused_element
-  void _toggleGroup(List<_ReportCallItem> items, bool? checked);
-  // ignore: unused_element
-  void _toggleItem(_ReportCallItem item, bool? checked);
-  // ignore: unused_element
-  _ReportCallItem? _primarySelectedItem(List<_ReportCallItem> allItems);
-  // ignore: unused_element
-  String _normalizedLansweeperState(_ReportCallItem item);
-  // ignore: unused_element
-  bool _isRegisteredCall(_ReportCallItem item);
-  // ignore: unused_element
-  bool _isFailedCall(_ReportCallItem item);
-  // ignore: unused_element
-  List<_ReportCallItem> _filterReportItems(List<_ReportCallItem> items);
+  List<ReportCallItem> _filterReportItems(List<ReportCallItem> items);
 }
 
 class _LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
     with
+        DialogSnackbarHost,
         LansweeperReportDialogStateHost,
         LansweeperReportSettingsMixin,
         LansweeperReportItemsMixin,
         LansweeperReportBrowserMixin,
-        LansweeperReportGeminiMixin,
+        LansweeperReportAiMixin,
         LansweeperReportRegistrationMixin {
   @override
   final Set<String> _selectedKeys = <String>{};
@@ -206,9 +212,9 @@ class _LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
   @override
   final TextEditingController _geminiApiKeyController = TextEditingController();
   @override
-  final GeminiPromptTemplateTextEditingController
-  _geminiPromptTemplateController =
-      GeminiPromptTemplateTextEditingController();
+  final AiPromptTemplateTextEditingController
+  _aiPromptTemplateController =
+      AiPromptTemplateTextEditingController();
   @override
   final TextEditingController _geminiEndpointController =
       TextEditingController();
@@ -247,58 +253,19 @@ class _LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
   http.Client? _aiSuggestClient;
   @override
   String? _aiCurrentModel;
-  final GlobalKey<ScaffoldMessengerState> _dialogMessengerKey =
-      GlobalKey<ScaffoldMessengerState>();
+  @override
+  DateTime? _aiCooldownUntil;
+  @override
+  String? _aiCooldownModel;
+  @override
+  Timer? _aiCooldownTicker;
+  @override
+  bool _aiAutoResubmitArmed = false;
+  @override
+  List<ReportCallItem>? _aiLastSuggestSelection;
 
   @override
-  void _showDialogSnackBar(SnackBar snackBar, {String? copyText}) {
-    if (!mounted) return;
-    final messenger = _dialogMessengerKey.currentState;
-    if (messenger == null) return;
-
-    final textToCopy = (copyText ?? '').trim();
-    if (textToCopy.isEmpty) {
-      messenger.showSnackBar(snackBar);
-      return;
-    }
-
-    messenger.showSnackBar(
-      SnackBar(
-        content: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(child: snackBar.content),
-            IconButton(
-              tooltip: 'Αντιγραφή',
-              visualDensity: VisualDensity.compact,
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
-              icon: const Icon(Icons.content_copy_outlined, size: 18),
-              color: Theme.of(context).colorScheme.inversePrimary,
-              onPressed: () => unawaited(_copyDialogSnackBarText(textToCopy)),
-            ),
-          ],
-        ),
-        duration: snackBar.duration,
-        behavior: snackBar.behavior,
-      ),
-    );
-  }
-
-  Future<void> _copyDialogSnackBarText(String text) async {
-    await Clipboard.setData(ClipboardData(text: text));
-    if (!mounted) return;
-    _dialogMessengerKey.currentState?.hideCurrentSnackBar();
-    _showDialogSnackBar(
-      const SnackBar(
-        content: Text('Αντιγραφή στο πρόχειρο.'),
-        duration: Duration(seconds: 2),
-      ),
-    );
-  }
-
-  @override
-  _LansweeperReportFilter _reportFilter = _LansweeperReportFilter.unsentOnly;
+  LansweeperReportFilter _reportFilter = LansweeperReportFilter.unsentOnly;
 
   @override
   void initState() {
@@ -326,7 +293,7 @@ class _LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
         lansweeperHelpdeskWebPasswordProvider,
       );
       _geminiApiKeyController.text = ref.read(geminiApiKeyProvider);
-      _geminiPromptTemplateController.text = ref.read(
+      _aiPromptTemplateController.text = ref.read(
         geminiPromptTemplateProvider,
       );
       _geminiEndpointController.text = ref.read(geminiEndpointProvider);
@@ -405,8 +372,8 @@ class _LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
     _geminiPromptTemplateSub = ref.listenManual<String>(
       geminiPromptTemplateProvider,
       (_, next) {
-        if (_geminiPromptTemplateController.text == next) return;
-        _geminiPromptTemplateController.text = next;
+        if (_aiPromptTemplateController.text == next) return;
+        _aiPromptTemplateController.text = next;
       },
     );
     _geminiEndpointSub = ref.listenManual<String>(geminiEndpointProvider, (
@@ -463,6 +430,7 @@ class _LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
   @override
   void dispose() {
     _aiSuggestTicker?.cancel();
+    _aiCooldownTicker?.cancel();
     _aiSuggestStopwatch.stop();
     _aiSuggestClient?.close();
     _lansweeperSettingsDebounceTimer?.cancel();
@@ -488,7 +456,7 @@ class _LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
     _lansweeperHelpdeskPasswordController.dispose();
     _lansweeperAgentUsernameController.dispose();
     _geminiApiKeyController.dispose();
-    _geminiPromptTemplateController.dispose();
+    _aiPromptTemplateController.dispose();
     _geminiEndpointController.dispose();
     _geminiPrimaryModelController.dispose();
     _geminiFallbackModelController.dispose();
@@ -507,17 +475,19 @@ class _LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
   }
 
   bool _canSetSelectedToState(
-    List<_ReportCallItem> selected,
+    List<ReportCallItem> selected,
     String targetState,
   ) {
     if (selected.isEmpty) return false;
-    final states = selected.map(_normalizedLansweeperState).toSet();
+    final states = selected
+        .map(LansweeperReportItemMapper.normalizedLansweeperState)
+        .toSet();
     if (states.length > 1) return true;
     return states.single != targetState;
   }
 
   String? _disabledStateButtonTooltip(
-    List<_ReportCallItem> selected,
+    List<ReportCallItem> selected,
     String targetState, {
     required bool isLoading,
   }) {
@@ -525,7 +495,9 @@ class _LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
     if (selected.isEmpty) {
       return 'Επιλέξτε μία ή περισσότερες κλήσεις';
     }
-    final states = selected.map(_normalizedLansweeperState).toSet();
+    final states = selected
+        .map(LansweeperReportItemMapper.normalizedLansweeperState)
+        .toSet();
     if (states.length > 1) return null;
     if (states.single != targetState) return null;
     return switch (targetState) {
@@ -540,7 +512,7 @@ class _LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
   }
 
   Widget _buildLansweeperStateButton({
-    required List<_ReportCallItem> selected,
+    required List<ReportCallItem> selected,
     required bool isLoading,
     required String targetState,
     required String label,
@@ -564,107 +536,6 @@ class _LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
     );
     if (tooltip == null) return button;
     return Tooltip(message: tooltip, child: button);
-  }
-
-  Widget _reportFilterChip({
-    required String label,
-    required String tooltip,
-    required bool selected,
-    VoidCallback? onSelect,
-  }) {
-    return Tooltip(
-      message: tooltip,
-      child: FilterChip(
-        label: Text(label),
-        selected: selected,
-        onSelected: onSelect == null ? null : (_) => onSelect(),
-      ),
-    );
-  }
-
-  static const String _noCallsInRangeFilterTooltip =
-      'Δεν υπάρχουν κλήσεις στο τρέχον εύρος ημερομηνιών';
-
-  Widget _buildReportFilterBar({
-    required bool hasAnyCallsInRange,
-    required String reportRangeTitle,
-  }) {
-    final disabledTooltip =
-        '$_noCallsInRangeFilterTooltip («$reportRangeTitle»).';
-
-    return Wrap(
-      spacing: 6,
-      runSpacing: 6,
-      children: [
-        _reportFilterChip(
-          label: 'Ακαταχώρητες',
-          tooltip: hasAnyCallsInRange
-              ? 'Οι κλήσεις που δεν έχουν καταχωρηθεί στο Lansweeper.'
-              : disabledTooltip,
-          selected: hasAnyCallsInRange &&
-              _reportFilter == _LansweeperReportFilter.unsentOnly,
-          onSelect: hasAnyCallsInRange
-              ? () => setState(
-                  () => _reportFilter = _LansweeperReportFilter.unsentOnly,
-                )
-              : null,
-        ),
-        _reportFilterChip(
-          label: 'Καταχωρημένες',
-          tooltip: hasAnyCallsInRange
-              ? 'Οι κλήσεις που έχουν καταχωρηθεί στο Lansweeper. '
-                    'Δεν είναι υποχρεωτικό αλλά επιθυμητό το αναγνωριστικό αιτήματος (ticket id).'
-              : disabledTooltip,
-          selected: hasAnyCallsInRange &&
-              _reportFilter == _LansweeperReportFilter.sentOnly,
-          onSelect: hasAnyCallsInRange
-              ? () => setState(
-                  () => _reportFilter = _LansweeperReportFilter.sentOnly,
-                )
-              : null,
-        ),
-        _reportFilterChip(
-          label: 'Εξαιρεμένες',
-          tooltip: hasAnyCallsInRange
-              ? 'Οι κλήσεις που δεν υπάρχει λόγος να καταχωρηθούν στο Lansweeper.'
-              : disabledTooltip,
-          selected: hasAnyCallsInRange &&
-              _reportFilter == _LansweeperReportFilter.excludedOnly,
-          onSelect: hasAnyCallsInRange
-              ? () => setState(
-                  () => _reportFilter = _LansweeperReportFilter.excludedOnly,
-                )
-              : null,
-        ),
-        _reportFilterChip(
-          label: 'Αποτυχημένες',
-          tooltip: hasAnyCallsInRange
-              ? 'Οι κλήσεις που απέτυχαν να καταχωρηθούν στο Lansweeper '
-                    'με αυτόματο τρόπο.'
-              : disabledTooltip,
-          selected: hasAnyCallsInRange &&
-              _reportFilter == _LansweeperReportFilter.failedOnly,
-          onSelect: hasAnyCallsInRange
-              ? () => setState(
-                  () => _reportFilter = _LansweeperReportFilter.failedOnly,
-                )
-              : null,
-        ),
-        _reportFilterChip(
-          label: 'Όλες',
-          tooltip: hasAnyCallsInRange
-              ? 'Εμφάνιση όλων των κλήσεων.'
-              : 'Εμφάνιση όλων των κλήσεων στο εύρος «$reportRangeTitle» (κενό).',
-          selected: !hasAnyCallsInRange ||
-              _reportFilter == _LansweeperReportFilter.all,
-          onSelect: hasAnyCallsInRange
-              ? () => setState(
-                  () => _reportFilter = _LansweeperReportFilter.all,
-                )
-              : null,
-        ),
-      ],
-    );
   }
 
   Widget _buildNoCallsInRangeEmptyState(
@@ -740,20 +611,34 @@ class _LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
       data: (calls) => calls.isNotEmpty,
       orElse: () => true,
     );
+    final reportCounts = callsAsync.maybeWhen(
+      data: (calls) => lansweeperReportCategoryCounts(
+        calls.map((call) => call.lansweeperState),
+      ),
+      orElse: () => null,
+    );
 
     ref.listen(dashboardCallsForReportProvider, (previous, next) {
       next.whenData((calls) {
-        if (calls.isNotEmpty || !mounted) return;
-        if (_reportFilter == _LansweeperReportFilter.all) return;
-        setState(() => _reportFilter = _LansweeperReportFilter.all);
+        if (!mounted) return;
+        if (calls.isEmpty) {
+          if (_reportFilter == LansweeperReportFilter.all) return;
+          setState(() => _reportFilter = LansweeperReportFilter.all);
+          return;
+        }
+        if (_reportFilter != LansweeperReportFilter.all &&
+            lansweeperReportCategoryCounts(
+                  calls.map((call) => call.lansweeperState),
+                ).forFilter(_reportFilter) ==
+                0) {
+          setState(() => _reportFilter = LansweeperReportFilter.all);
+        }
       });
     });
 
-    return ScaffoldMessenger(
-      key: _dialogMessengerKey,
-      child: Scaffold(
-        backgroundColor: Colors.transparent,
-        body: Stack(
+    return DialogSnackbarScope(
+      messengerKey: dialogMessengerKey,
+      child: Stack(
           fit: StackFit.expand,
           children: [
             Center(
@@ -791,9 +676,12 @@ class _LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _buildReportFilterBar(
+            LansweeperReportFilterBar(
+              selected: _reportFilter,
+              counts: reportCounts,
               hasAnyCallsInRange: hasAnyCallsInRange,
               reportRangeTitle: reportRangeTitle,
+              onSelect: (filter) => setState(() => _reportFilter = filter),
             ),
             const SizedBox(height: 6),
             Expanded(
@@ -802,10 +690,11 @@ class _LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
                 error: (e, _) =>
                     Center(child: Text('Σφάλμα φόρτωσης κλήσεων: $e')),
                 data: (calls) {
-                  final allItems = _toItems(calls);
+                  final allItems = LansweeperReportItemMapper.toItems(calls);
                   final items = _filterReportItems(allItems);
-                  final grouped = _groupByCaller(items);
-                  final groupedRows = _groupedRowData(grouped);
+                  final grouped = LansweeperReportItemMapper.groupByCaller(items);
+                  final groupedRows =
+                      LansweeperReportItemMapper.groupedRowData(grouped);
                   final itemByKey = {
                     for (final item in items) item.key: item,
                   };
@@ -814,9 +703,12 @@ class _LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
                       .toList();
                   final primarySelected = _primarySelectedItem(items);
                   final isPrimaryRegistered = primarySelected != null &&
-                      _isRegisteredCall(primarySelected);
+                      LansweeperReportItemMapper.isRegisteredCall(
+                        primarySelected,
+                      );
                   final isPrimaryFailed =
-                      primarySelected != null && _isFailedCall(primarySelected);
+                      primarySelected != null &&
+                      LansweeperReportItemMapper.isFailedCall(primarySelected);
                   final canImmediateApiSubmit = primarySelected != null &&
                       !syncState.isLoading &&
                       canSubmitToApi &&
@@ -832,15 +724,24 @@ class _LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
                   );
                   final selectedCallId = primarySelected?.call.id;
                   final geminiKeyReady = geminiApiKey.trim().isNotEmpty;
+                  final aiCooldownActive = _isAiCooldownActive;
+                  final aiCooldownSeconds = _aiCooldownRemainingSeconds;
                   final aiSuggestEnabled =
-                      selected.isNotEmpty && geminiKeyReady && !_aiSuggestRunning;
+                      selected.isNotEmpty &&
+                      geminiKeyReady &&
+                      !_aiSuggestRunning &&
+                      !aiCooldownActive;
                   final aiSuggestTooltip = selected.isEmpty
                       ? 'Επιλέξτε κλήση'
                       : !geminiKeyReady
                       ? 'Ορίστε Gemini API key στις ρυθμίσεις'
+                      : aiCooldownActive
+                      ? 'Αναμένεται διαθεσιμότητα ποσόστωσης'
                       : null;
                   final promptPreviewEnabled =
-                      selected.isNotEmpty && !_aiSuggestRunning;
+                      selected.isNotEmpty &&
+                      !_aiSuggestRunning &&
+                      !aiCooldownActive;
                   final promptPreviewTooltip = selected.isEmpty
                       ? 'Επιλέξτε κλήση'
                       : _aiSuggestRunning
@@ -888,7 +789,7 @@ class _LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
                               Text(
                                 'Επιλεγμένες: ${selected.length} | '
                                 'Σύνολο διάρκειας: '
-                                '${_totalDurationLabel(totalSelectedSeconds)}',
+                                '${LansweeperReportItemMapper.totalDurationLabel(totalSelectedSeconds)}',
                                 style: Theme.of(context).textTheme.titleSmall,
                               ),
                               const SizedBox(height: 4),
@@ -896,7 +797,8 @@ class _LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
                                 child: LansweeperReportCallList(
                                   grouped: groupedRows,
                                   selectedKeys: _selectedKeys,
-                                  totalDurationLabel: _totalDurationLabel,
+                                  totalDurationLabel:
+                                      LansweeperReportItemMapper.totalDurationLabel,
                                   ticketViewUrlTemplate:
                                       lansweeperTicketViewUrl,
                                   isSyncLoading: syncState.isLoading,
@@ -943,6 +845,16 @@ class _LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
                                       ? _aiSuggestElapsedSeconds
                                           .toStringAsFixed(2)
                                       : null,
+                                  cooldownRemainingSeconds: aiCooldownActive
+                                      ? aiCooldownSeconds
+                                      : null,
+                                  cooldownModelLabel: aiCooldownActive
+                                      ? _aiCooldownModel
+                                      : null,
+                                  onCancelAutoResubmit: aiCooldownActive &&
+                                          _aiAutoResubmitArmed
+                                      ? _cancelAiAutoResubmit
+                                      : null,
                                   suggestDisabledTooltip: aiSuggestTooltip,
                                   onSuggest: aiSuggestEnabled
                                       ? () => unawaited(
@@ -952,11 +864,11 @@ class _LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
                                   previewDisabledTooltip: promptPreviewTooltip,
                                   onPreviewPrompt: promptPreviewEnabled
                                       ? () => unawaited(
-                                          _showGeminiPromptPreview(selected),
+                                          _showAiPromptPreview(selected),
                                         )
                                       : null,
                                   onEditPromptTemplate: () => unawaited(
-                                    _openGeminiPromptTemplateEditorDialog(),
+                                    _openAiPromptTemplateEditorDialog(),
                                   ),
                                 ),
                                     const SizedBox(height: 10),
@@ -1114,7 +1026,7 @@ class _LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
         callsAsync.maybeWhen(
           data: (calls) {
             if (calls.isEmpty) return const SizedBox.shrink();
-            final items = _toItems(calls);
+            final items = LansweeperReportItemMapper.toItems(calls);
             final selected = items
                 .where((e) => _selectedKeys.contains(e.key))
                 .toList();
@@ -1162,7 +1074,6 @@ class _LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
             ),
           ],
         ),
-      ),
     );
   }
 }

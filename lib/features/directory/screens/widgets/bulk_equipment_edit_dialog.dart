@@ -1,3 +1,4 @@
+import '../../../../core/widgets/dialog_snackbar_scope.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -33,7 +34,8 @@ class BulkEquipmentEditDialog extends StatefulWidget {
       _BulkEquipmentEditDialogState();
 }
 
-class _BulkEquipmentEditDialogState extends State<BulkEquipmentEditDialog> {
+class _BulkEquipmentEditDialogState extends State<BulkEquipmentEditDialog>
+    with DialogSnackbarHost {
   static const _fieldKeys = [
     'type',
     'notes',
@@ -258,7 +260,10 @@ class _BulkEquipmentEditDialogState extends State<BulkEquipmentEditDialog> {
       'defaultRemoteTool': 'Εργαλείο απομακρυσμένης',
       'owner': 'Κάτοχος',
     };
-    return AlertDialog(
+    return DialogSnackbarScope(
+      messengerKey: dialogMessengerKey,
+      child: Center(
+        child: AlertDialog(
       title: Text(
         'Μαζική επεξεργασία (${widget.selectedRows.length} εξοπλισμός)',
       ),
@@ -592,6 +597,8 @@ class _BulkEquipmentEditDialogState extends State<BulkEquipmentEditDialog> {
         ),
         FilledButton(onPressed: _save, child: const Text('Αποθήκευση')),
       ],
+        ),
+      ),
     );
   }
 }

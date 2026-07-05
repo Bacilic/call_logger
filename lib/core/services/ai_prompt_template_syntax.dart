@@ -1,9 +1,9 @@
 ﻿import 'package:flutter/material.dart';
 
-/// Placeholder προτροπής Gemini (token → ετικέτα UI).
-typedef GeminiPromptPlaceholder = ({String token, String label});
+/// Placeholder προτροπής ΤΝ (token → ετικέτα UI).
+typedef AiPromptPlaceholder = ({String token, String label});
 
-const List<GeminiPromptPlaceholder> kGeminiPromptPlaceholders = [
+const List<AiPromptPlaceholder> kAiPromptPlaceholders = [
   (token: '{Υπάλληλος}', label: 'Υπάλληλος'),
   (token: '{Εξοπλισμός}', label: 'Εξοπλισμός'),
   (token: '{Τμήμα}', label: 'Τμήμα'),
@@ -15,11 +15,28 @@ const List<GeminiPromptPlaceholder> kGeminiPromptPlaceholders = [
 ];
 
 /// Blueprint οδηγίας μορφής JSON απάντησης ΤΝ (εισαγωγή στο πρότυπο).
-const String kGeminiJsonResponseBlueprint =
+const String kAiJsonResponseBlueprint =
     '{"title":"...","description":"...","solution":"..."}';
 
+const String kDefaultAiPromptTemplate = '''Δημιούργησε τίτλο και πλήρη περιγραφή για ticket helpdesk στο Lansweeper.
+
+Υπάλληλος: {Υπάλληλος}. Τμήμα: {Τμήμα}.
+{@Εξοπλισμός}Εξοπλισμός: {Εξοπλισμός}. {@/Εξοπλισμός}
+{@Κατηγορία}Κατηγορία: {Κατηγορία}. {@/Κατηγορία}
+
+Πρόβλημα: {Πρόβλημα}
+{@Λύση}Λύση (προσχέδιο): {Λύση}. {@/Λύση}
+
+Τρέχον προσχέδιο τίτλου: {Τίτλος}
+Τρέχουσα περιγραφή: {Σημειώσεις}
+
+Βελτίωσε το προσχέδιο με βάση τα στοιχεία κλήσης.
+Η περιγραφή (description) να περιέχει ΜΟΝΟ το πρόβλημα/αιτιολόγηση.
+Η λύση/αντιμετώπιση να μπει στο πεδίο solution, όχι στην description.
+Απάντησε ΜΟΝΟ σε JSON χωρίς markdown: {"title":"...","description":"...","solution":"..."}''';
+
 /// Είδος token προτροπής για χρωματισμό / έλεγχο.
-enum GeminiPromptTokenKind {
+enum AiPromptTokenKind {
   plain,
   knownPlaceholder,
   unknownPlaceholder,
@@ -30,21 +47,21 @@ enum GeminiPromptTokenKind {
 }
 
 /// Ένα τμήμα κειμένου προτροπής μετά την tokenization.
-class GeminiPromptTokenSpan {
-  const GeminiPromptTokenSpan({
+class AiPromptTokenSpan {
+  const AiPromptTokenSpan({
     required this.text,
     required this.kind,
     this.placeholderName,
   });
 
   final String text;
-  final GeminiPromptTokenKind kind;
+  final AiPromptTokenKind kind;
   final String? placeholderName;
 }
 
 /// Αποτέλεσμα ελέγχου συντακτικού προτροπής.
-class GeminiPromptTemplateValidation {
-  const GeminiPromptTemplateValidation({
+class AiPromptTemplateValidation {
+  const AiPromptTemplateValidation({
     required this.isValid,
     this.errors = const [],
     this.warnings = const [],
@@ -56,7 +73,7 @@ class GeminiPromptTemplateValidation {
   /// Προειδοποιήσεις που δεν επηρεάζουν την εγκυρότητα (`isValid`).
   final List<String> warnings;
 
-  static const valid = GeminiPromptTemplateValidation(
+  static const valid = AiPromptTemplateValidation(
     isValid: true,
     errors: <String>[],
     warnings: <String>[],
@@ -64,7 +81,7 @@ class GeminiPromptTemplateValidation {
 }
 
 /// Σύνταξη προαιρετικών blocks `{@Όνομα}…{@/Όνομα}` και placeholders `{Όνομα}`.
-abstract final class GeminiPromptTemplateSyntax {
+abstract final class AiPromptTemplateSyntax {
   static final RegExp _braceTokenPattern = RegExp(r'\{[^}]+\}');
 
   static const List<String> _jsonResponseKeys = [
@@ -74,11 +91,11 @@ abstract final class GeminiPromptTemplateSyntax {
   ];
 
   static Set<String> get knownPlaceholderTokens => {
-        for (final p in kGeminiPromptPlaceholders) p.token,
+        for (final p in kAiPromptPlaceholders) p.token,
       };
 
   static Set<String> get knownPlaceholderNames => {
-        for (final p in kGeminiPromptPlaceholders)
+        for (final p in kAiPromptPlaceholders)
           placeholderNameFromToken(p.token),
       };
 
@@ -158,7 +175,7 @@ abstract final class GeminiPromptTemplateSyntax {
     if (missing.length == _jsonResponseKeys.length) {
       return <String>[
         'Η προτροπή δεν περιλαμβάνει οδηγίες μορφής JSON απάντησης '
-        '($kGeminiJsonResponseBlueprint) — η ΤΝ δεν θα γνωρίζει σε ποια μορφή να απαντήσει.',
+        '($kAiJsonResponseBlueprint) — η ΤΝ δεν θα γνωρίζει σε ποια μορφή να απαντήσει.',
       ];
     }
     if (missing.isEmpty) return const <String>[];
@@ -186,7 +203,7 @@ abstract final class GeminiPromptTemplateSyntax {
     }
     return <String>[
       'Η προτροπή περιλαμβάνει περισσότερες από μία οδηγίες μορφής JSON '
-      '($kGeminiJsonResponseBlueprint) — η ΤΝ μπορεί να μπερδευτεί. '
+      '($kAiJsonResponseBlueprint) — η ΤΝ μπορεί να μπερδευτεί. '
       'Κρατήστε μόνο μία υπόδειξη απάντησης σε JSON.',
     ];
   }
@@ -198,7 +215,7 @@ abstract final class GeminiPromptTemplateSyntax {
         _ => key,
       };
 
-  static GeminiPromptTemplateValidation validate(String template) {
+  static AiPromptTemplateValidation validate(String template) {
     final errors = <String>[];
     final warnings = <String>[];
     final stack = <String>[];
@@ -280,9 +297,9 @@ abstract final class GeminiPromptTemplateSyntax {
     }
 
     if (errors.isEmpty && warnings.isEmpty) {
-      return GeminiPromptTemplateValidation.valid;
+      return AiPromptTemplateValidation.valid;
     }
-    return GeminiPromptTemplateValidation(
+    return AiPromptTemplateValidation(
       isValid: errors.isEmpty,
       errors: errors,
       warnings: warnings,
@@ -328,15 +345,15 @@ abstract final class GeminiPromptTemplateSyntax {
     return rows[b.length];
   }
 
-  static List<GeminiPromptTokenSpan> tokenize(String template) {
-    final spans = <GeminiPromptTokenSpan>[];
+  static List<AiPromptTokenSpan> tokenize(String template) {
+    final spans = <AiPromptTokenSpan>[];
     var index = 0;
     for (final match in _braceTokenPattern.allMatches(template)) {
       if (match.start > index) {
         spans.add(
-          GeminiPromptTokenSpan(
+          AiPromptTokenSpan(
             text: template.substring(index, match.start),
-            kind: GeminiPromptTokenKind.plain,
+            kind: AiPromptTokenKind.plain,
           ),
         );
       }
@@ -346,52 +363,52 @@ abstract final class GeminiPromptTemplateSyntax {
     }
     if (index < template.length) {
       spans.add(
-        GeminiPromptTokenSpan(
+        AiPromptTokenSpan(
           text: template.substring(index),
-          kind: GeminiPromptTokenKind.plain,
+          kind: AiPromptTokenKind.plain,
         ),
       );
     }
     return spans;
   }
 
-  static GeminiPromptTokenSpan _classifyToken(String token) {
+  static AiPromptTokenSpan _classifyToken(String token) {
     if (token.startsWith('{@/')) {
       final name = token.substring(3, token.length - 1);
-      return GeminiPromptTokenSpan(
+      return AiPromptTokenSpan(
         text: token,
         kind: knownPlaceholderNames.contains(name)
-            ? GeminiPromptTokenKind.blockClose
-            : GeminiPromptTokenKind.unknownBlock,
+            ? AiPromptTokenKind.blockClose
+            : AiPromptTokenKind.unknownBlock,
         placeholderName: name,
       );
     }
     if (token.startsWith('{@')) {
       final name = token.substring(2, token.length - 1);
-      return GeminiPromptTokenSpan(
+      return AiPromptTokenSpan(
         text: token,
         kind: knownPlaceholderNames.contains(name)
-            ? GeminiPromptTokenKind.blockOpen
-            : GeminiPromptTokenKind.unknownBlock,
+            ? AiPromptTokenKind.blockOpen
+            : AiPromptTokenKind.unknownBlock,
         placeholderName: name,
       );
     }
     if (knownPlaceholderTokens.contains(token)) {
-      return GeminiPromptTokenSpan(
+      return AiPromptTokenSpan(
         text: token,
-        kind: GeminiPromptTokenKind.knownPlaceholder,
+        kind: AiPromptTokenKind.knownPlaceholder,
         placeholderName: placeholderNameFromToken(token),
       );
     }
     if (isJsonResponseInstructionToken(token)) {
-      return GeminiPromptTokenSpan(
+      return AiPromptTokenSpan(
         text: token,
-        kind: GeminiPromptTokenKind.jsonResponseInstruction,
+        kind: AiPromptTokenKind.jsonResponseInstruction,
       );
     }
-    return GeminiPromptTokenSpan(
+    return AiPromptTokenSpan(
       text: token,
-      kind: GeminiPromptTokenKind.unknownPlaceholder,
+      kind: AiPromptTokenKind.unknownPlaceholder,
       placeholderName: placeholderNameFromToken(token),
     );
   }
@@ -410,19 +427,19 @@ abstract final class GeminiPromptTemplateSyntax {
     final children = <InlineSpan>[];
     for (final span in tokenize(template)) {
       final style = switch (span.kind) {
-        GeminiPromptTokenKind.plain => baseStyle,
-        GeminiPromptTokenKind.knownPlaceholder =>
+        AiPromptTokenKind.plain => baseStyle,
+        AiPromptTokenKind.knownPlaceholder =>
           baseStyle.copyWith(color: placeholder, fontWeight: FontWeight.w600),
-        GeminiPromptTokenKind.blockOpen ||
-        GeminiPromptTokenKind.blockClose =>
+        AiPromptTokenKind.blockOpen ||
+        AiPromptTokenKind.blockClose =>
           baseStyle.copyWith(color: block, fontWeight: FontWeight.w600),
-        GeminiPromptTokenKind.jsonResponseInstruction =>
+        AiPromptTokenKind.jsonResponseInstruction =>
           baseStyle.copyWith(
             color: const Color(0xFF7C3AED),
             fontWeight: FontWeight.w500,
           ),
-        GeminiPromptTokenKind.unknownPlaceholder ||
-        GeminiPromptTokenKind.unknownBlock =>
+        AiPromptTokenKind.unknownPlaceholder ||
+        AiPromptTokenKind.unknownBlock =>
           baseStyle.copyWith(
             color: error,
             fontWeight: FontWeight.w600,
