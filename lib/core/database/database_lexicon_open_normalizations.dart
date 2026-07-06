@@ -10,6 +10,21 @@ Future<void> applyLexiconOpenNormalizations(Database db) async {
   await ensureDepartmentsMapRotationColumn(db);
   await ensureDepartmentsMapHiddenColumn(db);
   await ensureCallsNoSolutionColumn(db);
+  await clearEquipmentDefaultRemoteToolOnOpen(db);
+}
+
+/// Το «κύριο εργαλείο» είναι πλέον υπολογιζόμενο (σειρά προτεραιότητας) — το παλιό
+/// αποθηκευμένο `equipment.default_remote_tool` είναι νεκρό/παραπλανητικό. Καθαρίζεται
+/// σε NULL (idempotent) ώστε να μη μένουν μπαγιάτικες τιμές που έκρυβαν κουμπιά κλήσης.
+Future<void> clearEquipmentDefaultRemoteToolOnOpen(Database db) async {
+  try {
+    await db.rawUpdate(
+      'UPDATE equipment SET default_remote_tool = NULL '
+      'WHERE default_remote_tool IS NOT NULL',
+    );
+  } catch (_) {
+    // Ο πίνακας μπορεί να λείπει σε ασυνήθιστα σενάρια.
+  }
 }
 
 /// Παλιά τιμή πηγής `system` (asset) → `imported` (ίδια κατηγορία με TXT).

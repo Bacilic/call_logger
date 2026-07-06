@@ -80,6 +80,9 @@ Finder _notesField() => _fieldByLabel('Σημειώσεις');
 
 Finder _locationField() => _fieldByLabel('Τοποθεσία');
 
+Finder _zoneAShowInCall() =>
+    find.byWidgetPredicate((w) => w is DropdownButtonFormField<int?>);
+
 List<Override> _equipmentFormProviderOverrides({
   List<RemoteTool>? catalog,
   List<RemoteToolFormPair>? pairs,
@@ -350,7 +353,7 @@ void main() {
     );
 
     testWidgets(
-      'επεξεργασία: εξοπλισμός με remote_params εμφανίζει επιλεγμένα chips',
+      'επεξεργασία: εξοπλισμός με remote_params εμφανίζει το πεδίο παραμέτρου με την τιμή',
       (tester) async {
         tester.view.physicalSize = const Size(1600, 900);
         tester.view.devicePixelRatio = 1.0;
@@ -359,12 +362,11 @@ void main() {
           tester.view.resetDevicePixelRatio();
         });
 
-        const remoteCode = 'EQ-REMOTE-CHIP';
+        const remoteCode = 'EQ-REMOTE-FIELD';
         await tester.runAsync(() async {
           await _seedEquipmentWithRemoteParams(
             code: remoteCode,
             remoteParams: const {'1': _kRemoteVncParamValue},
-            defaultRemoteTool: '1',
           );
         });
 
@@ -389,10 +391,13 @@ void main() {
 
         expect(find.text(_kEditEquipmentTitle), findsOneWidget);
         expect(
-          find.widgetWithText(FilterChip, _kRemoteVncToolName),
+          find.widgetWithText(
+            TextFormField,
+            'Παράμετρος · $_kRemoteVncToolName',
+          ),
           findsOneWidget,
           reason: greekExpectMsg(
-            'Το chip του εργαλείου απομακρυσμένης εμφανίζεται επιλεγμένο',
+            'Το πεδίο παραμέτρου του εργαλείου εμφανίζεται πάντα (χωρίς chips)',
           ),
         );
         expect(
@@ -406,7 +411,7 @@ void main() {
     );
 
     testWidgets(
-      'αποκλειστικό εργαλείο: αποθήκευση __exclusive_tool__ και καθάρισμα με αποεπιλογή chip',
+      'αποκλειστικότητα ανά εξοπλισμό: «Μόνο ένα» αποθηκεύει __exclusive_tool__ και «Όλα» το καθαρίζει',
       (tester) async {
         tester.view.physicalSize = const Size(1600, 900);
         tester.view.devicePixelRatio = 1.0;
@@ -435,11 +440,6 @@ void main() {
         await tester.enterText(_codeField(), code);
         await pumpUntilSettled(tester);
 
-        await tester.tap(find.widgetWithText(FilterChip, _kRemoteVncToolName));
-        await pumpUntilSettled(tester);
-        await tester.tap(find.widgetWithText(FilterChip, _kRemoteAnyDeskToolName));
-        await pumpUntilSettled(tester);
-
         await tester.enterText(
           find.widgetWithText(
             TextFormField,
@@ -457,16 +457,9 @@ void main() {
         );
         await pumpUntilSettled(tester);
 
-        await tester.tap(
-          find.byWidgetPredicate(
-            (w) =>
-                w is DropdownButtonFormField<int?> &&
-                w.decoration.labelText ==
-                    'Αποκλειστικό εργαλείο (μόνο αυτό στην κλήση)',
-          ),
-        );
+        await tester.tap(_zoneAShowInCall());
         await pumpUntilSettled(tester);
-        await tester.tap(find.text(_kRemoteAnyDeskToolName).last);
+        await tester.tap(find.text('Μόνο: $_kRemoteAnyDeskToolName').last);
         await pumpUntilSettled(tester);
 
         await tester.tap(find.widgetWithText(FilledButton, 'Προσθήκη'));
@@ -478,6 +471,9 @@ void main() {
         expect(
           savedFirst!.remoteParams[EquipmentRemoteParamKey.exclusiveToolKey],
           '2',
+          reason: greekExpectMsg(
+            'Η επιλογή «Μόνο: AnyDesk» αποθηκεύει το αποκλειστικό εργαλείο',
+          ),
         );
 
         await tester.runAsync(() async {
@@ -491,7 +487,9 @@ void main() {
           );
         });
 
-        await tester.tap(find.widgetWithText(FilterChip, _kRemoteAnyDeskToolName));
+        await tester.tap(_zoneAShowInCall());
+        await pumpUntilSettled(tester);
+        await tester.tap(find.text('Όλα τα εργαλεία').last);
         await pumpUntilSettled(tester);
 
         await tester.tap(find.widgetWithText(FilledButton, 'Αποθήκευση'));
@@ -505,6 +503,9 @@ void main() {
             EquipmentRemoteParamKey.exclusiveToolKey,
           ),
           isFalse,
+          reason: greekExpectMsg(
+            'Η επιλογή «Όλα» καθαρίζει το αποκλειστικό εργαλείο',
+          ),
         );
       },
     );

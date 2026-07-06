@@ -232,10 +232,14 @@ class _EquipmentTabState extends ConsumerState<EquipmentTab>
             onRequestDelete: () => _confirmAndDeleteSelected(context, ref),
             onRequestBulkEdit: () => _openBulkEdit(context, ref),
             continuousScroll: continuousScroll,
-            defaultRemoteDisplay: (row) => DefaultRemoteToolDisplay.resolve(
-              row.$1.defaultRemoteTool,
-              allToolsCatalog,
-            ),
+            defaultRemoteDisplay: (row) {
+              final primaryId =
+                  row.$1.displayPrimaryRemoteToolId(allToolsCatalog);
+              return DefaultRemoteToolDisplay.resolve(
+                primaryId?.toString(),
+                allToolsCatalog,
+              );
+            },
           ),
         ),
         if (state.selectedIds.isNotEmpty) ...[

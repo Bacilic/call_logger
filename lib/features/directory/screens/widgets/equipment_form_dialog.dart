@@ -17,7 +17,6 @@ import '../../../calls/models/equipment_model.dart';
 import '../../../calls/models/user_model.dart';
 import '../../../calls/provider/lookup_provider.dart';
 import '../../../calls/provider/remote_paths_provider.dart';
-import '../../../../core/database/remote_tools_repository.dart';
 import '../../../../core/models/remote_tool.dart';
 import '../../../../core/models/remote_tool_role.dart';
 import '../../../calls/utils/equipment_remote_param_key.dart';
@@ -64,7 +63,6 @@ mixin EquipmentFormDialogStateHost on State<EquipmentFormDialog> {
   String? get _selectedType;
   int? get _selectedUserId;
   int? get _defaultRemoteToolId;
-  set _defaultRemoteToolId(int? value);
   int? get _exclusiveRemoteToolId;
   set _exclusiveRemoteToolId(int? value);
   Map<String, String> get _remoteParamValues;
@@ -166,10 +164,9 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog>
     final out = <String, String>{};
     for (final k in _expandedRemoteKeys) {
       final v = (_remoteParamValues[k] ?? '').trim();
-      if (v.isEmpty) continue;
-      final norm = _isVncLikeParamKey(k, catalog)
-          ? v.replaceAll(',', '.')
-          : v;
+      final norm = v.isEmpty
+          ? ''
+          : (_isVncLikeParamKey(k, catalog) ? v.replaceAll(',', '.') : v);
       out[k] = norm;
     }
     for (final entry in _remoteParamValues.entries) {
@@ -206,13 +203,14 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog>
     _selectedUserId = widget.initialOwner?.id;
     final typeRaw = e?.type?.trim() ?? '';
     _selectedType = typeRaw.isEmpty ? null : typeRaw;
-    _defaultRemoteToolId =
-        RemoteToolsRepository.parseDefaultRemoteToolId(e?.defaultRemoteTool);
-    if (e != null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        _pruneRemoteParamsAfterCatalogLoad();
-      });
-    }
+    // Το «κύριο» εργαλείο είναι πλέον υπολογιζόμενο (σειρά προτεραιότητας) — δεν
+    // αποθηκεύεται. Κρατιέται null ώστε το `default_remote_tool` να καθαρίζει.
+    _defaultRemoteToolId = null;
+    // Πάντα (και σε νέο εξοπλισμό): γεμίζει τα πεδία παραμέτρων ανά εργαλείο από
+    // τον κατάλογο ώστε να αποδοθούν όλες οι Ζώνες.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _pruneRemoteParamsAfterCatalogLoad();
+    });
     if (_selectedUserId == null) {
       _ownerTextInitialized = true;
     }
@@ -377,9 +375,7 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog>
           ? null
           : _notesController.text.trim(),
       remoteParams: remoteParams,
-      defaultRemoteTool: RemoteToolsRepository.defaultRemoteToolIdToDbString(
-        _defaultRemoteToolId,
-      ),
+      defaultRemoteTool: null,
       departmentId: equipmentDepartmentId,
       location: locTrim.isEmpty ? null : locTrim,
     );
@@ -532,7 +528,7 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog>
                   return pairsAsync.when(
                     data: (pairs) => catalogAsync.when(
                       data: (catalog) =>
-                          _buildRemoteParamsChipsSection(pairs, catalog),
+                          _buildRemoteParamsSection(pairs, catalog),
                       loading: () => const Padding(
                         padding: EdgeInsets.symmetric(vertical: 8),
                         child: LinearProgressIndicator(minHeight: 2),

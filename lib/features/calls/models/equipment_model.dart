@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import '../../../core/models/remote_tool.dart';
 import '../../../core/models/remote_tool_role.dart';
+import '../utils/equipment_remote_param_key.dart';
 import '../utils/vnc_remote_target.dart';
 
 /// Μοντέλο εξοπλισμού (πίνακας equipment): id, code_equipment, type, notes,
@@ -48,6 +49,50 @@ class EquipmentModel {
     final v = remoteParams[tool.id.toString()]?.trim();
     if (v != null && v.isNotEmpty) return v;
     return null;
+  }
+
+  /// Πρώτο επιλεγμένο εργαλείο κατά σειρά ταξινόμησης — ίδια λογική με chips στη φόρμα.
+  int? effectiveDefaultRemoteToolId(List<RemoteTool> catalog) {
+    final selected = <RemoteTool>[];
+    for (final entry in remoteParams.entries) {
+      if (EquipmentRemoteParamKey.isReservedKey(entry.key)) continue;
+      final id = int.tryParse(entry.key);
+      if (id == null) continue;
+      for (final t in catalog) {
+        if (t.id == id) {
+          selected.add(t);
+          break;
+        }
+      }
+    }
+    selected.sort((a, b) {
+      final cmp = a.sortOrder.compareTo(b.sortOrder);
+      if (cmp != 0) return cmp;
+      return a.name.compareTo(b.name);
+    });
+    return selected.isEmpty ? null : selected.first.id;
+  }
+
+  /// Αληθές όταν το αποθηκευμένο `default_remote_tool` δεν ταιριάζει με το effective.
+  bool hasInconsistentDefaultRemoteTool(List<RemoteTool> catalog) {
+    final storedId = int.tryParse(defaultRemoteTool?.trim() ?? '');
+    if (storedId == null) return false;
+    return storedId != effectiveDefaultRemoteToolId(catalog);
+  }
+
+  /// Το «κύριο» εργαλείο που εμφανίζεται στη λίστα, **υπολογιζόμενο** (όχι από το
+  /// αποθηκευμένο `default_remote_tool`): αποκλειστικό εργαλείο ανά εξοπλισμό αν έχει
+  /// οριστεί και υπάρχει στον κατάλογο, αλλιώς το πρώτο με παράμετρο κατά σειρά
+  /// ταξινόμησης ([effectiveDefaultRemoteToolId]).
+  int? displayPrimaryRemoteToolId(List<RemoteTool> catalog) {
+    final exclusiveId =
+        EquipmentRemoteParamKey.exclusiveToolIdFrom(remoteParams);
+    if (exclusiveId != null) {
+      for (final t in catalog) {
+        if (t.id == exclusiveId) return exclusiveId;
+      }
+    }
+    return effectiveDefaultRemoteToolId(catalog);
   }
 
   RemoteTool? _preferredToolForRole(List<RemoteTool> tools, ToolRole role) {
@@ -140,7 +185,7 @@ class EquipmentModel {
       if (code != null) 'code_equipment': code,
       if (type != null) 'type': type,
       if (notes != null) 'notes': notes,
-      if (defaultRemoteTool != null) 'default_remote_tool': defaultRemoteTool,
+      'default_remote_tool': defaultRemoteTool,
       'department_id': departmentId,
       'location': location,
       'is_deleted': isDeleted ? 1 : 0,

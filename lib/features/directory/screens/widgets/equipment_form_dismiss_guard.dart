@@ -60,7 +60,7 @@ mixin EquipmentFormDismissGuardMixin on EquipmentFormDialogStateHost {
     if (_formBaselineCaptured) return;
     if (widget.initialOwner?.id != null && !_ownerTextInitialized) return;
     if (!_equipmentDepartmentTextInitialized) return;
-    if (widget.initialEquipment != null && !_didPruneUnknownRemoteKeys) {
+    if (!_didPruneUnknownRemoteKeys) {
       return;
     }
     _initialFormSignature = _formStateSignature();

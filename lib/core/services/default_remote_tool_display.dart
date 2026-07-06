@@ -21,7 +21,10 @@ class DefaultRemoteToolDisplay {
     }
     final id = RemoteToolsRepository.parseDefaultRemoteToolId(stored);
     if (id == null) {
-      return DefaultRemoteToolDisplay(label: raw, useMutedItalic: false);
+      return const DefaultRemoteToolDisplay(
+        label: '(άκυρο)',
+        useMutedItalic: true,
+      );
     }
     RemoteTool? found;
     for (final t in allTools) {
