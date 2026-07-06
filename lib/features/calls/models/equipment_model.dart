@@ -56,6 +56,7 @@ class EquipmentModel {
     final selected = <RemoteTool>[];
     for (final entry in remoteParams.entries) {
       if (EquipmentRemoteParamKey.isReservedKey(entry.key)) continue;
+      if (entry.value.trim().isEmpty) continue;
       final id = int.tryParse(entry.key);
       if (id == null) continue;
       for (final t in catalog) {

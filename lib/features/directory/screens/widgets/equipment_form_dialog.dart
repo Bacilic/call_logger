@@ -164,9 +164,8 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog>
     final out = <String, String>{};
     for (final k in _expandedRemoteKeys) {
       final v = (_remoteParamValues[k] ?? '').trim();
-      final norm = v.isEmpty
-          ? ''
-          : (_isVncLikeParamKey(k, catalog) ? v.replaceAll(',', '.') : v);
+      if (v.isEmpty) continue;
+      final norm = _isVncLikeParamKey(k, catalog) ? v.replaceAll(',', '.') : v;
       out[k] = norm;
     }
     for (final entry in _remoteParamValues.entries) {

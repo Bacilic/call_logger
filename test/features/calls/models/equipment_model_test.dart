@@ -110,14 +110,14 @@ void main() {
       expect(eq.hasInconsistentDefaultRemoteTool(catalog), isFalse);
     });
 
-    test('επιλεγμένο εργαλείο με κενή τιμή παραμέτρου μετράει στο effective', () {
+    test('κενή τιμή παραμέτρου στο remote_params αγνοείται στο effective', () {
       final eq = EquipmentModel(
         defaultRemoteTool: '1',
         remoteParams: const {'1': ''},
       );
 
-      expect(eq.effectiveDefaultRemoteToolId(catalog), 1);
-      expect(eq.hasInconsistentDefaultRemoteTool(catalog), isFalse);
+      expect(eq.effectiveDefaultRemoteToolId(catalog), isNull);
+      expect(eq.hasInconsistentDefaultRemoteTool(catalog), isTrue);
     });
 
     test('toMap περιλαμβάνει null default_remote_tool για εκκαθάριση στη βάση', () {
