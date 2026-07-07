@@ -58,7 +58,6 @@ class _RemoteConnectionButtonsState extends ConsumerState<RemoteConnectionButton
         : 'Εμφανίζονται μόνο τα κύρια εργαλεία';
     final actionLabel = _showAll ? 'Μόνο τα κύρια' : 'Εμφάνιση όλων';
     return Container(
-      width: double.infinity,
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
@@ -66,6 +65,8 @@ class _RemoteConnectionButtonsState extends ConsumerState<RemoteConnectionButton
         borderRadius: BorderRadius.circular(8),
       ),
       child: Row(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Icon(
             Icons.info_outline,
@@ -73,7 +74,7 @@ class _RemoteConnectionButtonsState extends ConsumerState<RemoteConnectionButton
             color: theme.colorScheme.onSurfaceVariant,
           ),
           const SizedBox(width: 8),
-          Expanded(
+          Flexible(
             child: Text(
               message,
               style: theme.textTheme.bodySmall?.copyWith(
@@ -473,21 +474,24 @@ class _RemoteConnectionButtonsState extends ConsumerState<RemoteConnectionButton
       label: Text(displayLabel),
     );
 
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        (onPressed == null && !_isConnecting)
-            ? Tooltip(message: tooltipDisabled, child: button)
-            : button,
-        const SizedBox(height: 4),
-        Text(
-          displaySubtitle,
-          style: theme.textTheme.bodySmall?.copyWith(
-            color: theme.colorScheme.onSurfaceVariant,
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 280),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          (onPressed == null && !_isConnecting)
+              ? Tooltip(message: tooltipDisabled, child: button)
+              : button,
+          const SizedBox(height: 4),
+          Text(
+            displaySubtitle,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 

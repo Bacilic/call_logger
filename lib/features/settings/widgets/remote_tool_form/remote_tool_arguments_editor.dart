@@ -54,7 +54,8 @@ class _RemoteToolArgumentsEditorState extends State<RemoteToolArgumentsEditor> {
         Text(
           'Placeholders: {TARGET}, {EQUIPMENT_CODE}, {FILE}. '
           'Κωδικοί/χρήστης ως απλό κείμενο στο value (π.χ. /p:…). '
-          'Κενό value παραλείπεται στην αποθήκευση.',
+          'Κενό value παραλείπεται στην αποθήκευση. '
+          'Με ενεργό όρισμα {FILE}, ο εξοπλισμός αποκτά πεδίο "Αρχείο σύνδεσης (.rdp)".',
           style: theme.textTheme.bodySmall?.copyWith(
             color: theme.colorScheme.onSurfaceVariant,
           ),

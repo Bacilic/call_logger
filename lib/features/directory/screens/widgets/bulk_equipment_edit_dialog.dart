@@ -10,6 +10,7 @@ import '../../../../core/utils/name_parser.dart';
 import '../../../../core/utils/search_text_normalizer.dart';
 import '../../../../core/utils/spell_check.dart';
 import '../../../calls/provider/lookup_provider.dart';
+import '../../../calls/provider/smart_entity_selector_provider.dart';
 import '../../models/equipment_column.dart';
 import '../../providers/equipment_directory_provider.dart';
 
@@ -189,6 +190,8 @@ class _BulkEquipmentEditDialogState extends State<BulkEquipmentEditDialog>
     await widget.notifier.bulkUpdate(ids, changes);
     if (!mounted) return;
     widget.ref.invalidate(lookupServiceProvider);
+    await refreshSelectedEquipmentInAllSelectors(widget.ref);
+    if (!mounted) return;
     Navigator.of(context).pop();
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(

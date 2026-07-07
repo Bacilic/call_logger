@@ -270,7 +270,6 @@ Future<void> applyDatabaseV1Schema(Database db) async {
         name TEXT NOT NULL,
         role TEXT NOT NULL,
         executable_path TEXT NOT NULL,
-        launch_mode TEXT NOT NULL,
         sort_order INTEGER NOT NULL DEFAULT 0,
         is_active INTEGER NOT NULL DEFAULT 1,
         suggested_values TEXT,

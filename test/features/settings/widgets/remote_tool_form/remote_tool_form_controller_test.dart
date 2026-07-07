@@ -42,7 +42,6 @@ void main() {
         name: 'Existing',
         role: ToolRole.generic,
         executablePath: r'C:\old.exe',
-        launchMode: 'direct_exec',
         sortOrder: 1,
         isActive: true,
       );
@@ -64,7 +63,6 @@ void main() {
       c.iconC.text = '   ';
       c.testIpC.text = '  ';
       c.role = ToolRole.rdp;
-      c.launchMode = 'template_file';
       c.isActive = false;
       c.addArg();
       c.argRows[0].valueC.text = '  -host=x  ';
@@ -79,7 +77,6 @@ void main() {
       expect(tool.name, 'My Tool');
       expect(tool.executablePath, r'C:\app.exe');
       expect(tool.role, ToolRole.rdp);
-      expect(tool.launchMode, 'template_file');
       expect(tool.sortOrder, 0);
       expect(tool.isActive, isFalse);
       expect(tool.isExclusive, isFalse);
@@ -104,7 +101,6 @@ void main() {
           name: 'alpha',
           role: ToolRole.generic,
           executablePath: 'a',
-          launchMode: 'direct_exec',
           sortOrder: 1,
           isActive: true,
         ),
@@ -117,7 +113,6 @@ void main() {
           name: 'Alpha',
           role: ToolRole.generic,
           executablePath: 'a',
-          launchMode: 'direct_exec',
           sortOrder: 1,
           isActive: true,
         ),
@@ -131,7 +126,6 @@ void main() {
             name: 'Alpha',
             role: ToolRole.generic,
             executablePath: 'a',
-            launchMode: 'direct_exec',
             sortOrder: 1,
             isActive: true,
           ),
@@ -159,7 +153,6 @@ void main() {
           name: 'With Suggestions',
           role: ToolRole.generic,
           executablePath: r'C:\tool.exe',
-          launchMode: 'direct_exec',
           sortOrder: 1,
           isActive: true,
           suggestedValuesJson: json,
@@ -179,7 +172,6 @@ void main() {
         name: 'Ordered',
         role: ToolRole.generic,
         executablePath: r'C:\tool.exe',
-        launchMode: 'direct_exec',
         sortOrder: 7,
         isActive: true,
       );
@@ -199,7 +191,6 @@ void main() {
           name: 'Was Exclusive',
           role: ToolRole.vnc,
           executablePath: r'C:\vnc.exe',
-          launchMode: 'direct_exec',
           sortOrder: 3,
           isActive: true,
           isExclusive: true,

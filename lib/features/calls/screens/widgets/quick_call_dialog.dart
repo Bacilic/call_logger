@@ -12,7 +12,6 @@ import '../../layout/calls_field_groups_provider.dart';
 import '../../provider/call_entry_provider.dart';
 import '../../provider/call_header_provider.dart';
 import '../../provider/remote_paths_provider.dart';
-import '../../utils/call_remote_targets.dart';
 import 'call_status_bar.dart';
 import 'category_autocomplete_field.dart';
 import 'notes_sticky_field.dart';
@@ -131,18 +130,9 @@ class _QuickCallDialogState extends ConsumerState<QuickCallDialog>
   Widget build(BuildContext context) {
     final header = ref.watch(callHeaderProvider);
     final tools = ref.watch(remoteToolsCatalogProvider).value ?? <RemoteTool>[];
-    final allToolsAsync = ref.watch(remoteToolsAllCatalogProvider);
-    final hideRemoteButtons = allToolsAsync.maybeWhen(
-      data: (all) => CallRemoteTargets.shouldHideRemoteConnectionButtons(
-        header.selectedEquipment,
-        all,
-      ),
-      orElse: () => false,
-    );
     final showRemoteButtons =
-        !hideRemoteButtons &&
-        (header.equipmentText.trim().isNotEmpty ||
-            header.selectedEquipment != null);
+        header.equipmentText.trim().isNotEmpty ||
+            header.selectedEquipment != null;
     final isSubmitting = ref.watch(
       callEntryProvider.select((s) => s.isSubmitting),
     );

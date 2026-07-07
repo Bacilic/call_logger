@@ -52,7 +52,6 @@ void main() {
         name: 't',
         role: ToolRole.vnc,
         executablePath: r'C:\x.exe',
-        launchMode: 'direct_exec',
         sortOrder: 1,
         isActive: true,
         arguments: [
@@ -76,7 +75,6 @@ void main() {
           name: 'TightVNC',
           role: ToolRole.vnc,
           executablePath: r'C:\Program Files\TightVNC\tvnviewer.exe',
-          launchMode: 'direct_exec',
           sortOrder: 1,
           isActive: true,
           arguments: arguments,
@@ -128,7 +126,6 @@ void main() {
         name: 'TightVNC',
         role: ToolRole.vnc,
         executablePath: r'C:\Program Files\TightVNC\tvnviewer.exe',
-        launchMode: 'direct_exec',
         sortOrder: 1,
         isActive: true,
         testTargetIp: 'pc922',
@@ -151,13 +148,12 @@ void main() {
   });
 
   group('RemoteTool.acceptsFileParam', () {
-    test('αναγνωρίζει template_file με placeholder αρχείου ανεξάρτητα από πεζά/κεφαλαία', () {
+    test('αναγνωρίζει ενεργό placeholder αρχείου ανεξάρτητα από πεζά/κεφαλαία', () {
       final t = RemoteTool(
         id: 10,
         name: 'RDP Template',
         role: ToolRole.rdp,
         executablePath: r'C:\Windows\System32\mstsc.exe',
-        launchMode: 'template_file',
         sortOrder: 1,
         isActive: true,
         arguments: const [
@@ -168,17 +164,16 @@ void main() {
       expect(RemoteTool.containsFilePlaceholder('{file}'), isTrue);
     });
 
-    test('δεν αναγνωρίζει άμεση εκτέλεση χωρίς template mode', () {
+    test('δεν αναγνωρίζει ανενεργό placeholder αρχείου', () {
       final t = RemoteTool(
         id: 11,
         name: 'RDP Direct',
         role: ToolRole.rdp,
         executablePath: r'C:\Windows\System32\mstsc.exe',
-        launchMode: 'direct_exec',
         sortOrder: 1,
         isActive: true,
         arguments: const [
-          RemoteToolArgument(value: '{FILE}', isActive: true),
+          RemoteToolArgument(value: '{FILE}', isActive: false),
         ],
       );
       expect(t.acceptsFileParam, isFalse);

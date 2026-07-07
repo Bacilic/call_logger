@@ -579,6 +579,18 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState>
     _resetAssociationQuickTaskCycle();
     state = state.copyWithClearSelections();
   }
+
+  /// Ανανεώνει μόνο το [selectedEquipment] από τον τρέχοντα κατάλογο lookup
+  /// (μετά αποθήκευση εξοπλισμού)· δεν αγγίζει equipmentText, candidates ή conflicts.
+  Future<void> refreshSelectedEquipmentFromLookup() async {
+    final id = state.selectedEquipment?.id;
+    if (id == null) return;
+    final bundle = await ref.read(lookupServiceProvider.future);
+    if (!ref.mounted) return;
+    final fresh = bundle.service.findEquipmentById(id);
+    if (fresh == null) return;
+    state = state.copyWith(selectedEquipment: fresh);
+  }
 }
 
 /// Κατάσταση έξυπνου επιλογέα για τη φόρμα **Κλήσεων** (ξεχωριστό instance από Tasks).
@@ -598,3 +610,17 @@ final historyEditSmartEntityProvider =
     NotifierProvider<SmartEntitySelectorNotifier, SmartEntitySelectorState>(
       SmartEntitySelectorNotifier.new,
     );
+
+/// Ανανεώνει το `selectedEquipment` σε όλους τους ενεργούς επιλογείς (κλήση,
+/// εκκρεμότητα, επεξεργασία ιστορικού) μετά από invalidate του lookup.
+Future<void> refreshSelectedEquipmentInAllSelectors(WidgetRef ref) async {
+  await ref
+      .read(callSmartEntityProvider.notifier)
+      .refreshSelectedEquipmentFromLookup();
+  await ref
+      .read(taskSmartEntityProvider.notifier)
+      .refreshSelectedEquipmentFromLookup();
+  await ref
+      .read(historyEditSmartEntityProvider.notifier)
+      .refreshSelectedEquipmentFromLookup();
+}

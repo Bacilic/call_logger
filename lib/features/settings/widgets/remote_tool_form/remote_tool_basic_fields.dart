@@ -107,15 +107,30 @@ class ExecutablePathField extends StatelessWidget {
   /// Στη δημιουργία: ετικέτα με * (υποχρεωτικό πεδίο).
   final bool isCreate;
 
+  /// Καταλήξεις που εκτελεί απευθείας το `Process.start` (CreateProcess) στα
+  /// Windows. Τα `.bat`/`.cmd` δεν τρέχουν χωρίς shell — θεωρούνται μη έγκυρα εδώ.
+  static const _winExecutableExtensions = {'.exe', '.com'};
+
+  static bool _isWindowsExecutablePath(String path) {
+    final lower = path.toLowerCase();
+    final sep = lower.lastIndexOf(RegExp(r'[\\/]'));
+    final dot = lower.lastIndexOf('.');
+    if (dot <= sep) return false;
+    return _winExecutableExtensions.contains(lower.substring(dot));
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final path = controller.text.trim();
-    String? missingMsg;
+    String? warningMsg;
     if (path.isNotEmpty) {
       final f = File(path);
       if (!f.existsSync()) {
-        missingMsg = 'Το αρχείο δεν βρέθηκε στη διαδρομή.';
+        warningMsg = 'Το αρχείο δεν βρέθηκε στη διαδρομή.';
+      } else if (!_isWindowsExecutablePath(path)) {
+        warningMsg =
+            'Το αρχείο δεν είναι εκτελέσιμο των Windows (αναμένεται .exe).';
       }
     }
 
@@ -146,11 +161,11 @@ class ExecutablePathField extends StatelessWidget {
             ),
           ],
         ),
-        if (missingMsg != null)
+        if (warningMsg != null)
           Padding(
             padding: const EdgeInsets.only(top: 4, left: 12),
             child: Text(
-              missingMsg,
+              warningMsg,
               style: theme.textTheme.bodySmall?.copyWith(
                 color: theme.colorScheme.error,
               ),

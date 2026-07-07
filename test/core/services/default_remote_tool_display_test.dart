@@ -14,7 +14,6 @@ RemoteTool _tool({
     name: name,
     role: ToolRole.vnc,
     executablePath: r'C:\dummy.exe',
-    launchMode: 'direct_exec',
     sortOrder: 0,
     isActive: isActive,
     deletedAt: deletedAt,

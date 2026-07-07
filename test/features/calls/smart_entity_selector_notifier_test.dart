@@ -1,3 +1,6 @@
+import 'dart:convert';
+
+import 'package:call_logger/core/database/database_helper.dart';
 import 'package:call_logger/core/services/lookup_service.dart';
 import 'package:call_logger/core/utils/phone_list_parser.dart';
 import 'package:call_logger/features/calls/models/equipment_model.dart';
@@ -9,6 +12,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../test_reporter.dart';
+import '../../test_setup.dart';
 
 /*
  * =============================================================================
@@ -1399,4 +1403,123 @@ void main() {
       );
     },
   );
+
+  group('refreshSelectedEquipmentFromLookup — ανανέωση snapshot μετά αποθήκευση εξοπλισμού', () {
+    registerCallLoggerIsolatedDatabaseHooks();
+
+    Future<int> seededTestEquipmentId() async {
+      final db = await DatabaseHelper.instance.database;
+      final rows = await db.query(
+        'equipment',
+        columns: ['id'],
+        where: 'code_equipment = ?',
+        whereArgs: [kTestEquipmentCode],
+        limit: 1,
+      );
+      expect(rows, isNotEmpty);
+      return rows.first['id'] as int;
+    }
+
+    Future<void> setEquipmentRemoteParams(
+      int equipmentId,
+      Map<String, String> remoteParams,
+    ) async {
+      final db = await DatabaseHelper.instance.database;
+      await db.update(
+        'equipment',
+        {'remote_params': jsonEncode(remoteParams)},
+        where: 'id = ?',
+        whereArgs: [equipmentId],
+      );
+    }
+
+    test(
+      'μετά invalidate lookup ανανεώνει selectedEquipment.remoteParams χωρίς αλλαγή equipmentText',
+      () async {
+        await seedIsolatedTestDatabase();
+        final equipmentId = await seededTestEquipmentId();
+        await setEquipmentRemoteParams(equipmentId, const {'1': '10.0.0.1'});
+
+        final container = ProviderContainer(
+          overrides: callLoggerTestProviderOverrides(),
+        );
+        addTearDown(container.dispose);
+
+        final bundle = await container.read(lookupServiceProvider.future);
+        final loaded = bundle.service
+            .findEquipmentsByCode(kTestEquipmentCode)
+            .first;
+        final notifier = container.read(callSmartEntityProvider.notifier);
+        notifier.setEquipment(loaded);
+        final textBefore = container.read(callSmartEntityProvider).equipmentText;
+
+        await setEquipmentRemoteParams(equipmentId, const {
+          '1': '10.0.0.1',
+          '3': '192.168.1.5',
+          '__exclusive_tool__': '3',
+        });
+
+        container.invalidate(lookupServiceProvider);
+        await container.read(lookupServiceProvider.future);
+        await notifier.refreshSelectedEquipmentFromLookup();
+
+        final state = container.read(callSmartEntityProvider);
+        expect(
+          state.selectedEquipment?.remoteParams.containsKey('3'),
+          isTrue,
+          reason: greekExpectMsg(
+            'Το ανανεωμένο snapshot πρέπει να περιέχει τη νέα παράμετρο RDP',
+          ),
+        );
+        expect(
+          state.selectedEquipment?.remoteParams['3'],
+          '192.168.1.5',
+          reason: greekExpectMsg('Νέα IP RDP στο selectedEquipment'),
+        );
+        expect(
+          state.selectedEquipment?.remoteParams['__exclusive_tool__'],
+          '3',
+          reason: greekExpectMsg('Αποκλειστικό εργαλείο στο snapshot'),
+        );
+        expect(
+          state.equipmentText,
+          textBefore,
+          reason: greekExpectMsg(
+            'Το equipmentText δεν πρέπει να αλλάξει — μόνο το snapshot',
+          ),
+        );
+      },
+    );
+
+    test(
+      'χωρίς επιλεγμένο εξοπλισμό η κλήση δεν αλλάζει state',
+      () async {
+        await seedIsolatedTestDatabase();
+
+        final container = ProviderContainer(
+          overrides: callLoggerTestProviderOverrides(),
+        );
+        addTearDown(container.dispose);
+        await container.read(lookupServiceProvider.future);
+
+        final notifier = container.read(callSmartEntityProvider.notifier);
+        expect(
+          container.read(callSmartEntityProvider).selectedEquipment,
+          isNull,
+        );
+
+        container.invalidate(lookupServiceProvider);
+        await container.read(lookupServiceProvider.future);
+        await notifier.refreshSelectedEquipmentFromLookup();
+
+        expect(
+          container.read(callSmartEntityProvider).selectedEquipment,
+          isNull,
+          reason: greekExpectMsg(
+            'Χωρίς selectedEquipment η ανανέωση είναι no-op',
+          ),
+        );
+      },
+    );
+  });
 }

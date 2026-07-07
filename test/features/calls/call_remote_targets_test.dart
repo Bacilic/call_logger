@@ -11,7 +11,6 @@ RemoteTool _tool({
   required int id,
   required ToolRole role,
   bool isExclusive = false,
-  String launchMode = 'direct_exec',
   List<RemoteToolArgument> arguments = const [],
 }) {
   return RemoteTool(
@@ -19,7 +18,6 @@ RemoteTool _tool({
     name: role.dbValue.toUpperCase(),
     role: role,
     executablePath: r'C:\dummy.exe',
-    launchMode: launchMode,
     sortOrder: 0,
     isActive: true,
     isExclusive: isExclusive,
@@ -46,7 +44,6 @@ void main() {
         final rdpFileTool = _tool(
           id: 3,
           role: ToolRole.rdp,
-          launchMode: 'template_file',
           arguments: const [
             RemoteToolArgument(value: '{file}', isActive: true),
           ],
@@ -215,23 +212,6 @@ void main() {
       expect(RemoteToolsRepository.parseDefaultRemoteToolId('12'), 12);
     });
 
-    test('shouldHideRemoteConnectionButtons όταν το προεπιλεγμένο εργαλείο είναι ανενεργό', () {
-      final eq = EquipmentModel(
-        code: 'X',
-        defaultRemoteTool: '1',
-      );
-      final inactive = _tool(id: 1, role: ToolRole.vnc).copyWith(isActive: false);
-      expect(
-        CallRemoteTargets.shouldHideRemoteConnectionButtons(eq, [inactive]),
-        isTrue,
-      );
-      final active = _tool(id: 1, role: ToolRole.vnc);
-      expect(
-        CallRemoteTargets.shouldHideRemoteConnectionButtons(eq, [active]),
-        isFalse,
-      );
-    });
-
     test('vncLikeTargetResolved χρησιμοποιεί σταθερό πρόθεμα PC για ψηφιακό κωδικό', () {
       final eq = EquipmentModel(
         code: '2850',
@@ -242,6 +222,58 @@ void main() {
         role: ToolRole.vnc,
       );
       expect(eq.vncLikeTargetResolved(vnc), 'PC2850');
+    });
+
+    test('generic με παράμετρο: resolvedLaunchTarget και visibleRemoteTools', () {
+      final eq = EquipmentModel(
+        code: '1137',
+        remoteParams: const {'5': 'MANUAL-TGT'},
+      );
+      final s = SmartEntitySelectorState(selectedEquipment: eq);
+      final gen = _tool(id: 5, role: ToolRole.generic);
+      final catalog = [gen];
+
+      expect(
+        CallRemoteTargets.resolvedLaunchTarget(s, gen, catalog),
+        'MANUAL-TGT',
+      );
+      expect(CallRemoteTargets.canConnectForTool(s, gen, catalog), isTrue);
+      expect(
+        CallRemoteTargets.visibleRemoteToolsForCallState(s, catalog)
+            .map((t) => t.id)
+            .toList(),
+        [5],
+      );
+    });
+
+    test('generic χωρίς παράμετρο: κρύβεται από visibleRemoteTools', () {
+      final eq = EquipmentModel(
+        code: '1137',
+        remoteParams: const {},
+      );
+      final s = SmartEntitySelectorState(selectedEquipment: eq);
+      final gen = _tool(id: 5, role: ToolRole.generic);
+      final catalog = [gen];
+
+      expect(
+        CallRemoteTargets.resolvedLaunchTarget(s, gen, catalog),
+        isNull,
+      );
+      expect(
+        CallRemoteTargets.visibleRemoteToolsForCallState(s, catalog),
+        isEmpty,
+      );
+    });
+
+    test('generic με ελεύθερο κείμενο: δεν εμφανίζεται χωρίς selectedEquipment', () {
+      final s = SmartEntitySelectorState(equipmentText: 'foo');
+      final gen = _tool(id: 5, role: ToolRole.generic);
+      final catalog = [gen];
+
+      expect(
+        CallRemoteTargets.visibleRemoteToolsForCallState(s, catalog),
+        isEmpty,
+      );
     });
   });
 }

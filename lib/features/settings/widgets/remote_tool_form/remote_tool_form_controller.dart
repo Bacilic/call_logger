@@ -42,7 +42,6 @@ class RemoteToolFormController extends ChangeNotifier {
     role = t?.role ?? ToolRole.generic;
     _suggestedValuesJson = t?.suggestedValuesJson;
     testIpC = TextEditingController(text: t?.testTargetIp ?? '');
-    launchMode = t?.launchMode ?? 'direct_exec';
     isActive = t?.isActive ?? true;
     if (t != null && t.arguments.isNotEmpty) {
       for (final a in t.arguments) {
@@ -76,7 +75,6 @@ class RemoteToolFormController extends ChangeNotifier {
   int? focusedArgRowIndex;
   bool focusedArgIsDescription = false;
 
-  String launchMode = 'direct_exec';
   ToolRole role = ToolRole.generic;
   bool isActive = true;
   bool saving = false;
@@ -139,8 +137,6 @@ class RemoteToolFormController extends ChangeNotifier {
       ..write(iconC.text)
       ..write('\u001e')
       ..write(testIpC.text)
-      ..write('\u001e')
-      ..write(launchMode)
       ..write('\u001e')
       ..write(role.index)
       ..write('\u001e')
@@ -217,7 +213,6 @@ class RemoteToolFormController extends ChangeNotifier {
       name: nameC.text.trim(),
       role: role,
       executablePath: pathC.text.trim(),
-      launchMode: launchMode,
       sortOrder: sort,
       isActive: isActive,
       suggestedValuesJson: _suggestedValuesJson,

@@ -2,62 +2,6 @@ import 'package:flutter/material.dart';
 
 import '../../../../core/models/remote_tool_role.dart';
 
-class LaunchModeSelector extends StatelessWidget {
-  const LaunchModeSelector({
-    super.key,
-    required this.value,
-    required this.onChanged,
-  });
-
-  final String value;
-  final ValueChanged<String>? onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Text(
-          'Τρόπος εκκίνησης',
-          style: theme.textTheme.labelLarge,
-        ),
-        const SizedBox(height: 8),
-        IgnorePointer(
-          ignoring: onChanged == null,
-          child: Opacity(
-            opacity: onChanged == null ? 0.5 : 1,
-            child: SegmentedButton<String>(
-              segments: const [
-                ButtonSegment(
-                  value: 'direct_exec',
-                  label: Text('Άμεση εκτέλεση'),
-                ),
-                ButtonSegment(
-                  value: 'template_file',
-                  label: Text('Αρχείο προτύπου'),
-                ),
-              ],
-              selected: {value},
-              onSelectionChanged: (s) {
-                if (s.isNotEmpty && onChanged != null) onChanged!(s.first);
-              },
-            ),
-          ),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          '«Άμεση εκτέλεση» περνά τα ορίσματα στο εκτελέσιμο. «Αρχείο προτύπου» = ίδια ροή· '
-          'χρησιμοποιήστε {FILE} σε ενεργό όρισμα για σταθερή διαδρομή υπάρχοντος .rdp (π.χ. το αρχείο στο δίσκο).',
-          style: theme.textTheme.bodySmall?.copyWith(
-            color: theme.colorScheme.onSurfaceVariant,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
 class RoleDropdown extends StatelessWidget {
   const RoleDropdown({
     super.key,
@@ -100,6 +44,15 @@ class RoleDropdown extends StatelessWidget {
                   if (v != null) onChanged!(v);
                 },
         ),
+        if (value == ToolRole.generic) ...[
+          const SizedBox(height: 8),
+          Text(
+            'Χρειάζεται χειροκίνητο στόχο (παράμετρο) ανά εξοπλισμό· χωρίς αυτόν δεν εμφανίζεται στην κλήση.',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ],
         const SizedBox(height: 4),
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,

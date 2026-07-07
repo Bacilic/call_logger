@@ -15,7 +15,6 @@ RemoteTool _catalogTool({
     name: name,
     role: role,
     executablePath: r'C:\dummy.exe',
-    launchMode: 'direct_exec',
     sortOrder: sortOrder,
     isActive: true,
   );

@@ -194,7 +194,7 @@ class RemoteLauncherService {
     await Process.start(status.path!, [], mode: ProcessStartMode.detached);
   }
 
-  /// Δοκιμή: `direct_exec` με placeholders ή `template_file` με ίδια ανάλυση ορισμάτων.
+  /// Δοκιμή εκκίνησης με ανάλυση placeholders στα ορίσματα.
   /// Η IP/hostname πρέπει να είναι ορισμένα στο πεδίο δοκιμής του εργαλείου (`test_target_ip`).
   Future<void> testToolArguments(String toolName) async {
     final role = toolRoleFromDb(toolName);

@@ -432,16 +432,6 @@ class _RemoteToolFormDialogState extends ConsumerState<RemoteToolFormDialog>
                             enabled: !_ctrl.saving,
                             isCreate: !_ctrl.isEdit,
                           ),
-                          const SizedBox(height: 12),
-                          LaunchModeSelector(
-                            value: _ctrl.launchMode,
-                            onChanged: _ctrl.saving
-                                ? null
-                                : (v) {
-                                    _ctrl.launchMode = v;
-                                    _ctrl.refresh();
-                                  },
-                          ),
                           const SizedBox(height: 16),
                           _sectionTitle(theme, 'Εικονίδιο εργαλείου'),
                           const Divider(),

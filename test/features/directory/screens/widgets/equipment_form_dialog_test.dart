@@ -8,6 +8,7 @@ import 'dart:convert';
 import 'package:call_logger/core/database/database_helper.dart';
 import 'package:call_logger/core/models/remote_tool.dart';
 import 'package:call_logger/core/models/remote_tool_role.dart';
+import 'package:call_logger/core/widgets/remote_tool_icon.dart';
 import 'package:call_logger/core/services/lookup_service.dart';
 import 'package:call_logger/features/calls/models/equipment_model.dart';
 import 'package:call_logger/features/calls/provider/lookup_provider.dart';
@@ -32,13 +33,15 @@ const _kRemoteVncToolName = 'UltraVNC Test';
 const _kRemoteVncParamValue = '10.0.0.55';
 
 const _kRemoteAnyDeskToolName = 'AnyDesk Test';
+const _kRemoteAddressLabel =
+    '$_kRemoteVncToolName - Διεύθυνση (IP ή όνομα υπολογιστή)';
+const _kRemoteAnyDeskCodeLabel = 'Κωδικός AnyDesk';
 
 RemoteTool get _kTestVncRemoteTool => RemoteTool(
       id: 1,
       name: _kRemoteVncToolName,
       role: ToolRole.vnc,
       executablePath: r'C:\vnc\viewer.exe',
-      launchMode: 'direct_exec',
       sortOrder: 1,
       isActive: true,
     );
@@ -54,7 +57,6 @@ RemoteTool get _kTestAnyDeskRemoteTool => RemoteTool(
       name: _kRemoteAnyDeskToolName,
       role: ToolRole.anydesk,
       executablePath: r'C:\anydesk\ad.exe',
-      launchMode: 'direct_exec',
       sortOrder: 2,
       isActive: true,
     );
@@ -62,6 +64,39 @@ RemoteTool get _kTestAnyDeskRemoteTool => RemoteTool(
 RemoteToolFormPair get _kTestAnyDeskFormPair => (
       label: _kRemoteAnyDeskToolName,
       key: '2',
+      acceptsFileParam: false,
+    );
+
+const _kRemoteIconToolName = 'VNC με εικονίδιο';
+
+RemoteTool get _kTestRemoteToolWithIcon => RemoteTool(
+      id: 10,
+      name: _kRemoteIconToolName,
+      role: ToolRole.vnc,
+      executablePath: r'C:\vnc\viewer.exe',
+      sortOrder: 1,
+      isActive: true,
+      iconAssetKey: 'assets/vnc_viewer.png',
+    );
+
+RemoteToolFormPair get _kTestRemoteToolWithIconFormPair => (
+      label: _kRemoteIconToolName,
+      key: '10',
+      acceptsFileParam: false,
+    );
+
+RemoteTool get _kTestRemoteToolWithoutIcon => RemoteTool(
+      id: 11,
+      name: 'Εργαλείο χωρίς εικονίδιο',
+      role: ToolRole.vnc,
+      executablePath: r'C:\vnc\viewer2.exe',
+      sortOrder: 1,
+      isActive: true,
+    );
+
+RemoteToolFormPair get _kTestRemoteToolWithoutIconFormPair => (
+      label: 'Εργαλείο χωρίς εικονίδιο',
+      key: '11',
       acceptsFileParam: false,
     );
 
@@ -393,7 +428,7 @@ void main() {
         expect(
           find.widgetWithText(
             TextFormField,
-            'Παράμετρος · $_kRemoteVncToolName',
+            _kRemoteAddressLabel,
           ),
           findsOneWidget,
           reason: greekExpectMsg(
@@ -443,7 +478,7 @@ void main() {
         await tester.enterText(
           find.widgetWithText(
             TextFormField,
-            'Παράμετρος · $_kRemoteVncToolName',
+            _kRemoteAddressLabel,
           ),
           '10.0.0.55',
         );
@@ -451,7 +486,7 @@ void main() {
         await tester.enterText(
           find.widgetWithText(
             TextFormField,
-            'Παράμετρος · $_kRemoteAnyDeskToolName',
+            _kRemoteAnyDeskCodeLabel,
           ),
           '123456789',
         );
@@ -505,6 +540,127 @@ void main() {
           isFalse,
           reason: greekExpectMsg(
             'Η επιλογή «Όλα» καθαρίζει το αποκλειστικό εργαλείο',
+          ),
+        );
+      },
+    );
+
+    testWidgets(
+      'ζώνη Β: εμφανίζει RemoteToolIcon στο πεδίο παραμέτρου όταν το εργαλείο έχει iconAssetKey',
+      (tester) async {
+        tester.view.physicalSize = const Size(1600, 900);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        final container = ProviderContainer(
+          overrides: _equipmentFormProviderOverrides(
+            catalog: [_kTestRemoteToolWithIcon],
+            pairs: [_kTestRemoteToolWithIconFormPair],
+          ),
+        );
+        addTearDown(container.dispose);
+
+        late EquipmentDirectoryNotifier notifier;
+        await tester.runAsync(() async {
+          await container.read(lookupServiceProvider.future);
+          notifier = container.read(equipmentDirectoryProvider.notifier);
+          await notifier.load();
+          await _openEquipmentFormInDialog(tester, container, notifier: notifier);
+        });
+
+        expect(find.text(_kNewEquipmentTitle), findsOneWidget);
+        expect(
+          find.byType(RemoteToolIcon),
+          findsWidgets,
+          reason: greekExpectMsg(
+            'Το εικονίδιο εργαλείου εμφανίζεται μπροστά από το πεδίο παραμέτρου',
+          ),
+        );
+      },
+    );
+
+    testWidgets(
+      'ζώνη Β: δεν εμφανίζει RemoteToolIcon όταν το εργαλείο δεν έχει iconAssetKey',
+      (tester) async {
+        tester.view.physicalSize = const Size(1600, 900);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        final container = ProviderContainer(
+          overrides: _equipmentFormProviderOverrides(
+            catalog: [_kTestRemoteToolWithoutIcon],
+            pairs: [_kTestRemoteToolWithoutIconFormPair],
+          ),
+        );
+        addTearDown(container.dispose);
+
+        late EquipmentDirectoryNotifier notifier;
+        await tester.runAsync(() async {
+          await container.read(lookupServiceProvider.future);
+          notifier = container.read(equipmentDirectoryProvider.notifier);
+          await notifier.load();
+          await _openEquipmentFormInDialog(tester, container, notifier: notifier);
+        });
+
+        expect(find.text(_kNewEquipmentTitle), findsOneWidget);
+        expect(
+          find.byType(RemoteToolIcon),
+          findsNothing,
+          reason: greekExpectMsg(
+            'Χωρίς iconAssetKey δεν εμφανίζεται εικονίδιο στο πεδίο παραμέτρου',
+          ),
+        );
+      },
+    );
+
+    testWidgets(
+      'ζώνη Β: VNC hint PC+κωδικός ζωντανά και νέος υπότιτλος ενότητας',
+      (tester) async {
+        tester.view.physicalSize = const Size(1600, 900);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        final container = ProviderContainer(
+          overrides: _equipmentFormProviderOverrides(),
+        );
+        addTearDown(container.dispose);
+
+        late EquipmentDirectoryNotifier notifier;
+        await tester.runAsync(() async {
+          await container.read(lookupServiceProvider.future);
+          notifier = container.read(equipmentDirectoryProvider.notifier);
+          await notifier.load();
+          await _openEquipmentFormInDialog(tester, container, notifier: notifier);
+        });
+
+        expect(find.text(_kNewEquipmentTitle), findsOneWidget);
+
+        await tester.enterText(_codeField(), '1002');
+        await pumpUntilSettled(tester);
+
+        expect(
+          find.byWidgetPredicate(
+            (w) => w is InputDecorator && w.decoration.hintText == 'PC1002',
+          ),
+          findsOneWidget,
+          reason: greekExpectMsg(
+            'Το VNC πεδίο δείχνει ως hint τον προεπιλεγμένο στόχο PC+κωδικό',
+          ),
+        );
+        expect(
+          find.textContaining('Αφήστε κενό για απενεργοποίηση'),
+          findsOneWidget,
+          reason: greekExpectMsg(
+            'Ο υπότιτλος της ενότητας παραμέτρων ενημερώνεται',
           ),
         );
       },

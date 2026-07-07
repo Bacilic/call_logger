@@ -156,7 +156,6 @@ mixin EquipmentFormRemoteParamsMixin on EquipmentFormDialogStateHost {
         rows.add(
           _buildRemoteParamField(
             key,
-            labelForKey(key),
             pairs,
             catalog,
             disabled: true,
@@ -165,7 +164,7 @@ mixin EquipmentFormRemoteParamsMixin on EquipmentFormDialogStateHost {
         );
       } else {
         rows.add(
-          _buildRemoteParamField(key, labelForKey(key), pairs, catalog),
+          _buildRemoteParamField(key, pairs, catalog),
         );
       }
     }
@@ -173,15 +172,13 @@ mixin EquipmentFormRemoteParamsMixin on EquipmentFormDialogStateHost {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text('Εμφάνιση στην κλήση', style: theme.textTheme.titleSmall),
+        Text('Εμφάνιση στην κλήση: Επιλέξτε «Όλα» ή ένα μόνο εργαλείο για αυτόν τον εξοπλισμό.', style: theme.textTheme.titleSmall),
         const SizedBox(height: 8),
         DropdownButtonFormField<int?>(
           key: ValueKey('zoneA-${zoneAValue ?? 'all'}'),
           initialValue: zoneAValue,
           decoration: const InputDecoration(
             border: OutlineInputBorder(),
-            helperText:
-                'Επιλέξτε «Όλα» ή ένα μόνο εργαλείο για αυτόν τον εξοπλισμό.',
           ),
           items: [
             const DropdownMenuItem<int?>(
@@ -207,7 +204,7 @@ mixin EquipmentFormRemoteParamsMixin on EquipmentFormDialogStateHost {
         Text('Παράμετροι ανά εργαλείο', style: theme.textTheme.titleSmall),
         const SizedBox(height: 4),
         Text(
-          'Με σειρά προτεραιότητας. Κενό = καμία δική του παράμετρος· το VNC δουλεύει και κενό.',
+          'Εμφανίζονται με σειρά προτεραιότητας. Αφήστε κενό για απενεργοποίηση — το VNC κρατά τον προεπιλεγμένο στόχο (PC + κωδικός).',
           style: theme.textTheme.bodySmall?.copyWith(
             color: theme.colorScheme.onSurfaceVariant,
           ),
@@ -253,7 +250,6 @@ mixin EquipmentFormRemoteParamsMixin on EquipmentFormDialogStateHost {
 
   Widget _buildRemoteParamField(
     String paramKey,
-    String toolLabel,
     List<RemoteToolFormPair> pairs,
     List<RemoteTool> catalog, {
     bool disabled = false,
@@ -264,14 +260,49 @@ mixin EquipmentFormRemoteParamsMixin on EquipmentFormDialogStateHost {
     final theme = Theme.of(context);
     final isVnc = _isVncLikeParamKey(paramKey, catalog);
     final acceptsFileParam = _toolAcceptsFileParam(paramKey, pairs);
+    final tool = _toolForParamKey(paramKey, catalog);
+    final hasIcon = tool?.iconAssetKey?.trim().isNotEmpty ?? false;
+    final roleLabel = switch (tool?.role) {
+      ToolRole.anydesk => 'Κωδικός AnyDesk',
+      ToolRole.rdp when acceptsFileParam => 'Αρχείο σύνδεσης (.rdp)',
+      ToolRole.vnc || ToolRole.rdp => 'Διεύθυνση (IP ή όνομα υπολογιστή)',
+      _ => 'Στόχος σύνδεσης',
+    };
+    final labelText = _remoteParamLabelWithTool(tool, roleLabel);
+    final vncDefault = VncRemoteTarget.resolveValidVncHost(
+      _codeController.text.trim(),
+      prefix: 'PC',
+    );
     return Opacity(
       opacity: disabled ? 0.6 : 1,
       child: TextFormField(
         controller: c,
         enabled: !disabled,
+        autovalidateMode: AutovalidateMode.onUserInteraction,
+        validator: (v) => tool == null
+            ? null
+            : RemoteParamValidator.validate(
+                tool: tool,
+                value: v ?? '',
+                acceptsFileParam: acceptsFileParam,
+              ),
         decoration: InputDecoration(
-          labelText: 'Παράμετρος · $toolLabel',
+          labelText: labelText,
           border: const OutlineInputBorder(),
+          prefixIcon: hasIcon
+              ? Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  child: RemoteToolIcon(
+                    iconAssetKey: tool!.iconAssetKey,
+                    size: 20,
+                    fallback: null,
+                  ),
+                )
+              : null,
+          prefixIconConstraints: const BoxConstraints(
+            minWidth: 36,
+            minHeight: 24,
+          ),
           helperText: historical
               ? 'Διατηρείται (αγνοείται όσο ισχύει «Μόνο ένα»)'
               : null,
@@ -287,7 +318,7 @@ mixin EquipmentFormRemoteParamsMixin on EquipmentFormDialogStateHost {
               : null,
           hintText: acceptsFileParam
               ? 'Αρχείο παραμέτρων πχ .rdp'
-              : (isVnc ? 'IP ή hostname' : null),
+              : (isVnc ? (vncDefault ?? 'IP ή hostname') : null),
         ),
         keyboardType: isVnc
             ? const TextInputType.numberWithOptions(decimal: true, signed: false)
@@ -310,5 +341,19 @@ mixin EquipmentFormRemoteParamsMixin on EquipmentFormDialogStateHost {
       if (p.key == key) return p.acceptsFileParam;
     }
     return false;
+  }
+
+  /// Προθέτει το όνομα εργαλείου στην ετικέτα όταν δεν εμφανίζεται ήδη
+  /// (π.χ. «UltraVNC - Διεύθυνση…»). Το «Κωδικός AnyDesk» ήδη περιέχει AnyDesk.
+  String _remoteParamLabelWithTool(RemoteTool? tool, String roleLabel) {
+    if (tool == null) return roleLabel;
+    final name = tool.name.trim();
+    if (name.isEmpty) return roleLabel;
+    final labelLower = roleLabel.toLowerCase();
+    if (labelLower.contains(name.toLowerCase())) return roleLabel;
+    if (tool.role == ToolRole.anydesk && labelLower.contains('anydesk')) {
+      return roleLabel;
+    }
+    return '$name - $roleLabel';
   }
 }

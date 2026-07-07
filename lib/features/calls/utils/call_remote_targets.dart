@@ -1,5 +1,4 @@
-﻿import '../../../core/database/remote_tools_repository.dart';
-import '../../../core/models/remote_tool.dart';
+﻿import '../../../core/models/remote_tool.dart';
 import '../../../core/models/remote_tool_role.dart';
 import '../models/equipment_model.dart';
 import '../provider/smart_entity_selector_provider.dart';
@@ -17,15 +16,6 @@ abstract final class CallRemoteTargets {
     final n = a.name.compareTo(b.name);
     if (n != 0) return n;
     return a.id.compareTo(b.id);
-  }
-
-  static String? _equipmentNameForGeneric(SmartEntitySelectorState s) {
-    if (s.selectedEquipment != null) {
-      final code = s.selectedEquipment!.code?.trim() ?? '';
-      if (code.isNotEmpty) return code;
-    }
-    final free = s.equipmentText.trim();
-    return free.isEmpty ? null : free;
   }
 
   static bool _looksLikeRdpHost(String raw) {
@@ -144,7 +134,7 @@ abstract final class CallRemoteTargets {
         if (free.isEmpty || free == 'Άγνωστο') return null;
         return free;
       case ToolRole.generic:
-        return _equipmentNameForGeneric(s);
+        return s.selectedEquipment?.paramForTool(tool);
     }
   }
 
@@ -171,7 +161,7 @@ abstract final class CallRemoteTargets {
       case ToolRole.vnc:
         return resolvedVncTarget(s, tools);
       case ToolRole.generic:
-        return '—';
+        return s.selectedEquipment?.paramForTool(tool) ?? '—';
     }
   }
 
@@ -211,13 +201,13 @@ abstract final class CallRemoteTargets {
       case ToolRole.rdp:
         return resolvedRdpHost(s, tools) != null;
       case ToolRole.generic:
-        return s.equipmentText.trim().isNotEmpty;
+        return false;
     }
   }
 
   /// Εργαλεία που εμφανίζονται στη γραμμή κλήσης (ο κατάλογος είναι ήδη ενεργά `remote_tools`).
   ///
-  /// Με εξοπλισμό από βάση: πάντα το προεπιλεγμένο εργαλείο + όσα έχουν παράμετρο με τιμή.
+  /// Με εξοπλισμό από βάση: VNC με έγκυρο στόχο + εργαλεία με παράμετρο τιμής.
   /// Με ελεύθερο κείμενο: όσα ενεργά εργαλεία [toolMatchesFreeEquipmentText] επιστρέφει true.
   static List<RemoteTool> visibleRemoteToolsForCallState(
     SmartEntitySelectorState s,
@@ -228,13 +218,7 @@ abstract final class CallRemoteTargets {
     final candidates = <RemoteTool>[];
     if (s.selectedEquipment != null) {
       final eq = s.selectedEquipment!;
-      final defId =
-          RemoteToolsRepository.parseDefaultRemoteToolId(eq.defaultRemoteTool);
       for (final t in catalog) {
-        if (defId != null && t.id == defId) {
-          candidates.add(t);
-          continue;
-        }
         if (t.role == ToolRole.vnc && canConnectForTool(s, t, catalog)) {
           candidates.add(t);
           continue;
@@ -302,27 +286,5 @@ abstract final class CallRemoteTargets {
       applyExclusive: false,
     );
     return withExclusive.length < withoutExclusive.length;
-  }
-
-  /// Κρύβει πλήρως τα κουμπιά σύνδεσης όταν το προεπιλεγμένο εργαλείο (id) είναι ανενεργό / διαγραμμένο / ορφανό.
-  static bool shouldHideRemoteConnectionButtons(
-    EquipmentModel? equipment,
-    List<RemoteTool> allToolsCatalog,
-  ) {
-    if (equipment == null) return false;
-    final id = RemoteToolsRepository.parseDefaultRemoteToolId(
-      equipment.defaultRemoteTool,
-    );
-    if (id == null) return false;
-    RemoteTool? found;
-    for (final t in allToolsCatalog) {
-      if (t.id == id) {
-        found = t;
-        break;
-      }
-    }
-    if (found == null) return true;
-    if (!found.isActive || found.deletedAt != null) return true;
-    return false;
   }
 }

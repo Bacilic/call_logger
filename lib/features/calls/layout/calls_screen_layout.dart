@@ -11,7 +11,6 @@ import '../provider/call_entry_provider.dart';
 import '../provider/call_header_provider.dart';
 import '../provider/calls_dashboard_providers.dart';
 import '../provider/remote_paths_provider.dart';
-import '../utils/call_remote_targets.dart';
 import '../screens/widgets/call_header_form.dart';
 import '../screens/widgets/call_status_bar.dart';
 import '../screens/widgets/recent_calls_list.dart';
@@ -304,14 +303,6 @@ class _ExpandedPlanBody extends ConsumerWidget {
     final groups = ref.watch(callsFieldGroupsProvider);
     final header = ref.watch(callHeaderProvider);
     final tools = ref.watch(remoteToolsCatalogProvider).value ?? <RemoteTool>[];
-    final allToolsAsync = ref.watch(remoteToolsAllCatalogProvider);
-    final hideRemoteButtons = allToolsAsync.maybeWhen(
-      data: (all) => CallRemoteTargets.shouldHideRemoteConnectionButtons(
-        header.selectedEquipment,
-        all,
-      ),
-      orElse: () => false,
-    );
     final cardsVis = ref
         .watch(callsScreenCardsVisibilityProvider)
         .maybeWhen(
@@ -322,7 +313,6 @@ class _ExpandedPlanBody extends ConsumerWidget {
     final selectedEquipmentCode =
         header.selectedEquipment?.code?.trim() ?? header.equipmentText.trim();
     final showRemoteButtons =
-        !hideRemoteButtons &&
         groups.isEquipmentGroupActive &&
         (header.equipmentText.trim().isNotEmpty ||
             header.selectedEquipment != null);

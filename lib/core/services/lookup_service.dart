@@ -351,6 +351,14 @@ class LookupService {
     return null;
   }
 
+  /// Αναζήτηση εξοπλισμού by id μέσα από in-memory λίστα.
+  EquipmentModel? findEquipmentById(int id) {
+    for (final equipment in _equipment) {
+      if (equipment.id == id) return equipment;
+    }
+    return null;
+  }
+
   /// Αναζήτηση τμημάτων στη μνήμη βάσει ονόματος (case-insensitive, αγνοώντας τόνους).
   List<DepartmentModel> searchDepartments(String query) {
     final q = SearchTextNormalizer.normalizeForSearch(query);

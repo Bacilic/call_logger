@@ -6,7 +6,7 @@ import '../models/remote_tool_role.dart';
 import 'remote_launcher_service.dart';
 import 'remote_tools_paths_helper.dart';
 
-/// Υπηρεσία απομακρυσμένων συνδέσεων: διαδρομές από `remote_tools`, εκκίνηση ανά `launch_mode`.
+/// Υπηρεσία απομακρυσμένων συνδέσεων: διαδρομές από `remote_tools`, εκκίνηση με ανάλυση ορισμάτων.
 class RemoteConnectionService {
   RemoteConnectionService(this._toolsRepo);
 
@@ -85,7 +85,7 @@ class RemoteConnectionService {
     }
   }
 
-  /// Γενική εκκίνηση: `direct_exec` ή `template_file` (ίδια ανάλυση ορισμάτων).
+  /// Γενική εκκίνηση με ανάλυση placeholders στα ορίσματα.
   Future<void> launchRemoteTool({
     required RemoteTool tool,
     required String resolvedTarget,

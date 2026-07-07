@@ -11,6 +11,19 @@ Future<void> applyLexiconOpenNormalizations(Database db) async {
   await ensureDepartmentsMapHiddenColumn(db);
   await ensureCallsNoSolutionColumn(db);
   await clearEquipmentDefaultRemoteToolOnOpen(db);
+  await dropRemoteToolsLaunchModeColumnOnOpen(db);
+}
+
+/// Αφαιρεί τη νεκρή στήλη `launch_mode` από `remote_tools` (idempotent).
+Future<void> dropRemoteToolsLaunchModeColumnOnOpen(Database db) async {
+  try {
+    final info = await db.rawQuery('PRAGMA table_info(remote_tools)');
+    final hasLaunchMode = info.any((r) => r['name'] == 'launch_mode');
+    if (!hasLaunchMode) return;
+    await db.execute('ALTER TABLE remote_tools DROP COLUMN launch_mode');
+  } catch (_) {
+    // Ο πίνακας μπορεί να λείπει σε ασυνήθιστα σενάρια.
+  }
 }
 
 /// Το «κύριο εργαλείο» είναι πλέον υπολογιζόμενο (σειρά προτεραιότητας) — το παλιό

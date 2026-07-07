@@ -12,14 +12,17 @@ import '../../../../core/utils/name_parser.dart';
 import '../../../../core/utils/search_text_normalizer.dart';
 import '../../../../core/utils/spell_check.dart';
 import '../../../../core/widgets/lexicon_spell_text_form_field.dart';
+import '../../../../core/widgets/remote_tool_icon.dart';
 import '../../../../core/widgets/spell_check_controller.dart';
 import '../../../calls/models/equipment_model.dart';
 import '../../../calls/models/user_model.dart';
 import '../../../calls/provider/lookup_provider.dart';
+import '../../../calls/provider/smart_entity_selector_provider.dart';
 import '../../../calls/provider/remote_paths_provider.dart';
 import '../../../../core/models/remote_tool.dart';
 import '../../../../core/models/remote_tool_role.dart';
 import '../../../calls/utils/equipment_remote_param_key.dart';
+import '../../../calls/utils/remote_param_validator.dart';
 import '../../../calls/utils/vnc_remote_target.dart';
 import '../../providers/equipment_directory_provider.dart';
 
@@ -398,6 +401,8 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog>
       );
       if (!mounted) return;
       widget.ref.invalidate(lookupServiceProvider);
+      await refreshSelectedEquipmentInAllSelectors(widget.ref);
+      if (!mounted) return;
       widget.onSaved?.call();
       Navigator.of(context).pop(true);
       ScaffoldMessenger.of(

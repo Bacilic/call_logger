@@ -45,7 +45,6 @@ class RemoteTool {
     required this.name,
     required this.role,
     required this.executablePath,
-    required this.launchMode,
     required this.sortOrder,
     required this.isActive,
     this.deletedAt,
@@ -60,8 +59,6 @@ class RemoteTool {
   final String name;
   final ToolRole role;
   final String executablePath;
-  /// `direct_exec` | `template_file`
-  final String launchMode;
   final int sortOrder;
   final bool isActive;
   /// Soft delete: όταν μη null, το εργαλείο δεν εμφανίζεται στα ενεργά chips· παραμένει για επιλύσεις id.
@@ -78,9 +75,8 @@ class RemoteTool {
   /// Όταν true, αν είναι έγκυρο στην κλήση κρύβει τα μη αποκλειστικά εργαλεία.
   final bool isExclusive;
 
-  /// True όταν το εργαλείο τρέχει ως template file και υπάρχει ενεργό `{FILE}` placeholder.
+  /// True όταν υπάρχει ενεργό όρισμα με placeholder `{FILE}`.
   bool get acceptsFileParam {
-    if (launchMode.trim().toLowerCase() != 'template_file') return false;
     for (final a in arguments) {
       if (!a.isActive) continue;
       if (containsFilePlaceholder(a.value)) return true;
@@ -130,7 +126,6 @@ class RemoteTool {
       name: (map['name'] as String?) ?? '',
       role: toolRoleFromDb(map['role']),
       executablePath: (map['executable_path'] as String?) ?? '',
-      launchMode: (map['launch_mode'] as String?) ?? 'direct_exec',
       sortOrder: (map['sort_order'] as int?) ?? 0,
       isActive: ((map['is_active'] as int?) ?? 0) == 1,
       deletedAt: _parseDeletedAt(map['deleted_at']),
@@ -148,7 +143,6 @@ class RemoteTool {
       'name': name,
       'role': role.dbValue,
       'executable_path': executablePath,
-      'launch_mode': launchMode,
       'sort_order': sortOrder,
       'is_active': isActive ? 1 : 0,
       'deleted_at': deletedAt?.toIso8601String(),
@@ -175,7 +169,6 @@ class RemoteTool {
     String? name,
     ToolRole? role,
     String? executablePath,
-    String? launchMode,
     int? sortOrder,
     bool? isActive,
     DateTime? deletedAt,
@@ -192,7 +185,6 @@ class RemoteTool {
       name: name ?? this.name,
       role: role ?? this.role,
       executablePath: executablePath ?? this.executablePath,
-      launchMode: launchMode ?? this.launchMode,
       sortOrder: sortOrder ?? this.sortOrder,
       isActive: isActive ?? this.isActive,
       deletedAt: clearDeletedAt ? null : (deletedAt ?? this.deletedAt),
@@ -230,7 +222,6 @@ class RemoteTool {
         other.name == name &&
         other.role == role &&
         other.executablePath == executablePath &&
-        other.launchMode == launchMode &&
         other.sortOrder == sortOrder &&
         other.isActive == isActive &&
         other.deletedAt == deletedAt &&
@@ -247,7 +238,6 @@ class RemoteTool {
         name,
         role,
         executablePath,
-        launchMode,
         sortOrder,
         isActive,
         deletedAt,

@@ -10,7 +10,6 @@ RemoteTool _tool({required int id, required String name}) => RemoteTool(
       name: name,
       role: ToolRole.generic,
       executablePath: 'x.exe',
-      launchMode: 'direct_exec',
       sortOrder: id,
       isActive: true,
     );
@@ -69,25 +68,6 @@ void main() {
       );
 
       expect(find.text('Το αρχείο δεν βρέθηκε στη διαδρομή.'), findsOneWidget);
-    });
-
-    testWidgets('LaunchModeSelector: εμφανίζει τα δύο segments και καλεί onChanged',
-        (tester) async {
-      String? selected;
-      await tester.pumpWidget(
-        _host(
-          LaunchModeSelector(
-            value: 'direct_exec',
-            onChanged: (v) => selected = v,
-          ),
-        ),
-      );
-
-      expect(find.text('Άμεση εκτέλεση'), findsOneWidget);
-      expect(find.text('Αρχείο προτύπου'), findsOneWidget);
-      await tester.tap(find.text('Αρχείο προτύπου'));
-      await tester.pump();
-      expect(selected, 'template_file');
     });
 
     testWidgets('RoleDropdown: εμφανίζει ετικέτα ρόλου και τρέχουσα επιλογή',
