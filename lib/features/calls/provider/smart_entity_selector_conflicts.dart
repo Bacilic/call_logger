@@ -140,9 +140,9 @@ mixin SmartEntitySelectorConflictsMixin on Notifier<SmartEntitySelectorState> {
     // ── Τμήμα ──
     if (source != SelectorField.department &&
         state.departmentText.trim().isNotEmpty &&
-        state.selectedDepartmentId != null &&
         truthDeptId != null &&
-        state.selectedDepartmentId != truthDeptId) {
+        (state.selectedDepartmentId == null ||
+            state.selectedDepartmentId != truthDeptId)) {
       _addConflict(
         out,
         SelectorField.department,

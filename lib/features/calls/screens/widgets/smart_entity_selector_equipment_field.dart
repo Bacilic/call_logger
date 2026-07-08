@@ -59,7 +59,6 @@ class _SmartEntityEquipmentFieldState extends State<SmartEntityEquipmentField> {
   final LayerLink _equipmentLayerLink = LayerLink();
   List<SmartEntityEquipmentSuggestion> _lastInitialSuggestions = const [];
   bool _justSelectedFromCustomList = false;
-  Timer? _debounce;
 
   void _performLookup() {
     final query = widget.controller.text.trim();
@@ -71,14 +70,6 @@ class _SmartEntityEquipmentFieldState extends State<SmartEntityEquipmentField> {
       return;
     }
     widget.notifier.performEquipmentLookupByCode(query);
-  }
-
-  void _scheduleCompletedLookup() {
-    _debounce?.cancel();
-    _debounce = Timer(const Duration(milliseconds: 250), () {
-      if (!mounted) return;
-      _performLookup();
-    });
   }
 
   @override
@@ -105,7 +96,6 @@ class _SmartEntityEquipmentFieldState extends State<SmartEntityEquipmentField> {
     if (_suggestionOverlayController.isShowing) {
       _suggestionOverlayController.hide();
     }
-    _debounce?.cancel();
     _optionsScrollController.dispose();
     _overlayScrollController.dispose();
     widget.focusNode.removeListener(_onEquipmentFocusChange);
@@ -122,7 +112,7 @@ class _SmartEntityEquipmentFieldState extends State<SmartEntityEquipmentField> {
       _keyboardOptionIndex = -1;
       _lastAutoScrollIndex = -1;
       _isKeyboardPreview = false;
-      _scheduleCompletedLookup();
+      _performLookup();
       Future.delayed(const Duration(milliseconds: 150), () {
         if (mounted && !widget.focusNode.hasFocus) {
           setState(() {
@@ -202,7 +192,6 @@ class _SmartEntityEquipmentFieldState extends State<SmartEntityEquipmentField> {
     EquipmentModel equipment, {
     bool fromCustomList = false,
   }) {
-    _debounce?.cancel();
     _isSelectingEquipment = true;
     if (fromCustomList) _justSelectedFromCustomList = true;
     final fieldText = _equipmentFieldText(equipment);
@@ -624,7 +613,7 @@ class _SmartEntityEquipmentFieldState extends State<SmartEntityEquipmentField> {
                             }
                             widget.onContentChecked();
                             nextFocusNode.requestFocus();
-                            _scheduleCompletedLookup();
+                            _performLookup();
                           },
                         ),
                       ),

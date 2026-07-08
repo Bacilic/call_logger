@@ -125,6 +125,30 @@ mixin SmartEntitySelectorLookupsMixin on Notifier<SmartEntitySelectorState> {
     return state.departmentText.trim().isEmpty;
   }
 
+  /// Ακριβές ταίριασμα πλήρους ονόματος (όνομα επώνυμο ή επώνυμο όνομα) μετά από
+  /// αφαίρεση παρενθετικού τμήματος — διαχωρίζει μερικό από πλήρες query.
+  bool _isExactCallerNameMatch(String query, UserModel user) {
+    final normalizedQuery = SearchTextNormalizer.normalizeForSearch(query);
+    if (normalizedQuery.isEmpty) return false;
+
+    final rawName =
+        user.name ??
+        NameParserUtility.stripParentheticalSuffix(user.fullNameWithDepartment);
+    final strippedName = NameParserUtility.stripParentheticalSuffix(rawName);
+
+    final firstLast = SearchTextNormalizer.normalizeForSearch(strippedName);
+    if (normalizedQuery == firstLast) return true;
+
+    final first = user.firstName?.trim() ?? '';
+    final last = user.lastName?.trim() ?? '';
+    if (first.isNotEmpty && last.isNotEmpty) {
+      final lastFirst = SearchTextNormalizer.normalizeForSearch('$last $first');
+      if (normalizedQuery == lastFirst) return true;
+    }
+
+    return false;
+  }
+
   String _departmentTextForUser(UserModel user) {
     if (user.departmentId == null) return '';
     final asyncLookup = ref.read(lookupServiceProvider);
@@ -202,7 +226,7 @@ mixin SmartEntitySelectorLookupsMixin on Notifier<SmartEntitySelectorState> {
           callerCandidates: [],
           clearSelectedCaller: true,
           equipmentCandidates: [],
-          clearSelectedEquipment: true,
+          clearSelectedEquipment: !_hasManualEquipmentSelection,
           isPhoneAmbiguous: false,
           isEquipmentAmbiguous: false,
           callerNoMatch: true,
@@ -407,6 +431,17 @@ mixin SmartEntitySelectorLookupsMixin on Notifier<SmartEntitySelectorState> {
       }
 
       final user = users.first;
+      if (!_isExactCallerNameMatch(query, user)) {
+        state = state.copyWith(
+          callerCandidates: users,
+          clearSelectedCaller: true,
+          callerNoMatch: false,
+          clearPhoneCandidates: true,
+          isPhoneAmbiguous: false,
+        );
+        return;
+      }
+
       final displayName = user.name ?? user.fullNameWithDepartment;
       final shouldAutofillDepartment = _canAutofillDepartmentForUser(user);
       state = state.copyWith(

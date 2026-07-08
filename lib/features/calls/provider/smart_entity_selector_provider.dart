@@ -383,18 +383,32 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState>
   }
 
   void setCaller(UserModel? value) {
-    final deptText = value == null ? '' : _departmentTextForUser(value);
-    state = state.copyWith(
-      selectedCaller: value,
-      clearSelectedCaller: value == null,
-      clearPhoneCandidates: true,
-      clearCallerCandidates: true,
-      isPhoneAmbiguous: false,
-      callerNoMatch: false,
-      callerDisplayText: value?.name ?? value?.fullNameWithDepartment ?? '',
-      departmentText: deptText,
-      selectedDepartmentId: value?.departmentId,
-    );
+    final departmentAlreadyFilled = state.departmentText.trim().isNotEmpty;
+    final shouldAutofillDepartment = !departmentAlreadyFilled && value != null;
+
+    if (shouldAutofillDepartment) {
+      final deptText = _departmentTextForUser(value);
+      state = state.copyWith(
+        selectedCaller: value,
+        clearPhoneCandidates: true,
+        clearCallerCandidates: true,
+        isPhoneAmbiguous: false,
+        callerNoMatch: false,
+        callerDisplayText: value.name ?? value.fullNameWithDepartment,
+        departmentText: deptText,
+        selectedDepartmentId: value.departmentId,
+      );
+    } else {
+      state = state.copyWith(
+        selectedCaller: value,
+        clearSelectedCaller: value == null,
+        clearPhoneCandidates: true,
+        clearCallerCandidates: true,
+        isPhoneAmbiguous: false,
+        callerNoMatch: false,
+        callerDisplayText: value?.name ?? value?.fullNameWithDepartment ?? '',
+      );
+    }
     if (value != null) {
       final pool = value.phoneJoined.trim();
       final sp = state.selectedPhone?.trim() ?? '';
@@ -404,6 +418,10 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState>
           _splitPhones(sp).length > 1) {
         state = state.copyWith(clearSelectedPhone: true, clearPhoneError: true);
       }
+      _recomputeConflicts(
+        SelectorField.caller,
+        ref.read(lookupServiceProvider).value?.service,
+      );
     }
   }
 
@@ -424,8 +442,6 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState>
       clearCallerCandidates: true,
       isPhoneAmbiguous: false,
       callerDisplayText: '',
-      departmentText: '',
-      clearSelectedDepartmentId: true,
       clearConflicts: true,
     );
   }

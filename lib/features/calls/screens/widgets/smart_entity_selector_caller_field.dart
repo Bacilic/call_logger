@@ -55,7 +55,6 @@ class SmartEntityCallerFieldState extends State<SmartEntityCallerField> {
   int _lastAutoScrollIndex = -1;
   String _typedQuery = '';
   final ScrollController _optionsScrollController = ScrollController();
-  Timer? _debounce;
   final OverlayPortalController _suggestionOverlayController =
       OverlayPortalController();
   final LayerLink _callerLayerLink = LayerLink();
@@ -64,14 +63,6 @@ class SmartEntityCallerFieldState extends State<SmartEntityCallerField> {
     final query = widget.controller.text.trim();
     if (query.isEmpty || query == 'Άγνωστος') return;
     widget.notifier.performCallerLookup(query);
-  }
-
-  void _scheduleCompletedLookup() {
-    _debounce?.cancel();
-    _debounce = Timer(const Duration(milliseconds: 250), () {
-      if (!mounted) return;
-      _performLookup();
-    });
   }
 
   String _extractDisplayName(String selection) {
@@ -133,7 +124,6 @@ class SmartEntityCallerFieldState extends State<SmartEntityCallerField> {
     if (_suggestionOverlayController.isShowing) {
       _suggestionOverlayController.hide();
     }
-    _debounce?.cancel();
     _optionsScrollController.dispose();
     widget.focusNode.removeListener(_onCallerFocusChange);
     widget.controller.removeListener(_onCallerTextChange);
@@ -178,7 +168,7 @@ class SmartEntityCallerFieldState extends State<SmartEntityCallerField> {
       // που δεν έχει ήδη επιλεγμένο καλούντα — ώστε να μη χαλάει ρητή επιλογή.
       if (widget.controller.text.trim().isNotEmpty &&
           widget.header.selectedCaller == null) {
-        _scheduleCompletedLookup();
+        _performLookup();
       }
       widget.onCallerFocusOut?.call();
     }
@@ -721,7 +711,6 @@ class SmartEntityCallerFieldState extends State<SmartEntityCallerField> {
                                           _typedQuery = '';
                                           _keyboardOptionIndex = -1;
                                           notifier.clearCaller();
-                                          notifier.clearEquipment();
                                         },
                                         tooltip: 'Καθαρισμός Καλούντα',
                                       ),
@@ -737,7 +726,6 @@ class SmartEntityCallerFieldState extends State<SmartEntityCallerField> {
                               _keyboardOptionIndex = -1;
                               if (value.trim().isEmpty) {
                                 notifier.clearCaller();
-                                notifier.clearEquipment();
                               } else {
                                 notifier.updateCallerDisplayText(value);
                                 if (header.selectedCaller != null) {
@@ -774,7 +762,10 @@ class SmartEntityCallerFieldState extends State<SmartEntityCallerField> {
                               }
                               widget.onContentChecked();
                               nextFocusNode.requestFocus();
-                              _scheduleCompletedLookup();
+                              if (widget.controller.text.trim().isNotEmpty &&
+                                  header.selectedCaller == null) {
+                                _performLookup();
+                              }
                             },
                           ),
                         );

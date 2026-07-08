@@ -25,12 +25,14 @@ class PhoneUsageCheck {
     required this.userNames,
     this.departmentId,
     this.departmentName,
+    this.ownerDepartmentIds = const [],
   });
 
   final String phone;
   final List<String> userNames;
   final int? departmentId;
   final String? departmentName;
+  final List<int> ownerDepartmentIds;
 
   bool get hasUserOwners => userNames.isNotEmpty;
   bool get hasDepartmentLocation => departmentId != null;
@@ -42,12 +44,14 @@ class EquipmentUsageCheck {
     required this.userNames,
     this.departmentId,
     this.departmentName,
+    this.ownerDepartmentIds = const [],
   });
 
   final String code;
   final List<String> userNames;
   final int? departmentId;
   final String? departmentName;
+  final List<int> ownerDepartmentIds;
 
   bool get hasUserOwners => userNames.isNotEmpty;
   bool get hasDepartmentLocation => departmentId != null;
@@ -635,6 +639,7 @@ class LookupService {
     final raw = phone.trim();
     final digits = _digitsOnly(raw);
     final owners = <String>[];
+    final ownerDepartmentIds = <int>{};
     for (final u in _users) {
       if (u.isDeleted) continue;
       final has = u.phones.any((p) {
@@ -647,6 +652,8 @@ class LookupService {
       if (!has) continue;
       final name = (u.name ?? '').trim();
       if (name.isNotEmpty) owners.add(name);
+      final ownerDeptId = u.departmentId;
+      if (ownerDeptId != null) ownerDepartmentIds.add(ownerDeptId);
     }
     int? depId = _phoneDepartmentByNumber[raw];
     if (depId == null && digits.isNotEmpty) {
@@ -663,6 +670,7 @@ class LookupService {
       userNames: owners,
       departmentId: depId,
       departmentName: departmentIdToName[depId],
+      ownerDepartmentIds: ownerDepartmentIds.toList()..sort(),
     );
   }
 
@@ -679,10 +687,13 @@ class LookupService {
       }
     }
     final owners = <String>[];
+    final ownerDepartmentIds = <int>{};
     if (match?.id != null) {
       for (final u in findUsersForEquipment(match!.id!)) {
         final name = (u.name ?? '').trim();
         if (name.isNotEmpty) owners.add(name);
+        final ownerDeptId = u.departmentId;
+        if (ownerDeptId != null) ownerDepartmentIds.add(ownerDeptId);
       }
     }
     final depId = match?.departmentId;
@@ -691,6 +702,7 @@ class LookupService {
       userNames: owners,
       departmentId: depId,
       departmentName: departmentIdToName[depId],
+      ownerDepartmentIds: ownerDepartmentIds.toList()..sort(),
     );
   }
 

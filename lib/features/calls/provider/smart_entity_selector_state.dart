@@ -192,6 +192,12 @@ class SmartEntitySelectorState {
   bool needsOrphanDepartmentQuickAddResolved(LookupService? lookup) {
     if (!needsOrphanDepartmentQuickAdd) return false;
     if (lookup == null) return true;
+    final flags = _computeOrphanNeedsSharedFlags(lookup);
+    return flags.phoneNeedsShared || flags.equipmentNeedsShared;
+  }
+
+  ({bool phoneNeedsShared, bool equipmentNeedsShared})
+      _computeOrphanNeedsSharedFlags(LookupService lookup) {
     final deptText = departmentText.trim();
     final departmentId =
         selectedDepartmentId ?? lookup.findDepartmentByName(deptText)?.id;
@@ -205,7 +211,13 @@ class SmartEntitySelectorState {
         phone.isNotEmpty &&
         (() {
           final usage = lookup.checkPhoneUsage(phone);
-          if (usage.hasUserOwners) return true;
+          if (usage.hasUserOwners) {
+            return _ownedUsageNeedsSharedForDepartment(
+              itemDepartmentId: usage.departmentId,
+              ownerDepartmentIds: usage.ownerDepartmentIds,
+              formDepartmentId: departmentId,
+            );
+          }
           if (departmentId == null) return true;
           return usage.departmentId != departmentId;
         })();
@@ -214,12 +226,30 @@ class SmartEntitySelectorState {
         equipmentCode != null &&
         (() {
           final usage = lookup.checkEquipmentUsage(equipmentCode);
-          if (usage.hasUserOwners) return true;
+          if (usage.hasUserOwners) {
+            return _ownedUsageNeedsSharedForDepartment(
+              itemDepartmentId: usage.departmentId,
+              ownerDepartmentIds: usage.ownerDepartmentIds,
+              formDepartmentId: departmentId,
+            );
+          }
           if (departmentId == null) return true;
           return usage.departmentId != departmentId;
         })();
 
-    return phoneNeedsShared || equipmentNeedsShared;
+    return (phoneNeedsShared: phoneNeedsShared, equipmentNeedsShared: equipmentNeedsShared);
+  }
+
+  static bool _ownedUsageNeedsSharedForDepartment({
+    required int? itemDepartmentId,
+    required List<int> ownerDepartmentIds,
+    required int? formDepartmentId,
+  }) {
+    final known = <int>{};
+    if (itemDepartmentId != null) known.add(itemDepartmentId);
+    known.addAll(ownerDepartmentIds);
+    if (formDepartmentId == null) return true;
+    return !known.contains(formDepartmentId);
   }
 
   /// Το κουμπί `+` εμφανίζεται είτε για νέα συσχέτιση σε υπάρχοντα χρήστη είτε για δημιουργία νέου καλούντα.
@@ -249,7 +279,7 @@ class SmartEntitySelectorState {
     return nextNorm != oldNorm;
   }
 
-  String? get pendingDepartmentChangeTooltip {
+  String? pendingDepartmentChangeTooltip(LookupService? lookup) {
     if (!hasPendingDepartmentChange) return null;
     final caller = selectedCaller;
     final nextDepartmentText = departmentText.trim();
@@ -257,10 +287,13 @@ class SmartEntitySelectorState {
     final oldText = (oldDepartment == null || oldDepartment.isEmpty)
         ? 'Χωρίς τμήμα'
         : oldDepartment;
+    final targetDeptExists =
+        lookup?.findDepartmentByName(nextDepartmentText)?.id != null;
+    final newDeptSuffix = targetDeptExists == true ? '' : ' — νέο τμήμα';
     final callerName = caller?.name?.trim().isNotEmpty == true
         ? caller!.name!.trim()
         : normalizedCallerDisplayText;
-    return 'Αλλαγή τμήματος ($oldText -> $nextDepartmentText) για $callerName';
+    return 'Αλλαγή τμήματος ($oldText → $nextDepartmentText$newDeptSuffix) για $callerName';
   }
 
   /// Πράσινο: νέος καλούντας ή orphans σε τμήμα που δεν υπάρχει ακόμη στη βάση (όλα νέα).
@@ -271,6 +304,22 @@ class SmartEntitySelectorState {
       return Colors.orange;
     }
     if (needsOrphanDepartmentQuickAdd || needsNewCallerCreation) {
+      if (needsOrphanDepartmentQuickAdd && lookup != null) {
+        final phone = selectedPhone?.trim();
+        final equipmentCode = equipmentText.trim();
+        var involvesOwnedElement = false;
+        if (phone != null && phone.isNotEmpty) {
+          if (lookup.checkPhoneUsage(phone).hasUserOwners) {
+            involvesOwnedElement = true;
+          }
+        }
+        if (!involvesOwnedElement && equipmentCode.isNotEmpty) {
+          if (lookup.checkEquipmentUsage(equipmentCode).hasUserOwners) {
+            involvesOwnedElement = true;
+          }
+        }
+        if (involvesOwnedElement) return Colors.orange;
+      }
       final d = departmentText.trim();
       final deptExists =
           d.isNotEmpty && lookup?.findDepartmentByName(d)?.id != null;
@@ -288,25 +337,51 @@ class SmartEntitySelectorState {
     if (needsNewCallerCreation) {
       // Για νέο καλούντα συσχετίζεται ό,τι υπάρχει στη φόρμα (v2 §Γ: η τιμή
       // του πεδίου είναι η αλήθεια, ανεξάρτητα από το πώς αποκτήθηκε).
-      final includeEquipmentForNewCaller = equipmentFilled;
-      final parts = <String>[];
-      if (phoneFilled) {
-        parts.add('τηλέφωνο: ${selectedPhone!.trim()}');
-      }
-      if (includeEquipmentForNewCaller) {
-        parts.add('εξοπλισμό: ${equipmentText.trim()}');
-      }
-      if (parts.isEmpty) {
-        return 'Προσθήκη νέου καλούντα: $normalizedCallerDisplayText';
-      }
-      return 'Προσθήκη νέου καλούντα: $normalizedCallerDisplayText με ${parts.join(' και ')}';
-    }
-
-    if (needsOrphanDepartmentQuickAddResolved(lookup)) {
       final parts = <String>[];
       if (phoneFilled) parts.add('τηλέφωνο: ${selectedPhone!.trim()}');
       if (equipmentFilled) parts.add('εξοπλισμό: ${equipmentText.trim()}');
-      return 'Προσθήκη στο τμήμα ${departmentText.trim()}: ${parts.join(' και ')}';
+
+      final base = parts.isEmpty
+          ? 'Προσθήκη νέου καλούντα: $normalizedCallerDisplayText'
+          : 'Προσθήκη νέου καλούντα: $normalizedCallerDisplayText με ${parts.join(' και ')}';
+
+      final deptText = departmentText.trim();
+      if (deptText.isEmpty) return base;
+
+      final deptExists =
+          lookup?.findDepartmentByName(deptText)?.id != null;
+      final deptPart = deptExists
+          ? 'στο τμήμα: $deptText'
+          : 'στο τμήμα: $deptText (νέο τμήμα)';
+
+      return '$base $deptPart';
+    }
+
+    if (needsOrphanDepartmentQuickAddResolved(lookup)) {
+      final deptText = departmentText.trim();
+      final deptExists =
+          lookup?.findDepartmentByName(deptText)?.id != null;
+      final deptPart = deptExists
+          ? 'Προσθήκη ως κοινόχρηστων στο τμήμα $deptText'
+          : 'Προσθήκη ως κοινόχρηστων στο τμήμα $deptText (νέο τμήμα)';
+
+      final parts = <String>[];
+      if (lookup != null) {
+        final flags = _computeOrphanNeedsSharedFlags(lookup);
+        if (flags.phoneNeedsShared) {
+          parts.add('τηλέφωνο: ${selectedPhone!.trim()}');
+        }
+        if (flags.equipmentNeedsShared) {
+          parts.add('εξοπλισμό: ${equipmentText.trim()}');
+        }
+      } else {
+        // Fallback όταν δεν υπάρχει lookup: δεν μπορούμε να ξέρουμε
+        // με βεβαιότητα ποια πεδία θα ενημερωθούν στη βάση.
+        if (phoneFilled) parts.add('τηλέφωνο: ${selectedPhone!.trim()}');
+        if (equipmentFilled) parts.add('εξοπλισμό: ${equipmentText.trim()}');
+      }
+
+      return '$deptPart: ${parts.join(' και ')}';
     }
 
     final name = selectedCaller?.name ?? 'άγνωστος';
@@ -320,7 +395,7 @@ class SmartEntitySelectorState {
     final base = parts.isEmpty
         ? null
         : 'Προσθήκη ${parts.join(' και ')} στο $name';
-    final departmentPart = pendingDepartmentChangeTooltip;
+    final departmentPart = pendingDepartmentChangeTooltip(lookup);
     if (base == null) return departmentPart;
     if (departmentPart == null) return base;
     // Δεύτερη γραμμή για την αλλαγή τμήματος, ώστε το tooltip
