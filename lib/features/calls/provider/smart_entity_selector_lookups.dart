@@ -548,6 +548,15 @@ mixin SmartEntitySelectorLookupsMixin on Notifier<SmartEntitySelectorState> {
 
       final user = owners.isNotEmpty ? owners.first : null;
       if (user == null) {
+        if (equipment.departmentId != null &&
+            state.departmentText.trim().isEmpty &&
+            state.selectedDepartmentId == null) {
+          state = state.copyWith(
+            departmentText:
+                lookup.departmentIdToName[equipment.departmentId] ?? '',
+            selectedDepartmentId: equipment.departmentId,
+          );
+        }
         return;
       }
 

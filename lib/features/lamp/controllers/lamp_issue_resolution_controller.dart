@@ -4,7 +4,9 @@ import 'package:flutter/material.dart';
 import '../../../core/database/old_database/lamp_data_issue_type_labels.dart';
 import '../../../core/database/old_database/lamp_issue_resolution_service.dart';
 import '../../../core/database/old_database/resolution_log_entry.dart';
+import 'lamp_issue_grouping.dart';
 import '../widgets/lamp_issue_manual_review_dialog.dart';
+import '../widgets/lamp_network_issue_resolution_dialog.dart';
 import '../widgets/lamp_resolution_progress_dialog.dart';
 import '../widgets/lamp_unresolved_resolution_dialog.dart';
 import 'lamp_path_management.dart';
@@ -27,10 +29,73 @@ class LampIssueResolutionController {
   final int Function(LampIssueType issueType) issueCountFor;
 
   LampIssueType? resolvingIssueType;
+  String? resolvingNetworkIssueType;
+
+  static bool isNetworkIssueType(String rawIssueType) {
+    return rawIssueType.trim().startsWith('network_');
+  }
+
+  bool canResolveNetworkIssueType(String rawIssueType) =>
+      search.readPathReadyForQuery &&
+      resolvingIssueType == null &&
+      resolvingNetworkIssueType == null &&
+      isNetworkIssueType(rawIssueType) &&
+      issueCountForNetwork(rawIssueType) > 0;
+
+  int issueCountForNetwork(String rawIssueType) {
+    return issuesList()
+        .where((issue) => issue['issue_type']?.toString() == rawIssueType)
+        .length;
+  }
+
+  Future<void> runNetworkIssueResolution(
+    String issueType,
+    List<Map<String, Object?>> groupIssues,
+  ) async {
+    if (resolvingNetworkIssueType != null || resolvingIssueType != null) return;
+    final dbPath = path.readDbController.text.trim();
+    if (!search.readPathReadyForQuery || dbPath.isEmpty) {
+      host.showSnack('Η βάση προς ανάγνωση δεν είναι έτοιμη.', isError: true);
+      return;
+    }
+    if (groupIssues.isEmpty) return;
+
+    resolvingNetworkIssueType = issueType;
+    host.notifyState();
+    try {
+      final outcome = await showLampNetworkIssueResolutionDialog(
+        context: host.context,
+        issueType: issueType,
+        issues: groupIssues,
+        service: host.shared.networkIssueResolutionService,
+        databasePath: dbPath,
+      );
+      if (!host.mounted) return;
+      await host.loadIssues();
+      if (!host.mounted) return;
+      if (outcome == LampNetworkIssueDialogOutcome.completed) {
+        host.showSnack(
+          'Ολοκληρώθηκε η επίλυση δικτύου: '
+          '${lampDataIssueTypeDisplayLabel(issueType)}.',
+        );
+      } else if (outcome == LampNetworkIssueDialogOutcome.cancelled) {
+        host.showSnack('Ακυρώθηκε η επίλυση δικτύου.');
+      }
+    } catch (e) {
+      if (!host.mounted) return;
+      host.showSnack('Η επίλυση δικτύου απέτυχε: $e', isError: true);
+    } finally {
+      if (host.mounted) {
+        resolvingNetworkIssueType = null;
+        host.notifyState();
+      }
+    }
+  }
 
   bool canResolveIssueType(LampIssueType issueType) =>
       search.readPathReadyForQuery &&
       resolvingIssueType == null &&
+      resolvingNetworkIssueType == null &&
       issueCountFor(issueType) > 0;
 
   Future<void> runIssueResolution(LampIssueType issueType) async {
@@ -76,43 +141,55 @@ class LampIssueResolutionController {
 
       final cancelToken = ResolutionCancelToken();
       final logController = ResolutionLogController();
-      final apply = await showDialog<LampIssueResolutionApplyResult>(
-        context: screenContext,
-        barrierDismissible: false,
-        builder: (dialogContext) => LampResolutionProgressDialog(
-          title: issueType.label,
-          logController: logController,
-          cancelToken: cancelToken,
-          apply: () => executeIssueResolutionOrchestration(
-            dialogContext: dialogContext,
-            databasePath: dbPath,
-            issueType: issueType,
-            proposals: proposals,
+      final progress = ValueNotifier<int>(0);
+      final paused = ValueNotifier<bool>(false);
+      try {
+        final apply = await showDialog<LampIssueResolutionApplyResult>(
+          context: screenContext,
+          barrierDismissible: false,
+          builder: (dialogContext) => LampResolutionProgressDialog(
+            title: issueType.label,
             logController: logController,
             cancelToken: cancelToken,
+            totalSteps: proposals.length,
+            progress: progress,
+            paused: paused,
+            apply: () => executeIssueResolutionOrchestration(
+              dialogContext: dialogContext,
+              databasePath: dbPath,
+              issueType: issueType,
+              proposals: proposals,
+              logController: logController,
+              cancelToken: cancelToken,
+              progress: progress,
+              paused: paused,
+            ),
           ),
-        ),
-      );
-      await host.loadIssues();
-      if (!host.mounted) return;
-      if (apply == null) {
+        );
+        await host.loadIssues();
+        if (!host.mounted) return;
+        if (apply == null) {
+          host.showSnack(
+            'Η επίλυση δεν επέστρεψε τελικό αποτέλεσμα. Δείτε την αναφορά για λεπτομέρειες.',
+            isError: true,
+            duration: const Duration(seconds: 8),
+          );
+          return;
+        }
+        final errorSuffix = apply.errors.isEmpty
+            ? ''
+            : ' · Σφάλματα: ${apply.errors.length}';
         host.showSnack(
-          'Η επίλυση δεν επέστρεψε τελικό αποτέλεσμα. Δείτε την αναφορά για λεπτομέρειες.',
-          isError: true,
+          'Επίλυση ${lampDataIssueTypeDisplayLabel(issueType.issueType)}: '
+          'εφαρμόστηκαν ${apply.totalChanged} ενέργειες '
+          '(auto: ${apply.resolved}, manual: ${apply.manualApplied}, νέες: ${apply.created})$errorSuffix.',
+          isError: apply.errors.isNotEmpty,
           duration: const Duration(seconds: 8),
         );
-        return;
+      } finally {
+        progress.dispose();
+        paused.dispose();
       }
-      final errorSuffix = apply.errors.isEmpty
-          ? ''
-          : ' · Σφάλματα: ${apply.errors.length}';
-      host.showSnack(
-        'Επίλυση ${lampDataIssueTypeDisplayLabel(issueType.issueType)}: '
-        'εφαρμόστηκαν ${apply.totalChanged} ενέργειες '
-        '(auto: ${apply.resolved}, manual: ${apply.manualApplied}, νέες: ${apply.created})$errorSuffix.',
-        isError: apply.errors.isNotEmpty,
-        duration: const Duration(seconds: 8),
-      );
     } catch (e) {
       if (!host.mounted) return;
       host.showSnack('Η επίλυση απέτυχε: $e', isError: true);
@@ -174,6 +251,18 @@ class LampIssueResolutionController {
     );
   }
 
+  Future<T?> _pauseForUserDialog<T>(
+    ValueNotifier<bool> paused,
+    Future<T?> Function() showDialog,
+  ) async {
+    paused.value = true;
+    try {
+      return await showDialog();
+    } finally {
+      paused.value = false;
+    }
+  }
+
   Future<LampIssueResolutionApplyResult> executeIssueResolutionOrchestration({
     required BuildContext dialogContext,
     required String databasePath,
@@ -181,6 +270,8 @@ class LampIssueResolutionController {
     required List<LampIssueResolutionProposal> proposals,
     required ResolutionLogController logController,
     required ResolutionCancelToken cancelToken,
+    required ValueNotifier<int> progress,
+    required ValueNotifier<bool> paused,
   }) async {
     var merged = emptyApplyResult();
     var skipRemainingUnresolved = false;
@@ -190,129 +281,153 @@ class LampIssueResolutionController {
     emit(
       ResolutionLogEntry.info(
         'Σειριακή εκτέλεση ${proposals.length} προτάσεων: αυτόματες διορθώσεις '
-        'όπου είναι διαθέσιμες και διάλογος χρήστη όπου απαιτείται απόφαση.',
+        'σε παρτίδες όπου είναι διαθέσιμες και διάλογος χρήστη όπου απαιτείται.',
       ),
     );
 
-    for (final proposal in proposals) {
+    final units = buildLampIssueOrchestrationUnits(proposals);
+
+    unitLoop:
+    for (final unit in units) {
       if (cancelToken.isCancelled) {
         emit(
           ResolutionLogEntry.warning(
             'Η διαδικασία σταμάτησε πριν ολοκληρωθεί η σειρά προτάσεων.',
           ),
         );
-        break;
+        break unitLoop;
       }
       if (!dialogContext.mounted) {
-        break;
+        break unitLoop;
       }
 
-      if (proposal.canApplyAutomatically) {
-        final step = await host.shared.issueResolutionService.applySingleDecision(
-          databasePath: databasePath,
-          decision: LampIssueResolutionDecision(proposal: proposal),
-          onLog: emit,
-          cancelToken: cancelToken,
-        );
-        merged = mergeApplyResults(merged, step);
-        continue;
-      }
-
-      if (proposal.proposedAction == LampIssueResolutionAction.manualReview) {
-        final manualDecisions = await showLampIssueManualReviewDialog(
-          context: dialogContext,
-          issueType: issueType,
-          proposals: <LampIssueResolutionProposal>[proposal],
-        );
-        if (!dialogContext.mounted) {
-          break;
-        }
-
-        if (manualDecisions == null) {
-          cancelToken.cancel();
-          emit(
-            ResolutionLogEntry.warning(
-              'Ακυρώθηκε το χειροκίνητο βήμα — διακόπτεται η επίλυση.',
-            ),
-          );
-          break;
-        }
-        if (manualDecisions.isEmpty) {
-          emit(
-            ResolutionLogEntry.info(
-              'Παραβλήθηκε η χειροκίνητη πρόταση (γραμμή ${proposal.row ?? '-'}).',
-            ),
-          );
-          continue;
-        }
-
-        for (final decision in manualDecisions) {
-          final step = await host.shared.issueResolutionService.applySingleDecision(
+      switch (unit) {
+        case LampAutoBatchOrchestrationUnit(:final proposals):
+          final decisions = proposals
+              .map((p) => LampIssueResolutionDecision(proposal: p))
+              .toList();
+          final step = await host.shared.issueResolutionService.applyDecisions(
             databasePath: databasePath,
-            decision: decision,
+            decisions: decisions,
             onLog: emit,
             cancelToken: cancelToken,
+            onDecisionApplied: (_) => progress.value++,
           );
           merged = mergeApplyResults(merged, step);
-        }
-        continue;
-      }
-
-      if (proposal.proposedAction == LampIssueResolutionAction.unresolved) {
-        var shouldRecordUnresolved = true;
-        if (!skipRemainingUnresolved) {
-          final outcome = await showLampUnresolvedResolutionDialog(
-            context: dialogContext,
-            proposal: proposal,
-          );
-          if (!dialogContext.mounted) {
-            break;
-          }
-          switch (outcome) {
-            case null:
-            case LampUnresolvedCancelAll():
-              cancelToken.cancel();
-              shouldRecordUnresolved = false;
-              emit(
-                ResolutionLogEntry.warning(
-                  'Ακυρώθηκε η διαδικασία κατά την επισκόπηση ανεπίλυτων προτάσεων.',
-                ),
-              );
-              break;
-            case LampUnresolvedSkipAll():
-              skipRemainingUnresolved = true;
-              emit(
-                ResolutionLogEntry.info(
-                  'Ο χρήστης επέλεξε μαζική παράλειψη για τις υπόλοιπες ανεπίλυτες προτάσεις.',
-                ),
-              );
-              emit(
-                ResolutionLogEntry.info(
-                  'Παραλείφθηκε ανεπίλυτη πρόταση στη γραμμή ${proposal.row ?? '-'} '
-                  '(στήλη ${proposal.column ?? '-'}).',
-                ),
-              );
-              break;
-            case LampUnresolvedSkipCurrent():
-              emit(
-                ResolutionLogEntry.info(
-                  'Παραλείφθηκε ανεπίλυτη πρόταση στη γραμμή ${proposal.row ?? '-'} '
-                  '(στήλη ${proposal.column ?? '-'}).',
-                ),
-              );
-              break;
-          }
-        } else {
-          emit(
-            ResolutionLogEntry.info(
-              'Μαζική παράλειψη ανεπίλυτης πρότασης στη γραμμή ${proposal.row ?? '-'} '
-              '(στήλη ${proposal.column ?? '-'}).',
+        case LampManualReviewOrchestrationUnit(
+          :final proposals,
+          :final groupedIdenticalValues,
+        ):
+          final manualDecisions = await _pauseForUserDialog(
+            paused,
+            () => showLampIssueManualReviewDialog(
+              context: dialogContext,
+              issueType: issueType,
+              proposals: proposals,
+              groupedIdenticalValues: groupedIdenticalValues,
             ),
           );
-        }
-        if (shouldRecordUnresolved) {
-          merged = mergeApplyResults(merged, singleUnresolvedApplyResult());
-        }
+          if (!dialogContext.mounted) {
+            break unitLoop;
+          }
+
+          if (manualDecisions == null) {
+            cancelToken.cancel();
+            emit(
+              ResolutionLogEntry.warning(
+                'Ακυρώθηκε το χειροκίνητο βήμα — διακόπτεται η επίλυση.',
+              ),
+            );
+            break unitLoop;
+          }
+          if (manualDecisions.isEmpty) {
+            emit(
+              ResolutionLogEntry.info(
+                groupedIdenticalValues
+                    ? 'Παραβλήθηκαν ${proposals.length} όμοιες χειροκίνητες '
+                        'προτάσεις.'
+                    : 'Παραβλήθηκε η χειροκίνητη πρόταση '
+                        '(γραμμή ${proposals.first.row ?? '-'}).',
+              ),
+            );
+            progress.value += proposals.length;
+            continue;
+          }
+
+          for (final decision in manualDecisions) {
+            final step =
+                await host.shared.issueResolutionService.applySingleDecision(
+              databasePath: databasePath,
+              decision: decision,
+              onLog: emit,
+              cancelToken: cancelToken,
+            );
+            merged = mergeApplyResults(merged, step);
+          }
+          progress.value += proposals.length;
+        case LampUnresolvedOrchestrationUnit(:final proposal):
+          var shouldRecordUnresolved = true;
+          if (!skipRemainingUnresolved) {
+            final outcome = await _pauseForUserDialog(
+              paused,
+              () => showLampUnresolvedResolutionDialog(
+                context: dialogContext,
+                proposal: proposal,
+              ),
+            );
+            if (!dialogContext.mounted) {
+              break unitLoop;
+            }
+            switch (outcome) {
+              case null:
+              case LampUnresolvedCancelAll():
+                cancelToken.cancel();
+                shouldRecordUnresolved = false;
+                emit(
+                  ResolutionLogEntry.warning(
+                    'Ακυρώθηκε η διαδικασία κατά την επισκόπηση ανεπίλυτων προτάσεων.',
+                  ),
+                );
+                break;
+              case LampUnresolvedSkipAll():
+                skipRemainingUnresolved = true;
+                emit(
+                  ResolutionLogEntry.info(
+                    'Ο χρήστης επέλεξε μαζική παράλειψη για τις υπόλοιπες ανεπίλυτες προτάσεις.',
+                  ),
+                );
+                emit(
+                  ResolutionLogEntry.info(
+                    'Παραλείφθηκε ανεπίλυτη πρόταση στη γραμμή ${proposal.row ?? '-'} '
+                    '(στήλη ${proposal.column ?? '-'}).',
+                  ),
+                );
+                break;
+              case LampUnresolvedSkipCurrent():
+                emit(
+                  ResolutionLogEntry.info(
+                    'Παραλείφθηκε ανεπίλυτη πρόταση στη γραμμή ${proposal.row ?? '-'} '
+                    '(στήλη ${proposal.column ?? '-'}).',
+                  ),
+                );
+                break;
+            }
+          } else {
+            emit(
+              ResolutionLogEntry.info(
+                'Μαζική παράλειψη ανεπίλυτης πρότασης στη γραμμή ${proposal.row ?? '-'} '
+                '(στήλη ${proposal.column ?? '-'}).',
+              ),
+            );
+          }
+          if (shouldRecordUnresolved) {
+            merged = mergeApplyResults(merged, singleUnresolvedApplyResult());
+            progress.value++;
+          }
+      }
+
+      if (cancelToken.isCancelled) {
+        break unitLoop;
       }
     }
 

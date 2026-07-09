@@ -15,6 +15,28 @@ String lampDataIssueTypeDisplayLabel(String issueType) {
       return 'Κύριος εξοπλισμός χωρίς υπαρκτό στόχο';
     case 'set_master_cycle':
       return 'Κύκλοι ιεραρχίας Κύριου εξοπλισμού';
+    case 'network_no_hostname':
+      return 'Δίκτυο · Χωρίς όνομα υπολογιστή (μόνο IP)';
+    case 'network_hostname_unmatched':
+      return 'Δίκτυο · Αναντιστοίχιστο όνομα υπολογιστή';
+    case 'network_duplicate_hostname':
+      return 'Δίκτυο · Διπλότυπο όνομα υπολογιστή';
+    case 'network_code_not_found':
+      return 'Δίκτυο · Ανύπαρκτος κωδικός εξοπλισμού';
+    case 'network_ip_in_comments':
+      return 'Δίκτυο · IP μέσα στα σχόλια (προς επιβεβαίωση)';
+    case 'network_model_mismatch':
+      return 'Δίκτυο · Ασυμφωνία μοντέλου (γράφτηκε, προς επιθεώρηση)';
+    case 'network_sheet_invalid':
+      return 'Δίκτυο · Μη έγκυρο φύλλο network';
+    case 'network_duplicate_ip':
+      return 'Δίκτυο · Διπλή διεύθυνση IP';
+    case 'network_duplicate_name':
+      return 'Δίκτυο · Διπλό όνομα υπολογιστή στη βάση';
+    case 'network_invalid_ip':
+      return 'Δίκτυο · Μη έγκυρη μορφή IP';
+    case 'network_name_code_mismatch':
+      return 'Δίκτυο · Όνομα που δεν ταιριάζει με τον κωδικό';
     default:
       return issueType;
   }

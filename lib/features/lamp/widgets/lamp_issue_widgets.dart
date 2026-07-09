@@ -215,16 +215,25 @@ class LampIssueHelpers {
     return null;
   }
 
-  static String buildIssuesClipboardText(List<Map<String, Object?>> issues) {
+  static String buildIssuesClipboardText(
+    List<Map<String, Object?>> issues, {
+    Set<String>? categoryKeys,
+  }) {
+    final entries = sortedIssueGroupEntries(issues);
+    final filtered = categoryKeys == null
+        ? entries
+        : entries.where((entry) => categoryKeys.contains(entry.key)).toList();
+    final filteredIssues = filtered.expand((entry) => entry.value).toList();
     final lines = <String>[
       '# LAMP ETL Issues',
-      'Σύνολο προβλημάτων: ${issues.length}',
+      'Σύνολο προβλημάτων: ${filteredIssues.length}',
+      if (categoryKeys != null) 'Κατηγορίες: ${filtered.length}',
       '',
       'Οδηγία προς Πράκτορα ΤΝ: Ανάλυσε τα προβλήματα ανά κατηγορία, πρότεινε αιτίες, '
           'βήματα επιδιόρθωσης και προτεραιότητες.',
       '',
     ];
-    for (final entry in sortedIssueGroupEntries(issues)) {
+    for (final entry in filtered) {
       lines.add(
         '## ${categoryDisplayLabel(entry.key)} (${entry.value.length})',
       );
@@ -293,6 +302,13 @@ class LampIssueGroupHeaderCard extends StatelessWidget {
     required this.resolvingIssueType,
     required this.canResolve,
     required this.onResolve,
+    this.isNetworkCategory = false,
+    this.resolvingNetworkIssueType,
+    this.canResolveNetwork = false,
+    this.onResolveNetwork,
+    this.copySelectionMode = false,
+    this.copySelected = false,
+    this.onCopySelectionChanged,
   });
 
   final String rawIssueType;
@@ -304,23 +320,39 @@ class LampIssueGroupHeaderCard extends StatelessWidget {
   final LampIssueType? resolvingIssueType;
   final bool canResolve;
   final VoidCallback? onResolve;
+  final bool isNetworkCategory;
+  final String? resolvingNetworkIssueType;
+  final bool canResolveNetwork;
+  final VoidCallback? onResolveNetwork;
+  final bool copySelectionMode;
+  final bool copySelected;
+  final ValueChanged<bool>? onCopySelectionChanged;
 
   @override
   Widget build(BuildContext context) {
     return Card(
       clipBehavior: Clip.antiAlias,
       child: InkWell(
-        onTap: onToggleExpanded,
+        onTap: copySelectionMode ? null : onToggleExpanded,
         child: Padding(
           padding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(
-                expanded ? Icons.expand_less : Icons.expand_more,
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
-              const SizedBox(width: 8),
+              if (copySelectionMode) ...[
+                Checkbox(
+                  value: copySelected,
+                  onChanged: onCopySelectionChanged == null
+                      ? null
+                      : (value) => onCopySelectionChanged!(value ?? false),
+                ),
+              ] else ...[
+                Icon(
+                  expanded ? Icons.expand_less : Icons.expand_more,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+                const SizedBox(width: 8),
+              ],
               const Icon(Icons.category_outlined),
               const SizedBox(width: 16),
               Expanded(
@@ -353,6 +385,25 @@ class LampIssueGroupHeaderCard extends StatelessWidget {
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
                       : Icon(LampIssueHelpers.resolveIssueIcon(lampIssueType!)),
+                ),
+              ] else if (isNetworkCategory) ...[
+                const SizedBox(width: 4),
+                IconButton(
+                  tooltip: 'Επίλυση · $categoryLabel (${issues.length})',
+                  visualDensity: VisualDensity.compact,
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(
+                    minWidth: 36,
+                    minHeight: 36,
+                  ),
+                  onPressed: canResolveNetwork ? onResolveNetwork : null,
+                  icon: resolvingNetworkIssueType == rawIssueType
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.lan_outlined),
                 ),
               ],
             ],
@@ -401,29 +452,91 @@ Future<void> showIssueResolutionOrderInfo(BuildContext context) {
   );
 }
 
-class LampIssuesTab extends StatelessWidget {
+class LampIssuesTab extends StatefulWidget {
   const LampIssuesTab({
     super.key,
     required this.issuesController,
     required this.resolutionController,
     required this.integrityChecking,
     required this.onRunIntegrityCheck,
-    required this.onCopyAllIssues,
     required this.onToggleGroup,
+    required this.showSnack,
   });
 
   final LampIssuesController issuesController;
   final LampIssueResolutionController resolutionController;
   final bool integrityChecking;
   final VoidCallback onRunIntegrityCheck;
-  final Future<void> Function() onCopyAllIssues;
   final void Function(String rawIssueType, bool expanded) onToggleGroup;
+  final void Function(String message) showSnack;
+
+  @override
+  State<LampIssuesTab> createState() => _LampIssuesTabState();
+}
+
+class _LampIssuesTabState extends State<LampIssuesTab> {
+  bool _copySelectionMode = false;
+  final Set<String> _selectedCategoryKeys = <String>{};
+
+  void _enterCopySelectionMode(List<MapEntry<String, List<Map<String, Object?>>>> groups) {
+    setState(() {
+      _copySelectionMode = true;
+      _selectedCategoryKeys
+        ..clear()
+        ..addAll(groups.map((group) => group.key));
+    });
+  }
+
+  void _exitCopySelectionMode() {
+    setState(() {
+      _copySelectionMode = false;
+      _selectedCategoryKeys.clear();
+    });
+  }
+
+  void _toggleSelectAllCategories(
+    List<MapEntry<String, List<Map<String, Object?>>>> groups,
+  ) {
+    setState(() {
+      if (_selectedCategoryKeys.length == groups.length) {
+        _selectedCategoryKeys.clear();
+      } else {
+        _selectedCategoryKeys
+          ..clear()
+          ..addAll(groups.map((group) => group.key));
+      }
+    });
+  }
+
+  Future<void> _copySelectedCategories(
+    List<MapEntry<String, List<Map<String, Object?>>>> groups,
+  ) async {
+    if (_selectedCategoryKeys.isEmpty) {
+      widget.showSnack('Επιλέξτε τουλάχιστον μία κατηγορία για αντιγραφή.');
+      return;
+    }
+    final selectedIssues = groups
+        .where((group) => _selectedCategoryKeys.contains(group.key))
+        .expand((group) => group.value)
+        .toList();
+    await copyIssuesToClipboard(
+      issues: widget.issuesController.issues,
+      categoryKeys: Set<String>.from(_selectedCategoryKeys),
+      showSnack: widget.showSnack,
+      copiedCount: selectedIssues.length,
+      categoryCount: _selectedCategoryKeys.length,
+    );
+    _exitCopySelectionMode();
+  }
 
   @override
   Widget build(BuildContext context) {
     final groups = LampIssueHelpers.sortedIssueGroupEntries(
-      issuesController.issues,
+      widget.issuesController.issues,
     );
+    final allCategoriesSelected =
+        groups.isNotEmpty && _selectedCategoryKeys.length == groups.length;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -436,20 +549,49 @@ class LampIssuesTab extends StatelessWidget {
             alignment: WrapAlignment.spaceBetween,
             children: [
               Text(
-                'Σύνολο προβλημάτων: ${issuesController.issues.length} • Κατηγορίες: ${groups.length}',
+                'Σύνολο προβλημάτων: ${widget.issuesController.issues.length} • Κατηγορίες: ${groups.length}',
                 style: Theme.of(context).textTheme.bodyMedium,
               ),
-              FilledButton.tonalIcon(
-                onPressed: () => onCopyAllIssues(),
-                icon: const Icon(Icons.copy_all_outlined),
-                label: const Text('Αντιγραφή όλων για ΤΝ'),
-              ),
+              if (_copySelectionMode) ...[
+                TextButton(
+                  onPressed: groups.isEmpty
+                      ? null
+                      : () => _toggleSelectAllCategories(groups),
+                  child: Text(
+                    allCategoriesSelected
+                        ? 'Αποεπιλογή όλων'
+                        : 'Επιλογή όλων',
+                  ),
+                ),
+                FilledButton.tonalIcon(
+                  onPressed: _selectedCategoryKeys.isEmpty
+                      ? null
+                      : () => _copySelectedCategories(groups),
+                  icon: const Icon(Icons.copy_outlined),
+                  label: Text(
+                    'Αντιγραφή (${_selectedCategoryKeys.length} κατηγορίες)',
+                  ),
+                ),
+                TextButton(
+                  onPressed: _exitCopySelectionMode,
+                  child: const Text('Ακύρωση'),
+                ),
+              ] else
+                FilledButton.tonalIcon(
+                  onPressed: groups.isEmpty
+                      ? null
+                      : () => _enterCopySelectionMode(groups),
+                  icon: const Icon(Icons.copy_outlined),
+                  label: const Text('Αντιγραφή για ΤΝ'),
+                ),
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   FilledButton.icon(
-                    onPressed: integrityChecking ? null : onRunIntegrityCheck,
-                    icon: integrityChecking
+                    onPressed: widget.integrityChecking
+                        ? null
+                        : widget.onRunIntegrityCheck,
+                    icon: widget.integrityChecking
                         ? const SizedBox(
                             width: 16,
                             height: 16,
@@ -474,12 +616,12 @@ class LampIssuesTab extends StatelessWidget {
             padding: const EdgeInsets.all(16),
             itemCount: LampIssueHelpers.flatIssuesItemCount(
               groups,
-              issuesController.expandedIssueGroupKeys,
+              widget.issuesController.expandedIssueGroupKeys,
             ),
             separatorBuilder: (context, index) {
               final next = LampIssueHelpers.flatIssueRefAt(
                 groups,
-                issuesController.expandedIssueGroupKeys,
+                widget.issuesController.expandedIssueGroupKeys,
                 index + 1,
               );
               if (next != null && next.isHeader) {
@@ -490,7 +632,7 @@ class LampIssuesTab extends StatelessWidget {
             itemBuilder: (context, flatIndex) {
               final ref = LampIssueHelpers.flatIssueRefAt(
                 groups,
-                issuesController.expandedIssueGroupKeys,
+                widget.issuesController.expandedIssueGroupKeys,
                 flatIndex,
               );
               if (ref == null) return const SizedBox.shrink();
@@ -500,7 +642,11 @@ class LampIssuesTab extends StatelessWidget {
               if (ref.isHeader) {
                 final lampIssueType =
                     LampIssueHelpers.lampIssueTypeForRaw(rawIssueType);
-                final expanded = issuesController.expandedIssueGroupKeys
+                final isNetworkCategory =
+                    LampIssueResolutionController.isNetworkIssueType(
+                  rawIssueType,
+                );
+                final expanded = widget.issuesController.expandedIssueGroupKeys
                     .contains(rawIssueType);
                 return LampIssueGroupHeaderCard(
                   rawIssueType: rawIssueType,
@@ -511,15 +657,45 @@ class LampIssuesTab extends StatelessWidget {
                   lampIssueType: lampIssueType,
                   expanded: expanded,
                   onToggleExpanded: () =>
-                      onToggleGroup(rawIssueType, expanded),
-                  resolvingIssueType: resolutionController.resolvingIssueType,
+                      widget.onToggleGroup(rawIssueType, expanded),
+                  resolvingIssueType: widget.resolutionController.resolvingIssueType,
                   canResolve: lampIssueType != null &&
-                      resolutionController.canResolveIssueType(lampIssueType),
+                      widget.resolutionController.canResolveIssueType(
+                        lampIssueType,
+                      ),
                   onResolve: lampIssueType == null
                       ? null
-                      : () => resolutionController.runIssueResolution(
+                      : () => widget.resolutionController.runIssueResolution(
                           lampIssueType,
                         ),
+                  isNetworkCategory:
+                      lampIssueType == null && isNetworkCategory,
+                  resolvingNetworkIssueType:
+                      widget.resolutionController.resolvingNetworkIssueType,
+                  canResolveNetwork: isNetworkCategory &&
+                      widget.resolutionController.canResolveNetworkIssueType(
+                        rawIssueType,
+                      ),
+                  onResolveNetwork: isNetworkCategory
+                      ? () => widget.resolutionController
+                          .runNetworkIssueResolution(
+                        rawIssueType,
+                        groupIssues,
+                      )
+                      : null,
+                  copySelectionMode: _copySelectionMode,
+                  copySelected: _selectedCategoryKeys.contains(rawIssueType),
+                  onCopySelectionChanged: _copySelectionMode
+                      ? (selected) {
+                          setState(() {
+                            if (selected) {
+                              _selectedCategoryKeys.add(rawIssueType);
+                            } else {
+                              _selectedCategoryKeys.remove(rawIssueType);
+                            }
+                          });
+                        }
+                      : null,
                 );
               }
               final issue = groupIssues[ref.issueIndex!];
@@ -536,15 +712,33 @@ class LampIssuesTab extends StatelessWidget {
   }
 }
 
-Future<void> copyAllIssuesToClipboard({
+Future<void> copyIssuesToClipboard({
   required List<Map<String, Object?>> issues,
   required void Function(String message) showSnack,
+  Set<String>? categoryKeys,
+  int? copiedCount,
+  int? categoryCount,
 }) async {
   if (issues.isEmpty) {
     showSnack('Δεν υπάρχουν προβλήματα για αντιγραφή.');
     return;
   }
-  final payload = LampIssueHelpers.buildIssuesClipboardText(issues);
+  if (categoryKeys != null && categoryKeys.isEmpty) {
+    showSnack('Επιλέξτε τουλάχιστον μία κατηγορία για αντιγραφή.');
+    return;
+  }
+  final payload = LampIssueHelpers.buildIssuesClipboardText(
+    issues,
+    categoryKeys: categoryKeys,
+  );
   await Clipboard.setData(ClipboardData(text: payload));
-  showSnack('Αντιγράφηκαν ${issues.length} προβλήματα στο πρόχειρο.');
+  if (categoryKeys != null) {
+    final count = copiedCount ?? 0;
+    final categories = categoryCount ?? categoryKeys.length;
+    showSnack(
+      'Αντιγράφηκαν $count προβλήματα από $categories κατηγορίες στο πρόχειρο.',
+    );
+  } else {
+    showSnack('Αντιγράφηκαν ${issues.length} προβλήματα στο πρόχειρο.');
+  }
 }

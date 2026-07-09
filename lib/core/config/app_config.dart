@@ -8,6 +8,7 @@ class CliArgumentsParseResult {
   const CliArgumentsParseResult._({
     this.profile,
     this.invalidParameter,
+    this.restartedAfterCrash = false,
   });
 
   /// Έγκυρο όνομα προφίλ, null στην παραγωγική εκτέλεση χωρίς `--profile`.
@@ -15,6 +16,9 @@ class CliArgumentsParseResult {
 
   /// Η πρώτη άκυρη παράμετρος που εντοπίστηκε (για εμφάνιση στον χρήστη).
   final String? invalidParameter;
+
+  /// True όταν η εφαρμογή επανεκκινήθηκε από τα Windows μετά από κατάρρευση.
+  final bool restartedAfterCrash;
 
   bool get isValid => invalidParameter == null;
 
@@ -24,11 +28,18 @@ class CliArgumentsParseResult {
     return 'Άκυρη παράμετρος γραμμής εντολών: $shown\n\n'
         'Επιτρεπόμενες:\n'
         '--profile <όνομα> ή --profile=<όνομα>\n'
-        '(όνομα: γράμματα, αριθμοί, _, -)';
+        '(όνομα: γράμματα, αριθμοί, _, -)\n'
+        '--restarted-after-crash';
   }
 
-  static CliArgumentsParseResult success({String? profile}) =>
-      CliArgumentsParseResult._(profile: profile);
+  static CliArgumentsParseResult success({
+    String? profile,
+    bool restartedAfterCrash = false,
+  }) =>
+      CliArgumentsParseResult._(
+        profile: profile,
+        restartedAfterCrash: restartedAfterCrash,
+      );
 
   static CliArgumentsParseResult failure(String invalidParameter) =>
       CliArgumentsParseResult._(invalidParameter: invalidParameter);
@@ -53,6 +64,9 @@ class AppConfig {
     return name != null && name.isNotEmpty;
   }
 
+  /// True όταν η εφαρμογή επανεκκινήθηκε αυτόματα μετά από κατάρρευση/κόλλημα.
+  static bool wasRestartedAfterCrash = false;
+
   /// Προεπιλεγμένη διαδρομή βάσης όταν τρέχει CLI προφίλ (μετά [initializeProfileStorage]).
   static String? _profileDefaultDbPath;
 
@@ -62,16 +76,24 @@ class AppConfig {
     return t.startsWith(r'\\');
   }
 
-  /// Επικυρώνει CLI ορίσματα. Κενή λίστα = παραγωγή. Μόνο `--profile` επιτρέπεται.
+  /// Επικυρώνει CLI ορίσματα. Κενή λίστα = παραγωγή.
+  /// Επιτρέπονται `--profile` και `--restarted-after-crash`.
   static CliArgumentsParseResult validateCliArguments(List<String> arguments) {
     if (arguments.isEmpty) {
       return CliArgumentsParseResult.success();
     }
 
     String? profile;
+    var restartedAfterCrash = false;
     var i = 0;
     while (i < arguments.length) {
       final arg = arguments[i];
+      if (arg == '--restarted-after-crash') {
+        restartedAfterCrash = true;
+        i += 1;
+        continue;
+      }
+
       if (arg == '--profile') {
         if (profile != null) {
           return CliArgumentsParseResult.failure('--profile');
@@ -110,7 +132,10 @@ class AppConfig {
       return CliArgumentsParseResult.failure(arg);
     }
 
-    return CliArgumentsParseResult.success(profile: profile);
+    return CliArgumentsParseResult.success(
+      profile: profile,
+      restartedAfterCrash: restartedAfterCrash,
+    );
   }
 
   /// Αναλύει `--profile <name>` ή `--profile=<name>` από CLI arguments.
@@ -127,6 +152,7 @@ class AppConfig {
       result.isValid,
       'Τα CLI ορίσματα πρέπει να έχουν επικυρωθεί πριν την εκκίνηση.',
     );
+    wasRestartedAfterCrash = result.restartedAfterCrash;
     final profile = result.profile;
     if (profile == null) {
       activeProfile = null;

@@ -24,12 +24,16 @@ Future<List<LampIssueResolutionDecision>?> showLampIssueManualReviewDialog({
   required BuildContext context,
   required LampIssueType issueType,
   required List<LampIssueResolutionProposal> proposals,
+  bool groupedIdenticalValues = false,
 }) {
   return showDialog<List<LampIssueResolutionDecision>>(
     context: context,
     barrierDismissible: false,
-    builder: (context) =>
-        LampIssueManualReviewDialog(issueType: issueType, proposals: proposals),
+    builder: (context) => LampIssueManualReviewDialog(
+      issueType: issueType,
+      proposals: proposals,
+      groupedIdenticalValues: groupedIdenticalValues,
+    ),
   );
 }
 
@@ -38,10 +42,12 @@ class LampIssueManualReviewDialog extends StatefulWidget {
     super.key,
     required this.issueType,
     required this.proposals,
+    this.groupedIdenticalValues = false,
   });
 
   final LampIssueType issueType;
   final List<LampIssueResolutionProposal> proposals;
+  final bool groupedIdenticalValues;
 
   @override
   State<LampIssueManualReviewDialog> createState() =>
@@ -65,9 +71,15 @@ class _LampIssueManualReviewDialogState
 
   @override
   Widget build(BuildContext context) {
-    final selectedCount = _selectedOptions.values
-        .whereType<LampIssueResolutionOption>()
-        .length;
+    final grouped = widget.groupedIdenticalValues && widget.proposals.length > 1;
+    final selectedCount = grouped
+        ? (_selectedOptions[0] != null ? 1 : 0)
+        : _selectedOptions.values
+            .whereType<LampIssueResolutionOption>()
+            .length;
+    final displayProposals = grouped
+        ? <LampIssueResolutionProposal>[widget.proposals.first]
+        : widget.proposals;
     return AlertDialog(
       title: Text('${widget.issueType.label} · χειροκίνητος έλεγχος'),
       content: SizedBox(
@@ -76,26 +88,44 @@ class _LampIssueManualReviewDialogState
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            if (grouped) ...[
+              Text(
+                'Η απόφαση θα εφαρμοστεί σε ${widget.proposals.length} εγγραφές '
+                'με την ίδια τιμή.',
+                style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Γραμμές: ${widget.proposals.map((p) => p.row ?? '-').join(', ')}',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+              const SizedBox(height: 12),
+            ],
             Text(
-              'Επιλέξτε ενέργεια για όσα θέλετε να εφαρμοστούν τώρα. '
-              'Όσα μείνουν χωρίς επιλογή παραμένουν ανοικτά.',
+              grouped
+                  ? 'Επιλέξτε ενέργεια που θα εφαρμοστεί σε όλες τις εγγραφές.'
+                  : 'Επιλέξτε ενέργεια για όσα θέλετε να εφαρμοστούν τώρα. '
+                      'Όσα μείνουν χωρίς επιλογή παραμένουν ανοικτά.',
               style: Theme.of(context).textTheme.bodyMedium,
             ),
             const SizedBox(height: 12),
             Expanded(
               child: ListView.separated(
-                itemCount: widget.proposals.length,
+                itemCount: displayProposals.length,
                 separatorBuilder: (context, index) =>
                     const SizedBox(height: 12),
                 itemBuilder: (context, index) {
-                  final proposal = widget.proposals[index];
+                  final proposal = displayProposals[index];
+                  final sourceIndex = grouped ? 0 : index;
                   return _ManualReviewCard(
                     index: index,
                     proposal: proposal,
-                    selectedOption: _selectedOptions[index],
-                    textController: _controllerFor(index),
+                    selectedOption: _selectedOptions[sourceIndex],
+                    textController: _controllerFor(sourceIndex),
                     onChanged: (option) {
-                      setState(() => _selectedOptions[index] = option);
+                      setState(() => _selectedOptions[sourceIndex] = option);
                     },
                   );
                 },
@@ -103,7 +133,9 @@ class _LampIssueManualReviewDialogState
             ),
             const SizedBox(height: 12),
             Text(
-              'Επιλεγμένες ενέργειες: $selectedCount/${widget.proposals.length}',
+              grouped
+                  ? 'Επιλεγμένη ενέργεια: $selectedCount/1'
+                  : 'Επιλεγμένες ενέργειες: $selectedCount/${widget.proposals.length}',
               style: Theme.of(context).textTheme.bodySmall,
             ),
           ],
@@ -134,6 +166,21 @@ class _LampIssueManualReviewDialogState
   }
 
   List<LampIssueResolutionDecision> _buildDecisions() {
+    final grouped = widget.groupedIdenticalValues && widget.proposals.length > 1;
+    if (grouped) {
+      final option = _selectedOptions[0];
+      if (option == null) return const <LampIssueResolutionDecision>[];
+      final textInput = option.requiresTextInput ? _controllerFor(0).text : null;
+      return <LampIssueResolutionDecision>[
+        for (final proposal in widget.proposals)
+          LampIssueResolutionDecision(
+            proposal: proposal,
+            option: option,
+            textInput: textInput,
+          ),
+      ];
+    }
+
     final decisions = <LampIssueResolutionDecision>[];
     for (var i = 0; i < widget.proposals.length; i++) {
       final option = _selectedOptions[i];

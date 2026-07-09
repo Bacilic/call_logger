@@ -30,12 +30,13 @@ class EquipmentSectionSaveResult {
   final String? message;
 }
 
-enum InfoSectionType { equipment, model, contract, owner, department }
+enum InfoSectionType { equipment, model, network, contract, owner, department }
 
 extension InfoSectionTypeSpec on InfoSectionType {
   String get title => switch (this) {
     InfoSectionType.equipment => 'ΕΞΟΠΛΙΣΜΟΣ',
     InfoSectionType.model => 'ΜΟΝΤΕΛΟ',
+    InfoSectionType.network => 'ΔΙΚΤΥΟ',
     InfoSectionType.contract => 'ΣΥΜΒΑΣΗ',
     InfoSectionType.owner => 'ΙΔΙΟΚΤΗΤΗΣ',
     InfoSectionType.department => 'ΤΜΗΜΑ',
@@ -44,6 +45,7 @@ extension InfoSectionTypeSpec on InfoSectionType {
   IconData get icon => switch (this) {
     InfoSectionType.equipment => Icons.print_outlined,
     InfoSectionType.model => Icons.handyman_outlined,
+    InfoSectionType.network => Icons.lan_outlined,
     InfoSectionType.contract => Icons.receipt_long_outlined,
     InfoSectionType.owner => Icons.person_outline,
     InfoSectionType.department => Icons.account_balance_outlined,
@@ -52,6 +54,7 @@ extension InfoSectionTypeSpec on InfoSectionType {
   Color get color => switch (this) {
     InfoSectionType.equipment => const Color(0xFF2563EB),
     InfoSectionType.model => const Color(0xFF7C3AED),
+    InfoSectionType.network => const Color(0xFF0D9488),
     InfoSectionType.contract => const Color(0xFFF97316),
     InfoSectionType.owner => const Color(0xFF16A34A),
     InfoSectionType.department => const Color(0xFFDC2626),
@@ -337,6 +340,71 @@ class EquipmentViewModel {
       ]),
     );
 
+    // Δίκτυο: εμπλουτισμός από την παλιά βάση δικτύου — αποθηκεύεται στον
+    // πίνακα equipment, γι' αυτό recordId = code. Χωρίς κουμπί μεταφοράς
+    // στη νέα βάση (μόνο ανάγνωση/επεξεργασία).
+    final network = InfoSectionData(
+      type: InfoSectionType.network,
+      recordId: _parseIntLike(row['code']),
+      editableFields: <EditableInfoField>[
+        EditableInfoField(
+          label: 'Κόμβος',
+          fieldKey: 'network_node',
+          value: _text(row['network_node']),
+        ),
+        EditableInfoField(
+          label: 'IP',
+          fieldKey: 'ip_address',
+          value: _text(row['ip_address']),
+          autofocus: true,
+        ),
+        EditableInfoField(
+          label: 'VLAN',
+          fieldKey: 'network_vlan',
+          value: _text(row['network_vlan']),
+        ),
+        EditableInfoField(
+          label: 'MAC',
+          fieldKey: 'network_mac',
+          value: _text(row['network_mac']),
+        ),
+        EditableInfoField(
+          label: 'Hostname',
+          fieldKey: 'network_name',
+          value: _text(row['network_name']),
+        ),
+        EditableInfoField(
+          label: 'Περιγραφή',
+          fieldKey: 'network_description',
+          value: _text(row['network_description']),
+          maxLines: 2,
+        ),
+        EditableInfoField(
+          label: 'Σχόλια',
+          fieldKey: 'network_comments',
+          value: _text(row['network_comments']),
+          maxLines: 3,
+        ),
+      ],
+      items: _items(<InfoItem>[
+        InfoItem(label: 'Κόμβος', value: _text(row['network_node'])),
+        InfoItem(label: 'IP', value: _text(row['ip_address'])),
+        InfoItem(label: 'VLAN', value: _text(row['network_vlan'])),
+        InfoItem(label: 'MAC', value: _text(row['network_mac'])),
+        InfoItem(label: 'Hostname', value: _text(row['network_name'])),
+        InfoItem(
+          label: 'Περιγραφή',
+          value: _text(row['network_description']),
+          maxLines: 2,
+        ),
+        InfoItem(
+          label: 'Σχόλια',
+          value: _text(row['network_comments']),
+          maxLines: 3,
+        ),
+      ]),
+    );
+
     final contract = InfoSectionData(
       type: InfoSectionType.contract,
       recordId: _parseIntLike(row['contract_id']),
@@ -607,14 +675,16 @@ class EquipmentViewModel {
       ]),
     );
 
+    // Σειρά καρτών: Εξοπλισμός, Μοντέλο, Δίκτυο, Ιδιοκτήτης, Τμήμα, Σύμβαση.
     return EquipmentViewModel(
       sourceRow: sourceRow,
       sections: <InfoSectionData>[
         equipment,
         model,
-        contract,
+        network,
         owner,
         department,
+        contract,
       ].where((section) => section.items.isNotEmpty).toList(growable: false),
     );
   }

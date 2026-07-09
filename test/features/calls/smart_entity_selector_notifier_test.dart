@@ -2427,6 +2427,95 @@ void main() {
     },
   );
 
+  group('performEquipmentLookupByCode — κοινόχρηστος εξοπλισμός (department_id)', () {
+    registerCallLoggerIsolatedDatabaseHooks();
+
+    //   flutter test test/features/calls/smart_entity_selector_notifier_test.dart --plain-name "χωρίς κάτοχο: συμπληρώνει τμήμα και τηλέφωνα από equipment.department_id"
+    test(
+      'χωρίς κάτοχο: συμπληρώνει τμήμα και τηλέφωνα από equipment.department_id',
+      () async {
+        await seedIsolatedTestDatabase();
+        final db = await DatabaseHelper.instance.database;
+        await db.delete('user_equipment');
+        await db.delete('equipment');
+        await db.delete('department_phones');
+        await db.delete('user_phones');
+        await db.delete('phones');
+        await db.delete('users');
+        await db.delete('departments');
+
+        const deptName = 'Τμήμα Κοινού Εξοπλισμού';
+        final deptId = await db.insert('departments', {
+          'name': deptName,
+          'name_key': 'tmhma koinou',
+          'is_deleted': 0,
+        });
+
+        Future<void> insertDepartmentPhone(String number) async {
+          final phoneId = await db.insert('phones', {'number': number});
+          await db.insert('department_phones', {
+            'department_id': deptId,
+            'phone_id': phoneId,
+          });
+        }
+
+        await insertDepartmentPhone('6101');
+        await insertDepartmentPhone('6102');
+
+        await db.insert('equipment', {
+          'code_equipment': 'EQ-DEPT-1',
+          'type': 'PC',
+          'department_id': deptId,
+          'is_deleted': 0,
+        });
+
+        LookupService.instance.resetForReload();
+        await LookupService.instance.loadFromDatabase();
+
+        final container = ProviderContainer(
+          overrides: callLoggerTestProviderOverrides(),
+        );
+        addTearDown(container.dispose);
+        await container.read(lookupServiceProvider.future);
+
+        final n = container.read(callSmartEntityProvider.notifier);
+        n.performEquipmentLookupByCode('EQ-DEPT-1');
+        final s = container.read(callSmartEntityProvider);
+
+        expect(
+          s.selectedEquipment,
+          isNotNull,
+          reason: greekExpectMsg('Ο εξοπλισμός πρέπει να επιλεγεί'),
+        );
+        expect(
+          s.selectedEquipment?.code,
+          'EQ-DEPT-1',
+          reason: greekExpectMsg('Σωστός κωδικός εξοπλισμού'),
+        );
+        expect(
+          s.selectedDepartmentId,
+          deptId,
+          reason: greekExpectMsg('Το τμήμα συμπληρώνεται από equipment.department_id'),
+        );
+        expect(
+          s.departmentText,
+          deptName,
+          reason: greekExpectMsg('Το όνομα τμήματος συμπληρώνεται αυτόματα'),
+        );
+        expect(
+          s.phoneCandidates,
+          isNotEmpty,
+          reason: greekExpectMsg('Τα τηλέφωνα του τμήματος ως candidates'),
+        );
+        expect(
+          s.phoneCandidates,
+          containsAll(['6101', '6102']),
+          reason: greekExpectMsg('Όλα τα τηλέφωνα τμήματος στους υποψήφιους'),
+        );
+      },
+    );
+  });
+
   group('refreshSelectedEquipmentFromLookup — ανανέωση snapshot μετά αποθήκευση εξοπλισμού', () {
     registerCallLoggerIsolatedDatabaseHooks();
 

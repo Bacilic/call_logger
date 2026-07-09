@@ -9,6 +9,28 @@ import 'package:flutter/material.dart';
 import '../../../core/database/old_database/lamp_issue_resolution_service.dart';
 import '../../../core/database/old_database/resolution_log_entry.dart';
 
+/// Μορφή εκτιμώμενου χρόνου ολοκλήρωσης ως λεπτά:δευτερόλεπτα.
+String lampResolutionEtaText(Duration remaining) {
+  final totalSeconds = remaining.inSeconds;
+  final minutes = totalSeconds ~/ 60;
+  final seconds = totalSeconds % 60;
+  return '$minutes:${seconds.toString().padLeft(2, '0')}';
+}
+
+/// Κείμενο κατάστασης κατά την εκτέλεση της επίλυσης ETL.
+String lampResolutionRunningStatusText({
+  required int processed,
+  required int totalSteps,
+  required Duration? estimatedRemaining,
+}) {
+  final remaining = totalSteps - processed;
+  final eta = processed == 0
+      ? 'υπολογίζεται…'
+      : lampResolutionEtaText(estimatedRemaining!);
+  return 'Η επίλυση εκτελείται. Επιλύθηκαν $processed από $totalSteps · '
+      'Απομένουν $remaining — Ολοκλήρωση σε $eta';
+}
+
 class LampResolutionProgressDialog extends StatefulWidget {
   const LampResolutionProgressDialog({
     super.key,
@@ -16,12 +38,18 @@ class LampResolutionProgressDialog extends StatefulWidget {
     required this.logController,
     required this.cancelToken,
     required this.apply,
+    required this.totalSteps,
+    required this.progress,
+    required this.paused,
   });
 
   final String title;
   final ResolutionLogController logController;
   final ResolutionCancelToken cancelToken;
   final Future<LampIssueResolutionApplyResult> Function() apply;
+  final int totalSteps;
+  final ValueNotifier<int> progress;
+  final ValueNotifier<bool> paused;
 
   @override
   State<LampResolutionProgressDialog> createState() =>
@@ -31,6 +59,7 @@ class LampResolutionProgressDialog extends StatefulWidget {
 class _LampResolutionProgressDialogState
     extends State<LampResolutionProgressDialog> {
   final _scrollController = ScrollController();
+  final _stopwatch = Stopwatch();
 
   bool _isRunning = true;
   bool _hasCompleted = false;
@@ -39,10 +68,16 @@ class _LampResolutionProgressDialogState
   LampIssueResolutionApplyResult? _applyResult;
   Object? _fatalError;
 
+  Timer? _etaTimer;
+  Duration _accumulatedPause = Duration.zero;
+  DateTime? _pauseStartedAt;
+
   @override
   void initState() {
     super.initState();
     widget.logController.addListener(_handleLogChanged);
+    widget.progress.addListener(_handleProgressChanged);
+    widget.paused.addListener(_handlePausedChanged);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       _startApply();
@@ -51,7 +86,10 @@ class _LampResolutionProgressDialogState
 
   @override
   void dispose() {
+    _etaTimer?.cancel();
     widget.logController.removeListener(_handleLogChanged);
+    widget.progress.removeListener(_handleProgressChanged);
+    widget.paused.removeListener(_handlePausedChanged);
     _scrollController.dispose();
     widget.logController.dispose();
     super.dispose();
@@ -65,6 +103,10 @@ class _LampResolutionProgressDialogState
     final canExport =
         !_isRunning && _hasCompleted && entries.isNotEmpty && !_exporting;
     final theme = Theme.of(context);
+    final processed = widget.progress.value;
+    final progressValue = widget.totalSteps > 0
+        ? processed / widget.totalSteps
+        : null;
 
     return PopScope(
       canPop: false,
@@ -77,11 +119,11 @@ class _LampResolutionProgressDialogState
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               if (_isRunning) ...[
-                const LinearProgressIndicator(),
+                LinearProgressIndicator(value: progressValue),
                 const SizedBox(height: 12),
               ],
               Text(
-                _statusText(entries.length),
+                _statusText(),
                 style: theme.textTheme.bodyMedium,
               ),
               const SizedBox(height: 12),
@@ -150,6 +192,8 @@ class _LampResolutionProgressDialogState
   }
 
   void _startApply() {
+    _stopwatch.start();
+    _startEtaTimer();
     unawaited(
       widget
           .apply()
@@ -165,6 +209,7 @@ class _LampResolutionProgressDialogState
               _hasCompleted = true;
               _applyResult = result;
             });
+            _stopEtaTimer();
           })
           .catchError((Object error, StackTrace stackTrace) {
             if (!mounted) return;
@@ -178,8 +223,63 @@ class _LampResolutionProgressDialogState
               _hasCompleted = true;
               _fatalError = error;
             });
+            _stopEtaTimer();
           }),
     );
+  }
+
+  void _startEtaTimer() {
+    _etaTimer?.cancel();
+    _etaTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!mounted || !_isRunning || _hasCompleted) {
+        _stopEtaTimer();
+        return;
+      }
+      setState(() {});
+    });
+  }
+
+  void _stopEtaTimer() {
+    _etaTimer?.cancel();
+    _etaTimer = null;
+  }
+
+  void _handleProgressChanged() {
+    if (!mounted) return;
+    setState(() {});
+  }
+
+  void _handlePausedChanged() {
+    if (!mounted) return;
+    if (widget.paused.value) {
+      _pauseStartedAt = DateTime.now();
+    } else if (_pauseStartedAt != null) {
+      _accumulatedPause += DateTime.now().difference(_pauseStartedAt!);
+      _pauseStartedAt = null;
+    }
+    setState(() {});
+  }
+
+  Duration _effectiveElapsed() {
+    var elapsed = _stopwatch.elapsed;
+    elapsed -= _accumulatedPause;
+    if (_pauseStartedAt != null) {
+      elapsed -= DateTime.now().difference(_pauseStartedAt!);
+    }
+    if (elapsed.isNegative) {
+      return Duration.zero;
+    }
+    return elapsed;
+  }
+
+  Duration? _estimatedRemaining() {
+    final processed = widget.progress.value;
+    if (processed <= 0) return null;
+    final remaining = widget.totalSteps - processed;
+    if (remaining <= 0) return Duration.zero;
+    final elapsed = _effectiveElapsed();
+    final perItem = elapsed ~/ processed;
+    return perItem * remaining;
   }
 
   void _handleLogChanged() {
@@ -191,18 +291,31 @@ class _LampResolutionProgressDialogState
     });
   }
 
+  bool _isNearBottom() {
+    if (!_scrollController.hasClients) return true;
+    final position = _scrollController.position;
+    return position.pixels >= position.maxScrollExtent - 48;
+  }
+
   void _scheduleScrollToBottom() {
+    if (!_isNearBottom()) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || !_scrollController.hasClients) return;
+      if (!_isNearBottom()) return;
       final maxExtent = _scrollController.position.maxScrollExtent;
       _scrollController.jumpTo(maxExtent);
     });
   }
 
-  String _statusText(int entryCount) {
+  String _statusText() {
     if (_isRunning) {
-      return 'Η επίλυση εκτελείται. Γραμμές αναφοράς: $entryCount.';
+      return lampResolutionRunningStatusText(
+        processed: widget.progress.value,
+        totalSteps: widget.totalSteps,
+        estimatedRemaining: _estimatedRemaining(),
+      );
     }
+    final entryCount = widget.logController.entries.length;
     if (_fatalError != null) {
       return 'Η επίλυση σταμάτησε λόγω σφάλματος. Γραμμές αναφοράς: $entryCount.';
     }

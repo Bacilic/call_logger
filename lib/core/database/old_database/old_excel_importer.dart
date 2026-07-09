@@ -6,6 +6,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import 'equipment_set_master_cycle.dart';
 import 'lamp_excel_parse_int.dart';
+import 'lamp_network_sheet_importer.dart';
 import 'old_database_schema.dart';
 
 class LampImportException implements Exception {
@@ -139,6 +140,16 @@ class OldExcelImporter {
           onProgress,
         );
         importedRows['equipment'] = equipmentIds.length;
+
+        final networkUpdates = await _importNetworkSheet(
+          txn,
+          excel,
+          issueBuffer,
+          onProgress,
+        );
+        if (networkUpdates != null) {
+          importedRows['network'] = networkUpdates;
+        }
 
         for (final issue in issueBuffer) {
           await _insertIssue(txn, issue: issue);
@@ -294,6 +305,135 @@ class OldExcelImporter {
       );
     }
     return records.keys.toSet();
+  }
+
+  /// Προαιρετικό φύλλο «network» (ίδιες στήλες με το ip_normalized.csv):
+  /// εμπλουτίζει τον εξοπλισμό με ip_address / network_name / network_source.
+  /// Επιστρέφει `null` όταν το φύλλο απουσιάζει (δεν είναι σφάλμα), αλλιώς
+  /// το πλήθος των αυτόματων εγγραφών.
+  Future<int?> _importNetworkSheet(
+    Transaction txn,
+    Excel excel,
+    List<_DataIssue> issues,
+    LampImportProgressCallback? onProgress,
+  ) async {
+    Sheet? sheet;
+    for (final entry in excel.tables.entries) {
+      final normalized = _normalize(entry.key);
+      if (normalized == 'network' ||
+          normalized == 'δικτυο' ||
+          normalized == 'δίκτυο') {
+        sheet = entry.value;
+        break;
+      }
+    }
+    if (sheet == null) return null;
+
+    final rows = sheet.rows;
+    if (rows.isEmpty) return 0;
+    final headerIndex = _findHeaderRow(rows);
+    if (headerIndex == null) return 0;
+
+    final headerCells = rows[headerIndex].map(_cellText).toList();
+    final indexes = lampNetworkHeaderIndexes(headerCells);
+    if (!indexes.containsKey('hostname') || !indexes.containsKey('ip')) {
+      issues.add(
+        _DataIssue(
+          sheet: sheet.sheetName,
+          issueType: 'network_sheet_invalid',
+          message:
+              'Το φύλλο network δεν έχει αναγνωρίσιμες στήλες Hostname/IP — '
+              'παραλείφθηκε ο εμπλουτισμός δικτύου.',
+        ),
+      );
+      return 0;
+    }
+
+    onProgress?.call(const LampImportProgress('Ανάγνωση φύλλου network'));
+
+    String cellOf(List<Data?> row, String key) {
+      final idx = indexes[key];
+      if (idx == null || idx >= row.length) return '';
+      return _cellText(row[idx]) ?? '';
+    }
+
+    final parsed = <LampNetworkRow>[];
+    for (var i = headerIndex + 1; i < rows.length; i++) {
+      final row = rows[i];
+      final networkRow = LampNetworkRow(
+        positionCode: cellOf(row, 'positionCode'),
+        ip: cellOf(row, 'ip'),
+        equipmentCode: cellOf(row, 'equipmentCode'),
+        equipmentText: cellOf(row, 'equipmentText'),
+        mac: cellOf(row, 'mac'),
+        vlan: cellOf(row, 'vlan'),
+        hostname: cellOf(row, 'hostname'),
+        workgroup: cellOf(row, 'workgroup'),
+        internet: cellOf(row, 'internet'),
+        comments: cellOf(row, 'comments'),
+      );
+      if (networkRow.isEmpty) continue;
+      parsed.add(networkRow);
+    }
+
+    final equipmentRows = await txn.query(
+      'equipment',
+      columns: <String>[
+        'code',
+        'description',
+        'model_original_text',
+        'owner_original_text',
+        'comments',
+        'attributes',
+      ],
+    );
+    final equipmentByCode = <int, LampNetworkEquipmentInfo>{
+      for (final row in equipmentRows)
+        if (row['code'] is int)
+          row['code']! as int: LampNetworkEquipmentInfo(
+            description: (row['description'] as String?) ?? '',
+            modelText: (row['model_original_text'] as String?) ?? '',
+            ownerText: (row['owner_original_text'] as String?) ?? '',
+            comments: (row['comments'] as String?) ?? '',
+            attributes: (row['attributes'] as String?) ?? '',
+          ),
+    };
+
+    final plan = planLampNetworkEnrichment(
+      rows: parsed,
+      equipmentByCode: equipmentByCode,
+    );
+
+    for (final update in plan.updates) {
+      await txn.update(
+        'equipment',
+        <String, Object?>{
+          'ip_address': update.ip,
+          'network_name': update.networkName,
+          'network_source': update.networkSource,
+          'network_node': update.node,
+          'network_vlan': update.vlan,
+          'network_mac': update.mac,
+          'network_description': update.description,
+          'network_comments': update.comments,
+        },
+        where: 'code = ?',
+        whereArgs: <Object?>[update.code],
+      );
+    }
+    for (final issue in plan.issues) {
+      issues.add(
+        _DataIssue(
+          sheet: sheet.sheetName,
+          rowNumber: issue.rowNumber,
+          columnName: 'ip_address',
+          rawValue: issue.rawValue,
+          issueType: issue.issueType,
+          message: issue.message,
+        ),
+      );
+    }
+    return plan.updates.length;
   }
 
   void _normalizeEquipmentSetMaster(

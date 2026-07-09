@@ -93,6 +93,14 @@ const List<String> oldDatabaseCreateStatements = <String>[
     office_original_text TEXT,
     attributes TEXT,
     comments TEXT,
+    ip_address TEXT,
+    network_name TEXT,
+    network_source TEXT,
+    network_node TEXT,
+    network_vlan TEXT,
+    network_mac TEXT,
+    network_description TEXT,
+    network_comments TEXT,
     FOREIGN KEY (model) REFERENCES model(model)
       ON DELETE RESTRICT ON UPDATE CASCADE,
     FOREIGN KEY (contract) REFERENCES contracts(contract)
@@ -121,6 +129,7 @@ const List<String> oldDatabaseCreateStatements = <String>[
 
 const List<String> oldDatabaseIndexStatements = <String>[
   'CREATE INDEX IF NOT EXISTS idx_equipment_asset_no ON equipment(asset_no)',
+  'CREATE INDEX IF NOT EXISTS idx_equipment_ip_address ON equipment(ip_address)',
   'CREATE INDEX IF NOT EXISTS idx_equipment_serial_no ON equipment(serial_no)',
   'CREATE INDEX IF NOT EXISTS idx_equipment_owner_original_text ON equipment(owner_original_text)',
   'CREATE INDEX IF NOT EXISTS idx_equipment_office_original_text ON equipment(office_original_text)',

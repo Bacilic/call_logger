@@ -18,6 +18,7 @@ import 'core/config/app_config.dart';
 import 'core/utils/windows_cli_error_dialog.dart';
 import 'core/services/desktop_window_service.dart';
 import 'core/errors/app_error_result.dart';
+import 'core/widgets/crash_restart_notice.dart';
 import 'core/widgets/app_init_wrapper.dart';
 import 'core/widgets/app_shell_with_global_fatal_error.dart';
 import 'core/widgets/global_fatal_error_notifier.dart';
@@ -214,7 +215,9 @@ class MyApp extends StatelessWidget {
           ),
         ),
       ),
-      home: const AppShellWithGlobalFatalError(child: AppInitWrapper()),
+      home: CrashRestartNotice(
+        child: const AppShellWithGlobalFatalError(child: AppInitWrapper()),
+      ),
     );
   }
 }

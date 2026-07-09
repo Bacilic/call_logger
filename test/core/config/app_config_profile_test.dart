@@ -90,6 +90,75 @@ void main() {
     });
   });
 
+  group('AppConfig.validateCliArguments — --restarted-after-crash', () {
+    tearDown(() {
+      AppConfig.wasRestartedAfterCrash = false;
+      AppConfig.activeProfile = null;
+    });
+
+    test('--restarted-after-crash μόνο του είναι έγκυρο', () {
+      final result = AppConfig.validateCliArguments(['--restarted-after-crash']);
+      expect(result.isValid, isTrue);
+      expect(result.restartedAfterCrash, isTrue);
+      expect(result.profile, isNull);
+    });
+
+    test('--profile test1 --restarted-after-crash έγκυρος συνδυασμός', () {
+      final result = AppConfig.validateCliArguments([
+        '--profile',
+        'test1',
+        '--restarted-after-crash',
+      ]);
+      expect(result.isValid, isTrue);
+      expect(result.profile, 'test1');
+      expect(result.restartedAfterCrash, isTrue);
+    });
+
+    test('--restarted-after-crash --profile=test1 έγκυρος συνδυασμός', () {
+      final result = AppConfig.validateCliArguments([
+        '--restarted-after-crash',
+        '--profile=test1',
+      ]);
+      expect(result.isValid, isTrue);
+      expect(result.profile, 'test1');
+      expect(result.restartedAfterCrash, isTrue);
+    });
+
+    test('άγνωστα ορίσματα εξακολουθούν να απορρίπτονται', () {
+      final result = AppConfig.validateCliArguments([
+        '--restarted-after-crash',
+        '--foo',
+      ]);
+      expect(result.isValid, isFalse);
+      expect(result.invalidParameter, '--foo');
+    });
+
+    test('χωρίς flag το wasRestartedAfterCrash μένει false', () async {
+      AppConfig.wasRestartedAfterCrash = true;
+      await AppConfig.configureFromCliArguments(const []);
+      expect(AppConfig.wasRestartedAfterCrash, isFalse);
+    });
+
+    test('configureFromCliArguments θέτει wasRestartedAfterCrash', () async {
+      await AppConfig.configureFromCliArguments(['--restarted-after-crash']);
+      expect(AppConfig.wasRestartedAfterCrash, isTrue);
+    });
+
+    test('διπλό --restarted-after-crash επιτρέπεται', () {
+      final result = AppConfig.validateCliArguments([
+        '--restarted-after-crash',
+        '--restarted-after-crash',
+      ]);
+      expect(result.isValid, isTrue);
+      expect(result.restartedAfterCrash, isTrue);
+    });
+
+    test('buildErrorMessage αναφέρει --restarted-after-crash', () {
+      final result = AppConfig.validateCliArguments(['--foo']);
+      expect(result.buildErrorMessage(), contains('--restarted-after-crash'));
+    });
+  });
+
   group('AppConfig.prefixedPreferencesKey', () {
     tearDown(() {
       AppConfig.activeProfile = null;

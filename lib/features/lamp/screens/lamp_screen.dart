@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/database/old_database/lamp_issue_resolution_service.dart';
+import '../../../core/database/old_database/lamp_network_issue_resolution_service.dart';
 import '../../../core/database/old_database/lamp_old_db_validator.dart';
 import '../../../core/database/old_database/lamp_settings_store.dart';
 import '../../../core/database/old_database/old_equipment_repository.dart';
@@ -122,6 +123,7 @@ class _LampScreenState extends ConsumerState<LampScreen> implements LampScreenHo
       settings: LampSettingsStore(),
       repository: OldEquipmentRepository(),
       issueResolutionService: LampIssueResolutionService(),
+      networkIssueResolutionService: LampNetworkIssueResolutionService(),
       migrationService: LampMigrationService(),
       importer: OldExcelImporter(),
     );
@@ -489,7 +491,7 @@ class _LampScreenState extends ConsumerState<LampScreen> implements LampScreenHo
           TabBar(
             tabs: [
               const Tab(text: 'Αναζήτηση'),
-              if (showEtlTab) const Tab(text: 'Προβλήματα ETL'),
+              if (showEtlTab) const Tab(text: 'Προβλήματα Εξαγωγής, Μετασχηματισμού και Φόρτωσης (ETL)'),
               if (showTablesTab) const Tab(text: 'Πίνακες'),
             ],
           ),
@@ -505,10 +507,7 @@ class _LampScreenState extends ConsumerState<LampScreen> implements LampScreenHo
                     onRunIntegrityCheck: () => _integrity.runIntegrityCheck(
                       reloadIssues: _issues.loadIssues,
                     ),
-                    onCopyAllIssues: () => copyAllIssuesToClipboard(
-                      issues: _issues.issues,
-                      showSnack: showSnack,
-                    ),
+                    showSnack: showSnack,
                     onToggleGroup: _toggleIssueGroup,
                   ),
                 if (showTablesTab)

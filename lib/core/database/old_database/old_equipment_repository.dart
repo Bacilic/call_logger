@@ -4,6 +4,7 @@ import '../../utils/search_text_normalizer.dart';
 import '../../utils/user_identity_normalizer.dart';
 import 'lamp_database_provider.dart';
 import 'lamp_excel_parse_int.dart';
+import 'lamp_network_sheet_importer.dart';
 import 'old_database_schema.dart';
 
 const String oldDataIssueEntityTypeEquipment = 'equipment';
@@ -20,7 +21,27 @@ class OldEquipmentSearchResult {
   final int totalCount;
 }
 
-enum OldEquipmentSectionType { equipment, model, contract, owner, department }
+enum OldEquipmentSectionType {
+  equipment,
+  model,
+  contract,
+  owner,
+  department,
+  network,
+}
+
+/// Στήλες δικτύου του πίνακα `equipment` (εμπλουτισμός από παλιά βάση δικτύου).
+/// Προστίθενται idempotent σε υπάρχουσες βάσεις που δεν τις έχουν ακόμη.
+const List<String> kLampNetworkEquipmentColumns = <String>[
+  'ip_address',
+  'network_name',
+  'network_source',
+  'network_node',
+  'network_vlan',
+  'network_mac',
+  'network_description',
+  'network_comments',
+];
 
 class OldEquipmentUpdateResult {
   const OldEquipmentUpdateResult({required this.success, this.message});
@@ -651,6 +672,12 @@ class OldEquipmentRepository {
         weight: 4,
         runner: _scanSetMasterCycles,
       ),
+      _IntegrityScanStepSpec(
+        id: 'network_data',
+        label: 'Έλεγχος δεδομένων δικτύου (IP, ονόματα, μορφή)',
+        weight: 1,
+        runner: _scanNetworkData,
+      ),
     ];
   }
 
@@ -1042,6 +1069,137 @@ class OldEquipmentRepository {
     ];
   }
 
+  Future<List<Map<String, Object?>>> _scanNetworkData(
+    Database db,
+    String createdAt,
+    OldIntegrityCancellationToken token,
+  ) async {
+    final columns = await _equipmentColumnNames(db);
+    const requiredColumns = <String>{'ip_address', 'network_name'};
+    if (!requiredColumns.every(columns.contains)) {
+      return const <Map<String, Object?>>[];
+    }
+
+    final rows = await db.rawQuery(
+      'SELECT code, ip_address, network_name FROM equipment',
+    );
+    if (token.isCancelled) throw const _OldIntegrityScanCancelled();
+
+    final issues = <Map<String, Object?>>[];
+
+    final byIp = <String, List<int>>{};
+    for (final row in rows) {
+      final ip = _normalizeText(row['ip_address']);
+      final code = _toInt(row['code']);
+      if (ip == null || code == null) continue;
+      byIp.putIfAbsent(ip, () => <int>[]).add(code);
+    }
+    for (final entry in byIp.entries) {
+      if (entry.value.length < 2) continue;
+      final codes = List<int>.from(entry.value)..sort();
+      for (final code in codes) {
+        if (token.isCancelled) throw const _OldIntegrityScanCancelled();
+        final others = codes.where((c) => c != code).toList();
+        issues.add(
+          _scanIssue(
+            issueType: 'network_duplicate_ip',
+            message:
+                'Η διεύθυνση IP «${entry.key}» εμφανίζεται και στους κωδικούς '
+                'εξοπλισμού: ${others.join(', ')}.',
+            rowNumber: code,
+            columnName: 'ip_address',
+            rawValue: entry.key,
+            createdAt: createdAt,
+          ),
+        );
+      }
+    }
+
+    final byName = <String, List<int>>{};
+    final nameByCode = <int, String>{};
+    for (final row in rows) {
+      final name = _normalizeText(row['network_name']);
+      final code = _toInt(row['code']);
+      if (name == null || code == null) continue;
+      nameByCode[code] = name;
+      byName.putIfAbsent(name.toLowerCase(), () => <int>[]).add(code);
+    }
+    for (final entry in byName.entries) {
+      if (entry.value.length < 2) continue;
+      final codes = List<int>.from(entry.value)..sort();
+      for (final code in codes) {
+        if (token.isCancelled) throw const _OldIntegrityScanCancelled();
+        final others = codes.where((c) => c != code).toList();
+        final displayName = nameByCode[code] ?? entry.key;
+        issues.add(
+          _scanIssue(
+            issueType: 'network_duplicate_name',
+            message:
+                'Το όνομα υπολογιστή «$displayName» εμφανίζεται και στους κωδικούς '
+                'εξοπλισμού: ${others.join(', ')}.',
+            rowNumber: code,
+            columnName: 'network_name',
+            rawValue: displayName,
+            createdAt: createdAt,
+          ),
+        );
+      }
+    }
+
+    for (final row in rows) {
+      if (token.isCancelled) throw const _OldIntegrityScanCancelled();
+      final ip = _normalizeText(row['ip_address']);
+      final code = _toInt(row['code']);
+      if (ip == null || code == null || _isValidIpv4(ip)) continue;
+      issues.add(
+        _scanIssue(
+          issueType: 'network_invalid_ip',
+          message: 'Μη έγκυρη μορφή IPv4: «$ip».',
+          rowNumber: code,
+          columnName: 'ip_address',
+          rawValue: ip,
+          createdAt: createdAt,
+        ),
+      );
+    }
+
+    for (final row in rows) {
+      if (token.isCancelled) throw const _OldIntegrityScanCancelled();
+      final name = _normalizeText(row['network_name']);
+      final code = _toInt(row['code']);
+      if (name == null || code == null) continue;
+      final hostnameCode = lampNetworkHostnameCode(name);
+      if (hostnameCode == null || hostnameCode == code) continue;
+      issues.add(
+        _scanIssue(
+          issueType: 'network_name_code_mismatch',
+          message:
+              'Το όνομα δικτύου «$name» υποδηλώνει κωδικό εξοπλισμού $hostnameCode, '
+              'αλλά η εγγραφή έχει code=$code.',
+          rowNumber: code,
+          columnName: 'network_name',
+          rawValue: name,
+          createdAt: createdAt,
+        ),
+      );
+    }
+
+    return issues;
+  }
+
+  bool _isValidIpv4(String ip) {
+    final parts = ip.trim().split('.');
+    if (parts.length != 4) return false;
+    for (final part in parts) {
+      if (part.isEmpty || !RegExp(r'^\d{1,3}$').hasMatch(part)) {
+        return false;
+      }
+      final value = int.parse(part);
+      if (value < 0 || value > 255) return false;
+    }
+    return true;
+  }
+
   /// Κλειδί σταθερό ανά «ίδιο» πρόβλημα (χωρίς `id` / `created_at`).
   /// Δεν περιλαμβάνει το `message` ώστε αλλαγές διατύπωσης να μην
   /// επανεισάγουν το ίδιο επιχειρησιακό εύρημα ως «νέο».
@@ -1182,7 +1340,12 @@ class OldEquipmentRepository {
     final merged = <String, Object?>{...currentRows.first, ...dbFields};
 
     return switch (spec.table) {
-      'equipment' => _validateEquipmentUpdate(db, id, merged),
+      'equipment' => _validateEquipmentUpdate(
+        db,
+        id,
+        merged,
+        changedFields: dbFields,
+      ),
       'owners' => _validateOwnerUpdate(
         db,
         id: id,
@@ -1193,28 +1356,37 @@ class OldEquipmentRepository {
     };
   }
 
+  /// Κάθε κανόνας ελέγχεται ΜΟΝΟ όταν η αλλαγή αγγίζει τα πεδία του — αλλιώς
+  /// προϋπάρχοντα ελαττώματα της γραμμής (π.χ. set_master που δείχνει στον
+  /// εαυτό του, κληρονομιά της Λάμπας) θα μπλόκαραν άσχετες αποθηκεύσεις,
+  /// όπως τις σημειώσεις της κάρτας Δικτύου.
   Future<String?> _validateEquipmentUpdate(
     Database db,
     int oldCode,
-    Map<String, Object?> row,
-  ) async {
+    Map<String, Object?> row, {
+    required Map<String, Object?> changedFields,
+  }) async {
+    bool changed(String column) => changedFields.containsKey(column);
+
     final code = _toInt(row['code']);
     if (code == null) return 'Ο κωδικός εξοπλισμού είναι υποχρεωτικός.';
 
-    final pkMessage = await _validatePrimaryKeyAvailability(
-      db,
-      const _UpdateSectionSpec(
-        table: 'equipment',
-        idColumn: 'code',
-        allowedColumnsByField: <String, String>{},
-      ),
-      oldCode,
-      code,
-    );
-    if (pkMessage != null) return pkMessage;
+    if (changed('code')) {
+      final pkMessage = await _validatePrimaryKeyAvailability(
+        db,
+        const _UpdateSectionSpec(
+          table: 'equipment',
+          idColumn: 'code',
+          allowedColumnsByField: <String, String>{},
+        ),
+        oldCode,
+        code,
+      );
+      if (pkMessage != null) return pkMessage;
+    }
 
     final assetNo = _normalizeText(row['asset_no']);
-    if (assetNo != null) {
+    if (changed('asset_no') && assetNo != null) {
       final duplicates = await db.query(
         'equipment',
         columns: <String>['code'],
@@ -1228,21 +1400,27 @@ class OldEquipmentRepository {
     }
 
     final model = _toInt(row['model']);
-    if (model != null && !await _recordExists(db, 'model', 'model', model)) {
+    if (changed('model') &&
+        model != null &&
+        !await _recordExists(db, 'model', 'model', model)) {
       return 'Το μοντέλο δεν υπάρχει στον πίνακα μοντέλων.';
     }
     final contract = _toInt(row['contract']);
-    if (contract != null &&
+    if (changed('contract') &&
+        contract != null &&
         !await _recordExists(db, 'contracts', 'contract', contract)) {
       return 'Η σύμβαση δεν υπάρχει στον πίνακα συμβάσεων.';
     }
     final office = _toInt(row['office']);
-    if (office != null &&
+    if (changed('office') &&
+        office != null &&
         !await _recordExists(db, 'offices', 'office', office)) {
       return 'Το γραφείο εξοπλισμού δεν υπάρχει.';
     }
     final serialNo = _normalizeText(row['serial_no']);
-    if (model != null && serialNo != null) {
+    if ((changed('model') || changed('serial_no')) &&
+        model != null &&
+        serialNo != null) {
       final duplicates = await db.query(
         'equipment',
         columns: <String>['code'],
@@ -1256,7 +1434,7 @@ class OldEquipmentRepository {
     }
 
     final owner = _toInt(row['owner']);
-    if (owner != null) {
+    if (changed('owner') && owner != null) {
       final ownerRows = await db.query(
         'owners',
         columns: <String>['office'],
@@ -1270,7 +1448,7 @@ class OldEquipmentRepository {
     }
 
     final setMaster = _toInt(row['set_master']);
-    if (setMaster != null) {
+    if ((changed('set_master') || changed('code')) && setMaster != null) {
       if (setMaster == code) {
         return 'Το set_master δεν μπορεί να δείχνει στον ίδιο εξοπλισμό.';
       }
@@ -1427,12 +1605,38 @@ class OldEquipmentRepository {
   }
 
   Future<_SearchCacheEntry> _buildCache(String databasePath) async {
+    await _ensureNetworkColumns(databasePath);
     await _ensureSearchIndexTable(databasePath);
     await _rebuildSearchIndex(databasePath);
     final db = await _databaseProvider.open(databasePath);
     final rows = await _loadSourceRows(db);
     final indexedRows = rows.map(_mapToIndexedRow).toList(growable: false);
     return _SearchCacheEntry(rows: indexedRows);
+  }
+
+  /// Idempotent προσθήκη των στηλών δικτύου σε παλαιότερες βάσεις.
+  /// Σε read-only βάση αποτυγχάνει αθόρυβα — το [_loadSourceRows] καλύπτει
+  /// τις στήλες που λείπουν με NULL.
+  Future<void> _ensureNetworkColumns(String databasePath) async {
+    try {
+      final db = await _databaseProvider.open(
+        databasePath,
+        mode: LampDatabaseMode.write,
+      );
+      final existing = await _equipmentColumnNames(db);
+      for (final column in kLampNetworkEquipmentColumns) {
+        if (!existing.contains(column)) {
+          await db.execute('ALTER TABLE equipment ADD COLUMN $column TEXT');
+        }
+      }
+    } catch (_) {
+      // Προαιρετική αναβάθμιση σχήματος — η αναζήτηση λειτουργεί και χωρίς αυτήν.
+    }
+  }
+
+  Future<Set<String>> _equipmentColumnNames(Database db) async {
+    final rows = await db.rawQuery("PRAGMA table_info('equipment')");
+    return rows.map((row) => row['name'] as String).toSet();
   }
 
   Future<void> _ensureSearchIndexTable(String databasePath) async {
@@ -1474,10 +1678,20 @@ class OldEquipmentRepository {
     }
   }
 
-  Future<List<Map<String, Object?>>> _loadSourceRows(Database db) {
+  Future<List<Map<String, Object?>>> _loadSourceRows(Database db) async {
+    final equipmentColumns = await _equipmentColumnNames(db);
+    // Βάσεις χωρίς στήλες δικτύου (παλιές/μη εμπλουτισμένες): NULL αντί στήλης.
+    final networkSelect = kLampNetworkEquipmentColumns
+        .map(
+          (column) => equipmentColumns.contains(column)
+              ? 'e.$column'
+              : 'NULL AS $column',
+        )
+        .join(',\n        ');
     return db.rawQuery('''
       SELECT
         e.rowid AS _source_id,
+        $networkSelect,
         e.code,
         e.description,
         e.model AS model_id,
@@ -1635,6 +1849,14 @@ class OldEquipmentRepository {
       _toText(row['office_phones']),
       _toText(row['building']),
       _toText(row['level']),
+      // Πεδία δικτύου (καθολική αναζήτηση: IP, VLAN, MAC, hostname,
+      // περιγραφή δικτύου, σχόλια δικτύου — όχι ο κόμβος).
+      _toText(row['ip_address']),
+      _toText(row['network_vlan']),
+      _toText(row['network_mac']),
+      _toText(row['network_name']),
+      _toText(row['network_description']),
+      _toText(row['network_comments']),
     ];
     return SearchTextNormalizer.normalizeForSearch(parts.join(' '));
   }
@@ -2012,6 +2234,19 @@ class _UpdateSectionSpec {
           'office_phones': 'phones',
           'building': 'building',
           'level': 'level',
+        },
+      ),
+      OldEquipmentSectionType.network => const _UpdateSectionSpec(
+        table: 'equipment',
+        idColumn: 'code',
+        allowedColumnsByField: <String, String>{
+          'network_node': 'network_node',
+          'ip_address': 'ip_address',
+          'network_vlan': 'network_vlan',
+          'network_mac': 'network_mac',
+          'network_name': 'network_name',
+          'network_description': 'network_description',
+          'network_comments': 'network_comments',
         },
       ),
     };
