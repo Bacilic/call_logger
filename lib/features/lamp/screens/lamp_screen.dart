@@ -306,8 +306,11 @@ class _LampScreenState extends ConsumerState<LampScreen> implements LampScreenHo
     if (result.failureMessage != null) {
       setState(() => _search.message = result.failureMessage);
     }
-    if (result.runIntegrityCheck) {
-      await _integrity.runIntegrityCheck(reloadIssues: _issues.loadIssues);
+    if (result.successMessage != null) {
+      await _integrity.runIntegrityCheck(
+        reloadIssues: _issues.loadIssues,
+        autoPersist: true,
+      );
     }
   }
 

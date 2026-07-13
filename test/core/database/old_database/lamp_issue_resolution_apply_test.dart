@@ -41,6 +41,100 @@ void main() {
 
   group('Λάμπα · εφαρμογή αποφάσεων επίλυσης ETL', () {
     test(
+      'reassign_scientific_serial ενημερώνει τον σειριακό και κλείνει το issue',
+      () async {
+        await _seedBaseReferenceData(dbPath);
+        await _insertEquipment(
+          dbPath,
+          code: 4100,
+          serialNo: '4,928E+11',
+          description: 'Laptop Excel',
+        );
+        final issueId = await _insertIssue(
+          dbPath,
+          issueType: 'serial_scientific_notation',
+          rawValue: '4,928E+11',
+          columnName: 'serial_no',
+          rowNumber: 4100,
+        );
+
+        final proposals = await service.analyzeIssues(
+          databasePath: dbPath,
+          issueType: LampIssueType.scientificSerial,
+        );
+        expect(proposals, hasLength(1));
+        final proposal = proposals.single;
+        final option = proposal.options.singleWhere(
+          (o) => o.metadata['operation'] == 'reassign_scientific_serial',
+        );
+
+        await service.applyDecisions(
+          databasePath: dbPath,
+          decisions: <LampIssueResolutionDecision>[
+            LampIssueResolutionDecision(
+              proposal: proposal,
+              option: option,
+              textInput: '492800000000',
+            ),
+          ],
+        );
+
+        expect(await _issueExists(dbPath, issueId), isFalse);
+        expect(await _serialNoForCode(dbPath, 4100), '492800000000');
+      },
+    );
+
+    test(
+      'reassign_scientific_serial εφαρμόζεται ακόμη κι αν ο σειριακός υπάρχει σε άλλον εξοπλισμό',
+      () async {
+        await _seedBaseReferenceData(dbPath);
+        await _insertEquipment(
+          dbPath,
+          code: 4200,
+          serialNo: '4,928E+11',
+          description: 'Laptop Excel',
+        );
+        await _insertEquipment(
+          dbPath,
+          code: 4201,
+          serialNo: 'BARCODE-DUP',
+          description: 'Άλλος εξοπλισμός',
+        );
+        final issueId = await _insertIssue(
+          dbPath,
+          issueType: 'serial_scientific_notation',
+          rawValue: '4,928E+11',
+          columnName: 'serial_no',
+          rowNumber: 4200,
+        );
+
+        final proposals = await service.analyzeIssues(
+          databasePath: dbPath,
+          issueType: LampIssueType.scientificSerial,
+        );
+        final proposal = proposals.single;
+        final option = proposal.options.singleWhere(
+          (o) => o.metadata['operation'] == 'reassign_scientific_serial',
+        );
+
+        await service.applyDecisions(
+          databasePath: dbPath,
+          decisions: <LampIssueResolutionDecision>[
+            LampIssueResolutionDecision(
+              proposal: proposal,
+              option: option,
+              textInput: 'BARCODE-DUP',
+            ),
+          ],
+        );
+
+        expect(await _issueExists(dbPath, issueId), isFalse);
+        expect(await _serialNoForCode(dbPath, 4200), 'BARCODE-DUP');
+        expect(await _serialNoForCode(dbPath, 4201), 'BARCODE-DUP');
+      },
+    );
+
+    test(
       'ομάδα 3 εξοπλισμών με ίδιο asset_no: reassign σε έναν κρατά την ουρά ανοιχτή',
       () async {
         await _seedBaseReferenceData(dbPath);
@@ -966,6 +1060,23 @@ Future<void> db_insertOwnerAndEquipment(String dbPath) async {
       'owner': 50,
       'office': 1,
     });
+  } finally {
+    await db.close();
+  }
+}
+
+Future<String?> _serialNoForCode(String dbPath, int code) async {
+  final db = await openDatabase(dbPath, singleInstance: false);
+  try {
+    final rows = await db.query(
+      'equipment',
+      columns: <String>['serial_no'],
+      where: 'code = ?',
+      whereArgs: <Object?>[code],
+      limit: 1,
+    );
+    if (rows.isEmpty) return null;
+    return rows.first['serial_no']?.toString();
   } finally {
     await db.close();
   }

@@ -9,6 +9,30 @@ void main() {
     SharedPreferences.setMockInitialValues(<String, Object>{});
   });
 
+  group('shouldSyncReadPathOnOutputPick', () {
+    test('sync only when read path is empty', () {
+      expect(shouldSyncReadPathOnOutputPick(''), isTrue);
+      expect(shouldSyncReadPathOnOutputPick('   '), isTrue);
+      expect(
+        shouldSyncReadPathOnOutputPick(r'C:\Data\old_equipment.db'),
+        isFalse,
+      );
+    });
+
+    test(
+      'does not sync when read matched previous output but read is not empty',
+      () {
+        const oldOutput = r'C:\Data\old_equipment.db';
+        const readPath = oldOutput;
+        const newOutput = r'C:\Data\old_equipment 2.db';
+
+        expect(shouldSyncReadPathOnOutputPick(readPath), isFalse);
+        expect(readPath, oldOutput);
+        expect(newOutput, isNot(oldOutput));
+      },
+    );
+  });
+
   group('computeMatchReadToOutputButtonState', () {
     test('disabled when output path is empty', () {
       final state = computeMatchReadToOutputButtonState(
@@ -74,5 +98,19 @@ void main() {
         isTrue,
       );
     });
+
+    test(
+      'ξεχωριστή ανάγνωση παραμένει στο store όταν ενημερώνεται μόνο η έξοδος',
+      () async {
+        final settings = LampSettingsStore();
+        const readPath = r'C:\read\experiment.db';
+        const outputPath = r'C:\out\fresh_import.db';
+        await settings.setReadPath(readPath);
+        await settings.setOutputPath(outputPath);
+
+        expect(await settings.getReadPathRaw(), readPath);
+        expect(await settings.getOutputPathRaw(), outputPath);
+      },
+    );
   });
 }

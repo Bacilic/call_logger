@@ -1,6 +1,16 @@
-﻿import 'package:flutter/material.dart';
+﻿import 'dart:async';
+
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../../core/database/old_database/lamp_issue_resolution_service.dart';
+import '../../../core/database/old_database/lamp_scientific_serial.dart';
+
+/// Έλεγχος ύπαρξης σειριακού σε άλλον εξοπλισμό (πιθανό barcode).
+typedef LampSerialExistsChecker = Future<bool> Function(
+  String serial,
+  int? exceptCode,
+);
 
 String _lampIssueColumnLabelEl(String? column) {
   if (column == null || column.isEmpty) return '-';
@@ -25,6 +35,7 @@ Future<List<LampIssueResolutionDecision>?> showLampIssueManualReviewDialog({
   required LampIssueType issueType,
   required List<LampIssueResolutionProposal> proposals,
   bool groupedIdenticalValues = false,
+  LampSerialExistsChecker? serialExistsChecker,
 }) {
   return showDialog<List<LampIssueResolutionDecision>>(
     context: context,
@@ -33,6 +44,7 @@ Future<List<LampIssueResolutionDecision>?> showLampIssueManualReviewDialog({
       issueType: issueType,
       proposals: proposals,
       groupedIdenticalValues: groupedIdenticalValues,
+      serialExistsChecker: serialExistsChecker,
     ),
   );
 }
@@ -43,11 +55,13 @@ class LampIssueManualReviewDialog extends StatefulWidget {
     required this.issueType,
     required this.proposals,
     this.groupedIdenticalValues = false,
+    this.serialExistsChecker,
   });
 
   final LampIssueType issueType;
   final List<LampIssueResolutionProposal> proposals;
   final bool groupedIdenticalValues;
+  final LampSerialExistsChecker? serialExistsChecker;
 
   @override
   State<LampIssueManualReviewDialog> createState() =>
@@ -124,6 +138,7 @@ class _LampIssueManualReviewDialogState
                     proposal: proposal,
                     selectedOption: _selectedOptions[sourceIndex],
                     textController: _controllerFor(sourceIndex),
+                    serialExistsChecker: widget.serialExistsChecker,
                     onChanged: (option) {
                       setState(() => _selectedOptions[sourceIndex] = option);
                     },
@@ -197,13 +212,14 @@ class _LampIssueManualReviewDialogState
   }
 }
 
-class _ManualReviewCard extends StatelessWidget {
+class _ManualReviewCard extends StatefulWidget {
   const _ManualReviewCard({
     required this.index,
     required this.proposal,
     required this.selectedOption,
     required this.textController,
     required this.onChanged,
+    this.serialExistsChecker,
   });
 
   final int index;
@@ -211,12 +227,173 @@ class _ManualReviewCard extends StatelessWidget {
   final LampIssueResolutionOption? selectedOption;
   final TextEditingController textController;
   final ValueChanged<LampIssueResolutionOption?> onChanged;
+  final LampSerialExistsChecker? serialExistsChecker;
+
+  @override
+  State<_ManualReviewCard> createState() => _ManualReviewCardState();
+}
+
+class _ManualReviewCardState extends State<_ManualReviewCard> {
+  Timer? _serialCheckDebounce;
+  bool? _serialExistsElsewhere;
+  bool _serialCheckInFlight = false;
+
+  bool get _isScientificSerialContext {
+    if (widget.proposal.issueType == LampIssueType.scientificSerial) {
+      return true;
+    }
+    final clean = widget.proposal.metadata['cleanDigits']?.toString().trim();
+    return clean != null && clean.isNotEmpty;
+  }
+
+  String? get _cleanDigits {
+    final fromMeta = widget.proposal.metadata['cleanDigits']?.toString().trim();
+    if (fromMeta != null && fromMeta.isNotEmpty) return fromMeta;
+    final fromOption =
+        widget.selectedOption?.metadata['cleanDigits']?.toString().trim();
+    if (fromOption != null && fromOption.isNotEmpty) return fromOption;
+    return null;
+  }
+
+  int? get _expectedLength {
+    final fromMeta = widget.proposal.metadata['expectedLength'];
+    if (fromMeta is int) return fromMeta;
+    if (fromMeta != null) return int.tryParse(fromMeta.toString());
+    final fromOption = widget.selectedOption?.metadata['expectedLength'];
+    if (fromOption is int) return fromOption;
+    if (fromOption != null) return int.tryParse(fromOption.toString());
+    return null;
+  }
+
+  String? get _rawSerial {
+    final fromMeta = widget.proposal.metadata['rawSerial']?.toString();
+    if (fromMeta != null && fromMeta.trim().isNotEmpty) return fromMeta.trim();
+    return widget.proposal.originalValue?.trim();
+  }
+
+  int? get _exceptCode {
+    final fromOption = widget.selectedOption?.metadata['targetCode'];
+    if (fromOption is int) return fromOption;
+    if (fromOption != null) return int.tryParse(fromOption.toString());
+    return widget.proposal.row;
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    widget.textController.addListener(_onSerialInputChanged);
+  }
+
+  @override
+  void didUpdateWidget(covariant _ManualReviewCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.textController != widget.textController) {
+      oldWidget.textController.removeListener(_onSerialInputChanged);
+      widget.textController.addListener(_onSerialInputChanged);
+    }
+    if (oldWidget.selectedOption != widget.selectedOption) {
+      _scheduleSerialExistsCheck(widget.textController.text);
+    }
+  }
+
+  @override
+  void dispose() {
+    _serialCheckDebounce?.cancel();
+    widget.textController.removeListener(_onSerialInputChanged);
+    super.dispose();
+  }
+
+  void _onSerialInputChanged() {
+    if (!_isScientificSerialContext ||
+        !(widget.selectedOption?.requiresTextInput ?? false)) {
+      return;
+    }
+    setState(() {});
+    _scheduleSerialExistsCheck(widget.textController.text);
+  }
+
+  void _scheduleSerialExistsCheck(String value) {
+    _serialCheckDebounce?.cancel();
+    final checker = widget.serialExistsChecker;
+    if (checker == null) {
+      if (_serialExistsElsewhere != null || _serialCheckInFlight) {
+        setState(() {
+          _serialExistsElsewhere = null;
+          _serialCheckInFlight = false;
+        });
+      }
+      return;
+    }
+    final trimmed = value.trim();
+    if (trimmed.isEmpty) {
+      setState(() {
+        _serialExistsElsewhere = null;
+        _serialCheckInFlight = false;
+      });
+      return;
+    }
+    _serialCheckDebounce = Timer(const Duration(milliseconds: 350), () async {
+      if (!mounted) return;
+      setState(() => _serialCheckInFlight = true);
+      try {
+        final exists = await checker(trimmed, _exceptCode);
+        if (!mounted) return;
+        setState(() {
+          _serialExistsElsewhere = exists;
+          _serialCheckInFlight = false;
+        });
+      } catch (_) {
+        if (!mounted) return;
+        setState(() {
+          _serialExistsElsewhere = null;
+          _serialCheckInFlight = false;
+        });
+      }
+    });
+  }
+
+  List<String> _warningMessages() {
+    if (!_isScientificSerialContext ||
+        !(widget.selectedOption?.requiresTextInput ?? false)) {
+      return const <String>[];
+    }
+    final cleanDigits = _cleanDigits ?? '';
+    final warnings = scientificSerialLocalWarnings(
+      newSerial: widget.textController.text,
+      cleanDigits: cleanDigits,
+      expectedLength: _expectedLength,
+      rawSerial: _rawSerial ?? '',
+    );
+    if (_serialExistsElsewhere == true) {
+      warnings.add(scientificSerialDuplicateWarning);
+    }
+    return warnings;
+  }
+
+  Future<void> _copyCleanDigits(String cleanDigits) async {
+    await Clipboard.setData(ClipboardData(text: cleanDigits));
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Αντιγράφηκαν τα ψηφία: $cleanDigits'),
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final proposal = widget.proposal;
+    final selectedOption = widget.selectedOption;
     final selectedRequiresInput = selectedOption?.requiresTextInput ?? false;
     final rowContextLines = _proposalRowContextLines(proposal);
+    final cleanDigits = _cleanDigits;
+    final showCleanDigitsLine =
+        _isScientificSerialContext && cleanDigits != null && cleanDigits.isNotEmpty;
+    final warnings = _warningMessages();
+    const warningColor = Color(0xFFE65100);
+
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(12),
@@ -227,7 +404,7 @@ class _ManualReviewCard extends StatelessWidget {
               spacing: 16,
               runSpacing: 6,
               children: [
-                Text('#${index + 1}', style: theme.textTheme.labelLarge),
+                Text('#${widget.index + 1}', style: theme.textTheme.labelLarge),
                 Text('Κωδικός εξοπλισμού: ${proposal.row ?? '-'}'),
                 Text('Πεδίο: ${_lampIssueColumnLabelEl(proposal.column)}'),
                 Text('Βεβαιότητα: ${proposal.confidence}%'),
@@ -250,6 +427,28 @@ class _ManualReviewCard extends StatelessWidget {
               for (final line in rowContextLines)
                 SelectableText(line, style: theme.textTheme.bodySmall),
             ],
+            if (showCleanDigitsLine) ...[
+              const SizedBox(height: 8),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: SelectableText(
+                      'Ψηφία για αναζήτηση: $cleanDigits',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: 'Αντιγραφή ψηφίων',
+                    icon: const Icon(Icons.copy_outlined, size: 18),
+                    visualDensity: VisualDensity.compact,
+                    onPressed: () => _copyCleanDigits(cleanDigits),
+                  ),
+                ],
+              ),
+            ],
             const SizedBox(height: 8),
             SelectableText(proposal.notes, style: theme.textTheme.bodySmall),
             const Divider(height: 20),
@@ -257,7 +456,7 @@ class _ManualReviewCard extends StatelessWidget {
             const SizedBox(height: 4),
             RadioGroup<LampIssueResolutionOption?>(
               groupValue: selectedOption,
-              onChanged: onChanged,
+              onChanged: widget.onChanged,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
@@ -283,13 +482,49 @@ class _ManualReviewCard extends StatelessWidget {
             if (selectedRequiresInput) ...[
               const SizedBox(height: 8),
               TextField(
-                controller: textController,
+                controller: widget.textController,
                 decoration: InputDecoration(
                   labelText: selectedOption?.inputLabel ?? 'Νέα τιμή',
                   border: const OutlineInputBorder(),
                   isDense: true,
                 ),
               ),
+              if (warnings.isNotEmpty || _serialCheckInFlight) ...[
+                const SizedBox(height: 8),
+                for (final warning in warnings)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 4),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Icon(
+                          Icons.warning_amber_outlined,
+                          size: 16,
+                          color: warningColor,
+                        ),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            warning,
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: warningColor,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                if (_serialCheckInFlight)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 2),
+                    child: Text(
+                      'Έλεγχος διπλότυπου σειριακού…',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+              ],
             ],
           ],
         ),

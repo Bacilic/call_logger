@@ -5,8 +5,10 @@ import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 
 import '../../../core/database/old_database/lamp_database_provider.dart';
+import '../../../core/database/old_database/lamp_excel_validator.dart';
 import '../../../core/database/old_database/lamp_old_db_validator.dart';
 import '../../../core/database/old_database/old_excel_importer.dart';
+import '../../../core/providers/lamp_db_comparison_provider.dart';
 import '../widgets/lamp_import_report_dialog.dart';
 import 'lamp_path_management.dart';
 import 'lamp_screen_host.dart';
@@ -15,11 +17,19 @@ typedef RecreateConfirmationCallback = Future<bool> Function({
   required String fileName,
 });
 
-typedef ImportReportFlowCallback = Future<LampImportReportCloseAction?> Function({
+typedef ImportReportFlowCallback = Future<LampImportReportOutcome?> Function({
   required Stopwatch stopwatch,
+  required LampImportReadPathContext readPathContext,
   required Future<LampImportResult> Function(
     void Function(LampImportProgress progress) onProgress,
   ) importRunner,
+});
+
+/// Ανανέωση των ειδοποιήσεων σύγκρισης βάσεων (ανάγνωση έναντι εξόδου).
+/// Εγχέεται στα τεστ ώστε το [runImport] να μη χρειάζεται ζωντανό [WidgetRef].
+typedef LampDbComparisonRefresh = Future<void> Function({
+  required String readPath,
+  required String outputPath,
 });
 
 class LampImportRunResult {
@@ -40,17 +50,25 @@ class LampImportController {
     required this.path,
     RecreateConfirmationCallback? confirmRecreateExistingDatabase,
     ImportReportFlowCallback? showImportReportDialog,
+    LampDbComparisonRefresh? refreshDbComparison,
   })  : _confirmRecreateExistingDatabase = confirmRecreateExistingDatabase,
-        _showImportReportDialog = showImportReportDialog;
+        _showImportReportDialog = showImportReportDialog,
+        _refreshDbComparison = refreshDbComparison;
 
   final LampScreenHost host;
   final LampPathController path;
   final RecreateConfirmationCallback? _confirmRecreateExistingDatabase;
   final ImportReportFlowCallback? _showImportReportDialog;
+  final LampDbComparisonRefresh? _refreshDbComparison;
 
   bool importing = false;
 
-  String? excelImportDisabledReason({LampOldDbCheckResult? outputPathCheck}) {
+  static const _excelValidator = LampExcelValidator();
+
+  String? excelImportDisabledReason({
+    LampOldDbCheckResult? outputPathCheck,
+    LampExcelCheckResult? excelPathCheck,
+  }) {
     final excelEmpty = path.excelController.text.trim().isEmpty;
     final outEmpty = path.outputDbController.text.trim().isEmpty;
     if (excelEmpty && outEmpty) {
@@ -58,6 +76,9 @@ class LampImportController {
     }
     if (excelEmpty) {
       return 'Λείπει το αρχείο Excel';
+    }
+    if (excelPathCheck != null && lampExcelPathBlocksImport(excelPathCheck)) {
+      return excelPathCheck.userMessageGreek;
     }
     if (outEmpty) {
       return 'Δεν έχει οριστεί διαδρομή εξόδου';
@@ -78,9 +99,11 @@ class LampImportController {
     required VoidCallback onImport,
     required String? message,
     LampOldDbCheckResult? outputPathCheck,
+    LampExcelCheckResult? excelPathCheck,
   }) {
     final blockReason = excelImportDisabledReason(
       outputPathCheck: outputPathCheck,
+      excelPathCheck: excelPathCheck,
     );
     final enabled = !importing && blockReason == null;
     final button = FilledButton.icon(
@@ -119,19 +142,25 @@ class LampImportController {
     );
   }
 
-  Future<LampImportReportCloseAction?> _runReportFlow({
+  Future<LampImportReportOutcome?> _runReportFlow({
     required Stopwatch stopwatch,
+    required LampImportReadPathContext readPathContext,
     required Future<LampImportResult> Function(
       void Function(LampImportProgress progress) onProgress,
     ) importRunner,
   }) {
     final callback = _showImportReportDialog;
     if (callback != null) {
-      return callback(stopwatch: stopwatch, importRunner: importRunner);
+      return callback(
+        stopwatch: stopwatch,
+        readPathContext: readPathContext,
+        importRunner: importRunner,
+      );
     }
     return showLampImportReportFlowWithDuration(
       context: host.context,
       stopwatch: stopwatch,
+      readPathContext: readPathContext,
       importRunner: importRunner,
     );
   }
@@ -144,7 +173,21 @@ class LampImportController {
   }) async {
     final excelPath = path.excelController.text.trim();
     final outPath = path.outputDbController.text.trim();
-    final blockReason = excelImportDisabledReason();
+
+    final excelCheck = await _excelValidator.validateExcelSource(excelPath);
+    if (excelCheck.status != LampExcelStatus.ok) {
+      final message = excelCheck.userMessageGreek;
+      host.showSnack(message, isError: true);
+      return LampImportRunResult(failureMessage: message);
+    }
+
+    final outputDirError = await _validateOutputDirectoryAccessible(outPath);
+    if (outputDirError != null) {
+      host.showSnack(outputDirError, isError: true);
+      return LampImportRunResult(failureMessage: outputDirError);
+    }
+
+    final blockReason = excelImportDisabledReason(excelPathCheck: excelCheck);
     if (blockReason != null) {
       host.showSnack(blockReason, isError: true);
       return LampImportRunResult(failureMessage: blockReason);
@@ -167,10 +210,23 @@ class LampImportController {
 
     final stopwatch = Stopwatch()..start();
     LampImportResult? importResult;
+    final readBeforeImport = path.readDbController.text.trim();
+    final readPathEmpty = readBeforeImport.isEmpty;
+    final readPathContext = LampImportReadPathContext(
+      readPathEmpty: readPathEmpty,
+      readDiffersFromOutput: !readPathEmpty &&
+          !LampOldDbValidator.pathsReferToSameFile(
+            readBeforeImport,
+            outPath,
+          ),
+      currentReadFileName:
+          readBeforeImport.isEmpty ? null : p.basename(readBeforeImport),
+    );
 
     try {
-      final closeAction = await _runReportFlow(
+      final outcome = await _runReportFlow(
         stopwatch: stopwatch,
+        readPathContext: readPathContext,
         importRunner: (onProgress) async {
           final result = await host.shared.importer.importExcel(
             excelPath: excelPath,
@@ -194,18 +250,29 @@ class LampImportController {
         );
       }
 
-      await settings.setOutputAndReadFromImportResult(result.databasePath);
-      path.readDbController.text = result.databasePath;
-      path.outputDbController.text = result.databasePath;
-      final successMessage = _successMessageFor(result);
+      final outputPath = result.databasePath;
+      await settings.setOutputPath(outputPath);
+      path.outputDbController.text = outputPath;
+
+      final alignRead = readPathEmpty || (outcome?.setAsReadDatabase ?? false);
+      if (alignRead) {
+        await settings.setReadPath(outputPath);
+        path.readDbController.text = outputPath;
+      }
+
+      final successMessage = _successMessageFor(
+        result: result,
+        readAligned: alignRead,
+      );
       onImportSuccess(successMessage);
       host.lampSettingsDialogSetState?.call(() {});
       await afterImportValidate();
+      await _refreshComparison();
 
       return LampImportRunResult(
         successMessage: successMessage,
-        runIntegrityCheck:
-            closeAction == LampImportReportCloseAction.runIntegrityCheck,
+        runIntegrityCheck: outcome?.action ==
+            LampImportReportCloseAction.runIntegrityCheck,
       );
     } catch (e) {
       if (!host.mounted) {
@@ -227,9 +294,52 @@ class LampImportController {
     }
   }
 
-  String _successMessageFor(LampImportResult result) {
+  /// Ανανεώνει τις ειδοποιήσεις σύγκρισης. Στην παραγωγή περνά από τον
+  /// [lampDbComparisonProvider] μέσω `host.ref`· στα τεστ εγχέεται no-op ώστε
+  /// να μη χρειάζεται ζωντανό [WidgetRef] (και άρα ούτε `testWidgets`/FFI).
+  Future<void> _refreshComparison() async {
+    final readPath = path.readDbController.text.trim();
+    final outputPath = path.outputDbController.text.trim();
+    final override = _refreshDbComparison;
+    if (override != null) {
+      await override(readPath: readPath, outputPath: outputPath);
+      return;
+    }
+    await host.ref.read(lampDbComparisonProvider.notifier).refresh(
+      readPathOverride: readPath,
+      outputPathOverride: outputPath,
+    );
+  }
+
+  String _successMessageFor({
+    required LampImportResult result,
+    required bool readAligned,
+  }) {
+    final alignmentText = readAligned
+        ? 'Η αποθηκευμένη διαδρομή «ανάγνωση» ευθυγραμμίστηκε με το .db εξόδου (ίδιο αρχείο).'
+        : 'Η βάση ανάγνωσης παρέμεινε ξεχωριστή από τη νέα έξοδο.';
     return 'Ολοκληρώθηκε η βάση ${p.basename(result.databasePath)}. '
         'Προβλήματα ETL: ${result.issueCount}. '
-        'Η αποθηκευμένη διαδρομή «ανάγνωση» ευθυγραμμίστηκε με το .db εξόδου (ίδιο αρχείο).';
+        '$alignmentText';
+  }
+
+  /// Έλεγχος ότι ο φάκελος εξόδου υπάρχει ή μπορεί να δημιουργηθεί.
+  Future<String?> _validateOutputDirectoryAccessible(String outputPath) async {
+    final trimmed = outputPath.trim();
+    if (trimmed.isEmpty) {
+      return 'Δεν έχει οριστεί διαδρομή εξόδου';
+    }
+    final parent = Directory(p.dirname(trimmed));
+    if (await parent.exists()) {
+      return null;
+    }
+    try {
+      await parent.create(recursive: true);
+      return null;
+    } on FileSystemException catch (e) {
+      return 'Ο φάκελος εξόδου δεν είναι προσβάσιμος '
+          '(${p.basename(parent.path)}). Ελέγξτε δίσκο δικτύου/USB ή τη διαδρομή. '
+          '${e.message}'.trim();
+    }
   }
 }

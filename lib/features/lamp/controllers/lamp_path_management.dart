@@ -7,7 +7,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 
 import '../../../core/database/old_database/lamp_database_provider.dart';
+import '../../../core/database/old_database/lamp_excel_validator.dart';
 import '../../../core/database/old_database/lamp_old_db_validator.dart';
+import '../../../core/providers/lamp_db_comparison_provider.dart';
+import '../../../core/providers/lamp_excel_path_health_provider.dart';
 import '../../../core/providers/lamp_open_settings_intent_provider.dart';
 import '../../../core/providers/lamp_read_path_health_provider.dart';
 import '../../../core/services/portable_lamp_storage.dart';
@@ -25,6 +28,9 @@ class LampMatchReadToOutputButtonState {
   final bool enabled;
   final String tooltip;
 }
+
+/// Αν η διαδρομή ανάγνωσης είναι κενή, η επιλογή εξόδου την ευθυγραμμίζει.
+bool shouldSyncReadPathOnOutputPick(String readPath) => readPath.trim().isEmpty;
 
 LampMatchReadToOutputButtonState computeMatchReadToOutputButtonState({
   required String outputPath,
@@ -112,6 +118,13 @@ class LampPathController {
     await host.ref.read(lampOutputPathHealthProvider.notifier).refresh(
       pathOverride: output,
     );
+    await host.ref.read(lampExcelPathHealthProvider.notifier).refresh(
+      pathOverride: excel,
+    );
+    await host.ref.read(lampDbComparisonProvider.notifier).refresh(
+      readPathOverride: read,
+      outputPathOverride: output,
+    );
     if (host.mounted) {
       host.lampSettingsDialogSetState?.call(() {});
     }
@@ -136,6 +149,13 @@ class LampPathController {
       readDbController.text = outRaw ?? '';
     }
     outputDbController.text = outRaw ?? '';
+    await host.ref.read(lampExcelPathHealthProvider.notifier).refresh(
+      pathOverride: excelController.text.trim(),
+    );
+    await host.ref.read(lampDbComparisonProvider.notifier).refresh(
+      readPathOverride: readDbController.text.trim(),
+      outputPathOverride: outputDbController.text.trim(),
+    );
   }
 
   Future<void> applyPersistedReadAndValidate({
@@ -160,6 +180,13 @@ class LampPathController {
     );
     await host.ref.read(lampOutputPathHealthProvider.notifier).refresh(
       pathOverride: output,
+    );
+    await host.ref.read(lampExcelPathHealthProvider.notifier).refresh(
+      pathOverride: excelController.text.trim(),
+    );
+    await host.ref.read(lampDbComparisonProvider.notifier).refresh(
+      readPathOverride: read,
+      outputPathOverride: output,
     );
     if (!host.mounted) return;
     final result = host.readPathCheck;
@@ -230,6 +257,9 @@ class LampPathController {
     }
     excelController.text = path;
     await host.shared.settings.setExcelPath(path);
+    await host.ref.read(lampExcelPathHealthProvider.notifier).refresh(
+      pathOverride: path,
+    );
     if (host.mounted) {
       host.lampSettingsDialogSetState?.call(() {});
       host.showSnack('Ορίστηκε αρχείο Excel: ${p.basename(path)}');
@@ -293,7 +323,7 @@ class LampPathController {
     outputDbController.text = portablePath;
     await host.shared.settings.setOutputPath(portablePath);
     final readT = readDbController.text.trim();
-    if (readT.isEmpty || (oldOut.isNotEmpty && readT == oldOut)) {
+    if (shouldSyncReadPathOnOutputPick(readT)) {
       readDbController.text = portablePath;
       await host.shared.settings.setReadPath(portablePath);
       if (host.mounted) {
@@ -304,6 +334,13 @@ class LampPathController {
       }
       await onReadSynced(source: 'αλλαγή αρχείου εξόδου');
     } else {
+      await host.ref.read(lampOutputPathHealthProvider.notifier).refresh(
+        pathOverride: portablePath,
+      );
+      await host.ref.read(lampDbComparisonProvider.notifier).refresh(
+        readPathOverride: readT,
+        outputPathOverride: portablePath,
+      );
       if (host.mounted) {
         host.showSnack(
           'Η διαδρομή εξόδου (δημιουργίας) ενημερώθηκε. Η βάση προς «ανάγνωση» παρέμεινε ξεχωριστή.',
@@ -392,6 +429,50 @@ class LampPathFormatWarningBanner extends StatelessWidget {
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
                   color: scheme.onErrorContainer,
                 ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Πορτοκαλί πλαίσιο ειδοποιήσεων σύγκρισης ανάγνωσης/εξόδου.
+class LampDbComparisonBanner extends StatelessWidget {
+  const LampDbComparisonBanner({super.key, required this.messages});
+
+  final List<String> messages;
+
+  @override
+  Widget build(BuildContext context) {
+    if (messages.isEmpty) return const SizedBox.shrink();
+    const orange = Color(0xFFE65100);
+    const orangeBg = Color(0xFFFFF3E0);
+    return Material(
+      color: orangeBg,
+      borderRadius: BorderRadius.circular(8),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Icon(Icons.info_outline, size: 20, color: orange),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  for (var i = 0; i < messages.length; i++) ...[
+                    if (i > 0) const SizedBox(height: 6),
+                    Text(
+                      messages[i],
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: orange,
+                      ),
+                    ),
+                  ],
+                ],
               ),
             ),
           ],
@@ -535,6 +616,78 @@ class LampPathCheckPanel extends StatelessWidget {
                       const SizedBox(height: 4),
                     Text(
                       pendingMessage ?? r.userMessageGreek,
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Πίνακας ελέγχου διαδρομής Excel (πηγή εισαγωγής).
+class LampExcelPathCheckPanel extends StatelessWidget {
+  const LampExcelPathCheckPanel({
+    super.key,
+    required this.excelPathCheck,
+    required this.excelController,
+  });
+
+  final LampExcelCheckResult? excelPathCheck;
+  final TextEditingController excelController;
+
+  @override
+  Widget build(BuildContext context) {
+    final r = excelPathCheck;
+    if (r == null) {
+      return Text(
+        'Δεν έχει τρέξει ακόμη έλεγχος — γίνεται αυτόματα μόλις οριστεί διαδρομή.',
+        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+          color: Theme.of(context).colorScheme.onSurfaceVariant,
+        ),
+      );
+    }
+    final scheme = Theme.of(context).colorScheme;
+    final Color? bg;
+    final IconData icon;
+    if (r.status == LampExcelStatus.ok) {
+      bg = scheme.primaryContainer.withValues(alpha: 0.45);
+      icon = Icons.check_circle_outline;
+    } else if (r.status == LampExcelStatus.pathEmpty) {
+      bg = scheme.surfaceContainerHighest;
+      icon = Icons.info_outline;
+    } else {
+      bg = scheme.errorContainer.withValues(alpha: 0.55);
+      icon = Icons.error_outline;
+    }
+    final showMessage = r.status != LampExcelStatus.ok;
+    return Material(
+      color: bg,
+      borderRadius: BorderRadius.circular(8),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(icon, size: 20, color: scheme.onSurface),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (excelController.text.isNotEmpty)
+                    Text(
+                      p.basename(excelController.text),
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  if (showMessage) ...[
+                    if (excelController.text.isNotEmpty) const SizedBox(height: 4),
+                    Text(
+                      r.userMessageGreek,
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
                   ],

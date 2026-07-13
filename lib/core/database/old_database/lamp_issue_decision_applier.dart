@@ -401,6 +401,29 @@ class LampIssueDecisionApplier {
             'Ενημερώθηκε το serial_no του εξοπλισμού $targetCode σε $value.',
           ),
         );
+      case 'reassign_scientific_serial':
+        final scientificValue = decision.textInput?.trim();
+        if (scientificValue == null || scientificValue.isEmpty) {
+          throw StateError('Δεν δόθηκε νέος σειριακός.');
+        }
+        final scientificTargetCode = metadata['targetCode'] as int?;
+        if (scientificTargetCode == null) {
+          throw StateError(
+            'Λείπει κωδικός εξοπλισμού για reassign επιστημονικού σειριακού.',
+          );
+        }
+        await txn.update(
+          'equipment',
+          <String, Object?>{'serial_no': scientificValue},
+          where: 'code = ?',
+          whereArgs: <Object?>[scientificTargetCode],
+        );
+        emit(
+          ResolutionLogEntry.success(
+            'Ενημερώθηκε το serial_no του εξοπλισμού $scientificTargetCode '
+            'σε $scientificValue (καταχώρηση νέου σειριακού).',
+          ),
+        );
       case LampIssueResolutionOperations.setFieldManual:
         final manualCode = _support.toInt(metadata['code'] ?? proposal.row);
         final manualFkColumn = metadata['fkColumn']?.toString() ?? proposal.column;

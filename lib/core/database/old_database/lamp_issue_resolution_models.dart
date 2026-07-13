@@ -10,6 +10,10 @@ enum LampIssueType {
     'duplicate_model_serial',
     'Επίλυση · Διπλότυποι συνδυασμοί μοντέλου / σειριακού',
   ),
+  scientificSerial(
+    'serial_scientific_notation',
+    'Επίλυση · Σειριακοί σε επιστημονική μορφή',
+  ),
   setMasterSelfReference(
     'set_master_self_reference',
     'Επίλυση · Κύριος εξοπλισμός που δείχνει στον ίδιο εξοπλισμό',

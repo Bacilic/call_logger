@@ -122,6 +122,7 @@ class LampIssueHelpers {
       LampIssueType.unknownId => Icons.tag_outlined,
       LampIssueType.duplicateAssetNo => Icons.badge_outlined,
       LampIssueType.duplicateModelSerial => Icons.memory_outlined,
+      LampIssueType.scientificSerial => Icons.functions_outlined,
       LampIssueType.setMasterSelfReference => Icons.link_off_outlined,
       LampIssueType.setMasterCycle => Icons.account_tree_outlined,
     };

@@ -62,6 +62,8 @@ class LampIssueResolutionService {
         _duplicateAnalyzers.analyzeDuplicateAssets(db),
       LampIssueType.duplicateModelSerial =>
         _duplicateAnalyzers.analyzeDuplicateModelSerial(db),
+      LampIssueType.scientificSerial =>
+        _duplicateAnalyzers.analyzeScientificSerials(db),
       LampIssueType.setMasterSelfReference =>
         _duplicateAnalyzers.analyzeSetMasterSelfReferences(db),
       LampIssueType.setMasterCycle =>

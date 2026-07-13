@@ -144,12 +144,12 @@ const List<String> oldDatabaseIntegrityStatements = <String>[
   'DROP TRIGGER IF EXISTS trg_equipment_owner_office_match_insert',
   'DROP TRIGGER IF EXISTS trg_equipment_owner_office_match_update',
   '''
-  CREATE UNIQUE INDEX IF NOT EXISTS ux_equipment_asset_no_clean
+  CREATE INDEX IF NOT EXISTS ux_equipment_asset_no_clean
   ON equipment(asset_no)
   WHERE asset_no IS NOT NULL AND TRIM(asset_no) <> ''
   ''',
   '''
-  CREATE UNIQUE INDEX IF NOT EXISTS ux_equipment_model_serial_no_clean
+  CREATE INDEX IF NOT EXISTS ux_equipment_model_serial_no_clean
   ON equipment(model, serial_no)
   WHERE model IS NOT NULL AND serial_no IS NOT NULL AND TRIM(serial_no) <> ''
   ''',

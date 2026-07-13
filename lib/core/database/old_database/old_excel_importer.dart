@@ -4,7 +4,9 @@ import 'package:justkawal_excel_updated/justkawal_excel_updated.dart';
 import 'package:path/path.dart' as p;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
+import '../lock_diagnostic_service.dart';
 import 'equipment_set_master_cycle.dart';
+import 'lamp_database_provider.dart';
 import 'lamp_excel_parse_int.dart';
 import 'lamp_network_sheet_importer.dart';
 import 'old_database_schema.dart';
@@ -56,7 +58,8 @@ class OldExcelImporter {
       await output.parent.create(recursive: true);
     }
     if (await output.exists()) {
-      await output.delete();
+      await LampDatabaseProvider.instance.close();
+      await _deleteDatabaseFileWithSidecars(output);
     }
 
     final db = await openDatabase(databasePath, singleInstance: false);
@@ -649,6 +652,67 @@ class OldExcelImporter {
         );
     await db.insert('data_issues', effective.toMap());
   }
+}
+
+/// Διαγράφει αρχείο βάσης και τα συνοδευτικά -wal/-shm με υπομονετική επανάληψη.
+///
+/// Πριν από ΚΑΘΕ προσπάθεια κλείνει ξανά το singleton της Λάμπας, ώστε αν κάποιος
+/// provider (search/health/σύγκριση) ξανα-άνοιξε τη βάση μέσα στο παράθυρο retry,
+/// το επόμενο βήμα να την ξανακλείσει. Το μεγαλύτερο συνολικό παράθυρο (~3s)
+/// απορροφά και εξωτερικούς σαρωτές (antivirus/indexer) που κρατούν στιγμιαία το
+/// φρέσκο αρχείο. Στην τελική αποτυχία τρέχει διάγνωση για να ονομάσει τον κάτοχο.
+Future<void> _deleteDatabaseFileWithSidecars(
+  File databaseFile, {
+  int maxAttempts = 12,
+  Duration retryDelay = const Duration(milliseconds: 250),
+}) async {
+  final path = databaseFile.path;
+  final wal = File('$path-wal');
+  final shm = File('$path-shm');
+
+  for (var attempt = 0; attempt < maxAttempts; attempt++) {
+    try {
+      await LampDatabaseProvider.instance.close();
+    } catch (_) {
+      // best-effort: ο σκοπός είναι απλώς να μη μείνει ανοιχτό handle.
+    }
+    try {
+      if (await databaseFile.exists()) {
+        await databaseFile.delete();
+      }
+      for (final sidecar in <File>[wal, shm]) {
+        try {
+          if (await sidecar.exists()) {
+            await sidecar.delete();
+          }
+        } on FileSystemException {
+          // Αποτυχία sidecar δεν είναι μοιραία.
+        }
+      }
+      return;
+    } on FileSystemException {
+      if (attempt < maxAttempts - 1) {
+        await Future<void>.delayed(retryDelay);
+      }
+    }
+  }
+
+  // Τελική αποτυχία: διάγνωσε (best-effort) ΠΟΙΟΣ κρατά το αρχείο και ονόμασέ τον.
+  var holder = '';
+  try {
+    holder = (await const LockDiagnosticService().detectLockingProcess(path))
+        .trim();
+  } catch (_) {
+    holder = '';
+  }
+  final detail = holder.isEmpty
+      ? ''
+      : '\n\n${holder.length > 600 ? '${holder.substring(0, 600)}…' : holder}';
+  throw LampImportException(
+    'Η βάση εξόδου [${p.basename(path)}] χρησιμοποιείται ήδη και δεν μπορεί να '
+    'ξαναδημιουργηθεί. Άλλαξε τη βάση εξόδου ή τη βάση ανάγνωσης και δοκίμασε ξανά.'
+    '$detail',
+  );
 }
 
 class _TableSpec {

@@ -1,10 +1,14 @@
+import 'dart:io';
+
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import '../../../features/lamp/controllers/lamp_search_query_parser.dart';
 import '../../utils/search_text_normalizer.dart';
 import '../../utils/user_identity_normalizer.dart';
 import 'lamp_database_provider.dart';
+import 'lamp_db_comparison.dart';
 import 'lamp_excel_parse_int.dart';
+import 'lamp_scientific_serial.dart';
 import 'lamp_network_sheet_importer.dart';
 import 'old_database_schema.dart';
 
@@ -254,6 +258,45 @@ class OldEquipmentRepository {
     if (path.isEmpty) return;
     final cache = await _buildCache(path);
     _cacheByPath[_cacheKey(path)] = cache;
+  }
+
+  /// Στατιστικά αρχείου βάσης για σύγκριση ανάγνωσης/εξόδου (read-only).
+  Future<LampDbSnapshot> collectDbSnapshot(String databasePath) async {
+    final path = databasePath.trim();
+    if (path.isEmpty) {
+      return const LampDbSnapshot(exists: false);
+    }
+    final file = File(path);
+    if (!await file.exists()) {
+      return const LampDbSnapshot(exists: false);
+    }
+    final stat = await file.stat();
+    try {
+      final db = await openDatabase(
+        path,
+        readOnly: true,
+        singleInstance: false,
+      );
+      try {
+        final equipmentCount = await _countTable(db, 'equipment');
+        final issuesCount = await _countTable(db, 'data_issues');
+        return LampDbSnapshot(
+          exists: true,
+          modified: stat.modified,
+          sizeBytes: stat.size,
+          equipmentCount: equipmentCount,
+          issuesCount: issuesCount,
+        );
+      } finally {
+        await db.close();
+      }
+    } catch (_) {
+      return LampDbSnapshot(
+        exists: true,
+        modified: stat.modified,
+        sizeBytes: stat.size,
+      );
+    }
   }
 
   Future<OldEquipmentSearchResult> searchByFields(
@@ -785,6 +828,12 @@ class OldEquipmentRepository {
         runner: _scanDuplicateModelSerial,
       ),
       _IntegrityScanStepSpec(
+        id: 'serial_scientific_notation',
+        label: 'Έλεγχος σειριακών σε επιστημονική μορφή',
+        weight: 1,
+        runner: _scanScientificSerial,
+      ),
+      _IntegrityScanStepSpec(
         id: 'set_master_self_reference',
         label:
             'Έλεγχος κύριου εξοπλισμού που δείχνει στον ίδιο εξοπλισμό',
@@ -1095,6 +1144,67 @@ class OldEquipmentRepository {
           createdAt: createdAt,
         ),
     ];
+  }
+
+  Future<List<Map<String, Object?>>> _scanScientificSerial(
+    Database db,
+    String createdAt,
+    OldIntegrityCancellationToken token,
+  ) async {
+    final rows = await db.query(
+      'equipment',
+      columns: <String>['code', 'serial_no'],
+      where: "serial_no IS NOT NULL AND TRIM(serial_no) <> ''",
+    );
+    if (token.isCancelled) throw const _OldIntegrityScanCancelled();
+    final out = <Map<String, Object?>>[];
+    for (final row in rows) {
+      if (token.isCancelled) throw const _OldIntegrityScanCancelled();
+      final serial = _toText(row['serial_no']);
+      if (!isScientificSerial(serial)) continue;
+      final code = _toInt(row['code']);
+      out.add(
+        _scanIssue(
+          issueType: 'serial_scientific_notation',
+          message:
+              'Σειριακός σε επιστημονική μορφή για code=$code: $serial',
+          rowNumber: code,
+          columnName: 'serial_no',
+          rawValue: serial,
+          createdAt: createdAt,
+        ),
+      );
+    }
+    return out;
+  }
+
+  /// Ελέγχει αν υπάρχει άλλος εξοπλισμός με ίδιο serial_no (read-only).
+  Future<bool> serialExistsInLamp(
+    String databasePath,
+    String serial, {
+    int? exceptCode,
+  }) async {
+    final path = databasePath.trim();
+    final trimmed = serial.trim();
+    if (path.isEmpty || trimmed.isEmpty) return false;
+    final db = await _databaseProvider.open(
+      path,
+      mode: LampDatabaseMode.read,
+    );
+    final where = exceptCode != null
+        ? 'serial_no = ? AND code <> ?'
+        : 'serial_no = ?';
+    final whereArgs = exceptCode != null
+        ? <Object?>[trimmed, exceptCode]
+        : <Object?>[trimmed];
+    final rows = await db.query(
+      'equipment',
+      columns: <String>['code'],
+      where: where,
+      whereArgs: whereArgs,
+      limit: 1,
+    );
+    return rows.isNotEmpty;
   }
 
   Future<List<Map<String, Object?>>> _scanSelfMaster(

@@ -21,6 +21,7 @@ class LampIntegrityController {
 
   Future<void> runIntegrityCheck({
     required Future<void> Function() reloadIssues,
+    bool autoPersist = false,
   }) async {
     if (integrityChecking) return;
     final dbPath = path.readDbController.text.trim();
@@ -84,6 +85,27 @@ class LampIntegrityController {
         cancelled: scan.cancelled,
         stoppedAfterError: scan.stoppedAfterError,
       );
+      if (autoPersist) {
+        if (newIssues.isEmpty) {
+          final suffix = scan.isPartial ? ' (μερικός έλεγχος)' : '';
+          host.showSnack(
+            'Δεν εντοπίστηκαν νέα προβλήματα$suffix.',
+          );
+          return;
+        }
+        final inserted = await host.shared.repository.insertDataIssues(
+          dbPath,
+          newIssues,
+        );
+        await reloadIssues();
+        if (!host.mounted) return;
+        final suffix = scan.isPartial ? ' από μερικό έλεγχο' : '';
+        host.showSnack(
+          'Καταχωρήθηκαν $inserted νέα προβλήματα$suffix '
+          'στον πίνακα ασυμφωνίας δεδομένων.',
+        );
+        return;
+      }
       final persist = await askPersistIntegrityIssues(
         reportScan: reportScan,
         rawTotalIssueCount: scan.issues.length,

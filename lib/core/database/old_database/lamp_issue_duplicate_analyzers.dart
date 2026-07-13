@@ -2,6 +2,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import 'lamp_issue_resolution_models.dart';
 import 'lamp_issue_resolution_support.dart';
+import 'lamp_scientific_serial.dart';
 
 class LampIssueDuplicateAnalyzers {
   LampIssueDuplicateAnalyzers(this._support);
@@ -95,6 +96,73 @@ class LampIssueDuplicateAnalyzers {
           reassignOperation: 'reassign_serial',
           inputLabel: 'Νέο serial_no',
           extraMetadata: <String, Object?>{'model': model, 'serialNo': serial},
+        ),
+      );
+    }
+    return proposals;
+  }
+
+  Future<List<LampIssueResolutionProposal>> analyzeScientificSerials(
+    Database db,
+  ) async {
+    final issues = await _support.openIssues(db, LampIssueType.scientificSerial);
+    final proposals = <LampIssueResolutionProposal>[];
+    for (final issue in issues) {
+      final code = _support.toInt(issue['row_number']);
+      final rawSerial = _support.text(issue['raw_value']);
+      final issueId = _support.toInt(issue['id']);
+      if (code == null || rawSerial == null || issueId == null) continue;
+      if (!isScientificSerial(rawSerial)) continue;
+
+      final rows = await db.query(
+        'equipment',
+        columns: LampIssueResolutionSupport.equipmentPreviewColumns,
+        where: 'code = ?',
+        whereArgs: <Object?>[code],
+        limit: 1,
+      );
+      if (rows.isEmpty) continue;
+
+      final cleanDigits = scientificSerialCleanDigits(rawSerial);
+      final expectedLength = scientificSerialExpectedLength(rawSerial);
+      final preview = _support.equipmentSummary(rows.first);
+      final notes =
+          'Σειριακός σε επιστημονική μορφή: $rawSerial\n$preview\n'
+          'Ψηφία για αναζήτηση: $cleanDigits · πιθανό μήκος: $expectedLength ψηφία';
+
+      proposals.add(
+        LampIssueResolutionProposal(
+          issueType: LampIssueType.scientificSerial,
+          issueIds: [issueId],
+          sheet: _support.text(issue['sheet']) ?? 'integrity_scan',
+          row: code,
+          column: 'serial_no',
+          originalValue: rawSerial,
+          proposedAction: LampIssueResolutionAction.manualReview,
+          confidence: 55,
+          notes: notes,
+          metadata: <String, Object?>{
+            'cleanDigits': cleanDigits,
+            'expectedLength': expectedLength,
+            'rawSerial': rawSerial,
+            'rows': rows,
+          },
+          options: <LampIssueResolutionOption>[
+            LampIssueResolutionOption(
+              id: 'scientific_serial_reassign_$code',
+              label: 'Καταχώρηση νέου σειριακού',
+              action: LampIssueResolutionAction.manualReview,
+              requiresTextInput: true,
+              inputLabel: 'Νέος σειριακός',
+              metadata: <String, Object?>{
+                'operation': 'reassign_scientific_serial',
+                'targetCode': code,
+                'cleanDigits': cleanDigits,
+                'expectedLength': expectedLength,
+                'rawSerial': rawSerial,
+              },
+            ),
+          ],
         ),
       );
     }

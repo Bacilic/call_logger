@@ -4,9 +4,46 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 /// Τι κάνει ο χρήστης όταν κλείνει την αναφορά επιτυχίας import.
+/// Βοηθητική γραμμή στη φόρμα αποτυχίας εισαγωγής (κλείδωμα vs γενικό).
+String lampImportFailureHintMessage(String errorMessage) {
+  final lower = errorMessage.toLowerCase();
+  if (errorMessage.contains('errno = 32') ||
+      errorMessage.contains('PathAccessException') ||
+      errorMessage.contains('χρησιμοποιείται') ||
+      lower.contains('another process')) {
+    return 'Το αρχείο της βάσης εξαγωγής πιθανόν χρησιμοποιείται από την εφαρμογή — '
+        'άλλαξε τη βάση εξόδου ή τη βάση ανάγνωσης και δοκίμασε ξανά.';
+  }
+  return 'Το αρχείο βάσης μπορεί να είναι ημιτελές ή να μην έχει δημιουργηθεί.';
+}
+
 enum LampImportReportCloseAction {
   dismiss,
   runIntegrityCheck,
+}
+
+/// Αποτέλεσμα κλεισίματος αναφοράς εισαγωγής.
+class LampImportReportOutcome {
+  const LampImportReportOutcome({
+    required this.action,
+    this.setAsReadDatabase = false,
+  });
+
+  final LampImportReportCloseAction action;
+  final bool setAsReadDatabase;
+}
+
+/// Πλαίσιο ανάγνωσης για την αναφορά επιτυχίας (ορατότητα διακόπτη).
+class LampImportReadPathContext {
+  const LampImportReadPathContext({
+    required this.readPathEmpty,
+    required this.readDiffersFromOutput,
+    this.currentReadFileName,
+  });
+
+  final bool readPathEmpty;
+  final bool readDiffersFromOutput;
+  final String? currentReadFileName;
 }
 
 /// Κατάσταση Φάσης Α — πρόοδος εισαγωγής.
@@ -53,6 +90,7 @@ sealed class LampImportReportUiState {
     required int durationSeconds,
     required Map<String, int> importedRows,
     required int issueCount,
+    required LampImportReadPathContext readPathContext,
   }) = LampImportReportSuccessUiState;
 
   factory LampImportReportUiState.failure({
@@ -66,12 +104,14 @@ class LampImportReportSuccessUiState extends LampImportReportUiState {
     required this.durationSeconds,
     required this.importedRows,
     required this.issueCount,
+    required this.readPathContext,
   });
 
   final String databaseFileName;
   final int durationSeconds;
   final Map<String, int> importedRows;
   final int issueCount;
+  final LampImportReadPathContext readPathContext;
 }
 
 class LampImportReportFailureUiState extends LampImportReportUiState {
@@ -151,16 +191,17 @@ typedef LampImportExecutor = Future<LampImportResult> Function({
 });
 
 /// Εμφανίζει διάλογο προόδου/αναφοράς και εκτελεί το import.
-Future<LampImportReportCloseAction?> showLampImportReportFlow({
+Future<LampImportReportOutcome?> showLampImportReportFlow({
   required BuildContext context,
   required LampImportExecutor importFuture,
+  required LampImportReadPathContext readPathContext,
 }) async {
   final progressNotifier = ValueNotifier<LampImportProgressUiState>(
     const LampImportProgressUiState(),
   );
   final reportNotifier = ValueNotifier<LampImportReportUiState?>(null);
 
-  final dialogFuture = showDialog<LampImportReportCloseAction>(
+  final dialogFuture = showDialog<LampImportReportOutcome>(
     context: context,
     barrierDismissible: false,
     builder: (dialogContext) => LampImportReportDialog(
@@ -183,6 +224,7 @@ Future<LampImportReportCloseAction?> showLampImportReportFlow({
       durationSeconds: 0,
       importedRows: result.importedRows,
       issueCount: result.issueCount,
+      readPathContext: readPathContext,
     );
   } catch (error) {
     reportNotifier.value = LampImportReportUiState.failure(
@@ -193,19 +235,20 @@ Future<LampImportReportCloseAction?> showLampImportReportFlow({
   return dialogFuture;
 }
 
-Future<LampImportReportCloseAction?> showLampImportReportFlowWithDuration({
+Future<LampImportReportOutcome?> showLampImportReportFlowWithDuration({
   required BuildContext context,
   required Future<LampImportResult> Function(
     void Function(LampImportProgress progress) onProgress,
   ) importRunner,
   required Stopwatch stopwatch,
+  required LampImportReadPathContext readPathContext,
 }) async {
   final progressNotifier = ValueNotifier<LampImportProgressUiState>(
     const LampImportProgressUiState(),
   );
   final reportNotifier = ValueNotifier<LampImportReportUiState?>(null);
 
-  final dialogFuture = showDialog<LampImportReportCloseAction>(
+  final dialogFuture = showDialog<LampImportReportOutcome>(
     context: context,
     barrierDismissible: false,
     builder: (dialogContext) => LampImportReportDialog(
@@ -227,6 +270,7 @@ Future<LampImportReportCloseAction?> showLampImportReportFlowWithDuration({
       durationSeconds: stopwatch.elapsed.inSeconds,
       importedRows: result.importedRows,
       issueCount: result.issueCount,
+      readPathContext: readPathContext,
     );
   } catch (error) {
     stopwatch.stop();
@@ -323,16 +367,41 @@ class LampImportReportDialog extends StatelessWidget {
   }
 }
 
-class _LampImportSuccessReportDialog extends StatelessWidget {
+class _LampImportSuccessReportDialog extends StatefulWidget {
   const _LampImportSuccessReportDialog({required this.report});
 
   final LampImportReportSuccessUiState report;
 
   @override
+  State<_LampImportSuccessReportDialog> createState() =>
+      _LampImportSuccessReportDialogState();
+}
+
+class _LampImportSuccessReportDialogState
+    extends State<_LampImportSuccessReportDialog> {
+  bool _setAsReadDatabase = false;
+
+  bool get _showReadSwitch {
+    final ctx = widget.report.readPathContext;
+    return !ctx.readPathEmpty && ctx.readDiffersFromOutput;
+  }
+
+  void _close(LampImportReportCloseAction action) {
+    Navigator.of(context).pop(
+      LampImportReportOutcome(
+        action: action,
+        setAsReadDatabase: _showReadSwitch && _setAsReadDatabase,
+      ),
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final report = widget.report;
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final issueColor = report.issueCount > 0 ? scheme.error : scheme.onSurface;
+    final readContext = report.readPathContext;
 
     return AlertDialog(
       title: const Text('Αναφορά εισαγωγής Excel'),
@@ -376,13 +445,29 @@ class _LampImportSuccessReportDialog extends StatelessWidget {
                 style: theme.textTheme.bodySmall,
               ),
               const SizedBox(height: 12),
+              if (readContext.readPathEmpty) ...[
+                SelectableText(
+                  'Η νέα βάση ορίστηκε ως βάση ανάγνωσης (το πεδίο ανάγνωσης ήταν κενό).',
+                  style: theme.textTheme.bodySmall,
+                ),
+                const SizedBox(height: 12),
+              ] else if (_showReadSwitch) ...[
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  value: _setAsReadDatabase,
+                  onChanged: (value) {
+                    setState(() => _setAsReadDatabase = value);
+                  },
+                  title: Text(
+                    'Η βάση [${report.databaseFileName}] δημιουργήθηκε με επιτυχία, '
+                    'θέλετε να γίνει η Βάση Δεδομένων που χρησιμοποιεί η Λάμπα',
+                    style: theme.textTheme.bodyMedium,
+                  ),
+                ),
+                const SizedBox(height: 12),
+              ],
               SelectableText(
-                'Η διαδρομή «ανάγνωσης» ευθυγραμμίστηκε με το αρχείο εξόδου (ίδιο .db).',
-                style: theme.textTheme.bodySmall,
-              ),
-              const SizedBox(height: 12),
-              SelectableText(
-                'Συνιστάται πλήρης έλεγχος της βάσης — πατήστε «Έλεγχος για προβλήματα».',
+                'Ο έλεγχος προβλημάτων της βάσης εκτελείται αυτόματα μετά την εισαγωγή.',
                 style: theme.textTheme.bodyMedium,
               ),
             ],
@@ -391,16 +476,8 @@ class _LampImportSuccessReportDialog extends StatelessWidget {
       ),
       actions: [
         TextButton(
-          onPressed: () => Navigator.of(
-            context,
-          ).pop(LampImportReportCloseAction.dismiss),
+          onPressed: () => _close(LampImportReportCloseAction.dismiss),
           child: const Text('Κλείσιμο'),
-        ),
-        FilledButton(
-          onPressed: () => Navigator.of(
-            context,
-          ).pop(LampImportReportCloseAction.runIntegrityCheck),
-          child: const Text('Έλεγχος για προβλήματα'),
         ),
       ],
     );
@@ -439,7 +516,7 @@ class _LampImportFailureReportDialog extends StatelessWidget {
               ),
               const SizedBox(height: 10),
               SelectableText(
-                'Το αρχείο βάσης μπορεί να είναι ημιτελές ή να μην έχει δημιουργηθεί.',
+                lampImportFailureHintMessage(report.errorMessage),
                 style: theme.textTheme.bodySmall,
               ),
             ],

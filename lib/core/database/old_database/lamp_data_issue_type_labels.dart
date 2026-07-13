@@ -9,6 +9,8 @@ String lampDataIssueTypeDisplayLabel(String issueType) {
       return 'Διπλότυποι αριθμοί παγίου';
     case 'duplicate_model_serial':
       return 'Διπλότυποι συνδυασμοί μοντέλου / σειριακού';
+    case 'serial_scientific_notation':
+      return 'Σειριακοί σε επιστημονική μορφή';
     case 'set_master_self_reference':
       return 'Κύριος εξοπλισμός που δείχνει στον ίδιο εξοπλισμό';
     case 'set_master_missing_target':
