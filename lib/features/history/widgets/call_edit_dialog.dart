@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
+import '../../../core/database/audit_service.dart';
+import '../../../core/services/save_confirmation_summary.dart';
 import '../../../core/utils/history_entity_display_utils.dart';
 import '../../../core/widgets/lexicon_spell_text_form_field.dart';
 import '../../../core/widgets/spell_check_controller.dart';
@@ -219,10 +221,20 @@ class _CallEditDialogState extends ConsumerState<_CallEditDialog>
     try {
       await ref.read(historyCallActionsServiceProvider).saveEditedCall(updated);
       if (!mounted) return;
+      final saveMessage = buildSaveConfirmationMessage(
+        entityType: AuditEntityTypes.call,
+        entityLabel: '#${_original!.id}',
+        oldMap: _original!.toMap(),
+        newMap: updated.toMap(),
+        isNew: false,
+      );
       Navigator.of(context).pop();
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Η κλήση ενημερώθηκε.')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(saveMessage),
+          duration: saveConfirmationSnackBarDuration(saveMessage),
+        ),
+      );
     } catch (e) {
       if (!mounted) return;
       setState(() => _saving = false);

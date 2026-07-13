@@ -175,27 +175,43 @@ class LampIssueDuplicateAnalyzers {
       db,
       LampIssueType.setMasterSelfReference,
     );
-    return <LampIssueResolutionProposal>[
-      for (final issue in issues)
-        if (_support.toInt(issue['row_number']) != null)
-          LampIssueResolutionProposal(
-            issueType: LampIssueType.setMasterSelfReference,
-            issueIds: [_support.toInt(issue['id'])].whereType<int>().toList(),
-            sheet: _support.text(issue['sheet']),
-            row: _support.toInt(issue['row_number']),
-            column: 'set_master',
-            originalValue: _support.text(issue['raw_value']),
-            proposedAction: LampIssueResolutionAction.autoFix,
-            proposedId: null,
-            proposedMatch: 'δείκτης κύριου εξοπλισμού = κενό',
-            confidence: 98,
-            notes: 'Ασφαλής εκκαθάριση αυτοαναφοράς κύριου εξοπλισμού.',
-            metadata: <String, Object?>{
-              'operation': 'clear_set_master',
-              'code': _support.toInt(issue['row_number']),
-            },
-          ),
-    ];
+    final proposals = <LampIssueResolutionProposal>[];
+    for (final issue in issues) {
+      final code = _codeFromSetMasterSelfReferenceIssue(issue);
+      if (code == null) continue;
+      proposals.add(
+        LampIssueResolutionProposal(
+          issueType: LampIssueType.setMasterSelfReference,
+          issueIds: [_support.toInt(issue['id'])].whereType<int>().toList(),
+          sheet: _support.text(issue['sheet']),
+          row: code,
+          column: 'set_master',
+          originalValue: _support.text(issue['raw_value']),
+          proposedAction: LampIssueResolutionAction.autoFix,
+          proposedId: null,
+          proposedMatch: 'δείκτης κύριου εξοπλισμού = κενό',
+          confidence: 98,
+          notes:
+              'Η διόρθωση δεδομένων έχει ήδη εφαρμοστεί κατά το import. '
+              'Η ενέργεια επιβεβαιώνει την κατάσταση και καθαρίζει το ιστορικό.',
+          metadata: <String, Object?>{
+            'operation': 'clear_set_master',
+            'code': code,
+          },
+        ),
+      );
+    }
+    return proposals;
+  }
+
+  int? _codeFromSetMasterSelfReferenceIssue(Map<String, Object?> issue) {
+    final fromRow = _support.toInt(issue['row_number']);
+    if (fromRow != null) return fromRow;
+    final message = _support.text(issue['message']);
+    if (message == null) return null;
+    final match = RegExp(r'code=(\d+)').firstMatch(message);
+    if (match == null) return null;
+    return int.tryParse(match.group(1)!);
   }
 
   Future<List<LampIssueResolutionProposal>> analyzeSetMasterCycles(

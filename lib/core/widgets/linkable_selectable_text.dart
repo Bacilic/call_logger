@@ -1,11 +1,8 @@
-﻿import 'dart:io';
-
-import 'package:flutter/gestures.dart';
+﻿import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
 
-import '../../features/database/services/database_maintenance_service.dart';
 import '../utils/linkable_text_parser.dart';
+import 'linkable_target_opener.dart';
 
 /// Επιλέξιμο κείμενο με αυτόματη αναγνώριση URL, UNC και τοπικών διαδρομών Windows.
 class LinkableSelectableText extends StatefulWidget {
@@ -14,18 +11,22 @@ class LinkableSelectableText extends StatefulWidget {
     required this.text,
     this.style,
     this.linkStyle,
+    this.targetOpener,
   });
 
   final String text;
   final TextStyle? style;
   final TextStyle? linkStyle;
+  final LinkableTargetOpener? targetOpener;
 
   @override
-  State<LinkableSelectableText> createState() => _LinkableSelectableTextState();
+  State<LinkableSelectableText> createState() => LinkableSelectableTextState();
 }
 
-class _LinkableSelectableTextState extends State<LinkableSelectableText> {
+class LinkableSelectableTextState extends State<LinkableSelectableText> {
   final List<TapGestureRecognizer> _recognizers = [];
+  late final LinkableTargetOpener _targetOpener =
+      widget.targetOpener ?? LinkableTargetOpener();
 
   @override
   void dispose() {
@@ -89,44 +90,36 @@ class _LinkableSelectableTextState extends State<LinkableSelectableText> {
     String target,
     LinkableTextKind kind,
   ) async {
-    try {
-      switch (kind) {
-        case LinkableTextKind.url:
-          final uri = Uri.tryParse(target);
-          if (uri == null || !uri.hasScheme) {
-            _showSnackBar(context, 'Μη έγκυρο URL: $target');
-            return;
-          }
-          final opened = await launchUrl(
-            uri,
-            mode: LaunchMode.externalApplication,
-          );
-          if (!opened && context.mounted) {
-            _showSnackBar(context, 'Αποτυχία ανοίγματος URL.');
-          }
-        case LinkableTextKind.uncPath:
-        case LinkableTextKind.localPath:
-          await _openFilesystemPath(target);
-      }
-    } catch (_) {
-      if (!context.mounted) return;
-      _showSnackBar(context, 'Αποτυχία ανοίγματος: $target');
-    }
-  }
+    final result = await _targetOpener.open(target: target, kind: kind);
+    if (!context.mounted) return;
 
-  Future<void> _openFilesystemPath(String path) async {
-    final normalized = path.replaceAll('/', r'\');
-    final file = File(normalized);
-    if (file.existsSync()) {
-      await DatabaseMaintenanceService.revealFileInExplorer(normalized);
-      return;
+    final message = switch (result) {
+      LinkOpenResult.opened => null,
+      LinkOpenResult.pathNotFound => 'Η διαδρομή δεν βρέθηκε: $target',
+      LinkOpenResult.invalidUrl => 'Μη έγκυρο URL: $target',
+      LinkOpenResult.urlOpenFailed => 'Αποτυχία ανοίγματος URL.',
+      LinkOpenResult.error => 'Αποτυχία ανοίγματος: $target',
+    };
+    if (message != null) {
+      _showSnackBar(context, message);
     }
-    await DatabaseMaintenanceService.openFolderInExplorer(normalized);
   }
 
   void _showSnackBar(BuildContext context, String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(message)),
     );
+  }
+
+  /// Ενεργοποιεί το ίδιο onTap που θα έτρεχε από κλικ στον αναγνωρισμένο σύνδεσμο.
+  @visibleForTesting
+  Future<void> triggerLinkTap(String target) async {
+    for (final segment in LinkableTextParser.parse(widget.text)) {
+      if (segment is LinkLinkableTextSegment && segment.text == target) {
+        await _openLink(context, target, segment.kind);
+        return;
+      }
+    }
+    throw StateError('Δεν βρέθηκε σύνδεσμος: $target');
   }
 }

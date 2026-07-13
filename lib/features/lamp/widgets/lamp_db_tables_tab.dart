@@ -193,7 +193,7 @@ class _LampDbTablesTabState extends State<LampDbTablesTab> {
     if (path.isEmpty) return;
     int count;
     try {
-      count = await widget.repository.dataIssueCount(path);
+      count = await widget.repository.totalDataIssueCount(path);
     } catch (e) {
       _showSnack('Αποτυχία ανάγνωσης πλήθους εγγραφών: $e', isError: true);
       return;
@@ -545,7 +545,7 @@ class _LampDbTablesTabState extends State<LampDbTablesTab> {
         child: Text('Δεν υπάρχουν στήλες ή σειρές προς εμφάνιση.'),
       );
     }
-    return _SimpleDataPreview(
+    return LampSimpleDataPreview(
       result: pre,
     );
   }
@@ -693,16 +693,16 @@ class _LampFileStatsCardState extends State<_LampFileStatsCard> {
 ///
 /// [Scrollbar] δένει ρητά `ScrollController` (ίδιο με το κάθετο [SingleChildScrollView]) ώστε
 /// να μην σπάει το paint σε αλλαγή μεγέθους παραθύρου / Windows (χωρίς `PrimaryScrollController`).
-class _SimpleDataPreview extends StatefulWidget {
-  const _SimpleDataPreview({required this.result});
+class LampSimpleDataPreview extends StatefulWidget {
+  const LampSimpleDataPreview({super.key, required this.result});
 
   final TablePreviewResult result;
 
   @override
-  State<_SimpleDataPreview> createState() => _SimpleDataPreviewState();
+  State<LampSimpleDataPreview> createState() => _LampSimpleDataPreviewState();
 }
 
-class _SimpleDataPreviewState extends State<_SimpleDataPreview> {
+class _LampSimpleDataPreviewState extends State<LampSimpleDataPreview> {
   final ScrollController _verticalScroll = ScrollController();
   final ScrollController _horizontalScroll = ScrollController();
 
@@ -718,63 +718,69 @@ class _SimpleDataPreviewState extends State<_SimpleDataPreview> {
     return LayoutBuilder(
       builder: (context, constraints) {
         return Scrollbar(
-          controller: _verticalScroll,
+          controller: _horizontalScroll,
           thumbVisibility: true,
-          child: SingleChildScrollView(
+          notificationPredicate: (notification) => notification.depth == 1,
+          child: Scrollbar(
             controller: _verticalScroll,
-            primary: false,
+            thumbVisibility: true,
+            notificationPredicate: (notification) => notification.depth == 0,
             child: SingleChildScrollView(
-              controller: _horizontalScroll,
+              controller: _verticalScroll,
               primary: false,
-              scrollDirection: Axis.horizontal,
-              child: ConstrainedBox(
-                constraints: BoxConstraints(
-                  minWidth: constraints.maxWidth,
-                ),
-                child: DataTable(
-                  showCheckboxColumn: false,
-                  columnSpacing: 8,
-                  horizontalMargin: 8,
-                  headingRowHeight: 40,
-                  dataRowMaxHeight: 64,
-                  columns: widget.result.columns
-                      .map(
-                        (c) => DataColumn(
-                          label: ConstrainedBox(
-                            constraints: const BoxConstraints(
-                              minWidth: 64,
-                              maxWidth: 180,
-                            ),
-                            child: Text(
-                              c,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        ),
-                      )
-                      .toList(),
-                  rows: widget.result.rows.map((r) {
-                    return DataRow(
-                      cells: widget.result.columns.map((c) {
-                        final v = r[c];
-                        final s = v?.toString() ?? '';
-                        return DataCell(
-                          ConstrainedBox(
-                            constraints: const BoxConstraints(
-                              minWidth: 64,
-                              maxWidth: 220,
-                            ),
-                            child: Text(
-                              s,
-                              maxLines: 3,
-                              overflow: TextOverflow.ellipsis,
+              child: SingleChildScrollView(
+                controller: _horizontalScroll,
+                primary: false,
+                scrollDirection: Axis.horizontal,
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(
+                    minWidth: constraints.maxWidth,
+                  ),
+                  child: DataTable(
+                    showCheckboxColumn: false,
+                    columnSpacing: 8,
+                    horizontalMargin: 8,
+                    headingRowHeight: 40,
+                    dataRowMaxHeight: 64,
+                    columns: widget.result.columns
+                        .map(
+                          (c) => DataColumn(
+                            label: ConstrainedBox(
+                              constraints: const BoxConstraints(
+                                minWidth: 64,
+                                maxWidth: 180,
+                              ),
+                              child: Text(
+                                c,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
                             ),
                           ),
-                        );
-                      }).toList(),
-                    );
-                  }).toList(),
+                        )
+                        .toList(),
+                    rows: widget.result.rows.map((r) {
+                      return DataRow(
+                        cells: widget.result.columns.map((c) {
+                          final v = r[c];
+                          final s = v?.toString() ?? '';
+                          return DataCell(
+                            ConstrainedBox(
+                              constraints: const BoxConstraints(
+                                minWidth: 64,
+                                maxWidth: 220,
+                              ),
+                              child: Text(
+                                s,
+                                maxLines: 3,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          );
+                        }).toList(),
+                      );
+                    }).toList(),
+                  ),
                 ),
               ),
             ),

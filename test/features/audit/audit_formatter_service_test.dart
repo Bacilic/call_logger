@@ -77,7 +77,7 @@ void main() {
     final s = formatter.summaryLine(row);
     expect(
       s,
-      'ΤΡΟΠΟΠΟΙΗΣΗ ΤΜΗΜΑΤΟΣ · Πληροφορική - Αλλαγή χρώματος από Μπλε σε Κόκκινο',
+      'ΤΡΟΠΟΠΟΙΗΣΗ ΤΜΗΜΑΤΟΣ · Πληροφορική - Αλλαγή χρώματος από Μπλε #1976D2 σε Κόκκινο #EF5350',
     );
   });
 
@@ -137,6 +137,38 @@ void main() {
     final s = formatter.summaryLine(row, labels: labels);
     expect(s, contains('Γραμματεία'));
     expect(s, isNot(contains('#46')));
+  });
+
+  test('summaryLine μίας αλλαγής χρώματος τμήματος — τίτλος όπως σήμερα', () {
+    final row = AuditLogModel(
+      id: 9,
+      action: 'ΤΡΟΠΟΠΟΙΗΣΗ ΤΜΗΜΑΤΟΣ',
+      entityType: 'department',
+      entityName: 'Πληροφορική',
+      oldValuesJson: '{"color":"#1976D2"}',
+      newValuesJson: '{"color":"#33691E"}',
+    );
+    final s = formatter.summaryLine(row);
+    expect(
+      s,
+      'ΤΡΟΠΟΠΟΙΗΣΗ ΤΜΗΜΑΤΟΣ · Πληροφορική - Αλλαγή χρώματος από Μπλε #1976D2 σε #33691E',
+    );
+  });
+
+  test('summaryLine πολλαπλών αλλαγών τμήματος — σύντομος τίτλος με ετικέτες', () {
+    final row = AuditLogModel(
+      id: 10,
+      action: 'ΤΡΟΠΟΠΟΙΗΣΗ ΤΜΗΜΑΤΟΣ',
+      entityType: 'department',
+      entityName: 'Πληροφορική',
+      oldValuesJson: '{"color":"#1976D2","map_x":10.0,"map_floor":"1"}',
+      newValuesJson: '{"color":"#33691E","map_x":50.0,"map_floor":"2"}',
+    );
+    final s = formatter.summaryLine(row);
+    expect(
+      s,
+      'ΤΡΟΠΟΠΟΙΗΣΗ ΤΜΗΜΑΤΟΣ · Πληροφορική - 3 αλλαγές: χρώμα, όροφος, θέση',
+    );
   });
 
   test('describeChanges department_id technical mode κρατά id', () {

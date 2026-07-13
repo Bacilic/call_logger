@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../../../features/calls/utils/remote_param_validator.dart';
+import '../../../../features/calls/utils/vnc_remote_target.dart';
 import 'remote_tool_form_controller.dart';
 
 class RemoteToolTestPanel extends StatelessWidget {
@@ -21,6 +23,17 @@ class RemoteToolTestPanel extends StatelessWidget {
       children: [
         TextFormField(
           controller: controller.testIpC,
+          autovalidateMode: AutovalidateMode.onUserInteraction,
+          validator: (value) {
+            final trimmed = (value ?? '').trim();
+            if (trimmed.isEmpty) return null;
+            return RemoteParamValidator.validateHostAddress(trimmed);
+          },
+          inputFormatters: [CommaToDotDecimalSeparatorFormatter()],
+          keyboardType: const TextInputType.numberWithOptions(
+            decimal: true,
+            signed: false,
+          ),
           decoration: const InputDecoration(
             labelText: 'Δοκιμαστική IP / Hostname (για δοκιμή)',
             helperText:

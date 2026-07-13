@@ -10,6 +10,7 @@ import '../../features/history/models/dashboard_summary_model.dart';
 import 'database_helper.dart';
 import '../errors/call_save_exception.dart';
 import 'audit_service.dart';
+import 'directory_support.dart';
 import '../utils/history_entity_display_utils.dart';
 import '../utils/search_text_normalizer.dart';
 
@@ -116,10 +117,16 @@ class CallsRepository
   }
 
   /// Εισαγωγή κλήσης σε υπάρχον [DatabaseExecutor] (π.χ. κοινό transaction με task).
+  ///
+  /// Αν δοθεί [afterCallInserted], εκτελείται μετά την κύρια εγγραφή ΔΗΜΙΟΥΡΓΙΑ ΚΛΗΣΗΣ
+  /// και περνά suffix προέλευσης για παράγωγες εγγραφές καταλόγου (Φάση 3).
+  /// Βλ. [DirectorySupport] — χάρτης αλυσίδας audit.
   Future<int> insertCallOnExecutor(
     DatabaseExecutor executor,
-    CallModel call,
-  ) async {
+    CallModel call, {
+    Future<void> Function(DatabaseExecutor txn, String auditOriginSuffix)?
+        afterCallInserted,
+  }) async {
     final map = _callInsertMap(call);
     map['search_index'] = await _buildCallSearchIndex(executor, map);
     final id = await executor.insert('calls', map);
@@ -144,6 +151,12 @@ class CallsRepository
       entityName: entityName.isEmpty ? null : entityName,
       newValues: nv.isEmpty ? null : nv,
     );
+    if (afterCallInserted != null) {
+      await afterCallInserted(
+        executor,
+        DirectorySupport.auditOriginSuffixFromCall(id),
+      );
+    }
     return id;
   }
 

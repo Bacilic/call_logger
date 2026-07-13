@@ -10,6 +10,9 @@ import '../providers/dashboard_provider.dart';
 import 'dashboard_charts.dart';
 import 'dashboard_palette_colors.dart';
 
+const _kLansweeperReportBadgeAsset = 'assets/lansweeper tickets.png';
+const _kLansweeperReportBadgeTooltip = 'Αναφορές Lansweeper';
+
 class KpiTopEntity {
   const KpiTopEntity({
     required this.title,
@@ -36,6 +39,7 @@ class KpiCardData {
     required this.points,
     this.sparklineTooltips = const [],
     this.barPoints = const <KpiBarSparklinePoint>[],
+    this.showLansweeperReportBadge = false,
     required this.colors,
   });
 
@@ -49,6 +53,7 @@ class KpiCardData {
   final List<double> points;
   final List<String> sparklineTooltips;
   final List<KpiBarSparklinePoint> barPoints;
+  final bool showLansweeperReportBadge;
   final KpiTone colors;
 }
 
@@ -109,87 +114,106 @@ class KpiGrid extends StatelessWidget {
                   ),
                 ],
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+              child: Stack(
+                clipBehavior: Clip.none,
                 children: [
-                  Container(
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(10),
-                      color: card.colors.iconSurface,
-                    ),
-                    child: Icon(
-                      card.icon,
-                      color: card.colors.iconColor,
-                      size: 22,
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  EllipsisTooltipText(
-                    text: card.title,
-                    maxLines: 2,
-                    style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                      fontWeight: FontWeight.w600,
-                      color: paletteColors.kpiTitle,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Expanded(
-                    child: Align(
-                      alignment: Alignment.centerLeft,
-                      child: FittedBox(
-                        fit: BoxFit.scaleDown,
-                        alignment: Alignment.centerLeft,
-                        child: Text(
-                          card.value,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.headlineSmall
-                              ?.copyWith(
-                                fontWeight: FontWeight.w800,
-                                letterSpacing: -0.8,
-                                color: card.colors.valueColor,
-                              ),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(10),
+                          color: card.colors.iconSurface,
+                        ),
+                        child: Icon(
+                          card.icon,
+                          color: card.colors.iconColor,
+                          size: 22,
                         ),
                       ),
-                    ),
-                  ),
-                  Row(
-                    children: [
-                      if (card.showTrendIndicator)
-                        Text(
-                          card.isUp ? '▲ ' : '▼ ',
-                          style: TextStyle(
-                            color: card.isUp
-                                ? const Color(0xFF16A34A)
-                                : const Color(0xFFDC2626),
-                            fontWeight: FontWeight.w700,
+                      const SizedBox(height: 10),
+                      EllipsisTooltipText(
+                        text: card.title,
+                        maxLines: 2,
+                        style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                          fontWeight: FontWeight.w600,
+                          color: paletteColors.kpiTitle,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Expanded(
+                        child: Align(
+                          alignment: Alignment.centerLeft,
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            alignment: Alignment.centerLeft,
+                            child: Text(
+                              card.value,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: Theme.of(context).textTheme.headlineSmall
+                                  ?.copyWith(
+                                    fontWeight: FontWeight.w800,
+                                    letterSpacing: -0.8,
+                                    color: card.colors.valueColor,
+                                  ),
+                            ),
                           ),
                         ),
-                      Expanded(
-                        child: EllipsisTooltipText(
-                          text: card.subtitle,
-                          style: Theme.of(context).textTheme.bodySmall
-                              ?.copyWith(color: paletteColors.kpiSubtitle),
-                        ),
                       ),
-                      SizedBox(
-                        width: 86,
-                        height: card.useBarSparkline ? 52 : 34,
-                        child: card.useBarSparkline
-                            ? BarSparklineChart(
-                                points: card.barPoints,
-                                color: card.colors.sparkColor,
-                              )
-                            : SparklineChart(
-                                points: card.points,
-                                tooltips: card.sparklineTooltips,
-                                color: card.colors.sparkColor,
+                      Row(
+                        children: [
+                          if (card.showTrendIndicator)
+                            Text(
+                              card.isUp ? '▲ ' : '▼ ',
+                              style: TextStyle(
+                                color: card.isUp
+                                    ? const Color(0xFF16A34A)
+                                    : const Color(0xFFDC2626),
+                                fontWeight: FontWeight.w700,
                               ),
+                            ),
+                          Expanded(
+                            child: EllipsisTooltipText(
+                              text: card.subtitle,
+                              style: Theme.of(context).textTheme.bodySmall
+                                  ?.copyWith(color: paletteColors.kpiSubtitle),
+                            ),
+                          ),
+                          SizedBox(
+                            width: 86,
+                            height: card.useBarSparkline ? 52 : 34,
+                            child: card.useBarSparkline
+                                ? BarSparklineChart(
+                                    points: card.barPoints,
+                                    color: card.colors.sparkColor,
+                                  )
+                                : SparklineChart(
+                                    points: card.points,
+                                    tooltips: card.sparklineTooltips,
+                                    color: card.colors.sparkColor,
+                                  ),
+                          ),
+                        ],
                       ),
                     ],
                   ),
+                  if (card.showLansweeperReportBadge)
+                    Positioned(
+                      top: 0,
+                      right: 0,
+                      child: Tooltip(
+                        message: _kLansweeperReportBadgeTooltip,
+                        child: Image.asset(
+                          _kLansweeperReportBadgeAsset,
+                          width: 32,
+                          height: 32,
+                          fit: BoxFit.contain,
+                        ),
+                      ),
+                    ),
                 ],
               ),
             ),

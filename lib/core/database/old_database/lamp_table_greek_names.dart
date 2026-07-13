@@ -6,6 +6,7 @@ const Map<String, String> kLampTableDisplayNamesGreek = {
   'owners': 'Ιδιοκτήτες (owners)',
   'model': 'Μοντέλα (model)',
   'contracts': 'Συμβάσεις (contracts)',
+  'search_index': 'Ευρετηρίαση (search_index)',
   'meta': 'Μετα-δεδομένα (meta)',
   'etl_run': 'Εκτέλεση ETL (etl_run)',
   'import_log': 'Καταγραφή import (import_log)',
@@ -14,18 +15,30 @@ const Map<String, String> kLampTableDisplayNamesGreek = {
 String lampTableDisplayGreek(String tableName) =>
     kLampTableDisplayNamesGreek[tableName] ?? tableName;
 
-/// Σειρά πινάκων στο UI: γνωστοί τυπικοί πρώτα, οι λοιποί αλφαβητικά τελικά.
+/// Σειρά πινάκων στο UI: πίνακες δεδομένων πρώτα, άγνωστοι αλφαβητικά, τεχνικοί τελευταίοι.
 int lampTableSortOrderKey(String a, String b) {
-  const preferred = <String>[
+  const dataTables = <String>[
     'equipment',
-    'data_issues',
     'offices',
     'owners',
     'model',
     'contracts',
   ];
-  final ia = preferred.indexOf(a);
-  final ib = preferred.indexOf(b);
+  const technicalTables = <String>[
+    'data_issues',
+    'search_index',
+  ];
+
+  final isTechA = technicalTables.contains(a);
+  final isTechB = technicalTables.contains(b);
+  if (isTechA && isTechB) {
+    return technicalTables.indexOf(a).compareTo(technicalTables.indexOf(b));
+  }
+  if (isTechA) return 1;
+  if (isTechB) return -1;
+
+  final ia = dataTables.indexOf(a);
+  final ib = dataTables.indexOf(b);
   if (ia >= 0 && ib >= 0) return ia.compareTo(ib);
   if (ia >= 0) return -1;
   if (ib >= 0) return 1;

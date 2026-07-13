@@ -1,8 +1,10 @@
 import 'dart:developer' as developer;
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import '../../../core/database/database_helper.dart';
+import '../../../core/database/directory_support.dart';
 import '../../../core/database/department_repository.dart';
 import '../../../core/database/equipment_repository.dart';
 import '../../../core/database/phone_repository.dart';
@@ -49,6 +51,61 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState>
   /// True μετά πράσινο (+) που δημιούργησε καλόντα χωρίς τηλέφωνο — το πρώτο
   /// πληκτρολόγημα τηλεφώνου συμπληρώνει, όχι νέο lookup.
   bool _callerAwaitingPhoneAssociation = false;
+
+  /// Παράγωγες εγγραφές audit πριν το id κλήσης/εκκρεμότητας (καλωδίωση Φάσης 3).
+  final PendingAuditOriginRows _pendingAuditOriginRows = PendingAuditOriginRows();
+
+  static const Set<String> _kMainAuditActionsWithoutOrigin = {
+    'ΔΗΜΙΟΥΡΓΙΑ ΚΛΗΣΗΣ',
+    'ΔΗΜΙΟΥΡΓΙΑ ΕΚΚΡΕΜΟΤΗΤΑΣ',
+  };
+
+  Future<int> maxAuditLogId(DatabaseExecutor executor) async {
+    final rows = await executor.rawQuery('SELECT MAX(id) AS m FROM audit_log');
+    return (rows.first['m'] as int?) ?? 0;
+  }
+
+  /// Καταγράφει νέες παράγωγες εγγραφές audit μετά από associate (όχι κύριες κλήσης/εκκρεμότητας).
+  Future<void> trackDerivativeAuditsSince(int sinceId) async {
+    final db = await DatabaseHelper.instance.database;
+    final rows = await db.query(
+      'audit_log',
+      columns: ['id', 'action'],
+      where: 'id > ?',
+      whereArgs: [sinceId],
+    );
+    for (final row in rows) {
+      final action = (row['action'] as String?)?.trim() ?? '';
+      if (_kMainAuditActionsWithoutOrigin.contains(action)) continue;
+      _pendingAuditOriginRows.track(row['id'] as int?);
+    }
+  }
+
+  /// Εφαρμόζει «από κλήση #N» στις εκκρεμείς παράγωγες εγγραφές (μέσα σε transaction submit).
+  Future<void> stampPendingAuditOriginsForCall(
+    DatabaseExecutor txn,
+    int callId,
+  ) async {
+    if (_pendingAuditOriginRows.isEmpty) return;
+    await _pendingAuditOriginRows.applyOriginSuffix(
+      txn,
+      DirectorySupport.auditOriginSuffixFromCall(callId),
+    );
+  }
+
+  /// Εφαρμόζει «από εκκρεμότητα #N» στις εκκρεμείς παράγωγες εγγραφές.
+  Future<void> stampPendingAuditOriginsForTask(
+    DatabaseExecutor txn,
+    int taskId,
+  ) async {
+    if (_pendingAuditOriginRows.isEmpty) return;
+    await _pendingAuditOriginRows.applyOriginSuffix(
+      txn,
+      DirectorySupport.auditOriginSuffixFromTask(taskId),
+    );
+  }
+
+  void clearPendingAuditOrigins() => _pendingAuditOriginRows.clear();
 
   bool _computeHasAnyContent({
     String? phoneText,
@@ -596,16 +653,42 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState>
     state = state.copyWithClearSelections();
   }
 
-  /// Ανανεώνει μόνο το [selectedEquipment] από τον τρέχοντα κατάλογο lookup
-  /// (μετά αποθήκευση εξοπλισμού)· δεν αγγίζει equipmentText, candidates ή conflicts.
+  /// Ανανεώνει το [selectedEquipment] από τον τρέχοντα κατάλογο lookup
+  /// (μετά αποθήκευση εξοπλισμού). Αν το [equipmentText] ταυτίζεται με τον
+  /// παλιό κωδικό και ο κωδικός άλλαξε, συγχρονίζεται και το κείμενο πεδίου.
+  /// Ενημερώνει επίσης μπαγιάτικα αντίγραφα στο [equipmentCandidates].
   Future<void> refreshSelectedEquipmentFromLookup() async {
-    final id = state.selectedEquipment?.id;
+    final current = state.selectedEquipment;
+    final id = current?.id;
     if (id == null) return;
     final bundle = await ref.read(lookupServiceProvider.future);
     if (!ref.mounted) return;
     final fresh = bundle.service.findEquipmentById(id);
     if (fresh == null) return;
-    state = state.copyWith(selectedEquipment: fresh);
+
+    final oldCode = current!.code?.trim() ?? '';
+    final newCode = fresh.code?.trim() ?? '';
+    final trimmedText = state.equipmentText.trim();
+    String? syncedEquipmentText;
+    if (oldCode.isNotEmpty &&
+        newCode.isNotEmpty &&
+        oldCode != newCode &&
+        trimmedText == oldCode) {
+      syncedEquipmentText = newCode;
+    }
+
+    List<EquipmentModel>? refreshedCandidates;
+    if (state.equipmentCandidates.any((e) => e.id == id)) {
+      refreshedCandidates = state.equipmentCandidates
+          .map((e) => e.id == id ? fresh : e)
+          .toList();
+    }
+
+    state = state.copyWith(
+      selectedEquipment: fresh,
+      equipmentText: syncedEquipmentText ?? state.equipmentText,
+      equipmentCandidates: refreshedCandidates ?? state.equipmentCandidates,
+    );
   }
 }
 

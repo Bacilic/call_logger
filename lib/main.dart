@@ -16,7 +16,9 @@ import 'package:window_manager/window_manager.dart';
 import 'core/about/version_display.dart';
 import 'core/config/app_config.dart';
 import 'core/utils/windows_cli_error_dialog.dart';
+import 'core/services/crash_log_service.dart';
 import 'core/services/desktop_window_service.dart';
+import 'core/services/settings_service.dart';
 import 'core/errors/app_error_result.dart';
 import 'core/widgets/crash_restart_notice.dart';
 import 'core/widgets/app_init_wrapper.dart';
@@ -77,11 +79,15 @@ bool _platformAsyncErrorHandler(Object error, StackTrace stack) {
     }
     return true;
   }
+  CrashLogService.instanceOrNull?.logError(error, stack, fatal: true);
   _routeFatalErrorToUi(error, stack);
   return true;
 }
 
 void _rootZoneErrorHandler(Object error, StackTrace stack) {
+  if (!_isNonFatalFrameworkNoise(error)) {
+    CrashLogService.instanceOrNull?.logError(error, stack, fatal: true);
+  }
   _routeFatalErrorToUi(error, stack);
 }
 
@@ -116,6 +122,11 @@ Future<void> main(List<String> arguments) async {
           );
           return;
         }
+        CrashLogService.instanceOrNull?.logError(
+          details.exception,
+          st,
+          fatal: false,
+        );
         _routeFatalErrorToUi(details.exception, st);
       };
 
@@ -139,6 +150,7 @@ Future<void> main(List<String> arguments) async {
 }
 
 Future<void> _bootstrapAndRunApp() async {
+  String appVersion = 'unknown';
   if (Platform.isWindows) {
     try {
       sqfliteFfiInit();
@@ -153,9 +165,11 @@ Future<void> _bootstrapAndRunApp() async {
           );
         } else {
           final pkg = await PackageInfo.fromPlatform();
+          appVersion = pkg.version;
           await wm.setTitle(windowTitleWithVersionLabel(pkg.version));
         }
       } catch (_) {}
+      wm.addListener(_CrashLogShutdownListener());
       final display = await ScreenRetriever.instance.getPrimaryDisplay();
       final screenWidth = display.size.width;
       final screenHeight = display.size.height;
@@ -175,7 +189,27 @@ Future<void> _bootstrapAndRunApp() async {
     } catch (_) {}
   }
 
+  try {
+    if (appVersion == 'unknown') {
+      final pkg = await PackageInfo.fromPlatform();
+      appVersion = pkg.version;
+    }
+    final settings = SettingsService();
+    await CrashLogService.initialize(
+      databasePath: await settings.getDatabasePath(),
+      appVersion: appVersion,
+      retentionCount: await settings.getCrashLogRetentionCount(),
+    );
+  } catch (_) {}
+
   runApp(const ProviderScope(child: MyApp()));
+}
+
+class _CrashLogShutdownListener with WindowListener {
+  @override
+  void onWindowClose() {
+    unawaited(CrashLogService.instanceOrNull?.onShutdown());
+  }
 }
 
 class MyApp extends StatelessWidget {

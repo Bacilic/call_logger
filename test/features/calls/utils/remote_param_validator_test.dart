@@ -242,5 +242,79 @@ void main() {
         );
       });
     });
+
+    group('διάγνωση απόπειρας IP (VNC/RDP host)', () {
+      final vnc = _tool(ToolRole.vnc);
+      final rdpHost = _tool(ToolRole.rdp, id: 2);
+
+      String? validateVnc(String value) => RemoteParamValidator.validate(
+            tool: vnc,
+            value: value,
+            acceptsFileParam: false,
+          );
+
+      String? validateRdpHost(String value) => RemoteParamValidator.validate(
+            tool: rdpHost,
+            value: value,
+            acceptsFileParam: false,
+          );
+
+      test('3164, hostname και έγκυρη IPv4 παραμένουν έγκυρα', () {
+        for (final value in ['3164', 'server1', '10.0.0.55']) {
+          expect(validateVnc(value), isNull, reason: 'VNC: $value');
+          expect(validateRdpHost(value), isNull, reason: 'RDP: $value');
+        }
+      });
+
+      test('κενό μέσα → «Η διεύθυνση περιέχει κενό — αφαιρέστε το.»', () {
+        const msg = 'Η διεύθυνση περιέχει κενό — αφαιρέστε το.';
+        expect(validateVnc('10 10.25.12'), msg);
+        expect(validateRdpHost('10 10.25.12'), msg);
+      });
+
+      test('διπλή τελεία → «Διπλή ή τελική τελεία στη διεύθυνση.»', () {
+        const msg = 'Διπλή ή τελική τελεία στη διεύθυνση.';
+        expect(validateVnc('10..10.25.12'), msg);
+        expect(validateRdpHost('10..10.25.12'), msg);
+      });
+
+      test('τελική τελεία → «Διπλή ή τελική τελεία στη διεύθυνση.»', () {
+        const msg = 'Διπλή ή τελική τελεία στη διεύθυνση.';
+        expect(validateVnc('10.10.25.'), msg);
+        expect(validateRdpHost('10.10.25.'), msg);
+      });
+
+      test('ελληνικό Ο → «Περιέχει το γράμμα "Ο" αντί για τον αριθμό 0.»', () {
+        const msg = 'Περιέχει το γράμμα "Ο" αντί για τον αριθμό 0.';
+        expect(validateVnc('10.10Ο.25.12'), msg);
+        expect(validateRdpHost('10.10Ο.25.12'), msg);
+      });
+
+      test('μη αποδεκτός χαρακτήρας → «Μη αποδεκτός χαρακτήρας "x" στη διεύθυνση.»', () {
+        const msg = 'Μη αποδεκτός χαρακτήρας "x" στη διεύθυνση.';
+        expect(validateVnc('10.10.x.25'), msg);
+        expect(validateRdpHost('10.10.x.25'), msg);
+      });
+
+      test('3 ομάδες → «Η IP θέλει 4 αριθμούς χωρισμένους με τελείες — βρέθηκαν 3.»', () {
+        const msg =
+            'Η IP θέλει 4 αριθμούς χωρισμένους με τελείες — βρέθηκαν 3.';
+        expect(validateVnc('10.10.25'), msg);
+        expect(validateRdpHost('10.10.25'), msg);
+      });
+
+      test('5 ομάδες → «Η IP θέλει 4 αριθμούς χωρισμένους με τελείες — βρέθηκαν 5.»', () {
+        const msg =
+            'Η IP θέλει 4 αριθμούς χωρισμένους με τελείες — βρέθηκαν 5.';
+        expect(validateVnc('10.10.25.12.5'), msg);
+        expect(validateRdpHost('10.10.25.12.5'), msg);
+      });
+
+      test('256 → «Το 256 ξεπερνά το όριο 255 κάθε τμήματος της IP.»', () {
+        const msg = 'Το 256 ξεπερνά το όριο 255 κάθε τμήματος της IP.';
+        expect(validateVnc('256.1.1.1'), msg);
+        expect(validateRdpHost('256.1.1.1'), msg);
+      });
+    });
   });
 }

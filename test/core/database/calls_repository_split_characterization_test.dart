@@ -143,6 +143,34 @@ void main() {
       expect(stats.avgDurationSeconds, 90);
     });
 
+    test(
+      'getDashboardStatistics — κλήση χωρίς τμήμα/καλούντα → Άγνωστο/Άγνωστος',
+      () async {
+        await repo.insertCall(
+          CallModel(
+            date: '2025-08-01',
+            time: '09:00',
+            issue: 'orphan-dash',
+            duration: 45,
+            callerText: '',
+            departmentText: '',
+          ),
+        );
+
+        final stats = await repo.getDashboardStatistics(
+          DashboardFilterModel(
+            dateFrom: DateTime(2025, 8, 1),
+            dateTo: DateTime(2025, 8, 1),
+          ),
+        );
+
+        expect(stats.byDepartment, isNotEmpty);
+        expect(stats.byDepartment.first.name, 'Άγνωστο');
+        expect(stats.topCallers, isNotEmpty);
+        expect(stats.topCallers.first.name, 'Άγνωστος');
+      },
+    );
+
     test('getHistoryCalls φιλτράρει με keyword στο search_index', () async {
       const marker = 'HistFilterMarkerZeta777';
       await repo.insertCall(

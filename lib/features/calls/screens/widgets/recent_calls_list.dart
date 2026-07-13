@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/providers/main_nav_request_provider.dart';
+import '../../../../core/widgets/linkable_text.dart';
 import '../../../../core/widgets/main_nav_destination.dart';
 import '../../../history/providers/history_provider.dart';
 import '../../models/call_model.dart';
@@ -227,8 +228,8 @@ class RecentCallsList extends ConsumerWidget {
                                 ),
                                 const SizedBox(width: 12),
                                 Expanded(
-                                  child: Text(
-                                    c.issue ?? '—',
+                                  child: LinkableText(
+                                    text: c.issue ?? '—',
                                     style: theme.textTheme.bodyMedium,
                                     maxLines: 2,
                                     overflow: TextOverflow.ellipsis,

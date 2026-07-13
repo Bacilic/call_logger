@@ -1,5 +1,6 @@
 ﻿import 'package:flutter/material.dart';
 
+import '../utils/task_duration_format.dart';
 import '../../../core/widgets/deleted_catalog_entity_text.dart';
 import '../../../core/widgets/linkable_selectable_text.dart';
 
@@ -38,13 +39,13 @@ class _TaskDescription extends StatelessWidget {
           final lineHeight = painter.preferredLineHeight;
           final lineCount = (painter.height / lineHeight).ceil();
           if (lineCount <= _maxLines) {
-            return Text(description, style: style);
+            return LinkableSelectableText(text: description, style: style);
           }
           return SizedBox(
             height: lineHeight * _maxLines,
             child: SingleChildScrollView(
               physics: const ClampingScrollPhysics(),
-              child: Text(description, style: style),
+              child: LinkableSelectableText(text: description, style: style),
             ),
           );
         } finally {
@@ -106,28 +107,6 @@ class TaskCard extends ConsumerStatefulWidget {
     return DateFormat('dd/MM/yyyy').format(createdAt);
   }
 
-  static String _durationSince(DateTime from, DateTime to) {
-    var diff = to.difference(from);
-    if (diff.isNegative) diff = Duration.zero;
-
-    var totalMinutes = diff.inMinutes;
-    if (totalMinutes <= 0) totalMinutes = 1;
-
-    final days = totalMinutes ~/ (24 * 60);
-    final hours = (totalMinutes % (24 * 60)) ~/ 60;
-    final minutes = totalMinutes % 60;
-
-    if (days > 0) {
-      if (hours > 0 && minutes > 0) return '$days μ. $hours ώρες και $minutes λεπτά';
-      if (hours > 0) return '$days μ. και $hours ώρες';
-      if (minutes > 0) return '$days μ. και $minutes λεπτά';
-      return '$days μ.';
-    }
-    if (hours > 0 && minutes > 0) return '$hours ώρες και $minutes λεπτά';
-    if (hours > 0) return '$hours ώρες';
-    return '$minutes λεπτά';
-  }
-
   static Color _statusChipColor(TaskStatus status, ColorScheme scheme) {
     return switch (status) {
       TaskStatus.open => scheme.surfaceContainerHighest,
@@ -166,10 +145,10 @@ class TaskCard extends ConsumerStatefulWidget {
         return lines.join('\n');
       case TaskStatus.closed:
         final total = (createdAt != null && completedAt != null)
-            ? _durationSince(createdAt, completedAt)
+            ? durationSince(createdAt, completedAt)
             : '';
         final fromLast = (lastSnoozeAt != null && completedAt != null)
-            ? _durationSince(lastSnoozeAt, completedAt)
+            ? durationSince(lastSnoozeAt, completedAt)
             : '';
         if (total.isEmpty && fromLast.isEmpty) {
           return 'Ολοκληρωμένη εκκρεμότητα';

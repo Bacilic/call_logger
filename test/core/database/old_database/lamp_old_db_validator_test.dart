@@ -1,7 +1,16 @@
-﻿import 'package:call_logger/core/database/old_database/lamp_old_db_validator.dart';
+﻿import 'dart:io';
+
+import 'package:call_logger/core/database/old_database/lamp_old_db_validator.dart';
+import 'package:call_logger/core/database/old_database/old_database_schema.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:path/path.dart' as p;
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 void main() {
+  setUpAll(() {
+    sqfliteFfiInit();
+    databaseFactory = databaseFactoryFfi;
+  });
   group('LampOldDbValidator.pathsReferToSameFile', () {
     test('matches normalized paths on Windows', () {
       expect(
@@ -103,6 +112,100 @@ void main() {
         excelPath: r'C:\import\file.xlsx',
       );
       expect(result.status, LampOldDbStatus.invalidPathFormat);
+    });
+
+    test(
+      'notOldEquipmentDb when equipment table exists but columns are wrong',
+      () async {
+        final dir = await Directory.systemTemp.createTemp('lamp_val_wrong_cols');
+        addTearDown(() => dir.deleteSync(recursive: true));
+        final dbPath = p.join(dir.path, 'wrong_structure.db');
+        final db = await openDatabase(dbPath);
+        await db.execute(
+          'CREATE TABLE equipment (id INTEGER PRIMARY KEY, name TEXT)',
+        );
+        await db.close();
+
+        final result = await validator.validateReadPath(dbPath);
+        expect(result.status, LampOldDbStatus.notOldEquipmentDb);
+        expect(
+          result.userMessageGreek,
+          contains('δομή'),
+        );
+      },
+    );
+
+    test('ok when equipment table has expected Lamp columns', () async {
+      final dir = await Directory.systemTemp.createTemp('lamp_val_valid');
+      addTearDown(() => dir.deleteSync(recursive: true));
+      final dbPath = p.join(dir.path, 'valid_lamp.db');
+      final db = await openDatabase(dbPath);
+      for (final statement in oldDatabaseCreateStatements) {
+        await db.execute(statement);
+      }
+      await db.close();
+
+      final result = await validator.validateReadPath(dbPath);
+      expect(result.status, LampOldDbStatus.ok);
+    });
+  });
+
+  group('LampOldDbValidator.validateOutputPath', () {
+    late LampOldDbValidator validator;
+    late Directory tempDir;
+
+    setUp(() async {
+      validator = LampOldDbValidator();
+      tempDir = await Directory.systemTemp.createTemp('lamp_out_val');
+    });
+
+    tearDown(() {
+      tempDir.deleteSync(recursive: true);
+    });
+
+    test('outputPendingCreation when file does not exist', () async {
+      final result = await validator.validateOutputPath(
+        p.join(tempDir.path, 'new_output.db'),
+      );
+      expect(result.status, LampOldDbStatus.outputPendingCreation);
+      expect(result.userMessageGreek, contains('δημιουργηθεί'));
+    });
+
+    test('outputWillUpdate when file is valid Lamp database', () async {
+      final dbPath = p.join(tempDir.path, 'existing.db');
+      final db = await openDatabase(dbPath);
+      for (final statement in oldDatabaseCreateStatements) {
+        await db.execute(statement);
+      }
+      await db.close();
+
+      final result = await validator.validateOutputPath(dbPath);
+      expect(result.status, LampOldDbStatus.outputWillUpdate);
+      expect(result.userMessageGreek, contains('ξαναδημιουργηθεί'));
+    });
+
+    test('notOldEquipmentDb blocks import for foreign sqlite file', () async {
+      final dbPath = p.join(tempDir.path, 'foreign.db');
+      final db = await openDatabase(dbPath);
+      await db.execute(
+        'CREATE TABLE unrelated (id INTEGER PRIMARY KEY, value TEXT)',
+      );
+      await db.close();
+
+      final result = await validator.validateOutputPath(dbPath);
+      expect(result.status, LampOldDbStatus.notOldEquipmentDb);
+      expect(lampOutputPathBlocksImport(result), isTrue);
+    });
+
+    test('openFailed blocks import for renamed text file with .db extension', () async {
+      final fakeDbPath = p.join(tempDir.path, 'renamed_txt.db');
+      await File(fakeDbPath).writeAsString('not a sqlite database');
+      final result = await validator.validateOutputPath(fakeDbPath);
+      expect(
+        result.status,
+        anyOf(LampOldDbStatus.openFailed, LampOldDbStatus.notOldEquipmentDb),
+      );
+      expect(lampOutputPathBlocksImport(result), isTrue);
     });
   });
 

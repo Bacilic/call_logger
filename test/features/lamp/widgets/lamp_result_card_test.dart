@@ -1,4 +1,5 @@
 import 'package:call_logger/features/lamp/widgets/lamp_result_card.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter/services.dart';
@@ -32,6 +33,15 @@ void main() {
   setUp(() {
     clipboardText = null;
   });
+
+  testWidgets(
+    'Lamp result card desktop διάταξη δεν έχει VerticalDivider ανάμεσα στις ενότητες',
+    (tester) async {
+      await _pumpCard(tester, width: 1300, row: _fullRow);
+
+      expect(find.byType(VerticalDivider), findsNothing);
+    },
+  );
 
   testWidgets('Lamp result card εμφανίζει τις 5 ενότητες με πλήρη δεδομένα', (
     tester,
@@ -184,12 +194,72 @@ void main() {
       matchesGoldenFile('goldens/lamp_result_card_full.png'),
     );
   });
+
+  testWidgets(
+    'hover δεν ξαναχτίζει το περιεχόμενο των ενοτήτων — μόνο η σκιά της κάρτας',
+    (tester) async {
+      await _pumpCard(tester, width: 1300, row: _fullRow);
+
+      final sectionFinder = find.byType(InfoColumnSection).first;
+      final elementBeforeHover = tester.element(sectionFinder);
+
+      final cardCenter = tester.getCenter(find.byType(EquipmentResultCard));
+      final gesture = await tester.createGesture(
+        kind: PointerDeviceKind.mouse,
+      );
+      await gesture.addPointer(location: cardCenter);
+      await gesture.moveTo(cardCenter);
+      await tester.pump();
+
+      final elementAfterHover = tester.element(sectionFinder);
+      expect(
+        identical(elementBeforeHover, elementAfterHover),
+        isTrue,
+        reason: 'Το hover δεν πρέπει να προκαλεί rebuild του περιεχομένου ενότητας',
+      );
+
+      final card = tester.widget<Card>(find.byType(Card));
+      expect(card.elevation, 3);
+    },
+  );
+
+  testWidgets(
+    'didUpdateWidget ενημερώνει την κάρτα με φρέσκο προϋπολογισμένο viewModel',
+    (tester) async {
+      final initial = EquipmentViewModel.fromRow(_fullRow);
+      final refreshed = EquipmentViewModel.fromRow({
+        ..._fullRow,
+        'description': 'Ενημερωμένη περιγραφή εξοπλισμού',
+      });
+
+      await _pumpCardWithViewModel(tester, width: 1300, viewModel: initial);
+      expect(find.text('Εκτυπωτής Laser A3'), findsOneWidget);
+
+      await _pumpCardWithViewModel(tester, width: 1300, viewModel: refreshed);
+      expect(find.text('Ενημερωμένη περιγραφή εξοπλισμού'), findsOneWidget);
+      expect(find.text('Εκτυπωτής Laser A3'), findsNothing);
+    },
+  );
 }
 
 Future<void> _pumpCard(
   WidgetTester tester, {
   required double width,
   required Map<String, Object?> row,
+  SaveEquipmentSection? onSaveSection,
+}) async {
+  await _pumpCardWithViewModel(
+    tester,
+    width: width,
+    viewModel: EquipmentViewModel.fromRow(row),
+    onSaveSection: onSaveSection,
+  );
+}
+
+Future<void> _pumpCardWithViewModel(
+  WidgetTester tester, {
+  required double width,
+  required EquipmentViewModel viewModel,
   SaveEquipmentSection? onSaveSection,
 }) async {
   tester.view.devicePixelRatio = 1;
@@ -216,7 +286,7 @@ Future<void> _pumpCard(
             child: SizedBox(
               width: width,
               child: EquipmentResultCard(
-                viewModel: EquipmentViewModel.fromRow(row),
+                viewModel: viewModel,
                 onSaveSection: onSaveSection,
               ),
             ),

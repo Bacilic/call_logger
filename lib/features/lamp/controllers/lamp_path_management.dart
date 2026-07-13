@@ -15,6 +15,47 @@ import '../../../core/utils/file_picker_session.dart';
 import '../../settings/widgets/create_new_database_dialog.dart';
 import 'lamp_screen_host.dart';
 
+/// Κατάσταση κουμπιού «ίδια διαδρομή εξόδου» (βελάκι) στον διάλογο ρυθμίσεων.
+class LampMatchReadToOutputButtonState {
+  const LampMatchReadToOutputButtonState({
+    required this.enabled,
+    required this.tooltip,
+  });
+
+  final bool enabled;
+  final String tooltip;
+}
+
+LampMatchReadToOutputButtonState computeMatchReadToOutputButtonState({
+  required String outputPath,
+  required String readPath,
+}) {
+  final output = outputPath.trim();
+  final read = readPath.trim();
+  if (output.isEmpty) {
+    return const LampMatchReadToOutputButtonState(
+      enabled: false,
+      tooltip: 'Η διαδρομή της βάσης εξόδου είναι κενή',
+    );
+  }
+  if (LampOldDbValidator.pathsReferToSameFile(output, read)) {
+    return const LampMatchReadToOutputButtonState(
+      enabled: false,
+      tooltip: 'Η διαδρομή της βάσης εξόδου είναι ίδια με τη βάση ανάγνωσης',
+    );
+  }
+  if (LampOldDbValidator.validateDbPathFormat(output) != null) {
+    return const LampMatchReadToOutputButtonState(
+      enabled: false,
+      tooltip: 'Η διαδρομή της βάσης εξόδου δεν είναι έγκυρη (αρχείο .db)',
+    );
+  }
+  return const LampMatchReadToOutputButtonState(
+    enabled: true,
+    tooltip: 'Ίδια διαδρομή με τη βάση εξόδου',
+  );
+}
+
 class LampPathController {
   LampPathController({required this.host});
 
@@ -52,14 +93,28 @@ class LampPathController {
     pathValidationDebounce?.cancel();
     pathValidationDebounce = Timer(const Duration(milliseconds: 400), () {
       if (!host.mounted) return;
-      unawaited(
-        host.ref.read(lampReadPathHealthProvider.notifier).refresh(
-          pathOverride: effectiveReadPathForValidation(),
-          outputPathOverride: outputDbController.text.trim(),
-          excelPathOverride: excelController.text.trim(),
-        ),
-      );
+      unawaited(_persistPathsAndRefreshHealth());
     });
+  }
+
+  Future<void> _persistPathsAndRefreshHealth() async {
+    final read = readDbController.text.trim();
+    final output = outputDbController.text.trim();
+    final excel = excelController.text.trim();
+    final settings = host.shared.settings;
+    await settings.setReadPath(read);
+    await settings.setOutputPath(output);
+    await host.ref.read(lampReadPathHealthProvider.notifier).refresh(
+      pathOverride: effectiveReadPathForValidation(),
+      outputPathOverride: output,
+      excelPathOverride: excel,
+    );
+    await host.ref.read(lampOutputPathHealthProvider.notifier).refresh(
+      pathOverride: output,
+    );
+    if (host.mounted) {
+      host.lampSettingsDialogSetState?.call(() {});
+    }
   }
 
   void notifySettingsDialogFieldsChanged() {
@@ -102,6 +157,9 @@ class LampPathController {
       pathOverride: read,
       outputPathOverride: output,
       excelPathOverride: excelController.text.trim(),
+    );
+    await host.ref.read(lampOutputPathHealthProvider.notifier).refresh(
+      pathOverride: output,
     );
     if (!host.mounted) return;
     final result = host.readPathCheck;
@@ -255,13 +313,53 @@ class LampPathController {
     }
   }
 
-  void matchReadToOutput() {
-    readDbController.text = outputDbController.text;
-    if (host.mounted) {
-      host.lampSettingsDialogSetState?.call(() {});
-      host.showSnack(
-        'Η «ανάγνωση» ευθυγραμμίστηκε με τη διαδρομή εξόδου. Πατήστε αποθήκευση στο τέλος ή κάντε έλεγχο.',
+  Future<void> matchReadToOutput({
+    required Future<void> Function() onDbOk,
+    required void Function() onDbNotOk,
+  }) async {
+    final output = outputDbController.text.trim();
+    final read = readDbController.text.trim();
+    if (output.isEmpty) return;
+
+    if (read.isNotEmpty &&
+        !LampOldDbValidator.pathsReferToSameFile(read, output)) {
+      final confirmed = await showDialog<bool>(
+        context: host.context,
+        builder: (ctx) {
+          return AlertDialog(
+            title: const Text('Αντικατάσταση διαδρομής ανάγνωσης'),
+            content: Text(
+              'Η βάση ανάγνωσης δείχνει σε διαφορετικό αρχείο '
+              '(${p.basename(read)}). Θέλετε να αντικατασταθεί με τη διαδρομή '
+              'εξόδου (${p.basename(output)});',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(false),
+                child: const Text('Ακύρωση'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(ctx).pop(true),
+                child: const Text('Αντικατάσταση'),
+              ),
+            ],
+          );
+        },
       );
+      if (confirmed != true) return;
+    }
+
+    readDbController.text = output;
+    if (!host.mounted) return;
+    host.lampSettingsDialogSetState?.call(() {});
+    await applyPersistedReadAndValidate(
+      announce: false,
+      source: 'ευθυγράμμιση ανάγνωσης',
+      onDbOk: onDbOk,
+      onDbNotOk: onDbNotOk,
+    );
+    if (host.mounted) {
+      host.showSnack('Η βάση ανάγνωσης ευθυγραμμίστηκε με τη διαδρομή εξόδου.');
     }
   }
 }
@@ -310,17 +408,37 @@ class LampPathRow extends StatelessWidget {
     required this.label,
     required this.onPick,
     this.onChanged,
+    this.infoTooltip,
+    this.trailing,
   });
 
   final TextEditingController controller;
   final String label;
   final VoidCallback onPick;
   final VoidCallback? onChanged;
+  final String? infoTooltip;
+  final Widget? trailing;
 
   @override
   Widget build(BuildContext context) {
     return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        if (infoTooltip != null) ...[
+          Padding(
+            padding: const EdgeInsets.only(top: 12, right: 4),
+            child: Tooltip(
+              waitDuration: const Duration(milliseconds: 300),
+              showDuration: const Duration(seconds: 8),
+              message: infoTooltip,
+              child: Icon(
+                Icons.info_outline,
+                size: 20,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ),
+        ],
         Expanded(
           child: TextField(
             controller: controller,
@@ -329,10 +447,14 @@ class LampPathRow extends StatelessWidget {
               labelText: label,
               border: const OutlineInputBorder(),
               hintText:
-                  'Μπορείτε και επικόλληση (paste) — μετά: Έλεγχος & αποθήκευση',
+                  'Μπορείτε και επικόλληση (paste) — ο έλεγχος γίνεται αυτόματα',
             ),
           ),
         ),
+        if (trailing != null) ...[
+          const SizedBox(width: 8),
+          trailing!,
+        ],
         const SizedBox(width: 12),
         OutlinedButton.icon(
           onPressed: onPick,
@@ -344,22 +466,27 @@ class LampPathRow extends StatelessWidget {
   }
 }
 
-class LampReadPathCheckPanel extends StatelessWidget {
-  const LampReadPathCheckPanel({
+class LampPathCheckPanel extends StatelessWidget {
+  const LampPathCheckPanel({
     super.key,
-    required this.readPathCheck,
-    required this.readDbController,
+    required this.pathCheck,
+    required this.pathController,
+    this.pendingMessage,
+    this.emptyMessage =
+        'Δεν έχει τρέξει ακόμη έλεγχος — γίνεται αυτόματα μόλις οριστεί διαδρομή.',
   });
 
-  final LampOldDbCheckResult? readPathCheck;
-  final TextEditingController readDbController;
+  final LampOldDbCheckResult? pathCheck;
+  final TextEditingController pathController;
+  final String? pendingMessage;
+  final String emptyMessage;
 
   @override
   Widget build(BuildContext context) {
-    final r = readPathCheck;
+    final r = pathCheck;
     if (r == null) {
       return Text(
-        'Δεν έχει τρέξει ακόμη έλεγχος. Μετά την επικόλληση/επιλογή πατήστε «Έλεγχος & αποθήκευση διαδρομών».',
+        emptyMessage,
         style: Theme.of(context).textTheme.labelSmall?.copyWith(
           color: Theme.of(context).colorScheme.onSurfaceVariant,
         ),
@@ -368,17 +495,20 @@ class LampReadPathCheckPanel extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     final Color? bg;
     final IconData icon;
-    if (r.status == LampOldDbStatus.ok) {
+    if (r.status == LampOldDbStatus.ok ||
+        r.status == LampOldDbStatus.outputWillUpdate) {
       bg = scheme.primaryContainer.withValues(alpha: 0.45);
       icon = Icons.check_circle_outline;
     } else if (r.status == LampOldDbStatus.pathEmpty ||
-        r.status == LampOldDbStatus.pendingCreation) {
+        r.status == LampOldDbStatus.pendingCreation ||
+        r.status == LampOldDbStatus.outputPendingCreation) {
       bg = scheme.surfaceContainerHighest;
       icon = Icons.info_outline;
     } else {
       bg = scheme.errorContainer.withValues(alpha: 0.55);
       icon = Icons.error_outline;
     }
+    final showMessage = r.status != LampOldDbStatus.ok;
     return Material(
       color: bg,
       borderRadius: BorderRadius.circular(8),
@@ -393,17 +523,18 @@ class LampReadPathCheckPanel extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  if (readDbController.text.isNotEmpty)
+                  if (pathController.text.isNotEmpty)
                     Text(
-                      p.basename(readDbController.text),
+                      p.basename(pathController.text),
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
-                  if (r.status != LampOldDbStatus.ok) ...[
-                    if (readDbController.text.isNotEmpty &&
-                        r.status != LampOldDbStatus.pendingCreation)
+                  if (showMessage) ...[
+                    if (pathController.text.isNotEmpty &&
+                        r.status != LampOldDbStatus.pendingCreation &&
+                        r.status != LampOldDbStatus.outputPendingCreation)
                       const SizedBox(height: 4),
                     Text(
-                      r.userMessageGreek,
+                      pendingMessage ?? r.userMessageGreek,
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
                   ],
@@ -413,6 +544,26 @@ class LampReadPathCheckPanel extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Πίνακας ελέγχου διαδρομής ανάγνωσης (συμβατότητα).
+class LampReadPathCheckPanel extends StatelessWidget {
+  const LampReadPathCheckPanel({
+    super.key,
+    required this.readPathCheck,
+    required this.readDbController,
+  });
+
+  final LampOldDbCheckResult? readPathCheck;
+  final TextEditingController readDbController;
+
+  @override
+  Widget build(BuildContext context) {
+    return LampPathCheckPanel(
+      pathCheck: readPathCheck,
+      pathController: readDbController,
     );
   }
 }

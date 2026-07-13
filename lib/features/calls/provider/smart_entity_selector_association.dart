@@ -7,6 +7,7 @@ mixin SmartEntitySelectorAssociationMixin on Notifier<SmartEntitySelectorState> 
   void _resetAssociationQuickTaskCycle() {
     _host._associationQuickTaskId = null;
     _host._callerAwaitingPhoneAssociation = false;
+    _host.clearPendingAuditOrigins();
   }
 
   Future<OrphanQuickAddResult?> quickAddOrphanToDepartment({
@@ -218,6 +219,7 @@ mixin SmartEntitySelectorAssociationMixin on Notifier<SmartEntitySelectorState> 
 
     final msg = state.associationTooltip(lookupForAssoc);
     final dbAssoc = await DatabaseHelper.instance.database;
+    final auditSince = await _host.maxAuditLogId(dbAssoc);
     final departments = DepartmentRepository(dbAssoc);
     final phones = PhoneRepository(dbAssoc);
     final equipmentRepo = EquipmentRepository(dbAssoc);
@@ -373,6 +375,7 @@ mixin SmartEntitySelectorAssociationMixin on Notifier<SmartEntitySelectorState> 
         if (summary != null && summary.isNotEmpty) {
           lines.add(summary);
         }
+        await _host.trackDerivativeAuditsSince(auditSince);
         return lines.join('\n');
       } catch (e) {
         await refreshDirectoryCaches(
@@ -532,6 +535,7 @@ mixin SmartEntitySelectorAssociationMixin on Notifier<SmartEntitySelectorState> 
             ? null
             : s.departmentText.trim(),
       );
+      await _host.trackDerivativeAuditsSince(auditSince);
       return (hadPhoneWork || hadEqWork || primaryDepartmentChanged)
           ? (msg ?? 'Προστέθηκε.')
           : null;

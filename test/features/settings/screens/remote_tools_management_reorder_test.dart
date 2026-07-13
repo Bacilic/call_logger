@@ -1,7 +1,30 @@
+import 'package:call_logger/core/models/remote_tool.dart';
+import 'package:call_logger/core/models/remote_tool_role.dart';
 import 'package:call_logger/features/settings/screens/remote_tools_management_screen.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  group('remoteToolArgumentsSummary', () {
+    test('απόκρυψη κωδικού στη σύνοψη λίστας', () {
+      final tool = RemoteTool(
+        id: 1,
+        name: 'VNC Test',
+        role: ToolRole.vnc,
+        executablePath: r'C:\vnc.exe',
+        sortOrder: 1,
+        isActive: true,
+        arguments: const [
+          RemoteToolArgument(value: '-password=pass99', isActive: true),
+        ],
+      );
+
+      expect(
+        remoteToolArgumentsSummary(tool),
+        '-password=***',
+      );
+    });
+  });
+
   group('reorderedPositionOneBased', () {
     test('μετακίνηση προς τα κάτω: newIndex > oldIndex αφαιρεί 1', () {
       expect(reorderedPositionOneBased(0, 2), 2);

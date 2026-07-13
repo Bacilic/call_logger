@@ -362,11 +362,12 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                                       barPoints:
                                           allDatesBars?.callsByMonth ??
                                           const <KpiBarSparklinePoint>[],
+                                      showLansweeperReportBadge: true,
                                       colors: colors.kpiBlue,
                                     ),
                                     KpiCardData(
                                       title:
-                                          'Συνολική Διάρκεια Κλήσεων (ώρ:λεπ)',
+                                          'Συνολική Διάρκεια Κλήσεων',
                                       value: _formatAggregateDurationSeconds(
                                         data.totalDurationSeconds,
                                       ),

@@ -8,6 +8,7 @@ import 'package:call_logger/features/calls/models/user_model.dart';
 import 'package:call_logger/features/calls/provider/lookup_provider.dart';
 import 'package:call_logger/features/calls/provider/smart_entity_selector_provider.dart';
 import 'package:call_logger/features/directory/models/department_model.dart';
+import 'package:call_logger/features/directory/providers/equipment_directory_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -2598,6 +2599,54 @@ void main() {
           textBefore,
           reason: greekExpectMsg(
             'Το equipmentText δεν πρέπει να αλλάξει — μόνο το snapshot',
+          ),
+        );
+      },
+    );
+
+    test(
+      'μετά αλλαγή κωδικού εξοπλισμού ανανεώνει και equipmentText όταν ταυτίζεται με τον παλιό κωδικό',
+      () async {
+        await seedIsolatedTestDatabase();
+        const newCode = 'PC-TEST-RENAMED';
+
+        final container = ProviderContainer(
+          overrides: callLoggerTestProviderOverrides(),
+        );
+        addTearDown(container.dispose);
+
+        await container.read(lookupServiceProvider.future);
+        final notifier = container.read(callSmartEntityProvider.notifier);
+        notifier.performEquipmentLookupByCode(kTestEquipmentCode);
+
+        final afterLookup = container.read(callSmartEntityProvider);
+        expect(afterLookup.selectedEquipment?.code, kTestEquipmentCode);
+        expect(afterLookup.equipmentText, kTestEquipmentCode);
+
+        final dirNotifier = container.read(equipmentDirectoryProvider.notifier);
+        await dirNotifier.load();
+        final equipment = afterLookup.selectedEquipment!;
+        await dirNotifier.updateEquipment(
+          equipment.copyWith(code: newCode),
+        );
+
+        container.invalidate(lookupServiceProvider);
+        await container.read(lookupServiceProvider.future);
+        await notifier.refreshSelectedEquipmentFromLookup();
+
+        final state = container.read(callSmartEntityProvider);
+        expect(
+          state.selectedEquipment?.code,
+          newCode,
+          reason: greekExpectMsg(
+            'Το selectedEquipment.code πρέπει να δείχνει τον νέο κωδικό',
+          ),
+        );
+        expect(
+          state.equipmentText,
+          newCode,
+          reason: greekExpectMsg(
+            'Το equipmentText πρέπει να συγχρονιστεί με τον νέο κωδικό',
           ),
         );
       },

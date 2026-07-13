@@ -3,7 +3,10 @@
 import '../../../../core/errors/department_exists_exception.dart';
 import '../../../../core/models/building_map_floor.dart';
 import '../../../../core/services/lookup_service.dart';
+import '../../../../core/database/audit_service.dart';
 import '../../../../core/database/database_helper.dart';
+import '../../../../core/services/save_confirmation_summary.dart';
+import '../../../../core/widgets/audit_summary_rich_text.dart';
 import '../../../../core/database/building_map_repository.dart';
 import '../../../../core/database/department_repository.dart';
 import '../../../../core/database/directory_support.dart';
@@ -113,6 +116,8 @@ mixin DepartmentFormDialogStateHost on State<DepartmentFormDialog> {
 
   int? get _snapFloorId;
 
+  List<BuildingMapFloor> get _floors;
+
   bool get _isEdit;
 
   Future<void> _save();
@@ -202,6 +207,7 @@ class _DepartmentFormDialogState extends State<DepartmentFormDialog>
   @override
   late final List<String> _snapSharedEquipmentCodes;
 
+  @override
   List<BuildingMapFloor> _floors = const [];
   @override
   int? _selectedFloorId;

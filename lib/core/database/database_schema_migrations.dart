@@ -1,12 +1,17 @@
+import 'dart:convert';
+
 import 'package:path/path.dart' as p;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import '../config/app_config.dart';
+import 'audit_diff_helper.dart';
+import 'audit_service.dart';
 import '../utils/lexicon_word_metrics.dart';
 import '../utils/search_text_normalizer.dart';
 import 'database_init_result.dart';
 import 'database_v1_schema.dart';
 import 'dictionary_repository.dart';
+import 'directory_audit_helpers.dart';
 
 /// Squashed schema version (ίδιο με [databaseSchemaVersionV1]).
 const int kDatabaseSchemaVersion = databaseSchemaVersionV1;
@@ -143,6 +148,561 @@ Future<void> onDatabaseUpgradeSquashed(
   }
   if (oldVersion < 31 && newVersion >= 31) {
     await migrateDatabaseToV31(db);
+  }
+  if (oldVersion < 32 && newVersion >= 32) {
+    await migrateDatabaseToV32(db);
+  }
+  if (oldVersion < 33 && newVersion >= 33) {
+    await migrateDatabaseToV33(db);
+  }
+  if (oldVersion < 34 && newVersion >= 34) {
+    await migrateDatabaseToV34(db);
+  }
+  if (oldVersion < 35 && newVersion >= 35) {
+    await migrateDatabaseToV35(db);
+  }
+  if (oldVersion < 36 && newVersion >= 36) {
+    await migrateDatabaseToV36(db);
+  }
+}
+
+/// v36: ανακατασκευή search_text με ελληνικές ετικέτες audit (idempotent).
+Future<void> migrateDatabaseToV36(Database db) async {
+  await AuditService.migrateRebuildAuditSearchTextIndex(db);
+}
+
+/// v35: αναδρομικός καθαρισμός παλιών εγγραφών audit (μόνο δεδομένα, idempotent).
+Future<void> migrateDatabaseToV35(Database db) async {
+  await db.transaction((txn) async {
+    var mergedCount = 0;
+    var deletedCount = 0;
+
+    deletedCount += await _v35CleanupSideEntityLinkRows(txn);
+    mergedCount += await _v35MergeEquipmentRemoteParamsPairs(txn);
+    final mergeResult = await _v35MergeDuplicateModifyRows(txn);
+    mergedCount += mergeResult.merged;
+    deletedCount += mergeResult.deleted;
+
+    await AuditService.rebuildAllSearchTexts(txn);
+
+    if (mergedCount > 0 || deletedCount > 0) {
+      final user = await AuditService.performingUser(txn);
+      await AuditService.log(
+        txn,
+        action: 'ΕΠΙΔΙΟΡΘΩΣΗ ΑΚΕΡΑΙΟΤΗΤΑΣ',
+        userPerforming: user,
+        entityType: AuditEntityTypes.maintenance,
+        details: 'auditHistoryCleanupV35',
+        newValues: {
+          'rows_merged': mergedCount,
+          'rows_deleted': deletedCount,
+        },
+      );
+    }
+  });
+}
+
+const int _kAuditMergeWindowSeconds = 2;
+
+bool _v35IsModifyAction(String? action) {
+  if (action == null) return false;
+  final t = action.trim();
+  if (t.isEmpty) return false;
+  if (AuditActions.isGenericModifyAction(t)) return true;
+  return t.startsWith('ΤΡΟΠΟΠΟΙΗΣΗ');
+}
+
+DateTime? _v35ParseTimestamp(String? raw) {
+  if (raw == null || raw.trim().isEmpty) return null;
+  return DateTime.tryParse(raw.trim());
+}
+
+bool _v35WithinMergeWindow(String? tsA, String? tsB) {
+  final a = _v35ParseTimestamp(tsA);
+  final b = _v35ParseTimestamp(tsB);
+  if (a == null || b == null) return false;
+  return a.difference(b).inSeconds.abs() <= _kAuditMergeWindowSeconds;
+}
+
+bool _v35GroupWithinWindow(List<Map<String, Object?>> rows) {
+  if (rows.length < 2) return false;
+  DateTime? minTs;
+  DateTime? maxTs;
+  for (final row in rows) {
+    final ts = _v35ParseTimestamp(row['timestamp'] as String?);
+    if (ts == null) return false;
+    minTs = minTs == null || ts.isBefore(minTs) ? ts : minTs;
+    maxTs = maxTs == null || ts.isAfter(maxTs) ? ts : maxTs;
+  }
+  if (minTs == null || maxTs == null) return false;
+  return maxTs.difference(minTs).inSeconds <= _kAuditMergeWindowSeconds;
+}
+
+Map<String, dynamic>? _v35DecodeJsonMap(String? raw) {
+  if (raw == null || raw.trim().isEmpty) return null;
+  try {
+    final decoded = jsonDecode(raw);
+    if (decoded is Map<String, dynamic>) return decoded;
+    if (decoded is Map) {
+      return decoded.map((k, v) => MapEntry(k.toString(), v));
+    }
+  } catch (_) {}
+  return null;
+}
+
+int _v35RowId(Map<String, Object?> row) {
+  final idRaw = row['id'];
+  if (idRaw is int) return idRaw;
+  return (idRaw as num).toInt();
+}
+
+String _v35EntityTablePrefix(String entityType) {
+  switch (entityType) {
+    case AuditEntityTypes.user:
+      return 'users';
+    case AuditEntityTypes.department:
+      return 'departments';
+    case AuditEntityTypes.equipment:
+      return 'equipment';
+    case AuditEntityTypes.phone:
+      return 'phones';
+    case AuditEntityTypes.category:
+      return 'categories';
+    case AuditEntityTypes.call:
+      return 'calls';
+    case AuditEntityTypes.task:
+      return 'tasks';
+    default:
+      return entityType;
+  }
+}
+
+bool _v35HasLinkedUserPayload(
+  Map<String, dynamic>? oldMap,
+  Map<String, dynamic>? newMap,
+) {
+  return oldMap?.containsKey('linked_user_id') == true ||
+      newMap?.containsKey('linked_user_id') == true;
+}
+
+bool _v35IsSideEntityLinkRow(Map<String, Object?> row) {
+  final entityType = (row['entity_type'] as String?)?.trim();
+  if (entityType != AuditEntityTypes.phone &&
+      entityType != AuditEntityTypes.equipment) {
+    return false;
+  }
+  final oldMap = _v35DecodeJsonMap(row['old_values_json'] as String?);
+  final newMap = _v35DecodeJsonMap(row['new_values_json'] as String?);
+  if (entityType == AuditEntityTypes.phone) {
+    return _v35HasLinkedUserPayload(oldMap, newMap);
+  }
+  final details = (row['details'] as String?)?.toLowerCase() ?? '';
+  if (details.contains('σύνδεση χρήστη') ||
+      details.contains('αποσύνδεση χρήστη')) {
+    return true;
+  }
+  return oldMap?.containsKey('linked_users') == true ||
+      newMap?.containsKey('linked_users') == true;
+}
+
+bool _v35IsUserSideLinkRow(Map<String, Object?> row) {
+  if ((row['entity_type'] as String?)?.trim() != AuditEntityTypes.user) {
+    return false;
+  }
+  if (!_v35IsModifyAction(row['action'] as String?)) return false;
+  final details = (row['details'] as String?) ?? '';
+  if (details.contains('Προσθήκη τηλεφών') ||
+      details.contains('Αποσύνδεση τηλεφών') ||
+      details.contains('Προσθήκη εξοπλισμ') ||
+      details.contains('Αποσύνδεση εξοπλισμ')) {
+    return true;
+  }
+  final oldMap = _v35DecodeJsonMap(row['old_values_json'] as String?);
+  final newMap = _v35DecodeJsonMap(row['new_values_json'] as String?);
+  return oldMap?.containsKey('linked_phone_numbers') == true ||
+      newMap?.containsKey('linked_phone_numbers') == true ||
+      oldMap?.containsKey('linked_equipment') == true ||
+      newMap?.containsKey('linked_equipment') == true;
+}
+
+String _v35MergeDetailsIfMissing(String? base, String? extra) {
+  final b = base?.trim() ?? '';
+  final e = extra?.trim() ?? '';
+  if (e.isEmpty) return b;
+  if (b.isEmpty) return e;
+  if (b.contains(e)) return b;
+  return '$b · $e';
+}
+
+Future<int> _v35CleanupSideEntityLinkRows(DatabaseExecutor txn) async {
+  final rows = await txn.query(
+    'audit_log',
+    orderBy: 'timestamp ASC, id ASC',
+  );
+  if (rows.isEmpty) return 0;
+
+  final userRows = rows.where(_v35IsUserSideLinkRow).toList();
+  if (userRows.isEmpty) return 0;
+
+  var deleted = 0;
+  for (final sideRow in rows.where(_v35IsSideEntityLinkRow)) {
+    final sideTs = sideRow['timestamp'] as String?;
+    Map<String, Object?>? matchedUser;
+    for (final userRow in userRows) {
+      if (!_v35WithinMergeWindow(sideTs, userRow['timestamp'] as String?)) {
+        continue;
+      }
+      if (sideRow['entity_type'] == AuditEntityTypes.phone) {
+        final sideOld =
+            _v35DecodeJsonMap(sideRow['old_values_json'] as String?);
+        final sideNew =
+            _v35DecodeJsonMap(sideRow['new_values_json'] as String?);
+        final linkedUserId =
+            sideNew?['linked_user_id'] ?? sideOld?['linked_user_id'];
+        final userEntityId = userRow['entity_id'];
+        if (linkedUserId != null &&
+            userEntityId != null &&
+            '$linkedUserId' == '$userEntityId') {
+          matchedUser = userRow;
+          break;
+        }
+      } else {
+        matchedUser = userRow;
+        break;
+      }
+    }
+    if (matchedUser == null) continue;
+
+    final sideDetails = sideRow['details'] as String?;
+    final userDetails = matchedUser['details'] as String?;
+    final mergedDetails = _v35MergeDetailsIfMissing(userDetails, sideDetails);
+    if (mergedDetails != (userDetails ?? '')) {
+      await txn.update(
+        'audit_log',
+        {'details': mergedDetails},
+        where: 'id = ?',
+        whereArgs: [_v35RowId(matchedUser)],
+      );
+    }
+
+    await txn.delete(
+      'audit_log',
+      where: 'id = ?',
+      whereArgs: [_v35RowId(sideRow)],
+    );
+    deleted++;
+  }
+  return deleted;
+}
+
+bool _v35IsRemoteParamsRemoval(
+  Map<String, dynamic>? oldMap,
+  Map<String, dynamic>? newMap,
+) {
+  if (oldMap == null || newMap == null) return false;
+  if (!oldMap.containsKey('remote_params')) return false;
+  if (!newMap.containsKey('remote_params')) return false;
+  final oldVal = oldMap['remote_params'];
+  final newVal = newMap['remote_params'];
+  final oldEmpty = oldVal == null ||
+      '$oldVal'.trim().isEmpty ||
+      '$oldVal' == '{}' ||
+      '$oldVal' == '[]';
+  final newEmpty = newVal == null ||
+      '$newVal'.trim().isEmpty ||
+      '$newVal' == '{}' ||
+      '$newVal' == '[]';
+  return !oldEmpty && newEmpty;
+}
+
+bool _v35IsRemoteParamsAddition(
+  Map<String, dynamic>? oldMap,
+  Map<String, dynamic>? newMap,
+) {
+  if (oldMap == null || newMap == null) return false;
+  if (!oldMap.containsKey('remote_params')) return false;
+  if (!newMap.containsKey('remote_params')) return false;
+  final oldVal = oldMap['remote_params'];
+  final newVal = newMap['remote_params'];
+  final oldEmpty = oldVal == null ||
+      '$oldVal'.trim().isEmpty ||
+      '$oldVal' == '{}' ||
+      '$oldVal' == '[]';
+  final newEmpty = newVal == null ||
+      '$newVal'.trim().isEmpty ||
+      '$newVal' == '{}' ||
+      '$newVal' == '[]';
+  return oldEmpty && !newEmpty;
+}
+
+Future<int> _v35MergeEquipmentRemoteParamsPairs(DatabaseExecutor txn) async {
+  final rows = await txn.query(
+    'audit_log',
+    where: 'entity_type = ?',
+    whereArgs: [AuditEntityTypes.equipment],
+    orderBy: 'entity_id ASC, timestamp ASC, id ASC',
+  );
+  if (rows.length < 2) return 0;
+
+  final byEntity = <int, List<Map<String, Object?>>>{};
+  for (final row in rows) {
+    if (!_v35IsModifyAction(row['action'] as String?)) continue;
+    final entityId = row['entity_id'];
+    if (entityId == null) continue;
+    final id = entityId is int ? entityId : (entityId as num).toInt();
+    byEntity.putIfAbsent(id, () => []).add(row);
+  }
+
+  var merged = 0;
+  for (final group in byEntity.values) {
+    if (group.length < 2) continue;
+    for (var i = 0; i < group.length - 1; i++) {
+      final a = group[i];
+      for (var j = i + 1; j < group.length; j++) {
+        final b = group[j];
+        if (!_v35WithinMergeWindow(
+          a['timestamp'] as String?,
+          b['timestamp'] as String?,
+        )) {
+          continue;
+        }
+        final aOld = _v35DecodeJsonMap(a['old_values_json'] as String?);
+        final aNew = _v35DecodeJsonMap(a['new_values_json'] as String?);
+        final bOld = _v35DecodeJsonMap(b['old_values_json'] as String?);
+        final bNew = _v35DecodeJsonMap(b['new_values_json'] as String?);
+
+        Map<String, Object?>? removeRow;
+        Map<String, Object?>? addRow;
+        if (_v35IsRemoteParamsRemoval(aOld, aNew) &&
+            _v35IsRemoteParamsAddition(bOld, bNew)) {
+          removeRow = a;
+          addRow = b;
+        } else if (_v35IsRemoteParamsRemoval(bOld, bNew) &&
+            _v35IsRemoteParamsAddition(aOld, aNew)) {
+          removeRow = b;
+          addRow = a;
+        }
+        if (removeRow == null || addRow == null) continue;
+
+        final removeOld =
+            _v35DecodeJsonMap(removeRow['old_values_json'] as String?);
+        final addNew = _v35DecodeJsonMap(addRow['new_values_json'] as String?);
+        final mergedOld = <String, dynamic>{
+          if (removeOld != null) 'remote_params': removeOld['remote_params'],
+        };
+        final mergedNew = <String, dynamic>{
+          if (addNew != null) 'remote_params': addNew['remote_params'],
+        };
+        final entityId = removeRow['entity_id'] as int?;
+        final keepId = _v35RowId(removeRow);
+        final deleteId = _v35RowId(addRow);
+        final details = AuditDiffHelper.buildMultiChangeDetails(
+          entityType: AuditEntityTypes.equipment,
+          entityId: entityId ?? 0,
+          oldDiff: mergedOld,
+          newDiff: mergedNew,
+          baseDetails: 'equipment id=${entityId ?? 0}',
+        );
+
+        await txn.update(
+          'audit_log',
+          {
+            'old_values_json': jsonEncode(mergedOld),
+            'new_values_json': jsonEncode(mergedNew),
+            'details': details,
+          },
+          where: 'id = ?',
+          whereArgs: [keepId],
+        );
+        await txn.delete(
+          'audit_log',
+          where: 'id = ?',
+          whereArgs: [deleteId],
+        );
+        group.remove(addRow);
+        merged++;
+        break;
+      }
+    }
+  }
+  return merged;
+}
+
+Future<({int merged, int deleted})> _v35MergeDuplicateModifyRows(
+  DatabaseExecutor txn,
+) async {
+  final rows = await txn.query(
+    'audit_log',
+    orderBy: 'entity_type ASC, entity_id ASC, timestamp ASC, id ASC',
+  );
+  if (rows.isEmpty) return (merged: 0, deleted: 0);
+
+  final byEntity = <String, List<Map<String, Object?>>>{};
+  for (final row in rows) {
+    if (!_v35IsModifyAction(row['action'] as String?)) continue;
+    final entityType = (row['entity_type'] as String?)?.trim();
+    final entityId = row['entity_id'];
+    if (entityType == null ||
+        entityType.isEmpty ||
+        entityId == null ||
+        entityType == AuditEntityTypes.maintenance) {
+      continue;
+    }
+    final key = '$entityType#$entityId';
+    byEntity.putIfAbsent(key, () => []).add(row);
+  }
+
+  var merged = 0;
+  var deleted = 0;
+  for (final group in byEntity.values) {
+    if (group.length < 2) continue;
+
+    final clusters = <List<Map<String, Object?>>>[];
+    for (final row in group) {
+      var placed = false;
+      for (final cluster in clusters) {
+        if (_v35WithinMergeWindow(
+              row['timestamp'] as String?,
+              cluster.first['timestamp'] as String?,
+            ) &&
+            _v35GroupWithinWindow([...cluster, row])) {
+          cluster.add(row);
+          placed = true;
+          break;
+        }
+      }
+      if (!placed) {
+        clusters.add([row]);
+      }
+    }
+
+    for (final cluster in clusters) {
+      if (cluster.length < 2) continue;
+      cluster.sort((a, b) => _v35RowId(a).compareTo(_v35RowId(b)));
+      final keep = cluster.first;
+      final chain = cluster
+          .map(
+            (row) => (
+              oldMap: _v35DecodeJsonMap(row['old_values_json'] as String?),
+              newMap: _v35DecodeJsonMap(row['new_values_json'] as String?),
+            ),
+          )
+          .toList();
+      final diff = AuditDiffHelper.computeChainedDiff(chain);
+      if (diff.oldDiff.isEmpty && diff.newDiff.isEmpty) continue;
+
+      final entityType = (keep['entity_type'] as String?)?.trim() ?? '';
+      final entityIdRaw = keep['entity_id'];
+      final entityId = entityIdRaw is int
+          ? entityIdRaw
+          : (entityIdRaw as num?)?.toInt() ?? 0;
+      final baseDetails = '${_v35EntityTablePrefix(entityType)} id=$entityId';
+      final details = AuditDiffHelper.buildMultiChangeDetails(
+        entityType: entityType,
+        entityId: entityId,
+        oldDiff: diff.oldDiff,
+        newDiff: diff.newDiff,
+        baseDetails: baseDetails,
+      );
+
+      await txn.update(
+        'audit_log',
+        {
+          'old_values_json': jsonEncode(diff.oldDiff),
+          'new_values_json': jsonEncode(diff.newDiff),
+          'details': details,
+        },
+        where: 'id = ?',
+        whereArgs: [_v35RowId(keep)],
+      );
+
+      for (var i = 1; i < cluster.length; i++) {
+        await txn.delete(
+          'audit_log',
+          where: 'id = ?',
+          whereArgs: [_v35RowId(cluster[i])],
+        );
+        deleted++;
+      }
+      merged++;
+    }
+  }
+  return (merged: merged, deleted: deleted);
+}
+
+/// v34: μετονομασία γενικών ενεργειών audit σε ενέργειες ανά οντότητα (idempotent).
+Future<void> migrateDatabaseToV34(Database db) async {
+  final rows = await db.query(
+    'audit_log',
+    columns: ['id', 'action', 'entity_type'],
+    where: "action IN ('ΤΡΟΠΟΠΟΙΗΣΗ', 'Τροποποίηση', 'τροποποίηση')",
+  );
+  if (rows.isEmpty) return;
+
+  final batch = db.batch();
+  var pending = 0;
+  for (final row in rows) {
+    final idRaw = row['id'];
+    if (idRaw == null) continue;
+    final id = idRaw is int ? idRaw : (idRaw as num).toInt();
+    final entityType = row['entity_type'] as String?;
+    final next = AuditActions.modifyActionForEntityType(entityType);
+    if (next == null) continue;
+    batch.update(
+      'audit_log',
+      {'action': next},
+      where: 'id = ? AND action IN (?, ?, ?)',
+      whereArgs: [id, 'ΤΡΟΠΟΠΟΙΗΣΗ', 'Τροποποίηση', 'τροποποίηση'],
+    );
+    pending++;
+  }
+  if (pending > 0) {
+    await batch.commit(noResult: true);
+  }
+}
+
+/// v33: ανακατασκευή ευρετηρίου `search_text` του audit_log (μόνο δεδομένα) —
+/// καθαρίζει ετικέτες πεδίων που μπήκαν από ψευδο-αλλαγές αριθμητικών τιμών.
+Future<void> migrateDatabaseToV33(Database db) async {
+  await AuditService.migrateRebuildAuditSearchTextIndex(db);
+}
+
+/// v32: κανονικοποίηση παλιών εγγραφών audit «συσχέτιση από κλήση: …» (μόνο δεδομένα).
+Future<void> migrateDatabaseToV32(Database db) async {
+  const legacyPrefix = 'συσχέτιση από κλήση:';
+  final rows = await db.query(
+    'audit_log',
+    columns: ['id', 'action', 'details'],
+    where: 'action LIKE ?',
+    whereArgs: ['$legacyPrefix%'],
+  );
+  if (rows.isEmpty) return;
+
+  final batch = db.batch();
+  var pending = 0;
+  for (final row in rows) {
+    final idRaw = row['id'];
+    if (idRaw == null) continue;
+    final id = idRaw is int ? idRaw : (idRaw as num).toInt();
+    final action = (row['action'] as String?) ?? '';
+    final normalized = normalizeLegacyCallAssociationAuditRow(
+      action: action,
+      details: row['details'] as String?,
+    );
+    if (normalized == null) continue;
+    batch.update(
+      'audit_log',
+      {
+        'action': normalized.action,
+        'details': normalized.details,
+      },
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+    pending++;
+  }
+  if (pending > 0) {
+    await batch.commit(noResult: true);
   }
 }
 

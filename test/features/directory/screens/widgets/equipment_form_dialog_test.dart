@@ -100,6 +100,25 @@ RemoteToolFormPair get _kTestRemoteToolWithoutIconFormPair => (
       acceptsFileParam: false,
     );
 
+const _kRemoteRdpToolName = 'RDP Test Host';
+const _kRemoteRdpAddressLabel =
+    '$_kRemoteRdpToolName - Διεύθυνση (IP ή όνομα υπολογιστή)';
+
+RemoteTool get _kTestRdpHostRemoteTool => RemoteTool(
+      id: 3,
+      name: _kRemoteRdpToolName,
+      role: ToolRole.rdp,
+      executablePath: r'C:\Windows\mstsc.exe',
+      sortOrder: 3,
+      isActive: true,
+    );
+
+RemoteToolFormPair get _kTestRdpHostFormPair => (
+      label: _kRemoteRdpToolName,
+      key: '3',
+      acceptsFileParam: false,
+    );
+
 Finder _fieldByLabel(String label) {
   return find.descendant(
     of: find.byWidgetPredicate(
@@ -661,6 +680,117 @@ void main() {
           findsOneWidget,
           reason: greekExpectMsg(
             'Ο υπότιτλος της ενότητας παραμέτρων ενημερώνεται',
+          ),
+        );
+      },
+    );
+    testWidgets(
+      'επεξεργασία: αλλαγή IP VNC εμφανίζει SnackBar με παλιά → νέα τιμή',
+      (tester) async {
+        tester.view.physicalSize = const Size(1600, 900);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        const remoteCode = 'EQ-REMOTE-SNACK';
+        const oldIp = '10.0.0.55';
+        const newIp = '10.0.0.99';
+        await tester.runAsync(() async {
+          await _seedEquipmentWithRemoteParams(
+            code: remoteCode,
+            remoteParams: const {'1': oldIp},
+          );
+        });
+
+        final container = ProviderContainer(
+          overrides: _equipmentFormProviderOverrides(),
+        );
+        addTearDown(container.dispose);
+
+        late EquipmentDirectoryNotifier notifier;
+        await tester.runAsync(() async {
+          await container.read(lookupServiceProvider.future);
+          notifier = container.read(equipmentDirectoryProvider.notifier);
+          await notifier.load();
+          final initial = await _loadEquipmentByCode(remoteCode);
+          await _openEquipmentFormInDialog(
+            tester,
+            container,
+            initialEquipment: initial,
+            notifier: notifier,
+          );
+        });
+
+        expect(find.text(_kEditEquipmentTitle), findsOneWidget);
+
+        await tester.enterText(
+          find.widgetWithText(
+            TextFormField,
+            _kRemoteAddressLabel,
+          ),
+          newIp,
+        );
+        await pumpUntilSettled(tester);
+
+        await tester.tap(find.widgetWithText(FilledButton, 'Αποθήκευση'));
+        await pumpUntilSettled(tester);
+        await _pumpUntilEquipmentSaveCompletes(tester);
+        await pumpUntilSettled(tester);
+
+        expect(
+          find.textContaining('$oldIp → $newIp'),
+          findsOneWidget,
+          reason: greekExpectMsg(
+            'Το SnackBar επιβεβαίωσης πρέπει να δείχνει παλιά → νέα IP',
+          ),
+        );
+      },
+    );
+
+    testWidgets(
+      'RDP host: πληκτρολόγηση «10,10,25,12» εμφανίζεται ως «10.10.25.12»',
+      (tester) async {
+        tester.view.physicalSize = const Size(1600, 900);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        final container = ProviderContainer(
+          overrides: _equipmentFormProviderOverrides(
+            catalog: [_kTestRdpHostRemoteTool],
+            pairs: [_kTestRdpHostFormPair],
+          ),
+        );
+        addTearDown(container.dispose);
+
+        late EquipmentDirectoryNotifier notifier;
+        await tester.runAsync(() async {
+          await container.read(lookupServiceProvider.future);
+          notifier = container.read(equipmentDirectoryProvider.notifier);
+          await notifier.load();
+          await _openEquipmentFormInDialog(tester, container, notifier: notifier);
+        });
+
+        expect(find.text(_kNewEquipmentTitle), findsOneWidget);
+
+        final rdpField = find.widgetWithText(
+          TextFormField,
+          _kRemoteRdpAddressLabel,
+        );
+        expect(rdpField, findsOneWidget);
+
+        await tester.enterText(rdpField, '10,10,25,12');
+        await pumpUntilSettled(tester);
+
+        expect(
+          find.textContaining('10.10.25.12'),
+          findsOneWidget,
+          reason: greekExpectMsg(
+            'Το κόμμα του numpad πρέπει να μετατρέπεται σε τελεία στο πεδίο RDP',
           ),
         );
       },

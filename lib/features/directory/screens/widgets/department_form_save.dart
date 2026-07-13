@@ -61,6 +61,7 @@ mixin DepartmentFormSaveMixin on DepartmentFormDialogStateHost {
       mapCustomName: clearBuildingMapPlacement ? null : ini?.mapCustomName,
       directPhones: ini?.directPhones,
       isDeleted: ini?.isDeleted ?? false,
+      isHiddenOnMap: ini?.isHiddenOnMap ?? false,
     );
 
     try {
@@ -181,8 +182,24 @@ mixin DepartmentFormSaveMixin on DepartmentFormDialogStateHost {
         }
       }
       if (!mounted) return;
+      final saveMessage = _isEdit
+          ? buildSaveConfirmationMessage(
+              entityType: AuditEntityTypes.department,
+              entityLabel: name,
+              oldMap: _departmentMapsForSaveConfirmation(ini!.toMap()),
+              newMap: _departmentMapsForSaveConfirmation(model.toMap()),
+              isNew: false,
+            )
+          : buildSaveConfirmationMessage(
+              entityType: AuditEntityTypes.department,
+              entityLabel: name,
+              oldMap: const {},
+              newMap: _departmentMapsForSaveConfirmation(model.toMap()),
+              isNew: true,
+            );
       widget.onSaved?.call();
       Navigator.of(context).pop(true);
+      showSaveConfirmationSnackBar(context, saveMessage);
     } on DepartmentExistsException catch (e) {
       if (!mounted) return;
       if (e.isDeleted) {
@@ -220,6 +237,13 @@ mixin DepartmentFormSaveMixin on DepartmentFormDialogStateHost {
             if (!mounted) return;
             widget.onSaved?.call();
             Navigator.of(context).pop(true);
+            final restoreMessage = 'Επαναφέρθηκε το τμήμα «$name»';
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(restoreMessage),
+                duration: saveConfirmationSnackBarDuration(restoreMessage),
+              ),
+            );
           } catch (err, st) {
             if (!mounted) return;
             showDatabasePersistenceErrorSnackBar(context, err, st);
@@ -269,5 +293,27 @@ mixin DepartmentFormSaveMixin on DepartmentFormDialogStateHost {
       if (!mounted) return;
       showDatabasePersistenceErrorSnackBar(context, e, st);
     }
+  }
+
+  Map<String, dynamic> _departmentMapsForSaveConfirmation(
+    Map<String, dynamic> source,
+  ) {
+    final map = Map<String, dynamic>.from(source);
+    if (map.containsKey('floor_id')) {
+      final raw = map['floor_id'];
+      final id = raw is int ? raw : int.tryParse('$raw');
+      map['floor_id'] = _floorLabelForSaveConfirmation(id);
+    }
+    return map;
+  }
+
+  String? _floorLabelForSaveConfirmation(int? floorId) {
+    if (floorId == null) return null;
+    for (final f in _floors) {
+      if (f.id == floorId) {
+        return buildingMapFloorDisplayLabel(f);
+      }
+    }
+    return '$floorId';
   }
 }

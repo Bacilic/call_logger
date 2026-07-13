@@ -147,6 +147,87 @@ void main() {
     });
   });
 
+  group('RemoteLauncherService — ένας στόχος ανά εκτέλεση ({FILE} vs {TARGET})', () {
+    RemoteTool rdpTool(List<RemoteToolArgument> arguments) => RemoteTool(
+          id: 20,
+          name: 'RDP File+Target',
+          role: ToolRole.rdp,
+          executablePath: r'C:\Windows\System32\mstsc.exe',
+          sortOrder: 1,
+          isActive: true,
+          testTargetIp: '10.0.0.55',
+          arguments: arguments,
+        );
+
+    test(
+      'σήμερα: {TARGET}+{FILE} παράγει ΔΥΟ στοιχεία στη δοκιμή — regression πριν τη διόρθωση',
+      () {
+        final tool = rdpTool(const [
+          RemoteToolArgument(value: '{TARGET}', isActive: true),
+          RemoteToolArgument(value: '{FILE}', isActive: true),
+        ]);
+        final args = RemoteLauncherService.testArgumentList(tool, '10.0.0.55');
+        expect(
+          args,
+          hasLength(1),
+          reason: 'Με ενεργό {FILE} το {TARGET} πρέπει να παραλείπεται',
+        );
+      },
+    );
+
+    test('με {TARGET}+{FILE} η λίστα δοκιμής περιέχει μόνο το αρχείο', () {
+      final tool = rdpTool(const [
+        RemoteToolArgument(value: '{TARGET}', isActive: true),
+        RemoteToolArgument(value: '{FILE}', isActive: true),
+      ]);
+      expect(
+        RemoteLauncherService.testArgumentList(tool, '10.0.0.55'),
+        [kPreviewRdpFilePath],
+      );
+    });
+
+    test(
+      'όρισμα με {TARGET} και {FILE} στην ίδια τιμή διατηρείται',
+      () {
+        final tool = rdpTool(const [
+          RemoteToolArgument(
+            value: r'/f:{FILE} /v:{TARGET}',
+            isActive: true,
+          ),
+          RemoteToolArgument(value: '{TARGET}', isActive: true),
+        ]);
+        expect(
+          RemoteLauncherService.testArgumentList(tool, '10.0.0.55'),
+          ['/f:$kPreviewRdpFilePath /v:10.0.0.55'],
+        );
+      },
+    );
+
+    test('εργαλείο χωρίς {FILE} μένει ανεπηρέαστο', () {
+      final tool = RemoteTool(
+        id: 21,
+        name: 'VNC',
+        role: ToolRole.vnc,
+        executablePath: r'C:\vnc.exe',
+        sortOrder: 1,
+        isActive: true,
+        testTargetIp: '922',
+        arguments: const [
+          RemoteToolArgument(value: '-host=PC{EQUIPMENT_CODE}', isActive: true),
+          RemoteToolArgument(value: '-password=secret', isActive: true),
+        ],
+      );
+      expect(
+        RemoteLauncherService.testArgumentList(tool, '922'),
+        ['-host=PC922', '-password=secret'],
+      );
+      expect(
+        RemoteLauncherService.formatTestCommandPreview(tool),
+        'vnc.exe -host=PC922 -password=secret',
+      );
+    });
+  });
+
   group('RemoteTool.acceptsFileParam', () {
     test('αναγνωρίζει ενεργό placeholder αρχείου ανεξάρτητα από πεζά/κεφαλαία', () {
       final t = RemoteTool(

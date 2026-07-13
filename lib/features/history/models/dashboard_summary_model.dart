@@ -8,6 +8,12 @@ import 'dashboard_filter_model.dart';
 const String kDashboardNoCategoryLabel =
     '\u03a7\u03c9\u03c1\u03af\u03c2 \u039a\u03b1\u03c4\u03b7\u03b3\u03bf\u03c1\u03af\u03b1';
 
+/// Ετικέτα για κλήσεις χωρίς τμήμα στα στατιστικά dashboard.
+const String kDashboardUnknownDepartmentLabel = 'Άγνωστο';
+
+/// Ετικέτα για κλήσεις χωρίς καλούντα στα στατιστικά dashboard.
+const String kDashboardUnknownCallerLabel = 'Άγνωστος';
+
 DateTime? parseDashboardSqlDate(String? raw) {
   if (raw == null) return null;
   final trimmed = raw.trim();
@@ -208,10 +214,10 @@ KpiBarSparklinePoint kpiDurationExtremePoint(int index, num seconds) {
   );
 }
 
-KpiBarSparklinePoint kpiRunnerUpCallsPoint(String name, int count) {
+KpiBarSparklinePoint kpiRunnerUpCallsPoint(String name, int count, int rank) {
   return KpiBarSparklinePoint(
     value: count.toDouble(),
-    tooltip: '$name: ${formatKpiCallCountLabel(count)}',
+    tooltip: '$rankο · $name: ${formatKpiCallCountLabel(count)}',
   );
 }
 
@@ -241,7 +247,12 @@ List<KpiBarSparklinePoint> runnerUpPointsFromDepartmentStats(
     stats
         .skip(1)
         .take(take)
-        .map((e) => kpiRunnerUpCallsPoint(e.name, e.count))
+        .toList()
+        .asMap()
+        .entries
+        .map(
+          (e) => kpiRunnerUpCallsPoint(e.value.name, e.value.count, e.key + 2),
+        )
         .toList(growable: false),
     take,
   );
@@ -255,7 +266,12 @@ List<KpiBarSparklinePoint> runnerUpPointsFromCallerStats(
     stats
         .skip(1)
         .take(take)
-        .map((e) => kpiRunnerUpCallsPoint(e.name, e.count))
+        .toList()
+        .asMap()
+        .entries
+        .map(
+          (e) => kpiRunnerUpCallsPoint(e.value.name, e.value.count, e.key + 2),
+        )
         .toList(growable: false),
     take,
   );
@@ -269,7 +285,12 @@ List<KpiBarSparklinePoint> runnerUpPointsFromIssueStats(
     stats
         .skip(1)
         .take(take)
-        .map((e) => kpiRunnerUpCallsPoint(e.name, e.count))
+        .toList()
+        .asMap()
+        .entries
+        .map(
+          (e) => kpiRunnerUpCallsPoint(e.value.name, e.value.count, e.key + 2),
+        )
         .toList(growable: false),
     take,
   );

@@ -32,7 +32,11 @@ import '../utils/search_text_normalizer.dart';
 /// v29: user_dictionary.display_word (ορθογραφημένη μορφή, ξεχωριστά από κλειδί).
 /// v30: departments.map_label_font_scale (κλίμακα μεγέθους ετικέτας χάρτη ανά τμήμα).
 /// v31: departments.map_label_width / map_label_height (πλαίσιο ετικέτας χάρτη σε px καμβά).
-const int databaseSchemaVersionV1 = 31;
+/// v32: κανονικοποίηση audit «συσχέτιση από κλήση» (μόνο δεδομένα, χωρίς αλλαγή σχήματος).
+/// v33: ανακατασκευή audit_log.search_text (μόνο δεδομένα — καθαρισμός ευρετηρίου).
+/// v34: μετονομασία γενικών ενεργειών audit «ΤΡΟΠΟΠΟΙΗΣΗ» σε ενέργειες ανά οντότητα (μόνο δεδομένα).
+/// v35: αναδρομικός καθαρισμός ιστορικού audit (συγχώνευση διπλών εγγραφών, μόνο δεδομένα).
+const int databaseSchemaVersionV1 = 36;
 
 /// Προεπιλογές διαδρομών (ίδιες με SettingsService — χωρίς εξάρτηση Flutter εδώ).
 const String kDefaultVncExecutablePath =

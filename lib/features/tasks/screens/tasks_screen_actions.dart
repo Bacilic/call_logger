@@ -40,9 +40,19 @@ Future<void> _openNewTaskForm(
         .read(tasksProvider.notifier)
         .addTask(result.copyWith(origin: Task.originManualFab));
     if (!context.mounted) return;
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('Εκκρεμότητα δημιουργήθηκε.')));
+    final saveMessage = buildSaveConfirmationMessage(
+      entityType: 'task',
+      entityLabel: result.title,
+      oldMap: const {},
+      newMap: result.toMap(),
+      isNew: true,
+    );
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(saveMessage),
+        duration: saveConfirmationSnackBarDuration(saveMessage),
+      ),
+    );
   } on TaskSaveException catch (e) {
     if (!context.mounted) return;
     _showTaskSaveError(context, e);
@@ -89,8 +99,13 @@ Future<void> _onEdit(
             ),
           );
           if (!context.mounted) return;
+          final recreateMessage =
+              'Δημιουργήθηκε νέα εκκρεμότητα «${result.title}»';
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Δημιουργήθηκε νέα εκκρεμότητα.')),
+            SnackBar(
+              content: Text(recreateMessage),
+              duration: saveConfirmationSnackBarDuration(recreateMessage),
+            ),
           );
           return;
         case _ClosedEditMode.reopen:
@@ -136,9 +151,27 @@ Future<void> _onEdit(
       await ref.read(tasksProvider.notifier).addTask(result);
     }
     if (!context.mounted) return;
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('Εκκρεμότητα ενημερώθηκε.')));
+    final saveMessage = result.id != null
+        ? buildSaveConfirmationMessage(
+            entityType: 'task',
+            entityLabel: result.title,
+            oldMap: mapForTaskSaveConfirmationDiff(task.toMap()),
+            newMap: mapForTaskSaveConfirmationDiff(result.toMap()),
+            isNew: false,
+          )
+        : buildSaveConfirmationMessage(
+            entityType: 'task',
+            entityLabel: result.title,
+            oldMap: const {},
+            newMap: result.toMap(),
+            isNew: true,
+          );
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(saveMessage),
+        duration: saveConfirmationSnackBarDuration(saveMessage),
+      ),
+    );
   } on TaskSaveException catch (e) {
     if (!context.mounted) return;
     _showTaskSaveError(context, e);
@@ -166,11 +199,24 @@ String _buildClosedInfoText(Task task) {
       durationText = '$minutes λ.';
     }
   }
+  final snoozeEntries = task.snoozeEntries;
+  final lastSnoozeAt =
+      snoozeEntries.isNotEmpty ? snoozeEntries.last.snoozedAt : null;
+  String fromLastSnoozeText = '';
+  if (lastSnoozeAt != null && completedAt != null) {
+    fromLastSnoozeText = durationSince(lastSnoozeAt, completedAt);
+  }
   final solution = (task.solutionNotes?.trim().isNotEmpty ?? false)
       ? task.solutionNotes!.trim()
       : 'Καθόλου λύση';
-  return 'Η εκκρεμότητα έχει ολοκληρωθεί στις $completedText'
-      '${durationText.isNotEmpty ? ' ($durationText)' : ''}.\n'
+  final durationSegment = durationText.isNotEmpty
+      ? fromLastSnoozeText.isNotEmpty
+          ? ' ($durationText, από τελευταία αναβολή: $fromLastSnoozeText)'
+          : ' ($durationText)'
+      : fromLastSnoozeText.isNotEmpty
+          ? ' (από τελευταία αναβολή: $fromLastSnoozeText)'
+          : '';
+  return 'Η εκκρεμότητα έχει ολοκληρωθεί στις $completedText$durationSegment.\n'
       'Λύση: $solution';
 }
 
@@ -424,6 +470,7 @@ Future<void> _onComplete(
   final solutionNotes = await showTaskCloseDialog(
     context,
     initialSolutionNotes: task.solutionNotes,
+    task: task,
   );
   if (!context.mounted || solutionNotes == null) return;
   if (task.id == null) return;

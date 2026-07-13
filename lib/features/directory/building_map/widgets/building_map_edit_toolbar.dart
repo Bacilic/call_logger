@@ -29,6 +29,7 @@ class BuildingMapEditToolbar extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final toolMode = ref.watch(buildingMapToolProvider);
+    final panLock = ref.watch(buildingMapPanLockProvider);
     final deptToMap = ref.watch(buildingMapSelectedDepartmentIdToMapProvider);
     final draftShape = ref.watch(buildingMapDraftShapeProvider);
     final sheetId = ref.watch(buildingMapSelectedSheetIdProvider);
@@ -70,6 +71,9 @@ class BuildingMapEditToolbar extends ConsumerWidget {
         toolMode == MapToolMode.draw || toolMode == MapToolMode.edit,
       ],
       onPressed: (index) {
+        // Η ρητή αλλαγή εργαλείου δηλώνει πρόθεση επιλογής/σχεδίασης —
+        // απενεργοποιεί τον διακόπτη μετακίνησης χάρτη.
+        ref.read(buildingMapPanLockProvider.notifier).setValue(false);
         if (index == 0) {
           ref
               .read(buildingMapToolProvider.notifier)
@@ -152,6 +156,24 @@ class BuildingMapEditToolbar extends ConsumerWidget {
       child: Row(
         children: [
           toggles,
+          const SizedBox(width: 4),
+          IconButton(
+            tooltip:
+                'Μετακίνηση χάρτη στη Σχεδίαση (διακόπτης).\n'
+                'Γρήγοροι δρόμοι: κρατήστε πατημένο το Space ή σύρετε '
+                'με το μεσαίο πλήκτρο του ποντικιού.',
+            isSelected: panLock,
+            style: IconButton.styleFrom(
+              backgroundColor: panLock
+                  ? Theme.of(context).colorScheme.secondaryContainer
+                  : null,
+            ),
+            onPressed: !hasActiveCanvas
+                ? null
+                : () =>
+                      ref.read(buildingMapPanLockProvider.notifier).toggle(),
+            icon: const Icon(Icons.open_with),
+          ),
           if (!hasActiveCanvas)
             Opacity(opacity: 0.42, child: IgnorePointer(child: labelFontControls))
           else

@@ -852,13 +852,19 @@ class EquipmentResultCard extends StatefulWidget {
 }
 
 class _EquipmentResultCardState extends State<EquipmentResultCard> {
-  bool _hovered = false;
+  final ValueNotifier<bool> _hovered = ValueNotifier(false);
   late EquipmentViewModel _viewModel;
 
   @override
   void initState() {
     super.initState();
     _viewModel = widget.viewModel;
+  }
+
+  @override
+  void dispose() {
+    _hovered.dispose();
+    super.dispose();
   }
 
   @override
@@ -875,17 +881,23 @@ class _EquipmentResultCardState extends State<EquipmentResultCard> {
     final sections = _viewModel.sections;
 
     return MouseRegion(
-      onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() => _hovered = false),
-      child: Card(
-        margin: const EdgeInsets.only(bottom: 12),
-        elevation: _hovered ? 3 : 1,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-          side: BorderSide(
-            color: theme.colorScheme.outlineVariant.withValues(alpha: 0.55),
-          ),
-        ),
+      onEnter: (_) => _hovered.value = true,
+      onExit: (_) => _hovered.value = false,
+      child: ValueListenableBuilder<bool>(
+        valueListenable: _hovered,
+        builder: (context, hovered, child) {
+          return Card(
+            margin: const EdgeInsets.only(bottom: 12),
+            elevation: hovered ? 3 : 1,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+              side: BorderSide(
+                color: theme.colorScheme.outlineVariant.withValues(alpha: 0.55),
+              ),
+            ),
+            child: child,
+          );
+        },
         child: Padding(
           padding: _kCardPadding,
           child: LayoutBuilder(
@@ -1008,16 +1020,7 @@ class _DesktopSections extends StatelessWidget {
               ),
             ),
             if (index != sections.length - 1)
-              SizedBox(
-                height: double.infinity,
-                child: VerticalDivider(
-                  width: _kSectionSpacing,
-                  thickness: 1,
-                  color: Theme.of(
-                    context,
-                  ).colorScheme.outlineVariant.withValues(alpha: 0.55),
-                ),
-              ),
+              const SizedBox(width: _kSectionSpacing),
           ],
         ],
       ),
@@ -1551,44 +1554,53 @@ class CopyableField extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Table(
-      columnWidths: const {
-        0: FixedColumnWidth(_kLabelWidth),
-        1: FlexColumnWidth(),
-        2: FixedColumnWidth(30),
-      },
-      defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        TableRow(
-          children: [
-            Padding(
-              padding: const EdgeInsets.only(right: 8),
-              child: Text(
-                label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.labelSmall?.copyWith(
+        SizedBox(
+          width: _kLabelWidth,
+          child: Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+        ),
+        Expanded(
+          child: Text(
+            value,
+            maxLines: maxLines,
+            overflow: TextOverflow.ellipsis,
+            style: theme.textTheme.bodySmall?.copyWith(
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+        SizedBox(
+          width: 30,
+          height: 28,
+          child: Tooltip(
+            message: 'Αντιγραφή $label',
+            waitDuration: const Duration(milliseconds: 500),
+            child: MouseRegion(
+              cursor: SystemMouseCursors.click,
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () => _copyValue(context),
+                child: Icon(
+                  Icons.copy_outlined,
+                  size: 15,
                   color: theme.colorScheme.onSurfaceVariant,
-                  fontWeight: FontWeight.w500,
                 ),
               ),
             ),
-            SelectableText(
-              value,
-              maxLines: maxLines,
-              style: theme.textTheme.bodySmall?.copyWith(
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            IconButton(
-              tooltip: 'Αντιγραφή $label',
-              visualDensity: VisualDensity.compact,
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints.tightFor(width: 28, height: 28),
-              icon: const Icon(Icons.copy_outlined, size: 15),
-              onPressed: () => _copyValue(context),
-            ),
-          ],
+          ),
         ),
       ],
     );

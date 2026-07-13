@@ -278,6 +278,28 @@ class BuildingMapToolNotifier extends Notifier<MapToolMode> {
   }
 }
 
+/// Διακόπτης «Μετακίνηση χάρτη» (pan lock) στην επεξεργασία: όσο είναι ενεργός,
+/// το αριστερό σύρσιμο μετακινεί τον χάρτη αντί να σχεδιάζει/επεξεργάζεται.
+/// Λειτουργεί και ως υπόδειξη προς τον χρήστη — οι γρήγοροι δρόμοι είναι
+/// το κρατημένο Space και το σύρσιμο με το μεσαίο πλήκτρο του ποντικιού.
+final buildingMapPanLockProvider =
+    NotifierProvider<BuildingMapPanLockNotifier, bool>(
+      BuildingMapPanLockNotifier.new,
+    );
+
+class BuildingMapPanLockNotifier extends Notifier<bool> {
+  @override
+  bool build() => false;
+
+  void toggle() {
+    state = !state;
+  }
+
+  void setValue(bool value) {
+    state = value;
+  }
+}
+
 final buildingMapDraftShapeProvider =
     NotifierProvider<BuildingMapDraftShapeNotifier, DraftDepartmentShape?>(
       BuildingMapDraftShapeNotifier.new,

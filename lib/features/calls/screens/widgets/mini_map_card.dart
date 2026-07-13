@@ -1,5 +1,9 @@
-﻿import 'dart:io';
+﻿// ignore_for_file: deprecated_member_use
 
+import 'dart:io';
+import 'dart:math' as math;
+
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -358,83 +362,13 @@ class _MiniMapCardState extends ConsumerState<MiniMapCard> {
     required BuildingMapFloor floor,
     required String imagePath,
   }) {
-    final nx = dept.mapX!;
-    final ny = dept.mapY!;
-    final nw = dept.mapWidth!;
-    final nh = dept.mapHeight!;
-
-    final cx = (nx + (nw / 2)).clamp(0.0, 1.0);
-    final cy = (ny + (nh / 2)).clamp(0.0, 1.0);
-    final span = nw > nh ? nw : nh;
-    // Δείχνουμε περισσότερο περιβάλλον για να μη φαίνεται «κενή περιοχή».
-    // Στόχος: το μεγαλύτερο dimension του τμήματος να καλύπτει ~12% του preview.
-    final zoom = (0.12 / span).clamp(1.35, 3.2);
-
     return LayoutBuilder(
       builder: (context, constraints) {
-        final viewportW = constraints.maxWidth;
-        final viewportH = constraints.maxHeight;
-        final scaledW = viewportW * zoom;
-        final scaledH = viewportH * zoom;
-        final targetX = cx * scaledW;
-        final targetY = cy * scaledH;
-
-        double dx = (viewportW / 2) - targetX;
-        double dy = (viewportH / 2) - targetY;
-        final minDx = viewportW - scaledW;
-        final minDy = viewportH - scaledH;
-        if (dx > 0) dx = 0;
-        if (dy > 0) dy = 0;
-        if (dx < minDx) dx = minDx;
-        if (dy < minDy) dy = minDy;
-        final overlayLeft = (nx * scaledW) + dx;
-        final overlayTop = (ny * scaledH) + dy;
-        final overlayWidth = nw * scaledW;
-        final overlayHeight = nh * scaledH;
-
-        return ClipRect(
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              Transform.translate(
-                offset: Offset(dx, dy),
-                child: OverflowBox(
-                  alignment: Alignment.topLeft,
-                  minWidth: scaledW,
-                  maxWidth: scaledW,
-                  minHeight: scaledH,
-                  maxHeight: scaledH,
-                  child: SizedBox(
-                    width: scaledW,
-                    height: scaledH,
-                    child: Image.file(
-                      File(imagePath),
-                      fit: BoxFit.fill,
-                      filterQuality: FilterQuality.medium,
-                    ),
-                  ),
-                ),
-              ),
-              Positioned(
-                left: overlayLeft,
-                top: overlayTop,
-                width: overlayWidth,
-                height: overlayHeight,
-                child: IgnorePointer(
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.22),
-                      border: Border.all(
-                        color: Theme.of(context).colorScheme.primary,
-                        width: 2,
-                      ),
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
+        return MiniMapFloorPreview(
+          dept: dept,
+          imagePath: imagePath,
+          viewportWidth: constraints.maxWidth,
+          viewportHeight: constraints.maxHeight,
         );
       },
     );
@@ -623,4 +557,311 @@ class _MiniMapCardData {
 
 extension<T> on List<T> {
   T? get firstOrNull => isEmpty ? null : first;
+}
+
+/// Διαδραστική προεπισκόπηση κατόψεως με επισήμανση τμήματος (μικρός χάρτης κλήσεων).
+@visibleForTesting
+class MiniMapFloorPreview extends StatefulWidget {
+  const MiniMapFloorPreview({
+    super.key,
+    required this.dept,
+    required this.imagePath,
+    required this.viewportWidth,
+    required this.viewportHeight,
+  });
+
+  static const double kMinInteractiveScale = 1.0;
+  static const double kMaxInteractiveScale = 6.0;
+  static const double _kTargetDepartmentCoverage = 0.12;
+  static const double _kMinBaseZoom = 1.35;
+  static const double _kMaxBaseZoom = 3.2;
+  static const int _kImageDecodeCeilingPx = 2048;
+  static const double _kWheelZoomFactor = 0.12;
+
+  final DepartmentModel dept;
+  final String imagePath;
+  final double viewportWidth;
+  final double viewportHeight;
+
+  @override
+  State<MiniMapFloorPreview> createState() => _MiniMapFloorPreviewState();
+}
+
+class _MiniMapFloorPreviewState extends State<MiniMapFloorPreview> {
+  late final TransformationController _transformationController;
+  late Matrix4 _initialMatrix;
+  late _MiniMapFloorPreviewLayout _layout;
+  DateTime? _lastPointerUpTime;
+  int _pointerUpCount = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _layout = _MiniMapFloorPreviewLayout.compute(
+      dept: widget.dept,
+      viewportWidth: widget.viewportWidth,
+      viewportHeight: widget.viewportHeight,
+    );
+    _initialMatrix = _layout.initialMatrix;
+    _transformationController = TransformationController(_initialMatrix);
+  }
+
+  @override
+  void didUpdateWidget(covariant MiniMapFloorPreview oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final layoutChanged =
+        oldWidget.dept.id != widget.dept.id ||
+        oldWidget.dept.mapX != widget.dept.mapX ||
+        oldWidget.dept.mapY != widget.dept.mapY ||
+        oldWidget.dept.mapWidth != widget.dept.mapWidth ||
+        oldWidget.dept.mapHeight != widget.dept.mapHeight ||
+        oldWidget.dept.mapRotation != widget.dept.mapRotation ||
+        oldWidget.imagePath != widget.imagePath ||
+        oldWidget.viewportWidth != widget.viewportWidth ||
+        oldWidget.viewportHeight != widget.viewportHeight;
+    if (!layoutChanged) return;
+
+    _layout = _MiniMapFloorPreviewLayout.compute(
+      dept: widget.dept,
+      viewportWidth: widget.viewportWidth,
+      viewportHeight: widget.viewportHeight,
+    );
+    _initialMatrix = _layout.initialMatrix;
+    _transformationController.value = _initialMatrix;
+  }
+
+  @override
+  void dispose() {
+    _transformationController.dispose();
+    super.dispose();
+  }
+
+  void _resetTransform() {
+    _transformationController.value = _initialMatrix;
+  }
+
+  void _onPointerUp(PointerUpEvent event) {
+    final now = DateTime.now();
+    if (_lastPointerUpTime != null &&
+        now.difference(_lastPointerUpTime!) <=
+            const Duration(milliseconds: 350)) {
+      _pointerUpCount++;
+    } else {
+      _pointerUpCount = 1;
+    }
+    _lastPointerUpTime = now;
+    if (_pointerUpCount >= 2) {
+      _pointerUpCount = 0;
+      _lastPointerUpTime = null;
+      _resetTransform();
+    }
+  }
+
+  void _onPointerSignal(PointerSignalEvent event) {
+    if (event is! PointerScrollEvent) return;
+    final scrollDelta = event.scrollDelta.dy;
+    if (scrollDelta == 0) return;
+
+    final current = _transformationController.value.clone();
+    final currentScale = current.getMaxScaleOnAxis();
+    final scaleDelta = scrollDelta > 0
+        ? (1 - MiniMapFloorPreview._kWheelZoomFactor)
+        : (1 + MiniMapFloorPreview._kWheelZoomFactor);
+    final newScale = (currentScale * scaleDelta).clamp(
+      MiniMapFloorPreview.kMinInteractiveScale,
+      MiniMapFloorPreview.kMaxInteractiveScale,
+    );
+    if ((newScale - currentScale).abs() < 1e-6) return;
+
+    final focalPoint = event.localPosition;
+    final scaleChange = newScale / currentScale;
+    final updated = Matrix4.copy(current)
+      ..translate(focalPoint.dx, focalPoint.dy)
+      ..scale(scaleChange)
+      ..translate(-focalPoint.dx, -focalPoint.dy);
+    _transformationController.value = updated;
+  }
+
+  Widget _departmentHighlight(BuildContext context) {
+    final highlight = DecoratedBox(
+      key: const Key('mini_map_department_highlight'),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.22),
+        border: Border.all(
+          color: Theme.of(context).colorScheme.primary,
+          width: 2,
+        ),
+        borderRadius: BorderRadius.circular(4),
+      ),
+    );
+
+    final rotation = widget.dept.mapRotation;
+    if (rotation == 0) return highlight;
+
+    return Transform.rotate(
+      angle: rotation,
+      alignment: Alignment.center,
+      child: highlight,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final dpr = MediaQuery.devicePixelRatioOf(context);
+    final cacheWidth = math.min(
+      MiniMapFloorPreview._kImageDecodeCeilingPx,
+      (_layout.viewportWidth *
+              2 *
+              dpr *
+              MiniMapFloorPreview.kMaxInteractiveScale)
+          .round(),
+    );
+
+    return ClipRect(
+      child: RepaintBoundary(
+        child: SizedBox(
+          width: widget.viewportWidth,
+          height: widget.viewportHeight,
+          child: Listener(
+            key: const Key('mini_map_scroll_listener'),
+            behavior: HitTestBehavior.opaque,
+            onPointerUp: _onPointerUp,
+            onPointerSignal: _onPointerSignal,
+            child: InteractiveViewer(
+                key: const Key('mini_map_interactive_viewer'),
+                transformationController: _transformationController,
+                minScale: MiniMapFloorPreview.kMinInteractiveScale,
+                maxScale: MiniMapFloorPreview.kMaxInteractiveScale,
+                constrained: false,
+                clipBehavior: Clip.hardEdge,
+                panEnabled: true,
+                scaleEnabled: false,
+                boundaryMargin: EdgeInsets.zero,
+                child: SizedBox(
+                  width: _layout.scaledWidth,
+                  height: _layout.scaledHeight,
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      Image.file(
+                        File(widget.imagePath),
+                        fit: BoxFit.fill,
+                        filterQuality: FilterQuality.medium,
+                        cacheWidth: cacheWidth,
+                      ),
+                      Positioned(
+                        left: _layout.highlightLeft,
+                        top: _layout.highlightTop,
+                        width: _layout.highlightWidth,
+                        height: _layout.highlightHeight,
+                        child: IgnorePointer(
+                          child: _departmentHighlight(context),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+    );
+  }
+}
+
+class _MiniMapFloorPreviewLayout {
+  const _MiniMapFloorPreviewLayout({
+    required this.viewportWidth,
+    required this.viewportHeight,
+    required this.scaledWidth,
+    required this.scaledHeight,
+    required this.highlightLeft,
+    required this.highlightTop,
+    required this.highlightWidth,
+    required this.highlightHeight,
+    required this.initialMatrix,
+  });
+
+  final double viewportWidth;
+  final double viewportHeight;
+  final double scaledWidth;
+  final double scaledHeight;
+  final double highlightLeft;
+  final double highlightTop;
+  final double highlightWidth;
+  final double highlightHeight;
+  final Matrix4 initialMatrix;
+
+  static double _rotatedSpan(double width, double height, double radians) {
+    final cosA = math.cos(radians).abs();
+    final sinA = math.sin(radians).abs();
+    final rotatedWidth = (width * cosA) + (height * sinA);
+    final rotatedHeight = (width * sinA) + (height * cosA);
+    return rotatedWidth > rotatedHeight ? rotatedWidth : rotatedHeight;
+  }
+
+  static Matrix4 _initialTranslationMatrix({
+    required double viewportWidth,
+    required double viewportHeight,
+    required double scaledWidth,
+    required double scaledHeight,
+    required double centerX,
+    required double centerY,
+  }) {
+    final targetX = centerX * scaledWidth;
+    final targetY = centerY * scaledHeight;
+
+    var dx = (viewportWidth / 2) - targetX;
+    var dy = (viewportHeight / 2) - targetY;
+    final minDx = viewportWidth - scaledWidth;
+    final minDy = viewportHeight - scaledHeight;
+    if (dx > 0) dx = 0;
+    if (dy > 0) dy = 0;
+    if (dx < minDx) dx = minDx;
+    if (dy < minDy) dy = minDy;
+
+    return Matrix4.identity()..translate(dx, dy);
+  }
+
+  static _MiniMapFloorPreviewLayout compute({
+    required DepartmentModel dept,
+    required double viewportWidth,
+    required double viewportHeight,
+  }) {
+    final nx = dept.mapX!;
+    final ny = dept.mapY!;
+    final nw = dept.mapWidth!;
+    final nh = dept.mapHeight!;
+
+    final cx = (nx + (nw / 2)).clamp(0.0, 1.0);
+    final cy = (ny + (nh / 2)).clamp(0.0, 1.0);
+    final span = _rotatedSpan(nw, nh, dept.mapRotation);
+    final zoom = (MiniMapFloorPreview._kTargetDepartmentCoverage / span).clamp(
+      MiniMapFloorPreview._kMinBaseZoom,
+      MiniMapFloorPreview._kMaxBaseZoom,
+    );
+
+    final scaledWidth = viewportWidth * zoom;
+    final scaledHeight = viewportHeight * zoom;
+    final initialMatrix = _initialTranslationMatrix(
+      viewportWidth: viewportWidth,
+      viewportHeight: viewportHeight,
+      scaledWidth: scaledWidth,
+      scaledHeight: scaledHeight,
+      centerX: cx,
+      centerY: cy,
+    );
+
+    return _MiniMapFloorPreviewLayout(
+      viewportWidth: viewportWidth,
+      viewportHeight: viewportHeight,
+      scaledWidth: scaledWidth,
+      scaledHeight: scaledHeight,
+      highlightLeft: nx * scaledWidth,
+      highlightTop: ny * scaledHeight,
+      highlightWidth: nw * scaledWidth,
+      highlightHeight: nh * scaledHeight,
+      initialMatrix: initialMatrix,
+    );
+  }
 }

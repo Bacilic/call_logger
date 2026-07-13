@@ -275,8 +275,85 @@ class LampIssueResolutionController {
   }) async {
     var merged = emptyApplyResult();
     var skipRemainingUnresolved = false;
+    var deferRemainingUnresolved = false;
 
     void emit(ResolutionLogEntry entry) => logController.add(entry);
+
+    LampIssueResolutionProposal proposalWithOperation(
+      LampIssueResolutionProposal proposal,
+      String operation,
+    ) {
+      return LampIssueResolutionProposal(
+        issueType: proposal.issueType,
+        issueIds: proposal.issueIds,
+        sheet: proposal.sheet,
+        row: proposal.row,
+        column: proposal.column,
+        originalValue: proposal.originalValue,
+        proposedAction: proposal.proposedAction,
+        proposedId: proposal.proposedId,
+        proposedMatch: proposal.proposedMatch,
+        confidence: proposal.confidence,
+        options: proposal.options,
+        notes: proposal.notes,
+        metadata: <String, Object?>{
+          ...proposal.metadata,
+          'operation': operation,
+          if (operation != LampIssueResolutionOperations.deferIssue) ...<String, Object?>{
+            'fkColumn': proposal.column,
+            'code': proposal.row,
+          },
+        },
+      );
+    }
+
+    Future<LampIssueResolutionApplyResult> applyUnresolvedOutcome(
+      LampIssueResolutionProposal proposal,
+      LampUnresolvedResolutionOutcome outcome,
+    ) async {
+      switch (outcome) {
+        case LampUnresolvedSetFieldManual(:final codeInput):
+          return host.shared.issueResolutionService.applySingleDecision(
+            databasePath: databasePath,
+            decision: LampIssueResolutionDecision(
+              proposal: proposalWithOperation(
+                proposal,
+                LampIssueResolutionOperations.setFieldManual,
+              ),
+              textInput: codeInput,
+            ),
+            onLog: emit,
+            cancelToken: cancelToken,
+          );
+        case LampUnresolvedClearField():
+          return host.shared.issueResolutionService.applySingleDecision(
+            databasePath: databasePath,
+            decision: LampIssueResolutionDecision(
+              proposal: proposalWithOperation(
+                proposal,
+                LampIssueResolutionOperations.clearField,
+              ),
+            ),
+            onLog: emit,
+            cancelToken: cancelToken,
+          );
+        case LampUnresolvedDeferCurrent():
+        case LampUnresolvedDeferAll():
+          return host.shared.issueResolutionService.applySingleDecision(
+            databasePath: databasePath,
+            decision: LampIssueResolutionDecision(
+              proposal: proposalWithOperation(
+                proposal,
+                LampIssueResolutionOperations.deferIssue,
+              ),
+            ),
+            onLog: emit,
+            cancelToken: cancelToken,
+          );
+        default:
+          return emptyApplyResult();
+      }
+    }
 
     emit(
       ResolutionLogEntry.info(
@@ -367,19 +444,51 @@ class LampIssueResolutionController {
           progress.value += proposals.length;
         case LampUnresolvedOrchestrationUnit(:final proposal):
           var shouldRecordUnresolved = true;
-          if (!skipRemainingUnresolved) {
-            final outcome = await _pauseForUserDialog(
+          LampUnresolvedResolutionOutcome? outcome;
+          if (!skipRemainingUnresolved && !deferRemainingUnresolved) {
+            outcome = await _pauseForUserDialog(
               paused,
               () => showLampUnresolvedResolutionDialog(
                 context: dialogContext,
                 proposal: proposal,
+                databasePath: databasePath,
+                resolutionService: host.shared.issueResolutionService,
               ),
             );
             if (!dialogContext.mounted) {
               break unitLoop;
             }
+          } else if (skipRemainingUnresolved) {
+            emit(
+              ResolutionLogEntry.info(
+                'Μαζική παράλειψη ανεπίλυτης πρότασης στη γραμμή ${proposal.row ?? '-'} '
+                '(στήλη ${proposal.column ?? '-'}).',
+              ),
+            );
+          } else {
+            outcome = const LampUnresolvedDeferCurrent();
+            emit(
+              ResolutionLogEntry.info(
+                'Μαζική αναβολή ανεπίλυτης πρότασης στη γραμμή ${proposal.row ?? '-'} '
+                '(στήλη ${proposal.column ?? '-'}).',
+              ),
+            );
+          }
+
+          if (outcome == null &&
+              !skipRemainingUnresolved &&
+              !deferRemainingUnresolved) {
+            cancelToken.cancel();
+            shouldRecordUnresolved = false;
+            emit(
+              ResolutionLogEntry.warning(
+                'Ακυρώθηκε η διαδικασία κατά την επισκόπηση ανεπίλυτων προτάσεων.',
+              ),
+            );
+          }
+
+          if (outcome != null) {
             switch (outcome) {
-              case null:
               case LampUnresolvedCancelAll():
                 cancelToken.cancel();
                 shouldRecordUnresolved = false;
@@ -388,7 +497,6 @@ class LampIssueResolutionController {
                     'Ακυρώθηκε η διαδικασία κατά την επισκόπηση ανεπίλυτων προτάσεων.',
                   ),
                 );
-                break;
               case LampUnresolvedSkipAll():
                 skipRemainingUnresolved = true;
                 emit(
@@ -402,7 +510,6 @@ class LampIssueResolutionController {
                     '(στήλη ${proposal.column ?? '-'}).',
                   ),
                 );
-                break;
               case LampUnresolvedSkipCurrent():
                 emit(
                   ResolutionLogEntry.info(
@@ -410,20 +517,41 @@ class LampIssueResolutionController {
                     '(στήλη ${proposal.column ?? '-'}).',
                   ),
                 );
-                break;
+              case LampUnresolvedDeferAll():
+                deferRemainingUnresolved = true;
+                emit(
+                  ResolutionLogEntry.info(
+                    'Ο χρήστης επέλεξε μαζική αναβολή για τις υπόλοιπες ανεπίλυτες προτάσεις.',
+                  ),
+                );
+                final deferStep = await applyUnresolvedOutcome(
+                  proposal,
+                  outcome,
+                );
+                merged = mergeApplyResults(merged, deferStep);
+                shouldRecordUnresolved = false;
+              case LampUnresolvedDeferCurrent():
+                final deferStep = await applyUnresolvedOutcome(
+                  proposal,
+                  outcome,
+                );
+                merged = mergeApplyResults(merged, deferStep);
+                shouldRecordUnresolved = false;
+              case LampUnresolvedSetFieldManual():
+              case LampUnresolvedClearField():
+                final actionStep = await applyUnresolvedOutcome(
+                  proposal,
+                  outcome,
+                );
+                merged = mergeApplyResults(merged, actionStep);
+                shouldRecordUnresolved = false;
             }
-          } else {
-            emit(
-              ResolutionLogEntry.info(
-                'Μαζική παράλειψη ανεπίλυτης πρότασης στη γραμμή ${proposal.row ?? '-'} '
-                '(στήλη ${proposal.column ?? '-'}).',
-              ),
-            );
           }
+
           if (shouldRecordUnresolved) {
             merged = mergeApplyResults(merged, singleUnresolvedApplyResult());
-            progress.value++;
           }
+          progress.value++;
       }
 
       if (cancelToken.isCancelled) {

@@ -48,6 +48,7 @@ class DepartmentRepository {
     String? name, {
     bool recordAudit = true,
     DatabaseExecutor? executor,
+    String? auditOriginSuffix,
   }) async {
     final displayName = stripDepartmentDeletedDisplaySuffix(name).trim();
     if (displayName.isEmpty) return null;
@@ -83,7 +84,10 @@ class DepartmentRepository {
           txn,
           action: 'ΔΗΜΙΟΥΡΓΙΑ ΤΜΗΜΑΤΟΣ',
           userPerforming: ap,
-          details: 'departments id=$newId (getOrCreateDepartmentIdByName)',
+          details: DirectorySupport.appendAuditOriginSuffix(
+            'departments id=$newId (getOrCreateDepartmentIdByName)',
+            auditOriginSuffix,
+          ),
           entityType: AuditEntityTypes.department,
           entityId: newId,
           entityName: displayName,
@@ -382,6 +386,25 @@ class DepartmentRepository {
     }
   }
 
+  static ({Map<String, dynamic> oldDiff, Map<String, dynamic> newDiff})
+      _departmentAuditDiff(
+    Map<String, dynamic> oldRow,
+    Map<String, dynamic> updates,
+  ) {
+    final oldDiff = <String, dynamic>{};
+    final newDiff = <String, dynamic>{};
+    for (final k in updates.keys) {
+      if (k == 'name_key') continue;
+      final a = oldRow[k];
+      final b = updates[k];
+      if (!DirectorySupport.auditValuesEqual(a, b)) {
+        oldDiff[k] = a;
+        newDiff[k] = b;
+      }
+    }
+    return (oldDiff: oldDiff, newDiff: newDiff);
+  }
+
   Future<int> updateDepartment(
     int id,
     Map<String, dynamic> values, {
@@ -407,17 +430,8 @@ class DepartmentRepository {
       whereArgs: [id],
     );
     if (n <= 0) return 0;
-    final oldDiff = <String, dynamic>{};
-    final newDiff = <String, dynamic>{};
-    for (final k in map.keys) {
-      final a = oldRow[k];
-      final b = map[k];
-      if ('$a' != '$b') {
-        oldDiff[k] = a;
-        newDiff[k] = b;
-      }
-    }
-    if (oldDiff.isNotEmpty) {
+    final diff = _departmentAuditDiff(oldRow, map);
+    if (diff.oldDiff.isNotEmpty) {
       final ap = await _support.auditPerformingUser(executor: executor);
       final dn = (oldRow['name'] as String?)?.trim() ?? '';
       await AuditService.log(
@@ -428,8 +442,8 @@ class DepartmentRepository {
         entityType: AuditEntityTypes.department,
         entityId: id,
         entityName: dn.isEmpty ? null : dn,
-        oldValues: oldDiff,
-        newValues: newDiff,
+        oldValues: diff.oldDiff,
+        newValues: diff.newDiff,
       );
     }
     return n;

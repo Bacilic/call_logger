@@ -162,89 +162,190 @@ class DirectorySupport {
   ) =>
       idLabelMap(e, 'equipment', 'code_equipment', ids);
 
-  Future<void> auditUserEntityLinkDeltaInTxn(
-    DatabaseExecutor txn, {
+  static bool auditValuesEqual(dynamic a, dynamic b) =>
+      AuditService.valuesEqual(a, b);
+
+  /// Ενώνει βασικές λεπτομέρειες audit με ονομαστικές γραμμές συνδέσεων.
+  static String mergeAuditDetailLines(String base, List<String> extras) {
+    final parts = <String>[base, ...extras]
+        .map((s) => s.trim())
+        .where((s) => s.isNotEmpty);
+    return parts.join(' · ');
+  }
+
+  // ---------------------------------------------------------------------------
+  // Φάση 3 — προέλευση παράγωγων εγγραφών audit (χωρίς αλλαγή σχήματος audit_log)
+  //
+  // Χάρτης αλυσίδας κατά υποβολή κλήσης (ενιαία συναλλαγή, call_id πρώτα):
+  //   1. insertCallOnExecutor → ΔΗΜΙΟΥΡΓΙΑ ΚΛΗΣΗΣ (κύρια · χωρίς προέλευση)
+  //   2. getOrCreateDepartmentIdByName → ΔΗΜΙΟΥΡΓΙΑ ΤΜΗΜΑΤΟΣ (παράγωγη)
+  //   3. insertUser → ΔΗΜΙΟΥΡΓΙΑ ΧΡΗΣΤΗ + σύνδεση τηλεφώνων (παράγωγη)
+  //   4. updateAssociationsIfNeeded → συσχέτιση εξοπλισμού/τηλεφώνου (παράγωγη)
+  //   5. addDepartmentDirectPhoneInTxn → ΤΡΟΠΟΠΟΙΗΣΗ ΤΗΛΕΦΩΝΟΥ (παράγωγη, αν χρειάζεται)
+  //   6. createFromCallOnExecutor → ΔΗΜΙΟΥΡΓΙΑ ΕΚΚΡΕΜΟΤΗΤΑΣ (κύρια · χωρίς προέλευση)
+  //
+  // Ροή UI (associate πριν submit): τα βήματα 2–4 μπορεί να τρέξουν ΠΡΙΝ το id κλήσης·
+  // τότε καταγράφονται χωρίς suffix και ενημερώνονται στο τέλος της ίδιας συναλλαγής
+  // μέσω [PendingAuditOriginRows.applyOriginSuffix].
+  // ---------------------------------------------------------------------------
+
+  static String auditOriginSuffixFromCall(int callId) =>
+      ' — από κλήση #$callId';
+
+  static String auditOriginSuffixFromTask(int taskId) =>
+      ' — από εκκρεμότητα #$taskId';
+
+  static final RegExp _auditOriginSuffixPattern = RegExp(
+    r' — από (κλήση|εκκρεμότητα) #(\d+)$',
+  );
+
+  /// Προσθέτει ενιαίο suffix προέλευσης στο τέλος των `details` (idempotent).
+  static String appendAuditOriginSuffix(String? base, String? suffix) {
+    if (suffix == null || suffix.trim().isEmpty) {
+      return base?.trim() ?? '';
+    }
+    // ΜΗΝ κάνουμε trim στο suffix — το « — » πρέπει να διατηρηθεί.
+    final s = suffix.startsWith(' — ')
+        ? suffix
+        : ' — ${suffix.trim()}';
+    final b = base?.trim() ?? '';
+    if (b.isEmpty) return s;
+    if (b.endsWith(s) || b.contains(s)) return b;
+    return '$b$s';
+  }
+
+  /// Αφαιρεί το suffix προέλευσης από `details` (εμφάνιση UI).
+  static String stripAuditOriginSuffix(String? details) {
+    final t = details?.trim() ?? '';
+    if (t.isEmpty) return t;
+    return t.replaceFirst(_auditOriginSuffixPattern, '').trim();
+  }
+
+  /// Γραμμή «Προέλευση: Κλήση #N» / «Προέλευση: Εκκρεμότητα #N» για UI.
+  static String? auditOriginDisplayLine(String? details) {
+    final m = _auditOriginSuffixPattern.firstMatch(details?.trim() ?? '');
+    if (m == null) return null;
+    final kind = m.group(1)!;
+    final id = m.group(2)!;
+    if (kind == 'κλήση') return 'Προέλευση: Κλήση #$id';
+    return 'Προέλευση: Εκκρεμότητα #$id';
+  }
+
+  /// Καταγραφή audit + επιστροφή id (για deferred stamping στην ίδια συναλλαγή).
+  static Future<int?> auditLogReturnId(
+    DatabaseExecutor executor, {
+    required String action,
     required String userPerforming,
+    String? details,
+    String? entityType,
+    int? entityId,
+    String? entityName,
+    Map<String, dynamic>? oldValues,
+    Map<String, dynamic>? newValues,
+    String? auditOriginSuffix,
+  }) async {
+    final mergedDetails = appendAuditOriginSuffix(details, auditOriginSuffix);
+    await AuditService.log(
+      executor,
+      action: action,
+      userPerforming: userPerforming,
+      details: mergedDetails.isEmpty ? null : mergedDetails,
+      entityType: entityType,
+      entityId: entityId,
+      entityName: entityName,
+      oldValues: oldValues,
+      newValues: newValues,
+    );
+    final rows = await executor.rawQuery('SELECT last_insert_rowid() AS id');
+    if (rows.isEmpty) return null;
+    final raw = rows.first['id'];
+    if (raw is int) return raw;
+    if (raw is num) return raw.toInt();
+    return int.tryParse('$raw');
+  }
+
+  Future<List<String>> describeUserEntityLinkDeltaInTxn(
+    DatabaseExecutor txn, {
     required int userId,
     required Set<int> beforeIds,
     required Set<int> afterIds,
     required String table,
     required String labelColumn,
-    required String entityWord,
     required String entityType,
   }) async {
     final removed = beforeIds.difference(afterIds);
     final added = afterIds.difference(beforeIds);
-    if (removed.isEmpty && added.isEmpty) return;
+    if (removed.isEmpty && added.isEmpty) return const [];
     final ids = removed.union(added);
     final labels = switch ((table, labelColumn)) {
       ('phones', 'number') => await phoneNumbersByIds(txn, ids),
       ('equipment', 'code_equipment') => await equipmentCodesByIds(txn, ids),
       _ => await idLabelMap(txn, table, labelColumn, ids),
     };
+    final lines = <String>[];
     for (final id in removed) {
-      await AuditService.log(
-        txn,
-        action: 'ΤΡΟΠΟΠΟΙΗΣΗ',
-        userPerforming: userPerforming,
-        details: '$entityWord id=$id (αποσύνδεση χρήστη)',
-        entityType: entityType,
-        entityId: id,
-        entityName: labels[id] ?? '#$id',
-        oldValues: {'linked_user_id': userId},
-        newValues: {'linked_user_id': null},
-      );
+      final label = labels[id] ?? '#$id';
+      lines.add(_userEntityLinkDetailLine(entityType, label, linked: false));
     }
     for (final id in added) {
-      await AuditService.log(
-        txn,
-        action: 'ΤΡΟΠΟΠΟΙΗΣΗ',
-        userPerforming: userPerforming,
-        details: '$entityWord id=$id (σύνδεση χρήστη)',
-        entityType: entityType,
-        entityId: id,
-        entityName: labels[id] ?? '#$id',
-        oldValues: {'linked_user_id': null},
-        newValues: {'linked_user_id': userId},
-      );
+      final label = labels[id] ?? '#$id';
+      lines.add(_userEntityLinkDetailLine(entityType, label, linked: true));
+    }
+    return lines;
+  }
+
+  static String _userEntityLinkDetailLine(
+    String entityType,
+    String label, {
+    required bool linked,
+  }) {
+    switch (entityType) {
+      case AuditEntityTypes.phone:
+        return linked
+            ? 'Προσθήκη τηλεφώνου $label'
+            : 'Αποσύνδεση τηλεφώνου $label';
+      case AuditEntityTypes.equipment:
+        return linked
+            ? 'Προσθήκη εξοπλισμού $label'
+            : 'Αποσύνδεση εξοπλισμού $label';
+      default:
+        return linked
+            ? 'Προσθήκη $entityType $label'
+            : 'Αποσύνδεση $entityType $label';
     }
   }
 
-  Future<void> auditPhoneUserLinkDeltaInTxn(
+  Future<List<String>> auditPhoneUserLinkDeltaInTxn(
     DatabaseExecutor txn,
     String userPerforming,
     int userId,
     Set<int> beforeIds,
     Set<int> afterIds,
   ) =>
-      auditUserEntityLinkDeltaInTxn(
+      describeUserEntityLinkDeltaInTxn(
         txn,
-        userPerforming: userPerforming,
         userId: userId,
         beforeIds: beforeIds,
         afterIds: afterIds,
         table: 'phones',
         labelColumn: 'number',
-        entityWord: 'phones',
         entityType: AuditEntityTypes.phone,
       );
 
-  Future<void> auditEquipmentUserLinkDeltaInTxn(
+  Future<List<String>> auditEquipmentUserLinkDeltaInTxn(
     DatabaseExecutor txn,
     String userPerforming,
     int userId,
     Set<int> beforeIds,
     Set<int> afterIds,
   ) =>
-      auditUserEntityLinkDeltaInTxn(
+      describeUserEntityLinkDeltaInTxn(
         txn,
-        userPerforming: userPerforming,
         userId: userId,
         beforeIds: beforeIds,
         afterIds: afterIds,
         table: 'equipment',
         labelColumn: 'code_equipment',
-        entityWord: 'equipment',
         entityType: AuditEntityTypes.equipment,
       );
 
@@ -314,8 +415,9 @@ class DirectorySupport {
   Future<void> addDepartmentDirectPhoneInTxn(
     DatabaseExecutor txn,
     int departmentId,
-    String phoneNumber,
-  ) async {
+    String phoneNumber, {
+    String? auditOriginSuffix,
+  }) async {
     final t = phoneNumber.trim();
     if (t.isEmpty) return;
     final beforeDp = await txn.rawQuery(
@@ -341,9 +443,12 @@ class DirectorySupport {
     final ap = await auditPerformingUser(executor: txn);
     await AuditService.log(
       txn,
-      action: 'ΤΡΟΠΟΠΟΙΗΣΗ',
+      action: AuditActions.modifyPhone,
       userPerforming: ap,
-      details: 'phones id=$pid (τμήμα $departmentId)',
+      details: appendAuditOriginSuffix(
+        'phones id=$pid (τμήμα $departmentId)',
+        auditOriginSuffix,
+      ),
       entityType: AuditEntityTypes.phone,
       entityId: pid,
       entityName: t,
@@ -382,7 +487,7 @@ class DirectorySupport {
       if (uid == null) continue;
       await AuditService.log(
         txn,
-        action: 'ΤΡΟΠΟΠΟΙΗΣΗ',
+        action: AuditActions.modifyPhone,
         userPerforming: ap,
         details: 'phones id=$pid (αφαίρεση από χρήστη $uid)',
         entityType: AuditEntityTypes.phone,
@@ -392,5 +497,47 @@ class DirectorySupport {
         newValues: {'linked_user_id': null},
       );
     }
+  }
+}
+
+/// Συλλέκτης id audit που γράφτηκαν πριν υπάρξει id κλήσης/εκκρεμότητας.
+class PendingAuditOriginRows {
+  final Set<int> _ids = {};
+
+  void track(int? auditLogId) {
+    if (auditLogId != null) _ids.add(auditLogId);
+  }
+
+  bool get isEmpty => _ids.isEmpty;
+
+  void clear() => _ids.clear();
+
+  Future<void> applyOriginSuffix(
+    DatabaseExecutor txn,
+    String originSuffix,
+  ) async {
+    if (_ids.isEmpty) return;
+    for (final auditId in _ids) {
+      final rows = await txn.query(
+        'audit_log',
+        columns: ['details'],
+        where: 'id = ?',
+        whereArgs: [auditId],
+        limit: 1,
+      );
+      if (rows.isEmpty) continue;
+      final updated = DirectorySupport.appendAuditOriginSuffix(
+        rows.first['details'] as String?,
+        originSuffix,
+      );
+      await txn.update(
+        'audit_log',
+        {'details': updated.isEmpty ? null : updated},
+        where: 'id = ?',
+        whereArgs: [auditId],
+      );
+      await AuditService.rebuildAndPersistSearchText(txn, auditId);
+    }
+    _ids.clear();
   }
 }

@@ -227,11 +227,24 @@ mixin UserFormSaveMixin on UserFormDialogStateHost {
       ref.invalidate(lookupServiceProvider);
       await ref.read(lookupServiceProvider.future);
       if (!mounted) return;
+      final saveMessage = buildSaveConfirmationMessage(
+        entityType: AuditEntityTypes.user,
+        entityLabel: _buildUserDisplayName(),
+        oldMap: _userMapForSaveConfirmation(
+          widget.initialUser!.toMap(),
+          departmentDisplayName:
+              widget.initialUser!.departmentName?.trim() ??
+              _initialDepartmentText.trim(),
+        ),
+        newMap: _userMapForSaveConfirmation(
+          user.toMap(),
+          departmentDisplayName: _departmentController.text.trim(),
+        ),
+        isNew: false,
+      );
       widget.onSaved?.call();
       Navigator.of(context).pop(true);
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Αποθηκεύτηκε')));
+      showSaveConfirmationSnackBar(context, saveMessage);
       return;
     }
     if (await widget.notifier.hasDuplicateUserFresh(user)) {
@@ -243,10 +256,27 @@ mixin UserFormSaveMixin on UserFormDialogStateHost {
     ref.invalidate(lookupServiceProvider);
     await ref.read(lookupServiceProvider.future);
     if (!mounted) return;
+    final saveMessage = buildSaveConfirmationMessage(
+      entityType: AuditEntityTypes.user,
+      entityLabel: _buildUserDisplayName(),
+      oldMap: const {},
+      newMap: user.toMap(),
+      isNew: true,
+    );
     widget.onSaved?.call();
     Navigator.of(context).pop(true);
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('Αποθηκεύτηκε')));
+    showSaveConfirmationSnackBar(context, saveMessage);
+  }
+
+  Map<String, dynamic> _userMapForSaveConfirmation(
+    Map<String, dynamic> source, {
+    required String departmentDisplayName,
+  }) {
+    final map = Map<String, dynamic>.from(source);
+    if (map.containsKey('department_id')) {
+      final name = departmentDisplayName.trim();
+      map['department_id'] = name.isEmpty ? null : name;
+    }
+    return map;
   }
 }

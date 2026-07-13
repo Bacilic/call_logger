@@ -1,6 +1,5 @@
 import '../../../core/database/department_repository.dart';
 import '../../../core/database/sqlite_types.dart';
-
 import '../models/audit_log_model.dart';
 import '../models/audit_reference_labels.dart';
 
@@ -15,13 +14,37 @@ class AuditReferenceLabelResolver {
   }
 
   Future<AuditReferenceLabels> resolveForRows(Iterable<AuditLogModel> rows) async {
-    final ids = <int>{};
+    final deptIds = <int>{};
     for (final row in rows) {
-      collectDepartmentIds(row, ids);
+      collectDepartmentIds(row, deptIds);
     }
-    if (ids.isEmpty) return AuditReferenceLabels.empty;
-    final names = await _departments.getDepartmentNamesByIds(ids);
-    return AuditReferenceLabels(departmentNames: names);
+    final departmentNames = deptIds.isEmpty
+        ? const <int, String>{}
+        : await _departments.getDepartmentNamesByIds(deptIds);
+    final remoteToolNames = await _loadRemoteToolNames();
+    if (departmentNames.isEmpty && remoteToolNames.isEmpty) {
+      return AuditReferenceLabels.empty;
+    }
+    return AuditReferenceLabels(
+      departmentNames: departmentNames,
+      remoteToolNames: remoteToolNames,
+    );
+  }
+
+  Future<Map<int, String>> _loadRemoteToolNames() async {
+    final rows = await _departments.db.query(
+      'remote_tools',
+      columns: ['id', 'name'],
+    );
+    final out = <int, String>{};
+    for (final row in rows) {
+      final idRaw = row['id'];
+      final id = idRaw is int ? idRaw : int.tryParse('$idRaw');
+      if (id == null) continue;
+      final name = (row['name'] as String?)?.trim() ?? '';
+      if (name.isNotEmpty) out[id] = name;
+    }
+    return out;
   }
 
   Future<AuditReferenceLabels> resolveForRow(AuditLogModel row) =>

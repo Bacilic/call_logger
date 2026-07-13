@@ -8,6 +8,22 @@ import '../controllers/lamp_integrity_controller.dart';
 import '../controllers/lamp_path_management.dart';
 import '../controllers/lamp_search_controller.dart';
 
+const String _kExcelInfoTooltip =
+    'Ορίστε το αρχείο Excel από το οποίο θα αντληθούν τα δεδομένα. '
+    'Το αρχείο πρέπει να έχει τη συγκεκριμένη δομή που εξάγει το πρόγραμμα της Λάμπας, '
+    'μαζί με την καρτέλα "network".';
+
+const String _kOutputDbInfoTooltip =
+    'Ορίστε το αρχείο βάσης δεδομένων στο οποίο θα μετατραπεί το Excel. '
+    'Η μετατροπή σε αρχείο .db γίνεται για πιο εύχρηστη διαχείριση. '
+    'Αν το αρχείο υπάρχει ήδη, θα διαγραφεί και θα ξαναδημιουργηθεί από το τρέχον περιεχόμενο του Excel. '
+    'Προσοχή: ΔΕΝ είναι αυτό το αρχείο που διαβάζει η Λάμπα.';
+
+const String _kReadDbInfoTooltip =
+    'Εδώ ορίζετε τη βάση δεδομένων που διαβάζει η Λάμπα (αναζήτηση, πίνακες, '
+    'έλεγχος προβλημάτων). Είναι ξεχωριστή από το αρχείο που δημιουργεί το Excel, '
+    'ώστε να μπορούν να γίνονται εύκολα δοκιμές. Φυσικά μπορεί να είναι το ίδιο αρχείο.';
+
 class LampSettingsDialogController {
   LampSettingsDialogController({
     required this.path,
@@ -15,6 +31,7 @@ class LampSettingsDialogController {
     required this.importController,
     required this.integrityController,
     required this.getReadPathCheck,
+    required this.getOutputPathCheck,
     required this.getDialogFeedback,
     required this.getDialogFeedbackIsError,
     required this.onClearDialogFeedback,
@@ -24,7 +41,6 @@ class LampSettingsDialogController {
     required this.onPickDatabaseOutput,
     required this.onMatchReadToOutput,
     required this.onRunIntegrityCheck,
-    required this.onApplyPersistedReadAndValidate,
     required this.onRunImport,
     required this.onClose,
     required this.isImporting,
@@ -36,6 +52,7 @@ class LampSettingsDialogController {
   final LampImportController importController;
   final LampIntegrityController integrityController;
   final LampOldDbCheckResult? Function() getReadPathCheck;
+  final LampOldDbCheckResult? Function() getOutputPathCheck;
   final String? Function() getDialogFeedback;
   final bool Function() getDialogFeedbackIsError;
   final VoidCallback onClearDialogFeedback;
@@ -43,9 +60,8 @@ class LampSettingsDialogController {
   final Future<void> Function() onPickExcel;
   final Future<void> Function() onPickReadDatabase;
   final Future<void> Function() onPickDatabaseOutput;
-  final VoidCallback onMatchReadToOutput;
+  final Future<void> Function() onMatchReadToOutput;
   final Future<void> Function() onRunIntegrityCheck;
-  final Future<void> Function() onApplyPersistedReadAndValidate;
   final Future<void> Function() onRunImport;
   final Future<void> Function(void Function() pop) onClose;
   final bool Function() isImporting;
@@ -66,9 +82,14 @@ void openLampSettingsDialog({
           registerDialogSetState(setDialogState);
           final maxDialogBodyHeight = MediaQuery.sizeOf(context).height * 0.55;
           final readPathCheck = controller.getReadPathCheck();
+          final outputPathCheck = controller.getOutputPathCheck();
           final dialogFeedback = controller.getDialogFeedback();
           final importing = controller.isImporting();
           final integrityChecking = controller.isIntegrityChecking();
+          final matchButtonState = computeMatchReadToOutputButtonState(
+            outputPath: controller.path.outputDbController.text,
+            readPath: controller.path.readDbController.text,
+          );
           return AlertDialog(
             title: const Text('Ρυθμίσεις Λάμπας'),
             content: SizedBox(
@@ -80,15 +101,10 @@ void openLampSettingsDialog({
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      Text(
-                        'Ξεχωριστά: αρχείο εξόδου (import Excel) και αρχείο ανάγνωσης (αναζήτηση). '
-                        'Με το πρώτο import ευθυγραμμίζονται. Μπορείτε μετά να φορτώσετε άλλο .db μόνο για ανάγνωση (δοκιμές).',
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
-                      const SizedBox(height: 16),
                       LampPathRow(
                         controller: controller.path.excelController,
-                        label: 'Αρχείο Excel (πηγή import)',
+                        label: 'Αρχείο Excel (πηγή δεδομένων)',
+                        infoTooltip: _kExcelInfoTooltip,
                         onPick: () => controller.onPickExcel(),
                         onChanged: controller.path.notifySettingsDialogFieldsChanged,
                       ),
@@ -101,14 +117,24 @@ void openLampSettingsDialog({
                       ],
                       LampPathRow(
                         controller: controller.path.outputDbController,
-                        label: 'Βάση εξόδου .db (δημιουργία / ενημέρωση)',
+                        label: 'Βάση δεδομένων που δημιουργεί το Excel',
+                        infoTooltip: _kOutputDbInfoTooltip,
                         onPick: () => controller.onPickDatabaseOutput(),
                         onChanged: controller.path.notifySettingsDialogFieldsChanged,
                       ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'Όπου αποθηκεύεται/φτιάχνεται το .db από το κουμπί import.',
-                        style: Theme.of(context).textTheme.labelSmall,
+                      const SizedBox(height: 6),
+                      LampPathCheckPanel(
+                        pathCheck: outputPathCheck,
+                        pathController: controller.path.outputDbController,
+                      ),
+                      const SizedBox(height: 8),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: controller.importController.excelImportButton(
+                          onImport: () => controller.onRunImport(),
+                          message: null,
+                          outputPathCheck: outputPathCheck,
+                        ),
                       ),
                       const SizedBox(height: 12),
                       if (controller.path.readPathFormatWarning() != null) ...[
@@ -119,19 +145,33 @@ void openLampSettingsDialog({
                       ],
                       LampPathRow(
                         controller: controller.path.readDbController,
-                        label: 'Βάση .db προς ανάγνωση (αναζήτηση, ETL issues)',
+                        label: 'Βάση Δεδομένων που χρησιμοποιεί η Λάμπα',
+                        infoTooltip: _kReadDbInfoTooltip,
                         onPick: () => controller.onPickReadDatabase(),
                         onChanged: controller.path.notifySettingsDialogFieldsChanged,
+                        trailing: Tooltip(
+                          waitDuration: const Duration(milliseconds: 300),
+                          showDuration: const Duration(seconds: 6),
+                          message: matchButtonState.tooltip,
+                          child: IconButton(
+                            onPressed: matchButtonState.enabled &&
+                                    !importing &&
+                                    !integrityChecking
+                                ? () async {
+                                    await controller.onMatchReadToOutput();
+                                    if (!context.mounted) return;
+                                    setDialogState(() {});
+                                  }
+                                : null,
+                            icon: const Icon(Icons.arrow_downward),
+                            tooltip: '',
+                          ),
+                        ),
                       ),
                       const SizedBox(height: 6),
                       LampReadPathCheckPanel(
                         readPathCheck: readPathCheck,
                         readDbController: controller.path.readDbController,
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'Μπορεί να δείχνει και σε άλλο αντίγραφο .db (δοκιμές).',
-                        style: Theme.of(context).textTheme.labelSmall,
                       ),
                       const SizedBox(height: 12),
                       Align(
@@ -141,6 +181,7 @@ void openLampSettingsDialog({
                               ? null
                               : () async {
                                   await controller.onRunIntegrityCheck();
+                                  if (!context.mounted) return;
                                   setDialogState(() {});
                                 },
                           icon: integrityChecking
@@ -155,11 +196,7 @@ void openLampSettingsDialog({
                           label: const Text('Έλεγχος Προβλημάτων'),
                         ),
                       ),
-                      Text(
-                        'Ίδιος έλεγχος με την καρτέλα «Προβλήματα ETL» — χρήσιμο όταν η καρτέλα δεν εμφανίζεται ακόμα.',
-                        style: Theme.of(context).textTheme.labelSmall,
-                      ),
-                      const SizedBox(height: 8),
+                      const SizedBox(height: 12),
                       TextField(
                         controller: controller.search.maxSearchResultsController,
                         keyboardType: TextInputType.number,
@@ -171,40 +208,6 @@ void openLampSettingsDialog({
                               'Εύρος ${LampSettingsStore.minMaxSearchResults}–'
                               '${LampSettingsStore.maxMaxSearchResults} · προεπιλογή '
                               '${LampSettingsStore.defaultMaxSearchResults}',
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Align(
-                        alignment: Alignment.centerLeft,
-                        child: OutlinedButton.icon(
-                          onPressed: importing
-                              ? null
-                              : controller.onMatchReadToOutput,
-                          icon: const Icon(Icons.copy_all_outlined),
-                          label: const Text('Ίδιο με τη διαδρομή εξόδου'),
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      Align(
-                        alignment: Alignment.centerLeft,
-                        child: FilledButton.tonalIcon(
-                          onPressed: importing
-                              ? null
-                              : () async {
-                                  await controller.onApplyPersistedReadAndValidate();
-                                  if (!context.mounted) return;
-                                  setDialogState(() {});
-                                },
-                          icon: const Icon(Icons.verified_outlined),
-                          label: const Text('Έλεγχος & αποθήκευση διαδρομών'),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      Align(
-                        alignment: Alignment.centerLeft,
-                        child: controller.importController.excelImportButton(
-                          onImport: () => controller.onRunImport(),
-                          message: null,
                         ),
                       ),
                       if (dialogFeedback != null && dialogFeedback.isNotEmpty) ...[

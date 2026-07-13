@@ -7,6 +7,7 @@ import 'lamp_issue_matching_engine.dart';
 import 'lamp_issue_resolution_models.dart';
 import 'lamp_issue_resolution_support.dart';
 import 'old_database_schema.dart';
+import 'old_equipment_repository.dart';
 import 'resolution_log_entry.dart';
 
 class LampIssueDecisionApplier {
@@ -400,6 +401,105 @@ class LampIssueDecisionApplier {
             'Ενημερώθηκε το serial_no του εξοπλισμού $targetCode σε $value.',
           ),
         );
+      case LampIssueResolutionOperations.setFieldManual:
+        final manualCode = _support.toInt(metadata['code'] ?? proposal.row);
+        final manualFkColumn = metadata['fkColumn']?.toString() ?? proposal.column;
+        final manualInput = decision.textInput?.trim();
+        final manualTargetId = _support.toInt(manualInput);
+        if (manualCode == null || manualFkColumn == null) {
+          throw StateError('Λείπουν στοιχεία χειροκίνητης σύνδεσης κωδικού.');
+        }
+        if (manualTargetId == null) {
+          throw StateError('Ο κωδικός πρέπει να είναι αριθμός.');
+        }
+        await _assertManualFkTargetExists(
+          txn,
+          fkColumn: manualFkColumn,
+          targetId: manualTargetId,
+        );
+        if (manualFkColumn == 'owner') {
+          await _updateEquipmentOwner(
+            txn,
+            code: manualCode,
+            ownerId: manualTargetId,
+            clearOriginalText: true,
+            emit: emit,
+          );
+        } else if (manualFkColumn == 'set_master') {
+          await txn.update(
+            'equipment',
+            <String, Object?>{
+              'set_master': manualTargetId,
+              'set_master_original_text': null,
+            },
+            where: 'code = ?',
+            whereArgs: <Object?>[manualCode],
+          );
+          emit(
+            ResolutionLogEntry.success(
+              'Ο κύριος εξοπλισμός του $manualCode ορίστηκε σε $manualTargetId.',
+            ),
+          );
+        } else {
+          final fkSpec = _support.fkSpec(manualFkColumn);
+          final values = <String, Object?>{manualFkColumn: manualTargetId};
+          if (fkSpec != null) {
+            values[fkSpec.originalColumn] = null;
+          }
+          await txn.update(
+            'equipment',
+            values,
+            where: 'code = ?',
+            whereArgs: <Object?>[manualCode],
+          );
+          emit(
+            ResolutionLogEntry.success(
+              'Ενημερώθηκε η στήλη $manualFkColumn του εξοπλισμού $manualCode σε $manualTargetId.',
+            ),
+          );
+        }
+      case LampIssueResolutionOperations.clearField:
+        final clearCode = _support.toInt(metadata['code'] ?? proposal.row);
+        final clearFkColumn = metadata['fkColumn']?.toString() ?? proposal.column;
+        if (clearCode == null || clearFkColumn == null) {
+          throw StateError('Λείπουν στοιχεία εκκαθάρισης πεδίου.');
+        }
+        final clearValues = <String, Object?>{clearFkColumn: null};
+        final clearFkSpec = _support.fkSpec(clearFkColumn);
+        if (clearFkSpec != null) {
+          clearValues[clearFkSpec.originalColumn] = null;
+        } else if (clearFkColumn == 'set_master') {
+          clearValues['set_master_original_text'] = null;
+        }
+        await txn.update(
+          'equipment',
+          clearValues,
+          where: 'code = ?',
+          whereArgs: <Object?>[clearCode],
+        );
+        emit(
+          ResolutionLogEntry.success(
+            'Εκκαθαρίστηκε το πεδίο $clearFkColumn του εξοπλισμού $clearCode.',
+          ),
+        );
+      case LampIssueResolutionOperations.deferIssue:
+        if (proposal.issueIds.isEmpty) {
+          throw StateError('Δεν υπάρχουν εγγραφές προβλήματος για αναβολή.');
+        }
+        final deferPlaceholders =
+            List<String>.filled(proposal.issueIds.length, '?').join(',');
+        await txn.update(
+          'data_issues',
+          <String, Object?>{'status': kDataIssueStatusDeferred},
+          where: 'id IN ($deferPlaceholders)',
+          whereArgs: proposal.issueIds,
+        );
+        emit(
+          ResolutionLogEntry.success(
+            'Αναβλήθηκαν ${proposal.issueIds.length} εγγραφές προβλήματος.',
+          ),
+        );
+        return _AppliedDecision(created: created);
       default:
         if (proposal.proposedAction == LampIssueResolutionAction.autoFix) {
           final fkColumn = proposal.metadata['fkColumn']?.toString();
@@ -591,6 +691,29 @@ class LampIssueDecisionApplier {
     throw StateError(
       'Ο αριθμός παγίου $assetNo χρησιμοποιείται ήδη στον εξοπλισμό $ownerCode.',
     );
+  }
+
+  Future<void> _assertManualFkTargetExists(
+    DatabaseExecutor db, {
+    required String fkColumn,
+    required int targetId,
+  }) async {
+    final spec = ManualFkTargetSpec.forColumn(fkColumn);
+    if (spec == null) {
+      throw StateError('Μη υποστηριζόμενο πεδίο για χειροκίνητη σύνδεση: $fkColumn.');
+    }
+    final rows = await db.query(
+      spec.table,
+      columns: <String>[spec.idColumn],
+      where: '${spec.idColumn} = ?',
+      whereArgs: <Object?>[targetId],
+      limit: 1,
+    );
+    if (rows.isEmpty) {
+      throw StateError(
+        'Ο κωδικός $targetId δεν υπάρχει στον πίνακα ${spec.table}.',
+      );
+    }
   }
 
   Future<void> _assertSerialNoAvailable(

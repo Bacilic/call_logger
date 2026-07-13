@@ -1,15 +1,18 @@
 import 'dart:async';
-import 'dart:io' show Platform;
+import 'dart:io' show Directory, Platform;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/models/calls_screen_cards_visibility.dart';
 import '../../../core/models/window_placement_mode.dart';
 import '../../../core/config/app_config.dart';
 import '../../../core/providers/settings_provider.dart';
+import '../../../core/services/crash_log_service.dart';
 import '../../../core/widgets/quick_call_fab.dart';
 import '../../../core/services/settings_service.dart';
+import '../../database/services/database_maintenance_service.dart';
 import '../../calls/provider/remote_paths_provider.dart';
 import '../widgets/create_new_database_dialog.dart';
 import '../widgets/start_from_beginning_flow.dart';
@@ -34,6 +37,9 @@ class SettingsScreen extends ConsumerStatefulWidget {
 
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   final SettingsService _settings = SettingsService();
+  final TextEditingController _crashLogRetentionController =
+      TextEditingController();
+  final FocusNode _crashLogRetentionFocus = FocusNode();
 
   bool _isLoadingSettings = true;
   bool _showActiveTimer = true;
@@ -50,6 +56,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   CallsScreenCardsVisibility _callsCardsVisibility =
       CallsScreenCardsVisibility.defaults;
   WindowPlacementMode _windowPlacementMode = WindowPlacementMode.alwaysCenter;
+  int _crashLogRetentionCount = SettingsService.defaultCrashLogRetentionCount;
+  String _logsDirectoryPath = '';
 
   @override
   void initState() {
@@ -66,6 +74,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         );
       });
     }
+  }
+
+  @override
+  void dispose() {
+    _crashLogRetentionController.dispose();
+    _crashLogRetentionFocus.dispose();
+    super.dispose();
   }
 
   Future<void> _loadGeneralSettings() async {
@@ -88,6 +103,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       final windowPlacementMode = Platform.isWindows
           ? await _settings.getWindowPlacementMode()
           : WindowPlacementMode.alwaysCenter;
+      final crashLogRetention = await _settings.getCrashLogRetentionCount();
+      final databasePath = await _settings.getDatabasePath();
+      final logsDirectoryPath = databasePath.trim().isEmpty
+          ? ''
+          : CrashLogService.logsDirectoryForDatabasePath(databasePath);
       var dictionaryNavVisible = showDictionaryNav;
       if (!enableSpellCheck && dictionaryNavVisible) {
         await _settings.setShowDictionaryNav(false);
@@ -106,6 +126,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           _databaseOpenMaxAttempts = dbOpenMaxAttempts;
           _callsCardsVisibility = callsCardsVisibility;
           _windowPlacementMode = windowPlacementMode;
+          _crashLogRetentionCount = crashLogRetention;
+          _logsDirectoryPath = logsDirectoryPath;
+          if (!_crashLogRetentionFocus.hasFocus) {
+            _crashLogRetentionController.text = crashLogRetention.toString();
+          }
           _isLoadingSettings = false;
         });
       }
@@ -118,6 +143,35 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           SnackBar(content: Text('Σφάλμα φόρτωσης ρυθμίσεων: $e')),
         );
       }
+    }
+  }
+
+  Future<void> _persistCrashLogRetentionCount() async {
+    final raw = _crashLogRetentionController.text.trim();
+    if (raw.isEmpty) {
+      _crashLogRetentionController.text = _crashLogRetentionCount.toString();
+      return;
+    }
+    final n = int.tryParse(raw);
+    if (n == null) return;
+    await _settings.setCrashLogRetentionCount(n);
+    final normalized = await _settings.getCrashLogRetentionCount();
+    if (!mounted) return;
+    setState(() => _crashLogRetentionCount = normalized);
+    _crashLogRetentionController.text = normalized.toString();
+  }
+
+  Future<void> _openLogsFolderInExplorer() async {
+    final path = _logsDirectoryPath.trim();
+    if (path.isEmpty) return;
+    try {
+      await Directory(path).create(recursive: true);
+      await DatabaseMaintenanceService.openFolderInExplorer(path);
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Αποτυχία ανοίγματος φακέλου logs.')),
+      );
     }
   }
 
@@ -350,6 +404,97 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               ),
               trailing: const Icon(Icons.edit_outlined),
               onTap: _editDatabaseOpenSettings,
+            ),
+            const SizedBox(height: 32),
+            const Divider(),
+            const SizedBox(height: 16),
+            Text(
+              'Καταγραφή σφαλμάτων',
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 8),
+            IgnorePointer(
+              ignoring: _isLoadingSettings,
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Expanded(
+                    child: Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        Text(
+                          'Αρχεία καταγραφής σφαλμάτων που διατηρούνται ',
+                          style: theme.textTheme.bodyLarge,
+                        ),
+                        SizedBox(
+                          width: 64,
+                          child: TextField(
+                            focusNode: _crashLogRetentionFocus,
+                            controller: _crashLogRetentionController,
+                            textAlign: TextAlign.center,
+                            keyboardType: TextInputType.number,
+                            inputFormatters: [
+                              FilteringTextInputFormatter.digitsOnly,
+                              LengthLimitingTextInputFormatter(2),
+                            ],
+                            decoration: const InputDecoration(
+                              isDense: true,
+                              border: OutlineInputBorder(),
+                              contentPadding: EdgeInsets.symmetric(
+                                horizontal: 6,
+                                vertical: 8,
+                              ),
+                            ),
+                            onEditingComplete: _persistCrashLogRetentionCount,
+                            onSubmitted: (_) =>
+                                _persistCrashLogRetentionCount(),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: _logsDirectoryPath.trim().isEmpty
+                  ? Text(
+                      'Ο φάκελος logs δημιουργείται δίπλα στο αρχείο βάσης '
+                      'δεδομένων (π.χ. errors_YYYY-MM-DD.log).',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    )
+                  : Wrap(
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        Text(
+                          'Ο φάκελος logs: ',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                        MouseRegion(
+                          cursor: SystemMouseCursors.click,
+                          child: GestureDetector(
+                            onTap: _openLogsFolderInExplorer,
+                            child: Text(
+                              _logsDirectoryPath,
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: theme.colorScheme.primary,
+                                decoration: TextDecoration.underline,
+                                decorationColor: theme.colorScheme.primary,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
             ),
             if (Platform.isWindows) ...[
               const SizedBox(height: 32),

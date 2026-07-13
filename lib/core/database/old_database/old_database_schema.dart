@@ -122,7 +122,8 @@ const List<String> oldDatabaseCreateStatements = <String>[
     raw_value TEXT,
     issue_type TEXT NOT NULL,
     message TEXT,
-    created_at TEXT NOT NULL
+    created_at TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'open'
   )
   ''',
 ];
@@ -136,6 +137,7 @@ const List<String> oldDatabaseIndexStatements = <String>[
   'CREATE INDEX IF NOT EXISTS idx_owners_phones ON owners(phones)',
   'CREATE INDEX IF NOT EXISTS idx_offices_phones ON offices(phones)',
   'CREATE INDEX IF NOT EXISTS idx_data_issues_issue_type ON data_issues(issue_type)',
+  'CREATE INDEX IF NOT EXISTS idx_data_issues_type_status ON data_issues(issue_type, status)',
 ];
 
 const List<String> oldDatabaseIntegrityStatements = <String>[

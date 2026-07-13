@@ -11,6 +11,11 @@ mixin SettingsServiceCatalogsMixin {
   static const String _keyEquipmentTypes = 'equipment_types';
   static const String _keyLexiconCategories = 'lexicon_categories';
   static const String _keyAuditRetentionConfig = 'audit_retention_config_v1';
+  static const String _keyCrashLogRetentionCount = 'crash_log_retention_count_v1';
+
+  static const int defaultCrashLogRetentionCount = 14;
+  static const int minCrashLogRetentionCount = 3;
+  static const int maxCrashLogRetentionCount = 90;
 
   /// Προεπιλεγμένες κατηγορίες λεξικού (CSV για ρυθμίσεις / dropdown).
   static const String defaultLexiconCategoriesCsv =
@@ -108,6 +113,23 @@ mixin SettingsServiceCatalogsMixin {
     await prefs.setString(
       _keyAuditRetentionConfig,
       jsonEncode(config.toJson()),
+    );
+  }
+
+  /// Πόσα πρόσφατα ημερήσια αρχεία errors_*.log διατηρούνται στον φάκελο logs.
+  Future<int> getCrashLogRetentionCount() async {
+    final prefs = await SharedPreferences.getInstance();
+    final value =
+        prefs.getInt(SettingsService._prefKey(_keyCrashLogRetentionCount));
+    if (value == null) return defaultCrashLogRetentionCount;
+    return value.clamp(minCrashLogRetentionCount, maxCrashLogRetentionCount);
+  }
+
+  Future<void> setCrashLogRetentionCount(int value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(
+      SettingsService._prefKey(_keyCrashLogRetentionCount),
+      value.clamp(minCrashLogRetentionCount, maxCrashLogRetentionCount),
     );
   }
 

@@ -691,33 +691,52 @@ class EquipmentRepository {
       whereArgs: [id],
     );
     if (n <= 0) return 0;
-    final oldDiff = <String, dynamic>{};
-    final newDiff = <String, dynamic>{};
-    for (final k in map.keys) {
-      final a = oldRow[k];
-      final b = map[k];
-      if ('$a' != '$b') {
-        oldDiff[k] = a;
-        newDiff[k] = b;
-      }
-    }
-    if (oldDiff.isNotEmpty) {
+    final diff = _equipmentAuditDiff(oldRow, map);
+    if (diff.oldDiff.isNotEmpty) {
       final ap = await _support.auditPerformingUser(executor: executor);
       final code = (oldRow['code_equipment'] as String?)?.trim() ?? '';
       await AuditService.log(
         e,
-        action: 'ΤΡΟΠΟΠΟΙΗΣΗ ΕΞΟΠΛΙΣΜΟΥ',
+        action: AuditActions.modifyEquipment,
         userPerforming: ap,
         details: 'equipment id=$id',
         entityType: AuditEntityTypes.equipment,
         entityId: id,
         entityName: code.isEmpty ? null : code,
-        oldValues: oldDiff,
-        newValues: newDiff,
+        oldValues: diff.oldDiff,
+        newValues: diff.newDiff,
       );
     }
     await CallsRepository(db).rebuildSearchIndexForCallsByEquipmentId(e, id);
     return n;
+  }
+
+  static ({Map<String, dynamic> oldDiff, Map<String, dynamic> newDiff})
+      _equipmentAuditDiff(
+    Map<String, dynamic> oldRow,
+    Map<String, dynamic> updates,
+  ) {
+    final oldDiff = <String, dynamic>{};
+    final newDiff = <String, dynamic>{};
+    for (final k in updates.keys) {
+      final a = oldRow[k];
+      final b = updates[k];
+      if (!DirectorySupport.auditValuesEqual(a, b)) {
+        oldDiff[k] = a;
+        newDiff[k] = b;
+      }
+    }
+    if (newDiff.containsKey('remote_params')) {
+      final clearingDefault =
+          oldDiff.containsKey('default_remote_tool') &&
+          (newDiff['default_remote_tool'] == null ||
+              '${newDiff['default_remote_tool'] ?? ''}'.trim().isEmpty);
+      if (clearingDefault) {
+        oldDiff.remove('default_remote_tool');
+        newDiff.remove('default_remote_tool');
+      }
+    }
+    return (oldDiff: oldDiff, newDiff: newDiff);
   }
 
   Future<void> bulkUpdateEquipments(

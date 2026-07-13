@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/database/database_helper.dart';
 import '../../../core/database/equipment_repository.dart';
 import '../../../core/models/remote_tool.dart';
+import '../../../core/models/remote_tool_arg.dart';
 import '../../../core/models/remote_tool_role.dart';
 import '../../../core/widgets/remote_tool_icon.dart';
 import '../../../core/widgets/reorder_grab_handle.dart';
@@ -58,6 +59,18 @@ Widget _roleTypeCell(BuildContext context, RemoteTool t) {
       _roleTypeBadge(context, t.role.shortLabel),
     ],
   );
+}
+
+/// Σύνοψη ενεργών ορισμάτων για τη λίστα εργαλείων (με απόκρυψη κωδικών).
+String remoteToolArgumentsSummary(RemoteTool t) {
+  final active = t.arguments.where((a) => a.isActive).toList();
+  if (active.isEmpty) return '—';
+  final parts =
+      active.take(2).map((a) => RemoteToolArg.maskSecretValues(a.value)).toList();
+  var s = parts.join(', ');
+  if (active.length > 2) s = '$s…';
+  if (s.length > 80) s = '${s.substring(0, 77)}…';
+  return s;
 }
 
 /// CRUD ορισμών `remote_tools` + ρυθμίσεις κύριου εργαλείου / overflow στην οθόνη κλήσεων.
@@ -120,15 +133,7 @@ class _RemoteToolsManagementScreenState
     ref.invalidate(remoteLauncherStatusesByIdProvider);
   }
 
-  String _argumentsSummary(RemoteTool t) {
-    final active = t.arguments.where((a) => a.isActive).toList();
-    if (active.isEmpty) return '—';
-    final parts = active.take(2).map((a) => a.value).toList();
-    var s = parts.join(', ');
-    if (active.length > 2) s = '$s…';
-    if (s.length > 80) s = '${s.substring(0, 77)}…';
-    return s;
-  }
+  String _argumentsSummary(RemoteTool t) => remoteToolArgumentsSummary(t);
 
   Future<void> _setToolActive(RemoteTool t, bool value) async {
     if (!value && t.isActive) {
@@ -815,7 +820,7 @@ class _CallsRemoteUiPanelState extends ConsumerState<_CallsRemoteUiPanel> {
         SwitchListTile(
           title: const Text('Δευτερεύοντα σε αναδυόμενο μενού'),
           subtitle: const Text(
-            'Όταν είναι ενεργό, επιπλέον εργαλεία ανοίγουν από το εικονίδιο «⋯».',
+            'Όταν είναι ενεργό, τα επιπλέον εργαλεία ανοίγουν από τις τρεις τελείες «⋯».',
           ),
           value: _overflow,
           onChanged: (v) => _onOverflowChanged(v),

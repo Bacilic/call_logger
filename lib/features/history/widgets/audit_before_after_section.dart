@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/database/audit_diff_helper.dart';
 import '../../audit/models/audit_log_model.dart';
 import '../../audit/models/audit_reference_labels.dart';
 import '../../audit/services/audit_formatter_service.dart';
@@ -61,7 +62,7 @@ class AuditBeforeAfterSection extends StatelessWidget {
           ),
         if (extraChanges.isEmpty)
           Text(
-            'Δεν υπάρχουν πρόσθετες φιλικές αλλαγές πέρα από τη σύνοψη.',
+            AuditDiffHelper.allChangesInSummaryMessage,
             style: theme.textTheme.bodySmall?.copyWith(
               color: theme.colorScheme.onSurfaceVariant,
             ),

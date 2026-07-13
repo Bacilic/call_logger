@@ -7,8 +7,10 @@ import '../../../core/database/old_database/lamp_old_db_validator.dart';
 import '../../../core/database/old_database/lamp_settings_store.dart';
 import '../../../core/database/old_database/old_equipment_repository.dart';
 import '../../database/services/database_stats_service.dart';
+import '../widgets/lamp_result_card.dart';
 import 'lamp_path_management.dart';
 import 'lamp_screen_host.dart';
+import 'lamp_search_query_parser.dart';
 
 class LampSearchController {
   LampSearchController({
@@ -34,9 +36,38 @@ class LampSearchController {
   Timer? liveSearchDebounce;
   bool suppressLiveSearch = false;
 
+  final Map<String, String?> _mirroredFieldValues = <String, String?>{
+    'phone': null,
+    'code': null,
+    'owner': null,
+    'office': null,
+    'serial': null,
+  };
+
   int maxSearchResults = LampSettingsStore.defaultMaxSearchResults;
   List<Map<String, Object?>> results = const <Map<String, Object?>>[];
+  List<EquipmentViewModel> resultViewModels = const <EquipmentViewModel>[];
   String? message;
+
+  static List<EquipmentViewModel> buildResultViewModels(
+    List<Map<String, Object?>> rows,
+  ) {
+    return rows
+        .map(EquipmentViewModel.fromRow)
+        .toList(growable: false);
+  }
+
+  void _assignResults(List<Map<String, Object?>> rows) {
+    results = rows;
+    resultViewModels = buildResultViewModels(rows);
+  }
+
+  void clearResults() {
+    _assignResults(_emptyResults);
+  }
+
+  static const List<Map<String, Object?>> _emptyResults =
+      <Map<String, Object?>>[];
 
   List<TextEditingController> get fieldSearchControllers =>
       <TextEditingController>[
@@ -129,24 +160,106 @@ class LampSearchController {
 
   void onGlobalSearchInputChanged() {
     if (suppressLiveSearch) return;
-    if (globalController.text.trim().isNotEmpty && hasAnyFieldSearchInput) {
+    final parsed = LampSearchQueryParser.parse(globalController.text);
+    if (parsed.hasScopedTerms) {
+      applyMirrorFromParsed(parsed);
+    } else if (globalController.text.trim().isNotEmpty && hasAnyFieldSearchInput) {
       suppressLiveSearch = true;
       for (final c in fieldSearchControllers) {
         if (c.text.isNotEmpty) c.clear();
       }
+      _mirroredFieldValues.updateAll((_, _) => null);
       suppressLiveSearch = false;
+    } else {
+      clearMirroredFieldsIfNeeded(parsed);
     }
     scheduleLiveSearch();
   }
 
   void onFieldSearchInputChanged() {
     if (suppressLiveSearch) return;
-    if (hasAnyFieldSearchInput && globalController.text.trim().isNotEmpty) {
+    final parsed = LampSearchQueryParser.parse(globalController.text);
+    if (hasAnyFieldSearchInput &&
+        globalController.text.trim().isNotEmpty &&
+        !parsed.hasScopedTerms) {
       suppressLiveSearch = true;
       globalController.clear();
+      _mirroredFieldValues.updateAll((_, _) => null);
       suppressLiveSearch = false;
     }
     scheduleLiveSearch();
+  }
+
+  TextEditingController? controllerForMirrorFieldId(String fieldId) {
+    switch (fieldId) {
+      case 'phone':
+        return phoneController;
+      case 'code':
+        return codeController;
+      case 'owner':
+        return ownerController;
+      case 'office':
+        return officeController;
+      case 'serial':
+        return serialController;
+      default:
+        return null;
+    }
+  }
+
+  void applyMirrorFromParsed(LampSearchParseResult parsed) {
+    suppressLiveSearch = true;
+    try {
+      final activeMirrorFields = <String>{};
+      for (final term in parsed.scopedTerms) {
+        final fieldId = LampSearchQueryParser.mirrorFieldIdForNormalizedKey(
+          term.normalizedKey,
+        );
+        if (fieldId == null) continue;
+        final controller = controllerForMirrorFieldId(fieldId);
+        if (controller == null) continue;
+        activeMirrorFields.add(fieldId);
+        final mirrored = _mirroredFieldValues[fieldId];
+        if (mirrored != null || controller.text.isEmpty) {
+          controller.text = term.value;
+          _mirroredFieldValues[fieldId] = term.value;
+        }
+      }
+      for (final entry in _mirroredFieldValues.entries) {
+        if (activeMirrorFields.contains(entry.key)) continue;
+        final mirrored = entry.value;
+        if (mirrored == null) continue;
+        final controller = controllerForMirrorFieldId(entry.key);
+        if (controller != null && controller.text == mirrored) {
+          controller.clear();
+        }
+        _mirroredFieldValues[entry.key] = null;
+      }
+    } finally {
+      suppressLiveSearch = false;
+    }
+  }
+
+  void clearMirroredFieldsIfNeeded(LampSearchParseResult parsed) {
+    if (parsed.hasScopedTerms) return;
+    suppressLiveSearch = true;
+    try {
+      for (final entry in _mirroredFieldValues.entries.toList()) {
+        final mirrored = entry.value;
+        if (mirrored == null) continue;
+        final controller = controllerForMirrorFieldId(entry.key);
+        if (controller != null && controller.text == mirrored) {
+          controller.clear();
+        }
+        _mirroredFieldValues[entry.key] = null;
+      }
+    } finally {
+      suppressLiveSearch = false;
+    }
+  }
+
+  LampSearchParseResult parseGlobalQuery() {
+    return LampSearchQueryParser.parse(globalController.text);
   }
 
   void scheduleLiveSearch() {
@@ -161,12 +274,14 @@ class LampSearchController {
     final hasGlobal = globalController.text.trim().isNotEmpty;
     final hasFields = hasAnyFieldSearchInput;
     if (!hasGlobal && !hasFields) {
-      results = const <Map<String, Object?>>[];
+      _assignResults(_emptyResults);
       message = null;
       host.notifyState();
       return;
     }
     if (hasGlobal) {
+      final parsed = parseGlobalQuery();
+      applyMirrorFromParsed(parsed);
       await globalSearch(showProgressSnack: false);
       return;
     }
@@ -179,9 +294,10 @@ class LampSearchController {
     for (final c in fieldSearchControllers) {
       c.clear();
     }
+    _mirroredFieldValues.updateAll((_, _) => null);
     suppressLiveSearch = false;
     liveSearchDebounce?.cancel();
-    results = const <Map<String, Object?>>[];
+    _assignResults(_emptyResults);
     message = null;
     host.notifyState();
   }
@@ -237,12 +353,25 @@ class LampSearchController {
       );
       return;
     }
+    final parsed = parseGlobalQuery();
+    applyMirrorFromParsed(parsed);
     await runSearch(
-      () => host.shared.repository.globalSearch(
-        path.readDbController.text.trim(),
-        globalController.text,
-        maxDisplay: maxSearchResults,
-      ),
+      () {
+        if (!parsed.hasScopedTerms) {
+          return host.shared.repository.globalSearch(
+            path.readDbController.text.trim(),
+            globalController.text,
+            maxDisplay: maxSearchResults,
+          );
+        }
+        return host.shared.repository.globalSearch(
+          path.readDbController.text.trim(),
+          globalController.text,
+          maxDisplay: maxSearchResults,
+          scopedTerms: parsed.scopedTerms,
+          freeText: parsed.freeText,
+        );
+      },
       showProgressSnack: showProgressSnack,
     );
   }
@@ -279,7 +408,7 @@ class LampSearchController {
     try {
       final result = await action();
       if (!host.mounted) return;
-      results = result.rows;
+      _assignResults(result.rows);
       message = searchOutcomeMessage(result.totalCount);
       host.notifyState();
     } catch (e) {

@@ -148,6 +148,70 @@ class LampIssueResolutionDecision {
   final String? textInput;
 }
 
+/// Πράξεις επίλυσης ανεπίλυτων προτάσεων (metadata `operation`).
+abstract final class LampIssueResolutionOperations {
+  static const String setFieldManual = 'set_field_manual';
+  static const String clearField = 'clear_field';
+  static const String deferIssue = 'defer_issue';
+}
+
+/// Πίνακας-στόχος για χειροκίνητη σύνδεση κωδικού FK.
+class ManualFkTargetSpec {
+  const ManualFkTargetSpec({
+    required this.table,
+    required this.idColumn,
+    required this.labelColumn,
+  });
+
+  final String table;
+  final String idColumn;
+  final String labelColumn;
+
+  static ManualFkTargetSpec? forColumn(String? column) {
+    return switch (column?.trim().toLowerCase()) {
+      'model' => const ManualFkTargetSpec(
+        table: 'model',
+        idColumn: 'model',
+        labelColumn: 'model_name',
+      ),
+      'contract' => const ManualFkTargetSpec(
+        table: 'contracts',
+        idColumn: 'contract',
+        labelColumn: 'contract_name',
+      ),
+      'owner' => const ManualFkTargetSpec(
+        table: 'owners',
+        idColumn: 'owner',
+        labelColumn: 'owner',
+      ),
+      'office' => const ManualFkTargetSpec(
+        table: 'offices',
+        idColumn: 'office',
+        labelColumn: 'office_name',
+      ),
+      'set_master' => const ManualFkTargetSpec(
+        table: 'equipment',
+        idColumn: 'code',
+        labelColumn: 'description',
+      ),
+      _ => null,
+    };
+  }
+}
+
+/// Πρόταση autocomplete κωδικού/ονόματος για χειροκίνητη σύνδεση FK.
+class LampEntityCodeSuggestion {
+  const LampEntityCodeSuggestion({
+    required this.code,
+    required this.label,
+  });
+
+  final int code;
+  final String label;
+
+  String get displayText => '$label ($code)';
+}
+
 class LampIssueResolutionApplyResult {
   const LampIssueResolutionApplyResult({
     required this.resolved,

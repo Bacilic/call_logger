@@ -808,4 +808,93 @@ void main() {
       },
     );
   });
+
+  group('Φόρμα τμήματος — map_hidden', () {
+    late int deptId;
+
+    setUp(() async {
+      final db = await DatabaseHelper.instance.database;
+      await db.delete('user_equipment');
+      await db.delete('user_phones');
+      await db.delete('department_phones');
+      await db.delete('phones');
+      await db.delete('equipment');
+      await db.delete('users');
+      await db.delete('departments');
+
+      const deptName = 'Κρυφό Τμήμα';
+      deptId = await db.insert('departments', {
+        'name': deptName,
+        'name_key': SearchTextNormalizer.normalizeForSearch(deptName),
+        'color': '#1976D2',
+        'is_deleted': 0,
+        'map_hidden': 1,
+      });
+      LookupService.instance.resetForReload();
+      await LookupService.instance.loadFromDatabase();
+    });
+
+    //   flutter test test/features/directory/screens/widgets/department_form_dialog_test.dart --plain-name "map_hidden"
+    testWidgets(
+      'αποθήκευση διατηρεί map_hidden=1 όταν το τμήμα είναι κρυφό στον χάρτη',
+      (tester) async {
+        const deptName = 'Κρυφό Τμήμα';
+        final container = ProviderContainer(
+          overrides: callLoggerTestProviderOverrides(),
+        );
+        addTearDown(container.dispose);
+
+        late DepartmentDirectoryNotifier notifier;
+        await tester.runAsync(() async {
+          await container.read(lookupServiceProvider.future);
+          notifier = container.read(departmentDirectoryProvider.notifier);
+          await notifier.loadDepartments();
+          await _openDepartmentFormInDialog(
+            tester,
+            container,
+            initialDepartment: DepartmentModel(
+              id: deptId,
+              name: deptName,
+              color: '#1976D2',
+              isHiddenOnMap: true,
+            ),
+            notifier: notifier,
+          );
+        });
+
+        await tester.enterText(_buildingField(), 'Κτίριο Α');
+        await tester.pump();
+
+        final saveButton = find.widgetWithText(FilledButton, 'Αποθήκευση');
+        await tester.ensureVisible(saveButton);
+        expect(
+          tester.widget<FilledButton>(saveButton).onPressed,
+          isNotNull,
+          reason: greekExpectMsg('Το κουμπί αποθήκευσης πρέπει να είναι ενεργό'),
+        );
+        await tester.tap(saveButton);
+        await pumpUntilSettled(tester);
+        await _pumpUntilDepartmentSaveCompletes(tester);
+
+        final mapHidden = await tester.runAsync(() async {
+          final db = await DatabaseHelper.instance.database;
+          final rows = await db.query(
+            'departments',
+            columns: ['map_hidden'],
+            where: 'id = ?',
+            whereArgs: [deptId],
+            limit: 1,
+          );
+          return rows.single['map_hidden'];
+        });
+        expect(
+          mapHidden,
+          1,
+          reason: greekExpectMsg(
+            'Η αποθήκευση φόρμας δεν πρέπει να μηδενίζει το map_hidden',
+          ),
+        );
+      },
+    );
+  });
 }

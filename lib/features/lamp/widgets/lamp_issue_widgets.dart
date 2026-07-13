@@ -22,7 +22,10 @@ class LampIssuesController {
   final LampSearchController search;
 
   List<Map<String, Object?>> issues = const <Map<String, Object?>>[];
+  List<Map<String, Object?>> deferredIssues = const <Map<String, Object?>>[];
   final Set<String> expandedIssueGroupKeys = <String>{};
+  final Set<String> expandedDeferredIssueGroupKeys = <String>{};
+  bool deferredSectionExpanded = false;
 
   Future<void> loadIssues() async {
     final dbPath = path.readDbController.text.trim();
@@ -30,28 +33,60 @@ class LampIssuesController {
     if (host.readPathCheck?.status != LampOldDbStatus.ok) {
       if (host.mounted) {
         issues = const <Map<String, Object?>>[];
+        deferredIssues = const <Map<String, Object?>>[];
         expandedIssueGroupKeys.clear();
+        expandedDeferredIssueGroupKeys.clear();
+        deferredSectionExpanded = false;
         host.notifyState();
       }
       return;
     }
     try {
       final loaded = await host.shared.repository.dataIssues(dbPath);
+      final deferred = await host.shared.repository.deferredDataIssues(dbPath);
       if (!host.mounted) return;
       issues = loaded;
+      deferredIssues = deferred;
       host.notifyState();
     } catch (e) {
       if (!host.mounted) return;
       issues = const <Map<String, Object?>>[];
+      deferredIssues = const <Map<String, Object?>>[];
       expandedIssueGroupKeys.clear();
+      expandedDeferredIssueGroupKeys.clear();
+      deferredSectionExpanded = false;
       host.notifyState();
       host.showSnack('Δεν φορτώθηκαν τα προβλήματα ETL: $e', isError: true);
     }
   }
 
+  Future<void> reopenDeferredGroup(String rawIssueType) async {
+    final dbPath = path.readDbController.text.trim();
+    if (dbPath.isEmpty) return;
+    try {
+      final count = await host.shared.repository.reopenDeferredDataIssuesByType(
+        dbPath,
+        rawIssueType,
+      );
+      await loadIssues();
+      if (!host.mounted) return;
+      host.showSnack(
+        count > 0
+            ? 'Επαναφέρθηκαν $count αναβληθέντα προβλήματα σε ανοιχτά.'
+            : 'Δεν βρέθηκαν αναβληθέντα προβλήματα για επαναφορά.',
+      );
+    } catch (e) {
+      if (!host.mounted) return;
+      host.showSnack('Αποτυχία επαναφοράς αναβληθέντων: $e', isError: true);
+    }
+  }
+
   void clearIssues() {
     issues = const <Map<String, Object?>>[];
+    deferredIssues = const <Map<String, Object?>>[];
     expandedIssueGroupKeys.clear();
+    expandedDeferredIssueGroupKeys.clear();
+    deferredSectionExpanded = false;
   }
 
   int issueCountFor(LampIssueType issueType) {
@@ -123,6 +158,14 @@ class LampIssueHelpers {
       default:
         return value;
     }
+  }
+
+  static String issueRowNumberLabel(Map<String, Object?> issue) {
+    final entity = issueEntityTypeValue(issue).trim().toLowerCase();
+    if (entity == 'equipment') {
+      return 'Κωδικός εξοπλισμού';
+    }
+    return 'Γραμμή';
   }
 
   static String issueOriginDisplayLabel(String value) {
@@ -277,7 +320,7 @@ class LampIssueEntryListTile extends StatelessWidget {
           title: Text(
             'Οντότητα: $entityType | '
             'Προέλευση: $origin | '
-            'Γραμμή: ${LampIssueHelpers.issueField(issue, 'row_number')}',
+            '${LampIssueHelpers.issueRowNumberLabel(issue)}: ${LampIssueHelpers.issueField(issue, 'row_number')}',
           ),
           subtitle: Text(
             'Στήλη: ${LampIssueHelpers.issueField(issue, 'column_name')}\n'
@@ -612,102 +655,204 @@ class _LampIssuesTabState extends State<LampIssuesTab> {
         ),
         const Divider(height: 1),
         Expanded(
-          child: ListView.separated(
+          child: ListView(
             padding: const EdgeInsets.all(16),
-            itemCount: LampIssueHelpers.flatIssuesItemCount(
-              groups,
-              widget.issuesController.expandedIssueGroupKeys,
-            ),
-            separatorBuilder: (context, index) {
-              final next = LampIssueHelpers.flatIssueRefAt(
-                groups,
-                widget.issuesController.expandedIssueGroupKeys,
-                index + 1,
-              );
-              if (next != null && next.isHeader) {
-                return const SizedBox(height: 12);
-              }
-              return const SizedBox.shrink();
-            },
-            itemBuilder: (context, flatIndex) {
-              final ref = LampIssueHelpers.flatIssueRefAt(
-                groups,
-                widget.issuesController.expandedIssueGroupKeys,
-                flatIndex,
-              );
-              if (ref == null) return const SizedBox.shrink();
-              final group = groups[ref.groupIndex];
-              final rawIssueType = group.key;
-              final groupIssues = group.value;
-              if (ref.isHeader) {
-                final lampIssueType =
-                    LampIssueHelpers.lampIssueTypeForRaw(rawIssueType);
-                final isNetworkCategory =
-                    LampIssueResolutionController.isNetworkIssueType(
-                  rawIssueType,
-                );
-                final expanded = widget.issuesController.expandedIssueGroupKeys
-                    .contains(rawIssueType);
-                return LampIssueGroupHeaderCard(
-                  rawIssueType: rawIssueType,
-                  categoryLabel: LampIssueHelpers.categoryDisplayLabel(
-                    rawIssueType,
-                  ),
-                  issues: groupIssues,
-                  lampIssueType: lampIssueType,
-                  expanded: expanded,
-                  onToggleExpanded: () =>
-                      widget.onToggleGroup(rawIssueType, expanded),
-                  resolvingIssueType: widget.resolutionController.resolvingIssueType,
-                  canResolve: lampIssueType != null &&
-                      widget.resolutionController.canResolveIssueType(
-                        lampIssueType,
-                      ),
-                  onResolve: lampIssueType == null
-                      ? null
-                      : () => widget.resolutionController.runIssueResolution(
-                          lampIssueType,
-                        ),
-                  isNetworkCategory:
-                      lampIssueType == null && isNetworkCategory,
-                  resolvingNetworkIssueType:
-                      widget.resolutionController.resolvingNetworkIssueType,
-                  canResolveNetwork: isNetworkCategory &&
-                      widget.resolutionController.canResolveNetworkIssueType(
-                        rawIssueType,
-                      ),
-                  onResolveNetwork: isNetworkCategory
-                      ? () => widget.resolutionController
-                          .runNetworkIssueResolution(
-                        rawIssueType,
-                        groupIssues,
-                      )
-                      : null,
-                  copySelectionMode: _copySelectionMode,
-                  copySelected: _selectedCategoryKeys.contains(rawIssueType),
-                  onCopySelectionChanged: _copySelectionMode
-                      ? (selected) {
-                          setState(() {
-                            if (selected) {
-                              _selectedCategoryKeys.add(rawIssueType);
-                            } else {
-                              _selectedCategoryKeys.remove(rawIssueType);
-                            }
-                          });
-                        }
-                      : null,
-                );
-              }
-              final issue = groupIssues[ref.issueIndex!];
-              return Card(
-                margin: EdgeInsets.zero,
-                clipBehavior: Clip.antiAlias,
-                child: LampIssueEntryListTile(issue: issue),
-              );
-            },
+            children: [
+              ..._buildOpenIssueWidgets(
+                context: context,
+                groups: groups,
+              ),
+              if (widget.issuesController.deferredIssues.isNotEmpty)
+                LampDeferredIssuesSection(
+                  issuesController: widget.issuesController,
+                  showSnack: widget.showSnack,
+                ),
+            ],
           ),
         ),
       ],
+    );
+  }
+
+  List<Widget> _buildOpenIssueWidgets({
+    required BuildContext context,
+    required List<MapEntry<String, List<Map<String, Object?>>>> groups,
+  }) {
+    final widgets = <Widget>[];
+    final itemCount = LampIssueHelpers.flatIssuesItemCount(
+      groups,
+      widget.issuesController.expandedIssueGroupKeys,
+    );
+    for (var flatIndex = 0; flatIndex < itemCount; flatIndex++) {
+      if (flatIndex > 0) {
+        final next = LampIssueHelpers.flatIssueRefAt(
+          groups,
+          widget.issuesController.expandedIssueGroupKeys,
+          flatIndex,
+        );
+        if (next != null && next.isHeader) {
+          widgets.add(const SizedBox(height: 12));
+        }
+      }
+      final ref = LampIssueHelpers.flatIssueRefAt(
+        groups,
+        widget.issuesController.expandedIssueGroupKeys,
+        flatIndex,
+      );
+      if (ref == null) continue;
+      final group = groups[ref.groupIndex];
+      final rawIssueType = group.key;
+      final groupIssues = group.value;
+      if (ref.isHeader) {
+        final lampIssueType =
+            LampIssueHelpers.lampIssueTypeForRaw(rawIssueType);
+        final isNetworkCategory =
+            LampIssueResolutionController.isNetworkIssueType(rawIssueType);
+        final expanded = widget.issuesController.expandedIssueGroupKeys
+            .contains(rawIssueType);
+        widgets.add(
+          LampIssueGroupHeaderCard(
+            rawIssueType: rawIssueType,
+            categoryLabel: LampIssueHelpers.categoryDisplayLabel(rawIssueType),
+            issues: groupIssues,
+            lampIssueType: lampIssueType,
+            expanded: expanded,
+            onToggleExpanded: () =>
+                widget.onToggleGroup(rawIssueType, expanded),
+            resolvingIssueType: widget.resolutionController.resolvingIssueType,
+            canResolve: lampIssueType != null &&
+                widget.resolutionController.canResolveIssueType(lampIssueType),
+            onResolve: lampIssueType == null
+                ? null
+                : () => widget.resolutionController.runIssueResolution(
+                      lampIssueType,
+                    ),
+            isNetworkCategory: lampIssueType == null && isNetworkCategory,
+            resolvingNetworkIssueType:
+                widget.resolutionController.resolvingNetworkIssueType,
+            canResolveNetwork: isNetworkCategory &&
+                widget.resolutionController.canResolveNetworkIssueType(
+                  rawIssueType,
+                ),
+            onResolveNetwork: isNetworkCategory
+                ? () => widget.resolutionController.runNetworkIssueResolution(
+                      rawIssueType,
+                      groupIssues,
+                    )
+                : null,
+            copySelectionMode: _copySelectionMode,
+            copySelected: _selectedCategoryKeys.contains(rawIssueType),
+            onCopySelectionChanged: _copySelectionMode
+                ? (selected) {
+                    setState(() {
+                      if (selected) {
+                        _selectedCategoryKeys.add(rawIssueType);
+                      } else {
+                        _selectedCategoryKeys.remove(rawIssueType);
+                      }
+                    });
+                  }
+                : null,
+          ),
+        );
+      } else {
+        final issue = groupIssues[ref.issueIndex!];
+        widgets.add(
+          Card(
+            margin: EdgeInsets.zero,
+            clipBehavior: Clip.antiAlias,
+            child: LampIssueEntryListTile(issue: issue),
+          ),
+        );
+      }
+    }
+    return widgets;
+  }
+}
+
+class LampDeferredIssuesSection extends StatefulWidget {
+  const LampDeferredIssuesSection({
+    super.key,
+    required this.issuesController,
+    required this.showSnack,
+  });
+
+  final LampIssuesController issuesController;
+  final void Function(String message) showSnack;
+
+  @override
+  State<LampDeferredIssuesSection> createState() =>
+      _LampDeferredIssuesSectionState();
+}
+
+class _LampDeferredIssuesSectionState extends State<LampDeferredIssuesSection> {
+  @override
+  Widget build(BuildContext context) {
+    final deferredGroups = LampIssueHelpers.sortedIssueGroupEntries(
+      widget.issuesController.deferredIssues,
+    );
+    final scheme = Theme.of(context).colorScheme;
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 20),
+      child: Material(
+        color: scheme.surfaceContainerHighest.withValues(alpha: 0.65),
+        borderRadius: BorderRadius.circular(12),
+        child: ExpansionTile(
+          initiallyExpanded: widget.issuesController.deferredSectionExpanded,
+          onExpansionChanged: (expanded) {
+            setState(() {
+              widget.issuesController.deferredSectionExpanded = expanded;
+            });
+          },
+          title: Text(
+            'Αναβληθέντα (${widget.issuesController.deferredIssues.length})',
+            style: Theme.of(context).textTheme.titleSmall,
+          ),
+          subtitle: const Text(
+            'Δεν προσμετρούνται στο σύνολο ανοιχτών προβλημάτων.',
+          ),
+          children: [
+            for (final group in deferredGroups) ...[
+              ListTile(
+                dense: true,
+                title: Text(
+                  '${LampIssueHelpers.categoryDisplayLabel(group.key)} '
+                  '(${group.value.length})',
+                ),
+                trailing: TextButton(
+                  onPressed: () async {
+                    await widget.issuesController.reopenDeferredGroup(group.key);
+                    if (mounted) setState(() {});
+                  },
+                  child: const Text('Επαναφορά σε ανοιχτά'),
+                ),
+                onTap: () {
+                  setState(() {
+                    final key = group.key;
+                    if (widget.issuesController.expandedDeferredIssueGroupKeys
+                        .contains(key)) {
+                      widget.issuesController.expandedDeferredIssueGroupKeys
+                          .remove(key);
+                    } else {
+                      widget.issuesController.expandedDeferredIssueGroupKeys
+                          .add(key);
+                    }
+                  });
+                },
+              ),
+              if (widget.issuesController.expandedDeferredIssueGroupKeys
+                  .contains(group.key))
+                for (final issue in group.value)
+                  Card(
+                    margin: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                    clipBehavior: Clip.antiAlias,
+                    child: LampIssueEntryListTile(issue: issue),
+                  ),
+            ],
+          ],
+        ),
+      ),
     );
   }
 }

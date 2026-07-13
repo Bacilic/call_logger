@@ -24,6 +24,7 @@ import '../services/lamp_migration_service.dart';
 import '../widgets/lamp_db_tables_tab.dart';
 import '../widgets/lamp_issue_widgets.dart';
 import '../widgets/lamp_result_card.dart';
+import '../widgets/lamp_search_key_autocomplete.dart';
 import '../widgets/lamp_settings_dialog.dart';
 import '../widgets/lamp_transfer_wizard_dialog.dart';
 
@@ -59,6 +60,9 @@ class _LampScreenState extends ConsumerState<LampScreen> implements LampScreenHo
   @override
   LampOldDbCheckResult? get readPathCheck =>
       ref.watch(lampReadPathHealthProvider).value;
+
+  LampOldDbCheckResult? get outputPathCheck =>
+      ref.watch(lampOutputPathHealthProvider).value;
 
   @override
   bool get lampSettingsDialogOpen => _lampSettingsDialogOpen;
@@ -272,9 +276,9 @@ class _LampScreenState extends ConsumerState<LampScreen> implements LampScreenHo
   }
 
   Future<void> _runImport() async {
-    final failureMessage = await _import.runImport(
+    final result = await _import.runImport(
       onImportStart: () {
-        _search.results = const <Map<String, Object?>>[];
+        _search.clearResults();
         _search.message = null;
         _issues.clearIssues();
         notifyState();
@@ -298,8 +302,12 @@ class _LampScreenState extends ConsumerState<LampScreen> implements LampScreenHo
         await _issues.loadIssues();
       },
     );
-    if (failureMessage != null && mounted) {
-      setState(() => _search.message = failureMessage);
+    if (!mounted) return;
+    if (result.failureMessage != null) {
+      setState(() => _search.message = result.failureMessage);
+    }
+    if (result.runIntegrityCheck) {
+      await _integrity.runIntegrityCheck(reloadIssues: _issues.loadIssues);
     }
   }
 
@@ -402,6 +410,7 @@ class _LampScreenState extends ConsumerState<LampScreen> implements LampScreenHo
       importController: _import,
       integrityController: _integrity,
       getReadPathCheck: () => readPathCheck,
+      getOutputPathCheck: () => outputPathCheck,
       getDialogFeedback: () => _lampDialogFeedback,
       getDialogFeedbackIsError: () => _lampDialogFeedbackIsError,
       onClearDialogFeedback: clearLampDialogFeedback,
@@ -416,15 +425,12 @@ class _LampScreenState extends ConsumerState<LampScreen> implements LampScreenHo
         onReadSynced: ({required source}) =>
             _refreshDataAfterReadPathChange(source: source),
       ),
-      onMatchReadToOutput: _path.matchReadToOutput,
-      onRunIntegrityCheck: () => _integrity.runIntegrityCheck(
-        reloadIssues: _issues.loadIssues,
-      ),
-      onApplyPersistedReadAndValidate: () => _path.applyPersistedReadAndValidate(
-        announce: true,
-        source: 'επαλήθευση',
+      onMatchReadToOutput: () => _path.matchReadToOutput(
         onDbOk: _onReadPathOk,
         onDbNotOk: _onReadPathNotOk,
+      ),
+      onRunIntegrityCheck: () => _integrity.runIntegrityCheck(
+        reloadIssues: _issues.loadIssues,
       ),
       onRunImport: _runImport,
       onClose: _closeLampSettingsDialog,
@@ -544,18 +550,10 @@ class _LampScreenState extends ConsumerState<LampScreen> implements LampScreenHo
                 children: [
                   SizedBox(
                     width: blockWidth,
-                    child: TextField(
-                      controller: _search.globalController,
-                      decoration: InputDecoration(
-                        labelText: 'Καθολική Αναζήτηση',
-                        prefixIcon: const Icon(Icons.search),
-                        suffixIcon: _search.clearFieldSuffix(
-                          controller: _search.globalController,
-                          tooltip: 'Καθαρισμός καθολικής αναζήτησης',
-                        ),
-                        border: const OutlineInputBorder(),
-                      ),
-                      onSubmitted: (_) => _search.globalSearch(),
+                    child: LampSearchKeyAutocomplete(
+                      search: _search,
+                      width: blockWidth,
+                      onSubmitted: _search.globalSearch,
                     ),
                   ),
                   const SizedBox(height: 12),
@@ -638,7 +636,7 @@ class _LampScreenState extends ConsumerState<LampScreen> implements LampScreenHo
       padding: const EdgeInsets.all(16),
       itemCount: _search.results.length,
       itemBuilder: (context, index) => EquipmentResultCard(
-        viewModel: EquipmentViewModel.fromRow(_search.results[index]),
+        viewModel: _search.resultViewModels[index],
         onSaveSection: _saveEquipmentSection,
         onTransferSection: _openTransferWizard,
       ),

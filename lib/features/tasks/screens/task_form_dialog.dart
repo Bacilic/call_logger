@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
 
 import '../../../core/widgets/lexicon_spell_text_form_field.dart';
 import '../../../core/widgets/spell_check_controller.dart';
@@ -37,6 +38,7 @@ class _TaskFormDialogState extends ConsumerState<_TaskFormDialog> {
   ProviderContainer? _providerContainer;
   late final SpellCheckController _titleController;
   late final SpellCheckController _descriptionController;
+  late final List<TextEditingController> _snoozeNoteControllers;
   late int _priority;
   late DateTime _dueDate;
   bool _userPickedDue = false;
@@ -57,6 +59,9 @@ class _TaskFormDialogState extends ConsumerState<_TaskFormDialog> {
     _titleController = SpellCheckController()..text = t?.title ?? '';
     _descriptionController = SpellCheckController()
       ..text = t?.description ?? '';
+    _snoozeNoteControllers = (t?.snoozeEntries ?? const [])
+        .map((e) => TextEditingController(text: e.note ?? ''))
+        .toList();
     _priority = t?.priority ?? 0;
     _userPickedDue = t != null;
     _dueDate =
@@ -100,6 +105,9 @@ class _TaskFormDialogState extends ConsumerState<_TaskFormDialog> {
     }
     _titleController.dispose();
     _descriptionController.dispose();
+    for (final controller in _snoozeNoteControllers) {
+      controller.dispose();
+    }
     super.dispose();
   }
 
@@ -200,7 +208,18 @@ class _TaskFormDialogState extends ConsumerState<_TaskFormDialog> {
           equipmentText: trimOrNull(entityState.equipmentText),
           origin: Task.originManualFab,
         );
-    Navigator.of(context).pop(result);
+
+    final Task submitted;
+    if (widget.task != null &&
+        widget.task!.snoozeEntries.isNotEmpty &&
+        _snoozeNoteControllers.length == widget.task!.snoozeEntries.length) {
+      submitted = result.withUpdatedSnoozeNotes(
+        _snoozeNoteControllers.map((c) => c.text).toList(),
+      );
+    } else {
+      submitted = result;
+    }
+    Navigator.of(context).pop(submitted);
   }
 
   @override
@@ -424,6 +443,39 @@ class _TaskFormDialogState extends ConsumerState<_TaskFormDialog> {
                     child: const Text('Επιλογή'),
                   ),
                 ),
+                if (widget.task != null &&
+                    widget.task!.snoozeEntries.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  Text(
+                    'Αναβολές',
+                    style: Theme.of(context).textTheme.titleSmall,
+                  ),
+                  const SizedBox(height: 8),
+                  for (var i = 0; i < widget.task!.snoozeEntries.length; i++) ...[
+                    Text(
+                      'Αναβολή ${i + 1} — '
+                      '${DateFormat('dd/MM HH:mm').format(widget.task!.snoozeEntries[i].snoozedAt)}',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    TextField(
+                      key: ValueKey('snooze_note_$i'),
+                      controller: _snoozeNoteControllers[i],
+                      decoration: const InputDecoration(
+                        labelText: 'Σημείωση αναβολής',
+                        hintText: 'Σημείωση αναβολής',
+                        border: OutlineInputBorder(),
+                        alignLabelWithHint: true,
+                      ),
+                      minLines: 1,
+                      maxLines: 3,
+                    ),
+                    if (i < widget.task!.snoozeEntries.length - 1)
+                      const SizedBox(height: 8),
+                  ],
+                ],
               ],
             ),
           ),

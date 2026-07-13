@@ -169,13 +169,19 @@ class AuditEntityPreviewResolver {
     if (rows.isEmpty) return null;
     final r = rows.first;
     final code = r['code_equipment'] as String? ?? '';
+    final type = (r['type'] as String?)?.trim();
+    final remoteParams = (r['remote_params'] as String?)?.trim();
+    final lines = <String>[];
+    if (type != null && type.isNotEmpty) {
+      lines.add('Τύπος: $type');
+    }
+    if (remoteParams != null && remoteParams.isNotEmpty) {
+      lines.add('Παράμετροι: $remoteParams');
+    }
+    lines.add('Id: $id');
     return AuditEntityPreview(
       title: code.isEmpty ? 'Εξοπλισμός #$id' : 'Εξοπλισμός $code',
-      lines: [
-        'Τύπος: ${r['type'] ?? '—'}',
-        'Παράμετροι: ${r['remote_params'] ?? '—'}',
-        'Id: $id',
-      ],
+      lines: lines,
     );
   }
 

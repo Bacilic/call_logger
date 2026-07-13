@@ -1,5 +1,6 @@
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
+import '../../../features/lamp/controllers/lamp_search_query_parser.dart';
 import '../../utils/search_text_normalizer.dart';
 import '../../utils/user_identity_normalizer.dart';
 import 'lamp_database_provider.dart';
@@ -9,6 +10,8 @@ import 'old_database_schema.dart';
 
 const String oldDataIssueEntityTypeEquipment = 'equipment';
 const String oldDataIssueOriginIntegrityScan = 'integrity_scan';
+const String kDataIssueStatusOpen = 'open';
+const String kDataIssueStatusDeferred = 'deferred';
 
 /// Αποτέλεσμα αναζήτησης: εμφανιζόμενες γραμμές + συνολικός αριθμός ταιριασμάτων.
 class OldEquipmentSearchResult {
@@ -293,9 +296,35 @@ class OldEquipmentRepository {
     String databasePath,
     String query, {
     required int maxDisplay,
+    List<LampScopedSearchTerm>? scopedTerms,
+    String? freeText,
   }) async {
-    final normalizedQuery = _normalizeMaybe(query);
-    if (normalizedQuery == null) {
+    if (scopedTerms == null && freeText == null) {
+      final normalizedQuery = _normalizeMaybe(query);
+      if (normalizedQuery == null) {
+        return const OldEquipmentSearchResult(
+          rows: <Map<String, Object?>>[],
+          totalCount: 0,
+        );
+      }
+      final cap = maxDisplay.clamp(1, 1000000);
+      final cache = await _ensureCache(databasePath);
+      var totalCount = 0;
+      final displayed = <Map<String, Object?>>[];
+      for (final row in cache.rows) {
+        if (!_containsAllTokens(row.normalizedText, normalizedQuery)) continue;
+        totalCount++;
+        if (displayed.length < cap) {
+          displayed.add(row.dto);
+        }
+      }
+      return OldEquipmentSearchResult(rows: displayed, totalCount: totalCount);
+    }
+
+    final effectiveFreeText = freeText ?? '';
+    final normalizedQuery = _normalizeMaybe(effectiveFreeText);
+    final terms = scopedTerms ?? const <LampScopedSearchTerm>[];
+    if (normalizedQuery == null && terms.isEmpty) {
       return const OldEquipmentSearchResult(
         rows: <Map<String, Object?>>[],
         totalCount: 0,
@@ -306,7 +335,11 @@ class OldEquipmentRepository {
     var totalCount = 0;
     final displayed = <Map<String, Object?>>[];
     for (final row in cache.rows) {
-      if (!_containsAllTokens(row.normalizedText, normalizedQuery)) continue;
+      if (normalizedQuery != null &&
+          !_containsAllTokens(row.normalizedText, normalizedQuery)) {
+        continue;
+      }
+      if (terms.isNotEmpty && !_matchesScopedTerms(row, terms)) continue;
       totalCount++;
       if (displayed.length < cap) {
         displayed.add(row.dto);
@@ -402,14 +435,112 @@ class OldEquipmentRepository {
     String databasePath, {
     int limit = 10000,
   }) async {
-    final db = await _databaseProvider.open(databasePath);
-    return db.query('data_issues', orderBy: 'id DESC', limit: limit);
+    final path = databasePath.trim();
+    await _ensureDataIssueSchemaOnPath(path);
+    final db = await _databaseProvider.open(path);
+    return db.query(
+      'data_issues',
+      where: "COALESCE(status, ?) = ?",
+      whereArgs: <Object?>[kDataIssueStatusOpen, kDataIssueStatusOpen],
+      orderBy: 'id DESC',
+      limit: limit,
+    );
+  }
+
+  Future<List<Map<String, Object?>>> deferredDataIssues(
+    String databasePath, {
+    int limit = 10000,
+  }) async {
+    final path = databasePath.trim();
+    await _ensureDataIssueSchemaOnPath(path);
+    final db = await _databaseProvider.open(path);
+    return db.query(
+      'data_issues',
+      where: 'status = ?',
+      whereArgs: <Object?>[kDataIssueStatusDeferred],
+      orderBy: 'id DESC',
+      limit: limit,
+    );
+  }
+
+  Future<Map<String, List<Map<String, Object?>>>> deferredDataIssuesGroupedByType(
+    String databasePath,
+  ) async {
+    final issues = await deferredDataIssues(databasePath);
+    final grouped = <String, List<Map<String, Object?>>>{};
+    for (final issue in issues) {
+      final raw = issue['issue_type']?.toString().trim() ?? '';
+      grouped.putIfAbsent(raw, () => <Map<String, Object?>>[]).add(issue);
+    }
+    return grouped;
   }
 
   Future<int> dataIssueCount(String databasePath) async {
-    final db = await _databaseProvider.open(databasePath);
+    final path = databasePath.trim();
+    await _ensureDataIssueSchemaOnPath(path);
+    final db = await _databaseProvider.open(path);
+    final rows = await db.rawQuery(
+      "SELECT COUNT(*) AS count FROM data_issues WHERE COALESCE(status, ?) = ?",
+      <Object?>[kDataIssueStatusOpen, kDataIssueStatusOpen],
+    );
+    return (rows.first['count'] as int?) ?? 0;
+  }
+
+  /// Συνολικό πλήθος εγγραφών `data_issues` (ανοιχτές + αναβληθείσες).
+  Future<int> totalDataIssueCount(String databasePath) async {
+    final path = databasePath.trim();
+    await _ensureDataIssueSchemaOnPath(path);
+    final db = await _databaseProvider.open(path);
     final rows = await db.rawQuery('SELECT COUNT(*) AS count FROM data_issues');
     return (rows.first['count'] as int?) ?? 0;
+  }
+
+  Future<void> _ensureDataIssueSchemaOnPath(String databasePath) async {
+    final path = databasePath.trim();
+    if (path.isEmpty) return;
+    final db = await _databaseProvider.open(
+      path,
+      mode: LampDatabaseMode.write,
+    );
+    await _ensureDataIssueModelColumns(db);
+  }
+
+  Future<int> deferDataIssuesByIds(
+    String databasePath,
+    List<int> issueIds,
+  ) async {
+    if (issueIds.isEmpty) return 0;
+    final path = databasePath.trim();
+    final db = await _databaseProvider.open(
+      path,
+      mode: LampDatabaseMode.write,
+    );
+    await _ensureDataIssueModelColumns(db);
+    final placeholders = List<String>.filled(issueIds.length, '?').join(',');
+    return db.update(
+      'data_issues',
+      <String, Object?>{'status': kDataIssueStatusDeferred},
+      where: 'id IN ($placeholders)',
+      whereArgs: issueIds,
+    );
+  }
+
+  Future<int> reopenDeferredDataIssuesByType(
+    String databasePath,
+    String issueType,
+  ) async {
+    final path = databasePath.trim();
+    final db = await _databaseProvider.open(
+      path,
+      mode: LampDatabaseMode.write,
+    );
+    await _ensureDataIssueModelColumns(db);
+    return db.update(
+      'data_issues',
+      <String, Object?>{'status': kDataIssueStatusOpen},
+      where: 'issue_type = ? AND status = ?',
+      whereArgs: <Object?>[issueType, kDataIssueStatusDeferred],
+    );
   }
 
   /// Διαγράφει όλες τις εγγραφές του πίνακα `data_issues`. Επιστρέφει το πλήθος διαγραφών.
@@ -1264,6 +1395,7 @@ class OldEquipmentRepository {
       final columns = await _dataIssueColumnNames(txn);
       final hasEntityType = columns.contains('entity_type');
       final hasOrigin = columns.contains('origin');
+      final hasStatus = columns.contains('status');
       final existing = await _loadDataIssueIdentityKeys(txn);
       for (final issue in issues) {
         final key = _dataIssueIdentityKey(issue);
@@ -1282,6 +1414,7 @@ class OldEquipmentRepository {
           'issue_type': issue['issue_type'] ?? oldDataIssueOriginIntegrityScan,
           'message': issue['message'],
           'created_at': issue['created_at'] ?? DateTime.now().toIso8601String(),
+          if (hasStatus) 'status': issue['status'] ?? kDataIssueStatusOpen,
         };
         await txn.insert('data_issues', <String, Object?>{
           ...row,
@@ -1922,6 +2055,26 @@ class OldEquipmentRepository {
     return true;
   }
 
+  bool _matchesScopedTerms(
+    _IndexedEquipmentRow row,
+    List<LampScopedSearchTerm> terms,
+  ) {
+    for (final term in terms) {
+      final normalizedValue = SearchTextNormalizer.normalizeForSearch(term.value);
+      if (normalizedValue.isEmpty) return false;
+      var matched = false;
+      for (final column in term.columns) {
+        final cellText = _normalizeMaybe(_toText(row.dto[column]));
+        if (cellText != null && cellText.contains(normalizedValue)) {
+          matched = true;
+          break;
+        }
+      }
+      if (!matched) return false;
+    }
+    return true;
+  }
+
   Map<String, Object?> _scanIssue({
     required String issueType,
     required String message,
@@ -2016,6 +2169,19 @@ class OldEquipmentRepository {
     if (!columns.contains('origin')) {
       await db.execute("ALTER TABLE data_issues ADD COLUMN origin TEXT");
     }
+    if (!columns.contains('status')) {
+      await db.execute(
+        "ALTER TABLE data_issues ADD COLUMN status TEXT NOT NULL DEFAULT 'open'",
+      );
+    }
+    await db.execute(
+      "UPDATE data_issues SET status = '$kDataIssueStatusOpen' "
+      "WHERE status IS NULL OR TRIM(status) = ''",
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_data_issues_type_status '
+      'ON data_issues(issue_type, status)',
+    );
     await db.execute(
       "UPDATE data_issues SET entity_type = COALESCE(entity_type, CASE "
       "WHEN lower(trim(COALESCE(sheet,''))) IN ('equipment','integrity_scan') THEN 'equipment' "

@@ -7,6 +7,10 @@ import '../../../../core/database/department_repository.dart';
 import '../../../../core/database/user_repository.dart';
 import '../../../../core/widgets/database_persistence_error_snackbar.dart';
 import '../../../../core/services/lookup_service.dart';
+import '../../../../core/database/audit_diff_helper.dart';
+import '../../../../core/database/audit_service.dart';
+import '../../../../core/services/save_confirmation_summary.dart';
+import '../../../../core/widgets/audit_summary_rich_text.dart';
 import '../../../../core/services/settings_service.dart';
 import '../../../../core/utils/name_parser.dart';
 import '../../../../core/utils/search_text_normalizer.dart';
@@ -168,7 +172,9 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog>
     for (final k in _expandedRemoteKeys) {
       final v = (_remoteParamValues[k] ?? '').trim();
       if (v.isEmpty) continue;
-      final norm = _isVncLikeParamKey(k, catalog) ? v.replaceAll(',', '.') : v;
+      final norm = _isHostAddressParamKey(k, catalog, pairs)
+          ? v.replaceAll(',', '.')
+          : v;
       out[k] = norm;
     }
     for (final entry in _remoteParamValues.entries) {
@@ -176,7 +182,7 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog>
       if (EquipmentRemoteParamKey.isReservedKey(entry.key)) continue;
       final v = entry.value.trim();
       if (v.isEmpty) continue;
-      final norm = _isVncLikeParamKey(entry.key, catalog)
+      final norm = _isHostAddressParamKey(entry.key, catalog, pairs)
           ? v.replaceAll(',', '.')
           : v;
       out[EquipmentRemoteParamKey.remoteParamStashKeyFor(entry.key)] = norm;
@@ -400,14 +406,32 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog>
         ownerUserId: userId,
       );
       if (!mounted) return;
-      widget.ref.invalidate(lookupServiceProvider);
-      await refreshSelectedEquipmentInAllSelectors(widget.ref);
+      final savedMessage = await _buildEditSaveConfirmationMessage(
+        equipment: equipment,
+        catalog: catalog,
+        newRemoteParams: remoteParams,
+      );
+      try {
+        widget.ref.invalidate(lookupServiceProvider);
+        await refreshSelectedEquipmentInAllSelectors(widget.ref);
+      } catch (_) {
+        if (!mounted) return;
+        widget.onSaved?.call();
+        Navigator.of(context).pop(true);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Αποθηκεύτηκε, αλλά η οθόνη κλήσεων ίσως δείχνει παλιές τιμές — επιλέξτε ξανά τον εξοπλισμό.',
+            ),
+            backgroundColor: Colors.orange,
+          ),
+        );
+        return;
+      }
       if (!mounted) return;
       widget.onSaved?.call();
       Navigator.of(context).pop(true);
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Αποθηκεύτηκε')));
+      showSaveConfirmationSnackBar(context, savedMessage);
       return;
     }
     if (widget.notifier.hasDuplicateCode(code)) {
@@ -427,12 +451,62 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog>
       ownerUserId: userId,
     );
     if (!mounted) return;
-    widget.ref.invalidate(lookupServiceProvider);
+    try {
+      widget.ref.invalidate(lookupServiceProvider);
+      await refreshSelectedEquipmentInAllSelectors(widget.ref);
+    } catch (_) {
+      if (!mounted) return;
+      widget.onSaved?.call();
+      Navigator.of(context).pop(true);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Αποθηκεύτηκε, αλλά η οθόνη κλήσεων ίσως δείχνει παλιές τιμές — επιλέξτε ξανά τον εξοπλισμό.',
+          ),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+    if (!mounted) return;
     widget.onSaved?.call();
     Navigator.of(context).pop(true);
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('Αποθηκεύτηκε')));
+    final createMessage = 'Δημιουργήθηκε εξοπλισμός «$code»';
+    showSaveConfirmationSnackBar(context, createMessage);
+  }
+
+  Future<String> _buildEditSaveConfirmationMessage({
+    required EquipmentModel equipment,
+    required List<RemoteTool> catalog,
+    required Map<String, String> newRemoteParams,
+  }) async {
+    final oldMap = Map<String, dynamic>.from(widget.initialEquipment!.toMap())
+      ..remove('remote_params');
+    final newMap = Map<String, dynamic>.from(equipment.toMap())
+      ..remove('remote_params');
+    final fieldMessage = buildSaveConfirmationMessage(
+      entityType: AuditEntityTypes.equipment,
+      entityLabel: equipment.code ?? '',
+      oldMap: oldMap,
+      newMap: newMap,
+      isNew: false,
+    );
+
+    final initial = widget.initialEquipment?.remoteParams ?? const {};
+    final toolNames = {for (final tool in catalog) tool.id: tool.name};
+    final remoteLines = AuditDiffHelper.describeRemoteParamsDiffLines(
+      oldValue: initial,
+      newValue: newRemoteParams,
+      toolNames: toolNames,
+    );
+
+    if (remoteLines.isEmpty) return fieldMessage;
+
+    if (fieldMessage == kSaveConfirmationNoChangesMessage) {
+      return 'Αποθηκεύτηκε — εξοπλισμός «${equipment.code}»\n'
+          '${remoteLines.join('\n')}';
+    }
+    return '$fieldMessage\n${remoteLines.join('\n')}';
   }
   String get _title {
     if (_isEdit) return 'Επεξεργασία εξοπλισμού';

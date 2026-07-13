@@ -43,13 +43,8 @@ class RemoteLauncherService {
   }) {
     final host = testIp.trim();
     final fp = filePathForTest ??
-        (tool.arguments.any(
-          (a) => a.isActive && a.value.contains('{FILE}'),
-        )
-            ? kPreviewRdpFilePath
-            : null);
-    return tool.arguments
-        .where((a) => a.isActive)
+        (tool.acceptsFileParam ? kPreviewRdpFilePath : null);
+    return tool.effectiveActiveArguments
         .map((a) => a.value)
         .map(
           (v) => replaceAllPlaceholders(
@@ -227,11 +222,7 @@ class RemoteLauncherService {
       throw Exception(errorAccessDenied);
     }
 
-    final fp = tool.arguments.any(
-          (a) => a.isActive && a.value.contains('{FILE}'),
-        )
-        ? kPreviewRdpFilePath
-        : null;
+    final fp = tool.acceptsFileParam ? kPreviewRdpFilePath : null;
     final arguments = testArgumentList(
       tool,
       testIp,

@@ -26,7 +26,7 @@ class LampIssueResolutionSupport {
   ) {
     return db.query(
       'data_issues',
-      where: 'issue_type = ?',
+      where: "issue_type = ? AND COALESCE(status, 'open') = 'open'",
       whereArgs: <Object?>[issueType.issueType],
       orderBy: 'id ASC',
     );

@@ -266,9 +266,13 @@ WHERE ${whereTrend.join(' AND ')}
     final byDepartment = deptRows
         .map(
           (row) => DepartmentStat(
-            name: (row['dept_name'] as String?)?.trim().isNotEmpty == true
-                ? (row['dept_name'] as String).trim()
-                : '-',
+            name: () {
+              final raw = (row['dept_name'] as String?)?.trim() ?? '';
+              if (raw.isEmpty || raw == '-') {
+                return kDashboardUnknownDepartmentLabel;
+              }
+              return raw;
+            }(),
             count: (row['cnt'] as num?)?.toInt() ?? 0,
             sumDurationSeconds: (row['sum_dur'] as num?)?.toInt() ?? 0,
           ),
@@ -349,9 +353,13 @@ WHERE ${whereSpark.join(' AND ')}
     final topCallers = topCallerRows
         .map(
           (row) => CallerStat(
-            name: (row['caller_name'] as String?)?.trim().isNotEmpty == true
-                ? (row['caller_name'] as String).trim()
-                : '-',
+            name: () {
+              final raw = (row['caller_name'] as String?)?.trim() ?? '';
+              if (raw.isEmpty || raw == '-') {
+                return kDashboardUnknownCallerLabel;
+              }
+              return raw;
+            }(),
             count: (row['cnt'] as num?)?.toInt() ?? 0,
           ),
         )

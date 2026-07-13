@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/models/remote_tool.dart';
 import '../../../../core/widgets/lexicon_spell_text_form_field.dart';
 import '../../../../core/widgets/reorder_grab_handle.dart';
 import 'remote_tool_form_controller.dart';
@@ -44,9 +45,56 @@ class _RemoteToolArgumentsEditorState extends State<RemoteToolArgumentsEditor> {
     }
   }
 
+  List<RemoteToolArgument> _currentArguments() {
+    return _ctrl.argRows
+        .map(
+          (r) => RemoteToolArgument(
+            value: r.valueC.text,
+            description: r.descC.text,
+            isActive: r.active,
+          ),
+        )
+        .toList();
+  }
+
+  Widget _buildArgumentsWarningBanner(ThemeData theme, String message) {
+    final cs = theme.colorScheme;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: cs.errorContainer,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            Icons.warning_amber_rounded,
+            size: 18,
+            color: cs.onErrorContainer,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              message,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: cs.onErrorContainer,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final warningMessage = RemoteTool.buildArgumentsEditorWarning(
+      _currentArguments(),
+      role: _ctrl.role,
+    );
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -82,6 +130,10 @@ class _RemoteToolArgumentsEditorState extends State<RemoteToolArgumentsEditor> {
           icon: const Icon(Icons.add),
           label: const Text('Προσθήκη ορίσματος'),
         ),
+        if (warningMessage != null) ...[
+          const SizedBox(height: 12),
+          _buildArgumentsWarningBanner(theme, warningMessage),
+        ],
         const SizedBox(height: 12),
         if (_ctrl.argRows.isEmpty)
           Text(

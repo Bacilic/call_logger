@@ -50,6 +50,13 @@ class SettingsService
     _setAppSetting = set;
   }
 
+  static const int defaultCrashLogRetentionCount =
+      SettingsServiceCatalogsMixin.defaultCrashLogRetentionCount;
+  static const int minCrashLogRetentionCount =
+      SettingsServiceCatalogsMixin.minCrashLogRetentionCount;
+  static const int maxCrashLogRetentionCount =
+      SettingsServiceCatalogsMixin.maxCrashLogRetentionCount;
+
   /// Κλειδί αποθήκευσης SharedPreferences (με πρόθεμα προφίλ όταν υπάρχει CLI `--profile`).
   static String _prefKey(String baseKey) =>
       AppConfig.prefixedPreferencesKey(baseKey);

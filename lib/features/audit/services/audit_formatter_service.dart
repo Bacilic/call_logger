@@ -1,6 +1,9 @@
 import 'dart:convert';
 
+import '../../../core/database/audit_diff_helper.dart';
+import '../../../core/database/audit_service.dart';
 import '../../../core/database/database_helper.dart';
+import '../../../core/database/directory_support.dart';
 import '../models/audit_log_model.dart';
 import '../models/audit_reference_labels.dart';
 
@@ -23,6 +26,16 @@ class AuditFormatterService {
     final hh = l.hour.toString().padLeft(2, '0');
     final min = l.minute.toString().padLeft(2, '0');
     return '$w $dd-$mm-$yyyy $hh:$min';
+  }
+
+  /// Διακριτή γραμμή προέλευσης παράγωγης εγγραφής (κάτω από τίτλο λεπτομερειών).
+  String? originDisplayLine(AuditLogModel row) =>
+      DirectorySupport.auditOriginDisplayLine(row.details);
+
+  /// Λεπτομέρειες χωρίς suffix προέλευσης (για εμφάνιση κειμένου).
+  String? detailsWithoutOrigin(AuditLogModel row) {
+    final stripped = DirectorySupport.stripAuditOriginSuffix(row.details);
+    return stripped.isEmpty ? null : stripped;
   }
 
   /// Μήνυμα μίας γραμμής για τη λίστα.
@@ -74,8 +87,9 @@ class AuditFormatterService {
         return '$main - $change';
       }
       if (main.trim().isNotEmpty) return main;
-      if (row.details != null && row.details!.trim().isNotEmpty) {
-        return row.details!.trim();
+      final detailsOnly = detailsWithoutOrigin(row);
+      if (detailsOnly != null && detailsOnly.isNotEmpty) {
+        return detailsOnly;
       }
       return '—';
     }
@@ -83,7 +97,7 @@ class AuditFormatterService {
     final action = _actionLabel(row.action ?? '', technical);
     final subject = type != null && type.isNotEmpty
         ? _entitySummarySubject(type, eid, effectiveName, technical: technical)
-        : (row.details?.trim() ?? '');
+        : (detailsWithoutOrigin(row) ?? '');
     final base = [action, subject].where((e) => e.trim().isNotEmpty).join(' · ');
     final change = primaryChangeLine(
       row,
@@ -95,8 +109,9 @@ class AuditFormatterService {
       return '$base - $change';
     }
     if (base.isNotEmpty) return base;
-    if (row.details != null) {
-      return row.details!.trim();
+    final detailsOnly = detailsWithoutOrigin(row);
+    if (detailsOnly != null) {
+      return detailsOnly;
     }
     return '—';
   }
@@ -242,16 +257,39 @@ class AuditFormatterService {
     final normalizedType = type == null ? '' : _normalizeEntityType(type);
 
     final allKeys = oldMap.keys.toSet().union(newMap.keys.toSet());
-    final keys = _orderedDiffKeys(normalizedType, allKeys);
+    final keys = AuditDiffHelper.orderedDiffKeys(normalizedType, allKeys);
     final lines = <String>[];
     for (final key in keys) {
-      if (_shouldSkipRedundantTextField(key, allKeys)) continue;
+      if (AuditDiffHelper.shouldSkipDerivativeField(key, allKeys)) continue;
       final hasOld = oldMap.containsKey(key);
       final hasNew = newMap.containsKey(key);
       if (!hasOld && !hasNew) continue;
       final oldValue = oldMap[key];
       final newValue = newMap[key];
-      if (_valuesEqual(oldValue, newValue)) continue;
+      if (!AuditService.shouldIncludeFieldInAuditDiff(key, oldValue, newValue)) {
+        continue;
+      }
+      if (normalizedType == 'equipment' && key == 'remote_params') {
+        final toolLines = AuditDiffHelper.describeRemoteParamsDiffLines(
+          oldValue: oldValue,
+          newValue: newValue,
+          toolNames: labels.remoteToolNames,
+        );
+        if (toolLines.length == 1) {
+          final line =
+              'Αλλαγή παραμέτρων απομακρυσμένης · ${toolLines.first}';
+          if (skipIfEquals == null || line != skipIfEquals) {
+            lines.add(line);
+          }
+        } else {
+          for (final line in toolLines) {
+            if (line.trim().isEmpty) continue;
+            if (skipIfEquals != null && line == skipIfEquals) continue;
+            lines.add(line);
+          }
+        }
+        continue;
+      }
       final line = _diffLineForField(
         entityType: normalizedType,
         field: key,
@@ -282,17 +320,40 @@ class AuditFormatterService {
       technical: technical,
       labels: labels,
     );
-    return lines.isEmpty ? null : lines.first;
+    if (lines.isEmpty) return null;
+    if (lines.length == 1) return lines.first;
+    final fieldLabels = _changedFieldTitleLabels(
+      row,
+      technical: technical,
+      labels: labels,
+    );
+    if (fieldLabels.isEmpty) {
+      return '${lines.length} αλλαγές';
+    }
+    return '${lines.length} αλλαγές: ${fieldLabels.join(', ')}';
   }
 
-  bool _shouldSkipRedundantTextField(String field, Set<String> keys) {
-    if (field == 'department_text' && keys.contains('department_id')) {
-      return true;
+  List<String> _changedFieldTitleLabels(
+    AuditLogModel row, {
+    required bool technical,
+    required AuditReferenceLabels labels,
+  }) {
+    final oldMap = row.oldValuesMap ?? const <String, dynamic>{};
+    final newMap = row.newValuesMap ?? const <String, dynamic>{};
+    if (oldMap.isEmpty && newMap.isEmpty) return const <String>[];
+
+    var type = row.entityType?.trim();
+    if (type == null || type.isEmpty) {
+      final parsed = _parseDetailsTableId(row.details);
+      if (parsed != null) type = parsed.$1;
     }
-    if (field == 'caller_text' && keys.contains('caller_id')) {
-      return true;
-    }
-    return false;
+    final normalizedType = type == null ? '' : _normalizeEntityType(type);
+
+    return AuditDiffHelper.changedFieldTitleLabels(
+      entityType: normalizedType,
+      oldMap: oldMap,
+      newMap: newMap,
+    );
   }
 
   String _entityTypeGreek(String type) {
@@ -326,73 +387,6 @@ class AuditFormatterService {
       default:
         return type;
     }
-  }
-
-  List<String> _orderedDiffKeys(String entityType, Set<String> keys) {
-    final order = switch (entityType) {
-      'call' => const [
-          'status',
-          'category_text',
-          'category_id',
-          'caller_text',
-          'caller_id',
-          'phone_text',
-          'department_text',
-          'equipment_text',
-          'equipment_id',
-          'issue',
-          'duration',
-          'is_priority',
-        ],
-      'task' => const [
-          'status',
-          'priority',
-          'due_date',
-          'solution_notes',
-          'title',
-          'description',
-          'department_text',
-          'user_text',
-          'equipment_text',
-          'phone_text',
-        ],
-      'department' => const [
-          'name',
-          'color',
-          'building',
-          'map_floor',
-          'floor_id',
-          'notes',
-          'map_x',
-          'map_y',
-          'map_width',
-          'map_height',
-          'map_rotation',
-        ],
-      'user' => const [
-          'department_id',
-          'department_text',
-          'email',
-          'phone',
-          'linked_phone_numbers',
-          'linked_equipment',
-        ],
-      'equipment' => const [
-          'department_id',
-          'type',
-          'remote_params',
-          'linked_users',
-        ],
-      'phone' => const ['linked_user_id', 'department_id'],
-      _ => const <String>[],
-    };
-    final out = <String>[];
-    for (final k in order) {
-      if (keys.contains(k)) out.add(k);
-    }
-    final rest = keys.where((k) => !out.contains(k)).toList()..sort();
-    out.addAll(rest);
-    return out;
   }
 
   String? _diffLineForField({
@@ -450,7 +444,17 @@ class AuditFormatterService {
       if (o != null && n != null) return 'Μεταφορά από τμήμα $o σε $n';
     }
 
-    final label = _fieldLabel(entityType, field);
+    if (entityType == 'equipment' && field == 'remote_params') {
+      final toolLines = AuditDiffHelper.describeRemoteParamsDiffLines(
+        oldValue: oldValue,
+        newValue: newValue,
+        toolNames: labels.remoteToolNames,
+      );
+      if (toolLines.isEmpty) return null;
+      return toolLines.join(' · ');
+    }
+
+    final label = AuditDiffHelper.fieldDetailLabel(entityType, field);
     final oldFmt = _friendlyValue(
       entityType,
       field,
@@ -475,49 +479,33 @@ class AuditFormatterService {
     return 'Αλλαγή $label από $oldFmt σε $newFmt';
   }
 
-  String _fieldLabel(String entityType, String field) {
-    const common = <String, String>{
-      'name': 'ονόματος',
-      'email': 'email',
-      'phone': 'τηλεφώνου',
-      'status': 'κατάστασης',
-      'priority': 'προτεραιότητας',
-      'due_date': 'προθεσμίας',
-      'title': 'τίτλου',
-      'description': 'περιγραφής',
-      'solution_notes': 'λύσης',
-      'department_id': 'τμήματος',
-      'department_text': 'τμήματος',
-      'equipment_id': 'εξοπλισμού',
-      'equipment_text': 'εξοπλισμού',
-      'caller_id': 'χρήστη',
-      'caller_text': 'χρήστη',
-      'phone_text': 'τηλεφώνου',
-      'category_text': 'κατηγορίας',
-      'category_id': 'κατηγορίας',
-      'issue': 'θέματος',
-      'solution': 'λύσης',
-      'type': 'τύπου',
-      'remote_params': 'Παράμετροι απομακρυσμένης',
-      'linked_users': 'συνδεδεμένων χρηστών',
-      'linked_equipment': 'συνδεδεμένου εξοπλισμού',
-      'linked_phone_numbers': 'τηλεφώνων',
-      'linked_user_id': 'χρήστη',
-      'color': 'χρώματος',
-      'building': 'κτιρίου',
-      'map_floor': 'ορόφου',
-      'floor_id': 'ορόφου',
-      'notes': 'σημειώσεων',
-      'map_x': 'θέσης Χ',
-      'map_y': 'θέσης Υ',
-      'map_width': 'πλάτους',
-      'map_height': 'ύψους',
-      'map_rotation': 'περιστροφής',
-    };
-    final label = common[field];
-    if (label != null) return label;
-    if (entityType.isEmpty) return 'πεδίου $field';
-    return 'πεδίου $field';
+  String _friendlyValue(
+    String entityType,
+    String field,
+    dynamic value, {
+    required bool technical,
+    Map<String, dynamic> sideMap = const {},
+    AuditReferenceLabels labels = AuditReferenceLabels.empty,
+  }) {
+    if (value == null) return 'κενό';
+    if (field == 'department_id') {
+      final formatted = _formatDepartmentReference(
+        value,
+        sideMap,
+        technical: technical,
+        labels: labels,
+      );
+      return formatted ?? 'κενό';
+    }
+    if (technical && field == 'remote_params') {
+      return 'δομή';
+    }
+    return AuditDiffHelper.humanizeFieldValue(
+      field,
+      value,
+      sideMap: sideMap,
+      forSearch: false,
+    );
   }
 
   String? _formatDepartmentReference(
@@ -541,94 +529,12 @@ class AuditFormatterService {
     return int.tryParse(value.toString().trim());
   }
 
-  String _friendlyValue(
-    String entityType,
-    String field,
-    dynamic value, {
-    required bool technical,
-    Map<String, dynamic> sideMap = const {},
-    AuditReferenceLabels labels = AuditReferenceLabels.empty,
-  }) {
-    if (value == null) return 'κενό';
-    if (field == 'department_id') {
-      final formatted = _formatDepartmentReference(
-        value,
-        sideMap,
-        technical: technical,
-        labels: labels,
-      );
-      return formatted ?? 'κενό';
-    }
-    if (field == 'status') {
-      final s = value.toString().trim().toLowerCase();
-      const map = <String, String>{
-        'pending': 'Εκκρεμής',
-        'completed': 'Ολοκληρωμένη',
-        'closed': 'Κλειστή',
-        'open': 'Ανοιχτή',
-        'in_progress': 'Σε εξέλιξη',
-      };
-      return map[s] ?? value.toString();
-    }
-    if (field == 'priority') {
-      final s = value.toString().trim().toLowerCase();
-      const map = <String, String>{
-        'low': 'Χαμηλή',
-        'normal': 'Κανονική',
-        'medium': 'Μεσαία',
-        'high': 'Υψηλή',
-        'urgent': 'Επείγουσα',
-      };
-      return map[s] ?? value.toString();
-    }
-    if (field == 'color') {
-      return _friendlyColor(value.toString());
-    }
-    if (field == 'map_floor') {
-      return _fmtFloorValue(value) ?? 'χωρίς όροφο';
-    }
-    if (value is List) {
-      if (technical) return 'λίστα ${value.length} στοιχείων';
-      return '${value.length} στοιχεία';
-    }
-    if (value is Map) {
-      if (technical) return 'δομή';
-      return 'δομημένα δεδομένα';
-    }
-    final t = value.toString().trim();
-    return t.isEmpty ? 'κενό' : t;
-  }
-
-  bool _valuesEqual(dynamic a, dynamic b) {
-    if (a == null && b == null) return true;
-    if (a is List || a is Map || b is List || b is Map) {
-      try {
-        return jsonEncode(a) == jsonEncode(b);
-      } catch (_) {
-        return '$a' == '$b';
-      }
-    }
-    return '${a ?? ''}' == '${b ?? ''}';
-  }
-
   bool _isEmptyLike(dynamic value) {
     if (value == null) return true;
     if (value is String) return value.trim().isEmpty;
     if (value is List) return value.isEmpty;
     if (value is Map) return value.isEmpty;
     return false;
-  }
-
-  String _friendlyColor(String raw) {
-    final r = raw.trim().toUpperCase();
-    const known = <String, String>{
-      '#1976D2': 'Μπλε',
-      '#EF5350': 'Κόκκινο',
-      '#4CAF50': 'Πράσινο',
-      '#FFC107': 'Κίτρινο',
-      '#9C27B0': 'Μωβ',
-    };
-    return known[r] ?? raw;
   }
 
   String? _fmtFloorValue(dynamic v) {
@@ -687,7 +593,7 @@ class AuditFormatterService {
       if (key == 'department_text' && fields.containsKey('department_id')) {
         continue;
       }
-      final label = _fieldLabel(entityType, key);
+      final label = AuditDiffHelper.fieldDetailLabel(entityType, key);
       if (key == 'department_id' && !technical) {
         final name = _formatDepartmentReference(
           fields['department_id'],

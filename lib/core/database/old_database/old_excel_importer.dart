@@ -218,6 +218,9 @@ class OldExcelImporter {
       }
       if (!hasAnyValue) continue;
 
+      final isEquipmentTable = spec.table == 'equipment';
+      final rowFkIssues = <_DataIssue>[];
+
       for (final fk in spec.foreignKeys) {
         final raw = rawValues[fk.column];
         final parsed = lampParseExcelInt(raw);
@@ -233,16 +236,19 @@ class OldExcelImporter {
           values[fk.column] = parsed;
         } else {
           values[fk.column] = null;
-          issues.add(
-            _DataIssue(
-              sheet: sheet.sheetName,
-              rowNumber: rowNumber,
-              columnName: fk.column,
-              rawValue: raw,
-              issueType: parsed == null ? 'non_numeric_fk' : 'unknown_id',
-              message: 'Η τιμή δεν αντιστοιχεί σε έγκυρο ID για ${fk.column}.',
-            ),
+          final fkIssue = _DataIssue(
+            sheet: sheet.sheetName,
+            rowNumber: rowNumber,
+            columnName: fk.column,
+            rawValue: raw,
+            issueType: parsed == null ? 'non_numeric_fk' : 'unknown_id',
+            message: 'Η τιμή δεν αντιστοιχεί σε έγκυρο ID για ${fk.column}.',
           );
+          if (isEquipmentTable) {
+            rowFkIssues.add(fkIssue);
+          } else {
+            issues.add(fkIssue);
+          }
         }
       }
 
@@ -262,9 +268,25 @@ class OldExcelImporter {
             message: 'Παράλειψη γραμμής χωρίς έγκυρο primary key.',
           ),
         );
+        issues.addAll(rowFkIssues);
         continue;
       }
       values[spec.primaryKey] = id;
+
+      if (isEquipmentTable && rowFkIssues.isNotEmpty) {
+        issues.addAll(
+          rowFkIssues.map(
+            (issue) => _DataIssue(
+              sheet: issue.sheet,
+              rowNumber: id,
+              columnName: issue.columnName,
+              rawValue: issue.rawValue,
+              issueType: issue.issueType,
+              message: issue.message,
+            ),
+          ),
+        );
+      }
 
       if (records.containsKey(id)) {
         issues.add(
@@ -456,7 +478,7 @@ class OldExcelImporter {
         issues.add(
           _DataIssue(
             sheet: sheetName,
-            rowNumber: null,
+            rowNumber: code,
             columnName: 'set_master',
             rawValue: raw,
             issueType: 'set_master_self_reference',

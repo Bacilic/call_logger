@@ -80,12 +80,18 @@ final auditPageReferenceLabelsProvider =
 final auditActionOptionsProvider = FutureProvider.autoDispose<List<String>>((
   ref,
 ) async {
-  final filter = ref.watch(auditFilterProvider);
+  // ΜΟΝΟ τα πεδία που επηρεάζουν το query: η επιλογή Ενέργειας δεν πρέπει να
+  // ξαναφορτώνει τις επιλογές (προκαλούσε αγώνα δρόμου που έσβηνε το φίλτρο).
+  final (entityType, dateFromIso, dateToIso) = ref.watch(
+    auditFilterProvider.select(
+      (f) => (f.entityType, f.dateFromInclusiveIso, f.dateToExclusiveIso),
+    ),
+  );
   final svc = await ref.watch(auditServiceAsyncProvider.future);
   return svc.queryDistinctActions(
-    entityType: filter.entityType,
-    dateFromInclusiveIso: filter.dateFromInclusiveIso,
-    dateToExclusiveIso: filter.dateToExclusiveIso,
+    entityType: entityType,
+    dateFromInclusiveIso: dateFromIso,
+    dateToExclusiveIso: dateToIso,
   );
 });
 

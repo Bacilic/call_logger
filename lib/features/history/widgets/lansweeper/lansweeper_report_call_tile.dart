@@ -1,5 +1,6 @@
 ﻿import 'package:flutter/material.dart';
 
+import '../../../../core/widgets/linkable_text.dart';
 import 'lansweeper_state_badge.dart';
 
 /// Μία γραμμή κλήσης στη λίστα αναφοράς Lansweeper (checkbox, μεταδεδομένα, κατάσταση).
@@ -44,8 +45,8 @@ class LansweeperReportCallTile extends StatelessWidget {
     final notesBlock = fixedNotesHeight
         ? SizedBox(
             height: 42,
-            child: Text(
-              bodyText,
+            child: LinkableText(
+              text: bodyText,
               maxLines: 3,
               overflow: TextOverflow.ellipsis,
               style: notesStyle?.copyWith(height: 1.25),
@@ -53,8 +54,8 @@ class LansweeperReportCallTile extends StatelessWidget {
           )
         : bodyText.trim().isEmpty
         ? null
-        : Text(
-            bodyText,
+        : LinkableText(
+            text: bodyText,
             maxLines: 3,
             overflow: TextOverflow.ellipsis,
             style: notesStyle,

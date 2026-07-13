@@ -88,6 +88,116 @@ class RemoteTool {
   static bool containsFilePlaceholder(String value) =>
       value.toLowerCase().contains('{file}');
 
+  /// Έλεγχος placeholder στόχου με ανοχή σε πεζά/κεφαλαία (`{TARGET}` ή `{target}`).
+  static bool containsTargetPlaceholder(String value) =>
+      value.toLowerCase().contains('{target}');
+
+  /// Ενεργά ορίσματα για εκτέλεση/δοκιμή: με ενεργό `{FILE}`, παραλείπονται
+  /// ενεργά ορίσματα που περιέχουν μόνο `{TARGET}` (όχι στην ίδια τιμή).
+  List<RemoteToolArgument> get effectiveActiveArguments {
+    final active = arguments.where((a) => a.isActive).toList();
+    if (!acceptsFileParam) return active;
+    return active
+        .where(
+          (a) =>
+              !containsTargetPlaceholder(a.value) ||
+              containsFilePlaceholder(a.value),
+        )
+        .toList();
+  }
+
+  /// Προειδοποίηση Α: σύγκρουση ενεργού {FILE} με ξεχωριστό {TARGET}.
+  static String? warningFileTargetConflict(List<RemoteToolArgument> arguments) {
+    final active = arguments.where((a) => a.isActive).toList();
+    final hasFile = active.any((a) => containsFilePlaceholder(a.value));
+    if (!hasFile) return null;
+    if (active.any(
+      (a) =>
+          containsTargetPlaceholder(a.value) &&
+          !containsFilePlaceholder(a.value),
+    )) {
+      return 'Το αρχείο ορίζει τον στόχο — τα ορίσματα με {TARGET} θα αγνοηθούν κατά την εκτέλεση.';
+    }
+    return null;
+  }
+
+  /// Προειδοποίηση Β: διπλότυπες τιμές ενεργών ορισμάτων.
+  static String? warningDuplicateActiveArguments(
+    List<RemoteToolArgument> arguments,
+  ) {
+    final seen = <String>{};
+    for (final a in arguments) {
+      if (!a.isActive) continue;
+      final v = a.value.trim();
+      if (v.isEmpty) continue;
+      if (seen.contains(v)) {
+        return 'Υπάρχουν διπλότυπα ορίσματα με την ίδια τιμή.';
+      }
+      seen.add(v);
+    }
+    return null;
+  }
+
+  /// True όταν κάθε {TARGET} στο όρισμα ακολουθεί αμέσως από `/v:` (χωρίς κενό).
+  static bool rdpArgumentHasValidTargetSyntax(String value) {
+    final lower = value.toLowerCase();
+    const token = '{target}';
+    var searchFrom = 0;
+    while (true) {
+      final pos = lower.indexOf(token, searchFrom);
+      if (pos == -1) return true;
+      if (pos < 3 || value.substring(pos - 3, pos).toLowerCase() != '/v:') {
+        return false;
+      }
+      searchFrom = pos + token.length;
+    }
+  }
+
+  /// Προειδοποίηση Γ: λανθασμένη σύνταξη `/v:{TARGET}` για RDP.
+  static String? warningRdpTargetSyntax({
+    required ToolRole role,
+    required List<RemoteToolArgument> arguments,
+  }) {
+    if (role != ToolRole.rdp) return null;
+    for (final a in arguments) {
+      if (!a.isActive) continue;
+      final v = a.value;
+      if (!containsTargetPlaceholder(v) || containsFilePlaceholder(v)) {
+        continue;
+      }
+      if (!rdpArgumentHasValidTargetSyntax(v)) {
+        return 'Για RDP ο στόχος γράφεται /v:{TARGET} — κολλητά, χωρίς κενό. '
+            'Σκέτο {TARGET} ή "/v: {TARGET}" ερμηνεύεται από το mstsc ως αρχείο σύνδεσης.';
+      }
+    }
+    return null;
+  }
+
+  /// Ζωντανές προειδοποιήσεις φόρμας εργαλείου (μία γραμμή ανά εύρημα).
+  static List<String> collectArgumentsEditorWarnings({
+    required ToolRole role,
+    required List<RemoteToolArgument> arguments,
+  }) {
+    return [
+      ?warningFileTargetConflict(arguments),
+      ?warningDuplicateActiveArguments(arguments),
+      ?warningRdpTargetSyntax(role: role, arguments: arguments),
+    ];
+  }
+
+  /// Προειδοποίηση φόρμας εργαλείου για συγκρούσεις ορισμάτων (μη μπλοκάρουσα).
+  static String? buildArgumentsEditorWarning(
+    List<RemoteToolArgument> arguments, {
+    required ToolRole role,
+  }) {
+    final messages = collectArgumentsEditorWarnings(
+      role: role,
+      arguments: arguments,
+    );
+    if (messages.isEmpty) return null;
+    return messages.join('\n');
+  }
+
   static DateTime? _parseDeletedAt(dynamic v) {
     if (v == null) return null;
     final s = v.toString().trim();

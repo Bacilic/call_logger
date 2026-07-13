@@ -313,6 +313,27 @@ class Task {
     return copyWith(snoozeHistoryJson: jsonEncode(next));
   }
 
+  /// Ενημέρωση μόνο των σημειώσεων αναβολών — οι χρόνοι (snoozedAt/dueAt) μένουν αναλλοίωτοι.
+  Task withUpdatedSnoozeNotes(List<String?> notes) {
+    final entries = snoozeEntries;
+    if (entries.isEmpty || notes.length != entries.length) {
+      return this;
+    }
+    final next = <Map<String, dynamic>>[];
+    for (var i = 0; i < entries.length; i++) {
+      final entry = entries[i];
+      final trimmed = notes[i]?.trim();
+      final effectiveNote =
+          (trimmed != null && trimmed.isNotEmpty) ? trimmed : null;
+      next.add({
+        'snoozedAt': entry.snoozedAt.toIso8601String(),
+        if (entry.dueAt != null) 'dueAt': entry.dueAt!.toIso8601String(),
+        'note': ?effectiveNote,
+      });
+    }
+    return copyWith(snoozeHistoryJson: jsonEncode(next));
+  }
+
   bool get isOverdue => dueDateTime?.isBefore(DateTime.now()) ?? false;
 
   bool get isSnoozed =>

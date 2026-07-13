@@ -534,6 +534,251 @@ void main() {
     );
 
     test(
+      'set_field_manual: έγκυρος κωδικός γραφείου ενημερώνει εξοπλισμό και αφαιρεί πρόβλημα',
+      () async {
+        await _seedBaseReferenceData(dbPath);
+        await _insertEquipment(
+          dbPath,
+          code: 11001,
+          officeOriginalText: 'Άγνωστο Γραφείο',
+        );
+        final issueId = await _insertIssue(
+          dbPath,
+          issueType: 'unknown_id',
+          rawValue: '999',
+          columnName: 'office',
+          rowNumber: 11001,
+        );
+
+        final proposal = LampIssueResolutionProposal(
+          issueType: LampIssueType.unknownId,
+          issueIds: <int>[issueId],
+          sheet: 'integrity_scan',
+          row: 11001,
+          column: 'office',
+          originalValue: '999',
+          proposedAction: LampIssueResolutionAction.unresolved,
+          confidence: 0,
+          notes: 'δοκιμή χειροκίνητου κωδικού',
+          metadata: <String, Object?>{
+            'operation': 'set_field_manual',
+            'fkColumn': 'office',
+            'code': 11001,
+          },
+        );
+
+        final result = await service.applyDecisions(
+          databasePath: dbPath,
+          decisions: <LampIssueResolutionDecision>[
+            LampIssueResolutionDecision(
+              proposal: proposal,
+              textInput: '1',
+            ),
+          ],
+        );
+
+        expect(result.unresolved, 0);
+        expect(await _issueExists(dbPath, issueId), isFalse);
+
+        final db = await openDatabase(dbPath, singleInstance: false);
+        try {
+          final row = await db.query(
+            'equipment',
+            columns: <String>['office', 'office_original_text'],
+            where: 'code = ?',
+            whereArgs: <Object?>[11001],
+          );
+          expect(row.single['office'], 1);
+          expect(row.single['office_original_text'], isNull);
+        } finally {
+          await db.close();
+        }
+      },
+    );
+
+    test(
+      'set_field_manual: ανύπαρκτος κωδικός αποτυγχάνει χωρίς μερική εγγραφή',
+      () async {
+        await _seedBaseReferenceData(dbPath);
+        await _insertEquipment(
+          dbPath,
+          code: 11002,
+          officeOriginalText: 'Άγνωστο',
+        );
+        final issueId = await _insertIssue(
+          dbPath,
+          issueType: 'unknown_id',
+          rawValue: '888',
+          columnName: 'office',
+          rowNumber: 11002,
+        );
+
+        final proposal = LampIssueResolutionProposal(
+          issueType: LampIssueType.unknownId,
+          issueIds: <int>[issueId],
+          sheet: 'integrity_scan',
+          row: 11002,
+          column: 'office',
+          originalValue: '888',
+          proposedAction: LampIssueResolutionAction.unresolved,
+          confidence: 0,
+          notes: 'δοκιμή ανύπαρκτου κωδικού',
+          metadata: <String, Object?>{
+            'operation': 'set_field_manual',
+            'fkColumn': 'office',
+            'code': 11002,
+          },
+        );
+
+        final result = await service.applyDecisions(
+          databasePath: dbPath,
+          decisions: <LampIssueResolutionDecision>[
+            LampIssueResolutionDecision(
+              proposal: proposal,
+              textInput: '99999',
+            ),
+          ],
+        );
+
+        expect(result.unresolved, 1);
+        expect(result.errors.single, contains('99999'));
+        expect(await _issueExists(dbPath, issueId), isTrue);
+
+        final db = await openDatabase(dbPath, singleInstance: false);
+        try {
+          final row = await db.query(
+            'equipment',
+            columns: <String>['office'],
+            where: 'code = ?',
+            whereArgs: <Object?>[11002],
+          );
+          expect(row.single['office'], isNull);
+        } finally {
+          await db.close();
+        }
+      },
+    );
+
+    test(
+      'clear_field: αδειάζει το πεδίο εξοπλισμού και αφαιρεί το πρόβλημα',
+      () async {
+        await _seedBaseReferenceData(dbPath);
+        await db_insertOwnerAndEquipment(dbPath);
+        final issueId = await _insertIssue(
+          dbPath,
+          issueType: 'unknown_id',
+          rawValue: '77',
+          columnName: 'owner',
+          rowNumber: 12001,
+        );
+
+        final proposal = LampIssueResolutionProposal(
+          issueType: LampIssueType.unknownId,
+          issueIds: <int>[issueId],
+          sheet: 'integrity_scan',
+          row: 12001,
+          column: 'owner',
+          originalValue: '77',
+          proposedAction: LampIssueResolutionAction.unresolved,
+          confidence: 0,
+          notes: 'δοκιμή εκκαθάρισης',
+          metadata: <String, Object?>{
+            'operation': 'clear_field',
+            'fkColumn': 'owner',
+            'code': 12001,
+          },
+        );
+
+        final result = await service.applyDecisions(
+          databasePath: dbPath,
+          decisions: <LampIssueResolutionDecision>[
+            LampIssueResolutionDecision(proposal: proposal),
+          ],
+        );
+
+        expect(result.unresolved, 0);
+        expect(await _issueExists(dbPath, issueId), isFalse);
+
+        final db = await openDatabase(dbPath, singleInstance: false);
+        try {
+          final row = await db.query(
+            'equipment',
+            columns: <String>['owner', 'owner_original_text'],
+            where: 'code = ?',
+            whereArgs: <Object?>[12001],
+          );
+          expect(row.single['owner'], isNull);
+          expect(row.single['owner_original_text'], isNull);
+        } finally {
+          await db.close();
+        }
+      },
+    );
+
+    test(
+      'defer_issue: αλλάζει status σε deferred χωρίς αλλαγή δεδομένων',
+      () async {
+        await _seedBaseReferenceData(dbPath);
+        await _insertEquipment(
+          dbPath,
+          code: 13001,
+          officeOriginalText: 'Κείμενο',
+        );
+        final issueId = await _insertIssue(
+          dbPath,
+          issueType: 'non_numeric_fk',
+          rawValue: 'Κείμενο',
+          columnName: 'office',
+          rowNumber: 13001,
+        );
+
+        final proposal = LampIssueResolutionProposal(
+          issueType: LampIssueType.nonNumericFk,
+          issueIds: <int>[issueId],
+          sheet: 'integrity_scan',
+          row: 13001,
+          column: 'office',
+          originalValue: 'Κείμενο',
+          proposedAction: LampIssueResolutionAction.unresolved,
+          confidence: 0,
+          notes: 'δοκιμή αναβολής',
+          metadata: <String, Object?>{
+            'operation': 'defer_issue',
+          },
+        );
+
+        final result = await service.applyDecisions(
+          databasePath: dbPath,
+          decisions: <LampIssueResolutionDecision>[
+            LampIssueResolutionDecision(proposal: proposal),
+          ],
+        );
+
+        expect(result.unresolved, 0);
+        expect(await _issueExists(dbPath, issueId), isTrue);
+
+        final db = await openDatabase(dbPath, singleInstance: false);
+        try {
+          final row = await db.query(
+            'data_issues',
+            where: 'id = ?',
+            whereArgs: <Object?>[issueId],
+          );
+          expect(row.single['status'], 'deferred');
+          final equipment = await db.query(
+            'equipment',
+            columns: <String>['office_original_text'],
+            where: 'code = ?',
+            whereArgs: <Object?>[13001],
+          );
+          expect(equipment.single['office_original_text'], 'Κείμενο');
+        } finally {
+          await db.close();
+        }
+      },
+    );
+
+    test(
       'ακύρωση μέσα σε παρτίδα: εφαρμόζεται μόνο η πρώτη απόφαση',
       () async {
         final decisions = await _threeOfficeAutoDecisions(dbPath, service);
@@ -699,6 +944,28 @@ Future<bool> _issueExists(String dbPath, int issueId) async {
       whereArgs: <Object?>[issueId],
     );
     return rows.isNotEmpty;
+  } finally {
+    await db.close();
+  }
+}
+
+// ignore: non_constant_identifier_names
+Future<void> db_insertOwnerAndEquipment(String dbPath) async {
+  final db = await openDatabase(dbPath, singleInstance: false);
+  try {
+    await db.insert('owners', <String, Object?>{
+      'owner': 50,
+      'last_name': 'Δοκιμής',
+      'first_name': 'Χρήστης',
+      'office': 1,
+    });
+    await db.insert('equipment', <String, Object?>{
+      'code': 12001,
+      'description': 'Εξοπλισμός με υπάλληλο',
+      'model': 1,
+      'owner': 50,
+      'office': 1,
+    });
   } finally {
     await db.close();
   }

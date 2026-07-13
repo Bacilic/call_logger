@@ -56,4 +56,17 @@ class RemoteToolArg {
       isActive: isActive ?? this.isActive,
     );
   }
+
+  /// Απόκρυψη τιμών μετά από διακόπτες κωδικού (password, passwd, pwd, pass, pin, secret).
+  /// Χρήση μόνο για οπτική εμφάνιση — όχι για αποθήκευση ή εκτέλεση.
+  static String maskSecretValues(String value) {
+    final pattern = RegExp(
+      r'(password|passwd|pwd|pass|pin|secret)(\s*[:=]\s*)(\S+)',
+      caseSensitive: false,
+    );
+    return value.replaceAllMapped(
+      pattern,
+      (match) => '${match[1]}${match[2]}***',
+    );
+  }
 }

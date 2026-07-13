@@ -87,7 +87,7 @@ class PhoneRepository {
     final ap = await _support.auditPerformingUser(executor: txn);
     await AuditService.log(
       txn,
-      action: 'ΤΡΟΠΟΠΟΙΗΣΗ',
+      action: AuditActions.modifyPhone,
       userPerforming: ap,
       details: 'phones id=$pid (αφαίρεση τμήματος $departmentId)',
       entityType: AuditEntityTypes.phone,
@@ -340,7 +340,7 @@ ORDER BY p.number COLLATE NOCASE ASC
       final ap = await _support.auditPerformingUser(executor: txn);
       await AuditService.log(
         txn,
-        action: 'ΤΡΟΠΟΠΟΙΗΣΗ',
+        action: AuditActions.modifyPhone,
         userPerforming: ap,
         details: 'phones id=$pid',
         entityType: AuditEntityTypes.phone,

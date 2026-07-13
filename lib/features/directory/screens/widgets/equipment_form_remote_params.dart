@@ -32,8 +32,19 @@ mixin EquipmentFormRemoteParamsMixin on EquipmentFormDialogStateHost {
     return null;
   }
 
-  bool _isVncLikeParamKey(String key, List<RemoteTool> catalog) =>
-      _toolForParamKey(key, catalog)?.role == ToolRole.vnc;
+  bool _isHostAddressParamKey(
+    String key,
+    List<RemoteTool> catalog,
+    List<RemoteToolFormPair> pairs,
+  ) {
+    final tool = _toolForParamKey(key, catalog);
+    if (tool == null) return false;
+    if (tool.role == ToolRole.vnc) return true;
+    if (tool.role == ToolRole.rdp && !_toolAcceptsFileParam(key, pairs)) {
+      return true;
+    }
+    return false;
+  }
 
   Future<void> _pruneRemoteParamsAfterCatalogLoad() async {
     if (!mounted || _didPruneUnknownRemoteKeys) return;
@@ -258,7 +269,7 @@ mixin EquipmentFormRemoteParamsMixin on EquipmentFormDialogStateHost {
     final c = _remoteParamControllers[paramKey];
     if (c == null) return const SizedBox.shrink();
     final theme = Theme.of(context);
-    final isVnc = _isVncLikeParamKey(paramKey, catalog);
+    final isHostAddress = _isHostAddressParamKey(paramKey, catalog, pairs);
     final acceptsFileParam = _toolAcceptsFileParam(paramKey, pairs);
     final tool = _toolForParamKey(paramKey, catalog);
     final hasIcon = tool?.iconAssetKey?.trim().isNotEmpty ?? false;
@@ -318,13 +329,13 @@ mixin EquipmentFormRemoteParamsMixin on EquipmentFormDialogStateHost {
               : null,
           hintText: acceptsFileParam
               ? 'Αρχείο παραμέτρων πχ .rdp'
-              : (isVnc ? (vncDefault ?? 'IP ή hostname') : null),
+              : (isHostAddress ? (vncDefault ?? 'IP ή hostname') : null),
         ),
-        keyboardType: isVnc
+        keyboardType: isHostAddress
             ? const TextInputType.numberWithOptions(decimal: true, signed: false)
             : TextInputType.text,
         inputFormatters:
-            isVnc ? [CommaToDotDecimalSeparatorFormatter()] : null,
+            isHostAddress ? [CommaToDotDecimalSeparatorFormatter()] : null,
         onChanged: (_) {
           _syncRemoteValueFromController(paramKey);
           setState(() {});

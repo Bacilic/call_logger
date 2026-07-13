@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:sqflite_common/sqlite_api.dart';
 
+import 'audit_diff_helper.dart';
 import 'database_helper.dart';
 import '../utils/search_text_normalizer.dart';
 
@@ -173,8 +174,10 @@ class AuditService {
     for (final key in keys) {
       final oldValue = oldMap[key];
       final newValue = newMap[key];
-      if (_valuesEqual(oldValue, newValue)) continue;
-      final label = _fieldSearchLabel(normalizedEntityType, key);
+      if (!AuditDiffHelper.shouldIncludeField(key, oldValue, newValue)) {
+        continue;
+      }
+      final label = AuditDiffHelper.fieldSearchLabel(normalizedEntityType, key);
       final oldText = _searchValueText(key, oldValue);
       final newText = _searchValueText(key, newValue);
       final subaction = _subactionSearchText(
@@ -229,94 +232,34 @@ class AuditService {
     }
   }
 
-  static String _fieldSearchLabel(String entityType, String field) {
-    const labels = <String, String>{
-      'name': 'ονομα',
-      'email': 'email',
-      'phone': 'τηλεφωνο',
-      'status': 'κατασταση',
-      'priority': 'προτεραιοτητα',
-      'due_date': 'προθεσμια',
-      'title': 'τιτλος',
-      'description': 'περιγραφη',
-      'solution_notes': 'λυση',
-      'department_id': 'τμημα',
-      'department_text': 'τμημα',
-      'equipment_id': 'εξοπλισμος',
-      'equipment_text': 'εξοπλισμος',
-      'caller_id': 'χρηστης',
-      'caller_text': 'χρηστης',
-      'phone_text': 'τηλεφωνο',
-      'category_text': 'κατηγορια',
-      'category_id': 'κατηγορια',
-      'issue': 'θεμα',
-      'solution': 'λυση',
-      'type': 'τυπος',
-      'remote_params': 'Παράμετροι απομακρυσμένης',
-      'linked_users': 'συνδεδεμενοι χρηστες',
-      'linked_equipment': 'συνδεδεμενος εξοπλισμος',
-      'linked_phone_numbers': 'τηλεφωνα',
-      'linked_user_id': 'χρηστης',
-      'color': 'χρωμα',
-      'building': 'κτηριο',
-      'map_floor': 'οροφος',
-      'floor_id': 'οροφος',
-      'notes': 'σημειωσεις',
-      'map_x': 'θεσης χ',
-      'map_y': 'θεσης υ',
-      'map_width': 'πλατους',
-      'map_height': 'υψους',
-      'map_rotation': 'περιστροφης',
-      'map_label_offset_x': 'μετατοπισης ετικετας χ',
-      'map_label_offset_y': 'μετατοπισης ετικετας υ',
-      'map_anchor_offset_x': 'μετατοπισης αγκυρας χ',
-      'map_anchor_offset_y': 'μετατοπισης αγκυρας υ',
-      'map_custom_name': 'προσαρμοσμενου ονοματος',
-      'map_hidden': 'ορατοτητας',
-    };
-    final label = labels[field];
-    if (label != null) return label;
-    if (entityType.trim().isEmpty) return 'πεδιου $field';
-    return 'πεδιου $field';
-  }
+  /// Αναγνώσιμη μορφή κλειδιού πεδίου χωρίς underscores (fallback ετικέτας).
+  static String humanizeFieldKey(String field) =>
+      AuditDiffHelper.humanizeFieldKey(field);
+
+  /// Πεδία που αποκλείονται από diff UI και από χτίσιμο `search_text`.
+  static Set<String> get auditDiffExcludedFields =>
+      AuditDiffHelper.excludedFields;
+
+  /// Παράγωγα πεδία που κρύβονται όταν υπάρχει κύριο πεδίο (π.χ. floor_id → map_floor).
+  static bool shouldSkipDerivativeAuditField(String field, Set<String> keys) =>
+      AuditDiffHelper.shouldSkipDerivativeField(field, keys);
+
+  /// Κοινός κανόνας: εμφάνιση πεδίου στο «Τι άλλαξε» και στο `search_text`.
+  static bool shouldIncludeFieldInAuditDiff(
+    String field,
+    dynamic oldValue,
+    dynamic newValue,
+  ) =>
+      AuditDiffHelper.shouldIncludeField(field, oldValue, newValue);
 
   static String _searchValueText(String field, dynamic value) {
     if (value == null) return '';
-    if (field == 'status') {
-      final raw = value.toString().trim().toLowerCase();
-      const map = <String, String>{
-        'pending': 'εκκρεμης',
-        'completed': 'ολοκληρωμενη',
-        'closed': 'κλειστη',
-        'open': 'ανοιχτη',
-        'in_progress': 'σε εξελιξη',
-      };
-      return map[raw] ?? raw;
-    }
-    if (field == 'priority') {
-      final raw = value.toString().trim().toLowerCase();
-      const map = <String, String>{
-        'low': 'χαμηλη',
-        'normal': 'κανονικη',
-        'medium': 'μεσαια',
-        'high': 'υψηλη',
-        'urgent': 'επειγουσα',
-      };
-      return map[raw] ?? raw;
-    }
-    if (field == 'color') {
-      return _friendlyColor(value.toString());
-    }
-    if (field == 'map_floor') {
-      return _formatFloorValue(value) ?? 'χωρις οροφο';
-    }
-    if (value is List) {
-      return '${value.length} στοιχεια';
-    }
-    if (value is Map) {
-      return 'δομημενα δεδομενα';
-    }
-    return '$value'.trim();
+    if (field == 'remote_params') return '';
+    return AuditDiffHelper.humanizeFieldValue(
+      field,
+      value,
+      forSearch: true,
+    );
   }
 
   static String _subactionSearchText({
@@ -373,6 +316,13 @@ class AuditService {
       }
     }
 
+    if (field == 'remote_params') {
+      return AuditDiffHelper.remoteParamsSearchText(
+        oldValue: oldValue,
+        newValue: newValue,
+      );
+    }
+
     final hasOld = _hasMeaningfulValue(oldValue);
     final hasNew = _hasMeaningfulValue(newValue);
     if (!hasOld && hasNew) {
@@ -397,6 +347,7 @@ class AuditService {
 
   static bool _valuesEqual(dynamic a, dynamic b) {
     if (a == null && b == null) return true;
+    if (a == null || b == null) return false;
     if (a is List || a is Map || b is List || b is Map) {
       try {
         return jsonEncode(a) == jsonEncode(b);
@@ -404,20 +355,28 @@ class AuditService {
         return '$a' == '$b';
       }
     }
+    final numA = _coerceNumeric(a);
+    final numB = _coerceNumeric(b);
+    if (numA != null && numB != null) {
+      if (numA is int && numB is int) return numA == numB;
+      return (numA.toDouble() - numB.toDouble()).abs() < 1e-6;
+    }
     return '${a ?? ''}' == '${b ?? ''}';
   }
 
-  static String _friendlyColor(String raw) {
-    final normalized = raw.trim().toUpperCase();
-    const known = <String, String>{
-      '#1976D2': 'μπλε',
-      '#EF5350': 'κοκκινο',
-      '#4CAF50': 'πρασινο',
-      '#FFC107': 'κιτρινο',
-      '#9C27B0': 'μωβ',
-    };
-    return known[normalized] ?? raw.trim();
+  /// Δημόσιος wrapper για σύγκριση πεδίων audit (diff repositories).
+  static bool valuesEqual(dynamic a, dynamic b) => _valuesEqual(a, b);
+
+  static num? _coerceNumeric(dynamic value) {
+    if (value is num) return value;
+    if (value is String) {
+      final trimmed = value.trim();
+      if (trimmed.isEmpty) return null;
+      return num.tryParse(trimmed);
+    }
+    return null;
   }
+
 
   static String? _formatFloorValue(dynamic value) {
     if (value == null) return 'χωρις οροφο';
@@ -426,19 +385,149 @@ class AuditService {
     return text;
   }
 
-  static List<String> _tokenVariants(String token) {
-    final out = <String>{token};
-    if (token.length > 3) {
-      out.add(token.substring(0, token.length - 1));
+  /// Ανακατασκευή `search_text` για όλες τις εγγραφές audit (idempotent).
+  static Future<void> rebuildAllSearchTexts(DatabaseExecutor executor) async {
+    final rows = await executor.query(
+      'audit_log',
+      columns: [
+        'id',
+        'details',
+        'entity_type',
+        'entity_name',
+        'old_values_json',
+        'new_values_json',
+        'search_text',
+      ],
+    );
+    if (rows.isEmpty) return;
+
+    final batch = executor.batch();
+    var pending = 0;
+    for (final row in rows) {
+      final idRaw = row['id'];
+      if (idRaw == null) continue;
+      final id = idRaw is int ? idRaw : (idRaw as num).toInt();
+      final next = rebuildSearchTextForRow(row);
+      final current = (row['search_text'] as String?) ?? '';
+      if (current == next) continue;
+      batch.update(
+        'audit_log',
+        {'search_text': next},
+        where: 'id = ?',
+        whereArgs: [id],
+      );
+      pending++;
     }
-    if (token.length > 4) {
-      out.add(token.substring(0, token.length - 2));
+    if (pending > 0) {
+      await batch.commit(noResult: true);
+    }
+  }
+
+  /// Συντήρηση: idempotent ανακατασκευή ευρετηρίου `search_text` (μόνο δεδομένα).
+  static Future<void> migrateRebuildAuditSearchTextIndex(Database db) async {
+    await rebuildAllSearchTexts(db);
+  }
+
+  static List<String> _wordPrefixVariants(String token) {
+    final out = <String>{};
+    if (token.length >= 5) {
+      final trimmed = token.substring(0, token.length - 1);
+      if (trimmed.length >= 4) {
+        out.add(trimmed);
+      }
     }
     final etaToIota = token.replaceAll('η', 'ι');
     if (etaToIota != token) out.add(etaToIota);
     final iotaToEta = token.replaceAll('ι', 'η');
     if (iotaToEta != token) out.add(iotaToEta);
-    return out.where((v) => v.trim().length >= 2).toList();
+    return out.toList();
+  }
+
+  static void _appendExactWordClause(
+    List<String> clauses,
+    List<Object?> clauseArgs,
+    String word,
+  ) {
+    clauses.add(
+      "(COALESCE(search_text, '') LIKE ? OR COALESCE(search_text, '') LIKE ? OR COALESCE(search_text, '') LIKE ? OR COALESCE(search_text, '') = ?)",
+    );
+    clauseArgs.add('$word %');
+    clauseArgs.add('% $word %');
+    clauseArgs.add('% $word');
+    clauseArgs.add(word);
+  }
+
+  static void _appendWordPrefixClause(
+    List<String> clauses,
+    List<Object?> clauseArgs,
+    String variant,
+  ) {
+    clauses.add(
+      "(COALESCE(search_text, '') LIKE ? OR COALESCE(search_text, '') LIKE ?)",
+    );
+    clauseArgs.add('$variant%');
+    clauseArgs.add('% $variant%');
+  }
+
+  static void _appendSearchTextKeywordClause(
+    List<String> where,
+    List<Object?> args,
+    String token,
+  ) {
+    final normalizedToken = token.trim();
+    if (normalizedToken.isEmpty) return;
+
+    final clauses = <String>[];
+    final clauseArgs = <Object?>[];
+
+    final isGenitiveLikeEnding =
+        (normalizedToken.endsWith('ς') || normalizedToken.endsWith('σ')) &&
+        normalizedToken.length >= 5;
+
+    if (isGenitiveLikeEnding) {
+      final stem = normalizedToken.substring(0, normalizedToken.length - 1);
+      // Η πλήρης λέξη του χρήστη ταιριάζει ΠΑΝΤΑ (π.χ. «θεσησ» μέσα στο
+      // «αλλαγη θεσησ x») — η ρίζα είναι μόνο επιπλέον ανοχή πτώσης.
+      clauses.add("COALESCE(search_text, '') LIKE ?");
+      clauseArgs.add('%$normalizedToken%');
+      if (stem.length >= 4) {
+        _appendExactWordClause(clauses, clauseArgs, stem);
+        for (final variant in _wordPrefixVariants(stem)) {
+          if (variant == stem) continue;
+          _appendExactWordClause(clauses, clauseArgs, variant);
+        }
+      }
+    } else {
+      clauses.add("COALESCE(search_text, '') LIKE ?");
+      clauseArgs.add('%$normalizedToken%');
+
+      for (final variant in _wordPrefixVariants(normalizedToken)) {
+        if (variant == normalizedToken) continue;
+        _appendWordPrefixClause(clauses, clauseArgs, variant);
+      }
+    }
+
+    where.add('(${clauses.join(' OR ')})');
+    args.addAll(clauseArgs);
+  }
+
+  static void _appendKeywordNormalizedClauses(
+    List<String> where,
+    List<Object?> args,
+    String? keywordNormalized,
+  ) {
+    if (keywordNormalized == null || keywordNormalized.trim().isEmpty) {
+      return;
+    }
+    final tokens = keywordNormalized
+        .trim()
+        .split(' ')
+        .map((token) => token.trim())
+        .where((token) => token.isNotEmpty)
+        .toList();
+    for (final token in tokens) {
+      _appendSearchTextKeywordClause(where, args, token);
+    }
   }
 
   /// Σελιδοποιημένη λίστα + συνολικό πλήθος (για φίλτρα UI).
@@ -471,22 +560,7 @@ class AuditService {
       where.add('timestamp < ?');
       args.add(dateToExclusiveIso.trim());
     }
-    if (keywordNormalized != null && keywordNormalized.trim().isNotEmpty) {
-      final tokens = keywordNormalized
-          .trim()
-          .split(' ')
-          .map((token) => token.trim())
-          .where((token) => token.isNotEmpty)
-          .toList();
-      for (final token in tokens) {
-        final variants = _tokenVariants(token);
-        if (variants.isEmpty) continue;
-        where.add(
-          '(${variants.map((_) => "COALESCE(search_text, '') LIKE ?").join(' OR ')})',
-        );
-        args.addAll(variants.map((variant) => '%$variant%'));
-      }
-    }
+    _appendKeywordNormalizedClauses(where, args, keywordNormalized);
 
     final whereSql = where.isEmpty ? '' : 'WHERE ${where.join(' AND ')}';
 
@@ -536,22 +610,7 @@ class AuditService {
       where.add('timestamp < ?');
       args.add(dateToExclusiveIso.trim());
     }
-    if (keywordNormalized != null && keywordNormalized.trim().isNotEmpty) {
-      final tokens = keywordNormalized
-          .trim()
-          .split(' ')
-          .map((token) => token.trim())
-          .where((token) => token.isNotEmpty)
-          .toList();
-      for (final token in tokens) {
-        final variants = _tokenVariants(token);
-        if (variants.isEmpty) continue;
-        where.add(
-          '(${variants.map((_) => "COALESCE(search_text, '') LIKE ?").join(' OR ')})',
-        );
-        args.addAll(variants.map((variant) => '%$variant%'));
-      }
-    }
+    _appendKeywordNormalizedClauses(where, args, keywordNormalized);
 
     final whereSql = where.isEmpty ? '' : 'WHERE ${where.join(' AND ')}';
     final rows = await _db.rawQuery(
@@ -676,4 +735,46 @@ abstract final class AuditEntityTypes {
 
   /// Πίνακας `phones` (entity_id = `phones.id`).
   static const String phone = 'phone';
+}
+
+/// Σταθερές ενεργειών audit (ΚΕΦΑΛΑΙΑ).
+abstract final class AuditActions {
+  static const String modifyUser = 'ΤΡΟΠΟΠΟΙΗΣΗ ΧΡΗΣΤΗ';
+  static const String modifyDepartment = 'ΤΡΟΠΟΠΟΙΗΣΗ ΤΜΗΜΑΤΟΣ';
+  static const String modifyEquipment = 'ΤΡΟΠΟΠΟΙΗΣΗ ΕΞΟΠΛΙΣΜΟΥ';
+  static const String modifyPhone = 'ΤΡΟΠΟΠΟΙΗΣΗ ΤΗΛΕΦΩΝΟΥ';
+  static const String modifyCategory = 'ΤΡΟΠΟΠΟΙΗΣΗ ΚΑΤΗΓΟΡΙΑΣ';
+  static const String modifyCall = 'ΤΡΟΠΟΠΟΙΗΣΗ ΚΛΗΣΗΣ';
+  static const String modifyTask = 'ΤΡΟΠΟΠΟΙΗΣΗ ΕΚΚΡΕΜΟΤΗΤΑΣ';
+
+  static const Set<String> genericModifyActions = {
+    'ΤΡΟΠΟΠΟΙΗΣΗ',
+    'Τροποποίηση',
+    'τροποποίηση',
+  };
+
+  static bool isGenericModifyAction(String? action) {
+    return genericModifyActions.contains(action?.trim());
+  }
+
+  static String? modifyActionForEntityType(String? entityType) {
+    switch ((entityType ?? '').trim()) {
+      case AuditEntityTypes.user:
+        return modifyUser;
+      case AuditEntityTypes.department:
+        return modifyDepartment;
+      case AuditEntityTypes.equipment:
+        return modifyEquipment;
+      case AuditEntityTypes.phone:
+        return modifyPhone;
+      case AuditEntityTypes.category:
+        return modifyCategory;
+      case AuditEntityTypes.call:
+        return modifyCall;
+      case AuditEntityTypes.task:
+        return modifyTask;
+      default:
+        return null;
+    }
+  }
 }

@@ -158,7 +158,7 @@ class CategoryRepository {
       );
       await AuditService.log(
         txn,
-        action: 'ΤΡΟΠΟΠΟΙΗΣΗ',
+        action: AuditActions.modifyCategory,
         userPerforming: user,
         details: 'categories id=$id',
         entityType: AuditEntityTypes.category,

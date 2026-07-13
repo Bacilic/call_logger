@@ -4,6 +4,8 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/services/save_confirmation_summary.dart';
+import '../../../../core/widgets/audit_summary_rich_text.dart';
 import '../../../../core/models/remote_tool.dart';
 import '../../../../core/models/remote_tool_role.dart';
 import '../../../../core/utils/file_picker_initial_directory.dart';
@@ -240,16 +242,27 @@ class _RemoteToolFormDialogState extends ConsumerState<RemoteToolFormDialog>
     _ctrl.refresh();
     try {
       if (_ctrl.isEdit) {
-        await saver.commitEdit(
-          toolFromForm: _ctrl.toRemoteTool(id: widget.initialTool!.id),
-        );
+        final tool = _ctrl.toRemoteTool(id: widget.initialTool!.id);
+        await saver.commitEdit(toolFromForm: tool);
+        _invalidateRemote();
+        if (mounted) {
+          final message = buildRemoteToolSaveMessage(
+            oldTool: widget.initialTool!,
+            newTool: tool,
+          );
+          Navigator.of(context).pop(true);
+          _showHostSnackBar(message);
+        }
       } else {
-        await saver.commitNew(
-          toolFromForm: _ctrl.toRemoteTool(id: 0),
-        );
+        final tool = _ctrl.toRemoteTool(id: 0);
+        await saver.commitNew(toolFromForm: tool);
+        _invalidateRemote();
+        if (mounted) {
+          final message = 'Δημιουργήθηκε εργαλείο «${tool.name}»';
+          Navigator.of(context).pop(true);
+          _showHostSnackBar(message);
+        }
       }
-      _invalidateRemote();
-      if (mounted) Navigator.of(context).pop(true);
     } catch (e) {
       if (mounted) {
         showDialogSnackBar(
@@ -274,6 +287,30 @@ class _RemoteToolFormDialogState extends ConsumerState<RemoteToolFormDialog>
     ref.invalidate(remotePathsProvider);
     ref.invalidate(validRemoteToolPathsByIdProvider);
     ref.invalidate(remoteLauncherStatusesByIdProvider);
+  }
+
+  void _showHostSnackBar(String message) {
+    showSaveConfirmationSnackBar(
+      context,
+      message,
+      messenger: _findHostScaffoldMessenger(),
+    );
+  }
+
+  ScaffoldMessengerState? _findHostScaffoldMessenger() {
+    final dialogMessenger = dialogMessengerKey.currentState;
+    ScaffoldMessengerState? host;
+    context.visitAncestorElements((element) {
+      if (element.widget is ScaffoldMessenger) {
+        final state = (element as StatefulElement).state;
+        if (state is ScaffoldMessengerState && state != dialogMessenger) {
+          host = state;
+          return false;
+        }
+      }
+      return true;
+    });
+    return host;
   }
 
   Future<void> _runTest() async {

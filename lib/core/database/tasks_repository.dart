@@ -13,6 +13,7 @@ import '../errors/task_save_exception.dart';
 import '../utils/search_text_normalizer.dart';
 import 'audit_service.dart';
 import 'database_helper.dart';
+import 'directory_support.dart';
 import 'integrity_service.dart';
 import 'settings_repository.dart';
 
@@ -349,12 +350,23 @@ class TasksRepository {
   }
 
   /// Εισαγωγή εκκρεμότητας σε υπάρχον [DatabaseExecutor] (π.χ. κοινό transaction με κλήση).
+  ///
+  /// Αν δοθεί [afterTaskInserted], εκτελείται μετά την κύρια εγγραφή ΔΗΜΙΟΥΡΓΙΑ ΕΚΚΡΕΜΟΤΗΤΑΣ
+  /// και περνά suffix προέλευσης για παράγωγες εγγραφές (Φάση 3).
   Future<int> createFromCallOnExecutor(
     DatabaseExecutor executor, {
     required Map<String, dynamic> row,
+    Future<void> Function(DatabaseExecutor txn, String auditOriginSuffix)?
+        afterTaskInserted,
   }) async {
     final id = await executor.insert('tasks', row);
     await _auditTaskCreate(executor, id, row);
+    if (afterTaskInserted != null) {
+      await afterTaskInserted(
+        executor,
+        DirectorySupport.auditOriginSuffixFromTask(id),
+      );
+    }
     return id;
   }
 

@@ -144,8 +144,9 @@ class UserRepository {
   Future<int> _insertUserFromMapInTxn(
     DatabaseExecutor txn,
     Map<String, dynamic> map,
-    List<String> phones,
-  ) async {
+    List<String> phones, {
+    String? auditOriginSuffix,
+  }) async {
     final beforePhoneIds = <int>{};
     final id = await txn.insert('users', map);
     if (phones.isNotEmpty) {
@@ -160,24 +161,30 @@ class UserRepository {
     final linkedEq = await _linkedEquipmentSnapshotsForUser(txn, id);
     nv['linked_equipment'] = linkedEq;
     await _support.applyDepartmentAuditText(txn, nv);
+    final phoneLinkDetails = await _support.auditPhoneUserLinkDeltaInTxn(
+      txn,
+      ap,
+      id,
+      beforePhoneIds,
+      afterPhoneIds,
+    );
     await AuditService.log(
       txn,
       action: 'ΔΗΜΙΟΥΡΓΙΑ ΧΡΗΣΤΗ',
       userPerforming: ap,
-      details: 'users id=$id',
+      details: DirectorySupport.appendAuditOriginSuffix(
+        DirectorySupport.mergeAuditDetailLines(
+          'users id=$id',
+          phoneLinkDetails,
+        ),
+        auditOriginSuffix,
+      ),
       entityType: AuditEntityTypes.user,
       entityId: id,
       entityName: _support.userDisplayNameFromRow(rowSnap).isEmpty
           ? null
           : _support.userDisplayNameFromRow(rowSnap),
       newValues: nv,
-    );
-    await _support.auditPhoneUserLinkDeltaInTxn(
-      txn,
-      ap,
-      id,
-      beforePhoneIds,
-      afterPhoneIds,
     );
     return id;
   }
@@ -186,6 +193,7 @@ class UserRepository {
     Map<String, dynamic> row, {
     DatabaseExecutor? executor,
     bool skipPhonePolicyValidation = false,
+    String? auditOriginSuffix,
   }) async {
     final map = Map<String, dynamic>.from(row);
     map.remove('id');
@@ -206,10 +214,20 @@ class UserRepository {
       );
     }
     if (executor != null) {
-      return _insertUserFromMapInTxn(executor, map, phones);
+      return _insertUserFromMapInTxn(
+        executor,
+        map,
+        phones,
+        auditOriginSuffix: auditOriginSuffix,
+      );
     }
     return db.transaction(
-      (txn) => _insertUserFromMapInTxn(txn, map, phones),
+      (txn) => _insertUserFromMapInTxn(
+        txn,
+        map,
+        phones,
+        auditOriginSuffix: auditOriginSuffix,
+      ),
     );
   }
 
@@ -268,6 +286,7 @@ class UserRepository {
     required List<String> oldPhoneList,
     required List<Map<String, dynamic>> oldEq,
     required bool recordAudit,
+    String? auditOriginSuffix,
   }) async {
     var n = 0;
     if (map.isNotEmpty) {
@@ -323,11 +342,24 @@ class UserRepository {
       newDiff[k] = b;
     }
     if (oldDiff.isNotEmpty) {
+      final phoneLinkDetails = await _support.auditPhoneUserLinkDeltaInTxn(
+        txn,
+        ap,
+        id,
+        beforePhoneIds,
+        afterPhoneIds,
+      );
       await AuditService.log(
         txn,
         action: 'ΤΡΟΠΟΠΟΙΗΣΗ ΧΡΗΣΤΗ',
         userPerforming: ap,
-        details: 'users id=$id',
+        details: DirectorySupport.appendAuditOriginSuffix(
+          DirectorySupport.mergeAuditDetailLines(
+            'users id=$id',
+            phoneLinkDetails,
+          ),
+          auditOriginSuffix,
+        ),
         entityType: AuditEntityTypes.user,
         entityId: id,
         entityName: _support.userDisplayNameFromRow(newRow).isEmpty
@@ -337,13 +369,6 @@ class UserRepository {
         newValues: newDiff,
       );
     }
-    await _support.auditPhoneUserLinkDeltaInTxn(
-      txn,
-      ap,
-      id,
-      beforePhoneIds,
-      afterPhoneIds,
-    );
     return n;
   }
 
@@ -353,6 +378,7 @@ class UserRepository {
     bool recordAudit = true,
     DatabaseExecutor? executor,
     bool skipPhonePolicyValidation = false,
+    String? auditOriginSuffix,
   }) async {
     final e = executor ?? db;
     final map = Map<String, dynamic>.from(values);
@@ -391,6 +417,7 @@ class UserRepository {
         oldPhoneList: oldPhoneList,
         oldEq: oldEq,
         recordAudit: recordAudit,
+        auditOriginSuffix: auditOriginSuffix,
       );
     }
     return db.transaction(
@@ -404,6 +431,7 @@ class UserRepository {
         oldPhoneList: oldPhoneList,
         oldEq: oldEq,
         recordAudit: recordAudit,
+        auditOriginSuffix: auditOriginSuffix,
       ),
     );
   }
@@ -439,7 +467,6 @@ class UserRepository {
     }
 
     await db.transaction((txn) async {
-      final apPhone = await _support.auditPerformingUser(executor: txn);
       if (map.isNotEmpty) {
         for (final id in ids) {
           await txn.update('users', map, where: 'id = ?', whereArgs: [id]);
@@ -448,16 +475,7 @@ class UserRepository {
       if (phoneBulk != null) {
         final list = PhoneListParser.splitPhones(phoneBulk);
         for (final id in ids) {
-          final beforeIds = await _support.userPhoneIds(txn, id);
           await _support.replaceUserPhonesInTxn(txn, id, list);
-          final afterIds = await _support.userPhoneIds(txn, id);
-          await _support.auditPhoneUserLinkDeltaInTxn(
-            txn,
-            apPhone,
-            id,
-            beforeIds,
-            afterIds,
-          );
         }
       }
       final user = await _support.auditPerformingUser(executor: txn);
@@ -559,20 +577,13 @@ class UserRepository {
             : (nameRows.first['last_name'] as String?)?.trim() ?? '';
         final displayName = '$fn $ln'.trim();
         final linkedPhoneIds = phoneIdsByUser[id] ?? {};
+        final beforePhoneIds = await _support.userPhoneIds(txn, id);
 
         for (final phoneId in linkedPhoneIds) {
-          final beforeIds = await _support.userPhoneIds(txn, id);
           await _unlinkUserFromPhoneInTxn(txn, id, phoneId);
-          final afterIds = await _support.userPhoneIds(txn, id);
-          await _support.auditPhoneUserLinkDeltaInTxn(
-            txn,
-            user,
-            id,
-            beforeIds,
-            afterIds,
-          );
         }
 
+        final afterPhoneIds = await _support.userPhoneIds(txn, id);
         final linkedEquipmentIds = equipmentIdsByUser[id] ?? {};
         if (linkedEquipmentIds.isNotEmpty) {
           await txn.delete(
@@ -580,14 +591,24 @@ class UserRepository {
             where: 'user_id = ?',
             whereArgs: [id],
           );
-          await _support.auditEquipmentUserLinkDeltaInTxn(
+        }
+
+        final linkDetails = <String>[
+          ...await _support.auditPhoneUserLinkDeltaInTxn(
+            txn,
+            user,
+            id,
+            beforePhoneIds,
+            afterPhoneIds,
+          ),
+          ...await _support.auditEquipmentUserLinkDeltaInTxn(
             txn,
             user,
             id,
             linkedEquipmentIds,
             const {},
-          );
-        }
+          ),
+        ];
 
         await txn.update(
           'users',
@@ -599,7 +620,10 @@ class UserRepository {
           txn,
           action: DatabaseHelper.auditActionDelete,
           userPerforming: user,
-          details: 'users id=$id',
+          details: DirectorySupport.mergeAuditDetailLines(
+            'users id=$id',
+            linkDetails,
+          ),
           entityType: AuditEntityTypes.user,
           entityId: id,
           entityName: displayName.isEmpty ? null : displayName,
@@ -656,6 +680,7 @@ class UserRepository {
     int? departmentId,
     DatabaseExecutor? executor,
     bool skipPhonePolicyValidation = false,
+    String? auditOriginSuffix,
   }) async {
     var resolvedDeptId = departmentId;
     if (resolvedDeptId == null &&
@@ -664,6 +689,7 @@ class UserRepository {
       resolvedDeptId = await _departments.getOrCreateDepartmentIdByName(
         department,
         executor: executor,
+        auditOriginSuffix: auditOriginSuffix,
       );
     }
     final map = <String, dynamic>{
@@ -683,16 +709,19 @@ class UserRepository {
       map,
       executor: executor,
       skipPhonePolicyValidation: skipPhonePolicyValidation,
+      auditOriginSuffix: auditOriginSuffix,
     );
   }
 
   Future<void> updateAssociationsIfNeeded(
     int? userId,
     String? phone,
-    String? equipmentCode,
-  ) async {
+    String? equipmentCode, {
+    DatabaseExecutor? executor,
+    String? auditOriginSuffix,
+  }) async {
     if (userId == null) return;
-    await db.transaction((txn) async {
+    Future<void> run(DatabaseExecutor txn) async {
       var phoneChanged = false;
       var equipmentLinked = false;
       int? equipmentIdForAudit;
@@ -712,21 +741,11 @@ class UserRepository {
             .whereType<String>()
             .toList();
         if (!existing.contains(trimmedPhone)) {
-          final beforeIds = await _support.userPhoneIds(txn, userId);
           await _support.replaceUserPhonesInTxn(txn, userId, [
             ...existing,
             trimmedPhone,
           ]);
-          final afterIds = await _support.userPhoneIds(txn, userId);
           phoneChanged = true;
-          final apPhones = await _support.auditPerformingUser(executor: txn);
-          await _support.auditPhoneUserLinkDeltaInTxn(
-            txn,
-            apPhones,
-            userId,
-            beforeIds,
-            afterIds,
-          );
         }
       }
 
@@ -778,11 +797,18 @@ class UserRepository {
       final userLabel = _support.userDisplayNameFromRow(uRow);
       final deptName = await _departmentNameForUserTxn(txn, userId);
       final eqTrim = equipmentCode?.trim() ?? '';
-      final action = auditCallAssociationActionLine(
+      final association = buildAuditCallAssociationEntry(
         userPart: userLabel.isEmpty ? null : userLabel,
         departmentPart: deptName,
         phonePart: phoneChanged ? trimmedPhone : null,
         equipmentPart: equipmentLinked && eqTrim.isNotEmpty ? eqTrim : null,
+      );
+      final auditDetails = DirectorySupport.appendAuditOriginSuffix(
+        mergeAuditCallAssociationDetails(
+          associationDetails: association.detailsLine,
+          existingDetails: 'updateAssociationsIfNeeded userId=$userId',
+        ),
+        auditOriginSuffix,
       );
 
       final ap = await _support.auditPerformingUser(executor: txn);
@@ -795,32 +821,20 @@ class UserRepository {
 
       await AuditService.log(
         txn,
-        action: action,
+        action: association.action,
         userPerforming: ap,
-        details: 'updateAssociationsIfNeeded userId=$userId',
+        details: auditDetails.isEmpty ? null : auditDetails,
         entityType: AuditEntityTypes.user,
         entityId: userId,
         entityName: userLabel.isEmpty ? null : userLabel,
         newValues: nv.isEmpty ? null : nv,
       );
-
-      if (equipmentLinked && equipmentIdForAudit != null && eqTrim.isNotEmpty) {
-        final usersSnap = await _linkedUserSnapshotsForEquipment(
-          txn,
-          equipmentIdForAudit,
-        );
-        await AuditService.log(
-          txn,
-          action: 'ΤΡΟΠΟΠΟΙΗΣΗ ΕΞΟΠΛΙΣΜΟΥ',
-          userPerforming: ap,
-          details: 'equipment id=$equipmentIdForAudit (σύνδεση από κλήση)',
-          entityType: AuditEntityTypes.equipment,
-          entityId: equipmentIdForAudit,
-          entityName: eqTrim,
-          newValues: {'linked_users': usersSnap},
-        );
-      }
-    });
+    }
+    if (executor != null) {
+      await run(executor);
+      return;
+    }
+    await db.transaction(run);
   }
 
   Future<Map<String, dynamic>?> getUserPreviewJoinRow(int id) async {

@@ -228,7 +228,7 @@ class _ManualReviewCard extends StatelessWidget {
               runSpacing: 6,
               children: [
                 Text('#${index + 1}', style: theme.textTheme.labelLarge),
-                Text('Γραμμή: ${proposal.row ?? '-'}'),
+                Text('Κωδικός εξοπλισμού: ${proposal.row ?? '-'}'),
                 Text('Πεδίο: ${_lampIssueColumnLabelEl(proposal.column)}'),
                 Text('Βεβαιότητα: ${proposal.confidence}%'),
               ],

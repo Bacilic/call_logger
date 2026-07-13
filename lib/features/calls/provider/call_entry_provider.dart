@@ -161,6 +161,12 @@ class CallEntryNotifier extends Notifier<CallEntryState> {
 
   /// Υποβολή κλήσης: διαβάζει caller/equipment από call_header_provider.
   ///
+  /// Χάρτης ροής προέλευσης audit (καλωδίωση Φάσης 3 — μόνο πέρασμα suffix):
+  ///   1. Πράσινο (+) `associateCurrentIfNeeded` → παράγωγες εγγραφές audit → `_pendingAuditOriginRows`
+  ///   2. `submitCall` → `insertCallOnExecutor` (κύρια ΔΗΜΙΟΥΡΓΙΑ ΚΛΗΣΗΣ) → `stampPendingAuditOriginsForCall`
+  ///   3. `submitOnlyPending` → `createFromCallOnExecutor` → `stampPendingAuditOriginsForTask`
+  ///   4. Γρήγορη εκκρεμότητα συσχέτισης (`_syncAssociationQuickTask`) → ίδιο pending μέχρι submit εκκρεμότητας/κλήσης
+  ///
   /// CONTRACT (μην αλλοιωθεί):
   /// - Η submit ροή ΠΟΤΕ δεν δημιουργεί/ενημερώνει οντότητες καταλόγου (users/phones/equipment/departments).
   /// - Γράφει μόνο ιστορικό κλήσης στον πίνακα `calls` (και προαιρετικά task όταν είναι pending).
@@ -245,8 +251,10 @@ class CallEntryNotifier extends Notifier<CallEntryState> {
 
       final db = await DatabaseHelper.instance.database;
       final callsRepo = CallsRepository(db);
+      final headerNotifier = ref.read(callHeaderProvider.notifier);
       await db.transaction((DatabaseExecutor txn) async {
         final id = await callsRepo.insertCallOnExecutor(txn, callModel);
+        await headerNotifier.stampPendingAuditOriginsForCall(txn, id);
         if (pendingTaskRow != null) {
           pendingTaskRow['call_id'] = id;
           await taskService.createFromCallOnExecutor(txn, row: pendingTaskRow);
@@ -313,23 +321,28 @@ class CallEntryNotifier extends Notifier<CallEntryState> {
       final categoryName = state.category.trim().isEmpty
           ? null
           : state.category.trim();
-      await ref
-          .read(taskServiceProvider)
-          .createFromCall(
-            callId: null,
-            callerName: callerName,
-            description: state.notes,
-            callDate: callDate,
-            callerId: taskFields.callerId,
-            equipmentId: taskFields.equipmentId,
-            departmentId: taskFields.departmentId,
-            phoneId: taskFields.phoneId,
-            phoneText: taskFields.phoneText,
-            userText: taskFields.userText,
-            equipmentText: taskFields.equipmentText,
-            departmentText: taskFields.departmentText,
-            categoryName: categoryName,
-          );
+      final row = await ref.read(taskServiceProvider).buildCreateFromCallRow(
+        callId: null,
+        callerName: callerName,
+        description: state.notes,
+        callDate: callDate,
+        callerId: taskFields.callerId,
+        equipmentId: taskFields.equipmentId,
+        departmentId: taskFields.departmentId,
+        phoneId: taskFields.phoneId,
+        phoneText: taskFields.phoneText,
+        userText: taskFields.userText,
+        equipmentText: taskFields.equipmentText,
+        departmentText: taskFields.departmentText,
+        categoryName: categoryName,
+      );
+      final db = await DatabaseHelper.instance.database;
+      final taskService = ref.read(taskServiceProvider);
+      final headerNotifier = ref.read(callHeaderProvider.notifier);
+      await db.transaction((DatabaseExecutor txn) async {
+        final taskId = await taskService.createFromCallOnExecutor(txn, row: row);
+        await headerNotifier.stampPendingAuditOriginsForTask(txn, taskId);
+      });
       ref.read(taskFilterProvider.notifier).update((_) => TaskFilter.initial());
       invalidateTaskListProviders(ref);
       reset();

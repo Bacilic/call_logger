@@ -48,10 +48,8 @@ class RemoteConnectionService {
     required Map<String, String> remoteParams,
   }) {
     final fp = _resolvedFilePathForLaunch(tool, remoteParams);
-    return tool.arguments
-        .where(
-          (a) => a.isActive && a.description.trim() != '__rdp_file__',
-        )
+    return tool.effectiveActiveArguments
+        .where((a) => a.description.trim() != '__rdp_file__')
         .map(
           (a) => RemoteLauncherService.replaceAllPlaceholders(
             a.value,
