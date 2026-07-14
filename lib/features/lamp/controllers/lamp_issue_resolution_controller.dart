@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/database/old_database/lamp_data_issue_type_labels.dart';
 import '../../../core/database/old_database/lamp_issue_resolution_service.dart';
+import '../../../core/database/old_database/old_equipment_repository.dart';
 import '../../../core/database/old_database/resolution_log_entry.dart';
 import 'lamp_issue_grouping.dart';
 import '../widgets/lamp_issue_manual_review_dialog.dart';
@@ -12,6 +13,25 @@ import '../widgets/lamp_unresolved_resolution_dialog.dart';
 import 'lamp_path_management.dart';
 import 'lamp_screen_host.dart';
 import 'lamp_search_controller.dart';
+
+/// Δημιουργεί έλεγχο ύπαρξης σειριακού για χειροκίνητη επισκόπηση.
+LampSerialExistsChecker lampSerialExistsCheckerFor(
+  OldEquipmentRepository repository,
+  String databasePath,
+) {
+  return (serial, exceptCode) => repository.serialExistsInLamp(
+        databasePath,
+        serial,
+        exceptCode: exceptCode,
+      );
+}
+
+/// Αν η απόφαση οδηγεί σε διαγραφή διπλοεγγραφών (καθρέφτης applier metadata).
+bool decisionIsDestructive(LampIssueResolutionDecision decision) {
+  final metadata = decision.option?.metadata ?? decision.proposal.metadata;
+  final operation = metadata['operation']?.toString();
+  return operation != null && operation.startsWith('delete_duplicate');
+}
 
 class LampIssueResolutionController {
   LampIssueResolutionController({
@@ -78,6 +98,8 @@ class LampIssueResolutionController {
           'Ολοκληρώθηκε η επίλυση δικτύου: '
           '${lampDataIssueTypeDisplayLabel(issueType)}.',
         );
+      } else if (outcome == LampNetworkIssueDialogOutcome.nothingChanged) {
+        host.showSnack('Δεν έγινε καμία αλλαγή στην επίλυση δικτύου.');
       } else if (outcome == LampNetworkIssueDialogOutcome.cancelled) {
         host.showSnack('Ακυρώθηκε η επίλυση δικτύου.');
       }
@@ -126,16 +148,6 @@ class LampIssueResolutionController {
       final proceed = await askResolutionPreview(issueType, proposals);
       if (proceed != true || !host.mounted) return;
 
-      final mayRunDestructive = proposals.any(
-        (proposal) =>
-            proposalDefaultActionIsDestructive(proposal) ||
-            proposalHasDestructiveOption(proposal),
-      );
-      if (mayRunDestructive) {
-        final destructiveOk = await askDestructiveResolutionConfirmation();
-        if (destructiveOk != true || !host.mounted) return;
-      }
-
       final screenContext = host.context;
       if (!screenContext.mounted) return;
 
@@ -179,13 +191,20 @@ class LampIssueResolutionController {
         final errorSuffix = apply.errors.isEmpty
             ? ''
             : ' · Σφάλματα: ${apply.errors.length}';
-        host.showSnack(
-          'Επίλυση ${lampDataIssueTypeDisplayLabel(issueType.issueType)}: '
-          'εφαρμόστηκαν ${apply.totalChanged} ενέργειες '
-          '(auto: ${apply.resolved}, manual: ${apply.manualApplied}, νέες: ${apply.created})$errorSuffix.',
-          isError: apply.errors.isNotEmpty,
-          duration: const Duration(seconds: 8),
-        );
+        if (apply.totalChanged == 0 && apply.errors.isEmpty) {
+          host.showSnack(
+            'Δεν έγινε καμία αλλαγή στην επίλυση '
+            '${lampDataIssueTypeDisplayLabel(issueType.issueType)}.',
+          );
+        } else {
+          host.showSnack(
+            'Επίλυση ${lampDataIssueTypeDisplayLabel(issueType.issueType)}: '
+            'εφαρμόστηκαν ${apply.totalChanged} ενέργειες '
+            '(auto: ${apply.resolved}, manual: ${apply.manualApplied}, νέες: ${apply.created})$errorSuffix.',
+            isError: apply.errors.isNotEmpty,
+            duration: const Duration(seconds: 8),
+          );
+        }
       } finally {
         progress.dispose();
         paused.dispose();
@@ -199,23 +218,6 @@ class LampIssueResolutionController {
         host.notifyState();
       }
     }
-  }
-
-  bool proposalDefaultActionIsDestructive(
-    LampIssueResolutionProposal proposal,
-  ) {
-    final operation = proposal.metadata['operation']?.toString();
-    return operation != null && operation.startsWith('delete_duplicate');
-  }
-
-  bool proposalHasDestructiveOption(LampIssueResolutionProposal proposal) {
-    for (final option in proposal.options) {
-      final operation = option.metadata['operation']?.toString();
-      if (operation != null && operation.startsWith('delete_duplicate')) {
-        return true;
-      }
-    }
-    return false;
   }
 
   LampIssueResolutionApplyResult emptyApplyResult() {
@@ -364,6 +366,23 @@ class LampIssueResolutionController {
 
     final units = buildLampIssueOrchestrationUnits(proposals);
 
+    var destructiveConfirmed = false;
+
+    Future<bool> confirmDestructiveIfNeeded(
+      List<LampIssueResolutionDecision> decisions,
+    ) async {
+      if (destructiveConfirmed) return true;
+      if (!decisions.any(decisionIsDestructive)) return true;
+
+      final ok = await askDestructiveResolutionConfirmation();
+      if (!dialogContext.mounted) return false;
+      if (ok == true) {
+        destructiveConfirmed = true;
+        return true;
+      }
+      return false;
+    }
+
     unitLoop:
     for (final unit in units) {
       if (cancelToken.isCancelled) {
@@ -383,6 +402,18 @@ class LampIssueResolutionController {
           final decisions = proposals
               .map((p) => LampIssueResolutionDecision(proposal: p))
               .toList();
+          if (!await confirmDestructiveIfNeeded(decisions)) {
+            cancelToken.cancel();
+            emit(
+              ResolutionLogEntry.warning(
+                'Ακυρώθηκε πριν τη διαγραφή διπλοεγγραφών.',
+              ),
+            );
+            break unitLoop;
+          }
+          if (!dialogContext.mounted) {
+            break unitLoop;
+          }
           final step = await host.shared.issueResolutionService.applyDecisions(
             databasePath: databasePath,
             decisions: decisions,
@@ -402,6 +433,10 @@ class LampIssueResolutionController {
               issueType: issueType,
               proposals: proposals,
               groupedIdenticalValues: groupedIdenticalValues,
+              serialExistsChecker: lampSerialExistsCheckerFor(
+                host.shared.repository,
+                databasePath,
+              ),
             ),
           );
           if (!dialogContext.mounted) {
@@ -429,6 +464,19 @@ class LampIssueResolutionController {
             );
             progress.value += proposals.length;
             continue;
+          }
+
+          if (!await confirmDestructiveIfNeeded(manualDecisions)) {
+            cancelToken.cancel();
+            emit(
+              ResolutionLogEntry.warning(
+                'Ακυρώθηκε πριν τη διαγραφή διπλοεγγραφών.',
+              ),
+            );
+            break unitLoop;
+          }
+          if (!dialogContext.mounted) {
+            break unitLoop;
           }
 
           for (final decision in manualDecisions) {

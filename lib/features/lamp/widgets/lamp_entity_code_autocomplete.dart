@@ -17,12 +17,17 @@ class LampEntityCodeAutocomplete extends StatefulWidget {
     required this.searchSuggestions,
     this.decoration,
     this.onCodeSelected,
+    this.autofocus = false,
   });
 
   final TextEditingController controller;
   final LampEntityCodeSearchCallback searchSuggestions;
   final InputDecoration? decoration;
   final ValueChanged<int>? onCodeSelected;
+
+  /// Αν true, το πεδίο εστιάζεται μόλις ανοίξει ο διάλογος, ώστε ο χρήστης να
+  /// μπορεί να πληκτρολογήσει αμέσως χωρίς κλικ (τυπική συμπεριφορά Windows).
+  final bool autofocus;
 
   @override
   State<LampEntityCodeAutocomplete> createState() =>
@@ -228,13 +233,18 @@ class _LampEntityCodeAutocompleteState extends State<LampEntityCodeAutocomplete>
 
   @override
   Widget build(BuildContext context) {
-    final field = TextField(
-      focusNode: _focusNode,
-      controller: widget.controller,
-      decoration: widget.decoration,
+    // Το πεδίο τυλίγεται ΠΑΝΤΑ στο CompositedTransformTarget: αν άλλαζε η δομή
+    // του δέντρου κάθε φορά που εμφανίζεται/κρύβεται η λίστα, η Flutter θα
+    // ξαναδημιουργούσε το TextField και θα έχανε το focus (κέρσορας/πληκτρολόγηση).
+    return CompositedTransformTarget(
+      link: _layerLink,
+      child: TextField(
+        focusNode: _focusNode,
+        controller: widget.controller,
+        decoration: widget.decoration,
+        autofocus: widget.autofocus,
+      ),
     );
-    if (_overlayEntry == null) return field;
-    return CompositedTransformTarget(link: _layerLink, child: field);
   }
 }
 

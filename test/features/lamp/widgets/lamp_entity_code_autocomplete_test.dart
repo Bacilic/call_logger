@@ -30,7 +30,10 @@ void main() {
       controller.dispose();
     });
 
-    Future<void> pumpField(WidgetTester tester) async {
+    Future<void> pumpField(
+      WidgetTester tester, {
+      bool autofocus = false,
+    }) async {
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
@@ -38,6 +41,7 @@ void main() {
               controller: controller,
               searchSuggestions: search,
               onCodeSelected: (code) => selectedCode = code,
+              autofocus: autofocus,
             ),
           ),
         ),
@@ -61,6 +65,73 @@ void main() {
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pump();
     });
+
+    testWidgets(
+      'autofocus: το πεδίο εστιάζεται μόλις ανοίξει, χωρίς κλικ',
+      (tester) async {
+        await pumpField(tester, autofocus: true);
+        await tester.pump();
+
+        final editable = tester.state<EditableTextState>(
+          find.byType(EditableText),
+        );
+        expect(
+          editable.widget.focusNode.hasPrimaryFocus,
+          isTrue,
+          reason: 'Με autofocus, ο χρήστης πρέπει να μπορεί να πληκτρολογήσει '
+              'αμέσως χωρίς κλικ μέσα στο πεδίο.',
+        );
+
+        // Χωρίς autofocus, το πεδίο ΔΕΝ πρέπει να αρπάζει την εστίαση μόνο του.
+        FocusManager.instance.primaryFocus?.unfocus();
+        await tester.pump();
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pump();
+      },
+    );
+
+    testWidgets(
+      'ΠΑΛΙΝΔΡΟΜΗΣΗ: το πεδίο ΔΕΝ ξαναχτίζεται όταν εμφανίζεται/κρύβεται η λίστα',
+      (tester) async {
+        await pumpField(tester);
+
+        // Ταυτότητα του πεδίου ΠΡΙΝ εμφανιστεί λίστα (χωρίς overlay).
+        final elementBefore = tester.element(find.byType(EditableText));
+
+        // Πληκτρολόγηση → εμφανίζεται η λίστα προτάσεων (overlay).
+        await tester.enterText(find.byType(TextField), 'πατσα');
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 150));
+
+        expect(find.byType(ListView), findsOneWidget);
+        final elementWithOverlay = tester.element(find.byType(EditableText));
+        expect(
+          identical(elementBefore, elementWithOverlay),
+          isTrue,
+          reason: 'Η εμφάνιση της λίστας δεν πρέπει να ξαναχτίζει το πεδίο '
+              '(αλλιώς χάνεται η εστίαση/ο κέρσορας).',
+        );
+
+        // Άδειασμα του πεδίου (σαν backspace στο τελευταίο ψηφίο) → η λίστα
+        // κρύβεται. Το πεδίο πρέπει να παραμείνει το ΙΔΙΟ element.
+        controller.clear();
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 150));
+
+        expect(find.byType(ListView), findsNothing);
+        final elementAfter = tester.element(find.byType(EditableText));
+        expect(
+          identical(elementBefore, elementAfter),
+          isTrue,
+          reason: 'Το κρύψιμο της λίστας δεν πρέπει να ξαναχτίζει το πεδίο.',
+        );
+
+        FocusManager.instance.primaryFocus?.unfocus();
+        await tester.pump();
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pump();
+      },
+    );
 
     testWidgets(
       'ΣΕΝΑΡΙΟ WINDOWS: κλικ ποντικιού σε πρόταση συμπληρώνει τον κωδικό',

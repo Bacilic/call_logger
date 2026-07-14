@@ -16,6 +16,7 @@ const String oldDataIssueEntityTypeEquipment = 'equipment';
 const String oldDataIssueOriginIntegrityScan = 'integrity_scan';
 const String kDataIssueStatusOpen = 'open';
 const String kDataIssueStatusDeferred = 'deferred';
+const String kDataIssueStatusAccepted = 'accepted';
 
 /// Αποτέλεσμα αναζήτησης: εμφανιζόμενες γραμμές + συνολικός αριθμός ταιριασμάτων.
 class OldEquipmentSearchResult {

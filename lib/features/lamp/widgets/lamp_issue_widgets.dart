@@ -128,6 +128,23 @@ class LampIssueHelpers {
     };
   }
 
+  static IconData resolveNetworkIssueIcon(String rawIssueType) {
+    return switch (rawIssueType.trim()) {
+      'network_invalid_ip' => Icons.wrong_location_outlined,
+      'network_duplicate_ip' => Icons.difference_outlined,
+      'network_duplicate_name' => Icons.content_copy_outlined,
+      'network_duplicate_hostname' => Icons.file_copy_outlined,
+      'network_name_code_mismatch' => Icons.sync_problem_outlined,
+      'network_no_hostname' => Icons.label_off_outlined,
+      'network_hostname_unmatched' => Icons.link_off_outlined,
+      'network_code_not_found' => Icons.search_off_outlined,
+      'network_ip_in_comments' => Icons.comment_outlined,
+      'network_model_mismatch' => Icons.devices_other_outlined,
+      'network_sheet_invalid' => Icons.grid_off_outlined,
+      _ => Icons.hub_outlined,
+    };
+  }
+
   static String issueField(Map<String, Object?> issue, String key) {
     final raw = issue[key];
     if (raw == null) return '-';
@@ -431,6 +448,14 @@ class LampIssueGroupHeaderCard extends StatelessWidget {
                       : Icon(LampIssueHelpers.resolveIssueIcon(lampIssueType!)),
                 ),
               ] else if (isNetworkCategory) ...[
+                const SizedBox(width: 4),
+                Tooltip(
+                  message: categoryLabel,
+                  child: Icon(
+                    LampIssueHelpers.resolveNetworkIssueIcon(rawIssueType),
+                    size: 20,
+                  ),
+                ),
                 const SizedBox(width: 4),
                 IconButton(
                   tooltip: 'Επίλυση · $categoryLabel (${issues.length})',

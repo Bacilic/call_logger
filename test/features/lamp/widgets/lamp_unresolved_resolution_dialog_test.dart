@@ -58,7 +58,13 @@ void main() {
     }
   });
 
-  LampIssueResolutionProposal officeProposal() {
+  LampIssueResolutionProposal officeProposal({
+    Map<String, Object?> metadata = const <String, Object?>{
+      'diagnosticEntityType': 'equipment',
+      'diagnosticOrigin': 'integrity_scan',
+      'diagnosticType': 'fk_resolution_unsupported_column',
+    },
+  }) {
     return LampIssueResolutionProposal(
       issueType: LampIssueType.unknownId,
       issueIds: const <int>[1],
@@ -69,10 +75,19 @@ void main() {
       proposedAction: LampIssueResolutionAction.unresolved,
       confidence: 0,
       notes: 'Δεν βρέθηκε έγκυρο γραφείο.',
+      metadata: metadata,
+    );
+  }
+
+  LampIssueResolutionProposal officeProposalWithRowContext() {
+    return officeProposal(
       metadata: const <String, Object?>{
         'diagnosticEntityType': 'equipment',
         'diagnosticOrigin': 'integrity_scan',
         'diagnosticType': 'fk_resolution_unsupported_column',
+        'rowContextCode': '2350',
+        'rowContextDescription': 'PC Γραφείου',
+        'rowContextOfficeLabel': 'Βασικό Γραφείο',
       },
     );
   }
@@ -119,6 +134,7 @@ void main() {
     required void Function(LampUnresolvedResolutionOutcome?) onResult,
     LampManualFkLookup? manualFkLookup,
     LampEntityCodeSearch? entityCodeSearch,
+    LampIssueResolutionProposal? proposal,
   }) async {
     await tester.pumpWidget(
       MaterialApp(
@@ -130,7 +146,7 @@ void main() {
                   onResult(
                     await showLampUnresolvedResolutionDialog(
                       context: context,
-                      proposal: officeProposal(),
+                      proposal: proposal ?? officeProposal(),
                       databasePath: dbPath,
                       resolutionService: service,
                       manualFkLookup: manualFkLookup,
@@ -160,6 +176,62 @@ void main() {
       expect(results.first.code, 1);
       expect(results.first.label, contains('Βασικό'));
     });
+
+    testWidgets(
+      'η κεφαλίδα έχει αντιγράψιμη οντότητα, κωδικό εξοπλισμού και βεβαιότητα',
+      (tester) async {
+        await openDialog(tester, onResult: (_) {});
+
+        expect(
+          find.widgetWithText(SelectableText, 'Οντότητα: Εξοπλισμός'),
+          findsOneWidget,
+        );
+        expect(
+          find.widgetWithText(SelectableText, 'Κωδικός εξοπλισμού: 5001'),
+          findsOneWidget,
+        );
+        expect(
+          find.widgetWithText(SelectableText, 'Βεβαιότητα: 0%'),
+          findsOneWidget,
+        );
+
+        await dismissOpenDialog(tester);
+      },
+    );
+
+    testWidgets(
+      'εμφανίζει «Στοιχεία εγγραφής» όταν υπάρχουν rowContext metadata',
+      (tester) async {
+        await openDialog(
+          tester,
+          proposal: officeProposalWithRowContext(),
+          onResult: (_) {},
+        );
+
+        expect(find.text('Στοιχεία εγγραφής'), findsOneWidget);
+        expect(
+          find.byWidgetPredicate(
+            (widget) =>
+                widget is SelectableText &&
+                widget.data == 'Εξοπλισμός: 2350 · PC Γραφείου',
+          ),
+          findsOneWidget,
+        );
+
+        await dismissOpenDialog(tester);
+      },
+    );
+
+    testWidgets(
+      'δεν εμφανίζει «Στοιχεία εγγραφής» χωρίς rowContext metadata',
+      (tester) async {
+        await openDialog(tester, onResult: (_) {});
+
+        expect(find.text('Στοιχεία εγγραφής'), findsNothing);
+
+        await dismissOpenDialog(tester);
+      },
+    );
 
     testWidgets('εμφανίζει τις νέες ενέργειες δίπλα στις υπάρχουσες', (tester) async {
       await openDialog(tester, onResult: (_) {});

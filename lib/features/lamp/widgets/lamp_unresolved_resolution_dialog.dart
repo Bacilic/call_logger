@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/database/old_database/lamp_issue_resolution_service.dart';
 import 'lamp_entity_code_autocomplete.dart';
+import 'lamp_issue_row_context.dart';
 
 /// Αποτέλεσμα διαλόγου για πρόταση με [LampIssueResolutionAction.unresolved].
 sealed class LampUnresolvedResolutionOutcome {
@@ -265,6 +266,7 @@ class _LampUnresolvedResolutionDialogState
     final origin = _originLabel(_metadataText('diagnosticOrigin') ?? 'manual');
     final diagnosticType = _metadataText('diagnosticType');
     final fieldLabel = columnLabelEl(proposal.column);
+    final rowContextLines = lampProposalRowContextLines(widget.proposal);
 
     return AlertDialog(
       title: Text('${proposal.issueType.label} · ανεπίλυτη πρόταση'),
@@ -279,17 +281,23 @@ class _LampUnresolvedResolutionDialogState
                 spacing: 12,
                 runSpacing: 6,
                 children: [
-                  Text('Οντότητα: $entityType', style: theme.textTheme.bodyMedium),
-                  Text('Προέλευση: $origin', style: theme.textTheme.bodyMedium),
-                  Text(
+                  SelectableText(
+                    'Οντότητα: $entityType',
+                    style: theme.textTheme.bodyMedium,
+                  ),
+                  SelectableText(
+                    'Προέλευση: $origin',
+                    style: theme.textTheme.bodyMedium,
+                  ),
+                  SelectableText(
                     'Κωδικός εξοπλισμού: ${proposal.row ?? '-'}',
                     style: theme.textTheme.bodyMedium,
                   ),
-                  Text(
+                  SelectableText(
                     'Πεδίο: $fieldLabel',
                     style: theme.textTheme.bodyMedium,
                   ),
-                  Text(
+                  SelectableText(
                     'Βεβαιότητα: ${proposal.confidence}%',
                     style: theme.textTheme.bodyMedium,
                   ),
@@ -308,6 +316,13 @@ class _LampUnresolvedResolutionDialogState
                   'Φύση σφάλματος: ${_diagnosticTypeLabel(diagnosticType)}',
                   style: theme.textTheme.bodyMedium,
                 ),
+              ],
+              if (rowContextLines.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Text('Στοιχεία εγγραφής', style: theme.textTheme.labelLarge),
+                const SizedBox(height: 4),
+                for (final line in rowContextLines)
+                  SelectableText(line, style: theme.textTheme.bodySmall),
               ],
               const SizedBox(height: 8),
               SelectableText(
@@ -331,6 +346,7 @@ class _LampUnresolvedResolutionDialogState
                   controller: _codeController,
                   searchSuggestions: _searchEntityCodes,
                   onCodeSelected: (_) => _runLookup(),
+                  autofocus: true,
                   decoration: InputDecoration(
                     labelText: 'Κωδικός ή όνομα $fieldLabel',
                     border: const OutlineInputBorder(),

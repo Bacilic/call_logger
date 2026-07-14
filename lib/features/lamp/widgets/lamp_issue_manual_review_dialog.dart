@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 
 import '../../../core/database/old_database/lamp_issue_resolution_service.dart';
 import '../../../core/database/old_database/lamp_scientific_serial.dart';
+import 'lamp_issue_row_context.dart';
 
 /// Έλεγχος ύπαρξης σειριακού σε άλλον εξοπλισμό (πιθανό barcode).
 typedef LampSerialExistsChecker = Future<bool> Function(
@@ -387,7 +388,7 @@ class _ManualReviewCardState extends State<_ManualReviewCard> {
     final proposal = widget.proposal;
     final selectedOption = widget.selectedOption;
     final selectedRequiresInput = selectedOption?.requiresTextInput ?? false;
-    final rowContextLines = _proposalRowContextLines(proposal);
+    final rowContextLines = lampProposalRowContextLines(proposal);
     final cleanDigits = _cleanDigits;
     final showCleanDigitsLine =
         _isScientificSerialContext && cleanDigits != null && cleanDigits.isNotEmpty;
@@ -405,9 +406,9 @@ class _ManualReviewCardState extends State<_ManualReviewCard> {
               runSpacing: 6,
               children: [
                 Text('#${widget.index + 1}', style: theme.textTheme.labelLarge),
-                Text('Κωδικός εξοπλισμού: ${proposal.row ?? '-'}'),
-                Text('Πεδίο: ${_lampIssueColumnLabelEl(proposal.column)}'),
-                Text('Βεβαιότητα: ${proposal.confidence}%'),
+                SelectableText('Κωδικός εξοπλισμού: ${proposal.row ?? '-'}'),
+                SelectableText('Πεδίο: ${_lampIssueColumnLabelEl(proposal.column)}'),
+                SelectableText('Βεβαιότητα: ${proposal.confidence}%'),
               ],
             ),
             const SizedBox(height: 8),
@@ -483,6 +484,7 @@ class _ManualReviewCardState extends State<_ManualReviewCard> {
               const SizedBox(height: 8),
               TextField(
                 controller: widget.textController,
+                autofocus: true,
                 decoration: InputDecoration(
                   labelText: selectedOption?.inputLabel ?? 'Νέα τιμή',
                   border: const OutlineInputBorder(),
@@ -531,52 +533,6 @@ class _ManualReviewCardState extends State<_ManualReviewCard> {
       ),
     );
   }
-}
-
-List<String> _proposalRowContextLines(LampIssueResolutionProposal proposal) {
-  final metadata = proposal.metadata;
-  String? text(String key) {
-    final value = metadata[key]?.toString().trim();
-    if (value == null || value.isEmpty || value == 'null') return null;
-    return value;
-  }
-
-  final lines = <String>[];
-  final code = text('rowContextCode');
-  final description = text('rowContextDescription');
-  if (code != null || description != null) {
-    lines.add('Εξοπλισμός: ${code ?? '-'} · ${description ?? '-'}');
-  }
-  final stateName = text('rowContextStateName');
-  if (stateName != null) {
-    lines.add('Κατάσταση: $stateName');
-  }
-  final assetNo = text('rowContextAssetNo');
-  final serialNo = text('rowContextSerialNo');
-  if (assetNo != null || serialNo != null) {
-    lines.add('Asset: ${assetNo ?? '-'} · Serial: ${serialNo ?? '-'}');
-  }
-  final officeId = text('rowContextOfficeId');
-  final officeLabel = text('rowContextOfficeLabel');
-  if (officeId != null || officeLabel != null) {
-    lines.add('Τμήμα/Γραφείο: ${officeId ?? '-'} · ${officeLabel ?? '-'}');
-  }
-  final ownerId = text('rowContextOwnerId');
-  final ownerLabel = text('rowContextOwnerLabel');
-  if (ownerId != null || ownerLabel != null) {
-    lines.add('Υπάλληλος: ${ownerId ?? '-'} · ${ownerLabel ?? '-'}');
-  }
-  final modelId = text('rowContextModelId');
-  final modelLabel = text('rowContextModelLabel');
-  if (modelId != null || modelLabel != null) {
-    lines.add('Μοντέλο: ${modelId ?? '-'} · ${modelLabel ?? '-'}');
-  }
-  final contractId = text('rowContextContractId');
-  final contractLabel = text('rowContextContractLabel');
-  if (contractId != null || contractLabel != null) {
-    lines.add('Συμβόλαιο: ${contractId ?? '-'} · ${contractLabel ?? '-'}');
-  }
-  return lines;
 }
 
 Widget? _resolutionOptionSubtitle(
