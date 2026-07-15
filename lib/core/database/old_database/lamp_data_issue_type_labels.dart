@@ -1,3 +1,30 @@
+/// Ελληνική ετικέτα πεδίου (στήλης) για οδηγούς επίλυσης προβλημάτων ETL.
+String lampDataIssueColumnDisplayLabel(String? column) {
+  if (column == null || column.trim().isEmpty) return '-';
+  switch (column.trim().toLowerCase()) {
+    case 'office':
+      return 'γραφείο';
+    case 'owner':
+      return 'υπάλληλος';
+    case 'model':
+      return 'μοντέλο';
+    case 'contract':
+      return 'συμβόλαιο';
+    case 'set_master':
+      return 'κύριος εξοπλισμός';
+    case 'asset_no':
+      return 'αριθμός παγίου';
+    case 'serial_no':
+      return 'σειριακός αριθμός';
+    case 'ip_address':
+      return 'διεύθυνση IP';
+    case 'network_name':
+      return 'όνομα δικτύου';
+    default:
+      return column;
+  }
+}
+
 /// Ελληνικές ετικέτες για `issue_type` στο `data_issues` και στην αναφορά ελέγχου ακεραιότητας.
 String lampDataIssueTypeDisplayLabel(String issueType) {
   switch (issueType) {

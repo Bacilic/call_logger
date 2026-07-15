@@ -12,6 +12,7 @@ class LampIssueDuplicateAnalyzers {
   Future<List<LampIssueResolutionProposal>> analyzeDuplicateAssets(
     Database db,
   ) async {
+    final labels = await _support.loadFkLabelMaps(db);
     final issues = await _support.openIssues(db, LampIssueType.duplicateAssetNo);
     final byAsset = <String, List<int>>{};
     for (final issue in issues) {
@@ -44,6 +45,7 @@ class LampIssueDuplicateAnalyzers {
           deleteOperation: 'delete_duplicate_asset_others',
           reassignOperation: 'reassign_asset',
           inputLabel: 'Νέο asset_no',
+          labels: labels,
         ),
       );
     }
@@ -53,6 +55,7 @@ class LampIssueDuplicateAnalyzers {
   Future<List<LampIssueResolutionProposal>> analyzeDuplicateModelSerial(
     Database db,
   ) async {
+    final labels = await _support.loadFkLabelMaps(db);
     final issues = await _support.openIssues(db, LampIssueType.duplicateModelSerial);
     final issueIdsBySerial = <String, List<int>>{};
     for (final issue in issues) {
@@ -96,6 +99,7 @@ class LampIssueDuplicateAnalyzers {
           reassignOperation: 'reassign_serial',
           inputLabel: 'Νέο serial_no',
           extraMetadata: <String, Object?>{'model': model, 'serialNo': serial},
+          labels: labels,
         ),
       );
     }
@@ -105,6 +109,7 @@ class LampIssueDuplicateAnalyzers {
   Future<List<LampIssueResolutionProposal>> analyzeScientificSerials(
     Database db,
   ) async {
+    final labels = await _support.loadFkLabelMaps(db);
     final issues = await _support.openIssues(db, LampIssueType.scientificSerial);
     final proposals = <LampIssueResolutionProposal>[];
     for (final issue in issues) {
@@ -125,7 +130,7 @@ class LampIssueDuplicateAnalyzers {
 
       final cleanDigits = scientificSerialCleanDigits(rawSerial);
       final expectedLength = scientificSerialExpectedLength(rawSerial);
-      final preview = _support.equipmentSummary(rows.first);
+      final preview = _support.equipmentSummary(rows.first, labels: labels);
       final notes =
           'Σειριακός σε επιστημονική μορφή: $rawSerial\n$preview\n'
           'Ψηφία για αναζήτηση: $cleanDigits · πιθανό μήκος: $expectedLength ψηφία';
@@ -146,6 +151,7 @@ class LampIssueDuplicateAnalyzers {
             'expectedLength': expectedLength,
             'rawSerial': rawSerial,
             'rows': rows,
+            'confidenceIsNominal': true,
           },
           options: <LampIssueResolutionOption>[
             LampIssueResolutionOption(
@@ -181,8 +187,18 @@ class LampIssueDuplicateAnalyzers {
     required String reassignOperation,
     required String inputLabel,
     Map<String, Object?> extraMetadata = const <String, Object?>{},
+    LampFkLabelMaps labels = LampFkLabelMaps.empty,
   }) {
-    final preview = rows.map(_support.equipmentSummary).join('\n');
+    String codeWithDescription(Map<String, Object?> row) {
+      final code = row['code'];
+      final description = _support.text(row['description']);
+      if (description != null) return '$code ($description)';
+      return '$code';
+    }
+
+    final preview = rows
+        .map((row) => _support.equipmentSummary(row, labels: labels))
+        .join('\n');
     return LampIssueResolutionProposal(
       issueType: issueType,
       issueIds: issueIds,
@@ -193,16 +209,21 @@ class LampIssueDuplicateAnalyzers {
       proposedAction: LampIssueResolutionAction.manualReview,
       confidence: 45,
       notes: 'Ομάδα διπλότυπων (${rows.length} εγγραφές):\n$preview',
-      metadata: <String, Object?>{'rows': rows, ...extraMetadata},
+      metadata: <String, Object?>{
+        'rows': rows,
+        'confidenceIsNominal': true,
+        ...extraMetadata,
+      },
       options: <LampIssueResolutionOption>[
         for (final row in rows)
           LampIssueResolutionOption(
             id: '${operationPrefix}_clear_keep_${row['code']}',
             label:
-                'Κράτα code ${row['code']} και καθάρισε την τιμή στις άλλες εγγραφές',
+                'Κράτα ${codeWithDescription(row)} και καθάρισε την τιμή στις άλλες εγγραφές',
             action: LampIssueResolutionAction.autoFix,
             metadata: <String, Object?>{
               'operation': clearOperation,
+              'duplicateActionKind': 'clear',
               'keepCode': _support.toInt(row['code']),
               'value': column == 'asset_no' ? originalValue : null,
               ...extraMetadata,
@@ -211,10 +232,12 @@ class LampIssueDuplicateAnalyzers {
         for (final row in rows)
           LampIssueResolutionOption(
             id: '${operationPrefix}_delete_keep_${row['code']}',
-            label: 'Κράτα code ${row['code']} και διέγραψε τις άλλες εγγραφές',
+            label:
+                'Κράτα ${codeWithDescription(row)} και διέγραψε τις άλλες εγγραφές',
             action: LampIssueResolutionAction.autoFix,
             metadata: <String, Object?>{
               'operation': deleteOperation,
+              'duplicateActionKind': 'delete',
               'keepCode': _support.toInt(row['code']),
               'value': column == 'asset_no' ? originalValue : null,
               ...extraMetadata,
@@ -223,12 +246,13 @@ class LampIssueDuplicateAnalyzers {
         for (final row in rows)
           LampIssueResolutionOption(
             id: '${operationPrefix}_reassign_${row['code']}',
-            label: 'Δώσε νέα τιμή στο code ${row['code']}',
+            label: 'Δώσε νέα τιμή στο ${codeWithDescription(row)}',
             action: LampIssueResolutionAction.autoFix,
             requiresTextInput: true,
             inputLabel: inputLabel,
             metadata: <String, Object?>{
               'operation': reassignOperation,
+              'duplicateActionKind': 'reassign',
               'targetCode': _support.toInt(row['code']),
             },
           ),
@@ -245,7 +269,7 @@ class LampIssueDuplicateAnalyzers {
     );
     final proposals = <LampIssueResolutionProposal>[];
     for (final issue in issues) {
-      final code = _codeFromSetMasterSelfReferenceIssue(issue);
+      final code = _codeFromSetMasterIssue(issue);
       if (code == null) continue;
       proposals.add(
         LampIssueResolutionProposal(
@@ -272,7 +296,7 @@ class LampIssueDuplicateAnalyzers {
     return proposals;
   }
 
-  int? _codeFromSetMasterSelfReferenceIssue(Map<String, Object?> issue) {
+  int? _codeFromSetMasterIssue(Map<String, Object?> issue) {
     final fromRow = _support.toInt(issue['row_number']);
     if (fromRow != null) return fromRow;
     final message = _support.text(issue['message']);
@@ -280,6 +304,55 @@ class LampIssueDuplicateAnalyzers {
     final match = RegExp(r'code=(\d+)').firstMatch(message);
     if (match == null) return null;
     return int.tryParse(match.group(1)!);
+  }
+
+  /// Προτάσεις για set_master που δείχνει σε ανύπαρκτο εξοπλισμό (ΓΕΝ-1).
+  ///
+  /// Παράγει ανεπίλυτες προτάσεις με column `set_master`, ώστε ο οδηγός
+  /// ανεπίλυτων να προσφέρει σύνδεση με υπαρκτό κωδικό (autocomplete) ή
+  /// εκκαθάριση του δείκτη — και τα δύο υποστηρίζονται ήδη από τον applier.
+  Future<List<LampIssueResolutionProposal>> analyzeSetMasterMissingTargets(
+    Database db,
+  ) async {
+    final issues = await _support.openIssues(
+      db,
+      LampIssueType.setMasterMissingTarget,
+    );
+    final proposals = <LampIssueResolutionProposal>[];
+    for (final issue in issues) {
+      final code = _codeFromSetMasterIssue(issue);
+      if (code == null) continue;
+      final equipment = await _support.equipmentByCode(db, code);
+      final missingTarget = _support.text(issue['raw_value']);
+      proposals.add(
+        LampIssueResolutionProposal(
+          issueType: LampIssueType.setMasterMissingTarget,
+          issueIds: [_support.toInt(issue['id'])].whereType<int>().toList(),
+          sheet: _support.text(issue['sheet']),
+          row: code,
+          column: 'set_master',
+          originalValue: missingTarget,
+          proposedAction: LampIssueResolutionAction.unresolved,
+          confidence: 0,
+          notes:
+              'Ο δείκτης κύριου εξοπλισμού δείχνει στον ανύπαρκτο κωδικό '
+              '${missingTarget ?? '-'}. Συνδέστε τον με υπαρκτό εξοπλισμό '
+              '(Εφαρμογή κωδικού) ή καθαρίστε τον δείκτη (Εκκαθάριση πεδίου).',
+          metadata: <String, Object?>{
+            'confidenceIsNominal': true,
+            if (equipment != null) ...<String, Object?>{
+              'rowContextCode': code,
+              'rowContextDescription': _support.text(
+                equipment['description'],
+              ),
+              'rowContextAssetNo': _support.text(equipment['asset_no']),
+              'rowContextSerialNo': _support.text(equipment['serial_no']),
+            },
+          },
+        ),
+      );
+    }
+    return proposals;
   }
 
   Future<List<LampIssueResolutionProposal>> analyzeSetMasterCycles(

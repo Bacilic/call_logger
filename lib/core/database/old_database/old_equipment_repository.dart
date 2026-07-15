@@ -604,6 +604,31 @@ class OldEquipmentRepository {
     }
   }
 
+  /// Διαγράφει όλες τις εγγραφές του `data_issues` ενός τύπου προβλήματος
+  /// (εκκαθάριση ομάδας πληροφοριακών τύπων). Επιστρέφει το πλήθος διαγραφών.
+  Future<int> deleteDataIssuesByType(
+    String databasePath,
+    String issueType,
+  ) async {
+    final path = databasePath.trim();
+    if (path.isEmpty) {
+      throw StateError('Κενή διαδρομή βάσης.');
+    }
+    try {
+      final db = await _databaseProvider.open(
+        path,
+        mode: LampDatabaseMode.write,
+      );
+      return db.delete(
+        'data_issues',
+        where: 'issue_type = ?',
+        whereArgs: <Object?>[issueType.trim()],
+      );
+    } catch (e) {
+      throw Exception(_friendlySqlError(e));
+    }
+  }
+
   /// Πλήρης εκκαθάριση και επαναδόμηση του `search_index` από τον εξοπλισμό (ίδια λογική με την εσωτερική αναδόμηση).
   Future<OldSearchIndexRebuildResult> rebuildLampSearchIndex(
     String databasePath,

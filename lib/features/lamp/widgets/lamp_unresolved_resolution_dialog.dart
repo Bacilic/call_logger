@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../../../core/database/old_database/lamp_data_issue_type_labels.dart';
 import '../../../core/database/old_database/lamp_issue_resolution_service.dart';
 import 'lamp_entity_code_autocomplete.dart';
 import 'lamp_issue_row_context.dart';
@@ -46,24 +47,6 @@ final class LampUnresolvedDeferCurrent extends LampUnresolvedResolutionOutcome {
 /// Μαζική αναβολή όλων των υπόλοιπων ανεπίλυτων προτάσεων.
 final class LampUnresolvedDeferAll extends LampUnresolvedResolutionOutcome {
   const LampUnresolvedDeferAll();
-}
-
-String columnLabelEl(String? column) {
-  if (column == null || column.isEmpty) return '-';
-  switch (column.trim().toLowerCase()) {
-    case 'office':
-      return 'γραφείο';
-    case 'owner':
-      return 'υπάλληλος';
-    case 'model':
-      return 'μοντέλο';
-    case 'contract':
-      return 'συμβόλαιο';
-    case 'set_master':
-      return 'κύριος εξοπλισμός';
-    default:
-      return column;
-  }
 }
 
 typedef LampManualFkLookup = Future<String?> Function(
@@ -125,6 +108,7 @@ class _LampUnresolvedResolutionDialogState
   String? _resolvedLabel;
   bool _lookupInFlight = false;
   String? _lookupError;
+  bool _applyToAll = false;
 
   bool get _supportsFieldActions =>
       ManualFkTargetSpec.forColumn(widget.proposal.column) != null;
@@ -265,8 +249,9 @@ class _LampUnresolvedResolutionDialogState
     );
     final origin = _originLabel(_metadataText('diagnosticOrigin') ?? 'manual');
     final diagnosticType = _metadataText('diagnosticType');
-    final fieldLabel = columnLabelEl(proposal.column);
+    final fieldLabel = lampDataIssueColumnDisplayLabel(proposal.column);
     final rowContextLines = lampProposalRowContextLines(widget.proposal);
+    final confidenceText = lampConfidenceDisplay(proposal);
 
     return AlertDialog(
       title: Text('${proposal.issueType.label} · ανεπίλυτη πρόταση'),
@@ -297,10 +282,14 @@ class _LampUnresolvedResolutionDialogState
                     'Πεδίο: $fieldLabel',
                     style: theme.textTheme.bodyMedium,
                   ),
-                  SelectableText(
-                    'Βεβαιότητα: ${proposal.confidence}%',
-                    style: theme.textTheme.bodyMedium,
-                  ),
+                  if (confidenceText != null)
+                    Tooltip(
+                      message: lampConfidenceTooltip,
+                      child: SelectableText(
+                        confidenceText,
+                        style: theme.textTheme.bodyMedium,
+                      ),
+                    ),
                 ],
               ),
               const SizedBox(height: 12),
@@ -403,35 +392,73 @@ class _LampUnresolvedResolutionDialogState
                   ),
                 ),
               ],
+              const SizedBox(height: 16),
+              Text(
+                'Παράλειψη: η εγγραφή μένει ανοιχτή και θα ξαναρωτηθείς στον '
+                'επόμενο έλεγχο. Αναβολή: καταχωρείται ως αναβληθείσα και '
+                'φεύγει από τις ροές επίλυσης.',
+                style: theme.textTheme.bodySmall,
+              ),
+              CheckboxListTile(
+                dense: true,
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Εφαρμογή σε όλα τα υπόλοιπα ανεπίλυτα'),
+                value: _applyToAll,
+                onChanged: (value) =>
+                    setState(() => _applyToAll = value ?? false),
+                controlAffinity: ListTileControlAffinity.leading,
+              ),
             ],
           ),
         ),
       ),
+      actionsAlignment: MainAxisAlignment.spaceBetween,
       actions: [
-        TextButton(
-          onPressed: () =>
-              Navigator.of(context).pop(const LampUnresolvedCancelAll()),
-          child: const Text('Ακύρωση επίλυσης'),
+        Tooltip(
+          message:
+              'Διακόπτεται όλη η διαδικασία επίλυσης — καμία αλλαγή στις '
+              'ανεπίλυτες εγγραφές.',
+          child: TextButton(
+            onPressed: () =>
+                Navigator.of(context).pop(const LampUnresolvedCancelAll()),
+            child: const Text('Ακύρωση επίλυσης'),
+          ),
         ),
-        TextButton(
-          onPressed: () =>
-              Navigator.of(context).pop(const LampUnresolvedSkipAll()),
-          child: const Text('Παράλειψη όλων των ανεπίλυτων'),
-        ),
-        TextButton(
-          onPressed: () =>
-              Navigator.of(context).pop(const LampUnresolvedDeferAll()),
-          child: const Text('Αναβολή όλων των ανεπίλυτων'),
-        ),
-        TextButton(
-          onPressed: () =>
-              Navigator.of(context).pop(const LampUnresolvedSkipCurrent()),
-          child: const Text('Παράλειψη τρέχουσας'),
-        ),
-        TextButton(
-          onPressed: () =>
-              Navigator.of(context).pop(const LampUnresolvedDeferCurrent()),
-          child: const Text('Αναβολή'),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Tooltip(
+              message: _applyToAll
+                  ? 'Όλες οι υπόλοιπες ανεπίλυτες εγγραφές μένουν ανοιχτές· '
+                      'θα ξαναρωτηθείς στον επόμενο έλεγχο.'
+                  : 'Η τρέχουσα εγγραφή μένει ανοιχτή· θα ξαναρωτηθείς στον '
+                      'επόμενο έλεγχο.',
+              child: OutlinedButton(
+                onPressed: () => Navigator.of(context).pop(
+                  _applyToAll
+                      ? const LampUnresolvedSkipAll()
+                      : const LampUnresolvedSkipCurrent(),
+                ),
+                child: Text(_applyToAll ? 'Παράλειψη όλων' : 'Παράλειψη'),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Tooltip(
+              message: _applyToAll
+                  ? 'Όλες οι υπόλοιπες ανεπίλυτες εγγραφές καταχωρούνται ως '
+                      'αναβληθείσες και φεύγουν από τις ροές επίλυσης.'
+                  : 'Η τρέχουσα εγγραφή καταχωρείται ως αναβληθείσα και '
+                      'φεύγει από τις ροές επίλυσης.',
+              child: FilledButton.tonal(
+                onPressed: () => Navigator.of(context).pop(
+                  _applyToAll
+                      ? const LampUnresolvedDeferAll()
+                      : const LampUnresolvedDeferCurrent(),
+                ),
+                child: Text(_applyToAll ? 'Αναβολή όλων' : 'Αναβολή'),
+              ),
+            ),
+          ],
         ),
       ],
     );

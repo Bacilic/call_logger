@@ -26,6 +26,15 @@ LampSerialExistsChecker lampSerialExistsCheckerFor(
       );
 }
 
+/// Γραμμή δείγματος προεπισκόπησης πρότασης επίλυσης (ορολογία οδηγών).
+String lampProposalPreviewLine(
+  LampIssueResolutionProposal p,
+  String Function(String?) columnLabel,
+) {
+  return '- Κωδικός εξοπλισμού=${p.row ?? '-'} πεδίο=${columnLabel(p.column)} · '
+      '${p.proposedAction.labelEl} · ${p.proposedMatch ?? p.notes}';
+}
+
 /// Αν η απόφαση οδηγεί σε διαγραφή διπλοεγγραφών (καθρέφτης applier metadata).
 bool decisionIsDestructive(LampIssueResolutionDecision decision) {
   final metadata = decision.option?.metadata ?? decision.proposal.metadata;
@@ -53,6 +62,72 @@ class LampIssueResolutionController {
 
   static bool isNetworkIssueType(String rawIssueType) {
     return rawIssueType.trim().startsWith('network_');
+  }
+
+  /// Πληροφοριακοί τύποι: δεν έχουν οδηγό επίλυσης (σωστά), μόνο εκκαθάριση
+  /// ομάδας — η διαγραφή τους δεν αγγίζει δεδομένα εξοπλισμού (ΓΕΝ-2).
+  static const Set<String> informationalIssueTypes = <String>{
+    'missing_sheet',
+    'missing_primary_key',
+    'duplicate_code_discarded',
+    'xls_conversion_failed',
+    'network_sheet_invalid',
+  };
+
+  static bool isInformationalIssueType(String rawIssueType) {
+    return informationalIssueTypes.contains(rawIssueType.trim());
+  }
+
+  /// Εκκαθάριση ολόκληρης πληροφοριακής ομάδας από την ουρά, με επιβεβαίωση.
+  Future<void> clearInformationalIssueGroup(String rawIssueType) async {
+    if (resolvingNetworkIssueType != null || resolvingIssueType != null) {
+      return;
+    }
+    final dbPath = path.readDbController.text.trim();
+    if (!search.readPathReadyForQuery || dbPath.isEmpty) {
+      host.showSnack('Η βάση προς ανάγνωση δεν είναι έτοιμη.', isError: true);
+      return;
+    }
+    final count = issueCountForNetwork(rawIssueType);
+    final label = lampDataIssueTypeDisplayLabel(rawIssueType);
+    final confirmed = await showDialog<bool>(
+      context: host.context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Εκκαθάριση ομάδας;'),
+        content: Text(
+          'Θα διαγραφούν οριστικά $count πληροφοριακές εγγραφές «$label» '
+          'από την ουρά προβλημάτων, χωρίς δυνατότητα αναίρεσης. '
+          'Δεν αλλάζουν δεδομένα εξοπλισμού.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Άκυρο'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(ctx).colorScheme.error,
+            ),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Εκκαθάριση'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !host.mounted) return;
+    try {
+      final deleted = await host.shared.repository.deleteDataIssuesByType(
+        dbPath,
+        rawIssueType,
+      );
+      if (!host.mounted) return;
+      await host.loadIssues();
+      if (!host.mounted) return;
+      host.showSnack('Εκκαθαρίστηκαν $deleted εγγραφές: $label.');
+    } catch (e) {
+      if (!host.mounted) return;
+      host.showSnack('Η εκκαθάριση απέτυχε: $e', isError: true);
+    }
   }
 
   bool canResolveNetworkIssueType(String rawIssueType) =>
@@ -642,24 +717,6 @@ class LampIssueResolutionController {
     );
   }
 
-  String issueColumnDisplayForPreview(String? column) {
-    if (column == null || column.isEmpty) return '-';
-    switch (column.trim().toLowerCase()) {
-      case 'office':
-        return 'γραφείο';
-      case 'owner':
-        return 'υπάλληλος';
-      case 'model':
-        return 'μοντέλο';
-      case 'contract':
-        return 'συμβόλαιο';
-      case 'set_master':
-        return 'κύριος εξοπλισμός';
-      default:
-        return column;
-    }
-  }
-
   Future<bool?> askResolutionPreview(
     LampIssueType issueType,
     List<LampIssueResolutionProposal> proposals,
@@ -681,11 +738,7 @@ class LampIssueResolutionController {
     final applicableCount = autoCount + createCount + manualCount;
     final preview = proposals
         .take(8)
-        .map(
-          (p) =>
-              '- γραμμή=${p.row ?? '-'} στήλη=${issueColumnDisplayForPreview(p.column)} · '
-              '${p.proposedAction.labelEl} · ${p.proposedMatch ?? p.notes}',
-        )
+        .map((p) => lampProposalPreviewLine(p, lampDataIssueColumnDisplayLabel))
         .join('\n');
     return showDialog<bool>(
       context: host.context,

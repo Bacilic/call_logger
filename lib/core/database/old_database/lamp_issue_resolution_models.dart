@@ -21,6 +21,10 @@ enum LampIssueType {
   setMasterCycle(
     'set_master_cycle',
     'Επίλυση · Κύκλοι ιεραρχίας Κύριου εξοπλισμού',
+  ),
+  setMasterMissingTarget(
+    'set_master_missing_target',
+    'Επίλυση · Κύριος εξοπλισμός χωρίς υπαρκτό στόχο',
   );
 
   const LampIssueType(this.issueType, this.label);

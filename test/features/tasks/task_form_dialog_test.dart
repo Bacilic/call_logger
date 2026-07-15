@@ -7,6 +7,7 @@ import 'dart:convert';
 import 'package:call_logger/core/providers/settings_provider.dart';
 import 'package:call_logger/core/providers/spell_check_provider.dart';
 import 'package:call_logger/core/services/spell_check_service.dart';
+import 'package:call_logger/core/widgets/lexicon_spell_text_form_field.dart';
 import 'package:call_logger/features/tasks/models/task.dart';
 import 'package:call_logger/features/tasks/models/task_settings_config.dart';
 import 'package:call_logger/features/tasks/providers/task_settings_config_provider.dart';
@@ -142,6 +143,24 @@ void main() {
         final noteFields = find.byKey(const ValueKey('snooze_note_0'));
         expect(noteFields, findsOneWidget);
         expect(find.byKey(const ValueKey('snooze_note_1')), findsOneWidget);
+
+        await tester.tap(find.text('Ακύρωση'));
+        await pumpUntilSettled(tester, steps: 10);
+        await flushCallLoggerSqfliteLockTimers(tester);
+      },
+    );
+
+    testWidgets(
+      'σημείωση αναβολής χρησιμοποιεί LexiconSpellTextFormField',
+      (tester) async {
+        await _openTaskFormDialog(tester, task: _taskWithTwoSnoozes());
+
+        final noteField = find.byKey(const ValueKey('snooze_note_0'));
+        expect(noteField, findsOneWidget);
+        expect(
+          tester.widget(noteField),
+          isA<LexiconSpellTextFormField>(),
+        );
 
         await tester.tap(find.text('Ακύρωση'));
         await pumpUntilSettled(tester, steps: 10);

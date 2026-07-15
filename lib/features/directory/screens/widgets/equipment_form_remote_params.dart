@@ -280,6 +280,10 @@ mixin EquipmentFormRemoteParamsMixin on EquipmentFormDialogStateHost {
       _ => 'Στόχος σύνδεσης',
     };
     final labelText = _remoteParamLabelWithTool(tool, roleLabel);
+    final helpText = RemoteParamHelpText.forTool(
+      tool: tool,
+      acceptsFileParam: acceptsFileParam,
+    );
     final vncDefault = VncRemoteTarget.resolveValidVncHost(
       _codeController.text.trim(),
       prefix: 'PC',
@@ -317,16 +321,24 @@ mixin EquipmentFormRemoteParamsMixin on EquipmentFormDialogStateHost {
           helperText: historical
               ? 'Διατηρείται (αγνοείται όσο ισχύει «Μόνο ένα»)'
               : null,
-          suffixIcon: historical
-              ? Tooltip(
+          suffixIcon: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (historical)
+                Tooltip(
                   message: 'Ιστορική τιμή',
                   child: Icon(
                     Icons.history,
                     size: 18,
                     color: theme.colorScheme.onSurfaceVariant,
                   ),
-                )
-              : null,
+                ),
+              Padding(
+                padding: const EdgeInsets.only(right: 6),
+                child: InfoHintIcon(message: helpText),
+              ),
+            ],
+          ),
           hintText: acceptsFileParam
               ? 'Αρχείο παραμέτρων πχ .rdp'
               : (isHostAddress ? (vncDefault ?? 'IP ή hostname') : null),

@@ -38,7 +38,7 @@ class _TaskFormDialogState extends ConsumerState<_TaskFormDialog> {
   ProviderContainer? _providerContainer;
   late final SpellCheckController _titleController;
   late final SpellCheckController _descriptionController;
-  late final List<TextEditingController> _snoozeNoteControllers;
+  late final List<SpellCheckController> _snoozeNoteControllers;
   late int _priority;
   late DateTime _dueDate;
   bool _userPickedDue = false;
@@ -60,7 +60,7 @@ class _TaskFormDialogState extends ConsumerState<_TaskFormDialog> {
     _descriptionController = SpellCheckController()
       ..text = t?.description ?? '';
     _snoozeNoteControllers = (t?.snoozeEntries ?? const [])
-        .map((e) => TextEditingController(text: e.note ?? ''))
+        .map((e) => SpellCheckController()..text = e.note ?? '')
         .toList();
     _priority = t?.priority ?? 0;
     _userPickedDue = t != null;
@@ -460,7 +460,7 @@ class _TaskFormDialogState extends ConsumerState<_TaskFormDialog> {
                       ),
                     ),
                     const SizedBox(height: 4),
-                    TextField(
+                    LexiconSpellTextFormField(
                       key: ValueKey('snooze_note_$i'),
                       controller: _snoozeNoteControllers[i],
                       decoration: const InputDecoration(
@@ -471,6 +471,7 @@ class _TaskFormDialogState extends ConsumerState<_TaskFormDialog> {
                       ),
                       minLines: 1,
                       maxLines: 3,
+                      textCapitalization: TextCapitalization.sentences,
                     ),
                     if (i < widget.task!.snoozeEntries.length - 1)
                       const SizedBox(height: 8),

@@ -125,6 +125,7 @@ class LampIssueHelpers {
       LampIssueType.scientificSerial => Icons.functions_outlined,
       LampIssueType.setMasterSelfReference => Icons.link_off_outlined,
       LampIssueType.setMasterCycle => Icons.account_tree_outlined,
+      LampIssueType.setMasterMissingTarget => Icons.gps_off_outlined,
     };
   }
 
@@ -205,12 +206,52 @@ class LampIssueHelpers {
       'unknown_id',
       'duplicate_asset_no',
       'duplicate_model_serial',
+      'serial_scientific_notation',
       'set_master_self_reference',
       'set_master_missing_target',
       'set_master_cycle',
+      'network_invalid_ip',
+      'network_duplicate_ip',
+      'network_duplicate_name',
+      'network_name_code_mismatch',
+      'network_code_not_found',
+      'network_duplicate_hostname',
+      'network_hostname_unmatched',
+      'network_no_hostname',
+      'network_ip_in_comments',
+      'network_model_mismatch',
+      'missing_sheet',
+      'missing_primary_key',
+      'duplicate_code_discarded',
+      'xls_conversion_failed',
+      'network_sheet_invalid',
     ];
     final i = order.indexOf(raw);
     return i >= 0 ? i : 999;
+  }
+
+  /// Χρώμα οικογένειας επίλυσης για κεφαλίδες ομάδων (ΓΕΝ-4).
+  static Color issueFamilyColor(String rawIssueType) {
+    final raw = rawIssueType.trim();
+    if (LampIssueResolutionController.isInformationalIssueType(raw)) {
+      return Colors.blueGrey;
+    }
+    switch (raw) {
+      case 'non_numeric_fk':
+      case 'unknown_id':
+        return Colors.indigo;
+      case 'duplicate_asset_no':
+      case 'duplicate_model_serial':
+      case 'serial_scientific_notation':
+        return Colors.orange;
+      case 'set_master_self_reference':
+      case 'set_master_missing_target':
+      case 'set_master_cycle':
+        return Colors.deepPurple;
+      default:
+        if (raw.startsWith('network_')) return Colors.teal;
+        return Colors.blueGrey;
+    }
   }
 
   static Map<String, List<Map<String, Object?>>> groupedIssuesByType(
@@ -335,12 +376,12 @@ class LampIssueEntryListTile extends StatelessWidget {
         const Divider(height: 1),
         ListTile(
           leading: const Icon(Icons.warning_amber),
-          title: Text(
+          title: SelectableText(
             'Οντότητα: $entityType | '
             'Προέλευση: $origin | '
             '${LampIssueHelpers.issueRowNumberLabel(issue)}: ${LampIssueHelpers.issueField(issue, 'row_number')}',
           ),
-          subtitle: Text(
+          subtitle: SelectableText(
             'Στήλη: ${LampIssueHelpers.issueField(issue, 'column_name')}\n'
             'Τιμή: ${LampIssueHelpers.issueField(issue, 'raw_value')}\n'
             '${LampIssueHelpers.issueField(issue, 'message')}',
@@ -370,6 +411,7 @@ class LampIssueGroupHeaderCard extends StatelessWidget {
     this.copySelectionMode = false,
     this.copySelected = false,
     this.onCopySelectionChanged,
+    this.onClearGroup,
   });
 
   final String rawIssueType;
@@ -389,93 +431,123 @@ class LampIssueGroupHeaderCard extends StatelessWidget {
   final bool copySelected;
   final ValueChanged<bool>? onCopySelectionChanged;
 
+  /// Εκκαθάριση ολόκληρης της ομάδας — μόνο για πληροφοριακούς τύπους
+  /// χωρίς οδηγό επίλυσης (ΓΕΝ-2).
+  final VoidCallback? onClearGroup;
+
   @override
   Widget build(BuildContext context) {
+    final familyColor = LampIssueHelpers.issueFamilyColor(rawIssueType);
     return Card(
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: copySelectionMode ? null : onToggleExpanded,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (copySelectionMode) ...[
-                Checkbox(
-                  value: copySelected,
-                  onChanged: onCopySelectionChanged == null
-                      ? null
-                      : (value) => onCopySelectionChanged!(value ?? false),
-                ),
-              ] else ...[
-                Icon(
-                  expanded ? Icons.expand_less : Icons.expand_more,
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+        child: Container(
+          decoration: BoxDecoration(
+            border: Border(
+              left: BorderSide(color: familyColor, width: 4),
+            ),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (copySelectionMode) ...[
+                  Checkbox(
+                    value: copySelected,
+                    onChanged: onCopySelectionChanged == null
+                        ? null
+                        : (value) => onCopySelectionChanged!(value ?? false),
+                  ),
+                ] else ...[
+                  Icon(
+                    expanded ? Icons.expand_less : Icons.expand_more,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                  const SizedBox(width: 8),
+                ],
+                Icon(Icons.category_outlined, color: familyColor),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Text(
+                    categoryLabel,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
                 const SizedBox(width: 8),
+                Text(
+                  '${issues.length}',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                if (lampIssueType != null) ...[
+                  const SizedBox(width: 4),
+                  IconButton(
+                    tooltip: '${lampIssueType!.label} (${issues.length})',
+                    visualDensity: VisualDensity.compact,
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(
+                      minWidth: 36,
+                      minHeight: 36,
+                    ),
+                    onPressed: canResolve ? onResolve : null,
+                    icon: resolvingIssueType == lampIssueType
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : Icon(LampIssueHelpers.resolveIssueIcon(lampIssueType!)),
+                  ),
+                ] else if (isNetworkCategory) ...[
+                  const SizedBox(width: 4),
+                  Tooltip(
+                    message: categoryLabel,
+                    child: Icon(
+                      LampIssueHelpers.resolveNetworkIssueIcon(rawIssueType),
+                      size: 20,
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  IconButton(
+                    tooltip: 'Επίλυση · $categoryLabel (${issues.length})',
+                    visualDensity: VisualDensity.compact,
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(
+                      minWidth: 36,
+                      minHeight: 36,
+                    ),
+                    onPressed: canResolveNetwork ? onResolveNetwork : null,
+                    icon: resolvingNetworkIssueType == rawIssueType
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.lan_outlined),
+                  ),
+                ] else if (onClearGroup != null) ...[
+                  const SizedBox(width: 4),
+                  IconButton(
+                    tooltip:
+                        'Εκκαθάριση ομάδας (${issues.length} πληροφοριακές '
+                        'εγγραφές)',
+                    visualDensity: VisualDensity.compact,
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(
+                      minWidth: 36,
+                      minHeight: 36,
+                    ),
+                    onPressed: onClearGroup,
+                    icon: Icon(
+                      Icons.delete_sweep_outlined,
+                      color: Theme.of(context).colorScheme.error,
+                    ),
+                  ),
+                ],
               ],
-              const Icon(Icons.category_outlined),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Text(
-                  categoryLabel,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                '${issues.length}',
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
-              if (lampIssueType != null) ...[
-                const SizedBox(width: 4),
-                IconButton(
-                  tooltip: '${lampIssueType!.label} (${issues.length})',
-                  visualDensity: VisualDensity.compact,
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(
-                    minWidth: 36,
-                    minHeight: 36,
-                  ),
-                  onPressed: canResolve ? onResolve : null,
-                  icon: resolvingIssueType == lampIssueType
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : Icon(LampIssueHelpers.resolveIssueIcon(lampIssueType!)),
-                ),
-              ] else if (isNetworkCategory) ...[
-                const SizedBox(width: 4),
-                Tooltip(
-                  message: categoryLabel,
-                  child: Icon(
-                    LampIssueHelpers.resolveNetworkIssueIcon(rawIssueType),
-                    size: 20,
-                  ),
-                ),
-                const SizedBox(width: 4),
-                IconButton(
-                  tooltip: 'Επίλυση · $categoryLabel (${issues.length})',
-                  visualDensity: VisualDensity.compact,
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(
-                    minWidth: 36,
-                    minHeight: 36,
-                  ),
-                  onPressed: canResolveNetwork ? onResolveNetwork : null,
-                  icon: resolvingNetworkIssueType == rawIssueType
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.lan_outlined),
-                ),
-              ],
-            ],
+            ),
           ),
         ),
       ),
@@ -501,12 +573,26 @@ Future<void> showIssueResolutionOrderInfo(BuildContext context) {
             'συχνά συγχώνευση ή διαγραφή διπλών γραμμών. Κατά τη διαγραφή, οι '
             'δείκτες κύριου εξοπλισμού αναδρομολογούνται προς την εγγραφή που '
             'διατηρείται.\n\n'
+            'Σειριακοί σε επιστημονική μορφή\n'
+            'Στόχος: αποκατάσταση σειριακών που το Excel μετέτρεψε σε αριθμητική '
+            'μορφή (π.χ. 4,9E+11), με αναζήτηση στην παλιά Λάμπα και καταχώρηση '
+            'του σωστού.\n\n'
             'Κύριος εξοπλισμός που δείχνει στον ίδιο εξοπλισμό\n'
             'Στόχος: αφαίρεση αυτοαναφορών (ο δείκτης κύριου εξοπλισμού δείχνει '
             'στον ίδιο κωδικό εξοπλισμού).\n\n'
+            'Κύριος εξοπλισμός χωρίς υπαρκτό στόχο\n'
+            'Στόχος: σύνδεση του δείκτη με υπαρκτό εξοπλισμό ή εκκαθάρισή του.\n\n'
             'Κύκλοι ιεραρχίας κύριου εξοπλισμού\n'
             'Στόχος: σπάσιμο κύκλων στην ιεραρχία (συχνά με καθαρισμό του δείκτη '
-            'κύριου εξοπλισμού σε επιλεγμένες γραμμές).',
+            'κύριου εξοπλισμού σε επιλεγμένες γραμμές).\n\n'
+            'Προβλήματα δικτύου\n'
+            'Στόχος: πρώτα διόρθωση στοιχείων δικτύου πάνω στη βάση (μη έγκυρη/διπλή '
+            'IP, διπλό ή αναντίστοιχο όνομα), έπειτα αντιστοίχιση των εγγραφών της '
+            'ουράς import σε εξοπλισμό, και τέλος οι περιπτώσεις προς επιβεβαίωση '
+            '(IP μέσα στα σχόλια, ασυμφωνία μοντέλου).\n\n'
+            'Πληροφοριακές ομάδες\n'
+            'Στόχος: δεν απαιτούν επίλυση — καθαρίζονται με το κουμπί «Εκκαθάριση '
+            'ομάδας» αφού ενημερωθείς.',
             style: Theme.of(context).textTheme.bodyMedium,
           ),
         ),
@@ -732,7 +818,13 @@ class _LampIssuesTabState extends State<LampIssuesTab> {
       if (ref.isHeader) {
         final lampIssueType =
             LampIssueHelpers.lampIssueTypeForRaw(rawIssueType);
-        final isNetworkCategory =
+        final isInformational =
+            LampIssueResolutionController.isInformationalIssueType(
+          rawIssueType,
+        );
+        // Οι πληροφοριακοί τύποι υπερισχύουν: το network_sheet_invalid δεν
+        // πρέπει να πάρει κουμπί επίλυσης δικτύου (δεν έχει τίποτα να επιλύσει).
+        final isNetworkCategory = !isInformational &&
             LampIssueResolutionController.isNetworkIssueType(rawIssueType);
         final expanded = widget.issuesController.expandedIssueGroupKeys
             .contains(rawIssueType);
@@ -778,6 +870,10 @@ class _LampIssuesTabState extends State<LampIssuesTab> {
                       }
                     });
                   }
+                : null,
+            onClearGroup: isInformational
+                ? () => widget.resolutionController
+                    .clearInformationalIssueGroup(rawIssueType)
                 : null,
           ),
         );

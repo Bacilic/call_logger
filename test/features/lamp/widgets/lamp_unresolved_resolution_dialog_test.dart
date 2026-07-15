@@ -191,7 +191,7 @@ void main() {
           findsOneWidget,
         );
         expect(
-          find.widgetWithText(SelectableText, 'Βεβαιότητα: 0%'),
+          find.widgetWithText(SelectableText, 'Βεβαιότητα: Χαμηλή (0%)'),
           findsOneWidget,
         );
 
@@ -213,7 +213,7 @@ void main() {
           find.byWidgetPredicate(
             (widget) =>
                 widget is SelectableText &&
-                widget.data == 'Εξοπλισμός: 2350 · PC Γραφείου',
+                widget.data == 'Εξοπλισμός: PC Γραφείου (2350)',
           ),
           findsOneWidget,
         );
@@ -233,16 +233,34 @@ void main() {
       },
     );
 
+    testWidgets(
+      'εμφανίζει διακόπτη εμβέλειας «Εφαρμογή σε όλα τα υπόλοιπα ανεπίλυτα»',
+      (tester) async {
+        await openDialog(tester, onResult: (_) {});
+
+        expect(
+          find.widgetWithText(
+            CheckboxListTile,
+            'Εφαρμογή σε όλα τα υπόλοιπα ανεπίλυτα',
+          ),
+          findsOneWidget,
+        );
+
+        await dismissOpenDialog(tester);
+      },
+    );
+
     testWidgets('εμφανίζει τις νέες ενέργειες δίπλα στις υπάρχουσες', (tester) async {
       await openDialog(tester, onResult: (_) {});
 
       expect(find.text('Ακύρωση επίλυσης'), findsOneWidget);
-      expect(find.text('Παράλειψη όλων των ανεπίλυτων'), findsOneWidget);
-      expect(find.text('Παράλειψη τρέχουσας'), findsOneWidget);
+      expect(find.widgetWithText(OutlinedButton, 'Παράλειψη'), findsOneWidget);
+      expect(find.widgetWithText(FilledButton, 'Αναβολή'), findsOneWidget);
+      expect(find.text('Παράλειψη όλων των ανεπίλυτων'), findsNothing);
+      expect(find.text('Παράλειψη τρέχουσας'), findsNothing);
+      expect(find.text('Αναβολή όλων των ανεπίλυτων'), findsNothing);
       expect(find.text('Διόρθωση με κωδικό'), findsOneWidget);
       expect(find.widgetWithText(OutlinedButton, 'Εκκαθάριση πεδίου'), findsOneWidget);
-      expect(find.text('Αναβολή'), findsOneWidget);
-      expect(find.text('Αναβολή όλων των ανεπίλυτων'), findsOneWidget);
 
       await dismissOpenDialog(tester);
     });
@@ -321,7 +339,7 @@ void main() {
         onResult: (outcome) => captured = outcome,
       );
 
-      await tester.tap(find.text('Αναβολή'));
+      await tester.tap(find.widgetWithText(FilledButton, 'Αναβολή'));
       await tester.pump();
 
       expect(captured, isA<LampUnresolvedDeferCurrent>());
@@ -334,10 +352,77 @@ void main() {
         onResult: (outcome) => captured = outcome,
       );
 
-      await tester.tap(find.text('Αναβολή όλων των ανεπίλυτων'));
+      await tester.ensureVisible(
+        find.widgetWithText(
+          CheckboxListTile,
+          'Εφαρμογή σε όλα τα υπόλοιπα ανεπίλυτα',
+        ),
+      );
+      await tester.tap(
+        find.widgetWithText(
+          CheckboxListTile,
+          'Εφαρμογή σε όλα τα υπόλοιπα ανεπίλυτα',
+        ),
+      );
+      await tester.pump();
+      await tester.tap(find.widgetWithText(FilledButton, 'Αναβολή όλων'));
       await tester.pump();
 
       expect(captured, isA<LampUnresolvedDeferAll>());
+    });
+
+    testWidgets('Παράλειψη επιστρέφει LampUnresolvedSkipCurrent', (tester) async {
+      LampUnresolvedResolutionOutcome? captured;
+      await openDialog(
+        tester,
+        onResult: (outcome) => captured = outcome,
+      );
+
+      await tester.tap(find.widgetWithText(OutlinedButton, 'Παράλειψη'));
+      await tester.pump();
+
+      expect(captured, isA<LampUnresolvedSkipCurrent>());
+    });
+
+    testWidgets('Παράλειψη όλων επιστρέφει LampUnresolvedSkipAll', (tester) async {
+      LampUnresolvedResolutionOutcome? captured;
+      await openDialog(
+        tester,
+        onResult: (outcome) => captured = outcome,
+      );
+
+      await tester.ensureVisible(
+        find.widgetWithText(
+          CheckboxListTile,
+          'Εφαρμογή σε όλα τα υπόλοιπα ανεπίλυτα',
+        ),
+      );
+      await tester.tap(
+        find.widgetWithText(
+          CheckboxListTile,
+          'Εφαρμογή σε όλα τα υπόλοιπα ανεπίλυτα',
+        ),
+      );
+      await tester.pump();
+      await tester.tap(find.widgetWithText(OutlinedButton, 'Παράλειψη όλων'));
+      await tester.pump();
+
+      expect(captured, isA<LampUnresolvedSkipAll>());
+    });
+
+    testWidgets('Ακύρωση επίλυσης επιστρέφει LampUnresolvedCancelAll', (
+      tester,
+    ) async {
+      LampUnresolvedResolutionOutcome? captured;
+      await openDialog(
+        tester,
+        onResult: (outcome) => captured = outcome,
+      );
+
+      await tester.tap(find.text('Ακύρωση επίλυσης'));
+      await tester.pump();
+
+      expect(captured, isA<LampUnresolvedCancelAll>());
     });
 
     testWidgets('η διόρθωση με κωδικό χρησιμοποιεί autocomplete πεδίο', (

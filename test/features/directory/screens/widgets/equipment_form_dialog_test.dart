@@ -8,6 +8,7 @@ import 'dart:convert';
 import 'package:call_logger/core/database/database_helper.dart';
 import 'package:call_logger/core/models/remote_tool.dart';
 import 'package:call_logger/core/models/remote_tool_role.dart';
+import 'package:call_logger/core/widgets/info_hint_icon.dart';
 import 'package:call_logger/core/widgets/remote_tool_icon.dart';
 import 'package:call_logger/core/services/lookup_service.dart';
 import 'package:call_logger/features/calls/models/equipment_model.dart';
@@ -559,6 +560,40 @@ void main() {
           isFalse,
           reason: greekExpectMsg(
             'Η επιλογή «Όλα» καθαρίζει το αποκλειστικό εργαλείο',
+          ),
+        );
+      },
+    );
+
+    testWidgets(
+      'ζώνη Β: εμφανίζει InfoHintIcon στο πεδίο παραμέτρου απομακρυσμένης',
+      (tester) async {
+        tester.view.physicalSize = const Size(1600, 900);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        final container = ProviderContainer(
+          overrides: _equipmentFormProviderOverrides(),
+        );
+        addTearDown(container.dispose);
+
+        late EquipmentDirectoryNotifier notifier;
+        await tester.runAsync(() async {
+          await container.read(lookupServiceProvider.future);
+          notifier = container.read(equipmentDirectoryProvider.notifier);
+          await notifier.load();
+          await _openEquipmentFormInDialog(tester, container, notifier: notifier);
+        });
+
+        expect(find.text(_kNewEquipmentTitle), findsOneWidget);
+        expect(
+          find.byType(InfoHintIcon),
+          findsWidgets,
+          reason: greekExpectMsg(
+            'Το επεξηγηματικό εικονίδιο (i) εμφανίζεται στο πεδίο παραμέτρου',
           ),
         );
       },

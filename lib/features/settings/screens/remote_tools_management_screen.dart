@@ -6,11 +6,13 @@ import '../../../core/database/equipment_repository.dart';
 import '../../../core/models/remote_tool.dart';
 import '../../../core/models/remote_tool_arg.dart';
 import '../../../core/models/remote_tool_role.dart';
+import '../../../core/widgets/info_hint_icon.dart';
 import '../../../core/widgets/remote_tool_icon.dart';
 import '../../../core/widgets/reorder_grab_handle.dart';
 import '../../calls/provider/remote_paths_provider.dart';
 import '../../../core/services/settings_service.dart';
 import '../widgets/remote_tool_form/remote_tool_form_dialog.dart';
+import 'primary_tool_help_text.dart';
 
 /// Μετατροπή δεικτών [ReorderableListView] σε θέση 1-based για [reorderToolToPosition].
 int reorderedPositionOneBased(int oldIndex, int newIndex) {
@@ -795,26 +797,35 @@ class _CallsRemoteUiPanelState extends ConsumerState<_CallsRemoteUiPanel> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        DropdownButtonFormField<int?>(
-          key: ValueKey<int?>(_primaryId),
-          initialValue: _primaryId,
-          decoration: const InputDecoration(
-            labelText: 'Κύριο κουμπί (null = πρώτο ενεργό)',
-            border: OutlineInputBorder(),
-          ),
-          items: [
-            const DropdownMenuItem<int?>(
-              value: null,
-              child: Text('Αυτόματο (πρώτο ενεργό)'),
-            ),
-            ...active.map(
-              (t) => DropdownMenuItem<int?>(
-                value: t.id,
-                child: Text(t.name),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Expanded(
+              child: DropdownButtonFormField<int?>(
+                key: ValueKey<int?>(_primaryId),
+                initialValue: _primaryId,
+                decoration: const InputDecoration(
+                  labelText: 'Κύριο κουμπί (null = πρώτο ενεργό)',
+                  border: OutlineInputBorder(),
+                ),
+                items: [
+                  const DropdownMenuItem<int?>(
+                    value: null,
+                    child: Text('Αυτόματο (πρώτο ενεργό)'),
+                  ),
+                  ...active.map(
+                    (t) => DropdownMenuItem<int?>(
+                      value: t.id,
+                      child: Text(t.name),
+                    ),
+                  ),
+                ],
+                onChanged: (v) => _onPrimaryToolChanged(v),
               ),
             ),
+            const SizedBox(width: 8),
+            InfoHintIcon(message: PrimaryToolHelpText.build(active)),
           ],
-          onChanged: (v) => _onPrimaryToolChanged(v),
         ),
         const SizedBox(height: 8),
         SwitchListTile(

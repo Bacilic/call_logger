@@ -3,6 +3,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../../core/database/old_database/lamp_data_issue_type_labels.dart';
 import '../../../core/database/old_database/lamp_issue_resolution_service.dart';
 import '../../../core/database/old_database/lamp_scientific_serial.dart';
 import 'lamp_issue_row_context.dart';
@@ -12,24 +13,6 @@ typedef LampSerialExistsChecker = Future<bool> Function(
   String serial,
   int? exceptCode,
 );
-
-String _lampIssueColumnLabelEl(String? column) {
-  if (column == null || column.isEmpty) return '-';
-  switch (column.trim().toLowerCase()) {
-    case 'office':
-      return 'γραφείο';
-    case 'owner':
-      return 'υπάλληλος';
-    case 'model':
-      return 'μοντέλο';
-    case 'contract':
-      return 'συμβόλαιο';
-    case 'set_master':
-      return 'κύριος εξοπλισμός';
-    default:
-      return column;
-  }
-}
 
 Future<List<LampIssueResolutionDecision>?> showLampIssueManualReviewDialog({
   required BuildContext context,
@@ -238,6 +221,83 @@ class _ManualReviewCardState extends State<_ManualReviewCard> {
   Timer? _serialCheckDebounce;
   bool? _serialExistsElsewhere;
   bool _serialCheckInFlight = false;
+  int? _selectedDuplicateCode;
+  String? _selectedDuplicateActionKind;
+
+  bool get _isDuplicateGroupLayout {
+    if (widget.proposal.options.isEmpty) return false;
+    final rows = widget.proposal.metadata['rows'];
+    if (rows is! List || rows.isEmpty) return false;
+    return widget.proposal.options.every(
+      (option) => option.metadata['duplicateActionKind'] != null,
+    );
+  }
+
+  List<Map<String, Object?>> get _duplicateRows {
+    final rows = widget.proposal.metadata['rows'];
+    if (rows is! List) return const <Map<String, Object?>>[];
+    return <Map<String, Object?>>[
+      for (final row in rows)
+        if (row is Map<String, Object?>)
+          row
+        else if (row is Map)
+          Map<String, Object?>.from(row),
+    ];
+  }
+
+  int? _codeFromDuplicateRow(Map<String, Object?> row) {
+    final code = row['code'];
+    if (code is int) return code;
+    if (code is num) return code.toInt();
+    return int.tryParse(code?.toString() ?? '');
+  }
+
+  String _duplicateRowDropdownLabel(Map<String, Object?> row) {
+    final code = _codeFromDuplicateRow(row);
+    final description = row['description']?.toString().trim();
+    if (description != null && description.isNotEmpty) {
+      return '$code ($description)';
+    }
+    return '$code';
+  }
+
+  LampIssueResolutionOption? _duplicateOptionFor(
+    String? actionKind,
+    int? code,
+  ) {
+    if (actionKind == null || code == null) return null;
+    for (final option in widget.proposal.options) {
+      if (option.metadata['duplicateActionKind']?.toString() != actionKind) {
+        continue;
+      }
+      final keepCode = option.metadata['keepCode'];
+      final targetCode = option.metadata['targetCode'];
+      final keep = keepCode is int
+          ? keepCode
+          : int.tryParse(keepCode?.toString() ?? '');
+      final target = targetCode is int
+          ? targetCode
+          : int.tryParse(targetCode?.toString() ?? '');
+      if (keep == code || target == code) return option;
+    }
+    return null;
+  }
+
+  void _syncDuplicateSelection() {
+    widget.onChanged(
+      _duplicateOptionFor(_selectedDuplicateActionKind, _selectedDuplicateCode),
+    );
+  }
+
+  void _onDuplicateCodeChanged(int? code) {
+    setState(() => _selectedDuplicateCode = code);
+    _syncDuplicateSelection();
+  }
+
+  void _onDuplicateActionKindChanged(String? actionKind) {
+    setState(() => _selectedDuplicateActionKind = actionKind);
+    _syncDuplicateSelection();
+  }
 
   bool get _isScientificSerialContext {
     if (widget.proposal.issueType == LampIssueType.scientificSerial) {
@@ -283,6 +343,15 @@ class _ManualReviewCardState extends State<_ManualReviewCard> {
   void initState() {
     super.initState();
     widget.textController.addListener(_onSerialInputChanged);
+    if (_isDuplicateGroupLayout) {
+      final rows = _duplicateRows;
+      if (rows.isNotEmpty) {
+        _selectedDuplicateCode = _codeFromDuplicateRow(rows.first);
+      }
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _syncDuplicateSelection();
+      });
+    }
   }
 
   @override
@@ -389,6 +458,7 @@ class _ManualReviewCardState extends State<_ManualReviewCard> {
     final selectedOption = widget.selectedOption;
     final selectedRequiresInput = selectedOption?.requiresTextInput ?? false;
     final rowContextLines = lampProposalRowContextLines(proposal);
+    final confidenceText = lampConfidenceDisplay(proposal);
     final cleanDigits = _cleanDigits;
     final showCleanDigitsLine =
         _isScientificSerialContext && cleanDigits != null && cleanDigits.isNotEmpty;
@@ -407,8 +477,14 @@ class _ManualReviewCardState extends State<_ManualReviewCard> {
               children: [
                 Text('#${widget.index + 1}', style: theme.textTheme.labelLarge),
                 SelectableText('Κωδικός εξοπλισμού: ${proposal.row ?? '-'}'),
-                SelectableText('Πεδίο: ${_lampIssueColumnLabelEl(proposal.column)}'),
-                SelectableText('Βεβαιότητα: ${proposal.confidence}%'),
+                SelectableText(
+                  'Πεδίο: ${lampDataIssueColumnDisplayLabel(proposal.column)}',
+                ),
+                if (confidenceText != null)
+                  Tooltip(
+                    message: lampConfidenceTooltip,
+                    child: SelectableText(confidenceText),
+                  ),
               ],
             ),
             const SizedBox(height: 8),
@@ -455,31 +531,95 @@ class _ManualReviewCardState extends State<_ManualReviewCard> {
             const Divider(height: 20),
             Text('Ενέργεια', style: theme.textTheme.labelLarge),
             const SizedBox(height: 4),
-            RadioGroup<LampIssueResolutionOption?>(
-              groupValue: selectedOption,
-              onChanged: widget.onChanged,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  RadioListTile<LampIssueResolutionOption?>(
-                    title: const Text('Παράλειψη / παραμένει ανοικτό'),
-                    value: null,
-                    dense: true,
-                    contentPadding: EdgeInsets.zero,
-                    visualDensity: VisualDensity.compact,
-                  ),
-                  for (final option in proposal.options)
-                    RadioListTile<LampIssueResolutionOption?>(
-                      title: Text(_displayResolutionOptionLabel(option)),
-                      subtitle: _resolutionOptionSubtitle(theme, option),
-                      value: option,
+            if (_isDuplicateGroupLayout) ...[
+              DropdownButtonFormField<int>(
+                isExpanded: true,
+                decoration: const InputDecoration(
+                  labelText: 'Εγγραφή:',
+                  border: OutlineInputBorder(),
+                  isDense: true,
+                ),
+                initialValue: _selectedDuplicateCode,
+                items: [
+                  for (final row in _duplicateRows)
+                    if (_codeFromDuplicateRow(row) != null)
+                      DropdownMenuItem<int>(
+                        value: _codeFromDuplicateRow(row),
+                        child: Text(_duplicateRowDropdownLabel(row)),
+                      ),
+                ],
+                onChanged: _onDuplicateCodeChanged,
+              ),
+              const SizedBox(height: 8),
+              RadioGroup<String?>(
+                groupValue: _selectedDuplicateActionKind,
+                onChanged: _onDuplicateActionKindChanged,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    RadioListTile<String?>(
+                      title: const Text('Παράλειψη / παραμένει ανοικτό'),
+                      value: null,
                       dense: true,
                       contentPadding: EdgeInsets.zero,
                       visualDensity: VisualDensity.compact,
                     ),
-                ],
+                    RadioListTile<String?>(
+                      title: const Text(
+                        'Κράτα την και καθάρισε την τιμή στις άλλες εγγραφές',
+                      ),
+                      value: 'clear',
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      visualDensity: VisualDensity.compact,
+                    ),
+                    RadioListTile<String?>(
+                      title: const Text(
+                        'Κράτα την και διέγραψε τις άλλες εγγραφές',
+                      ),
+                      value: 'delete',
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      visualDensity: VisualDensity.compact,
+                    ),
+                    RadioListTile<String?>(
+                      title: const Text(
+                        'Δώσε νέα τιμή σε αυτή την εγγραφή',
+                      ),
+                      value: 'reassign',
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      visualDensity: VisualDensity.compact,
+                    ),
+                  ],
+                ),
               ),
-            ),
+            ] else
+              RadioGroup<LampIssueResolutionOption?>(
+                groupValue: selectedOption,
+                onChanged: widget.onChanged,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    RadioListTile<LampIssueResolutionOption?>(
+                      title: const Text('Παράλειψη / παραμένει ανοικτό'),
+                      value: null,
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      visualDensity: VisualDensity.compact,
+                    ),
+                    for (final option in proposal.options)
+                      RadioListTile<LampIssueResolutionOption?>(
+                        title: Text(_displayResolutionOptionLabel(option)),
+                        subtitle: _resolutionOptionSubtitle(theme, option),
+                        value: option,
+                        dense: true,
+                        contentPadding: EdgeInsets.zero,
+                        visualDensity: VisualDensity.compact,
+                      ),
+                  ],
+                ),
+              ),
             if (selectedRequiresInput) ...[
               const SizedBox(height: 8),
               TextField(

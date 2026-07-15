@@ -4,6 +4,41 @@ import '../../utils/user_identity_normalizer.dart';
 import 'lamp_issue_matching_engine.dart';
 import 'lamp_issue_resolution_models.dart';
 
+class LampFkLabelMaps {
+  const LampFkLabelMaps({
+    required this.modelLabelById,
+    required this.officeLabelById,
+    required this.ownerLabelById,
+  });
+
+  final Map<int, String> modelLabelById;
+  final Map<int, String> officeLabelById;
+  final Map<int, String> ownerLabelById;
+
+  static const LampFkLabelMaps empty = LampFkLabelMaps(
+    modelLabelById: <int, String>{},
+    officeLabelById: <int, String>{},
+    ownerLabelById: <int, String>{},
+  );
+}
+
+/// Ετικέτα FK ως «Όνομα (id)» ή σκέτο id αν λείπει όνομα.
+String lampLabelledId(Map<int, String> labels, Object? id) {
+  if (id == null) return '-';
+  int? asInt;
+  if (id is int) {
+    asInt = id;
+  } else if (id is num) {
+    asInt = id.toInt();
+  } else {
+    asInt = int.tryParse(id.toString().trim());
+  }
+  if (asInt == null) return '-';
+  final label = labels[asInt];
+  if (label != null && label.isNotEmpty) return '$label ($asInt)';
+  return asInt.toString();
+}
+
 class LampIssueResolutionSupport {
   LampIssueResolutionSupport(this._matching);
 
@@ -128,10 +163,64 @@ class LampIssueResolutionSupport {
     };
   }
 
-  String equipmentSummary(Map<String, Object?> row) {
+  String equipmentSummary(
+    Map<String, Object?> row, {
+    LampFkLabelMaps labels = LampFkLabelMaps.empty,
+  }) {
     return 'κωδικός=${row['code']} · ${text(row['description']) ?? '-'} · '
-        'μοντέλο=${row['model'] ?? '-'} · σειριακός=${row['serial_no'] ?? '-'} · '
-        'γραφείο=${row['office'] ?? '-'} · υπάλληλος=${row['owner'] ?? '-'}';
+        'μοντέλο=${lampLabelledId(labels.modelLabelById, row['model'])} · '
+        'σειριακός=${row['serial_no'] ?? '-'} · '
+        'γραφείο=${lampLabelledId(labels.officeLabelById, row['office'])} · '
+        'υπάλληλος=${lampLabelledId(labels.ownerLabelById, row['owner'])}';
+  }
+
+  Future<LampFkLabelMaps> loadFkLabelMaps(Database db) async {
+    final modelLabelById = <int, String>{};
+    final modelRows = await db.query(
+      'model',
+      columns: <String>['model', 'model_name'],
+    );
+    for (final row in modelRows) {
+      final id = toInt(row['model']);
+      final label = text(row['model_name']);
+      if (id != null && label != null) {
+        modelLabelById[id] = label;
+      }
+    }
+
+    final officeLabelById = <int, String>{};
+    final officeRows = await db.query(
+      'offices',
+      columns: <String>['office', 'office_name', 'department_name'],
+    );
+    for (final row in officeRows) {
+      final id = toInt(row['office']);
+      if (id == null) continue;
+      final officeName = text(row['office_name']) ?? '';
+      final departmentName = text(row['department_name']) ?? '';
+      final label = departmentName.isNotEmpty
+          ? '$officeName $departmentName'
+          : officeName;
+      if (label.isNotEmpty) {
+        officeLabelById[id] = label;
+      }
+    }
+
+    final ownerLabelById = <int, String>{};
+    final ownerRows = await db.query('owners');
+    for (final row in ownerRows) {
+      final id = toInt(row['owner']);
+      final label = ownerLabel(row);
+      if (id != null && label.isNotEmpty) {
+        ownerLabelById[id] = label;
+      }
+    }
+
+    return LampFkLabelMaps(
+      modelLabelById: modelLabelById,
+      officeLabelById: officeLabelById,
+      ownerLabelById: ownerLabelById,
+    );
   }
 
   Future<Map<String, Object?>?> equipmentByCode(Database db, int code) async {

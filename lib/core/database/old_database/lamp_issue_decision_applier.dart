@@ -210,6 +210,22 @@ class LampIssueDecisionApplier {
         final equipmentOffice = equipmentOfficeRows.isEmpty
             ? null
             : _support.toInt(equipmentOfficeRows.first['office']);
+        var officeLogDisplay = equipmentOffice?.toString() ?? '(κενό)';
+        if (equipmentOffice != null) {
+          final officeRows = await txn.query(
+            'offices',
+            columns: <String>['office_name'],
+            where: 'office = ?',
+            whereArgs: <Object?>[equipmentOffice],
+            limit: 1,
+          );
+          if (officeRows.isNotEmpty) {
+            final officeName = _support.text(officeRows.first['office_name']);
+            if (officeName != null) {
+              officeLogDisplay = '$officeName ($equipmentOffice)';
+            }
+          }
+        }
 
         var ownerId = await _existingOwnerIdByIdentity(
           txn,
@@ -236,7 +252,7 @@ class LampIssueDecisionApplier {
               'Δημιουργήθηκε νέος υπάλληλος: id=$ownerId, '
               'επώνυμο=${lastName ?? '(κενό)'}, '
               'μικρό όνομα=${firstName ?? '(χωρίς μικρό όνομα)'}, '
-              'γραφείο=${equipmentOffice ?? '(κενό)'}.',
+              'γραφείο=$officeLogDisplay.',
             ),
           );
           created = true;

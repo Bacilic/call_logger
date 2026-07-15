@@ -68,6 +68,8 @@ class LampIssueResolutionService {
         _duplicateAnalyzers.analyzeSetMasterSelfReferences(db),
       LampIssueType.setMasterCycle =>
         _duplicateAnalyzers.analyzeSetMasterCycles(db),
+      LampIssueType.setMasterMissingTarget =>
+        _duplicateAnalyzers.analyzeSetMasterMissingTargets(db),
     };
   }
 
