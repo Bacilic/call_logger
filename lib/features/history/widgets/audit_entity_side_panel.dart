@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/database/audit_service.dart';
+import '../../../core/utils/user_facing_error_messages.dart';
 import '../../audit/models/audit_log_model.dart';
 import '../../audit/models/audit_reference_labels.dart';
 import '../../audit/providers/audit_providers.dart';
@@ -201,7 +202,7 @@ class AuditEntitySidePanel extends ConsumerWidget {
         ),
       ),
       error: (e, _) => Text(
-        'Σφάλμα φόρτωσης: $e',
+        'Σφάλμα φόρτωσης: ${humanizeUserFacingError(e)}',
         style: theme.textTheme.bodySmall?.copyWith(
           color: theme.colorScheme.error,
         ),

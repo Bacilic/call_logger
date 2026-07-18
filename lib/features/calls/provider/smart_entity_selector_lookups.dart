@@ -286,6 +286,45 @@ mixin SmartEntitySelectorLookupsMixin on Notifier<SmartEntitySelectorState> {
         }
         return;
       }
+      final sharedDeptIds = users
+          .map((u) => u.departmentId)
+          .whereType<int>()
+          .toSet();
+      final allShareSameDepartment = users.isNotEmpty &&
+          users.every((u) => u.departmentId != null) &&
+          sharedDeptIds.length == 1;
+      final sharedDeptId =
+          allShareSameDepartment ? sharedDeptIds.single : null;
+      final sharedDeptName = sharedDeptId == null
+          ? null
+          : lookup.departmentIdToName[sharedDeptId];
+      final canAutofillSharedDepartment =
+          state.departmentText.trim().isEmpty &&
+          state.selectedDepartmentId == null;
+
+      // Αν ο ήδη δεμένος καλούντας είναι ένας από τους κατόχους, μην τον
+      // ξεδέσεις (κοινόχρηστο τηλέφωνο βάρδιας μετά από autofill εξοπλισμού).
+      final selectedCallerId = state.selectedCaller?.id;
+      final selectedCallerIsOwner = selectedCallerId != null &&
+          users.any((u) => u.id == selectedCallerId);
+      if (selectedCallerIsOwner) {
+        state = state.copyWith(
+          clearPhoneCandidates: true,
+          callerCandidates: [],
+          isPhoneAmbiguous: false,
+          callerNoMatch: false,
+          departmentText:
+              (canAutofillSharedDepartment && sharedDeptName != null)
+              ? sharedDeptName
+              : state.departmentText,
+          selectedDepartmentId:
+              (canAutofillSharedDepartment && sharedDeptId != null)
+              ? sharedDeptId
+              : state.selectedDepartmentId,
+        );
+        return;
+      }
+
       state = state.copyWith(
         clearPhoneCandidates: true,
         callerCandidates: users,
@@ -296,6 +335,13 @@ mixin SmartEntitySelectorLookupsMixin on Notifier<SmartEntitySelectorState> {
         isEquipmentAmbiguous: false,
         callerNoMatch: false,
         equipmentNoMatch: false,
+        departmentText: (canAutofillSharedDepartment && sharedDeptName != null)
+            ? sharedDeptName
+            : state.departmentText,
+        selectedDepartmentId:
+            (canAutofillSharedDepartment && sharedDeptId != null)
+            ? sharedDeptId
+            : state.selectedDepartmentId,
       );
     } finally {
       _host._recomputeConflicts(SelectorField.phone, lookup);
@@ -505,9 +551,22 @@ mixin SmartEntitySelectorLookupsMixin on Notifier<SmartEntitySelectorState> {
         );
         return;
       }
-      if (list.length > 1) {
+
+      // Ακριβής κωδικός (π.χ. «506») υπερισχύει των μερικών ταιριασμάτων
+      // (5067, 5068, …) κατά την κατοχύρωση — όχι κατά τις προτάσεις πληκτρολόγησης.
+      final queryNorm = SearchTextNormalizer.normalizeForSearch(query);
+      final exactMatches = list
+          .where(
+            (e) =>
+                SearchTextNormalizer.normalizeForSearch(e.code ?? '') ==
+                queryNorm,
+          )
+          .toList();
+      final resolved = exactMatches.length == 1 ? exactMatches : list;
+
+      if (resolved.length > 1) {
         state = state.copyWith(
-          equipmentCandidates: list,
+          equipmentCandidates: resolved,
           clearSelectedEquipment: true,
           isEquipmentAmbiguous: true,
           equipmentNoMatch: false,
@@ -515,7 +574,7 @@ mixin SmartEntitySelectorLookupsMixin on Notifier<SmartEntitySelectorState> {
         return;
       }
 
-      final equipment = list.first;
+      final equipment = resolved.first;
       final resolvedText = equipment.code?.trim().isNotEmpty == true
           ? equipment.code!.trim()
           : query;

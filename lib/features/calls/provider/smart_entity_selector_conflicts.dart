@@ -140,15 +140,20 @@ mixin SmartEntitySelectorConflictsMixin on Notifier<SmartEntitySelectorState> {
     // ── Τμήμα ──
     if (source != SelectorField.department &&
         state.departmentText.trim().isNotEmpty &&
-        truthDeptId != null &&
-        (state.selectedDepartmentId == null ||
-            state.selectedDepartmentId != truthDeptId)) {
-      _addConflict(
-        out,
-        SelectorField.department,
-        ConflictSeverity.mismatch,
-        '$label ανήκει στο τμήμα: ${truthDeptName ?? '—'}',
-      );
+        truthDeptId != null) {
+      final selectedDeptId = state.selectedDepartmentId;
+      final departmentDiffers = selectedDeptId != null
+          ? selectedDeptId != truthDeptId
+          : SearchTextNormalizer.normalizeForSearch(state.departmentText) !=
+              SearchTextNormalizer.normalizeForSearch(truthDeptName ?? '');
+      if (departmentDiffers) {
+        _addConflict(
+          out,
+          SelectorField.department,
+          ConflictSeverity.mismatch,
+          '$label ανήκει στο τμήμα: ${truthDeptName ?? '—'}',
+        );
+      }
     }
 
     // ── Τηλέφωνο ──

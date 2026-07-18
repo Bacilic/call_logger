@@ -3,6 +3,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/utils/user_facing_error_messages.dart';
 import '../models/dashboard_date_preset.dart';
 
 class DatePresetButton extends StatelessWidget {
@@ -185,7 +186,7 @@ class FilterPane extends StatelessWidget {
                   child: LinearProgressIndicator(),
                 ),
                 error: (e, _) => Text(
-                  'Σφάλμα φόρτωσης τμημάτων: $e',
+                  'Σφάλμα φόρτωσης τμημάτων: ${humanizeUserFacingError(e)}',
                   style: TextStyle(color: theme.colorScheme.error),
                 ),
               ),

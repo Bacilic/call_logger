@@ -90,6 +90,13 @@ class PhoneDepartmentPolicy {
       if (usage.hasUserOwners) {
         for (final u in svc.findUsersByPhone(phone)) {
           if (editingUserId != null && u.id == editingUserId) continue;
+          // Βάρδια ίδιου τμήματος: συνάδελφοι του target δεν είναι σύγκρουση.
+          // Χωρίς targetDepartmentId κρατάμε αυστηρή συμπεριφορά.
+          if (targetDepartmentId != null &&
+              u.departmentId != null &&
+              u.departmentId == targetDepartmentId) {
+            continue;
+          }
           final label = _userOwnerLabel(u);
           if (label.isNotEmpty) otherOwners.add(label);
         }

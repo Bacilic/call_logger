@@ -8,6 +8,7 @@ import '../config/app_config.dart';
 import '../services/settings_service.dart';
 import '../utils/search_text_normalizer.dart';
 import 'database_access_probe.dart';
+import 'database_file_classifier.dart';
 import 'database_init_result.dart';
 import 'database_init_progress_provider.dart';
 import 'database_lexicon_open_normalizations.dart';
@@ -185,6 +186,10 @@ class DatabaseHelper with DatabaseTableInspectionMixin {
       await createNewDatabaseFile(dbPath);
     }
     _isUsingLocalDb = true;
+    await _ensureCompatibleDatabaseFile(
+      dbPath,
+      progressNotifier: progressNotifier,
+    );
     final timeoutSeconds = await _resolveDatabaseOpenTimeoutSeconds();
     Database db;
     try {
@@ -203,10 +208,10 @@ class DatabaseHelper with DatabaseTableInspectionMixin {
     }
     try {
       await validateSchema(db, dbPath);
-    } catch (_) {
+    } catch (e) {
       await db.close();
       _database = null;
-      rethrow;
+      throw _enrichSchemaValidationException(e);
     }
     await db.execute('PRAGMA journal_mode = WAL;');
     return db;
@@ -362,6 +367,11 @@ class DatabaseHelper with DatabaseTableInspectionMixin {
       progressNotifier?.setDiagnostic(probeDiagnostic);
     }
 
+    await _ensureCompatibleDatabaseFile(
+      dbPath,
+      progressNotifier: progressNotifier,
+    );
+
     for (var attempt = 1; attempt <= maxAttempts; attempt++) {
       if (attempt > 1) {
         await Future<void>.delayed(const Duration(milliseconds: 450));
@@ -382,10 +392,10 @@ class DatabaseHelper with DatabaseTableInspectionMixin {
         );
         try {
           await validateSchema(db, dbPath);
-        } catch (_) {
+        } catch (e) {
           await db.close();
           _database = null;
-          rethrow;
+          throw _enrichSchemaValidationException(e);
         }
         await db.execute('PRAGMA journal_mode = WAL;');
         progressNotifier?.setStep(
@@ -453,6 +463,52 @@ class DatabaseHelper with DatabaseTableInspectionMixin {
       );
     }
     throw DatabaseInitException(fallbackResult);
+  }
+
+  Never _enrichSchemaValidationException(Object error) {
+    if (error is DatabaseInitException && error.result.recoveryKind == null) {
+      throw DatabaseInitException(
+        error.result.copyWith(
+          recoveryKind: DatabaseInitRecoveryKind.corruptedOrMigration,
+        ),
+      );
+    }
+    throw error;
+  }
+
+  /// Ταξινόμηση αρχείου πριν το άνοιγμα με version/onCreate — αποτρέπει εγγραφή
+  /// σε ξένη βάση (π.χ. Λάμπας). Το [DatabaseFileKind.empty] επιτρέπει νόμιμη
+  /// δημιουργία σχήματος σε νέο κενό αρχείο.
+  Future<void> _ensureCompatibleDatabaseFile(
+    String dbPath, {
+    DatabaseInitProgressNotifier? progressNotifier,
+  }) async {
+    progressNotifier?.setStep('Έλεγχος τύπου αρχείου βάσης');
+    final kind = await classifyDatabaseFile(dbPath);
+    if (kind == DatabaseFileKind.callLogger ||
+        kind == DatabaseFileKind.empty) {
+      return;
+    }
+
+    final fileName = dbPath.split(RegExp(r'[/\\]')).last.trim();
+    final displayName = fileName.isEmpty ? dbPath : fileName;
+    final message = kind == DatabaseFileKind.lamp
+        ? 'Το αρχείο «$displayName» είναι η βάση δεδομένων της Λάμπας. '
+              'Η Καταγραφή Κλήσεων χρειάζεται το δικό της αρχείο βάσης '
+              '(π.χ. call_logger.db).'
+        : 'Το αρχείο «$displayName» δεν είναι βάση της Καταγραφής Κλήσεων.';
+
+    throw DatabaseInitException(
+      DatabaseInitResult(
+        status: DatabaseStatus.corruptedOrInvalid,
+        message: message,
+        details: 'Διαδρομή: $dbPath',
+        path: dbPath,
+        recoveryKind: kind == DatabaseFileKind.lamp
+            ? DatabaseInitRecoveryKind.wrongDatabaseLamp
+            : DatabaseInitRecoveryKind.wrongDatabaseUnknown,
+      ),
+    );
   }
 
   Future<int> _resolveDatabaseOpenTimeoutSeconds() async {

@@ -334,7 +334,8 @@ class _DepartmentsTabState extends ConsumerState<DepartmentsTab>
         : 'Σημειώθηκαν ως διαγραμμένα $deletedCount $label: $displayNames';
     final tooltipAllNames = names.isEmpty ? null : names.join(', ');
 
-    ScaffoldMessenger.of(context).showSnackBar(
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.showSnackBar(
       SnackBar(
         content: Row(
           children: [
@@ -348,8 +349,7 @@ class _DepartmentsTabState extends ConsumerState<DepartmentsTab>
             ),
             IconButton(
               icon: const Icon(Icons.close, size: 20),
-              onPressed: () =>
-                  ScaffoldMessenger.of(context).hideCurrentSnackBar(),
+              onPressed: () => messenger.hideCurrentSnackBar(),
               style: IconButton.styleFrom(
                 foregroundColor:
                     Theme.of(context).colorScheme.onInverseSurface,
@@ -363,9 +363,7 @@ class _DepartmentsTabState extends ConsumerState<DepartmentsTab>
         action: SnackBarAction(
           label: 'Αναίρεση',
           onPressed: () async {
-            await ref
-                .read(departmentDirectoryProvider.notifier)
-                .undoLastDelete();
+            await notifier.undoLastDelete();
           },
         ),
       ),

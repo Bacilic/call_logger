@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import '../services/settings_service.dart';
@@ -19,6 +20,9 @@ Future<void> _appSettingsSet(String key, String value) async {
   return SettingsRepository(db).saveSetting(key, value);
 }
 
+/// Αλυσίδα σειριοποίησης: νέες κλήσεις περιμένουν την προηγούμενη να τελειώσει.
+Future<void> _runDatabaseInitChecksGate = Future<void>.value();
+
 /// Αποτέλεσμα ελέγχου αρχικοποίησης (αποτέλεσμα + τρόπος λειτουργίας).
 class DatabaseInitRunnerResult {
   const DatabaseInitRunnerResult({
@@ -34,8 +38,28 @@ class DatabaseInitRunnerResult {
 /// Χρησιμοποιείται στην εκκίνηση και κατά την επιστροφή από Ρυθμίσεις.
 /// Αν [closeConnectionFirst] είναι true, κλείνει την τρέχουσα σύνδεση ώστε να
 /// χρησιμοποιηθεί η τρέχουσα διαδρομή από ρυθμίσεις (π.χ. μετά αλλαγή path).
+///
+/// Οι κλήσεις σειριοποιούνται: αν τρέχει ήδη άλλη, η νέα περιμένει να ολοκληρωθεί.
 Future<DatabaseInitRunnerResult> runDatabaseInitChecks({
   bool closeConnectionFirst = false,
+  DatabaseInitProgressNotifier? progressNotifier,
+}) async {
+  final previous = _runDatabaseInitChecksGate;
+  final gate = Completer<void>();
+  _runDatabaseInitChecksGate = gate.future;
+  try {
+    await previous;
+    return await _runDatabaseInitChecksUnlocked(
+      closeConnectionFirst: closeConnectionFirst,
+      progressNotifier: progressNotifier,
+    );
+  } finally {
+    gate.complete();
+  }
+}
+
+Future<DatabaseInitRunnerResult> _runDatabaseInitChecksUnlocked({
+  required bool closeConnectionFirst,
   DatabaseInitProgressNotifier? progressNotifier,
 }) async {
   progressNotifier?.setStep('Έλεγχος διαδρομής', clearDiagnosticInfo: true);
@@ -138,12 +162,43 @@ Future<DatabaseInitResult> _attachLockDiagnostic(
       dbPath,
     );
     if (diagnostic.trim().isEmpty) return result;
-    final merged = _mergeDetails(result.details, diagnostic);
+
+    final foundProcess = _lockDiagnosticFoundProcess(diagnostic);
+    if (!foundProcess) {
+      // Χωρίς εντοπισμένη διεργασία: μην ισχυριζόμαστε κλείδωμα από άλλη εφαρμογή.
+      progressNotifier?.setDiagnostic(diagnostic);
+      return result.copyWith(
+        details: _mergeDetails(result.details, diagnostic),
+      );
+    }
+
+    var details = result.details;
+    if (!_detailsMentionOtherAppLock(details)) {
+      details = _mergeDetails(
+        details,
+        'Ελέγξτε αν άλλη εφαρμογή κρατά το ίδιο αρχείο .db.',
+      );
+    }
+    final merged = _mergeDetails(details, diagnostic);
     progressNotifier?.setDiagnostic(diagnostic);
     return result.copyWith(details: merged);
   } catch (_) {
     return result;
   }
+}
+
+bool _lockDiagnosticFoundProcess(String diagnostic) {
+  final d = diagnostic.trim();
+  if (d.isEmpty) return false;
+  if (d.contains('Δεν εντοπίστηκε διεργασία')) return false;
+  if (d.startsWith('Αποτυχία lock diagnostics')) return false;
+  return true;
+}
+
+bool _detailsMentionOtherAppLock(String? details) {
+  final d = details?.toLowerCase() ?? '';
+  return d.contains('άλλη εφαρμογή κρατά') ||
+      (d.contains('άλλη διεργασία') && d.contains('αρχείο'));
 }
 
 String _mergeDetails(String? current, String diagnostic) {

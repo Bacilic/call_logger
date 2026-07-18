@@ -214,8 +214,10 @@ class _CallHeaderFormState extends ConsumerState<CallHeaderForm> {
         }
       }
 
+      if (!context.mounted) return;
       final msg = await notifier.associateCurrentIfNeeded(
         updatePrimaryDepartment: updatePrimaryDepartment,
+        context: context,
       );
       if (context.mounted && msg != null) {
         messenger.showSnackBar(SnackBar(content: Text(msg)));

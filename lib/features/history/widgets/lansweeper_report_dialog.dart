@@ -7,6 +7,7 @@ import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/widgets/dialog_snackbar_scope.dart';
+import '../../../core/utils/user_facing_error_messages.dart';
 import '../../../core/services/ai_prompt_template_controller.dart';
 import '../../../core/services/ai_ticket_suggestion_service.dart';
 import '../../../core/services/lansweeper_sync_service.dart';
@@ -688,7 +689,11 @@ class _LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
               child: callsAsync.when(
                 loading: () => const Center(child: CircularProgressIndicator()),
                 error: (e, _) =>
-                    Center(child: Text('Σφάλμα φόρτωσης κλήσεων: $e')),
+                    Center(
+                      child: Text(
+                        'Σφάλμα φόρτωσης κλήσεων: ${humanizeUserFacingError(e)}',
+                      ),
+                    ),
                 data: (calls) {
                   final allItems = LansweeperReportItemMapper.toItems(calls);
                   final items = _filterReportItems(allItems);
@@ -1000,7 +1005,9 @@ class _LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
                                       error: (e, _) => Card(
                                         child: Padding(
                                           padding: const EdgeInsets.all(12),
-                                          child: Text('Σφάλμα ιστορικού: $e'),
+                                          child: Text(
+                                            'Σφάλμα ιστορικού: ${humanizeUserFacingError(e)}',
+                                          ),
                                         ),
                                       ),
                                       data: (links) =>

@@ -1,4 +1,5 @@
 import '../../../../core/widgets/dialog_snackbar_scope.dart';
+import '../../../../core/widgets/draggable_dialog_shell.dart';
 import 'package:flutter/material.dart';
 
 import '../../../../core/database/database_helper.dart';
@@ -266,8 +267,10 @@ class _CategoryFormDialogState extends State<CategoryFormDialog>
         if (didPop) return;
         await _requestClose();
       },
-      child: AlertDialog(
+      child: DraggableDialogShell(
         title: Text(_isEdit ? 'Επεξεργασία κατηγορίας' : 'Νέα κατηγορία'),
+        builder: (titleHandle) => AlertDialog(
+        title: titleHandle,
         content: SizedBox(
           width: 400,
           child: TextField(
@@ -300,6 +303,7 @@ class _CategoryFormDialogState extends State<CategoryFormDialog>
             child: const Text('Αποθήκευση'),
           ),
         ],
+      ),
       ),
       ),
     );

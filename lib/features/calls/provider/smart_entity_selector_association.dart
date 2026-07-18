@@ -4,6 +4,50 @@ part of 'smart_entity_selector_provider.dart';
 mixin SmartEntitySelectorAssociationMixin on Notifier<SmartEntitySelectorState> {
   SmartEntitySelectorNotifier get _host => this as SmartEntitySelectorNotifier;
 
+  /// Εμφανίζει τον υπάρχοντα διάλογο σύγκρουσης αν χρειάζεται· επιστρέφει το
+  /// τηλέφωνο προς σύνδεση ή null αν ο χρήστης ακύρωσε / δεν υπάρχει context.
+  Future<String?> _confirmAndPreparePhoneAssociation({
+    required BuildContext? context,
+    required PhoneRepository phonesRepo,
+    required String phone,
+    required int? targetDepartmentId,
+    required int? editingUserId,
+    required String userDisplayName,
+    required String targetDepartmentName,
+  }) async {
+    final trimmed = phone.trim();
+    if (trimmed.isEmpty) return null;
+
+    final conflicts = PhoneDepartmentPolicy.findConflictsForUserAssignment(
+      phones: [trimmed],
+      targetDepartmentId: targetDepartmentId,
+      editingUserId: editingUserId,
+    );
+    if (conflicts.isEmpty) return trimmed;
+
+    if (context == null || !context.mounted) {
+      return null;
+    }
+
+    final result = await showUserPhoneDepartmentConflictDialog(
+      context,
+      conflicts: conflicts,
+      userDisplayName: userDisplayName,
+      targetDepartmentName: targetDepartmentName,
+      targetDepartmentId: targetDepartmentId,
+    );
+    if (result == null) return null;
+
+    await PhoneDepartmentPolicy.applyUserPhoneConflictResolutions(
+      phones: phonesRepo,
+      resolutions: result,
+      targetDepartmentId: targetDepartmentId,
+    );
+    ref.invalidate(lookupServiceProvider);
+    await ref.read(lookupServiceProvider.future);
+    return trimmed;
+  }
+
   void _resetAssociationQuickTaskCycle() {
     _host._associationQuickTaskId = null;
     _host._callerAwaitingPhoneAssociation = false;
@@ -213,6 +257,7 @@ mixin SmartEntitySelectorAssociationMixin on Notifier<SmartEntitySelectorState> 
 
   Future<String?> associateCurrentIfNeeded({
     bool updatePrimaryDepartment = false,
+    BuildContext? context,
   }) async {
     final lookupForAssoc = ref.read(lookupServiceProvider).value?.service;
     if (!state.needsAssociation(lookupForAssoc)) return null;
@@ -254,7 +299,35 @@ mixin SmartEntitySelectorAssociationMixin on Notifier<SmartEntitySelectorState> 
         );
       }
       try {
-        final parsedPhones = PhoneListParser.splitPhones(phone);
+        var parsedPhones = PhoneListParser.splitPhones(phone);
+        String? phoneForAssociation = phone;
+        if (parsedPhones.isNotEmpty) {
+          final dialogContext = context;
+          if (dialogContext != null && !dialogContext.mounted) {
+            parsedPhones = <String>[];
+            phoneForAssociation = null;
+          } else {
+            final prepared = await _confirmAndPreparePhoneAssociation(
+              context: dialogContext,
+              phonesRepo: phones,
+              phone: parsedPhones.first,
+              targetDepartmentId: departmentId,
+              editingUserId: null,
+              userDisplayName: name,
+              targetDepartmentName: departmentId != null
+                  ? (lookup?.departmentIdToName[departmentId] ??
+                        deptTextRaw)
+                  : deptTextRaw,
+            );
+            if (prepared == null) {
+              parsedPhones = <String>[];
+              phoneForAssociation = null;
+            } else {
+              parsedPhones = PhoneListParser.splitPhones(prepared);
+              phoneForAssociation = prepared;
+            }
+          }
+        }
         final userId = await users.insertUser(
           firstName: parsed.firstName,
           lastName: parsed.lastName,
@@ -264,7 +337,7 @@ mixin SmartEntitySelectorAssociationMixin on Notifier<SmartEntitySelectorState> 
 
         await users.updateAssociationsIfNeeded(
           userId,
-          phone,
+          phoneForAssociation,
           equipmentCode.isNotEmpty ? equipmentCode : null,
         );
 
@@ -384,7 +457,7 @@ mixin SmartEntitySelectorAssociationMixin on Notifier<SmartEntitySelectorState> 
           equipment: true,
           departments: true,
         );
-        return 'Σφάλμα αποθήκευσης: $e';
+        return 'Σφάλμα αποθήκευσης: ${humanizeUserFacingError(e)}';
       }
     }
 
@@ -419,9 +492,36 @@ mixin SmartEntitySelectorAssociationMixin on Notifier<SmartEntitySelectorState> 
     final newEntityEligible =
         newPhoneRow || newEquipmentRow || newDepartmentRow;
     try {
+      String? phoneToLink = phone;
+      if (phoneToLink != null && phoneToLink.isNotEmpty) {
+        final caller = state.selectedCaller;
+        final targetDeptId = caller?.departmentId ??
+            state.selectedDepartmentId ??
+            (state.departmentText.trim().isNotEmpty && lookupForAssoc != null
+                ? lookupForAssoc.findDepartmentByName(state.departmentText)?.id
+                : null);
+        final targetDeptName = targetDeptId != null
+            ? (lookupForAssoc?.departmentIdToName[targetDeptId] ??
+                  state.departmentText.trim())
+            : state.departmentText.trim();
+        final dialogContext = context;
+        if (dialogContext != null && !dialogContext.mounted) {
+          phoneToLink = null;
+        } else {
+          phoneToLink = await _confirmAndPreparePhoneAssociation(
+            context: dialogContext,
+            phonesRepo: phones,
+            phone: phoneToLink,
+            targetDepartmentId: targetDeptId,
+            editingUserId: userId,
+            userDisplayName: caller?.name ?? state.callerDisplayText.trim(),
+            targetDepartmentName: targetDeptName,
+          );
+        }
+      }
       await users.updateAssociationsIfNeeded(
         userId,
-        phone,
+        phoneToLink,
         eqCode?.isNotEmpty == true ? eqCode : null,
       );
 
@@ -456,7 +556,7 @@ mixin SmartEntitySelectorAssociationMixin on Notifier<SmartEntitySelectorState> 
       }
 
       final s = state;
-      final phoneNow = s.hasPhoneAssociation ? null : s.selectedPhone?.trim();
+      final phoneNow = phoneToLink;
       final currentPhones = List<String>.from(
         s.selectedCaller?.phones ?? const [],
       );
@@ -540,7 +640,7 @@ mixin SmartEntitySelectorAssociationMixin on Notifier<SmartEntitySelectorState> 
           ? (msg ?? 'Προστέθηκε.')
           : null;
     } catch (e) {
-      return 'Σφάλμα αποθήκευσης: $e';
+      return 'Σφάλμα αποθήκευσης: ${humanizeUserFacingError(e)}';
     }
   }
 

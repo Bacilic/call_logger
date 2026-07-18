@@ -4,6 +4,7 @@
 //   flutter test test/features/directory/screens/widgets/user_form_dialog_test.dart
 
 import 'package:call_logger/core/database/database_helper.dart';
+import 'package:call_logger/core/utils/phone_list_parser.dart';
 import 'package:call_logger/features/calls/models/user_model.dart';
 import 'package:call_logger/features/calls/provider/lookup_provider.dart';
 import 'package:call_logger/features/directory/providers/directory_provider.dart';
@@ -267,6 +268,79 @@ void main() {
         expect(find.text('Ακύρωση Αλλαγών'), findsOneWidget);
         expect(find.text('Επεξεργασία'), findsOneWidget);
         expect(find.text(_kEditUserTitle), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'λίστα προτάσεων τηλεφώνου δείχνει τμήμα-υπάλληλο και η επιλογή γράφει μόνο τον αριθμό',
+      (tester) async {
+        tester.view.physicalSize = const Size(1600, 900);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        final container = ProviderContainer(
+          overrides: callLoggerTestProviderOverrides(),
+        );
+        addTearDown(container.dispose);
+
+        late DirectoryNotifier notifier;
+        await tester.runAsync(() async {
+          await container.read(lookupServiceProvider.future);
+          notifier = container.read(directoryProvider.notifier);
+          await notifier.loadUsers();
+          await _openUserFormInDialog(tester, container, notifier: notifier);
+        });
+
+        final phoneField = _fieldByLabel('Τηλέφωνο');
+        await tester.tap(phoneField);
+        await pumpUntilSettled(tester);
+        // Ελάχιστο μήκος query autocomplete = 2.
+        await tester.enterText(phoneField, kTestPhoneDigits.substring(0, 2));
+        await pumpUntilSettledLong(tester);
+
+        final labeledOption = find.textContaining(
+          '($kTestDepartmentName - $kTestUserFirstName $kTestUserLastName)',
+        );
+        expect(
+          labeledOption,
+          findsWidgets,
+          reason: greekExpectMsg(
+            'Η πρόταση τηλεφώνου πρέπει να δείχνει (Τμήμα - Υπάλληλος)',
+          ),
+        );
+
+        await tester.tap(labeledOption.first);
+        await pumpUntilSettled(tester);
+
+        final phoneEditable = tester.widget<EditableText>(
+          find.descendant(
+            of: find.byWidgetPredicate(
+              (w) =>
+                  w is InputDecorator &&
+                  w.decoration.labelText == 'Τηλέφωνο',
+            ),
+            matching: find.byType(EditableText),
+          ),
+        );
+        final fieldText = phoneEditable.controller.text.trim();
+        final writtenPhones = PhoneListParser.splitPhones(fieldText);
+        expect(
+          writtenPhones,
+          [kTestPhoneDigits],
+          reason: greekExpectMsg(
+            'Μετά την επιλογή στο πεδίο μένει μόνο ο αριθμός',
+          ),
+        );
+        expect(
+          fieldText.contains('('),
+          isFalse,
+          reason: greekExpectMsg(
+            'Η πληροφορία τμήματος-κατόχου δεν γράφεται στο πεδίο',
+          ),
+        );
       },
     );
   });

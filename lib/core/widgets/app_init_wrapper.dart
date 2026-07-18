@@ -6,6 +6,7 @@ import '../database/database_init_result.dart';
 import '../database/database_init_progress_provider.dart';
 import '../database/database_helper.dart';
 import '../init/app_init_provider.dart';
+import '../init/database_reopen_cache_reset.dart';
 import '../providers/application_reset_provider.dart';
 import '../services/application_reset_service.dart';
 import '../../features/settings/widgets/pending_reset_database_screen.dart';
@@ -26,6 +27,7 @@ class _AppInitWrapperState extends ConsumerState<AppInitWrapper> {
       await DatabaseHelper.instance.closeConnection();
     } catch (_) {}
     if (!mounted) return;
+    invalidateDatabaseScopedCaches(ref);
     ref.invalidate(applicationResetPendingProvider);
     ref.invalidate(appInitProvider);
   }

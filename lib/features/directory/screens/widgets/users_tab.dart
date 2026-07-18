@@ -353,7 +353,8 @@ class _UsersTabState extends ConsumerState<UsersTab>
         : 'Διαγράφηκαν $deletedCount $label: $displayNames';
     final tooltipAllNames = names.isEmpty ? null : names.join(', ');
 
-    ScaffoldMessenger.of(context).showSnackBar(
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.showSnackBar(
       SnackBar(
         content: Row(
           children: [
@@ -367,7 +368,7 @@ class _UsersTabState extends ConsumerState<UsersTab>
             ),
             IconButton(
               icon: const Icon(Icons.close, size: 20),
-              onPressed: () => ScaffoldMessenger.of(context).hideCurrentSnackBar(),
+              onPressed: () => messenger.hideCurrentSnackBar(),
               style: IconButton.styleFrom(
                 foregroundColor: Theme.of(context).colorScheme.onInverseSurface,
                 padding: const EdgeInsets.all(4),
@@ -380,7 +381,7 @@ class _UsersTabState extends ConsumerState<UsersTab>
         action: SnackBarAction(
           label: 'Αναίρεση',
           onPressed: () async {
-            await ref.read(directoryProvider.notifier).undoLastDelete();
+            await notifier.undoLastDelete();
           },
         ),
       ),

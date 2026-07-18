@@ -10,6 +10,7 @@ import '../../../core/providers/main_nav_request_provider.dart';
 import '../../../core/database/audit_service.dart';
 import '../../../core/widgets/main_nav_destination.dart';
 import '../../../core/utils/search_text_normalizer.dart';
+import '../../../core/utils/user_facing_error_messages.dart';
 import '../../directory/screens/directory_screen.dart';
 import '../../../core/widgets/calendar_range_picker.dart';
 import '../../audit/constants/audit_ui_mappings.dart';
@@ -653,7 +654,7 @@ class _ApplicationAuditTabState extends ConsumerState<ApplicationAuditTab> {
                   error: (e, _) => Center(
                     child: Padding(
                       padding: const EdgeInsets.all(24),
-                      child: SelectableText('$e'),
+                      child: SelectableText(humanizeUserFacingError(e)),
                     ),
                   ),
                   data: (AuditPageResult r) {

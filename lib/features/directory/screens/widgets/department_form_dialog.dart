@@ -11,6 +11,7 @@ import '../../../../core/database/building_map_repository.dart';
 import '../../../../core/database/department_repository.dart';
 import '../../../../core/database/directory_support.dart';
 import '../../../../core/widgets/database_persistence_error_snackbar.dart';
+import '../../../../core/widgets/draggable_dialog_shell.dart';
 import '../../../../core/utils/search_text_normalizer.dart';
 import '../../../../core/utils/spell_check.dart';
 import '../../../../core/widgets/lexicon_spell_text_form_field.dart';
@@ -546,8 +547,10 @@ class _DepartmentFormDialogState extends State<DepartmentFormDialog>
         if (didPop) return;
         await _requestClose();
       },
-      child: AlertDialog(
-      title: Text(title),
+      child: DraggableDialogShell(
+        title: Text(title),
+        builder: (titleHandle) => AlertDialog(
+      title: titleHandle,
       content: SizedBox(
         width: 420,
         child: Form(
@@ -979,6 +982,7 @@ class _DepartmentFormDialogState extends State<DepartmentFormDialog>
         ),
       ],
     ),
+      ),
     );
   }
 }

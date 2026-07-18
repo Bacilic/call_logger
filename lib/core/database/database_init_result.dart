@@ -12,6 +12,17 @@ enum DatabaseStatus {
   applicationError,
 }
 
+/// Δομημένη πληροφορία ανάκαμψης για την οθόνη σφάλματος εκκίνησης.
+/// Προτιμάται έναντι ταιριάσματος ελληνικών φράσεων στο μήνυμα.
+enum DatabaseInitRecoveryKind {
+  wrongDatabaseLamp,
+  wrongDatabaseUnknown,
+  corruptedOrMigration,
+  locked,
+  timeout,
+  generic,
+}
+
 /// Αποτέλεσμα αρχικοποίησης ή ελέγχου υγείας βάσης δεδομένων.
 /// Χρησιμοποιείται για φιλικά μηνύματα σφαλμάτων στο UI.
 class DatabaseInitResult {
@@ -23,6 +34,7 @@ class DatabaseInitResult {
     this.originalExceptionText,
     this.stackTraceText,
     this.technicalCode,
+    this.recoveryKind,
   });
 
   final DatabaseStatus status;
@@ -32,6 +44,7 @@ class DatabaseInitResult {
   final String? originalExceptionText;
   final String? stackTraceText;
   final String? technicalCode;
+  final DatabaseInitRecoveryKind? recoveryKind;
 
   bool get isSuccess => status == DatabaseStatus.success;
 
@@ -95,6 +108,7 @@ class DatabaseInitResult {
       required DatabaseStatus status,
       required String message,
       String? details,
+      DatabaseInitRecoveryKind? recoveryKind,
     }) {
       final advice = (details != null && details.trim().isNotEmpty)
           ? details.trim()
@@ -107,6 +121,7 @@ class DatabaseInitResult {
         originalExceptionText: original,
         stackTraceText: stackStr.isEmpty ? null : stackStr,
         technicalCode: codeLabel,
+        recoveryKind: recoveryKind,
       );
     }
 
@@ -117,6 +132,7 @@ class DatabaseInitResult {
             'Το αρχείο της βάσης δεδομένων είναι κλειδωμένο από άλλη διεργασία ή δεν ολοκληρώθηκε προηγούμενη λειτουργία εγγραφής (SQLite: database is locked / busy).',
         details:
             'Κλείστε άλλα αντίγραφα της εφαρμογής ή προγράμματα που ανοίγουν το ίδιο αρχείο .db και δοκιμάστε ξανά.',
+        recoveryKind: DatabaseInitRecoveryKind.locked,
       );
     }
 
@@ -152,6 +168,7 @@ class DatabaseInitResult {
               'Το αρχείο χρησιμοποιείται ή είναι κλειδωμένο από άλλο πρόγραμμα (κοινή χρήση αρχείου Windows).',
           details:
               'Κλείστε άλλες εφαρμογές που μπορεί να κρατούν ανοιχτό το αρχείο βάσης.',
+          recoveryKind: DatabaseInitRecoveryKind.locked,
         );
       }
     }
@@ -225,6 +242,7 @@ class DatabaseInitResult {
             'Το αρχείο δεν είναι έγκυρη βάση SQLite ή φαίνεται κατεστραμμένο.',
         details:
             'Επαληθεύστε ότι επιλέξατε σωστό αρχείο .db και ότι δεν είναι κρυπτογραφημένο/αλλοιωμένο.',
+        recoveryKind: DatabaseInitRecoveryKind.corruptedOrMigration,
       );
     }
 
@@ -251,6 +269,7 @@ class DatabaseInitResult {
         status: DatabaseStatus.applicationError,
         message: msg,
         details: composed,
+        recoveryKind: DatabaseInitRecoveryKind.corruptedOrMigration,
       );
     }
 
@@ -310,6 +329,7 @@ class DatabaseInitResult {
             'Η βάση δεδομένων δεν απάντησε έγκαιρα. Πιθανό προσωρινό πρόβλημα πρόσβασης ή κλειδώματος αρχείου στα Windows.',
         details:
             'Κλείστε εντελώς την εφαρμογή και ανοίξτε την ξανά. Αν το πρόβλημα συνεχιστεί, ελέγξτε αν άλλη διεργασία ή υπηρεσία κρατά ανοιχτό το αρχείο .db.',
+        recoveryKind: DatabaseInitRecoveryKind.timeout,
       );
     }
 
@@ -342,8 +362,9 @@ class DatabaseInitResult {
         message:
             'Προέκυψε πρόβλημα κατά την πρόσβαση ή την ενημέρωση της βάσης δεδομένων (SQLite).',
         details:
-            'Ελέγξτε τη διαδρομή στις ρυθμίσεις, τα δικαιώματα και αν άλλη εφαρμογή κρατά το ίδιο αρχείο .db. '
+            'Ελέγξτε τη διαδρομή στις ρυθμίσεις και τα δικαιώματα. '
             'Αν το αρχείο φαίνεται κατεστραμμένο ή ασύμβατο, δοκιμάστε νέα βάση από τις ρυθμίσεις.',
+        recoveryKind: DatabaseInitRecoveryKind.generic,
       );
     }
 
@@ -356,6 +377,7 @@ class DatabaseInitResult {
       originalExceptionText: original,
       stackTraceText: stackStr.isEmpty ? null : stackStr,
       technicalCode: codeLabel,
+      recoveryKind: DatabaseInitRecoveryKind.generic,
     );
   }
 
@@ -555,6 +577,7 @@ class DatabaseInitResult {
     String? originalExceptionText,
     String? stackTraceText,
     String? technicalCode,
+    DatabaseInitRecoveryKind? recoveryKind,
   }) {
     return DatabaseInitResult(
       status: status ?? this.status,
@@ -565,6 +588,7 @@ class DatabaseInitResult {
           originalExceptionText ?? this.originalExceptionText,
       stackTraceText: stackTraceText ?? this.stackTraceText,
       technicalCode: technicalCode ?? this.technicalCode,
+      recoveryKind: recoveryKind ?? this.recoveryKind,
     );
   }
 }

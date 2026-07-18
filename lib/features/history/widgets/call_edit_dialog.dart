@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import '../../../core/database/audit_service.dart';
 import '../../../core/services/save_confirmation_summary.dart';
 import '../../../core/utils/history_entity_display_utils.dart';
+import '../../../core/utils/user_facing_error_messages.dart';
 import '../../../core/widgets/lexicon_spell_text_form_field.dart';
 import '../../../core/widgets/spell_check_controller.dart';
 import '../../calls/models/call_model.dart';
@@ -239,7 +240,7 @@ class _CallEditDialogState extends ConsumerState<_CallEditDialog>
       if (!mounted) return;
       setState(() => _saving = false);
       showDialogSnackBar(
-        SnackBar(content: Text('Αποτυχία ενημέρωσης κλήσης: $e')),
+        SnackBar(content: Text('Αποτυχία ενημέρωσης κλήσης: ${humanizeUserFacingError(e)}')),
       );
     }
   }
@@ -260,7 +261,7 @@ class _CallEditDialogState extends ConsumerState<_CallEditDialog>
       if (!mounted) return;
       setState(() => _hardCloneBusy = false);
       showDialogSnackBar(
-        SnackBar(content: Text('Αποτυχία κλωνοποίησης: $e')),
+        SnackBar(content: Text('Αποτυχία κλωνοποίησης: ${humanizeUserFacingError(e)}')),
       );
     }
   }

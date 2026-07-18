@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../../core/directory/phone_department_policy.dart';
+import '../../../../core/widgets/draggable_dialog_shell.dart';
 
 enum _UserPhoneConflictResolution {
   transferSharedToUserDepartment,
@@ -140,86 +141,89 @@ class _UserPhoneDepartmentConflictDialogState
         ? '—'
         : widget.targetDepartmentName.trim();
 
-    return AlertDialog(
+    return DraggableDialogShell(
       title: const Text('Σύγκρουση τοποθεσίας τηλεφώνου'),
-      content: SizedBox(
-        width: 680,
-        child: ConstrainedBox(
-          constraints: BoxConstraints(maxHeight: desiredHeight),
-          child: SingleChildScrollView(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text(
-                  'Το τμήμα του χρήστη είναι «$targetLabel». '
-                  'Τα παρακάτω τηλέφωνα συγκρούονται με την πολιτική '
-                  'ενός αριθμού ανά τμήμα. Επιλέξτε ενέργεια ή ακυρώστε.',
-                ),
-                const SizedBox(height: 10),
-                for (final c in widget.conflicts) ...[
-                  Card(
-                    margin: const EdgeInsets.only(bottom: 10),
-                    child: Padding(
-                      padding: const EdgeInsets.all(10),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Τηλέφωνο: ${c.phone}',
-                            style: theme.textTheme.titleSmall,
-                          ),
-                          const SizedBox(height: 4),
-                          Text(_detailsText(c)),
-                          if (_optionsFor(c).isEmpty) ...[
-                            const SizedBox(height: 6),
+      builder: (titleHandle) => AlertDialog(
+        title: titleHandle,
+        content: SizedBox(
+          width: 680,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxHeight: desiredHeight),
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    'Το τμήμα του χρήστη είναι «$targetLabel». '
+                    'Τα παρακάτω τηλέφωνα συγκρούονται με την πολιτική '
+                    'ενός αριθμού ανά τμήμα. Επιλέξτε ενέργεια ή ακυρώστε.',
+                  ),
+                  const SizedBox(height: 10),
+                  for (final c in widget.conflicts) ...[
+                    Card(
+                      margin: const EdgeInsets.only(bottom: 10),
+                      child: Padding(
+                        padding: const EdgeInsets.all(10),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
                             Text(
-                              'Δεν είναι δυνατή μεταφορά χωρίς τμήμα χρήστη. '
-                              'Ακυρώστε ή ορίστε τμήμα.',
-                              style: TextStyle(color: theme.colorScheme.error),
+                              'Τηλέφωνο: ${c.phone}',
+                              style: theme.textTheme.titleSmall,
                             ),
-                          ] else ...[
-                            const SizedBox(height: 6),
-                            RadioGroup<_UserPhoneConflictResolution>(
-                              groupValue: _decisions[c.phone],
-                              onChanged: (v) {
-                                if (v == null) return;
-                                setState(() => _decisions[c.phone] = v);
-                              },
-                              child: Column(
-                                children: [
-                                  for (final option in _optionsFor(c))
-                                    RadioListTile<_UserPhoneConflictResolution>(
-                                      dense: true,
-                                      value: option,
-                                      title: _resolutionLabel(c, option),
-                                    ),
-                                ],
+                            const SizedBox(height: 4),
+                            Text(_detailsText(c)),
+                            if (_optionsFor(c).isEmpty) ...[
+                              const SizedBox(height: 6),
+                              Text(
+                                'Δεν είναι δυνατή μεταφορά χωρίς τμήμα χρήστη. '
+                                'Ακυρώστε ή ορίστε τμήμα.',
+                                style: TextStyle(color: theme.colorScheme.error),
                               ),
-                            ),
+                            ] else ...[
+                              const SizedBox(height: 6),
+                              RadioGroup<_UserPhoneConflictResolution>(
+                                groupValue: _decisions[c.phone],
+                                onChanged: (v) {
+                                  if (v == null) return;
+                                  setState(() => _decisions[c.phone] = v);
+                                },
+                                child: Column(
+                                  children: [
+                                    for (final option in _optionsFor(c))
+                                      RadioListTile<_UserPhoneConflictResolution>(
+                                        dense: true,
+                                        value: option,
+                                        title: _resolutionLabel(c, option),
+                                      ),
+                                  ],
+                                ),
+                              ),
+                            ],
                           ],
-                        ],
+                        ),
                       ),
                     ),
-                  ),
+                  ],
                 ],
-              ],
+              ),
             ),
           ),
         ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Ακύρωση'),
+          ),
+          FilledButton(
+            onPressed: _allResolved &&
+                    widget.conflicts.every((c) => _optionsFor(c).isNotEmpty)
+                ? () => Navigator.of(context).pop(_buildResult())
+                : null,
+            child: const Text('Επιβεβαίωση'),
+          ),
+        ],
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Ακύρωση'),
-        ),
-        FilledButton(
-          onPressed: _allResolved &&
-                  widget.conflicts.every((c) => _optionsFor(c).isNotEmpty)
-              ? () => Navigator.of(context).pop(_buildResult())
-              : null,
-          child: const Text('Επιβεβαίωση'),
-        ),
-      ],
     );
   }
 }

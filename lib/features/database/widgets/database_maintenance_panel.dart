@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/config/audit_retention_config.dart';
 import '../../../core/services/audit_retention_runner.dart';
 import '../../../core/services/settings_service.dart';
+import '../../../core/utils/user_facing_error_messages.dart';
 import '../../audit/providers/audit_providers.dart';
 import '../../calls/provider/lookup_provider.dart';
 import '../../settings/widgets/create_new_database_dialog.dart';
@@ -106,7 +107,7 @@ class _DatabaseMaintenancePanelState
         }
         _showBanner('Οι ρυθμίσεις retention audit αποθηκεύτηκαν.');
       } catch (e) {
-        _showBanner('Σφάλμα αποθήκευσης: $e', error: true);
+        _showBanner('Σφάλμα αποθήκευσης: ${humanizeUserFacingError(e)}', error: true);
       }
     });
   }
@@ -138,7 +139,7 @@ class _DatabaseMaintenancePanelState
           'Διαγράφηκαν ${r.byAge} εγγραφές (ηλικία) και ${r.byTrim} (όριο πλήθους).',
         );
       } catch (e) {
-        _showBanner('Σφάλμα: $e', error: true);
+        _showBanner('Σφάλμα: ${humanizeUserFacingError(e)}', error: true);
       }
     });
   }
@@ -287,7 +288,7 @@ class _DatabaseMaintenancePanelState
         _showBanner('Το VACUUM ολοκληρώθηκε.');
         _invalidateCaches();
       } catch (e) {
-        _showBanner('Σφάλμα VACUUM: $e', error: true);
+        _showBanner('Σφάλμα VACUUM: ${humanizeUserFacingError(e)}', error: true);
       }
     });
   }
@@ -305,7 +306,7 @@ class _DatabaseMaintenancePanelState
         _showBanner('Το REINDEX ολοκληρώθηκε.');
         _invalidateCaches();
       } catch (e) {
-        _showBanner('Σφάλμα REINDEX: $e', error: true);
+        _showBanner('Σφάλμα REINDEX: ${humanizeUserFacingError(e)}', error: true);
       }
     });
   }
@@ -331,7 +332,7 @@ class _DatabaseMaintenancePanelState
         _showBanner('Διαγράφηκαν $n εγγραφές από $label.');
         _invalidateCaches();
       } catch (e) {
-        _showBanner('Σφάλμα: $e', error: true);
+        _showBanner('Σφάλμα: ${humanizeUserFacingError(e)}', error: true);
       }
     });
   }
@@ -356,7 +357,7 @@ class _DatabaseMaintenancePanelState
         _showBanner('Διαγράφηκαν $n εγγραφές audit.');
         _invalidateCaches();
       } catch (e) {
-        _showBanner('Σφάλμα: $e', error: true);
+        _showBanner('Σφάλμα: ${humanizeUserFacingError(e)}', error: true);
       }
     });
   }
@@ -387,7 +388,7 @@ class _DatabaseMaintenancePanelState
         _showBanner('Διαγράφηκαν $n εγγραφές audit.');
         _invalidateCaches();
       } catch (e) {
-        _showBanner('Σφάλμα: $e', error: true);
+        _showBanner('Σφάλμα: ${humanizeUserFacingError(e)}', error: true);
       }
     });
   }
@@ -409,7 +410,7 @@ class _DatabaseMaintenancePanelState
         _showBanner('Διαγράφηκαν $n κλειστές εκκρεμότητες.');
         _invalidateCaches();
       } catch (e) {
-        _showBanner('Σφάλμα: $e', error: true);
+        _showBanner('Σφάλμα: ${humanizeUserFacingError(e)}', error: true);
       }
     });
   }

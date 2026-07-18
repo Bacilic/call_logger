@@ -27,6 +27,7 @@ import '../../../core/services/core_lexicon_service.dart';
 import '../../../core/services/dictionary_service.dart';
 import '../../../core/services/master_dictionary_service.dart';
 import '../../../core/utils/lexicon_word_metrics.dart';
+import '../../../core/utils/user_facing_error_messages.dart';
 import '../dictionary_table_layout.dart';
 import '../providers/dictionary_layout_provider.dart';
 import '../models/lexicon_list_filters_model.dart';
@@ -717,7 +718,7 @@ class _DictionaryManagerScreenState extends ConsumerState<DictionaryManagerScree
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Σφάλμα: $e')),
+          SnackBar(content: Text('Σφάλμα: ${humanizeUserFacingError(e)}')),
         );
       }
     }
@@ -750,7 +751,7 @@ class _DictionaryManagerScreenState extends ConsumerState<DictionaryManagerScree
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Σφάλμα Compile: $e')),
+          SnackBar(content: Text('Σφάλμα Compile: ${humanizeUserFacingError(e)}')),
         );
       }
     }
@@ -1059,7 +1060,7 @@ class _DictionaryManagerScreenState extends ConsumerState<DictionaryManagerScree
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Σφάλμα: $e')),
+          SnackBar(content: Text('Σφάλμα: ${humanizeUserFacingError(e)}')),
         );
       }
     }

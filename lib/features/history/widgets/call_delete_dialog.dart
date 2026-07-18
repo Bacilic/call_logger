@@ -2,6 +2,7 @@ import '../../../core/widgets/dialog_snackbar_scope.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/utils/user_facing_error_messages.dart';
 import '../providers/history_call_actions_provider.dart';
 
 Future<void> showCallDeleteDialog(
@@ -106,7 +107,7 @@ class _CallDeleteDialogState extends ConsumerState<_CallDeleteDialog>
       if (!mounted) return;
       setState(() => _busy = false);
       showDialogSnackBar(
-        SnackBar(content: Text('Αποτυχία διαγραφής: $e')),
+        SnackBar(content: Text('Αποτυχία διαγραφής: ${humanizeUserFacingError(e)}')),
       );
     }
   }
@@ -237,7 +238,7 @@ class _CallBulkDeleteDialogState extends ConsumerState<_CallBulkDeleteDialog>
       if (!mounted) return;
       setState(() => _busy = false);
       showDialogSnackBar(
-        SnackBar(content: Text('Αποτυχία μαζικής διαγραφής: $e')),
+        SnackBar(content: Text('Αποτυχία μαζικής διαγραφής: ${humanizeUserFacingError(e)}')),
       );
     }
   }

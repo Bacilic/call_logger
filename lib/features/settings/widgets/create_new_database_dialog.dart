@@ -6,17 +6,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as path;
 
+import '../../../core/config/app_config.dart';
 import '../../../core/database/database_helper.dart';
 import '../../../core/init/app_init_provider.dart';
+import '../../../core/init/database_reopen_cache_reset.dart';
 import '../../../core/utils/file_picker_initial_directory.dart';
 import '../../../core/utils/file_picker_session.dart';
+import '../../../core/utils/new_database_suggested_file_name.dart';
 import '../../../core/utils/windows_save_sqlite_database_dialog.dart';
-import '../../calls/provider/lookup_provider.dart';
-import '../../database/providers/database_browser_stats_provider.dart';
 import '../../database/providers/database_maintenance_provider.dart';
 import '../../database/widgets/database_rename_failure_dialog.dart';
-import '../../tasks/providers/task_service_provider.dart';
-import '../../tasks/providers/tasks_provider.dart';
 
 bool _sameResolvedPath(String a, String b) {
   final na = path.normalize(a);
@@ -47,10 +46,13 @@ String? validateNewDatabaseSavePath(String raw) {
 }
 
 /// Native «Αποθήκευση ως» (φάκελος + όνομα + `.db` σε ένα βήμα).
+///
+/// Το [initialPathHint] χρησιμοποιείται **μόνο** για τον αρχικό φάκελο —
+/// όχι ως όνομα αρχείου (αποφυγή πρότασης λάθους/ξένου `.db`).
 Future<String?> pickSqliteDatabaseSavePath({
   String? initialPathHint,
   String dialogTitle = 'Δημιουργία νέου αρχείου βάσης',
-  String defaultSuggestedFileName = 'call_logger.db',
+  String? defaultSuggestedFileName,
 }) async {
   final session = await FilePickerSession.run(
     () => _pickSqliteDatabaseSavePathImpl(
@@ -66,17 +68,16 @@ Future<String?> pickSqliteDatabaseSavePath({
 Future<String?> _pickSqliteDatabaseSavePathImpl({
   String? initialPathHint,
   required String dialogTitle,
-  required String defaultSuggestedFileName,
+  String? defaultSuggestedFileName,
 }) async {
   final hint = initialPathHint?.trim();
-  final initialDir = initialDirectoryForFilePicker(hint);
-  var suggested = defaultSuggestedFileName;
-  if (hint != null && hint.isNotEmpty) {
-    final base = path.basename(hint);
-    if (base.toLowerCase().endsWith('.db') && !base.contains(RegExp(r'[/\\]'))) {
-      suggested = base;
-    }
-  }
+  final initialDir = initialDirectoryForFilePicker(
+        (hint != null && hint.isNotEmpty) ? hint : AppConfig.defaultDbPath,
+      ) ??
+      path.dirname(AppConfig.defaultDbPath);
+  final suggested = defaultSuggestedFileName?.trim().isNotEmpty == true
+      ? defaultSuggestedFileName!.trim()
+      : suggestNewCallLoggerDatabaseFileName(directory: initialDir);
 
   final String? picked;
   if (Platform.isWindows) {
@@ -129,12 +130,7 @@ class CreateNewDatabaseFlow {
   CreateNewDatabaseFlow._();
 
   static void _invalidateCaches(WidgetRef ref) {
-    ref.invalidate(databaseBrowserStatsProvider);
-    ref.invalidate(lookupServiceProvider);
-    ref.invalidate(tasksProvider);
-    ref.invalidate(totalTasksCountProvider);
-    ref.invalidate(orphanCallsProvider);
-    ref.read(taskServiceProvider).resetSnoozeHistoryColumnCache();
+    invalidateDatabaseScopedCaches(ref);
   }
 
   /// [onDatabaseReopened]: π.χ. `MainShell` / `AppShortcuts` → [runDatabaseInitChecks].

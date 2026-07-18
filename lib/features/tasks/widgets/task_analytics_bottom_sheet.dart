@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/widgets/calendar_range_picker.dart';
+import '../../../core/utils/user_facing_error_messages.dart';
 import '../models/task_analytics_date_preset.dart';
 import '../models/task_analytics_summary.dart';
 import '../providers/task_analytics_date_provider.dart';
@@ -153,7 +154,7 @@ class TaskAnalyticsBottomSheet extends ConsumerWidget {
                         const Center(child: CircularProgressIndicator()),
                     error: (e, _) => Center(
                       child: Text(
-                        'Σφάλμα φόρτωσης αναφορών: $e',
+                        'Σφάλμα φόρτωσης αναφορών: ${humanizeUserFacingError(e)}',
                         textAlign: TextAlign.center,
                         style: TextStyle(color: theme.colorScheme.error),
                       ),

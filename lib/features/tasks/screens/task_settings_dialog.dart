@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/providers/settings_provider.dart';
 import '../../../core/services/settings_service.dart';
+import '../../../core/utils/user_facing_error_messages.dart';
 import '../models/task_settings_config.dart';
 import '../providers/task_settings_config_provider.dart';
 import '../ui/task_due_option_tooltips.dart';
@@ -226,7 +227,7 @@ class _TaskSettingsDialogState extends ConsumerState<TaskSettingsDialog>
     } catch (e) {
       if (mounted) {
         showDialogSnackBar(
-          SnackBar(content: Text('Αποτυχία αποθήκευσης: $e')),
+          SnackBar(content: Text('Αποτυχία αποθήκευσης: ${humanizeUserFacingError(e)}')),
         );
       }
     }

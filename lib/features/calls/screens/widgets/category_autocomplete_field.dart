@@ -8,6 +8,7 @@ import '../../../../core/database/category_repository.dart';
 import '../../../../core/database/calls_repository.dart';
 import '../../../../core/database/database_helper.dart';
 import '../../../../core/utils/spell_check.dart';
+import '../../../../core/utils/user_facing_error_messages.dart';
 import '../../../history/providers/history_provider.dart';
 import '../../provider/call_entry_provider.dart';
 
@@ -133,7 +134,7 @@ class _CategoryAutocompleteFieldState
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Αποτυχία προσθήκης: $e')),
+        SnackBar(content: Text('Αποτυχία προσθήκης: ${humanizeUserFacingError(e)}')),
       );
     }
   }

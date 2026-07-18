@@ -9,6 +9,7 @@ import '../../../../core/widgets/audit_summary_rich_text.dart';
 import '../../../../core/models/remote_tool.dart';
 import '../../../../core/models/remote_tool_role.dart';
 import '../../../../core/utils/file_picker_initial_directory.dart';
+import '../../../../core/utils/user_facing_error_messages.dart';
 import 'remote_tool_arguments_editor.dart';
 import 'remote_tool_basic_fields.dart';
 import 'remote_tool_behavior_fields.dart';
@@ -127,7 +128,7 @@ class _RemoteToolFormDialogState extends ConsumerState<RemoteToolFormDialog>
       } catch (e) {
         if (mounted) {
           showDialogSnackBar(
-            SnackBar(content: Text('Αποτυχία αντιγραφής εικονιδίου: $e')),
+            SnackBar(content: Text('Αποτυχία αντιγραφής εικονιδίου: ${humanizeUserFacingError(e)}')),
           );
         }
         _ctrl.iconC.text = picked;
@@ -222,7 +223,7 @@ class _RemoteToolFormDialogState extends ConsumerState<RemoteToolFormDialog>
           if (mounted) {
             showDialogSnackBar(
               SnackBar(
-                content: Text('Σφάλμα: $e'),
+                content: Text('Σφάλμα: ${humanizeUserFacingError(e)}'),
                 backgroundColor: Theme.of(context).colorScheme.error,
               ),
             );
@@ -267,7 +268,7 @@ class _RemoteToolFormDialogState extends ConsumerState<RemoteToolFormDialog>
       if (mounted) {
         showDialogSnackBar(
           SnackBar(
-            content: Text('Σφάλμα: $e'),
+            content: Text('Σφάλμα: ${humanizeUserFacingError(e)}'),
             backgroundColor: Theme.of(context).colorScheme.error,
           ),
         );
@@ -331,7 +332,7 @@ class _RemoteToolFormDialogState extends ConsumerState<RemoteToolFormDialog>
       if (mounted) {
         showDialogSnackBar(
           SnackBar(
-            content: Text('$e'),
+            content: Text(humanizeUserFacingError(e)),
             backgroundColor: Theme.of(context).colorScheme.error,
           ),
         );
@@ -389,7 +390,7 @@ class _RemoteToolFormDialogState extends ConsumerState<RemoteToolFormDialog>
       error: (e, _) => Dialog(
         child: Padding(
           padding: const EdgeInsets.all(24),
-          child: Text('Φόρτωση καταλόγου: $e'),
+          child: Text('Φόρτωση καταλόγου: ${humanizeUserFacingError(e)}'),
         ),
       ),
       data: (allTools) {

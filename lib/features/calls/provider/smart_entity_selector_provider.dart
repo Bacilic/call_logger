@@ -1,5 +1,6 @@
 import 'dart:developer' as developer;
 
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
@@ -9,15 +10,18 @@ import '../../../core/database/department_repository.dart';
 import '../../../core/database/equipment_repository.dart';
 import '../../../core/database/phone_repository.dart';
 import '../../../core/database/user_repository.dart';
+import '../../../core/directory/phone_department_policy.dart';
 import '../../../core/services/lookup_service.dart';
 import '../../../core/utils/name_parser.dart';
 import '../../../core/utils/phone_list_parser.dart';
 import '../../../core/utils/search_text_normalizer.dart';
+import '../../../core/utils/user_facing_error_messages.dart';
 import 'lookup_provider.dart';
 import '../models/equipment_model.dart';
 import '../models/user_model.dart';
 import '../../directory/models/department_model.dart';
 import '../../directory/providers/directory_cache_refresh.dart';
+import '../../directory/screens/widgets/user_phone_department_conflict_dialog.dart';
 import '../../tasks/models/task.dart';
 import '../../tasks/providers/task_service_provider.dart';
 import 'call_mutation_refresh.dart';

@@ -3,6 +3,7 @@
 import 'package:path/path.dart' as path;
 import 'package:sqflite_common/sqflite.dart';
 
+import '../database_file_classifier.dart';
 import 'lamp_database_provider.dart';
 
 /// Κουμπί import Excel στη Λάμπα — κοινό κείμενο σε μηνύματα pending creation.
@@ -25,6 +26,9 @@ enum LampOldDbStatus {
   outputPendingCreation,
   /// Έγκυρη βάση Λάμπας στη διαδρομή εξόδου — θα ξαναδημιουργηθεί από import.
   outputWillUpdate,
+
+  /// Το αρχείο είναι βάση της Καταγραφής Κλήσεων, όχι της Λάμπας.
+  isCallLoggerDb,
 }
 
 class LampOldDbCheckResult {
@@ -73,6 +77,11 @@ class LampOldDbCheckResult {
         return 'Το αρχείο δεν υπάρχει ακόμα — θα δημιουργηθεί από το import.';
       case LampOldDbStatus.outputWillUpdate:
         return 'Η βάση είναι έγκυρη — θα διαγραφεί και θα ξαναδημιουργηθεί από το import.';
+      case LampOldDbStatus.isCallLoggerDb:
+        final name = (technicalDetail != null && technicalDetail!.isNotEmpty)
+            ? technicalDetail!
+            : '…';
+        return 'Το αρχείο «$name» είναι η βάση της Καταγραφής Κλήσεων, όχι της Λάμπας.';
     }
   }
 
@@ -105,6 +114,7 @@ bool lampOutputPathBlocksImport(LampOldDbCheckResult result) {
     case LampOldDbStatus.emptyFile:
     case LampOldDbStatus.openFailed:
     case LampOldDbStatus.notOldEquipmentDb:
+    case LampOldDbStatus.isCallLoggerDb:
     case LampOldDbStatus.ok:
       return true;
   }
@@ -298,6 +308,14 @@ class LampOldDbValidator {
     String dbPath,
   ) async {
     try {
+      final kind = await classifyDatabaseFile(dbPath);
+      if (kind == DatabaseFileKind.callLogger) {
+        return LampOldDbCheckResult(
+          LampOldDbStatus.isCallLoggerDb,
+          technicalDetail: path.basename(dbPath),
+        );
+      }
+
       await _databaseProvider.close();
       final db = await _databaseProvider.open(
         dbPath,

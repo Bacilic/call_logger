@@ -6,6 +6,7 @@ import '../../../../core/database/department_repository.dart';
 import '../../../../core/database/phone_repository.dart';
 import '../../../../core/directory/phone_department_policy.dart';
 import '../../../../core/widgets/database_persistence_error_snackbar.dart';
+import '../../../../core/widgets/draggable_dialog_shell.dart';
 import '../../../../core/providers/settings_provider.dart';
 import '../../../../core/providers/spell_check_provider.dart';
 import '../../../../core/utils/search_text_normalizer.dart';
@@ -354,6 +355,42 @@ class _UserFormDialogState extends ConsumerState<UserFormDialog>
     );
   }
 
+  /// Ετικέτα λίστας προτάσεων: «2914 (Φαρμακείο - Βασίλης Πρόβος)».
+  /// Μόνο για εμφάνιση — η επιλογή γράφει σκέτο τον αριθμό.
+  String _phoneAutocompleteListLabel(String phone) {
+    final lookup = LookupService.instance;
+    final owners = lookup
+        .findUsersByPhone(phone)
+        .where((u) => !u.isDeleted)
+        .toList();
+    final names = owners
+        .map((u) => (u.name ?? '').trim())
+        .where((n) => n.isNotEmpty)
+        .toList();
+    String? dept;
+    final ownerDeptIds =
+        owners.map((u) => u.departmentId).whereType<int>().toSet();
+    if (ownerDeptIds.length == 1) {
+      dept = lookup.departmentIdToName[ownerDeptIds.single]?.trim();
+    } else if (owners.length == 1) {
+      dept = (owners.first.departmentName ?? '').trim();
+    }
+    if (dept == null || dept.isEmpty) {
+      final usage = lookup.checkPhoneUsage(phone);
+      dept = usage.departmentName?.trim();
+    }
+    if ((dept == null || dept.isEmpty) && names.isEmpty) {
+      return phone;
+    }
+    if (names.isEmpty) {
+      return '$phone ($dept)';
+    }
+    if (dept == null || dept.isEmpty) {
+      return '$phone (${names.join(', ')})';
+    }
+    return '$phone ($dept - ${names.join(', ')})';
+  }
+
   String _phoneDisplayStringForAutocompleteOption(String option) {
     final text = _phoneController.text;
     final offset = _phoneController.selection.isValid
@@ -413,8 +450,10 @@ class _UserFormDialogState extends ConsumerState<UserFormDialog>
         if (didPop) return;
         await _requestClose();
       },
-      child: AlertDialog(
-      title: Text(_title),
+      child: DraggableDialogShell(
+        title: Text(_title),
+        builder: (titleHandle) => AlertDialog(
+      title: titleHandle,
       content: Form(
         key: _formKey,
         child: SingleChildScrollView(
@@ -541,10 +580,30 @@ class _UserFormDialogState extends ConsumerState<UserFormDialog>
                   );
                 },
                 optionsViewBuilder: (context, onSelected, options) {
-                  return _nameAutocompleteOptionsView(
-                    context,
-                    onSelected,
-                    options,
+                  return Align(
+                    alignment: Alignment.topLeft,
+                    child: Material(
+                      elevation: 4,
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(
+                          maxWidth: 420,
+                          maxHeight: 220,
+                        ),
+                        child: ListView.builder(
+                          padding: EdgeInsets.zero,
+                          shrinkWrap: true,
+                          itemCount: options.length,
+                          itemBuilder: (context, index) {
+                            final option = options.elementAt(index);
+                            return ListTile(
+                              dense: true,
+                              title: Text(_phoneAutocompleteListLabel(option)),
+                              onTap: () => onSelected(option),
+                            );
+                          },
+                        ),
+                      ),
+                    ),
                   );
                 },
               ),
@@ -615,6 +674,7 @@ class _UserFormDialogState extends ConsumerState<UserFormDialog>
         ),
       ],
     ),
+      ),
     );
   }
 }

@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/providers/settings_provider.dart';
 import '../../../../core/providers/spell_check_provider.dart';
 import '../../../../core/services/settings_service.dart';
+import '../../../../core/utils/user_facing_error_messages.dart';
 import '../../../../core/widgets/lexicon_spell_text_form_field.dart';
 import '../../../../core/widgets/spell_check_controller.dart';
 
@@ -61,7 +62,7 @@ class _EquipmentSettingsDialogState
       if (mounted) {
         showDialogSnackBar(
           SnackBar(
-            content: Text('Σφάλμα αποθήκευσης: $e'),
+            content: Text('Σφάλμα αποθήκευσης: ${humanizeUserFacingError(e)}'),
             backgroundColor: Theme.of(context).colorScheme.error,
           ),
         );

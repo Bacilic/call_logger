@@ -741,11 +741,29 @@ class UserRepository {
             .whereType<String>()
             .toList();
         if (!existing.contains(trimmedPhone)) {
-          await _support.replaceUserPhonesInTxn(txn, userId, [
-            ...existing,
-            trimmedPhone,
-          ]);
-          phoneChanged = true;
+          // Δίχτυ ασφαλείας: μην γράφεις σύνδεση που παραβιάζει την πολιτική.
+          final userRows = await txn.query(
+            'users',
+            columns: ['department_id'],
+            where: 'id = ?',
+            whereArgs: [userId],
+            limit: 1,
+          );
+          final targetDepartmentId = userRows.isEmpty
+              ? null
+              : userRows.first['department_id'] as int?;
+          final conflicts = PhoneDepartmentPolicy.findConflictsForUserAssignment(
+            phones: [trimmedPhone],
+            targetDepartmentId: targetDepartmentId,
+            editingUserId: userId,
+          );
+          if (conflicts.isEmpty) {
+            await _support.replaceUserPhonesInTxn(txn, userId, [
+              ...existing,
+              trimmedPhone,
+            ]);
+            phoneChanged = true;
+          }
         }
       }
 

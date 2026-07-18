@@ -8,6 +8,7 @@ import 'package:intl/intl.dart';
 
 import '../../../core/widgets/calendar_range_picker.dart';
 import '../../../core/widgets/quick_call_fab.dart';
+import '../../../core/utils/user_facing_error_messages.dart';
 import '../models/dashboard_date_preset.dart';
 import '../models/dashboard_filter_model.dart';
 import '../models/dashboard_summary_model.dart';
@@ -620,7 +621,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                       },
                       loading: () => LoadingDashboard(colors: colors),
                       error: (e, _) => ErrorCard(
-                        message: 'Σφάλμα φόρτωσης: $e',
+                        message: 'Σφάλμα φόρτωσης: ${humanizeUserFacingError(e)}',
                         colors: colors,
                       ),
                     ),

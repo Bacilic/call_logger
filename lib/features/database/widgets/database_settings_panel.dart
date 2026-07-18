@@ -10,11 +10,14 @@ import 'package:path/path.dart' as p;
 import '../../../core/config/app_config.dart';
 import '../../../core/utils/file_picker_initial_directory.dart';
 import '../../../core/utils/file_picker_session.dart';
+import '../../../core/utils/user_facing_error_messages.dart';
 import '../../../core/providers/core_lexicon_provider.dart';
 import '../../../core/database/database_helper.dart';
 import '../../../core/database/database_init_runner.dart';
 import '../../../core/database/database_path_pick_flow.dart';
+import '../../../core/database/database_restore_flow.dart';
 import '../../../core/init/app_init_provider.dart';
+import '../../../core/init/database_reopen_cache_reset.dart';
 import '../../../core/services/settings_service.dart';
 import '../../settings/widgets/create_new_database_dialog.dart';
 import '../models/database_backup_settings.dart';
@@ -193,7 +196,7 @@ class _DatabaseSettingsPanelState extends ConsumerState<DatabaseSettingsPanel> {
     } catch (e) {
       if (mounted) {
         setState(() {
-          _dbPathErrorMessage = 'Σφάλμα ανάγνωσης διαδρομής: $e';
+          _dbPathErrorMessage = 'Σφάλμα ανάγνωσης διαδρομής: ${humanizeUserFacingError(e)}';
           _isLoadingDbPath = false;
         });
       }
@@ -347,8 +350,10 @@ class _DatabaseSettingsPanelState extends ConsumerState<DatabaseSettingsPanel> {
     await _loadDatabasePathSection();
 
     if (!mounted) return;
-    ref.invalidate(appInitProvider);
     await widget.onDatabaseLifecycleChanged?.call();
+    if (!mounted) return;
+    invalidateDatabaseScopedCaches(ref);
+    ref.invalidate(appInitProvider);
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Η νέα βάση ορίστηκε και επαληθεύτηκε.')),
@@ -395,7 +400,7 @@ class _DatabaseSettingsPanelState extends ConsumerState<DatabaseSettingsPanel> {
       await _settings.setDatabasePath(newPath);
     } catch (e) {
       if (mounted) {
-        setState(() => _dbPathErrorMessage = 'Σφάλμα αποθήκευσης: $e');
+        setState(() => _dbPathErrorMessage = 'Σφάλμα αποθήκευσης: ${humanizeUserFacingError(e)}');
       }
       return;
     }
@@ -726,7 +731,7 @@ class _DatabaseSettingsPanelState extends ConsumerState<DatabaseSettingsPanel> {
       if (!mounted) return false;
       setState(() {
         _destinationFolderError =
-            'Δεν ήταν δυνατή η δημιουργία του φακέλου: $e';
+            'Δεν ήταν δυνατή η δημιουργία του φακέλου: ${humanizeUserFacingError(e)}';
       });
       return false;
     }
@@ -1006,127 +1011,18 @@ class _DatabaseSettingsPanelState extends ConsumerState<DatabaseSettingsPanel> {
     final backupFolder = _destinationController.text.trim().isNotEmpty
         ? _destinationController.text.trim()
         : ref.read(databaseBackupSettingsProvider).destinationDirectory.trim();
-    final initialDirectory = initialDirectoryForFilePicker(
-      backupFolder.isNotEmpty ? backupFolder : null,
-    );
-    final session = await FilePickerSession.run(
-      () => FilePicker.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: ['zip'],
-        dialogTitle: 'Επιλογή αρχείου επαναφοράς (.zip)',
-        initialDirectory: initialDirectory,
-      ),
-    );
-    if (session.refocusedExisting) return;
-    final picked = session.value;
-    if (picked == null ||
-        picked.files.isEmpty ||
-        picked.files.single.path == null) {
-      return;
-    }
-    final zipPath = picked.files.single.path!.trim();
-    if (!mounted) return;
-
     final defaultTarget = _currentDbPath.trim().isNotEmpty
         ? _currentDbPath
         : AppConfig.defaultDbPath;
-
-    final confirmed = await showDialog<bool>(
+    await runRestoreFromBackupZipFlow(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Επαναφορά από zip'),
-        content: Text(
-          'Η βάση θα αντικατασταθεί στο:\n$defaultTarget\n\n'
-          'Οι εικόνες χαρτών (${AppConfig.portableMapsDirName}), εικονίδια '
-          '(${AppConfig.portableImagesDirName}), λεξικό (${AppConfig.portableDictionariesDirName}) '
-          'και βάση Λάμπας (${AppConfig.portableDataBaseDirName}) θα επαναφερθούν στη '
-          'ρίζα της εφαρμογής. Συνέχεια;',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Άκυρο'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Επαναφορά'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true || !mounted) return;
-
-    showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => const AlertDialog(
-        content: Row(
-          children: [
-            SizedBox(
-              width: 48,
-              height: 48,
-              child: CircularProgressIndicator(strokeWidth: 3),
-            ),
-            SizedBox(width: 24),
-            Expanded(child: Text('Επαναφορά από zip…')),
-          ],
-        ),
-      ),
-    );
-
-    DatabaseRestoreResult result;
-    try {
-      try {
-        await DatabaseHelper.instance.closeConnection();
-      } catch (_) {}
-      result = await DatabaseBackupService.restoreFromBackupZip(
-        zipPath,
-        targetDatabasePath: defaultTarget,
-      );
-    } catch (e) {
-      result = DatabaseRestoreResult(
-        success: false,
-        message: e.toString(),
-      );
-    } finally {
-      if (mounted) {
-        Navigator.of(context, rootNavigator: true).pop();
-      }
-    }
-
-    if (!mounted) return;
-    final messenger = ScaffoldMessenger.of(context);
-    if (!result.success) {
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text(result.message ?? 'Αποτυχία επαναφοράς'),
-          backgroundColor: Theme.of(context).colorScheme.error,
-        ),
-      );
-      return;
-    }
-
-    if (result.databasePath != null) {
-      final outcome = await setAndVerifyDatabasePath(result.databasePath!);
-      if (!mounted) return;
-      if (outcome.ok) {
+      backupFolderHint: backupFolder.isNotEmpty ? backupFolder : null,
+      currentDatabasePath: defaultTarget,
+      onVerifiedSuccess: () async {
         await widget.onDatabaseLifecycleChanged?.call();
         await _loadDatabasePathSection();
-        messenger.showSnackBar(
-          SnackBar(content: Text(result.message ?? 'Η επαναφορά ολοκληρώθηκε.')),
-        );
-      } else {
-        messenger.showSnackBar(
-          SnackBar(
-            content: Text(
-              outcome.runner.result.message ??
-                  'Η επαναφορά ολοκληρώθηκε αλλά η βάση δεν πέρασε έλεγχο.',
-            ),
-            backgroundColor: Theme.of(context).colorScheme.error,
-          ),
-        );
-      }
-    }
+      },
+    );
   }
 
   @override

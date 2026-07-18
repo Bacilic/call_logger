@@ -9,6 +9,7 @@ import '../../../../core/widgets/remote_tool_icon.dart';
 import '../../../../core/models/remote_tool_role.dart';
 import '../../../../core/services/remote_connection_service.dart';
 import '../../../../core/services/remote_launcher_service.dart';
+import '../../../../core/utils/user_facing_error_messages.dart';
 import '../../provider/call_header_provider.dart';
 import '../../provider/remote_paths_provider.dart';
 import '../../utils/call_remote_targets.dart';
@@ -399,14 +400,16 @@ class _RemoteConnectionButtonsState extends ConsumerState<RemoteConnectionButton
                   child: CircularProgressIndicator(strokeWidth: 2),
                 ),
               ),
-              error: (e, _) => Text('Ρυθμίσεις UI: $e'),
+              error: (e, _) => Text(
+                'Ρυθμίσεις UI: ${humanizeUserFacingError(e)}',
+              ),
             );
           },
           loading: () => const Padding(
             padding: EdgeInsets.all(8),
             child: CircularProgressIndicator(strokeWidth: 2),
           ),
-          error: (e, _) => Text('Διαδρομές: $e'),
+          error: (e, _) => Text('Διαδρομές: ${humanizeUserFacingError(e)}'),
               ),
             );
           },
@@ -416,7 +419,9 @@ class _RemoteConnectionButtonsState extends ConsumerState<RemoteConnectionButton
           ),
           error: (e, _) => Padding(
             padding: const EdgeInsets.all(12),
-            child: Text('Κατάλογος εργαλείων: $e'),
+            child: Text(
+              'Κατάλογος εργαλείων: ${humanizeUserFacingError(e)}',
+            ),
           ),
         );
     if (!widget.framed) return content;
@@ -656,7 +661,7 @@ class _RemoteConnectionButtonsState extends ConsumerState<RemoteConnectionButton
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Αποτυχία εκκίνησης: $e')),
+        SnackBar(content: Text('Αποτυχία εκκίνησης: ${humanizeUserFacingError(e)}')),
       );
     }
   }
@@ -686,7 +691,7 @@ class _RemoteConnectionButtonsState extends ConsumerState<RemoteConnectionButton
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('$e')),
+          SnackBar(content: Text(humanizeUserFacingError(e))),
         );
       }
     } finally {

@@ -242,25 +242,14 @@ void main() {
         expect(oldV?['linked_phone_numbers'], [oldPhone]);
         expect(newV?['linked_phone_numbers'], [newPhone]);
 
-        final newPhoneId = (await db.query(
-          'phones',
-          columns: ['id'],
-          where: 'number = ?',
-          whereArgs: [newPhone],
-        ))
-            .single['id'] as int;
-        final linkAudit = await db.query(
+        // Η σύνδεση τηλεφώνου καταγράφεται πλέον μόνο στην πλευρά χρήστη
+        // (όχι ξεχωριστό audit «σύνδεση χρήστη» στο entity τηλεφώνου).
+        final phoneLinkAudits = await db.query(
           'audit_log',
-          where:
-              'action = ? AND entity_type = ? AND entity_id = ? AND details = ?',
-          whereArgs: [
-            'ΤΡΟΠΟΠΟΙΗΣΗ',
-            AuditEntityTypes.phone,
-            newPhoneId,
-            'phones id=$newPhoneId (σύνδεση χρήστη)',
-          ],
+          where: "entity_type = ? AND details LIKE '%σύνδεση χρήστη%'",
+          whereArgs: [AuditEntityTypes.phone],
         );
-        expect(linkAudit, hasLength(1));
+        expect(phoneLinkAudits, isEmpty);
       },
     );
 

@@ -6,6 +6,7 @@ import '../../../../core/database/database_helper.dart';
 import '../../../../core/database/department_repository.dart';
 import '../../../../core/database/user_repository.dart';
 import '../../../../core/widgets/database_persistence_error_snackbar.dart';
+import '../../../../core/widgets/draggable_dialog_shell.dart';
 import '../../../../core/services/lookup_service.dart';
 import '../../../../core/database/audit_diff_helper.dart';
 import '../../../../core/database/audit_service.dart';
@@ -526,8 +527,10 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog>
         if (didPop) return;
         await _requestClose();
       },
-      child: AlertDialog(
-      title: Text(_title),
+      child: DraggableDialogShell(
+        title: Text(_title),
+        builder: (titleHandle) => AlertDialog(
+      title: titleHandle,
       content: Form(
         key: _formKey,
         child: SingleChildScrollView(
@@ -960,6 +963,7 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog>
           child: Text(_isEdit ? 'Αποθήκευση' : 'Προσθήκη'),
         ),
       ],
+      ),
       ),
       ),
     );

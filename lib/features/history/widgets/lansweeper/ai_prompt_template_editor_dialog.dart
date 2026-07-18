@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/widgets/dialog_snackbar_scope.dart';
+import '../../../../core/utils/user_facing_error_messages.dart';
 import '../../../../core/services/ai_prompt_template_controller.dart';
 import '../../../../core/services/gemini_ticket_service.dart';
 import '../../providers/gemini_settings_provider.dart';
@@ -119,7 +120,11 @@ class _AiPromptTemplateEditorDialogState
       if (!mounted) return;
       setState(() => _saving = false);
       showDialogSnackBar(
-        SnackBar(content: Text('Αποτυχία αποθήκευσης: $e')),
+        SnackBar(
+          content: Text(
+            'Αποτυχία αποθήκευσης: ${humanizeUserFacingError(e)}',
+          ),
+        ),
       );
     }
   }
