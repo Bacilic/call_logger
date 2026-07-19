@@ -9,6 +9,10 @@ import 'package:window_manager/window_manager.dart';
 
 import '../../features/database/services/database_exit_backup.dart';
 import '../services/desktop_window_service.dart';
+import '../services/settings_service.dart';
+import '../services/shutdown_coordinator.dart';
+import '../services/shutdown_trace_service.dart';
+import '../services/crash_log_service.dart';
 import '../database/database_helper.dart';
 import '../database/database_init_result.dart';
 import '../database/database_init_runner.dart';
@@ -17,6 +21,7 @@ import '../providers/quick_call_providers.dart';
 import '../../features/calls/screens/widgets/quick_call_dialog.dart';
 import 'main_shell.dart';
 import 'quick_call_shortcuts.dart';
+import 'shutdown_progress_screen.dart';
 
 /// Root-level Shortcuts και Actions για την εφαρμογή.
 /// Κρατά σε state το τρέχον αποτέλεσμα βάσης και ξανατρέχει τους ελέγχους
@@ -26,10 +31,18 @@ class AppShortcuts extends ConsumerStatefulWidget {
     super.key,
     required this.initialDatabaseResult,
     required this.initialIsLocalDevMode,
+    @visibleForTesting this.shutdownCoordinatorFactory,
+    @visibleForTesting this.shutdownTraceFactory,
   });
 
   final DatabaseInitResult initialDatabaseResult;
   final bool initialIsLocalDevMode;
+
+  /// Εργοστάσιο συντονιστή (μόνο για τεστ — παράκαμψη πραγματικών βημάτων).
+  final ShutdownCoordinator Function()? shutdownCoordinatorFactory;
+
+  /// Εργοστάσιο ιχνηλάτη (μόνο για τεστ).
+  final Future<ShutdownTraceService?> Function()? shutdownTraceFactory;
 
   @override
   ConsumerState<AppShortcuts> createState() => _AppShortcutsState();
@@ -43,6 +56,8 @@ class _AppShortcutsState extends ConsumerState<AppShortcuts>
   final DesktopWindowService _desktopWindow = DesktopWindowService();
   AppLifecycleListener? _appLifecycleListener;
   bool _windowCloseHandling = false;
+  bool _showShutdownProgress = false;
+  ShutdownCoordinator? _activeShutdownCoordinator;
 
   static final Map<ShortcutActivator, Intent> _shortcuts = quickCallShortcuts;
 
@@ -146,19 +161,77 @@ class _AppShortcutsState extends ConsumerState<AppShortcuts>
   Future<void> _handleWindowsClose() async {
     if (_windowCloseHandling) return;
     _windowCloseHandling = true;
+
+    // ΣΗΜΕΙΩΣΗ (μη το εκλάβεις ως ξεχασμένο κλείσιμο παραθύρου): εδώ ΔΕΝ καλείται
+    // πια `windowManager.destroy()`. Ο ShutdownCoordinator.run() εκτελεί τα βήματα
+    // καθαρισμού και τερματίζει ο ίδιος με exit(0), παρακάμπτοντας το teardown της
+    // μηχανής Flutter που κατέρρεε (0xc0000005). Το παράθυρο μένει σκόπιμα ορατό,
+    // δείχνοντας την οθόνη προόδου — δεν το κρύβουμε, γιατί ο διάλογος προόδου ζει
+    // μέσα σε αυτό. Δες lib/core/services/shutdown_coordinator.dart.
+    final coordinator = widget.shutdownCoordinatorFactory?.call() ??
+        ShutdownCoordinator(
+          persistWindowBounds: _persistWindowBoundsIfNeeded,
+          walCheckpoint: () =>
+              DatabaseHelper.instance.tryWalCheckpoint(mode: 'FULL'),
+          exitBackup: DatabaseExitBackup.runIfEnabled,
+          closeConnection: DatabaseHelper.instance.closeConnection,
+          closeCrashLog: () async {
+            await CrashLogService.instanceOrNull?.onShutdown();
+          },
+        );
+
+    if (mounted) {
+      setState(() {
+        _activeShutdownCoordinator = coordinator;
+      });
+    } else {
+      _activeShutdownCoordinator = coordinator;
+    }
+
+    final trace = widget.shutdownTraceFactory != null
+        ? await widget.shutdownTraceFactory!()
+        : await _createTraceServiceIfEnabled();
+    if (trace != null) {
+      await trace.beginSession();
+      trace.listenTo(coordinator.events);
+    }
+
+    var shutdownStillRunning = true;
+    final revealTimer = scheduleShutdownProgressReveal(
+      onReveal: () {
+        if (!mounted) return;
+        setState(() => _showShutdownProgress = true);
+      },
+      isShutdownStillRunning: () => shutdownStillRunning && mounted,
+    );
+
     try {
-      await _persistWindowBoundsIfNeeded();
-      await DatabaseHelper.instance.tryWalCheckpoint(mode: 'FULL');
-      await DatabaseExitBackup.runIfEnabled();
-      await DatabaseHelper.instance.closeConnection();
-    } catch (_) {
-      // Συνεχίζουμε προς κλείσιμο παραθύρου ακόμα κι αν αποτύχει βήμα.
+      // Ένα frame ώστε το Offstage ShutdownProgressScreen να συνδεθεί στο stream
+      // πριν ξεκινήσουν τα γεγονότα των βημάτων.
+      await WidgetsBinding.instance.endOfFrame;
+      await coordinator.run();
     } finally {
-      if (Platform.isWindows) {
-        try {
-          await windowManager.destroy();
-        } on MissingPluginException catch (_) {}
-      }
+      shutdownStillRunning = false;
+      revealTimer.cancel();
+      await trace?.endSession();
+    }
+  }
+
+  Future<ShutdownTraceService?> _createTraceServiceIfEnabled() async {
+    try {
+      final settings = SettingsService();
+      final enabled = await settings.getShutdownTraceEnabled();
+      if (!enabled) return null;
+      final dbPath = await settings.getDatabasePath();
+      if (dbPath.trim().isEmpty) return null;
+      return ShutdownTraceService(
+        logsDirectory:
+            ShutdownTraceService.logsDirectoryForDatabasePath(dbPath),
+        enabled: true,
+        retentionCount: await settings.getShutdownTraceRetentionCount(),
+      );
+    } catch (_) {
+      return null;
     }
   }
 
@@ -203,7 +276,8 @@ class _AppShortcutsState extends ConsumerState<AppShortcuts>
 
   @override
   Widget build(BuildContext context) {
-    return Shortcuts(
+    final coordinator = _activeShutdownCoordinator;
+    final shell = Shortcuts(
       shortcuts: _shortcuts,
       child: Actions(
         actions: <Type, Action<Intent>>{
@@ -221,6 +295,21 @@ class _AppShortcutsState extends ConsumerState<AppShortcuts>
           onDatabaseReopened: _recheckDatabase,
         ),
       ),
+    );
+
+    if (coordinator == null) return shell;
+
+    // Η οθόνη προόδου μένει στο δέντρο (Offstage) ώστε να συλλέγει γεγονότα
+    // από την αρχή· γίνεται ορατή μόνο μετά το κατώφλι των 500 ms.
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        if (!_showShutdownProgress) shell,
+        Offstage(
+          offstage: !_showShutdownProgress,
+          child: ShutdownProgressScreen(events: coordinator.events),
+        ),
+      ],
     );
   }
 }

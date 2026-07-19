@@ -539,8 +539,12 @@ class DepartmentRepository {
     return rows.isNotEmpty;
   }
 
-  Future<String?> getDepartmentNameById(int departmentId) async {
-    final rows = await db.query(
+  Future<String?> getDepartmentNameById(
+    int departmentId, {
+    DatabaseExecutor? executor,
+  }) async {
+    final e = executor ?? db;
+    final rows = await e.query(
       'departments',
       columns: ['name'],
       where: 'id = ? AND ${DirectorySupport.notDeletedClause}',

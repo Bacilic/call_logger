@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html lang="el">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Δείγμα διάταξης — Remote Tools πάνω (Πρότυπο Β)</title>
+  <style>
+    :root {
+      --bg: #f3f4f6;
+      --panel: #ffffff;
+      --border: #d1d5db;
+      --muted: #6b7280;
+      --title: #111827;
+      --accent: #2563eb;
+      --bad: #dc2626;
+      --good: #059669;
+      --field: #f9fafb;
+      --chip: #e5e7eb;
+      --sidebar: #1f2937;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", system-ui, sans-serif;
+      background: #e8eaed;
+      color: var(--title);
+    }
+    .page {
+      max-width: 1280px;
+      margin: 0 auto;
+      padding: 20px 24px 40px;
+    }
+    h1 {
+      font-size: 1.35rem;
+      margin: 0 0 6px;
+    }
+    .intro {
+      color: var(--muted);
+      margin: 0 0 18px;
+      max-width: 820px;
+      line-height: 1.45;
+    }
+    .tabs {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 16px;
+      flex-wrap: wrap;
+    }
+    .tab {
+      border: 1px solid var(--border);
+      background: #fff;
+      padding: 8px 14px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: 600;
+    }
+    .tab.active {
+      background: var(--accent);
+      color: #fff;
+      border-color: var(--accent);
+    }
+    .pair {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+    @media (max-width: 1100px) {
+      .pair { grid-template-columns: 1fr; }
+    }
+    .frame-wrap {
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 1px 3px rgba(0,0,0,.06);
+    }
+    .frame-label {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--border);
+      font-weight: 700;
+      font-size: .95rem;
+    }
+    .badge {
+      font-size: .75rem;
+      font-weight: 700;
+      padding: 3px 8px;
+      border-radius: 999px;
+      color: #fff;
+    }
+    .badge.bad { background: var(--bad); }
+    .badge.good { background: var(--good); }
+    .app {
+      display: grid;
+      grid-template-columns: 56px 1fr;
+      min-height: 520px;
+      background: var(--bg);
+    }
+    .sidebar {
+      background: var(--sidebar);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 14px;
+      padding: 14px 0;
+    }
+    .nav-dot {
+      width: 28px;
+      height: 28px;
+      border-radius: 8px;
+      background: #374151;
+    }
+    .nav-dot.on { background: #60a5fa; }
+    .main {
+      padding: 14px 16px 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .screen-title {
+      font-size: 1.05rem;
+      font-weight: 700;
+      margin: 0 0 2px;
+    }
+    .fields {
+      display: grid;
+      grid-template-columns: 1.1fr 1.2fr 1.1fr 1fr auto;
+      gap: 10px;
+      align-items: end;
+    }
+    .field label {
+      display: block;
+      font-size: .72rem;
+      color: var(--muted);
+      margin-bottom: 4px;
+    }
+    .field .box {
+      height: 36px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--field);
+      padding: 0 10px;
+      display: flex;
+      align-items: center;
+      font-size: .9rem;
+      position: relative;
+    }
+    .field .box.empty { color: #9ca3af; }
+    .field .box .x {
+      position: absolute;
+      right: 8px;
+      color: #9ca3af;
+      font-size: .85rem;
+    }
+    .clear-x {
+      width: 36px;
+      height: 36px;
+      border-radius: 8px;
+      border: none;
+      background: #ef4444;
+      color: #fff;
+      font-weight: 700;
+    }
+    .body {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      min-height: 340px;
+    }
+    .row {
+      display: flex;
+      gap: 12px;
+      align-items: flex-start;
+      flex-wrap: wrap;
+    }
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px 12px;
+      box-shadow: 0 1px 2px rgba(0,0,0,.04);
+    }
+    .card h3 {
+      margin: 0 0 8px;
+      font-size: .85rem;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .remote {
+      width: 150px;
+      text-align: center;
+      background: #f3f4f6;
+    }
+    .remote .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 8px 12px;
+      font-weight: 600;
+      font-size: .85rem;
+    }
+    .remote .pc {
+      margin-top: 8px;
+      font-size: .8rem;
+      color: var(--muted);
+      font-weight: 600;
+    }
+    .map {
+      width: 280px;
+    }
+    .map .snap {
+      height: 140px;
+      border-radius: 8px;
+      background:
+        linear-gradient(135deg, #e5e7eb 25%, transparent 25%) -10px 0 / 20px 20px,
+        linear-gradient(225deg, #e5e7eb 25%, transparent 25%) -10px 0 / 20px 20px,
+        linear-gradient(315deg, #e5e7eb 25%, transparent 25%) 0 0 / 20px 20px,
+        linear-gradient(45deg, #e5e7eb 25%, #f3f4f6 25%) 0 0 / 20px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--muted);
+      font-size: .85rem;
+      text-align: center;
+      padding: 12px;
+      border: 1px dashed #c7cad1;
+    }
+    .caller {
+      width: 220px;
+      min-height: 90px;
+    }
+    .caller .line { font-size: .85rem; margin: 4px 0; color: #374151; }
+    .ghost-space {
+      height: 120px;
+      border: 2px dashed #fca5a5;
+      border-radius: 10px;
+      color: #b91c1c;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: .82rem;
+      background: #fef2f2;
+      width: 100%;
+    }
+    .highlight-up {
+      outline: 3px solid #10b981;
+      outline-offset: 2px;
+    }
+    .footer-note {
+      margin-top: 16px;
+      padding: 12px 14px;
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      line-height: 1.5;
+      font-size: .92rem;
+    }
+    .footer-note strong { color: var(--accent); }
+    .scenario { display: none; }
+    .scenario.active { display: block; }
+    .arrow {
+      align-self: center;
+      text-align: center;
+      color: var(--muted);
+      font-size: .85rem;
+      padding: 4px 0;
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <h1>Δείγμα διάταξης — κάρτα εργαλείων πάνω (χωρίς τηλέφωνο)</h1>
+    <p class="intro">
+      Όταν υπάρχει εξοπλισμός με αντιστοίχιση σε τμήμα (και προαιρετικά καλούντα), αλλά το τηλέφωνο είναι κενό,
+      σήμερα η κάρτα TightVNC πέφτει μόνη της χαμηλά. Η πρόταση τη βάζει στην <strong>πρώτη γραμμή</strong>
+      δίπλα στη «Θέση τμήματος», όπως ήδη γίνεται όταν υπάρχει μόνο εξοπλισμός.
+    </p>
+
+    <div class="tabs">
+      <button class="tab active" data-scenario="s1">Σενάριο 1 — Εξοπλισμός + Τμήμα + Καλούντας</button>
+      <button class="tab" data-scenario="s2">Σενάριο 2 — Εξοπλισμός + Τμήμα (χωρίς καλούντα)</button>
+    </div>
+
+    <!-- ========== SCENARIO 1 ========== -->
+    <div class="scenario active" id="s1">
+      <div class="pair">
+        <!-- NOW -->
+        <div class="frame-wrap">
+          <div class="frame-label">
+            <span>Τώρα (λάθος)</span>
+            <span class="badge bad">Remote κάτω</span>
+          </div>
+          <div class="app">
+            <aside class="sidebar">
+              <div class="nav-dot on"></div>
+              <div class="nav-dot"></div>
+              <div class="nav-dot"></div>
+              <div class="nav-dot"></div>
+            </aside>
+            <section class="main">
+              <div class="screen-title">Πληροφορίες</div>
+              <div class="fields">
+                <div class="field">
+                  <label>Τηλέφωνο</label>
+                  <div class="box empty">—</div>
+                </div>
+                <div class="field">
+                  <label>Καλούντας</label>
+                  <div class="box">Φαρμακοποιός 1<span class="x">×</span></div>
+                </div>
+                <div class="field">
+                  <label>Τμήμα</label>
+                  <div class="box">Φαρμακείο<span class="x">×</span></div>
+                </div>
+                <div class="field">
+                  <label>Κωδικός Εξοπλισμού</label>
+                  <div class="box">1001<span class="x">×</span></div>
+                </div>
+                <button class="clear-x" type="button">×</button>
+              </div>
+              <div class="body">
+                <div class="row">
+                  <div class="card caller">
+                    <h3>👤 Καλούντας</h3>
+                    <div class="line">Φαρμακοποιός 1</div>
+                    <div class="line">Τμήμα: Φαρμακείο</div>
+                  </div>
+                  <div class="card map">
+                    <h3>🧭 Θέση τμήματος</h3>
+                    <div class="snap">Δεν βρέθηκε αρχείο κάτοψης</div>
+                  </div>
+                </div>
+                <div class="ghost-space">κενός χώρος — η κάρτα εργαλείων είναι πιο κάτω ↓</div>
+                <div class="row">
+                  <div class="card remote">
+                    <div class="btn">🖥 TightVNC</div>
+                    <div class="pc">PC1001</div>
+                  </div>
+                </div>
+              </div>
+            </section>
+          </div>
+        </div>
+
+        <!-- PROPOSED -->
+        <div class="frame-wrap">
+          <div class="frame-label">
+            <span>Προτεινόμενο</span>
+            <span class="badge good">Remote πάνω</span>
+          </div>
+          <div class="app">
+            <aside class="sidebar">
+              <div class="nav-dot on"></div>
+              <div class="nav-dot"></div>
+              <div class="nav-dot"></div>
+              <div class="nav-dot"></div>
+            </aside>
+            <section class="main">
+              <div class="screen-title">Πληροφορίες</div>
+              <div class="fields">
+                <div class="field">
+                  <label>Τηλέφωνο</label>
+                  <div class="box empty">—</div>
+                </div>
+                <div class="field">
+                  <label>Καλούντας</label>
+                  <div class="box">Φαρμακοποιός 1<span class="x">×</span></div>
+                </div>
+                <div class="field">
+                  <label>Τμήμα</label>
+                  <div class="box">Φαρμακείο<span class="x">×</span></div>
+                </div>
+                <div class="field">
+                  <label>Κωδικός Εξοπλισμού</label>
+                  <div class="box">1001<span class="x">×</span></div>
+                </div>
+                <button class="clear-x" type="button">×</button>
+              </div>
+              <div class="body">
+                <div class="row">
+                  <div class="card remote highlight-up">
+                    <div class="btn">🖥 TightVNC</div>
+                    <div class="pc">PC1001</div>
+                  </div>
+                  <div class="card map">
+                    <h3>🧭 Θέση τμήματος</h3>
+                    <div class="snap">Δεν βρέθηκε αρχείο κάτοψης</div>
+                  </div>
+                  <div class="card caller">
+                    <h3>👤 Καλούντας</h3>
+                    <div class="line">Φαρμακοποιός 1</div>
+                    <div class="line">Τμήμα: Φαρμακείο</div>
+                  </div>
+                </div>
+              </div>
+            </section>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ========== SCENARIO 2 ========== -->
+    <div class="scenario" id="s2">
+      <div class="pair">
+        <div class="frame-wrap">
+          <div class="frame-label">
+            <span>Τώρα (λάθος)</span>
+            <span class="badge bad">Remote αποκομμένο αριστερά</span>
+          </div>
+          <div class="app">
+            <aside class="sidebar">
+              <div class="nav-dot on"></div>
+              <div class="nav-dot"></div>
+              <div class="nav-dot"></div>
+            </aside>
+            <section class="main">
+              <div class="screen-title">Πληροφορίες</div>
+              <div class="fields">
+                <div class="field">
+                  <label>Τηλέφωνο</label>
+                  <div class="box empty">—</div>
+                </div>
+                <div class="field">
+                  <label>Καλούντας</label>
+                  <div class="box empty">—</div>
+                </div>
+                <div class="field">
+                  <label>Τμήμα</label>
+                  <div class="box">Αιμοδοσία<span class="x">×</span></div>
+                </div>
+                <div class="field">
+                  <label>Κωδικός Εξοπλισμού</label>
+                  <div class="box">2568<span class="x">×</span></div>
+                </div>
+                <button class="clear-x" type="button">×</button>
+              </div>
+              <div class="body">
+                <div class="row">
+                  <div class="card remote">
+                    <div class="btn">🖥 TightVNC</div>
+                    <div class="pc">PC2568</div>
+                  </div>
+                </div>
+                <div class="row">
+                  <div class="card map">
+                    <h3>🧭 Θέση τμήματος</h3>
+                    <div class="snap">Δεν υπάρχει το τμήμα στο χάρτη</div>
+                  </div>
+                </div>
+              </div>
+            </section>
+          </div>
+        </div>
+
+        <div class="frame-wrap">
+          <div class="frame-label">
+            <span>Προτεινόμενο</span>
+            <span class="badge good">Remote + χάρτης ίδια γραμμή</span>
+          </div>
+          <div class="app">
+            <aside class="sidebar">
+              <div class="nav-dot on"></div>
+              <div class="nav-dot"></div>
+              <div class="nav-dot"></div>
+            </aside>
+            <section class="main">
+              <div class="screen-title">Πληροφορίες</div>
+              <div class="fields">
+                <div class="field">
+                  <label>Τηλέφωνο</label>
+                  <div class="box empty">—</div>
+                </div>
+                <div class="field">
+                  <label>Καλούντας</label>
+                  <div class="box empty">—</div>
+                </div>
+                <div class="field">
+                  <label>Τμήμα</label>
+                  <div class="box">Αιμοδοσία<span class="x">×</span></div>
+                </div>
+                <div class="field">
+                  <label>Κωδικός Εξοπλισμού</label>
+                  <div class="box">2568<span class="x">×</span></div>
+                </div>
+                <button class="clear-x" type="button">×</button>
+              </div>
+              <div class="body">
+                <div class="row">
+                  <div class="card remote highlight-up">
+                    <div class="btn">🖥 TightVNC</div>
+                    <div class="pc">PC2568</div>
+                  </div>
+                  <div class="card map">
+                    <h3>🧭 Θέση τμήματος</h3>
+                    <div class="snap">Δεν υπάρχει το τμήμα στο χάρτη</div>
+                  </div>
+                </div>
+              </div>
+            </section>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="footer-note">
+      <strong>Κανόνας πρότασης:</strong>
+      Χωρίς τηλέφωνο, όταν υπάρχει εξοπλισμός, η κάρτα εργαλείων μπαίνει στην
+      <strong>πρώτη γραμμή περιεχομένου</strong> μαζί με τη «Θέση τμήματος»
+      (και την κάρτα καλούντος, αν υπάρχει) — όχι σε ξεχωριστή γραμμή από κάτω.
+      <br /><br />
+      Πες μου αν αυτό είναι σωστό, ή αν θέλεις άλλη σειρά (π.χ. χάρτης αριστερά / εργαλεία δεξιά κοντά στον κωδικό εξοπλισμού).
+      Μόνο μετά την επικύρωσή σου θα προχωρήσουμε σε υλοποίηση με «Προγραμμάτισε».
+    </div>
+  </div>
+
+  <script>
+    document.querySelectorAll('.tab').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.tab').forEach((b) => b.classList.remove('active'));
+        document.querySelectorAll('.scenario').forEach((s) => s.classList.remove('active'));
+        btn.classList.add('active');
+        document.getElementById(btn.dataset.scenario).classList.add('active');
+      });
+    });
+  </script>
+</body>
+</html>

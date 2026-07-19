@@ -57,6 +57,15 @@ class SettingsService
   static const int maxCrashLogRetentionCount =
       SettingsServiceCatalogsMixin.maxCrashLogRetentionCount;
 
+  static const bool defaultShutdownTraceEnabled =
+      SettingsServiceCatalogsMixin.defaultShutdownTraceEnabled;
+  static const int defaultShutdownTraceRetentionCount =
+      SettingsServiceCatalogsMixin.defaultShutdownTraceRetentionCount;
+  static const int minShutdownTraceRetentionCount =
+      SettingsServiceCatalogsMixin.minShutdownTraceRetentionCount;
+  static const int maxShutdownTraceRetentionCount =
+      SettingsServiceCatalogsMixin.maxShutdownTraceRetentionCount;
+
   /// Κλειδί αποθήκευσης SharedPreferences (με πρόθεμα προφίλ όταν υπάρχει CLI `--profile`).
   static String _prefKey(String baseKey) =>
       AppConfig.prefixedPreferencesKey(baseKey);

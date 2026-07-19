@@ -157,19 +157,19 @@ class CallsLayoutEngine {
     CallsFieldGroups groups,
     CallsLayoutVisibility v,
   ) {
-    final row2 = CallsLayoutRow([
-      if (v.showUserCard) CallsLayoutColumn.singleSlot(CallsLayoutSlot.callerCard),
-      if (v.showMapCard) CallsLayoutColumn.singleSlot(CallsLayoutSlot.map),
-      if (v.showEquipmentRecentPanel)
-        CallsLayoutColumn.singleSlot(CallsLayoutSlot.equipmentHistory),
-    ]);
-
-    final row3 = CallsLayoutRow([
+    // Χωρίς τηλέφωνο: remote + χάρτης + καλούντας στην 1η γραμμή.
+    // Το ιστορικό εξοπλισμού ΔΕΝ μπαίνει εδώ — 4η στήλη ανάγκαζε στοίβα
+    // (ίσος διαμοιρασμός 380px) ακόμα και σε φαρδιά παράθυρα.
+    final rowInfo = CallsLayoutRow([
       if (v.showRemoteTools)
         CallsLayoutColumn.singleSlot(CallsLayoutSlot.remoteTools),
+      if (v.showMapCard) CallsLayoutColumn.singleSlot(CallsLayoutSlot.map),
+      if (v.showUserCard) CallsLayoutColumn.singleSlot(CallsLayoutSlot.callerCard),
     ]);
 
-    final row4 = CallsLayoutRow([
+    final rowHistory = CallsLayoutRow([
+      if (v.showEquipmentRecentPanel)
+        CallsLayoutColumn.singleSlot(CallsLayoutSlot.equipmentHistory),
       if (v.showEmployeeRecentCard)
         CallsLayoutColumn.singleSlot(CallsLayoutSlot.callerHistory),
       if (v.showGlobalRecentCard)
@@ -178,7 +178,7 @@ class CallsLayoutEngine {
 
     return CallsLayoutPlan(
       template: CallsLayoutTemplate.b,
-      rows: [row2, row3, row4].where((r) => !r.isEmpty).toList(),
+      rows: [rowInfo, rowHistory].where((r) => !r.isEmpty).toList(),
     );
   }
 
@@ -206,15 +206,16 @@ class CallsLayoutEngine {
     CallsFieldGroups groups,
     CallsLayoutVisibility v,
   ) {
+    // Remote tools στην 1η γραμμή μαζί με χάρτη/ιστορικό εξοπλισμού.
     final row2 = CallsLayoutRow([
       if (v.showRemoteTools)
         CallsLayoutColumn.singleSlot(CallsLayoutSlot.remoteTools),
+      if (v.showMapCard) CallsLayoutColumn.singleSlot(CallsLayoutSlot.map),
       if (v.showEquipmentRecentPanel)
         CallsLayoutColumn.singleSlot(CallsLayoutSlot.equipmentHistory),
     ]);
 
     final row3Cols = <CallsLayoutColumn>[
-      if (v.showMapCard) CallsLayoutColumn.singleSlot(CallsLayoutSlot.map),
       if (v.showGlobalRecentCard)
         CallsLayoutColumn.singleSlot(CallsLayoutSlot.globalRecent),
     ];

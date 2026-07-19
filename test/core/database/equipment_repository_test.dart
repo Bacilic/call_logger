@@ -378,5 +378,40 @@ void main() {
         );
       },
     );
+
+    test(
+      'deleteEquipments / countUsersLinkedToEquipment μέσα σε εξωτερική transaction με executor: txn',
+      () async {
+        final eqId = await repo.insertEquipmentFromMap(
+          equipmentRow('PC-TXN-EXECUTOR'),
+        );
+        await db.insert('user_equipment', {
+          'user_id': userId,
+          'equipment_id': eqId,
+        });
+        await db.insert('user_equipment', {
+          'user_id': userId2,
+          'equipment_id': eqId,
+        });
+
+        await db.transaction((txn) async {
+          expect(
+            await repo.countUsersLinkedToEquipment(eqId, executor: txn),
+            2,
+          );
+          await repo.deleteEquipments([eqId], executor: txn);
+          expect(
+            await repo.countUsersLinkedToEquipment(eqId, executor: txn),
+            0,
+          );
+        }).timeout(const Duration(seconds: 10));
+
+        expect(
+          (await db.query('equipment', where: 'id = ?', whereArgs: [eqId]))
+              .single['is_deleted'],
+          1,
+        );
+      },
+    );
   });
 }

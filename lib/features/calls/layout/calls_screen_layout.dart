@@ -336,10 +336,6 @@ class _ExpandedPlanBody extends ConsumerWidget {
 
     final plan = CallsLayoutEngine.build(groups, visibility);
     final width = MediaQuery.sizeOf(context).width - 32;
-    final isNarrowViewport = callsLayoutShouldStackColumns(
-      contentWidth: width,
-      plan: plan,
-    );
 
     return Column(
       children: [
@@ -348,7 +344,10 @@ class _ExpandedPlanBody extends ConsumerWidget {
             padding: const EdgeInsets.only(bottom: 16),
             child: _LayoutRowWidget(
               row: row,
-              isNarrowViewport: isNarrowViewport,
+              isNarrowViewport: callsLayoutShouldStackRow(
+                contentWidth: width,
+                row: row,
+              ),
               header: header,
               tools: tools,
               cardsVis: cardsVis,

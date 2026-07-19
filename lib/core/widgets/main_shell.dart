@@ -36,6 +36,7 @@ import 'main_nav_destination.dart';
 import 'quick_call_fab.dart';
 import '../services/settings_service.dart';
 import '../about/widgets/version_chip.dart';
+import '../updates/update_startup_prompt.dart';
 import 'nav_rail_attention_badge.dart';
 import '../../features/tasks/providers/tasks_provider.dart';
 import '../../features/calls/provider/call_entry_provider.dart';
@@ -408,55 +409,62 @@ class _MainShellState extends ConsumerState<MainShell>
     }
 
     if (dictionaryImmersive || historyImmersive) {
-      return Scaffold(
-        appBar: null,
-        floatingActionButton: const QuickCallFloatingButton(),
-        body: SafeArea(
-          child: _destinationContentColumn(
-            dictionaryImmersive
-                ? MainNavDestination.dictionary
-                : MainNavDestination.history,
-            pendingRestartDueToPathChange: _pendingRestartDueToPathChange,
+      return Stack(
+        children: [
+          Scaffold(
+            appBar: null,
+            floatingActionButton: const QuickCallFloatingButton(),
+            body: SafeArea(
+              child: _destinationContentColumn(
+                dictionaryImmersive
+                    ? MainNavDestination.dictionary
+                    : MainNavDestination.history,
+                pendingRestartDueToPathChange: _pendingRestartDueToPathChange,
+              ),
+            ),
           ),
-        ),
+          const UpdateStartupPromptListener(),
+        ],
       );
     }
 
     final showAppBar = effectiveDestination != MainNavDestination.calls;
     final isLampDestination = effectiveDestination == MainNavDestination.lamp;
-    return Scaffold(
-      appBar: showAppBar
-          ? AppBar(
-              title: isLampDestination
-                  ? Row(
-                      children: [
-                        Icon(
-                          Icons.lightbulb_outline,
-                          color: Theme.of(context).colorScheme.primary,
-                        ),
-                        const SizedBox(width: 12),
-                        const Text('Λάμπα'),
-                      ],
-                    )
-                  : const Text('Καταγραφή Κλήσεων'),
-              actions: isLampDestination
-                  ? <Widget>[
-                      IconButton(
-                        icon: const Icon(Icons.settings),
-                        tooltip: 'Ρυθμίσεις Λάμπας',
-                        onPressed: () {
-                          ref
-                              .read(
-                                lampOpenSettingsRequestProvider.notifier,
-                              )
-                              .request();
-                        },
-                      ),
-                    ]
-                  : null,
-            )
-          : null,
-      body: Row(
+    return Stack(
+      children: [
+        Scaffold(
+          appBar: showAppBar
+              ? AppBar(
+                  title: isLampDestination
+                      ? Row(
+                          children: [
+                            Icon(
+                              Icons.lightbulb_outline,
+                              color: Theme.of(context).colorScheme.primary,
+                            ),
+                            const SizedBox(width: 12),
+                            const Text('Λάμπα'),
+                          ],
+                        )
+                      : const Text('Καταγραφή Κλήσεων'),
+                  actions: isLampDestination
+                      ? <Widget>[
+                          IconButton(
+                            icon: const Icon(Icons.settings),
+                            tooltip: 'Ρυθμίσεις Λάμπας',
+                            onPressed: () {
+                              ref
+                                  .read(
+                                    lampOpenSettingsRequestProvider.notifier,
+                                  )
+                                  .request();
+                            },
+                          ),
+                        ]
+                      : null,
+                )
+              : null,
+          body: Row(
         children: [
           Column(
             crossAxisAlignment: CrossAxisAlignment.center,
@@ -557,6 +565,9 @@ class _MainShellState extends ConsumerState<MainShell>
           ),
         ],
       ),
+        ),
+        const UpdateStartupPromptListener(),
+      ],
     );
   }
 }

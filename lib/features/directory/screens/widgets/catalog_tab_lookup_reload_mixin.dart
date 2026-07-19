@@ -1,3 +1,4 @@
+import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../calls/provider/lookup_provider.dart';
@@ -9,13 +10,17 @@ mixin CatalogTabLookupReloadMixin<T extends ConsumerStatefulWidget>
   ProviderSubscription<AsyncValue<LookupLoadResult>>? _catalogLookupReloadSub;
 
   void attachCatalogLookupReloadListener() {
-    _catalogLookupReloadSub ??=
-        ref.listenManual<AsyncValue<LookupLoadResult>>(
-      lookupServiceProvider,
-      (_, _) {
-        if (mounted) setState(() {});
-      },
-    );
+    if (_catalogLookupReloadSub != null) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _catalogLookupReloadSub ??=
+          ref.listenManual<AsyncValue<LookupLoadResult>>(
+        lookupServiceProvider,
+        (_, _) {
+          if (mounted) setState(() {});
+        },
+      );
+    });
   }
 
   void detachCatalogLookupReloadListener() {

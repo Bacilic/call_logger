@@ -15,6 +15,7 @@ import 'package:window_manager/window_manager.dart';
 
 import 'core/about/version_display.dart';
 import 'core/config/app_config.dart';
+import 'core/updates/update_providers.dart';
 import 'core/utils/windows_cli_error_dialog.dart';
 import 'core/services/crash_log_service.dart';
 import 'core/services/desktop_window_service.dart';
@@ -103,6 +104,12 @@ Future<void> main(List<String> arguments) async {
       WidgetsFlutterBinding.ensureInitialized();
       await AppConfig.configureFromCliArguments(arguments);
 
+      // Εκκρεμής ενημέρωση: αν υπάρχει έτοιμο πακέτο από προηγούμενη «Αναμονή»,
+      // εφάρμοσέ το τώρα (εκκίνηση updater + κλείσιμο) πριν φορτώσει η εφαρμογή.
+      if (await maybeApplyPendingUpdateOnStartup()) {
+        return; // η εφαρμογή κλείνει· ο updater θα την ξανανοίξει.
+      }
+
       FlutterError.onError = (FlutterErrorDetails details) {
         final st = details.stack ?? StackTrace.empty;
         if (_isIgnorableHardwareKeyboardAssertion(details.exception)) {
@@ -169,7 +176,6 @@ Future<void> _bootstrapAndRunApp() async {
           await wm.setTitle(windowTitleWithVersionLabel(pkg.version));
         }
       } catch (_) {}
-      wm.addListener(_CrashLogShutdownListener());
       final display = await ScreenRetriever.instance.getPrimaryDisplay();
       final screenWidth = display.size.width;
       final screenHeight = display.size.height;
@@ -195,6 +201,11 @@ Future<void> _bootstrapAndRunApp() async {
       appVersion = pkg.version;
     }
     final settings = SettingsService();
+    // Το CrashLogService.onShutdown() ΔΕΝ καλείται πλέον από WindowListener εδώ
+    // (ο παλιός _CrashLogShutdownListener αφαιρέθηκε επίτηδες). Καλείται τώρα ως
+    // ένα από τα βήματα του ShutdownCoordinator («Κλείσιμο ημερολογίου
+    // καταγραφής»), ώστε να μην εκτελείται δύο φορές και να έχει σωστή σειρά ως
+    // προς το κλείσιμο της βάσης. Δες lib/core/services/shutdown_coordinator.dart.
     await CrashLogService.initialize(
       databasePath: await settings.getDatabasePath(),
       appVersion: appVersion,
@@ -203,13 +214,6 @@ Future<void> _bootstrapAndRunApp() async {
   } catch (_) {}
 
   runApp(const ProviderScope(child: MyApp()));
-}
-
-class _CrashLogShutdownListener with WindowListener {
-  @override
-  void onWindowClose() {
-    unawaited(CrashLogService.instanceOrNull?.onShutdown());
-  }
 }
 
 class MyApp extends StatelessWidget {

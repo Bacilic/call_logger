@@ -94,7 +94,48 @@ class CallsLayoutPlan {
       ];
 }
 
-/// Αποφασίζει αν οι στήλες μιας γραμμής στοιβάζονται κάθετα αντί για οριζόντιο πλέγμα.
+/// Ελάχιστο χρήσιμο πλάτος στήλης για απόφαση στοίβας (όχι υποχρεωτικά ίσο
+/// με το max cap της κάρτας — το TightVNC είναι στενό).
+double callsLayoutColumnMinWidth(CallsLayoutColumn column) {
+  final slots = column.slots;
+  if (slots.isEmpty) return 0;
+  if (slots.length == 1) {
+    return switch (slots.single) {
+      CallsLayoutSlot.remoteTools => 180,
+      CallsLayoutSlot.map => 336,
+      CallsLayoutSlot.callerCard => 280,
+      CallsLayoutSlot.notes => 420,
+      CallsLayoutSlot.categoryPending => 420,
+      CallsLayoutSlot.equipmentHistory => 320,
+      CallsLayoutSlot.callerHistory => 320,
+      CallsLayoutSlot.globalRecent => 320,
+    };
+  }
+  // Στοίβα μέσα στη στήλη (π.χ. notes+category): το μεγαλύτερο ελάχιστο.
+  return slots
+      .map((s) => callsLayoutColumnMinWidth(CallsLayoutColumn.singleSlot(s)))
+      .fold<double>(0, (a, b) => a > b ? a : b);
+}
+
+/// Αποφασίζει αν οι στήλες μιας γραμμής στοιβάζονται κάθετα.
+bool callsLayoutShouldStackRow({
+  required double contentWidth,
+  required CallsLayoutRow row,
+  double columnGap = 16,
+}) {
+  if (contentWidth < callsLayoutNarrowViewportBreakpoint) return true;
+
+  final cols = row.columns.where((c) => !c.isEmpty).toList();
+  if (cols.length <= 1) return false;
+
+  final gutters = (cols.length - 1) * columnGap;
+  final needed =
+      cols.map(callsLayoutColumnMinWidth).fold<double>(0, (a, b) => a + b) +
+          gutters;
+  return contentWidth < needed;
+}
+
+/// Αποφασίζει αν κάποια γραμμή του πλάνου στοιβάζεται (για tests / συμβατότητα).
 bool callsLayoutShouldStackColumns({
   required double contentWidth,
   required CallsLayoutPlan plan,
@@ -102,11 +143,13 @@ bool callsLayoutShouldStackColumns({
 }) {
   if (contentWidth < callsLayoutNarrowViewportBreakpoint) return true;
   for (final row in plan.rows) {
-    final colCount = row.columns.where((c) => !c.isEmpty).length;
-    if (colCount <= 1) continue;
-    final gutters = (colCount - 1) * columnGap;
-    final perCol = (contentWidth - gutters) / colCount;
-    if (perCol < callsLayoutMinColumnWidth) return true;
+    if (callsLayoutShouldStackRow(
+      contentWidth: contentWidth,
+      row: row,
+      columnGap: columnGap,
+    )) {
+      return true;
+    }
   }
   return false;
 }

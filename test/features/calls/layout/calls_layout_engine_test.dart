@@ -164,7 +164,7 @@ void main() {
       expect(plan.allSlots, contains(CallsLayoutSlot.map));
     });
 
-    test('#12 caller + equipment no map — template B split caller rows', () {
+    test('#12 caller + equipment no map — template B: remote στην 1η γραμμή', () {
       final g = _groups(
         caller: true,
         equipment: EquipmentGroupTier.matchedRecord,
@@ -174,6 +174,19 @@ void main() {
       expect(plan.allSlots, contains(CallsLayoutSlot.remoteTools));
       expect(plan.allSlots, contains(CallsLayoutSlot.callerCard));
       expect(plan.allSlots, contains(CallsLayoutSlot.callerHistory));
+      final firstRowSlots =
+          plan.rows.first.columns.map((c) => c.single).whereType<CallsLayoutSlot>();
+      expect(firstRowSlots, contains(CallsLayoutSlot.remoteTools));
+      expect(firstRowSlots, contains(CallsLayoutSlot.callerCard));
+      expect(
+        plan.rows.any(
+          (r) =>
+              r.columns.length == 1 &&
+              r.columns.single.single == CallsLayoutSlot.remoteTools,
+        ),
+        isFalse,
+        reason: 'το remote δεν πρέπει να είναι μόνο του σε ξεχωριστή γραμμή',
+      );
     });
 
     test('#13 caller + map — template C with map column', () {
@@ -183,7 +196,7 @@ void main() {
       expect(plan.allSlots, containsAll([CallsLayoutSlot.callerCard, CallsLayoutSlot.map]));
     });
 
-    test('#14 equipment + map — template D with map', () {
+    test('#14 equipment + map — template D: remote + χάρτης ίδια γραμμή', () {
       final g = _groups(
         equipment: EquipmentGroupTier.matchedRecord,
         map: true,
@@ -191,9 +204,15 @@ void main() {
       final plan = CallsLayoutEngine.build(g, _visFor(g));
       expect(plan.template, CallsLayoutTemplate.d);
       expect(plan.allSlots, contains(CallsLayoutSlot.map));
+      final firstRowSlots =
+          plan.rows.first.columns.map((c) => c.single).whereType<CallsLayoutSlot>();
+      expect(
+        firstRowSlots,
+        containsAll([CallsLayoutSlot.remoteTools, CallsLayoutSlot.map]),
+      );
     });
 
-    test('#15 full template B without phone', () {
+    test('#15 full template B without phone — remote στην 1η γραμμή με χάρτη', () {
       final g = _groups(
         caller: true,
         equipment: EquipmentGroupTier.matchedRecord,
@@ -201,7 +220,36 @@ void main() {
       );
       final plan = CallsLayoutEngine.build(g, _visFor(g));
       expect(plan.template, CallsLayoutTemplate.b);
-      expect(plan.rows.length, greaterThanOrEqualTo(3));
+      expect(plan.rows.length, greaterThanOrEqualTo(2));
+      final firstRowSlots =
+          plan.rows.first.columns.map((c) => c.single).whereType<CallsLayoutSlot>();
+      expect(
+        firstRowSlots.toList(),
+        containsAll([
+          CallsLayoutSlot.remoteTools,
+          CallsLayoutSlot.map,
+          CallsLayoutSlot.callerCard,
+        ]),
+      );
+      expect(
+        firstRowSlots.first,
+        CallsLayoutSlot.remoteTools,
+        reason: 'σειρά: εργαλεία → χάρτης → καλούντας',
+      );
+      expect(
+        firstRowSlots,
+        isNot(contains(CallsLayoutSlot.equipmentHistory)),
+        reason: 'το ιστορικό εξοπλισμού δεν μπαίνει στην 1η γραμμή (αποφυγή 4 στηλών)',
+      );
+      expect(
+        plan.rows.any(
+          (r) =>
+              r.columns.length == 1 &&
+              r.columns.single.single == CallsLayoutSlot.remoteTools,
+        ),
+        isFalse,
+        reason: 'το remote δεν πρέπει να είναι μόνο του σε ξεχωριστή γραμμή',
+      );
     });
   });
 }

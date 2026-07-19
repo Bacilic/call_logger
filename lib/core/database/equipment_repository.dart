@@ -350,8 +350,12 @@ class EquipmentRepository {
     return db.query('user_equipment');
   }
 
-  Future<int> countUsersLinkedToEquipment(int equipmentId) async {
-    final rows = await db.rawQuery(
+  Future<int> countUsersLinkedToEquipment(
+    int equipmentId, {
+    DatabaseExecutor? executor,
+  }) async {
+    final e = executor ?? db;
+    final rows = await e.rawQuery(
       'SELECT COUNT(*) AS c FROM user_equipment WHERE equipment_id = ?',
       [equipmentId],
     );
@@ -764,43 +768,55 @@ class EquipmentRepository {
     });
   }
 
-  Future<void> deleteEquipments(List<int> ids) async {
+  Future<void> _deleteEquipmentsInTxn(
+    DatabaseExecutor txn,
+    List<int> ids,
+  ) async {
     if (ids.isEmpty) return;
-    final user = await _support.auditPerformingUser();
-    await db.transaction((txn) async {
-      for (final id in ids) {
-        final codeRows = await txn.query(
-          'equipment',
-          columns: ['code_equipment'],
-          where: 'id = ?',
-          whereArgs: [id],
-          limit: 1,
-        );
-        final code = codeRows.isEmpty
-            ? null
-            : (codeRows.first['code_equipment'] as String?)?.trim();
-        await txn.delete(
-          'user_equipment',
-          where: 'equipment_id = ?',
-          whereArgs: [id],
-        );
-        await txn.update(
-          'equipment',
-          {'is_deleted': 1},
-          where: 'id = ?',
-          whereArgs: [id],
-        );
-        await AuditService.log(
-          txn,
-          action: DatabaseHelper.auditActionDelete,
-          userPerforming: user,
-          details: 'equipment id=$id',
-          entityType: AuditEntityTypes.equipment,
-          entityId: id,
-          entityName: code != null && code.isNotEmpty ? code : null,
-        );
-      }
-    });
+    final user = await _support.auditPerformingUser(executor: txn);
+    for (final id in ids) {
+      final codeRows = await txn.query(
+        'equipment',
+        columns: ['code_equipment'],
+        where: 'id = ?',
+        whereArgs: [id],
+        limit: 1,
+      );
+      final code = codeRows.isEmpty
+          ? null
+          : (codeRows.first['code_equipment'] as String?)?.trim();
+      await txn.delete(
+        'user_equipment',
+        where: 'equipment_id = ?',
+        whereArgs: [id],
+      );
+      await txn.update(
+        'equipment',
+        {'is_deleted': 1},
+        where: 'id = ?',
+        whereArgs: [id],
+      );
+      await AuditService.log(
+        txn,
+        action: DatabaseHelper.auditActionDelete,
+        userPerforming: user,
+        details: 'equipment id=$id',
+        entityType: AuditEntityTypes.equipment,
+        entityId: id,
+        entityName: code != null && code.isNotEmpty ? code : null,
+      );
+    }
+  }
+
+  Future<void> deleteEquipments(
+    List<int> ids, {
+    DatabaseExecutor? executor,
+  }) async {
+    if (ids.isEmpty) return;
+    if (executor != null) {
+      return _deleteEquipmentsInTxn(executor, ids);
+    }
+    await db.transaction((txn) => _deleteEquipmentsInTxn(txn, ids));
   }
 
   Future<void> restoreEquipment(List<int> ids) async {

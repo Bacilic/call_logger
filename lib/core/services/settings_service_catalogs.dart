@@ -12,10 +12,21 @@ mixin SettingsServiceCatalogsMixin {
   static const String _keyLexiconCategories = 'lexicon_categories';
   static const String _keyAuditRetentionConfig = 'audit_retention_config_v1';
   static const String _keyCrashLogRetentionCount = 'crash_log_retention_count_v1';
+  static const String _keyShutdownTraceEnabled = 'shutdown_trace_enabled_v1';
+  static const String _keyShutdownTraceRetentionCount =
+      'shutdown_trace_retention_count_v1';
+  static const String _keyUpdateFolderPath = 'update_folder_path';
+  static const String _keyShowUpdateOnStartup = 'show_update_on_startup';
 
   static const int defaultCrashLogRetentionCount = 14;
   static const int minCrashLogRetentionCount = 3;
   static const int maxCrashLogRetentionCount = 90;
+
+  static const bool defaultShutdownTraceEnabled = true;
+  static const int defaultShutdownTraceRetentionCount =
+      defaultCrashLogRetentionCount;
+  static const int minShutdownTraceRetentionCount = minCrashLogRetentionCount;
+  static const int maxShutdownTraceRetentionCount = maxCrashLogRetentionCount;
 
   /// Προεπιλεγμένες κατηγορίες λεξικού (CSV για ρυθμίσεις / dropdown).
   static const String defaultLexiconCategoriesCsv =
@@ -130,6 +141,82 @@ mixin SettingsServiceCatalogsMixin {
     await prefs.setInt(
       SettingsService._prefKey(_keyCrashLogRetentionCount),
       value.clamp(minCrashLogRetentionCount, maxCrashLogRetentionCount),
+    );
+  }
+
+  /// Ενεργοποίηση αρχείου ιχνηλάτησης βημάτων κλεισίματος.
+  Future<bool> getShutdownTraceEnabled() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(SettingsService._prefKey(_keyShutdownTraceEnabled)) ??
+        defaultShutdownTraceEnabled;
+  }
+
+  Future<void> setShutdownTraceEnabled(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(
+      SettingsService._prefKey(_keyShutdownTraceEnabled),
+      value,
+    );
+  }
+
+  /// Πόσα πρόσφατα αρχεία shutdown_trace_*.log διατηρούνται στον φάκελο logs.
+  Future<int> getShutdownTraceRetentionCount() async {
+    final prefs = await SharedPreferences.getInstance();
+    final value = prefs.getInt(
+      SettingsService._prefKey(_keyShutdownTraceRetentionCount),
+    );
+    if (value == null) return defaultShutdownTraceRetentionCount;
+    return value.clamp(
+      minShutdownTraceRetentionCount,
+      maxShutdownTraceRetentionCount,
+    );
+  }
+
+  Future<void> setShutdownTraceRetentionCount(int value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(
+      SettingsService._prefKey(_keyShutdownTraceRetentionCount),
+      value.clamp(
+        minShutdownTraceRetentionCount,
+        maxShutdownTraceRetentionCount,
+      ),
+    );
+  }
+
+  /// Διαδρομή κοινόχρηστου φακέλου ενημερώσεων. Κενό/null = χωρίς τοπική ρύθμιση.
+  Future<String?> getUpdateFolderPath() async {
+    final prefs = await SharedPreferences.getInstance();
+    final s = prefs.getString(SettingsService._prefKey(_keyUpdateFolderPath));
+    if (s == null) return null;
+    final t = s.trim();
+    return t.isEmpty ? null : t;
+  }
+
+  Future<void> setUpdateFolderPath(String? path) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (path == null || path.trim().isEmpty) {
+      await prefs.remove(SettingsService._prefKey(_keyUpdateFolderPath));
+    } else {
+      await prefs.setString(
+        SettingsService._prefKey(_keyUpdateFolderPath),
+        path.trim(),
+      );
+    }
+  }
+
+  /// Εμφάνιση αυτόματου μηνύματος διαθέσιμης ενημέρωσης στην εκκίνηση.
+  /// Προεπιλογή: true. Δεν επηρεάζει την κόκκινη κουκίδα ούτε τον έλεγχο.
+  Future<bool> getShowUpdateOnStartup() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(SettingsService._prefKey(_keyShowUpdateOnStartup)) ??
+        true;
+  }
+
+  Future<void> setShowUpdateOnStartup(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(
+      SettingsService._prefKey(_keyShowUpdateOnStartup),
+      value,
     );
   }
 

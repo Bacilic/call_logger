@@ -22,8 +22,14 @@ String versionChipLabel(String version, {required bool extended}) {
 }
 
 /// Tooltip για το chip έκδοσης.
-String versionChipTooltip(String version) {
-  return 'Ιστορικό αλλαγών — v$version';
+String versionChipTooltip(
+  String version, {
+  String? availableUpdateVersion,
+}) {
+  final base = 'Ιστορικό αλλαγών — v$version';
+  final update = availableUpdateVersion?.trim();
+  if (update == null || update.isEmpty) return base;
+  return '$base\nΔιαθέσιμη νέα έκδοση $update';
 }
 
 /// Υπότιτλος στο διάλογο ιστορικού.

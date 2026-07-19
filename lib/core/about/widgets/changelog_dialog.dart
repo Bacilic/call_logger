@@ -8,6 +8,8 @@ import '../models/changelog_entry.dart';
 import '../providers/app_version_provider.dart';
 import '../providers/changelog_provider.dart';
 import '../version_display.dart';
+import '../../updates/update_dialogs.dart';
+import '../../updates/update_providers.dart';
 
 /// Παράθυρο με ιστορικό αλλαγών ανά έκδοση και ημερομηνία (ελληνική μορφή).
 class ChangelogDialog extends ConsumerWidget {
@@ -19,6 +21,13 @@ class ChangelogDialog extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final changelogAsync = ref.watch(changelogProvider);
     final versionAsync = ref.watch(appVersionProvider);
+    final updateResult = ref.watch(updateCheckProvider).asData?.value;
+    final updateManifest = updateResult?.updateAvailable == true
+        ? updateResult?.manifest
+        : null;
+    // Εκκρεμής (ήδη προετοιμασμένη) ενημέρωση σε αναμονή επανεκκίνησης.
+    final pendingUpdate =
+        ref.watch(pendingUpdateProvider).asData?.value ?? false;
     final screenH = MediaQuery.sizeOf(context).height;
 
     final titleVersion = versionAsync.maybeWhen(
@@ -96,12 +105,49 @@ class ChangelogDialog extends ConsumerWidget {
               ),
               Padding(
                 padding: const EdgeInsets.all(16),
-                child: Align(
-                  alignment: Alignment.centerRight,
-                  child: FilledButton.tonal(
-                    onPressed: () => Navigator.of(context).pop(),
-                    child: const Text('Κλείσιμο'),
-                  ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    if (pendingUpdate) ...[
+                      FilledButton.icon(
+                        key: const Key('changelog_restart_button'),
+                        icon: const Icon(Icons.restart_alt),
+                        onPressed: () {
+                          final rootNav =
+                              Navigator.of(context, rootNavigator: true);
+                          rootNav.pop();
+                          WidgetsBinding.instance.addPostFrameCallback((_) {
+                            final ctx = rootNav.context;
+                            if (!ctx.mounted) return;
+                            launchPendingUpdateNow(ctx, ref);
+                          });
+                        },
+                        label: const Text('Επανεκκίνηση'),
+                      ),
+                      const SizedBox(width: 8),
+                    ] else if (updateManifest != null) ...[
+                      FilledButton(
+                        key: const Key('changelog_update_button'),
+                        onPressed: () {
+                          final manifest = updateManifest;
+                          final rootNav =
+                              Navigator.of(context, rootNavigator: true);
+                          rootNav.pop();
+                          WidgetsBinding.instance.addPostFrameCallback((_) {
+                            final ctx = rootNav.context;
+                            if (!ctx.mounted) return;
+                            runUpdatePrepareFlow(ctx, ref, manifest);
+                          });
+                        },
+                        child: const Text('Ενημέρωση'),
+                      ),
+                      const SizedBox(width: 8),
+                    ],
+                    FilledButton.tonal(
+                      onPressed: () => Navigator.of(context).pop(),
+                      child: const Text('Κλείσιμο'),
+                    ),
+                  ],
                 ),
               ),
             ],

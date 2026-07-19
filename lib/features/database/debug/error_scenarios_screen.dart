@@ -7,6 +7,7 @@ import '../../../core/widgets/main_nav_destination.dart';
 import '../widgets/database_integrity_panel.dart';
 import 'integrity_debug_provider_refresh.dart';
 import 'integrity_debug_seeder_service.dart';
+import 'release_publisher_card.dart';
 
 /// Οθόνη δημιουργίας σενάριων σφαλμάτων για δοκιμή UX (μόνο debug desktop).
 class ErrorScenariosScreen extends ConsumerStatefulWidget {
@@ -100,6 +101,8 @@ class _ErrorScenariosScreenState extends ConsumerState<ErrorScenariosScreen> {
             color: scheme.onSurfaceVariant,
           ),
         ),
+        const SizedBox(height: 24),
+        const ReleasePublisherCard(),
         const SizedBox(height: 24),
         if (_seedSucceeded) ...[
           Material(

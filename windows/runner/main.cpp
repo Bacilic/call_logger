@@ -97,6 +97,26 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
     ::DispatchMessage(&msg);
   }
 
+  // ΓΙΑΤΙ: Ζευγάρι με το RegisterCrashRestart (γρ. 91). Η μηχανή του Flutter
+  // καταρρέει κατά την αποδόμησή της στα Windows (access violation 0xc0000005
+  // στο FlutterWindowsView::OnHighContrastChanged — γνωστό bug του engine, όχι
+  // δικό μας). Χωρίς αυτό, το Windows Error Reporting έβλεπε την κατάρρευση στο
+  // κλείσιμο ως πραγματικό crash και ΞΑΝΑΝΟΙΓΕ την εφαρμογή με
+  // --restarted-after-crash — εξ ου ο διάλογος «Αυτόματη επανεκκίνηση» που
+  // εμφανιζόταν στους χρήστες όταν πατούσαν το Χ.
+  //
+  // Ηθελημένο κλείσιμο: απενεργοποιούμε την αυτόματη επανεκκίνηση ΕΔΩ, ώστε
+  // ακόμη κι αν η μηχανή καταρρεύσει στο τελικό teardown, το Windows να μην
+  // αναστήσει την εφαρμογή. Οι γνήσιες καταρρεύσεις ΕΝ ΛΕΙΤΟΥΡΓΙΑ (πριν φτάσουμε
+  // εδώ) συνεχίζουν κανονικά να ενεργοποιούν την επανεκκίνηση — αυτό το θέλουμε.
+  //
+  // ΠΡΟΣΟΧΗ: Στην κανονική ροή κλεισίματος από το Dart, ο ShutdownCoordinator
+  // τερματίζει με exit(0) και ο βρόχος μηνυμάτων ΔΕΝ επιστρέφει ποτέ εδώ — γι'
+  // αυτό το UnregisterApplicationRestart καλείται ΚΑΙ από το Dart μέσω FFI (δες
+  // ShutdownCoordinator._defaultTerminate). Η κλήση εδώ καλύπτει τις native
+  // διαδρομές εξόδου (π.χ. WM_QUIT χωρίς να περάσει από τον συντονιστή).
+  ::UnregisterApplicationRestart();
+
   ::CoUninitialize();
   return EXIT_SUCCESS;
 }

@@ -10,6 +10,7 @@ import '../../../../core/database/settings_repository.dart';
 import '../../../../core/models/remote_tool.dart';
 import '../../../../core/providers/equipment_focus_intent_provider.dart';
 import '../../../../core/services/default_remote_tool_display.dart';
+import '../../../../core/utils/user_facing_error_messages.dart';
 import '../../../calls/models/user_model.dart';
 import '../../models/equipment_column.dart';
 import '../../providers/directory_provider.dart';
@@ -369,7 +370,18 @@ class _EquipmentTabState extends ConsumerState<EquipmentTab>
     );
     if (ok != true || !context.mounted) return;
     final notifier = ref.read(equipmentDirectoryProvider.notifier);
-    await notifier.deleteSelected();
+    try {
+      await notifier.deleteSelected();
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Σφάλμα διαγραφής: ${humanizeUserFacingError(e)}'),
+          backgroundColor: Theme.of(context).colorScheme.error,
+        ),
+      );
+      return;
+    }
     if (!context.mounted) return;
     final entries = ref.read(equipmentDirectoryProvider).lastDeleted;
     final bodyText = entries == null || entries.isEmpty

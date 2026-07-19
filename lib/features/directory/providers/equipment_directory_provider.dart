@@ -672,21 +672,27 @@ class EquipmentDirectoryNotifier extends Notifier<EquipmentDirectoryState> {
     final dbDel = await DatabaseHelper.instance.database;
     final equipment = EquipmentRepository(dbDel);
     final departments = DepartmentRepository(dbDel);
-    await dbDel.transaction((_) async {
+    await dbDel.transaction((txn) async {
       for (final row in toProcess) {
         final eq = row.$1;
         final owner = row.$2;
         final eid = eq.id;
         if (eid == null) continue;
 
-        final linkCount = await equipment.countUsersLinkedToEquipment(eid);
+        final linkCount = await equipment.countUsersLinkedToEquipment(
+          eid,
+          executor: txn,
+        );
         String? deptName;
         if (owner == null && eq.departmentId != null) {
-          deptName = await departments.getDepartmentNameById(eq.departmentId!);
+          deptName = await departments.getDepartmentNameById(
+            eq.departmentId!,
+            executor: txn,
+          );
         }
 
         if (linkCount > 1 && owner?.id == null) {
-          await equipment.deleteEquipments([eid]);
+          await equipment.deleteEquipments([eid], executor: txn);
           final code = _equipmentCodeForMessage(eq);
           undo.add(
             EquipmentDeleteUndoEntry(
@@ -702,7 +708,11 @@ class EquipmentDirectoryNotifier extends Notifier<EquipmentDirectoryState> {
         }
 
         if (linkCount > 1 && owner?.id != null) {
-          await equipment.unlinkUserFromEquipment(owner!.id!, eid);
+          await equipment.unlinkUserFromEquipment(
+            owner!.id!,
+            eid,
+            executor: txn,
+          );
           undo.add(
             EquipmentDeleteUndoEntry(
               equipmentId: eid,
@@ -718,7 +728,7 @@ class EquipmentDirectoryNotifier extends Notifier<EquipmentDirectoryState> {
             ),
           );
         } else {
-          await equipment.deleteEquipments([eid]);
+          await equipment.deleteEquipments([eid], executor: txn);
           undo.add(
             EquipmentDeleteUndoEntry(
               equipmentId: eid,
