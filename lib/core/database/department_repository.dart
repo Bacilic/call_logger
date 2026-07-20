@@ -478,10 +478,14 @@ class DepartmentRepository {
     await softDeleteDepartments([id]);
   }
 
-  Future<void> softDeleteDepartments(List<int> ids) async {
+  Future<void> softDeleteDepartments(
+    List<int> ids, {
+    DatabaseExecutor? executor,
+  }) async {
     if (ids.isEmpty) return;
-    final user = await _support.auditPerformingUser();
-    await db.transaction((txn) async {
+
+    Future<void> run(DatabaseExecutor txn) async {
+      final user = await _support.auditPerformingUser(executor: txn);
       for (final id in ids) {
         final nameRows = await txn.query(
           'departments',
@@ -510,7 +514,10 @@ class DepartmentRepository {
           entityName: deptName != null && deptName.isNotEmpty ? deptName : null,
         );
       }
-    });
+    }
+
+    if (executor != null) return run(executor);
+    return db.transaction(run);
   }
 
   Future<void> restoreDepartments(List<int> ids) async {

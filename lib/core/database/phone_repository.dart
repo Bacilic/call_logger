@@ -114,11 +114,15 @@ class PhoneRepository {
     );
   }
 
-  Future<int?> getPhoneIdByNumber(String phoneNumber) async {
+  Future<int?> getPhoneIdByNumber(
+    String phoneNumber, {
+    DatabaseExecutor? executor,
+  }) async {
+    final e = executor ?? db;
     await _support.ensurePhonesIsDeletedColumn(db);
     final t = phoneNumber.trim();
     if (t.isEmpty) return null;
-    final rows = await db.query(
+    final rows = await e.query(
       'phones',
       columns: ['id'],
       where: 'number = ? AND ${DirectorySupport.notDeletedClause}',
@@ -172,10 +176,14 @@ class PhoneRepository {
         _readCount(callLinks);
   }
 
-  Future<void> softDeletePhones(List<int> ids) async {
+  Future<void> softDeletePhones(
+    List<int> ids, {
+    DatabaseExecutor? executor,
+  }) async {
     if (ids.isEmpty) return;
-    final user = await _support.auditPerformingUser();
-    await db.transaction((txn) async {
+
+    Future<void> run(DatabaseExecutor txn) async {
+      final user = await _support.auditPerformingUser(executor: txn);
       for (final id in ids) {
         final rows = await txn.query(
           'phones',
@@ -215,7 +223,10 @@ class PhoneRepository {
           entityName: number.isEmpty ? null : number,
         );
       }
-    });
+    }
+
+    if (executor != null) return run(executor);
+    return db.transaction(run);
   }
 
   Future<Map<int, List<String>>> getDepartmentDirectPhonesMap() async {

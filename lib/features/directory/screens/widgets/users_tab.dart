@@ -330,6 +330,7 @@ class _UsersTabState extends ConsumerState<UsersTab>
     if (pendingPhoneBatches.isNotEmpty) {
       await notifier.loadUsers();
       ref.invalidate(lookupServiceProvider);
+      await ref.read(lookupServiceProvider.future);
     }
     if (!context.mounted) return;
     final deleted = ref.read(directoryProvider).lastDeleted ?? [];

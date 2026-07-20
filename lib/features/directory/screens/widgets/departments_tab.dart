@@ -4,10 +4,16 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/database/database_helper.dart';
 import '../../../../core/models/building_map_floor.dart';
 import '../../../../core/database/settings_repository.dart';
-import '../../../calls/provider/lookup_provider.dart';
 import '../../../../core/services/lookup_service.dart';
-import '../../services/shared_asset_disconnect_apply.dart';
+import '../../../../core/widgets/database_persistence_error_snackbar.dart';
+import '../../services/department_deletion_inventory.dart';
+import '../../services/department_deletion_orchestrator.dart';
+import '../../services/department_deletion_undo_policy.dart';
+import '../../services/department_rename_heuristic.dart';
 import 'shared_asset_disconnect_dialog.dart';
+import 'department_deletion_preview_dialog.dart';
+import 'department_employee_reassign_dialog.dart';
+import 'department_rename_guard_dialog.dart';
 import '../../models/department_directory_column.dart';
 import '../../models/department_model.dart';
 import '../../building_map/providers/building_map_providers.dart';
@@ -237,25 +243,6 @@ class _DepartmentsTabState extends ConsumerState<DepartmentsTab>
   ) async {
     final state = ref.read(departmentDirectoryProvider);
     if (state.selectedIds.isEmpty) return;
-    final count = state.selectedIds.length;
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Διαγραφή τμημάτων'),
-        content: Text('Μόνιμη σήμανση ως διαγραμμένα για $count τμήματα;'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Ακύρωση'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('Διαγραφή'),
-          ),
-        ],
-      ),
-    );
-    if (ok != true || !context.mounted) return;
 
     final toDelete = state.allDepartments
         .where(
@@ -266,49 +253,241 @@ class _DepartmentsTabState extends ConsumerState<DepartmentsTab>
         )
         .toList();
     if (toDelete.isEmpty) return;
-    final db = await DatabaseHelper.instance.database;
+
+    final inventories = [
+      for (final d in toDelete)
+        DepartmentDeletionInventory.fromLookup(d.id!, d.name),
+    ];
+    final choice = await showDepartmentDeletionPreviewDialog(
+      context: context,
+      inventories: inventories,
+    );
+    if (choice == null ||
+        choice == DepartmentDeletionChoice.cancel ||
+        !context.mounted) {
+      return;
+    }
+
     final lookup = LookupService.instance;
     final deletingIds = state.selectedIds.toSet();
+    var movedEmployeeCount = 0;
+    var movedOrDeletedAssetCount = 0;
+    final plans = <DepartmentDeletionPlan>[];
 
-    for (final dept in toDelete) {
-      final deptId = dept.id;
-      if (deptId == null) continue;
-      final phones = lookup.getDirectPhonesByDepartment(deptId);
-      final equipment = lookup.getSharedEquipmentCodesByDepartment(deptId);
-      if (phones.isEmpty && equipment.isEmpty) continue;
+    // Φάση συλλογής: μόνο διάλογοι — χωρίς εγγραφές στη βάση.
+    if (choice == DepartmentDeletionChoice.detailed) {
+      for (final dept in toDelete) {
+        final deptId = dept.id;
+        if (deptId == null) continue;
 
-      final availableDepartments = lookup.departments
-          .where(
-            (d) =>
-                d.id != null &&
-                !d.isDeleted &&
-                !deletingIds.contains(d.id) &&
-                d.name.trim().isNotEmpty,
-          )
-          .toList();
+        var employeeBatch = const DepartmentEmployeeReassignBatch(
+          transfers: {},
+        );
+        final users = lookup.getUsersByDepartment(deptId);
+        final employees = <DepartmentEmployeeReassignCandidate>[
+          for (final u in users)
+            if (u.id != null)
+              DepartmentEmployeeReassignCandidate(
+                id: u.id!,
+                name: (u.name ?? '').trim().isEmpty
+                    ? '?'
+                    : (u.name ?? '').trim(),
+              ),
+        ];
+        if (employees.isNotEmpty) {
+          final availableDepartments = lookup.departments
+              .where(
+                (d) =>
+                    d.id != null &&
+                    !d.isDeleted &&
+                    !deletingIds.contains(d.id) &&
+                    d.name.trim().isNotEmpty,
+              )
+              .toList();
 
+          if (!context.mounted) return;
+          final collected = await showDepartmentEmployeeReassignFlow(
+            context: context,
+            sourceDepartmentName: dept.name,
+            employees: employees,
+            availableDepartments: availableDepartments,
+            sourceDepartmentId: deptId,
+          );
+          if (!context.mounted || collected == null) return;
+          employeeBatch = collected;
+          movedEmployeeCount += employeeBatch.transfers.length;
+        }
+
+        var sharedBatch = const SharedAssetDisconnectBatchResult();
+        final phones = lookup.getDirectPhonesByDepartment(deptId);
+        final equipment = lookup.getSharedEquipmentCodesByDepartment(deptId);
+        if (phones.isNotEmpty || equipment.isNotEmpty) {
+          final availableDepartments = lookup.departments
+              .where(
+                (d) =>
+                    d.id != null &&
+                    !d.isDeleted &&
+                    !deletingIds.contains(d.id) &&
+                    d.name.trim().isNotEmpty,
+              )
+              .toList();
+
+          if (!context.mounted) return;
+          final collected = await showSharedAssetDisconnectFlow(
+            context: context,
+            sourceDepartmentId: deptId,
+            sourceDepartmentName: dept.name,
+            phones: phones,
+            equipmentCodes: equipment,
+            availableDepartments: availableDepartments,
+            allowKeepInDepartment: false,
+          );
+          if (!context.mounted || collected == null) return;
+          sharedBatch = collected;
+          movedOrDeletedAssetCount += sharedBatch.phoneTransfers.length +
+              sharedBatch.phonesToDelete.length +
+              sharedBatch.equipmentTransfers.length +
+              sharedBatch.equipmentToDelete.length;
+        }
+
+        plans.add(
+          DepartmentDeletionPlan(
+            departmentId: deptId,
+            employeeBatch: employeeBatch,
+            sharedBatch: sharedBatch,
+          ),
+        );
+      }
+    } else {
+      for (final dept in toDelete) {
+        final deptId = dept.id;
+        if (deptId == null) continue;
+
+        final availableDepartments = lookup.departments
+            .where(
+              (d) =>
+                  d.id != null &&
+                  !d.isDeleted &&
+                  !deletingIds.contains(d.id) &&
+                  d.name.trim().isNotEmpty,
+            )
+            .toList();
+
+        if (!context.mounted) return;
+        final target = await showAssetTransferTargetPicker(
+          context: context,
+          headerLabel:
+              'Πού μεταφέρονται όλα από «${dept.name.trim().isEmpty ? '—' : dept.name.trim()}»;',
+          availableDepartments: availableDepartments,
+          sourceDepartmentId: deptId,
+        );
+        if (!context.mounted || target == null) return;
+
+        final users = lookup.getUsersByDepartment(deptId);
+        final phones = lookup.getDirectPhonesByDepartment(deptId);
+        final equipment = lookup.getSharedEquipmentCodesByDepartment(deptId);
+        final employees = <DepartmentEmployeeReassignCandidate>[
+          for (final u in users)
+            if (u.id != null)
+              DepartmentEmployeeReassignCandidate(
+                id: u.id!,
+                name: (u.name ?? '').trim().isEmpty
+                    ? '?'
+                    : (u.name ?? '').trim(),
+              ),
+        ];
+        final movedTotal =
+            employees.length + phones.length + equipment.length;
+        final proposedNewName = target.newDepartmentName?.trim() ?? '';
+        final dominantTargetIsNew = proposedNewName.isNotEmpty;
+
+        if (looksLikeDepartmentRename(
+          movedTotal: movedTotal,
+          movedToDominantTarget: movedTotal,
+          dominantTargetIsNew: dominantTargetIsNew,
+        )) {
+          if (!context.mounted) return;
+          final guard = await showDepartmentRenameGuardDialog(
+            context: context,
+            sourceDepartmentName: dept.name,
+            proposedNewName: proposedNewName,
+          );
+          if (!context.mounted) return;
+          if (guard == null ||
+              guard == DepartmentRenameGuardChoice.cancel) {
+            return;
+          }
+          if (guard == DepartmentRenameGuardChoice.renameInstead) {
+            await _openForm(
+              context,
+              ref,
+              dept.copyWith(name: proposedNewName),
+              focusedField: 'name',
+            );
+            return;
+          }
+        }
+
+        var employeeBatch = const DepartmentEmployeeReassignBatch(
+          transfers: {},
+        );
+        if (employees.isNotEmpty) {
+          employeeBatch = DepartmentEmployeeReassignBatch(
+            transfers: {
+              for (final e in employees) e.id: target,
+            },
+          );
+          movedEmployeeCount += employees.length;
+        }
+
+        var sharedBatch = const SharedAssetDisconnectBatchResult();
+        if (phones.isNotEmpty || equipment.isNotEmpty) {
+          final newDeptNames = <String, Set<String>>{};
+          if (dominantTargetIsNew) {
+            newDeptNames[proposedNewName] = {...phones};
+          }
+          sharedBatch = SharedAssetDisconnectBatchResult(
+            phoneTransfers: {
+              for (final p in phones) p: target,
+            },
+            equipmentTransfers: {
+              for (final c in equipment) c: target,
+            },
+            newDepartmentNamesToCreate: newDeptNames,
+          );
+          movedOrDeletedAssetCount += phones.length + equipment.length;
+        }
+
+        plans.add(
+          DepartmentDeletionPlan(
+            departmentId: deptId,
+            employeeBatch: employeeBatch,
+            sharedBatch: sharedBatch,
+          ),
+        );
+      }
+    }
+
+    // Φάση εκτέλεσης: ένα ατομικό transaction για όλα τα plans.
+    if (plans.isEmpty) return;
+
+    final db = await DatabaseHelper.instance.database;
+    try {
+      await applyDepartmentDeletionPlansAtomic(db, plans);
+    } catch (e, st) {
       if (!context.mounted) return;
-      final batch = await showSharedAssetDisconnectFlow(
-        context: context,
-        sourceDepartmentId: deptId,
-        sourceDepartmentName: dept.name,
-        phones: phones,
-        equipmentCodes: equipment,
-        availableDepartments: availableDepartments,
-        allowKeepInDepartment: false,
+      showDatabasePersistenceErrorSnackBar(
+        context,
+        Exception(
+          'Η διαγραφή τμήματος απέτυχε και καμία αλλαγή δεν έγινε. $e',
+        ),
+        st,
       );
-      if (!context.mounted || batch == null) return;
-
-      await applyDepartmentSharedAssetDisconnectBatch(
-        db,
-        batch,
-        sourceDepartmentId: deptId,
-      );
+      return;
     }
 
     final notifier = ref.read(departmentDirectoryProvider.notifier);
-    await notifier.deleteSelected();
-    ref.invalidate(lookupServiceProvider);
+    await notifier.finalizeExternalDeletion(toDelete);
     if (!context.mounted) return;
     final deleted = ref.read(departmentDirectoryProvider).lastDeleted ?? [];
     final deletedCount = deleted.length;
@@ -327,12 +506,21 @@ class _DepartmentsTabState extends ConsumerState<DepartmentsTab>
     final truncated = take < names.length;
     final displayNames =
         truncated ? '${names.sublist(0, take).join(', ')}...' : namesPart;
-    final isOne = deletedCount == 1;
-    final label = isOne ? 'τμήμα' : 'τμήματα';
-    final message = names.isEmpty
-        ? 'Σημειώθηκαν ως διαγραμμένα $deletedCount $label.'
-        : 'Σημειώθηκαν ως διαγραμμένα $deletedCount $label: $displayNames';
     final tooltipAllNames = names.isEmpty ? null : names.join(', ');
+
+    final undoPolicy = resolveDepartmentDeletionUndo(
+      deletedDepartmentCount: deletedCount,
+      movedEmployeeCount: movedEmployeeCount,
+      movedOrDeletedAssetCount: movedOrDeletedAssetCount,
+    );
+    final String message;
+    if (undoPolicy.canOfferUndo) {
+      message = names.isEmpty
+          ? undoPolicy.snackbarMessage
+          : '${undoPolicy.snackbarMessage.substring(0, undoPolicy.snackbarMessage.length - 1)}: $displayNames';
+    } else {
+      message = undoPolicy.snackbarMessage;
+    }
 
     final messenger = ScaffoldMessenger.of(context);
     messenger.showSnackBar(
@@ -360,12 +548,14 @@ class _DepartmentsTabState extends ConsumerState<DepartmentsTab>
           ],
         ),
         duration: const Duration(seconds: 5),
-        action: SnackBarAction(
-          label: 'Αναίρεση',
-          onPressed: () async {
-            await notifier.undoLastDelete();
-          },
-        ),
+        action: undoPolicy.canOfferUndo
+            ? SnackBarAction(
+                label: 'Αναίρεση',
+                onPressed: () async {
+                  await notifier.undoLastDelete();
+                },
+              )
+            : null,
       ),
     );
   }

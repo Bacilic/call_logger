@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/services/gemini_ticket_service.dart';
 import '../../../../core/services/lansweeper_agent_api_probe.dart';
 import '../../../../core/services/lansweeper_helpdesk_login_probe.dart';
+import '../../../../core/services/lansweeper_ticket_requester_fields.dart';
 import '../../providers/gemini_settings_provider.dart';
 import '../../providers/lansweeper_connection_probe_provider.dart';
 import '../../providers/lansweeper_settings_provider.dart';
@@ -284,7 +285,10 @@ class _LansweeperConnectionSettingsDialogState
               _sectionTitle('Πράκτορας & αιτών API (ίδια τιμή)'),
               TextFormField(
                 controller: widget.agentUsernameController,
-                onChanged: (_) => widget.onSettingsChanged(),
+                onChanged: (_) {
+                  widget.onSettingsChanged();
+                  setState(() {});
+                },
                 decoration: const InputDecoration(
                   labelText: 'Πράκτορας = αιτών (domain\\username)',
                   hintText: 'π.χ. gnk\\v.drosos',
@@ -303,6 +307,19 @@ class _LansweeperConnectionSettingsDialogState
                       ),
                 ),
               ),
+              if (lansweeperAgentValueLooksLikeDisplayName(
+                widget.agentUsernameController.text,
+              ))
+                Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: Text(
+                    'Η τιμή δεν μοιάζει με έγκυρη ταυτότητα (domain\\username ή '
+                    'email). Ελέγξτε τη μορφή πριν τον έλεγχο API.',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Theme.of(context).colorScheme.error,
+                        ),
+                  ),
+                ),
               const SizedBox(height: 10),
               FilledButton.tonalIcon(
                 onPressed: _agentProbeRunning ? null : _runAgentApiProbe,

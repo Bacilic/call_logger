@@ -350,7 +350,12 @@ class _CallHeaderFormState extends ConsumerState<CallHeaderForm> {
                         ),
                       ),
                       TextButton(
-                        onPressed: () => ref.invalidate(lookupServiceProvider),
+                        onPressed: () {
+                          ref.invalidate(lookupServiceProvider);
+                          // Άμεσο flush εκτός build ώστε να μη μείνει «dirty» και
+                          // ξεπλυθεί σύγχρονα στο επόμενο build της οθόνης κλήσεων.
+                          ref.read(lookupServiceProvider);
+                        },
                         child: const Text('Επαναδοκιμή'),
                       ),
                     ],

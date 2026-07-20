@@ -336,16 +336,48 @@ Future<SharedAssetTransferTarget?> _showTransferDialog({
   );
 }
 
+/// Δημόσιος επιλογέας τμήματος προορισμού (υπάρχον ή νέο), για επαναχρησιμοποίηση.
+Future<SharedAssetTransferTarget?> showAssetTransferTargetPicker({
+  required BuildContext context,
+  required String headerLabel,
+  required List<DepartmentModel> availableDepartments,
+  int? sourceDepartmentId,
+}) async {
+  final depts = availableDepartments
+      .where(
+        (d) =>
+            d.id != null &&
+            (sourceDepartmentId == null || d.id != sourceDepartmentId) &&
+            !d.isDeleted &&
+            d.name.trim().isNotEmpty,
+      )
+      .toList()
+    ..sort((a, b) => a.name.compareTo(b.name));
+
+  return showDialog<SharedAssetTransferTarget>(
+    context: context,
+    barrierDismissible: false,
+    builder: (ctx) => _SharedAssetTransferDialog(
+      isPhone: true,
+      value: '',
+      departments: depts,
+      headerLabel: headerLabel,
+    ),
+  );
+}
+
 class _SharedAssetTransferDialog extends StatefulWidget {
   const _SharedAssetTransferDialog({
     required this.isPhone,
     required this.value,
     required this.departments,
+    this.headerLabel,
   });
 
   final bool isPhone;
   final String value;
   final List<DepartmentModel> departments;
+  final String? headerLabel;
 
   @override
   State<_SharedAssetTransferDialog> createState() =>
@@ -403,16 +435,23 @@ class _SharedAssetTransferDialogState extends State<_SharedAssetTransferDialog> 
   }
 
   Future<bool> _confirmCreateDepartment(String newName) async {
+    final String content;
+    final customHeader = widget.headerLabel;
+    if (customHeader != null) {
+      content = 'Θα δημιουργηθεί νέο τμήμα: $newName.';
+    } else if (widget.isPhone) {
+      content =
+          'Θα δημιουργηθεί νέο τμήμα: $newName με κοινόχρηστο τηλέφωνο: ${widget.value}.';
+    } else {
+      content =
+          'Θα δημιουργηθεί νέο τμήμα: $newName με κοινόχρηστο εξοπλισμό: ${widget.value}.';
+    }
     final confirmed = await showDialog<bool>(
       context: context,
       barrierDismissible: false,
       builder: (confirmCtx) => AlertDialog(
         title: const Text('Δημιουργία νέου τμήματος'),
-        content: Text(
-          widget.isPhone
-              ? 'Θα δημιουργηθεί νέο τμήμα: $newName με κοινόχρηστο τηλέφωνο: ${widget.value}.'
-              : 'Θα δημιουργηθεί νέο τμήμα: $newName με κοινόχρηστο εξοπλισμό: ${widget.value}.',
-        ),
+        content: Text(content),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(confirmCtx).pop(false),
@@ -477,9 +516,10 @@ class _SharedAssetTransferDialogState extends State<_SharedAssetTransferDialog> 
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text(
-              widget.isPhone
-                  ? 'Τηλέφωνο: ${widget.value}'
-                  : 'Εξοπλισμός: ${widget.value}',
+              widget.headerLabel ??
+                  (widget.isPhone
+                      ? 'Τηλέφωνο: ${widget.value}'
+                      : 'Εξοπλισμός: ${widget.value}'),
               style: theme.textTheme.titleSmall,
             ),
             const SizedBox(height: 12),

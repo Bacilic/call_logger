@@ -77,10 +77,14 @@ class EquipmentRepository {
         .toList();
   }
 
-  Future<int?> getEquipmentIdByCode(String code) async {
+  Future<int?> getEquipmentIdByCode(
+    String code, {
+    DatabaseExecutor? executor,
+  }) async {
+    final e = executor ?? db;
     final c = code.trim();
     if (c.isEmpty) return null;
-    final rows = await db.query(
+    final rows = await e.query(
       'equipment',
       columns: ['id'],
       where:
@@ -174,11 +178,13 @@ class EquipmentRepository {
 
   Future<void> updateEquipmentDepartment(
     String equipmentCode,
-    int departmentId,
-  ) async {
+    int departmentId, {
+    DatabaseExecutor? executor,
+  }) async {
     final code = equipmentCode.trim();
     if (code.isEmpty) return;
-    await db.transaction((txn) async {
+
+    Future<void> run(DatabaseExecutor txn) async {
       final rows = await txn.query(
         'equipment',
         columns: ['id', 'department_id'],
@@ -228,16 +234,21 @@ class EquipmentRepository {
         oldValues: await _support.departmentAuditSnapshot(txn, oldDept),
         newValues: await _support.departmentAuditSnapshot(txn, departmentId),
       );
-    });
+    }
+
+    if (executor != null) return run(executor);
+    return db.transaction(run);
   }
 
   Future<void> clearEquipmentSharedDepartment(
     String equipmentCode,
-    int departmentId,
-  ) async {
+    int departmentId, {
+    DatabaseExecutor? executor,
+  }) async {
     final code = equipmentCode.trim();
     if (code.isEmpty) return;
-    await db.transaction((txn) async {
+
+    Future<void> run(DatabaseExecutor txn) async {
       final rows = await txn.query(
         'equipment',
         columns: ['id', 'department_id'],
@@ -268,7 +279,10 @@ class EquipmentRepository {
         oldValues: await _support.departmentAuditSnapshot(txn, oldDept),
         newValues: const {'department_id': null},
       );
-    });
+    }
+
+    if (executor != null) return run(executor);
+    return db.transaction(run);
   }
 
   Future<void> _removeEquipmentFromAllUsersInTxn(

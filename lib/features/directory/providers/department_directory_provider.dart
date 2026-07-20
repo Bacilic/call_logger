@@ -629,6 +629,29 @@ class DepartmentDirectoryNotifier extends Notifier<DepartmentDirectoryState> {
     await refreshDirectoryCaches(ref, users: true, equipment: true);
   }
 
+  /// Μετά από ατομική soft-delete εκτός notifier: ενημερώνει μόνο UI/cache,
+  /// χωρίς νέο γράψιμο στη βάση.
+  Future<void> finalizeExternalDeletion(List<DepartmentModel> toDelete) async {
+    if (toDelete.isEmpty) return;
+    await _refreshLookupCache();
+    if (!ref.mounted) return;
+    state = DepartmentDirectoryState(
+      allDepartments: state.allDepartments,
+      filteredDepartments: state.filteredDepartments,
+      searchQuery: state.searchQuery,
+      sortColumn: state.sortColumn,
+      sortAscending: state.sortAscending,
+      selectedIds: {},
+      lastDeleted: toDelete,
+      lastBulkUpdatedDepartments: state.lastBulkUpdatedDepartments,
+      focusedRowIndex: state.focusedRowIndex,
+      columnOrder: state.columnOrder,
+      visibleColumnKeys: state.visibleColumnKeys,
+    );
+    await loadDepartments();
+    await refreshDirectoryCaches(ref, users: true, equipment: true);
+  }
+
   Future<void> undoLastDelete() async {
     final list = state.lastDeleted;
     if (list == null || list.isEmpty) return;

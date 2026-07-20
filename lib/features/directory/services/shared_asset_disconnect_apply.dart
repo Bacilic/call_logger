@@ -15,8 +15,9 @@ Future<void> reloadLookupAfterNewDepartments(
 
 Future<Map<String, int>> _resolvePhoneTransferTargets(
   Database db,
-  Map<String, SharedAssetTransferTarget> transfers,
-) async {
+  Map<String, SharedAssetTransferTarget> transfers, {
+  DatabaseExecutor? executor,
+}) async {
   final departments = DepartmentRepository(db);
   final out = <String, int>{};
   for (final entry in transfers.entries) {
@@ -27,7 +28,10 @@ Future<Map<String, int>> _resolvePhoneTransferTargets(
     }
     final newName = target.newDepartmentName?.trim();
     if (newName == null || newName.isEmpty) continue;
-    final deptId = await departments.getOrCreateDepartmentIdByName(newName);
+    final deptId = await departments.getOrCreateDepartmentIdByName(
+      newName,
+      executor: executor,
+    );
     if (deptId != null) out[entry.key] = deptId;
   }
   return out;
@@ -77,10 +81,15 @@ Future<void> applyPersonalPhoneDisconnectBatch(
 }
 
 /// Μετά από αποδέσμευση κοινόχρηστων στοιχείων τμήματος (φόρμα ή διαγραφή τμήματος).
+///
+/// Αν δοθεί [executor] (π.χ. μέσα σε εξωτερικό transaction), οι αλλαγές
+/// γράφονται εκεί χωρίς nested transactions και **χωρίς**
+/// [reloadLookupAfterNewDepartments] — ευθύνη του caller μετά το commit.
 Future<void> applyDepartmentSharedAssetDisconnectBatch(
   Database db,
   SharedAssetDisconnectBatchResult batch, {
   required int sourceDepartmentId,
+  DatabaseExecutor? executor,
 }) async {
   if (batch.phonesToKeep.isEmpty &&
       batch.equipmentToKeep.isEmpty &&
@@ -92,24 +101,36 @@ Future<void> applyDepartmentSharedAssetDisconnectBatch(
     return;
   }
 
-  await reloadLookupAfterNewDepartments(batch);
+  if (executor == null) {
+    await reloadLookupAfterNewDepartments(batch);
+  }
 
   final phones = PhoneRepository(db);
   final equipment = EquipmentRepository(db);
   final phoneTransfers = await _resolvePhoneTransferTargets(
     db,
     batch.phoneTransfers,
+    executor: executor,
   );
   final equipmentTransfers = await _resolvePhoneTransferTargets(
     db,
     batch.equipmentTransfers,
+    executor: executor,
   );
 
   for (final phone in batch.phonesToKeep) {
-    await phones.addDepartmentDirectPhone(sourceDepartmentId, phone);
+    await phones.addDepartmentDirectPhone(
+      sourceDepartmentId,
+      phone,
+      executor: executor,
+    );
   }
   for (final code in batch.equipmentToKeep) {
-    await equipment.updateEquipmentDepartment(code, sourceDepartmentId);
+    await equipment.updateEquipmentDepartment(
+      code,
+      sourceDepartmentId,
+      executor: executor,
+    );
   }
 
   final phonesLeavingSource = <String>{
@@ -117,10 +138,18 @@ Future<void> applyDepartmentSharedAssetDisconnectBatch(
     ...phoneTransfers.keys,
   };
   for (final phone in phonesLeavingSource) {
-    await phones.removeDepartmentDirectPhone(sourceDepartmentId, phone);
+    await phones.removeDepartmentDirectPhone(
+      sourceDepartmentId,
+      phone,
+      executor: executor,
+    );
   }
   for (final entry in phoneTransfers.entries) {
-    await phones.addDepartmentDirectPhone(entry.value, entry.key);
+    await phones.addDepartmentDirectPhone(
+      entry.value,
+      entry.key,
+      executor: executor,
+    );
   }
 
   final equipmentLeavingSource = <String>{
@@ -128,31 +157,43 @@ Future<void> applyDepartmentSharedAssetDisconnectBatch(
     ...equipmentTransfers.keys,
   };
   for (final code in equipmentLeavingSource) {
-    await equipment.clearEquipmentSharedDepartment(code, sourceDepartmentId);
+    await equipment.clearEquipmentSharedDepartment(
+      code,
+      sourceDepartmentId,
+      executor: executor,
+    );
   }
   for (final entry in equipmentTransfers.entries) {
-    await equipment.updateEquipmentDepartment(entry.key, entry.value);
+    await equipment.updateEquipmentDepartment(
+      entry.key,
+      entry.value,
+      executor: executor,
+    );
   }
 
   if (batch.phonesToDelete.isNotEmpty) {
     final phoneIds = <int>[];
     for (final p in batch.phonesToDelete) {
-      final id = await phones.getPhoneIdByNumber(p);
+      final id = await phones.getPhoneIdByNumber(p, executor: executor);
       if (id != null) phoneIds.add(id);
     }
     if (phoneIds.isNotEmpty) {
-      await phones.softDeletePhones(phoneIds);
+      await phones.softDeletePhones(phoneIds, executor: executor);
     }
   }
 
   if (batch.equipmentToDelete.isNotEmpty) {
     final equipmentIds = <int>[];
     for (final code in batch.equipmentToDelete) {
-      final id = await equipment.getEquipmentIdByCode(code);
+      final id = await equipment.getEquipmentIdByCode(
+        code,
+        executor: executor,
+      );
       if (id != null) equipmentIds.add(id);
     }
     if (equipmentIds.isNotEmpty) {
-      await equipment.deleteEquipments(equipmentIds);
+      await equipment.deleteEquipments(equipmentIds, executor: executor);
     }
   }
 }
+
