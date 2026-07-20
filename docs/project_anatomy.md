@@ -1,8 +1,8 @@
-# Call Logger — Project Anatomy
+﻿# Call Logger — Project Anatomy
 
-**Ημερομηνία τροποποίησης εγγράφου:** 29 Ιουνίου 2026
+**Ημερομηνία τροποποίησης εγγράφου:** 20 Ιουλίου 2026
 
-Συμπυκνωμένη «ακτινογραφία» για εξωτερικό LLM (Καθοδηγητής): Flutter για Windows 11, δομή ανά `features/`, Riverpod, SQLite μέσω `sqflite_common_ffi`.
+Συμπυκνωμένη «ακτινογραφία» για εξωτερικό LLM (Καθοδηγητής): Flutter για Windows 11, δομή ανά features/, Riverpod, SQLite μέσω sqflite_common_ffi.
 
 ---
 
@@ -10,55 +10,61 @@
 
 ```
 lib/
+├── main.dart
 ├── core/
 │   ├── about/
-│   │   ├── models/
-│   │   │   └── changelog_entry.dart
-│   │   ├── providers/
-│   │   │   ├── app_version_provider.dart
-│   │   │   └── changelog_provider.dart
-│   │   ├── services/
-│   │   │   └── changelog_service.dart
+│   │   ├── models/changelog_entry.dart
+│   │   ├── providers/app_version_provider.dart
+│   │   ├── providers/changelog_provider.dart
+│   │   ├── services/changelog_service.dart
 │   │   ├── version_display.dart
-│   │   └── widgets/
-│   │       ├── changelog_dialog.dart
-│   │       └── version_chip.dart
+│   │   └── widgets/changelog_dialog.dart, version_chip.dart
 │   ├── config/
 │   │   ├── app_config.dart
 │   │   ├── audit_retention_config.dart
 │   │   └── calls_layout_config.dart
 │   ├── database/
-│   │   ├── calls_repository.dart
+│   │   ├── audit_diff_helper.dart
+│   │   ├── audit_service.dart
+│   │   ├── backup_destination_hint.dart
+│   │   ├── building_map_repository.dart
+│   │   ├── calls_repository.dart + _dashboard / _deletion / _lansweeper / _search_index
+│   │   ├── category_repository.dart
 │   │   ├── database_access_probe.dart
-│   │   ├── database_helper.dart
+│   │   ├── database_file_classifier.dart
+│   │   ├── database_helper.dart  ← Singleton SQLite
 │   │   ├── database_init_progress_provider.dart
 │   │   ├── database_init_result.dart
 │   │   ├── database_init_runner.dart
+│   │   ├── database_integrity_diagnostics.dart
+│   │   ├── database_lexicon_open_normalizations.dart
+│   │   ├── database_lock_recovery.dart
+│   │   ├── database_maintenance_repository.dart
 │   │   ├── database_path_pick_flow.dart
 │   │   ├── database_path_resolution.dart
-│   │   ├── database_v1_schema.dart
+│   │   ├── database_restore_flow.dart
+│   │   ├── database_schema_migrations.dart
+│   │   ├── database_table_inspection.dart
+│   │   ├── database_v1_schema.dart  ← SQL DDL + migrations
 │   │   ├── department_floor_migration.dart
+│   │   ├── department_name_key_migration.dart
+│   │   ├── department_repository.dart
 │   │   ├── dictionary_repository.dart
 │   │   ├── directory_audit_helpers.dart
-│   │   ├── directory_repository.dart
+│   │   ├── directory_support.dart
+│   │   ├── equipment_repository.dart
+│   │   ├── integrity_service.dart
+│   │   ├── lamp_migration_service.dart
 │   │   ├── lock_diagnostic_service.dart
-│   │   ├── old_database/
-│   │   │   ├── equipment_set_master_cycle.dart
-│   │   │   ├── lamp_data_issue_type_labels.dart
-│   │   │   ├── lamp_database_provider.dart
-│   │   │   ├── lamp_excel_parse_int.dart
-│   │   │   ├── lamp_issue_resolution_service.dart
-│   │   │   ├── lamp_old_db_validator.dart
-│   │   │   ├── lamp_settings_store.dart
-│   │   │   ├── lamp_table_browser_api.dart
-│   │   │   ├── lamp_table_greek_names.dart
-│   │   │   ├── old_database_schema.dart
-│   │   │   ├── old_equipment_repository.dart
-│   │   │   ├── old_excel_importer.dart
-│   │   │   └── resolution_log_entry.dart
+│   │   ├── omnisearch_service.dart
+│   │   ├── phone_repository.dart
 │   │   ├── remote_tools_repository.dart
 │   │   ├── settings_repository.dart
-│   │   └── user_delete_phone_policy.dart
+│   │   ├── sqlite_types.dart
+│   │   ├── tasks_repository.dart
+│   │   ├── user_delete_phone_policy.dart
+│   │   ├── user_repository.dart
+│   │   └── old_database/  ← LAMP legacy (lamp_database_provider, lamp_issue_*, old_database_schema κ.λπ.)
 │   ├── directory/
 │   │   └── phone_department_policy.dart
 │   ├── errors/
@@ -69,7 +75,8 @@ lib/
 │   │   └── task_save_exception.dart
 │   ├── init/
 │   │   ├── app_init_provider.dart
-│   │   └── app_initializer.dart
+│   │   ├── app_initializer.dart
+│   │   └── database_reopen_cache_reset.dart
 │   ├── models/
 │   │   ├── building_map_floor.dart
 │   │   ├── calls_screen_cards_visibility.dart
@@ -87,6 +94,8 @@ lib/
 │   │   ├── equipment_focus_intent_provider.dart
 │   │   ├── greek_dictionary_provider.dart
 │   │   ├── history_audit_immersive_provider.dart
+│   │   ├── lamp_db_comparison_provider.dart
+│   │   ├── lamp_excel_path_health_provider.dart
 │   │   ├── lamp_open_settings_intent_provider.dart
 │   │   ├── lamp_read_path_health_provider.dart
 │   │   ├── lexicon_categories_provider.dart
@@ -100,633 +109,285 @@ lib/
 │   │   ├── task_focus_intent_provider.dart
 │   │   └── user_form_edit_intent_provider.dart
 │   ├── services/
-│   │   ├── application_prefs_snapshot.dart
+│   │   ├── ai_model_cooldown_registry.dart
+│   │   ├── ai_prompt_template_controller.dart
+│   │   ├── ai_ticket_suggestion_service.dart
 │   │   ├── application_reset_service.dart
 │   │   ├── audit_retention_runner.dart
-│   │   ├── audit_service.dart
-│   │   ├── backup_reset_metadata.dart
-│   │   ├── building_map_storage.dart
 │   │   ├── core_lexicon_service.dart
-│   │   ├── core_lexicon_validation.dart
+│   │   ├── crash_log_service.dart
 │   │   ├── default_remote_tool_display.dart
 │   │   ├── desktop_window_service.dart
 │   │   ├── dictionary_service.dart
-│   │   ├── gemini_prompt_template_controller.dart
-│   │   ├── gemini_prompt_template_syntax.dart
 │   │   ├── gemini_runtime_settings.dart
 │   │   ├── gemini_ticket_service.dart
+│   │   ├── gemini_ticket_suggestion_service.dart
 │   │   ├── lansweeper_agent_api_probe.dart
-│   │   ├── lansweeper_helpdesk_login_probe.dart
-│   │   ├── lansweeper_host_reachability.dart
 │   │   ├── lansweeper_sync_service.dart
-│   │   ├── lansweeper_ticket_requester_fields.dart
-│   │   ├── lookup_service.dart
+│   │   ├── lookup_service.dart  ← in-memory cache χρηστών/εξοπλισμού
 │   │   ├── master_dictionary_service.dart
 │   │   ├── portable_lamp_storage.dart
-│   │   ├── portable_tool_image_storage.dart
 │   │   ├── remote_args_service.dart
 │   │   ├── remote_connection_service.dart
 │   │   ├── remote_launcher_service.dart
-│   │   ├── remote_tools_paths_helper.dart
-│   │   ├── settings_service.dart
+│   │   ├── settings_service.dart  (+ _analytics_filters / _catalogs / _remote_lansweeper / _window_ui)
+│   │   ├── shutdown_coordinator.dart
+│   │   ├── shutdown_trace_service.dart
 │   │   ├── spell_check_service.dart
 │   │   └── spelling_lookup_gemini_service.dart
-│   ├── theme/
-│   │   └── .gitkeep
+│   ├── updates/
+│   │   ├── build_environment.dart
+│   │   ├── network_folder_classifier.dart
+│   │   ├── update_check_result.dart
+│   │   ├── update_providers.dart
+│   │   ├── update_service.dart
+│   │   ├── update_source_config.dart
+│   │   └── updater_script_builder.dart
 │   ├── utils/
-│   │   ├── autocomplete_highlight_scroll.dart
-│   │   ├── bundled_dictionary_assets.dart
 │   │   ├── date_parser_util.dart
-│   │   ├── department_display_utils.dart
-│   │   ├── department_floor_sync.dart
-│   │   ├── file_picker_initial_directory.dart
-│   │   ├── file_picker_session.dart
-│   │   ├── history_entity_display_utils.dart
-│   │   ├── lexicon_word_metrics.dart
-│   │   ├── linkable_text_parser.dart
 │   │   ├── name_parser.dart
-│   │   ├── natural_string_compare.dart
 │   │   ├── phone_list_parser.dart
-│   │   ├── safe_file_base_name.dart
-│   │   ├── search_debouncer.dart
 │   │   ├── search_text_normalizer.dart
-│   │   ├── spell_check.dart
-│   │   ├── user_homonym_finder.dart
-│   │   ├── user_identity_normalizer.dart
-│   │   ├── windows_cli_error_dialog.dart
-│   │   ├── windows_file_name_validation.dart
-│   │   └── windows_save_sqlite_database_dialog.dart
+│   │   └── (άλλα utils: autocomplete_highlight_scroll, department_display, homoglyph_text_normalizer κ.λπ.)
 │   └── widgets/
-│       ├── .gitkeep
 │       ├── app_init_wrapper.dart
 │       ├── app_shell_with_global_fatal_error.dart
-│       ├── app_shortcuts.dart
-│       ├── calendar_range_picker.dart
-│       ├── database_error_screen.dart
-│       ├── database_persistence_error_snackbar.dart
-│       ├── deleted_catalog_entity_text.dart
-│       ├── dialog_outside_tap_hint.dart
-│       ├── ellipsis_tooltip_text.dart
-│       ├── fatal_error_screen.dart
-│       ├── global_fatal_error_notifier.dart
-│       ├── lexicon_spell_menu_helper.dart
-│       ├── lexicon_spell_text_form_field.dart
-│       ├── linkable_selectable_text.dart
-│       ├── main_nav_destination.dart
 │       ├── main_shell.dart
-│       ├── nav_rail_attention_badge.dart
 │       ├── quick_call_fab.dart
-│       ├── quick_call_shortcuts.dart
-│       ├── remote_tool_icon.dart
-│       └── spell_check_controller.dart
+│       └── (άλλα κοινά widgets)
+│
 ├── features/
 │   ├── audit/
-│   │   ├── audit.dart
-│   │   ├── constants/
-│   │   │   └── audit_ui_mappings.dart
-│   │   ├── models/
-│   │   │   ├── audit_filter_model.dart
-│   │   │   ├── audit_log_model.dart
-│   │   │   ├── audit_page_result.dart
-│   │   │   └── audit_reference_labels.dart
-│   │   ├── providers/
-│   │   │   └── audit_providers.dart
-│   │   └── services/
-│   │       ├── audit_entity_preview_resolver.dart
-│   │       ├── audit_formatter_service.dart
-│   │       └── audit_reference_label_resolver.dart
+│   │   ├── models/  audit_filter_model, audit_log_model, audit_page_result, audit_reference_labels
+│   │   ├── providers/audit_providers.dart
+│   │   └── services/  audit_formatter_service, audit_reference_label_resolver, audit_entity_preview_resolver
 │   ├── calls/
-│   │   ├── layout/
-│   │   │   ├── calls_field_confirmations.dart
-│   │   │   ├── calls_field_groups.dart
-│   │   │   ├── calls_field_groups_provider.dart
-│   │   │   ├── calls_layout_engine.dart
-│   │   │   ├── calls_layout_plan.dart
-│   │   │   ├── calls_layout_template.dart
-│   │   │   ├── calls_map_gate.dart
-│   │   │   ├── calls_screen_layout.dart
-│   │   │   └── calls_screen_mode.dart
-│   │   ├── models/
-│   │   │   ├── .gitkeep
-│   │   │   ├── call_model.dart
-│   │   │   ├── equipment_model.dart
-│   │   │   └── user_model.dart
-│   │   ├── provider/
-│   │   │   ├── .gitkeep
-│   │   │   ├── call_entry_provider.dart
-│   │   │   ├── call_header_provider.dart
-│   │   │   ├── call_mutation_refresh.dart
-│   │   │   ├── calls_dashboard_providers.dart
-│   │   │   ├── lookup_provider.dart
-│   │   │   ├── notes_field_hint_provider.dart
-│   │   │   ├── remote_paths_provider.dart
-│   │   │   └── smart_entity_selector_provider.dart
-│   │   ├── screens/
-│   │   │   ├── .gitkeep
-│   │   │   ├── calls_screen.dart
-│   │   │   └── widgets/
-│   │   │       ├── call_header_form.dart
-│   │   │       ├── call_status_bar.dart
-│   │   │       ├── category_autocomplete_field.dart
-│   │   │       ├── equipment_recent_calls_panel.dart
-│   │   │       ├── global_recent_calls_list.dart
-│   │   │       ├── mini_map_card.dart
-│   │   │       ├── notes_sticky_field.dart
-│   │   │       ├── quick_call_dialog.dart
-│   │   │       ├── recent_calls_list.dart
-│   │   │       ├── remote_connection_buttons.dart
-│   │   │       ├── smart_entity_equipment_initial_suggestions.dart
-│   │   │       ├── smart_entity_selector_caller_field.dart
-│   │   │       ├── smart_entity_selector_caller_presentational.dart
-│   │   │       ├── smart_entity_selector_conflict_badge.dart
-│   │   │       ├── smart_entity_selector_department_field.dart
-│   │   │       ├── smart_entity_selector_equipment_field.dart
-│   │   │       ├── smart_entity_selector_equipment_models.dart
-│   │   │       ├── smart_entity_selector_equipment_suggestion_list.dart
-│   │   │       ├── smart_entity_selector_overlay_utils.dart
-│   │   │       ├── smart_entity_selector_phone_field.dart
-│   │   │       ├── smart_entity_selector_phone_presentational.dart
-│   │   │       ├── smart_entity_selector_phone_suggestion_list.dart
-│   │   │       ├── smart_entity_selector_phone_utils.dart
-│   │   │       ├── smart_entity_selector_widget.dart
-│   │   │       ├── sticky_note_widget.dart
-│   │   │       ├── text_layout_utils.dart
-│   │   │       └── user_info_card.dart
-│   │   └── utils/
-│   │       ├── call_remote_targets.dart
-│   │       ├── equipment_remote_param_key.dart
-│   │       ├── remote_target_rules.dart
-│   │       └── vnc_remote_target.dart
+│   │   ├── layout/  calls_field_groups_provider, calls_layout_engine, calls_screen_layout κ.λπ.
+│   │   ├── models/  call_model, equipment_model, user_model
+│   │   ├── provider/  call_entry_provider, call_header_provider, calls_dashboard_providers,
+│   │   │              lookup_provider, remote_paths_provider, smart_entity_selector_provider κ.λπ.
+│   │   ├── screens/  calls_screen.dart
+│   │   └── screens/widgets/  (call_header_form, smart_entity_selector_*, recent_calls_list κ.λπ.)
 │   ├── database/
-│   │   ├── debug/
-│   │   │   ├── error_scenarios_screen.dart
-│   │   │   ├── integrity_debug_provider_refresh.dart
-│   │   │   └── integrity_debug_seeder_service.dart
-│   │   ├── models/
-│   │   │   ├── database_backup_settings.dart
-│   │   │   ├── database_integrity_finding.dart
-│   │   │   ├── database_integrity_report.dart
-│   │   │   ├── database_stats.dart
-│   │   │   └── integrity_fix_models.dart
-│   │   ├── providers/
-│   │   │   ├── backup_scheduler_provider.dart
-│   │   │   ├── database_backup_settings_provider.dart
-│   │   │   ├── database_browser_stats_provider.dart
-│   │   │   ├── database_integrity_provider.dart
-│   │   │   └── database_maintenance_provider.dart
-│   │   ├── screens/
-│   │   │   └── database_browser_screen.dart
-│   │   ├── services/
-│   │   │   ├── database_backup_audit.dart
-│   │   │   ├── database_backup_service.dart
-│   │   │   ├── database_exit_backup.dart
-│   │   │   ├── database_integrity_fix_service.dart
-│   │   │   ├── database_integrity_service.dart
-│   │   │   ├── database_maintenance_service.dart
-│   │   │   ├── database_stats_service.dart
-│   │   │   └── integrity_audit_details_builder.dart
-│   │   ├── utils/
-│   │   │   ├── backup_destination_folder_validator.dart
-│   │   │   ├── backup_destination_location_warnings.dart
-│   │   │   ├── backup_location_hints.dart
-│   │   │   ├── backup_restore_tooltip.dart
-│   │   │   ├── backup_schedule_status.dart
-│   │   │   ├── backup_schedule_utils.dart
-│   │   │   └── portable_backup_availability.dart
-│   │   └── widgets/
-│   │       ├── backup_folder_missing_dialog.dart
-│   │       ├── database_integrity_panel.dart
-│   │       ├── database_maintenance_panel.dart
-│   │       ├── database_rename_failure_dialog.dart
-│   │       ├── database_settings_panel.dart
-│   │       └── integrity_fix_dialogs.dart
+│   │   ├── models/  database_backup_settings, database_integrity_finding/report, database_stats, integrity_fix_models
+│   │   ├── providers/  backup_scheduler, database_backup_settings, database_browser_stats,
+│   │   │               database_integrity, database_maintenance
+│   │   ├── services/  database_backup_service, database_exit_backup, database_integrity_service/fix_service,
+│   │   │               database_maintenance_service, database_stats_service
+│   │   └── utils/  backup_destination_folder_validator, backup_schedule_utils κ.λπ.
 │   ├── dictionary/
-│   │   ├── dictionary_table_layout.dart
-│   │   ├── models/
-│   │   │   └── lexicon_list_filters_model.dart
-│   │   ├── providers/
-│   │   │   ├── dictionary_layout_provider.dart
-│   │   │   ├── lexicon_list_filters_provider.dart
-│   │   │   ├── lexicon_scroll_provider.dart
-│   │   │   └── lexicon_spelling_panel_provider.dart
-│   │   ├── screens/
-│   │   │   └── dictionary_manager_screen.dart
-│   │   └── widgets/
-│   │       ├── core_lexicon_setup_dialog.dart
-│   │       ├── dictionary_grid_row.dart
-│   │       ├── dictionary_settings_dialog.dart
-│   │       └── lexicon_spelling_panel.dart
+│   │   ├── models/lexicon_list_filters_model.dart
+│   │   ├── providers/  dictionary_layout, lexicon_list_filters, lexicon_scroll, lexicon_spelling_panel
+│   │   └── screens/  dictionary_manager_screen.dart
 │   ├── directory/
-│   │   ├── building_map/
-│   │   │   ├── building_map_geometry.dart
-│   │   │   ├── building_map_label_layout.dart
-│   │   │   ├── building_map_sheet_export_key.dart
-│   │   │   ├── controllers/
-│   │   │   │   └── building_map_controller.dart
-│   │   │   ├── providers/
-│   │   │   │   └── building_map_providers.dart
-│   │   │   ├── screens/
-│   │   │   │   └── building_map_dialog.dart
-│   │   │   ├── services/
-│   │   │   │   ├── building_map_sheet_export.dart
-│   │   │   │   └── building_map_sheet_export_save_path.dart
-│   │   │   └── widgets/
-│   │   │       ├── building_map_commit_color_dialog.dart
-│   │   │       ├── building_map_department_search_field.dart
-│   │   │       ├── building_map_edit_toolbar.dart
-│   │   │       ├── building_map_empty_canvas_message.dart
-│   │   │       ├── building_map_fill_color_dialog.dart
-│   │   │       ├── building_map_floor_departments_dialog.dart
-│   │   │       ├── building_map_floor_edit_preview.dart
-│   │   │       ├── building_map_floor_menu_button.dart
-│   │   │       ├── building_map_floors_body.dart
-│   │   │       ├── building_map_omnisearch_field.dart
-│   │   │       ├── building_map_portable_image_copy_dialog.dart
-│   │   │       ├── building_map_search_unresolved_banner.dart
-│   │   │       ├── building_map_sheet_painter.dart
-│   │   │       ├── building_map_sheet_viewport.dart
-│   │   │       ├── department_selection_overlay.dart
-│   │   │       ├── map_rotation_pod.dart
-│   │   │       └── views/
-│   │   │           ├── building_map_edit_layout.dart
-│   │   │           └── building_map_view_layout.dart
-│   │   ├── models/
-│   │   │   ├── .gitkeep
-│   │   │   ├── category_directory_column.dart
-│   │   │   ├── category_model.dart
-│   │   │   ├── department_directory_column.dart
-│   │   │   ├── department_floor_display_extension.dart
-│   │   │   ├── department_model.dart
-│   │   │   ├── equipment_column.dart
-│   │   │   ├── non_user_phone_entry.dart
-│   │   │   ├── user_catalog_mode.dart
-│   │   │   └── user_directory_column.dart
-│   │   ├── providers/
-│   │   │   ├── category_directory_provider.dart
-│   │   │   ├── department_directory_provider.dart
-│   │   │   ├── directory_cache_refresh.dart
-│   │   │   ├── directory_provider.dart
-│   │   │   └── equipment_directory_provider.dart
-│   │   ├── screens/
-│   │   │   ├── .gitkeep
-│   │   │   ├── directory_screen.dart
-│   │   │   └── widgets/
-│   │   │       ├── bulk_department_edit_dialog.dart
-│   │   │       ├── bulk_equipment_edit_dialog.dart
-│   │   │       ├── bulk_user_edit_dialog.dart
-│   │   │       ├── catalog_column_selector_shell.dart
-│   │   │       ├── catalog_search_field_sync.dart
-│   │   │       ├── catalog_tab_lookup_reload_mixin.dart
-│   │   │       ├── catalog_table_hover_focus.dart
-│   │   │       ├── categories_data_table.dart
-│   │   │       ├── categories_tab.dart
-│   │   │       ├── category_form_dialog.dart
-│   │   │       ├── category_undo_snackbar.dart
-│   │   │       ├── department_color_palette.dart
-│   │   │       ├── department_color_picker_dialog.dart
-│   │   │       ├── department_form_dialog.dart
-│   │   │       ├── department_palette_actions.dart
-│   │   │       ├── department_palette_host.dart
-│   │   │       ├── department_palette_store.dart
-│   │   │       ├── department_transfer_confirm_dialog.dart
-│   │   │       ├── departments_data_table.dart
-│   │   │       ├── departments_tab.dart
-│   │   │       ├── equipment_data_table.dart
-│   │   │       ├── equipment_form_dialog.dart
-│   │   │       ├── equipment_settings_dialog.dart
-│   │   │       ├── equipment_tab.dart
-│   │   │       ├── homonym_warning_dialog.dart
-│   │   │       ├── miscellaneous_tab.dart
-│   │   │       ├── non_user_phones_data_table.dart
-│   │   │       ├── shared_asset_disconnect_dialog.dart
-│   │   │       ├── user_form_dialog.dart
-│   │   │       ├── user_form_smart_text_field.dart
-│   │   │       ├── user_name_change_confirm_dialog.dart
-│   │   │       ├── user_phone_department_conflict_dialog.dart
-│   │   │       ├── users_data_table.dart
-│   │   │       └── users_tab.dart
-│   │   └── services/
-│   │       └── shared_asset_disconnect_apply.dart
+│   │   ├── building_map/  controllers, providers, screens, services, widgets
+│   │   ├── models/  category_model, department_model, equipment_column, department_directory_column,
+│   │   │            user_directory_column, category_directory_column, non_user_phone_entry, user_catalog_mode
+│   │   ├── providers/  category_directory, department_directory, directory_provider, equipment_directory
+│   │   └── screens/  directory_screen.dart + widgets/
 │   ├── floor_map/
-│   │   └── services/
-│   │       └── floor_color_assignment_service.dart
+│   │   └── services/floor_color_assignment_service.dart
 │   ├── history/
-│   │   ├── models/
-│   │   │   ├── dashboard_date_preset.dart
-│   │   │   ├── dashboard_filter_model.dart
-│   │   │   ├── dashboard_summary_model.dart
-│   │   │   ├── lansweeper_connection_status.dart
-│   │   │   └── lansweeper_sync_state.dart
-│   │   ├── providers/
-│   │   │   ├── app_settings_bool.dart
-│   │   │   ├── dashboard_provider.dart
-│   │   │   ├── gemini_settings_provider.dart
-│   │   │   ├── history_application_audit_view_provider.dart
-│   │   │   ├── lansweeper_settings_provider.dart
-│   │   │   ├── history_call_actions_provider.dart
-│   │   │   ├── history_provider.dart
-│   │   │   ├── lansweeper_connection_probe_provider.dart
-│   │   │   └── lansweeper_sync_provider.dart
-│   │   ├── screens/
-│   │   │   ├── dashboard_cards.dart
-│   │   │   ├── dashboard_charts.dart
-│   │   │   ├── dashboard_filter_pane.dart
-│   │   │   ├── dashboard_palette_colors.dart
-│   │   │   ├── dashboard_screen.dart
-│   │   │   └── history_screen.dart
-│   │   ├── services/
-│   │   │   └── history_call_actions_service.dart
-│   │   └── widgets/
-│   │       ├── application_audit_tab.dart
-│   │       ├── audit_before_after_section.dart
-│   │       ├── audit_entity_previews/
-│   │       │   ├── audit_entity_preview_body.dart
-│   │       │   ├── audit_preview_column.dart
-│   │       │   ├── backup_preview_widget.dart
-│   │       │   ├── call_preview_widget.dart
-│   │       │   ├── equipment_preview_widget.dart
-│   │       │   ├── settings_preview_widget.dart
-│   │       │   ├── task_preview_widget.dart
-│   │       │   └── user_preview_widget.dart
-│   │       ├── audit_entity_side_panel.dart
-│   │       ├── call_delete_dialog.dart
-│   │       ├── call_edit_dialog.dart
-│   │       ├── history_deleted_entity_text.dart
-│   │       ├── lansweeper/
-│   │       │   ├── gemini_model_field.dart
-│   │       │   ├── gemini_prompt_template_editor_dialog.dart
-│   │       │   ├── gemini_prompt_template_field.dart
-│   │       │   ├── lansweeper_connection_settings_dialog.dart
-│   │       │   ├── lansweeper_connection_status_indicator.dart
-│   │       │   ├── lansweeper_gemini_prompt_preview_dialog.dart
-│   │       │   ├── lansweeper_report_call_list.dart
-│   │       │   ├── lansweeper_report_call_tile.dart
-│   │       │   ├── lansweeper_state_badge.dart
-│   │       │   ├── lansweeper_sync_form.dart
-│   │       │   ├── lansweeper_url_rules.dart
-│   │       │   └── sync_history_list.dart
-│   │       └── lansweeper_report_dialog.dart
+│   │   ├── models/  dashboard_date_preset, dashboard_filter_model, dashboard_summary_model,
+│   │   │            lansweeper_connection_status, lansweeper_sync_state
+│   │   ├── providers/  ai_ticket_suggestion, dashboard_provider, gemini_settings, history_provider,
+│   │   │               lansweeper_connection_probe, lansweeper_settings, lansweeper_sync
+│   │   ├── screens/  dashboard_screen, history_screen + dashboard_cards/charts/filter_pane
+│   │   └── widgets/  call_edit_dialog, lansweeper/*, audit_entity_previews/*
 │   ├── lamp/
-│   │   ├── controllers/
-│   │   │   ├── lamp_import_controller.dart
-│   │   │   ├── lamp_integrity_controller.dart
-│   │   │   ├── lamp_issue_resolution_controller.dart
-│   │   │   ├── lamp_path_management.dart
-│   │   │   ├── lamp_screen_host.dart
-│   │   │   └── lamp_search_controller.dart
-│   │   ├── screens/
-│   │   │   └── lamp_screen.dart
-│   │   ├── services/
-│   │   │   └── lamp_migration_service.dart
-│   │   └── widgets/
-│   │       ├── lamp_db_tables_tab.dart
-│   │       ├── lamp_issue_manual_review_dialog.dart
-│   │       ├── lamp_issue_widgets.dart
-│   │       ├── lamp_resolution_progress_dialog.dart
-│   │       ├── lamp_result_card.dart
-│   │       ├── lamp_settings_dialog.dart
-│   │       ├── lamp_transfer_wizard_dialog.dart
-│   │       └── lamp_unresolved_resolution_dialog.dart
+│   │   ├── controllers/  lamp_import_controller, lamp_issue_resolution_controller κ.λπ.
+│   │   ├── screens/lamp_screen.dart
+│   │   ├── services/  lamp_migration_service, lamp_transfer_preview
+│   │   └── widgets/  lamp_transfer_wizard_dialog, lamp_resolution_progress_dialog κ.λπ.
 │   ├── settings/
-│   │   ├── screens/
-│   │   │   ├── remote_tools_management_screen.dart
-│   │   │   └── settings_screen.dart
-│   │   └── widgets/
-│   │       ├── create_new_database_dialog.dart
-│   │       ├── pending_reset_database_screen.dart
-│   │       ├── remote_tool_form_dialog.dart
-│   │       └── start_from_beginning_flow.dart
+│   │   ├── screens/  settings_screen, remote_tools_management_screen
+│   │   └── widgets/  remote_tool_form/* (controller, dialog, saver, sort, test_panel)
 │   └── tasks/
-│       ├── models/
-│       │   ├── .gitkeep
-│       │   ├── task.dart
-│       │   ├── task_analytics_date_preset.dart
-│       │   ├── task_analytics_filter.dart
-│       │   ├── task_analytics_summary.dart
-│       │   ├── task_filter.dart
-│       │   └── task_settings_config.dart
-│       ├── providers/
-│       │   ├── pending_task_delete_provider.dart
-│       │   ├── task_analytics_date_provider.dart
-│       │   ├── task_analytics_provider.dart
-│       │   ├── task_service_provider.dart
-│       │   ├── task_settings_config_provider.dart
-│       │   └── tasks_provider.dart
-│       ├── screens/
-│       │   ├── .gitkeep
-│       │   ├── task_card.dart
-│       │   ├── task_close_dialog.dart
-│       │   ├── task_filter_bar.dart
-│       │   ├── task_form_dialog.dart
-│       │   ├── task_settings_dialog.dart
-│       │   └── tasks_screen.dart
-│       ├── services/
-│       │   └── task_service.dart
-│       ├── ui/
-│       │   └── task_due_option_tooltips.dart
-│       └── widgets/
-│           └── task_analytics_bottom_sheet.dart
-└── main.dart
+│       ├── models/  task, task_analytics_filter, task_analytics_summary, task_filter,
+│       │            task_settings_config, task_analytics_date_preset
+│       ├── providers/  pending_task_delete, task_analytics_date, task_analytics, task_service,
+│       │               task_settings_config, tasks_provider
+│       ├── screens/  tasks_screen, task_card, task_form_dialog, task_close_dialog, task_filter_bar
+│       └── services/task_service.dart
 ```
 
 ---
 
 ## 2) DATABASE SCHEMA (SQLite)
 
-**Τρέχουσα έκδοση σχήματος:** `databaseSchemaVersionV1 = 31` (`lib/core/database/database_v1_schema.dart`).
+**Τρέχουσα έκδοση σχήματος:** `databaseSchemaVersionV1 = 36`
 
-| Πίνακας | Στήλες (τύπος SQLite) |
-|---------|------------------------|
-| **calls** | id INTEGER PK, date/time TEXT, caller_id/equipment_id INTEGER, caller_text/phone_text/department_text/equipment_text TEXT, issue TEXT, category_text TEXT, category_id INTEGER, status TEXT, duration INTEGER, is_priority INTEGER, search_index TEXT, lansweeper_state TEXT, lansweeper_main_ticket_id TEXT, lansweeper_last_sync_at TEXT, is_deleted INTEGER |
+| Πίνακας | Βασικές στήλες |
+|---------|----------------|
+| **calls** | id INTEGER PK, date TEXT, time TEXT, caller_id INTEGER, equipment_id INTEGER, caller_text TEXT, phone_text TEXT, department_text TEXT, equipment_text TEXT, issue TEXT, category_text TEXT, category_id INTEGER, status TEXT, duration INTEGER, is_priority INTEGER DEFAULT 0, search_index TEXT, lansweeper_state TEXT DEFAULT 'unsent', lansweeper_main_ticket_id TEXT, lansweeper_last_sync_at TEXT, is_deleted INTEGER DEFAULT 0 |
 | **call_external_links** | id INTEGER PK, call_id INTEGER, external_id TEXT, provider TEXT, created_at TEXT, metadata TEXT |
-| **users** | id INTEGER PK, last_name/first_name TEXT, department_id INTEGER, location/notes TEXT, is_deleted INTEGER |
-| **phones** | id INTEGER PK, number TEXT UNIQUE, department_id INTEGER, is_deleted INTEGER |
-| **department_phones** | department_id, phone_id (PK composite) |
-| **user_phones** | user_id, phone_id (PK composite) |
-| **equipment** | id INTEGER PK, code_equipment/type/notes TEXT, remote_params TEXT, default_remote_tool TEXT, department_id INTEGER, location TEXT, is_deleted INTEGER |
-| **user_equipment** | user_id, equipment_id (PK composite) |
-| **departments** | id INTEGER PK, name/name_key TEXT, building/color/notes TEXT, map_floor TEXT, map_x/y/width/height/rotation REAL, map_label_offset_*, map_anchor_offset_*, map_custom_name TEXT, map_label_font_scale/width/height REAL, group_name TEXT, floor_id INTEGER, map_hidden INTEGER, is_deleted INTEGER |
-| **building_map_floors** | id INTEGER PK, sort_order INTEGER, label TEXT, floor_group TEXT, image_path TEXT, rotation_degrees REAL |
-| **categories** | id INTEGER PK, name TEXT, is_deleted INTEGER |
-| **tasks** | id INTEGER PK, title/description TEXT, due_date/snooze_until TEXT, snooze_history_json TEXT, status TEXT, call_id INTEGER, priority INTEGER, solution_notes TEXT, caller/equipment/department/phone ids & texts, created_at/updated_at TEXT, origin TEXT, search_index TEXT, is_deleted INTEGER |
-| **knowledge_base** | id INTEGER PK, topic/content/tags TEXT |
-| **audit_log** | id INTEGER PK, action/timestamp/user_performing/details TEXT, entity_type TEXT, entity_id INTEGER, entity_name TEXT, search_text TEXT, old_values_json/new_values_json TEXT |
+| **users** | id INTEGER PK, last_name TEXT, first_name TEXT, department_id INTEGER, location TEXT, notes TEXT, is_deleted INTEGER DEFAULT 0 |
+| **phones** | id INTEGER PK, number TEXT UNIQUE, department_id INTEGER, is_deleted INTEGER DEFAULT 0 |
+| **department_phones** | department_id INTEGER, phone_id INTEGER (PK σύνθετο) |
+| **user_phones** | user_id INTEGER, phone_id INTEGER (PK σύνθετο) |
+| **equipment** | id INTEGER PK, code_equipment TEXT, type TEXT, notes TEXT, remote_params TEXT (JSON), default_remote_tool TEXT, department_id INTEGER, location TEXT, is_deleted INTEGER DEFAULT 0 |
+| **user_equipment** | user_id INTEGER, equipment_id INTEGER (PK σύνθετο) |
+| **departments** | id INTEGER PK, name TEXT, name_key TEXT UNIQUE, building TEXT, color TEXT DEFAULT '#1976D2', notes TEXT, map_floor TEXT, map_x/y/width/height/rotation REAL, map_label_offset_x/y REAL, map_anchor_offset_x/y REAL, map_custom_name TEXT, map_label_font_scale REAL, map_label_width REAL DEFAULT 150.0, map_label_height REAL DEFAULT 50.0, group_name TEXT, floor_id INTEGER, is_deleted INTEGER DEFAULT 0, map_hidden INTEGER DEFAULT 0 |
+| **building_map_floors** | id INTEGER PK, sort_order INTEGER, label TEXT, floor_group TEXT, image_path TEXT, rotation_degrees REAL DEFAULT 0 |
+| **categories** | id INTEGER PK, name TEXT, is_deleted INTEGER DEFAULT 0 |
+| **tasks** | id INTEGER PK, title TEXT, description TEXT, due_date TEXT, snooze_history_json TEXT, status TEXT, call_id INTEGER, priority INTEGER, solution_notes TEXT, snooze_until TEXT, caller_id INTEGER, equipment_id INTEGER, department_id INTEGER, phone_id INTEGER, phone_text TEXT, user_text TEXT, equipment_text TEXT, department_text TEXT, created_at TEXT, updated_at TEXT, origin TEXT DEFAULT 'legacy', search_index TEXT, is_deleted INTEGER DEFAULT 0 |
+| **knowledge_base** | id INTEGER PK, topic TEXT, content TEXT, tags TEXT |
+| **audit_log** | id INTEGER PK, action TEXT, timestamp TEXT, user_performing TEXT, details TEXT, entity_type TEXT, entity_id INTEGER, entity_name TEXT, search_text TEXT, old_values_json TEXT, new_values_json TEXT |
 | **app_settings** | key TEXT PK, value TEXT |
-| **remote_tools** | id INTEGER PK, name/role/executable_path/launch_mode TEXT, sort_order/is_active/is_exclusive INTEGER, suggested_values/icon_asset_key/arguments_json/test_target_ip TEXT, deleted_at TEXT |
-| **remote_tool_args** | id INTEGER PK, remote_tool_id INTEGER, tool_name/arg_flag/description TEXT, is_active INTEGER |
-| **user_dictionary** | word TEXT PK, display_word TEXT, language TEXT, letters_count/diacritic_mark_count INTEGER |
-| **full_dictionary** | id INTEGER PK, word/normalized_word/source/language/category TEXT, created_at TEXT, letters_count/diacritic_mark_count INTEGER |
-
-Ευρετήρια: `calls(lansweeper_state)`, `audit_log(timestamp, action, entity_type+entity_id)`, `full_dictionary(normalized_word, filters, letters, diacritics)`, `remote_tools(role)`, `call_external_links(call_id+provider, created_at)`.
+| **remote_tools** | id INTEGER PK, name TEXT, role TEXT, executable_path TEXT, sort_order INTEGER, is_active INTEGER, suggested_values TEXT, icon_asset_key TEXT, arguments_json TEXT, test_target_ip TEXT, is_exclusive INTEGER, deleted_at TEXT |
+| **remote_tool_args** | id INTEGER PK, remote_tool_id INTEGER FK, tool_name TEXT, arg_flag TEXT, description TEXT, is_active INTEGER |
+| **user_dictionary** | word TEXT PK, display_word TEXT, language TEXT, letters_count INTEGER, diacritic_mark_count INTEGER |
+| **full_dictionary** | id INTEGER PK, word TEXT UNIQUE, normalized_word TEXT, source TEXT, language TEXT, category TEXT, created_at TEXT, letters_count INTEGER, diacritic_mark_count INTEGER |
 
 ---
 
 ## 3) MODELS
 
-### `lib/features/audit/models/`
-- **AuditFilterModel** — keyword, action, entityType, dateFrom, dateTo
-- **AuditLogModel** — id, action, timestamp, userPerforming, details, entityType, entityId, entityName, old/newValuesJson
-- **AuditPageResult** — items, totalCount
-- **AuditReferenceLabels** — departmentNames (Map)
+### Βήμα Α — Κατάλογοι `models/`
 
-### `lib/features/calls/models/`
-- **CallModel** — id, date, time, callerId, equipmentId, *Text πεδία, issue, category, status, duration, isPriority, lansweeper*, isDeleted, linked-deleted flags
-- **EquipmentModel** — id, code, type, notes, remoteParams, defaultRemoteTool, departmentId, location, isDeleted
-- **UserModel** — id, firstName, lastName, phones, departmentId, location, notes, isDeleted
+**`lib/features/calls/models/`**
 
-### `lib/features/database/models/`
-- **DatabaseBackupSettings** — destination, naming, zip, includes (maps/tools/lexicon/lamp), interval, retention, last backup metadata
-- **DatabaseStats** — fileSizeBytes, dbPath, lastBackupTime, rowCountsByTable
-- **DatabaseIntegrityReport** — findings, checkedAt, schemaVersion
-- **DatabaseIntegrityFinding** — severity, category, checkType, title, description, affectedId/Entity, context
-- **IntegrityFix*** — enums/sealed classes για επιδιορθώσεις ακεραιότητας
+- **CallModel** — Μοντέλο κλήσης: id, date, time, callerId, equipmentId, callerText, phoneText, departmentText, equipmentText, issue, category, categoryId, status, duration, isPriority, lansweeperState, lansweeperMainTicketId, lansweeperLastSyncAt, isDeleted, callerLinkedDeleted, equipmentLinkedDeleted.
+- **UserModel** — Μοντέλο χρήστη: id, firstName, lastName, phones (List\<String\>), departmentId, location, notes, isDeleted. Computed: name, phoneJoined, fullNameWithDepartment.
+- **EquipmentModel** — Μοντέλο εξοπλισμού: id, code, type, notes, remoteParams (Map\<String,String\>), defaultRemoteTool, departmentId, location, isDeleted. Computed: displayLabel, vncTargetResolved, rdpHostResolved, anydeskIdResolved.
 
-### `lib/features/directory/models/`
-- **DepartmentModel** — id, name, building, color, notes, groupName, floorId, map* γεωμετρία/ετικέτα, directPhones, isDeleted, isHiddenOnMap
-- **CategoryModel** — id, name
-- **NonUserPhoneEntry** — phoneId, number, departmentNamesDisplay, primaryDepartmentId
-- **DepartmentDirectoryColumn / CategoryDirectoryColumn / UserDirectoryColumn / EquipmentColumn** — key, label, sortKey (+ στατικές στήλες)
-- **UserCatalogMode** (enum) — personal, shared
-- **EquipmentRow** (typedef) — (EquipmentModel, UserModel?)
+**`lib/features/directory/models/`**
 
-### `lib/features/dictionary/models/`
-- **LexiconListFiltersModel** — langFilter, sourceFilter, categoryFilter, columnGroups, lettersCompareOp, lettersCount, diacriticMarksFilter, page (αποθηκεύονται στη βάση· όχι αναζήτηση)
+- **DepartmentModel** — id, name, building, color, notes, groupName, floorId, mapFloor, mapX/Y/Width/Height/Rotation, mapLabel*/mapAnchor* REAL, mapCustomName, mapLabelFontScale, mapLabelWidth/Height, directPhones, isDeleted, isHiddenOnMap.
+- **CategoryModel** — id, name, isDeleted.
+- **UserCatalogMode** (enum) — Λειτουργία εμφάνισης καταλόγου χρηστών.
+- **NonUserPhoneEntry** — Εγγραφή τηλεφώνου χωρίς κάτοχο χρήστη.
+- **UserDirectoryColumn** / **DepartmentDirectoryColumn** / **CategoryDirectoryColumn** / **DepartmentFloorDisplayExtension** — Στήλες πίνακα UI καταλόγου.
+- **EquipmentColumn** — typedef `EquipmentRow = (EquipmentModel, UserModel?)` + helper συνάρτηση μορφοποίησης τοποθεσίας.
 
-### `lib/features/history/models/`
-- **DashboardFilterModel** — keyword, dateFrom, dateTo, department, userName, equipmentCode, topN
-- **DashboardSummaryModel** — KPIs, trends, sparklines, byDepartment, byIssue, longestCalls, hourlyDistribution, …
-- **DepartmentStat, IssueStat, DailyTrendPoint, CallerStat, LongestCallEntry, HourlyBucket, KpiBarSparklinePoint** — βοηθητικά dashboard
-- **DashboardDatePreset** (enum) — today, last7, last30, all, custom
-- **LansweeperConnectionStatus** (sealed) — checking, available, unavailable
-- **LansweeperSyncState** — unsent, sent, excluded, failed
+**`lib/features/audit/models/`**
 
-### `lib/features/tasks/models/`
-- **Task** — id, callId, entity ids/texts, title, description, dueDate, snoozeUntil, snoozeHistoryJson, status, priority, solutionNotes, origin, timestamps, isDeleted
-- **TaskFilter** — searchQuery, statuses, date range, sortBy, sortAscending
-- **TaskSettingsConfig** — dayEndTime, nextBusinessHour, skipWeekends, snooze defaults
-- **TaskAnalyticsSummary / TaskAnalyticsFilter / TaskAnalyticsDatePreset** — αναλυτικά εκκρεμοτήτων
-- **TaskStatus** (enum), **TaskSnoozeEntry**, **TaskSortOption** (enum)
+- **AuditLogModel** — id, action, timestamp, userPerforming, details, entityType, entityId, entityName, oldValuesJson, newValuesJson. Computed: hasAnyDeltaJson, isTechnicalTableDetailsOnly, oldValuesMap, newValuesMap.
+- **AuditFilterModel** — keyword, action, entityType, dateFrom, dateTo. Helpers: dateFromInclusiveIso, dateToExclusiveIso.
+- **AuditPageResult** — items (List\<AuditLogModel\>), totalCount.
+- **AuditReferenceLabels** — departmentNames (Map\<int,String\>), remoteToolNames (Map\<int,String\>). Μέθοδος: merge.
 
-### `lib/core/models/`
-- **RemoteTool** — id, name, role, executablePath, launchMode, arguments, testTargetIp, isExclusive, …
-- **RemoteToolArg, RemoteToolArgument, ToolRole** (enum)
-- **BuildingMapFloor** — id, sortOrder, label, floorGroup, imagePath, rotationDegrees
-- **DictionaryImportMode** (enum), **WindowPlacementMode** (enum)
-- **CallsScreenCardsVisibility** — toggles καρτών οθόνης Κλήσεων (showMapCard κ.λπ.)
+**`lib/features/history/models/`**
 
-### `lib/core/utils/` (τύποι βοηθητικών)
-- **PhoneFieldSegmentBounds** — `phone_list_parser.dart`: όρια ενεργού τμήματος τηλεφώνου μετά κόμμα (autocomplete φόρμας υπαλλήλου)
+- **DashboardFilterModel** — Ενεργό φίλτρο dashboard (dateFrom, dateTo, departmentFilter, κ.λπ.).
+- **DashboardSummaryModel** — Αποτέλεσμα συνάθροισης: totalCalls, totalDurationSeconds, departmentStats, issueStats, dailyTrends, callerStats, longestCalls, hourlyBuckets κ.λπ. Συνυπάρχοντες τύποι: `DepartmentStat`, `IssueStat`, `DailyTrendPoint`, `CallerStat`, `LongestCallEntry`, `HourlyBucket`, `KpiBarSparklinePoint`.
+- **DashboardDatePreset** (enum) — Χρονικές προεπιλογές (σήμερα, εβδομάδα, μήνας κ.λπ.).
+- **LansweeperConnectionStatus** / **LansweeperSyncState** — Κατάσταση σύνδεσης και συγχρονισμού Lansweeper.
 
-### `lib/core/about/models/`
-- **ChangelogEntry** — version, date, added, changed, fixed
+**`lib/features/tasks/models/`**
 
-### Μοντέλα εκτός `models/`
-- **HistoryFilterModel** — `history_provider.dart` (keyword, dates, category, department, …)
-- **EquipmentViewModel** — `lamp_result_card.dart` (προβολή Λάμπας)
+- **Task** — id, callId, callerId, equipmentId, departmentId, phoneId, phoneText, userText, equipmentText, departmentText, title, description, dueDate, snoozeUntil, snoozeHistoryJson, status (TaskStatus), priority, solutionNotes, createdAt, updatedAt, origin, isDeleted + joined-deleted flags. Nested: `TaskSnoozeEntry` (από snoozeHistoryJson). Constants: originManualFab, originCallLinked, originQuickAdd, originLegacy.
+- **TaskStatus** (enum) — open, snoozed, closed.
+- **TaskFilter** — Φίλτρο λίστας εργασιών (status, keyword, dateFrom/To κ.λπ.).
+- **TaskSettingsConfig** — Ρυθμίσεις εργασιών (snooze intervals, default due days κ.λπ.).
+- **TaskAnalyticsFilter** / **TaskAnalyticsSummary** / **TaskAnalyticsDatePreset** — Δεδομένα analytics εκκρεμοτήτων.
 
-### `lib/features/lamp/services/lamp_migration_service.dart` (μεταφορά / προεπισκόπηση)
-- **LampTransferTarget** (enum) — equipment, owner, department
-- **LampMigrationCandidate** — id, label, confidence, isExact
-- **LampMigrationDraft** — target, oldValues, formValues, newRecordFormValues, candidateFormValues, candidates, selectedCandidateId, updatesExistingRecord, hint
-- **LampMigrationSaveResult** — id, updated, message
-- **LampOwnerConflictKind / LampOwnerConflictAction** (enum)
-- **LampOwnerConflict** — conflictId, kind, value, currentOwners
-- **LampOwnerConflictDecision** — conflictId, action
-- **TransferFieldAction** (enum) — unchanged, linked, created, updated, unlinked
-- **TransferItemPlan** — value, action, hasWarning, warningMessage
-- **TransferFieldPlan\<TKey\>** — fieldKey, action, lampValue, destinationValue, items, hasWarning, warningMessage
-- **DepartmentTransferField / OwnerTransferField / EquipmentTransferField** (enum) — κλειδιά πεδίων με `.formKey` → `formValues`
-- **TransferEntityMode** (enum) — newEntry, updateExisting
-- **TransferEntityPlan\<TKey\>** — target, mode, matchedEntityId, matchedEntityLabel, fields
-- **TransferEntityKind / TransferOperationKind** (enum)
-- **TransferOperationResult** — kind, entityKind, label, entityId, hasWarning, warningMessage
-- **TransferResult** — target, mainEntityMode, mainEntityId, mainEntityLabel, operations, hasAnyWarning
-- **OwnerResolveOutcome** (record) — ownerId, kind, label
-- **evaluateField / evaluateItemsField** — καθαρές συναρτήσεις αξιολόγησης πεδίων (χωρίς πρόσβαση βάσης)
+**`lib/features/database/models/`**
 
-### Σημαντικοί τύποι χωρίς επίθημα Model
-| Περιοχή | Τύποι |
-|---------|--------|
-| Αρχικοποίηση βάσης | `DatabaseStatus`, `DatabaseInitResult`, `DatabaseInitException`, `DatabaseInitRunnerResult`, `DatabaseInitProgressState`, `ConnectionCheckResult`, `TablePreviewResult` |
-| Εφαρμογή | `AppInitResult` |
-| Ρυθμίσεις | `AuditRetentionConfig` |
-| Υπηρεσίες | `LookupResult`, `ImportResult` (excel), `ImportLogLevel` (enum), `GeminiPromptTemplateController` / σύνταξη προτύπων (`gemini_prompt_template_*`) |
-| Κλήσεις | `CallEntryState`, `SmartEntitySelectorState`, `OrphanQuickAddResult`, `LookupLoadResult`, `CallsFieldGroups`, `CallsFieldConfirmations`, `CallsLayoutPlan`, `CallsLayoutTemplate` (enum) |
-| Κατάλογος | `DirectoryState`, `CategoryDirectoryState`, `DepartmentDirectoryState`, `EquipmentDirectoryState`, `EquipmentDeleteUndoEntry`, `BuildingMapFloorDeleteChoice` |
-| Βάση | `ReplaceDatabaseResult`, `DatabaseBackupResult`, `BackupDestinationValidationResult` |
-| Εργασίες | `TaskSnoozeEntry` (nested στο Task) |
-| Λεξικό | `LexiconSpellingPanelState`, `LexiconSpellingTarget` — πάνελ ορθογραφίας |
-| Gemini | `GeminiTextModel`, `GeminiModelProbeResult`, `GeminiModelsProbeCache` — probe μοντέλων ΤΝ |
+- **DatabaseBackupSettings** — Ρυθμίσεις backup: enabled, targetFolder, scheduleInterval, keepCount κ.λπ.
+- **DatabaseStats** — Στατιστικά πινάκων (αριθμός εγγραφών ανά πίνακα).
+- **DatabaseIntegrityFinding** / **DatabaseIntegrityReport** — Ευρήματα ελέγχου ακεραιότητας.
+- **IntegrityFixModels** — Βοηθητικά μοντέλα αποτελεσμάτων επιδιόρθωσης.
+
+**`lib/features/dictionary/models/`**
+
+- **LexiconListFiltersModel** — Φίλτρα εμφάνισης λεξικού (γλώσσα, πηγή, κατηγορία, κ.λπ.).
+
+**`lib/core/models/`**
+
+- **RemoteTool** — id, name, role (ToolRole), executablePath, sortOrder, isActive, suggestedValues, iconAssetKey, argumentsJson, testTargetIp, isExclusive, deletedAt.
+- **RemoteToolArg** — id, remoteToolId, toolName, argFlag, description, isActive.
+- **RemoteToolRole** (enum) — vnc, rdp, anydesk, generic.
+- **BuildingMapFloor** — id, sortOrder, label, floorGroup, imagePath, rotationDegrees.
+- **CallsScreenCardsVisibility** — Ορατότητα καρτών οθόνης κλήσεων.
+- **DictionaryImportMode** (enum) — Λειτουργία εισαγωγής λεξικού.
+- **WindowPlacementMode** (enum) — Τρόπος τοποθέτησης παραθύρου.
+
+### Βήμα Β — Μοντέλα εκτός `models/`
+
+- **HistoryFilterModel** (`lib/features/history/providers/history_provider.dart`) — Φίλτρα ιστορικού κλήσεων: keyword, dateFrom/To, category, status, departmentFilter, showDeleted.
+
+### Βήμα Γ — Τύποι δεδομένων χωρίς επίθημα Model
+
+| Τύπος | Αρχείο | Πεδία |
+|-------|--------|-------|
+| `DatabaseStatus` (enum) | `core/database/database_init_result.dart` | success, fileNotFound, accessDenied, corruptedOrInvalid, applicationError |
+| `DatabaseInitResult` | `core/database/database_init_result.dart` | status, message, details, path, originalExceptionText, stackTraceText, technicalCode, recoveryKind |
+| `DatabaseInitRecoveryKind` (enum) | ίδιο | wrongDatabaseLamp, wrongDatabaseUnknown, corruptedOrMigration, locked, timeout, generic |
+| `DatabaseInitException` | ίδιο | result (DatabaseInitResult) |
+| `AppInitResult` | `core/init/app_initializer.dart` | result (DatabaseInitResult), isLocalDevMode, spellCheckReady |
+| `AuditRetentionConfig` | `core/config/audit_retention_config.dart` | Ρυθμίσεις διατήρησης audit log |
+| `LookupResult` | `core/services/lookup_service.dart` | user (UserModel), equipment (List\<EquipmentModel\>) |
+| `LookupLoadResult` | `features/calls/provider/lookup_provider.dart` | service (LookupService), loadError, loadErrorDetails |
+| `ConnectionCheckResult` | `core/database/database_helper.dart` | success, isLocalDev |
+| `TablePreviewResult` | `core/database/database_helper.dart` | columns (List\<String\>), rows (List\<Map\>) |
+| `DatabaseInitProgressState` | `core/database/database_init_progress_provider.dart` | Βήμα και μήνυμα προόδου αρχικοποίησης |
+| `CallEntryState` | `features/calls/provider/call_entry_provider.dart` | notes, category, categoryId, isPending, durationSeconds, isCallTimerRunning, retainPlayPauseAfterManualZero, isSubmitting |
+| `SmartEntitySelectorState` | `features/calls/provider/smart_entity_selector_state.dart` | selectedPhone, selectedCaller, selectedEquipment, phoneCandidates, callerCandidates, equipmentCandidates, isPhoneAmbiguous, callerNoMatch, equipmentNoMatch, hasAnyContent, equipmentText, callerDisplayText, departmentText, selectedDepartmentId, conflicts |
+| `SelectorField` (enum) | ίδιο | phone, caller, department, equipment |
+| `ConflictSeverity` (enum) | ίδιο | mismatch, unknown |
+| `FieldConflict` | ίδιο | severity, message |
+| `OrphanQuickAddResult` | `features/calls/provider/smart_entity_selector_provider.dart` | Αποτέλεσμα γρήγορης προσθήκης ορφανής οντότητας |
+| `DirectoryState` | `features/directory/providers/directory_provider.dart` | Κατάσταση καταλόγου (users, equipment, search, selectedTab) |
+| `CategoryDirectoryState` | `features/directory/providers/category_directory_provider.dart` | Λίστα κατηγοριών + φίλτρο |
+| `DepartmentDirectoryState` | `features/directory/providers/department_directory_provider.dart` | Λίστα τμημάτων + φίλτρο + ταξινόμηση |
+| `EquipmentDirectoryState` | `features/directory/providers/equipment_directory_provider.dart` | Λίστα εξοπλισμού + φίλτρα |
+| `EquipmentDeleteUndoEntry` | `features/directory/providers/equipment_directory_provider.dart` | Εγγραφή αναίρεσης διαγραφής εξοπλισμού |
+| `BuildingMapFloorDeleteChoice` (enum) | `features/directory/building_map/controllers/building_map_controller.dart` | Επιλογή ενέργειας κατά διαγραφή ορόφου |
+| `DatabaseBackupResult` | `features/database/services/database_backup_service.dart` | success, filePath, errorMessage, failureCode |
+| `ReplaceDatabaseResult` | `features/database/services/database_maintenance_service.dart` | success, message, details |
+| `BackupDestinationValidationResult` | `features/database/utils/backup_destination_folder_validator.dart` | Αποτέλεσμα ελέγχου φακέλου backup (kind, matchingFileCount, latestModified) |
+| `TaskStatus` (enum) | `features/tasks/models/task.dart` | open, snoozed, closed |
+| `GeminiTextModel` / `GeminiModelProbeResult` / `GeminiModelsQuotaProbeResult` / `GeminiModelsProbeCache` | `core/services/gemini_ticket_service.dart` | Μοντέλα Gemini API (αναγνωριστικά, quota, cache αποτελεσμάτων probe) |
 
 ---
 
 ## 4) STATE MANAGEMENT — PROVIDERS (Riverpod)
 
-### Αρχικοποίηση & πυρήνας
-- **appInitProvider** — μονοσήμαντη εκκίνηση εφαρμογής
-- **databaseInitProgressProvider** — πρόοδος init βάσης
-- **lookupServiceProvider** — in-memory κατάλογος χρηστών/εξοπλισμού
-- **activeProfileProvider** — CLI προφίλ (`--profile`)
-- **applicationResetPendingProvider** — ροή «Ξεκίνα από την αρχή»
-
-### Κλήσεις
-- **callEntryProvider** — φόρμα καταχώρησης κλήσης
-- **callSmartEntityProvider / taskSmartEntityProvider / historyEditSmartEntityProvider** — έξυπνος επιλογέας οντοτήτων
-- **callsFieldGroupsProvider, callsFieldConfirmationsProvider** — ομαδοποίηση πεδίων & επιβεβαιώσεις (layout engine)
-- **callsScreenIsExpandedProvider / callsScreenExpandedLatchProvider** — compact vs expanded όψη Νέας κλήσης
-- **recentCallsProvider, globalRecentCallsProvider** — πρόσφατες κλήσεις
-- **remoteToolsCatalogProvider** — κατάλογος απομακρυσμένων εργαλείων
-- **callDepartmentPrefillIntentProvider** — πρόθεση προ-συμπλήρωσης τμήματος από εξωτερική ροή
-- **mainShellEffectiveDestinationProvider, settingsRouteOpenForQuickCallProvider, buildingMapQuickCallBlockedProvider** — γρήγορη κλήση (FAB μέσω `showQuickCallFabProvider`, προορισμός κελύφους, αποκλεισμός όταν ανοιχτές Ρυθμίσεις ή επεξεργασία χάρτη)
-
-### Ιστορικό & dashboard
-- **historyFilterProvider, historyCallsProvider** — φίλτρα και λίστα ιστορικού
-- **dashboardFilterProvider, dashboardStatsProvider** — στατιστικά KPI
-- **lansweeperSyncProvider, lansweeperConnectionProbeProvider** — Lansweeper integration (σύγχρονη κατάσταση / έλεγχος σύνδεσης)
-- **lansweeperApiUrlProvider … lansweeperHelpdeskWebPasswordProvider** — ρυθμίσεις Lansweeper API/Help Desk (`lansweeper_settings_provider.dart`, κλειδιά `lansweeper_*`)
-- **geminiApiKeyProvider … geminiModelsProbeCacheProvider** — ρυθμίσεις Gemini & επεξεργασία προτύπου prompt (`gemini_settings_provider.dart`, κλειδιά `gemini_*` / `gemini_prompt_template_*`)
-
-### Εκκρεμότητες
-- **taskFilterProvider, tasksProvider, globalPendingTasksCountProvider**
-- **taskSettingsConfigProvider, taskAnalyticsProvider**
-
-### Κατάλογος
-- **directoryProvider, departmentDirectoryProvider, equipmentDirectoryProvider, categoryDirectoryProvider**
-- **buildingMapControllerProvider** + undo/jump providers — χάρτης κτιρίου
-- **directoryTabIntentProvider, equipmentFocusIntentProvider, userFormEditIntentProvider**
-- Οθόνη καταλόγου: καρτέλες **Υπάλληλοι** · Τμήματα · Εξοπλισμός · Διάφορα (`directory_screen.dart`)
-
-### Audit
-- **auditFilterProvider, auditListProvider, selectedAuditEntryIdProvider, auditEntityPreviewProvider**
-
-### Βάση & backup
-- **databaseIntegrityProvider, databaseBackupSettingsProvider, backupSchedulerProvider**
-- **databaseBrowserStatsProvider, databaseMaintenanceServiceProvider**
-
-### Λεξικό & ορθογραφία
-- **coreLexiconProvider, greekDictionaryServiceProvider, spellCheckServiceProvider**
-- **lexiconFullModeProvider, lexiconCategoriesProvider, lexiconLanguageRecalcProvider**
-- **lexiconListFiltersProvider, dictionaryLayoutProvider** — απομνημόνευση φίλτρων/διάταξης λίστας
-- **lexiconContinuousScrollProvider, lexiconPageSizeProvider**
-- **lexiconSpellingPanelProvider** — πάνελ ορθογραφίας (ΤΝ / διαδίκτυο κατόπιν αιτήματος)
-
-### Λάμπα, πλοήγηση, ρυθμίσεις
-- **lampReadPathHealthProvider, lampOpenSettingsRequestProvider**
-- **mainNavRequestProvider, shellNavigationIntentProvider**
-- **settings_provider** — timer, badges, ορατότητα καρτών, nav items
-- **appVersionProvider, changelogProvider**
+| Provider | Τύπος | Περιγραφή |
+|----------|-------|-----------|
+| `appInitProvider` | `FutureProvider<AppInitResult>` | Αρχικοποίηση εφαρμογής: άνοιγμα βάσης + bootstrap λεξικού |
+| `lookupServiceProvider` | `FutureProvider<LookupLoadResult>` | In-memory cache χρηστών/εξοπλισμού για lookup < 50ms |
+| `callEntryProvider` | `NotifierProvider<CallEntryNotifier, CallEntryState>` | Φόρμα εισαγωγής κλήσης (notes, κατηγορία, χρονόμετρο, submit) |
+| `callSmartEntityProvider` / `taskSmartEntityProvider` / `historyEditSmartEntityProvider` | `NotifierProvider<SmartEntitySelectorNotifier, SmartEntitySelectorState>` | Επιλογέας οντοτήτων (τηλέφωνο→χρήστης→εξοπλισμός→τμήμα) |
+| `directoryProvider` | `NotifierProvider<DirectoryNotifier, DirectoryState>` | Κατάλογος χρηστών/εξοπλισμού (CRUD + αναζήτηση + ταξινόμηση) |
+| `departmentDirectoryProvider` | `NotifierProvider<DepartmentDirectoryNotifier, DepartmentDirectoryState>` | Κατάλογος τμημάτων με φίλτρα και αναζήτηση |
+| `equipmentDirectoryProvider` | `NotifierProvider<EquipmentDirectoryNotifier, EquipmentDirectoryState>` | Κατάλογος εξοπλισμού με φίλτρα, undo διαγραφής |
+| `categoryDirectoryProvider` | `NotifierProvider<CategoryDirectoryNotifier, CategoryDirectoryState>` | Κατάλογος κατηγοριών προβλημάτων |
+| `tasksProvider` | `AsyncNotifierProvider<TasksNotifier, List<Task>>` | Λίστα εκκρεμοτήτων (CRUD, φίλτρα, ταξινόμηση) |
+| `taskFilterProvider` | `NotifierProvider<TaskFilterNotifier, TaskFilter>` | Ενεργό φίλτρο οθόνης εκκρεμοτήτων |
+| `historyFilterProvider` | `NotifierProvider<HistoryFilterNotifier, HistoryFilterModel>` | Ενεργό φίλτρο ιστορικού κλήσεων |
+| `historyCallsProvider` | `FutureProvider.autoDispose` | Σελιδοποιημένη λίστα κλήσεων από DB με βάση τα φίλτρα |
+| `dashboardFilterProvider` | `NotifierProvider.autoDispose<DashboardFilterNotifier, DashboardFilterModel>` | Φίλτρα dashboard (ημερομηνίες, τμήμα) |
+| `dashboardStatsProvider` | `FutureProvider.autoDispose<DashboardSummaryModel>` | Στατιστικά dashboard (κλήσεις, τάσεις, κατανομές) |
+| `auditFilterProvider` | `NotifierProvider<AuditFilterNotifier, AuditFilterModel>` | Φίλτρα ιστορικού εφαρμογής (audit log) |
+| `auditListProvider` | `FutureProvider.autoDispose<AuditPageResult>` | Σελιδοποιημένο audit log με βάση τα φίλτρα |
+| `databaseInitProgressProvider` | `NotifierProvider<DatabaseInitProgressNotifier, DatabaseInitProgressState>` | Πρόοδος αρχικοποίησης βάσης (για SplashScreen) |
+| `databaseBackupSettingsProvider` | `NotifierProvider<DatabaseBackupSettingsNotifier, DatabaseBackupSettings>` | Ρυθμίσεις backup (φάκελος, χρονοδιάγραμμα) |
+| `backupSchedulerProvider` | `NotifierProvider<BackupSchedulerNotifier, int>` | Αυτόματος χρονοπρογραμματιστής backup |
+| `databaseIntegrityProvider` | `NotifierProvider<DatabaseIntegrityNotifier, DatabaseIntegrityState>` | Ελέγχος + επιδιόρθωση ακεραιότητας βάσης |
+| `remoteToolsCatalogProvider` | `FutureProvider<List<RemoteTool>>` | Κατάλογος ενεργών εργαλείων απομακρυσμένης σύνδεσης |
+| `coreLexiconProvider` | `NotifierProvider` | Κεντρικό λεξικό ορθογραφίας (πυρήνας) |
+| `spellCheckServiceProvider` | `FutureProvider<LexiconSpellCheckService>` | Υπηρεσία ορθογραφικού ελέγχου |
+| `buildingMapFloorsCatalogProvider` | `FutureProvider<List<BuildingMapFloor>>` | Κατάλογος ορόφων χάρτη κτιρίου |
+| `buildingMapSelectedSheetIdProvider` | `NotifierProvider<_, int?>` | Ενεργό φύλλο κατόψης |
+| `geminiPrimaryModelProvider` / `geminiFallbackModelProvider` | `NotifierProvider.autoDispose<_, String>` | Επιλεγμένα μοντέλα Gemini API |
+| `lansweeperSyncProvider` | `AsyncNotifierProvider.autoDispose` | Χειροκίνητος/αυτόματος συγχρονισμός με Lansweeper |
+| `lansweeperConnectionProbeProvider` | `NotifierProvider.autoDispose` | Έλεγχος σύνδεσης Lansweeper |
+| `updateCheckProvider` | `FutureProvider<UpdateCheckResult>` | Έλεγχος διαθέσιμης ενημέρωσης από φάκελο δικτύου |
+| `settingsProvider` (σύνολο) | `FutureProvider<bool>` × πολλαπλοί | UI preferences: showActiveTimer, showTasksBadge, enableSpellCheck, showDatabaseNav, showLampNav κ.λπ. |
 
 ---
 
 ## 5) DEPENDENCIES (pubspec.yaml)
 
-**SDK:** `^3.10.7` · **Έκδοση εφαρμογής:** `0.18.0+18`
+**Έκδοση εφαρμογής:** `0.24.5+38`  
+**SDK:** `^3.10.7`
 
 ### dependencies
+
 | Πακέτο | Έκδοση |
 |--------|--------|
-| flutter / flutter_localizations | sdk |
-| cupertino_icons | ^1.0.9 |
 | flutter_riverpod | ^3.3.1 |
 | sqflite_common | ^2.5.11 |
 | sqflite_common_ffi | ^2.4.2 |
@@ -745,6 +406,7 @@ lib/
 | file_picker | ^12.0.0-beta.4 |
 | fl_chart | ^1.2.0 |
 | archive | ^4.0.9 |
+| crypto | ^3.0.7 |
 | win32 | ^6.3.0 |
 | ffi | ^2.2.0 |
 | custom_mouse_cursor | ^1.1.3 |
@@ -752,12 +414,12 @@ lib/
 | image | ^4.9.1 |
 
 ### dev_dependencies
-- flutter_test, integration_test (sdk)
-- riverpod ^3.2.1
-- flutter_lints ^6.0.0
 
-### dependency_overrides (κύρια)
-`_fe_analyzer_shared`, `analyzer`, `archive`, `image`, `meta`, `test`/`test_api`/`test_core`, `vector_math`, `xml`, `objective_c`, …
+| Πακέτο | Έκδοση |
+|--------|--------|
+| flutter_lints | ^6.0.0 |
+| riverpod | ^3.2.1 |
+| leak_tracker_flutter_testing | ^3.0.10 |
 
 ---
 
