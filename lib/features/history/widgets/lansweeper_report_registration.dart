@@ -1,4 +1,4 @@
-part of 'lansweeper_report_dialog.dart';
+﻿part of 'lansweeper_report_dialog.dart';
 
 mixin LansweeperReportRegistrationMixin on LansweeperReportDialogStateHost {
   Future<void> _submitSelected(
@@ -53,12 +53,21 @@ mixin LansweeperReportRegistrationMixin on LansweeperReportDialogStateHost {
       0,
       (sum, item) => sum + item.durationSeconds,
     );
+    final ticketConfig = ref.read(lansweeperTicketSubmitConfigProvider);
+    final resolvedCustomFields = <String, String>{
+      for (final field in ticketConfig.customFields)
+        field.id: (_customFieldValues[field.id] ?? field.defaultValue),
+    };
     final input = LansweeperSubmitInput(
       title: _titleController.text,
       notes: _notesController.text,
       solution: _solutionController.text,
       agentUsername: _lansweeperAgentUsernameController.text,
       durationSeconds: durationSeconds,
+      config: ticketConfig,
+      customFieldValues: resolvedCustomFields,
+      targetTicketState:
+          _selectedTicketState ?? ticketConfig.defaultTicketState,
     );
     final companionCallIds = selected
         .map((entry) => entry.call.id)
@@ -78,18 +87,20 @@ mixin LansweeperReportRegistrationMixin on LansweeperReportDialogStateHost {
           );
     if (!mounted) return;
     if (result.success) {
+      await _persistTicketSubmitFormPrefs();
+      if (!mounted) return;
       final ticketId = (result.ticketId ?? '').trim();
       final totalMarked = 1 + companionCallIds.length;
+      final baseMessage = totalMarked == 1
+          ? 'Καταχώρηση επιτυχής. Ticket: ${ticketId.isEmpty ? '-' : ticketId}'
+          : ticketId.isEmpty
+          ? '$totalMarked κλήσεις επισημάνθηκαν ως καταχωρημένες.'
+          : '$totalMarked κλήσεις επισημάνθηκαν ως καταχωρημένες (ticket #$ticketId).';
+      final warningsText = result.warnings.isEmpty
+          ? ''
+          : '\n${result.warnings.join('\n')}';
       showDialogSnackBar(
-        SnackBar(
-          content: Text(
-            totalMarked == 1
-                ? 'Καταχώρηση επιτυχής. Ticket: ${ticketId.isEmpty ? '-' : ticketId}'
-                : ticketId.isEmpty
-                ? '$totalMarked κλήσεις επισημάνθηκαν ως καταχωρημένες.'
-                : '$totalMarked κλήσεις επισημάνθηκαν ως καταχωρημένες (ticket #$ticketId).',
-          ),
-        ),
+        SnackBar(content: Text('$baseMessage$warningsText')),
       );
       if (!resubmit && ticketId.isNotEmpty) {
         final openTicketAfterSubmit =
@@ -101,7 +112,13 @@ mixin LansweeperReportRegistrationMixin on LansweeperReportDialogStateHost {
       return;
     }
 
-    final failureMessage = 'Αποτυχία καταχώρησης: ${result.message}';
+    await _persistTicketSubmitFormPrefs();
+    if (!mounted) return;
+
+    final failedStep = (result.failedStep ?? '').trim();
+    final failureMessage = failedStep.isEmpty
+        ? 'Αποτυχία καταχώρησης: ${result.message}'
+        : 'Αποτυχία καταχώρησης ($failedStep): ${result.message}';
     showDialogSnackBar(
       SnackBar(
         content: Text(failureMessage),
@@ -110,7 +127,10 @@ mixin LansweeperReportRegistrationMixin on LansweeperReportDialogStateHost {
       copyText: failureMessage,
     );
 
-    final reportText = (result.failureReport ?? result.message).trim();
+    final reportBase = (result.failureReport ?? result.message).trim();
+    final reportText = failedStep.isEmpty
+        ? reportBase
+        : 'failedStep: $failedStep\n$reportBase';
     await showLansweeperFailureReportDialog(
       context,
       reportText: reportText,

@@ -1,0 +1,193 @@
+﻿<!DOCTYPE html>
+<html lang="el">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Ρυθμίσεις Lansweeper — Windows 11 Layout</title>
+<style>
+:root {
+  --mica: #f3f3f3;
+  --panel: #ffffff;
+  --accent: #2563eb;
+  --border: #d1d5db;
+  --muted: #6b7280;
+  --radius: 12px;
+  --shadow: 0 8px 28px rgba(0,0,0,.15);
+}
+body {
+  margin: 0;
+  font-family: "Segoe UI Variable", "Segoe UI", sans-serif;
+  background: var(--mica);
+  color: #111827;
+}
+.dialog {
+  width: 1040px;
+  margin: 40px auto;
+  background: var(--panel);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.header {
+  background: linear-gradient(to right,#e0e7ff,#f9fafb);
+  padding: 20px 28px;
+  font-size: 1.4rem;
+  font-weight: 500;
+  border-bottom: 1px solid var(--border);
+}
+.tabs {
+  display: flex;
+  border-bottom: 1px solid var(--border);
+  background: #f9fafb;
+}
+.tabs button {
+  flex: 1;
+  padding: 12px 0;
+  border: none;
+  background: transparent;
+  font-weight: 500;
+  color: var(--muted);
+  cursor: pointer;
+}
+.tabs button.active {
+  color: var(--accent);
+  border-bottom: 3px solid var(--accent);
+}
+.content {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+  padding: 24px 28px;
+}
+.section {
+  background: #fefefe;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px 20px;
+}
+.section h2 {
+  font-size: 1rem;
+  margin: 0 0 12px;
+  color: var(--accent);
+}
+.field {
+  margin-bottom: 10px;
+}
+.field label {
+  display: block;
+  font-size: .85rem;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+.field input, .field textarea {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: .9rem;
+}
+.switch {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 8px 0;
+}
+.switch span { font-size: .85rem; }
+.switch input[type=checkbox] {
+  width: 40px; height: 20px;
+  accent-color: var(--accent);
+}
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  padding: 16px 28px;
+  border-top: 1px solid var(--border);
+}
+button.primary {
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 10px 20px;
+  font-weight: 500;
+}
+button.secondary {
+  background: transparent;
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  padding: 10px 20px;
+  font-weight: 500;
+  margin-right: 8px;
+}
+</style>
+</head>
+<body>
+<div class="dialog">
+  <div class="header">Ρυθμίσεις Lansweeper</div>
+  <div class="tabs">
+    <button class="active">Σύνδεση & Help Desk</button>
+    <button>Τεχνητή Νοημοσύνη</button>
+    <button>Καταχώρηση εισιτηρίου</button>
+    <button>Κατάσταση σύνδεσης</button>
+  </div>
+
+  <div class="content">
+    <!-- Left column -->
+    <div class="section">
+      <h2>Σύνδεση API (Ticket API)</h2>
+      <div class="field">
+        <label>URL API (api.aspx)</label>
+        <input value="http://server/api.aspx" />
+      </div>
+      <div class="field">
+        <label>Lansweeper API key</label>
+        <input type="password" value="API key…" />
+      </div>
+      <div class="switch">
+        <span>Άνοιγμα ticket μετά την Άμεση Καταχώρηση</span>
+        <input type="checkbox" checked />
+      </div>
+      <div class="field">
+        <label>Πράκτορας = αιτών (domain\username)</label>
+        <input value="π.χ. gnk\v.drosos" />
+      </div>
+      <button class="secondary">👤 Έλεγχος πράκτορα API</button>
+    </div>
+
+    <!-- Right column -->
+    <div class="section">
+      <h2>Φόρμα νέου αιτήματος (browser)</h2>
+      <div class="field">
+        <label>URL φόρμας νέου αιτήματος</label>
+        <input value="…/helpdesk/NewTicket.aspx…" />
+      </div>
+      <div class="field">
+        <label>URL προβολής ticket</label>
+        <input value="…/helpdesk/ticket.aspx?tid={tid}" />
+      </div>
+      <div class="field">
+        <label>URL σελίδας σύνδεσης (login.aspx)</label>
+        <input value="http://…/login.aspx" />
+      </div>
+      <div class="field">
+        <label>Όνομα χρήστη Help Desk</label>
+        <input />
+      </div>
+      <div class="field">
+        <label>Κωδικός Help Desk</label>
+        <input type="password" value="••••••••" />
+      </div>
+      <button class="secondary">🛡 Έλεγχος διαπιστευτηρίων</button>
+    </div>
+  </div>
+
+  <div class="actions">
+    <button class="secondary">↺ Επαναφορά προεπιλογών</button>
+    <button class="primary">Κλείσιμο</button>
+  </div>
+</div>
+</body>
+</html>

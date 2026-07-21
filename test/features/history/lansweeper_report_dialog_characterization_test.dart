@@ -1,4 +1,4 @@
-// Widget test: διάλογος αναφοράς Lansweeper — χαρακτηρισμός split.
+﻿// Widget test: διάλογος αναφοράς Lansweeper — χαρακτηρισμός split.
 //
 // Ολόκληρο αρχείο:
 //   flutter test test/features/history/lansweeper_report_dialog_characterization_test.dart
@@ -12,6 +12,7 @@ import 'package:call_logger/features/history/providers/dashboard_provider.dart';
 import 'package:call_logger/features/history/providers/gemini_settings_provider.dart';
 import 'package:call_logger/features/history/providers/lansweeper_connection_probe_provider.dart';
 import 'package:call_logger/features/history/providers/lansweeper_settings_provider.dart';
+import 'package:call_logger/features/history/providers/lansweeper_ticket_submit_config_provider.dart';
 import 'package:call_logger/features/history/widgets/lansweeper_report_dialog.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -80,6 +81,9 @@ List<Override> _lansweeperCharacterizationOverrides({
     ),
     geminiFallbackModelProvider.overrideWith(
       FixedGeminiFallbackModelNotifier.new,
+    ),
+    lansweeperTicketSubmitConfigProvider.overrideWith(
+      FixedLansweeperTicketSubmitConfigNotifier.new,
     ),
   ];
 }

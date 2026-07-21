@@ -1,0 +1,826 @@
+﻿<!DOCTYPE html>
+<html lang="el">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Mockup — Ρυθμίσεις Lansweeper (πιστή αναπαράσταση)</title>
+  <style>
+    :root {
+      --bg: #e8eaed;
+      --panel: #fffbfe;
+      --border: #cac4d0;
+      --muted: #49454f;
+      --title: #1c1b1f;
+      --primary: #6750a4;
+      --primary-container: #e8def8;
+      --on-primary-container: #21005d;
+      --field: #fffbfe;
+      --good-bg: #e8f5e9;
+      --good-border: #81c784;
+      --good-text: #1b5e20;
+      --chip-bg: #e7e0ec;
+      --chip-disabled-bg: #e7e0ec;
+      --chip-disabled-fg: #79747e;
+      --surface-2: #f3edf7;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", Roboto, system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--title);
+    }
+    .page {
+      max-width: 640px;
+      margin: 0 auto;
+      padding: 20px 20px 48px;
+    }
+    h1 {
+      font-size: 1.25rem;
+      margin: 0 0 6px;
+    }
+    .intro {
+      color: var(--muted);
+      margin: 0 0 14px;
+      line-height: 1.45;
+      font-size: .92rem;
+    }
+    .source-map {
+      margin: 0 0 16px;
+      padding: 12px 14px;
+      background: #fffbeb;
+      border: 1px solid #fcd34d;
+      border-radius: 10px;
+      line-height: 1.55;
+      font-size: .88rem;
+    }
+    .source-map h2 {
+      margin: 0 0 8px;
+      font-size: .92rem;
+    }
+    .source-map code {
+      font-size: .78rem;
+      background: #fef3c7;
+      padding: 1px 5px;
+      border-radius: 4px;
+    }
+    .source-map ul { margin: 6px 0 0; padding-left: 1.15rem; }
+    .source-map li { margin: 3px 0; }
+    .fidelity-note {
+      margin: 0 0 16px;
+      padding: 10px 12px;
+      background: #ecfdf5;
+      border: 1px solid #6ee7b7;
+      border-radius: 8px;
+      font-size: .85rem;
+      line-height: 1.45;
+    }
+
+    /* ===== AlertDialog shell (πλάτος ~520 όπως στο Flutter) ===== */
+    .dialog {
+      background: var(--panel);
+      border-radius: 28px;
+      box-shadow: 0 8px 28px rgba(0,0,0,.18);
+      overflow: hidden;
+      width: 100%;
+      max-width: 560px;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      max-height: 85vh;
+    }
+    .dialog-title {
+      padding: 20px 24px 8px;
+      font-size: 1.35rem;
+      font-weight: 400;
+      letter-spacing: 0;
+    }
+    .dialog-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 4px 24px 8px 24px;
+      padding-right: 28px; /* χώρος για scrollbar όπως στο Flutter */
+    }
+    .dialog-actions {
+      display: flex;
+      justify-content: flex-end;
+      padding: 8px 16px 16px;
+    }
+    .btn-text {
+      border: none;
+      background: transparent;
+      color: var(--primary);
+      font-size: .875rem;
+      font-weight: 500;
+      letter-spacing: .01em;
+      padding: 10px 12px;
+      border-radius: 20px;
+      cursor: default;
+    }
+
+    .section-title {
+      margin: 12px 0 6px;
+      font-size: .875rem;
+      font-weight: 600;
+    }
+    .section-label {
+      margin: 0 0 6px;
+      font-size: .8125rem;
+      font-weight: 600;
+    }
+    .body-small {
+      font-size: .75rem;
+      color: var(--muted);
+      line-height: 1.4;
+      margin: 0 0 8px;
+    }
+    .divider {
+      height: 1px;
+      background: var(--border);
+      margin: 16px 0;
+      opacity: .7;
+    }
+
+    /* Πεδία — OutlineInputBorder, isDense */
+    .field {
+      margin-bottom: 8px;
+    }
+    .outline {
+      position: relative;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      min-height: 48px;
+      padding: 12px 12px 8px;
+      background: var(--field);
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .outline .floating {
+      position: absolute;
+      top: -8px;
+      left: 10px;
+      background: var(--panel);
+      padding: 0 4px;
+      font-size: .75rem;
+      color: var(--muted);
+    }
+    .outline .value {
+      flex: 1;
+      font-size: .875rem;
+      word-break: break-all;
+    }
+    .outline .suffix-icon {
+      color: var(--muted);
+      font-size: 1.15rem;
+      line-height: 1;
+      padding: 4px;
+      flex-shrink: 0;
+    }
+    .field .helper {
+      font-size: .75rem;
+      color: var(--muted);
+      margin: 4px 2px 0;
+      line-height: 1.35;
+    }
+    .outline.textarea {
+      min-height: 72px;
+      align-items: flex-start;
+      white-space: pre-line;
+      padding-top: 16px;
+    }
+    .field.password .value {
+      letter-spacing: .15em;
+    }
+
+    .link-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      border: none;
+      background: transparent;
+      color: var(--primary);
+      font-weight: 500;
+      font-size: .875rem;
+      padding: 4px 4px 8px 0;
+      cursor: default;
+    }
+
+    /* SwitchListTile */
+    .switch-row {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 8px 0;
+    }
+    .switch-row .texts {
+      flex: 1;
+      min-width: 0;
+    }
+    .switch-row .texts .t {
+      display: block;
+      font-size: .875rem;
+      font-weight: 400;
+      line-height: 1.35;
+    }
+    .switch-row .texts .s {
+      display: block;
+      font-size: .75rem;
+      color: var(--muted);
+      margin-top: 4px;
+      line-height: 1.35;
+    }
+    .toggle {
+      width: 52px;
+      height: 32px;
+      border-radius: 999px;
+      background: #79747e;
+      position: relative;
+      flex-shrink: 0;
+      margin-top: 2px;
+      border: 2px solid #79747e;
+    }
+    .toggle.on {
+      background: var(--primary);
+      border-color: var(--primary);
+    }
+    .toggle::after {
+      content: "";
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      background: #fff;
+    }
+    .toggle.on::after { left: 22px; }
+
+    /* FilledButton.tonalIcon */
+    .btn-tonal {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      border: none;
+      border-radius: 20px;
+      background: var(--primary-container);
+      color: var(--on-primary-container);
+      font-size: .875rem;
+      font-weight: 500;
+      padding: 8px 16px;
+      margin: 4px 8px 4px 0;
+      cursor: default;
+    }
+    .btn-outlined {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      background: transparent;
+      color: var(--primary);
+      font-size: .875rem;
+      font-weight: 500;
+      padding: 8px 16px;
+      margin: 8px 0 4px;
+      cursor: default;
+    }
+    .btn-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0;
+      margin: 4px 0 8px;
+    }
+
+    /* Status / probe boxes */
+    .status-box {
+      display: flex;
+      gap: 8px;
+      align-items: flex-start;
+      padding: 10px;
+      border-radius: 8px;
+      border: 1px solid var(--good-border);
+      background: var(--good-bg);
+      font-size: .8125rem;
+      margin: 8px 0 4px;
+      line-height: 1.4;
+    }
+    .status-box .icon {
+      color: var(--good-text);
+      flex-shrink: 0;
+      font-size: 1.15rem;
+      line-height: 1.2;
+    }
+    .status-box .meta {
+      display: block;
+      color: var(--muted);
+      font-size: .75rem;
+      margin-top: 2px;
+    }
+
+    /* SegmentedButton */
+    .seg {
+      display: inline-flex;
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      overflow: hidden;
+      margin: 6px 0 8px;
+    }
+    .seg button {
+      border: none;
+      background: transparent;
+      padding: 6px 14px;
+      font-size: .8125rem;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      cursor: default;
+      color: var(--title);
+    }
+    .seg button + button {
+      border-left: 1px solid var(--border);
+    }
+    .seg button.active {
+      background: var(--primary-container);
+      color: var(--on-primary-container);
+      font-weight: 500;
+    }
+
+    /* InputChip wrap */
+    .chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 4px;
+    }
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 6px 10px;
+      font-size: .75rem;
+      background: #fff;
+      color: var(--title);
+    }
+    .chip.assigned {
+      background: var(--chip-disabled-bg);
+      color: var(--chip-disabled-fg);
+      border-color: rgba(121, 116, 126, .35);
+    }
+
+    /* Custom field ListTile cards */
+    .cf-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+    .cf-card {
+      border-radius: 12px;
+      background: var(--surface-2);
+      margin-bottom: 8px;
+      padding: 10px 8px 10px 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .cf-card .main { flex: 1; min-width: 0; }
+    .cf-card .title { font-size: .875rem; font-weight: 500; }
+    .cf-card .sub {
+      font-size: .75rem;
+      color: var(--muted);
+      margin-top: 2px;
+    }
+    .cf-actions {
+      display: flex;
+      align-items: center;
+      flex-shrink: 0;
+    }
+    .icon-btn {
+      width: 36px;
+      height: 36px;
+      border: none;
+      background: transparent;
+      border-radius: 50%;
+      color: var(--muted);
+      font-size: 1rem;
+      cursor: default;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .icon-btn.disabled {
+      opacity: .35;
+    }
+
+    .list-default-block {
+      margin-bottom: 12px;
+    }
+
+    .footer-note {
+      margin-top: 18px;
+      padding: 12px 14px;
+      background: #fff;
+      border: 1px solid #d1d5db;
+      border-radius: 10px;
+      line-height: 1.5;
+      font-size: .88rem;
+    }
+    .footer-note strong { color: var(--primary); }
+
+    /* Σημάδι περιοχής για σχεδιασμό */
+    .widget-tag {
+      display: none; /* ενεργοποίηση: display:inline-block για debug */
+      font-size: .65rem;
+      background: #fef3c7;
+      color: #92400e;
+      padding: 1px 6px;
+      border-radius: 4px;
+      margin-left: 6px;
+      vertical-align: middle;
+    }
+  </style>
+</head>
+<body>
+  <!--
+    ΑΝΤΙΣΤΟΙΧΙΑ FLUTTER — πιστή αναπαράσταση τρέχουσας εφαρμογής
+    -------------------------------------------------------------
+    Κύριο:
+      lib/features/history/widgets/lansweeper/lansweeper_connection_settings_dialog.dart
+      → LansweeperConnectionSettingsDialog  (AlertDialog width: 520)
+
+    Εμφωλευμένα:
+      lib/features/history/widgets/lansweeper/gemini_model_field.dart
+      → GeminiModelsSection
+
+      lib/features/history/widgets/lansweeper/lansweeper_ticket_submit_settings_section.dart
+      → LansweeperTicketSubmitSettingsSection
+         (_CustomFieldsEditor, _ListWithDefaultSection)
+
+      lib/features/history/widgets/lansweeper/lansweeper_connection_status_indicator.dart
+      → LansweeperConnectionStatusIndicator
+  -->
+  <div class="page">
+    <h1>Mockup — Ρυθμίσεις Lansweeper</h1>
+    <div class="source-map">
+      <h2>Αναπαριστά widgets Flutter</h2>
+      <ul>
+        <li><strong>Κύριο:</strong> <code>lib/features/history/widgets/lansweeper/lansweeper_connection_settings_dialog.dart</code> (<code>LansweeperConnectionSettingsDialog</code>)</li>
+        <li><strong>Gemini:</strong> <code>lib/features/history/widgets/lansweeper/gemini_model_field.dart</code> (<code>GeminiModelsSection</code>)</li>
+        <li><strong>Καταχώρηση ticket:</strong> <code>lib/features/history/widgets/lansweeper/lansweeper_ticket_submit_settings_section.dart</code> (<code>LansweeperTicketSubmitSettingsSection</code>)</li>
+        <li><strong>Κατάσταση σύνδεσης:</strong> <code>lib/features/history/widgets/lansweeper/lansweeper_connection_status_indicator.dart</code></li>
+      </ul>
+    </div>
+    <p class="fidelity-note">
+      <strong>Πιστή αναπαράσταση της τρέχουσας εφαρμογής</strong> (όχι πρόταση αλλαγής).
+      Οι λίστες + προεπιλογές είναι <em>κάθετα</em>. Η περιοχή Gemini περιλαμβάνει πεδία κειμένου με εικονίδιο λίστας,
+      κουμπιά «Ανανέωση λίστας» / «Έλεγχος μοντέλων», πράσινο πλαίσιο ποσόστωσης, SegmentedButton Κύριο/Εφεδρικό και chips.
+    </p>
+    <p class="intro">
+      Πλάτος διαλόγου ≈ 520px. Κύλιση στο περιεχόμενο. Κουμπί ενεργειών: μόνο «Κλείσιμο».
+    </p>
+
+    <div class="dialog" role="dialog" aria-labelledby="dlg-title">
+      <div class="dialog-title" id="dlg-title">Ρυθμίσεις Lansweeper</div>
+      <div class="dialog-body">
+
+        <!-- ========== Σύνδεση API ========== -->
+        <div class="section-title">Σύνδεση API (Ticket API)</div>
+        <div class="field">
+          <div class="outline">
+            <span class="floating">URL API (api.aspx)</span>
+            <span class="value">http://[διακομιστής]:[πύλη]/api.aspx</span>
+          </div>
+        </div>
+        <button class="link-btn" type="button">↗ Έλεγχος συνδέσμου</button>
+        <div class="field">
+          <div class="outline">
+            <span class="floating">Lansweeper API key</span>
+            <span class="value">API key…</span>
+          </div>
+        </div>
+
+        <div class="divider"></div>
+
+        <!-- ========== Φόρμα browser ========== -->
+        <div class="section-title">Φόρμα νέου αιτήματος (browser)</div>
+        <div class="field">
+          <div class="outline">
+            <span class="floating">URL φόρμας νέου αιτήματος</span>
+            <span class="value">…/helpdesk/NewTicket.aspx…</span>
+          </div>
+        </div>
+        <button class="link-btn" type="button">↗ Έλεγχος συνδέσμου</button>
+        <div class="field">
+          <div class="outline">
+            <span class="floating">URL προβολής ticket</span>
+            <span class="value">…/helpdesk/ticket.aspx?tid={tid}</span>
+          </div>
+          <div class="helper">Χρησιμοποιήστε {tid} ως θέση του αριθμού ticket στη λίστα αναφοράς.</div>
+        </div>
+        <button class="link-btn" type="button">↗ Έλεγχος συνδέσμου</button>
+        <div class="switch-row">
+          <div class="texts">
+            <span class="t">Άνοιγμα ticket μετά την Άμεση Καταχώρηση</span>
+            <span class="s">Μετά επιτυχή καταχώρηση μέσω API, άνοιγμα του αιτήματος στον περιηγητή με βάση το URL προβολής ticket.</span>
+          </div>
+          <div class="toggle on" title="ενεργό" aria-hidden="true"></div>
+        </div>
+
+        <div class="divider"></div>
+
+        <!-- ========== Πράκτορας ========== -->
+        <div class="section-title">Πράκτορας &amp; αιτών API (ίδια τιμή)</div>
+        <div class="field">
+          <div class="outline">
+            <span class="floating">Πράκτορας = αιτών (domain\username)</span>
+            <span class="value">π.χ. gnk\v.drosos</span>
+          </div>
+        </div>
+        <p class="body-small">
+          Στο AddTicket στέλνονται Username και AgentUsername με την ίδια τιμή
+          (όπως στο Lansweeper: domain\username).
+          Ο έλεγχος καλεί το API με δοκιμαστικό αίτημα — αν επιτύχει, δημιουργείται ticket που μπορείτε να διαγράψετε.
+        </p>
+        <button class="btn-tonal" type="button">👤 Έλεγχος πράκτορα API</button>
+
+        <div class="divider"></div>
+
+        <!-- ========== Help Desk ========== -->
+        <div class="section-title">Help Desk — αυτόματη σύνδεση (browser)</div>
+        <p class="body-small">
+          Η εφαρμογή δεν μεταφέρει συνεδρία στον περιηγητή. Με ενεργή επιλογή ανοίγει πρώτα η σελίδα σύνδεσης και μετά η φόρμα.
+          Χρησιμοποιήστε «Έλεγχος διαπιστευτηρίων» για επαλήθευση.
+        </p>
+        <div class="switch-row">
+          <div class="texts">
+            <span class="t">Άνοιγμα σελίδας σύνδεσης πριν τη φόρμα</span>
+          </div>
+          <div class="toggle on" title="ενεργό" aria-hidden="true"></div>
+        </div>
+        <div class="field">
+          <div class="outline">
+            <span class="floating">URL σελίδας σύνδεσης (login.aspx)</span>
+            <span class="value">http://…/login.aspx</span>
+          </div>
+        </div>
+        <button class="link-btn" type="button">↗ Έλεγχος συνδέσμου</button>
+        <div class="field">
+          <div class="outline">
+            <span class="floating">Όνομα χρήστη Help Desk</span>
+            <span class="value"></span>
+          </div>
+        </div>
+        <div class="field password">
+          <div class="outline">
+            <span class="floating">Κωδικός Help Desk</span>
+            <span class="value">••••••••</span>
+            <span class="suffix-icon" title="Εμφάνιση κωδικού">👁</span>
+          </div>
+        </div>
+        <button class="btn-tonal" type="button">🛡 Έλεγχος διαπιστευτηρίων</button>
+
+        <div class="divider"></div>
+
+        <!-- ========== ΤΝ (ενότητα διαλόγου) ========== -->
+        <div class="section-title">Τεχνητή Νοημοσύνη</div>
+        <p class="body-small">Απαιτείται για την αυτόματη πρόταση τίτλου/περιγραφής ticket.</p>
+        <button class="link-btn" type="button">↗ Δωρεάν κλειδί από: aistudio.google.com</button>
+        <div class="field password">
+          <div class="outline">
+            <span class="floating">Gemini API key</span>
+            <span class="value">AIza…</span>
+            <span class="suffix-icon" title="Εμφάνιση κλειδιού">👁</span>
+          </div>
+        </div>
+        <div class="field">
+          <div class="outline">
+            <span class="floating">Διεύθυνση κλήσης API του Gemini</span>
+            <span class="value">…/models/{προτεύων μοντέλο}:generateContent?key={κλειδί API}</span>
+          </div>
+          <div class="helper">Χρησιμοποιήστε {προτεύων μοντέλο} και {κλειδί API} ως placeholders.</div>
+        </div>
+        <div class="switch-row">
+          <div class="texts">
+            <span class="t">Υποβάθμιση σε εφεδρικό μοντέλο</span>
+            <span class="s">Αν το κύριο μοντέλο είναι υπερφορτωμένο (503), δοκιμάζεται αυτόματα το εφεδρικό μοντέλο.</span>
+          </div>
+          <div class="toggle on" title="ενεργό" aria-hidden="true"></div>
+        </div>
+        <div class="switch-row">
+          <div class="texts">
+            <span class="t">Αυτόματη επανυποβολή μέχρι την επιτυχία</span>
+            <span class="s">Μετά από αναμονή ποσόστωσης, επαναλαμβάνεται αυτόματα η πρόταση ΤΝ όσο το παράθυρο παραμένει ανοιχτό.</span>
+          </div>
+          <div class="toggle" title="ανενεργό" aria-hidden="true"></div>
+        </div>
+
+        <!-- ========== GeminiModelsSection (πιστή) ========== -->
+        <!-- gemini_model_field.dart → GeminiModelsSection -->
+        <div class="field">
+          <div class="outline">
+            <span class="floating">Κύριο μοντέλο</span>
+            <span class="value">gemini-flash-latest</span>
+            <span class="suffix-icon" title="Λίστα μοντέλων">☰</span>
+          </div>
+          <div class="helper">Αντικαθιστά το {προτεύων μοντέλο} στο endpoint. Επιλογή από λίστα ή χειροκίνητη πληκτρολόγηση.</div>
+        </div>
+        <div class="field">
+          <div class="outline">
+            <span class="floating">Εφεδρικό μοντέλο</span>
+            <span class="value">gemini-flash-lite-latest</span>
+            <span class="suffix-icon" title="Λίστα μοντέλων">☰</span>
+          </div>
+          <div class="helper">Χρησιμοποιείται σε 503 (υπερφόρτωση).</div>
+        </div>
+        <div class="btn-row">
+          <button class="btn-tonal" type="button">↻ Ανανέωση λίστας</button>
+          <button class="btn-tonal" type="button">🛡 Έλεγχος μοντέλων</button>
+        </div>
+
+        <!-- _buildProbeResultsCard -->
+        <div class="status-box">
+          <span class="icon">✓</span>
+          <div>
+            <div>7 από 19 μοντέλα με διαθέσιμη ποσόστωση (&gt; 0).</div>
+            <span class="meta">Τελευταίος έλεγχος: 15/06/2026 13:11</span>
+
+            <div style="margin-top:10px" class="body-small">Επόμενη επιλογή chip:</div>
+            <div class="seg" role="group" aria-label="Επόμενη επιλογή chip">
+              <button type="button" class="active">① Κύριο</button>
+              <button type="button">② Εφεδρικό</button>
+            </div>
+            <div class="chips">
+              <span class="chip">gemini-2.5-flash-lite</span>
+              <span class="chip">gemini-3-flash-preview</span>
+              <span class="chip">gemini-3.1-flash-lite</span>
+              <span class="chip">gemini-3.1-flash-lite-preview</span>
+              <span class="chip">gemini-3.5-flash</span>
+              <span class="chip assigned" title="Ήδη ορισμένο ως κύριο μοντέλο">gemini-flash-latest</span>
+              <span class="chip assigned" title="Ήδη ορισμένο ως εφεδρικό μοντέλο">gemini-flash-lite-latest</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="divider"></div>
+
+        <!-- ========== LansweeperTicketSubmitSettingsSection ========== -->
+        <div class="section-title">Παραμετροποίηση καταχώρησης εισιτηρίου</div>
+
+        <!-- _CustomFieldsEditor — όπως στην εφαρμογή: κάρτες με βέλη / επεξεργασία / διαγραφή -->
+        <div class="cf-head">
+          <span class="section-label" style="margin:0">Πεδία εισιτηρίου (custom fields)</span>
+          <button class="link-btn" type="button" style="padding:0">＋ Προσθήκη</button>
+        </div>
+        <div class="cf-card">
+          <div class="main">
+            <div class="title">Κατηγορία αιτήματος</div>
+            <div class="sub">Κατηγορία αιτήματος · Ραδιοπλήκτρα</div>
+          </div>
+          <div class="cf-actions">
+            <button class="icon-btn disabled" type="button" title="Μετακίνηση πάνω (ανενεργό — πρώτο)">↑</button>
+            <button class="icon-btn" type="button" title="Μετακίνηση κάτω">↓</button>
+            <button class="icon-btn" type="button" title="Επεξεργασία">✎</button>
+            <button class="icon-btn" type="button" title="Διαγραφή">🗑</button>
+          </div>
+        </div>
+        <div class="cf-card">
+          <div class="main">
+            <div class="title">Τί αφορά;</div>
+            <div class="sub">Τί αφορά; · Λίστα</div>
+          </div>
+          <div class="cf-actions">
+            <button class="icon-btn" type="button" title="Μετακίνηση πάνω">↑</button>
+            <button class="icon-btn disabled" type="button" title="Μετακίνηση κάτω (ανενεργό — τελευταίο)">↓</button>
+            <button class="icon-btn" type="button" title="Επεξεργασία">✎</button>
+            <button class="icon-btn" type="button" title="Διαγραφή">🗑</button>
+          </div>
+        </div>
+
+        <!-- _ListWithDefaultSection — ΚΑΘΕΤΑ (Column), όπως στο Flutter -->
+        <div class="list-default-block">
+          <div class="section-label">Καταστάσεις ticket</div>
+          <div class="field">
+            <div class="outline textarea">
+              <span class="floating">Καταστάσεις (μία ανά γραμμή)</span>
+              <span class="value">Open
+Closed
+In Progress</span>
+            </div>
+          </div>
+          <div class="field">
+            <div class="outline">
+              <span class="floating">Προεπιλογή κατάστασης</span>
+              <span class="value">Closed</span>
+              <span class="suffix-icon">▾</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="list-default-block">
+          <div class="section-label">Τύπος αιτήματος (Type)</div>
+          <div class="field">
+            <div class="outline textarea">
+              <span class="floating">Τύποι αιτήματος (μία ανά γραμμή)</span>
+              <span class="value">IT Support</span>
+            </div>
+          </div>
+          <div class="field">
+            <div class="outline">
+              <span class="floating">Προεπιλογή τύπου αιτήματος</span>
+              <span class="value">IT Support</span>
+              <span class="suffix-icon">▾</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="list-default-block">
+          <div class="section-label">Προτεραιότητα (Priority)</div>
+          <div class="field">
+            <div class="outline textarea">
+              <span class="floating">Προτεραιότητες (μία ανά γραμμή)</span>
+              <span class="value">Low
+Medium
+High</span>
+            </div>
+          </div>
+          <div class="field">
+            <div class="outline">
+              <span class="floating">Προεπιλογή προτεραιότητας</span>
+              <span class="value">Low</span>
+              <span class="suffix-icon">▾</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="list-default-block">
+          <div class="section-label">Ομάδα (Team)</div>
+          <div class="field">
+            <div class="outline textarea">
+              <span class="floating">Ομάδες (μία ανά γραμμή)</span>
+              <span class="value">IT Support</span>
+            </div>
+          </div>
+          <div class="field">
+            <div class="outline">
+              <span class="floating">Προεπιλογή ομάδας</span>
+              <span class="value">IT Support</span>
+              <span class="suffix-icon">▾</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="field">
+          <div class="outline">
+            <span class="floating">Τύπος σημείωσης</span>
+            <span class="value">Ιδιωτική</span>
+            <span class="suffix-icon">▾</span>
+          </div>
+        </div>
+        <div class="switch-row">
+          <div class="texts"><span class="t">Ενεργό βήμα σημείωσης (AddNote)</span></div>
+          <div class="toggle on" aria-hidden="true"></div>
+        </div>
+        <div class="switch-row">
+          <div class="texts"><span class="t">Ενεργό βήμα κατάστασης (EditTicket)</span></div>
+          <div class="toggle on" aria-hidden="true"></div>
+        </div>
+        <div class="switch-row">
+          <div class="texts"><span class="t">Απομνημόνευση τελευταίων επιλογών φόρμας</span></div>
+          <div class="toggle on" aria-hidden="true"></div>
+        </div>
+        <div class="switch-row">
+          <div class="texts">
+            <span class="t">Προσθήκη χρόνου εργασίας στη σημείωση</span>
+            <span class="s">Όταν είναι ενεργό, προστίθεται γραμμή «Χρόνος: MM:SS» στη σημείωση λύσης.</span>
+          </div>
+          <div class="toggle on" aria-hidden="true"></div>
+        </div>
+        <button class="btn-outlined" type="button">↺ Επαναφορά προεπιλογών</button>
+
+        <div class="divider"></div>
+
+        <!-- ========== Κατάσταση σύνδεσης ========== -->
+        <div class="section-title">Κατάσταση σύνδεσης</div>
+        <div class="status-box">
+          <span class="icon">✓</span>
+          <div>Η σύνδεση με το Lansweeper είναι διαθέσιμη.</div>
+        </div>
+
+      </div>
+      <div class="dialog-actions">
+        <button class="btn-text" type="button">Κλείσιμο</button>
+      </div>
+    </div>
+
+    <div class="footer-note">
+      <strong>Χρήση για σχεδιασμό:</strong>
+      Άνοιξε αυτό το αρχείο στον περιηγητή, κάνε στιγμιότυπο ή σημείωσε αλλαγές πάνω σε αυτό.
+      Ό,τι βλέπεις εδώ πρέπει να ταιριάζει με την εφαρμογή· αν όχι, πες το — διορθώνουμε το HTML πρώτα.
+    </div>
+  </div>
+</body>
+</html>

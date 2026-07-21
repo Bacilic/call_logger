@@ -771,15 +771,30 @@ class _CategoryTimerSubmitRow extends ConsumerWidget {
           );
         }
 
-        // Απλωμένη γραμμή: σταθερό πεδίο κατηγορίας αριστερά, χρονόμετρο
-        // δίπλα του, «Καταγραφή» καρφωμένη στη δεξιά άκρη του μπλοκ.
+        // Απλωμένη γραμμή: πεδίο κατηγορίας αριστερά (προτιμώμενο πλάτος 380 με
+        // ΕΛΑΣΤΙΚΗ συρρίκνωση σε στενό χώρο — ποτέ σταθερό, ώστε να μην
+        // υπερχειλίζει), χρονόμετρο δίπλα του, «Καταγραφή» καρφωμένη στη δεξιά
+        // άκρη. Το [Expanded] απορροφά όλη τη διαθέσιμη/ελλείπουσα διάσταση,
+        // οπότε η γραμμή είναι δομικά αδύνατο να υπερχειλίσει.
         return Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            SizedBox(width: 380, child: categoryField),
+            Expanded(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Flexible(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 380),
+                      child: categoryField,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  const CallStatusBar(showPendingToggle: false),
+                ],
+              ),
+            ),
             const SizedBox(width: 12),
-            const CallStatusBar(showPendingToggle: false),
-            const Spacer(),
             _buildSubmitButton(context, ref),
           ],
         );

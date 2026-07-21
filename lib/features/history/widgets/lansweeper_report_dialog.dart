@@ -1,4 +1,5 @@
 ﻿import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -6,6 +7,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../../core/database/database_helper.dart';
+import '../../../core/database/settings_repository.dart';
 import '../../../core/widgets/dialog_snackbar_scope.dart';
 import '../../../core/utils/user_facing_error_messages.dart';
 import '../../../core/services/ai_prompt_template_controller.dart';
@@ -21,6 +24,7 @@ import '../providers/gemini_settings_provider.dart';
 import '../providers/lansweeper_connection_probe_provider.dart';
 import '../providers/lansweeper_settings_provider.dart';
 import '../providers/lansweeper_sync_provider.dart';
+import '../providers/lansweeper_ticket_submit_config_provider.dart';
 import 'lansweeper/lansweeper_ai_prompt_preview_dialog.dart';
 import 'lansweeper/ai_prompt_template_editor_dialog.dart';
 import 'lansweeper/lansweeper_connection_settings_dialog.dart';
@@ -85,6 +89,10 @@ mixin LansweeperReportDialogStateHost on ConsumerState<LansweeperReportDialog> {
   TextEditingController get _geminiPrimaryModelController;
   // ignore: unused_element
   TextEditingController get _geminiFallbackModelController;
+  // ignore: unused_element
+  Map<String, String> get _customFieldValues;
+  // ignore: unused_element
+  String? get _selectedTicketState;
 
   // ignore: unused_element
   Timer? get _lansweeperSettingsDebounceTimer;
@@ -160,6 +168,11 @@ mixin LansweeperReportDialogStateHost on ConsumerState<LansweeperReportDialog> {
   Future<void> _openTicketViewInBrowser(String ticketId);
 
   // ignore: unused_element
+  Future<void> _hydrateTicketSubmitFormPrefs();
+  // ignore: unused_element
+  Future<void> _persistTicketSubmitFormPrefs();
+
+  // ignore: unused_element
   void _toggleGroup(List<ReportCallItem> items, bool? checked);
   // ignore: unused_element
   void _toggleItem(ReportCallItem item, bool? checked);
@@ -225,6 +238,10 @@ class _LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
   @override
   final TextEditingController _geminiFallbackModelController =
       TextEditingController();
+  @override
+  final Map<String, String> _customFieldValues = <String, String>{};
+  @override
+  String? _selectedTicketState;
   ProviderSubscription<String>? _lansweeperApiUrlSub;
   ProviderSubscription<String>? _lansweeperTicketFormUrlSub;
   ProviderSubscription<String>? _lansweeperTicketViewUrlSub;
@@ -306,6 +323,7 @@ class _LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
       unawaited(
         ref.read(lansweeperConnectionProbeProvider.notifier).ensureCheck(),
       );
+      unawaited(_hydrateTicketSubmitFormPrefs());
     });
     _lansweeperApiUrlSub = ref.listenManual<String>(lansweeperApiUrlProvider, (
       _,
@@ -426,6 +444,66 @@ class _LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
       );
     }
     return Icon(icon);
+  }
+
+  @override
+  Future<void> _hydrateTicketSubmitFormPrefs() async {
+    try {
+      await ref
+          .read(lansweeperTicketSubmitConfigProvider.notifier)
+          .hydrationFuture;
+    } catch (_) {}
+    if (!mounted) return;
+    final config = ref.read(lansweeperTicketSubmitConfigProvider);
+    if (!config.rememberFormSelections) return;
+
+    final db = await DatabaseHelper.instance.database;
+    if (!mounted) return;
+    final raw = await SettingsRepository(db).getSetting(
+      kLansweeperTicketSubmitFormPrefsSettingKey,
+    );
+    if (!mounted || raw == null || raw.trim().isEmpty) return;
+
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map) return;
+      final map = Map<String, dynamic>.from(decoded);
+      final valuesRaw = map['customFieldValues'];
+      final nextValues = <String, String>{};
+      if (valuesRaw is Map) {
+        valuesRaw.forEach((key, value) {
+          if (key != null) {
+            nextValues[key.toString()] = value?.toString() ?? '';
+          }
+        });
+      }
+      final ticketState = map['ticketState']?.toString();
+      setState(() {
+        _customFieldValues
+          ..clear()
+          ..addAll(nextValues);
+        if (ticketState != null && ticketState.trim().isNotEmpty) {
+          _selectedTicketState = ticketState.trim();
+        }
+      });
+    } catch (_) {}
+  }
+
+  @override
+  Future<void> _persistTicketSubmitFormPrefs() async {
+    final config = ref.read(lansweeperTicketSubmitConfigProvider);
+    if (!config.rememberFormSelections) return;
+    final payload = <String, dynamic>{
+      'customFieldValues': Map<String, String>.from(_customFieldValues),
+      'ticketState':
+          _selectedTicketState ?? config.defaultTicketState,
+    };
+    final db = await DatabaseHelper.instance.database;
+    if (!mounted) return;
+    await SettingsRepository(db).saveSetting(
+      kLansweeperTicketSubmitFormPrefsSettingKey,
+      jsonEncode(payload),
+    );
   }
 
   @override
@@ -601,6 +679,7 @@ class _LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
     final syncState = ref.watch(lansweeperSyncProvider);
     final connectionStatus = ref.watch(lansweeperConnectionProbeProvider);
     final geminiApiKey = ref.watch(geminiApiKeyProvider);
+    final ticketConfig = ref.watch(lansweeperTicketSubmitConfigProvider);
     final connectionReady = _connectionReady(connectionStatus);
     final canSubmitToApi = LansweeperUrlRules.isApiEndpointUrl(
       lansweeperApiUrl,
@@ -842,6 +921,17 @@ class _LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
                                   titleController: _titleController,
                                   notesController: _notesController,
                                   solutionController: _solutionController,
+                                  config: ticketConfig,
+                                  customFieldValues: _customFieldValues,
+                                  onCustomFieldChanged: (id, value) => setState(
+                                    () => _customFieldValues[id] = value,
+                                  ),
+                                  ticketState:
+                                      _selectedTicketState ??
+                                      ticketConfig.defaultTicketState,
+                                  onTicketStateChanged: (value) => setState(
+                                    () => _selectedTicketState = value,
+                                  ),
                                   isSuggesting: _aiSuggestRunning,
                                   suggestModelLabel: _aiSuggestRunning
                                       ? _aiCurrentModel

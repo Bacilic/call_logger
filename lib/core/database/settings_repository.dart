@@ -17,6 +17,10 @@ const String kLansweeperHelpdeskWebUsernameSettingKey =
     'lansweeper_helpdesk_web_username';
 const String kLansweeperHelpdeskWebPasswordSettingKey =
     'lansweeper_helpdesk_web_password';
+const String kLansweeperTicketSubmitConfigSettingKey =
+    'lansweeper_ticket_submit_config';
+const String kLansweeperTicketSubmitFormPrefsSettingKey =
+    'lansweeper_ticket_submit_form_prefs';
 const String kGeminiApiKeySettingKey = 'gemini_api_key';
 const String kGeminiPromptTemplateSettingKey = 'gemini_prompt_template';
 const String kGeminiPromptTemplateUserDefaultSettingKey =

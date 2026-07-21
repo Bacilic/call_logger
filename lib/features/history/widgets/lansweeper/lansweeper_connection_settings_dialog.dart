@@ -12,6 +12,7 @@ import '../../providers/lansweeper_connection_probe_provider.dart';
 import '../../providers/lansweeper_settings_provider.dart';
 import 'gemini_model_field.dart';
 import 'lansweeper_connection_status_indicator.dart';
+import 'lansweeper_ticket_submit_settings_section.dart';
 
 /// Διάλογος: API (`api.aspx`), φόρμα αιτήματος, πράκτορας, αυτόματη σύνδεση Help Desk.
 class LansweeperConnectionSettingsDialog extends ConsumerStatefulWidget {
@@ -608,6 +609,8 @@ class _LansweeperConnectionSettingsDialogState
                     : widget.geminiEndpointController.text,
                 onChanged: widget.onSettingsChanged,
               ),
+              const Divider(height: 24),
+              const LansweeperTicketSubmitSettingsSection(),
               const Divider(height: 24),
               _sectionTitle('Κατάσταση σύνδεσης'),
               LansweeperConnectionStatusIndicator(status: connectionStatus),

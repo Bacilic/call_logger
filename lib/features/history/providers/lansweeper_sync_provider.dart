@@ -6,8 +6,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/database/calls_repository.dart';
 import '../../../core/database/database_helper.dart';
 import '../../../core/services/lansweeper_sync_service.dart';
+import '../../../core/services/lansweeper_ticket_submit_config.dart';
 import '../../calls/provider/call_mutation_refresh.dart';
 import '../models/lansweeper_sync_state.dart';
+
+final lansweeperSyncServiceProvider = Provider<LansweeperSyncService>(
+  (ref) => LansweeperSyncService(),
+);
 
 class LansweeperSubmitInput {
   const LansweeperSubmitInput({
@@ -16,6 +21,9 @@ class LansweeperSubmitInput {
     required this.solution,
     required this.agentUsername,
     this.durationSeconds,
+    this.customFieldValues = const <String, String>{},
+    this.targetTicketState,
+    this.config,
   });
 
   final String title;
@@ -23,6 +31,9 @@ class LansweeperSubmitInput {
   final String solution;
   final String agentUsername;
   final int? durationSeconds;
+  final Map<String, String> customFieldValues;
+  final String? targetTicketState;
+  final LansweeperTicketSubmitConfig? config;
 }
 
 class LansweeperCommandResult {
@@ -32,6 +43,9 @@ class LansweeperCommandResult {
     this.ticketId,
     this.ignored = false,
     this.failureReport,
+    this.warnings = const <String>[],
+    this.completedSteps = const <String>[],
+    this.failedStep,
   });
 
   final bool success;
@@ -39,6 +53,9 @@ class LansweeperCommandResult {
   final String? ticketId;
   final bool ignored;
   final String? failureReport;
+  final List<String> warnings;
+  final List<String> completedSteps;
+  final String? failedStep;
 }
 
 class LansweeperSyncNotifier extends AsyncNotifier<void> {
@@ -79,15 +96,36 @@ class LansweeperSyncNotifier extends AsyncNotifier<void> {
         );
       }
 
-      final service = LansweeperSyncService();
-      final result = await service.submitAddTicket(
-        LansweeperSyncRequest(
+      if (input.agentUsername.trim().isEmpty) {
+        state = const AsyncData(null);
+        return const LansweeperCommandResult(
+          success: false,
+          message: 'Ο πράκτορας API (AgentUsername) είναι υποχρεωτικός.',
+        );
+      }
+
+      final config = input.config ?? LansweeperTicketSubmitConfig.defaults();
+      final existingTicketIdRaw = (call.lansweeperMainTicketId ?? '').trim();
+      final existingTicketId =
+          existingTicketIdRaw.isEmpty ? null : existingTicketIdRaw;
+      final targetState =
+          (input.targetTicketState?.trim().isNotEmpty ?? false)
+              ? input.targetTicketState!.trim()
+              : config.defaultTicketState;
+
+      final service = ref.read(lansweeperSyncServiceProvider);
+      final result = await service.submitTicketWorkflow(
+        LansweeperWorkflowRequest(
           call: call,
           title: input.title,
-          notes: input.notes,
+          problem: input.notes,
           solution: input.solution,
           agentUsername: input.agentUsername,
           durationSeconds: input.durationSeconds,
+          config: config,
+          customFieldValues: input.customFieldValues,
+          targetState: targetState,
+          existingTicketId: existingTicketId,
         ),
       );
 
@@ -98,9 +136,12 @@ class LansweeperSyncNotifier extends AsyncNotifier<void> {
           ticketId: ticketId,
           provider: 'lansweeper',
           metadata: <String, dynamic>{
-            'mode': 'api',
+            'mode': 'api_workflow',
             'message': result.message,
-            'payload': result.rawPayload,
+            'completedSteps': result.completedSteps,
+            'warnings': result.warnings,
+            'failedStep': result.failedStep,
+            'payload': result.rawPayloads,
           },
         );
         for (final companionId in companionCallIds) {
@@ -110,9 +151,12 @@ class LansweeperSyncNotifier extends AsyncNotifier<void> {
             ticketId: ticketId,
             provider: 'lansweeper',
             metadata: <String, dynamic>{
-              'mode': 'api_batch',
+              'mode': 'api_workflow_batch',
               'message': result.message,
-              'payload': result.rawPayload,
+              'completedSteps': result.completedSteps,
+              'warnings': result.warnings,
+              'failedStep': result.failedStep,
+              'payload': result.rawPayloads,
               'primaryCallId': callId,
             },
           );
@@ -125,6 +169,8 @@ class LansweeperSyncNotifier extends AsyncNotifier<void> {
           success: true,
           message: result.message,
           ticketId: result.ticketId,
+          warnings: result.warnings,
+          completedSteps: result.completedSteps,
         );
       }
 
@@ -138,9 +184,12 @@ class LansweeperSyncNotifier extends AsyncNotifier<void> {
           externalId: result.ticketId!.trim(),
           provider: 'lansweeper',
           metadata: <String, dynamic>{
-            'mode': 'api_failed',
+            'mode': 'api_workflow_failed',
             'message': result.message,
-            'payload': result.rawPayload,
+            'completedSteps': result.completedSteps,
+            'warnings': result.warnings,
+            'failedStep': result.failedStep,
+            'payload': result.rawPayloads,
           },
         );
       }
@@ -150,12 +199,15 @@ class LansweeperSyncNotifier extends AsyncNotifier<void> {
         success: false,
         message: result.message,
         ticketId: result.ticketId,
+        warnings: result.warnings,
+        completedSteps: result.completedSteps,
+        failedStep: result.failedStep,
         failureReport: _buildFailureReport(
-          stage: 'api_response',
+          stage: result.failedStep ?? 'workflow',
           callId: callId,
           message: result.message,
           ticketId: result.ticketId,
-          payload: result.rawPayload,
+          payload: result.rawPayloads,
         ),
       );
     } on LansweeperSyncPrecheckException catch (e) {

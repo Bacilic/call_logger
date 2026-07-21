@@ -1,6 +1,7 @@
 ﻿import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/services/lansweeper_ticket_submit_config.dart';
 import '../../../../core/widgets/lexicon_spell_text_form_field.dart';
 import '../../../../core/widgets/spell_check_controller.dart';
 
@@ -20,6 +21,11 @@ class LansweeperSyncForm extends ConsumerWidget {
     this.cooldownRemainingSeconds,
     this.cooldownModelLabel,
     this.onCancelAutoResubmit,
+    this.config,
+    this.customFieldValues = const <String, String>{},
+    this.onCustomFieldChanged,
+    this.ticketState,
+    this.onTicketStateChanged,
     super.key,
   });
 
@@ -37,11 +43,77 @@ class LansweeperSyncForm extends ConsumerWidget {
   final int? cooldownRemainingSeconds;
   final String? cooldownModelLabel;
   final VoidCallback? onCancelAutoResubmit;
+  final LansweeperTicketSubmitConfig? config;
+  final Map<String, String> customFieldValues;
+  final void Function(String fieldId, String value)? onCustomFieldChanged;
+  final String? ticketState;
+  final ValueChanged<String>? onTicketStateChanged;
 
   static Color cooldownRemainingColor(int seconds) {
     if (seconds > 30) return Colors.red;
     if (seconds >= 10) return Colors.orange;
     return Colors.green;
+  }
+
+  Widget _buildCustomField(
+    BuildContext context,
+    LansweeperCustomFieldDef field,
+  ) {
+    final currentValue = customFieldValues[field.id] ?? field.defaultValue;
+
+    if (field.widgetType == LansweeperFieldWidgetType.text) {
+      return TextFormField(
+        key: ValueKey('lansweeper_custom_field_${field.id}'),
+        initialValue: currentValue,
+        decoration: InputDecoration(
+          labelText: field.formLabel,
+          border: const OutlineInputBorder(),
+        ),
+        onChanged: (value) => onCustomFieldChanged?.call(field.id, value),
+      );
+    }
+
+    final dropdownValue = field.options.contains(currentValue)
+        ? currentValue
+        : (field.options.isNotEmpty ? field.options.first : null);
+
+    return DropdownButtonFormField<String>(
+      key: ValueKey('lansweeper_custom_field_${field.id}'),
+      isExpanded: true,
+      initialValue: dropdownValue,
+      decoration: InputDecoration(
+        labelText: field.formLabel,
+        border: const OutlineInputBorder(),
+      ),
+      selectedItemBuilder: (context) => field.options
+          .map(
+            (option) => Text(
+              option,
+              overflow: TextOverflow.ellipsis,
+              maxLines: 1,
+            ),
+          )
+          .toList(),
+      items: field.options
+          .map(
+            (option) => DropdownMenuItem<String>(
+              value: option,
+              child: Text(
+                option,
+                overflow: TextOverflow.ellipsis,
+                maxLines: 2,
+              ),
+            ),
+          )
+          .toList(),
+      onChanged: onCustomFieldChanged == null
+          ? null
+          : (value) {
+              if (value != null) {
+                onCustomFieldChanged!.call(field.id, value);
+              }
+            },
+    );
   }
 
   @override
@@ -147,6 +219,43 @@ class LansweeperSyncForm extends ConsumerWidget {
       ],
     );
 
+    final formConfig = config;
+    final customFieldWidgets = <Widget>[];
+    if (formConfig != null) {
+      for (final field in formConfig.customFields) {
+        if (!field.showInForm || !field.visible) continue;
+        customFieldWidgets.add(const SizedBox(height: 10));
+        customFieldWidgets.add(_buildCustomField(context, field));
+      }
+      customFieldWidgets.add(const SizedBox(height: 10));
+      customFieldWidgets.add(
+        DropdownButtonFormField<String>(
+          key: const ValueKey('lansweeper_ticket_state'),
+          isExpanded: true,
+          initialValue: ticketState ?? formConfig.defaultTicketState,
+          decoration: const InputDecoration(
+            labelText: 'Κατάσταση ticket',
+            border: OutlineInputBorder(),
+          ),
+          items: formConfig.ticketStates
+              .map(
+                (state) => DropdownMenuItem<String>(
+                  value: state,
+                  child: Text(state),
+                ),
+              )
+              .toList(),
+          onChanged: onTicketStateChanged == null
+              ? null
+              : (value) {
+                  if (value != null) {
+                    onTicketStateChanged!(value);
+                  }
+                },
+        ),
+      );
+    }
+
     return Card(
       child: Padding(
         padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
@@ -189,11 +298,13 @@ class LansweeperSyncForm extends ConsumerWidget {
               maxLines: null,
               decoration: const InputDecoration(
                 labelText: 'Λύση',
-                hintText: 'Ενσωματώνεται στην περιγραφή ticket κατά την αποστολή.',
+                hintText:
+                    'Προστίθεται ως σημείωση (Note) στο ticket — ΟΧΙ στην περιγραφή.',
                 border: OutlineInputBorder(),
                 alignLabelWithHint: true,
               ),
             ),
+            ...customFieldWidgets,
           ],
         ),
       ),

@@ -1,9 +1,9 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="el">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Δείγμα διάταξης — Remote Tools πάνω (Πρότυπο Β)</title>
+  <title>Δείγμα διάταξης — Remote Tools πάνω (κλήσεις / Πληροφορίες)</title>
   <style>
     :root {
       --bg: #f3f4f6;
@@ -262,6 +262,26 @@
       font-size: .92rem;
     }
     .footer-note strong { color: var(--accent); }
+    .source-map {
+      margin: 0 0 18px;
+      padding: 12px 14px;
+      background: #fffbeb;
+      border: 1px solid #fcd34d;
+      border-radius: 10px;
+      line-height: 1.55;
+      font-size: .9rem;
+    }
+    .source-map h2 {
+      margin: 0 0 8px;
+      font-size: .95rem;
+    }
+    .source-map code {
+      font-size: .82rem;
+      background: #fef3c7;
+      padding: 1px 5px;
+      border-radius: 4px;
+    }
+    .source-map ul { margin: 6px 0 0; padding-left: 1.2rem; }
     .scenario { display: none; }
     .scenario.active { display: block; }
     .arrow {
@@ -274,8 +294,36 @@
   </style>
 </head>
 <body>
+  <!--
+    ΑΝΤΙΣΤΟΙΧΙΑ FLUTTER (πηγή αλήθειας για υλοποίηση)
+    -------------------------------------------------
+    Κύριο widget διάταξης οθόνης:
+      lib/features/calls/layout/calls_screen_layout.dart
+    Μηχανή / σχέδιο θέσεων (slots remoteTools, map, callerCard):
+      lib/features/calls/layout/calls_layout_engine.dart
+      lib/features/calls/layout/calls_layout_plan.dart
+    Header πεδίων (Τηλέφωνο / Καλούντας / Τμήμα / Κωδικός Εξοπλισμού):
+      lib/features/calls/screens/widgets/call_header_form.dart
+    Κάρτα εργαλείων απομακρυσμένης σύνδεσης (TightVNC κ.λπ.):
+      lib/features/calls/screens/widgets/remote_connection_buttons.dart
+    Κάρτα «Θέση τμήματος»:
+      lib/features/calls/screens/widgets/mini_map_card.dart
+    Κάρτα καλούντος:
+      lib/features/calls/screens/widgets/user_info_card.dart
+  -->
   <div class="page">
     <h1>Δείγμα διάταξης — κάρτα εργαλείων πάνω (χωρίς τηλέφωνο)</h1>
+    <div class="source-map">
+      <h2>Αναπαριστά widgets Flutter</h2>
+      <ul>
+        <li><strong>Κύριο:</strong> <code>lib/features/calls/layout/calls_screen_layout.dart</code></li>
+        <li><strong>Λογική θέσεων:</strong> <code>lib/features/calls/layout/calls_layout_engine.dart</code>, <code>calls_layout_plan.dart</code></li>
+        <li><strong>Header πεδίων:</strong> <code>lib/features/calls/screens/widgets/call_header_form.dart</code></li>
+        <li><strong>Κάρτα Remote Tools:</strong> <code>lib/features/calls/screens/widgets/remote_connection_buttons.dart</code></li>
+        <li><strong>Χάρτης τμήματος:</strong> <code>lib/features/calls/screens/widgets/mini_map_card.dart</code></li>
+        <li><strong>Κάρτα καλούντος:</strong> <code>lib/features/calls/screens/widgets/user_info_card.dart</code></li>
+      </ul>
+    </div>
     <p class="intro">
       Όταν υπάρχει εξοπλισμός με αντιστοίχιση σε τμήμα (και προαιρετικά καλούντα), αλλά το τηλέφωνο είναι κενό,
       σήμερα η κάρτα TightVNC πέφτει μόνη της χαμηλά. Η πρόταση τη βάζει στην <strong>πρώτη γραμμή</strong>

@@ -1,9 +1,10 @@
-// Κοινά test doubles για widget τεστ διάλογου αναφοράς Lansweeper.
+﻿// Κοινά test doubles για widget τεστ διάλογου αναφοράς Lansweeper.
 //
 // Χρησιμοποιούνται από lansweeper_report_dialog_characterization_test.dart,
 // lansweeper_report_multi_immediate_submit_test.dart, lansweeper_sync_invalidates_history_test.dart.
 
 import 'package:call_logger/core/services/gemini_ticket_service.dart';
+import 'package:call_logger/core/services/lansweeper_ticket_submit_config.dart';
 import 'package:call_logger/features/history/models/dashboard_date_preset.dart';
 import 'package:call_logger/features/history/models/dashboard_filter_model.dart';
 import 'package:call_logger/features/history/models/lansweeper_connection_status.dart';
@@ -11,6 +12,7 @@ import 'package:call_logger/features/history/providers/dashboard_provider.dart';
 import 'package:call_logger/features/history/providers/gemini_settings_provider.dart';
 import 'package:call_logger/features/history/providers/lansweeper_connection_probe_provider.dart';
 import 'package:call_logger/features/history/providers/lansweeper_settings_provider.dart';
+import 'package:call_logger/features/history/providers/lansweeper_ticket_submit_config_provider.dart';
 
 const kTestLansweeperApiUrl = 'https://test.example.com/api.aspx';
 
@@ -94,4 +96,13 @@ class FixedGeminiFallbackEnabledNotifier extends GeminiFallbackEnabledNotifier {
 class FixedGeminiFallbackModelNotifier extends GeminiFallbackModelNotifier {
   @override
   String build() => '';
+}
+
+class FixedLansweeperTicketSubmitConfigNotifier
+    extends LansweeperTicketSubmitConfigNotifier {
+  @override
+  LansweeperTicketSubmitConfig build() {
+    Future.microtask(ensureHydrationCompleted);
+    return LansweeperTicketSubmitConfig.defaults();
+  }
 }

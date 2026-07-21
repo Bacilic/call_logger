@@ -13,6 +13,7 @@ import 'package:call_logger/features/history/providers/gemini_settings_provider.
 import 'package:call_logger/features/history/providers/lansweeper_connection_probe_provider.dart';
 import 'package:call_logger/features/history/providers/lansweeper_settings_provider.dart';
 import 'package:call_logger/features/history/providers/lansweeper_sync_provider.dart';
+import 'package:call_logger/features/history/providers/lansweeper_ticket_submit_config_provider.dart';
 import 'package:call_logger/features/history/widgets/lansweeper_report_dialog.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -125,6 +126,9 @@ List<Override> _lansweeperMultiSubmitTestOverrides({
     geminiFallbackModelProvider.overrideWith(
       FixedGeminiFallbackModelNotifier.new,
     ),
+    lansweeperTicketSubmitConfigProvider.overrideWith(
+      FixedLansweeperTicketSubmitConfigNotifier.new,
+    ),
     lansweeperSyncProvider.overrideWith(() => syncNotifier),
   ];
 }
@@ -201,7 +205,7 @@ void main() {
     testWidgets(
       'Άμεση Καταχώρηση: όλες οι επιλεγμένες κλήσεις παίρνουν το ίδιο ticket_id',
       (tester) async {
-        tester.view.physicalSize = const Size(1600, 900);
+        tester.view.physicalSize = const Size(1600, 1200);
         tester.view.devicePixelRatio = 1.0;
         addTearDown(() {
           tester.view.resetPhysicalSize();
@@ -285,6 +289,9 @@ void main() {
         reporter.logStep(
           'Πάτημα Άμεση Καταχώρηση (mock API, χωρίς πραγματικό ticket)',
         );
+
+        await tester.ensureVisible(immediateSubmitButton);
+        await pumpUntilSettled(tester);
 
         await tester.runAsync(() async {
           await tester.tap(immediateSubmitButton);
