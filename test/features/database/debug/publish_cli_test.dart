@@ -108,6 +108,7 @@ void main() {
       nextBuild: 32,
       unreleasedEntryCount: 0,
       hasUnreleasedEntries: false,
+      bumpKind: VersionBumpKind.patch,
     );
 
     const filledPreview = ReleasePublishPreview(
@@ -117,6 +118,7 @@ void main() {
       nextBuild: 32,
       unreleasedEntryCount: 2,
       hasUnreleasedEntries: true,
+      bumpKind: VersionBumpKind.patch,
     );
 
     test('returns 0 on success when Unreleased has entries', () async {
@@ -145,7 +147,6 @@ void main() {
       );
       expect(code, 0);
       expect(tracker.publishCalls, 1);
-      expect(tracker.lastProceedDespiteEmpty, isFalse);
       expect(tracker.writeInstallerCalls, 0);
       expect(lines, isNotEmpty);
     });
@@ -238,7 +239,7 @@ void main() {
     });
 
     test(
-      'empty Unreleased + publishAnyway calls publish with proceed true',
+      'empty Unreleased + publishAnyway returns 2 without publish',
       () async {
         final tracker = _CallTracker();
         final code = await runPublishCli(
@@ -262,9 +263,8 @@ void main() {
             );
           },
         );
-        expect(code, 0);
-        expect(tracker.publishCalls, 1);
-        expect(tracker.lastProceedDespiteEmpty, isTrue);
+        expect(code, 2);
+        expect(tracker.publishCalls, 0);
         expect(tracker.writeInstallerCalls, 0);
       },
     );
@@ -300,16 +300,17 @@ void main() {
       expect(lines.join('\n'), contains('Unreleased'));
     });
 
-    test('empty + --allow-empty publishes without calling prompt', () async {
+    test('empty + --allow-empty returns 2 without publish or prompt', () async {
       final tracker = _CallTracker();
       var promptCalls = 0;
+      final lines = <String>[];
       final code = await runPublishCli(
         PublishCliArgs(
           bumpKind: VersionBumpKind.minor,
           folder: tempDir.path,
           allowEmpty: true,
         ),
-        writeLine: (_) {},
+        writeLine: lines.add,
         isInteractive: true,
         promptEmptyUnreleased: () {
           promptCalls++;
@@ -328,10 +329,10 @@ void main() {
           );
         },
       );
-      expect(code, 0);
+      expect(code, 2);
       expect(promptCalls, 0);
-      expect(tracker.publishCalls, 1);
-      expect(tracker.lastProceedDespiteEmpty, isTrue);
+      expect(tracker.publishCalls, 0);
+      expect(lines.join('\n'), contains('--allow-empty'));
     });
 
     test('non-empty Unreleased publishes normally without prompt', () async {
@@ -364,7 +365,6 @@ void main() {
       expect(code, 0);
       expect(promptCalls, 0);
       expect(tracker.publishCalls, 1);
-      expect(tracker.lastProceedDespiteEmpty, isFalse);
     });
   });
 }
@@ -372,7 +372,6 @@ void main() {
 class _CallTracker {
   int publishCalls = 0;
   int writeInstallerCalls = 0;
-  bool? lastProceedDespiteEmpty;
 }
 
 class _FakePublisherService extends ReleasePublisherService {
@@ -400,17 +399,12 @@ class _FakePublisherService extends ReleasePublisherService {
   final ReleasePublishResult writeInstallerResult;
 
   @override
-  Future<ReleasePublishPreview> preparePreview(VersionBumpKind kind) async =>
-      preview;
+  Future<ReleasePublishPreview> preparePreview() async => preview;
 
   @override
-  Future<ReleasePublishResult> publish({
-    required VersionBumpKind bumpKind,
-    bool proceedDespiteEmptyUnreleased = false,
-  }) async {
+  Future<ReleasePublishResult> publish() async {
     onProgress?.call('fake progress');
     tracker.publishCalls++;
-    tracker.lastProceedDespiteEmpty = proceedDespiteEmptyUnreleased;
     return publishResult;
   }
 

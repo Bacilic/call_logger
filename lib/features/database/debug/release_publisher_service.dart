@@ -44,6 +44,7 @@ class ReleasePublishPreview {
     required this.nextBuild,
     required this.unreleasedEntryCount,
     required this.hasUnreleasedEntries,
+    required this.bumpKind,
   });
 
   final String currentVersion;
@@ -52,6 +53,7 @@ class ReleasePublishPreview {
   final int nextBuild;
   final int unreleasedEntryCount;
   final bool hasUnreleasedEntries;
+  final VersionBumpKind bumpKind;
 }
 
 typedef ReleaseProcessRunner = Future<int> Function(
@@ -96,6 +98,15 @@ class ReleasePublisherService {
   final void Function(String message)? onProgress;
   final ZipVerificationReader verificationReader;
 
+  static const _categoryKeys = ['added', 'improvements', 'changed', 'fixed'];
+
+  static const _mdSectionTitles = {
+    'added': 'Προστέθηκε',
+    'improvements': 'Μικροβελτιώσεις',
+    'changed': 'Άλλαξε',
+    'fixed': 'Διορθώθηκε',
+  };
+
   static Future<Uint8List> _defaultVerificationReader(String zipPath) =>
       File(zipPath).readAsBytes();
 
@@ -124,10 +135,13 @@ class ReleasePublisherService {
   }
 
   /// Χωρίς εγγραφές: τρέχουσα/επόμενη έκδοση και πλήθος Unreleased.
-  Future<ReleasePublishPreview> preparePreview(VersionBumpKind kind) async {
+  /// Ο τύπος αύξησης προκύπτει αυτόματα από το περιεχόμενο του Unreleased.
+  Future<ReleasePublishPreview> preparePreview() async {
     final current = await _readPubspecVersion();
+    final unreleased = await _readUnreleasedMap();
+    final count = _countEntriesIn(unreleased);
+    final kind = _bumpKindFromUnreleased(unreleased);
     final bumped = _bumpVersion(current.version, current.build, kind);
-    final count = await _countUnreleasedEntries();
     return ReleasePublishPreview(
       currentVersion: current.version,
       currentBuild: current.build,
@@ -135,6 +149,7 @@ class ReleasePublisherService {
       nextBuild: bumped.build,
       unreleasedEntryCount: count,
       hasUnreleasedEntries: count > 0,
+      bumpKind: kind,
     );
   }
 
@@ -177,32 +192,38 @@ class ReleasePublisherService {
     }
   }
 
-  Future<ReleasePublishResult> publish({
-    required VersionBumpKind bumpKind,
-    bool proceedDespiteEmptyUnreleased = false,
-  }) async {
+  Future<ReleasePublishResult> publish() async {
     _ProjectFileSnapshot? snapshot;
     try {
       _progress('Έλεγχος Unreleased…');
-      final hasEntries = await _unreleasedHasEntries();
-      if (!hasEntries && !proceedDespiteEmptyUnreleased) {
+      final unreleased = await _readUnreleasedMap();
+      if (_countEntriesIn(unreleased) == 0) {
         return const ReleasePublishResult(
           status: ReleasePublishStatus.emptyUnreleasedWarning,
           message:
               'Η ενότητα Unreleased στο changelog είναι κενή. '
-              'Προσθέστε καταχωρήσεις ή επιβεβαιώστε για συνέχεια.',
+              'Προσθέστε καταχωρήσεις πριν τη δημοσίευση.',
         );
       }
 
       snapshot = await _snapshotProjectFiles();
 
+      final bumpKind = _bumpKindFromUnreleased(unreleased);
       final current = await _readPubspecVersion();
       final bumped = _bumpVersion(current.version, current.build, bumpKind);
       final releasedDate = _formatDate(clock());
 
       _progress('Σφράγιση changelog…');
-      await _sealChangelogJson(bumped.version, releasedDate);
-      await _sealChangelogMarkdown(bumped.version, releasedDate);
+      await _sealChangelogJson(
+        bumpKind: bumpKind,
+        version: bumped.version,
+        date: releasedDate,
+      );
+      await _sealChangelogMarkdown(
+        bumpKind: bumpKind,
+        version: bumped.version,
+        date: releasedDate,
+      );
 
       _progress('Bump έκδοσης στο pubspec.yaml…');
       await _writePubspecVersion(bumped.version, bumped.build);
@@ -373,24 +394,35 @@ class ReleasePublisherService {
     await _pubspecFile.writeAsBytes(snapshot.pubspec, flush: true);
   }
 
-  Future<bool> _unreleasedHasEntries() async {
-    return (await _countUnreleasedEntries()) > 0;
-  }
-
-  Future<int> _countUnreleasedEntries() async {
+  Future<Map<String, dynamic>> _readUnreleasedMap() async {
     final list = await _readChangelogJson();
     final unreleased = list.cast<Map>().firstWhere(
           (e) => (e['version'] as String?) == 'Unreleased',
           orElse: () => <String, dynamic>{},
         );
+    return Map<String, dynamic>.from(unreleased);
+  }
+
+  static int _countEntriesIn(Map<String, dynamic> unreleased) {
     if (unreleased.isEmpty) return 0;
     var count = 0;
-    for (final key in const ['added', 'changed', 'fixed']) {
+    for (final key in _categoryKeys) {
       final raw = unreleased[key];
       if (raw is! List) continue;
       count += raw.where((e) => e.toString().trim().isNotEmpty).length;
     }
     return count;
+  }
+
+  static VersionBumpKind _bumpKindFromUnreleased(
+    Map<String, dynamic> unreleased,
+  ) {
+    final added = unreleased['added'];
+    if (added is List &&
+        added.any((e) => e.toString().trim().isNotEmpty)) {
+      return VersionBumpKind.minor;
+    }
+    return VersionBumpKind.patch;
   }
 
   Future<List<dynamic>> _readChangelogJson() async {
@@ -401,47 +433,180 @@ class ReleasePublisherService {
     return raw;
   }
 
-  Future<void> _sealChangelogJson(String version, String date) async {
+  Map<String, dynamic> _emptyUnreleased() => {
+        'version': 'Unreleased',
+        'date': '',
+        'added': <String>[],
+        'improvements': <String>[],
+        'changed': <String>[],
+        'fixed': <String>[],
+      };
+
+  static List<String> _stringList(dynamic raw) {
+    if (raw is! List) return [];
+    return raw
+        .map((e) => e.toString())
+        .where((s) => s.trim().isNotEmpty)
+        .toList();
+  }
+
+  Future<void> _sealChangelogJson({
+    required VersionBumpKind bumpKind,
+    required String version,
+    required String date,
+  }) async {
     final list = await _readChangelogJson();
-    final index = list.indexWhere(
+    final unreleasedIndex = list.indexWhere(
       (e) => e is Map && e['version'] == 'Unreleased',
     );
-    if (index < 0) {
+    if (unreleasedIndex < 0) {
       throw StateError('Δεν βρέθηκε ενότητα Unreleased στο changelog.json.');
     }
-    final sealed = Map<String, dynamic>.from(list[index] as Map);
-    sealed['version'] = version;
-    sealed['date'] = date;
-    list[index] = sealed;
-    list.insert(0, {
-      'version': 'Unreleased',
-      'date': '',
-      'added': <String>[],
-      'changed': <String>[],
-      'fixed': <String>[],
-    });
+    final unreleased =
+        Map<String, dynamic>.from(list[unreleasedIndex] as Map);
+
+    if (bumpKind == VersionBumpKind.minor) {
+      final sealed = Map<String, dynamic>.from(unreleased);
+      sealed['version'] = version;
+      sealed['date'] = date;
+      for (final key in _categoryKeys) {
+        sealed[key] = _stringList(sealed[key]);
+      }
+      list[unreleasedIndex] = sealed;
+      list.insert(0, _emptyUnreleased());
+    } else {
+      final topIndex = list.indexWhere(
+        (e) => e is Map && e['version'] != 'Unreleased',
+      );
+      if (topIndex < 0) {
+        throw StateError(
+          'Δεν βρέθηκε δημοσιευμένη κάρτα για συγχώνευση patch.',
+        );
+      }
+      final top = Map<String, dynamic>.from(list[topIndex] as Map);
+      top['version'] = version;
+      top['date'] = date;
+      for (final key in _categoryKeys) {
+        final existing = _stringList(top[key]);
+        final incoming = _stringList(unreleased[key]);
+        top[key] = [...existing, ...incoming];
+      }
+      list[topIndex] = top;
+      list[unreleasedIndex] = _emptyUnreleased();
+    }
+
     await _changelogJsonFile.writeAsString(
       const JsonEncoder.withIndent('  ').convert(list),
       flush: true,
     );
   }
 
-  Future<void> _sealChangelogMarkdown(String version, String date) async {
+  Future<void> _sealChangelogMarkdown({
+    required VersionBumpKind bumpKind,
+    required String version,
+    required String date,
+  }) async {
     final content = await _changelogMdFile.readAsString();
     const marker = '## [Unreleased]';
     final idx = content.indexOf(marker);
     if (idx < 0) {
       throw StateError('Δεν βρέθηκε ## [Unreleased] στο CHANGELOG.md.');
     }
-    final sealedHeader = '## [$version] - $date';
-    final updated = content.replaceFirst(marker, sealedHeader);
-    final insertAt = updated.indexOf(sealedHeader);
-    final withNewUnreleased = updated.replaceRange(
-      insertAt,
-      insertAt,
-      '## [Unreleased]\n\n',
-    );
-    await _changelogMdFile.writeAsString(withNewUnreleased, flush: true);
+
+    if (bumpKind == VersionBumpKind.minor) {
+      final sealedHeader = '## [$version] - $date';
+      final updated = content.replaceFirst(marker, sealedHeader);
+      final insertAt = updated.indexOf(sealedHeader);
+      final withNewUnreleased = updated.replaceRange(
+        insertAt,
+        insertAt,
+        '## [Unreleased]\n\n',
+      );
+      await _changelogMdFile.writeAsString(withNewUnreleased, flush: true);
+      return;
+    }
+
+    final nextHeader = RegExp(r'^## \[', multiLine: true);
+    final afterUnreleased = idx + marker.length;
+    final nextMatch = nextHeader.firstMatch(content.substring(afterUnreleased));
+    if (nextMatch == null) {
+      throw StateError(
+        'Δεν βρέθηκε δημοσιευμένη ενότητα στο CHANGELOG.md για patch.',
+      );
+    }
+    final topStart = afterUnreleased + nextMatch.start;
+    final unreleasedBody = content.substring(afterUnreleased, topStart).trim();
+    final afterTopHeaderLine = content.indexOf('\n', topStart);
+    final topHeaderEnd =
+        afterTopHeaderLine < 0 ? content.length : afterTopHeaderLine + 1;
+    final restMatch =
+        nextHeader.firstMatch(content.substring(topHeaderEnd));
+    final topEnd =
+        restMatch == null ? content.length : topHeaderEnd + restMatch.start;
+    final topBody = content.substring(topHeaderEnd, topEnd).trimRight();
+
+    final incoming = _parseMdSections(unreleasedBody);
+    final mergedBody = _mergeMdSections(topBody, incoming);
+    final prefix = content.substring(0, idx);
+    final suffix = content.substring(topEnd);
+    final rebuilt = StringBuffer()
+      ..write(prefix)
+      ..writeln('## [Unreleased]')
+      ..writeln()
+      ..writeln('## [$version] - $date')
+      ..writeln()
+      ..write(mergedBody.trimRight())
+      ..writeln()
+      ..writeln()
+      ..write(suffix.trimLeft());
+
+    await _changelogMdFile.writeAsString(rebuilt.toString(), flush: true);
+  }
+
+  static Map<String, List<String>> _parseMdSections(String body) {
+    final result = {
+      for (final key in _categoryKeys) key: <String>[],
+    };
+    final titleToKey = {
+      for (final e in _mdSectionTitles.entries) e.value: e.key,
+    };
+    String? currentKey;
+    for (final rawLine in body.split('\n')) {
+      final line = rawLine.trimRight();
+      final header = RegExp(r'^###\s+(.+)$').firstMatch(line.trim());
+      if (header != null) {
+        currentKey = titleToKey[header.group(1)!.trim()];
+        continue;
+      }
+      if (currentKey == null) continue;
+      final bullet = RegExp(r'^-\s+(.+)$').firstMatch(line.trim());
+      if (bullet != null) {
+        final text = bullet.group(1)!.trim();
+        if (text.isNotEmpty) result[currentKey]!.add(text);
+      }
+    }
+    return result;
+  }
+
+  static String _mergeMdSections(
+    String existingBody,
+    Map<String, List<String>> incoming,
+  ) {
+    final existing = _parseMdSections(existingBody);
+    final buffer = StringBuffer();
+    var first = true;
+    for (final key in _categoryKeys) {
+      final items = [...existing[key]!, ...incoming[key]!];
+      if (items.isEmpty) continue;
+      if (!first) buffer.writeln();
+      first = false;
+      buffer.writeln('### ${_mdSectionTitles[key]}');
+      buffer.writeln();
+      for (final item in items) {
+        buffer.writeln('- $item');
+      }
+    }
+    return buffer.toString();
   }
 
   Future<({String version, int build})> _readPubspecVersion() async {

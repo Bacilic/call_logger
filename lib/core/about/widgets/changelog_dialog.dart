@@ -203,6 +203,12 @@ class _VersionExpansionTile extends StatelessWidget {
               icon: Icons.add_circle_outline,
               items: entry.added,
             ),
+          if (entry.improvements.isNotEmpty)
+            _CategoryBlock(
+              label: 'Μικροβελτιώσεις',
+              icon: Icons.auto_fix_high_outlined,
+              items: entry.improvements,
+            ),
           if (entry.changed.isNotEmpty)
             _CategoryBlock(
               label: 'Άλλαξε',

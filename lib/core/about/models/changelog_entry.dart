@@ -8,6 +8,7 @@ class ChangelogEntry {
     required this.version,
     required this.date,
     required this.added,
+    required this.improvements,
     required this.changed,
     required this.fixed,
   });
@@ -17,13 +18,17 @@ class ChangelogEntry {
   /// ISO 8601 ημερομηνία (yyyy-MM-dd).
   final String date;
   final List<String> added;
+  final List<String> improvements;
   final List<String> changed;
   final List<String> fixed;
 
   bool get isUnreleased => version == unreleasedVersion;
 
   bool get hasContent =>
-      added.isNotEmpty || changed.isNotEmpty || fixed.isNotEmpty;
+      added.isNotEmpty ||
+      improvements.isNotEmpty ||
+      changed.isNotEmpty ||
+      fixed.isNotEmpty;
 
   factory ChangelogEntry.fromJson(Map<String, dynamic> json) {
     List<String> strings(String key) {
@@ -39,6 +44,7 @@ class ChangelogEntry {
       version: json['version']?.toString() ?? '',
       date: json['date']?.toString() ?? '',
       added: strings('added'),
+      improvements: strings('improvements'),
       changed: strings('changed'),
       fixed: strings('fixed'),
     );

@@ -66,21 +66,28 @@ void main() {
     await File(p.join(imagesDir.path, 'tool.png')).writeAsBytes([8]);
   }
 
-  String sampleChangelogJson({bool emptyUnreleased = false}) {
+  String sampleChangelogJson({
+    bool emptyUnreleased = false,
+    bool withAdded = true,
+    List<String> improvements = const [],
+    List<String> fixed = const [],
+  }) {
     final unreleased = emptyUnreleased
         ? {
             'version': 'Unreleased',
             'date': '',
             'added': <String>[],
+            'improvements': <String>[],
             'changed': <String>[],
             'fixed': <String>[],
           }
         : {
             'version': 'Unreleased',
             'date': '',
-            'added': ['Νέο feature δοκιμής'],
+            'added': withAdded ? ['Νέο feature δοκιμής'] : <String>[],
+            'improvements': improvements,
             'changed': <String>[],
-            'fixed': <String>[],
+            'fixed': fixed,
           };
     return jsonEncode([
       unreleased,
@@ -88,13 +95,14 @@ void main() {
         'version': '0.23.1',
         'date': '2026-07-12',
         'added': <String>[],
+        'improvements': <String>['Παλιά μικροβελτίωση'],
         'changed': <String>[],
         'fixed': ['Παλιά διόρθωση'],
       },
     ]);
   }
 
-  const sampleChangelogMd = '''
+  const sampleChangelogMdMinor = '''
 # Ιστορικό Αλλαγών
 
 ## [Unreleased]
@@ -104,6 +112,34 @@ void main() {
 - Νέο feature δοκιμής
 
 ## [0.23.1] - 2026-07-12
+
+### Μικροβελτιώσεις
+
+- Παλιά μικροβελτίωση
+
+### Διορθώθηκε
+
+- Παλιά διόρθωση
+''';
+
+  const sampleChangelogMdPatch = '''
+# Ιστορικό Αλλαγών
+
+## [Unreleased]
+
+### Μικροβελτιώσεις
+
+- Νέα μικροβελτίωση
+
+### Διορθώθηκε
+
+- Νέα διόρθωση
+
+## [0.23.1] - 2026-07-12
+
+### Μικροβελτιώσεις
+
+- Παλιά μικροβελτίωση
 
 ### Διορθώθηκε
 
@@ -142,7 +178,7 @@ environment:
   test('empty Unreleased returns warning and does not change files', () async {
     await writeProjectFiles(
       changelogJson: sampleChangelogJson(emptyUnreleased: true),
-      changelogMd: sampleChangelogMd.replaceAll('- Νέο feature δοκιμής', ''),
+      changelogMd: sampleChangelogMdMinor.replaceAll('- Νέο feature δοκιμής', ''),
       pubspec: samplePubspec,
     );
 
@@ -150,7 +186,7 @@ environment:
       processRunner: (_, _, {workingDirectory, onOutput}) async => 0,
     );
 
-    final result = await service.publish(bumpKind: VersionBumpKind.patch);
+    final result = await service.publish();
 
     expect(result.status, ReleasePublishStatus.emptyUnreleasedWarning);
     expect(result.failedStep, isNull);
@@ -159,82 +195,125 @@ environment:
     expect(pubspec, contains('version: 0.23.1+31'));
   });
 
-  test('seals Unreleased and bumps patch with new empty Unreleased on top',
-      () async {
-    await writeProjectFiles(
-      changelogJson: sampleChangelogJson(),
-      changelogMd: sampleChangelogMd,
-      pubspec: samplePubspec,
-    );
-    await seedReleaseArtifacts();
+  test(
+    'added → minor: creates new card and resets Unreleased',
+    () async {
+      await writeProjectFiles(
+        changelogJson: sampleChangelogJson(),
+        changelogMd: sampleChangelogMdMinor,
+        pubspec: samplePubspec,
+      );
+      await seedReleaseArtifacts();
 
-    final steps = <String>[];
-    final service = buildService(
-      processRunner: (exe, args, {workingDirectory, onOutput}) async {
-        steps.add('$exe ${args.join(' ')}');
-        return 0;
-      },
-    );
+      final steps = <String>[];
+      final service = buildService(
+        processRunner: (exe, args, {workingDirectory, onOutput}) async {
+          steps.add('$exe ${args.join(' ')}');
+          return 0;
+        },
+      );
 
-    final result = await service.publish(bumpKind: VersionBumpKind.patch);
+      final result = await service.publish();
 
-    expect(result.status, ReleasePublishStatus.success);
-    expect(result.newVersion, '0.23.2');
-    expect(result.newBuild, 32);
+      expect(result.status, ReleasePublishStatus.success);
+      expect(result.newVersion, '0.24.0');
+      expect(result.newBuild, 32);
 
-    final jsonList = jsonDecode(
-      await File(p.join(projectRoot.path, 'assets', 'changelog.json'))
-          .readAsString(),
-    ) as List<dynamic>;
-    expect(jsonList.first['version'], 'Unreleased');
-    expect(jsonList.first['added'], isEmpty);
-    expect(jsonList[1]['version'], '0.23.2');
-    expect(jsonList[1]['date'], '2026-07-19');
-    expect(jsonList[1]['added'], contains('Νέο feature δοκιμής'));
+      final jsonList = jsonDecode(
+        await File(p.join(projectRoot.path, 'assets', 'changelog.json'))
+            .readAsString(),
+      ) as List<dynamic>;
+      expect(jsonList.first['version'], 'Unreleased');
+      expect(jsonList.first['added'], isEmpty);
+      expect(jsonList.first['improvements'], isEmpty);
+      expect(jsonList[1]['version'], '0.24.0');
+      expect(jsonList[1]['date'], '2026-07-19');
+      expect(jsonList[1]['added'], contains('Νέο feature δοκιμής'));
+      expect(jsonList[2]['version'], '0.23.1');
 
-    final md =
-        await File(p.join(projectRoot.path, 'CHANGELOG.md')).readAsString();
-    expect(md, contains('## [Unreleased]'));
-    expect(md, contains('## [0.23.2] - 2026-07-19'));
-    expect(
-      md.indexOf('## [Unreleased]'),
-      lessThan(md.indexOf('## [0.23.2] - 2026-07-19')),
-    );
+      final md =
+          await File(p.join(projectRoot.path, 'CHANGELOG.md')).readAsString();
+      expect(md, contains('## [Unreleased]'));
+      expect(md, contains('## [0.24.0] - 2026-07-19'));
+      expect(
+        md.indexOf('## [Unreleased]'),
+        lessThan(md.indexOf('## [0.24.0] - 2026-07-19')),
+      );
 
-    final pubspec = await File(p.join(projectRoot.path, 'pubspec.yaml'))
-        .readAsString();
-    expect(pubspec, contains('version: 0.23.2+32'));
+      final pubspec = await File(p.join(projectRoot.path, 'pubspec.yaml'))
+          .readAsString();
+      expect(pubspec, contains('version: 0.24.0+32'));
 
-    expect(steps.any((s) => s.contains('flutter') && s.contains('build')),
-        isTrue);
-  });
+      expect(
+        steps.any((s) => s.contains('flutter') && s.contains('build')),
+        isTrue,
+      );
+    },
+  );
 
-  test('minor bump resets patch to 0', () async {
-    await writeProjectFiles(
-      changelogJson: sampleChangelogJson(),
-      changelogMd: sampleChangelogMd,
-      pubspec: samplePubspec,
-    );
-    await seedReleaseArtifacts();
+  test(
+    'only improvements/fixed → patch: renames top card and merges bullets',
+    () async {
+      await writeProjectFiles(
+        changelogJson: sampleChangelogJson(
+          withAdded: false,
+          improvements: ['Νέα μικροβελτίωση'],
+          fixed: ['Νέα διόρθωση'],
+        ),
+        changelogMd: sampleChangelogMdPatch,
+        pubspec: samplePubspec,
+      );
+      await seedReleaseArtifacts();
 
-    final service = buildService(
-      processRunner: (_, _, {workingDirectory, onOutput}) async => 0,
-    );
+      final service = buildService(
+        processRunner: (_, _, {workingDirectory, onOutput}) async => 0,
+      );
 
-    final result = await service.publish(bumpKind: VersionBumpKind.minor);
+      final result = await service.publish();
 
-    expect(result.status, ReleasePublishStatus.success);
-    expect(result.newVersion, '0.24.0');
-    expect(result.newBuild, 32);
-    final pubspec = await File(p.join(projectRoot.path, 'pubspec.yaml'))
-        .readAsString();
-    expect(pubspec, contains('version: 0.24.0+32'));
-  });
+      expect(result.status, ReleasePublishStatus.success);
+      expect(result.newVersion, '0.23.2');
+      expect(result.newBuild, 32);
+
+      final jsonList = jsonDecode(
+        await File(p.join(projectRoot.path, 'assets', 'changelog.json'))
+            .readAsString(),
+      ) as List<dynamic>;
+      expect(jsonList.length, 2);
+      expect(jsonList.first['version'], 'Unreleased');
+      expect(jsonList.first['improvements'], isEmpty);
+      expect(jsonList.first['fixed'], isEmpty);
+      expect(jsonList[1]['version'], '0.23.2');
+      expect(jsonList[1]['date'], '2026-07-19');
+      expect(
+        jsonList[1]['improvements'],
+        containsAll(['Παλιά μικροβελτίωση', 'Νέα μικροβελτίωση']),
+      );
+      expect(
+        jsonList[1]['fixed'],
+        containsAll(['Παλιά διόρθωση', 'Νέα διόρθωση']),
+      );
+
+      final md =
+          await File(p.join(projectRoot.path, 'CHANGELOG.md')).readAsString();
+      expect(md, contains('## [Unreleased]'));
+      expect(md, contains('## [0.23.2] - 2026-07-19'));
+      expect(md, isNot(contains('## [0.23.1]')));
+      expect(md, contains('### Μικροβελτιώσεις'));
+      expect(md, contains('- Νέα μικροβελτίωση'));
+      expect(md, contains('- Παλιά μικροβελτίωση'));
+      expect(md, contains('- Νέα διόρθωση'));
+
+      final pubspec = await File(p.join(projectRoot.path, 'pubspec.yaml'))
+          .readAsString();
+      expect(pubspec, contains('version: 0.23.2+32'));
+    },
+  );
 
   test('correct step order: seal+bump before flutter build', () async {
     await writeProjectFiles(
       changelogJson: sampleChangelogJson(),
-      changelogMd: sampleChangelogMd,
+      changelogMd: sampleChangelogMdMinor,
       pubspec: samplePubspec,
     );
     await seedReleaseArtifacts();
@@ -245,20 +324,19 @@ environment:
         final pubspec = await File(p.join(projectRoot.path, 'pubspec.yaml'))
             .readAsString();
         order.add('build');
-        expect(pubspec, contains('version: 0.23.2+32'),
+        expect(pubspec, contains('version: 0.24.0+32'),
             reason: 'Το bump πρέπει να έχει γίνει πριν το flutter build');
         final jsonList = jsonDecode(
           await File(p.join(projectRoot.path, 'assets', 'changelog.json'))
               .readAsString(),
         ) as List<dynamic>;
-        expect(jsonList[1]['version'], '0.23.2',
+        expect(jsonList[1]['version'], '0.24.0',
             reason: 'Η σφράγιση πρέπει να έχει γίνει πριν το flutter build');
         return 0;
       },
     );
 
-    // Hook via onProgress to observe seal — processRunner already checks.
-    final result = await service.publish(bumpKind: VersionBumpKind.patch);
+    final result = await service.publish();
     expect(result.status, ReleasePublishStatus.success);
     expect(order, ['build']);
   });
@@ -266,7 +344,7 @@ environment:
   test('build failure stops without writing to update folder', () async {
     await writeProjectFiles(
       changelogJson: sampleChangelogJson(),
-      changelogMd: sampleChangelogMd,
+      changelogMd: sampleChangelogMdMinor,
       pubspec: samplePubspec,
     );
 
@@ -274,7 +352,7 @@ environment:
       processRunner: (_, _, {workingDirectory, onOutput}) async => 1,
     );
 
-    final result = await service.publish(bumpKind: VersionBumpKind.patch);
+    final result = await service.publish();
 
     expect(result.status, ReleasePublishStatus.failure);
     expect(result.failedStep, isNotNull);
@@ -291,7 +369,7 @@ environment:
       () async {
     await writeProjectFiles(
       changelogJson: sampleChangelogJson(),
-      changelogMd: sampleChangelogMd,
+      changelogMd: sampleChangelogMdMinor,
       pubspec: samplePubspec,
     );
     final jsonBefore = await File(
@@ -306,7 +384,7 @@ environment:
       processRunner: (_, _, {workingDirectory, onOutput}) async => 1,
     );
 
-    final result = await service.publish(bumpKind: VersionBumpKind.patch);
+    final result = await service.publish();
     expect(result.status, ReleasePublishStatus.failure);
 
     expect(
@@ -332,7 +410,7 @@ environment:
       () async {
     await writeProjectFiles(
       changelogJson: sampleChangelogJson(),
-      changelogMd: sampleChangelogMd,
+      changelogMd: sampleChangelogMdMinor,
       pubspec: samplePubspec,
     );
 
@@ -340,8 +418,8 @@ environment:
       processRunner: (_, _, {workingDirectory, onOutput}) async => 1,
     );
 
-    await service.publish(bumpKind: VersionBumpKind.patch);
-    await service.publish(bumpKind: VersionBumpKind.patch);
+    await service.publish();
+    await service.publish();
 
     final pubspec = await File(p.join(projectRoot.path, 'pubspec.yaml'))
         .readAsString();
@@ -352,7 +430,7 @@ environment:
       () async {
     await writeProjectFiles(
       changelogJson: sampleChangelogJson(),
-      changelogMd: sampleChangelogMd,
+      changelogMd: sampleChangelogMdMinor,
       pubspec: samplePubspec,
     );
     await seedReleaseArtifacts();
@@ -370,7 +448,7 @@ environment:
       },
     );
 
-    final result = await service.publish(bumpKind: VersionBumpKind.patch);
+    final result = await service.publish();
     expect(result.status, ReleasePublishStatus.failure);
     expect(result.failedStep, contains('επαλήθευση'));
     expect(
@@ -397,7 +475,7 @@ environment:
       () async {
     await writeProjectFiles(
       changelogJson: sampleChangelogJson(),
-      changelogMd: sampleChangelogMd,
+      changelogMd: sampleChangelogMdMinor,
       pubspec: samplePubspec,
     );
     await seedReleaseArtifacts();
@@ -408,7 +486,7 @@ environment:
       onProgress: progress.add,
     );
 
-    final result = await service.publish(bumpKind: VersionBumpKind.patch);
+    final result = await service.publish();
     expect(result.status, ReleasePublishStatus.success);
 
     final versionPath =
@@ -438,11 +516,11 @@ environment:
     expect(manifest['sha256'], sha);
   });
 
-  test('preparePreview returns versions and count without modifying files',
+  test('preparePreview returns auto bump and count without modifying files',
       () async {
     await writeProjectFiles(
       changelogJson: sampleChangelogJson(),
-      changelogMd: sampleChangelogMd,
+      changelogMd: sampleChangelogMdMinor,
       pubspec: samplePubspec,
     );
     final jsonBefore = await File(
@@ -458,10 +536,11 @@ environment:
           fail('preparePreview δεν πρέπει να χτίζει'),
     );
 
-    final preview = await service.preparePreview(VersionBumpKind.patch);
+    final preview = await service.preparePreview();
     expect(preview.currentVersion, '0.23.1');
     expect(preview.currentBuild, 31);
-    expect(preview.nextVersion, '0.23.2');
+    expect(preview.bumpKind, VersionBumpKind.minor);
+    expect(preview.nextVersion, '0.24.0');
     expect(preview.nextBuild, 32);
     expect(preview.unreleasedEntryCount, 1);
     expect(preview.hasUnreleasedEntries, isTrue);
@@ -481,11 +560,33 @@ environment:
     );
   });
 
+  test('preparePreview chooses patch when Unreleased has no added', () async {
+    await writeProjectFiles(
+      changelogJson: sampleChangelogJson(
+        withAdded: false,
+        improvements: ['μ'],
+        fixed: ['δ'],
+      ),
+      changelogMd: sampleChangelogMdPatch,
+      pubspec: samplePubspec,
+    );
+
+    final service = buildService(
+      processRunner: (_, _, {workingDirectory, onOutput}) async =>
+          fail('preparePreview δεν πρέπει να χτίζει'),
+    );
+
+    final preview = await service.preparePreview();
+    expect(preview.bumpKind, VersionBumpKind.patch);
+    expect(preview.nextVersion, '0.23.2');
+    expect(preview.unreleasedEntryCount, 2);
+  });
+
   test('writeInstallerOnly writes bat only without touching project or app',
       () async {
     await writeProjectFiles(
       changelogJson: sampleChangelogJson(),
-      changelogMd: sampleChangelogMd,
+      changelogMd: sampleChangelogMdMinor,
       pubspec: samplePubspec,
     );
     final jsonBefore = await File(
@@ -550,7 +651,7 @@ environment:
       () async {
     await writeProjectFiles(
       changelogJson: sampleChangelogJson(),
-      changelogMd: sampleChangelogMd,
+      changelogMd: sampleChangelogMdMinor,
       pubspec: samplePubspec,
     );
     await seedReleaseArtifacts();
@@ -559,13 +660,13 @@ environment:
       processRunner: (_, _, {workingDirectory, onOutput}) async => 0,
     );
 
-    final result = await service.publish(bumpKind: VersionBumpKind.patch);
+    final result = await service.publish();
     expect(result.status, ReleasePublishStatus.success);
 
     final zipPath = p.join(
       updateFolder.path,
       'current',
-      'call_logger_0.23.2.zip',
+      'call_logger_0.24.0.zip',
     );
     expect(await File(zipPath).exists(), isTrue);
 

@@ -15,6 +15,7 @@ void main() {
         'version': '1.2.3',
         'date': '2026-06-27',
         'added': ['Νέο feature'],
+        'improvements': ['Μικροβελτίωση'],
         'changed': ['Αλλαγή'],
         'fixed': ['Διόρθωση'],
       });
@@ -22,6 +23,7 @@ void main() {
       expect(entry.version, '1.2.3');
       expect(entry.date, '2026-06-27');
       expect(entry.added, ['Νέο feature']);
+      expect(entry.improvements, ['Μικροβελτίωση']);
       expect(entry.changed, ['Αλλαγή']);
       expect(entry.fixed, ['Διόρθωση']);
     });
@@ -33,6 +35,7 @@ void main() {
       });
 
       expect(entry.added, isEmpty);
+      expect(entry.improvements, isEmpty);
       expect(entry.changed, isEmpty);
       expect(entry.fixed, isEmpty);
       expect(entry.hasContent, isFalse);
@@ -46,6 +49,20 @@ void main() {
       });
 
       expect(entry.isUnreleased, isTrue);
+      expect(entry.hasContent, isTrue);
+    });
+
+    test('parses improvements and hasContent when only improvements', () {
+      final entry = ChangelogEntry.fromJson({
+        'version': 'Unreleased',
+        'date': '',
+        'improvements': ['Μικρή βελτίωση UI'],
+      });
+
+      expect(entry.improvements, ['Μικρή βελτίωση UI']);
+      expect(entry.added, isEmpty);
+      expect(entry.changed, isEmpty);
+      expect(entry.fixed, isEmpty);
       expect(entry.hasContent, isTrue);
     });
   });

@@ -150,23 +150,6 @@ void main() {
     );
   });
 
-  testWidgets('bump chips show dynamic next-version tooltips', (tester) async {
-    await pumpCard(tester, currentVersion: '0.26.7');
-
-    expect(
-      find.byTooltip(
-        'Μικρή αναβάθμιση για διορθώσεις σφαλμάτων — π.χ. 0.26.7 → 0.26.8',
-      ),
-      findsOneWidget,
-    );
-    expect(
-      find.byTooltip(
-        'Μεγαλύτερη αναβάθμιση για νέες δυνατότητες — π.χ. 0.26.7 → 0.27.0',
-      ),
-      findsOneWidget,
-    );
-  });
-
   testWidgets('localOnly warning visible only for localOnly', (tester) async {
     await pumpCard(
       tester,
@@ -264,6 +247,7 @@ void main() {
               nextBuild: 32,
               unreleasedEntryCount: 1,
               hasUnreleasedEntries: true,
+              bumpKind: VersionBumpKind.patch,
             ),
           );
         },
@@ -280,6 +264,10 @@ void main() {
 
       expect(find.byKey(const Key('release_confirm_dialog')), findsOneWidget);
       expect(find.textContaining('0.23.1+31 → 0.23.2+32'), findsOneWidget);
+      expect(
+        find.textContaining('Θα δημοσιευτεί ως patch → 0.23.2'),
+        findsOneWidget,
+      );
       expect(publishCalls, 0);
 
       await tester.tap(find.byKey(const Key('release_confirm_cancel')));
@@ -308,6 +296,7 @@ void main() {
             nextBuild: 32,
             unreleasedEntryCount: 0,
             hasUnreleasedEntries: false,
+            bumpKind: VersionBumpKind.patch,
           ),
         );
       },
@@ -326,7 +315,8 @@ void main() {
       find.byKey(const Key('release_empty_unreleased_dialog')),
       findsOneWidget,
     );
-    expect(find.text('Δημοσίευση όπως είναι'), findsOneWidget);
+    expect(find.text('Δημοσίευση όπως είναι'), findsNothing);
+    expect(find.byKey(const Key('release_empty_publish_anyway')), findsNothing);
 
     await tester.tap(find.byKey(const Key('release_empty_cancel')));
     await tester.pump();
@@ -351,6 +341,7 @@ void main() {
             nextBuild: 32,
             unreleasedEntryCount: 0,
             hasUnreleasedEntries: false,
+            bumpKind: VersionBumpKind.patch,
           ),
         );
       },
@@ -393,6 +384,7 @@ void main() {
             nextBuild: 32,
             unreleasedEntryCount: 1,
             hasUnreleasedEntries: true,
+            bumpKind: VersionBumpKind.patch,
           ),
         );
       },
@@ -430,6 +422,7 @@ void main() {
             nextBuild: 32,
             unreleasedEntryCount: 1,
             hasUnreleasedEntries: true,
+            bumpKind: VersionBumpKind.patch,
           ),
           writeInstallerResult: () => gate.future,
         );
@@ -481,7 +474,26 @@ void main() {
   });
 
   testWidgets('copy CLI button writes command to clipboard', (tester) async {
-    await pumpCard(tester, initialFolder: tempDir.path);
+    await pumpCard(
+      tester,
+      initialFolder: tempDir.path,
+      serviceFactory: ({required updateFolderPath, onProgress}) {
+        return _TrackingPublisherService(
+          projectRoot: projectRoot.path,
+          updateFolderPath: updateFolderPath,
+          onPublish: () {},
+          preview: const ReleasePublishPreview(
+            currentVersion: '0.23.1',
+            currentBuild: 31,
+            nextVersion: '0.23.2',
+            nextBuild: 32,
+            unreleasedEntryCount: 1,
+            hasUnreleasedEntries: true,
+            bumpKind: VersionBumpKind.patch,
+          ),
+        );
+      },
+    );
     await tester.enterText(
       find.byKey(const Key('release_update_folder_field')),
       tempDir.path,
@@ -500,15 +512,32 @@ void main() {
     expect(find.textContaining(expected), findsOneWidget);
   });
 
-  testWidgets('copy CLI button uses minor bump when selected', (tester) async {
-    await pumpCard(tester, initialFolder: tempDir.path);
+  testWidgets('copy CLI button uses auto-detected minor bump from preview',
+      (tester) async {
+    await pumpCard(
+      tester,
+      initialFolder: tempDir.path,
+      serviceFactory: ({required updateFolderPath, onProgress}) {
+        return _TrackingPublisherService(
+          projectRoot: projectRoot.path,
+          updateFolderPath: updateFolderPath,
+          onPublish: () {},
+          preview: const ReleasePublishPreview(
+            currentVersion: '0.23.1',
+            currentBuild: 31,
+            nextVersion: '0.24.0',
+            nextBuild: 32,
+            unreleasedEntryCount: 1,
+            hasUnreleasedEntries: true,
+            bumpKind: VersionBumpKind.minor,
+          ),
+        );
+      },
+    );
     await tester.enterText(
       find.byKey(const Key('release_update_folder_field')),
       tempDir.path,
     );
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.text('Νέα έκδοση χαρακτηριστικών'));
     await tester.pumpAndSettle();
 
     await tester.tap(find.byKey(const Key('release_copy_cli_button')));
@@ -635,14 +664,10 @@ class _TrackingPublisherService extends ReleasePublisherService {
   final Future<ReleasePublishResult> Function()? writeInstallerResult;
 
   @override
-  Future<ReleasePublishPreview> preparePreview(VersionBumpKind kind) async =>
-      preview;
+  Future<ReleasePublishPreview> preparePreview() async => preview;
 
   @override
-  Future<ReleasePublishResult> publish({
-    required VersionBumpKind bumpKind,
-    bool proceedDespiteEmptyUnreleased = false,
-  }) async {
+  Future<ReleasePublishResult> publish() async {
     onPublish();
     return const ReleasePublishResult(status: ReleasePublishStatus.success);
   }

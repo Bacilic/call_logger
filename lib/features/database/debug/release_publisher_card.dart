@@ -47,7 +47,6 @@ class _ReleasePublisherCardState extends ConsumerState<ReleasePublisherCard> {
   final _folderController = TextEditingController();
   final _logController = TextEditingController();
   late final SearchDebouncer _networkClassifyDebouncer;
-  VersionBumpKind _bumpKind = VersionBumpKind.patch;
   bool _running = false;
   String? _statusMessage;
   bool _statusIsError = false;
@@ -269,7 +268,7 @@ class _ReleasePublisherCardState extends ConsumerState<ReleasePublisherCard> {
     await _validateAndPersistFolder(offerCreateIfMissing: true);
   }
 
-  Future<void> _publish({bool proceedDespiteEmptyUnreleased = false}) async {
+  Future<void> _publish() async {
     if (!_canPublish) return;
     final folder = _folderController.text.trim();
 
@@ -286,10 +285,7 @@ class _ReleasePublisherCardState extends ConsumerState<ReleasePublisherCard> {
 
     final service = _createService(folder);
 
-    final result = await service.publish(
-      bumpKind: _bumpKind,
-      proceedDespiteEmptyUnreleased: proceedDespiteEmptyUnreleased,
-    );
+    final result = await service.publish();
 
     if (!mounted) {
       _stopActionTimer();
@@ -408,6 +404,11 @@ class _ReleasePublisherCardState extends ConsumerState<ReleasePublisherCard> {
     );
   }
 
+  static String _bumpKindLabel(VersionBumpKind kind) => switch (kind) {
+        VersionBumpKind.patch => 'patch',
+        VersionBumpKind.minor => 'minor',
+      };
+
   Future<void> _onPublishPressed() async {
     if (!_canPublish) return;
     final folder = _folderController.text.trim();
@@ -415,7 +416,7 @@ class _ReleasePublisherCardState extends ConsumerState<ReleasePublisherCard> {
 
     late final ReleasePublishPreview preview;
     try {
-      preview = await service.preparePreview(_bumpKind);
+      preview = await service.preparePreview();
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -445,23 +446,17 @@ class _ReleasePublisherCardState extends ConsumerState<ReleasePublisherCard> {
               onPressed: () => Navigator.of(ctx).pop('installer'),
               child: const Text('Μόνο εγκαταστάτης'),
             ),
-            FilledButton(
-              key: const Key('release_empty_publish_anyway'),
-              onPressed: () => Navigator.of(ctx).pop('publish'),
-              child: const Text('Δημοσίευση όπως είναι'),
-            ),
           ],
         ),
       );
       if (!mounted) return;
-      if (choice == 'publish') {
-        await _publish(proceedDespiteEmptyUnreleased: true);
-      } else if (choice == 'installer') {
+      if (choice == 'installer') {
         await _writeInstallerOnly();
       }
       return;
     }
 
+    final bumpLabel = _bumpKindLabel(preview.bumpKind);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -470,7 +465,9 @@ class _ReleasePublisherCardState extends ConsumerState<ReleasePublisherCard> {
         content: Text(
           'Δημοσίευση: ${preview.currentVersion}+${preview.currentBuild} → '
           '${preview.nextVersion}+${preview.nextBuild}, με '
-          '${preview.unreleasedEntryCount} καταχωρήσεις ιστορικού. Συνέχεια;',
+          '${preview.unreleasedEntryCount} καταχωρήσεις ιστορικού.\n\n'
+          'Θα δημοσιευτεί ως $bumpLabel → ${preview.nextVersion}\n\n'
+          'Συνέχεια;',
         ),
         actions: [
           TextButton(
@@ -488,15 +485,27 @@ class _ReleasePublisherCardState extends ConsumerState<ReleasePublisherCard> {
       ),
     );
     if (confirmed == true && mounted) {
-      await _publish(proceedDespiteEmptyUnreleased: false);
+      await _publish();
     }
   }
 
   Future<void> _copyCliCommand() async {
     if (!_canPublish) return;
     final folder = _folderController.text.trim();
+    final service = _createService(folder);
+    late final ReleasePublishPreview preview;
+    try {
+      preview = await service.preparePreview();
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _statusIsError = true;
+        _statusMessage = 'Αποτυχία προεπισκόπησης: $e';
+      });
+      return;
+    }
     final template = await SettingsService().getPublishCliCommandTemplate();
-    final command = buildPublishCliCommand(template, _bumpKind, folder);
+    final command = buildPublishCliCommand(template, preview.bumpKind, folder);
     await Clipboard.setData(ClipboardData(text: command));
     if (!mounted) return;
     setState(() {
@@ -523,16 +532,8 @@ class _ReleasePublisherCardState extends ConsumerState<ReleasePublisherCard> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    final currentVersion =
-        ref.watch(appVersionProvider).asData?.value ?? '…';
-    final patchNext = ReleasePublisherService.nextVersion(
-      currentVersion,
-      VersionBumpKind.patch,
-    );
-    final minorNext = ReleasePublisherService.nextVersion(
-      currentVersion,
-      VersionBumpKind.minor,
-    );
+    // Διατηρείται για συμβατότητα με overrides τεστ (appVersionProvider).
+    ref.watch(appVersionProvider);
 
     final publishButton = FilledButton.icon(
       key: const Key('release_publish_button'),
@@ -576,7 +577,9 @@ class _ReleasePublisherCardState extends ConsumerState<ReleasePublisherCard> {
               'Σφραγίζει το Ιστορικό Έκδοσης, αυξάνει την έκδοση, '
               'χτίζει τη Κυκλοφορία της εφαρμογής και δημοσιεύει στο '
               'κοινόχρηστο φάκελο ενημερώσεων '
-              '(μαζί με τον εγκαταστάτη: install_call_logger.bat).',
+              '(μαζί με τον εγκαταστάτη: install_call_logger.bat). '
+              'Ο τύπος αύξησης (patch/minor) προκύπτει αυτόματα από το '
+              'περιεχόμενο του Unreleased.',
               style: theme.textTheme.bodySmall?.copyWith(
                 color: scheme.onSurfaceVariant,
               ),
@@ -645,33 +648,6 @@ class _ReleasePublisherCardState extends ConsumerState<ReleasePublisherCard> {
               runSpacing: 8,
               crossAxisAlignment: WrapCrossAlignment.center,
               children: [
-                Text('Αύξηση (έκδοσης):', style: theme.textTheme.bodyMedium),
-                SegmentedButton<VersionBumpKind>(
-                  segments: [
-                    ButtonSegment(
-                      value: VersionBumpKind.patch,
-                      label: Tooltip(
-                        message:
-                            'Μικρή αναβάθμιση για διορθώσεις σφαλμάτων — '
-                            'π.χ. $currentVersion → $patchNext',
-                        child: const Text('Διόρθωση'),
-                      ),
-                    ),
-                    ButtonSegment(
-                      value: VersionBumpKind.minor,
-                      label: Tooltip(
-                        message:
-                            'Μεγαλύτερη αναβάθμιση για νέες δυνατότητες — '
-                            'π.χ. $currentVersion → $minorNext',
-                        child: const Text('Νέα έκδοση χαρακτηριστικών'),
-                      ),
-                    ),
-                  ],
-                  selected: {_bumpKind},
-                  onSelectionChanged: _running
-                      ? null
-                      : (s) => setState(() => _bumpKind = s.first),
-                ),
                 if (!_canPublish && !_running)
                   Tooltip(
                     message: 'Ορίστε έγκυρο εγγράψιμο φάκελο ενημερώσεων',

@@ -147,7 +147,7 @@ Future<int> runPublishCli(
 
   late final ReleasePublishPreview preview;
   try {
-    preview = await service.preparePreview(args.bumpKind);
+    preview = await service.preparePreview();
   } catch (e) {
     log('Αποτυχία προεπισκόπησης: $e');
     return 1;
@@ -155,19 +155,17 @@ Future<int> runPublishCli(
 
   if (!preview.hasUnreleasedEntries) {
     if (args.allowEmpty) {
-      return _mapPublishResult(
-        await service.publish(
-          bumpKind: args.bumpKind,
-          proceedDespiteEmptyUnreleased: true,
-        ),
-        log,
+      log(
+        'Η ενότητα Unreleased στο changelog είναι κενή. '
+        'Η δημοσίευση χωρίς καταχωρήσεις δεν επιτρέπεται πλέον '
+        '(το --allow-empty αγνοείται για αύξηση έκδοσης).',
       );
+      return 2;
     }
     if (!interactive) {
       log(
         'Η ενότητα Unreleased στο changelog είναι κενή. '
-        'Τρέξτε από διαδραστικό τερματικό, προσθέστε καταχωρήσεις '
-        'ή χρησιμοποιήστε --allow-empty.',
+        'Τρέξτε από διαδραστικό τερματικό ή προσθέστε καταχωρήσεις.',
       );
       return 2;
     }
@@ -180,23 +178,22 @@ Future<int> runPublishCli(
       case EmptyUnreleasedChoice.installerOnly:
         return _mapPublishResult(await service.writeInstallerOnly(), log);
       case EmptyUnreleasedChoice.publishAnyway:
-        return _mapPublishResult(
-          await service.publish(
-            bumpKind: args.bumpKind,
-            proceedDespiteEmptyUnreleased: true,
-          ),
-          log,
+        log(
+          'Η δημοσίευση χωρίς καταχωρήσεις Unreleased δεν επιτρέπεται.',
         );
+        return 2;
     }
   }
 
-  return _mapPublishResult(
-    await service.publish(
-      bumpKind: args.bumpKind,
-      proceedDespiteEmptyUnreleased: false,
-    ),
-    log,
-  );
+  if (args.bumpKind != preview.bumpKind) {
+    log(
+      'Σημείωση: το --bump=${args.bumpKind.name} αγνοείται· '
+      'από το Unreleased προκύπτει αυτόματα ${preview.bumpKind.name} '
+      '→ ${preview.nextVersion}.',
+    );
+  }
+
+  return _mapPublishResult(await service.publish(), log);
 }
 
 int _mapPublishResult(
@@ -227,14 +224,11 @@ EmptyUnreleasedChoice _defaultPromptEmptyUnreleased({
   writeLine('Το ιστορικό (Unreleased) είναι κενό.');
   writeLine('1) Ακύρωση');
   writeLine('2) Μόνο εγκαταστάτης');
-  writeLine('3) Δημοσίευση όπως είναι');
-  writeLine('Επιλογή [1-3]:');
+  writeLine('Επιλογή [1-2]:');
   final raw = stdin.readLineSync()?.trim() ?? '';
   switch (raw) {
     case '2':
       return EmptyUnreleasedChoice.installerOnly;
-    case '3':
-      return EmptyUnreleasedChoice.publishAnyway;
     case '1':
     default:
       return EmptyUnreleasedChoice.cancel;
