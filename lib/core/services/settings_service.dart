@@ -8,6 +8,7 @@ import '../config/app_config.dart';
 import '../config/audit_retention_config.dart';
 import '../models/calls_screen_cards_visibility.dart';
 import '../models/window_placement_mode.dart';
+import '../../features/database/debug/publish_cli.dart';
 
 part 'settings_service_window_ui.dart';
 part 'settings_service_analytics_filters.dart';

@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -55,7 +55,7 @@ class _UpdateStartupPromptListenerState
     if (_updateStartupPromptShownThisSession) return;
 
     _updateStartupPromptShownThisSession = true;
-    await showUpdateAvailableDialog(context, ref, result);
+    await showUpdateAvailableDialog(context, result);
   }
 
   @override

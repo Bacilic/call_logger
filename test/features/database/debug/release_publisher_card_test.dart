@@ -1,11 +1,14 @@
-import 'dart:async';
+﻿import 'dart:async';
 import 'dart:io';
 
 import 'package:call_logger/core/about/providers/app_version_provider.dart';
+import 'package:call_logger/core/services/settings_service.dart';
 import 'package:call_logger/core/updates/network_folder_classifier.dart';
+import 'package:call_logger/features/database/debug/publish_cli.dart';
 import 'package:call_logger/features/database/debug/release_publisher_card.dart';
 import 'package:call_logger/features/database/debug/release_publisher_service.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
@@ -16,13 +19,36 @@ void main() {
 
   late Directory tempDir;
   late Directory projectRoot;
+  String? clipboardText;
 
   NetworkFolderClassifier fixedKind(NetworkFolderKind kind) {
     return _FixedKindClassifier(kind);
   }
 
+  setUpAll(() {
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(SystemChannels.platform, (call) async {
+      switch (call.method) {
+        case 'Clipboard.setData':
+          final args = call.arguments as Map<Object?, Object?>;
+          clipboardText = args['text'] as String?;
+          return null;
+        case 'Clipboard.getData':
+          if (clipboardText == null) return null;
+          return <String, Object?>{'text': clipboardText};
+      }
+      return null;
+    });
+  });
+
+  tearDownAll(() {
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(SystemChannels.platform, null);
+  });
+
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
+    clipboardText = null;
     tempDir = await Directory.systemTemp.createTemp('release_card_');
     projectRoot = Directory(p.join(tempDir.path, 'project'));
     await Directory(p.join(projectRoot.path, 'assets')).create(recursive: true);
@@ -428,6 +454,22 @@ void main() {
           .onPressed,
       isNull,
     );
+    expect(
+      tester
+          .widget<IconButton>(
+            find.byKey(const Key('release_copy_cli_button')),
+          )
+          .onPressed,
+      isNull,
+    );
+    expect(
+      tester
+          .widget<IconButton>(
+            find.byKey(const Key('release_cli_settings_button')),
+          )
+          .onPressed,
+      isNull,
+    );
     expect(find.byKey(const Key('release_elapsed_timer')), findsOneWidget);
     expect(find.textContaining('Χρόνος:'), findsOneWidget);
 
@@ -436,6 +478,126 @@ void main() {
     );
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
+  });
+
+  testWidgets('copy CLI button writes command to clipboard', (tester) async {
+    await pumpCard(tester, initialFolder: tempDir.path);
+    await tester.enterText(
+      find.byKey(const Key('release_update_folder_field')),
+      tempDir.path,
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('release_copy_cli_button')));
+    await tester.pumpAndSettle();
+
+    final expected = buildPublishCliCommand(
+      kDefaultPublishCliCommandTemplate,
+      VersionBumpKind.patch,
+      tempDir.path,
+    );
+    expect(clipboardText, expected);
+    expect(find.textContaining(expected), findsOneWidget);
+  });
+
+  testWidgets('copy CLI button uses minor bump when selected', (tester) async {
+    await pumpCard(tester, initialFolder: tempDir.path);
+    await tester.enterText(
+      find.byKey(const Key('release_update_folder_field')),
+      tempDir.path,
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Νέα έκδοση χαρακτηριστικών'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('release_copy_cli_button')));
+    await tester.pumpAndSettle();
+
+    expect(
+      clipboardText,
+      buildPublishCliCommand(
+        kDefaultPublishCliCommandTemplate,
+        VersionBumpKind.minor,
+        tempDir.path,
+      ),
+    );
+  });
+
+  testWidgets('CLI settings dialog saves and restores default template',
+      (tester) async {
+    await pumpCard(tester, initialFolder: tempDir.path);
+    await tester.enterText(
+      find.byKey(const Key('release_update_folder_field')),
+      tempDir.path,
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('release_cli_settings_button')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('release_cli_settings_dialog')), findsOneWidget);
+
+    const custom =
+        'dart run tool/publish.dart --bump={bump} --folder="{folder}" --allow-empty';
+    await tester.enterText(
+      find.byKey(const Key('release_cli_template_field')),
+      custom,
+    );
+    await tester.tap(find.byKey(const Key('release_cli_save_button')));
+    await tester.pumpAndSettle();
+
+    expect(await SettingsService().getPublishCliCommandTemplate(), custom);
+
+    await tester.tap(find.byKey(const Key('release_cli_settings_button')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('release_cli_reset_default_button')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('release_cli_save_button')));
+    await tester.pumpAndSettle();
+
+    expect(
+      await SettingsService().getPublishCliCommandTemplate(),
+      kDefaultPublishCliCommandTemplate,
+    );
+  });
+
+  testWidgets('CLI settings dialog shows parameter help including allow-empty',
+      (tester) async {
+    await pumpCard(tester, initialFolder: tempDir.path);
+    await tester.enterText(
+      find.byKey(const Key('release_update_folder_field')),
+      tempDir.path,
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('release_cli_settings_button')));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('--allow-empty'), findsOneWidget);
+    expect(find.textContaining('{bump}'), findsWidgets);
+    expect(find.textContaining('{folder}'), findsWidgets);
+  });
+
+  testWidgets('copy CLI disabled when folder invalid', (tester) async {
+    await pumpCard(tester);
+
+    expect(
+      tester
+          .widget<IconButton>(
+            find.byKey(const Key('release_copy_cli_button')),
+          )
+          .onPressed,
+      isNull,
+    );
+    expect(
+      tester
+          .widget<IconButton>(
+            find.byKey(const Key('release_cli_settings_button')),
+          )
+          .onPressed,
+      isNotNull,
+    );
   });
 }
 

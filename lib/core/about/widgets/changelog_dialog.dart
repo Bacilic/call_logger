@@ -1,4 +1,4 @@
-import 'dart:math' as math;
+﻿import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -119,7 +119,7 @@ class ChangelogDialog extends ConsumerWidget {
                           WidgetsBinding.instance.addPostFrameCallback((_) {
                             final ctx = rootNav.context;
                             if (!ctx.mounted) return;
-                            launchPendingUpdateNow(ctx, ref);
+                            launchPendingUpdateNow(ctx);
                           });
                         },
                         label: const Text('Επανεκκίνηση'),
@@ -136,7 +136,7 @@ class ChangelogDialog extends ConsumerWidget {
                           WidgetsBinding.instance.addPostFrameCallback((_) {
                             final ctx = rootNav.context;
                             if (!ctx.mounted) return;
-                            runUpdatePrepareFlow(ctx, ref, manifest);
+                            runUpdatePrepareFlow(ctx, manifest);
                           });
                         },
                         child: const Text('Ενημέρωση'),

@@ -1,4 +1,4 @@
-import 'dart:io';
+﻿import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -7,6 +7,7 @@ import '../config/app_config.dart';
 import '../services/settings_service.dart';
 import 'build_environment.dart';
 import 'update_check_result.dart';
+import 'update_cmd_launcher.dart';
 import 'update_installer_service.dart';
 import 'update_manifest.dart';
 import 'update_service.dart';
@@ -68,12 +69,12 @@ UpdateInstallerService buildDefaultUpdateInstallerService() {
     resolveUpdateFolder: config.resolveUpdateFolderPath,
     isDevelopmentBuild: () => BuildEnvironment.isDevelopmentBuild(),
     launchDetached: (exe, args, {workingDirectory}) async {
-      await Process.start(
-        exe,
-        args,
+      // exe = updater.cmd. Εκκίνηση μέσω cmd.exe ώστε διαδρομές με κενά
+      // (π.χ. Documents\Call Logger) να μην σπάσουν τη γραμμή εντολών.
+      await UpdateCmdLauncher.launchDetached(
+        scriptPath: exe,
+        scriptArgs: args,
         workingDirectory: workingDirectory,
-        mode: ProcessStartMode.detached,
-        runInShell: true,
       );
     },
     terminateApp: () async {
@@ -93,17 +94,7 @@ Future<UpdateInstallResult> prepareAvailableUpdate(
   required UpdateManifest manifest,
   void Function(String message)? onProgress,
 }) {
-  final service = UpdateInstallerService(
-    installDirectory: base.installDirectory,
-    resolveUpdateFolder: base.resolveUpdateFolder,
-    launchDetached: base.launchDetached,
-    terminateApp: base.terminateApp,
-    currentPid: base.currentPid,
-    clock: base.clock,
-    isDevelopmentBuild: base.isDevelopmentBuild,
-    onProgress: onProgress,
-  );
-  return service.prepareUpdate(manifest);
+  return base.prepareUpdate(manifest, onProgressOverride: onProgress);
 }
 
 /// Εφαρμογή εκκρεμούς ενημέρωσης στην εκκίνηση: αν υπάρχει έτοιμο πακέτο (και

@@ -1,4 +1,4 @@
-part of 'settings_service.dart';
+﻿part of 'settings_service.dart';
 
 /// Κατάλογοι, λεξικό, audit retention και timeout ανοίγματος βάσης.
 mixin SettingsServiceCatalogsMixin {
@@ -16,6 +16,8 @@ mixin SettingsServiceCatalogsMixin {
   static const String _keyShutdownTraceRetentionCount =
       'shutdown_trace_retention_count_v1';
   static const String _keyUpdateFolderPath = 'update_folder_path';
+  static const String _keyPublishCliCommandTemplate =
+      'publish_cli_command_template';
   static const String _keyShowUpdateOnStartup = 'show_update_on_startup';
 
   static const int defaultCrashLogRetentionCount = 14;
@@ -200,6 +202,32 @@ mixin SettingsServiceCatalogsMixin {
       await prefs.setString(
         SettingsService._prefKey(_keyUpdateFolderPath),
         path.trim(),
+      );
+    }
+  }
+
+  /// Πρότυπο εντολής δημοσίευσης μέσω τερματικού.
+  /// Κενό/null = [kDefaultPublishCliCommandTemplate].
+  Future<String> getPublishCliCommandTemplate() async {
+    final prefs = await SharedPreferences.getInstance();
+    final s = prefs.getString(
+      SettingsService._prefKey(_keyPublishCliCommandTemplate),
+    );
+    if (s == null) return kDefaultPublishCliCommandTemplate;
+    final t = s.trim();
+    return t.isEmpty ? kDefaultPublishCliCommandTemplate : t;
+  }
+
+  Future<void> setPublishCliCommandTemplate(String? template) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (template == null || template.trim().isEmpty) {
+      await prefs.remove(
+        SettingsService._prefKey(_keyPublishCliCommandTemplate),
+      );
+    } else {
+      await prefs.setString(
+        SettingsService._prefKey(_keyPublishCliCommandTemplate),
+        template.trim(),
       );
     }
   }

@@ -1,4 +1,4 @@
-import 'dart:io';
+﻿import 'dart:io';
 
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
@@ -1876,6 +1876,7 @@ class OldEquipmentRepository {
   Future<_SearchCacheEntry> _buildCache(String databasePath) async {
     await _ensureNetworkColumns(databasePath);
     await _ensureSearchIndexTable(databasePath);
+    await _ensureLampIntegrityArtifacts(databasePath);
     await _rebuildSearchIndex(databasePath);
     final db = await _databaseProvider.open(databasePath);
     final rows = await _loadSourceRows(db);
@@ -1931,6 +1932,35 @@ class OldEquipmentRepository {
       );
     } catch (_) {
       // Αν η βάση είναι μόνο-ανάγνωση, συνεχίζουμε με in-memory cache χωρίς persisted index.
+    }
+  }
+
+  /// Idempotent εφαρμογή indexes + triggers ακεραιότητας σε υπάρχουσα βάση ανάγνωσης.
+  /// Σε read-only βάση αποτυγχάνει αθόρυβα. Κάθε statement τρέχει σε δικό του
+  /// try/catch ώστε αποτυχία ενός (π.χ. UNIQUE με υπάρχοντα διπλότυπα) να μην
+  /// εμποδίζει τα υπόλοιπα artifacts.
+  Future<void> _ensureLampIntegrityArtifacts(String databasePath) async {
+    try {
+      final db = await _databaseProvider.open(
+        databasePath,
+        mode: LampDatabaseMode.write,
+      );
+      for (final statement in oldDatabaseIndexStatements) {
+        try {
+          await db.execute(statement);
+        } catch (_) {
+          // Ένα αποτυχημένο index δεν μπλοκάρει τα υπόλοιπα.
+        }
+      }
+      for (final statement in oldDatabaseIntegrityStatements) {
+        try {
+          await db.execute(statement);
+        } catch (_) {
+          // Ένα αποτυχημένο integrity statement δεν μπλοκάρει τα υπόλοιπα.
+        }
+      }
+    } catch (_) {
+      // Προαιρετική αναβάθμιση σχήματος — η αναζήτηση λειτουργεί και χωρίς αυτήν.
     }
   }
 

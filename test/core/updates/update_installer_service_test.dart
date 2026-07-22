@@ -1,4 +1,4 @@
-import 'dart:io';
+﻿import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:archive/archive.dart';
@@ -179,7 +179,7 @@ void main() {
     expect(launched.first.first.toLowerCase(), contains('updater.cmd'));
     expect(launched.first, contains('4242')); // PID
     expect(terminations, ['terminate']);
-    // Ο δείκτης διαγράφεται πριν την εκκίνηση (χωρίς βρόχο).
+    // Ο δείκτης διαγράφεται μετά την επιτυχή εκκίνηση του updater.
     expect(
       await File(p.join(installDir.path, '.update_pending.json')).exists(),
       isFalse,

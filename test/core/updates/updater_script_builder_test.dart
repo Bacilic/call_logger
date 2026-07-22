@@ -4,12 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   group('UpdaterScriptBuilder', () {
     test('generated cmd waits for PID, backs up, overlays without MIR/PURGE, rolls back, restarts', () {
-      final script = UpdaterScriptBuilder.build(
-        pidPlaceholder: '%~1',
-        installDirPlaceholder: '%~2',
-        stagingDirPlaceholder: '%~3',
-        backupDirPlaceholder: '%~4',
-      );
+      final script = UpdaterScriptBuilder.build();
 
       final upper = script.toUpperCase();
       final robocopyLines = script
@@ -27,10 +22,22 @@ void main() {
         reason: 'Ο updater.cmd πρέπει να είναι ASCII-only',
       );
       expect(script.toLowerCase(), contains('tasklist'));
+
+      // ΜΟΝΟ το PID περνά ως όρισμα (%1). Οι διαδρομές υπολογίζονται από το
+      // %~dp0 — ΔΕΝ πρέπει να υπάρχουν %~2/%~3/%~4 (αυτό ήταν το σφάλμα που
+      // έσπαγε τη γραμμή εντολών σε φακέλους με κενά).
       expect(script, contains('%~1'));
-      expect(script, contains('%~2'));
-      expect(script, contains('%~3'));
-      expect(script, contains('%~4'));
+      expect(script, isNot(contains('%~2')));
+      expect(script, isNot(contains('%~3')));
+      expect(script, isNot(contains('%~4')));
+
+      // Οι διαδρομές πηγάζουν από τον φάκελο του ίδιου του script (%~dp0).
+      expect(script, contains('%~dp0'));
+      expect(script.toLowerCase(), contains('set "staging_dir=%~dp0app"'));
+      expect(
+        script.toLowerCase(),
+        contains('for %%i in ("%~dp0..") do set "install_dir=%%~fi"'),
+      );
 
       // Backup πριν το overlay: το πρώτο robocopy πηγάζει από INSTALL, το overlay από STAGING.
       expect(script.toLowerCase(), contains('robocopy "%install_dir%" "%backup_dir%"'));
@@ -52,6 +59,9 @@ void main() {
       expect(upper, contains('ROLLBACK'));
       expect(script.toLowerCase(), contains('call_logger.exe'));
       expect(script.toLowerCase(), contains('errorlevel'));
+      expect(script, contains('updater.log'));
+      expect(script, contains('FAIL'));
+      expect(script, contains(':log'));
     });
   });
 }

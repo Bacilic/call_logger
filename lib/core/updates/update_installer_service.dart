@@ -1,4 +1,4 @@
-import 'dart:convert';
+﻿import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -173,7 +173,16 @@ class UpdateInstallerService {
 
   /// Προετοιμασία ενημέρωσης: staging, επαλήθευση, δείκτης εκκρεμότητας.
   /// ΔΕΝ κλείνει την εφαρμογή.
-  Future<UpdateInstallResult> prepareUpdate(UpdateManifest manifest) async {
+  ///
+  /// [onProgressOverride] υπερισχύει του [onProgress] του στιγμιοτύπου
+  /// (π.χ. ενημέρωση διαλόγου προόδου χωρίς ανακατασκευή υπηρεσίας).
+  Future<UpdateInstallResult> prepareUpdate(
+    UpdateManifest manifest, {
+    void Function(String message)? onProgressOverride,
+  }) async {
+    final report = onProgressOverride ?? onProgress;
+    void progress(String message) => report?.call(message);
+
     if (isDevelopmentBuild()) {
       return const UpdateInstallResult(
         status: UpdateInstallStatus.failure,
@@ -212,11 +221,11 @@ class UpdateInstallerService {
       }
       await stagingRoot.create(recursive: true);
 
-      _progress('Αντιγραφή πακέτου ενημέρωσης…');
+      progress('Αντιγραφή πακέτου ενημέρωσης…');
       final localZip = File(p.join(stagingRoot.path, manifest.zipFile));
       await sourceZip.copy(localZip.path);
 
-      _progress('Επαλήθευση SHA-256…');
+      progress('Επαλήθευση SHA-256…');
       final bytes = await localZip.readAsBytes();
       final digest = sha256.convert(bytes).toString();
       if (digest.toLowerCase() != manifest.sha256.toLowerCase()) {
@@ -230,7 +239,7 @@ class UpdateInstallerService {
         );
       }
 
-      _progress('Έλεγχος ασφάλειας πακέτου…');
+      progress('Έλεγχος ασφάλειας πακέτου…');
       final archive = ZipDecoder().decodeBytes(bytes);
       try {
         assertZipIsSafe(archive);
@@ -243,7 +252,7 @@ class UpdateInstallerService {
         );
       }
 
-      _progress('Αποσυμπίεση…');
+      progress('Αποσυμπίεση…');
       final stagingApp = Directory(p.join(stagingRoot.path, 'app'));
       await stagingApp.create(recursive: true);
       await _extractArchive(archive, stagingApp.path);
@@ -255,7 +264,7 @@ class UpdateInstallerService {
         flush: true,
       );
 
-      _progress('Καταγραφή εκκρεμότητας…');
+      progress('Καταγραφή εκκρεμότητας…');
       await _pendingMarkerFile.writeAsString(
         jsonEncode({
           'stagingApp': stagingApp.path,
@@ -287,7 +296,9 @@ class UpdateInstallerService {
   }
 
   /// Εκκινεί τον updater για την εκκρεμή ενημέρωση και κλείνει την εφαρμογή.
-  /// Ο δείκτης διαγράφεται ΠΡΙΝ την εκκίνηση (at-most-once, χωρίς βρόχο).
+  ///
+  /// Ο δείκτης διαγράφεται **μετά** την επιτυχή εκκίνηση του script (όχι πριν),
+  /// ώστε αποτυχία εκκίνησης να αφήνει δυνατότητα επανάληψης στην επόμενη φορά.
   Future<UpdateInstallResult> launchPendingUpdate() async {
     final info = await readPendingUpdate();
     if (info == null) {
@@ -298,23 +309,32 @@ class UpdateInstallerService {
       );
     }
 
+    // Αν λείπει το ίδιο το script, ΜΗΝ διαγράψεις τον δείκτη: κράτα την
+    // εκκρεμότητα για επανάληψη (το detached Process.start «πετυχαίνει» ακόμη
+    // κι αν το αρχείο λείπει, οπότε ο έλεγχος πρέπει να γίνει εδώ ρητά).
+    if (!await File(info.scriptPath).exists()) {
+      return UpdateInstallResult(
+        status: UpdateInstallStatus.failure,
+        failedStep: 'εκκίνηση εγκαταστάτη',
+        message: 'Δεν βρέθηκε ο updater: ${info.scriptPath}',
+      );
+    }
+
     try {
-      // Διαγραφή δείκτη πριν την εκκίνηση: αν ο updater αποτύχει, δεν
-      // επαναλαμβάνεται αυτόματα σε βρόχο στην επόμενη εκκίνηση.
+      // Το script δέχεται ΜΟΝΟ το PID· τις διαδρομές τις υπολογίζει από το
+      // %~dp0 (βλ. UpdateCmdLauncher / UpdaterScriptBuilder). Έτσι διαδρομές
+      // με κενά (Documents\Call Logger) δεν σπάνε τη γραμμή εντολών.
+      await launchDetached(
+        info.scriptPath,
+        ['${currentPid()}'],
+        workingDirectory: installDirectory,
+      );
+
+      // At-most-once αφού το script ξεκίνησε: αν αποτύχει το overlay, δεν
+      // επαναλαμβάνεται αυτόματα σε βρόχο (μένει updater.log για διάγνωση).
       if (await _pendingMarkerFile.exists()) {
         await _pendingMarkerFile.delete();
       }
-
-      await launchDetached(
-        info.scriptPath,
-        [
-          '${currentPid()}',
-          installDirectory,
-          info.stagingAppPath,
-          info.backupPath,
-        ],
-        workingDirectory: installDirectory,
-      );
     } catch (e) {
       return UpdateInstallResult(
         status: UpdateInstallStatus.failure,
@@ -330,8 +350,6 @@ class UpdateInstallerService {
           'Η ενημέρωση ξεκίνησε. Η εφαρμογή θα κλείσει και θα ανοίξει ξανά.',
     );
   }
-
-  void _progress(String message) => onProgress?.call(message);
 
   static Future<void> _extractArchive(Archive archive, String destDir) async {
     for (final entry in archive) {

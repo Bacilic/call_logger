@@ -1,9 +1,10 @@
-import 'dart:async';
+﻿import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/about/providers/app_version_provider.dart';
@@ -13,6 +14,7 @@ import '../../../core/utils/file_picker_initial_directory.dart';
 import '../../../core/utils/file_picker_session.dart';
 import '../../../core/utils/search_debouncer.dart';
 import '../utils/backup_destination_folder_validator.dart';
+import 'publish_cli.dart';
 import 'release_publisher_service.dart';
 
 /// Κάρτα «Δημοσίευση έκδοσης» — μόνο στα Σενάρια σφαλμάτων (debug).
@@ -490,6 +492,33 @@ class _ReleasePublisherCardState extends ConsumerState<ReleasePublisherCard> {
     }
   }
 
+  Future<void> _copyCliCommand() async {
+    if (!_canPublish) return;
+    final folder = _folderController.text.trim();
+    final template = await SettingsService().getPublishCliCommandTemplate();
+    final command = buildPublishCliCommand(template, _bumpKind, folder);
+    await Clipboard.setData(ClipboardData(text: command));
+    if (!mounted) return;
+    setState(() {
+      _statusIsError = false;
+      _statusMessage = 'Η εντολή αντιγράφηκε στο πρόχειρο:\n$command';
+    });
+  }
+
+  Future<void> _openCliSettingsDialog() async {
+    final initial = await SettingsService().getPublishCliCommandTemplate();
+    if (!mounted) return;
+    final saved = await showDialog<String>(
+      context: context,
+      builder: (ctx) => _PublishCliSettingsDialog(initialTemplate: initial),
+    );
+    if (saved == null || !mounted) return;
+    final text = saved.trim();
+    await SettingsService().setPublishCliCommandTemplate(
+      text.isEmpty ? null : text,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -659,6 +688,27 @@ class _ReleasePublisherCardState extends ConsumerState<ReleasePublisherCard> {
                   )
                 else
                   installerButton,
+                IconButton(
+                  key: const Key('release_copy_cli_button'),
+                  tooltip:
+                      'Λόγω περιορισμών ασφαλείας στο εργασιακό περιβάλλον '
+                      '(antivirus), η μεταγλώττιση από την εφαρμογή ενδέχεται '
+                      'να μπλοκάρεται. Αντιγράφει την εντολή δημοσίευσης για '
+                      'εκτέλεση από τερματικό (π.χ. Cursor), όπου το build '
+                      'ολοκληρώνεται κανονικά με το ίδιο ακριβώς αποτέλεσμα.',
+                  onPressed: _canPublish
+                      ? () => unawaited(_copyCliCommand())
+                      : null,
+                  icon: const Icon(Icons.code),
+                ),
+                IconButton(
+                  key: const Key('release_cli_settings_button'),
+                  tooltip: 'Ρυθμίσεις εντολής τερματικού',
+                  onPressed: _running
+                      ? null
+                      : () => unawaited(_openCliSettingsDialog()),
+                  icon: const Icon(Icons.settings_outlined),
+                ),
                 if (_running || _actionStopwatch.elapsedMilliseconds > 0)
                   Text(
                     key: const Key('release_elapsed_timer'),
@@ -707,6 +757,90 @@ class _ReleasePublisherCardState extends ConsumerState<ReleasePublisherCard> {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Διάλογος επεξεργασίας προτύπου εντολής δημοσίευσης μέσω τερματικού.
+class _PublishCliSettingsDialog extends StatefulWidget {
+  const _PublishCliSettingsDialog({required this.initialTemplate});
+
+  final String initialTemplate;
+
+  @override
+  State<_PublishCliSettingsDialog> createState() =>
+      _PublishCliSettingsDialogState();
+}
+
+class _PublishCliSettingsDialogState extends State<_PublishCliSettingsDialog> {
+  late final TextEditingController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.initialTemplate);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      key: const Key('release_cli_settings_dialog'),
+      title: const Text('Πρότυπο εντολής τερματικού'),
+      content: SizedBox(
+        width: 520,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                'Η εντολή χρησιμοποιεί τα placeholders {bump} '
+                '(patch ή minor) και {folder} (φάκελος ενημερώσεων).\n\n'
+                'Παράμετροι εντολής:\n'
+                '$kPublishCliParametersHelp',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                key: const Key('release_cli_template_field'),
+                controller: _controller,
+                maxLines: 4,
+                decoration: const InputDecoration(
+                  labelText: 'Πρότυπο εντολής',
+                  border: OutlineInputBorder(),
+                  alignLabelWithHint: true,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          key: const Key('release_cli_reset_default_button'),
+          onPressed: () {
+            setState(() {
+              _controller.text = kDefaultPublishCliCommandTemplate;
+            });
+          },
+          child: const Text('Επαναφορά προεπιλογής'),
+        ),
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Άκυρο'),
+        ),
+        FilledButton(
+          key: const Key('release_cli_save_button'),
+          onPressed: () => Navigator.of(context).pop(_controller.text),
+          child: const Text('Αποθήκευση'),
+        ),
+      ],
     );
   }
 }
