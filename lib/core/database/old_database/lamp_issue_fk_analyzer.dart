@@ -1,6 +1,7 @@
-import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+﻿import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import '../../utils/user_identity_normalizer.dart';
+import 'lamp_data_issue_type_labels.dart';
 import 'lamp_issue_matching_engine.dart';
 import 'lamp_issue_resolution_models.dart';
 import 'lamp_issue_resolution_support.dart';
@@ -187,7 +188,11 @@ class LampIssueFkAnalyzer {
       if (spec == null) {
         final reasons = <String>[
           'Η στήλη αναφοράς `column` δεν υποστηρίζεται για επίλυση FK '
-              '(τρέχουσα τιμή: `${columnRaw ?? '(κενό)'}`, υποστηριζόμενες: office, owner, contract, model).',
+              '(τρέχουσα τιμή: `${columnRaw ?? '(κενό)'}`, υποστηριζόμενες: '
+              '${lampDataIssueColumnDisplayLabel('office')}, '
+              '${lampDataIssueColumnDisplayLabel('owner')}, '
+              '${lampDataIssueColumnDisplayLabel('contract')}, '
+              '${lampDataIssueColumnDisplayLabel('model')}).',
         ];
         proposals.add(
           base(
@@ -1092,8 +1097,7 @@ class LampIssueFkAnalyzer {
         ),
         LampIssueResolutionOption(
           id: 'owner_null_keep_note',
-          label:
-              'Αποσύνδεση υπαλλήλου και διατήρηση κειμένου στο original_text',
+          label: 'Αποσύνδεση υπαλλήλου, διατήρηση του αρχικού κειμένου',
           action: LampIssueResolutionAction.autoFix,
           metadata: <String, Object?>{
             'operation': 'update_equipment_fk',
@@ -1103,7 +1107,7 @@ class LampIssueFkAnalyzer {
         ),
         LampIssueResolutionOption(
           id: 'owner_null_clear_original',
-          label: 'Αποσύνδεση υπαλλήλου και εκκαθάριση owner_original_text',
+          label: 'Αποσύνδεση υπαλλήλου και εκκαθάριση του αρχικού κειμένου',
           action: LampIssueResolutionAction.autoFix,
           metadata: <String, Object?>{
             'operation': 'update_equipment_owner_null_clear_original',

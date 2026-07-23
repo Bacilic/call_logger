@@ -6,6 +6,7 @@ import '../../../features/lamp/controllers/lamp_search_query_parser.dart';
 import '../../utils/search_text_normalizer.dart';
 import '../../utils/user_identity_normalizer.dart';
 import 'lamp_database_provider.dart';
+import 'lamp_data_issue_type_labels.dart';
 import 'lamp_db_comparison.dart';
 import 'lamp_excel_parse_int.dart';
 import 'lamp_scientific_serial.dart';
@@ -1062,7 +1063,9 @@ class OldEquipmentRepository {
       final ownerId = _toInt(row['owner']);
       addIfNew(
         issueType: parsed == null ? 'non_numeric_fk' : 'unknown_id',
-        message: 'Η τιμή δεν αντιστοιχεί σε έγκυρο ID για office.',
+        message:
+            'Η τιμή δεν αντιστοιχεί σε έγκυρο ID για '
+            '${lampDataIssueColumnDisplayLabel('office')}.',
         rowNumber: ownerId,
         columnName: 'office',
         rawValue: raw,
@@ -1096,7 +1099,9 @@ class OldEquipmentRepository {
         if (parsed != null && valid.contains(parsed)) continue;
         addIfNew(
           issueType: parsed == null ? 'non_numeric_fk' : 'unknown_id',
-          message: 'Η τιμή δεν αντιστοιχεί σε έγκυρο ID για $col.',
+          message:
+              'Η τιμή δεν αντιστοιχεί σε έγκυρο ID για '
+              '${lampDataIssueColumnDisplayLabel(col)}.',
           rowNumber: code,
           columnName: col,
           rawValue: raw,
@@ -1110,7 +1115,8 @@ class OldEquipmentRepository {
       if (smParsed != null && equipmentCodes.contains(smParsed)) continue;
       addIfNew(
         issueType: smParsed == null ? 'non_numeric_fk' : 'unknown_id',
-        message: 'Το set_master δεν αντιστοιχεί σε έγκυρο code εξοπλισμού.',
+        message:
+            'Ο κύριος εξοπλισμός δεν αντιστοιχεί σε έγκυρο κωδικό εξοπλισμού.',
         rowNumber: code,
         columnName: 'set_master',
         rawValue: smRaw,

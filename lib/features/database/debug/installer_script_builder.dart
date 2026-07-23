@@ -1,4 +1,4 @@
-import 'package:call_logger/core/utils/windows1253_encoder.dart';
+﻿import 'package:call_logger/core/utils/windows1253_encoder.dart';
 
 /// Παράγει το περιεχόμενο του `install_call_logger.bat`.
 class InstallerScriptBuilder {
@@ -68,7 +68,8 @@ set /p "CONFIRM=Πατήστε Enter (ή Y) για συνέχεια, ή N για
 if /I "%CONFIRM%"=="N" goto user_cancel
 
 rem Αντιγραφή χωρίς διαγραφή υπαρχόντων φακέλων δεδομένων χρήστη.
-robocopy "%APP_SOURCE%" "%INSTALL_DIR%" /E /R:2 /W:2 /NFL /NDL /NJH /NJS /nc /ns /np
+echo Αντιγραφή αρχείων...
+robocopy "%APP_SOURCE%" "%INSTALL_DIR%" /E /R:2 /W:2 /NDL /NJH /nc /ns /np
 set "RC=%ERRORLEVEL%"
 if %RC% GEQ 8 goto copy_failed
 

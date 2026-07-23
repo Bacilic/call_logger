@@ -8,6 +8,14 @@ import '../../../core/database/old_database/lamp_issue_resolution_service.dart';
 import '../../../core/database/old_database/lamp_scientific_serial.dart';
 import 'lamp_issue_row_context.dart';
 
+/// Ρητή παράλειψη στον χειροκίνητο έλεγχο (διακριτή από «καμία επιλογή»).
+final LampIssueResolutionOption kLampManualSkipOption =
+    const LampIssueResolutionOption(
+  id: '__skip_open__',
+  label: 'Παράλειψη / παραμένει ανοικτό',
+  action: LampIssueResolutionAction.unresolved,
+);
+
 /// Έλεγχος ύπαρξης σειριακού σε άλλον εξοπλισμό (πιθανό barcode).
 typedef LampSerialExistsChecker = Future<bool> Function(
   String serial,
@@ -71,10 +79,8 @@ class _LampIssueManualReviewDialogState
   Widget build(BuildContext context) {
     final grouped = widget.groupedIdenticalValues && widget.proposals.length > 1;
     final selectedCount = grouped
-        ? (_selectedOptions[0] != null ? 1 : 0)
-        : _selectedOptions.values
-            .whereType<LampIssueResolutionOption>()
-            .length;
+        ? (_isDecidedOption(_selectedOptions[0]) ? 1 : 0)
+        : _selectedOptions.values.where(_isDecidedOption).length;
     final displayProposals = grouped
         ? <LampIssueResolutionProposal>[widget.proposals.first]
         : widget.proposals;
@@ -130,13 +136,13 @@ class _LampIssueManualReviewDialogState
                 },
               ),
             ),
-            const SizedBox(height: 12),
-            Text(
-              grouped
-                  ? 'Επιλεγμένη ενέργεια: $selectedCount/1'
-                  : 'Επιλεγμένες ενέργειες: $selectedCount/${widget.proposals.length}',
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
+            if (!grouped) ...[
+              const SizedBox(height: 12),
+              Text(
+                'Αποφασισμένες: $selectedCount/${widget.proposals.length}',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ],
           ],
         ),
       ),
@@ -164,11 +170,20 @@ class _LampIssueManualReviewDialogState
     return _textControllers.putIfAbsent(index, TextEditingController.new);
   }
 
+  /// Αποφασισμένη εγγραφή: πραγματική επιλογή ή ρητή παράλειψη (όχι απουσία).
+  bool _isDecidedOption(LampIssueResolutionOption? option) => option != null;
+
+  /// Ρητή παράλειψη — δεν γράφει απόφαση στη βάση.
+  bool _isExplicitSkip(LampIssueResolutionOption? option) =>
+      identical(option, kLampManualSkipOption);
+
   List<LampIssueResolutionDecision> _buildDecisions() {
     final grouped = widget.groupedIdenticalValues && widget.proposals.length > 1;
     if (grouped) {
       final option = _selectedOptions[0];
-      if (option == null) return const <LampIssueResolutionDecision>[];
+      if (option == null || _isExplicitSkip(option)) {
+        return const <LampIssueResolutionDecision>[];
+      }
       final textInput = option.requiresTextInput ? _controllerFor(0).text : null;
       return <LampIssueResolutionDecision>[
         for (final proposal in widget.proposals)
@@ -183,7 +198,7 @@ class _LampIssueManualReviewDialogState
     final decisions = <LampIssueResolutionDecision>[];
     for (var i = 0; i < widget.proposals.length; i++) {
       final option = _selectedOptions[i];
-      if (option == null) continue;
+      if (option == null || _isExplicitSkip(option)) continue;
       decisions.add(
         LampIssueResolutionDecision(
           proposal: widget.proposals[i],
@@ -603,7 +618,7 @@ class _ManualReviewCardState extends State<_ManualReviewCard> {
                   children: [
                     RadioListTile<LampIssueResolutionOption?>(
                       title: const Text('Παράλειψη / παραμένει ανοικτό'),
-                      value: null,
+                      value: kLampManualSkipOption,
                       dense: true,
                       contentPadding: EdgeInsets.zero,
                       visualDensity: VisualDensity.compact,
@@ -620,6 +635,28 @@ class _ManualReviewCardState extends State<_ManualReviewCard> {
                   ],
                 ),
               ),
+            ListenableBuilder(
+              listenable: widget.textController,
+              builder: (context, _) {
+                final consequence = lampResolutionConsequenceLine(
+                  proposal,
+                  selectedOption,
+                  textInput: selectedRequiresInput
+                      ? widget.textController.text
+                      : null,
+                );
+                return Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text(
+                    consequence,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      fontWeight: FontWeight.w600,
+                      color: theme.colorScheme.primary,
+                    ),
+                  ),
+                );
+              },
+            ),
             if (selectedRequiresInput) ...[
               const SizedBox(height: 8),
               TextField(
@@ -727,14 +764,5 @@ String _formatIdWithName({required String raw, int? id}) {
 }
 
 String _displayResolutionOptionLabel(LampIssueResolutionOption option) {
-  if (option.proposedId != null) {
-    return option.label.trim();
-  }
-  var label = option.label.trim();
-  label = label.replaceAll('owner', 'υπάλληλος');
-  label = label.replaceAll('last_name', 'επώνυμο');
-  label = label.replaceAll('first_name', 'μικρό όνομα');
-  label = label.replaceAll('Νέος υπάλληλος:', 'Νέος υπάλληλος:');
-  label = label.replaceAll('Αλλαγή υπάλληλος', 'Αλλαγή υπαλλήλου');
-  return label;
+  return option.label.trim();
 }

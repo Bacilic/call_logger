@@ -1,4 +1,4 @@
-import 'package:call_logger/features/lamp/controllers/lamp_issue_resolution_controller.dart';
+﻿import 'package:call_logger/features/lamp/controllers/lamp_issue_resolution_controller.dart';
 import 'package:call_logger/features/lamp/widgets/lamp_issue_widgets.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -51,6 +51,50 @@ void main() {
 
       expect(find.byType(SelectableText), findsNWidgets(2));
     });
+
+    testWidgets(
+      'LampIssueEntryListTile · Στήλη και μήνυμα εξελληνισμένα '
+      '(όχι office/contract)',
+      (tester) async {
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: Column(
+                children: [
+                  LampIssueEntryListTile(
+                    issue: <String, Object?>{
+                      'row_number': 100,
+                      'column_name': 'office',
+                      'raw_value': 'Τμήμα Α',
+                      'message':
+                          'Η τιμή δεν αντιστοιχεί σε έγκυρο ID για office.',
+                    },
+                  ),
+                  LampIssueEntryListTile(
+                    issue: <String, Object?>{
+                      'row_number': 200,
+                      'column_name': 'contract',
+                      'raw_value': 'Σύμβαση Χ',
+                      'message':
+                          'Η τιμή δεν αντιστοιχεί σε έγκυρο ID για contract.',
+                    },
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+
+        expect(find.textContaining('Στήλη: γραφείο'), findsOneWidget);
+        expect(find.textContaining('για γραφείο.'), findsOneWidget);
+        expect(find.textContaining('Στήλη: συμβόλαιο'), findsOneWidget);
+        expect(find.textContaining('για συμβόλαιο.'), findsOneWidget);
+        expect(find.textContaining('Στήλη: office'), findsNothing);
+        expect(find.textContaining('για office.'), findsNothing);
+        expect(find.textContaining('Στήλη: contract'), findsNothing);
+        expect(find.textContaining('για contract.'), findsNothing);
+      },
+    );
   });
 
   group('issueResolutionPriority (ΓΕΝ-3)', () {

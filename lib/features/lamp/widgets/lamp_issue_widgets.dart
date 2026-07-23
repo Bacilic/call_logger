@@ -1,4 +1,4 @@
-// Καρτέλα και widgets προβλημάτων ETL: ομαδοποίηση, λίστες, αντιγραφή.
+﻿// Καρτέλα και widgets προβλημάτων ETL: ομαδοποίηση, λίστες, αντιγραφή.
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -346,10 +346,12 @@ class LampIssueHelpers {
         final origin = issueOriginDisplayLabel(issueOriginValue(issue));
         lines.add(
           '- Entity type: $entityType | Origin: $origin | Row: ${issueField(issue, 'row_number')} | '
-          'Column: ${issueField(issue, 'column_name')}',
+          'Column: ${lampDataIssueColumnDisplayLabel(issue['column_name']?.toString())}',
         );
         lines.add('  Value: ${issueField(issue, 'raw_value')}');
-        lines.add('  Message: ${issueField(issue, 'message')}');
+        lines.add(
+          '  Message: ${lampDataIssueMessageDisplayText(issue['message']?.toString())}',
+        );
       }
       lines.add('');
     }
@@ -382,9 +384,9 @@ class LampIssueEntryListTile extends StatelessWidget {
             '${LampIssueHelpers.issueRowNumberLabel(issue)}: ${LampIssueHelpers.issueField(issue, 'row_number')}',
           ),
           subtitle: SelectableText(
-            'Στήλη: ${LampIssueHelpers.issueField(issue, 'column_name')}\n'
+            'Στήλη: ${lampDataIssueColumnDisplayLabel(issue['column_name']?.toString())}\n'
             'Τιμή: ${LampIssueHelpers.issueField(issue, 'raw_value')}\n'
-            '${LampIssueHelpers.issueField(issue, 'message')}',
+            '${lampDataIssueMessageDisplayText(issue['message']?.toString())}',
           ),
         ),
       ],

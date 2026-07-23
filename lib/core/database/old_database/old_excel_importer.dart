@@ -7,6 +7,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import '../lock_diagnostic_service.dart';
 import 'equipment_set_master_cycle.dart';
 import 'lamp_database_provider.dart';
+import 'lamp_data_issue_type_labels.dart';
 import 'lamp_excel_parse_int.dart';
 import 'lamp_network_sheet_importer.dart';
 import 'old_database_schema.dart';
@@ -245,7 +246,9 @@ class OldExcelImporter {
             columnName: fk.column,
             rawValue: raw,
             issueType: parsed == null ? 'non_numeric_fk' : 'unknown_id',
-            message: 'Η τιμή δεν αντιστοιχεί σε έγκυρο ID για ${fk.column}.',
+            message:
+                'Η τιμή δεν αντιστοιχεί σε έγκυρο ID για '
+                '${lampDataIssueColumnDisplayLabel(fk.column)}.',
           );
           if (isEquipmentTable) {
             rowFkIssues.add(fkIssue);
@@ -503,7 +506,8 @@ class OldExcelImporter {
           columnName: 'set_master',
           rawValue: raw,
           issueType: parsed == null ? 'non_numeric_fk' : 'unknown_id',
-          message: 'Το set_master δεν αντιστοιχεί σε έγκυρο code εξοπλισμού.',
+          message:
+              'Ο κύριος εξοπλισμός δεν αντιστοιχεί σε έγκυρο κωδικό εξοπλισμού.',
         ),
       );
     }

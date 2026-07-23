@@ -1,4 +1,4 @@
-/// Ελληνική ετικέτα πεδίου (στήλης) για οδηγούς επίλυσης προβλημάτων ETL.
+﻿/// Ελληνική ετικέτα πεδίου (στήλης) για οδηγούς επίλυσης προβλημάτων ETL.
 String lampDataIssueColumnDisplayLabel(String? column) {
   if (column == null || column.trim().isEmpty) return '-';
   switch (column.trim().toLowerCase()) {
@@ -23,6 +23,42 @@ String lampDataIssueColumnDisplayLabel(String? column) {
     default:
       return column;
   }
+}
+
+/// Εξελληνίζει αποθηκευμένα μηνύματα `data_issues` που περιέχουν αγγλικά
+/// ονόματα στηλών (παλιά σκανάρισματα), χωρίς να αλλάζει τη βάση.
+String lampDataIssueMessageDisplayText(String? message) {
+  if (message == null) return '-';
+  final trimmed = message.trim();
+  if (trimmed.isEmpty) return '-';
+
+  // Μακρύτερα κλειδιά πρώτα, ώστε π.χ. set_master να μην «σπάει».
+  const keys = <String>[
+    'set_master',
+    'asset_no',
+    'serial_no',
+    'network_name',
+    'ip_address',
+    'contract',
+    'office',
+    'owner',
+    'model',
+  ];
+
+  var text = trimmed;
+  for (final key in keys) {
+    final label = lampDataIssueColumnDisplayLabel(key);
+    if (label == key) continue;
+    text = text.replaceAllMapped(
+      RegExp('\\b${RegExp.escape(key)}\\b', caseSensitive: false),
+      (_) => label,
+    );
+  }
+  text = text.replaceAllMapped(
+    RegExp(r'\bcode\b', caseSensitive: false),
+    (_) => 'κωδικό',
+  );
+  return text;
 }
 
 /// Ελληνικές ετικέτες για `issue_type` στο `data_issues` και στην αναφορά ελέγχου ακεραιότητας.

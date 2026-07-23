@@ -1,4 +1,4 @@
-import 'dart:convert';
+﻿import 'dart:convert';
 
 import 'package:call_logger/features/database/debug/installer_script_builder.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -75,9 +75,39 @@ void main() {
       expect(
         robocopyLine,
         contains(
-          'robocopy "%APP_SOURCE%" "%INSTALL_DIR%" /E /R:2 /W:2 /NFL /NDL /NJH /NJS /nc /ns /np',
+          'robocopy "%APP_SOURCE%" "%INSTALL_DIR%" /E /R:2 /W:2 /NDL /NJH /nc /ns /np',
         ),
       );
+    });
+
+    test('robocopy line does not silence file names with /NFL', () {
+      final robocopyLine = script
+          .split(RegExp(r'\r?\n'))
+          .firstWhere((l) => l.toLowerCase().contains('robocopy'));
+      expect(robocopyLine.toUpperCase(), isNot(contains('/NFL')));
+    });
+
+    test('echo progress message immediately precedes robocopy', () {
+      final lines = script.split(RegExp(r'\r?\n'));
+      final robocopyIndex =
+          lines.indexWhere((l) => l.toLowerCase().contains('robocopy'));
+      expect(robocopyIndex, greaterThan(0));
+      expect(lines[robocopyIndex - 1].trim(), 'echo Αντιγραφή αρχείων...');
+    });
+
+    test('robocopy keeps summary flags but drops /NJS', () {
+      final robocopyLine = script
+          .split(RegExp(r'\r?\n'))
+          .firstWhere((l) => l.toLowerCase().contains('robocopy'));
+      expect(robocopyLine.toUpperCase(), isNot(contains('/NJS')));
+      expect(robocopyLine, contains('/NDL'));
+      expect(robocopyLine, contains('/NJH'));
+      expect(robocopyLine, contains('/nc'));
+      expect(robocopyLine, contains('/ns'));
+      expect(robocopyLine, contains('/np'));
+      expect(robocopyLine, contains('/E'));
+      expect(robocopyLine, contains('/R:2'));
+      expect(robocopyLine, contains('/W:2'));
     });
 
     test('every exit path is preceded by pause', () {

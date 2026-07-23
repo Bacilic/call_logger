@@ -1,3 +1,4 @@
+﻿import '../../../core/database/old_database/lamp_data_issue_type_labels.dart';
 import '../../../core/database/old_database/lamp_issue_resolution_models.dart';
 
 /// Επεξήγηση λεκτικής βαθμίδας βεβαιότητας στους οδηγούς επίλυσης.
@@ -81,4 +82,73 @@ List<String> lampProposalRowContextLines(LampIssueResolutionProposal proposal) {
     lines.add('Συμβόλαιο: $contractDisplay');
   }
   return lines;
+}
+
+bool _isSkipSentinel(LampIssueResolutionOption option) =>
+    option.id == '__skip_open__';
+
+bool _isClearOrDisconnectOption(LampIssueResolutionOption option) {
+  if (option.proposedId != null) return false;
+  if (option.action == LampIssueResolutionAction.createNew) return false;
+  if (_isSkipSentinel(option)) return false;
+
+  final operation =
+      (option.metadata['operation']?.toString() ?? '').toLowerCase();
+  if (operation.contains('null') || operation.contains('clear')) {
+    return true;
+  }
+  // π.χ. update_equipment_fk με ρητό proposedId: null στα metadata
+  if (option.metadata.containsKey('proposedId') &&
+      option.metadata['proposedId'] == null) {
+    return true;
+  }
+  return false;
+}
+
+String _equipmentCodePrefix(LampIssueResolutionProposal proposal) {
+  final row = proposal.row?.toString() ?? '-';
+  final description = proposal.metadata['rowContextDescription']
+      ?.toString()
+      .trim();
+  if (description != null &&
+      description.isNotEmpty &&
+      description != 'null') {
+    return 'Κωδικός $row ($description)';
+  }
+  return 'Κωδικός $row';
+}
+
+/// Ζωντανή γραμμή συνέπειας για την επιλεγμένη ενέργεια χειροκίνητου ελέγχου.
+String lampResolutionConsequenceLine(
+  LampIssueResolutionProposal proposal,
+  LampIssueResolutionOption? selectedOption, {
+  String? textInput,
+}) {
+  if (selectedOption == null) {
+    return 'Δεν έχει επιλεγεί ενέργεια.';
+  }
+  if (_isSkipSentinel(selectedOption)) {
+    return 'Επιλεγμένη ενέργεια: Παράλειψη — η εγγραφή μένει ανοιχτή';
+  }
+
+  final fieldLabel = lampDataIssueColumnDisplayLabel(proposal.column);
+
+  if (selectedOption.action == LampIssueResolutionAction.createNew) {
+    final label = selectedOption.label.trim();
+    final trimmedInput = textInput?.trim();
+    if (selectedOption.requiresTextInput &&
+        trimmedInput != null &&
+        trimmedInput.isNotEmpty) {
+      return '→ Δημιουργία: $label · $trimmedInput';
+    }
+    return '→ Δημιουργία: $label';
+  }
+
+  if (_isClearOrDisconnectOption(selectedOption)) {
+    return '→ Εκκαθάριση/Αποσύνδεση $fieldLabel';
+  }
+
+  final optionLabel = selectedOption.label.trim();
+  return 'Επιλεγμένη ενέργεια: ${_equipmentCodePrefix(proposal)} → '
+      '$fieldLabel: $optionLabel';
 }

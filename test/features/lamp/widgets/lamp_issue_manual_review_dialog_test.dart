@@ -1,4 +1,4 @@
-import 'package:call_logger/core/database/old_database/lamp_issue_resolution_service.dart';
+﻿import 'package:call_logger/core/database/old_database/lamp_issue_resolution_service.dart';
 import 'package:call_logger/core/database/old_database/lamp_scientific_serial.dart';
 import 'package:call_logger/features/lamp/widgets/lamp_issue_manual_review_dialog.dart';
 import 'package:flutter/material.dart';
@@ -431,4 +431,92 @@ void main() {
       await tearDownDialog(tester);
     },
   );
+
+  group('ρητή παράλειψη · sentinel (μη-διπλότυπη διάταξη)', () {
+    testWidgets(
+      'αρχικά αναποφάσιστο → παράλειψη μετράει → εφαρμογή χωρίς απόφαση βάσης',
+      (tester) async {
+        List<LampIssueResolutionDecision>? captured;
+
+        await tester.binding.setSurfaceSize(const Size(1280, 900));
+        addTearDown(() => tester.binding.setSurfaceSize(null));
+
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: Builder(
+                builder: (context) {
+                  return ElevatedButton(
+                    onPressed: () async {
+                      final result = await showLampIssueManualReviewDialog(
+                        context: context,
+                        issueType: LampIssueType.nonNumericFk,
+                        proposals: const [_testProposal],
+                      );
+                      captured = result;
+                    },
+                    child: const Text('Open'),
+                  );
+                },
+              ),
+            ),
+          ),
+        );
+        await tester.tap(find.text('Open'));
+        await tester.pumpAndSettle();
+
+        // ΠΡΩΤΑ: καμία επιλογή, κουμπί ανενεργό, μετρητής 0.
+        final radioGroup = tester.widget<RadioGroup<LampIssueResolutionOption?>>(
+          find.byType(RadioGroup<LampIssueResolutionOption?>),
+        );
+        expect(radioGroup.groupValue, isNull);
+        expect(find.text('Επιλεγμένες ενέργειες: 0/1'), findsOneWidget);
+        expect(
+          tester
+              .widget<FilledButton>(
+                find.widgetWithText(FilledButton, 'Εφαρμογή επιλεγμένων'),
+              )
+              .onPressed,
+          isNull,
+        );
+
+        // ΜΕΤΑ: ρητή παράλειψη → μετρητής 1, κουμπί ενεργό.
+        await tester.tap(find.text('Παράλειψη / παραμένει ανοικτό'));
+        await tester.pump();
+
+        final afterSkip = tester.widget<RadioGroup<LampIssueResolutionOption?>>(
+          find.byType(RadioGroup<LampIssueResolutionOption?>),
+        );
+        expect(afterSkip.groupValue, same(kLampManualSkipOption));
+        expect(find.text('Επιλεγμένες ενέργειες: 1/1'), findsOneWidget);
+        expect(
+          tester
+              .widget<FilledButton>(
+                find.widgetWithText(FilledButton, 'Εφαρμογή επιλεγμένων'),
+              )
+              .onPressed,
+          isNotNull,
+        );
+
+        // Εφαρμογή μόνο με παράλειψη → χωρίς αποφάσεις που αλλάζουν τη βάση.
+        await tester.tap(
+          find.widgetWithText(FilledButton, 'Εφαρμογή επιλεγμένων'),
+        );
+        await tester.pumpAndSettle();
+
+        expect(captured, isNotNull);
+        expect(captured, isEmpty);
+        expect(
+          captured!.any(
+            (d) =>
+                d.option != null &&
+                !identical(d.option, kLampManualSkipOption),
+          ),
+          isFalse,
+        );
+
+        await tearDownDialog(tester);
+      },
+    );
+  });
 }
