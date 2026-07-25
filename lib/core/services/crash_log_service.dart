@@ -8,11 +8,9 @@ class CrashLogService {
     required this.logsDirectory,
     this.appVersion = 'unknown',
     DateTime Function()? now,
-    int maxDetailedRepeats = 20,
-    int repeatSummaryInterval = 100,
-  })  : _now = now ?? DateTime.now,
-        _maxDetailedRepeats = maxDetailedRepeats,
-        _repeatSummaryInterval = repeatSummaryInterval;
+    this._maxDetailedRepeats = 20,
+    this._repeatSummaryInterval = 100,
+  })  : _now = now ?? DateTime.now;
 
   static const String sessionLockFileName = 'session.lock';
   static const String abnormalTerminationMessage =

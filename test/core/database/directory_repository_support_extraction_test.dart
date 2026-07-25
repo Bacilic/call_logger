@@ -161,30 +161,19 @@ void main() {
         skipPhonePolicyValidation: true,
       );
 
-      final phoneId = (await db.query(
-        'phones',
-        columns: ['id'],
-        where: 'number = ?',
-        whereArgs: [phoneNumber],
-      ))
-          .single['id'] as int;
-
       final rows = await db.query(
         'audit_log',
-        where:
-            'action = ? AND entity_type = ? AND entity_id = ? AND details = ?',
+        where: 'entity_type = ? AND entity_id = ? AND details LIKE ?',
         whereArgs: [
-          'ΤΡΟΠΟΠΟΙΗΣΗ',
-          AuditEntityTypes.phone,
-          phoneId,
-          'phones id=$phoneId (σύνδεση χρήστη)',
+          AuditEntityTypes.user,
+          userId,
+          '%Προσθήκη τηλεφώνου $phoneNumber%',
         ],
       );
       expect(rows, hasLength(1));
-      final oldV = decodeJson(rows.single['old_values_json'] as String?);
+      expect(rows.single['action'], 'ΔΗΜΙΟΥΡΓΙΑ ΧΡΗΣΤΗ');
       final newV = decodeJson(rows.single['new_values_json'] as String?);
-      expect(oldV, {'linked_user_id': null});
-      expect(newV, {'linked_user_id': userId});
+      expect(newV?['linked_phone_numbers'], [phoneNumber]);
     });
 
     test('link-delta audit: αποσύνδεση εξοπλισμού μέσω deleteUsers', () async {
@@ -209,21 +198,16 @@ void main() {
 
       final rows = await db.query(
         'audit_log',
-        where:
-            'action = ? AND entity_type = ? AND entity_id = ? AND details = ?',
+        where: 'entity_type = ? AND entity_id = ? AND details LIKE ?',
         whereArgs: [
-          'ΤΡΟΠΟΠΟΙΗΣΗ',
-          AuditEntityTypes.equipment,
-          equipmentId,
-          'equipment id=$equipmentId (αποσύνδεση χρήστη)',
+          AuditEntityTypes.user,
+          userId,
+          '%Αποσύνδεση εξοπλισμού $code%',
         ],
       );
       expect(rows, hasLength(1));
-      expect(rows.single['entity_name'], code);
-      final oldV = decodeJson(rows.single['old_values_json'] as String?);
-      final newV = decodeJson(rows.single['new_values_json'] as String?);
-      expect(oldV, {'linked_user_id': userId});
-      expect(newV, {'linked_user_id': null});
+      expect(rows.single['action'], DatabaseHelper.auditActionDelete);
+      expect(rows.single['entity_name'], 'Unlink Equipment');
     });
 
     test(
@@ -249,7 +233,11 @@ void main() {
         final rows = await db.query(
           'audit_log',
           where: 'entity_type = ? AND entity_id = ? AND action = ?',
-          whereArgs: [AuditEntityTypes.phone, phoneId, 'ΤΡΟΠΟΠΟΙΗΣΗ'],
+          whereArgs: [
+            AuditEntityTypes.phone,
+            phoneId,
+            AuditActions.modifyPhone,
+          ],
         );
         expect(rows, hasLength(1));
 

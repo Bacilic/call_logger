@@ -10,7 +10,10 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import '../../test_setup.dart';
 
 /// Κλείδωμα συμπεριφοράς audit σύνδεσης/αποσύνδεσης τηλεφώνων και εξοπλισμού
-/// (μέσω `_auditPhoneUserLinkDeltaInTxn` / `_auditEquipmentUserLinkDeltaInTxn`).
+/// (μέσω `auditPhoneUserLinkDeltaInTxn` / `auditEquipmentUserLinkDeltaInTxn`).
+///
+/// Από 13/07/2026 οι σύνδεσεις ενσωματώνονται ως ονομαστικές γραμμές στα
+/// `details` της εγγραφής χρήστη — όχι ως ξεχωριστό audit στο entity phone/equipment.
 void main() {
   group('DirectoryRepository user↔entity link audit — lock', () {
     late UserRepository repo;
@@ -48,40 +51,48 @@ void main() {
       return null;
     }
 
-    Future<Map<String, dynamic>?> findLinkDeltaAudit({
-      required String entityWord,
+    /// Ονομαστική γραμμή delta όπως την παράγει `_userEntityLinkDetailLine`.
+    String linkDetailLine({
       required String entityType,
-      required int entityId,
+      required String label,
       required bool isLink,
-    }) async {
-      final op = isLink ? 'σύνδεση' : 'αποσύνδεση';
-      final expectedDetails = '$entityWord id=$entityId ($op χρήστη)';
-      final rows = await db.query(
-        'audit_log',
-        where:
-            'action = ? AND entity_type = ? AND entity_id = ? AND details = ?',
-        whereArgs: ['ΤΡΟΠΟΠΟΙΗΣΗ', entityType, entityId, expectedDetails],
-      );
-      expect(rows, hasLength(1), reason: 'αναμενόταν μία γραμμή: $expectedDetails');
-      return rows.single;
+    }) {
+      if (entityType == AuditEntityTypes.phone) {
+        return isLink
+            ? 'Προσθήκη τηλεφώνου $label'
+            : 'Αποσύνδεση τηλεφώνου $label';
+      }
+      if (entityType == AuditEntityTypes.equipment) {
+        return isLink
+            ? 'Προσθήκη εξοπλισμού $label'
+            : 'Αποσύνδεση εξοπλισμού $label';
+      }
+      throw ArgumentError('unsupported entityType: $entityType');
     }
 
-    void expectLinkDeltaValues({
-      required Map<String, dynamic> row,
+    /// Βρίσκει την εγγραφή audit χρήστη που περιέχει τη γραμμή σύνδεσης/αποσύνδεσης.
+    Future<Map<String, dynamic>> findLinkDeltaAudit({
       required int userId,
+      required String entityType,
+      required String label,
       required bool isLink,
-      required String entityName,
-    }) {
-      expect(row['entity_name'], entityName);
-      final oldV = decodeJson(row['old_values_json'] as String?);
-      final newV = decodeJson(row['new_values_json'] as String?);
-      if (isLink) {
-        expect(oldV, {'linked_user_id': null});
-        expect(newV, {'linked_user_id': userId});
-      } else {
-        expect(oldV, {'linked_user_id': userId});
-        expect(newV, {'linked_user_id': null});
-      }
+    }) async {
+      final line = linkDetailLine(
+        entityType: entityType,
+        label: label,
+        isLink: isLink,
+      );
+      final rows = await db.query(
+        'audit_log',
+        where: 'entity_type = ? AND entity_id = ? AND details LIKE ?',
+        whereArgs: [AuditEntityTypes.user, userId, '%$line%'],
+      );
+      expect(
+        rows,
+        hasLength(1),
+        reason: 'αναμενόταν μία γραμμή χρήστη με: $line',
+      );
+      return rows.single;
     }
 
     test('phone σύνδεση: insertUser γράφει audit delta', () async {
@@ -94,29 +105,20 @@ void main() {
         skipPhonePolicyValidation: true,
       );
 
-      final phoneId = (await db.query(
-        'phones',
-        columns: ['id'],
-        where: 'number = ?',
-        whereArgs: [phoneNumber],
-      ))
-          .single['id'] as int;
-
       final row = await findLinkDeltaAudit(
-        entityWord: 'phones',
-        entityType: AuditEntityTypes.phone,
-        entityId: phoneId,
-        isLink: true,
-      );
-      expectLinkDeltaValues(
-        row: row!,
         userId: userId,
+        entityType: AuditEntityTypes.phone,
+        label: phoneNumber,
         isLink: true,
-        entityName: phoneNumber,
       );
+      expect(row['action'], 'ΔΗΜΙΟΥΡΓΙΑ ΧΡΗΣΤΗ');
+      expect(row['entity_name'], 'Σύνδεση Τηλεφώνου');
+      final newV = decodeJson(row['new_values_json'] as String?);
+      expect(newV?['linked_phone_numbers'], [phoneNumber]);
     });
 
-    test('phone αποσύνδεση: updateUser με κενά phones γράφει audit delta', () async {
+    test('phone αποσύνδεση: updateUser με κενά phones γράφει audit delta',
+        () async {
       const phoneNumber = '2345888802';
 
       final userId = await repo.insertUser(
@@ -125,14 +127,6 @@ void main() {
         phones: [phoneNumber],
         skipPhonePolicyValidation: true,
       );
-
-      final phoneId = (await db.query(
-        'phones',
-        columns: ['id'],
-        where: 'number = ?',
-        whereArgs: [phoneNumber],
-      ))
-          .single['id'] as int;
 
       await db.delete('audit_log');
 
@@ -143,17 +137,16 @@ void main() {
       );
 
       final row = await findLinkDeltaAudit(
-        entityWord: 'phones',
-        entityType: AuditEntityTypes.phone,
-        entityId: phoneId,
-        isLink: false,
-      );
-      expectLinkDeltaValues(
-        row: row!,
         userId: userId,
+        entityType: AuditEntityTypes.phone,
+        label: phoneNumber,
         isLink: false,
-        entityName: phoneNumber,
       );
+      expect(row['action'], AuditActions.modifyUser);
+      final oldV = decodeJson(row['old_values_json'] as String?);
+      final newV = decodeJson(row['new_values_json'] as String?);
+      expect(oldV?['linked_phone_numbers'], [phoneNumber]);
+      expect(newV?['linked_phone_numbers'], <String>[]);
     });
 
     test('equipment αποσύνδεση: deleteUsers γράφει audit delta', () async {
@@ -178,20 +171,17 @@ void main() {
       await repo.deleteUsers([userId]);
 
       final row = await findLinkDeltaAudit(
-        entityWord: 'equipment',
-        entityType: AuditEntityTypes.equipment,
-        entityId: equipmentId,
-        isLink: false,
-      );
-      expectLinkDeltaValues(
-        row: row!,
         userId: userId,
+        entityType: AuditEntityTypes.equipment,
+        label: code,
         isLink: false,
-        entityName: code,
       );
+      expect(row['action'], DatabaseHelper.auditActionDelete);
+      expect(row['entity_name'], 'Αποσύνδεση Εξοπλισμού');
     });
 
-    test('equipment σύνδεση: added-branch μέσω updateUser phones (ίδια λογική helper)',
+    test(
+        'equipment σύνδεση: added-branch μέσω updateUser phones (ίδια λογική helper)',
         () async {
       // `_auditEquipmentUserLinkDeltaInTxn` δεν καλείται από δημόσιο API για σύνδεση·
       // το added-branch κλειδώνεται μέσω phone updateUser (κοινός κώδικας helper).
@@ -209,30 +199,21 @@ void main() {
 
       await repo.updateUser(
         userId,
-        {'phones': [existingPhone, newPhone]},
+        {
+          'phones': [existingPhone, newPhone],
+        },
         skipPhonePolicyValidation: true,
       );
 
-      final newPhoneId = (await db.query(
-        'phones',
-        columns: ['id'],
-        where: 'number = ?',
-        whereArgs: [newPhone],
-      ))
-          .single['id'] as int;
-
       final row = await findLinkDeltaAudit(
-        entityWord: 'phones',
-        entityType: AuditEntityTypes.phone,
-        entityId: newPhoneId,
-        isLink: true,
-      );
-      expectLinkDeltaValues(
-        row: row!,
         userId: userId,
+        entityType: AuditEntityTypes.phone,
+        label: newPhone,
         isLink: true,
-        entityName: newPhone,
       );
+      expect(row['action'], AuditActions.modifyUser);
+      final newV = decodeJson(row['new_values_json'] as String?);
+      expect(newV?['linked_phone_numbers'], [existingPhone, newPhone]);
     });
 
     test('entityName fallback #id όταν λείπει ετικέτα στη βάση', () async {
@@ -254,12 +235,16 @@ void main() {
       await repo.deleteUsers([userId]);
 
       final row = await findLinkDeltaAudit(
-        entityWord: 'equipment',
+        userId: userId,
         entityType: AuditEntityTypes.equipment,
-        entityId: equipmentId,
+        label: '#$equipmentId',
         isLink: false,
       );
-      expect(row!['entity_name'], '#$equipmentId');
+      expect(row['entity_name'], 'Fallback Ετικέτας');
+      expect(
+        row['details'],
+        contains('Αποσύνδεση εξοπλισμού #$equipmentId'),
+      );
     });
   });
 }

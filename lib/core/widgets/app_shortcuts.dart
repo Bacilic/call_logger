@@ -13,6 +13,8 @@ import '../services/settings_service.dart';
 import '../services/shutdown_coordinator.dart';
 import '../services/shutdown_trace_service.dart';
 import '../services/crash_log_service.dart';
+import '../services/startup_asset_integrity_service.dart';
+import '../database/database_file_classifier.dart';
 import '../database/database_helper.dart';
 import '../database/database_init_result.dart';
 import '../database/database_init_runner.dart';
@@ -31,12 +33,14 @@ class AppShortcuts extends ConsumerStatefulWidget {
     super.key,
     required this.initialDatabaseResult,
     required this.initialIsLocalDevMode,
+    this.initialDatabaseProfile,
     @visibleForTesting this.shutdownCoordinatorFactory,
     @visibleForTesting this.shutdownTraceFactory,
   });
 
   final DatabaseInitResult initialDatabaseResult;
   final bool initialIsLocalDevMode;
+  final DatabaseFileProfile? initialDatabaseProfile;
 
   /// Εργοστάσιο συντονιστή (μόνο για τεστ — παράκαμψη πραγματικών βημάτων).
   final ShutdownCoordinator Function()? shutdownCoordinatorFactory;
@@ -52,6 +56,7 @@ class _AppShortcutsState extends ConsumerState<AppShortcuts>
     with WidgetsBindingObserver, WindowListener {
   late DatabaseInitResult _databaseResult;
   late bool _isLocalDevMode;
+  DatabaseFileProfile? _databaseProfile;
   Timer? _windowBoundsSaveTimer;
   final DesktopWindowService _desktopWindow = DesktopWindowService();
   AppLifecycleListener? _appLifecycleListener;
@@ -74,9 +79,13 @@ class _AppShortcutsState extends ConsumerState<AppShortcuts>
           await windowManager.setPreventClose(true);
         } on MissingPluginException catch (_) {}
       });
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _warnIfMissingStartupAssets();
+      });
     }
     _databaseResult = widget.initialDatabaseResult;
     _isLocalDevMode = widget.initialIsLocalDevMode;
+    _databaseProfile = widget.initialDatabaseProfile;
     _appLifecycleListener = AppLifecycleListener(
       onExitRequested: () async => AppExitResponse.exit,
     );
@@ -85,6 +94,37 @@ class _AppShortcutsState extends ConsumerState<AppShortcuts>
       unawaited(ref.read(coreLexiconProvider.notifier).bootstrapFromSavedPath());
     });
     HardwareKeyboard.instance.addHandler(_handleGlobalQuickCallKey);
+  }
+
+  /// Μη-μπλοκάρουσα προειδοποίηση όταν λείπουν μη-μοιραία αρχεία πόρων (Π1/Δ4).
+  /// Τρέχει το πολύ μία φορά ανά εκκίνηση (μόνο από το post-frame στο initState).
+  void _warnIfMissingStartupAssets() {
+    if (!mounted) return;
+    final missing =
+        StartupAssetIntegrityService().findMissingCriticalAssets();
+    if (missing.isEmpty) return;
+    if (!mounted) return;
+
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    if (messenger == null) return;
+
+    messenger.clearMaterialBanners();
+    messenger.showMaterialBanner(
+      MaterialBanner(
+        content: Text(
+          'Λείπουν αρχεία της εφαρμογής: ${missing.join(', ')}. '
+          'Η εφαρμογή λειτουργεί περιορισμένα· συνιστάται επανεγκατάσταση.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              messenger.hideCurrentMaterialBanner();
+            },
+            child: const Text('Το κατάλαβα'),
+          ),
+        ],
+      ),
+    );
   }
 
   void _invokeQuickCapture() {
@@ -248,9 +288,11 @@ class _AppShortcutsState extends ConsumerState<AppShortcuts>
   void didUpdateWidget(covariant AppShortcuts oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.initialDatabaseResult != widget.initialDatabaseResult ||
-        oldWidget.initialIsLocalDevMode != widget.initialIsLocalDevMode) {
+        oldWidget.initialIsLocalDevMode != widget.initialIsLocalDevMode ||
+        oldWidget.initialDatabaseProfile != widget.initialDatabaseProfile) {
       _databaseResult = widget.initialDatabaseResult;
       _isLocalDevMode = widget.initialIsLocalDevMode;
+      _databaseProfile = widget.initialDatabaseProfile;
     }
   }
 
@@ -263,6 +305,7 @@ class _AppShortcutsState extends ConsumerState<AppShortcuts>
         setState(() {
           _databaseResult = runnerResult.result;
           _isLocalDevMode = runnerResult.isLocalDevMode;
+          _databaseProfile = runnerResult.databaseProfile;
         });
       }
     } catch (e, st) {
@@ -291,6 +334,7 @@ class _AppShortcutsState extends ConsumerState<AppShortcuts>
         child: MainShell(
           databaseResult: _databaseResult,
           isLocalDevMode: _isLocalDevMode,
+          databaseProfile: _databaseProfile,
           onReturnFromSettings: _recheckDatabase,
           onDatabaseReopened: _recheckDatabase,
         ),

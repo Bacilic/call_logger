@@ -11,13 +11,17 @@ import '../../../../core/models/remote_tool.dart';
 import '../../../../core/providers/equipment_focus_intent_provider.dart';
 import '../../../../core/services/default_remote_tool_display.dart';
 import '../../../../core/utils/user_facing_error_messages.dart';
+import '../../../../core/widgets/draggable_dialog_shell.dart';
+import '../../../../core/widgets/app_asset_image.dart';
 import '../../../calls/models/user_model.dart';
 import '../../models/equipment_column.dart';
 import '../../providers/directory_provider.dart';
 import '../../providers/equipment_directory_provider.dart';
+import '../../services/equipment_deletion_summary.dart';
 import 'bulk_equipment_edit_dialog.dart';
 import 'catalog_column_selector_shell.dart';
 import 'equipment_data_table.dart';
+import 'equipment_delete_countdown_snackbar.dart';
 import 'equipment_form_dialog.dart';
 import 'catalog_tab_lookup_reload_mixin.dart';
 import 'catalog_search_field_sync.dart';
@@ -146,12 +150,13 @@ class _EquipmentTabState extends ConsumerState<EquipmentTab>
                     );
                   }
                 },
-                icon: Image.asset(
-                  'assets/equipment_settings_icon.png',
+                icon: AppAssetImage(
+                  assetPath: 'assets/equipment_settings_icon.png',
                   width: 28,
                   height: 28,
                   fit: BoxFit.contain,
                   filterQuality: FilterQuality.medium,
+                  fallbackIcon: Icons.settings,
                 ),
               ),
             ],
@@ -351,21 +356,35 @@ class _EquipmentTabState extends ConsumerState<EquipmentTab>
     final state = ref.read(equipmentDirectoryProvider);
     if (state.selectedIds.isEmpty) return;
     final count = state.selectedIds.length;
+    final String contentText;
+    if (count <= 5) {
+      final db = await DatabaseHelper.instance.database;
+      final summaries =
+          await deletionSummaries(db, state.selectedIds.toList());
+      final lines = formatEquipmentDeletionLines(summaries);
+      contentText = ['Διαγραφή εξοπλισμού;', ...lines].join('\n');
+    } else {
+      contentText = 'Διαγραφή $count εγγραφών εξοπλισμού;';
+    }
+    if (!context.mounted) return;
     final ok = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
+      builder: (ctx) => DraggableDialogShell(
         title: const Text('Διαγραφή εξοπλισμού'),
-        content: Text('Διαγραφή $count εγγραφών εξοπλισμού;'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Ακύρωση'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('Διαγραφή'),
-          ),
-        ],
+        builder: (titleHandle) => AlertDialog(
+          title: titleHandle,
+          content: Text(contentText),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Ακύρωση'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: const Text('Διαγραφή'),
+            ),
+          ],
+        ),
       ),
     );
     if (ok != true || !context.mounted) return;
@@ -393,41 +412,17 @@ class _EquipmentTabState extends ConsumerState<EquipmentTab>
     messenger.showSnackBar(
       SnackBar(
         behavior: SnackBarBehavior.floating,
-        duration: const Duration(seconds: 8),
+        duration: const Duration(seconds: 5),
         dismissDirection: DismissDirection.horizontal,
         showCloseIcon: false,
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            ConstrainedBox(
-              constraints: const BoxConstraints(maxHeight: 160),
-              child: SingleChildScrollView(
-                child: Text(bodyText),
-              ),
-            ),
-            const SizedBox(height: 8),
-            Wrap(
-              alignment: WrapAlignment.end,
-              spacing: 4,
-              runSpacing: 4,
-              children: [
-                TextButton(
-                  onPressed: () => messenger.hideCurrentSnackBar(),
-                  child: const Text('Επιβεβαίωση'),
-                ),
-                TextButton(
-                  onPressed: () async {
-                    messenger.hideCurrentSnackBar();
-                    await ref
-                        .read(equipmentDirectoryProvider.notifier)
-                        .undoLastDelete();
-                  },
-                  child: const Text('Αναίρεση'),
-                ),
-              ],
-            ),
-          ],
+        content: EquipmentDeleteCountdownSnackBarContent(
+          message: bodyText,
+          seconds: 5,
+          onConfirm: () => messenger.hideCurrentSnackBar(),
+          onUndo: () async {
+            messenger.hideCurrentSnackBar();
+            await ref.read(equipmentDirectoryProvider.notifier).undoLastDelete();
+          },
         ),
       ),
     );

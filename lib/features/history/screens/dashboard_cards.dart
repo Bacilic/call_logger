@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/widgets/ellipsis_tooltip_text.dart';
+import '../../../core/widgets/app_asset_image.dart';
 import '../models/dashboard_summary_model.dart';
 import '../providers/dashboard_provider.dart';
 import 'dashboard_charts.dart';
@@ -206,11 +207,12 @@ class KpiGrid extends StatelessWidget {
                       right: 0,
                       child: Tooltip(
                         message: _kLansweeperReportBadgeTooltip,
-                        child: Image.asset(
-                          _kLansweeperReportBadgeAsset,
+                        child: AppAssetImage(
+                          assetPath: _kLansweeperReportBadgeAsset,
                           width: 32,
                           height: 32,
                           fit: BoxFit.contain,
+                          fallbackIcon: Icons.assignment_outlined,
                         ),
                       ),
                     ),

@@ -48,7 +48,7 @@ void main() {
       'call_logger_test_nonexistent_recent.db',
     );
     SharedPreferences.setMockInitialValues(<String, Object>{
-      // Μη κενή λίστα ώστε να μην επιστρέφεται AppConfig.defaultDbPath.
+      // Μη κενή λίστα ώστε το τεστ να ελέγχει φιλτράρισμα υπάρχουσας/ανύπαρκτης διαδρομής.
       'recent_database_paths': <String>[dummyMissing],
     });
   });

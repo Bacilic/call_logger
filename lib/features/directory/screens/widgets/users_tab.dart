@@ -4,9 +4,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/providers/user_form_edit_intent_provider.dart';
 import '../../../../core/database/database_helper.dart';
 import '../../../../core/database/department_repository.dart';
+import '../../../../core/database/equipment_repository.dart';
 import '../../../../core/database/settings_repository.dart';
-import '../../../../core/database/user_repository.dart';
+import '../../../../core/database/user_delete_equipment_policy.dart';
 import '../../../../core/database/user_delete_phone_policy.dart';
+import '../../../../core/database/user_repository.dart';
+import '../../../../core/utils/search_text_normalizer.dart';
+import '../../../../core/widgets/draggable_dialog_shell.dart';
 import '../../../calls/models/user_model.dart';
 import '../../../calls/provider/lookup_provider.dart';
 import '../../../../core/services/lookup_service.dart';
@@ -17,6 +21,8 @@ import '../../models/user_directory_column.dart';
 import '../../providers/department_directory_provider.dart';
 import '../../providers/directory_provider.dart';
 import '../../services/shared_asset_disconnect_apply.dart';
+import '../../services/user_deletion_messages.dart';
+import '../../services/user_deletion_undo_record.dart';
 import 'bulk_user_edit_dialog.dart';
 import 'catalog_column_selector_shell.dart';
 import 'department_form_dialog.dart';
@@ -269,33 +275,57 @@ class _UsersTabState extends ConsumerState<UsersTab>
   Future<void> _confirmAndDeleteSelected(BuildContext context, WidgetRef ref) async {
     final state = ref.read(directoryProvider);
     if (state.selectedIds.isEmpty) return;
-    final count = state.selectedIds.length;
+    final selectedUsers = state.allUsers
+        .where((u) => u.id != null && state.selectedIds.contains(u.id))
+        .toList();
+    final confirmLabels = selectedUsers
+        .map(
+          (u) => employeeDisplayLabel(
+            (u.name ?? '').trim().isEmpty ? '?' : u.name!.trim(),
+            u.departmentName,
+          ),
+        )
+        .toList();
     final ok = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Διαγραφή χρηστών'),
-        content: Text('Διαγραφή $count χρηστών;'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Ακύρωση'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('Διαγραφή'),
-          ),
-        ],
+      builder: (ctx) => DraggableDialogShell(
+        title: Text(userDeletionConfirmTitle(confirmLabels.length)),
+        builder: (titleHandle) => AlertDialog(
+          title: titleHandle,
+          content: Text(userDeletionConfirmMessage(confirmLabels)),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Ακύρωση'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: const Text('Διαγραφή'),
+            ),
+          ],
+        ),
       ),
     );
     if (ok != true || !context.mounted) return;
 
     final ids = state.selectedIds.toList();
     final db = await DatabaseHelper.instance.database;
+    final userRepo = UserRepository(db);
     final exclusivePhones =
-        await UserRepository(db).findExclusivePhonesForUserDelete(ids);
-    final usersToDelete = state.allUsers
-        .where((u) => u.id != null && ids.contains(u.id))
-        .toList();
+        await userRepo.findExclusivePhonesForUserDelete(ids);
+    final exclusiveEquipment =
+        await userRepo.findExclusiveEquipmentForUserDelete(ids);
+    final usersToDelete = selectedUsers;
+
+    final originalUserPhones = <int, List<String>>{};
+    final originalUserEquipmentIds = <int, List<int>>{};
+    for (final u in usersToDelete) {
+      final uid = u.id;
+      if (uid == null) continue;
+      originalUserPhones[uid] = await userRepo.userPhoneNumbersOrdered(db, uid);
+      originalUserEquipmentIds[uid] =
+          (await userRepo.equipmentIdsForUser(uid)).toList();
+    }
 
     final pendingPhoneBatches = <({
       SharedAssetDisconnectBatchResult batch,
@@ -317,6 +347,26 @@ class _UsersTabState extends ConsumerState<UsersTab>
       if (!context.mounted || !confirmed) return;
     }
 
+    final pendingEquipmentBatches = <({
+      SharedAssetDisconnectBatchResult batch,
+      int? sourceDepartmentId,
+    })>[];
+    if (exclusiveEquipment.isNotEmpty) {
+      if (!context.mounted) return;
+      final confirmed = await _collectExclusiveEquipmentDisconnectBatches(
+        context,
+        exclusiveEquipment: exclusiveEquipment,
+        usersToDelete: usersToDelete,
+        onBatch: (batch, sourceDepartmentId) {
+          pendingEquipmentBatches.add((
+            batch: batch,
+            sourceDepartmentId: sourceDepartmentId,
+          ));
+        },
+      );
+      if (!context.mounted || !confirmed) return;
+    }
+
     final notifier = ref.read(directoryProvider.notifier);
     await notifier.deleteSelected();
 
@@ -327,31 +377,167 @@ class _UsersTabState extends ConsumerState<UsersTab>
         sourceDepartmentId: pending.sourceDepartmentId,
       );
     }
-    if (pendingPhoneBatches.isNotEmpty) {
+    for (final pending in pendingEquipmentBatches) {
+      await applyPersonalEquipmentDisconnectBatch(
+        db,
+        pending.batch,
+        sourceDepartmentId: pending.sourceDepartmentId,
+      );
+    }
+
+    final phoneDeptAdds = <PhoneDeptAdd>[];
+    final equipmentDeptSets = <EquipmentDeptSet>[];
+    final softDeletedPhoneNumbers = <String>[];
+    final softDeletedEquipmentCodes = <String>[];
+    final equipmentRepo = EquipmentRepository(db);
+
+    Future<int?> resolveTransferDeptId(SharedAssetTransferTarget target) async {
+      if (target.departmentId != null) return target.departmentId;
+      final name = target.newDepartmentName?.trim();
+      if (name == null || name.isEmpty) return null;
+      final key = SearchTextNormalizer.normalizeForSearch(name);
+      final rows = await db.query(
+        'departments',
+        columns: ['id'],
+        where: 'name_key = ? AND COALESCE(is_deleted, 0) = 0',
+        whereArgs: [key],
+        limit: 1,
+      );
+      if (rows.isEmpty) return null;
+      return rows.first['id'] as int?;
+    }
+
+    for (final pending in pendingPhoneBatches) {
+      final sourceDeptId = pending.sourceDepartmentId;
+      for (final phone in pending.batch.phonesToKeep) {
+        if (sourceDeptId != null) {
+          phoneDeptAdds.add(
+            PhoneDeptAdd(departmentId: sourceDeptId, phoneNumber: phone),
+          );
+        }
+      }
+      for (final entry in pending.batch.phoneTransfers.entries) {
+        final deptId = await resolveTransferDeptId(entry.value);
+        if (deptId != null) {
+          phoneDeptAdds.add(
+            PhoneDeptAdd(departmentId: deptId, phoneNumber: entry.key),
+          );
+        }
+      }
+      softDeletedPhoneNumbers.addAll(pending.batch.phonesToDelete);
+    }
+
+    for (final pending in pendingEquipmentBatches) {
+      final sourceDeptId = pending.sourceDepartmentId;
+      for (final code in pending.batch.equipmentToKeep) {
+        if (sourceDeptId == null) continue;
+        final eid = await equipmentRepo.getEquipmentIdByCode(code);
+        if (eid != null) {
+          equipmentDeptSets.add(
+            EquipmentDeptSet(equipmentId: eid, departmentId: sourceDeptId),
+          );
+        }
+      }
+      for (final entry in pending.batch.equipmentTransfers.entries) {
+        final deptId = await resolveTransferDeptId(entry.value);
+        if (deptId == null) continue;
+        final eid = await equipmentRepo.getEquipmentIdByCode(entry.key);
+        if (eid != null) {
+          equipmentDeptSets.add(
+            EquipmentDeptSet(equipmentId: eid, departmentId: deptId),
+          );
+        }
+      }
+      softDeletedEquipmentCodes.addAll(pending.batch.equipmentToDelete);
+    }
+
+    notifier.rememberUserDeletionUndo(
+      UserDeletionUndoRecord(
+        deletedUserIds: ids,
+        originalUserPhones: originalUserPhones,
+        originalUserEquipmentIds: originalUserEquipmentIds,
+        phoneDeptAdds: phoneDeptAdds,
+        equipmentDeptSets: equipmentDeptSets,
+        softDeletedPhoneNumbers: softDeletedPhoneNumbers,
+        softDeletedEquipmentCodes: softDeletedEquipmentCodes,
+      ),
+    );
+
+    if (pendingPhoneBatches.isNotEmpty || pendingEquipmentBatches.isNotEmpty) {
       await notifier.loadUsers();
       ref.invalidate(lookupServiceProvider);
       await ref.read(lookupServiceProvider.future);
     }
     if (!context.mounted) return;
     final deleted = ref.read(directoryProvider).lastDeleted ?? [];
-    final deletedCount = deleted.length;
-    final names = deleted.map((u) => u.name?.trim().isEmpty ?? true ? '?' : u.name!).toList();
-    const maxNamesLength = 70;
-    final namesPart = names.join(', ');
-    int take = 0;
-    int len = 0;
-    for (; take < names.length; take++) {
-      final add = (take == 0 ? '' : ', ') + names[take];
-      if (len + add.length > maxNamesLength) break;
-      len += add.length;
+    final names = deleted
+        .map((u) => u.name?.trim().isEmpty ?? true ? '?' : u.name!)
+        .toList();
+    final assetActions = <UserDeletionAssetAction>[];
+    for (final pending in pendingPhoneBatches) {
+      final batch = pending.batch;
+      for (final phone in batch.phoneTransfers.keys) {
+        assetActions.add(
+          UserDeletionAssetAction(
+            kind: UserDeletionAssetActionKind.transfer,
+            identifier: phone,
+            isPhone: true,
+          ),
+        );
+      }
+      for (final phone in batch.phonesToDelete) {
+        assetActions.add(
+          UserDeletionAssetAction(
+            kind: UserDeletionAssetActionKind.delete,
+            identifier: phone,
+            isPhone: true,
+          ),
+        );
+      }
+      for (final phone in batch.phonesToKeep) {
+        assetActions.add(
+          UserDeletionAssetAction(
+            kind: UserDeletionAssetActionKind.keep,
+            identifier: phone,
+            isPhone: true,
+          ),
+        );
+      }
     }
-    final truncated = take < names.length;
-    final displayNames = truncated ? '${names.sublist(0, take).join(', ')}...' : namesPart;
-    final isOne = deletedCount == 1;
-    final label = isOne ? 'χρήστης' : 'χρήστες';
-    final message = names.isEmpty
-        ? 'Διαγράφηκαν $deletedCount $label.'
-        : 'Διαγράφηκαν $deletedCount $label: $displayNames';
+    for (final pending in pendingEquipmentBatches) {
+      final batch = pending.batch;
+      for (final code in batch.equipmentTransfers.keys) {
+        assetActions.add(
+          UserDeletionAssetAction(
+            kind: UserDeletionAssetActionKind.transfer,
+            identifier: code,
+            isPhone: false,
+          ),
+        );
+      }
+      for (final code in batch.equipmentToDelete) {
+        assetActions.add(
+          UserDeletionAssetAction(
+            kind: UserDeletionAssetActionKind.delete,
+            identifier: code,
+            isPhone: false,
+          ),
+        );
+      }
+      for (final code in batch.equipmentToKeep) {
+        assetActions.add(
+          UserDeletionAssetAction(
+            kind: UserDeletionAssetActionKind.keep,
+            identifier: code,
+            isPhone: false,
+          ),
+        );
+      }
+    }
+    final message = userDeletionSummaryMessage(
+      employeeNames: names,
+      assetActions: assetActions,
+    );
     final tooltipAllNames = names.isEmpty ? null : names.join(', ');
 
     final messenger = ScaffoldMessenger.of(context);
@@ -485,6 +671,62 @@ class _UsersTabState extends ConsumerState<UsersTab>
     }
     return true;
   }
+
+  Future<bool> _collectExclusiveEquipmentDisconnectBatches(
+    BuildContext context, {
+    required List<ExclusiveEquipmentForUserDelete> exclusiveEquipment,
+    required List<UserModel> usersToDelete,
+    required void Function(
+      SharedAssetDisconnectBatchResult batch,
+      int? sourceDepartmentId,
+    )
+    onBatch,
+  }) async {
+    final lookup = LookupService.instance;
+    final departments = lookup.departments
+        .where((d) => !d.isDeleted && d.name.trim().isNotEmpty)
+        .toList();
+
+    final byUser = <int, List<ExclusiveEquipmentForUserDelete>>{};
+    for (final item in exclusiveEquipment) {
+      byUser.putIfAbsent(item.userId, () => []).add(item);
+    }
+
+    for (final entry in byUser.entries) {
+      final codes = entry.value
+          .map((e) => e.codeEquipment)
+          .where((c) => c.isNotEmpty)
+          .toList();
+      if (codes.isEmpty) continue;
+
+      final first = entry.value.first;
+      UserModel? user;
+      for (final u in usersToDelete) {
+        if (u.id == entry.key) {
+          user = u;
+          break;
+        }
+      }
+      final displayName = user == null
+          ? null
+          : '${user.firstName} ${user.lastName}'.trim();
+
+      if (!context.mounted) return false;
+      final batch = await showSharedAssetDisconnectFlow(
+        context: context,
+        sourceDepartmentId: first.departmentId,
+        sourceDepartmentName: first.departmentName,
+        equipmentCodes: codes,
+        availableDepartments: departments,
+        mode: SharedAssetDisconnectMode.personalEquipment,
+        personalPhoneUserDisplayName: displayName,
+        allowKeepInDepartment: true,
+      );
+      if (!context.mounted || batch == null) return false;
+      onBatch(batch, first.departmentId);
+    }
+    return true;
+  }
 }
 
 /// Διακόπτης Προσωπικά / Κοινόχρηστα (εικονίδια asset).
@@ -511,7 +753,7 @@ class _CatalogModeToggle extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         Tooltip(
-          message: 'Μόνο τηλέφωνα χρηστών',
+          message: 'Μόνο τηλέφωνα υπαλλήλων',
           child: _modeButton(
             context: context,
             selected: personal,

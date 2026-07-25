@@ -18,6 +18,7 @@ import '../../calls/provider/lookup_provider.dart';
 import '../models/non_user_phone_entry.dart';
 import '../models/user_catalog_mode.dart';
 import '../models/user_directory_column.dart';
+import '../services/user_deletion_undo_record.dart';
 import 'directory_cache_refresh.dart';
 
 const _catalogUsersVisibleColumnsKey = 'catalog_users_visible_columns';
@@ -27,6 +28,18 @@ class _UnsetFocus {
 }
 
 const _kUnsetFocus = _UnsetFocus();
+
+class _UnsetDeletionUndo {
+  const _UnsetDeletionUndo();
+}
+
+const _kUnsetDeletionUndo = _UnsetDeletionUndo();
+
+class _UnsetLastDeleted {
+  const _UnsetLastDeleted();
+}
+
+const _kUnsetLastDeleted = _UnsetLastDeleted();
 
 /// Αποτέλεσμα ανάγνωσης ρυθμίσεων στηλών χρηστών (σειρά πλήρους λίστας + ποια κλειδιά είναι ορατά).
 typedef _UserColumnLayout = ({
@@ -47,6 +60,7 @@ class DirectoryState {
     this.sortAscending = true,
     this.selectedIds = const {},
     this.lastDeleted,
+    this.lastUserDeletionUndo,
     this.lastBulkUpdatedUsers,
     this.focusedRowIndex,
     List<UserDirectoryColumn>? columnOrder,
@@ -71,6 +85,8 @@ class DirectoryState {
   final bool sortAscending;
   final Set<int> selectedIds;
   final List<UserModel>? lastDeleted;
+  /// Φάκελος πλήρους αναίρεσης διαγραφής υπαλλήλου (τηλέφωνα/εξοπλισμός).
+  final UserDeletionUndoRecord? lastUserDeletionUndo;
   /// Πριν την τελευταία μαζική επεξεργασία (για undo).
   final List<UserModel>? lastBulkUpdatedUsers;
   /// Ευρετήριο στη [filteredUsers] για keyboard navigation (πάνω/κάτω, Enter).
@@ -98,7 +114,8 @@ class DirectoryState {
     String? sortColumn,
     bool? sortAscending,
     Set<int>? selectedIds,
-    List<UserModel>? lastDeleted,
+    Object? lastDeleted = _kUnsetLastDeleted,
+    Object? lastUserDeletionUndo = _kUnsetDeletionUndo,
     List<UserModel>? lastBulkUpdatedUsers,
     Object? focusedRowIndex = _kUnsetFocus,
     List<UserDirectoryColumn>? columnOrder,
@@ -107,6 +124,12 @@ class DirectoryState {
     final nextFocus = identical(focusedRowIndex, _kUnsetFocus)
         ? this.focusedRowIndex
         : focusedRowIndex as int?;
+    final nextUndo = identical(lastUserDeletionUndo, _kUnsetDeletionUndo)
+        ? this.lastUserDeletionUndo
+        : lastUserDeletionUndo as UserDeletionUndoRecord?;
+    final nextLastDeleted = identical(lastDeleted, _kUnsetLastDeleted)
+        ? this.lastDeleted
+        : lastDeleted as List<UserModel>?;
     return DirectoryState(
       allUsers: allUsers ?? this.allUsers,
       filteredUsers: filteredUsers ?? this.filteredUsers,
@@ -117,7 +140,8 @@ class DirectoryState {
       sortColumn: sortColumn ?? this.sortColumn,
       sortAscending: sortAscending ?? this.sortAscending,
       selectedIds: selectedIds ?? this.selectedIds,
-      lastDeleted: lastDeleted ?? this.lastDeleted,
+      lastDeleted: nextLastDeleted,
+      lastUserDeletionUndo: nextUndo,
       lastBulkUpdatedUsers: lastBulkUpdatedUsers ?? this.lastBulkUpdatedUsers,
       focusedRowIndex: nextFocus,
       columnOrder: columnOrder ?? this.columnOrder,
@@ -271,6 +295,7 @@ class DirectoryNotifier extends Notifier<DirectoryState> {
       sortAscending: state.sortAscending,
       selectedIds: state.selectedIds,
       lastDeleted: state.lastDeleted,
+      lastUserDeletionUndo: state.lastUserDeletionUndo,
       lastBulkUpdatedUsers: state.lastBulkUpdatedUsers,
       focusedRowIndex: state.focusedRowIndex,
       catalogMode: state.catalogMode,
@@ -615,20 +640,35 @@ class DirectoryNotifier extends Notifier<DirectoryState> {
     state = state.copyWith(
       selectedIds: {},
       lastDeleted: toDelete,
+      lastUserDeletionUndo: null,
     );
     await loadUsers();
     await refreshDirectoryCaches(ref, equipment: true);
   }
 
+  /// Αποθηκεύει τον φάκελο πλήρους αναίρεσης μετά την εφαρμογή διαθέσεων.
+  void rememberUserDeletionUndo(UserDeletionUndoRecord record) {
+    state = state.copyWith(lastUserDeletionUndo: record);
+  }
+
   Future<void> undoLastDelete() async {
+    final undoRecord = state.lastUserDeletionUndo;
     final list = state.lastDeleted;
-    if (list == null || list.isEmpty) return;
-    final ids = list.map((u) => u.id).whereType<int>().toList();
-    final dbRestore = await DatabaseHelper.instance.database;
-    await UserRepository(dbRestore).restoreUsers(ids);
+    if (undoRecord != null) {
+      final dbRestore = await DatabaseHelper.instance.database;
+      await applyUserDeletionUndo(dbRestore, undoRecord);
+    } else {
+      if (list == null || list.isEmpty) return;
+      final ids = list.map((u) => u.id).whereType<int>().toList();
+      final dbRestore = await DatabaseHelper.instance.database;
+      await UserRepository(dbRestore).restoreUsers(ids);
+    }
     await _refreshLookupCache();
     if (!ref.mounted) return;
-    state = state.copyWith(lastDeleted: null);
+    state = state.copyWith(
+      lastDeleted: null,
+      lastUserDeletionUndo: null,
+    );
     await loadUsers();
     await refreshDirectoryCaches(ref, equipment: true);
   }

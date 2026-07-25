@@ -15,11 +15,17 @@ class DepartmentEmployeeReassignCandidate {
   final String name;
 }
 
-/// Αποτέλεσμα οδηγού μεταφοράς υπαλλήλων: userId → τμήμα προορισμού.
+/// Αποτέλεσμα οδηγού απόφασης υπαλλήλων: μεταφορά (userId → τμήμα) ή διαγραφή.
 class DepartmentEmployeeReassignBatch {
-  const DepartmentEmployeeReassignBatch({required this.transfers});
+  const DepartmentEmployeeReassignBatch({
+    required this.transfers,
+    this.toDelete = const {},
+  });
 
   final Map<int, SharedAssetTransferTarget> transfers;
+
+  /// Υπάλληλοι που επιλέχθηκαν προς διαγραφή (αντί μεταφοράς).
+  final Set<int> toDelete;
 }
 
 /// Οδηγός μεταφοράς υπαλλήλων τμήματος (ανά ομάδες) πριν τη διαγραφή.
@@ -115,6 +121,14 @@ class _DepartmentEmployeeReassignDialogState
     });
   }
 
+  void _deleteSelected() {
+    if (_selected.isEmpty) return;
+    setState(() {
+      _draft.markForDeletion(Set<int>.from(_selected));
+      _selected.clear();
+    });
+  }
+
   void _toggleAll(bool? value) {
     setState(() {
       if (value == true) {
@@ -139,7 +153,7 @@ class _DepartmentEmployeeReassignDialogState
         : widget.sourceDepartmentName.trim();
 
     return AlertDialog(
-      title: Text('Μεταφορά υπαλλήλων από «$sourceLabel»'),
+      title: Text('Απόφαση για τους υπαλλήλους του «$sourceLabel»'),
       content: SizedBox(
         width: 480,
         child: SingleChildScrollView(
@@ -219,12 +233,19 @@ class _DepartmentEmployeeReassignDialogState
           onPressed: () => Navigator.of(context).pop(),
           child: const Text('Ακύρωση'),
         ),
-        if (!_draft.isComplete)
+        if (!_draft.isComplete) ...[
+          TextButton(
+            onPressed: selectedCount >= 1 ? _deleteSelected : null,
+            style: TextButton.styleFrom(
+              foregroundColor: theme.colorScheme.error,
+            ),
+            child: Text('Διαγραφή ($selectedCount) επιλεγμένων'),
+          ),
           FilledButton(
             onPressed: selectedCount >= 1 ? _transferSelected : null,
             child: Text('Μεταφορά επιλεγμένων ($selectedCount) σε…'),
-          )
-        else
+          ),
+        ] else
           FilledButton(
             onPressed: () => Navigator.of(context).pop(_draft.build()),
             child: const Text('Ολοκλήρωση'),

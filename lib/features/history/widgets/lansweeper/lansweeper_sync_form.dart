@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/services/lansweeper_ticket_submit_config.dart';
 import '../../../../core/widgets/lexicon_spell_text_form_field.dart';
 import '../../../../core/widgets/spell_check_controller.dart';
+import '../../../../core/widgets/app_asset_image.dart';
 
 class LansweeperSyncForm extends ConsumerWidget {
   const LansweeperSyncForm({
@@ -150,10 +151,11 @@ class LansweeperSyncForm extends ConsumerWidget {
         : IconButton(
             tooltip: 'Επεξεργασία προτύπου προτροπής',
             onPressed: isSuggesting || inCooldown ? null : onEditPromptTemplate,
-            icon: Image.asset(
-              'assets/prompt_editor.png',
+            icon: AppAssetImage(
+              assetPath: 'assets/prompt_editor.png',
               width: 20,
               height: 20,
+              fallbackIcon: Icons.edit_note,
             ),
           );
 

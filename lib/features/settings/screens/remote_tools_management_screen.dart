@@ -8,6 +8,7 @@ import '../../../core/models/remote_tool_arg.dart';
 import '../../../core/models/remote_tool_role.dart';
 import '../../../core/widgets/info_hint_icon.dart';
 import '../../../core/widgets/remote_tool_icon.dart';
+import '../../../core/widgets/app_asset_image.dart';
 import '../../../core/widgets/reorder_grab_handle.dart';
 import '../../calls/provider/remote_paths_provider.dart';
 import '../../../core/services/settings_service.dart';
@@ -688,10 +689,11 @@ class _RemoteConnectionSettingsPanelState
                   widget.onAfterRemoteToolSaved?.call();
                 }
               },
-              icon: Image.asset(
-                'assets/add_remote_tool_icon.png',
+              icon: AppAssetImage(
+                assetPath: 'assets/add_remote_tool_icon.png',
                 width: 28,
                 height: 28,
+                fallbackIcon: Icons.add_circle_outline,
               ),
             ),
           ],

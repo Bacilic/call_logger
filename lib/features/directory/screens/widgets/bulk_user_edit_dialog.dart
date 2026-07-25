@@ -115,7 +115,7 @@ class _BulkUserEditDialogState extends State<BulkUserEditDialog>
         const SnackBar(
           content: Text(
             'Η μαζική ανάθεση συγκρουόμενου τηλέφωνου απαιτεί '
-            'το ίδιο τμήμα για όλους τους επιλεγμένους χρήστες.',
+            'το ίδιο τμήμα για όλους τους επιλεγμένους υπαλλήλους.',
           ),
           backgroundColor: Colors.orange,
         ),
@@ -132,7 +132,7 @@ class _BulkUserEditDialogState extends State<BulkUserEditDialog>
         ? ((widget.selectedUsers.first.name ?? '').trim().isEmpty
               ? '—'
               : widget.selectedUsers.first.name!.trim())
-        : '${widget.selectedUsers.length} επιλεγμένους χρήστες';
+        : '${widget.selectedUsers.length} επιλεγμένους υπαλλήλους';
 
     if (!mounted) return null;
     return showUserPhoneDepartmentConflictDialog(
@@ -200,7 +200,11 @@ class _BulkUserEditDialogState extends State<BulkUserEditDialog>
     Navigator.of(context).pop();
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('Ενημερώθηκαν ${ids.length} χρήστες.'),
+        content: Text(
+          ids.length == 1
+              ? 'Ενημερώθηκε 1 υπάλληλος.'
+              : 'Ενημερώθηκαν ${ids.length} υπάλληλοι.',
+        ),
         duration: const Duration(seconds: 5),
         action: SnackBarAction(
           label: 'Αναίρεση',
@@ -224,7 +228,11 @@ class _BulkUserEditDialogState extends State<BulkUserEditDialog>
       messengerKey: dialogMessengerKey,
       child: Center(
         child: AlertDialog(
-      title: Text('Μαζική επεξεργασία (${widget.selectedUsers.length} χρήστες)'),
+      title: Text(
+        widget.selectedUsers.length == 1
+            ? 'Μαζική επεξεργασία (1 υπάλληλος)'
+            : 'Μαζική επεξεργασία (${widget.selectedUsers.length} υπάλληλοι)',
+      ),
       content: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,

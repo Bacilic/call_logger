@@ -30,4 +30,26 @@ void main() {
     expect(await settings.isDatabaseUnconfigured(), isFalse);
     expect(await settings.getDatabasePath(), r'C:\temp\test_reset.db');
   });
+
+  test(
+    'markDatabaseUnconfigured σβήνει διαδρομή, σημαίνει μη ρυθμισμένη και καθαρίζει πρόσφατες',
+    () async {
+      const path =
+          r'F:\flutter_projects\call_logger\Data Base\Δοκιμές\μόνο_κλήσεις.db';
+      final settings = SettingsService();
+      await settings.setDatabasePath(path);
+      await settings.recordVerifiedDatabasePath(path);
+      expect(await settings.getDatabasePath(), path);
+      expect(await settings.getRecentDatabasePaths(), contains(path));
+      expect(await settings.isDatabaseUnconfigured(), isFalse);
+
+      await settings.markDatabaseUnconfigured();
+
+      expect(await settings.isDatabaseUnconfigured(), isTrue);
+      expect(await settings.getRecentDatabasePaths(), isEmpty);
+      // Άμεσος έλεγχος prefs: το getDatabasePath() θα ζητούσε path_provider για την προεπιλογή.
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getString('database_path'), isNull);
+    },
+  );
 }

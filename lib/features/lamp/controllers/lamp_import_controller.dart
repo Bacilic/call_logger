@@ -48,12 +48,10 @@ class LampImportController {
   LampImportController({
     required this.host,
     required this.path,
-    RecreateConfirmationCallback? confirmRecreateExistingDatabase,
-    ImportReportFlowCallback? showImportReportDialog,
-    LampDbComparisonRefresh? refreshDbComparison,
-  })  : _confirmRecreateExistingDatabase = confirmRecreateExistingDatabase,
-        _showImportReportDialog = showImportReportDialog,
-        _refreshDbComparison = refreshDbComparison;
+    this._confirmRecreateExistingDatabase,
+    this._showImportReportDialog,
+    this._refreshDbComparison,
+  });
 
   final LampScreenHost host;
   final LampPathController path;

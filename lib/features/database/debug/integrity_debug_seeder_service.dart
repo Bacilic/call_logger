@@ -48,6 +48,33 @@ class IntegrityDebugSeederService {
     '1003',
   ];
 
+  /// Τμήμα δοκιμής UX: έλεγχος ροών διαγραφής υπαλλήλου/εξοπλισμού/τηλεφώνου.
+  static const String informatikiDepartmentName = 'Πληροφορική';
+  static const List<(String, String)> informatikiEmployees = [
+    ('Άννα', 'Πατσαρίκα'),
+    ('Βλάσης', 'Οικονόμου'),
+    ('Ελένη', 'Ψαρά'),
+    ('Βασίλης', 'Δρόσος'),
+    ('Νίκος', 'Οικονομόπουλος'),
+    ('Γιάννα', 'Κυριαζη'),
+  ];
+  static const List<String> informatikiPersonalPhones = [
+    '2851',
+    '2852',
+    '2853',
+    '2854',
+    '2855',
+    '2856',
+  ];
+  static const List<String> informatikiEquipmentCodes = [
+    '3601',
+    '3602',
+    '3603',
+    '3604',
+    '3605',
+    '3606',
+  ];
+
   /// Διαθέσιμο μόνο σε debug builds σε desktop (Windows/macOS/Linux).
   static bool get isEnabled {
     if (!kDebugMode) return false;
@@ -133,6 +160,7 @@ class IntegrityDebugSeederService {
         await _insertTasksTemporalInconsistency(txn);
         await _insertAuditMissingSearchText(txn);
         await _insertDokimastikoSharedAssetsScenario(txn);
+        await insertInformatikiDeletionScenario(txn);
       });
     } finally {
       await db.close();
@@ -511,6 +539,160 @@ class IntegrityDebugSeederService {
         'is_deleted': 0,
       });
     }
+  }
+
+  /// Σενάριο ελέγχου διαγραφών: τμήμα Πληροφορική με 6 υπαλλήλους,
+  /// προσωπικά τηλέφωνα και owned εξοπλισμό (department_id NULL).
+  ///
+  /// Επιπλέον πολλαπλές συνδέσεις για δοκιμή απαρίθμησης:
+  /// Δρόσος 2854/3604 → τηλέφωνο 9, εξοπλισμός 7· Βλάσης 2852/3602 → 5 και 3.
+  Future<void> insertInformatikiDeletionScenario(Transaction txn) async {
+    final deptId = await txn.insert('departments', {
+      'name': informatikiDepartmentName,
+      'name_key': SearchTextNormalizer.normalizeForSearch(
+        informatikiDepartmentName,
+      ),
+      'is_deleted': 0,
+    });
+
+    int? drososPhoneId;
+    int? drososEquipmentId;
+    int? vlasisPhoneId;
+    int? vlasisEquipmentId;
+
+    for (var i = 0; i < informatikiEmployees.length; i++) {
+      final employee = informatikiEmployees[i];
+      final phoneNumber = informatikiPersonalPhones[i];
+      final equipmentCode = informatikiEquipmentCodes[i];
+
+      final userId = await txn.insert('users', {
+        'first_name': employee.$1,
+        'last_name': employee.$2,
+        'department_id': deptId,
+        'is_deleted': 0,
+      });
+
+      final phoneId = await txn.insert('phones', {
+        'number': phoneNumber,
+        'is_deleted': 0,
+      });
+      await txn.insert('user_phones', {
+        'user_id': userId,
+        'phone_id': phoneId,
+      });
+
+      final equipmentId = await txn.insert('equipment', {
+        'code_equipment': equipmentCode,
+        'department_id': null,
+        'is_deleted': 0,
+      });
+      await txn.insert('user_equipment', {
+        'user_id': userId,
+        'equipment_id': equipmentId,
+      });
+
+      if (phoneNumber == '2854') {
+        drososPhoneId = phoneId;
+        drososEquipmentId = equipmentId;
+      } else if (phoneNumber == '2852') {
+        vlasisPhoneId = phoneId;
+        vlasisEquipmentId = equipmentId;
+      }
+    }
+
+    final now = DateTime.now().toIso8601String();
+
+    // Βασίλης Δρόσος — τηλέφωνο 2854: dept + 2 tasks + 5 calls (= 9 με κάτοχο).
+    await txn.insert('department_phones', {
+      'department_id': deptId,
+      'phone_id': drososPhoneId,
+    });
+    for (var i = 0; i < 2; i++) {
+      await txn.insert('tasks', {
+        'title': 'Debug Δρόσος εκκρεμότητα τηλ. ${i + 1}',
+        'status': 'open',
+        'search_index': 'debug drosos phone task ${i + 1}',
+        'phone_id': drososPhoneId,
+        'created_at': now,
+        'updated_at': now,
+        'is_deleted': 0,
+      });
+    }
+    for (var i = 0; i < 5; i++) {
+      await txn.insert('calls', {
+        'phone_text': '2854',
+        'status': 'completed',
+        'search_index': 'debug drosos phone call ${i + 1}',
+        'lansweeper_state': 'unsent',
+        'is_deleted': 0,
+      });
+    }
+
+    // Βασίλης Δρόσος — εξοπλισμός 3604: 2 tasks + 4 calls (= 7 με κάτοχο).
+    for (var i = 0; i < 2; i++) {
+      await txn.insert('tasks', {
+        'title': 'Debug Δρόσος εκκρεμότητα εξοπλ. ${i + 1}',
+        'status': 'open',
+        'search_index': 'debug drosos equipment task ${i + 1}',
+        'equipment_id': drososEquipmentId,
+        'created_at': now,
+        'updated_at': now,
+        'is_deleted': 0,
+      });
+    }
+    for (var i = 0; i < 4; i++) {
+      await txn.insert('calls', {
+        'equipment_id': drososEquipmentId,
+        'equipment_text': '3604',
+        'status': 'completed',
+        'search_index': 'debug drosos equipment call ${i + 1}',
+        'lansweeper_state': 'unsent',
+        'is_deleted': 0,
+      });
+    }
+
+    // Βλάσης Οικονόμου — τηλέφωνο 2852: dept + 1 task + 2 calls (= 5 με κάτοχο).
+    await txn.insert('department_phones', {
+      'department_id': deptId,
+      'phone_id': vlasisPhoneId,
+    });
+    await txn.insert('tasks', {
+      'title': 'Debug Βλάσης εκκρεμότητα τηλ.',
+      'status': 'open',
+      'search_index': 'debug vlasis phone task',
+      'phone_id': vlasisPhoneId,
+      'created_at': now,
+      'updated_at': now,
+      'is_deleted': 0,
+    });
+    for (var i = 0; i < 2; i++) {
+      await txn.insert('calls', {
+        'phone_text': '2852',
+        'status': 'completed',
+        'search_index': 'debug vlasis phone call ${i + 1}',
+        'lansweeper_state': 'unsent',
+        'is_deleted': 0,
+      });
+    }
+
+    // Βλάσης Οικονόμου — εξοπλισμός 3602: 1 task + 1 call (= 3 με κάτοχο).
+    await txn.insert('tasks', {
+      'title': 'Debug Βλάσης εκκρεμότητα εξοπλ.',
+      'status': 'open',
+      'search_index': 'debug vlasis equipment task',
+      'equipment_id': vlasisEquipmentId,
+      'created_at': now,
+      'updated_at': now,
+      'is_deleted': 0,
+    });
+    await txn.insert('calls', {
+      'equipment_id': vlasisEquipmentId,
+      'equipment_text': '3602',
+      'status': 'completed',
+      'search_index': 'debug vlasis equipment call',
+      'lansweeper_state': 'unsent',
+      'is_deleted': 0,
+    });
   }
 
   Future<void> _insertAuditMissingSearchText(Transaction txn) async {

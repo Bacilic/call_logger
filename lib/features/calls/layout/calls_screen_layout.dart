@@ -23,6 +23,7 @@ import '../screens/widgets/remote_connection_buttons.dart';
 import '../screens/widgets/user_info_card.dart';
 import '../../../core/errors/call_save_exception.dart';
 import '../../../core/errors/task_save_exception.dart';
+import 'call_form_clear.dart';
 import 'calls_field_groups.dart';
 import 'calls_field_groups_provider.dart';
 import 'calls_layout_engine.dart';
@@ -285,12 +286,7 @@ class _ClearFormButton extends ConsumerWidget {
       style: OutlinedButton.styleFrom(
         padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
       ),
-      onPressed: () {
-        ref.read(callHeaderProvider.notifier).clearAll();
-        ref.read(callEntryProvider.notifier).reset();
-        ref.read(callsFieldConfirmationsProvider.notifier).resetAll();
-        ref.read(callsScreenExpandedLatchProvider.notifier).release();
-      },
+      onPressed: () => clearCallFormCompletely(ref),
     );
   }
 }

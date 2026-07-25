@@ -80,6 +80,57 @@ Future<void> applyPersonalPhoneDisconnectBatch(
   }
 }
 
+/// Μετά από αποσύνδεση προσωπικού εξοπλισμού χρήστη (διαγραφή χρήστη).
+///
+/// Ο εξοπλισμός έχει πάντα τμήμα: η «κράτηση» γράφει το τμήμα του (πρώην)
+/// κατόχου· χωρίς [sourceDepartmentId] δεν γίνεται κράτηση.
+Future<void> applyPersonalEquipmentDisconnectBatch(
+  Database db,
+  SharedAssetDisconnectBatchResult batch, {
+  required int? sourceDepartmentId,
+}) async {
+  if (batch.equipmentToKeep.isEmpty &&
+      batch.equipmentTransfers.isEmpty &&
+      batch.equipmentToDelete.isEmpty &&
+      batch.newDepartmentNamesToCreate.isEmpty) {
+    return;
+  }
+
+  assert(
+    batch.equipmentToKeep.isEmpty || sourceDepartmentId != null,
+    'equipmentToKeep απαιτεί sourceDepartmentId (κανόνας: εξοπλισμός πάντα με τμήμα)',
+  );
+
+  await reloadLookupAfterNewDepartments(batch);
+
+  final equipment = EquipmentRepository(db);
+  final equipmentTransfers = await _resolvePhoneTransferTargets(
+    db,
+    batch.equipmentTransfers,
+  );
+
+  if (sourceDepartmentId != null) {
+    for (final code in batch.equipmentToKeep) {
+      await equipment.updateEquipmentDepartment(code, sourceDepartmentId);
+    }
+  }
+
+  for (final entry in equipmentTransfers.entries) {
+    await equipment.updateEquipmentDepartment(entry.key, entry.value);
+  }
+
+  if (batch.equipmentToDelete.isNotEmpty) {
+    final equipmentIds = <int>[];
+    for (final code in batch.equipmentToDelete) {
+      final id = await equipment.getEquipmentIdByCode(code);
+      if (id != null) equipmentIds.add(id);
+    }
+    if (equipmentIds.isNotEmpty) {
+      await equipment.deleteEquipments(equipmentIds);
+    }
+  }
+}
+
 /// Μετά από αποδέσμευση κοινόχρηστων στοιχείων τμήματος (φόρμα ή διαγραφή τμήματος).
 ///
 /// Αν δοθεί [executor] (π.χ. μέσα σε εξωτερικό transaction), οι αλλαγές

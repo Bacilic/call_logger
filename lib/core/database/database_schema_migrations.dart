@@ -8,6 +8,7 @@ import 'audit_diff_helper.dart';
 import 'audit_service.dart';
 import '../utils/lexicon_word_metrics.dart';
 import '../utils/search_text_normalizer.dart';
+import 'database_file_classifier.dart';
 import 'database_init_result.dart';
 import 'database_v1_schema.dart';
 import 'dictionary_repository.dart';
@@ -16,17 +17,31 @@ import 'directory_audit_helpers.dart';
 /// Squashed schema version (ίδιο με [databaseSchemaVersionV1]).
 const int kDatabaseSchemaVersion = databaseSchemaVersionV1;
 
-/// Επαληθεύει ότι υπάρχει ο πίνακας `calls`. Αλλιώς ρίχνει [DatabaseInitException].
+/// Επαληθεύει ότι υπάρχουν όλοι οι [kCallLoggerCoreTables].
+/// Αλλιώς ρίχνει [DatabaseInitException] με ονομαστική λίστα ελλείψεων.
 Future<void> validateDatabaseSchema(Database db, String dbPath) async {
-  final r = await db.rawQuery('PRAGMA table_info(calls)');
-  if (r.isEmpty) {
-    throw DatabaseInitException(
-      DatabaseInitResult.corruptedOrInvalid(
-        dbPath,
-        'Λείπει ο πίνακας calls· το αρχείο δεν φαίνεται έγκυρη βάση.',
-      ),
-    );
-  }
+  final tableRows = await db.rawQuery(
+    "SELECT name FROM sqlite_master "
+    "WHERE type = 'table' AND name NOT LIKE 'sqlite_%'",
+  );
+  final tables = <String>{
+    for (final row in tableRows)
+      ((row['name'] as String?)?.trim().toLowerCase() ?? ''),
+  }..removeWhere((name) => name.isEmpty);
+
+  final missing = kCallLoggerCoreTables
+      .where((name) => !tables.contains(name))
+      .toList(growable: false);
+  if (missing.isEmpty) return;
+
+  final fileName = p.basename(dbPath);
+  throw DatabaseInitException(
+    DatabaseInitResult.corruptedOrInvalid(
+      dbPath,
+      'Το αρχείο «$fileName» είναι ελλιπής βάση της Καταγραφής Κλήσεων — '
+      'λείπουν οι πίνακες: ${missing.join(', ')}.',
+    ),
+  );
 }
 
 /// Δημιουργία σχήματος v1 (squashed): όλοι οι πίνακες σε μία δημιουργία.

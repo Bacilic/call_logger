@@ -4,7 +4,7 @@ typedef DepartmentDeletionUndoDecision = ({
   String snackbarMessage,
 });
 
-/// Αποφασίζει αν προσφέρεται αναίρεση και ποιο μήνυμα εμφανίζεται στο snackbar.
+/// Αποφασίζει το μήνυμα snackbar· η αναίρεση προσφέρεται πάντα (πλήρης φάκελος).
 DepartmentDeletionUndoDecision resolveDepartmentDeletionUndo({
   required int deletedDepartmentCount,
   required int movedEmployeeCount,
@@ -19,10 +19,8 @@ DepartmentDeletionUndoDecision resolveDepartmentDeletionUndo({
   }
 
   return (
-    canOfferUndo: false,
+    canOfferUndo: true,
     snackbarMessage:
-        'Το τμήμα διαγράφηκε, αλλά υπάλληλοι ή στοιχεία μετακινήθηκαν σε άλλα '
-        'τμήματα· η ενέργεια δεν αναιρείται αυτόματα (η επαναφορά του τμήματος '
-        'θα το έφερνε πίσω άδειο).',
+        '$baseMessage Επαναφέρθηκαν και τα μετακινημένα στοιχεία.',
   );
 }

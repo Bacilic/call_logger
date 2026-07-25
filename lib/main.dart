@@ -21,6 +21,7 @@ import 'core/services/crash_log_service.dart';
 import 'core/services/desktop_window_service.dart';
 import 'core/services/settings_service.dart';
 import 'core/errors/app_error_result.dart';
+import 'core/errors/nonfatal_font_error_classifier.dart';
 import 'core/widgets/crash_restart_notice.dart';
 import 'core/widgets/app_init_wrapper.dart';
 import 'core/widgets/app_shell_with_global_fatal_error.dart';
@@ -80,12 +81,20 @@ bool _platformAsyncErrorHandler(Object error, StackTrace stack) {
     }
     return true;
   }
+  if (isNonFatalFontLoadError(error, stack)) {
+    CrashLogService.instanceOrNull?.logError(error, stack, fatal: false);
+    return true;
+  }
   CrashLogService.instanceOrNull?.logError(error, stack, fatal: true);
   _routeFatalErrorToUi(error, stack);
   return true;
 }
 
 void _rootZoneErrorHandler(Object error, StackTrace stack) {
+  if (isNonFatalFontLoadError(error, stack)) {
+    CrashLogService.instanceOrNull?.logError(error, stack, fatal: false);
+    return;
+  }
   if (!_isNonFatalFrameworkNoise(error)) {
     CrashLogService.instanceOrNull?.logError(error, stack, fatal: true);
   }
@@ -126,6 +135,14 @@ Future<void> main(List<String> arguments) async {
             _isNonFatalUiLayoutErrorMessage(details.exceptionAsString())) {
           debugPrint(
             'UI layout error (αγνοήθηκε σε release): ${details.exceptionAsString()}',
+          );
+          return;
+        }
+        if (isNonFatalFontLoadError(details.exception, st)) {
+          CrashLogService.instanceOrNull?.logError(
+            details.exception,
+            st,
+            fatal: false,
           );
           return;
         }
@@ -221,7 +238,9 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final textTheme = GoogleFonts.interTextTheme();
+    final textTheme = GoogleFonts.interTextTheme().apply(
+      fontFamilyFallback: const ['Segoe UI'],
+    );
     final colorScheme = ColorScheme.fromSeed(seedColor: Colors.deepPurple);
     return MaterialApp(
       title: 'Καταγραφή Κλήσεων',

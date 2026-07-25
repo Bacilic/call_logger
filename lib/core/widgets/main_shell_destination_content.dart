@@ -2,6 +2,70 @@ part of 'main_shell.dart';
 
 /// Περιεχόμενο προορισμού πλοήγησης και στήλη κύριου panel.
 mixin MainShellDestinationContentMixin on ConsumerState<MainShell> {
+  /// Η λωρίδα παλιάς/κενής βάσης έκλεισε σε αυτή τη συνεδρία.
+  bool _databaseNoticeDismissedThisSession = false;
+  bool _acknowledgedNoticeLoaded = false;
+  String? _acknowledgedNoticeIdentity;
+  late DatabaseStateNotice _databaseStateNotice;
+
+  void _initDatabaseStateNotice() {
+    _databaseStateNotice = _evaluateCurrentDatabaseNotice();
+    unawaited(_loadAcknowledgedDatabaseNoticeIdentity());
+  }
+
+  void _syncDatabaseStateNotice(MainShell oldWidget) {
+    if (oldWidget.databaseProfile != widget.databaseProfile ||
+        oldWidget.databaseResult.path != widget.databaseResult.path) {
+      final next = _evaluateCurrentDatabaseNotice();
+      if (next.identity != _databaseStateNotice.identity) {
+        _databaseNoticeDismissedThisSession = false;
+      }
+      _databaseStateNotice = next;
+    }
+  }
+
+  DatabaseStateNotice _evaluateCurrentDatabaseNotice() {
+    final path = widget.databaseResult.path?.trim() ?? '';
+    var modifiedAt = DateTime.fromMillisecondsSinceEpoch(0);
+    if (path.isNotEmpty) {
+      try {
+        modifiedAt = File(path).lastModifiedSync();
+      } catch (_) {}
+    }
+    return evaluateDatabaseStateNotice(
+      profile: widget.databaseProfile,
+      dbPath: path,
+      fileModifiedAt: modifiedAt,
+      now: DateTime.now(),
+    );
+  }
+
+  Future<void> _loadAcknowledgedDatabaseNoticeIdentity() async {
+    final value =
+        await SettingsService().getAcknowledgedDatabaseNoticeIdentity();
+    if (!mounted) return;
+    setState(() {
+      _acknowledgedNoticeIdentity = value;
+      _acknowledgedNoticeLoaded = true;
+    });
+  }
+
+  Future<void> _dismissDatabaseStateNotice() async {
+    final identity = _databaseStateNotice.identity;
+    setState(() {
+      _databaseNoticeDismissedThisSession = true;
+      _acknowledgedNoticeIdentity = identity;
+    });
+    await SettingsService().setAcknowledgedDatabaseNoticeIdentity(identity);
+  }
+
+  bool get _showDatabaseStateNotice {
+    if (!_acknowledgedNoticeLoaded) return false;
+    if (_databaseStateNotice.kind == DatabaseNoticeKind.none) return false;
+    if (_databaseNoticeDismissedThisSession) return false;
+    return _acknowledgedNoticeIdentity != _databaseStateNotice.identity;
+  }
+
   Future<void> _openDatabaseSettingsDialog() async {
     if (!mounted) return;
     await showDialog<void>(
@@ -60,10 +124,12 @@ mixin MainShellDestinationContentMixin on ConsumerState<MainShell> {
     );
   }
 
-  Widget _destinationContentColumn(
-    MainNavDestination dest, {
-    required bool pendingRestartDueToPathChange,
-  }) {
+  Widget _destinationContentColumn(MainNavDestination dest) {
+    final switchSuccessMessage = ref.watch(databaseSwitchSuccessNoticeProvider);
+    final topBanner = topDatabaseBanner(
+      showStateNotice: _showDatabaseStateNotice,
+      hasSwitchSuccess: switchSuccessMessage != null,
+    );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -78,6 +144,70 @@ mixin MainShellDestinationContentMixin on ConsumerState<MainShell> {
               style: Theme.of(context).textTheme.labelLarge?.copyWith(
                 color: Colors.black87,
                 fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        if (topBanner == TopDatabaseBanner.warning)
+          Material(
+            color: Colors.amber.shade200,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      _databaseStateNotice.message,
+                      key: const ValueKey('database_state_notice_banner'),
+                      textAlign: TextAlign.center,
+                      style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                        color: Colors.black87,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    key: const ValueKey('database_state_notice_dismiss'),
+                    tooltip: 'Κλείσιμο',
+                    icon: const Icon(Icons.close, size: 20, color: Colors.black87),
+                    onPressed: () {
+                      unawaited(_dismissDatabaseStateNotice());
+                    },
+                    visualDensity: VisualDensity.compact,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        if (topBanner == TopDatabaseBanner.success)
+          Material(
+            color: Colors.green.shade200,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      switchSuccessMessage!,
+                      key: const ValueKey('database_switch_success_banner'),
+                      textAlign: TextAlign.center,
+                      style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                        color: Colors.black87,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    key: const ValueKey('database_switch_success_dismiss'),
+                    tooltip: 'Κλείσιμο',
+                    icon: const Icon(Icons.close, size: 20, color: Colors.black87),
+                    onPressed: () {
+                      ref
+                          .read(databaseSwitchSuccessNoticeProvider.notifier)
+                          .clear();
+                    },
+                    visualDensity: VisualDensity.compact,
+                  ),
+                ],
               ),
             ),
           ),
@@ -128,53 +258,6 @@ mixin MainShellDestinationContentMixin on ConsumerState<MainShell> {
             ),
           ),
         Expanded(child: _contentForDestination(dest)),
-        if (pendingRestartDueToPathChange)
-          Material(
-            color: Colors.grey.shade800,
-            child: SafeArea(
-              top: false,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 12,
-                ),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: RichText(
-                        text: TextSpan(
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 13,
-                          ),
-                          children: [
-                            const TextSpan(
-                              text:
-                                  'Έγινε αλλαγή διαδρομής βάσης. Παρακαλώ επανεκκινήστε την εφαρμογή για να ισχύσει πλήρως. ',
-                            ),
-                            TextSpan(
-                              text: 'Επανεκκίνηση...',
-                              style: TextStyle(
-                                color: Theme.of(
-                                  context,
-                                ).colorScheme.primaryContainer,
-                                fontWeight: FontWeight.w600,
-                                decoration: TextDecoration.underline,
-                              ),
-                              recognizer: TapGestureRecognizer()
-                                ..onTap = () {
-                                  exit(0);
-                                },
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
       ],
     );
   }

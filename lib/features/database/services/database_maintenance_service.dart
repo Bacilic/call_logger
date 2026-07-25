@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:path/path.dart' as p;
 
+import '../../../core/database/database_file_bundle.dart';
 import '../../../core/database/database_helper.dart';
 import '../../../core/database/database_maintenance_repository.dart';
 import '../../../core/database/settings_repository.dart';
@@ -260,43 +261,20 @@ class DatabaseMaintenanceService {
         subtractCalendarMonths(DateTime.now(), 6),
       );
 
-  String _resolveUniqueBackupFileName(String directory, String desiredName) {
-    var name = desiredName;
-    var counter = 1;
-    while (File(p.join(directory, name)).existsSync()) {
-      counter++;
-      final stem = p.basenameWithoutExtension(desiredName);
-      final ext = p.extension(desiredName);
-      name = '${stem}_$counter$ext';
-    }
-    return name;
-  }
-
-  /// Π.χ. `call_logger.db` → `call_logger_old_2026-03-31.db` (μοναδικό στον φάκελο).
+  /// Π.χ. `call_logger.db` → `call_logger_old_25-07-2026.db` (μοναδικό στον φάκελο).
   String _desiredOldDatabaseBackupName(String currentDbPath) {
-    final stamp = _backupDateStamp();
     final stem = p.basenameWithoutExtension(currentDbPath);
     final ext = p.extension(currentDbPath);
-    final base = '${stem}_old_$stamp$ext';
-    return _resolveUniqueBackupFileName(p.dirname(currentDbPath), base);
+    return resolveUniqueTimestampedFileName(
+      directory: p.dirname(currentDbPath),
+      baseName: stem,
+      suffix: '_old_',
+      extension: ext.isEmpty ? '.db' : ext,
+    );
   }
 
-  Future<void> _renameSqliteBundle(String dbPath, String newMainFileName) async {
-    final dir = p.dirname(dbPath);
-    final newMain = p.join(dir, newMainFileName);
-    final wal = '$dbPath-wal';
-    final shm = '$dbPath-shm';
-    final newWal = '$newMain-wal';
-    final newShm = '$newMain-shm';
-
-    await File(dbPath).rename(newMain);
-    if (await File(wal).exists()) {
-      await File(wal).rename(newWal);
-    }
-    if (await File(shm).exists()) {
-      await File(shm).rename(newShm);
-    }
-  }
+  Future<void> _renameSqliteBundle(String dbPath, String newMainFileName) =>
+      renameDatabaseBundle(dbPath, newMainFileName);
 
   /// Μεταφορά σε νέο αρχείο: **μόνο μετονομασία** της τρέχουσας βάσης (`όνομα_old_YYYY-MM-DD.db`),
   /// χωρίς διαγραφή της παλιάς. Αν στον στόχο υπάρχει ήδη αρχείο (και δεν είναι η τρέχουσα βάση), επιστρέφει σφάλμα.
@@ -361,6 +339,7 @@ class DatabaseMaintenanceService {
       await DatabaseHelper.instance.createNewDatabaseFile(normTarget);
       await settings.setDatabasePath(normTarget);
       await DatabaseHelper.instance.initializeDatabase();
+      await settings.recordVerifiedDatabasePath(normTarget);
     } catch (e) {
       try {
         await DatabaseHelper.instance.initializeDatabase();
@@ -468,14 +447,6 @@ class DatabaseMaintenanceService {
       return na.toLowerCase() == nb.toLowerCase();
     }
     return na == nb;
-  }
-
-  static String _backupDateStamp() {
-    final n = DateTime.now();
-    final y = n.year.toString().padLeft(4, '0');
-    final m = n.month.toString().padLeft(2, '0');
-    final d = n.day.toString().padLeft(2, '0');
-    return '$y-$m-$d';
   }
 
   /// Άνοιγμα εξερευνητή αρχείων στη θέση αρχείου (Windows: `/select`, macOS: `-R`).

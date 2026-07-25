@@ -6,11 +6,16 @@ import 'dart:io';
 
 import 'package:call_logger/core/database/database_helper.dart';
 import 'package:call_logger/core/init/database_reopen_cache_reset.dart';
+import 'package:call_logger/features/calls/models/equipment_model.dart';
+import 'package:call_logger/features/calls/models/user_model.dart';
+import 'package:call_logger/features/calls/provider/call_entry_provider.dart';
+import 'package:call_logger/features/calls/provider/smart_entity_selector_provider.dart';
 import 'package:call_logger/features/tasks/models/task.dart';
 import 'package:call_logger/features/tasks/providers/tasks_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../test_setup.dart';
 
@@ -48,6 +53,7 @@ void main() {
   late String pathB;
 
   setUp(() async {
+    SharedPreferences.setMockInitialValues(<String, Object>{});
     initSqfliteFfiForTests();
     await DatabaseHelper.instance.closeConnection();
     DatabaseHelper.releaseTestDatabaseBinding();
@@ -152,6 +158,65 @@ void main() {
         );
         expect(_titlesOf(fromB), isNot(contains(_kTitleA)));
       });
+    },
+  );
+
+  testWidgets(
+    'με invalidateDatabaseScopedCaches η φόρμα κλήσης καθαρίζει ξένες ταυτότητες',
+    (tester) async {
+      late WidgetRef widgetRef;
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
+
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: Consumer(
+            builder: (context, ref, _) {
+              widgetRef = ref;
+              return const SizedBox.shrink();
+            },
+          ),
+        ),
+      );
+
+      await tester.runAsync(() async {
+        await DatabaseHelper.bindTestDatabaseFile(pathA);
+
+        final smart = container.read(callSmartEntityProvider.notifier);
+        smart.setCaller(
+          UserModel(
+            id: 42,
+            firstName: 'Βάση',
+            lastName: 'Άλφα',
+            departmentId: 7,
+          ),
+        );
+        smart.setEquipment(
+          EquipmentModel(id: 99, code: 'EQ-A-99'),
+        );
+        container.read(callEntryProvider.notifier).setCategory(
+              'Κατηγορία Α',
+              categoryId: 5,
+            );
+
+        final before = container.read(callSmartEntityProvider);
+        expect(before.selectedCaller?.id, 42);
+        expect(before.selectedEquipment?.id, 99);
+        expect(before.selectedDepartmentId, 7);
+        expect(container.read(callEntryProvider).categoryId, 5);
+
+        invalidateDatabaseScopedCaches(widgetRef);
+      });
+
+      // post-frame callback της εκκαθάρισης (αν αναβλήθηκε)
+      await tester.pump();
+
+      final after = container.read(callSmartEntityProvider);
+      expect(after.selectedCaller, isNull);
+      expect(after.selectedEquipment, isNull);
+      expect(after.selectedDepartmentId, isNull);
+      expect(container.read(callEntryProvider).categoryId, isNull);
     },
   );
 }

@@ -1,11 +1,13 @@
 ﻿import 'dart:async';
 import 'dart:io';
 
-import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../database/database_file_classifier.dart';
 import '../database/database_init_result.dart';
+import '../database/database_state_notice.dart';
+import '../database/database_switch_success_notice.dart';
 import '../../features/calls/screens/calls_screen.dart';
 import '../../features/database/debug/error_scenarios_screen.dart';
 import '../../features/database/screens/database_browser_screen.dart';
@@ -50,12 +52,14 @@ class MainShell extends ConsumerStatefulWidget {
     super.key,
     required this.databaseResult,
     required this.isLocalDevMode,
+    this.databaseProfile,
     this.onReturnFromSettings,
     this.onDatabaseReopened,
   });
 
   final DatabaseInitResult databaseResult;
   final bool isLocalDevMode;
+  final DatabaseFileProfile? databaseProfile;
 
   /// Κλήση όταν ο χρήστης κλείνει την οθόνη Ρυθμίσεων· ξανατρέχουν οι έλεγχοι βάσης.
   final Future<void> Function()? onReturnFromSettings;
@@ -69,8 +73,6 @@ class MainShell extends ConsumerStatefulWidget {
 
 class _MainShellState extends ConsumerState<MainShell>
     with MainShellDestinationContentMixin {
-  /// True αν άλλαξε η διαδρομή βάσης από Ρυθμίσεις και απαιτείται επανεκκίνηση.
-  bool _pendingRestartDueToPathChange = false;
   MainNavDestination _selectedDestination = MainNavDestination.calls;
 
   /// Λεζάντες πλευρικής μπάρας (όταν το πλάτος παραθύρου επιτρέπει extended rail).
@@ -81,7 +83,14 @@ class _MainShellState extends ConsumerState<MainShell>
   @override
   void initState() {
     super.initState();
+    _initDatabaseStateNotice();
     _loadNavRailShowLabels();
+  }
+
+  @override
+  void didUpdateWidget(covariant MainShell oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _syncDatabaseStateNotice(oldWidget);
   }
 
   Future<void> _loadNavRailShowLabels() async {
@@ -261,7 +270,6 @@ class _MainShellState extends ConsumerState<MainShell>
   }
 
   Future<void> _openSettingsScreen() async {
-    final pathBefore = await SettingsService().getDatabasePath();
     if (!mounted) return;
     ref.read(settingsRouteOpenForQuickCallProvider.notifier).setOpen(true);
     try {
@@ -279,10 +287,6 @@ class _MainShellState extends ConsumerState<MainShell>
     if (!mounted) return;
     await widget.onReturnFromSettings?.call();
     if (!mounted) return;
-    final pathAfter = await SettingsService().getDatabasePath();
-    if (pathBefore != pathAfter) {
-      setState(() => _pendingRestartDueToPathChange = true);
-    }
     ref.invalidate(showLampNavProvider);
     ref.invalidate(showDatabaseNavProvider);
     ref.invalidate(showDictionaryNavProvider);
@@ -419,7 +423,6 @@ class _MainShellState extends ConsumerState<MainShell>
                 dictionaryImmersive
                     ? MainNavDestination.dictionary
                     : MainNavDestination.history,
-                pendingRestartDueToPathChange: _pendingRestartDueToPathChange,
               ),
             ),
           ),
@@ -559,7 +562,6 @@ class _MainShellState extends ConsumerState<MainShell>
               effectiveDestination,
               _destinationContentColumn(
                 effectiveDestination,
-                pendingRestartDueToPathChange: _pendingRestartDueToPathChange,
               ),
             ),
           ),

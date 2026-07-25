@@ -13,9 +13,8 @@ class ShutdownTraceService {
     required this.enabled,
     required this.retentionCount,
     DateTime Function()? now,
-    void Function(ShutdownStepEvent event)? onEventWritten,
-  })  : _now = now ?? DateTime.now,
-        _onEventWritten = onEventWritten;
+    this._onEventWritten,
+  })  : _now = now ?? DateTime.now;
 
   final String logsDirectory;
   final bool enabled;

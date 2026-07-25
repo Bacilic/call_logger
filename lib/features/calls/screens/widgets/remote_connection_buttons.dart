@@ -6,6 +6,7 @@ import 'package:path/path.dart' as p;
 
 import '../../../../core/models/remote_tool.dart';
 import '../../../../core/widgets/remote_tool_icon.dart';
+import '../../../../core/widgets/app_asset_image.dart';
 import '../../../../core/models/remote_tool_role.dart';
 import '../../../../core/services/remote_connection_service.dart';
 import '../../../../core/services/remote_launcher_service.dart';
@@ -152,10 +153,11 @@ class _RemoteConnectionButtonsState extends ConsumerState<RemoteConnectionButton
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            Image.asset(
-              'assets/no_remote_tool_icon.png',
+            AppAssetImage(
+              assetPath: 'assets/no_remote_tool_icon.png',
               width: 80,
               height: 80,
+              fallbackIcon: Icons.desktop_access_disabled,
             ),
             const SizedBox(width: 12),
             Expanded(

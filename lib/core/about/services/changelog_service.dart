@@ -6,41 +6,52 @@ import '../models/changelog_entry.dart';
 
 /// Φόρτωση και ταξινόμηση του ιστορικού αλλαγών από το asset JSON.
 class ChangelogService {
+  ChangelogService({
+    Future<String> Function(String assetPath)? loadAsset,
+  }) : _loadAsset = loadAsset ?? ((path) => rootBundle.loadString(path));
+
   static const String _assetPath = 'assets/changelog.json';
 
+  final Future<String> Function(String assetPath) _loadAsset;
+
   Future<List<ChangelogEntry>> load() async {
-    final raw = await rootBundle.loadString(_assetPath);
-    final decoded = jsonDecode(raw);
-    if (decoded is! List) {
-      throw FormatException(
-        'Το changelog.json πρέπει να είναι λίστα εγγραφών.',
-      );
-    }
-    final parsed = decoded
-        .cast<dynamic>()
-        .map(
-          (e) => ChangelogEntry.fromJson(Map<String, dynamic>.from(e as Map)),
-        )
-        .where((e) => e.version.isNotEmpty)
-        .toList();
-
-    ChangelogEntry? unreleased;
-    final released = <ChangelogEntry>[];
-
-    for (final entry in parsed) {
-      if (entry.isUnreleased) {
-        unreleased = entry;
-      } else {
-        released.add(entry);
+    try {
+      final raw = await _loadAsset(_assetPath);
+      final decoded = jsonDecode(raw);
+      if (decoded is! List) {
+        throw FormatException(
+          'Το changelog.json πρέπει να είναι λίστα εγγραφών.',
+        );
       }
-    }
+      final parsed = decoded
+          .cast<dynamic>()
+          .map(
+            (e) =>
+                ChangelogEntry.fromJson(Map<String, dynamic>.from(e as Map)),
+          )
+          .where((e) => e.version.isNotEmpty)
+          .toList();
 
-    released.sort((a, b) => _compareVersionsDesc(a.version, b.version));
+      ChangelogEntry? unreleased;
+      final released = <ChangelogEntry>[];
 
-    if (unreleased != null && unreleased.hasContent) {
-      return [unreleased, ...released];
+      for (final entry in parsed) {
+        if (entry.isUnreleased) {
+          unreleased = entry;
+        } else {
+          released.add(entry);
+        }
+      }
+
+      released.sort((a, b) => _compareVersionsDesc(a.version, b.version));
+
+      if (unreleased != null && unreleased.hasContent) {
+        return [unreleased, ...released];
+      }
+      return released;
+    } catch (_) {
+      return const <ChangelogEntry>[];
     }
-    return released;
   }
 
   /// Σύγκριση semver τύπου major.minor.patch (φθίνουσα σειρά).

@@ -1,7 +1,8 @@
-import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 
@@ -13,7 +14,9 @@ import '../database/database_init_runner.dart';
 import '../database/database_path_pick_flow.dart';
 import '../database/database_restore_flow.dart';
 import '../services/settings_service.dart';
+import '../utils/database_path_identity.dart';
 import '../utils/user_facing_error_messages.dart';
+import '../../features/database/widgets/schema_upgrade_consent_dialog.dart';
 import '../../features/settings/widgets/create_new_database_dialog.dart';
 
 /// Οθόνη σφάλματος βάσης / γενικού σφάλματος.
@@ -144,6 +147,21 @@ class _DatabaseErrorScreenState extends ConsumerState<DatabaseErrorScreen> {
     super.initState();
     _detailsScrollController = ScrollController();
     _loadRecentExistingPaths();
+    if (_effectiveRecoveryKind ==
+        DatabaseInitRecoveryKind.schemaUpgradeConsent) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        unawaited(_offerSchemaUpgradeConsent());
+      });
+    }
+  }
+
+  Future<void> _offerSchemaUpgradeConsent() async {
+    await runSchemaUpgradeConsentRecovery(
+      context: context,
+      result: widget.result,
+      onSuccess: widget.onRetry,
+    );
   }
 
   @override
@@ -161,7 +179,7 @@ class _DatabaseErrorScreenState extends ConsumerState<DatabaseErrorScreen> {
       if (path.isEmpty) continue;
       if (current != null &&
           current.isNotEmpty &&
-          _pathsReferToSameFile(path, current)) {
+          databasePathsReferToSameFile(path, current)) {
         continue;
       }
       try {
@@ -174,15 +192,6 @@ class _DatabaseErrorScreenState extends ConsumerState<DatabaseErrorScreen> {
     }
     if (!mounted) return;
     setState(() => _recentExistingPaths = existing);
-  }
-
-  bool _pathsReferToSameFile(String a, String b) {
-    final na = p.normalize(a);
-    final nb = p.normalize(b);
-    if (Platform.isWindows) {
-      return na.toLowerCase() == nb.toLowerCase();
-    }
-    return na == nb;
   }
 
   Future<void> _openSettingsForCreateDatabase() async {
@@ -362,14 +371,32 @@ class _DatabaseErrorScreenState extends ConsumerState<DatabaseErrorScreen> {
       ],
     );
     if (!mounted) return;
-    await runRestoreFromBackupZipFlow(
+    final result = await runRestoreFromBackupZipFlow(
       context: context,
       backupFolderHint: backupFolder,
       currentDatabasePath:
           (target != null && target.isNotEmpty) ? target : AppConfig.defaultDbPath,
-      onVerifiedSuccess: () async {
-        await widget.onRetry();
-      },
+    );
+    if (!mounted || result.cancelled) return;
+    if (result.failed) return;
+    if (!result.isSuccess) return;
+
+    final toOpen = result.pathToOpen?.trim();
+    if (toOpen != null && toOpen.isNotEmpty) {
+      await _verifyPathAndRetry(toOpen);
+      return;
+    }
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          result.restoredPath == null
+              ? 'Η επαναφορά ολοκληρώθηκε.'
+              : 'Η βάση επαναφέρθηκε στο:\n${result.restoredPath}',
+        ),
+        behavior: SnackBarBehavior.floating,
+      ),
     );
   }
 

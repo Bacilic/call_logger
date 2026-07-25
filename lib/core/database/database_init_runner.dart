@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import '../services/settings_service.dart';
+import 'database_file_classifier.dart';
 import 'database_helper.dart';
 import 'remote_tools_repository.dart';
 import 'settings_repository.dart';
@@ -28,10 +29,12 @@ class DatabaseInitRunnerResult {
   const DatabaseInitRunnerResult({
     required this.result,
     required this.isLocalDevMode,
+    this.databaseProfile,
   });
 
   final DatabaseInitResult result;
   final bool isLocalDevMode;
+  final DatabaseFileProfile? databaseProfile;
 }
 
 /// Εκτελεί τους ελέγχους βάσης (ύπαρξη αρχείου, δικαιώματα, σύνδεση, υγεία).
@@ -143,6 +146,7 @@ Future<DatabaseInitRunnerResult> _runDatabaseInitChecksUnlocked({
   return DatabaseInitRunnerResult(
     result: finalResult,
     isLocalDevMode: isLocalDevMode,
+    databaseProfile: DatabaseHelper.instance.lastDatabaseProfile,
   );
 }
 

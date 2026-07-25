@@ -64,8 +64,8 @@ extension InfoSectionTypeSpec on InfoSectionType {
 class EquipmentViewModel {
   const EquipmentViewModel({
     required this.sections,
-    required Map<String, Object?> sourceRow,
-  }) : _sourceRow = sourceRow;
+    required this._sourceRow,
+  });
 
   factory EquipmentViewModel.fromRow(Map<String, Object?> row) {
     final sourceRow = Map<String, Object?>.from(row);

@@ -4,6 +4,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import '../directory/phone_department_policy.dart';
 import '../utils/phone_list_parser.dart';
+import 'user_delete_equipment_policy.dart';
 import 'user_delete_phone_policy.dart';
 import 'audit_service.dart';
 import 'calls_repository.dart';
@@ -32,7 +33,15 @@ class UserRepository {
     'is_deleted',
   };
 
-  Future<void> replaceUserPhones(int userId, List<String> numbers) async {
+  Future<void> replaceUserPhones(
+    int userId,
+    List<String> numbers, {
+    DatabaseExecutor? executor,
+  }) async {
+    if (executor != null) {
+      await _support.replaceUserPhonesInTxn(executor, userId, numbers);
+      return;
+    }
     await updateUser(userId, {'phones': numbers});
   }
 
@@ -96,6 +105,9 @@ class UserRepository {
     );
     return rows.map((r) => r['equipment_id'] as int?).whereType<int>().toSet();
   }
+
+  Future<Set<int>> equipmentIdsForUser(int userId) =>
+      _equipmentIdsForUser(db, userId);
 
   Future<List<Map<String, dynamic>>> _linkedEquipmentSnapshotsForUser(
     DatabaseExecutor e,
@@ -538,6 +550,62 @@ class UserRepository {
         .toList();
   }
 
+  /// Εξοπλισμός σε κίνδυνο ορφανοποίησης τμήματος κατά τη διαγραφή χρηστών.
+  ///
+  /// Μόνο όταν `equipment.department_id IS NULL` και δεν υπάρχει άλλος ενεργός
+  /// κάτοχος εκτός των [userIds]. Αν υπάρχουν πολλοί κάτοχοι μέσα στους
+  /// διαγραφόμενους, κρατάται ο πρώτος (μικρότερο `user_id`).
+  Future<List<ExclusiveEquipmentForUserDelete>>
+      findExclusiveEquipmentForUserDelete(List<int> userIds) async {
+    if (userIds.isEmpty) return const [];
+    final placeholders = _support.sqlPlaceholders(userIds.length);
+    final rows = await db.rawQuery(
+      '''
+      SELECT ue.user_id AS user_id,
+             ue.equipment_id AS equipment_id,
+             e.code_equipment AS code_equipment,
+             u.department_id AS department_id,
+             d.name AS department_name
+      FROM user_equipment ue
+      JOIN equipment e ON e.id = ue.equipment_id
+      JOIN users u ON u.id = ue.user_id
+      LEFT JOIN departments d ON d.id = u.department_id
+      WHERE ue.user_id IN ($placeholders)
+        AND COALESCE(e.is_deleted, 0) = 0
+        AND e.department_id IS NULL
+        AND NOT EXISTS (
+          SELECT 1
+          FROM user_equipment ue2
+          JOIN users u2 ON u2.id = ue2.user_id
+          WHERE ue2.equipment_id = ue.equipment_id
+            AND ue2.user_id NOT IN ($placeholders)
+            AND COALESCE(u2.is_deleted, 0) = 0
+        )
+      ORDER BY e.code_equipment COLLATE NOCASE ASC, ue.user_id ASC
+      ''',
+      [...userIds, ...userIds],
+    );
+
+    final seenEquipmentIds = <int>{};
+    final out = <ExclusiveEquipmentForUserDelete>[];
+    for (final r in rows) {
+      final equipmentId = r['equipment_id'] as int;
+      if (!seenEquipmentIds.add(equipmentId)) continue;
+      final code = (r['code_equipment'] as String?)?.trim() ?? '';
+      if (code.isEmpty) continue;
+      out.add(
+        ExclusiveEquipmentForUserDelete(
+          equipmentId: equipmentId,
+          codeEquipment: code,
+          userId: r['user_id'] as int,
+          departmentId: r['department_id'] as int?,
+          departmentName: (r['department_name'] as String?)?.trim(),
+        ),
+      );
+    }
+    return out;
+  }
+
   Future<void> _unlinkUserFromPhoneInTxn(
     DatabaseExecutor txn,
     int userId,
@@ -632,10 +700,71 @@ class UserRepository {
     });
   }
 
-  Future<void> restoreUsers(List<int> ids) async {
+  /// Διαγράφει (soft) υπαλλήλους ΜΕΣΑ σε δοσμένο [txn] και επιστρέφει, ανά
+  /// υπάλληλο, τα πρωτότυπα τηλέφωνα (αριθμοί) και equipment ids ώστε να μπορεί
+  /// να αναιρεθεί πλήρως η σύνδεσή τους αργότερα.
+  Future<Map<int, ({List<String> phoneNumbers, List<int> equipmentIds})>>
+      deleteUsersInTxn(DatabaseExecutor txn, List<int> ids) async {
+    final result =
+        <int, ({List<String> phoneNumbers, List<int> equipmentIds})>{};
+    if (ids.isEmpty) return result;
+    final user = await _support.auditPerformingUser(executor: txn);
+    for (final id in ids) {
+      final phoneRows = await txn.rawQuery(
+        'SELECT p.number AS number FROM user_phones up '
+        'JOIN phones p ON p.id = up.phone_id WHERE up.user_id = ?',
+        [id],
+      );
+      final phoneNumbers = phoneRows
+          .map((r) => (r['number'] as String?)?.trim() ?? '')
+          .where((n) => n.isNotEmpty)
+          .toList();
+      final equipmentIds = (await _equipmentIdsForUser(txn, id)).toList();
+      final nameRows = await txn.query(
+        'users',
+        columns: ['first_name', 'last_name'],
+        where: 'id = ?',
+        whereArgs: [id],
+        limit: 1,
+      );
+      final fn = nameRows.isEmpty
+          ? ''
+          : (nameRows.first['first_name'] as String?)?.trim() ?? '';
+      final ln = nameRows.isEmpty
+          ? ''
+          : (nameRows.first['last_name'] as String?)?.trim() ?? '';
+      final displayName = '$fn $ln'.trim();
+
+      await txn.delete('user_phones', where: 'user_id = ?', whereArgs: [id]);
+      await txn.delete('user_equipment', where: 'user_id = ?', whereArgs: [id]);
+      await txn.update(
+        'users',
+        {'is_deleted': 1},
+        where: 'id = ?',
+        whereArgs: [id],
+      );
+      await AuditService.log(
+        txn,
+        action: DatabaseHelper.auditActionDelete,
+        userPerforming: user,
+        details: 'users id=$id',
+        entityType: AuditEntityTypes.user,
+        entityId: id,
+        entityName: displayName.isEmpty ? null : displayName,
+      );
+      result[id] = (phoneNumbers: phoneNumbers, equipmentIds: equipmentIds);
+    }
+    return result;
+  }
+
+  Future<void> restoreUsers(
+    List<int> ids, {
+    DatabaseExecutor? executor,
+  }) async {
     if (ids.isEmpty) return;
-    final user = await _support.auditPerformingUser();
-    await db.transaction((txn) async {
+
+    Future<void> run(DatabaseExecutor txn) async {
+      final user = await _support.auditPerformingUser(executor: txn);
       for (final id in ids) {
         final nameRows = await txn.query(
           'users',
@@ -667,7 +796,10 @@ class UserRepository {
           entityName: displayName.isEmpty ? null : displayName,
         );
       }
-    });
+    }
+
+    if (executor != null) return run(executor);
+    return db.transaction(run);
   }
 
   Future<int> insertUser({

@@ -25,6 +25,7 @@ abstract final class BackupAuditSkipReason {
   static const backupDisabled = 'backup_disabled';
   static const noSchedule = 'no_schedule';
   static const jobRunning = 'job_running';
+  static const databaseSwitchInProgress = 'database_switch_in_progress';
   static const appNotRunning = 'app_not_running';
 }
 

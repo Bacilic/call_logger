@@ -10,6 +10,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../../core/database/database_helper.dart';
 import '../../../core/database/settings_repository.dart';
 import '../../../core/widgets/dialog_snackbar_scope.dart';
+import '../../../core/widgets/app_asset_image.dart';
 import '../../../core/utils/user_facing_error_messages.dart';
 import '../../../core/services/ai_prompt_template_controller.dart';
 import '../../../core/services/ai_ticket_suggestion_service.dart';
@@ -741,11 +742,12 @@ class _LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
             onPressed: () {
               unawaited(_openLansweeperConnectionSettingsDialog());
             },
-            icon: Image.asset(
-              'assets/lansweeper_settings.png',
+            icon: AppAssetImage(
+              assetPath: 'assets/lansweeper_settings.png',
               height: 28,
               width: 28,
               filterQuality: FilterQuality.medium,
+              fallbackIcon: Icons.settings,
             ),
           ),
         ],

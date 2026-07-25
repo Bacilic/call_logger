@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../features/database/providers/backup_scheduler_provider.dart';
 import '../../features/database/providers/database_backup_settings_provider.dart';
+import '../database/database_file_classifier.dart';
 import '../database/database_init_progress_provider.dart';
 import '../database/database_init_result.dart';
 import '../database/database_init_runner.dart';
@@ -18,6 +19,7 @@ class AppInitResult {
     required this.result,
     required this.isLocalDevMode,
     this.spellCheckReady = false,
+    this.databaseProfile,
   });
 
   final DatabaseInitResult result;
@@ -25,6 +27,9 @@ class AppInitResult {
 
   /// True αν φορτώθηκε λεξικό-πυρήνας από αποθηκευμένη διαδρομή.
   final bool spellCheckReady;
+
+  /// Προφίλ αρχείου βάσης από την ταξινόμηση εκκίνησης (χωρίς νέο query).
+  final DatabaseFileProfile? databaseProfile;
 
   bool get success => result.isSuccess;
   String? get message => result.message;
@@ -68,6 +73,7 @@ class AppInitializer {
         result: runnerResult.result,
         isLocalDevMode: runnerResult.isLocalDevMode,
         spellCheckReady: spellCheckReady,
+        databaseProfile: runnerResult.databaseProfile,
       );
     } catch (e, st) {
       var result = DatabaseInitResult.fromException(e, null, st);
@@ -92,6 +98,7 @@ class AppInitializer {
         result: result,
         isLocalDevMode: false,
         spellCheckReady: false,
+        databaseProfile: null,
       );
     }
   }

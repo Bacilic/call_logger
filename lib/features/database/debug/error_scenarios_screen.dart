@@ -65,6 +65,12 @@ class _ErrorScenariosScreenState extends ConsumerState<ErrorScenariosScreen> {
         );
   }
 
+  void _openCatalogForDeletionCheck() {
+    ref.read(mainNavRequestProvider.notifier).request(
+          const MainNavRequest(destination: MainNavDestination.directory),
+        );
+  }
+
   String _formatGreekList(List<String> items) {
     if (items.isEmpty) return '';
     if (items.length == 1) return items.first;
@@ -213,6 +219,24 @@ class _ErrorScenariosScreenState extends ConsumerState<ErrorScenariosScreen> {
                 onTap: _openNewCallWithDokimastikoDepartment,
               ),
               const TextSpan(text: ' για έλεγχο.'),
+            ],
+          ),
+          const SizedBox(height: 12),
+          _ErrorScenarioCard(
+            icon: Icons.delete_sweep_outlined,
+            title: 'Έλεγχος διαγραφών',
+            descriptionSpans: [
+              TextSpan(
+                text:
+                    'Δημιουργήθηκε το τμήμα ${IntegrityDebugSeederService.informatikiDepartmentName} '
+                    'με 6 υπαλλήλους, προσωπικά τηλέφωνα (285x) και εξοπλισμό (36x). '
+                    'Κάντε κλικ ',
+              ),
+              _linkSpan(
+                scheme: scheme,
+                onTap: _openCatalogForDeletionCheck,
+              ),
+              const TextSpan(text: ' για έλεγχο στον κατάλογο.'),
             ],
           ),
         ] else

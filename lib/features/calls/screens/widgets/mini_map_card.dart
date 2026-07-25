@@ -16,6 +16,7 @@ import '../../../../core/database/sqlite_types.dart';
 import '../../../../core/models/building_map_floor.dart';
 import '../../../../core/services/building_map_storage.dart';
 import '../../../../core/services/lookup_service.dart';
+import '../../../../core/widgets/app_asset_image.dart';
 import '../../../directory/building_map/screens/building_map_dialog.dart';
 import '../../../directory/models/department_floor_display_extension.dart';
 import '../../../directory/models/department_model.dart';
@@ -385,11 +386,12 @@ class _MiniMapCardState extends ConsumerState<MiniMapCard> {
           mainAxisAlignment: MainAxisAlignment.center,
           mainAxisSize: MainAxisSize.min,
           children: [
-            Image.asset(
-              _kDepartmentNotFoundAsset,
+            AppAssetImage(
+              assetPath: _kDepartmentNotFoundAsset,
               height: 96,
               fit: BoxFit.contain,
               filterQuality: FilterQuality.medium,
+              fallbackIcon: Icons.location_off,
             ),
             const SizedBox(height: 8),
             Text(

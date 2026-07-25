@@ -21,27 +21,32 @@ void main() {
       expect(many.snackbarMessage, 'Σημειώθηκαν ως διαγραμμένα 3 τμήματα.');
     });
 
-    test('μετακίνηση υπαλλήλων → canOfferUndo false και ειλικρινές μήνυμα', () {
+    test('μετακίνηση υπαλλήλων → canOfferUndo true και μήνυμα πλήρους αναίρεσης', () {
       final result = resolveDepartmentDeletionUndo(
         deletedDepartmentCount: 1,
         movedEmployeeCount: 2,
         movedOrDeletedAssetCount: 0,
       );
-      expect(result.canOfferUndo, isFalse);
-      expect(result.snackbarMessage, contains('δεν αναιρείται'));
-      expect(result.snackbarMessage.toLowerCase(), contains('υπάλληλ'));
+      expect(result.canOfferUndo, isTrue);
+      expect(
+        result.snackbarMessage,
+        contains('Επαναφέρθηκαν και τα μετακινημένα στοιχεία'),
+      );
     });
 
     test(
-      'μετακίνηση/διαγραφή κοινόχρηστων χωρίς υπαλλήλους → canOfferUndo false',
+      'μετακίνηση/διαγραφή κοινόχρηστων χωρίς υπαλλήλους → canOfferUndo true',
       () {
         final result = resolveDepartmentDeletionUndo(
           deletedDepartmentCount: 2,
           movedEmployeeCount: 0,
           movedOrDeletedAssetCount: 4,
         );
-        expect(result.canOfferUndo, isFalse);
-        expect(result.snackbarMessage, contains('δεν αναιρείται'));
+        expect(result.canOfferUndo, isTrue);
+        expect(
+          result.snackbarMessage,
+          contains('Επαναφέρθηκαν και τα μετακινημένα στοιχεία'),
+        );
       },
     );
   });

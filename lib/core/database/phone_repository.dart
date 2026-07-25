@@ -119,7 +119,7 @@ class PhoneRepository {
     DatabaseExecutor? executor,
   }) async {
     final e = executor ?? db;
-    await _support.ensurePhonesIsDeletedColumn(db);
+    await _support.ensurePhonesIsDeletedColumn(e);
     final t = phoneNumber.trim();
     if (t.isEmpty) return null;
     final rows = await e.query(
@@ -176,6 +176,96 @@ class PhoneRepository {
         _readCount(callLinks);
   }
 
+  /// Ονομαστική/συνοπτική λίστα συνδέσεων τηλεφώνου (ίδιες κατηγορίες με το count).
+  ///
+  /// Σειρά: κάτοχοι → τμήματα → εκκρεμότητες → κλήσεις ιστορικού.
+  Future<List<String>> phoneReferenceDescriptions(
+    int phoneId,
+    String phoneNumber,
+  ) async {
+    await _support.ensurePhonesIsDeletedColumn(db);
+    final out = <String>[];
+
+    final ownerRows = await db.rawQuery(
+      '''
+      SELECT u.first_name AS first_name, u.last_name AS last_name
+      FROM user_phones up
+      JOIN users u ON u.id = up.user_id
+      WHERE up.phone_id = ?
+      ORDER BY u.last_name COLLATE NOCASE ASC, u.first_name COLLATE NOCASE ASC
+      ''',
+      [phoneId],
+    );
+    for (final r in ownerRows) {
+      final name = _personDisplayName(r);
+      if (name != null) out.add(name);
+    }
+
+    final deptRows = await db.rawQuery(
+      '''
+      SELECT d.name AS name
+      FROM department_phones dp
+      JOIN departments d ON d.id = dp.department_id
+      WHERE dp.phone_id = ?
+      ORDER BY d.name COLLATE NOCASE ASC
+      ''',
+      [phoneId],
+    );
+    for (final r in deptRows) {
+      final name = (r['name'] as String?)?.trim() ?? '';
+      if (name.isNotEmpty) out.add(name);
+    }
+
+    final taskLinks = await db.rawQuery(
+      '''
+      SELECT COUNT(*) AS c FROM tasks
+      WHERE phone_id = ? AND ${DirectorySupport.notDeletedClause}
+      ''',
+      [phoneId],
+    );
+    final taskCount = _readCount(taskLinks);
+    if (taskCount > 0) {
+      out.add(
+        taskCount == 1 ? '1 εκκρεμότητα' : '$taskCount εκκρεμότητες',
+      );
+    }
+
+    final digits = DirectorySupport.phoneDigitsOnly(phoneNumber.trim());
+    final callLinks = await db.rawQuery(
+      '''
+      SELECT COUNT(*) AS c FROM calls
+      WHERE ${DirectorySupport.notDeletedClause}
+        AND (
+          TRIM(phone_text) = ?
+          OR (
+            ? != ''
+            AND REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(
+              COALESCE(phone_text, ''), ' ', ''), '-', ''), '(', ''), ')', ''), '+', '')
+              LIKE '%' || ? || '%'
+          )
+        )
+      ''',
+      [phoneNumber.trim(), digits, digits],
+    );
+    final callCount = _readCount(callLinks);
+    if (callCount > 0) {
+      out.add(
+        callCount == 1
+            ? '1 κλήση ιστορικού'
+            : '$callCount κλήσεις ιστορικού',
+      );
+    }
+
+    return out;
+  }
+
+  static String? _personDisplayName(Map<String, dynamic> row) {
+    final first = (row['first_name'] as String?)?.trim() ?? '';
+    final last = (row['last_name'] as String?)?.trim() ?? '';
+    final name = '$first $last'.trim();
+    return name.isEmpty ? null : name;
+  }
+
   Future<void> softDeletePhones(
     List<int> ids, {
     DatabaseExecutor? executor,
@@ -216,6 +306,47 @@ class PhoneRepository {
         await AuditService.log(
           txn,
           action: DatabaseHelper.auditActionDelete,
+          userPerforming: user,
+          details: 'phones id=$id',
+          entityType: AuditEntityTypes.phone,
+          entityId: id,
+          entityName: number.isEmpty ? null : number,
+        );
+      }
+    }
+
+    if (executor != null) return run(executor);
+    return db.transaction(run);
+  }
+
+  /// Un-soft-delete τηλεφώνων (καθρέφτης του [softDeletePhones]· χωρίς επαναφορά συνδέσμων).
+  Future<void> restorePhones(
+    List<int> ids, {
+    DatabaseExecutor? executor,
+  }) async {
+    if (ids.isEmpty) return;
+
+    Future<void> run(DatabaseExecutor txn) async {
+      final user = await _support.auditPerformingUser(executor: txn);
+      for (final id in ids) {
+        final rows = await txn.query(
+          'phones',
+          columns: ['number'],
+          where: 'id = ?',
+          whereArgs: [id],
+          limit: 1,
+        );
+        if (rows.isEmpty) continue;
+        final number = (rows.first['number'] as String?)?.trim() ?? '';
+        await txn.update(
+          'phones',
+          {'is_deleted': 0},
+          where: 'id = ?',
+          whereArgs: [id],
+        );
+        await AuditService.log(
+          txn,
+          action: DatabaseHelper.auditActionRestore,
           userPerforming: user,
           details: 'phones id=$id',
           entityType: AuditEntityTypes.phone,

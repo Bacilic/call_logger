@@ -473,6 +473,18 @@ class CallsRepository
     return (rows.first['c'] as int?) ?? 0;
   }
 
+  /// Πλήθος μη διαγραμμένων κλήσεων που αναφέρονται σε συγκεκριμένο εξοπλισμό.
+  Future<int> countCallsForEquipment(int equipmentId) async {
+    final rows = await db.rawQuery(
+      '''
+      SELECT COUNT(*) AS c FROM calls
+      WHERE equipment_id = ? AND COALESCE(is_deleted, 0) = 0
+      ''',
+      [equipmentId],
+    );
+    return (rows.first['c'] as int?) ?? 0;
+  }
+
   /// Πλήθος κλήσεων ιστορικού με φίλτρα ημερομηνίας και κατηγορίας (χωρίς keyword).
   Future<int> getHistoryCallCount({
     String? dateFrom,

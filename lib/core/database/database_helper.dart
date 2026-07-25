@@ -14,6 +14,7 @@ import 'database_init_progress_provider.dart';
 import 'database_lexicon_open_normalizations.dart';
 import 'database_lock_recovery.dart';
 import 'database_schema_migrations.dart';
+import 'database_state_notice.dart';
 import 'lock_diagnostic_service.dart';
 import 'database_path_resolution.dart';
 
@@ -97,9 +98,13 @@ class DatabaseHelper with DatabaseTableInspectionMixin {
   Future<Database>? _databaseInitializingFuture;
   Completer<Never>? _userAbortCompleter;
   bool _isUsingLocalDb = false;
+  DatabaseFileProfile? _lastDatabaseProfile;
 
   /// True αν η εφαρμογή χρησιμοποιεί την τοπική βάση (Dev Mode).
   bool get isUsingLocalDb => _isUsingLocalDb;
+
+  /// Προφίλ αρχείου από την τελευταία ταξινόμηση (χωρίς νέο άνοιγμα/query).
+  DatabaseFileProfile? get lastDatabaseProfile => _lastDatabaseProfile;
 
   /// True όταν εκτελείται προσπάθεια ανοίγματος βάσης.
   bool get isOpening => _databaseInitializingFuture != null;
@@ -171,6 +176,7 @@ class DatabaseHelper with DatabaseTableInspectionMixin {
     _databaseInitializingFuture = null;
     _userAbortCompleter = null;
     _isUsingLocalDb = false;
+    _lastDatabaseProfile = null;
   }
 
   Future<Database> _openTestOverrideDatabase(
@@ -214,6 +220,7 @@ class DatabaseHelper with DatabaseTableInspectionMixin {
       throw _enrichSchemaValidationException(e);
     }
     await db.execute('PRAGMA journal_mode = WAL;');
+    await SettingsService().setLastOpenedDatabasePath(dbPath);
     return db;
   }
 
@@ -332,6 +339,12 @@ class DatabaseHelper with DatabaseTableInspectionMixin {
       throw DatabaseInitException(DatabaseInitResult.fileNotFound(dbPath));
     }
 
+    var classificationKind = await _ensureCompatibleDatabaseFile(
+      dbPath,
+      progressNotifier: progressNotifier,
+    );
+    await _requireSchemaUpgradeConsentIfNeeded(dbPath);
+
     final timeoutSeconds = await _resolveDatabaseOpenTimeoutSeconds();
     final maxAttempts = await _resolveDatabaseOpenMaxAttempts();
     String? lastDiagnostic;
@@ -367,10 +380,13 @@ class DatabaseHelper with DatabaseTableInspectionMixin {
       progressNotifier?.setDiagnostic(probeDiagnostic);
     }
 
-    await _ensureCompatibleDatabaseFile(
-      dbPath,
-      progressNotifier: progressNotifier,
-    );
+    if (classificationKind == DatabaseFileKind.undetermined) {
+      classificationKind = await _ensureCompatibleDatabaseFile(
+        dbPath,
+        progressNotifier: progressNotifier,
+      );
+      await _requireSchemaUpgradeConsentIfNeeded(dbPath);
+    }
 
     for (var attempt = 1; attempt <= maxAttempts; attempt++) {
       if (attempt > 1) {
@@ -398,6 +414,7 @@ class DatabaseHelper with DatabaseTableInspectionMixin {
           throw _enrichSchemaValidationException(e);
         }
         await db.execute('PRAGMA journal_mode = WAL;');
+        await SettingsService().setLastOpenedDatabasePath(dbPath);
         progressNotifier?.setStep(
           'Η βάση άνοιξε επιτυχώς',
           clearSecondsRemaining: true,
@@ -476,27 +493,136 @@ class DatabaseHelper with DatabaseTableInspectionMixin {
     throw error;
   }
 
+  /// Συγκατάθεση πριν από μόνιμη αναβάθμιση σχήματος σε ΝΕΑ διαδρομή.
+  /// Η ίδια διαδρομή με την τελευταία επιτυχημένη (`getLastOpenedDatabasePath`)
+  /// προχωρά σιωπηλά — δικλείδα για την καθημερινή βάση παραγωγής.
+  Future<void> _requireSchemaUpgradeConsentIfNeeded(String dbPath) async {
+    final profile = _lastDatabaseProfile;
+    final fileVersion = profile?.userVersion;
+    if (fileVersion == null || fileVersion <= 0) return;
+    if (fileVersion >= kDatabaseSchemaVersion) return;
+
+    final settings = SettingsService();
+    final lastOpened = await settings.getLastOpenedDatabasePath();
+    if (lastOpened != null && _sameDatabasePath(lastOpened, dbPath)) {
+      return;
+    }
+
+    var modifiedMs = 0;
+    try {
+      modifiedMs = File(dbPath).lastModifiedSync().millisecondsSinceEpoch;
+    } catch (_) {}
+    final identity = databaseContentIdentity(
+      dbPath: dbPath,
+      latestCallDate: profile?.latestCallDate,
+      callCount: profile?.callCount,
+      fileModifiedMs: modifiedMs,
+    );
+    final consented = await settings.getSchemaUpgradeConsentIdentity();
+    if (consented != null && consented == identity) return;
+
+    final fileName = dbPath.split(RegExp(r'[/\\]')).last.trim();
+    final displayName = fileName.isEmpty ? dbPath : fileName;
+    throw DatabaseInitException(
+      DatabaseInitResult(
+        status: DatabaseStatus.corruptedOrInvalid,
+        message:
+            'Το αρχείο «$displayName» έχει σχήμα έκδοσης $fileVersion. '
+            'Η εφαρμογή χρησιμοποιεί την έκδοση $kDatabaseSchemaVersion. '
+            'Το άνοιγμα θα αναβαθμίσει το αρχείο ΜΟΝΙΜΑ, χωρίς δυνατότητα '
+            'επιστροφής σε προηγούμενη έκδοση.',
+        details:
+            'Διαδρομή: $dbPath\n'
+            'Έκδοση αρχείου: $fileVersion\n'
+            'Έκδοση εφαρμογής: $kDatabaseSchemaVersion',
+        path: dbPath,
+        recoveryKind: DatabaseInitRecoveryKind.schemaUpgradeConsent,
+        technicalCode: '$fileVersion→$kDatabaseSchemaVersion',
+      ),
+    );
+  }
+
+  bool _sameDatabasePath(String a, String b) {
+    final na = a.trim().replaceAll('/', r'\');
+    final nb = b.trim().replaceAll('/', r'\');
+    if (Platform.isWindows) {
+      return na.toLowerCase() == nb.toLowerCase();
+    }
+    return na == nb;
+  }
+
   /// Ταξινόμηση αρχείου πριν το άνοιγμα με version/onCreate — αποτρέπει εγγραφή
   /// σε ξένη βάση (π.χ. Λάμπας). Το [DatabaseFileKind.empty] επιτρέπει νόμιμη
   /// δημιουργία σχήματος σε νέο κενό αρχείο.
-  Future<void> _ensureCompatibleDatabaseFile(
+  ///
+  /// Επιστρέφει το είδος που βρέθηκε. Τα [DatabaseFileKind.lamp],
+  /// [DatabaseFileKind.hybrid], [DatabaseFileKind.incompleteCallLogger] και
+  /// [DatabaseFileKind.unknown] απορρίπτονται με εξαίρεση. Το
+  /// [DatabaseFileKind.undetermined] συνεχίζει χωρίς εξαίρεση (δεύτερη ευκαιρία
+  /// μετά από καθαρισμό sidecars / βρόχος ανοίγματος).
+  Future<DatabaseFileKind> _ensureCompatibleDatabaseFile(
     String dbPath, {
     DatabaseInitProgressNotifier? progressNotifier,
   }) async {
     progressNotifier?.setStep('Έλεγχος τύπου αρχείου βάσης');
-    final kind = await classifyDatabaseFile(dbPath);
+    final profile = await profileDatabaseFile(dbPath);
+    _lastDatabaseProfile = profile;
+    final kind = profile.kind;
     if (kind == DatabaseFileKind.callLogger ||
         kind == DatabaseFileKind.empty) {
-      return;
+      return kind;
+    }
+
+    if (kind == DatabaseFileKind.undetermined) {
+      final reason = profile.failureReason?.trim();
+      if (reason != null && reason.isNotEmpty) {
+        progressNotifier?.setDiagnostic(
+          'Ταξινόμηση αρχείου βάσης: αδυναμία ανάγνωσης — $reason',
+        );
+      }
+      return kind;
     }
 
     final fileName = dbPath.split(RegExp(r'[/\\]')).last.trim();
     final displayName = fileName.isEmpty ? dbPath : fileName;
-    final message = kind == DatabaseFileKind.lamp
-        ? 'Το αρχείο «$displayName» είναι η βάση δεδομένων της Λάμπας. '
-              'Η Καταγραφή Κλήσεων χρειάζεται το δικό της αρχείο βάσης '
-              '(π.χ. call_logger.db).'
-        : 'Το αρχείο «$displayName» δεν είναι βάση της Καταγραφής Κλήσεων.';
+
+    final String message;
+    final DatabaseInitRecoveryKind recoveryKind;
+    switch (kind) {
+      case DatabaseFileKind.lamp:
+        message =
+            'Το αρχείο «$displayName» είναι η βάση δεδομένων της Λάμπας. '
+            'Η Καταγραφή Κλήσεων χρειάζεται το δικό της αρχείο βάσης '
+            '(π.χ. call_logger.db).';
+        recoveryKind = DatabaseInitRecoveryKind.wrongDatabaseLamp;
+      case DatabaseFileKind.hybrid:
+        message =
+            'Το αρχείο «$displayName» περιέχει ταυτόχρονα πίνακες της '
+            'Καταγραφής Κλήσεων και της Λάμπας — δεν μπορεί να χρησιμοποιηθεί '
+            'από καμία από τις δύο εφαρμογές.';
+        recoveryKind = DatabaseInitRecoveryKind.wrongDatabaseLamp;
+      case DatabaseFileKind.incompleteCallLogger:
+        final missing = profile.missingCoreTables.join(', ');
+        message =
+            'Το αρχείο «$displayName» είναι ελλιπής βάση της Καταγραφής '
+            'Κλήσεων — λείπουν οι πίνακες: $missing.';
+        recoveryKind = DatabaseInitRecoveryKind.wrongDatabaseUnknown;
+      case DatabaseFileKind.unknown:
+        message = profile.userVersion == 0
+            ? 'Το αρχείο «$displayName» περιέχει πίνακες αλλά δηλώνει '
+                'έκδοση 0, οπότε δεν αναγνωρίζεται ως βάση της Καταγραφής '
+                'Κλήσεων.'
+            : 'Το αρχείο «$displayName» δεν είναι βάση της Καταγραφής '
+                'Κλήσεων.';
+        recoveryKind = DatabaseInitRecoveryKind.wrongDatabaseUnknown;
+      case DatabaseFileKind.callLogger:
+      case DatabaseFileKind.empty:
+      case DatabaseFileKind.undetermined:
+        // Καλύπτονται παραπάνω· το switch απαιτεί εξαντλητικότητα.
+        message =
+            'Το αρχείο «$displayName» δεν είναι βάση της Καταγραφής Κλήσεων.';
+        recoveryKind = DatabaseInitRecoveryKind.wrongDatabaseUnknown;
+    }
 
     throw DatabaseInitException(
       DatabaseInitResult(
@@ -504,9 +630,7 @@ class DatabaseHelper with DatabaseTableInspectionMixin {
         message: message,
         details: 'Διαδρομή: $dbPath',
         path: dbPath,
-        recoveryKind: kind == DatabaseFileKind.lamp
-            ? DatabaseInitRecoveryKind.wrongDatabaseLamp
-            : DatabaseInitRecoveryKind.wrongDatabaseUnknown,
+        recoveryKind: recoveryKind,
       ),
     );
   }

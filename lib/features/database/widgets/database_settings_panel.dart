@@ -13,11 +13,15 @@ import '../../../core/utils/file_picker_session.dart';
 import '../../../core/utils/user_facing_error_messages.dart';
 import '../../../core/providers/core_lexicon_provider.dart';
 import '../../../core/database/database_helper.dart';
+import '../../../core/database/database_init_result.dart';
 import '../../../core/database/database_init_runner.dart';
 import '../../../core/database/database_path_pick_flow.dart';
 import '../../../core/database/database_restore_flow.dart';
+import '../../../core/database/database_switch_success_notice.dart';
 import '../../../core/init/app_init_provider.dart';
 import '../../../core/init/database_reopen_cache_reset.dart';
+import '../../../core/init/database_switch_guard.dart';
+import '../../../core/providers/active_critical_operations_provider.dart';
 import '../../../core/services/settings_service.dart';
 import '../../settings/widgets/create_new_database_dialog.dart';
 import '../models/database_backup_settings.dart';
@@ -26,8 +30,11 @@ import '../providers/database_backup_settings_provider.dart';
 import '../providers/database_integrity_provider.dart';
 import '../services/database_backup_audit.dart';
 import '../services/database_backup_service.dart';
+import '../services/database_path_switch_runner.dart';
+import '../services/restore_plan.dart';
 import 'backup_folder_missing_dialog.dart';
 import '../utils/backup_destination_folder_validator.dart';
+import '../utils/database_path_dropdown_options.dart';
 import '../utils/backup_destination_location_warnings.dart';
 import '../utils/backup_location_hints.dart';
 import '../utils/backup_schedule_status.dart';
@@ -35,6 +42,7 @@ import '../utils/backup_schedule_utils.dart';
 import '../utils/backup_restore_tooltip.dart';
 import '../utils/portable_backup_availability.dart';
 import 'database_integrity_panel.dart';
+import 'schema_upgrade_consent_dialog.dart';
 
 String _weekdayChipLabel(int weekday) {
   const labels = ['Δε', 'Τρ', 'Τε', 'Πε', 'Πα', 'Σα', 'Κυ'];
@@ -64,7 +72,8 @@ class DatabaseSettingsPanel extends ConsumerStatefulWidget {
       _DatabaseSettingsPanelState();
 }
 
-class _DatabaseSettingsPanelState extends ConsumerState<DatabaseSettingsPanel> {
+class _DatabaseSettingsPanelState extends ConsumerState<DatabaseSettingsPanel>
+    implements DatabasePathSwitchHooks {
   final SettingsService _settings = SettingsService();
 
   late final TextEditingController _destinationController;
@@ -87,7 +96,6 @@ class _DatabaseSettingsPanelState extends ConsumerState<DatabaseSettingsPanel> {
   String _currentDbPath = '';
   List<String> _recentDbPaths = [];
   bool _currentDbPathExists = false;
-  String? _selectedNewDbPath;
   bool _isLoadingDbPath = true;
   String? _dbPathErrorMessage;
 
@@ -155,6 +163,11 @@ class _DatabaseSettingsPanelState extends ConsumerState<DatabaseSettingsPanel> {
         dbBaseName: baseName,
       );
     } catch (_) {
+      // Σκόπιμη υποβάθμιση, όχι απόκρυψη σφάλματος: χωρίς ανοιχτή βάση δεν
+      // γνωρίζουμε το όνομα του αρχείου, άρα δεν μπορούμε να πούμε τι περιέχει
+      // ο φάκελος προορισμού. Η ένδειξη είναι διακοσμητική (προειδοποίηση στο
+      // πάνελ αντιγράφων) — το πραγματικό σφάλμα βάσης αναφέρεται από τη ροή
+      // αρχικοποίησης, που είναι ο ιδιοκτήτης του μηνύματος.
       return const BackupDestinationContentResult(
         kind: BackupDestinationContentKind.folderMissing,
       );
@@ -174,14 +187,14 @@ class _DatabaseSettingsPanelState extends ConsumerState<DatabaseSettingsPanel> {
         try {
           exists = await File(p).exists();
         } catch (_) {
+          // Η αδυναμία ΕΛΕΓΧΟΥ είναι η απάντηση: σε νεκρή δικτυακή διαδρομή ή
+          // άρνηση πρόσβασης δεν μπορούμε να επιβεβαιώσουμε το αρχείο, οπότε το
+          // εικονίδιο «δεν υπάρχει αυτή η βάση» είναι η σωστή ένδειξη. Το
+          // ονομαστικό σφάλμα το δίνει η επόμενη απόπειρα ανοίγματος.
           exists = false;
         }
       }
       var paths = List<String>.from(recent);
-      if (!paths.contains(p)) {
-        paths.insert(0, p);
-        paths = paths.take(3).toList();
-      }
       if (mounted) {
         setState(() {
           _currentDbPath = p;
@@ -204,15 +217,16 @@ class _DatabaseSettingsPanelState extends ConsumerState<DatabaseSettingsPanel> {
   }
 
   Future<void> _pickDatabasePath() async {
+    if (!await ensureDatabaseSwitchAllowed(context, ref)) return;
+
     setState(() {
       _dbPathErrorMessage = null;
-      _selectedNewDbPath = null;
     });
 
     final picked = await pickDatabasePathWithSystemPicker();
     if (FilePickerSession.takeLastRefocusedExisting()) return;
     if (picked != null && picked.isNotEmpty) {
-      await _validateApplyAndFinishPick(picked);
+      await _switchToPickedDatabasePath(picked);
     } else {
       if (mounted) {
         setState(() => _dbPathErrorMessage = 'Δεν επιλέχθηκε αρχείο ή φάκελος.');
@@ -220,53 +234,52 @@ class _DatabaseSettingsPanelState extends ConsumerState<DatabaseSettingsPanel> {
     }
   }
 
-  Future<void> _validateApplyAndFinishPick(String newPath) async {
-    var trimmed = newPath.trim();
+  /// Αλλαγή στη διαδρομή που επέλεξε ο χρήστης (επιλογέας αρχείου ή πρόσφατη).
+  ///
+  /// Αν η επιλογή είναι αντίγραφο `.zip`, ακολουθείται η κοινή ροή επαναφοράς
+  /// με προεπιλογή «νέο αρχείο δίπλα στο αντίγραφο» (μη καταστροφική).
+  Future<void> _switchToPickedDatabasePath(String newPath) async {
+    final trimmed = newPath.trim();
     if (trimmed.isEmpty || !mounted) return;
-
-    if (trimmed.toLowerCase().endsWith('.zip')) {
-      final targetDb = p.join(p.dirname(trimmed), 'call_logger.db');
-      final confirm = await showDialog<bool>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Text('Επαναφορά από zip'),
-          content: Text(
-            'Το αντίγραφο θα αποσυμπιεστεί στη διαδρομή:\n$targetDb',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Άκυρο'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Συνέχεια'),
-            ),
-          ],
-        ),
-      );
-      if (confirm != true || !mounted) return;
-      try {
-        await DatabaseHelper.instance.closeConnection();
-      } catch (_) {}
-      final restored = await DatabaseBackupService.restoreFromBackupZip(
-        trimmed,
-        targetDatabasePath: targetDb,
-      );
-      if (!restored.success || restored.databasePath == null) {
-        if (mounted) {
-          setState(() {
-            _dbPathErrorMessage =
-                restored.message ?? 'Αποτυχία επαναφοράς από zip.';
-          });
-        }
-        return;
-      }
-      trimmed = restored.databasePath!;
-    }
-
+    if (!await ensureDatabaseSwitchAllowed(context, ref)) return;
     if (!mounted) return;
 
+    if (trimmed.toLowerCase().endsWith('.zip')) {
+      await runGuardedDatabaseSwitch(context, ref, () async {
+        if (!mounted) return;
+        final current = _currentDbPath.trim().isNotEmpty
+            ? _currentDbPath
+            : AppConfig.defaultDbPath;
+        final result = await runRestoreFromBackupZipFlow(
+          context: context,
+          currentDatabasePath: current,
+          preselectedZipPath: trimmed,
+          initialDestination: RestoreDestinationChoice.besideZip,
+        );
+        if (!mounted || !result.isSuccess) return;
+        final toOpen = result.pathToOpen?.trim();
+        if (toOpen != null && toOpen.isNotEmpty) {
+          await runDatabasePathSwitch(path: toOpen, hooks: this);
+        } else if (result.restoredPath != null) {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Η βάση επαναφέρθηκε στο:\n${result.restoredPath}',
+              ),
+            ),
+          );
+        }
+      });
+      return;
+    }
+
+    await runDatabasePathSwitch(path: trimmed, hooks: this);
+  }
+
+  @override
+  Future<void> showVerifyingIndicator() async {
+    if (!mounted) return;
     showDialog<void>(
       context: context,
       barrierDismissible: false,
@@ -289,170 +302,106 @@ class _DatabaseSettingsPanelState extends ConsumerState<DatabaseSettingsPanel> {
         ),
       ),
     );
+  }
 
-    late ({bool ok, DatabaseInitRunnerResult runner}) outcome;
-    try {
-      outcome = await setAndVerifyDatabasePath(trimmed);
-    } finally {
-      if (mounted) {
-        Navigator.of(context, rootNavigator: true).pop();
-      }
+  @override
+  Future<void> hideVerifyingIndicator() async {
+    if (mounted) {
+      Navigator.of(context, rootNavigator: true).pop();
     }
+  }
 
+  Future<void> _applySwitchAfterSchemaRecovery() async {
     if (!mounted) return;
+    final activePath = await SettingsService().getDatabasePath();
+    if (!mounted) return;
+    await applySwitchToSession(activePath);
+  }
 
-    if (!outcome.ok) {
-      final msg =
-          outcome.runner.result.message ?? 'Η βάση δεν πέρασε τον έλεγχο.';
-      final det = outcome.runner.result.details?.trim();
-      await showDialog<void>(
+  @override
+  Future<void> reportVerificationFailure(DatabaseInitRunnerResult runner) async {
+    if (!mounted) return;
+    if (runner.result.recoveryKind ==
+        DatabaseInitRecoveryKind.schemaUpgradeConsent) {
+      final recovered = await runSchemaUpgradeConsentRecovery(
         context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Text('Η βάση δεν είναι έγκυρη'),
-          content: SingleChildScrollView(
-            child: Text(det != null && det.isNotEmpty ? '$msg\n\n$det' : msg),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(),
-              child: const Text('Εντάξει'),
-            ),
-          ],
-        ),
+        result: runner.result,
+        onSuccess: _applySwitchAfterSchemaRecovery,
       );
+      if (recovered && mounted) {
+        // Η διαδρομή μπορεί να είναι το αντίγραφο — ανανέωση ετικετών.
+        await _loadDatabasePathSection();
+      }
       return;
     }
-
+    final msg = runner.result.message ?? 'Η βάση δεν πέρασε τον έλεγχο.';
+    final det = runner.result.details?.trim();
     await showDialog<void>(
       context: context,
-      barrierDismissible: false,
       builder: (ctx) => AlertDialog(
-        title: const Text('Βάση έτοιμη'),
-        content: const Text(
-          'Η διαδρομή αποθηκεύτηκε και η βάση επαληθεύτηκε.\n\n'
-          'Για πλήρη εφαρμογή αλλαγών, κλείστε την εφαρμογή (π.χ. Alt+F4) και ανοίξτε την ξανά.',
+        title: const Text('Η βάση δεν είναι έγκυρη'),
+        content: SingleChildScrollView(
+          child: Text(det != null && det.isNotEmpty ? '$msg\n\n$det' : msg),
         ),
         actions: [
-          FilledButton(
+          TextButton(
             onPressed: () => Navigator.of(ctx).pop(),
             child: const Text('Εντάξει'),
           ),
         ],
       ),
     );
+  }
 
+  @override
+  Future<void> applySwitchToSession(String path) async {
     if (!mounted) return;
     setState(() {
-      _currentDbPath = trimmed;
-      _selectedNewDbPath = null;
+      _currentDbPath = path;
       _dbPathErrorMessage = null;
     });
     await _loadDatabasePathSection();
 
     if (!mounted) return;
+    ref.read(databaseSwitchSuccessNoticeProvider.notifier).show(path);
     await widget.onDatabaseLifecycleChanged?.call();
     if (!mounted) return;
     invalidateDatabaseScopedCaches(ref);
     ref.invalidate(appInitProvider);
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Η νέα βάση ορίστηκε και επαληθεύτηκε.')),
-      );
-    }
   }
 
-  Future<void> _saveNewDatabasePathSetting() async {
-    final newPath = _selectedNewDbPath?.trim();
-    if (newPath == null || newPath.isEmpty) {
-      setState(() => _dbPathErrorMessage = 'Επιλέξτε πρώτα νέα διαδρομή.');
-      return;
-    }
+  @override
+  void declareSwitchBegin() {
+    ref
+        .read(activeCriticalOperationsProvider.notifier)
+        .begin(CriticalOperation.databaseSwitch);
+  }
 
-    if (!newPath.toLowerCase().endsWith('.db')) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text(
-              'Προειδοποίηση: η διαδρομή δεν τελειώνει σε .db. Βεβαιωθείτε ότι δείχνει σε αρχείο βάσης δεδομένων.',
-            ),
-            backgroundColor: Colors.orange.shade800,
-          ),
-        );
-      }
-    }
-
-    final newFile = File(newPath);
-    try {
-      final parentExists = await newFile.parent.exists();
-      if (!parentExists && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Προειδοποίηση: ο φάκελος δεν υπάρχει. Η διαδρομή θα αποθηκευτεί αλλά η βάση θα δημιουργηθεί στην πρώτη εκκίνηση.',
-            ),
-            backgroundColor: Colors.orange,
-          ),
-        );
-      }
-    } catch (_) {}
-
-    try {
-      await _settings.setDatabasePath(newPath);
-    } catch (e) {
-      if (mounted) {
-        setState(() => _dbPathErrorMessage = 'Σφάλμα αποθήκευσης: ${humanizeUserFacingError(e)}');
-      }
-      return;
-    }
-
-    if (!mounted) return;
-    await showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Ρυθμίσεις αποθηκεύτηκαν'),
-        content: const Text(
-          'Η νέα διαδρομή θα ισχύσει στην επόμενη εκκίνηση της εφαρμογής.\n\n'
-          'Παρακαλώ κλείστε την εφαρμογή χειροκίνητα (Alt+F4 ή κουμπί κλεισίματος) και ανοίξτε την ξανά.',
-        ),
-        actions: [
-          FilledButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Εντάξει'),
-          ),
-        ],
-      ),
-    );
-
-    if (!mounted) return;
-    setState(() {
-      _currentDbPath = newPath;
-      _selectedNewDbPath = null;
-      _dbPathErrorMessage = null;
-    });
-    await _loadDatabasePathSection();
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Η διαδρομή αποθηκεύτηκε επιτυχώς')),
-    );
+  @override
+  void declareSwitchEnd() {
+    ref
+        .read(activeCriticalOperationsProvider.notifier)
+        .end(CriticalOperation.databaseSwitch);
   }
 
   Future<void> _runCreateNewDatabaseFlow() async {
-    setState(() => _dbPathErrorMessage = null);
-    await CreateNewDatabaseFlow.run(
-      context,
-      ref,
-      onDatabaseReopened: widget.onDatabaseLifecycleChanged,
-      onReloadSettingsState: () async {
-        if (!mounted) return;
-        await _loadDatabasePathSection();
-        if (!mounted) return;
-        setState(() {
-          _selectedNewDbPath = null;
-          _dbPathErrorMessage = null;
-        });
-      },
-    );
+    await runGuardedDatabaseSwitch(context, ref, () async {
+      if (!mounted) return;
+      setState(() => _dbPathErrorMessage = null);
+      await CreateNewDatabaseFlow.run(
+        context,
+        ref,
+        onDatabaseReopened: widget.onDatabaseLifecycleChanged,
+        onReloadSettingsState: () async {
+          if (!mounted) return;
+          await _loadDatabasePathSection();
+          if (!mounted) return;
+          setState(() {
+            _dbPathErrorMessage = null;
+          });
+        },
+      );
+    });
   }
 
   List<Widget> _buildDatabaseFilePathSection(ThemeData theme) {
@@ -489,13 +438,15 @@ class _DatabaseSettingsPanelState extends ConsumerState<DatabaseSettingsPanel> {
                 ),
                 child: DropdownButtonHideUnderline(
                   child: DropdownButton<String>(
-                    value: _recentDbPaths.contains(_currentDbPath)
-                        ? _currentDbPath
-                        : _recentDbPaths.isNotEmpty
-                            ? _recentDbPaths.first
-                            : _currentDbPath,
+                    // Η τιμή είναι ΠΑΝΤΑ η ενεργή διαδρομή: οι επιλογές την
+                    // περιλαμβάνουν εξ ορισμού, οπότε δεν υπάρχει εφεδρική τιμή
+                    // που θα εμφάνιζε ως ενεργή μια βάση που δεν είναι ανοιχτή.
+                    value: _currentDbPath,
                     isExpanded: true,
-                    items: _recentDbPaths.map((path) {
+                    items: databasePathDropdownOptions(
+                      currentPath: _currentDbPath,
+                      recentPaths: _recentDbPaths,
+                    ).map((path) {
                       final isDefault = path == AppConfig.defaultDbPath;
                       return DropdownMenuItem<String>(
                         value: path,
@@ -515,8 +466,7 @@ class _DatabaseSettingsPanelState extends ConsumerState<DatabaseSettingsPanel> {
                     }).toList(),
                     onChanged: (String? value) async {
                       if (value == null || value == _currentDbPath) return;
-                      await _settings.setDatabasePath(value);
-                      await _loadDatabasePathSection();
+                      await _switchToPickedDatabasePath(value);
                     },
                   ),
                 ),
@@ -547,40 +497,6 @@ class _DatabaseSettingsPanelState extends ConsumerState<DatabaseSettingsPanel> {
             ),
           ],
         ),
-      if (_selectedNewDbPath != null) ...[
-        const SizedBox(height: 16),
-        Text(
-          'Νέα διαδρομή (προεπισκόπηση)',
-          style: theme.textTheme.titleSmall?.copyWith(
-            fontWeight: FontWeight.w600,
-            color: theme.colorScheme.primary,
-          ),
-        ),
-        const SizedBox(height: 8),
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: theme.colorScheme.primaryContainer.withValues(alpha: 0.4),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: theme.colorScheme.primary.withValues(alpha: 0.5),
-            ),
-          ),
-          child: SelectableText(
-            _selectedNewDbPath!,
-            style: theme.textTheme.bodyMedium?.copyWith(
-              fontFamily: 'monospace',
-            ),
-          ),
-        ),
-        const SizedBox(height: 12),
-        FilledButton.icon(
-          onPressed: _saveNewDatabasePathSetting,
-          icon: const Icon(Icons.save),
-          label: const Text('Αποθήκευση ρύθμισης'),
-        ),
-      ],
       if (_dbPathErrorMessage != null) ...[
         const SizedBox(height: 12),
         Container(
@@ -1008,21 +924,34 @@ class _DatabaseSettingsPanelState extends ConsumerState<DatabaseSettingsPanel> {
   }
 
   Future<void> _restoreFromBackupZip() async {
-    final backupFolder = _destinationController.text.trim().isNotEmpty
-        ? _destinationController.text.trim()
-        : ref.read(databaseBackupSettingsProvider).destinationDirectory.trim();
-    final defaultTarget = _currentDbPath.trim().isNotEmpty
-        ? _currentDbPath
-        : AppConfig.defaultDbPath;
-    await runRestoreFromBackupZipFlow(
-      context: context,
-      backupFolderHint: backupFolder.isNotEmpty ? backupFolder : null,
-      currentDatabasePath: defaultTarget,
-      onVerifiedSuccess: () async {
-        await widget.onDatabaseLifecycleChanged?.call();
-        await _loadDatabasePathSection();
-      },
-    );
+    await runGuardedDatabaseSwitch(context, ref, () async {
+      if (!mounted) return;
+      final backupFolder = _destinationController.text.trim().isNotEmpty
+          ? _destinationController.text.trim()
+          : ref.read(databaseBackupSettingsProvider).destinationDirectory.trim();
+      final defaultTarget = _currentDbPath.trim().isNotEmpty
+          ? _currentDbPath
+          : AppConfig.defaultDbPath;
+      final result = await runRestoreFromBackupZipFlow(
+        context: context,
+        backupFolderHint: backupFolder.isNotEmpty ? backupFolder : null,
+        currentDatabasePath: defaultTarget,
+        initialDestination: RestoreDestinationChoice.currentDatabase,
+      );
+      if (!mounted || !result.isSuccess) return;
+      final toOpen = result.pathToOpen?.trim();
+      if (toOpen != null && toOpen.isNotEmpty) {
+        await runDatabasePathSwitch(path: toOpen, hooks: this);
+      } else if (result.restoredPath != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Η βάση επαναφέρθηκε στο:\n${result.restoredPath}',
+            ),
+          ),
+        );
+      }
+    });
   }
 
   @override

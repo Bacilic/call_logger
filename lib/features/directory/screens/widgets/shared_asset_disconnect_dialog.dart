@@ -4,6 +4,7 @@ import '../../../../core/database/database_helper.dart';
 import '../../../../core/database/equipment_repository.dart';
 import '../../../../core/database/phone_repository.dart';
 import '../../../../core/utils/search_text_normalizer.dart';
+import '../../../../core/widgets/draggable_dialog_shell.dart';
 import '../../models/department_model.dart';
 
 /// Sentinel για επιλογή «δημιουργία νέου τμήματος» στο autocomplete.
@@ -23,10 +24,11 @@ String _departmentOptionLabel(String option) {
   return option;
 }
 
-/// Πλαίσιο αποδέσμευσης: κοινόχρηστο στοιχείο τμήματος ή προσωπικό τηλέφωνο χρήστη.
+/// Πλαίσιο αποδέσμευσης: κοινόχρηστο στοιχείο τμήματος ή προσωπικό στοιχείο χρήστη.
 enum SharedAssetDisconnectMode {
   sharedAsset,
   personalPhone,
+  personalEquipment,
 }
 
 /// Επιλογή στον κύριο διάλογο αποδέσμευσης κοινόχρηστου στοιχείου.
@@ -154,7 +156,10 @@ Future<SharedAssetDisconnectBatchResult?> showSharedAssetDisconnectFlow({
       sourceDepartmentId: sourceDepartmentId,
       sourceDepartmentName: sourceDepartmentName,
       availableDepartments: availableDepartments,
-      mode: SharedAssetDisconnectMode.sharedAsset,
+      mode: mode == SharedAssetDisconnectMode.personalEquipment
+          ? SharedAssetDisconnectMode.personalEquipment
+          : SharedAssetDisconnectMode.sharedAsset,
+      personalPhoneUserDisplayName: personalPhoneUserDisplayName,
       allowKeepInDepartment: allowKeepInDepartment,
     );
     if (item == null) return null;
@@ -192,12 +197,28 @@ String _disconnectDialogTitle({
   if (isPhone && mode == SharedAssetDisconnectMode.personalPhone) {
     return 'Αποδέσμευση προσωπικού τηλεφώνου';
   }
+  if (!isPhone && mode == SharedAssetDisconnectMode.personalEquipment) {
+    return 'Αποδέσμευση προσωπικού εξοπλισμού';
+  }
   return isPhone
       ? 'Αποδέσμευση κοινόχρηστου τηλεφώνου'
       : 'Αποδέσμευση κοινόχρηστου εξοπλισμού';
 }
 
-String _disconnectDialogContent({
+String _personalEmployeeQuotedLabel({
+  String? personalPhoneUserDisplayName,
+  String? sourceDepartmentName,
+}) {
+  final user = personalPhoneUserDisplayName?.trim();
+  if (user == null || user.isEmpty) return '';
+  final dept = sourceDepartmentName?.trim();
+  if (dept == null || dept.isEmpty) return ' «$user»';
+  return ' «$user ($dept)»';
+}
+
+/// Κείμενο σώματος διαλόγου αποδέσμευσης (τεσταρίσιμο).
+@visibleForTesting
+String disconnectDialogContent({
   required bool isPhone,
   required String value,
   required SharedAssetDisconnectMode mode,
@@ -205,18 +226,67 @@ String _disconnectDialogContent({
   String? personalPhoneUserDisplayName,
 }) {
   if (isPhone && mode == SharedAssetDisconnectMode.personalPhone) {
-    final user = personalPhoneUserDisplayName?.trim();
-    final userPart = (user == null || user.isEmpty) ? '' : ' «$user»';
-    final dept = sourceDepartmentName?.trim();
-    final deptPart = (dept == null || dept.isEmpty)
-        ? ''
-        : ' (τμήμα «$dept»)';
-    return 'Ο αριθμός $value πρόκειται να αποσυνδεθεί από τον χρήστη$userPart$deptPart.\n\nΕπιλέξτε ενέργεια:';
+    final userPart = _personalEmployeeQuotedLabel(
+      personalPhoneUserDisplayName: personalPhoneUserDisplayName,
+      sourceDepartmentName: sourceDepartmentName,
+    );
+    return 'Ο αριθμός $value πρόκειται να αποσυνδεθεί από τον υπάλληλο$userPart.\n\nΕπιλέξτε ενέργεια:';
+  }
+  if (!isPhone && mode == SharedAssetDisconnectMode.personalEquipment) {
+    final userPart = _personalEmployeeQuotedLabel(
+      personalPhoneUserDisplayName: personalPhoneUserDisplayName,
+      sourceDepartmentName: sourceDepartmentName,
+    );
+    return 'Ο εξοπλισμός $value πρόκειται να αποσυνδεθεί από τον υπάλληλο$userPart.\n\nΕπιλέξτε ενέργεια:';
   }
   final dept = sourceDepartmentName?.trim() ?? '';
   return isPhone
       ? 'Το κοινόχρηστο τηλέφωνο $value πρόκειται να αποδεσμευτεί από το τμήμα «$dept».\n\nΕπιλέξτε ενέργεια:'
       : 'Ο κοινόχρηστος εξοπλισμός $value πρόκειται να αποδεσμευτεί από το τμήμα «$dept».\n\nΕπιλέξτε ενέργεια:';
+}
+
+/// Κείμενο επιβεβαίωσης κατάργησης με απαρίθμηση συνδέσεων (τεσταρίσιμο).
+@visibleForTesting
+String formatAssetReferenceDeleteMessage({
+  required bool isPhone,
+  required String value,
+  required List<String> descriptions,
+}) {
+  if (descriptions.isEmpty) {
+    return isPhone
+        ? 'Ο αριθμός $value δεν συνδέεται με άλλες εγγραφές. Να καταργηθεί;'
+        : 'Ο εξοπλισμός $value δεν συνδέεται με άλλες εγγραφές. Να καταργηθεί;';
+  }
+
+  final buf = StringBuffer(
+    isPhone
+        ? 'Ο αριθμός $value συνδέεται με:'
+        : 'Ο εξοπλισμός $value συνδέεται με:',
+  );
+  final visibleCount =
+      descriptions.length > 5 ? 5 : descriptions.length;
+  for (var i = 0; i < visibleCount; i++) {
+    buf.write('\n• ${descriptions[i]}');
+  }
+  if (descriptions.length > 5) {
+    buf.write('\n…και ${descriptions.length - 5} ακόμα');
+  }
+  buf.write('\nΝα καταργηθεί;');
+  return buf.toString();
+}
+
+String _keepInDepartmentLabel(
+  SharedAssetDisconnectMode mode, {
+  String? sourceDepartmentName,
+}) {
+  final dept = sourceDepartmentName?.trim() ?? '';
+  if (dept.isNotEmpty) {
+    return 'Παραμονή στο $dept';
+  }
+  if (mode == SharedAssetDisconnectMode.personalEquipment) {
+    return 'Παραμονή στο τμήμα του υπαλλήλου';
+  }
+  return 'Παραμονή στο ίδιο τμήμα';
 }
 
 Future<SharedAssetDisconnectItemResult?> _resolveSingleItem({
@@ -240,44 +310,52 @@ Future<SharedAssetDisconnectItemResult?> _resolveSingleItem({
     final choice = await showDialog<SharedAssetDisconnectChoice>(
       context: context,
       barrierDismissible: false,
-      builder: (ctx) => AlertDialog(
+      builder: (ctx) => DraggableDialogShell(
         title: Text(
           _disconnectDialogTitle(isPhone: isPhone, mode: mode),
         ),
-        content: Text(
-          _disconnectDialogContent(
-            isPhone: isPhone,
-            value: value,
-            mode: mode,
-            sourceDepartmentName: sourceDepartmentName,
-            personalPhoneUserDisplayName: personalPhoneUserDisplayName,
+        builder: (titleHandle) => AlertDialog(
+          title: titleHandle,
+          content: Text(
+            disconnectDialogContent(
+              isPhone: isPhone,
+              value: value,
+              mode: mode,
+              sourceDepartmentName: sourceDepartmentName,
+              personalPhoneUserDisplayName: personalPhoneUserDisplayName,
+            ),
           ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Άκυρο'),
-          ),
-          if (canKeepInDepartment)
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('Ακύρωση'),
+            ),
+            if (canKeepInDepartment)
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(
+                  SharedAssetDisconnectChoice.keepInDepartment,
+                ),
+                child: Text(
+                  _keepInDepartmentLabel(
+                    mode,
+                    sourceDepartmentName: sourceDepartmentName,
+                  ),
+                ),
+              ),
             TextButton(
               onPressed: () => Navigator.of(ctx).pop(
-                SharedAssetDisconnectChoice.keepInDepartment,
+                SharedAssetDisconnectChoice.transfer,
               ),
-              child: const Text('Παραμονή στο ίδιο τμήμα'),
+              child: const Text('Μεταφορά σε άλλο τμήμα'),
             ),
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(
-              SharedAssetDisconnectChoice.transfer,
+            FilledButton(
+              onPressed: () => Navigator.of(ctx).pop(
+                SharedAssetDisconnectChoice.delete,
+              ),
+              child: const Text('Διαγραφή'),
             ),
-            child: const Text('Μεταφορά σε άλλο τμήμα'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(ctx).pop(
-              SharedAssetDisconnectChoice.delete,
-            ),
-            child: const Text('Διαγραφή'),
-          ),
-        ],
+          ],
+        ),
       ),
     );
     if (!context.mounted || choice == null) return null;
@@ -489,19 +567,13 @@ class _SharedAssetTransferDialogState extends State<_SharedAssetTransferDialog> 
   }
 
   Future<void> _onDepartmentOptionSelected(String selection) async {
-    if (_isCreateDepartmentOption(selection)) {
-      final newName = selection.substring(_kCreateDepartmentOptionPrefix.length);
-      _departmentController.text = newName;
-      await _submitNewDepartment(newName);
-      return;
-    }
-    _departmentController.text = selection;
-    final matched = _matchDepartment(selection);
-    if (matched?.id != null && mounted) {
-      Navigator.of(context).pop(
-        SharedAssetTransferTarget.existing(matched!.id!),
-      );
-    }
+    final text = _isCreateDepartmentOption(selection)
+        ? selection.substring(_kCreateDepartmentOptionPrefix.length)
+        : selection;
+    _departmentController.text = text;
+    _departmentController.selection = TextSelection.collapsed(
+      offset: text.length,
+    );
   }
 
   @override
@@ -612,17 +684,17 @@ Future<bool?> _confirmDelete({
   final db = await DatabaseHelper.instance.database;
   final phones = PhoneRepository(db);
   final equipment = EquipmentRepository(db);
-  final int refCount;
+  final List<String> descriptions;
   if (isPhone) {
     final id = await phones.getPhoneIdByNumber(value);
-    refCount = id == null
-        ? 0
-        : await phones.countPhoneReferencesExcludingAudit(id, value);
+    descriptions = id == null
+        ? const <String>[]
+        : await phones.phoneReferenceDescriptions(id, value);
   } else {
     final id = await equipment.getEquipmentIdByCode(value);
-    refCount = id == null
-        ? 0
-        : await equipment.countEquipmentReferencesExcludingAudit(id);
+    descriptions = id == null
+        ? const <String>[]
+        : await equipment.equipmentReferenceDescriptions(id);
   }
 
   if (!context.mounted) return null;
@@ -632,9 +704,11 @@ Future<bool?> _confirmDelete({
     builder: (ctx) => AlertDialog(
       title: Text(isPhone ? 'Διαγραφή τηλεφώνου' : 'Διαγραφή εξοπλισμού'),
       content: Text(
-        isPhone
-            ? 'Ο αριθμός $value συνδέεται με $refCount εγγραφές στη βάση. Να καταργηθεί;'
-            : 'Ο εξοπλισμός $value συνδέεται με $refCount εγγραφές στη βάση. Να καταργηθεί;',
+        formatAssetReferenceDeleteMessage(
+          isPhone: isPhone,
+          value: value,
+          descriptions: descriptions,
+        ),
       ),
       actions: [
         TextButton(

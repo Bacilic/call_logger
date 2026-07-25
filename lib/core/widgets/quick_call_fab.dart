@@ -8,6 +8,8 @@ import '../providers/quick_call_providers.dart';
 
 import '../../features/calls/screens/widgets/quick_call_dialog.dart';
 
+import 'app_asset_image.dart';
+
 
 
 /// Διαδρομή asset και tooltip γρήγορης καταγραφής.
@@ -262,18 +264,13 @@ class _QuickCallIcon extends StatelessWidget {
 
   Widget build(BuildContext context) {
 
-    return Image.asset(
-
-      QuickCallTrigger.assetPath,
-
+    return AppAssetImage(
+      assetPath: QuickCallTrigger.assetPath,
       width: size,
-
       height: size,
-
       fit: BoxFit.contain,
-
       filterQuality: FilterQuality.medium,
-
+      fallbackIcon: Icons.call,
     );
 
   }

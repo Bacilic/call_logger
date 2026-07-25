@@ -197,7 +197,11 @@ void main() {
         final auditRows = await db.query(
           'audit_log',
           where: 'entity_type = ? AND entity_id = ? AND action = ?',
-          whereArgs: [AuditEntityTypes.category, catId, 'ΤΡΟΠΟΠΟΙΗΣΗ'],
+          whereArgs: [
+            AuditEntityTypes.category,
+            catId,
+            AuditActions.modifyCategory,
+          ],
         );
         expect(auditRows, hasLength(1));
         expect(auditRows.single['user_performing'], 'Editor Κατηγορίας');

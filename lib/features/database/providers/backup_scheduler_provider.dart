@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import 'package:path/path.dart' as p;
 
 import '../../../core/database/database_helper.dart';
+import '../../../core/providers/active_critical_operations_provider.dart';
 import '../models/database_backup_settings.dart';
 import '../services/database_backup_audit.dart';
 import '../services/database_backup_service.dart';
@@ -156,6 +157,22 @@ class BackupSchedulerNotifier extends Notifier<int> {
     if (_runLock) {
       if (atWindow) {
         _maybeLogScheduledSkip(settings, BackupAuditSkipReason.jobRunning);
+      }
+      return;
+    }
+
+    // Αντίστροφη φορά του ελέγχου που κάνει ο φρουρός εναλλαγής βάσης: εκείνος
+    // μπλοκάρει την αλλαγή όσο τρέχει αντίγραφο· εδώ αποφεύγουμε να ξεκινήσει
+    // αντίγραφο πάνω σε βάση που αλλάζει αυτή τη στιγμή (VACUUM INTO σε handle
+    // που πρόκειται να κλείσει → μισό/αποτυχημένο αντίγραφο ή λάθος βάση).
+    if (ref
+        .read(activeCriticalOperationsProvider)
+        .contains(CriticalOperation.databaseSwitch)) {
+      if (atWindow) {
+        _maybeLogScheduledSkip(
+          settings,
+          BackupAuditSkipReason.databaseSwitchInProgress,
+        );
       }
       return;
     }

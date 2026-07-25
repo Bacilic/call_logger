@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/providers/main_nav_request_provider.dart';
+import '../../../core/providers/pending_deferred_actions_provider.dart';
 import '../../../core/database/audit_service.dart';
 import '../../../core/widgets/main_nav_destination.dart';
 import '../../../core/utils/search_text_normalizer.dart';
@@ -251,16 +252,31 @@ class _ApplicationAuditTabState extends ConsumerState<ApplicationAuditTab> {
     var undone = false;
     Timer? deleteTimer;
     final deleteIds = ids;
+    final deferred = ref.read(pendingDeferredActionsProvider.notifier);
+    final container = ProviderScope.containerOf(context);
+    late final int token;
 
     deleteTimer = Timer(const Duration(seconds: 5), () async {
       if (undone || !mounted) return;
       final service = await ref.read(auditServiceAsyncProvider.future);
       await service.deleteByIds(deleteIds);
+      deferred.unregister(token);
       if (!mounted) return;
       ref.invalidate(auditListProvider);
       messenger.hideCurrentSnackBar();
       setState(() => _deleteCountdownActive = false);
     });
+
+    token = deferred.register(
+      label: 'Διαγραφή ${deleteIds.length} εγγραφών ιστορικού εφαρμογής',
+      settle: () async {
+        if (undone) return;
+        undone = true;
+        deleteTimer?.cancel();
+        final service = await container.read(auditServiceAsyncProvider.future);
+        await service.deleteByIds(deleteIds);
+      },
+    );
 
     messenger.hideCurrentSnackBar();
     messenger
@@ -273,6 +289,7 @@ class _ApplicationAuditTabState extends ConsumerState<ApplicationAuditTab> {
               onPressed: () {
                 undone = true;
                 deleteTimer?.cancel();
+                deferred.unregister(token);
                 if (mounted) {
                   setState(() => _deleteCountdownActive = false);
                 }
@@ -283,6 +300,7 @@ class _ApplicationAuditTabState extends ConsumerState<ApplicationAuditTab> {
         )
         .closed
         .then((_) {
+          deferred.unregister(token);
           if (mounted) {
             setState(() => _deleteCountdownActive = false);
           }

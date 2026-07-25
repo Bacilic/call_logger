@@ -5,6 +5,7 @@ import '../utils/file_picker_session.dart';
 import '../services/application_reset_service.dart';
 import '../services/settings_service.dart';
 import 'database_helper.dart';
+import 'database_init_progress_provider.dart';
 import 'database_init_result.dart';
 import 'database_init_runner.dart';
 
@@ -43,10 +44,17 @@ Future<String?> _pickDatabasePathWithSystemPickerImpl() async {
   return null;
 }
 
+/// Εκτελεστής ελέγχων αρχικοποίησης (προεπιλογή: [runDatabaseInitChecks]).
+typedef DatabaseInitChecksRunner = Future<DatabaseInitRunnerResult> Function({
+  bool closeConnectionFirst,
+  DatabaseInitProgressNotifier? progressNotifier,
+});
+
 /// Ορίζει διαδρομή, τρέχει ελέγχους αρχικοποίησης· σε αποτυχία επαναφέρει την προηγούμενη.
 Future<({bool ok, DatabaseInitRunnerResult runner})> setAndVerifyDatabasePath(
-  String trimmed,
-) async {
+  String trimmed, {
+  DatabaseInitChecksRunner runInitChecks = runDatabaseInitChecks,
+}) async {
   final settings = SettingsService();
   final wasUnconfigured = await settings.isDatabaseUnconfigured();
   final previous = wasUnconfigured ? null : await settings.getDatabasePath();
@@ -56,7 +64,7 @@ Future<({bool ok, DatabaseInitRunnerResult runner})> setAndVerifyDatabasePath(
       await DatabaseHelper.instance.closeConnection();
     } catch (_) {}
     await settings.setDatabasePath(trimmed);
-    runner = await runDatabaseInitChecks(closeConnectionFirst: true);
+    runner = await runInitChecks(closeConnectionFirst: true);
   } catch (e, st) {
     runner = DatabaseInitRunnerResult(
       result: DatabaseInitResult.fromException(e, trimmed, st),
@@ -68,6 +76,10 @@ Future<({bool ok, DatabaseInitRunnerResult runner})> setAndVerifyDatabasePath(
     try {
       await DatabaseHelper.instance.closeConnection();
     } catch (_) {}
+    if (runner.result.recoveryKind !=
+        DatabaseInitRecoveryKind.schemaUpgradeConsent) {
+      await settings.forgetRecentDatabasePath(trimmed);
+    }
     if (!wasUnconfigured && previous != null) {
       try {
         await settings.setDatabasePath(previous);
@@ -77,6 +89,8 @@ Future<({bool ok, DatabaseInitRunnerResult runner})> setAndVerifyDatabasePath(
     }
     return (ok: false, runner: runner);
   }
+
+  await settings.recordVerifiedDatabasePath(trimmed);
 
   if (await ApplicationResetService.instance.hasPendingReset()) {
     await ApplicationResetService.instance.commitPendingReset();

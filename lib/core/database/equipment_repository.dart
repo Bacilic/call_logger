@@ -144,6 +144,87 @@ class EquipmentRepository {
         callTextLinks;
   }
 
+  /// Ονομαστική/συνοπτική λίστα συνδέσεων εξοπλισμού (ίδιες κατηγορίες με το count).
+  ///
+  /// Σειρά: κάτοχοι → εκκρεμότητες → κλήσεις ιστορικού
+  /// (συμπεριλαμβάνει και κλήσεις με `equipment_text` όταν `equipment_id` είναι null).
+  Future<List<String>> equipmentReferenceDescriptions(int equipmentId) async {
+    final out = <String>[];
+
+    final ownerRows = await db.rawQuery(
+      '''
+      SELECT u.first_name AS first_name, u.last_name AS last_name
+      FROM user_equipment ue
+      JOIN users u ON u.id = ue.user_id
+      WHERE ue.equipment_id = ?
+      ORDER BY u.last_name COLLATE NOCASE ASC, u.first_name COLLATE NOCASE ASC
+      ''',
+      [equipmentId],
+    );
+    for (final r in ownerRows) {
+      final first = (r['first_name'] as String?)?.trim() ?? '';
+      final last = (r['last_name'] as String?)?.trim() ?? '';
+      final name = '$first $last'.trim();
+      if (name.isNotEmpty) out.add(name);
+    }
+
+    final taskLinks = await db.rawQuery(
+      '''
+      SELECT COUNT(*) AS c FROM tasks
+      WHERE equipment_id = ? AND ${DirectorySupport.notDeletedClause}
+      ''',
+      [equipmentId],
+    );
+    final taskCount = _readCount(taskLinks);
+    if (taskCount > 0) {
+      out.add(
+        taskCount == 1 ? '1 εκκρεμότητα' : '$taskCount εκκρεμότητες',
+      );
+    }
+
+    final callLinks = await db.rawQuery(
+      '''
+      SELECT COUNT(*) AS c FROM calls
+      WHERE equipment_id = ? AND ${DirectorySupport.notDeletedClause}
+      ''',
+      [equipmentId],
+    );
+    var callCount = _readCount(callLinks);
+
+    final codeRows = await db.query(
+      'equipment',
+      columns: ['code_equipment'],
+      where: 'id = ?',
+      whereArgs: [equipmentId],
+      limit: 1,
+    );
+    if (codeRows.isNotEmpty) {
+      final code = (codeRows.first['code_equipment'] as String?)?.trim() ?? '';
+      if (code.isNotEmpty) {
+        final textRows = await db.rawQuery(
+          '''
+          SELECT COUNT(*) AS c FROM calls
+          WHERE ${DirectorySupport.notDeletedClause}
+            AND equipment_id IS NULL
+            AND TRIM(COALESCE(equipment_text, '')) = ?
+          ''',
+          [code],
+        );
+        callCount += _readCount(textRows);
+      }
+    }
+
+    if (callCount > 0) {
+      out.add(
+        callCount == 1
+            ? '1 κλήση ιστορικού'
+            : '$callCount κλήσεις ιστορικού',
+      );
+    }
+
+    return out;
+  }
+
   Future<bool> equipmentCodeExists(String equipmentCode) async {
     final t = equipmentCode.trim();
     if (t.isEmpty) return false;
@@ -833,39 +914,62 @@ class EquipmentRepository {
     await db.transaction((txn) => _deleteEquipmentsInTxn(txn, ids));
   }
 
-  Future<void> restoreEquipment(List<int> ids) async {
+  Future<void> _restoreEquipmentsInTxn(
+    DatabaseExecutor txn,
+    List<int> ids,
+  ) async {
     if (ids.isEmpty) return;
-    final user = await _support.auditPerformingUser();
-    await db.transaction((txn) async {
-      for (final id in ids) {
-        final codeRows = await txn.query(
-          'equipment',
-          columns: ['code_equipment'],
-          where: 'id = ?',
-          whereArgs: [id],
-          limit: 1,
-        );
-        final code = codeRows.isEmpty
-            ? null
-            : (codeRows.first['code_equipment'] as String?)?.trim();
-        await txn.update(
-          'equipment',
-          {'is_deleted': 0},
-          where: 'id = ?',
-          whereArgs: [id],
-        );
-        await AuditService.log(
-          txn,
-          action: DatabaseHelper.auditActionRestore,
-          userPerforming: user,
-          details: 'equipment id=$id',
-          entityType: AuditEntityTypes.equipment,
-          entityId: id,
-          entityName: code != null && code.isNotEmpty ? code : null,
-        );
-      }
-    });
+    final user = await _support.auditPerformingUser(executor: txn);
+    for (final id in ids) {
+      final codeRows = await txn.query(
+        'equipment',
+        columns: ['code_equipment'],
+        where: 'id = ?',
+        whereArgs: [id],
+        limit: 1,
+      );
+      final code = codeRows.isEmpty
+          ? null
+          : (codeRows.first['code_equipment'] as String?)?.trim();
+      await txn.update(
+        'equipment',
+        {'is_deleted': 0},
+        where: 'id = ?',
+        whereArgs: [id],
+      );
+      await AuditService.log(
+        txn,
+        action: DatabaseHelper.auditActionRestore,
+        userPerforming: user,
+        details: 'equipment id=$id',
+        entityType: AuditEntityTypes.equipment,
+        entityId: id,
+        entityName: code != null && code.isNotEmpty ? code : null,
+      );
+    }
   }
+
+  /// Un-soft-delete εξοπλισμών (καθρέφτης του [deleteEquipments]· χωρίς επαναφορά συνδέσμων).
+  Future<void> restoreEquipments(
+    List<int> ids, {
+    DatabaseExecutor? executor,
+  }) async {
+    if (ids.isEmpty) return;
+    if (executor != null) {
+      return _restoreEquipmentsInTxn(executor, ids);
+    }
+    await db.transaction((txn) => _restoreEquipmentsInTxn(txn, ids));
+  }
+
+  Future<void> restoreEquipment(List<int> ids) => restoreEquipments(ids);
+
+  /// Εισαγωγή στο `user_equipment` αν λείπει· δεν πειράζει άλλους κατόχους.
+  Future<void> linkUserEquipment(
+    int userId,
+    int equipmentId, {
+    DatabaseExecutor? executor,
+  }) =>
+      linkUserToEquipment(userId, equipmentId, executor: executor);
 
   Future<List<int>> getUserIdsLinkedToEquipment(int equipmentId) async {
     final rows = await db.query(

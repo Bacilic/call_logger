@@ -195,6 +195,8 @@ class _DepartmentFormDialogState extends State<DepartmentFormDialog>
   List<String> _sharedPhones = [];
   @override
   List<String> _sharedEquipmentCodes = [];
+  final Set<String> _sharedPhonesPendingRemoval = {};
+  final Set<String> _sharedEquipmentPendingRemoval = {};
   @override
   late final String _snapName;
   @override
@@ -669,13 +671,30 @@ class _DepartmentFormDialogState extends State<DepartmentFormDialog>
                     runSpacing: 6,
                     children: [
                       for (final p in _sharedPhones)
-                        InputChip(
-                          label: Text(p),
-                          backgroundColor: _snapSharedPhones.contains(p)
-                              ? null
-                              : Colors.lightGreen.shade100,
-                          onDeleted: () => setState(() {
+                        RemovableSharedChip(
+                          label: p,
+                          isNewlyAdded: !_snapSharedPhones.contains(p),
+                          isPendingRemoval: false,
+                          onToggle: () => setState(() {
                             _sharedPhones.remove(p);
+                            if (_snapSharedPhones.contains(p)) {
+                              _sharedPhonesPendingRemoval.add(p);
+                            }
+                          }),
+                        ),
+                      for (final p
+                          in (_sharedPhonesPendingRemoval.toList()..sort())
+                              .where((x) => !_sharedPhones.contains(x)))
+                        RemovableSharedChip(
+                          label: p,
+                          isNewlyAdded: false,
+                          isPendingRemoval: true,
+                          onToggle: () => setState(() {
+                            _sharedPhonesPendingRemoval.remove(p);
+                            if (!_sharedPhones.contains(p)) {
+                              _sharedPhones.add(p);
+                              _sharedPhones.sort();
+                            }
                           }),
                         ),
                     ],
@@ -764,14 +783,31 @@ class _DepartmentFormDialogState extends State<DepartmentFormDialog>
                     runSpacing: 6,
                     children: [
                       for (final code in _sharedEquipmentCodes)
-                        InputChip(
-                          label: Text(code),
-                          backgroundColor:
-                              _snapSharedEquipmentCodes.contains(code)
-                              ? null
-                              : Colors.lightGreen.shade100,
-                          onDeleted: () => setState(() {
+                        RemovableSharedChip(
+                          label: code,
+                          isNewlyAdded:
+                              !_snapSharedEquipmentCodes.contains(code),
+                          isPendingRemoval: false,
+                          onToggle: () => setState(() {
                             _sharedEquipmentCodes.remove(code);
+                            if (_snapSharedEquipmentCodes.contains(code)) {
+                              _sharedEquipmentPendingRemoval.add(code);
+                            }
+                          }),
+                        ),
+                      for (final code
+                          in (_sharedEquipmentPendingRemoval.toList()..sort())
+                              .where((x) => !_sharedEquipmentCodes.contains(x)))
+                        RemovableSharedChip(
+                          label: code,
+                          isNewlyAdded: false,
+                          isPendingRemoval: true,
+                          onToggle: () => setState(() {
+                            _sharedEquipmentPendingRemoval.remove(code);
+                            if (!_sharedEquipmentCodes.contains(code)) {
+                              _sharedEquipmentCodes.add(code);
+                              _sharedEquipmentCodes.sort();
+                            }
                           }),
                         ),
                     ],
@@ -983,6 +1019,42 @@ class _DepartmentFormDialogState extends State<DepartmentFormDialog>
       ],
     ),
       ),
+    );
+  }
+}
+
+/// Chip κοινόχρηστου τηλεφώνου/εξοπλισμού: ενεργό, νεοπροστεθέν ή προς αφαίρεση.
+class RemovableSharedChip extends StatelessWidget {
+  const RemovableSharedChip({
+    super.key,
+    required this.label,
+    required this.isNewlyAdded,
+    required this.isPendingRemoval,
+    required this.onToggle,
+  });
+
+  final String label;
+  final bool isNewlyAdded;
+  final bool isPendingRemoval;
+  final VoidCallback onToggle;
+
+  @override
+  Widget build(BuildContext context) {
+    return InputChip(
+      label: Text(
+        label,
+        style: isPendingRemoval
+            ? const TextStyle(decoration: TextDecoration.lineThrough)
+            : null,
+      ),
+      backgroundColor: isPendingRemoval
+          ? Colors.red.shade100
+          : (isNewlyAdded ? Colors.lightGreen.shade100 : null),
+      deleteIcon: Icon(isPendingRemoval ? Icons.undo : Icons.cancel),
+      deleteButtonTooltipMessage: isPendingRemoval
+          ? 'Θα αφαιρεθεί στην αποθήκευση — κλικ για επαναφορά'
+          : 'Διαγραφή',
+      onDeleted: onToggle,
     );
   }
 }

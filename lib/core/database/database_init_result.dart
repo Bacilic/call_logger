@@ -20,6 +20,10 @@ enum DatabaseInitRecoveryKind {
   corruptedOrMigration,
   locked,
   timeout,
+  missingApplicationFile,
+
+  /// Απαιτείται συγκατάθεση πριν από μόνιμη αναβάθμιση σχήματος.
+  schemaUpgradeConsent,
   generic,
 }
 
@@ -368,6 +372,21 @@ class DatabaseInitResult {
       );
     }
 
+    if (_isMissingApplicationFile(lower)) {
+      final fileName = _extractMissingApplicationFileName(raw);
+      final filePart =
+          (fileName != null && fileName.isNotEmpty) ? ': $fileName' : '';
+      return build(
+        status: DatabaseStatus.applicationError,
+        message:
+            'Λείπει ή έχει αλλοιωθεί κρίσιμο αρχείο της εφαρμογής$filePart. '
+            'Η επανεγκατάσταση της εφαρμογής θα διορθώσει το πρόβλημα.',
+        details:
+            'Μην διαγράφετε αρχεία μέσα στον φάκελο της εφαρμογής· επανεγκαταστήστε την.',
+        recoveryKind: DatabaseInitRecoveryKind.missingApplicationFile,
+      );
+    }
+
     return DatabaseInitResult(
       status: DatabaseStatus.applicationError,
       message:
@@ -625,6 +644,39 @@ bool _isDatabaseLocked(String lower, int? osErrCode) {
     return true;
   }
   return false;
+}
+
+bool _isMissingApplicationFile(String lower) {
+  // Δευτερογενές σύμπτωμα: το πραγματικό σφάλμα (π.χ. «Failed to load dynamic
+  // library sqlite3.dll») καταπίνεται στο σιωπηλό catch του main.dart, οπότε το
+  // ΜΟΝΟ που φτάνει εδώ όταν λείπει η μηχανή SQLite (sqlite3.dll ή
+  // NativeAssetsManifest.json) είναι το «Bad state: databaseFactory not
+  // initialized». Στην παραγωγική εκκίνηση το databaseFactory αρχικοποιείται
+  // πάντα (main.dart:163-164)· αν λείπει, λείπει native υποδομή → κρίσιμο αρχείο.
+  if (lower.contains('databasefactory not initialized')) return true;
+
+  // Πρωτογενή σήματα (αν κάποια ροή τα διατηρεί χωρίς να τα καταπιεί).
+  final nativeLib = lower.contains('failed to load dynamic library') ||
+      (lower.contains('sqlite3') &&
+          (lower.contains('could not be found') ||
+              lower.contains('error code: 126') ||
+              lower.contains('cannot open shared object')));
+  if (nativeLib) return true;
+
+  return lower.contains('unable to load asset') ||
+      lower.contains('assetmanifest') ||
+      lower.contains('nativeassetsmanifest') ||
+      lower.contains('kernel_blob') ||
+      lower.contains('flutter_assets');
+}
+
+String? _extractMissingApplicationFileName(String raw) {
+  final matches = RegExp(
+    r'''[\w.\-]+\.(?:dll|json|bin|so|dylib|blob)''',
+    caseSensitive: false,
+  ).allMatches(raw);
+  if (matches.isEmpty) return null;
+  return matches.last.group(0);
 }
 
 bool _isDiskFull(String lower, int? osErrCode) {

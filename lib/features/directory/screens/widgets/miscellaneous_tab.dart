@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/widgets/app_asset_image.dart';
 import '../../../settings/screens/remote_tools_management_screen.dart';
 import 'categories_tab.dart';
 
@@ -138,11 +139,12 @@ class _HubNavCardState extends State<_HubNavCard> {
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
               child: Row(
                 children: [
-                  Image.asset(
-                    widget.assetPath,
+                  AppAssetImage(
+                    assetPath: widget.assetPath,
                     width: 72,
                     height: 72,
                     filterQuality: FilterQuality.medium,
+                    fallbackIcon: Icons.image_outlined,
                   ),
                   const SizedBox(width: 20),
                   Expanded(

@@ -15,8 +15,7 @@ import 'settings_service.dart';
 
 /// Εισαγωγές στο `full_dictionary` και Compile (εξαγωγή TXT).
 class MasterDictionaryService {
-  MasterDictionaryService({DictionaryRepository? dictionaryRepository})
-      : _dictionaryRepository = dictionaryRepository;
+  MasterDictionaryService({this._dictionaryRepository});
 
   final DictionaryRepository? _dictionaryRepository;
 

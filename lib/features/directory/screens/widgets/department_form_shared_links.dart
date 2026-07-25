@@ -453,49 +453,92 @@ mixin DepartmentFormSharedLinksMixin on DepartmentFormDialogStateHost {
     }
 
     if (!mounted) return null;
-    final batch = await showSharedAssetDisconnectFlow(
-      context: context,
-      sourceDepartmentId: departmentId,
-      sourceDepartmentName: departmentName,
-      phones: sharedOnlyPhonesRemoved,
-      equipmentCodes: sharedOnlyEqRemoved,
-      availableDepartments: lookup.departments,
-    );
-    if (!mounted || batch == null) return null;
 
-    phones = (phones.toSet()..addAll(batch.phonesToKeep)).toList()..sort();
-    equipment = (equipment.toSet()..addAll(batch.equipmentToKeep)).toList()
-      ..sort();
+    final otherDepartments = lookup.departments
+        .where(
+          (d) =>
+              d.id != null &&
+              d.id != departmentId &&
+              !d.isDeleted &&
+              d.name.trim().isNotEmpty,
+        )
+        .toList();
+
+    var phonesToDelete = <String>[];
+    var equipmentToDelete = <String>[];
+    final phoneTransferTargets = <String, SharedAssetTransferTarget>{};
+    final equipmentTransferTargets = <String, SharedAssetTransferTarget>{};
+    final newDeptNames = <String, Set<String>>{};
+
+    if (sharedOnlyPhonesRemoved.isNotEmpty) {
+      final phoneBatch = await showSharedAssetDisconnectFlow(
+        context: context,
+        sourceDepartmentId: departmentId,
+        sourceDepartmentName: departmentName,
+        phones: sharedOnlyPhonesRemoved,
+        availableDepartments: otherDepartments,
+        mode: SharedAssetDisconnectMode.sharedAsset,
+        allowKeepInDepartment: true,
+      );
+      if (!mounted || phoneBatch == null) return null;
+      phones = (phones.toSet()..addAll(phoneBatch.phonesToKeep)).toList()
+        ..sort();
+      phonesToDelete = phoneBatch.phonesToDelete;
+      phoneTransferTargets.addAll(phoneBatch.phoneTransfers);
+      for (final entry in phoneBatch.newDepartmentNamesToCreate.entries) {
+        newDeptNames.putIfAbsent(entry.key, () => <String>{}).addAll(entry.value);
+      }
+    }
+
+    if (sharedOnlyEqRemoved.isNotEmpty) {
+      // Εξοπλισμός χωρίς κάτοχο: ποτέ «κράτηση» — μόνο μεταφορά ή διαγραφή.
+      final equipmentBatch = await showSharedAssetDisconnectFlow(
+        context: context,
+        sourceDepartmentId: departmentId,
+        sourceDepartmentName: departmentName,
+        equipmentCodes: sharedOnlyEqRemoved,
+        availableDepartments: otherDepartments,
+        mode: SharedAssetDisconnectMode.sharedAsset,
+        allowKeepInDepartment: false,
+      );
+      if (!mounted || equipmentBatch == null) return null;
+      // Χωρίς keep: δεν επαναφέρουμε κωδικούς στη λίστα κοινόχρηστων.
+      equipmentToDelete = equipmentBatch.equipmentToDelete;
+      equipmentTransferTargets.addAll(equipmentBatch.equipmentTransfers);
+      for (final entry in equipmentBatch.newDepartmentNamesToCreate.entries) {
+        newDeptNames.putIfAbsent(entry.key, () => <String>{});
+      }
+    }
 
     final db = await DatabaseHelper.instance.database;
     final dir = DepartmentRepository(db);
     final phoneTransfers = <String, int>{};
     final equipmentTransfers = <String, int>{};
 
-    for (final newName in batch.newDepartmentNamesToCreate.keys) {
+    for (final newName in newDeptNames.keys) {
       final deptId = await dir.getOrCreateDepartmentIdByName(newName);
       if (deptId == null) continue;
-      for (final entry in batch.phoneTransfers.entries) {
+      for (final entry in phoneTransferTargets.entries) {
         if (entry.value.newDepartmentName?.trim() == newName.trim()) {
           phoneTransfers[entry.key] = deptId;
         }
       }
-      for (final entry in batch.equipmentTransfers.entries) {
+      for (final entry in equipmentTransferTargets.entries) {
         if (entry.value.newDepartmentName?.trim() == newName.trim()) {
           equipmentTransfers[entry.key] = deptId;
         }
       }
     }
-    for (final entry in batch.phoneTransfers.entries) {
+    for (final entry in phoneTransferTargets.entries) {
       final id = entry.value.departmentId;
       if (id != null) phoneTransfers[entry.key] = id;
     }
-    for (final entry in batch.equipmentTransfers.entries) {
+    for (final entry in equipmentTransferTargets.entries) {
       final id = entry.value.departmentId;
       if (id != null) equipmentTransfers[entry.key] = id;
     }
 
-    if (batch.newDepartmentNamesToCreate.isNotEmpty) {
+    if (newDeptNames.isNotEmpty) {
       LookupService.instance.resetForReload();
       await LookupService.instance.loadFromDatabase();
       await widget.notifier.loadDepartments();
@@ -506,8 +549,8 @@ mixin DepartmentFormSharedLinksMixin on DepartmentFormDialogStateHost {
       sharedEquipmentCodes: equipment,
       phoneTransfers: phoneTransfers,
       equipmentTransfers: equipmentTransfers,
-      phonesToDelete: batch.phonesToDelete,
-      equipmentToDelete: batch.equipmentToDelete,
+      phonesToDelete: phonesToDelete,
+      equipmentToDelete: equipmentToDelete,
     );
   }
 

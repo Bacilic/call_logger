@@ -56,14 +56,17 @@ void main() {
   });
 
   group('classifyDatabaseFile', () {
-    test('α) βάση με πίνακα calls → callLogger', () async {
+    test('α) βάση με μόνο πίνακα calls → incompleteCallLogger', () async {
       final dbPath = await _createTempDb(tempDir, 'calls.db', (db) async {
         await db.execute(
           'CREATE TABLE calls (id INTEGER PRIMARY KEY, note TEXT)',
         );
       });
 
-      expect(await classifyDatabaseFile(dbPath), DatabaseFileKind.callLogger);
+      expect(
+        await classifyDatabaseFile(dbPath),
+        DatabaseFileKind.incompleteCallLogger,
+      );
     });
 
     test('β) υπογραφή Λάμπας με user_version 0 → lamp', () async {
@@ -100,6 +103,136 @@ void main() {
 
       expect(await classifyDatabaseFile(dbPath), DatabaseFileKind.empty);
     });
+
+    test(
+      'ι) υβρίδιο calls + υπογραφή Λάμπας → hybrid',
+      () async {
+        final dbPath = await _createTempDb(tempDir, 'hybrid.db', (db) async {
+          await db.execute(
+            'CREATE TABLE calls (id INTEGER PRIMARY KEY, date TEXT)',
+          );
+          await db.execute(
+            'CREATE TABLE owners (owner INTEGER PRIMARY KEY)',
+          );
+          await db.execute(
+            'CREATE TABLE offices (office INTEGER PRIMARY KEY)',
+          );
+          await db.execute(
+            'CREATE TABLE equipment ('
+            'code INTEGER PRIMARY KEY, model INTEGER, office INTEGER)',
+          );
+        });
+
+        final profile = await profileDatabaseFile(dbPath);
+        expect(profile.kind, DatabaseFileKind.hybrid);
+        expect(profile.hasLampSignature, isTrue);
+      },
+    );
+
+    test(
+      'ια) ελλιπές αρχείο με μόνο calls → incompleteCallLogger με missing',
+      () async {
+        final dbPath = await _createTempDb(
+          tempDir,
+          'incomplete.db',
+          (db) async {
+            await db.execute(
+              'CREATE TABLE calls (id INTEGER PRIMARY KEY, date TEXT)',
+            );
+          },
+        );
+
+        final profile = await profileDatabaseFile(dbPath);
+        expect(profile.kind, DatabaseFileKind.incompleteCallLogger);
+        expect(profile.missingCoreTables, isNotEmpty);
+        expect(profile.missingCoreTables, contains('users'));
+        expect(profile.missingCoreTables, contains('departments'));
+        expect(profile.missingCoreTables, contains('phones'));
+        expect(profile.missingCoreTables, isNot(contains('calls')));
+      },
+    );
+
+    test(
+      'ιβ) Λάμπα μόνο με equipment (code/model, χωρίς code_equipment) → lamp',
+      () async {
+        final dbPath = await _createTempDb(
+          tempDir,
+          'lamp_equipment_only.db',
+          (db) async {
+            await db.execute(
+              'CREATE TABLE equipment ('
+              'code INTEGER PRIMARY KEY, model INTEGER, office INTEGER)',
+            );
+          },
+        );
+
+        final profile = await profileDatabaseFile(dbPath);
+        expect(profile.kind, DatabaseFileKind.lamp);
+        expect(profile.hasLampSignature, isTrue);
+      },
+    );
+
+    test(
+      'ιγ) πίνακες με user_version 0 → unknown (όχι empty)',
+      () async {
+        final dbPath = await _createTempDb(
+          tempDir,
+          'version_zero.db',
+          (db) async {
+            await db.execute(
+              'CREATE TABLE unrelated (id INTEGER PRIMARY KEY)',
+            );
+          },
+        );
+
+        final profile = await profileDatabaseFile(dbPath);
+        expect(profile.kind, DatabaseFileKind.unknown);
+        expect(profile.userVersion, 0);
+      },
+    );
+
+    test(
+      'ιδ) κενή βάση με πλήρες σχήμα → callLogger με μηδενικά πλήθη',
+      () async {
+        final dbPath = p.join(tempDir.path, 'full_empty.db');
+        await DatabaseHelper.instance.createNewDatabaseFile(dbPath);
+
+        final profile = await profileDatabaseFile(dbPath);
+        expect(profile.kind, DatabaseFileKind.callLogger);
+        expect(profile.callCount, 0);
+        expect(profile.userCount, 0);
+        expect(profile.phoneCount, 0);
+        expect(profile.equipmentCount, 0);
+        expect(profile.departmentCount, 0);
+        expect(profile.latestCallDate, isNull);
+        expect(profile.missingCoreTables, isEmpty);
+      },
+    );
+
+    test(
+      'ιε) πλήρης βάση με δύο κλήσεις → callCount 2 και latestCallDate',
+      () async {
+        final dbPath = p.join(tempDir.path, 'with_calls.db');
+        await DatabaseHelper.instance.createNewDatabaseFile(dbPath);
+
+        final writer = await openDatabase(dbPath, singleInstance: false);
+        await writer.insert('calls', <String, Object?>{
+          'date': '2026-07-20',
+          'issue': 'πρώτη',
+        });
+        await writer.insert('calls', <String, Object?>{
+          'date': '2026-07-25',
+          'issue': 'δεύτερη',
+        });
+        await writer.close();
+
+        final profile = await profileDatabaseFile(dbPath);
+        expect(profile.kind, DatabaseFileKind.callLogger);
+        expect(profile.callCount, 2);
+        expect(profile.latestCallDate, isNotNull);
+        expect(profile.latestCallDate, isNotEmpty);
+      },
+    );
   });
 
   group('μη-εγγραφή σε ξένη βάση Λάμπας', () {
@@ -145,6 +278,128 @@ void main() {
         );
         expect(runner.result.message, contains(fileName));
         expect(runner.result.details, contains(dbPath));
+      },
+    );
+
+    test(
+      'ζ) βάση Λάμπας με ενεργό WAL: καμία εγγραφή/checkpoint πριν την απόρριψη',
+      () async {
+        final fileName = 'old_equipment 2.db';
+        final dbPath = p.join(tempDir.path, fileName);
+
+        final writer = await openDatabase(dbPath, singleInstance: false);
+        await writer.execute('PRAGMA journal_mode = WAL');
+        for (final statement in oldDatabaseCreateStatements) {
+          await writer.execute(statement);
+        }
+        // Δεύτερη σύνδεση: κρατά το -wal ζωντανό μετά το κλείσιμο του writer.
+        final holder = await openDatabase(dbPath, singleInstance: false);
+        addTearDown(() async {
+          if (holder.isOpen) await holder.close();
+        });
+        await holder.rawQuery('SELECT 1');
+        await writer.close();
+
+        final walFile = File('$dbPath-wal');
+        expect(
+          await walFile.exists(),
+          isTrue,
+          reason: 'Το σενάριο απαιτεί ενεργό -wal στη ξένη βάση',
+        );
+        final walSizeBefore = await walFile.length();
+        expect(walSizeBefore, greaterThan(0));
+        final mainBefore = await _fileBytes(dbPath);
+
+        final settings = SettingsService();
+        await settings.setDatabasePath(dbPath);
+        await settings.setDatabaseOpenTimeoutSeconds(2);
+        await settings.setDatabaseOpenMaxAttempts(1);
+
+        final runner = await runDatabaseInitChecks(closeConnectionFirst: true);
+
+        final mainAfter = await _fileBytes(dbPath);
+        expect(
+          mainAfter,
+          orderedEquals(mainBefore),
+          reason:
+              'Ο προληπτικός καθαρισμός WAL δεν πρέπει να τρέχει σε αρχείο '
+              'που δεν έχει ακόμη ταξινομηθεί',
+        );
+        expect(
+          await walFile.exists(),
+          isTrue,
+          reason: 'Το -wal της ξένης βάσης δεν πρέπει να διαγράφεται',
+        );
+        expect(await walFile.length(), walSizeBefore);
+        expect(runner.result.isSuccess, isFalse);
+        expect(
+          runner.result.message,
+          contains('είναι η βάση δεδομένων της Λάμπας'),
+        );
+      },
+    );
+
+    test(
+      'η) αρχείο που δεν είναι SQLite δεν πετάει ωμό σφάλμα',
+      () async {
+        final dbPath = p.join(tempDir.path, 'fake.db');
+        await File(dbPath).writeAsBytes(
+          List<int>.generate(64, (i) => (i * 17 + 3) % 256),
+        );
+
+        expect(
+          await classifyDatabaseFile(dbPath),
+          DatabaseFileKind.undetermined,
+        );
+
+        final settings = SettingsService();
+        await settings.setDatabasePath(dbPath);
+        await settings.setDatabaseOpenTimeoutSeconds(2);
+        await settings.setDatabaseOpenMaxAttempts(1);
+
+        final runner = await runDatabaseInitChecks(closeConnectionFirst: true);
+        expect(runner.result.isSuccess, isFalse);
+        expect(
+          runner.result.message,
+          anyOf(
+            contains('έγκυρη βάση SQLite'),
+            contains('έγκυρη κεφαλίδα SQLite'),
+            contains('κεφαλίδα SQLite'),
+          ),
+        );
+      },
+    );
+
+    test(
+      'θ) υγιής βάση Καταγραφής με ενεργό WAL ανοίγει κανονικά',
+      () async {
+        final dbPath = p.join(tempDir.path, 'call_logger.db');
+        await DatabaseHelper.instance.createNewDatabaseFile(dbPath);
+
+        final writer = await openDatabase(dbPath, singleInstance: false);
+        await writer.execute('PRAGMA journal_mode = WAL');
+        final holder = await openDatabase(dbPath, singleInstance: false);
+        addTearDown(() async {
+          if (holder.isOpen) await holder.close();
+        });
+        await holder.rawQuery('SELECT 1');
+        await writer.close();
+
+        expect(await classifyDatabaseFile(dbPath), DatabaseFileKind.callLogger);
+
+        final settings = SettingsService();
+        await settings.setDatabasePath(dbPath);
+        await settings.setDatabaseOpenTimeoutSeconds(2);
+        await settings.setDatabaseOpenMaxAttempts(1);
+
+        final runner = await runDatabaseInitChecks(closeConnectionFirst: true);
+        expect(
+          runner.result.isSuccess,
+          isTrue,
+          reason:
+              'Η νέα σειρά (ταξινόμηση πριν από probe/WAL) δεν πρέπει να '
+              'απορρίπτει υγιή βάση Καταγραφής με ενεργό WAL',
+        );
       },
     );
   });

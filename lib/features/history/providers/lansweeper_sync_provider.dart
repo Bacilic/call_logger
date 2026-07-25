@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/database/calls_repository.dart';
 import '../../../core/database/database_helper.dart';
+import '../../../core/providers/active_critical_operations_provider.dart';
 import '../../../core/services/lansweeper_sync_service.dart';
 import '../../../core/services/lansweeper_ticket_submit_config.dart';
 import '../../calls/provider/call_mutation_refresh.dart';
@@ -78,6 +79,8 @@ class LansweeperSyncNotifier extends AsyncNotifier<void> {
     }
 
     _isRunning = true;
+    final criticalOps = ref.read(activeCriticalOperationsProvider.notifier);
+    criticalOps.begin(CriticalOperation.lansweeperTicketSubmit);
     state = const AsyncLoading();
     try {
       final db = await DatabaseHelper.instance.database;
@@ -129,9 +132,19 @@ class LansweeperSyncNotifier extends AsyncNotifier<void> {
         ),
       );
 
+      // CONTRACT: κάθε εγγραφή ΜΕΤΑ από μακρύ `await` (εδώ: το HTTP workflow που
+      // κρατά δευτερόλεπτα) χρησιμοποιεί ΦΡΕΣΚΟ handle βάσης. Το `repo` παραπάνω
+      // δεσμεύτηκε πριν την αποστολή· αν η βάση εναλλάχθηκε στο μεταξύ, γράφοντας
+      // με εκείνο θα αποτύγχανε (database_closed) ή θα έγραφε σε λάθος στόχο —
+      // με το εισιτήριο ΗΔΗ δημιουργημένο στο Lansweeper, δηλαδή κίνδυνος διπλής
+      // αποστολής. (Ο φρουρός εναλλαγής μπλοκάρει ήδη το σενάριο· αυτό εδώ κλείνει
+      // τη ρίζα, ώστε να μην εξαρτάται η ορθότητα από τον φρουρό.)
+      final writeDb = await DatabaseHelper.instance.database;
+      final writeRepo = CallsRepository(writeDb);
+
       if (result.success && (result.ticketId?.trim().isNotEmpty ?? false)) {
         final ticketId = result.ticketId!.trim();
-        await repo.markLansweeperSynced(
+        await writeRepo.markLansweeperSynced(
           callId: callId,
           ticketId: ticketId,
           provider: 'lansweeper',
@@ -146,7 +159,7 @@ class LansweeperSyncNotifier extends AsyncNotifier<void> {
         );
         for (final companionId in companionCallIds) {
           if (companionId == callId) continue;
-          await repo.markLansweeperSynced(
+          await writeRepo.markLansweeperSynced(
             callId: companionId,
             ticketId: ticketId,
             provider: 'lansweeper',
@@ -174,12 +187,12 @@ class LansweeperSyncNotifier extends AsyncNotifier<void> {
         );
       }
 
-      await repo.updateLansweeperState(
+      await writeRepo.updateLansweeperState(
         callId: callId,
         state: LansweeperSyncState.failed,
       );
       if (result.ticketId?.trim().isNotEmpty ?? false) {
-        await repo.addExternalLink(
+        await writeRepo.addExternalLink(
           callId: callId,
           externalId: result.ticketId!.trim(),
           provider: 'lansweeper',
@@ -236,6 +249,7 @@ class LansweeperSyncNotifier extends AsyncNotifier<void> {
       );
     } finally {
       _isRunning = false;
+      criticalOps.end(CriticalOperation.lansweeperTicketSubmit);
     }
   }
 

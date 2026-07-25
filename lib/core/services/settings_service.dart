@@ -8,6 +8,7 @@ import '../config/app_config.dart';
 import '../config/audit_retention_config.dart';
 import '../models/calls_screen_cards_visibility.dart';
 import '../models/window_placement_mode.dart';
+import '../utils/database_path_identity.dart';
 import '../../features/database/debug/publish_cli.dart';
 
 part 'settings_service_window_ui.dart';
@@ -26,6 +27,12 @@ class SettingsService
   static const String _keyDatabaseSetupState = 'database_setup_state_v1';
   static const String _keyApplicationResetPending = 'application_reset_pending_v1';
   static const String _keyRecentPaths = 'recent_database_paths';
+  static const String _keyAcknowledgedDatabaseNoticeIdentity =
+      'acknowledged_database_notice_identity_v1';
+  static const String _keyLastOpenedDatabasePath =
+      'last_opened_database_path_v1';
+  static const String _keySchemaUpgradeConsentIdentity =
+      'schema_upgrade_consent_identity_v1';
   static const int _maxRecentPaths = 3;
 
   /// Τιμή [database_setup_state_v1] όταν η εφαρμογή περιμένει επιλογή/δημιουργία βάσης.
@@ -70,6 +77,70 @@ class SettingsService
   /// Κλειδί αποθήκευσης SharedPreferences (με πρόθεμα προφίλ όταν υπάρχει CLI `--profile`).
   static String _prefKey(String baseKey) =>
       AppConfig.prefixedPreferencesKey(baseKey);
+
+  /// Ταυτότητα περιεχομένου βάσης για την οποία ο χρήστης έκλεισε τη λωρίδα ειδοποίησης.
+  Future<String?> getAcknowledgedDatabaseNoticeIdentity() async {
+    final prefs = await SharedPreferences.getInstance();
+    final value =
+        prefs.getString(_prefKey(_keyAcknowledgedDatabaseNoticeIdentity));
+    if (value == null || value.trim().isEmpty) return null;
+    return value;
+  }
+
+  /// Αποθηκεύει την ταυτότητα περιεχομένου μετά το κλείσιμο της λωρίδας ειδοποίησης.
+  Future<void> setAcknowledgedDatabaseNoticeIdentity(String identity) async {
+    final prefs = await SharedPreferences.getInstance();
+    final trimmed = identity.trim();
+    if (trimmed.isEmpty) {
+      await prefs.remove(_prefKey(_keyAcknowledgedDatabaseNoticeIdentity));
+      return;
+    }
+    await prefs.setString(
+      _prefKey(_keyAcknowledgedDatabaseNoticeIdentity),
+      trimmed,
+    );
+  }
+
+  /// Διαδρομή βάσης που άνοιξε επιτυχώς τελευταία φορά (για σιωπηλή αναβάθμιση).
+  Future<String?> getLastOpenedDatabasePath() async {
+    final prefs = await SharedPreferences.getInstance();
+    final value = prefs.getString(_prefKey(_keyLastOpenedDatabasePath));
+    if (value == null || value.trim().isEmpty) return null;
+    return value.trim();
+  }
+
+  /// Καταγράφει τη διαδρομή μετά από πλήρως επιτυχημένο άνοιγμα βάσης.
+  Future<void> setLastOpenedDatabasePath(String path) async {
+    final prefs = await SharedPreferences.getInstance();
+    final trimmed = path.trim();
+    if (trimmed.isEmpty) {
+      await prefs.remove(_prefKey(_keyLastOpenedDatabasePath));
+      return;
+    }
+    await prefs.setString(_prefKey(_keyLastOpenedDatabasePath), trimmed);
+  }
+
+  /// Ταυτότητα περιεχομένου για την οποία δόθηκε συγκατάθεση μόνιμης αναβάθμισης.
+  Future<String?> getSchemaUpgradeConsentIdentity() async {
+    final prefs = await SharedPreferences.getInstance();
+    final value = prefs.getString(_prefKey(_keySchemaUpgradeConsentIdentity));
+    if (value == null || value.trim().isEmpty) return null;
+    return value.trim();
+  }
+
+  /// Καταγράφει συγκατάθεση αναβάθμισης σχήματος για συγκεκριμένη ταυτότητα.
+  Future<void> setSchemaUpgradeConsentIdentity(String identity) async {
+    final prefs = await SharedPreferences.getInstance();
+    final trimmed = identity.trim();
+    if (trimmed.isEmpty) {
+      await prefs.remove(_prefKey(_keySchemaUpgradeConsentIdentity));
+      return;
+    }
+    await prefs.setString(
+      _prefKey(_keySchemaUpgradeConsentIdentity),
+      trimmed,
+    );
+  }
 
   /// Επιστρέφει την αποθηκευμένη διαδρομή βάσης δεδομένων.
   /// Σε κατάσταση [databaseSetupStateUnconfigured] επιστρέφει placeholder που δεν υπάρχει.
@@ -152,39 +223,56 @@ class SettingsService
   }
 
   /// Αποθηκεύει τη νέα διαδρομή βάσης δεδομένων (trim() εφαρμόζεται αυτόματα).
-  /// Προσθέτει τη διαδρομή στη λίστα των τελευταίων έγκυρων διαδρομών.
+  /// Δεν αγγίζει τη λίστα πρόσφατων — αυτή ενημερώνεται μόνο μετά από επιτυχή
+  /// επαλήθευση μέσω [recordVerifiedDatabasePath].
   Future<void> setDatabasePath(String path) async {
     final prefs = await SharedPreferences.getInstance();
     final trimmed = path.trim();
     await markDatabaseConfigured();
     await prefs.setString(_prefKey(_keyDatabasePath), trimmed);
-    await _addToRecentPaths(prefs, trimmed);
   }
 
-  /// Επιστρέφει τις 3 τελευταίες έγκυρες (χρησιμοποιημένες) διαδρομές για dropdown.
+  /// Επιστρέφει τις έως 3 τελευταίες διαδρομές που καταγράφηκαν μετά από επιτυχή
+  /// επαλήθευση. Κενή λίστα όταν δεν υπάρχει ιστορικό — χωρίς συνθετικές εγγραφές.
   Future<List<String>> getRecentDatabasePaths() async {
     final prefs = await SharedPreferences.getInstance();
     final list = prefs.getStringList(_prefKey(_keyRecentPaths));
     if (list == null || list.isEmpty) {
-      return [AppConfig.defaultDbPath];
+      return const <String>[];
     }
-    return list.take(_maxRecentPaths).toList();
+    return list
+        .where((entry) => entry.trim().isNotEmpty)
+        .take(_maxRecentPaths)
+        .toList();
+  }
+
+  /// Καταγράφει διαδρομή στη λίστα πρόσφατων.
+  /// Καλείται ΜΟΝΟ μετά από επιτυχή επαλήθευση βάσης.
+  Future<void> recordVerifiedDatabasePath(String path) async {
+    final prefs = await SharedPreferences.getInstance();
+    final trimmed = path.trim();
+    if (trimmed.isEmpty) return;
+    await _addToRecentPaths(prefs, trimmed);
+  }
+
+  /// Αφαιρεί από τη λίστα πρόσφατων κάθε εγγραφή που δείχνει στο ίδιο αρχείο.
+  Future<void> forgetRecentDatabasePath(String path) async {
+    final prefs = await SharedPreferences.getInstance();
+    final trimmed = path.trim();
+    if (trimmed.isEmpty) return;
+    final list = prefs.getStringList(_prefKey(_keyRecentPaths)) ?? [];
+    final updated = list
+        .where((entry) => !databasePathsReferToSameFile(entry, trimmed))
+        .toList();
+    await prefs.setStringList(_prefKey(_keyRecentPaths), updated);
   }
 
   Future<void> _addToRecentPaths(SharedPreferences prefs, String path) async {
     final list = prefs.getStringList(_prefKey(_keyRecentPaths)) ?? [];
     final updated = [
       path,
-      ...list.where((p) => p != path),
+      ...list.where((entry) => !databasePathsReferToSameFile(entry, path)),
     ].take(_maxRecentPaths).toList();
     await prefs.setStringList(_prefKey(_keyRecentPaths), updated);
-  }
-
-  /// Επαναφορά σε προεπιλεγμένη διαδρομή (αφαίρεση αποθηκευμένης ρύθμισης).
-  /// Προσθέτει την προεπιλογή στη λίστα recent ώστε να εμφανίζεται στο dropdown.
-  Future<void> resetToDefault() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_prefKey(_keyDatabasePath));
-    await _addToRecentPaths(prefs, AppConfig.defaultDbPath);
   }
 }

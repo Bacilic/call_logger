@@ -31,6 +31,84 @@ std::wstring Utf16FromUtf8(const std::string& utf8_string) {
   return utf16_string;
 }
 
+// Επιστρέφει τον φάκελο όπου ζει το εκτελέσιμο (χωρίς τελικό backslash), ή
+// κενό string σε αποτυχία.
+std::wstring ExecutableDirectory() {
+  wchar_t path[MAX_PATH];
+  DWORD length = ::GetModuleFileNameW(nullptr, path, MAX_PATH);
+  if (length == 0 || length >= MAX_PATH) {
+    return std::wstring();
+  }
+  std::wstring full_path(path, length);
+  size_t last_separator = full_path.find_last_of(L"\\/");
+  if (last_separator == std::wstring::npos) {
+    return std::wstring();
+  }
+  return full_path.substr(0, last_separator);
+}
+
+bool PathExists(const std::wstring& path) {
+  return ::GetFileAttributesW(path.c_str()) != INVALID_FILE_ATTRIBUTES;
+}
+
+// Ο φάκελος «data» δίπλα στο .exe περιέχει τη μηχανή του Flutter
+// (flutter_assets, icudtl.dat, app.so) — αν λείπει ή έχει αλλοιωθεί, η εφαρμογή
+// κατέρρεε ΣΙΩΠΗΛΑ. Εδώ δείχνουμε native μήνυμα με την ακριβή αιτία και την
+// ενέργεια ανάκαμψης, αφού καμία οθόνη σφάλματος της εφαρμογής (που ζει στο
+// Dart) δεν προλαβαίνει να εμφανιστεί.
+void ShowStartupFailureMessage() {
+  const std::wstring exe_dir = ExecutableDirectory();
+  const std::wstring data_dir =
+      exe_dir.empty() ? L"data" : (exe_dir + L"\\data");
+
+  std::wstring message;
+  if (!PathExists(data_dir)) {
+    // Ο φάκελος λείπει ολόκληρος.
+    message = L"Ο φάκελος:\n\n" + data_dir +
+              L"\n\nδεν υπάρχει. Αυτός ο φάκελος περιέχει κρίσιμα αρχεία της "
+              L"εφαρμογής. Η επανεγκατάσταση της εφαρμογής θα διορθώσει το "
+              L"πρόβλημα.";
+  } else if (!PathExists(data_dir + L"\\icudtl.dat") ||
+             !PathExists(data_dir + L"\\flutter_assets")) {
+    // Ο φάκελος υπάρχει αλλά λείπουν κρίσιμα αρχεία του.
+    message = L"Ο φάκελος:\n\n" + data_dir +
+              L"\n\nφαίνεται αλλοιωμένος (λείπουν κρίσιμα αρχεία της "
+              L"εφαρμογής). Η επανεγκατάσταση της εφαρμογής θα διορθώσει το "
+              L"πρόβλημα.";
+  } else {
+    // Ο φάκελος και τα βασικά αρχεία υπάρχουν, αλλά η μηχανή δεν ξεκίνησε —
+    // πιθανή αλλοίωση κάποιου αρχείου μέσα στον φάκελο.
+    message = L"Η εφαρμογή δεν μπόρεσε να ξεκινήσει. Ο φάκελος:\n\n" +
+              data_dir +
+              L"\n\nφαίνεται αλλοιωμένος. Η επανεγκατάσταση της εφαρμογής θα "
+              L"διορθώσει το πρόβλημα.";
+  }
+
+  ::MessageBoxW(nullptr, message.c_str(), L"Καταγραφή Κλήσεων",
+                MB_OK | MB_ICONERROR);
+}
+
+// Προληπτικός έλεγχος ΠΡΙΝ την κατασκευή της μηχανής Flutter. ΚΡΙΣΙΜΟ: με
+// ελλιπή φάκελο data η μηχανή ΔΕΝ επιστρέφει αποτυχία — κρεμάει αόρατα μέσα
+// στην κατασκευή του FlutterViewController (διεργασία χωρίς παράθυρο,
+// επαληθευμένο 24/07/2026). Άρα ο έλεγχος στην αποτυχία του Create δεν αρκεί·
+// πρέπει να προλάβουμε τη μηχανή.
+bool FlutterDataLooksPresent() {
+  const std::wstring exe_dir = ExecutableDirectory();
+  const std::wstring data_dir =
+      exe_dir.empty() ? L"data" : (exe_dir + L"\\data");
+  if (!PathExists(data_dir) || !PathExists(data_dir + L"\\icudtl.dat") ||
+      !PathExists(data_dir + L"\\flutter_assets")) {
+    return false;
+  }
+  // Ο μεταγλωττισμένος κώδικας Dart: σε release/profile build είναι το app.so
+  // (χωρίς αυτό η μηχανή καταρρέει σιωπηλά — επαληθευμένο 24/07/2026)· σε debug
+  // build ΔΕΝ υπάρχει app.so — ο κώδικας ζει στο flutter_assets\kernel_blob.bin.
+  // Δεχόμαστε όποιο από τα δύο υπάρχει, αλλιώς και τα δύο builds θα έσπαγαν.
+  return PathExists(data_dir + L"\\app.so") ||
+         PathExists(data_dir + L"\\flutter_assets\\kernel_blob.bin");
+}
+
 void RegisterCrashRestart(const std::vector<std::string>& command_line_arguments) {
   std::vector<std::string> restart_arguments = command_line_arguments;
   auto has_restart_flag = [&restart_arguments]() {
@@ -74,6 +152,14 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   // plugins.
   ::CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
 
+  // Ο έλεγχος γίνεται ΠΡΙΝ το DartProject/FlutterWindow: αν λείπει ο φάκελος
+  // data, η μηχανή Flutter κρεμάει αόρατα αντί να αποτύχει καθαρά.
+  if (!FlutterDataLooksPresent()) {
+    ShowStartupFailureMessage();
+    ::CoUninitialize();
+    return EXIT_FAILURE;
+  }
+
   flutter::DartProject project(L"data");
 
   std::vector<std::string> command_line_arguments =
@@ -86,6 +172,9 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   // Αρχικό μέγεθος ώστε η γραμμή πεδίων Κλήσεων + κουμπί + να χωράει (rail ~280 + row 750 + padding 32 ≈ 1062).
   Win32Window::Size size(1200, 600);
   if (!window.Create(L"Καταγραφή Κλήσεων", origin, size)) {
+    // Η μηχανή Flutter δεν ξεκίνησε (π.χ. ελλιπής/αλλοιωμένος φάκελος data).
+    // Δείξε σαφές μήνυμα αντί για σιωπηλή έξοδο.
+    ShowStartupFailureMessage();
     return EXIT_FAILURE;
   }
   RegisterCrashRestart(GetCommandLineArguments());

@@ -15,6 +15,7 @@ import '../../../core/utils/department_floor_sync.dart';
 import '../../calls/provider/lookup_provider.dart';
 import '../models/department_directory_column.dart';
 import '../models/department_model.dart';
+import '../services/department_deletion_undo_record.dart';
 import 'directory_cache_refresh.dart';
 
 const _catalogDepartmentsVisibleColumnsKey =
@@ -42,6 +43,7 @@ class DepartmentDirectoryState {
     this.sortAscending = true,
     this.selectedIds = const {},
     this.lastDeleted,
+    this.lastDepartmentDeletionUndo,
     this.lastBulkUpdatedDepartments,
     this.focusedRowIndex,
     List<DepartmentDirectoryColumn>? columnOrder,
@@ -62,6 +64,8 @@ class DepartmentDirectoryState {
   final bool sortAscending;
   final Set<int> selectedIds;
   final List<DepartmentModel>? lastDeleted;
+  /// Φάκελος πλήρους αναίρεσης διαγραφής τμήματος.
+  final DepartmentDeletionUndoRecord? lastDepartmentDeletionUndo;
   final List<DepartmentModel>? lastBulkUpdatedDepartments;
   final int? focusedRowIndex;
   final List<DepartmentDirectoryColumn> columnOrder;
@@ -194,6 +198,7 @@ class DepartmentDirectoryNotifier extends Notifier<DepartmentDirectoryState> {
       sortAscending: state.sortAscending,
       selectedIds: state.selectedIds,
       lastDeleted: state.lastDeleted,
+      lastDepartmentDeletionUndo: state.lastDepartmentDeletionUndo,
       lastBulkUpdatedDepartments: state.lastBulkUpdatedDepartments,
       focusedRowIndex: state.focusedRowIndex,
       columnOrder: parsed != null
@@ -311,6 +316,7 @@ class DepartmentDirectoryNotifier extends Notifier<DepartmentDirectoryState> {
       sortAscending: state.sortAscending,
       selectedIds: state.selectedIds,
       lastDeleted: state.lastDeleted,
+      lastDepartmentDeletionUndo: state.lastDepartmentDeletionUndo,
       lastBulkUpdatedDepartments: state.lastBulkUpdatedDepartments,
       focusedRowIndex: clamped,
       columnOrder: state.columnOrder,
@@ -342,6 +348,7 @@ class DepartmentDirectoryNotifier extends Notifier<DepartmentDirectoryState> {
     bool? sortAscending,
     Set<int>? selectedIds,
     Object? lastDeleted = _kPatchKeep,
+    Object? lastDepartmentDeletionUndo = _kPatchKeep,
     Object? lastBulkUpdatedDepartments = _kPatchKeep,
     int? focusedRow,
     bool keepFocusedRow = true,
@@ -358,6 +365,10 @@ class DepartmentDirectoryNotifier extends Notifier<DepartmentDirectoryState> {
       lastDeleted: identical(lastDeleted, _kPatchKeep)
           ? state.lastDeleted
           : lastDeleted as List<DepartmentModel>?,
+      lastDepartmentDeletionUndo:
+          identical(lastDepartmentDeletionUndo, _kPatchKeep)
+          ? state.lastDepartmentDeletionUndo
+          : lastDepartmentDeletionUndo as DepartmentDeletionUndoRecord?,
       lastBulkUpdatedDepartments:
           identical(lastBulkUpdatedDepartments, _kPatchKeep)
           ? state.lastBulkUpdatedDepartments
@@ -422,6 +433,7 @@ class DepartmentDirectoryNotifier extends Notifier<DepartmentDirectoryState> {
       sortAscending: state.sortAscending,
       selectedIds: selectedIds,
       lastDeleted: state.lastDeleted,
+      lastDepartmentDeletionUndo: state.lastDepartmentDeletionUndo,
       lastBulkUpdatedDepartments: state.lastBulkUpdatedDepartments,
       focusedRowIndex: state.focusedRowIndex,
       columnOrder: DepartmentDirectoryColumn.pinSelectionFirst(
@@ -551,8 +563,27 @@ class DepartmentDirectoryNotifier extends Notifier<DepartmentDirectoryState> {
       }
       await equipment.updateEquipmentDepartment(code, departmentId);
     }
+    final transferCodes = equipmentTransfers.keys
+        .map((c) => c.trim())
+        .where((c) => c.isNotEmpty)
+        .toSet();
+    final deleteCodes = equipmentToSoftDelete
+        .map((c) => c.trim())
+        .where((c) => c.isNotEmpty)
+        .toSet();
     for (final code in existingEq.difference(nextEq)) {
-      await equipment.clearEquipmentSharedDepartment(code, departmentId);
+      final hasOwner = lookup.checkEquipmentUsage(code).hasUserOwners;
+      final hasDisposition =
+          transferCodes.contains(code) || deleteCodes.contains(code);
+      if (!hasOwner && !hasDisposition) {
+        throw StateError(
+          'Αφαίρεση κοινόχρηστου εξοπλισμού «$code» χωρίς κάτοχο '
+          'απαιτεί μεταφορά σε άλλο τμήμα ή διαγραφή.',
+        );
+      }
+      if (hasOwner || hasDisposition) {
+        await equipment.clearEquipmentSharedDepartment(code, departmentId);
+      }
     }
 
     for (final entry in phoneTransfers.entries) {
@@ -620,6 +651,7 @@ class DepartmentDirectoryNotifier extends Notifier<DepartmentDirectoryState> {
       sortAscending: state.sortAscending,
       selectedIds: {},
       lastDeleted: toDelete,
+      lastDepartmentDeletionUndo: null,
       lastBulkUpdatedDepartments: state.lastBulkUpdatedDepartments,
       focusedRowIndex: state.focusedRowIndex,
       columnOrder: state.columnOrder,
@@ -643,6 +675,7 @@ class DepartmentDirectoryNotifier extends Notifier<DepartmentDirectoryState> {
       sortAscending: state.sortAscending,
       selectedIds: {},
       lastDeleted: toDelete,
+      lastDepartmentDeletionUndo: state.lastDepartmentDeletionUndo,
       lastBulkUpdatedDepartments: state.lastBulkUpdatedDepartments,
       focusedRowIndex: state.focusedRowIndex,
       columnOrder: state.columnOrder,
@@ -652,15 +685,26 @@ class DepartmentDirectoryNotifier extends Notifier<DepartmentDirectoryState> {
     await refreshDirectoryCaches(ref, users: true, equipment: true);
   }
 
+  /// Αποθηκεύει τον φάκελο πλήρους αναίρεσης μετά τη διαγραφή τμήματος.
+  void rememberDepartmentDeletionUndo(DepartmentDeletionUndoRecord record) {
+    _patch(lastDepartmentDeletionUndo: record);
+  }
+
   Future<void> undoLastDelete() async {
+    final undoRecord = state.lastDepartmentDeletionUndo;
     final list = state.lastDeleted;
-    if (list == null || list.isEmpty) return;
-    final ids = list.map((d) => d.id).whereType<int>().toList();
-    final dbUndoDel = await DatabaseHelper.instance.database;
-    await DepartmentRepository(dbUndoDel).restoreDepartments(ids);
+    if (undoRecord != null) {
+      final dbUndoDel = await DatabaseHelper.instance.database;
+      await applyDepartmentDeletionUndo(dbUndoDel, undoRecord);
+    } else {
+      if (list == null || list.isEmpty) return;
+      final ids = list.map((d) => d.id).whereType<int>().toList();
+      final dbUndoDel = await DatabaseHelper.instance.database;
+      await DepartmentRepository(dbUndoDel).restoreDepartments(ids);
+    }
     await _refreshLookupCache();
     if (!ref.mounted) return;
-    _patch(lastDeleted: null);
+    _patch(lastDeleted: null, lastDepartmentDeletionUndo: null);
     await loadDepartments();
     await refreshDirectoryCaches(ref, users: true, equipment: true);
   }
@@ -683,6 +727,7 @@ class DepartmentDirectoryNotifier extends Notifier<DepartmentDirectoryState> {
       sortAscending: state.sortAscending,
       selectedIds: state.selectedIds,
       lastDeleted: state.lastDeleted,
+      lastDepartmentDeletionUndo: state.lastDepartmentDeletionUndo,
       lastBulkUpdatedDepartments: toUpdate,
       focusedRowIndex: state.focusedRowIndex,
       columnOrder: state.columnOrder,

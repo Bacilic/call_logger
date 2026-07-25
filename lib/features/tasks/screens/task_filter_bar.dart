@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/widgets/calendar_range_picker.dart';
+import '../../../core/widgets/app_asset_image.dart';
 import '../models/task.dart';
 import '../models/task_filter.dart';
 import '../providers/tasks_provider.dart';
@@ -296,10 +297,11 @@ class _TaskFilterBarState extends ConsumerState<TaskFilterBar> {
                   ),
                   IconButton(
                     tooltip: 'Καθαρισμός ημερομηνιών',
-                    icon: Image.asset(
-                      'assets/ic_calendar_broom_clear.png',
+                    icon: AppAssetImage(
+                      assetPath: 'assets/ic_calendar_broom_clear.png',
                       width: 22,
                       height: 22,
+                      fallbackIcon: Icons.event_busy,
                     ),
                     onPressed: filtersEnabled ? _clearDateRange : null,
                   ),

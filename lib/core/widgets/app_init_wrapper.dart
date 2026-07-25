@@ -81,6 +81,7 @@ class _AppInitWrapperState extends ConsumerState<AppInitWrapper> {
           return AppShortcuts(
             initialDatabaseResult: initResult.result,
             initialIsLocalDevMode: initResult.isLocalDevMode,
+            initialDatabaseProfile: initResult.databaseProfile,
           );
         }
         return _buildInitFailureScreen(

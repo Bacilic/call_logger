@@ -520,12 +520,19 @@ class DepartmentRepository {
     return db.transaction(run);
   }
 
-  Future<void> restoreDepartments(List<int> ids) async {
+  Future<void> restoreDepartments(
+    List<int> ids, {
+    DatabaseExecutor? executor,
+  }) async {
     if (ids.isEmpty) return;
-    final user = await _support.auditPerformingUser();
-    await db.transaction((txn) async {
+
+    Future<void> run(DatabaseExecutor txn) async {
+      final user = await _support.auditPerformingUser(executor: txn);
       await _restoreDepartmentsInTxn(txn, ids, user);
-    });
+    }
+
+    if (executor != null) return run(executor);
+    return db.transaction(run);
   }
 
   Future<bool> departmentNameExistsExcluding(
