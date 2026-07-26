@@ -2,7 +2,8 @@ import 'dart:developer' as developer;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+// Μόνο για τον τύπο [DatabaseExecutor] στις υπογραφές — καμία εκτέλεση SQL εδώ.
+import 'package:sqflite_common/sqflite.dart';
 
 import '../../../core/database/database_helper.dart';
 import '../../../core/database/directory_support.dart';
@@ -64,10 +65,9 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState>
     'ΔΗΜΙΟΥΡΓΙΑ ΕΚΚΡΕΜΟΤΗΤΑΣ',
   };
 
-  Future<int> maxAuditLogId(DatabaseExecutor executor) async {
-    final rows = await executor.rawQuery('SELECT MAX(id) AS m FROM audit_log');
-    return (rows.first['m'] as int?) ?? 0;
-  }
+  /// Προωθεί στο repository — το SQL ζει στο `core/database/`.
+  Future<int> maxAuditLogId(DatabaseExecutor executor) =>
+      PendingAuditOriginRows.maxAuditLogId(executor);
 
   /// Καταγράφει νέες παράγωγες εγγραφές audit μετά από associate (όχι κύριες κλήσης/εκκρεμότητας).
   Future<void> trackDerivativeAuditsSince(int sinceId) async {

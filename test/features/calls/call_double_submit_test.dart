@@ -142,11 +142,16 @@ void main() {
         await _fillValidCallForm(tester, notesMarker: _doubleSubmitMarker);
 
         final submitFinder = find.widgetWithText(ElevatedButton, 'Καταγραφή');
-        await tester.tap(submitFinder);
-        await tester.tap(submitFinder);
-        await tester.pump();
-
+        // Τα tap ΠΡΕΠΕΙ να γίνουν μέσα σε `runAsync`: η υποβολή ανοίγει
+        // συναλλαγή sqflite, που δημιουργεί χρονόμετρο κλειδώματος 10s. Έξω από
+        // `runAsync` το χρονόμετρο ζει στον εικονικό χρόνο και η απάντηση του
+        // FFI δεν φτάνει ποτέ — το τεστ κρεμάει αντί να αποτύχει. Τα δύο tap
+        // παραμένουν διαδοχικά χωρίς pump ανάμεσα, οπότε η διπλή υποβολή
+        // δοκιμάζεται ακέραια.
         await tester.runAsync(() async {
+          await tester.tap(submitFinder);
+          await tester.tap(submitFinder);
+          await tester.pump();
           await pumpUntilSettledLong(tester);
         });
         await flushCallLoggerSqfliteLockTimers(tester);
@@ -182,12 +187,12 @@ void main() {
         );
 
         final submitFinder = find.widgetWithText(ElevatedButton, 'Καταγραφή');
-        await tester.tap(submitFinder);
-        await tester.tap(submitFinder);
-        await tester.tap(submitFinder);
-        await tester.pump();
-
+        // Ίδιος λόγος με το διπλό tap: όλα μέσα σε `runAsync`.
         await tester.runAsync(() async {
+          await tester.tap(submitFinder);
+          await tester.tap(submitFinder);
+          await tester.tap(submitFinder);
+          await tester.pump();
           await pumpUntilSettledLong(tester);
         });
         await flushCallLoggerSqfliteLockTimers(tester);

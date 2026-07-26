@@ -220,7 +220,9 @@ class DatabaseHelper with DatabaseTableInspectionMixin {
       throw _enrichSchemaValidationException(e);
     }
     await db.execute('PRAGMA journal_mode = WAL;');
-    await SettingsService().setLastOpenedDatabasePath(dbPath);
+    // ΔΕΝ καταγράφεται «τελευταία ανοιγμένη βάση»: αυτή η διαδρομή ανοίγει
+    // αρχείο που έδεσε τεστ, όχι βάση που επέλεξε ο χρήστης. Η καταγραφή
+    // ανήκει αποκλειστικά στην κανονική ροή ανοίγματος.
     return db;
   }
 

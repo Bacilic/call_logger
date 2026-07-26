@@ -141,30 +141,33 @@ void main() {
         expect(find.byType(CategoryAutocompleteField), findsOneWidget);
 
         // ΚΑΝΟΝΑΣ 3: χρονόμετρο (CallStatusBar) και κουμπί «Καταγραφή»
-        // κατοικούν στο ίδιο widget γραμμής με την κατηγορία.
-        final rowFinder = find.ancestor(
-          of: find.byType(CategoryAutocompleteField),
-          matching: find.byType(Row),
-        );
-        expect(rowFinder, findsWidgets);
+        // μοιράζονται την ΙΔΙΑ ΟΠΤΙΚΗ ΓΡΑΜΜΗ με την κατηγορία.
+        //
+        // Ελέγχεται με κατακόρυφη ευθυγράμμιση και ΟΧΙ με κοινό γονέα `Row`: η
+        // διάταξη φωλιάζει σκόπιμα εσωτερική `Row` (κατηγορία + χρονόμετρο) μέσα
+        // σε `Expanded`, ώστε να είναι δομικά αδύνατη η υπερχείλιση. Ο κανόνας
+        // που προστατεύουμε είναι οπτικός, οπότε και ο έλεγχος οφείλει να είναι
+        // οπτικός — αλλιώς κάθε αθώα αλλαγή φωλιάσματος τον σπάει.
+        final submitFinder = find.widgetWithText(ElevatedButton, 'Καταγραφή');
+        expect(find.byType(CallStatusBar), findsOneWidget);
+        expect(submitFinder, findsOneWidget);
 
-        final sharedRow = rowFinder.first;
+        final categoryY =
+            tester.getCenter(find.byType(CategoryAutocompleteField)).dy;
+        // Ανοχή αρκετά μικρή ώστε δεύτερη γραμμή (απόσταση ≈ 60 px και πάνω) να
+        // κοκκινίζει, αρκετά μεγάλη ώστε να αντέχει διαφορετικά ύψη widget.
+        const sameLineTolerance = 24.0;
+
         expect(
-          find.descendant(
-            of: sharedRow,
-            matching: find.byType(CallStatusBar),
-          ),
-          findsOneWidget,
+          tester.getCenter(find.byType(CallStatusBar)).dy,
+          closeTo(categoryY, sameLineTolerance),
           reason: greekExpectMsg(
             'Το χρονόμετρο πρέπει να είναι στην ίδια γραμμή με την κατηγορία',
           ),
         );
         expect(
-          find.descendant(
-            of: sharedRow,
-            matching: find.widgetWithText(ElevatedButton, 'Καταγραφή'),
-          ),
-          findsOneWidget,
+          tester.getCenter(submitFinder).dy,
+          closeTo(categoryY, sameLineTolerance),
           reason: greekExpectMsg(
             'Το κουμπί «Καταγραφή» πρέπει να είναι στην ίδια γραμμή με την κατηγορία',
           ),

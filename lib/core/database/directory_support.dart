@@ -504,6 +504,17 @@ class DirectorySupport {
 class PendingAuditOriginRows {
   final Set<int> _ids = {};
 
+  /// Το τελευταίο id του `audit_log` — σημείο εκκίνησης για τον εντοπισμό των
+  /// παράγωγων εγγραφών που θα γραφτούν στη συνέχεια.
+  ///
+  /// Ζει εδώ και όχι στον provider: το SQL ανήκει στο `core/database/`, και
+  /// αυτή η κλάση είναι ήδη ο κάτοχος της ανάγνωσης/εγγραφής του `audit_log`
+  /// για τη σφράγιση προέλευσης.
+  static Future<int> maxAuditLogId(DatabaseExecutor executor) async {
+    final rows = await executor.rawQuery('SELECT MAX(id) AS m FROM audit_log');
+    return (rows.first['m'] as int?) ?? 0;
+  }
+
   void track(int? auditLogId) {
     if (auditLogId != null) _ids.add(auditLogId);
   }

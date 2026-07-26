@@ -1,4 +1,7 @@
+import 'package:call_logger/core/database/old_database/lamp_excel_validator.dart';
 import 'package:call_logger/core/database/old_database/lamp_old_db_validator.dart';
+import 'package:call_logger/core/providers/lamp_db_comparison_provider.dart';
+import 'package:call_logger/core/providers/lamp_excel_path_health_provider.dart';
 import 'package:call_logger/features/lamp/controllers/lamp_import_controller.dart';
 import 'package:call_logger/features/lamp/controllers/lamp_integrity_controller.dart';
 import 'package:call_logger/features/lamp/controllers/lamp_path_management.dart';
@@ -6,6 +9,7 @@ import 'package:call_logger/features/lamp/controllers/lamp_screen_host.dart';
 import 'package:call_logger/features/lamp/controllers/lamp_search_controller.dart';
 import 'package:call_logger/features/lamp/widgets/lamp_settings_dialog.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 class _StubPath extends LampPathController {
@@ -42,6 +46,67 @@ class _StubImport extends LampImportController {
 class _StubIntegrity extends LampIntegrityController {
   _StubIntegrity(LampPathController path)
       : super(host: _ThrowingHost(), path: path);
+}
+
+// Ο διάλογος είναι `ConsumerStatefulWidget`: παρακολουθεί δύο providers και
+// καλεί `refresh()` σε post-frame callback. Χωρίς αδρανή stubs το τεστ θα
+// άγγιζε πραγματικό SharedPreferences και βάση Λάμπας μέσω FFI — δηλαδή θα
+// κρέμαγε στον εικονικό χρόνο του binding αντί να αποτύχει.
+class _StubExcelPathHealth extends LampExcelPathHealthNotifier {
+  @override
+  Future<LampExcelCheckResult?> build() async => null;
+
+  @override
+  Future<void> refresh({String? pathOverride}) async {}
+}
+
+class _StubDbComparison extends LampDbComparisonNotifier {
+  @override
+  Future<List<String>> build() async => const <String>[];
+
+  @override
+  Future<void> refresh({
+    String? readPathOverride,
+    String? outputPathOverride,
+  }) async {}
+}
+
+/// Στήνει τον host, ανοίγει τον διάλογο και τον αφήνει σταθερό.
+Future<void> _openLampSettingsDialog(
+  WidgetTester tester,
+  LampSettingsDialogController controller,
+) async {
+  await tester.pumpWidget(
+    ProviderScope(
+      overrides: [
+        lampExcelPathHealthProvider.overrideWith(_StubExcelPathHealth.new),
+        lampDbComparisonProvider.overrideWith(_StubDbComparison.new),
+      ],
+      child: MaterialApp(
+        home: Builder(
+          builder: (context) {
+            return Scaffold(
+              body: Center(
+                child: FilledButton(
+                  onPressed: () {
+                    openLampSettingsDialog(
+                      context: context,
+                      controller: controller,
+                      registerDialogSetState: (_) {},
+                      onDialogClosed: () {},
+                    );
+                  },
+                  child: const Text('Άνοιγμα'),
+                ),
+              ),
+            );
+          },
+        ),
+      ),
+    ),
+  );
+  await tester.tap(find.text('Άνοιγμα'));
+  await tester.pumpAndSettle();
 }
 
 void main() {
@@ -84,31 +149,7 @@ void main() {
     });
 
     testWidgets('shows new field labels and info tooltips', (tester) async {
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Builder(
-            builder: (context) {
-              return Scaffold(
-                body: Center(
-                  child: FilledButton(
-                    onPressed: () {
-                      openLampSettingsDialog(
-                        context: context,
-                        controller: controller,
-                        registerDialogSetState: (_) {},
-                        onDialogClosed: () {},
-                      );
-                    },
-                    child: const Text('Άνοιγμα'),
-                  ),
-                ),
-              );
-            },
-          ),
-        ),
-      );
-      await tester.tap(find.text('Άνοιγμα'));
-      await tester.pumpAndSettle();
+      await _openLampSettingsDialog(tester, controller);
 
       expect(find.text('Αρχείο Excel (πηγή δεδομένων)'), findsOneWidget);
       expect(
@@ -124,31 +165,7 @@ void main() {
     });
 
     testWidgets('removed legacy action buttons are absent', (tester) async {
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Builder(
-            builder: (context) {
-              return Scaffold(
-                body: Center(
-                  child: FilledButton(
-                    onPressed: () {
-                      openLampSettingsDialog(
-                        context: context,
-                        controller: controller,
-                        registerDialogSetState: (_) {},
-                        onDialogClosed: () {},
-                      );
-                    },
-                    child: const Text('Άνοιγμα'),
-                  ),
-                ),
-              );
-            },
-          ),
-        ),
-      );
-      await tester.tap(find.text('Άνοιγμα'));
-      await tester.pumpAndSettle();
+      await _openLampSettingsDialog(tester, controller);
 
       expect(find.text('Ίδιο με τη διαδρομή εξόδου'), findsNothing);
       expect(find.text('Έλεγχος & αποθήκευση διαδρομών'), findsNothing);
@@ -158,31 +175,7 @@ void main() {
       path.outputDbController.text = '';
       path.readDbController.text = r'C:\read.db';
 
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Builder(
-            builder: (context) {
-              return Scaffold(
-                body: Center(
-                  child: FilledButton(
-                    onPressed: () {
-                      openLampSettingsDialog(
-                        context: context,
-                        controller: controller,
-                        registerDialogSetState: (_) {},
-                        onDialogClosed: () {},
-                      );
-                    },
-                    child: const Text('Άνοιγμα'),
-                  ),
-                ),
-              );
-            },
-          ),
-        ),
-      );
-      await tester.tap(find.text('Άνοιγμα'));
-      await tester.pumpAndSettle();
+      await _openLampSettingsDialog(tester, controller);
 
       final arrowButtons = find.byWidgetPredicate(
         (widget) =>
@@ -207,31 +200,7 @@ void main() {
     });
 
     testWidgets('import button sits below output status panel', (tester) async {
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Builder(
-            builder: (context) {
-              return Scaffold(
-                body: Center(
-                  child: FilledButton(
-                    onPressed: () {
-                      openLampSettingsDialog(
-                        context: context,
-                        controller: controller,
-                        registerDialogSetState: (_) {},
-                        onDialogClosed: () {},
-                      );
-                    },
-                    child: const Text('Άνοιγμα'),
-                  ),
-                ),
-              );
-            },
-          ),
-        ),
-      );
-      await tester.tap(find.text('Άνοιγμα'));
-      await tester.pumpAndSettle();
+      await _openLampSettingsDialog(tester, controller);
 
       final outputLabel = tester.getTopLeft(
         find.text('Βάση δεδομένων που δημιουργεί το Excel'),
@@ -249,31 +218,7 @@ void main() {
 
     testWidgets('pending read check message mentions automatic validation',
         (tester) async {
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Builder(
-            builder: (context) {
-              return Scaffold(
-                body: Center(
-                  child: FilledButton(
-                    onPressed: () {
-                      openLampSettingsDialog(
-                        context: context,
-                        controller: controller,
-                        registerDialogSetState: (_) {},
-                        onDialogClosed: () {},
-                      );
-                    },
-                    child: const Text('Άνοιγμα'),
-                  ),
-                ),
-              );
-            },
-          ),
-        ),
-      );
-      await tester.tap(find.text('Άνοιγμα'));
-      await tester.pumpAndSettle();
+      await _openLampSettingsDialog(tester, controller);
 
       expect(
         find.textContaining('γίνεται αυτόματα'),
@@ -282,31 +227,7 @@ void main() {
     });
 
     testWidgets('output db tooltip describes recreate not update', (tester) async {
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Builder(
-            builder: (context) {
-              return Scaffold(
-                body: Center(
-                  child: FilledButton(
-                    onPressed: () {
-                      openLampSettingsDialog(
-                        context: context,
-                        controller: controller,
-                        registerDialogSetState: (_) {},
-                        onDialogClosed: () {},
-                      );
-                    },
-                    child: const Text('Άνοιγμα'),
-                  ),
-                ),
-              );
-            },
-          ),
-        ),
-      );
-      await tester.tap(find.text('Άνοιγμα'));
-      await tester.pumpAndSettle();
+      await _openLampSettingsDialog(tester, controller);
 
       final outputTooltip = find.byWidgetPredicate(
         (widget) =>
@@ -350,31 +271,7 @@ void main() {
         isIntegrityChecking: () => false,
       );
 
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Builder(
-            builder: (context) {
-              return Scaffold(
-                body: Center(
-                  child: FilledButton(
-                    onPressed: () {
-                      openLampSettingsDialog(
-                        context: context,
-                        controller: outputCheckController,
-                        registerDialogSetState: (_) {},
-                        onDialogClosed: () {},
-                      );
-                    },
-                    child: const Text('Άνοιγμα'),
-                  ),
-                ),
-              );
-            },
-          ),
-        ),
-      );
-      await tester.tap(find.text('Άνοιγμα'));
-      await tester.pumpAndSettle();
+      await _openLampSettingsDialog(tester, outputCheckController);
 
       expect(
         find.textContaining('θα διαγραφεί και θα ξαναδημιουργηθεί'),

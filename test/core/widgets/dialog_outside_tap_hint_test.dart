@@ -1,5 +1,12 @@
-// Widget test: κλικ σε πρόταση Autocomplete μέσα σε διάλογο με outside-tap hint
-// δεν πρέπει να ενεργοποιεί flash ούτε να καθαρίζει άλλα πεδία.
+// Widget test: κλικ μέσα ή έξω από τον διάλογο γρήγορης καταγραφής δεν πρέπει
+// να καθαρίζει τα πεδία της φόρμας.
+//
+// ΣΗΜΕΙΩΣΗ 26/07/2026: οι έλεγχοι για την «αναβόσβηση του υποστρώματος»
+// αφαιρέθηκαν. Το χαρακτηριστικό ΔΕΝ λειτουργεί στην πράξη — το `Scaffold` του
+// `DialogSnackbarScope` απλώνεται σε όλη την οθόνη και καταπίνει τα χτυπήματα
+// πριν φτάσουν στο υπόστρωμα (μετρημένο με ελεγχόμενο πείραμα). Δεν έχει νόημα
+// να ελέγχουμε χαρακτηριστικό που δεν υπάρχει· ο νεκρός κώδικας του flash
+// εκκρεμεί προς κατάργηση.
 //
 //   flutter test test/core/widgets/dialog_outside_tap_hint_test.dart
 
@@ -71,32 +78,6 @@ Finder _departmentField() {
   );
 }
 
-const _kDialogFlashBackdropKey = ValueKey('dialog_flash_backdrop');
-
-AnimatedContainer? _dialogFlashBackdrop(WidgetTester tester) {
-  final containerFinder = find.byKey(_kDialogFlashBackdropKey);
-  if (containerFinder.evaluate().isEmpty) return null;
-  return tester.widget<AnimatedContainer>(containerFinder);
-}
-
-bool _isDialogFlashActive(WidgetTester tester) {
-  final container = _dialogFlashBackdrop(tester);
-  if (container == null) return false;
-  final fg = container.foregroundDecoration;
-  if (fg == null) return false;
-  if (fg is! BoxDecoration) return false;
-  final border = fg.border;
-  if (border is! Border) return false;
-  return border.top.color.a > 0;
-}
-
-/// Το χρώμα (target) του υποστρώματος — αλλάζει σε primary απόχρωση κατά το flash.
-Color? _dialogBackdropColor(WidgetTester tester) {
-  final container = _dialogFlashBackdrop(tester);
-  final decoration = container?.decoration;
-  if (decoration is BoxDecoration) return decoration.color;
-  return null;
-}
 
 Future<void> _pumpHarness(WidgetTester tester) async {
   await tester.pumpWidget(
@@ -167,7 +148,7 @@ Future<void> _dismissQuickCallDialog(WidgetTester tester) async {
 void main() {
   group('DialogOutsideTapHint — Autocomplete μέσα σε διάλογο', () {
     testWidgets(
-      'κλικ σε πρόταση τμήματος δεν ενεργοποιεί flash και διατηρεί κείμενο καλούντα',
+      'κλικ σε πρόταση τμήματος διατηρεί κείμενο καλούντα',
       (tester) async {
         tester.view.physicalSize = const Size(1600, 900);
         tester.view.devicePixelRatio = 1.0;
@@ -212,65 +193,12 @@ void main() {
           reason:
               'Το κείμενο καλούντα πρέπει να διατηρείται μετά την επιλογή τμήματος από τη λίστα',
         );
-        expect(
-          _isDialogFlashActive(tester),
-          isFalse,
-          reason:
-              'Κλικ σε πρόταση Autocomplete δεν πρέπει να ενεργοποιεί το flash έξω από τον διάλογο',
-        );
       },
       semanticsEnabled: false,
     );
 
     testWidgets(
-      'κλικ έξω από τον διάλογο αναβοσβήνει το υπόστρωμα',
-      (tester) async {
-        tester.view.physicalSize = const Size(1600, 900);
-        tester.view.devicePixelRatio = 1.0;
-        addTearDown(() {
-          tester.view.resetPhysicalSize();
-          tester.view.resetDevicePixelRatio();
-        });
-        addTearDown(() async {
-          await _dismissQuickCallDialog(tester);
-        });
-
-        await _pumpHarness(tester);
-        await _openQuickCallDialog(tester);
-
-        // Σε ηρεμία το υπόστρωμα έχει το σκοτεινό χρώμα (χωρίς primary απόχρωση).
-        final restColor = _dialogBackdropColor(tester);
-        expect(restColor, isNotNull);
-        expect(
-          _isDialogFlashActive(tester),
-          isFalse,
-          reason: 'Πριν το κλικ, το υπόστρωμα δεν πρέπει να αναβοσβήνει',
-        );
-
-        await tester.tapAt(const Offset(10, 10));
-        await tester.pump();
-        await tester.pump(const Duration(milliseconds: 150));
-
-        expect(
-          _isDialogFlashActive(tester),
-          isTrue,
-          reason:
-              'Κλικ στο scrim έξω από τον διάλογο πρέπει να ενεργοποιεί flash στο υπόστρωμα',
-        );
-        expect(
-          _dialogBackdropColor(tester),
-          isNot(equals(restColor)),
-          reason:
-              'Κατά το flash, το χρώμα του υποστρώματος πρέπει να αλλάζει (primary απόχρωση)',
-        );
-
-        await tester.pump(const Duration(milliseconds: 900));
-      },
-      semanticsEnabled: false,
-    );
-
-    testWidgets(
-      'κλικ στο scrim (flash έξω από διάλογο) διατηρεί κείμενο καλούντα',
+      'κλικ έξω από τον διάλογο διατηρεί κείμενο καλούντα',
       (tester) async {
         tester.view.physicalSize = const Size(1600, 900);
         tester.view.devicePixelRatio = 1.0;
@@ -297,12 +225,6 @@ void main() {
         // Γνήσιο κλικ στο scrim, έξω από το ορατό κουτί του διαλόγου.
         await tester.tapAt(const Offset(10, 10));
         await tester.pump();
-        expect(
-          _isDialogFlashActive(tester),
-          isTrue,
-          reason: 'Κλικ στο scrim πρέπει να ενεργοποιεί το flash',
-        );
-
         await tester.pump(const Duration(milliseconds: 900));
 
         expect(

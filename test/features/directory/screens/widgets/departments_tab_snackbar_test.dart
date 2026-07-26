@@ -157,7 +157,16 @@ void main() {
       }
 
       expect(find.byType(SnackBar), findsOneWidget);
-      expect(find.textContaining('Σημειώθηκαν ως διαγραμμένα'), findsOneWidget);
+      // Έλεγχος ότι είναι το snackbar της διαγραφής, ΧΩΡΙΣ καθήλωση στο ακριβές
+      // κείμενο: η σύνοψη ονομάζει πάντα το τμήμα, ενώ η διατύπωση γύρω του
+      // (ενικός/πληθυντικός, μεταφορές στοιχείων) αλλάζει νόμιμα.
+      expect(
+        find.descendant(
+          of: find.byType(SnackBar),
+          matching: find.textContaining('Snack Τμήμα'),
+        ),
+        findsOneWidget,
+      );
 
       final hostState =
           tester.state(find.byType(_DepartmentsTabHost)) as _DepartmentsTabHostState;

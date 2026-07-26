@@ -470,7 +470,7 @@ void main() {
           find.byType(RadioGroup<LampIssueResolutionOption?>),
         );
         expect(radioGroup.groupValue, isNull);
-        expect(find.text('Επιλεγμένες ενέργειες: 0/1'), findsOneWidget);
+        expect(find.text('Αποφασισμένες: 0/1'), findsOneWidget);
         expect(
           tester
               .widget<FilledButton>(
@@ -488,7 +488,7 @@ void main() {
           find.byType(RadioGroup<LampIssueResolutionOption?>),
         );
         expect(afterSkip.groupValue, same(kLampManualSkipOption));
-        expect(find.text('Επιλεγμένες ενέργειες: 1/1'), findsOneWidget);
+        expect(find.text('Αποφασισμένες: 1/1'), findsOneWidget);
         expect(
           tester
               .widget<FilledButton>(

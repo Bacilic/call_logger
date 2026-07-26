@@ -1,4 +1,5 @@
-import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+// Μόνο για τον τύπο [Database] στην υπογραφή — τα ερωτήματα πάνε σε repositories.
+import 'package:sqflite_common/sqflite.dart';
 
 import '../../../core/database/calls_repository.dart';
 import '../../../core/database/user_repository.dart';
