@@ -47,8 +47,7 @@ class LansweeperBrowserLauncher {
 
     var openedLoginTab = false;
     final loginPageRaw = loginUrl.trim();
-    if (autoLogin &&
-        LansweeperUrlRules.isBrowserLaunchableUrl(loginPageRaw)) {
+    if (autoLogin && LansweeperUrlRules.isBrowserLaunchableUrl(loginPageRaw)) {
       final loginUri = Uri.tryParse(loginPageRaw);
       if (loginUri != null && loginUri.hasScheme) {
         openedLoginTab = await launch(loginUri);

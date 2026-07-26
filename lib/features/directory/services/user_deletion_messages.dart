@@ -82,8 +82,8 @@ String userDeletionSummaryMessage({
   final namePart = names.isEmpty
       ? 'Διαγράφηκαν υπάλληλοι'
       : (names.length == 1
-          ? 'Διαγράφηκε ${names.first}'
-          : 'Διαγράφηκαν ${names.join(', ')}');
+            ? 'Διαγράφηκε ${names.first}'
+            : 'Διαγράφηκαν ${names.join(', ')}');
 
   if (assetActions.isEmpty) {
     return namePart;

@@ -93,9 +93,7 @@ class _BackupZipDatabaseChoiceDialogState
                   child: Row(
                     children: [
                       Icon(
-                        _showRejected
-                            ? Icons.expand_less
-                            : Icons.expand_more,
+                        _showRejected ? Icons.expand_less : Icons.expand_more,
                         size: 20,
                       ),
                       const SizedBox(width: 4),
@@ -138,9 +136,7 @@ class _BackupZipDatabaseChoiceDialogState
   }
 
   String _candidateSubtitle(BackupZipEligibleCandidate c) {
-    final parts = <String>[
-      _formatBytes(c.sizeBytes),
-    ];
+    final parts = <String>[_formatBytes(c.sizeBytes)];
     if (c.checkFailed) {
       parts.add(c.checkWarning ?? 'Ο έλεγχος απέτυχε');
     } else {

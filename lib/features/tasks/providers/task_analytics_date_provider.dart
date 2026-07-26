@@ -156,5 +156,5 @@ class TaskAnalyticsDateNotifier extends AsyncNotifier<TaskAnalyticsDateState> {
 
 final taskAnalyticsDateProvider =
     AsyncNotifierProvider<TaskAnalyticsDateNotifier, TaskAnalyticsDateState>(
-  TaskAnalyticsDateNotifier.new,
-);
+      TaskAnalyticsDateNotifier.new,
+    );

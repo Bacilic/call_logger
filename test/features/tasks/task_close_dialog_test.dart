@@ -35,8 +35,7 @@ Task _taskForTimingTest({
     dueDate: createdAt.add(const Duration(days: 1)).toIso8601String(),
     status: TaskStatus.open.toDbValue,
     createdAt: createdAt.toIso8601String(),
-    snoozeHistoryJson:
-        snoozeEntries.isEmpty ? null : jsonEncode(snoozeEntries),
+    snoozeHistoryJson: snoozeEntries.isEmpty ? null : jsonEncode(snoozeEntries),
   );
 }
 
@@ -109,14 +108,9 @@ void main() {
       final createdAt = DateTime.now().subtract(const Duration(hours: 2));
       final task = _taskForTimingTest(createdAt: createdAt);
 
-      await _pumpTaskCloseDialog(
-        tester,
-        initialSolutionNotes: '',
-        task: task,
-      );
+      await _pumpTaskCloseDialog(tester, initialSolutionNotes: '', task: task);
 
-      final createdLabel =
-          DateFormat('dd/MM/yyyy HH:mm').format(createdAt);
+      final createdLabel = DateFormat('dd/MM/yyyy HH:mm').format(createdAt);
       expect(
         find.textContaining('Δημιουργήθηκε: $createdLabel'),
         findsOneWidget,
@@ -138,11 +132,15 @@ void main() {
           snoozeEntries: [
             {
               'snoozedAt': firstSnooze.toIso8601String(),
-              'dueAt': firstSnooze.add(const Duration(days: 1)).toIso8601String(),
+              'dueAt': firstSnooze
+                  .add(const Duration(days: 1))
+                  .toIso8601String(),
             },
             {
               'snoozedAt': lastSnooze.toIso8601String(),
-              'dueAt': lastSnooze.add(const Duration(hours: 6)).toIso8601String(),
+              'dueAt': lastSnooze
+                  .add(const Duration(hours: 6))
+                  .toIso8601String(),
             },
           ],
         );

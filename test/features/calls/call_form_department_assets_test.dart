@@ -1,4 +1,4 @@
-﻿// Widget test: φόρμα κλήσης — εμφάνιση εξοπλισμού και τηλεφώνων μετά την επιλογή τμήματος.
+// Widget test: φόρμα κλήσης — εμφάνιση εξοπλισμού και τηλεφώνων μετά την επιλογή τμήματος.
 //
 // Ολόκληρο αρχείο:
 //   flutter test test/features/calls/call_form_department_assets_test.dart
@@ -114,10 +114,9 @@ Future<void> _expectClearAllButtonVisible(
     reason: greekExpectMsg('Υπάρχει το κουμπί «Καθαρισμός όλων των πεδίων»'),
   );
   final animatedOpacity = tester.widget<AnimatedOpacity>(
-    find.ancestor(
-      of: clearAllButton,
-      matching: find.byType(AnimatedOpacity),
-    ).first,
+    find
+        .ancestor(of: clearAllButton, matching: find.byType(AnimatedOpacity))
+        .first,
   );
   expect(
     animatedOpacity.opacity,
@@ -165,9 +164,7 @@ Future<void> _expectNoDepartmentScopedOverlays(
   expect(
     find.byType(SmartEntityPhoneSuggestionList),
     findsNothing,
-    reason: greekExpectMsg(
-      'Χωρίς overlay τηλεφώνων τμήματος — $failContext',
-    ),
+    reason: greekExpectMsg('Χωρίς overlay τηλεφώνων τμήματος — $failContext'),
   );
   for (final phone in departmentPhones) {
     expect(
@@ -184,9 +181,7 @@ Future<void> _expectNoDepartmentScopedOverlays(
   expect(
     find.byType(SmartEntityEquipmentSuggestionList),
     findsNothing,
-    reason: greekExpectMsg(
-      'Χωρίς overlay εξοπλισμού τμήματος — $failContext',
-    ),
+    reason: greekExpectMsg('Χωρίς overlay εξοπλισμού τμήματος — $failContext'),
   );
   for (final code in departmentEquipmentCodes) {
     expect(
@@ -215,9 +210,7 @@ Future<void> _expectNoDepartmentScopedOverlays(
     expect(
       find.byType(SmartEntityCallerSuggestionList),
       findsNothing,
-      reason: greekExpectMsg(
-        'Χωρίς overlay καλούντα τμήματος — $failContext',
-      ),
+      reason: greekExpectMsg('Χωρίς overlay καλούντα τμήματος — $failContext'),
     );
   }
 }
@@ -296,7 +289,9 @@ Future<int> _seedFantasmaDepartmentAssetsScenario() async {
     'phone_id': sharedPhoneId,
   });
 
-  final userOnlyPhoneId = await db.insert('phones', {'number': _kUserOnlyPhone});
+  final userOnlyPhoneId = await db.insert('phones', {
+    'number': _kUserOnlyPhone,
+  });
   await db.insert('user_phones', {
     'user_id': userId,
     'phone_id': userOnlyPhoneId,
@@ -383,7 +378,11 @@ Future<void> _enterPhoneDigitsAndRunLookup(
     notifier.performPhoneLookup(digits);
   });
   await tester.pump();
-  await pumpUntilSettled(tester, steps: 40, step: const Duration(milliseconds: 60));
+  await pumpUntilSettled(
+    tester,
+    steps: 40,
+    step: const Duration(milliseconds: 60),
+  );
   await pumpUntilSettledLong(tester);
 }
 
@@ -569,10 +568,7 @@ Future<void> _clearEquipmentWithClearButton(WidgetTester tester) async {
 Future<void> _runDokimastikoDepartmentEquipPhoneBaseFlow(
   WidgetTester tester,
 ) async {
-  await _selectDepartmentFromAutocomplete(
-    tester,
-    _kDokimastikoDepartmentName,
-  );
+  await _selectDepartmentFromAutocomplete(tester, _kDokimastikoDepartmentName);
 
   await tester.tap(_callLoggerEquipmentTextField());
   await pumpUntilSettled(tester);
@@ -704,7 +700,9 @@ void main() {
         expect(
           headerAfterDept.departmentText,
           _kFantasmaDepartmentName,
-          reason: greekExpectMsg('Το πεδίο τμήματος συμπληρώνεται μετά την επιλογή'),
+          reason: greekExpectMsg(
+            'Το πεδίο τμήματος συμπληρώνεται μετά την επιλογή',
+          ),
         );
         expect(
           headerAfterDept.selectedDepartmentId,
@@ -759,7 +757,9 @@ void main() {
         );
 
         // —— Αλληλεπίδραση + έλεγχος: λίστα τηλεφώνων ——
-        reporter.logProgress('Tap στο πεδίο τηλεφώνου — λίστα αριθμών τμήματος');
+        reporter.logProgress(
+          'Tap στο πεδίο τηλεφώνου — λίστα αριθμών τμήματος',
+        );
 
         final expectedPhones = [_kSharedPhone, _kUserOnlyPhone];
         expect(
@@ -868,7 +868,9 @@ void main() {
         expect(
           headerWithDept.equipmentCandidates,
           isNotEmpty,
-          reason: greekExpectMsg('Φιλτραρισμένοι υποψήφιοι εξοπλισμού τμήματος'),
+          reason: greekExpectMsg(
+            'Φιλτραρισμένοι υποψήφιοι εξοπλισμού τμήματος',
+          ),
         );
         expect(
           headerWithDept.callerCandidates
@@ -882,7 +884,9 @@ void main() {
           visible: true,
           failContext: 'μετά επιλογή τμήματος',
         );
-        reporter.logStepDone('Τμήμα επιλέχθηκε — φιλτραρισμένες λίστες ενεργές');
+        reporter.logStepDone(
+          'Τμήμα επιλέχθηκε — φιλτραρισμένες λίστες ενεργές',
+        );
 
         reporter.logProgress('Καθαρισμός πεδίου τμήματος');
         await _clearDepartmentField(tester);
@@ -921,7 +925,9 @@ void main() {
         reporter.logStepDone('Λίστες ξεφιλτράρονται — κόκκινο Χ κρυφό');
 
         await _finishCallFormWidgetTest(tester);
-        reporter.recordPass('Καθαρισμός τμήματος — regression overlay / κόκκινο Χ');
+        reporter.recordPass(
+          'Καθαρισμός τμήματος — regression overlay / κόκκινο Χ',
+        );
       },
       semanticsEnabled: false,
     );
@@ -952,7 +958,9 @@ void main() {
         final reporter = GreekTestReportCollector();
 
         // —— Setup ——
-        reporter.logProgress('Οθόνη «Νέα Κλήση» — βάση δοκιμών (Τμήμα Δοκιμών)');
+        reporter.logProgress(
+          'Οθόνη «Νέα Κλήση» — βάση δοκιμών (Τμήμα Δοκιμών)',
+        );
         await _loadCallFormApp(tester);
         expect(
           find.byType(NavigationRail),
@@ -1018,7 +1026,9 @@ void main() {
         expect(
           headerAfterEquipment.selectedEquipment?.code,
           kTestEquipmentCode,
-          reason: greekExpectMsg('Επιλεγμένος εξοπλισμός μετά το tap στη λίστα'),
+          reason: greekExpectMsg(
+            'Επιλεγμένος εξοπλισμός μετά το tap στη λίστα',
+          ),
         );
         expect(
           headerAfterEquipment.phoneCandidates,
@@ -1031,11 +1041,15 @@ void main() {
         reporter.logStepDone('Εξοπλισμός $kTestEquipmentCode επιλέχθηκε');
 
         // —— Βήμα 4: κλικ τηλέφωνο (μετά την επιλογή εξοπλισμού) ——
-        reporter.logProgress('Κλικ στο πεδίο τηλεφώνου — overlay λίστας τμήματος');
+        reporter.logProgress(
+          'Κλικ στο πεδίο τηλεφώνου — overlay λίστας τμήματος',
+        );
         await tester.tap(callLoggerPhoneTextField());
         await pumpUntilSettled(tester);
 
-        final departmentPhoneOverlay = find.byType(SmartEntityPhoneSuggestionList);
+        final departmentPhoneOverlay = find.byType(
+          SmartEntityPhoneSuggestionList,
+        );
         await _pumpUntilFinderVisible(
           tester,
           departmentPhoneOverlay,
@@ -1064,9 +1078,7 @@ void main() {
 
         await _finishCallFormWidgetTest(tester);
 
-        reporter.recordPass(
-          'select_department: τμήμα → εξοπλισμός → τηλέφωνο',
-        );
+        reporter.recordPass('select_department: τμήμα → εξοπλισμός → τηλέφωνο');
       },
       semanticsEnabled: false,
     );
@@ -1085,7 +1097,9 @@ void main() {
         _configureDesktopViewport(tester);
         final reporter = GreekTestReportCollector();
 
-        reporter.logProgress('Οθόνη «Νέα Κλήση» — σενάριο Δοκιμαστικό (σενάριο 1)');
+        reporter.logProgress(
+          'Οθόνη «Νέα Κλήση» — σενάριο Δοκιμαστικό (σενάριο 1)',
+        );
         await _loadCallFormApp(tester);
         reporter.logStepDone('Εφαρμογή φορτώθηκε');
 
@@ -1105,7 +1119,9 @@ void main() {
         expect(
           headerAfterClear.equipmentText,
           isEmpty,
-          reason: greekExpectMsg('Το πεδίο εξοπλισμού είναι κενό μετά backspace'),
+          reason: greekExpectMsg(
+            'Το πεδίο εξοπλισμού είναι κενό μετά backspace',
+          ),
         );
         reporter.logStepDone('Εξοπλισμός καθαρίστηκε');
 
@@ -1132,7 +1148,9 @@ void main() {
         _configureDesktopViewport(tester);
         final reporter = GreekTestReportCollector();
 
-        reporter.logProgress('Οθόνη «Νέα Κλήση» — σενάριο Δοκιμαστικό (σενάριο 2)');
+        reporter.logProgress(
+          'Οθόνη «Νέα Κλήση» — σενάριο Δοκιμαστικό (σενάριο 2)',
+        );
         await _loadCallFormApp(tester);
         reporter.logStepDone('Εφαρμογή φορτώθηκε');
 
@@ -1140,15 +1158,14 @@ void main() {
         reporter.logStepDone('Βασική ροή ολοκληρώθηκε');
 
         reporter.logProgress('Καθαρισμός τηλεφώνου με backspace');
-        await _clearTextFieldWithBackspace(
-          tester,
-          callLoggerPhoneTextField(),
-        );
+        await _clearTextFieldWithBackspace(tester, callLoggerPhoneTextField());
         final headerAfter = await _readCallHeaderState(tester);
         expect(
           headerAfter.selectedPhone,
           anyOf(isNull, ''),
-          reason: greekExpectMsg('Το πεδίο τηλεφώνου είναι κενό μετά backspace'),
+          reason: greekExpectMsg(
+            'Το πεδίο τηλεφώνου είναι κενό μετά backspace',
+          ),
         );
         reporter.logStepDone('Τηλέφωνο καθαρίστηκε');
 
@@ -1175,7 +1192,9 @@ void main() {
         _configureDesktopViewport(tester);
         final reporter = GreekTestReportCollector();
 
-        reporter.logProgress('Οθόνη «Νέα Κλήση» — σενάριο Δοκιμαστικό (σενάριο 3)');
+        reporter.logProgress(
+          'Οθόνη «Νέα Κλήση» — σενάριο Δοκιμαστικό (σενάριο 3)',
+        );
         await _loadCallFormApp(tester);
         reporter.logStepDone('Εφαρμογή φορτώθηκε');
 
@@ -1183,10 +1202,7 @@ void main() {
         reporter.logStepDone('Βασική ροή ολοκληρώθηκε');
 
         reporter.logProgress('Καθαρισμός τηλεφώνου με backspace');
-        await _clearTextFieldWithBackspace(
-          tester,
-          callLoggerPhoneTextField(),
-        );
+        await _clearTextFieldWithBackspace(tester, callLoggerPhoneTextField());
         reporter.logStepDone('Τηλέφωνο καθαρίστηκε');
 
         reporter.logProgress('Καθαρισμός εξοπλισμού με κουμπί «χ»');
@@ -1282,9 +1298,13 @@ void main() {
             matching: find.text('Καμία αντιστοιχία'),
           ),
           findsOneWidget,
-          reason: greekExpectMsg('Υπόδειξη «Καμία αντιστοιχία» στο πεδίο καλούντα'),
+          reason: greekExpectMsg(
+            'Υπόδειξη «Καμία αντιστοιχία» στο πεδίο καλούντα',
+          ),
         );
-        reporter.logStepDone('Τμήμα συμπληρώθηκε — καλούντας χωρίς αντιστοιχία');
+        reporter.logStepDone(
+          'Τμήμα συμπληρώθηκε — καλούντας χωρίς αντιστοιχία',
+        );
 
         reporter.logProgress(
           'Έλεγχος αυτόματης συμπλήρωσης εξοπλισμού $_kOrphanDepartmentEquipment',
@@ -1321,12 +1341,15 @@ void main() {
         );
         reporter.logStepDone('Εξοπλισμός συμπληρώθηκε αυτόματα');
 
-        reporter.logProgress('Κλικ στο πεδίο εξοπλισμού — αναμένεται στη λίστα');
+        reporter.logProgress(
+          'Κλικ στο πεδίο εξοπλισμού — αναμένεται στη λίστα',
+        );
         await tester.tap(_callLoggerEquipmentTextField());
         await pumpUntilSettled(tester);
 
-        final equipmentTile =
-            _equipmentCodeInListFinder(_kOrphanDepartmentEquipment);
+        final equipmentTile = _equipmentCodeInListFinder(
+          _kOrphanDepartmentEquipment,
+        );
         await _pumpUntilFinderVisible(
           tester,
           equipmentTile,

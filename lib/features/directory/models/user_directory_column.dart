@@ -10,13 +10,22 @@ class UserDirectoryColumn {
 
   static const selection = UserDirectoryColumn._('selection', 'Επιλογή', null);
   static const id = UserDirectoryColumn._('id', 'ID', 'id');
-  static const lastName =
-      UserDirectoryColumn._('last_name', 'Επώνυμο', 'last_name');
-  static const firstName =
-      UserDirectoryColumn._('first_name', 'Όνομα', 'first_name');
+  static const lastName = UserDirectoryColumn._(
+    'last_name',
+    'Επώνυμο',
+    'last_name',
+  );
+  static const firstName = UserDirectoryColumn._(
+    'first_name',
+    'Όνομα',
+    'first_name',
+  );
   static const phone = UserDirectoryColumn._('phone', 'Τηλέφωνο', 'phone');
-  static const department =
-      UserDirectoryColumn._('department', 'Τμήμα', 'department');
+  static const department = UserDirectoryColumn._(
+    'department',
+    'Τμήμα',
+    'department',
+  );
   static const notes = UserDirectoryColumn._('notes', 'Σημειώσεις', 'notes');
 
   /// Προεπιλογή: όλες οι στήλες ορατές.
@@ -54,10 +63,7 @@ class UserDirectoryColumn {
     if (!order.contains(selection)) {
       return List<UserDirectoryColumn>.from(order);
     }
-    return [
-      selection,
-      ...order.where((c) => c != selection),
-    ];
+    return [selection, ...order.where((c) => c != selection)];
   }
 
   /// Πεδίο εστίασης στη φόρμα επεξεργασίας μετά από διπλό κλικ.

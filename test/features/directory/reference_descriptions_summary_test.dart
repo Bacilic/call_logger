@@ -52,15 +52,7 @@ void main() {
       final text = formatAssetReferenceDeleteMessage(
         isPhone: false,
         value: '3601',
-        descriptions: const [
-          'Α',
-          'Β',
-          'Γ',
-          'Δ',
-          'Ε',
-          'ΣΤ',
-          'Ζ',
-        ],
+        descriptions: const ['Α', 'Β', 'Γ', 'Δ', 'Ε', 'ΣΤ', 'Ζ'],
       );
       expect(
         text,

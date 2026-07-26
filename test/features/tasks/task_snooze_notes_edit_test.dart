@@ -14,16 +14,8 @@ const _snooze2Due = '2026-06-04T08:00:00.000';
 
 String _twoEntryHistoryJson({String? note1, String? note2}) {
   return jsonEncode([
-    {
-      'snoozedAt': _snooze1At,
-      'dueAt': _snooze1Due,
-      'note': ?note1,
-    },
-    {
-      'snoozedAt': _snooze2At,
-      'dueAt': _snooze2Due,
-      'note': ?note2,
-    },
+    {'snoozedAt': _snooze1At, 'dueAt': _snooze1Due, 'note': ?note1},
+    {'snoozedAt': _snooze2At, 'dueAt': _snooze2Due, 'note': ?note2},
   ]);
 }
 
@@ -42,10 +34,7 @@ void main() {
       final task = _taskWithTwoSnoozes(note1: 'παλιό 1', note2: 'παλιό 2');
       final before = task.snoozeEntries;
 
-      final updated = task.withUpdatedSnoozeNotes([
-        'νέο 1',
-        'νέο 2',
-      ]);
+      final updated = task.withUpdatedSnoozeNotes(['νέο 1', 'νέο 2']);
 
       expect(updated.snoozeEntries, hasLength(2));
       expect(updated.snoozeEntries[0].snoozedAt, before[0].snoozedAt);
@@ -90,7 +79,10 @@ void main() {
 
       final withSnoozes = _taskWithTwoSnoozes();
       expect(
-        identical(withSnoozes, withSnoozes.withUpdatedSnoozeNotes(['μόνο ένα'])),
+        identical(
+          withSnoozes,
+          withSnoozes.withUpdatedSnoozeNotes(['μόνο ένα']),
+        ),
         isTrue,
       );
       expect(

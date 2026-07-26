@@ -69,41 +69,51 @@ void main() {
       expect(version.single['user_version'], databaseSchemaVersionV1);
     });
 
-    test('createNewDatabaseFile παράγει τρέχον σχήμα με στήλες equipment v2', () async {
-      final dbPath = '${tempDir.path}/fresh_schema.db';
-      await DatabaseHelper.instance.createNewDatabaseFile(dbPath);
+    test(
+      'createNewDatabaseFile παράγει τρέχον σχήμα με στήλες equipment v2',
+      () async {
+        final dbPath = '${tempDir.path}/fresh_schema.db';
+        await DatabaseHelper.instance.createNewDatabaseFile(dbPath);
 
-      final db = await openDatabase(dbPath, readOnly: true, singleInstance: false);
-      try {
-        final info = await db.rawQuery('PRAGMA table_info(equipment)');
-        final names = info.map((r) => r['name'] as String).toSet();
-        expect(names, containsAll(<String>['department_id', 'location']));
+        final db = await openDatabase(
+          dbPath,
+          readOnly: true,
+          singleInstance: false,
+        );
+        try {
+          final info = await db.rawQuery('PRAGMA table_info(equipment)');
+          final names = info.map((r) => r['name'] as String).toSet();
+          expect(names, containsAll(<String>['department_id', 'location']));
 
-        final version = await db.rawQuery('PRAGMA user_version');
-        expect(version.single['user_version'], databaseSchemaVersionV1);
-      } finally {
-        await db.close();
-      }
-    });
+          final version = await db.rawQuery('PRAGMA user_version');
+          expect(version.single['user_version'], databaseSchemaVersionV1);
+        } finally {
+          await db.close();
+        }
+      },
+    );
 
-    test('μεταναστεύσεις σε παλιό σχήμα v1 προσθέτουν στήλες εξοπλισμού', () async {
-      final dbPath = '${tempDir.path}/legacy_v1.db';
-      await _createLegacyV1EquipmentDatabaseFile(dbPath);
+    test(
+      'μεταναστεύσεις σε παλιό σχήμα v1 προσθέτουν στήλες εξοπλισμού',
+      () async {
+        final dbPath = '${tempDir.path}/legacy_v1.db';
+        await _createLegacyV1EquipmentDatabaseFile(dbPath);
 
-      final db = await openDatabase(
-        dbPath,
-        version: 2,
-        onUpgrade: onDatabaseUpgradeSquashed,
-        singleInstance: false,
-      );
-      try {
-        final info = await db.rawQuery('PRAGMA table_info(equipment)');
-        final names = info.map((r) => r['name'] as String).toSet();
-        expect(names, containsAll(<String>['department_id', 'location']));
-      } finally {
-        await db.close();
-      }
-    });
+        final db = await openDatabase(
+          dbPath,
+          version: 2,
+          onUpgrade: onDatabaseUpgradeSquashed,
+          singleInstance: false,
+        );
+        try {
+          final info = await db.rawQuery('PRAGMA table_info(equipment)');
+          final names = info.map((r) => r['name'] as String).toSet();
+          expect(names, containsAll(<String>['department_id', 'location']));
+        } finally {
+          await db.close();
+        }
+      },
+    );
 
     test('getTablePreview επιστρέφει στήλες και γραμμές με όριο', () async {
       final dbPath = '${tempDir.path}/preview.db';

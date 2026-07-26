@@ -1,4 +1,4 @@
-﻿part of 'lansweeper_report_dialog.dart';
+part of 'lansweeper_report_dialog.dart';
 
 mixin LansweeperReportRegistrationMixin on LansweeperReportDialogStateHost {
   Future<void> _submitSelected(
@@ -99,9 +99,7 @@ mixin LansweeperReportRegistrationMixin on LansweeperReportDialogStateHost {
       final warningsText = result.warnings.isEmpty
           ? ''
           : '\n${result.warnings.join('\n')}';
-      showDialogSnackBar(
-        SnackBar(content: Text('$baseMessage$warningsText')),
-      );
+      showDialogSnackBar(SnackBar(content: Text('$baseMessage$warningsText')));
       if (!resubmit && ticketId.isNotEmpty) {
         final openTicketAfterSubmit =
             await readLansweeperOpenTicketAfterApiSubmitSetting();
@@ -135,9 +133,7 @@ mixin LansweeperReportRegistrationMixin on LansweeperReportDialogStateHost {
       context,
       reportText: reportText,
       onCopied: () => showDialogSnackBar(
-        const SnackBar(
-          content: Text('Η αναφορά αντιγράφηκε στο πρόχειρο.'),
-        ),
+        const SnackBar(content: Text('Η αναφορά αντιγράφηκε στο πρόχειρο.')),
       ),
     );
   }
@@ -211,11 +207,13 @@ mixin LansweeperReportRegistrationMixin on LansweeperReportDialogStateHost {
           continue;
         }
       }
-      await ref.read(lansweeperSyncProvider.notifier).markRegistered(
-        callId: callId,
-        ticketId: ticketId.isEmpty ? null : ticketId,
-        comment: comment,
-      );
+      await ref
+          .read(lansweeperSyncProvider.notifier)
+          .markRegistered(
+            callId: callId,
+            ticketId: ticketId.isEmpty ? null : ticketId,
+            comment: comment,
+          );
       if (!mounted) return;
       showDialogSnackBar(
         SnackBar(
@@ -285,11 +283,13 @@ mixin LansweeperReportRegistrationMixin on LansweeperReportDialogStateHost {
           continue;
         }
       }
-      await ref.read(lansweeperSyncProvider.notifier).markRegistered(
-        callId: callId,
-        ticketId: ticketId.isEmpty ? null : ticketId,
-        comment: comment,
-      );
+      await ref
+          .read(lansweeperSyncProvider.notifier)
+          .markRegistered(
+            callId: callId,
+            ticketId: ticketId.isEmpty ? null : ticketId,
+            comment: comment,
+          );
       if (!mounted) return;
       showDialogSnackBar(
         SnackBar(

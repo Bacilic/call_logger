@@ -37,8 +37,7 @@ void main() {
       );
       expect(
         shortcuts.keys.whereType<SingleActivator>().any(
-          (a) =>
-              a.trigger == LogicalKeyboardKey.keyL && a.control && a.alt,
+          (a) => a.trigger == LogicalKeyboardKey.keyL && a.control && a.alt,
         ),
         isFalse,
       );

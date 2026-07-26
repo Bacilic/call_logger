@@ -18,12 +18,12 @@ class BackupZipManifest {
   });
 
   const BackupZipManifest.unknown()
-      : originalDatabasePath = null,
-        databaseFileName = null,
-        createdAt = null,
-        appVersion = null,
-        schemaVersion = null,
-        isKnown = false;
+    : originalDatabasePath = null,
+      databaseFileName = null,
+      createdAt = null,
+      appVersion = null,
+      schemaVersion = null,
+      isKnown = false;
 
   /// Όνομα εγγραφής στη ρίζα του zip (αγνοείται από παλιότερες επαναφορές).
   static const zipEntryName = 'backup_manifest.json';

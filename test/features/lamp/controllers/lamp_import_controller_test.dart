@@ -157,19 +157,22 @@ void main() {
             host.confirmationCallCount++;
             return true;
           },
-          showImportReportDialog: ({
-            required stopwatch,
-            required readPathContext,
-            required importRunner,
-          }) async {
-            await importRunner((_) {});
-            return const LampImportReportOutcome(
-              action: LampImportReportCloseAction.dismiss,
-            );
-          },
+          showImportReportDialog:
+              ({
+                required stopwatch,
+                required readPathContext,
+                required importRunner,
+              }) async {
+                await importRunner((_) {});
+                return const LampImportReportOutcome(
+                  action: LampImportReportCloseAction.dismiss,
+                );
+              },
         );
 
-        final tempDir = await Directory.systemTemp.createTemp('lamp_import_ctl');
+        final tempDir = await Directory.systemTemp.createTemp(
+          'lamp_import_ctl',
+        );
         addTearDown(() => tempDir.deleteSync(recursive: true));
         final excelPath = p.join(tempDir.path, 'test.xlsx');
         final dbPath = p.join(tempDir.path, 'existing.db');
@@ -200,16 +203,17 @@ void main() {
       final importController = buildController(
         host: host,
         path: path,
-        showImportReportDialog: ({
-          required stopwatch,
-          required readPathContext,
-          required importRunner,
-        }) async {
-          await importRunner((_) {});
-          return const LampImportReportOutcome(
-            action: LampImportReportCloseAction.dismiss,
-          );
-        },
+        showImportReportDialog:
+            ({
+              required stopwatch,
+              required readPathContext,
+              required importRunner,
+            }) async {
+              await importRunner((_) {});
+              return const LampImportReportOutcome(
+                action: LampImportReportCloseAction.dismiss,
+              );
+            },
       );
 
       final tempDir = await Directory.systemTemp.createTemp('lamp_import_ctl2');
@@ -239,21 +243,23 @@ void main() {
       final importController = buildController(
         host: host,
         path: path,
-        showImportReportDialog: ({
-          required stopwatch,
-          required readPathContext,
-          required importRunner,
-        }) async {
-          expect(readPathContext.readPathEmpty, isTrue);
-          await importRunner((_) {});
-          return const LampImportReportOutcome(
-            action: LampImportReportCloseAction.dismiss,
-          );
-        },
+        showImportReportDialog:
+            ({
+              required stopwatch,
+              required readPathContext,
+              required importRunner,
+            }) async {
+              expect(readPathContext.readPathEmpty, isTrue);
+              await importRunner((_) {});
+              return const LampImportReportOutcome(
+                action: LampImportReportCloseAction.dismiss,
+              );
+            },
       );
 
-      final tempDir =
-          await Directory.systemTemp.createTemp('lamp_import_empty_read');
+      final tempDir = await Directory.systemTemp.createTemp(
+        'lamp_import_empty_read',
+      );
       addTearDown(() => tempDir.deleteSync(recursive: true));
       final excelPath = p.join(tempDir.path, 'test.xlsx');
       final dbPath = p.join(tempDir.path, 'new.db');
@@ -284,22 +290,24 @@ void main() {
         final importController = buildController(
           host: host,
           path: path,
-          showImportReportDialog: ({
-            required stopwatch,
-            required readPathContext,
-            required importRunner,
-          }) async {
-            expect(readPathContext.readDiffersFromOutput, isTrue);
-            await importRunner((_) {});
-            return const LampImportReportOutcome(
-              action: LampImportReportCloseAction.dismiss,
-              setAsReadDatabase: false,
-            );
-          },
+          showImportReportDialog:
+              ({
+                required stopwatch,
+                required readPathContext,
+                required importRunner,
+              }) async {
+                expect(readPathContext.readDiffersFromOutput, isTrue);
+                await importRunner((_) {});
+                return const LampImportReportOutcome(
+                  action: LampImportReportCloseAction.dismiss,
+                  setAsReadDatabase: false,
+                );
+              },
         );
 
-        final tempDir =
-            await Directory.systemTemp.createTemp('lamp_import_keep_read');
+        final tempDir = await Directory.systemTemp.createTemp(
+          'lamp_import_keep_read',
+        );
         addTearDown(() => tempDir.deleteSync(recursive: true));
         final excelPath = p.join(tempDir.path, 'test.xlsx');
         final dbPath = p.join(tempDir.path, 'new_out.db');
@@ -331,21 +339,23 @@ void main() {
       final importController = buildController(
         host: host,
         path: path,
-        showImportReportDialog: ({
-          required stopwatch,
-          required readPathContext,
-          required importRunner,
-        }) async {
-          await importRunner((_) {});
-          return const LampImportReportOutcome(
-            action: LampImportReportCloseAction.dismiss,
-            setAsReadDatabase: true,
-          );
-        },
+        showImportReportDialog:
+            ({
+              required stopwatch,
+              required readPathContext,
+              required importRunner,
+            }) async {
+              await importRunner((_) {});
+              return const LampImportReportOutcome(
+                action: LampImportReportCloseAction.dismiss,
+                setAsReadDatabase: true,
+              );
+            },
       );
 
-      final tempDir =
-          await Directory.systemTemp.createTemp('lamp_import_switch_on');
+      final tempDir = await Directory.systemTemp.createTemp(
+        'lamp_import_switch_on',
+      );
       addTearDown(() => tempDir.deleteSync(recursive: true));
       final excelPath = p.join(tempDir.path, 'test.xlsx');
       final dbPath = p.join(tempDir.path, 'new_out.db');
@@ -374,20 +384,22 @@ void main() {
       final importController = buildController(
         host: host,
         path: path,
-        showImportReportDialog: ({
-          required stopwatch,
-          required readPathContext,
-          required importRunner,
-        }) async {
-          await importRunner((_) {});
-          return const LampImportReportOutcome(
-            action: LampImportReportCloseAction.runIntegrityCheck,
-          );
-        },
+        showImportReportDialog:
+            ({
+              required stopwatch,
+              required readPathContext,
+              required importRunner,
+            }) async {
+              await importRunner((_) {});
+              return const LampImportReportOutcome(
+                action: LampImportReportCloseAction.runIntegrityCheck,
+              );
+            },
       );
 
-      final tempDir =
-          await Directory.systemTemp.createTemp('lamp_import_integrity');
+      final tempDir = await Directory.systemTemp.createTemp(
+        'lamp_import_integrity',
+      );
       addTearDown(() => tempDir.deleteSync(recursive: true));
       final excelPath = p.join(tempDir.path, 'test.xlsx');
       final dbPath = p.join(tempDir.path, 'new.db');
@@ -407,54 +419,53 @@ void main() {
       expect(result.runIntegrityCheck, isTrue);
     });
 
-    test(
-      'δεν καλεί importer όταν το Excel διαγράφηκε πριν το κλικ',
-      () async {
-        final host = _FakeHost(importer: _FakeImporter());
-        final path = LampPathController(host: host);
-        addTearDown(path.dispose);
+    test('δεν καλεί importer όταν το Excel διαγράφηκε πριν το κλικ', () async {
+      final host = _FakeHost(importer: _FakeImporter());
+      final path = LampPathController(host: host);
+      addTearDown(path.dispose);
 
-        final importController = buildController(
-          host: host,
-          path: path,
-          showImportReportDialog: ({
-            required stopwatch,
-            required readPathContext,
-            required importRunner,
-          }) async {
-            await importRunner((_) {});
-            return const LampImportReportOutcome(
-              action: LampImportReportCloseAction.dismiss,
-            );
-          },
-        );
+      final importController = buildController(
+        host: host,
+        path: path,
+        showImportReportDialog:
+            ({
+              required stopwatch,
+              required readPathContext,
+              required importRunner,
+            }) async {
+              await importRunner((_) {});
+              return const LampImportReportOutcome(
+                action: LampImportReportCloseAction.dismiss,
+              );
+            },
+      );
 
-        final tempDir =
-            await Directory.systemTemp.createTemp('lamp_import_del_excel');
-        addTearDown(() => tempDir.deleteSync(recursive: true));
-        final excelPath = p.join(tempDir.path, 'vanished.xlsx');
-        final dbPath = p.join(tempDir.path, 'out.db');
-        await File(excelPath).writeAsBytes(<int>[1, 2, 3]);
+      final tempDir = await Directory.systemTemp.createTemp(
+        'lamp_import_del_excel',
+      );
+      addTearDown(() => tempDir.deleteSync(recursive: true));
+      final excelPath = p.join(tempDir.path, 'vanished.xlsx');
+      final dbPath = p.join(tempDir.path, 'out.db');
+      await File(excelPath).writeAsBytes(<int>[1, 2, 3]);
 
-        path.excelController.text = excelPath;
-        path.outputDbController.text = dbPath;
+      path.excelController.text = excelPath;
+      path.outputDbController.text = dbPath;
 
-        await File(excelPath).delete();
+      await File(excelPath).delete();
 
-        final result = await importController.runImport(
-          onImportStart: () {},
-          onImportSuccess: (_) {},
-          afterImportValidate: () async {},
-          onImportFailureReload: () async {},
-        );
+      final result = await importController.runImport(
+        onImportStart: () {},
+        onImportSuccess: (_) {},
+        afterImportValidate: () async {},
+        onImportFailureReload: () async {},
+      );
 
-        expect(host.importerCallCount, 0);
-        expect(result.failureMessage, isNotNull);
-        expect(result.failureMessage, contains('δεν βρέθηκε'));
-        expect(host.snackMessages, isNotEmpty);
-        expect(host.snackMessages.last, contains('δεν βρέθηκε'));
-      },
-    );
+      expect(host.importerCallCount, 0);
+      expect(result.failureMessage, isNotNull);
+      expect(result.failureMessage, contains('δεν βρέθηκε'));
+      expect(host.snackMessages, isNotEmpty);
+      expect(host.snackMessages.last, contains('δεν βρέθηκε'));
+    });
   });
 
   group('LampImportController.excelImportDisabledReason', () {

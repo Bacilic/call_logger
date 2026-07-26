@@ -49,8 +49,9 @@ String mergeAuditCallAssociationDetails({
   if (!trimmed.startsWith(_kLegacyCallAssociationActionPrefix)) {
     return null;
   }
-  final tail =
-      trimmed.substring(_kLegacyCallAssociationActionPrefix.length).trim();
+  final tail = trimmed
+      .substring(_kLegacyCallAssociationActionPrefix.length)
+      .trim();
   final merged = mergeAuditCallAssociationDetails(
     associationDetails: tail.isEmpty ? null : tail,
     existingDetails: details,

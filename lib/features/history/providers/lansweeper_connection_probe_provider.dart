@@ -105,7 +105,7 @@ class LansweeperConnectionProbeNotifier
 }
 
 final lansweeperConnectionProbeProvider =
-    NotifierProvider.autoDispose<LansweeperConnectionProbeNotifier,
-        LansweeperConnectionStatus>(
-  LansweeperConnectionProbeNotifier.new,
-);
+    NotifierProvider.autoDispose<
+      LansweeperConnectionProbeNotifier,
+      LansweeperConnectionStatus
+    >(LansweeperConnectionProbeNotifier.new);

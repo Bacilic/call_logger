@@ -20,7 +20,8 @@ const _kInvalidSavedTemplate = 'Κατηγορία: {Κατηγορίαα}';
 
 String? _testUserDefaultValue;
 
-class _MutableUserDefaultNotifier extends GeminiPromptTemplateUserDefaultNotifier {
+class _MutableUserDefaultNotifier
+    extends GeminiPromptTemplateUserDefaultNotifier {
   @override
   String? build() => _testUserDefaultValue;
 
@@ -110,10 +111,7 @@ void main() {
       });
 
       await tester.pumpWidget(
-        _wrapDialog(
-          savedTemplate: _kValidSavedTemplate,
-          onSave: (_) async {},
-        ),
+        _wrapDialog(savedTemplate: _kValidSavedTemplate, onSave: (_) async {}),
       );
       await tester.pumpAndSettle();
 
@@ -140,7 +138,10 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      await tester.enterText(find.byType(TextField), 'Αλλαγμένο $_kValidSavedTemplate');
+      await tester.enterText(
+        find.byType(TextField),
+        'Αλλαγμένο $_kValidSavedTemplate',
+      );
       await tester.pumpAndSettle();
 
       expect(tester.widget<FilledButton>(_saveButton).onPressed, isNotNull);
@@ -152,7 +153,9 @@ void main() {
       expect(tester.widget<FilledButton>(_saveButton).onPressed, isNull);
     });
 
-    testWidgets('Ακύρωση επαναφέρει το αποθηκευμένο στιγμιότυπο', (tester) async {
+    testWidgets('Ακύρωση επαναφέρει το αποθηκευμένο στιγμιότυπο', (
+      tester,
+    ) async {
       tester.view.physicalSize = const Size(1200, 1600);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(() {
@@ -161,10 +164,7 @@ void main() {
       });
 
       await tester.pumpWidget(
-        _wrapDialog(
-          savedTemplate: _kValidSavedTemplate,
-          onSave: (_) async {},
-        ),
+        _wrapDialog(savedTemplate: _kValidSavedTemplate, onSave: (_) async {}),
       );
       await tester.pumpAndSettle();
 
@@ -187,10 +187,7 @@ void main() {
       });
 
       await tester.pumpWidget(
-        _wrapDialog(
-          savedTemplate: _kValidSavedTemplate,
-          onSave: (_) async {},
-        ),
+        _wrapDialog(savedTemplate: _kValidSavedTemplate, onSave: (_) async {}),
       );
       await tester.pumpAndSettle();
 
@@ -233,7 +230,10 @@ void main() {
 
       await tester.tap(find.text('Άνοιγμα'));
       await tester.pumpAndSettle();
-      expect(find.text('Πρότυπο προτροπής Τεχνητής Νοημοσύνης'), findsOneWidget);
+      expect(
+        find.text('Πρότυπο προτροπής Τεχνητής Νοημοσύνης'),
+        findsOneWidget,
+      );
 
       await tester.tap(_closeButton);
       await tester.pumpAndSettle();
@@ -302,37 +302,12 @@ void main() {
       },
     );
 
-    testWidgets(
-      'Επαναφορά με προσωπική προεπιλογή — επιλογή προσωπικής',
-      (tester) async {
-        _testUserDefaultValue = 'Προσωπικό πρότυπο με "title" και "description" και "solution"';
+    testWidgets('Επαναφορά με προσωπική προεπιλογή — επιλογή προσωπικής', (
+      tester,
+    ) async {
+      _testUserDefaultValue =
+          'Προσωπικό πρότυπο με "title" και "description" και "solution"';
 
-        tester.view.physicalSize = const Size(1200, 1600);
-        tester.view.devicePixelRatio = 1.0;
-        addTearDown(() {
-          tester.view.resetPhysicalSize();
-          tester.view.resetDevicePixelRatio();
-        });
-
-        await tester.pumpWidget(
-          _wrapDialog(
-            savedTemplate: _kValidSavedTemplate,
-            onSave: (_) async {},
-          ),
-        );
-        await tester.pumpAndSettle();
-
-        await tester.tap(find.text('Επαναφορά Προεπιλογής'));
-        await tester.pumpAndSettle();
-        await tester.tap(find.widgetWithText(FilledButton, 'Προσωπική'));
-        await tester.pumpAndSettle();
-
-        expect(find.textContaining('Προσωπικό πρότυπο'), findsOneWidget);
-      },
-    );
-
-    testWidgets('Ορισμός Προεπιλογής αποθηκεύει την τρέχουσα τιμή πεδίου',
-        (tester) async {
       tester.view.physicalSize = const Size(1200, 1600);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(() {
@@ -341,14 +316,35 @@ void main() {
       });
 
       await tester.pumpWidget(
-        _wrapDialog(
-          savedTemplate: _kValidSavedTemplate,
-          onSave: (_) async {},
-        ),
+        _wrapDialog(savedTemplate: _kValidSavedTemplate, onSave: (_) async {}),
       );
       await tester.pumpAndSettle();
 
-      const personal = 'Προσωπικό για αποθήκευση με "title" "description" "solution"';
+      await tester.tap(find.text('Επαναφορά Προεπιλογής'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(FilledButton, 'Προσωπική'));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('Προσωπικό πρότυπο'), findsOneWidget);
+    });
+
+    testWidgets('Ορισμός Προεπιλογής αποθηκεύει την τρέχουσα τιμή πεδίου', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(1200, 1600);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      await tester.pumpWidget(
+        _wrapDialog(savedTemplate: _kValidSavedTemplate, onSave: (_) async {}),
+      );
+      await tester.pumpAndSettle();
+
+      const personal =
+          'Προσωπικό για αποθήκευση με "title" "description" "solution"';
       await tester.enterText(find.byType(TextField), personal);
       await tester.pumpAndSettle();
 

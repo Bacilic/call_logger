@@ -54,8 +54,8 @@ void main() {
       expect(
         support.equipmentSummary(row, labels: labels),
         'κωδικός=2667 · PC Test · '
-            'μοντέλο=Windows 7 Pro (410) · σειριακός=SN-001 · '
-            'γραφείο=Διοικητικό ΚΥ Ξυλοκάστρου (73) · υπάλληλος=Εξεταστήριο 2 (243)',
+        'μοντέλο=Windows 7 Pro (410) · σειριακός=SN-001 · '
+        'γραφείο=Διοικητικό ΚΥ Ξυλοκάστρου (73) · υπάλληλος=Εξεταστήριο 2 (243)',
       );
     });
 
@@ -63,8 +63,8 @@ void main() {
       expect(
         support.equipmentSummary(row),
         'κωδικός=2667 · PC Test · '
-            'μοντέλο=410 · σειριακός=SN-001 · '
-            'γραφείο=73 · υπάλληλος=243',
+        'μοντέλο=410 · σειριακός=SN-001 · '
+        'γραφείο=73 · υπάλληλος=243',
       );
     });
   });
@@ -110,10 +110,7 @@ void main() {
         final labels = await support.loadFkLabelMaps(db);
 
         expect(labels.modelLabelById[410], 'Windows 7 Pro');
-        expect(
-          labels.officeLabelById[73],
-          'Διοικητικό ΚΥ Ξυλοκάστρου',
-        );
+        expect(labels.officeLabelById[73], 'Διοικητικό ΚΥ Ξυλοκάστρου');
         expect(labels.ownerLabelById[243], 'Εξεταστήριο 2');
       } finally {
         await db.close();

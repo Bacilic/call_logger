@@ -93,14 +93,16 @@ void main() {
             phones: ['23453333'],
             executor: txn,
           );
-          await users.updateUser(
-            id,
-            {'notes': 'ενημέρωση εντός txn'},
-            executor: txn,
-          );
+          await users.updateUser(id, {
+            'notes': 'ενημέρωση εντός txn',
+          }, executor: txn);
         });
 
-        final rows = await db.query('users', where: 'last_name = ?', whereArgs: ['Txn']);
+        final rows = await db.query(
+          'users',
+          where: 'last_name = ?',
+          whereArgs: ['Txn'],
+        );
         expect(rows, hasLength(1));
         expect(rows.single['notes'], 'ενημέρωση εντός txn');
         expect(await db.query('user_phones'), hasLength(1));
@@ -123,7 +125,10 @@ void main() {
         expect(row.single['location'], 'Αίθουσα');
 
         await phones.removePhoneFromAllUsers(phone);
-        expect(await db.query('user_phones', where: 'user_id = ?', whereArgs: [id]), isEmpty);
+        expect(
+          await db.query('user_phones', where: 'user_id = ?', whereArgs: [id]),
+          isEmpty,
+        );
       },
     );
   });

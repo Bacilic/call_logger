@@ -1,7 +1,8 @@
 part of 'smart_entity_selector_provider.dart';
 
 /// Συσχετίσεις, quick-add orphan και γρήγορες εκκρεμότητες.
-mixin SmartEntitySelectorAssociationMixin on Notifier<SmartEntitySelectorState> {
+mixin SmartEntitySelectorAssociationMixin
+    on Notifier<SmartEntitySelectorState> {
   SmartEntitySelectorNotifier get _host => this as SmartEntitySelectorNotifier;
 
   /// Εμφανίζει τον υπάρχοντα διάλογο σύγκρουσης αν χρειάζεται· επιστρέφει το
@@ -84,7 +85,8 @@ mixin SmartEntitySelectorAssociationMixin on Notifier<SmartEntitySelectorState> 
     final phonesOrphan = PhoneRepository(dbOrphan);
     final equipmentOrphan = EquipmentRepository(dbOrphan);
     final deptExistedBefore =
-        deptText.isNotEmpty && await departmentsOrphan.departmentNameExists(deptText);
+        deptText.isNotEmpty &&
+        await departmentsOrphan.departmentNameExists(deptText);
     final phoneExistedBefore = (phone != null && phone.isNotEmpty)
         ? await phonesOrphan.phoneNumberExists(phone)
         : true;
@@ -164,7 +166,9 @@ mixin SmartEntitySelectorAssociationMixin on Notifier<SmartEntitySelectorState> 
       );
     }
 
-    departmentId ??= await departmentsOrphan.getOrCreateDepartmentIdByName(deptText);
+    departmentId ??= await departmentsOrphan.getOrCreateDepartmentIdByName(
+      deptText,
+    );
     if (departmentId == null) {
       return const OrphanQuickAddResult(
         requiresConfirmation: false,
@@ -176,7 +180,10 @@ mixin SmartEntitySelectorAssociationMixin on Notifier<SmartEntitySelectorState> 
       await phonesOrphan.updatePhoneDepartment(phone, departmentId);
     }
     if (equipmentNeedsShared) {
-      await equipmentOrphan.updateEquipmentDepartment(equipmentCode, departmentId);
+      await equipmentOrphan.updateEquipmentDepartment(
+        equipmentCode,
+        departmentId,
+      );
     }
 
     await refreshDirectoryCaches(
@@ -315,8 +322,7 @@ mixin SmartEntitySelectorAssociationMixin on Notifier<SmartEntitySelectorState> 
               editingUserId: null,
               userDisplayName: name,
               targetDepartmentName: departmentId != null
-                  ? (lookup?.departmentIdToName[departmentId] ??
-                        deptTextRaw)
+                  ? (lookup?.departmentIdToName[departmentId] ?? deptTextRaw)
                   : deptTextRaw,
             );
             if (prepared == null) {
@@ -471,8 +477,7 @@ mixin SmartEntitySelectorAssociationMixin on Notifier<SmartEntitySelectorState> 
         : state.equipmentText.trim();
     final hadPhoneWork = phone != null && phone.isNotEmpty;
     final hadEqWork = eqCode != null && eqCode.isNotEmpty;
-    final newPhoneRow =
-        hadPhoneWork && !await phones.phoneNumberExists(phone);
+    final newPhoneRow = hadPhoneWork && !await phones.phoneNumberExists(phone);
     final newEquipmentRow =
         hadEqWork && !await equipmentRepo.equipmentCodeExists(eqCode);
     final deptTrimAssoc = state.departmentText.trim();
@@ -481,21 +486,24 @@ mixin SmartEntitySelectorAssociationMixin on Notifier<SmartEntitySelectorState> 
         (state.selectedCaller?.departmentName ?? '').trim().isEmpty;
     // Όταν ο καλών δεν είχε κύριο τμήμα, η πρώτη ανάθεση τμήματος στο πορτοκαλί
     // βήμα δεν μπλοκάρεται από dialog «Όχι» (δεν υπάρχει παλιό τμήμα προς διατήρηση).
-    final effectiveUpdatePrimaryDepartment = updatePrimaryDepartment ||
+    final effectiveUpdatePrimaryDepartment =
+        updatePrimaryDepartment ||
         (state.hasPendingDepartmentChange &&
             callerHadNoPrimaryDept &&
             deptTrimAssoc.isNotEmpty);
     final willCreateDept =
         effectiveUpdatePrimaryDepartment && deptTrimAssoc.isNotEmpty;
     final newDepartmentRow =
-        willCreateDept && !await departments.departmentNameExists(deptTrimAssoc);
+        willCreateDept &&
+        !await departments.departmentNameExists(deptTrimAssoc);
     final newEntityEligible =
         newPhoneRow || newEquipmentRow || newDepartmentRow;
     try {
       String? phoneToLink = phone;
       if (phoneToLink != null && phoneToLink.isNotEmpty) {
         final caller = state.selectedCaller;
-        final targetDeptId = caller?.departmentId ??
+        final targetDeptId =
+            caller?.departmentId ??
             state.selectedDepartmentId ??
             (state.departmentText.trim().isNotEmpty && lookupForAssoc != null
                 ? lookupForAssoc.findDepartmentByName(state.departmentText)?.id
@@ -537,9 +545,8 @@ mixin SmartEntitySelectorAssociationMixin on Notifier<SmartEntitySelectorState> 
           state.departmentText.trim().isNotEmpty &&
           state.selectedCaller?.id != null) {
         // Αν το τμήμα δεν υπάρχει ακόμα στη βάση, το δημιουργούμε ώστε να πάρουμε id.
-        selectedDepartmentId ??= await departments.getOrCreateDepartmentIdByName(
-          state.departmentText.trim(),
-        );
+        selectedDepartmentId ??= await departments
+            .getOrCreateDepartmentIdByName(state.departmentText.trim());
       }
 
       if (effectiveUpdatePrimaryDepartment &&

@@ -85,8 +85,7 @@ void main() {
           whereArgs: [userId],
         );
         expect(links, hasLength(2));
-        final linkedPhoneIds =
-            links.map((r) => r['phone_id'] as int).toSet();
+        final linkedPhoneIds = links.map((r) => r['phone_id'] as int).toSet();
         expect(linkedPhoneIds, contains(existingPhoneId));
         expect(linkedPhoneIds, contains(phonesForNew.single['id'] as int));
       },

@@ -70,7 +70,8 @@ class PendingDeferredActionsNotifier
   }
 }
 
-final pendingDeferredActionsProvider = NotifierProvider<
-    PendingDeferredActionsNotifier, List<PendingDeferredAction>>(
-  PendingDeferredActionsNotifier.new,
-);
+final pendingDeferredActionsProvider =
+    NotifierProvider<
+      PendingDeferredActionsNotifier,
+      List<PendingDeferredAction>
+    >(PendingDeferredActionsNotifier.new);

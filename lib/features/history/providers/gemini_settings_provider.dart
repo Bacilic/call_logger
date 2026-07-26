@@ -20,7 +20,9 @@ class GeminiApiKeyNotifier extends Notifier<String> {
   Future<void> _hydrateFromDb() async {
     final db = await DatabaseHelper.instance.database;
     if (!ref.mounted) return;
-    final raw = await SettingsRepository(db).getSetting(kGeminiApiKeySettingKey);
+    final raw = await SettingsRepository(
+      db,
+    ).getSetting(kGeminiApiKeySettingKey);
     if (!ref.mounted) return;
     state = raw?.trim() ?? '';
   }
@@ -30,7 +32,9 @@ class GeminiApiKeyNotifier extends Notifier<String> {
     state = normalized;
     final db = await DatabaseHelper.instance.database;
     if (!ref.mounted) return;
-    await SettingsRepository(db).saveSetting(kGeminiApiKeySettingKey, normalized);
+    await SettingsRepository(
+      db,
+    ).saveSetting(kGeminiApiKeySettingKey, normalized);
   }
 }
 
@@ -55,8 +59,9 @@ class GeminiPromptTemplateNotifier extends Notifier<String> {
     final db = await DatabaseHelper.instance.database;
     if (!ref.mounted) return;
     final raw =
-        (await SettingsRepository(db).getSetting(kGeminiPromptTemplateSettingKey))
-            ?.trim() ??
+        (await SettingsRepository(
+          db,
+        ).getSetting(kGeminiPromptTemplateSettingKey))?.trim() ??
         '';
     if (!ref.mounted) return;
     state = raw.isEmpty ? kDefaultAiPromptTemplate : raw;
@@ -95,9 +100,9 @@ class GeminiPromptTemplateUserDefaultNotifier extends Notifier<String?> {
   Future<void> _hydrateFromDb() async {
     final db = await DatabaseHelper.instance.database;
     if (!ref.mounted) return;
-    final raw = (await SettingsRepository(db).getSetting(
-      kGeminiPromptTemplateUserDefaultSettingKey,
-    ))?.trim();
+    final raw = (await SettingsRepository(
+      db,
+    ).getSetting(kGeminiPromptTemplateUserDefaultSettingKey))?.trim();
     if (!ref.mounted) return;
     state = raw == null || raw.isEmpty ? null : raw;
   }
@@ -111,17 +116,17 @@ class GeminiPromptTemplateUserDefaultNotifier extends Notifier<String?> {
     state = normalized;
     final db = await DatabaseHelper.instance.database;
     if (!ref.mounted) return;
-    await SettingsRepository(db).saveSetting(
-      kGeminiPromptTemplateUserDefaultSettingKey,
-      normalized,
-    );
+    await SettingsRepository(
+      db,
+    ).saveSetting(kGeminiPromptTemplateUserDefaultSettingKey, normalized);
   }
 }
 
 final geminiPromptTemplateUserDefaultProvider =
-    NotifierProvider.autoDispose<GeminiPromptTemplateUserDefaultNotifier, String?>(
-      GeminiPromptTemplateUserDefaultNotifier.new,
-    );
+    NotifierProvider.autoDispose<
+      GeminiPromptTemplateUserDefaultNotifier,
+      String?
+    >(GeminiPromptTemplateUserDefaultNotifier.new);
 
 class GeminiEndpointNotifier extends Notifier<String> {
   bool _hydrated = false;
@@ -139,8 +144,9 @@ class GeminiEndpointNotifier extends Notifier<String> {
     final db = await DatabaseHelper.instance.database;
     if (!ref.mounted) return;
     final raw =
-        (await SettingsRepository(db).getSetting(kGeminiEndpointSettingKey))
-            ?.trim() ??
+        (await SettingsRepository(
+          db,
+        ).getSetting(kGeminiEndpointSettingKey))?.trim() ??
         '';
     if (!ref.mounted) return;
     state = GeminiTicketService.normalizeEndpointTemplate(
@@ -187,7 +193,8 @@ class GeminiPrimaryModelNotifier extends Notifier<String> {
     if (raw.isEmpty) {
       final legacyEndpoint =
           (await repo.getSetting(kGeminiEndpointSettingKey))?.trim() ?? '';
-      raw = GeminiTicketService.modelFromEndpoint(legacyEndpoint) ??
+      raw =
+          GeminiTicketService.modelFromEndpoint(legacyEndpoint) ??
           kDefaultGeminiPrimaryModel;
     }
     if (!ref.mounted) return;
@@ -196,15 +203,13 @@ class GeminiPrimaryModelNotifier extends Notifier<String> {
 
   Future<void> setPrimaryModel(String value) async {
     final normalized = value.trim();
-    final next =
-        normalized.isEmpty ? kDefaultGeminiPrimaryModel : normalized;
+    final next = normalized.isEmpty ? kDefaultGeminiPrimaryModel : normalized;
     state = next;
     final db = await DatabaseHelper.instance.database;
     if (!ref.mounted) return;
-    await SettingsRepository(db).saveSetting(
-      kGeminiPrimaryModelSettingKey,
-      next,
-    );
+    await SettingsRepository(
+      db,
+    ).saveSetting(kGeminiPrimaryModelSettingKey, next);
   }
 }
 
@@ -240,10 +245,9 @@ class GeminiFallbackEnabledNotifier extends Notifier<bool> {
     state = value;
     final db = await DatabaseHelper.instance.database;
     if (!ref.mounted) return;
-    await SettingsRepository(db).saveSetting(
-      kGeminiFallbackEnabledSettingKey,
-      value ? '1' : '0',
-    );
+    await SettingsRepository(
+      db,
+    ).saveSetting(kGeminiFallbackEnabledSettingKey, value ? '1' : '0');
   }
 }
 
@@ -269,8 +273,9 @@ class GeminiFallbackModelNotifier extends Notifier<String> {
     final db = await DatabaseHelper.instance.database;
     if (!ref.mounted) return;
     final raw =
-        (await SettingsRepository(db).getSetting(kGeminiFallbackModelSettingKey))
-            ?.trim() ??
+        (await SettingsRepository(
+          db,
+        ).getSetting(kGeminiFallbackModelSettingKey))?.trim() ??
         '';
     if (!ref.mounted) return;
     state = raw.isEmpty ? kDefaultGeminiFallbackModel : raw;
@@ -320,10 +325,9 @@ class GeminiAutoResubmitEnabledNotifier extends Notifier<bool> {
     state = value;
     final db = await DatabaseHelper.instance.database;
     if (!ref.mounted) return;
-    await SettingsRepository(db).saveSetting(
-      kGeminiAutoResubmitSettingKey,
-      value ? '1' : '0',
-    );
+    await SettingsRepository(
+      db,
+    ).saveSetting(kGeminiAutoResubmitSettingKey, value ? '1' : '0');
   }
 }
 
@@ -348,9 +352,9 @@ class GeminiModelsProbeCacheNotifier extends Notifier<GeminiModelsProbeCache?> {
   Future<void> _hydrateFromDb() async {
     final db = await DatabaseHelper.instance.database;
     if (!ref.mounted) return;
-    final raw = await SettingsRepository(db).getSetting(
-      kGeminiModelsProbeCacheSettingKey,
-    );
+    final raw = await SettingsRepository(
+      db,
+    ).getSetting(kGeminiModelsProbeCacheSettingKey);
     if (!ref.mounted) return;
     state = GeminiModelsProbeCache.decode(raw);
   }
@@ -363,15 +367,14 @@ class GeminiModelsProbeCacheNotifier extends Notifier<GeminiModelsProbeCache?> {
     state = cache;
     final db = await DatabaseHelper.instance.database;
     if (!ref.mounted) return;
-    await SettingsRepository(db).saveSetting(
-      kGeminiModelsProbeCacheSettingKey,
-      cache.encode(),
-    );
+    await SettingsRepository(
+      db,
+    ).saveSetting(kGeminiModelsProbeCacheSettingKey, cache.encode());
   }
 }
 
 final geminiModelsProbeCacheProvider =
-    NotifierProvider.autoDispose<GeminiModelsProbeCacheNotifier,
-        GeminiModelsProbeCache?>(
-  GeminiModelsProbeCacheNotifier.new,
-);
+    NotifierProvider.autoDispose<
+      GeminiModelsProbeCacheNotifier,
+      GeminiModelsProbeCache?
+    >(GeminiModelsProbeCacheNotifier.new);

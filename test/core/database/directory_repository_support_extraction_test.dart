@@ -22,9 +22,12 @@ void main() {
 
     setUpAll(() async {
       initSqfliteFfiForTests();
-      final dir =
-          await Directory.systemTemp.createTemp('support_extraction_test_');
-      await DatabaseHelper.bindTestDatabaseFile('${dir.path}/support_extract.db');
+      final dir = await Directory.systemTemp.createTemp(
+        'support_extraction_test_',
+      );
+      await DatabaseHelper.bindTestDatabaseFile(
+        '${dir.path}/support_extract.db',
+      );
       db = await DatabaseHelper.instance.database;
     });
 
@@ -65,49 +68,49 @@ void main() {
       });
     }
 
-    test('audit performing user: setSetting + ενέργεια audit → σωστό user_performing',
-        () async {
-      const performer = 'Χρήστης Δοκιμής Audit';
-      await settings.saveSetting(
-        DatabaseHelper.auditUserPerformingSettingsKey,
-        performer,
-      );
+    test(
+      'audit performing user: setSetting + ενέργεια audit → σωστό user_performing',
+      () async {
+        const performer = 'Χρήστης Δοκιμής Audit';
+        await settings.saveSetting(
+          DatabaseHelper.auditUserPerformingSettingsKey,
+          performer,
+        );
 
-      const phoneNumber = '2345999901';
-      final userId = await users.insertUser(
-        firstName: 'Audit',
-        lastName: 'Performer',
-        phones: [phoneNumber],
-        skipPhonePolicyValidation: true,
-      );
+        const phoneNumber = '2345999901';
+        final userId = await users.insertUser(
+          firstName: 'Audit',
+          lastName: 'Performer',
+          phones: [phoneNumber],
+          skipPhonePolicyValidation: true,
+        );
 
-      final rows = await db.query(
-        'audit_log',
-        where: 'user_performing = ?',
-        whereArgs: [performer],
-      );
-      expect(rows, isNotEmpty);
-      expect(
-        rows.any((r) => r['entity_type'] == AuditEntityTypes.user),
-        isTrue,
-        reason: 'αναμενόταν audit εγγραφής χρήστη με σωστό user_performing',
-      );
+        final rows = await db.query(
+          'audit_log',
+          where: 'user_performing = ?',
+          whereArgs: [performer],
+        );
+        expect(rows, isNotEmpty);
+        expect(
+          rows.any((r) => r['entity_type'] == AuditEntityTypes.user),
+          isTrue,
+          reason: 'αναμενόταν audit εγγραφής χρήστη με σωστό user_performing',
+        );
 
-      await db.delete('audit_log');
-      await users.updateUser(
-        userId,
-        {'notes': 'δοκιμή'},
-        skipPhonePolicyValidation: true,
-      );
+        await db.delete('audit_log');
+        await users.updateUser(userId, {
+          'notes': 'δοκιμή',
+        }, skipPhonePolicyValidation: true);
 
-      final updateRows = await db.query(
-        'audit_log',
-        where: 'user_performing = ? AND action = ?',
-        whereArgs: [performer, 'ΤΡΟΠΟΠΟΙΗΣΗ ΧΡΗΣΤΗ'],
-      );
-      expect(updateRows, hasLength(1));
-      expect(updateRows.single['entity_id'], userId);
-    });
+        final updateRows = await db.query(
+          'audit_log',
+          where: 'user_performing = ? AND action = ?',
+          whereArgs: [performer, 'ΤΡΟΠΟΠΟΙΗΣΗ ΧΡΗΣΤΗ'],
+        );
+        expect(updateRows, hasLength(1));
+        expect(updateRows.single['entity_id'], userId);
+      },
+    );
 
     test(
       'replaceUserPhones: υπάρχων + νέος αριθμός → χωρίς διπλότυπο phones',

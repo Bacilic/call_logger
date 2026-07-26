@@ -1,4 +1,4 @@
-﻿part of 'settings_service.dart';
+part of 'settings_service.dart';
 
 /// Κατάλογοι, λεξικό, audit retention και timeout ανοίγματος βάσης.
 mixin SettingsServiceCatalogsMixin {
@@ -11,7 +11,8 @@ mixin SettingsServiceCatalogsMixin {
   static const String _keyEquipmentTypes = 'equipment_types';
   static const String _keyLexiconCategories = 'lexicon_categories';
   static const String _keyAuditRetentionConfig = 'audit_retention_config_v1';
-  static const String _keyCrashLogRetentionCount = 'crash_log_retention_count_v1';
+  static const String _keyCrashLogRetentionCount =
+      'crash_log_retention_count_v1';
   static const String _keyShutdownTraceEnabled = 'shutdown_trace_enabled_v1';
   static const String _keyShutdownTraceRetentionCount =
       'shutdown_trace_retention_count_v1';
@@ -45,7 +46,9 @@ mixin SettingsServiceCatalogsMixin {
   /// Timeout ανοίγματος βάσης σε δευτερόλεπτα. Προεπιλογή: [AppConfig.databaseOpenTimeoutSeconds].
   Future<int> getDatabaseOpenTimeoutSeconds() async {
     final prefs = await SharedPreferences.getInstance();
-    final value = prefs.getInt(SettingsService._prefKey(_keyDatabaseOpenTimeoutSeconds));
+    final value = prefs.getInt(
+      SettingsService._prefKey(_keyDatabaseOpenTimeoutSeconds),
+    );
     if (value == null || value <= 0) {
       return AppConfig.databaseOpenTimeoutSeconds;
     }
@@ -57,13 +60,18 @@ mixin SettingsServiceCatalogsMixin {
     final normalized = value <= 0
         ? AppConfig.databaseOpenTimeoutSeconds
         : value;
-    await prefs.setInt(SettingsService._prefKey(_keyDatabaseOpenTimeoutSeconds), normalized);
+    await prefs.setInt(
+      SettingsService._prefKey(_keyDatabaseOpenTimeoutSeconds),
+      normalized,
+    );
   }
 
   /// Μέγιστες προσπάθειες ανοίγματος βάσης. Προεπιλογή: [AppConfig.databaseOpenMaxAttempts].
   Future<int> getDatabaseOpenMaxAttempts() async {
     final prefs = await SharedPreferences.getInstance();
-    final value = prefs.getInt(SettingsService._prefKey(_keyDatabaseOpenMaxAttempts));
+    final value = prefs.getInt(
+      SettingsService._prefKey(_keyDatabaseOpenMaxAttempts),
+    );
     if (value == null || value <= 0) {
       return AppConfig.databaseOpenMaxAttempts;
     }
@@ -75,13 +83,18 @@ mixin SettingsServiceCatalogsMixin {
     final normalized = value <= 0
         ? AppConfig.databaseOpenMaxAttempts
         : value.clamp(1, 5);
-    await prefs.setInt(SettingsService._prefKey(_keyDatabaseOpenMaxAttempts), normalized);
+    await prefs.setInt(
+      SettingsService._prefKey(_keyDatabaseOpenMaxAttempts),
+      normalized,
+    );
   }
 
   /// Διαδρομή αρχείου TXT λεξικού-πυρήνα (ορθογραφία). Κενό/null = δεν έχει φορτωθεί πυρήνας.
   Future<String?> getDictionarySourcePath() async {
     final prefs = await SharedPreferences.getInstance();
-    final s = prefs.getString(SettingsService._prefKey(_keyDictionarySourcePath));
+    final s = prefs.getString(
+      SettingsService._prefKey(_keyDictionarySourcePath),
+    );
     if (s == null) return null;
     final t = s.trim();
     return t.isEmpty ? null : t;
@@ -92,14 +105,19 @@ mixin SettingsServiceCatalogsMixin {
     if (path == null || path.trim().isEmpty) {
       await prefs.remove(SettingsService._prefKey(_keyDictionarySourcePath));
     } else {
-      await prefs.setString(SettingsService._prefKey(_keyDictionarySourcePath), path.trim());
+      await prefs.setString(
+        SettingsService._prefKey(_keyDictionarySourcePath),
+        path.trim(),
+      );
     }
   }
 
   /// Διαδρομή εξόδου για Compile (`exportToTxt`).
   Future<String?> getDictionaryExportPath() async {
     final prefs = await SharedPreferences.getInstance();
-    final s = prefs.getString(SettingsService._prefKey(_keyDictionaryExportPath));
+    final s = prefs.getString(
+      SettingsService._prefKey(_keyDictionaryExportPath),
+    );
     if (s == null) return null;
     final t = s.trim();
     return t.isEmpty ? null : t;
@@ -110,14 +128,19 @@ mixin SettingsServiceCatalogsMixin {
     if (path == null || path.trim().isEmpty) {
       await prefs.remove(SettingsService._prefKey(_keyDictionaryExportPath));
     } else {
-      await prefs.setString(SettingsService._prefKey(_keyDictionaryExportPath), path.trim());
+      await prefs.setString(
+        SettingsService._prefKey(_keyDictionaryExportPath),
+        path.trim(),
+      );
     }
   }
 
   /// Πολιτική εκκαθάρισης audit log (ηλικία / max rows).
   Future<AuditRetentionConfig> getAuditRetentionConfig() async {
     final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(SettingsService._prefKey(_keyAuditRetentionConfig));
+    final raw = prefs.getString(
+      SettingsService._prefKey(_keyAuditRetentionConfig),
+    );
     return AuditRetentionConfig.fromJsonString(raw);
   }
 
@@ -132,8 +155,9 @@ mixin SettingsServiceCatalogsMixin {
   /// Πόσα πρόσφατα ημερήσια αρχεία errors_*.log διατηρούνται στον φάκελο logs.
   Future<int> getCrashLogRetentionCount() async {
     final prefs = await SharedPreferences.getInstance();
-    final value =
-        prefs.getInt(SettingsService._prefKey(_keyCrashLogRetentionCount));
+    final value = prefs.getInt(
+      SettingsService._prefKey(_keyCrashLogRetentionCount),
+    );
     if (value == null) return defaultCrashLogRetentionCount;
     return value.clamp(minCrashLogRetentionCount, maxCrashLogRetentionCount);
   }

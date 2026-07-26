@@ -3,11 +3,7 @@ import 'package:flutter/material.dart';
 import '../../services/department_deletion_inventory.dart';
 
 /// Επιλογή μετά την προεπισκόπηση διαγραφής τμήματος.
-enum DepartmentDeletionChoice {
-  cancel,
-  detailed,
-  quickAll,
-}
+enum DepartmentDeletionChoice { cancel, detailed, quickAll }
 
 /// Προεπισκόπηση «Τι θα συμβεί» πριν τη διαγραφή τμημάτων.
 Future<DepartmentDeletionChoice?> showDepartmentDeletionPreviewDialog({

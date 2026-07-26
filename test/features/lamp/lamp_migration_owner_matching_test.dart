@@ -14,7 +14,9 @@ void main() {
     setUpAll(() async {
       initSqfliteFfiForTests();
       final dir = await Directory.systemTemp.createTemp('lamp_owner_match_');
-      await DatabaseHelper.bindTestDatabaseFile('${dir.path}/lamp_owner_match.db');
+      await DatabaseHelper.bindTestDatabaseFile(
+        '${dir.path}/lamp_owner_match.db',
+      );
       await DatabaseHelper.instance.database;
       migrationService = LampMigrationService();
     });
@@ -76,9 +78,7 @@ void main() {
 
       final draft = await migrationService.buildDraft(
         target: LampTransferTarget.owner,
-        sourceRow: {
-          'owner_original_text': 'Παπαδόπουλος',
-        },
+        sourceRow: {'owner_original_text': 'Παπαδόπουλος'},
       );
 
       expect(draft.selectedCandidateId, userId);
@@ -101,39 +101,48 @@ void main() {
         candidateDepartment: 'Τμήμα HR',
       );
 
-      expect(sameDept, LampIssueResolutionService.substringContainmentConfidence);
-      expect(otherDept, isNot(LampIssueResolutionService.substringContainmentConfidence));
+      expect(
+        sameDept,
+        LampIssueResolutionService.substringContainmentConfidence,
+      );
+      expect(
+        otherDept,
+        isNot(LampIssueResolutionService.substringContainmentConfidence),
+      );
       expect(sameDept, greaterThan(otherDept));
     });
 
-    test('homonym ranking in migration candidates respects department', () async {
-      final deptIt = await insertDepartment('Τμήμα IT');
-      final deptHr = await insertDepartment('Τμήμα HR');
-      final db = await DatabaseHelper.instance.database;
-      await db.insert('users', {
-        'first_name': 'Γιώργος',
-        'last_name': 'Παπαδόπουλος',
-        'department_id': deptHr,
-        'is_deleted': 0,
-      });
-      final userIt = await db.insert('users', {
-        'first_name': 'Γιώργος',
-        'last_name': 'Παπαδόπουλος',
-        'department_id': deptIt,
-        'is_deleted': 0,
-      });
+    test(
+      'homonym ranking in migration candidates respects department',
+      () async {
+        final deptIt = await insertDepartment('Τμήμα IT');
+        final deptHr = await insertDepartment('Τμήμα HR');
+        final db = await DatabaseHelper.instance.database;
+        await db.insert('users', {
+          'first_name': 'Γιώργος',
+          'last_name': 'Παπαδόπουλος',
+          'department_id': deptHr,
+          'is_deleted': 0,
+        });
+        final userIt = await db.insert('users', {
+          'first_name': 'Γιώργος',
+          'last_name': 'Παπαδόπουλος',
+          'department_id': deptIt,
+          'is_deleted': 0,
+        });
 
-      final draft = await migrationService.buildDraft(
-        target: LampTransferTarget.owner,
-        sourceRow: {
-          'owner_original_text': 'Παπαδόπουλος',
-          'office_name': 'Τμήμα IT',
-        },
-      );
+        final draft = await migrationService.buildDraft(
+          target: LampTransferTarget.owner,
+          sourceRow: {
+            'owner_original_text': 'Παπαδόπουλος',
+            'office_name': 'Τμήμα IT',
+          },
+        );
 
-      expect(draft.candidates, isNotEmpty);
-      expect(draft.candidates.first.id, userIt);
-    });
+        expect(draft.candidates, isNotEmpty);
+        expect(draft.candidates.first.id, userIt);
+      },
+    );
 
     test('substring containment confidence is defined in one place', () {
       expect(LampIssueResolutionService.substringContainmentConfidence, 72);

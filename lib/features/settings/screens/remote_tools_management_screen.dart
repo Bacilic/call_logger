@@ -29,11 +29,7 @@ Widget _remoteToolListIcon(RemoteTool t, {double size = 22}) {
   return RemoteToolIcon(iconAssetKey: t.iconAssetKey, size: size);
 }
 
-Widget _roleTypeBadge(
-  BuildContext context,
-  String text, {
-  String? tooltip,
-}) {
+Widget _roleTypeBadge(BuildContext context, String text, {String? tooltip}) {
   final theme = Theme.of(context);
   final chip = Container(
     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
@@ -58,9 +54,7 @@ Widget _roleTypeBadge(
 Widget _roleTypeCell(BuildContext context, RemoteTool t) {
   return Row(
     mainAxisSize: MainAxisSize.min,
-    children: [
-      _roleTypeBadge(context, t.role.shortLabel),
-    ],
+    children: [_roleTypeBadge(context, t.role.shortLabel)],
   );
 }
 
@@ -68,8 +62,10 @@ Widget _roleTypeCell(BuildContext context, RemoteTool t) {
 String remoteToolArgumentsSummary(RemoteTool t) {
   final active = t.arguments.where((a) => a.isActive).toList();
   if (active.isEmpty) return '—';
-  final parts =
-      active.take(2).map((a) => RemoteToolArg.maskSecretValues(a.value)).toList();
+  final parts = active
+      .take(2)
+      .map((a) => RemoteToolArg.maskSecretValues(a.value))
+      .toList();
   var s = parts.join(', ');
   if (active.length > 2) s = '$s…';
   if (s.length > 80) s = '${s.substring(0, 77)}…';
@@ -175,9 +171,9 @@ class _RemoteToolsManagementScreenState
                   Text(
                     n == 1
                         ? 'Το παραπάνω εργαλείο είναι ενεργοποιημένο σε 1 εξοπλισμό. '
-                            'Να απενεργοποιηθεί;'
+                              'Να απενεργοποιηθεί;'
                         : 'Το παραπάνω εργαλείο είναι ενεργοποιημένο σε $n εξοπλισμούς. '
-                            'Να απενεργοποιηθεί;',
+                              'Να απενεργοποιηθεί;',
                     style: theme.textTheme.bodyMedium,
                   ),
                   const SizedBox(height: 12),
@@ -225,8 +221,7 @@ class _RemoteToolsManagementScreenState
   }
 
   Future<void> _openToolEditor(RemoteTool t) async {
-    final saved =
-        await showRemoteToolFormDialog(context, ref, tool: t);
+    final saved = await showRemoteToolFormDialog(context, ref, tool: t);
     if (!mounted) return;
     if (saved == true) {
       _refreshEquipmentUsage();
@@ -237,9 +232,7 @@ class _RemoteToolsManagementScreenState
 
   /// Μοναδικό όνομα «… (αντίγραφο)» ή «… (αντίγραφο 2)» κ.λπ.
   String _uniqueCloneName(String baseName, List<RemoteTool> nonDeleted) {
-    final taken = nonDeleted
-        .map((e) => e.name.trim().toLowerCase())
-        .toSet();
+    final taken = nonDeleted.map((e) => e.name.trim().toLowerCase()).toSet();
     final trimmed = baseName.trim();
     var candidate = '$trimmed$_cloneNameSuffix';
     if (!taken.contains(candidate.toLowerCase())) return candidate;
@@ -257,16 +250,9 @@ class _RemoteToolsManagementScreenState
       final existing = await repo.getAllNonDeletedTools();
       final name = _uniqueCloneName(t.name, existing);
       final n = existing.length;
-      final clone = t.copyWith(
-        id: 0,
-        name: name,
-        clearDeletedAt: true,
-      );
+      final clone = t.copyWith(id: 0, name: name, clearDeletedAt: true);
       final newId = await repo.insertTool(clone);
-      await repo.reorderToolToPosition(
-        toolId: newId,
-        positionOneBased: n + 1,
-      );
+      await repo.reorderToolToPosition(toolId: newId, positionOneBased: n + 1);
       _invalidateRemoteCatalog();
       _refreshEquipmentUsage();
       if (mounted) {
@@ -304,10 +290,10 @@ class _RemoteToolsManagementScreenState
               n == 0
                   ? 'Να απομακρυνθεί από τη λίστα το εργαλείο «${t.name}»;'
                   : n == 1
-                      ? 'Το εργαλείο «${t.name}» είναι ορισμένο ως προεπιλογή σε 1 εξοπλισμό. '
-                          'Να απομακρυνθεί από τη λίστα;'
-                      : 'Το εργαλείο «${t.name}» είναι ορισμένο ως προεπιλογή σε $n εξοπλισμούς. '
-                          'Να απομακρυνθεί από τη λίστα;',
+                  ? 'Το εργαλείο «${t.name}» είναι ορισμένο ως προεπιλογή σε 1 εξοπλισμό. '
+                        'Να απομακρυνθεί από τη λίστα;'
+                  : 'Το εργαλείο «${t.name}» είναι ορισμένο ως προεπιλογή σε $n εξοπλισμούς. '
+                        'Να απομακρυνθεί από τη λίστα;',
               style: theme.textTheme.bodyMedium,
             ),
             const SizedBox(height: 12),
@@ -343,9 +329,7 @@ class _RemoteToolsManagementScreenState
       _refreshEquipmentUsage();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Απομακρύνθηκε το εργαλείο «${t.name}».'),
-          ),
+          SnackBar(content: Text('Απομακρύνθηκε το εργαλείο «${t.name}».')),
         );
       }
     } catch (e) {
@@ -367,7 +351,9 @@ class _RemoteToolsManagementScreenState
   ) async {
     try {
       final position = reorderedPositionOneBased(oldIndex, newIndex);
-      await ref.read(remoteToolsRepositoryProvider).reorderToolToPosition(
+      await ref
+          .read(remoteToolsRepositoryProvider)
+          .reorderToolToPosition(
             toolId: tools[oldIndex].id,
             positionOneBased: position,
           );
@@ -427,10 +413,7 @@ class _RemoteToolsManagementScreenState
                           const SizedBox(width: 8),
                         ],
                         Expanded(
-                          child: Text(
-                            t.name,
-                            overflow: TextOverflow.ellipsis,
-                          ),
+                          child: Text(t.name, overflow: TextOverflow.ellipsis),
                         ),
                       ],
                     ),
@@ -515,9 +498,7 @@ class _RemoteToolsManagementScreenState
     return Scaffold(
       appBar: widget.embedded
           ? null
-          : AppBar(
-              title: const Text('Απομακρυσμένα εργαλεία'),
-            ),
+          : AppBar(title: const Text('Απομακρυσμένα εργαλεία')),
       body: async.when(
         loading: () => ListView(
           padding: const EdgeInsets.all(16),
@@ -542,90 +523,88 @@ class _RemoteToolsManagementScreenState
           ],
         ),
         data: (allTools) {
-          final tools =
-              allTools.where((t) => t.deletedAt == null).toList();
+          final tools = allTools.where((t) => t.deletedAt == null).toList();
           return FutureBuilder<Map<int, int>>(
             future: _equipmentUsageFuture,
             builder: (context, snapshot) {
               final usage = snapshot.data;
               return Scrollbar(
-          controller: _pageScrollController,
-          thumbVisibility: true,
-          child: SingleChildScrollView(
-            controller: _pageScrollController,
-            padding: const EdgeInsets.only(bottom: 24),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Padding(
-                  padding: EdgeInsets.fromLTRB(16, 16, 16, 0),
-                  child: _RemoteConnectionSettingsPanel(
-                    onBackToDashboard: widget.onBackToDashboard,
-                    onAfterRemoteToolSaved: _refreshEquipmentUsage,
-                  ),
-                ),
-                const Divider(height: 24),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: Text(
-                    'Εργαλεία',
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w600,
-                        ),
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: Text(
-                    'Σύρετε μια γραμμή για να αλλάξετε τη σειρά εμφάνισης.',
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: Theme.of(context).colorScheme.onSurfaceVariant,
-                        ),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                ReorderableListView.builder(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  buildDefaultDragHandles: false,
-                  itemCount: tools.length,
-                  onReorderItem: (oldIndex, newIndex) {
-                    _reorderToolAt(tools, oldIndex, newIndex);
-                  },
-                  itemBuilder: (context, i) => KeyedSubtree(
-                    key: ValueKey(tools[i].id),
-                    child: _buildReorderableToolRow(
-                      context,
-                      tools: tools,
-                      usage: usage,
-                      index: i,
-                    ),
-                  ),
-                ),
-                const Padding(
-                  padding: EdgeInsets.only(bottom: 16),
-                ),
-                const Divider(height: 1),
-                Padding(
-                  padding: const EdgeInsets.all(16),
+                controller: _pageScrollController,
+                thumbVisibility: true,
+                child: SingleChildScrollView(
+                  controller: _pageScrollController,
+                  padding: const EdgeInsets.only(bottom: 24),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      Text(
-                        'Οθόνη κλήσεων',
-                        style:
-                            Theme.of(context).textTheme.titleMedium,
+                      Padding(
+                        padding: EdgeInsets.fromLTRB(16, 16, 16, 0),
+                        child: _RemoteConnectionSettingsPanel(
+                          onBackToDashboard: widget.onBackToDashboard,
+                          onAfterRemoteToolSaved: _refreshEquipmentUsage,
+                        ),
+                      ),
+                      const Divider(height: 24),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: Text(
+                          'Εργαλεία',
+                          style: Theme.of(context).textTheme.titleMedium
+                              ?.copyWith(fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: Text(
+                          'Σύρετε μια γραμμή για να αλλάξετε τη σειρά εμφάνισης.',
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.onSurfaceVariant,
+                              ),
+                        ),
                       ),
                       const SizedBox(height: 8),
-                      _CallsRemoteUiPanel(tools: tools),
+                      ReorderableListView.builder(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        buildDefaultDragHandles: false,
+                        itemCount: tools.length,
+                        onReorderItem: (oldIndex, newIndex) {
+                          _reorderToolAt(tools, oldIndex, newIndex);
+                        },
+                        itemBuilder: (context, i) => KeyedSubtree(
+                          key: ValueKey(tools[i].id),
+                          child: _buildReorderableToolRow(
+                            context,
+                            tools: tools,
+                            usage: usage,
+                            index: i,
+                          ),
+                        ),
+                      ),
+                      const Padding(padding: EdgeInsets.only(bottom: 16)),
+                      const Divider(height: 1),
+                      Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Text(
+                              'Οθόνη κλήσεων',
+                              style: Theme.of(context).textTheme.titleMedium,
+                            ),
+                            const SizedBox(height: 8),
+                            _CallsRemoteUiPanel(tools: tools),
+                          ],
+                        ),
+                      ),
                     ],
                   ),
                 ),
-              ],
-            ),
-          ),
-        );
+              );
             },
           );
         },
@@ -641,6 +620,7 @@ class _RemoteConnectionSettingsPanel extends ConsumerStatefulWidget {
   });
 
   final VoidCallback? onBackToDashboard;
+
   /// Μετά από αποθήκευση από φόρμα εργαλείου (προσθήκη) — ανανέωση μετρήσεων εξοπλισμού.
   final VoidCallback? onAfterRemoteToolSaved;
 
@@ -677,8 +657,7 @@ class _RemoteConnectionSettingsPanelState
               ),
             ),
             IconButton(
-              tooltip:
-                  'Προσθήκη νέου εργαλείου απομακρυσμένης σύνδεσης',
+              tooltip: 'Προσθήκη νέου εργαλείου απομακρυσμένης σύνδεσης',
               onPressed: () async {
                 final saved = await showRemoteToolFormDialog(
                   context,
@@ -719,7 +698,8 @@ class _CallsRemoteUiPanel extends ConsumerStatefulWidget {
   final List<RemoteTool> tools;
 
   @override
-  ConsumerState<_CallsRemoteUiPanel> createState() => _CallsRemoteUiPanelState();
+  ConsumerState<_CallsRemoteUiPanel> createState() =>
+      _CallsRemoteUiPanelState();
 }
 
 class _CallsRemoteUiPanelState extends ConsumerState<_CallsRemoteUiPanel> {
@@ -792,8 +772,8 @@ class _CallsRemoteUiPanelState extends ConsumerState<_CallsRemoteUiPanel> {
       return Text(
         'Δεν υπάρχουν ενεργά εργαλεία — ενεργοποιήστε εργαλεία στον πίνακα παραπάνω.',
         style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-            ),
+          color: Theme.of(context).colorScheme.onSurfaceVariant,
+        ),
       );
     }
     return Column(

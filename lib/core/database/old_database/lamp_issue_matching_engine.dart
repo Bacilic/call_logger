@@ -38,11 +38,9 @@ class LampIssueMatchingEngine {
   }
 
   String _sortedTokensNormalized(String normalized) {
-    final tokens = normalized
-        .split(' ')
-        .where((token) => token.isNotEmpty)
-        .toList()
-      ..sort();
+    final tokens =
+        normalized.split(' ').where((token) => token.isNotEmpty).toList()
+          ..sort();
     return tokens.join(' ');
   }
 

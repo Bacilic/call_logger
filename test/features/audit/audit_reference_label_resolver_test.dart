@@ -18,8 +18,7 @@ void main() {
     test('συλλέγει department_id από bulk JSON', () {
       final row = AuditLogModel(
         id: 2,
-        newValuesJson:
-            '{"fields":{"department_id":5},"affected_ids":[1,2,3]}',
+        newValuesJson: '{"fields":{"department_id":5},"affected_ids":[1,2,3]}',
       );
       final ids = <int>{};
       AuditReferenceLabelResolver.collectDepartmentIds(row, ids);

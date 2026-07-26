@@ -61,7 +61,12 @@ void main() {
       () async {
         final container = await _containerWithUsers([
           _u(id: 1, first: 'Πρωινή', last: 'Βάρδια', departmentId: _kDeptA),
-          _u(id: 2, first: 'Απογευματινή', last: 'Βάρδια', departmentId: _kDeptA),
+          _u(
+            id: 2,
+            first: 'Απογευματινή',
+            last: 'Βάρδια',
+            departmentId: _kDeptA,
+          ),
         ]);
         addTearDown(container.dispose);
         final n = container.read(callSmartEntityProvider.notifier);
@@ -76,48 +81,42 @@ void main() {
       },
     );
 
-    test(
-      'χρήστες διαφορετικών τμημάτων → το τμήμα δεν γεμίζει',
-      () async {
-        final container = await _containerWithUsers([
-          _u(id: 1, first: 'Α', last: 'Φαρμ', departmentId: _kDeptA),
-          _u(id: 2, first: 'Β', last: 'Χειρ', departmentId: _kDeptB),
-        ]);
-        addTearDown(container.dispose);
-        final n = container.read(callSmartEntityProvider.notifier);
-        n.updatePhone(_kPhone);
-        n.performPhoneLookup(_kPhone);
-        final s = container.read(callSmartEntityProvider);
+    test('χρήστες διαφορετικών τμημάτων → το τμήμα δεν γεμίζει', () async {
+      final container = await _containerWithUsers([
+        _u(id: 1, first: 'Α', last: 'Φαρμ', departmentId: _kDeptA),
+        _u(id: 2, first: 'Β', last: 'Χειρ', departmentId: _kDeptB),
+      ]);
+      addTearDown(container.dispose);
+      final n = container.read(callSmartEntityProvider.notifier);
+      n.updatePhone(_kPhone);
+      n.performPhoneLookup(_kPhone);
+      final s = container.read(callSmartEntityProvider);
 
-        expect(s.isPhoneAmbiguous, isTrue);
-        expect(s.callerCandidates, hasLength(2));
-        expect(s.selectedDepartmentId, isNull);
-        expect(s.departmentText.trim(), isEmpty);
-      },
-    );
+      expect(s.isPhoneAmbiguous, isTrue);
+      expect(s.callerCandidates, hasLength(2));
+      expect(s.selectedDepartmentId, isNull);
+      expect(s.departmentText.trim(), isEmpty);
+    });
 
-    test(
-      'γεμάτο πεδίο τμήματος → δεν επικαλύπτεται ποτέ',
-      () async {
-        final container = await _containerWithUsers([
-          _u(id: 1, first: 'Πρωινή', last: 'Βάρδια', departmentId: _kDeptA),
-          _u(id: 2, first: 'Απογευματινή', last: 'Βάρδια', departmentId: _kDeptA),
-        ]);
-        addTearDown(container.dispose);
-        final n = container.read(callSmartEntityProvider.notifier);
-        n.updateDepartmentText(_kDeptBName);
-        expect(
-          container.read(callSmartEntityProvider).selectedDepartmentId,
-          _kDeptB,
-        );
-        n.updatePhone(_kPhone);
-        n.performPhoneLookup(_kPhone);
-        final s = container.read(callSmartEntityProvider);
+    test('γεμάτο πεδίο τμήματος → δεν επικαλύπτεται ποτέ', () async {
+      final container = await _containerWithUsers([
+        _u(id: 1, first: 'Πρωινή', last: 'Βάρδια', departmentId: _kDeptA),
+        _u(id: 2, first: 'Απογευματινή', last: 'Βάρδια', departmentId: _kDeptA),
+      ]);
+      addTearDown(container.dispose);
+      final n = container.read(callSmartEntityProvider.notifier);
+      n.updateDepartmentText(_kDeptBName);
+      expect(
+        container.read(callSmartEntityProvider).selectedDepartmentId,
+        _kDeptB,
+      );
+      n.updatePhone(_kPhone);
+      n.performPhoneLookup(_kPhone);
+      final s = container.read(callSmartEntityProvider);
 
-        expect(s.selectedDepartmentId, _kDeptB);
-        expect(s.departmentText, _kDeptBName);
-        expect(s.callerCandidates, hasLength(2));
-      },
-    );
+      expect(s.selectedDepartmentId, _kDeptB);
+      expect(s.departmentText, _kDeptBName);
+      expect(s.callerCandidates, hasLength(2));
+    });
   });
 }

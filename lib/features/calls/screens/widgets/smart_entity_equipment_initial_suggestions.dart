@@ -90,7 +90,10 @@ List<SmartEntityEquipmentSuggestion> buildInitialEquipmentSuggestions(
   LookupService? lookupService,
 ) {
   final phoneEquipments = phoneEquipmentsForSuggestions(header, lookupService);
-  final callerEquipments = callerEquipmentsForSuggestions(header, lookupService);
+  final callerEquipments = callerEquipmentsForSuggestions(
+    header,
+    lookupService,
+  );
   final phoneKeys = phoneEquipments.map(equipmentDedupeKey).toSet();
   final callerKeys = callerEquipments.map(equipmentDedupeKey).toSet();
 

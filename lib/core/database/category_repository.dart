@@ -11,7 +11,7 @@ typedef RebuildCallSearchIndexForCategoryInTxn =
 /// Persistence κατηγοριών προβλημάτων κλήσεων.
 class CategoryRepository {
   CategoryRepository(this.db, {DirectorySupport? support})
-      : _support = support ?? DirectorySupport(db);
+    : _support = support ?? DirectorySupport(db);
 
   final Database db;
   final DirectorySupport _support;

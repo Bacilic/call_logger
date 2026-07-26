@@ -12,12 +12,16 @@ class PortableLampStorage {
   static const String backupZipLampDbFolderName = 'lamp_db';
 
   /// Αντιγραφή επιλεγμένου `.db` στο portable `Data Base/`· σε αποτυχία επιστρέφει την αρχική διαδρομή.
-  static Future<String> tryCopyLampDbToPortableDataBase(String pickedPath) async {
+  static Future<String> tryCopyLampDbToPortableDataBase(
+    String pickedPath,
+  ) async {
     final src = p.normalize(p.absolute(pickedPath.trim()));
     if (!await File(src).exists()) return pickedPath;
 
     try {
-      await AppConfig.ensureDirectoryExists(AppConfig.portableDataBaseDirectory);
+      await AppConfig.ensureDirectoryExists(
+        AppConfig.portableDataBaseDirectory,
+      );
       final dest = p.normalize(
         p.join(AppConfig.portableDataBaseDirectory, p.basename(src)),
       );
@@ -34,10 +38,7 @@ class PortableLampStorage {
     final readPath = await LampSettingsStore().getReadPath();
     if (readPath == null || readPath.trim().isEmpty) return false;
     final expected = p.normalize(
-      p.join(
-        AppConfig.portableDataBaseDirectory,
-        p.basename(readPath.trim()),
-      ),
+      p.join(AppConfig.portableDataBaseDirectory, p.basename(readPath.trim())),
     );
     return File(expected).exists();
   }
@@ -47,10 +48,7 @@ class PortableLampStorage {
     final readPath = await LampSettingsStore().getReadPath();
     if (readPath == null || readPath.trim().isEmpty) return null;
     final expected = p.normalize(
-      p.join(
-        AppConfig.portableDataBaseDirectory,
-        p.basename(readPath.trim()),
-      ),
+      p.join(AppConfig.portableDataBaseDirectory, p.basename(readPath.trim())),
     );
     if (await File(expected).exists()) return expected;
     return null;

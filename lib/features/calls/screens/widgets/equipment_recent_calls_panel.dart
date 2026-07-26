@@ -1,4 +1,4 @@
-﻿import 'dart:math' as math;
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -53,8 +53,7 @@ String _equipmentRecentCardClipboardText(
   String equipmentCode,
   List<CallModel> calls,
 ) {
-  final buf = StringBuffer()
-    ..writeln('Ιστορικό Εξοπλισμού: $equipmentCode');
+  final buf = StringBuffer()..writeln('Ιστορικό Εξοπλισμού: $equipmentCode');
   for (final c in calls) {
     buf.writeln(
       '${_equipmentRecentDateTimeLabel(c)}\t${_equipmentRecentCategoryOrNotesLine(c)}',
@@ -134,7 +133,9 @@ Future<void> _openEquipmentCatalogForm(
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Δεν βρέθηκε εξοπλισμός με κωδικό $code στον κατάλογο.'),
+          content: Text(
+            'Δεν βρέθηκε εξοπλισμός με κωδικό $code στον κατάλογο.',
+          ),
         ),
       );
     }
@@ -183,137 +184,149 @@ class EquipmentRecentCallsPanel extends ConsumerWidget {
               child: SizedBox(
                 width: cardWidth,
                 child: Card(
-          margin: EdgeInsets.zero,
-          child: Padding(
-            padding: const EdgeInsets.all(12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      child: Text(
-                        'Ιστορικό Εξοπλισμού',
-                        style: theme.textTheme.titleSmall,
-                      ),
-                    ),
-                    PopupMenuButton<_EquipmentRecentTitleMenu>(
-                      tooltip: 'Ενέργειες',
-                      icon: const Icon(Icons.more_vert, size: 22),
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(
-                        minWidth: 40,
-                        minHeight: 36,
-                      ),
-                      onSelected: (action) {
-                        switch (action) {
-                          case _EquipmentRecentTitleMenu.copyAll:
-                            final text = _equipmentRecentCardClipboardText(
-                              code,
-                              calls,
-                            );
-                            Clipboard.setData(ClipboardData(text: text));
-                            if (context.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text(
-                                    'Το κείμενο αντιγράφηκε στο πρόχειρο.',
-                                  ),
-                                ),
-                              );
-                            }
-                          case _EquipmentRecentTitleMenu.openHistory:
-                            ref
-                                .read(historyFilterProvider.notifier)
-                                .update(
-                                  (s) => s.copyWith(keyword: code),
-                                );
-                            ref
-                                .read(mainNavRequestProvider.notifier)
-                                .request(
-                                  const MainNavRequest(
-                                    destination: MainNavDestination.history,
-                                  ),
-                                );
-                          case _EquipmentRecentTitleMenu.openEquipmentEdit:
-                            _openEquipmentCatalogForm(context, ref, code);
-                        }
-                      },
-                      itemBuilder: (ctx) => [
-                        const PopupMenuItem(
-                          value: _EquipmentRecentTitleMenu.copyAll,
-                          child: ListTile(
-                            dense: true,
-                            contentPadding: EdgeInsets.zero,
-                            leading: Icon(Icons.copy),
-                            title: Text('Αντιγραφή κειμένου'),
-                            subtitle: Text(
-                              'Αντιγράφει όλες τις γραμμές για επικόλληση',
-                              style: TextStyle(fontSize: 12),
-                            ),
-                          ),
-                        ),
-                        const PopupMenuItem(
-                          value: _EquipmentRecentTitleMenu.openHistory,
-                          child: ListTile(
-                            dense: true,
-                            contentPadding: EdgeInsets.zero,
-                            leading: Icon(Icons.history),
-                            title: Text('Μετάβαση στο ιστορικό'),
-                            subtitle: Text(
-                              'Φίλτρο αναζήτησης με τον κωδικό εξοπλισμού',
-                              style: TextStyle(fontSize: 12),
-                            ),
-                          ),
-                        ),
-                        const PopupMenuItem(
-                          value: _EquipmentRecentTitleMenu.openEquipmentEdit,
-                          child: ListTile(
-                            dense: true,
-                            contentPadding: EdgeInsets.zero,
-                            leading: Icon(Icons.edit_outlined),
-                            title: Text('Άνοιγμα καρτέλας εξοπλισμού'),
-                            subtitle: Text(
-                              'Άμεσο άνοιγμα φόρμας επεξεργασίας εξοπλισμού',
-                              style: TextStyle(fontSize: 12),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                for (final c in calls)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: Row(
+                  margin: EdgeInsets.zero,
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        SizedBox(
-                          width: 132,
-                          child: Text(
-                            _equipmentRecentDateTimeLabel(c),
-                            style: theme.textTheme.bodySmall,
-                            overflow: TextOverflow.ellipsis,
-                          ),
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(
+                              child: Text(
+                                'Ιστορικό Εξοπλισμού',
+                                style: theme.textTheme.titleSmall,
+                              ),
+                            ),
+                            PopupMenuButton<_EquipmentRecentTitleMenu>(
+                              tooltip: 'Ενέργειες',
+                              icon: const Icon(Icons.more_vert, size: 22),
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(
+                                minWidth: 40,
+                                minHeight: 36,
+                              ),
+                              onSelected: (action) {
+                                switch (action) {
+                                  case _EquipmentRecentTitleMenu.copyAll:
+                                    final text =
+                                        _equipmentRecentCardClipboardText(
+                                          code,
+                                          calls,
+                                        );
+                                    Clipboard.setData(
+                                      ClipboardData(text: text),
+                                    );
+                                    if (context.mounted) {
+                                      ScaffoldMessenger.of(
+                                        context,
+                                      ).showSnackBar(
+                                        const SnackBar(
+                                          content: Text(
+                                            'Το κείμενο αντιγράφηκε στο πρόχειρο.',
+                                          ),
+                                        ),
+                                      );
+                                    }
+                                  case _EquipmentRecentTitleMenu.openHistory:
+                                    ref
+                                        .read(historyFilterProvider.notifier)
+                                        .update(
+                                          (s) => s.copyWith(keyword: code),
+                                        );
+                                    ref
+                                        .read(mainNavRequestProvider.notifier)
+                                        .request(
+                                          const MainNavRequest(
+                                            destination:
+                                                MainNavDestination.history,
+                                          ),
+                                        );
+                                  case _EquipmentRecentTitleMenu
+                                      .openEquipmentEdit:
+                                    _openEquipmentCatalogForm(
+                                      context,
+                                      ref,
+                                      code,
+                                    );
+                                }
+                              },
+                              itemBuilder: (ctx) => [
+                                const PopupMenuItem(
+                                  value: _EquipmentRecentTitleMenu.copyAll,
+                                  child: ListTile(
+                                    dense: true,
+                                    contentPadding: EdgeInsets.zero,
+                                    leading: Icon(Icons.copy),
+                                    title: Text('Αντιγραφή κειμένου'),
+                                    subtitle: Text(
+                                      'Αντιγράφει όλες τις γραμμές για επικόλληση',
+                                      style: TextStyle(fontSize: 12),
+                                    ),
+                                  ),
+                                ),
+                                const PopupMenuItem(
+                                  value: _EquipmentRecentTitleMenu.openHistory,
+                                  child: ListTile(
+                                    dense: true,
+                                    contentPadding: EdgeInsets.zero,
+                                    leading: Icon(Icons.history),
+                                    title: Text('Μετάβαση στο ιστορικό'),
+                                    subtitle: Text(
+                                      'Φίλτρο αναζήτησης με τον κωδικό εξοπλισμού',
+                                      style: TextStyle(fontSize: 12),
+                                    ),
+                                  ),
+                                ),
+                                const PopupMenuItem(
+                                  value: _EquipmentRecentTitleMenu
+                                      .openEquipmentEdit,
+                                  child: ListTile(
+                                    dense: true,
+                                    contentPadding: EdgeInsets.zero,
+                                    leading: Icon(Icons.edit_outlined),
+                                    title: Text('Άνοιγμα καρτέλας εξοπλισμού'),
+                                    subtitle: Text(
+                                      'Άμεσο άνοιγμα φόρμας επεξεργασίας εξοπλισμού',
+                                      style: TextStyle(fontSize: 12),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
                         ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            _equipmentRecentCategoryOrNotesLine(c),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: theme.textTheme.bodyMedium,
+                        const SizedBox(height: 10),
+                        for (final c in calls)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 8),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                SizedBox(
+                                  width: 132,
+                                  child: Text(
+                                    _equipmentRecentDateTimeLabel(c),
+                                    style: theme.textTheme.bodySmall,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    _equipmentRecentCategoryOrNotesLine(c),
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: theme.textTheme.bodyMedium,
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
-                        ),
                       ],
                     ),
                   ),
-              ],
-            ),
-          ),
                 ),
               ),
             );

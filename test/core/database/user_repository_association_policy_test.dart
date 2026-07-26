@@ -70,7 +70,10 @@ void main() {
     return id;
   }
 
-  Future<void> syncLookup(List<UserModel> userModels, List<DepartmentModel> depts) async {
+  Future<void> syncLookup(
+    List<UserModel> userModels,
+    List<DepartmentModel> depts,
+  ) async {
     LookupService.instance.resetForReload();
     LookupService.instance.injectInMemoryCatalogForTests(
       users: userModels,

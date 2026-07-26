@@ -20,10 +20,10 @@ LampSerialExistsChecker lampSerialExistsCheckerFor(
   String databasePath,
 ) {
   return (serial, exceptCode) => repository.serialExistsInLamp(
-        databasePath,
-        serial,
-        exceptCode: exceptCode,
-      );
+    databasePath,
+    serial,
+    exceptCode: exceptCode,
+  );
 }
 
 /// Γραμμή δείγματος προεπισκόπησης πρότασης επίλυσης (ορολογία οδηγών).
@@ -376,7 +376,8 @@ class LampIssueResolutionController {
         metadata: <String, Object?>{
           ...proposal.metadata,
           'operation': operation,
-          if (operation != LampIssueResolutionOperations.deferIssue) ...<String, Object?>{
+          if (operation !=
+              LampIssueResolutionOperations.deferIssue) ...<String, Object?>{
             'fkColumn': proposal.column,
             'code': proposal.row,
           },
@@ -532,9 +533,9 @@ class LampIssueResolutionController {
               ResolutionLogEntry.info(
                 groupedIdenticalValues
                     ? 'Παραβλήθηκαν ${proposals.length} όμοιες χειροκίνητες '
-                        'προτάσεις.'
+                          'προτάσεις.'
                     : 'Παραβλήθηκε η χειροκίνητη πρόταση '
-                        '(γραμμή ${proposals.first.row ?? '-'}).',
+                          '(γραμμή ${proposals.first.row ?? '-'}).',
               ),
             );
             progress.value += proposals.length;
@@ -555,13 +556,13 @@ class LampIssueResolutionController {
           }
 
           for (final decision in manualDecisions) {
-            final step =
-                await host.shared.issueResolutionService.applySingleDecision(
-              databasePath: databasePath,
-              decision: decision,
-              onLog: emit,
-              cancelToken: cancelToken,
-            );
+            final step = await host.shared.issueResolutionService
+                .applySingleDecision(
+                  databasePath: databasePath,
+                  decision: decision,
+                  onLog: emit,
+                  cancelToken: cancelToken,
+                );
             merged = mergeApplyResults(merged, step);
           }
           progress.value += proposals.length;

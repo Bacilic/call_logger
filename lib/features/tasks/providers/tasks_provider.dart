@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 
 import 'package:flutter/scheduler.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -18,21 +18,24 @@ class TaskFilterNotifier extends Notifier<TaskFilter> {
   }
 }
 
-final taskFilterProvider =
-    NotifierProvider<TaskFilterNotifier, TaskFilter>(TaskFilterNotifier.new);
+final taskFilterProvider = NotifierProvider<TaskFilterNotifier, TaskFilter>(
+  TaskFilterNotifier.new,
+);
 
 /// Μετρητές ανά κατάσταση (ίδια φίλτρα αναζήτησης/ημερομηνίας, χωρίς status chips).
 /// Παρακολουθεί [tasksProvider] ώστε να ενημερώνεται μετά από αλλαγές λίστας.
-final taskStatusCountsProvider =
-    FutureProvider<Map<TaskStatus, int>>((ref) async {
+final taskStatusCountsProvider = FutureProvider<Map<TaskStatus, int>>((
+  ref,
+) async {
   final filter = ref.watch(taskFilterProvider);
   ref.watch(tasksProvider);
   final service = ref.read(taskServiceProvider);
   return service.getTaskCounts(filter);
 });
 
-final tasksProvider =
-    AsyncNotifierProvider<TasksNotifier, List<Task>>(TasksNotifier.new);
+final tasksProvider = AsyncNotifierProvider<TasksNotifier, List<Task>>(
+  TasksNotifier.new,
+);
 
 /// Αναβολή [invalidate] του [tasksProvider] στο επόμενο frame — αποφυγή
 /// `FlutterError` (locked widget tree) μετά το κλείσιμο διαλόγου επεξεργασίας.

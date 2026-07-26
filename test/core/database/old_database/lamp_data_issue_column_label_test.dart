@@ -1,4 +1,4 @@
-﻿import 'package:call_logger/core/database/old_database/lamp_data_issue_type_labels.dart';
+import 'package:call_logger/core/database/old_database/lamp_data_issue_type_labels.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -21,7 +21,10 @@ void main() {
       expect(lampDataIssueColumnDisplayLabel('owner'), 'υπάλληλος');
       expect(lampDataIssueColumnDisplayLabel('model'), 'μοντέλο');
       expect(lampDataIssueColumnDisplayLabel('contract'), 'συμβόλαιο');
-      expect(lampDataIssueColumnDisplayLabel('set_master'), 'κύριος εξοπλισμός');
+      expect(
+        lampDataIssueColumnDisplayLabel('set_master'),
+        'κύριος εξοπλισμός',
+      );
       expect(lampDataIssueColumnDisplayLabel('asset_no'), 'αριθμός παγίου');
       expect(lampDataIssueColumnDisplayLabel('serial_no'), 'σειριακός αριθμός');
       expect(lampDataIssueColumnDisplayLabel('ip_address'), 'διεύθυνση IP');

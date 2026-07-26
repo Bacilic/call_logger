@@ -14,46 +14,43 @@ void main() {
       },
     );
 
-    test(
-      'μόνο επιτυχία → success, μόνο κίτρινη → warning, κανένα → none',
-      () {
-        expect(
-          topDatabaseBanner(showStateNotice: false, hasSwitchSuccess: true),
-          TopDatabaseBanner.success,
-        );
-        expect(
-          topDatabaseBanner(showStateNotice: true, hasSwitchSuccess: false),
-          TopDatabaseBanner.warning,
-        );
-        expect(
-          topDatabaseBanner(showStateNotice: false, hasSwitchSuccess: false),
-          TopDatabaseBanner.none,
-        );
-      },
-    );
+    test('μόνο επιτυχία → success, μόνο κίτρινη → warning, κανένα → none', () {
+      expect(
+        topDatabaseBanner(showStateNotice: false, hasSwitchSuccess: true),
+        TopDatabaseBanner.success,
+      );
+      expect(
+        topDatabaseBanner(showStateNotice: true, hasSwitchSuccess: false),
+        TopDatabaseBanner.warning,
+      );
+      expect(
+        topDatabaseBanner(showStateNotice: false, hasSwitchSuccess: false),
+        TopDatabaseBanner.none,
+      );
+    });
   });
 
   group('databaseSwitchSuccessNoticeProvider', () {
-    test('ξεκινά null· show θέτει μήνυμα με φράση και διαδρομή· clear μηδενίζει',
-        () {
-      final container = ProviderContainer();
-      addTearDown(container.dispose);
+    test(
+      'ξεκινά null· show θέτει μήνυμα με φράση και διαδρομή· clear μηδενίζει',
+      () {
+        final container = ProviderContainer();
+        addTearDown(container.dispose);
 
-      expect(container.read(databaseSwitchSuccessNoticeProvider), isNull);
+        expect(container.read(databaseSwitchSuccessNoticeProvider), isNull);
 
-      const path = r'C:\data\call_logger.db';
-      container
-          .read(databaseSwitchSuccessNoticeProvider.notifier)
-          .show(path);
+        const path = r'C:\data\call_logger.db';
+        container.read(databaseSwitchSuccessNoticeProvider.notifier).show(path);
 
-      final message = container.read(databaseSwitchSuccessNoticeProvider);
-      expect(message, isNotNull);
-      expect(message, contains('Έγινε με επιτυχία η αλλαγή βάσης'));
-      expect(message, contains(path));
+        final message = container.read(databaseSwitchSuccessNoticeProvider);
+        expect(message, isNotNull);
+        expect(message, contains('Έγινε με επιτυχία η αλλαγή βάσης'));
+        expect(message, contains(path));
 
-      container.read(databaseSwitchSuccessNoticeProvider.notifier).clear();
-      expect(container.read(databaseSwitchSuccessNoticeProvider), isNull);
-    });
+        container.read(databaseSwitchSuccessNoticeProvider.notifier).clear();
+        expect(container.read(databaseSwitchSuccessNoticeProvider), isNull);
+      },
+    );
 
     test('δεύτερη show αντικαθιστά το προηγούμενο μήνυμα', () {
       final container = ProviderContainer();
@@ -64,8 +61,9 @@ void main() {
       const second =
           r'C:\Users\Bacilic\Documents\call_logger\DB\call_logger.db';
 
-      final notifier =
-          container.read(databaseSwitchSuccessNoticeProvider.notifier);
+      final notifier = container.read(
+        databaseSwitchSuccessNoticeProvider.notifier,
+      );
       notifier.show(first);
       expect(
         container.read(databaseSwitchSuccessNoticeProvider),

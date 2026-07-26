@@ -58,7 +58,8 @@ class BuildingMapFloorEditPreview extends StatefulWidget {
       _BuildingMapFloorEditPreviewState();
 }
 
-class _BuildingMapFloorEditPreviewState extends State<BuildingMapFloorEditPreview> {
+class _BuildingMapFloorEditPreviewState
+    extends State<BuildingMapFloorEditPreview> {
   Future<_PreviewData>? _loadFuture;
 
   @override

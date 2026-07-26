@@ -38,7 +38,7 @@ class ReplaceDatabaseResult {
   const ReplaceDatabaseResult.success() : this._(success: true);
 
   const ReplaceDatabaseResult.failure(String message)
-      : this._(success: false, errorMessage: message);
+    : this._(success: false, errorMessage: message);
 
   /// Η μετονομασία απέτυχε· εμφάνιση διαδρομής και άνοιγμα φακέλου.
   const ReplaceDatabaseResult.renameFailed({
@@ -46,18 +46,19 @@ class ReplaceDatabaseResult {
     required String folderPath,
     String? sourceDbPathForLockDiagnostic,
   }) : this._(
-          success: false,
-          renameFailedFilePath: filePath,
-          renameFailedFolder: folderPath,
-          sourceDbPathForLockDiagnostic: sourceDbPathForLockDiagnostic,
-          errorMessage:
-              'Δεν ήταν δυνατή η μετονομασία του τρέχοντος αρχείου (π.χ. κλειδωμένο από άλλη διεργασία).',
-        );
+         success: false,
+         renameFailedFilePath: filePath,
+         renameFailedFolder: folderPath,
+         sourceDbPathForLockDiagnostic: sourceDbPathForLockDiagnostic,
+         errorMessage:
+             'Δεν ήταν δυνατή η μετονομασία του τρέχοντος αρχείου (π.χ. κλειδωμένο από άλλη διεργασία).',
+       );
 
   final bool success;
   final String? errorMessage;
   final String? renameFailedFilePath;
   final String? renameFailedFolder;
+
   /// Διαδρομή αρχείου πριν τη μετονομασία (για `LockDiagnosticService`).
   final String? sourceDbPathForLockDiagnostic;
 }
@@ -85,11 +86,12 @@ class DatabaseMaintenanceService {
 
   /// Ξεκινά backup αν είναι ενεργό και υπάρχει προορισμός.
   Future<({MaintenanceBackupPrecheck kind, String? message})>
-      runPreMaintenanceBackup() async {
+  runPreMaintenanceBackup() async {
     try {
       final dbBk = await DatabaseHelper.instance.database;
-      final raw = await SettingsRepository(dbBk)
-          .getSetting(DatabaseBackupSettings.appSettingsKey);
+      final raw = await SettingsRepository(
+        dbBk,
+      ).getSetting(DatabaseBackupSettings.appSettingsKey);
       final settings = DatabaseBackupSettings.fromJsonString(raw);
       if (!settings.backupOnExit ||
           settings.destinationDirectory.trim().isEmpty) {
@@ -115,10 +117,7 @@ class DatabaseMaintenanceService {
         message: r.message ?? 'Άγνωστο σφάλμα αντιγράφου.',
       );
     } catch (e) {
-      return (
-        kind: MaintenanceBackupPrecheck.failed,
-        message: e.toString(),
-      );
+      return (kind: MaintenanceBackupPrecheck.failed, message: e.toString());
     }
   }
 
@@ -155,7 +154,9 @@ class DatabaseMaintenanceService {
   /// Πλήρες άδειασμα επιτρεπτού πίνακα (`DELETE FROM`, όχι `DROP`).
   Future<int> clearTableFull(String tableName) async {
     if (!isPurgeableTable(tableName)) {
-      throw ArgumentError('Ο πίνακας δεν επιτρέπεται για εκκαθάριση: $tableName');
+      throw ArgumentError(
+        'Ο πίνακας δεν επιτρέπεται για εκκαθάριση: $tableName',
+      );
     }
     final db = await DatabaseHelper.instance.database;
     final n = await db.delete(tableName);
@@ -257,9 +258,7 @@ class DatabaseMaintenanceService {
 
   /// Αντίστοιχο της οδηγίας «6 μήνες» για κλειστά tasks.
   Future<int> deleteClosedTasksOlderThanSixMonths() =>
-      deleteClosedTasksOlderThan(
-        subtractCalendarMonths(DateTime.now(), 6),
-      );
+      deleteClosedTasksOlderThan(subtractCalendarMonths(DateTime.now(), 6));
 
   /// Π.χ. `call_logger.db` → `call_logger_old_25-07-2026.db` (μοναδικό στον φάκελο).
   String _desiredOldDatabaseBackupName(String currentDbPath) {
@@ -298,8 +297,7 @@ class DatabaseMaintenanceService {
       );
     }
 
-    final normTarget =
-        p.normalize(p.absolute(targetAbsolutePath.trim()));
+    final normTarget = p.normalize(p.absolute(targetAbsolutePath.trim()));
     if (normTarget.isEmpty) {
       return const ReplaceDatabaseResult.failure('Κενή διαδρομή προορισμού.');
     }
@@ -430,10 +428,7 @@ class DatabaseMaintenanceService {
         userPerforming: user,
         entityType: AuditEntityTypes.maintenance,
         details: 'replaceCurrentDatabaseWithNew',
-        newValues: {
-          'path': dbPath,
-          'previous_bundle_renamed_to': oldName,
-        },
+        newValues: {'path': dbPath, 'previous_bundle_renamed_to': oldName},
       );
     } catch (_) {}
 

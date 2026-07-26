@@ -12,14 +12,8 @@ void main() {
   SharedPreferences.setMockInitialValues(<String, Object>{});
 
   test('DictionaryService.stripDiacritics removes Greek tonos only', () {
-    expect(
-      DictionaryService.stripDiacritics('Άλφα'),
-      'Αλφα',
-    );
-    expect(
-      DictionaryService.stripDiacritics('άέήίόύώ'),
-      'αεηιουω',
-    );
+    expect(DictionaryService.stripDiacritics('Άλφα'), 'Αλφα');
+    expect(DictionaryService.stripDiacritics('άέήίόύώ'), 'αεηιουω');
   });
 
   test('normalizeDictionaryForm keeps underscores, strips accents', () {
@@ -27,10 +21,7 @@ void main() {
       SearchTextNormalizer.normalizeDictionaryForm('Καλή_μέρα'),
       'καλη_μερα',
     );
-    expect(
-      SearchTextNormalizer.normalizeDictionaryForm('ΕΠΙΛΥΣΗ'),
-      'επιλυση',
-    );
+    expect(SearchTextNormalizer.normalizeDictionaryForm('ΕΠΙΛΥΣΗ'), 'επιλυση');
   });
 
   test('DictionaryService loads bundled txt and resolves known words', () async {

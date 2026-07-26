@@ -30,8 +30,9 @@ void main() {
 
     setUpAll(() async {
       initSqfliteFfiForTests();
-      final dir =
-          await Directory.systemTemp.createTemp('type_homogenization_test_');
+      final dir = await Directory.systemTemp.createTemp(
+        'type_homogenization_test_',
+      );
       await DatabaseHelper.bindTestDatabaseFile(
         '${dir.path}/type_homogenization.db',
       );
@@ -125,10 +126,7 @@ void main() {
     });
 
     test('getActiveCategoryRows: μόνο ενεργές κατηγορίες', () async {
-      await db.insert('categories', {
-        'name': 'Διαγραμμένη',
-        'is_deleted': 1,
-      });
+      await db.insert('categories', {'name': 'Διαγραμμένη', 'is_deleted': 1});
 
       final rows = await categories.getActiveCategoryRows();
 
@@ -160,10 +158,7 @@ void main() {
       expect(row['number'], '2345999302');
       expect(row.containsKey('dept_names'), isTrue);
       expect(row.containsKey('primary_department_id'), isTrue);
-      expect(
-        rows.every((r) => r['phone_id'] != linkedPhoneId),
-        isTrue,
-      );
+      expect(rows.every((r) => r['phone_id'] != linkedPhoneId), isTrue);
     });
   });
 }

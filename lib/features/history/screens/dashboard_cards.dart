@@ -1,4 +1,4 @@
-﻿import 'dart:math' as math;
+import 'dart:math' as math;
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
@@ -227,10 +227,7 @@ class KpiGrid extends StatelessWidget {
 }
 
 class HoverLiftCard extends StatefulWidget {
-  const HoverLiftCard({
-    super.key,
-    required this.child, required this.onTap,
-  });
+  const HoverLiftCard({super.key, required this.child, required this.onTap});
 
   final Widget child;
   final VoidCallback onTap;
@@ -537,8 +534,9 @@ class CategoryDistributionChartCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final excludeCallsWithoutCategory =
-        ref.watch(dashboardExcludeCallsWithoutCategoryProvider);
+    final excludeCallsWithoutCategory = ref.watch(
+      dashboardExcludeCallsWithoutCategoryProvider,
+    );
     final visibleIssues = visibleDashboardIssueStats(
       issues,
       excludeCallsWithoutCategory: excludeCallsWithoutCategory,
@@ -555,10 +553,7 @@ class CategoryDistributionChartCard extends ConsumerWidget {
           children: [
             Text(
               'Χωρίς Κατηγορία',
-              style: TextStyle(
-                fontSize: 11,
-                color: colors.kpiSubtitle,
-              ),
+              style: TextStyle(fontSize: 11, color: colors.kpiSubtitle),
             ),
             const SizedBox(width: 4),
             Transform.scale(
@@ -584,10 +579,8 @@ class CategoryDistributionChartCard extends ConsumerWidget {
         switchOutCurve: Curves.easeInCubic,
         layoutBuilder: (currentChild, previousChildren) =>
             currentChild ?? const SizedBox.shrink(),
-        transitionBuilder: (child, animation) => FadeTransition(
-          opacity: animation,
-          child: child,
-        ),
+        transitionBuilder: (child, animation) =>
+            FadeTransition(opacity: animation, child: child),
         child: IssuePieChart(
           key: ValueKey<bool>(excludeCallsWithoutCategory),
           issues: visibleIssues,
@@ -616,10 +609,7 @@ class MoreSection extends StatelessWidget {
   final String Function(num) formatDuration;
 
   Widget _categoryDistributionCard() {
-    return CategoryDistributionChartCard(
-      issues: data.byIssue,
-      colors: colors,
-    );
+    return CategoryDistributionChartCard(issues: data.byIssue, colors: colors);
   }
 
   @override
@@ -735,11 +725,9 @@ class MoreSection extends StatelessWidget {
     );
   }
 }
+
 class DepartmentPill extends StatelessWidget {
-  const DepartmentPill({
-    super.key,
-    required this.name,
-  });
+  const DepartmentPill({super.key, required this.name});
 
   final String name;
 
@@ -844,10 +832,7 @@ class GlassCard extends StatelessWidget {
 }
 
 class LoadingDashboard extends StatelessWidget {
-  const LoadingDashboard({
-    super.key,
-    required this.colors,
-  });
+  const LoadingDashboard({super.key, required this.colors});
 
   final DashboardPaletteColors colors;
 
@@ -868,7 +853,8 @@ class LoadingDashboard extends StatelessWidget {
 class LoadingSkeleton extends StatelessWidget {
   const LoadingSkeleton({
     super.key,
-    required this.height, required this.colors,
+    required this.height,
+    required this.colors,
   });
 
   final double height;
@@ -896,7 +882,8 @@ class LoadingSkeleton extends StatelessWidget {
 class EmptyStateCard extends StatelessWidget {
   const EmptyStateCard({
     super.key,
-    required this.message, required this.colors,
+    required this.message,
+    required this.colors,
   });
 
   final String message;
@@ -916,10 +903,7 @@ class EmptyStateCard extends StatelessWidget {
 }
 
 class ErrorCard extends StatelessWidget {
-  const ErrorCard({
-    super.key,
-    required this.message, required this.colors,
-  });
+  const ErrorCard({super.key, required this.message, required this.colors});
 
   final String message;
   final DashboardPaletteColors colors;
@@ -936,10 +920,7 @@ class ErrorCard extends StatelessWidget {
 }
 
 class GradientPaletteIcon extends StatelessWidget {
-  const GradientPaletteIcon({
-    super.key,
-    required this.colors,
-  });
+  const GradientPaletteIcon({super.key, required this.colors});
 
   final DashboardPaletteColors colors;
 

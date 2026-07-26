@@ -165,7 +165,8 @@ void main() {
       expect(
         container.read(categoryDirectoryProvider).searchQuery,
         isEmpty,
-        reason: 'Το `lastDeleted` της αναίρεσης δείχνει σε ids της παλιάς βάσης',
+        reason:
+            'Το `lastDeleted` της αναίρεσης δείχνει σε ids της παλιάς βάσης',
       );
     },
   );

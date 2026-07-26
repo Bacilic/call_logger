@@ -12,5 +12,5 @@ class HistoryApplicationAuditViewNotifier extends Notifier<bool> {
 
 final historyApplicationAuditViewProvider =
     NotifierProvider<HistoryApplicationAuditViewNotifier, bool>(
-  HistoryApplicationAuditViewNotifier.new,
-);
+      HistoryApplicationAuditViewNotifier.new,
+    );

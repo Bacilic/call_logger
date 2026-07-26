@@ -12,12 +12,9 @@ void main() {
           historyCount: 12,
         ),
       ]);
-      expect(
-        lines,
-        [
-          '2113 → Αναστασία Φούφα · τηλ. 2898 · 12 εγγραφές ιστορικού',
-        ],
-      );
+      expect(lines, [
+        '2113 → Αναστασία Φούφα · τηλ. 2898 · 12 εγγραφές ιστορικού',
+      ]);
     });
 
     test('παραλείπει τηλέφωνο όταν λείπει', () {
@@ -29,10 +26,7 @@ void main() {
           historyCount: 12,
         ),
       ]);
-      expect(
-        lines.single,
-        '2113 → Αναστασία Φούφα · 12 εγγραφές ιστορικού',
-      );
+      expect(lines.single, '2113 → Αναστασία Φούφα · 12 εγγραφές ιστορικού');
     });
 
     test('χωρίς κάτοχο: μόνο κωδικός και ιστορικό', () {
@@ -56,10 +50,7 @@ void main() {
           historyCount: 1,
         ),
       ]);
-      expect(
-        lines.single,
-        '1001 → Μαρία Α · τηλ. 2200 · 1 εγγραφή ιστορικού',
-      );
+      expect(lines.single, '1001 → Μαρία Α · τηλ. 2200 · 1 εγγραφή ιστορικού');
     });
 
     test('πολλές περίληψεις → μία γραμμή ανά εξοπλισμό', () {
@@ -70,10 +61,7 @@ void main() {
           phone: '1',
           historyCount: 2,
         ),
-        const EquipmentDeletionSummary(
-          code: 'B',
-          historyCount: 0,
-        ),
+        const EquipmentDeletionSummary(code: 'B', historyCount: 0),
       ]);
       expect(lines, [
         'A → Υ1 · τηλ. 1 · 2 εγγραφές ιστορικού',

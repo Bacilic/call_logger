@@ -113,11 +113,7 @@ class _RemoteToolArgumentsEditorState extends State<RemoteToolArgumentsEditor> {
           spacing: 8,
           runSpacing: 8,
           children: [
-            for (final ph in [
-              '{TARGET}',
-              '{EQUIPMENT_CODE}',
-              '{FILE}',
-            ])
+            for (final ph in ['{TARGET}', '{EQUIPMENT_CODE}', '{FILE}'])
               FilledButton.tonal(
                 onPressed: _ctrl.saving ? null : () => _onInsertPlaceholder(ph),
                 child: Text(ph),

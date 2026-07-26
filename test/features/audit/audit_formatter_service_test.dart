@@ -11,8 +11,7 @@ void main() {
       id: 1,
       action: 'ΤΡΟΠΟΠΟΙΗΣΗ',
       entityType: 'bulk_users',
-      newValuesJson:
-          '{"fields":{"department_id":5},"affected_ids":[1,2,3]}',
+      newValuesJson: '{"fields":{"department_id":5},"affected_ids":[1,2,3]}',
     );
     final s = formatter.summaryLine(row, technical: false);
     expect(s, contains('Επηρέασε 3'));
@@ -114,8 +113,7 @@ void main() {
       entityType: 'equipment',
       entityName: '2978',
       oldValuesJson: '{"department_id":null}',
-      newValuesJson:
-          '{"department_id":46,"department_text":"Πληροφορική"}',
+      newValuesJson: '{"department_id":46,"department_text":"Πληροφορική"}',
     );
     final s = formatter.summaryLine(row);
     expect(s, contains('Πληροφορική'));
@@ -131,9 +129,7 @@ void main() {
       oldValuesJson: '{"department_id":null}',
       newValuesJson: '{"department_id":46}',
     );
-    const labels = AuditReferenceLabels(
-      departmentNames: {46: 'Γραμματεία'},
-    );
+    const labels = AuditReferenceLabels(departmentNames: {46: 'Γραμματεία'});
     final s = formatter.summaryLine(row, labels: labels);
     expect(s, contains('Γραμματεία'));
     expect(s, isNot(contains('#46')));
@@ -155,21 +151,24 @@ void main() {
     );
   });
 
-  test('summaryLine πολλαπλών αλλαγών τμήματος — σύντομος τίτλος με ετικέτες', () {
-    final row = AuditLogModel(
-      id: 10,
-      action: 'ΤΡΟΠΟΠΟΙΗΣΗ ΤΜΗΜΑΤΟΣ',
-      entityType: 'department',
-      entityName: 'Πληροφορική',
-      oldValuesJson: '{"color":"#1976D2","map_x":10.0,"map_floor":"1"}',
-      newValuesJson: '{"color":"#33691E","map_x":50.0,"map_floor":"2"}',
-    );
-    final s = formatter.summaryLine(row);
-    expect(
-      s,
-      'ΤΡΟΠΟΠΟΙΗΣΗ ΤΜΗΜΑΤΟΣ · Πληροφορική - 3 αλλαγές: χρώμα, όροφος, θέση',
-    );
-  });
+  test(
+    'summaryLine πολλαπλών αλλαγών τμήματος — σύντομος τίτλος με ετικέτες',
+    () {
+      final row = AuditLogModel(
+        id: 10,
+        action: 'ΤΡΟΠΟΠΟΙΗΣΗ ΤΜΗΜΑΤΟΣ',
+        entityType: 'department',
+        entityName: 'Πληροφορική',
+        oldValuesJson: '{"color":"#1976D2","map_x":10.0,"map_floor":"1"}',
+        newValuesJson: '{"color":"#33691E","map_x":50.0,"map_floor":"2"}',
+      );
+      final s = formatter.summaryLine(row);
+      expect(
+        s,
+        'ΤΡΟΠΟΠΟΙΗΣΗ ΤΜΗΜΑΤΟΣ · Πληροφορική - 3 αλλαγές: χρώμα, όροφος, θέση',
+      );
+    },
+  );
 
   test('describeChanges department_id technical mode κρατά id', () {
     final row = AuditLogModel(
@@ -179,9 +178,7 @@ void main() {
       entityName: '2978',
       newValuesJson: '{"department_id":46}',
     );
-    const labels = AuditReferenceLabels(
-      departmentNames: {46: 'Γραμματεία'},
-    );
+    const labels = AuditReferenceLabels(departmentNames: {46: 'Γραμματεία'});
     final lines = formatter.describeChanges(
       row,
       technical: true,

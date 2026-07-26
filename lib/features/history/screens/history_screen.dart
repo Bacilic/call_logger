@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -470,8 +470,8 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
                         icon: const Icon(Icons.zoom_out),
                         onPressed: filtersEnabled
                             ? () => ref
-                                .read(historyTableZoomProvider.notifier)
-                                .zoomOut()
+                                  .read(historyTableZoomProvider.notifier)
+                                  .zoomOut()
                             : null,
                       ),
                       IconButton(
@@ -479,8 +479,8 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
                         icon: const Icon(Icons.restart_alt),
                         onPressed: filtersEnabled
                             ? () => ref
-                                .read(historyTableZoomProvider.notifier)
-                                .reset()
+                                  .read(historyTableZoomProvider.notifier)
+                                  .reset()
                             : null,
                       ),
                       IconButton(
@@ -488,8 +488,8 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
                         icon: const Icon(Icons.zoom_in),
                         onPressed: filtersEnabled
                             ? () => ref
-                                .read(historyTableZoomProvider.notifier)
-                                .zoomIn()
+                                  .read(historyTableZoomProvider.notifier)
+                                  .zoomIn()
                             : null,
                       ),
                       const SizedBox(width: 8),
@@ -916,9 +916,7 @@ class _HistoryDataTableState extends ConsumerState<_HistoryDataTable> {
           if (isActive) ...[
             const SizedBox(width: 4),
             Icon(
-              _sortAscending
-                  ? Icons.arrow_upward
-                  : Icons.arrow_downward,
+              _sortAscending ? Icons.arrow_upward : Icons.arrow_downward,
               size: 16 * zoomLevel,
               color: theme.colorScheme.primary,
             ),
@@ -965,13 +963,9 @@ class _HistoryDataTableState extends ConsumerState<_HistoryDataTable> {
     return Container(
       height: headingRowHeight,
       decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerHighest.withValues(
-          alpha: 0.5,
-        ),
+        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
         border: Border(
-          bottom: BorderSide(
-            color: theme.dividerColor.withValues(alpha: 0.6),
-          ),
+          bottom: BorderSide(color: theme.dividerColor.withValues(alpha: 0.6)),
         ),
       ),
       child: Row(children: cells),
@@ -1021,7 +1015,9 @@ class _HistoryDataTableState extends ConsumerState<_HistoryDataTable> {
     final phone = row['user_phone']?.toString().trim() ?? '—';
     final department = _str(row['user_department']);
     final equipment = _str(row['equipment_code']);
-    final equipmentDeleted = historyEntityIsDeleted(row['equipment_is_deleted']);
+    final equipmentDeleted = historyEntityIsDeleted(
+      row['equipment_is_deleted'],
+    );
     final category = _str(row['category']);
     final categoryDeleted = historyEntityIsDeleted(row['category_is_deleted']);
     final issue = _str(row['issue']);
@@ -1057,8 +1053,7 @@ class _HistoryDataTableState extends ConsumerState<_HistoryDataTable> {
                   value: isSelected,
                   onChanged: callId == null
                       ? null
-                      : (value) =>
-                            _toggleSelection(callId, value == true),
+                      : (value) => _toggleSelection(callId, value == true),
                 ),
               ),
             ),
@@ -1079,10 +1074,7 @@ class _HistoryDataTableState extends ConsumerState<_HistoryDataTable> {
             _dataCell(
               width: columnWidths[3],
               horizontalPadding: horizontalPadding,
-              child: Text(
-                phone.isEmpty ? '—' : phone,
-                style: bodyStyle,
-              ),
+              child: Text(phone.isEmpty ? '—' : phone, style: bodyStyle),
             ),
             _dataCell(
               width: columnWidths[4],
@@ -1137,10 +1129,7 @@ class _HistoryDataTableState extends ConsumerState<_HistoryDataTable> {
                       visualDensity: VisualDensity.compact,
                       onPressed: callId == null
                           ? null
-                          : () => showCallEditDialog(
-                              context,
-                              callId: callId,
-                            ),
+                          : () => showCallEditDialog(context, callId: callId),
                       icon: const Icon(Icons.edit_outlined),
                     ),
                     IconButton(
@@ -1197,9 +1186,9 @@ class _HistoryDataTableState extends ConsumerState<_HistoryDataTable> {
         child: SizedBox(
           width: tableWidth,
           child: MediaQuery(
-            data: MediaQuery.of(context).copyWith(
-              textScaler: TextScaler.linear(zoomLevel),
-            ),
+            data: MediaQuery.of(
+              context,
+            ).copyWith(textScaler: TextScaler.linear(zoomLevel)),
             child: IconTheme(
               data: IconThemeData(size: 24.0 * zoomLevel),
               child: Column(

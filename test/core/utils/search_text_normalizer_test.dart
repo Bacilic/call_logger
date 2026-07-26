@@ -5,17 +5,20 @@ void main() {
   group('SearchTextNormalizer.normalizeForSearch', () {
     test('maps final sigma ς and Σ-derived σ to the same key', () {
       final typed = SearchTextNormalizer.normalizeForSearch('Πληροφορικής');
-      final fromUppercase =
-          SearchTextNormalizer.normalizeForSearch('ΠΛΗΡΟΦΟΡΙΚΗΣ');
+      final fromUppercase = SearchTextNormalizer.normalizeForSearch(
+        'ΠΛΗΡΟΦΟΡΙΚΗΣ',
+      );
 
       expect(typed, equals(fromUppercase));
     });
 
     test('maps full department labels that differ only by final sigma', () {
-      final typed =
-          SearchTextNormalizer.normalizeForSearch('Τμήμα Πληροφορικής');
-      final fromLamp =
-          SearchTextNormalizer.normalizeForSearch('ΤΜΗΜΑ ΠΛΗΡΟΦΟΡΙΚΗΣ');
+      final typed = SearchTextNormalizer.normalizeForSearch(
+        'Τμήμα Πληροφορικής',
+      );
+      final fromLamp = SearchTextNormalizer.normalizeForSearch(
+        'ΤΜΗΜΑ ΠΛΗΡΟΦΟΡΙΚΗΣ',
+      );
 
       expect(typed, equals(fromLamp));
     });

@@ -10,8 +10,7 @@ void main() {
     bool Function()? isWindows,
   }) {
     return NetworkFolderClassifier(
-      driveTypeResolver:
-          driveTypeResolver ?? ((_) async => false),
+      driveTypeResolver: driveTypeResolver ?? ((_) async => false),
       localSharesProvider: localSharesProvider ?? (() async => <String>[]),
       isWindows: isWindows ?? (() => true),
     );
@@ -19,7 +18,8 @@ void main() {
 
   test('UNC path → networkUnc', () async {
     final c = classifier(
-      driveTypeResolver: (_) async => fail('driveType δεν πρέπει να κληθεί για UNC'),
+      driveTypeResolver: (_) async =>
+          fail('driveType δεν πρέπει να κληθεί για UNC'),
       localSharesProvider: () async =>
           fail('shares δεν πρέπει να κληθεί για UNC'),
     );
@@ -47,20 +47,13 @@ void main() {
   });
 
   test('local path exact share match → localShared', () async {
-    final c = classifier(
-      localSharesProvider: () async => [r'C:\updates'],
-    );
+    final c = classifier(localSharesProvider: () async => [r'C:\updates']);
 
-    expect(
-      await c.classify(r'C:\updates'),
-      NetworkFolderKind.localShared,
-    );
+    expect(await c.classify(r'C:\updates'), NetworkFolderKind.localShared);
   });
 
   test('local path under share → localShared', () async {
-    final c = classifier(
-      localSharesProvider: () async => [r'C:\updates'],
-    );
+    final c = classifier(localSharesProvider: () async => [r'C:\updates']);
 
     expect(
       await c.classify(r'C:\updates\call_logger'),
@@ -69,14 +62,9 @@ void main() {
   });
 
   test('local path outside any share → localOnly', () async {
-    final c = classifier(
-      localSharesProvider: () async => [r'C:\updates'],
-    );
+    final c = classifier(localSharesProvider: () async => [r'C:\updates']);
 
-    expect(
-      await c.classify(r'C:\private\folder'),
-      NetworkFolderKind.localOnly,
-    );
+    expect(await c.classify(r'C:\private\folder'), NetworkFolderKind.localOnly);
   });
 
   test(

@@ -69,7 +69,11 @@ void main() {
     });
 
     test('μόνο επώνυμο — ταύτιση με χρήστη πλήρους ονοματεπώνυμου', () {
-      final existing = user(id: 5, firstName: 'Γιάννης', lastName: 'Παπαδόπουλος');
+      final existing = user(
+        id: 5,
+        firstName: 'Γιάννης',
+        lastName: 'Παπαδόπουλος',
+      );
       final found = UserHomonymFinder.findHomonymUser(
         users: [existing],
         firstName: '',

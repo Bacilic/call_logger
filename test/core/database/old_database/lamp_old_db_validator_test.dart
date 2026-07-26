@@ -1,4 +1,4 @@
-﻿import 'dart:io';
+import 'dart:io';
 
 import 'package:call_logger/core/database/old_database/lamp_old_db_validator.dart';
 import 'package:call_logger/core/database/old_database/old_database_schema.dart';
@@ -71,26 +71,32 @@ void main() {
       validator = LampOldDbValidator();
     });
 
-    test('pendingCreation when read matches output and file is missing', () async {
-      final result = await validator.validateReadPath(
-        r'C:\missing\lampa_test.db',
-        outputPath: r'C:\missing\lampa_test.db',
-        excelPath: r'C:\import\αρχείο.xlsx',
-      );
-      expect(result.status, LampOldDbStatus.pendingCreation);
-      expect(result.pendingDbFileName, 'lampa_test.db');
-      expect(result.pendingFolderPath, r'C:\missing');
-      expect(result.pendingExcelFileName, 'αρχείο.xlsx');
-    });
+    test(
+      'pendingCreation when read matches output and file is missing',
+      () async {
+        final result = await validator.validateReadPath(
+          r'C:\missing\lampa_test.db',
+          outputPath: r'C:\missing\lampa_test.db',
+          excelPath: r'C:\import\αρχείο.xlsx',
+        );
+        expect(result.status, LampOldDbStatus.pendingCreation);
+        expect(result.pendingDbFileName, 'lampa_test.db');
+        expect(result.pendingFolderPath, r'C:\missing');
+        expect(result.pendingExcelFileName, 'αρχείο.xlsx');
+      },
+    );
 
-    test('fileMissing when read differs from output and file is missing', () async {
-      final result = await validator.validateReadPath(
-        r'C:\missing\read.db',
-        outputPath: r'C:\missing\out.db',
-        excelPath: r'C:\import\file.xlsx',
-      );
-      expect(result.status, LampOldDbStatus.fileMissing);
-    });
+    test(
+      'fileMissing when read differs from output and file is missing',
+      () async {
+        final result = await validator.validateReadPath(
+          r'C:\missing\read.db',
+          outputPath: r'C:\missing\out.db',
+          excelPath: r'C:\import\file.xlsx',
+        );
+        expect(result.status, LampOldDbStatus.fileMissing);
+      },
+    );
 
     test('invalidPathFormat when path lacks .db extension', () async {
       final result = await validator.validateReadPath(
@@ -105,19 +111,24 @@ void main() {
       );
     });
 
-    test('invalidPathFormat blocks pendingCreation for same missing path', () async {
-      final result = await validator.validateReadPath(
-        r'C:\missing\old_base_test',
-        outputPath: r'C:\missing\old_base_test',
-        excelPath: r'C:\import\file.xlsx',
-      );
-      expect(result.status, LampOldDbStatus.invalidPathFormat);
-    });
+    test(
+      'invalidPathFormat blocks pendingCreation for same missing path',
+      () async {
+        final result = await validator.validateReadPath(
+          r'C:\missing\old_base_test',
+          outputPath: r'C:\missing\old_base_test',
+          excelPath: r'C:\import\file.xlsx',
+        );
+        expect(result.status, LampOldDbStatus.invalidPathFormat);
+      },
+    );
 
     test(
       'notOldEquipmentDb when equipment table exists but columns are wrong',
       () async {
-        final dir = await Directory.systemTemp.createTemp('lamp_val_wrong_cols');
+        final dir = await Directory.systemTemp.createTemp(
+          'lamp_val_wrong_cols',
+        );
         addTearDown(() => dir.deleteSync(recursive: true));
         final dbPath = p.join(dir.path, 'wrong_structure.db');
         final db = await openDatabase(dbPath);
@@ -128,10 +139,7 @@ void main() {
 
         final result = await validator.validateReadPath(dbPath);
         expect(result.status, LampOldDbStatus.notOldEquipmentDb);
-        expect(
-          result.userMessageGreek,
-          contains('δομή'),
-        );
+        expect(result.userMessageGreek, contains('δομή'));
       },
     );
 
@@ -197,16 +205,19 @@ void main() {
       expect(lampOutputPathBlocksImport(result), isTrue);
     });
 
-    test('openFailed blocks import for renamed text file with .db extension', () async {
-      final fakeDbPath = p.join(tempDir.path, 'renamed_txt.db');
-      await File(fakeDbPath).writeAsString('not a sqlite database');
-      final result = await validator.validateOutputPath(fakeDbPath);
-      expect(
-        result.status,
-        anyOf(LampOldDbStatus.openFailed, LampOldDbStatus.notOldEquipmentDb),
-      );
-      expect(lampOutputPathBlocksImport(result), isTrue);
-    });
+    test(
+      'openFailed blocks import for renamed text file with .db extension',
+      () async {
+        final fakeDbPath = p.join(tempDir.path, 'renamed_txt.db');
+        await File(fakeDbPath).writeAsString('not a sqlite database');
+        final result = await validator.validateOutputPath(fakeDbPath);
+        expect(
+          result.status,
+          anyOf(LampOldDbStatus.openFailed, LampOldDbStatus.notOldEquipmentDb),
+        );
+        expect(lampOutputPathBlocksImport(result), isTrue);
+      },
+    );
   });
 
   group('LampOldDbValidator.validateDbPathFormat', () {

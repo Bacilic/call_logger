@@ -84,10 +84,9 @@ mixin UserFormSaveMixin on UserFormDialogStateHost {
       if (initialDeptNorm != currentDeptNorm) {
         final existsInOrg = currentDeptNorm.isEmpty
             ? true
-            : await DepartmentRepository(await DatabaseHelper.instance.database)
-                .departmentNameExists(
-                _departmentController.text,
-              );
+            : await DepartmentRepository(
+                await DatabaseHelper.instance.database,
+              ).departmentNameExists(_departmentController.text);
         if (!mounted) return;
         final useAddToDepartmentMessage =
             !_isEdit || widget.isClone || _initialDepartmentText.trim().isEmpty;
@@ -114,8 +113,7 @@ mixin UserFormSaveMixin on UserFormDialogStateHost {
         if (phoneDisconnectBatch == null) return;
       }
 
-      final editingUserId =
-          _isEdit && !cloneAsNewEmployee && !widget.isClone
+      final editingUserId = _isEdit && !cloneAsNewEmployee && !widget.isClone
           ? widget.initialUser?.id
           : null;
       final phoneConflictBatch = await _confirmUserPhoneAssignmentConflicts(

@@ -146,11 +146,14 @@ void main() {
 
       final units = buildLampIssueOrchestrationUnits(proposals);
       expect(units, hasLength(2));
-      expect(units.every((u) => u is LampManualReviewOrchestrationUnit), isTrue);
       expect(
-        units
-            .cast<LampManualReviewOrchestrationUnit>()
-            .every((u) => !u.groupedIdenticalValues),
+        units.every((u) => u is LampManualReviewOrchestrationUnit),
+        isTrue,
+      );
+      expect(
+        units.cast<LampManualReviewOrchestrationUnit>().every(
+          (u) => !u.groupedIdenticalValues,
+        ),
         isTrue,
       );
     });

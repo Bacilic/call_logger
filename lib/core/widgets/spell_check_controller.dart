@@ -114,10 +114,7 @@ class SpellCheckController extends TextEditingController {
           !_spell!.isCorrect(word) &&
           _isWrongRange(gStart, gEnd);
       spans.add(
-        TextSpan(
-          text: word,
-          style: wrong ? _wrongStyleFor(style) : style,
-        ),
+        TextSpan(text: word, style: wrong ? _wrongStyleFor(style) : style),
       );
       last = m.end;
     }
@@ -179,9 +176,7 @@ class SpellCheckController extends TextEditingController {
     }
 
     final composingStyle =
-        style?.merge(
-          const TextStyle(decoration: TextDecoration.underline),
-        ) ??
+        style?.merge(const TextStyle(decoration: TextDecoration.underline)) ??
         const TextStyle(decoration: TextDecoration.underline);
 
     final range = val.composing;

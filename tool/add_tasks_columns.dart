@@ -50,7 +50,9 @@ Future<void> main() async {
     for (final row in info) {
       stdout.writeln('  ${row['name']} (${row['type']})');
     }
-    stdout.writeln('\nΗ βάση ενημερώθηκε επιτυχώς (τα υπάρχοντα δεδομένα παραμένουν).');
+    stdout.writeln(
+      '\nΗ βάση ενημερώθηκε επιτυχώς (τα υπάρχοντα δεδομένα παραμένουν).',
+    );
   } catch (e, st) {
     stderr.writeln('Σφάλμα κατά την ενημέρωση: $e');
     stderr.writeln('$st');

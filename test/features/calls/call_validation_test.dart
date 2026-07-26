@@ -66,7 +66,9 @@ void main() {
         expect(
           find.byType(CallsScreen),
           findsOneWidget,
-          reason: greekExpectMsg('Οθόνη Κλήσεων για πρόσβαση στο callHeaderProvider'),
+          reason: greekExpectMsg(
+            'Οθόνη Κλήσεων για πρόσβαση στο callHeaderProvider',
+          ),
         );
 
         report.logStep(
@@ -80,8 +82,7 @@ void main() {
         await tester.pump();
         await pumpUntilSettled(tester);
 
-        final submitFinder =
-            find.widgetWithText(ElevatedButton, 'Καταγραφή');
+        final submitFinder = find.widgetWithText(ElevatedButton, 'Καταγραφή');
         expect(
           submitFinder,
           findsOneWidget,

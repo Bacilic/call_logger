@@ -16,6 +16,7 @@ Future<DepartmentTransferDialogResult?> showDepartmentTransferConfirmDialog({
   required String oldDepartment,
   required String newDepartment,
   required bool newDepartmentExistsInOrg,
+
   /// True: μήνυμα «Προσθήκη … σε …» και κουμπιά Προσθήκη / Προσθήκη + Δημιουργία.
   bool useAddToDepartmentMessage = false,
 }) {
@@ -67,7 +68,8 @@ class _DepartmentTransferConfirmDialogState
   }
 
   bool get _needsCreate =>
-      widget.newDepartment.trim().isNotEmpty && !widget.newDepartmentExistsInOrg;
+      widget.newDepartment.trim().isNotEmpty &&
+      !widget.newDepartmentExistsInOrg;
 
   String get _confirmButtonLabel {
     if (widget.useAddToDepartmentMessage) {
@@ -116,8 +118,9 @@ class _DepartmentTransferConfirmDialogState
                               const TextSpan(text: 'Προσθήκη '),
                               TextSpan(
                                 text: nameLabel,
-                                style:
-                                    const TextStyle(fontWeight: FontWeight.w600),
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                ),
                               ),
                               const TextSpan(text: ' σε '),
                               TextSpan(
@@ -137,14 +140,16 @@ class _DepartmentTransferConfirmDialogState
                               const TextSpan(text: 'Μεταφορά '),
                               TextSpan(
                                 text: nameLabel,
-                                style:
-                                    const TextStyle(fontWeight: FontWeight.w600),
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                ),
                               ),
                               const TextSpan(text: ' από '),
                               TextSpan(
                                 text: _oldLabel,
-                                style:
-                                    const TextStyle(fontWeight: FontWeight.w500),
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w500,
+                                ),
                               ),
                               const TextSpan(text: ' → '),
                               TextSpan(
@@ -175,18 +180,18 @@ class _DepartmentTransferConfirmDialogState
       ),
       actions: [
         TextButton(
-          onPressed: () => Navigator.of(context)
-              .pop(DepartmentTransferDialogResult.cancelTransfer),
+          onPressed: () => Navigator.of(
+            context,
+          ).pop(DepartmentTransferDialogResult.cancelTransfer),
           child: Text(
-            widget.useAddToDepartmentMessage
-                ? 'Ακύρωση'
-                : 'Ακύρωση μεταφοράς',
+            widget.useAddToDepartmentMessage ? 'Ακύρωση' : 'Ακύρωση μεταφοράς',
           ),
         ),
         FilledButton(
           onPressed: _confirmTransfer
-              ? () => Navigator.of(context)
-                  .pop(DepartmentTransferDialogResult.confirm)
+              ? () => Navigator.of(
+                  context,
+                ).pop(DepartmentTransferDialogResult.confirm)
               : null,
           child: Text(_confirmButtonLabel),
         ),

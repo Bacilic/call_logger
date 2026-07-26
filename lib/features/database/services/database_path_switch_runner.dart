@@ -2,8 +2,8 @@ import '../../../core/database/database_init_runner.dart';
 import '../../../core/database/database_path_pick_flow.dart';
 
 /// Επαληθευτής διαδρομής βάσης (προεπιλογή: [setAndVerifyDatabasePath]).
-typedef DatabasePathVerifier = Future<({bool ok, DatabaseInitRunnerResult runner})>
-    Function(String path);
+typedef DatabasePathVerifier =
+    Future<({bool ok, DatabaseInitRunnerResult runner})> Function(String path);
 
 /// Σημεία σύνδεσης UI/συνεδρίας για την εναλλαγή διαδρομής βάσης.
 abstract interface class DatabasePathSwitchHooks {

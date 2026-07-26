@@ -67,10 +67,7 @@ class LampTransferFormFieldSpec {
 
 /// Αποτέλεσμα προεπισκόπησης μεταφοράς (χωρίς εγγραφή στη βάση).
 class LampTransferPreview {
-  const LampTransferPreview({
-    required this.result,
-    required this.fields,
-  });
+  const LampTransferPreview({required this.result, required this.fields});
 
   final TransferResult result;
   final List<LampTransferPreviewField> fields;
@@ -78,9 +75,7 @@ class LampTransferPreview {
   bool get hasAnyWarning =>
       result.hasAnyWarning ||
       fields.any((field) => field.hasWarning) ||
-      fields.any(
-        (field) => field.items.any((item) => item.hasWarning),
-      );
+      fields.any((field) => field.items.any((item) => item.hasWarning));
 }
 
 extension DepartmentTransferFieldDisplay on DepartmentTransferField {
@@ -195,14 +190,8 @@ List<LampTransferFormFieldSpec> lampTransferFormFieldSpecs(
         label: 'Κωδικός',
         required: true,
       ),
-      LampTransferFormFieldSpec(
-        formKey: 'type',
-        label: 'Τύπος/Περιγραφή',
-      ),
-      LampTransferFormFieldSpec(
-        formKey: 'department_name',
-        label: 'Τμήμα',
-      ),
+      LampTransferFormFieldSpec(formKey: 'type', label: 'Τύπος/Περιγραφή'),
+      LampTransferFormFieldSpec(formKey: 'department_name', label: 'Τμήμα'),
       LampTransferFormFieldSpec(formKey: 'owner_name', label: 'Κάτοχος'),
       LampTransferFormFieldSpec(formKey: 'location', label: 'Τοποθεσία'),
       LampTransferFormFieldSpec(
@@ -323,10 +312,8 @@ LampTransferPreview buildLampTransferPreview({
     ),
   };
 
-  final mainLabel = matchedLabel ?? _defaultMainEntityLabel(
-    draft.target,
-    currentFormValues,
-  );
+  final mainLabel =
+      matchedLabel ?? _defaultMainEntityLabel(draft.target, currentFormValues);
 
   return LampTransferPreview(
     result: TransferResult(
@@ -391,7 +378,9 @@ List<LampTransferPreviewField> _departmentPreviewFields({
           targetExists: targetExists,
           valuesEquivalent: fieldKey == DepartmentTransferField.building
               ? (left, right) =>
-                    HomoglyphTextNormalizer.normalizeForComparison(left ?? '') ==
+                    HomoglyphTextNormalizer.normalizeForComparison(
+                      left ?? '',
+                    ) ==
                     HomoglyphTextNormalizer.normalizeForComparison(right ?? '')
               : null,
           warningCheck: fieldKey == DepartmentTransferField.level
@@ -422,72 +411,76 @@ List<LampTransferPreviewField> _ownerPreviewFields({
   required Map<String, String>? destinationMap,
   bool Function(String normalizedDepartmentName)? departmentExistsCheck,
 }) {
-  return OwnerTransferField.values.map((fieldKey) {
-    final formKey = fieldKey.formKey;
-    final destinationValue = destinationMap == null
-        ? null
-        : _nullableValue(destinationMap[formKey]);
-    if (fieldKey == OwnerTransferField.phones ||
-        fieldKey == OwnerTransferField.equipmentCodes) {
-      final currentItems = fieldKey == OwnerTransferField.phones
-          ? PhoneListParser.splitPhones(currentFormValues[formKey])
-          : LampMigrationService.parseEquipmentCodes(
-              currentFormValues[formKey],
-            );
-      final lampItems = fieldKey == OwnerTransferField.phones
-          ? PhoneListParser.splitPhones(lampValues[formKey])
-          : LampMigrationService.parseEquipmentCodes(lampValues[formKey]);
-      final destinationItems = destinationMap == null
-          ? const <String>[]
-          : fieldKey == OwnerTransferField.phones
-          ? PhoneListParser.splitPhones(destinationMap[formKey])
-          : LampMigrationService.parseEquipmentCodes(destinationMap[formKey]);
-      final items = evaluateItemsField<OwnerTransferField>(
-        fieldKey: fieldKey,
-        currentItems: currentItems,
-        lampItems: lampItems,
-        destinationItems: destinationItems,
-      );
-      final hasItemWarning = items.any((item) => item.hasWarning);
-      final itemWarning = items
-          .map((item) => item.warningMessage)
-          .whereType<String>()
-          .where((message) => message.isNotEmpty)
-          .join(' · ');
-      final aggregateAction = _aggregateItemsAction(items);
-      return LampTransferPreviewField(
-        formKey: formKey,
-        label: fieldKey.displayLabel,
-        action: aggregateAction,
-        lampValue: lampValues[formKey],
-        destinationValue: destinationMap?[formKey],
-        items: items,
-        hasWarning: hasItemWarning,
-        warningMessage: hasItemWarning && itemWarning.isNotEmpty
-            ? itemWarning
-            : null,
-      );
-    }
+  return OwnerTransferField.values
+      .map((fieldKey) {
+        final formKey = fieldKey.formKey;
+        final destinationValue = destinationMap == null
+            ? null
+            : _nullableValue(destinationMap[formKey]);
+        if (fieldKey == OwnerTransferField.phones ||
+            fieldKey == OwnerTransferField.equipmentCodes) {
+          final currentItems = fieldKey == OwnerTransferField.phones
+              ? PhoneListParser.splitPhones(currentFormValues[formKey])
+              : LampMigrationService.parseEquipmentCodes(
+                  currentFormValues[formKey],
+                );
+          final lampItems = fieldKey == OwnerTransferField.phones
+              ? PhoneListParser.splitPhones(lampValues[formKey])
+              : LampMigrationService.parseEquipmentCodes(lampValues[formKey]);
+          final destinationItems = destinationMap == null
+              ? const <String>[]
+              : fieldKey == OwnerTransferField.phones
+              ? PhoneListParser.splitPhones(destinationMap[formKey])
+              : LampMigrationService.parseEquipmentCodes(
+                  destinationMap[formKey],
+                );
+          final items = evaluateItemsField<OwnerTransferField>(
+            fieldKey: fieldKey,
+            currentItems: currentItems,
+            lampItems: lampItems,
+            destinationItems: destinationItems,
+          );
+          final hasItemWarning = items.any((item) => item.hasWarning);
+          final itemWarning = items
+              .map((item) => item.warningMessage)
+              .whereType<String>()
+              .where((message) => message.isNotEmpty)
+              .join(' · ');
+          final aggregateAction = _aggregateItemsAction(items);
+          return LampTransferPreviewField(
+            formKey: formKey,
+            label: fieldKey.displayLabel,
+            action: aggregateAction,
+            lampValue: lampValues[formKey],
+            destinationValue: destinationMap?[formKey],
+            items: items,
+            hasWarning: hasItemWarning,
+            warningMessage: hasItemWarning && itemWarning.isNotEmpty
+                ? itemWarning
+                : null,
+          );
+        }
 
-    final targetExists = fieldKey == OwnerTransferField.departmentName
-        ? lampDepartmentExistsByName(
-            currentFormValues[formKey],
-            existsCheck: departmentExistsCheck,
-          )
-        : false;
-    final plan = evaluateField<OwnerTransferField>(
-      fieldKey: fieldKey,
-      currentValue: currentFormValues[formKey],
-      lampValue: lampValues[formKey],
-      destinationValue: destinationValue,
-      targetExists: targetExists,
-    );
-    return LampTransferPreviewField.fromPlan(
-      formKey,
-      fieldKey.displayLabel,
-      plan,
-    );
-  }).toList(growable: false);
+        final targetExists = fieldKey == OwnerTransferField.departmentName
+            ? lampDepartmentExistsByName(
+                currentFormValues[formKey],
+                existsCheck: departmentExistsCheck,
+              )
+            : false;
+        final plan = evaluateField<OwnerTransferField>(
+          fieldKey: fieldKey,
+          currentValue: currentFormValues[formKey],
+          lampValue: lampValues[formKey],
+          destinationValue: destinationValue,
+          targetExists: targetExists,
+        );
+        return LampTransferPreviewField.fromPlan(
+          formKey,
+          fieldKey.displayLabel,
+          plan,
+        );
+      })
+      .toList(growable: false);
 }
 
 List<LampTransferPreviewField> _equipmentPreviewFields({
@@ -496,30 +489,32 @@ List<LampTransferPreviewField> _equipmentPreviewFields({
   required Map<String, String>? destinationMap,
   bool Function(String normalizedDepartmentName)? departmentExistsCheck,
 }) {
-  return EquipmentTransferField.values.map((fieldKey) {
-    final formKey = fieldKey.formKey;
-    final destinationValue = destinationMap == null
-        ? null
-        : _nullableValue(destinationMap[formKey]);
-    final targetExists = fieldKey == EquipmentTransferField.departmentName
-        ? lampDepartmentExistsByName(
-            currentFormValues[formKey],
-            existsCheck: departmentExistsCheck,
-          )
-        : false;
-    final plan = evaluateField<EquipmentTransferField>(
-      fieldKey: fieldKey,
-      currentValue: currentFormValues[formKey],
-      lampValue: lampValues[formKey],
-      destinationValue: destinationValue,
-      targetExists: targetExists,
-    );
-    return LampTransferPreviewField.fromPlan(
-      formKey,
-      fieldKey.displayLabel,
-      plan,
-    );
-  }).toList(growable: false);
+  return EquipmentTransferField.values
+      .map((fieldKey) {
+        final formKey = fieldKey.formKey;
+        final destinationValue = destinationMap == null
+            ? null
+            : _nullableValue(destinationMap[formKey]);
+        final targetExists = fieldKey == EquipmentTransferField.departmentName
+            ? lampDepartmentExistsByName(
+                currentFormValues[formKey],
+                existsCheck: departmentExistsCheck,
+              )
+            : false;
+        final plan = evaluateField<EquipmentTransferField>(
+          fieldKey: fieldKey,
+          currentValue: currentFormValues[formKey],
+          lampValue: lampValues[formKey],
+          destinationValue: destinationValue,
+          targetExists: targetExists,
+        );
+        return LampTransferPreviewField.fromPlan(
+          formKey,
+          fieldKey.displayLabel,
+          plan,
+        );
+      })
+      .toList(growable: false);
 }
 
 TransferFieldAction _aggregateItemsAction(List<TransferItemPlan> items) {

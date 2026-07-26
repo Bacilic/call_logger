@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../../../core/services/lookup_service.dart';
@@ -8,6 +8,7 @@ import '../../../../features/directory/models/department_model.dart';
 import '../../provider/smart_entity_selector_provider.dart';
 import 'smart_entity_selector_conflict_badge.dart';
 import 'text_layout_utils.dart';
+
 class SmartEntityDepartmentField extends StatefulWidget {
   const SmartEntityDepartmentField({
     super.key,
@@ -31,10 +32,12 @@ class SmartEntityDepartmentField extends StatefulWidget {
   final VoidCallback onContentChecked;
 
   @override
-  State<SmartEntityDepartmentField> createState() => SmartEntityDepartmentFieldState();
+  State<SmartEntityDepartmentField> createState() =>
+      SmartEntityDepartmentFieldState();
 }
 
-class SmartEntityDepartmentFieldState extends State<SmartEntityDepartmentField> {
+class SmartEntityDepartmentFieldState
+    extends State<SmartEntityDepartmentField> {
   bool _isKeyboardPreview = false;
   int _keyboardOptionIndex = -1;
   int _lastAutoScrollIndex = -1;
@@ -129,10 +132,12 @@ class SmartEntityDepartmentFieldState extends State<SmartEntityDepartmentField> 
                   ),
                 ),
                 ConflictBadge(
-                  severity: widget.header
-                      .conflictSeverityFor(SelectorField.department),
-                  message: widget.header
-                      .conflictTooltipFor(SelectorField.department),
+                  severity: widget.header.conflictSeverityFor(
+                    SelectorField.department,
+                  ),
+                  message: widget.header.conflictTooltipFor(
+                    SelectorField.department,
+                  ),
                 ),
               ],
             ),
@@ -260,13 +265,13 @@ class SmartEntityDepartmentFieldState extends State<SmartEntityDepartmentField> 
                       child: TextField(
                         controller: textController,
                         focusNode: focusNodeParam,
-                        spellCheckConfiguration: platformSpellCheckConfiguration,
+                        spellCheckConfiguration:
+                            platformSpellCheckConfiguration,
                         decoration: InputDecoration(
                           border: const OutlineInputBorder(),
                           isDense: true,
-                          suffixIcon: showInlineFieldClearButton(
-                            textController.text,
-                          )
+                          suffixIcon:
+                              showInlineFieldClearButton(textController.text)
                               ? Semantics(
                                   label: 'Καθαρισμός Τμήματος',
                                   child: IconButton(
@@ -329,4 +334,3 @@ class SmartEntityDepartmentFieldState extends State<SmartEntityDepartmentField> 
     );
   }
 }
-

@@ -81,7 +81,11 @@ class _ReorderGrabHandleState extends State<ReorderGrabHandle> {
 
   @override
   Widget build(BuildContext context) {
-    Widget iconWidget = Icon(widget.icon, color: widget.color, size: widget.size);
+    Widget iconWidget = Icon(
+      widget.icon,
+      color: widget.color,
+      size: widget.size,
+    );
     if (widget.tooltip != null) {
       iconWidget = Tooltip(message: widget.tooltip!, child: iconWidget);
     }

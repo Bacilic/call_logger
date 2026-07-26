@@ -94,9 +94,8 @@ _RecentCallColumnWidths _intrinsicRecentColumnWidths(
   List<CallModel> calls,
 ) {
   final textScaler = MediaQuery.textScalerOf(context);
-  final headerStyle = (theme.textTheme.labelSmall ?? const TextStyle()).copyWith(
-    fontWeight: FontWeight.w600,
-  );
+  final headerStyle = (theme.textTheme.labelSmall ?? const TextStyle())
+      .copyWith(fontWeight: FontWeight.w600);
   final bodySmall = theme.textTheme.bodySmall ?? const TextStyle();
   final bodyMedium = theme.textTheme.bodyMedium ?? const TextStyle();
 
@@ -147,9 +146,9 @@ class GlobalRecentCallsList extends ConsumerWidget {
     final theme = Theme.of(context);
     final isVisible = ref.watch(showGlobalCallsToggleProvider);
 
-    final asyncCalls =
-        isVisible ? ref.watch(globalRecentCallsProvider) : null;
-    final measureCalls = asyncCalls?.maybeWhen(
+    final asyncCalls = isVisible ? ref.watch(globalRecentCallsProvider) : null;
+    final measureCalls =
+        asyncCalls?.maybeWhen(
           data: (c) => c,
           orElse: () => const <CallModel>[],
         ) ??
@@ -268,8 +267,7 @@ _RecentCallColumnWidths _clampedRecentWidths(
   const floorPhone = 32.0;
   const floorCaller = 48.0;
   final gaps = 2 * _kGlobalRecentGap + _kGlobalRecentDeptLeadingGap;
-  final availableFixed =
-      maxRowWidth - gaps - _kGlobalRecentDeptMinReserve;
+  final availableFixed = maxRowWidth - gaps - _kGlobalRecentDeptMinReserve;
   final sum = intrinsic.time + intrinsic.phone + intrinsic.caller;
   if (sum <= availableFixed) return intrinsic;
 
@@ -295,10 +293,7 @@ _RecentCallColumnWidths _clampedRecentWidths(
 }
 
 class _RecentCallHeaderRow extends StatelessWidget {
-  const _RecentCallHeaderRow({
-    required this.theme,
-    required this.widths,
-  });
+  const _RecentCallHeaderRow({required this.theme, required this.widths});
 
   final ThemeData theme;
   final _RecentCallColumnWidths widths;
@@ -328,11 +323,7 @@ class _RecentCallHeaderRow extends StatelessWidget {
         ),
         SizedBox(width: _kGlobalRecentDeptLeadingGap),
         Expanded(
-          child: Text(
-            'Τμήμα',
-            style: h,
-            overflow: TextOverflow.ellipsis,
-          ),
+          child: Text('Τμήμα', style: h, overflow: TextOverflow.ellipsis),
         ),
       ],
     );

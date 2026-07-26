@@ -1,4 +1,4 @@
-﻿import 'dart:convert';
+import 'dart:convert';
 
 import 'package:flutter/services.dart';
 
@@ -6,9 +6,8 @@ import '../models/changelog_entry.dart';
 
 /// Φόρτωση και ταξινόμηση του ιστορικού αλλαγών από το asset JSON.
 class ChangelogService {
-  ChangelogService({
-    Future<String> Function(String assetPath)? loadAsset,
-  }) : _loadAsset = loadAsset ?? ((path) => rootBundle.loadString(path));
+  ChangelogService({Future<String> Function(String assetPath)? loadAsset})
+    : _loadAsset = loadAsset ?? ((path) => rootBundle.loadString(path));
 
   static const String _assetPath = 'assets/changelog.json';
 
@@ -26,8 +25,7 @@ class ChangelogService {
       final parsed = decoded
           .cast<dynamic>()
           .map(
-            (e) =>
-                ChangelogEntry.fromJson(Map<String, dynamic>.from(e as Map)),
+            (e) => ChangelogEntry.fromJson(Map<String, dynamic>.from(e as Map)),
           )
           .where((e) => e.version.isNotEmpty)
           .toList();

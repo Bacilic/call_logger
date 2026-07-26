@@ -153,10 +153,7 @@ class _OrphanCallsBanner extends ConsumerWidget {
 }
 
 class _SnoozeChoiceDialog extends StatefulWidget {
-  const _SnoozeChoiceDialog({
-    required this.config,
-    required this.maxRangeText,
-  });
+  const _SnoozeChoiceDialog({required this.config, required this.maxRangeText});
 
   final TaskSettingsConfig config;
   final String maxRangeText;

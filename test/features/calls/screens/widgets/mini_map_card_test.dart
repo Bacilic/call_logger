@@ -12,7 +12,6 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-
 /// Ελάχιστο έγκυρο PNG 1×1 pixel (base64).
 const String _kTinyPngBase64 =
     'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
@@ -20,9 +19,7 @@ const String _kTinyPngBase64 =
 const double _kTestViewportWidth = 336;
 const double _kTestViewportHeight = 170;
 
-DepartmentModel _mappedDepartment({
-  double mapRotation = 0.0,
-}) {
+DepartmentModel _mappedDepartment({double mapRotation = 0.0}) {
   return DepartmentModel(
     id: 1,
     name: 'Τμήμα δοκιμής',
@@ -131,10 +128,7 @@ void main() {
         expect(rotationFinder, findsOneWidget);
         final transform = tester.widget<Transform>(rotationFinder);
         expect(transform.alignment, Alignment.center);
-        expect(
-          _matrixRotationZ(transform.transform),
-          closeTo(rotation, 0.001),
-        );
+        expect(_matrixRotationZ(transform.transform), closeTo(rotation, 0.001));
         await _disposePumpedWidget(tester);
       },
       semanticsEnabled: false,
@@ -179,42 +173,7 @@ void main() {
     // Η οπτική ομαλότητα (χωρίς κολλήματα) επιβεβαιώνεται χειροκίνητα στα Windows·
     // το τεστ αποδεικνύει μόνο τη λογική του TransformationController.
 
-    testWidgets(
-      'τροχός ποντικιού αλλάζει την κλίμακα εντός ορίων',
-      (tester) async {
-        await _pumpMiniMapFloorPreview(
-          tester,
-          dept: _mappedDepartment(),
-          imagePath: imagePath,
-        );
-
-        final viewerFinder = find.byKey(const Key('mini_map_interactive_viewer'));
-        expect(viewerFinder, findsOneWidget);
-        final viewer = tester.widget<InteractiveViewer>(viewerFinder);
-        final controller = viewer.transformationController!;
-        final initialScale = controller.value.getMaxScaleOnAxis();
-
-        final center = tester.getCenter(
-          find.byKey(const Key('mini_map_scroll_listener')),
-        );
-        await _dispatchScroll(tester, center, -80);
-
-        final afterZoomIn = controller.value.getMaxScaleOnAxis();
-        expect(afterZoomIn, greaterThan(initialScale));
-        expect(afterZoomIn, lessThanOrEqualTo(MiniMapFloorPreview.kMaxInteractiveScale));
-
-        await _dispatchScroll(tester, center, 4000);
-        await tester.pump();
-
-        final afterZoomOut = controller.value.getMaxScaleOnAxis();
-        expect(afterZoomOut, greaterThanOrEqualTo(MiniMapFloorPreview.kMinInteractiveScale));
-        expect(afterZoomOut, lessThanOrEqualTo(MiniMapFloorPreview.kMaxInteractiveScale));
-        await _disposePumpedWidget(tester);
-      },
-      semanticsEnabled: false,
-    );
-
-    testWidgets('διπλό κλικ επαναφέρει την αρχική μετασχηματιστική τιμή', (
+    testWidgets('τροχός ποντικιού αλλάζει την κλίμακα εντός ορίων', (
       tester,
     ) async {
       await _pumpMiniMapFloorPreview(
@@ -224,23 +183,69 @@ void main() {
       );
 
       final viewerFinder = find.byKey(const Key('mini_map_interactive_viewer'));
+      expect(viewerFinder, findsOneWidget);
       final viewer = tester.widget<InteractiveViewer>(viewerFinder);
       final controller = viewer.transformationController!;
-      final initial = Matrix4.copy(controller.value);
+      final initialScale = controller.value.getMaxScaleOnAxis();
 
       final center = tester.getCenter(
         find.byKey(const Key('mini_map_scroll_listener')),
       );
-      await _dispatchScroll(tester, center, -120);
-      expect(controller.value, isNot(equals(initial)));
+      await _dispatchScroll(tester, center, -80);
 
-      await tester.tapAt(center);
+      final afterZoomIn = controller.value.getMaxScaleOnAxis();
+      expect(afterZoomIn, greaterThan(initialScale));
+      expect(
+        afterZoomIn,
+        lessThanOrEqualTo(MiniMapFloorPreview.kMaxInteractiveScale),
+      );
+
+      await _dispatchScroll(tester, center, 4000);
       await tester.pump();
-      await tester.tapAt(center);
-      await tester.pump(const Duration(milliseconds: 100));
 
-      expect(controller.value, equals(initial));
+      final afterZoomOut = controller.value.getMaxScaleOnAxis();
+      expect(
+        afterZoomOut,
+        greaterThanOrEqualTo(MiniMapFloorPreview.kMinInteractiveScale),
+      );
+      expect(
+        afterZoomOut,
+        lessThanOrEqualTo(MiniMapFloorPreview.kMaxInteractiveScale),
+      );
       await _disposePumpedWidget(tester);
     }, semanticsEnabled: false);
+
+    testWidgets(
+      'διπλό κλικ επαναφέρει την αρχική μετασχηματιστική τιμή',
+      (tester) async {
+        await _pumpMiniMapFloorPreview(
+          tester,
+          dept: _mappedDepartment(),
+          imagePath: imagePath,
+        );
+
+        final viewerFinder = find.byKey(
+          const Key('mini_map_interactive_viewer'),
+        );
+        final viewer = tester.widget<InteractiveViewer>(viewerFinder);
+        final controller = viewer.transformationController!;
+        final initial = Matrix4.copy(controller.value);
+
+        final center = tester.getCenter(
+          find.byKey(const Key('mini_map_scroll_listener')),
+        );
+        await _dispatchScroll(tester, center, -120);
+        expect(controller.value, isNot(equals(initial)));
+
+        await tester.tapAt(center);
+        await tester.pump();
+        await tester.tapAt(center);
+        await tester.pump(const Duration(milliseconds: 100));
+
+        expect(controller.value, equals(initial));
+        await _disposePumpedWidget(tester);
+      },
+      semanticsEnabled: false,
+    );
   });
 }

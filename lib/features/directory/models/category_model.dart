@@ -1,10 +1,6 @@
 /// Μοντέλο εγγραφής κατηγορίας κλήσεων (`categories`).
 class CategoryModel {
-  const CategoryModel({
-    this.id,
-    required this.name,
-    this.isDeleted = false,
-  });
+  const CategoryModel({this.id, required this.name, this.isDeleted = false});
 
   final int? id;
   final String name;

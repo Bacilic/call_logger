@@ -16,7 +16,9 @@ void main() {
     setUpAll(() async {
       initSqfliteFfiForTests();
       final dir = await Directory.systemTemp.createTemp('lamp_phone_policy_');
-      await DatabaseHelper.bindTestDatabaseFile('${dir.path}/lamp_phone_policy.db');
+      await DatabaseHelper.bindTestDatabaseFile(
+        '${dir.path}/lamp_phone_policy.db',
+      );
       await DatabaseHelper.instance.database;
       service = LampMigrationService();
     });
@@ -65,10 +67,7 @@ void main() {
         'is_deleted': 0,
       });
       final phoneId = await db.insert('phones', {'number': phone});
-      await db.insert('user_phones', {
-        'user_id': userId,
-        'phone_id': phoneId,
-      });
+      await db.insert('user_phones', {'user_id': userId, 'phone_id': phoneId});
       return userId;
     }
 
@@ -112,17 +111,19 @@ void main() {
       final targetDepartmentId = departmentName.isEmpty
           ? null
           : targetDepartmentIdForName(departmentName);
-      final policyConflicts = PhoneDepartmentPolicy.findConflictsForUserAssignment(
-        phones: phones,
-        targetDepartmentId: targetDepartmentId,
-        editingUserId: editingUserId,
-      );
+      final policyConflicts =
+          PhoneDepartmentPolicy.findConflictsForUserAssignment(
+            phones: phones,
+            targetDepartmentId: targetDepartmentId,
+            editingUserId: editingUserId,
+          );
       final expected = <LampOwnerConflict>[];
       for (final c in policyConflicts) {
         if (c.hasOtherUserOwners) {
           expected.add(
             LampOwnerConflict(
-              conflictId: 'phone:${SearchTextNormalizer.normalizeForSearch(c.phone)}',
+              conflictId:
+                  'phone:${SearchTextNormalizer.normalizeForSearch(c.phone)}',
               kind: LampOwnerConflictKind.phone,
               value: c.phone,
               currentOwners: c.otherUserOwnerLabels,
@@ -131,7 +132,8 @@ void main() {
         } else if (c.hasDepartmentLocationConflict) {
           expected.add(
             LampOwnerConflict(
-              conflictId: 'phone:${SearchTextNormalizer.normalizeForSearch(c.phone)}',
+              conflictId:
+                  'phone:${SearchTextNormalizer.normalizeForSearch(c.phone)}',
               kind: LampOwnerConflictKind.phone,
               value: c.phone,
               currentOwners: [
@@ -175,10 +177,7 @@ void main() {
         await reloadLookup();
 
         final conflicts = await service.detectOwnerConflicts(
-          formValues: ownerForm(
-            phones: phone,
-            departmentName: 'Τμήμα HR',
-          ),
+          formValues: ownerForm(phones: phone, departmentName: 'Τμήμα HR'),
           selectedCandidateId: null,
         );
 
@@ -202,10 +201,7 @@ void main() {
       await reloadLookup();
 
       final conflicts = await service.detectOwnerConflicts(
-        formValues: ownerForm(
-          phones: phone,
-          departmentName: 'Γραμματεία',
-        ),
+        formValues: ownerForm(phones: phone, departmentName: 'Γραμματεία'),
         selectedCandidateId: null,
       );
 
@@ -231,10 +227,7 @@ void main() {
         await reloadLookup();
 
         final conflicts = await service.detectOwnerConflicts(
-          formValues: ownerForm(
-            phones: phone,
-            departmentName: 'Τμήμα Γ',
-          ),
+          formValues: ownerForm(phones: phone, departmentName: 'Τμήμα Γ'),
           selectedCandidateId: null,
         );
 
@@ -250,39 +243,45 @@ void main() {
       },
     );
 
-    test('συνέπεια με PhoneDepartmentPolicy.findConflictsForUserAssignment', () async {
-      const phone = '2105554004';
-      final deptIt = await insertDepartment('Τμήμα IT');
-      await insertDepartment('Τμήμα HR');
-      await insertUserWithPhone(
-        firstName: 'Νίκος',
-        lastName: 'Αντωνίου',
-        departmentId: deptIt,
-        phone: phone,
-      );
-      await reloadLookup();
+    test(
+      'συνέπεια με PhoneDepartmentPolicy.findConflictsForUserAssignment',
+      () async {
+        const phone = '2105554004';
+        final deptIt = await insertDepartment('Τμήμα IT');
+        await insertDepartment('Τμήμα HR');
+        await insertUserWithPhone(
+          firstName: 'Νίκος',
+          lastName: 'Αντωνίου',
+          departmentId: deptIt,
+          phone: phone,
+        );
+        await reloadLookup();
 
-      const departmentName = 'Τμήμα HR';
-      final formValues = ownerForm(phones: phone, departmentName: departmentName);
-      final actual = await service.detectOwnerConflicts(
-        formValues: formValues,
-        selectedCandidateId: null,
-      );
-      final expected = phoneConflictsFromPolicy(
-        phones: [phone],
-        departmentName: departmentName,
-      );
+        const departmentName = 'Τμήμα HR';
+        final formValues = ownerForm(
+          phones: phone,
+          departmentName: departmentName,
+        );
+        final actual = await service.detectOwnerConflicts(
+          formValues: formValues,
+          selectedCandidateId: null,
+        );
+        final expected = phoneConflictsFromPolicy(
+          phones: [phone],
+          departmentName: departmentName,
+        );
 
-      final actualPhones = actual
-          .where((c) => c.kind == LampOwnerConflictKind.phone)
-          .toList();
-      expect(actualPhones.length, expected.length);
-      for (var i = 0; i < expected.length; i++) {
-        expect(actualPhones[i].conflictId, expected[i].conflictId);
-        expect(actualPhones[i].value, expected[i].value);
-        expect(actualPhones[i].currentOwners, expected[i].currentOwners);
-      }
-    });
+        final actualPhones = actual
+            .where((c) => c.kind == LampOwnerConflictKind.phone)
+            .toList();
+        expect(actualPhones.length, expected.length);
+        for (var i = 0; i < expected.length; i++) {
+          expect(actualPhones[i].conflictId, expected[i].conflictId);
+          expect(actualPhones[i].value, expected[i].value);
+          expect(actualPhones[i].currentOwners, expected[i].currentOwners);
+        }
+      },
+    );
 
     test(
       'ενημέρωση υπάρχοντος: δικό του τηλέφωνο δεν παράγει σύγκρουση',
@@ -298,10 +297,7 @@ void main() {
         await reloadLookup();
 
         final conflicts = await service.detectOwnerConflicts(
-          formValues: ownerForm(
-            phones: phone,
-            departmentName: 'Τμήμα IT',
-          ),
+          formValues: ownerForm(phones: phone, departmentName: 'Τμήμα IT'),
           selectedCandidateId: userId,
         );
 
@@ -333,10 +329,7 @@ void main() {
       await reloadLookup();
 
       final conflicts = await service.detectOwnerConflicts(
-        formValues: ownerForm(
-          phones: '',
-          equipmentCodes: code,
-        ),
+        formValues: ownerForm(phones: '', equipmentCodes: code),
         selectedCandidateId: null,
       );
 

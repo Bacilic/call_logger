@@ -1,4 +1,4 @@
-﻿import 'dart:math' as math;
+import 'dart:math' as math;
 import 'dart:ui' show Offset, Rect, Size;
 
 import 'package:flutter/foundation.dart';
@@ -95,11 +95,7 @@ final buildingMapReposProvider = FutureProvider<BuildingMapRepos>((ref) async {
   final departments = DepartmentRepository(db);
   final maps = BuildingMapRepository(db);
   maps.bindUpdateDepartment(departments.updateDepartment);
-  return (
-    maps: maps,
-    search: OmnisearchService(db),
-    departments: departments,
-  );
+  return (maps: maps, search: OmnisearchService(db), departments: departments);
 });
 
 final buildingMapSelectedSheetIdProvider =
@@ -204,10 +200,13 @@ class DraftDepartmentShape {
   final double? labelOffsetY;
   final double? anchorOffsetX;
   final double? anchorOffsetY;
+
   /// Ενεργή κλίμακα μεγέθους ετικέτας (1.0 = προεπιλογή).
   final double labelFontScale;
+
   /// Πλάτος πλαισίου ετικέτας σε px καμβά.
   final double labelWidth;
+
   /// Ύψος πλαισίου ετικέτας σε px καμβά.
   final double labelHeight;
 
@@ -388,12 +387,13 @@ class BuildingMapFloorReloadSeqNotifier extends Notifier<int> {
 }
 
 /// Κατάλογος φύλλων κατόψης (`building_map_floors`) για ετικέτες ορόφου στο UI (π.χ. καρτέλα τμήματα).
-final buildingMapFloorsCatalogProvider =
-    FutureProvider<List<BuildingMapFloor>>((ref) async {
-  ref.watch(buildingMapFloorReloadSeqProvider);
-  final db = await DatabaseHelper.instance.database;
-  return BuildingMapRepository(db).listBuildingMapFloors();
-});
+final buildingMapFloorsCatalogProvider = FutureProvider<List<BuildingMapFloor>>(
+  (ref) async {
+    ref.watch(buildingMapFloorReloadSeqProvider);
+    final db = await DatabaseHelper.instance.database;
+    return BuildingMapRepository(db).listBuildingMapFloors();
+  },
+);
 
 /// Αύξων αριθμός όταν η αναζήτηση χάρτη ζητά κεντράρισμα στο επιλεγμένο τμήμα (μόνο pan, ίδιο zoom).
 final buildingMapViewportCenterRequestSeqProvider =
@@ -443,11 +443,11 @@ class BuildingMapSearchUnresolvedNotice {
   final int? departmentId;
 }
 
-final buildingMapSearchUnresolvedNoticeProvider = NotifierProvider<
-    BuildingMapSearchUnresolvedNoticeNotifier,
-    BuildingMapSearchUnresolvedNotice?>(
-  BuildingMapSearchUnresolvedNoticeNotifier.new,
-);
+final buildingMapSearchUnresolvedNoticeProvider =
+    NotifierProvider<
+      BuildingMapSearchUnresolvedNoticeNotifier,
+      BuildingMapSearchUnresolvedNotice?
+    >(BuildingMapSearchUnresolvedNoticeNotifier.new);
 
 class BuildingMapSearchUnresolvedNoticeNotifier
     extends Notifier<BuildingMapSearchUnresolvedNotice?> {
@@ -465,9 +465,7 @@ class BuildingMapSearchUnresolvedNoticeNotifier
 
 @immutable
 class BuildingMapPendingJumpPayload {
-  const BuildingMapPendingJumpPayload({
-    required this.entity,
-  });
+  const BuildingMapPendingJumpPayload({required this.entity});
 
   final dynamic entity;
 }

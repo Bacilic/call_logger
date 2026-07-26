@@ -1,4 +1,4 @@
-﻿// Provider test: πολυβηματική ροή Lansweeper (submitTicketWorkflow) χωρίς δίκτυο.
+// Provider test: πολυβηματική ροή Lansweeper (submitTicketWorkflow) χωρίς δίκτυο.
 //
 //   flutter test test/features/history/lansweeper_sync_workflow_provider_test.dart
 
@@ -53,9 +53,7 @@ const _kDefaultSubmitInput = LansweeperSubmitInput(
   durationSeconds: 300,
 );
 
-Future<int> _seedWorkflowCall({
-  String? lansweeperMainTicketId,
-}) async {
+Future<int> _seedWorkflowCall({String? lansweeperMainTicketId}) async {
   final db = await DatabaseHelper.instance.database;
   final repo = CallsRepository(db);
   return repo.insertCall(
@@ -107,10 +105,11 @@ void main() {
 
         expect(result.success, isTrue);
         expect(result.ticketId, _kFakeTicketId);
-        expect(
-          poster.calls.map((c) => c.action).toList(),
-          ['AddTicket', 'AddNote', 'EditTicket'],
-        );
+        expect(poster.calls.map((c) => c.action).toList(), [
+          'AddTicket',
+          'AddNote',
+          'EditTicket',
+        ]);
 
         final db = await DatabaseHelper.instance.database;
         final call = await CallsRepository(db).getCallById(callId);
@@ -133,14 +132,14 @@ void main() {
             .submitCall(callId: callId, input: _kDefaultSubmitInput);
 
         final db = await DatabaseHelper.instance.database;
-        final links = await CallsRepository(db).getCallExternalLinks(
-          callId,
-          provider: 'lansweeper',
-        );
+        final links = await CallsRepository(
+          db,
+        ).getCallExternalLinks(callId, provider: 'lansweeper');
         expect(links, isNotEmpty);
 
         final metadata =
-            jsonDecode(links.first['metadata'] as String) as Map<String, dynamic>;
+            jsonDecode(links.first['metadata'] as String)
+                as Map<String, dynamic>;
         expect(metadata['mode'], 'api_workflow');
         final steps = (metadata['completedSteps'] as List).cast<String>();
         expect(steps, contains('AddTicket'));
@@ -169,10 +168,7 @@ void main() {
         expect(poster.calls, isNotEmpty);
         expect(poster.calls.first.action, 'AddNote');
         expect(poster.calls.first.fields['TicketID'], _kExistingTicketId);
-        expect(
-          poster.calls.any((call) => call.action == 'AddTicket'),
-          isFalse,
-        );
+        expect(poster.calls.any((call) => call.action == 'AddTicket'), isFalse);
 
         final db = await DatabaseHelper.instance.database;
         final call = await CallsRepository(db).getCallById(callId);
@@ -189,7 +185,9 @@ void main() {
 
         container.listen(lansweeperSyncProvider, (_, _) {});
 
-        final result = await container.read(lansweeperSyncProvider.notifier).submitCall(
+        final result = await container
+            .read(lansweeperSyncProvider.notifier)
+            .submitCall(
               callId: callId,
               input: const LansweeperSubmitInput(
                 title: 'Τίτλος',

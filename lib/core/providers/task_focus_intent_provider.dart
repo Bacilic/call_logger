@@ -14,7 +14,6 @@ class TaskFocusIntentNotifier extends Notifier<int?> {
   }
 }
 
-final taskFocusIntentProvider =
-    NotifierProvider<TaskFocusIntentNotifier, int?>(
+final taskFocusIntentProvider = NotifierProvider<TaskFocusIntentNotifier, int?>(
   TaskFocusIntentNotifier.new,
 );

@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -40,8 +40,7 @@ class _AppInitWrapperState extends ConsumerState<AppInitWrapper> {
       future: ApplicationResetService.instance.hasPendingReset(),
       builder: (context, snapshot) {
         final pending = snapshot.data == true;
-        if (pending &&
-            result.status == DatabaseStatus.fileNotFound) {
+        if (pending && result.status == DatabaseStatus.fileNotFound) {
           return _buildPendingResetScreen();
         }
         return DatabaseErrorScreen(
@@ -71,10 +70,7 @@ class _AppInitWrapperState extends ConsumerState<AppInitWrapper> {
       loading: () => const _InitLoadingScreen(),
       error: (err, st) {
         final result = DatabaseInitResult.fromException(err, null, st);
-        return _buildInitFailureScreen(
-          result: result,
-          dbPath: result.path,
-        );
+        return _buildInitFailureScreen(result: result, dbPath: result.path);
       },
       data: (initResult) {
         if (initResult.success) {

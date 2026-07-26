@@ -1,4 +1,4 @@
-﻿import 'dart:collection';
+import 'dart:collection';
 import 'dart:convert';
 import 'dart:io';
 
@@ -60,11 +60,10 @@ class DictionaryService {
   }
 
   /// Όλες οι καταχωρημένες επιφανειακές μορφές ανά κλειδί.
-  Map<String, Set<String>> get stripKeyToVariantsMap =>
-      UnmodifiableMapView({
-        for (final e in _stripKeyToVariants.entries)
-          e.key: UnmodifiableSetView(Set<String>.from(e.value)),
-      });
+  Map<String, Set<String>> get stripKeyToVariantsMap => UnmodifiableMapView({
+    for (final e in _stripKeyToVariants.entries)
+      e.key: UnmodifiableSetView(Set<String>.from(e.value)),
+  });
 
   /// Επιλογή κύριας μορφής από σύνολο παραλλαγών.
   static String primaryDisplayForVariants(String key, Set<String> variants) {

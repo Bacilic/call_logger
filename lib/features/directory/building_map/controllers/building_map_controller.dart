@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 import 'dart:io';
 import 'dart:ui' as ui;
 
@@ -107,9 +107,7 @@ class BuildingMapController {
     }
     _ref.read(buildingMapDraftShapeProvider.notifier).clear();
     _ref.read(buildingMapEditFromSelectionTapProvider.notifier).clear();
-    _ref
-        .read(buildingMapSearchRevealedDepartmentIdProvider.notifier)
-        .clear();
+    _ref.read(buildingMapSearchRevealedDepartmentIdProvider.notifier).clear();
     _ref.read(buildingMapToolProvider.notifier).setMode(MapToolMode.select);
     final path = floors
         .cast<BuildingMapFloor?>()
@@ -344,7 +342,9 @@ class BuildingMapController {
       'map_label_offset_y': draft.labelOffsetY,
       'map_anchor_offset_x': draft.anchorOffsetX,
       'map_anchor_offset_y': draft.anchorOffsetY,
-      'map_label_font_scale': mapLabelFontScaleForDatabase(draft.labelFontScale),
+      'map_label_font_scale': mapLabelFontScaleForDatabase(
+        draft.labelFontScale,
+      ),
       'map_label_width': mapLabelWidthForDatabase(draft.labelWidth),
       'map_label_height': mapLabelHeightForDatabase(draft.labelHeight),
     };
@@ -389,7 +389,8 @@ class BuildingMapController {
         : computeMinMapLabelBoxWidthForText(labelText);
     final w = width.clamp(minW, 2000.0);
     final h = height.clamp(kBuildingMapLabelMinHeight, 2000.0);
-    if ((w - draft.labelWidth).abs() < 0.5 && (h - draft.labelHeight).abs() < 0.5) {
+    if ((w - draft.labelWidth).abs() < 0.5 &&
+        (h - draft.labelHeight).abs() < 0.5) {
       return;
     }
     _ref
@@ -401,7 +402,10 @@ class BuildingMapController {
   void adjustDraftLabelFontScale({required bool increase}) {
     final draft = _ref.read(buildingMapDraftShapeProvider);
     if (draft == null) return;
-    final next = stepMapLabelFontScale(draft.labelFontScale, increase: increase);
+    final next = stepMapLabelFontScale(
+      draft.labelFontScale,
+      increase: increase,
+    );
     if ((next - draft.labelFontScale).abs() < 0.001) return;
     _ref
         .read(buildingMapDraftShapeProvider.notifier)
@@ -575,7 +579,7 @@ class BuildingMapController {
     var responded = false;
     var copyToPortable = true;
     String? targetFileName;
-  ingestLoop:
+    ingestLoop:
     while (true) {
       final result = await BuildingMapStorage.ingestPickedImage(
         srcPath,
@@ -599,9 +603,9 @@ class BuildingMapController {
         continue ingestLoop;
       }
       if (result.errorMessage != null && context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(result.errorMessage!)),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(result.errorMessage!)));
       }
       return null;
     }
@@ -658,9 +662,9 @@ class BuildingMapController {
       }
       _ref.read(buildingMapFloorReloadSeqProvider.notifier).bump();
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Η κατόψη ενημερώθηκε.')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Η κατόψη ενημερώθηκε.')));
       }
     } catch (e) {
       if (context.mounted) {
@@ -676,82 +680,82 @@ class BuildingMapController {
     final groupCtrl = SpellCheckController();
     final labelFocus = FocusNode();
     try {
-    final picked = await FilePicker.pickFiles(
-      type: FileType.image,
-    );
-    if (picked == null || picked.files.isEmpty) return;
-    final srcPath = picked.files.single.path;
-    if (srcPath == null) return;
-    if (!context.mounted) return;
+      final picked = await FilePicker.pickFiles(type: FileType.image);
+      if (picked == null || picked.files.isEmpty) return;
+      final srcPath = picked.files.single.path;
+      if (srcPath == null) return;
+      if (!context.mounted) return;
 
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => Consumer(
-        builder: (context, ref, _) => AlertDialog(
-          title: const Text('Νέο φύλλο κατόψης'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Focus(
-                  autofocus: true,
-                  child: LexiconSpellTextFormField(
-                    controller: labelCtrl,
-                    focusNode: labelFocus,
-                    decoration: const InputDecoration(
-                      labelText: 'Ετικέτα',
-                      hintText: 'π.χ. 1ος — Γραφεία',
+      final ok = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => Consumer(
+          builder: (context, ref, _) => AlertDialog(
+            title: const Text('Νέο φύλλο κατόψης'),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Focus(
+                    autofocus: true,
+                    child: LexiconSpellTextFormField(
+                      controller: labelCtrl,
+                      focusNode: labelFocus,
+                      decoration: const InputDecoration(
+                        labelText: 'Ετικέτα',
+                        hintText: 'π.χ. 1ος — Γραφεία',
+                      ),
                     ),
                   ),
-                ),
-                LexiconSpellTextFormField(
-                  controller: groupCtrl,
-                  decoration: const InputDecoration(
-                    labelText: 'Ομάδα ορόφου (προαιρετικό)',
-                    hintText: 'π.χ. L1',
+                  LexiconSpellTextFormField(
+                    controller: groupCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Ομάδα ορόφου (προαιρετικό)',
+                      hintText: 'π.χ. L1',
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Άκυρο'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('Προσθήκη'),
+              ),
+            ],
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Άκυρο'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Προσθήκη'),
-            ),
-          ],
         ),
-      ),
-    );
-    if (ok != true || !context.mounted) return;
-    final label = labelCtrl.text.trim();
-    if (label.isEmpty) return;
+      );
+      if (ok != true || !context.mounted) return;
+      final label = labelCtrl.text.trim();
+      if (label.isEmpty) return;
 
-    final copied = await _ingestPickedImagePath(
-      context,
-      srcPath,
-      floorLabel: label,
-    );
-    if (copied == null || !context.mounted) return;
+      final copied = await _ingestPickedImagePath(
+        context,
+        srcPath,
+        floorLabel: label,
+      );
+      if (copied == null || !context.mounted) return;
 
-    final db = await DatabaseHelper.instance.database;
-    final maps = BuildingMapRepository(db);
-    final id = await maps.insertBuildingMapFloor(
-      label: label,
-      floorGroup: groupCtrl.text.trim().isEmpty ? null : groupCtrl.text.trim(),
-      copiedImagePath: copied,
-      rotationDegrees: 0,
-    );
-    _ref.read(buildingMapSelectedSheetIdProvider.notifier).setSheet(id);
-    final floors = await maps.listBuildingMapFloors();
-    if (!context.mounted) return;
-    await syncSheetSelection(floors);
-    appliedInitialFloorSync = false;
-    _ref.read(buildingMapFloorReloadSeqProvider.notifier).bump();
+      final db = await DatabaseHelper.instance.database;
+      final maps = BuildingMapRepository(db);
+      final id = await maps.insertBuildingMapFloor(
+        label: label,
+        floorGroup: groupCtrl.text.trim().isEmpty
+            ? null
+            : groupCtrl.text.trim(),
+        copiedImagePath: copied,
+        rotationDegrees: 0,
+      );
+      _ref.read(buildingMapSelectedSheetIdProvider.notifier).setSheet(id);
+      final floors = await maps.listBuildingMapFloors();
+      if (!context.mounted) return;
+      await syncSheetSelection(floors);
+      appliedInitialFloorSync = false;
+      _ref.read(buildingMapFloorReloadSeqProvider.notifier).bump();
     } finally {
       labelCtrl.dispose();
       groupCtrl.dispose();
@@ -769,152 +773,156 @@ class BuildingMapController {
     final originalLabel = floor.label.trim();
     final originalGroup = (floor.floorGroup ?? '').trim();
     try {
-    String? pickedSrcPath;
-    var previewImageAvailable = false;
-    if (floor.imagePath.trim().isNotEmpty) {
-      final initialImage =
-          await BuildingMapStorage.fileForStoredPath(floor.imagePath);
-      previewImageAvailable = await initialImage.exists();
-    }
-    var showDepartmentsOnPreview = previewImageAvailable;
-    if (!context.mounted) return;
-    final previewDepartments = _ref
-        .read(departmentDirectoryProvider)
-        .allDepartments
-        .where((d) => !d.isDeleted)
-        .toList();
+      String? pickedSrcPath;
+      var previewImageAvailable = false;
+      if (floor.imagePath.trim().isNotEmpty) {
+        final initialImage = await BuildingMapStorage.fileForStoredPath(
+          floor.imagePath,
+        );
+        previewImageAvailable = await initialImage.exists();
+      }
+      var showDepartmentsOnPreview = previewImageAvailable;
+      if (!context.mounted) return;
+      final previewDepartments = _ref
+          .read(departmentDirectoryProvider)
+          .allDepartments
+          .where((d) => !d.isDeleted)
+          .toList();
 
-    bool hasSaveableChanges() {
-      final label = labelCtrl.text.trim();
-      if (label.isEmpty) return false;
-      final group = groupCtrl.text.trim();
-      return label != originalLabel ||
-          group != originalGroup ||
-          pickedSrcPath != null;
-    }
+      bool hasSaveableChanges() {
+        final label = labelCtrl.text.trim();
+        if (label.isEmpty) return false;
+        final group = groupCtrl.text.trim();
+        return label != originalLabel ||
+            group != originalGroup ||
+            pickedSrcPath != null;
+      }
 
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => Consumer(
-        builder: (context, ref, _) => StatefulBuilder(
-        builder: (ctx, setDlg) => AlertDialog(
-          title: const Text('Επεξεργασία κατόψης'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Focus(
-                  autofocus: true,
-                  child: LexiconSpellTextFormField(
-                    controller: labelCtrl,
-                    focusNode: labelFocus,
-                    decoration: const InputDecoration(labelText: 'Όνομα ορόφου'),
-                    onChanged: (_) => setDlg(() {}),
-                  ),
+      final ok = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => Consumer(
+          builder: (context, ref, _) => StatefulBuilder(
+            builder: (ctx, setDlg) => AlertDialog(
+              title: const Text('Επεξεργασία κατόψης'),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Focus(
+                      autofocus: true,
+                      child: LexiconSpellTextFormField(
+                        controller: labelCtrl,
+                        focusNode: labelFocus,
+                        decoration: const InputDecoration(
+                          labelText: 'Όνομα ορόφου',
+                        ),
+                        onChanged: (_) => setDlg(() {}),
+                      ),
+                    ),
+                    LexiconSpellTextFormField(
+                      controller: groupCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'Περιοχή ορόφου (προαιρετικό)',
+                      ),
+                      onChanged: (_) => setDlg(() {}),
+                    ),
+                    const SizedBox(height: 12),
+                    OutlinedButton.icon(
+                      onPressed: () async {
+                        final picked = await FilePicker.pickFiles(
+                          type: FileType.image,
+                        );
+                        if (picked == null || picked.files.isEmpty) return;
+                        final srcPath = picked.files.single.path;
+                        if (srcPath == null) return;
+                        pickedSrcPath = srcPath;
+                        previewImageAvailable = await File(srcPath).exists();
+                        if (previewImageAvailable) {
+                          showDepartmentsOnPreview = true;
+                        }
+                        setDlg(() {});
+                      },
+                      icon: const Icon(Icons.image_outlined),
+                      label: Text(
+                        pickedSrcPath != null
+                            ? 'Επιλέχθηκε νέα κατόψη'
+                            : 'Αλλαγή κατόψης',
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    BuildingMapFloorEditPreview(
+                      imagePath: pickedSrcPath ?? floor.imagePath,
+                      floorId: floor.id,
+                      rotationDegrees: floor.rotationDegrees,
+                      showDepartments: showDepartmentsOnPreview,
+                      departments: previewDepartments,
+                    ),
+                    Tooltip(
+                      message:
+                          'Η προβολή τμημάτων είναι μόνο για την εκκαθάριση της '
+                          'μικρογραφίας. ΔΕΝ επιρεάζει τη βασική σχεδίαση του ορόφου.',
+                      child: SwitchListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text('Προβολή τμημάτων'),
+                        value: showDepartmentsOnPreview,
+                        onChanged: previewImageAvailable
+                            ? (v) => setDlg(() => showDepartmentsOnPreview = v)
+                            : null,
+                      ),
+                    ),
+                  ],
                 ),
-                LexiconSpellTextFormField(
-                  controller: groupCtrl,
-                  decoration: const InputDecoration(
-                    labelText: 'Περιοχή ορόφου (προαιρετικό)',
-                  ),
-                  onChanged: (_) => setDlg(() {}),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx, false),
+                  child: const Text('Άκυρο'),
                 ),
-                const SizedBox(height: 12),
-                OutlinedButton.icon(
-                  onPressed: () async {
-                    final picked = await FilePicker.pickFiles(
-                      type: FileType.image,
-                    );
-                    if (picked == null || picked.files.isEmpty) return;
-                    final srcPath = picked.files.single.path;
-                    if (srcPath == null) return;
-                    pickedSrcPath = srcPath;
-                    previewImageAvailable = await File(srcPath).exists();
-                    if (previewImageAvailable) {
-                      showDepartmentsOnPreview = true;
-                    }
-                    setDlg(() {});
-                  },
-                  icon: const Icon(Icons.image_outlined),
-                  label: Text(
-                    pickedSrcPath != null
-                        ? 'Επιλέχθηκε νέα κατόψη'
-                        : 'Αλλαγή κατόψης',
-                  ),
-                ),
-                const SizedBox(height: 12),
-                BuildingMapFloorEditPreview(
-                  imagePath: pickedSrcPath ?? floor.imagePath,
-                  floorId: floor.id,
-                  rotationDegrees: floor.rotationDegrees,
-                  showDepartments: showDepartmentsOnPreview,
-                  departments: previewDepartments,
-                ),
-                Tooltip(
-                  message:
-                      'Η προβολή τμημάτων είναι μόνο για την εκκαθάριση της '
-                      'μικρογραφίας. ΔΕΝ επιρεάζει τη βασική σχεδίαση του ορόφου.',
-                  child: SwitchListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: const Text('Προβολή τμημάτων'),
-                    value: showDepartmentsOnPreview,
-                    onChanged: previewImageAvailable
-                        ? (v) => setDlg(() => showDepartmentsOnPreview = v)
-                        : null,
-                  ),
+                FilledButton(
+                  onPressed: hasSaveableChanges()
+                      ? () => Navigator.pop(ctx, true)
+                      : null,
+                  child: const Text('Αποθήκευση'),
                 ),
               ],
             ),
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Άκυρο'),
-            ),
-            FilledButton(
-              onPressed:
-                  hasSaveableChanges() ? () => Navigator.pop(ctx, true) : null,
-              child: const Text('Αποθήκευση'),
-            ),
-          ],
         ),
-      ),
-      ),
-    );
-    if (ok != true || !context.mounted) return;
-    final label = labelCtrl.text.trim();
-    if (label.isEmpty) return;
-
-    var imagePathUpdate = floor.imagePath;
-    final previousPath = floor.imagePath;
-    if (pickedSrcPath != null) {
-      final ingested = await _ingestPickedImagePath(
-        context,
-        pickedSrcPath!,
-        floorLabel: label,
       );
-      if (ingested == null) return;
-      imagePathUpdate = ingested;
-    }
+      if (ok != true || !context.mounted) return;
+      final label = labelCtrl.text.trim();
+      if (label.isEmpty) return;
 
-    final db = await DatabaseHelper.instance.database;
-    await BuildingMapRepository(db).updateBuildingMapFloor(
-      floor.id,
-      rotationDegrees: floor.rotationDegrees,
-      label: label,
-      floorGroup: groupCtrl.text,
-      imagePath: pickedSrcPath != null ? imagePathUpdate : null,
-    );
-    if (pickedSrcPath != null && previousPath != imagePathUpdate) {
-      await BuildingMapStorage.deleteStoredImageBestEffort(previousPath);
-    }
+      var imagePathUpdate = floor.imagePath;
+      final previousPath = floor.imagePath;
+      if (pickedSrcPath != null) {
+        final ingested = await _ingestPickedImagePath(
+          context,
+          pickedSrcPath!,
+          floorLabel: label,
+        );
+        if (ingested == null) return;
+        imagePathUpdate = ingested;
+      }
 
-    final sel = _ref.read(buildingMapSelectedSheetIdProvider);
-    if (sel == floor.id) {
-      await decodeImageForPath(imagePathUpdate);
-    }
-    _ref.read(buildingMapFloorReloadSeqProvider.notifier).bump();
+      final db = await DatabaseHelper.instance.database;
+      await BuildingMapRepository(db).updateBuildingMapFloor(
+        floor.id,
+        rotationDegrees: floor.rotationDegrees,
+        label: label,
+        floorGroup: groupCtrl.text,
+        imagePath: pickedSrcPath != null ? imagePathUpdate : null,
+      );
+      if (pickedSrcPath != null && previousPath != imagePathUpdate) {
+        await BuildingMapStorage.deleteStoredImageBestEffort(previousPath);
+      }
+
+      final sel = _ref.read(buildingMapSelectedSheetIdProvider);
+      if (sel == floor.id) {
+        await decodeImageForPath(imagePathUpdate);
+      }
+      _ref.read(buildingMapFloorReloadSeqProvider.notifier).bump();
     } finally {
       labelCtrl.dispose();
       groupCtrl.dispose();
@@ -931,8 +939,7 @@ class BuildingMapController {
     String? resolvedImagePath;
     var imageFileExists = false;
     if (trimmedPath.isNotEmpty) {
-      final imageFile =
-          await BuildingMapStorage.fileForStoredPath(trimmedPath);
+      final imageFile = await BuildingMapStorage.fileForStoredPath(trimmedPath);
       resolvedImagePath = imageFile.path;
       imageFileExists = await imageFile.exists();
     }
@@ -979,7 +986,8 @@ class BuildingMapController {
                             displayImagePath,
                             style: Theme.of(context).textTheme.bodySmall,
                           ),
-                        ] else if (!imageFileExists && trimmedPath.isNotEmpty) ...[
+                        ] else if (!imageFileExists &&
+                            trimmedPath.isNotEmpty) ...[
                           const SizedBox(height: 8),
                           Text(
                             'Το αρχείο εικόνας δεν βρέθηκε στο δίσκο.',
@@ -1090,7 +1098,9 @@ class BuildingMapController {
 
   void _showMapSnack(BuildContext context, String message) {
     if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   Future<List<int>> _departmentIdsForUserId(int userId) async {
@@ -1100,7 +1110,9 @@ class BuildingMapController {
 
   Future<List<int>> _departmentIdsForPhone(String phoneText) async {
     final db = await DatabaseHelper.instance.database;
-    return DepartmentRepository(db).resolveActiveDepartmentIdsForPhone(phoneText);
+    return DepartmentRepository(
+      db,
+    ).resolveActiveDepartmentIdsForPhone(phoneText);
   }
 
   Future<UserModel?> _pickUserForEquipment(
@@ -1118,7 +1130,11 @@ class BuildingMapController {
             for (final user in users)
               SimpleDialogOption(
                 onPressed: () => Navigator.of(ctx).pop(user),
-                child: Text(user.name?.trim().isNotEmpty == true ? user.name! : 'Χωρίς όνομα'),
+                child: Text(
+                  user.name?.trim().isNotEmpty == true
+                      ? user.name!
+                      : 'Χωρίς όνομα',
+                ),
               ),
           ],
         );
@@ -1243,9 +1259,11 @@ class BuildingMapController {
 
     int? fallbackFloorId;
     final preferredFloorId = department.floorId;
-    if (preferredFloorId != null && floors.any((f) => f.id == preferredFloorId)) {
+    if (preferredFloorId != null &&
+        floors.any((f) => f.id == preferredFloorId)) {
       fallbackFloorId = preferredFloorId;
-    } else if (mappedFloorId != null && floors.any((f) => f.id == mappedFloorId)) {
+    } else if (mappedFloorId != null &&
+        floors.any((f) => f.id == mappedFloorId)) {
       fallbackFloorId = mappedFloorId;
     } else if (floors.isNotEmpty) {
       fallbackFloorId = floors.first.id;
@@ -1277,10 +1295,11 @@ class BuildingMapController {
           '«${buildingMapFloorDisplayLabel(fallbackFloor)}», αλλά δεν έχει '
           'σχεδιαστεί ακόμα στον χάρτη.';
     } else {
-      message =
-          'Το τμήμα «$deptName» δεν έχει καταχωρημένη θέση στον χάρτη.';
+      message = 'Το τμήμα «$deptName» δεν έχει καταχωρημένη θέση στον χάρτη.';
     }
-    _ref.read(buildingMapSearchUnresolvedNoticeProvider.notifier).setNotice(
+    _ref
+        .read(buildingMapSearchUnresolvedNoticeProvider.notifier)
+        .setNotice(
           BuildingMapSearchUnresolvedNotice(
             message: message,
             departmentId: departmentId,
@@ -1400,9 +1419,7 @@ class BuildingMapController {
         );
       }
     } else {
-      _ref
-          .read(buildingMapSearchRevealedDepartmentIdProvider.notifier)
-          .clear();
+      _ref.read(buildingMapSearchRevealedDepartmentIdProvider.notifier).clear();
     }
     await _jumpToDepartmentWithFallback(
       departmentId: selectedDepartmentId,

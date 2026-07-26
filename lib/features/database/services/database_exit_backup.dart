@@ -39,8 +39,8 @@ class DatabaseExitBackup {
         lastBackupStatus: result.success
             ? BackupScheduleStatus.success
             : (result.failureCode == DatabaseBackupFailureCode.folderMissing
-                ? BackupScheduleStatus.folderMissing
-                : BackupScheduleStatus.failed),
+                  ? BackupScheduleStatus.folderMissing
+                  : BackupScheduleStatus.failed),
       );
       await repo.saveSetting(
         DatabaseBackupSettings.appSettingsKey,

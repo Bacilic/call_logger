@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
@@ -87,9 +87,7 @@ MainNavRequest? mainNavRequestForAuditEntry(AuditLogModel row) {
       );
     case AuditEntityTypes.maintenance:
     case AuditEntityTypes.backup:
-      return const MainNavRequest(
-        destination: MainNavDestination.database,
-      );
+      return const MainNavRequest(destination: MainNavDestination.database);
     default:
       return null;
   }
@@ -129,16 +127,18 @@ class _ApplicationAuditTabState extends ConsumerState<ApplicationAuditTab> {
   void _onKeywordChanged(String value) {
     _debounceKeyword?.cancel();
     _debounceKeyword = Timer(_debounceDuration, () {
-      ref.read(auditFilterProvider.notifier).update(
-            (s) => s.copyWith(keyword: value.trim()),
-          );
+      ref
+          .read(auditFilterProvider.notifier)
+          .update((s) => s.copyWith(keyword: value.trim()));
       ref.read(auditPageIndexProvider.notifier).reset();
     });
   }
 
   void _onActionSelected(String? value) {
     final next = value?.trim();
-    ref.read(auditFilterProvider.notifier).update(
+    ref
+        .read(auditFilterProvider.notifier)
+        .update(
           (s) => s.copyWith(
             action: (next == null || next.isEmpty) ? null : next,
             clearAction: next == null || next.isEmpty,
@@ -148,11 +148,10 @@ class _ApplicationAuditTabState extends ConsumerState<ApplicationAuditTab> {
   }
 
   void _onEntityTypeSelected(String? value) {
-    ref.read(auditFilterProvider.notifier).update(
-          (s) => s.copyWith(
-            entityType: value,
-            clearEntityType: value == null,
-          ),
+    ref
+        .read(auditFilterProvider.notifier)
+        .update(
+          (s) => s.copyWith(entityType: value, clearEntityType: value == null),
         );
     ref.read(auditPageIndexProvider.notifier).reset();
   }
@@ -160,9 +159,9 @@ class _ApplicationAuditTabState extends ConsumerState<ApplicationAuditTab> {
   void _clearKeyword() {
     _debounceKeyword?.cancel();
     _keywordController.clear();
-    ref.read(auditFilterProvider.notifier).update(
-          (s) => s.copyWith(keyword: ''),
-        );
+    ref
+        .read(auditFilterProvider.notifier)
+        .update((s) => s.copyWith(keyword: ''));
     ref.read(auditPageIndexProvider.notifier).reset();
   }
 
@@ -319,17 +318,17 @@ class _ApplicationAuditTabState extends ConsumerState<ApplicationAuditTab> {
     );
     if (!mounted || result == null) return;
     if (result.wasCleared) {
-      ref.read(auditFilterProvider.notifier).update(
-            (s) => s.copyWith(clearDateRange: true),
-          );
+      ref
+          .read(auditFilterProvider.notifier)
+          .update((s) => s.copyWith(clearDateRange: true));
       ref.read(auditPageIndexProvider.notifier).reset();
       return;
     }
     final range = result.range;
     if (range == null) return;
-    ref.read(auditFilterProvider.notifier).update(
-          (s) => s.copyWith(dateFrom: range.start, dateTo: range.end),
-        );
+    ref
+        .read(auditFilterProvider.notifier)
+        .update((s) => s.copyWith(dateFrom: range.start, dateTo: range.end));
     ref.read(auditPageIndexProvider.notifier).reset();
   }
 
@@ -341,7 +340,8 @@ class _ApplicationAuditTabState extends ConsumerState<ApplicationAuditTab> {
     });
     ref.listen<AuditFilterModel>(auditFilterProvider, (previous, next) {
       if (previous == null) return;
-      final changed = previous.keyword != next.keyword ||
+      final changed =
+          previous.keyword != next.keyword ||
           previous.action != next.action ||
           previous.entityType != next.entityType ||
           previous.dateFrom != next.dateFrom ||
@@ -384,9 +384,9 @@ class _ApplicationAuditTabState extends ConsumerState<ApplicationAuditTab> {
         !actionOptions.contains(selectedAction)) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
-        ref.read(auditFilterProvider.notifier).update(
-              (s) => s.copyWith(clearAction: true),
-            );
+        ref
+            .read(auditFilterProvider.notifier)
+            .update((s) => s.copyWith(clearAction: true));
         ref.read(auditPageIndexProvider.notifier).reset();
       });
     }
@@ -425,10 +425,13 @@ class _ApplicationAuditTabState extends ConsumerState<ApplicationAuditTab> {
       data: (r) => r.totalCount,
       orElse: () => 0,
     );
-    final allSelected = totalCount > 0 && _selectedAuditIds.length == totalCount;
+    final allSelected =
+        totalCount > 0 && _selectedAuditIds.length == totalCount;
     final someSelected = _selectedAuditIds.isNotEmpty && !allSelected;
     final canDeleteSelection =
-        _selectedAuditIds.isNotEmpty && !_isSelectingAll && !_deleteCountdownActive;
+        _selectedAuditIds.isNotEmpty &&
+        !_isSelectingAll &&
+        !_deleteCountdownActive;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -501,7 +504,8 @@ class _ApplicationAuditTabState extends ConsumerState<ApplicationAuditTab> {
                                 .toList(),
                             selectedValue: selectedAction,
                             selectedLabel: selectedAction,
-                            enabled: actionOptionsAsync.hasValue ||
+                            enabled:
+                                actionOptionsAsync.hasValue ||
                                 !actionOptionsAsync.isLoading,
                             onSelected: _onActionSelected,
                           );
@@ -586,9 +590,9 @@ class _ApplicationAuditTabState extends ConsumerState<ApplicationAuditTab> {
                       ActionChip(
                         label: const Text('Καθαρισμός ημερομηνιών'),
                         onPressed: () {
-                          ref.read(auditFilterProvider.notifier).update(
-                                (s) => s.copyWith(clearDateRange: true),
-                              );
+                          ref
+                              .read(auditFilterProvider.notifier)
+                              .update((s) => s.copyWith(clearDateRange: true));
                           ref.read(auditPageIndexProvider.notifier).reset();
                         },
                       ),
@@ -627,23 +631,20 @@ class _ApplicationAuditTabState extends ConsumerState<ApplicationAuditTab> {
                     onPressed: pageIndex <= 0
                         ? null
                         : () => ref
-                            .read(auditPageIndexProvider.notifier)
-                            .setPage(pageIndex - 1),
+                              .read(auditPageIndexProvider.notifier)
+                              .setPage(pageIndex - 1),
                     icon: const Icon(Icons.chevron_left),
                   ),
-                  Text(
-                    pageLabel,
-                    style: theme.textTheme.bodySmall,
-                  ),
+                  Text(pageLabel, style: theme.textTheme.bodySmall),
                   IconButton(
                     tooltip: 'Επόμενη σελίδα',
                     onPressed: listAsync.maybeWhen(
                       data: (r) =>
                           (pageIndex + 1) * kAuditPageSize >= r.totalCount
-                              ? null
-                              : () => ref
-                                  .read(auditPageIndexProvider.notifier)
-                                  .setPage(pageIndex + 1),
+                          ? null
+                          : () => ref
+                                .read(auditPageIndexProvider.notifier)
+                                .setPage(pageIndex + 1),
                       orElse: () => null,
                     ),
                     icon: const Icon(Icons.chevron_right),
@@ -757,9 +758,7 @@ class _ApplicationAuditTabState extends ConsumerState<ApplicationAuditTab> {
                   },
                 ),
               ),
-              if (panelOpen &&
-                  selectedEntry != null &&
-                  selectedId != null) ...[
+              if (panelOpen && selectedEntry != null && selectedId != null) ...[
                 const VerticalDivider(width: 1),
                 AuditEntitySidePanel(
                   entry: selectedEntry,
@@ -806,10 +805,8 @@ class _ApplicationAuditTabState extends ConsumerState<ApplicationAuditTab> {
     };
     return types
         .map(
-          (t) => _AuditFilterAutocompleteOption(
-            value: t,
-            label: labels[t] ?? t,
-          ),
+          (t) =>
+              _AuditFilterAutocompleteOption(value: t, label: labels[t] ?? t),
         )
         .toList();
   }
@@ -907,8 +904,7 @@ class _AuditFilterAutocompleteState extends State<_AuditFilterAutocomplete> {
     final itemTop = _selectedIndex * _kOptionExtent;
     final itemBottom = itemTop + _kOptionExtent;
     final viewTop = _overlayScroll.offset;
-    final viewBottom =
-        viewTop + _overlayScroll.position.viewportDimension;
+    final viewBottom = viewTop + _overlayScroll.position.viewportDimension;
     double? target;
     if (itemTop < viewTop) {
       target = itemTop;
@@ -1070,8 +1066,9 @@ class _AuditFilterAutocompleteState extends State<_AuditFilterAutocomplete> {
 
   void _applySuggestion(_AuditFilterAutocompleteOption option) {
     _controller.text = option.label;
-    _controller.selection =
-        TextSelection.collapsed(offset: option.label.length);
+    _controller.selection = TextSelection.collapsed(
+      offset: option.label.length,
+    );
     widget.onSelected(option.value);
     _removeOverlay();
     _focusNode.requestFocus();
@@ -1134,9 +1131,7 @@ class _AuditFilterAutocompleteState extends State<_AuditFilterAutocomplete> {
         enabled: widget.enabled,
         decoration: InputDecoration(
           labelText: widget.labelText,
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
           isDense: true,
           suffixIcon: _controller.text.trim().isEmpty
               ? null

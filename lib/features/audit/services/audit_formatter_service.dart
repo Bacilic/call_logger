@@ -46,12 +46,7 @@ class AuditFormatterService {
   }) {
     final bulk = _parseBulk(row.newValuesJson);
     if (bulk != null) {
-      return _formatBulk(
-        row,
-        bulk,
-        technical: technical,
-        labels: labels,
-      );
+      return _formatBulk(row, bulk, technical: technical, labels: labels);
     }
 
     var type = row.entityType?.trim();
@@ -68,10 +63,9 @@ class AuditFormatterService {
     }
 
     final inferredName = _titleFromJson(row);
-    final effectiveName =
-        (row.entityName?.trim().isNotEmpty == true)
-            ? row.entityName!.trim()
-            : inferredName;
+    final effectiveName = (row.entityName?.trim().isNotEmpty == true)
+        ? row.entityName!.trim()
+        : inferredName;
 
     if (type == 'call' && !technical) {
       final action = _actionLabel(row.action ?? '', technical);
@@ -98,12 +92,11 @@ class AuditFormatterService {
     final subject = type != null && type.isNotEmpty
         ? _entitySummarySubject(type, eid, effectiveName, technical: technical)
         : (detailsWithoutOrigin(row) ?? '');
-    final base = [action, subject].where((e) => e.trim().isNotEmpty).join(' · ');
-    final change = primaryChangeLine(
-      row,
-      technical: technical,
-      labels: labels,
-    );
+    final base = [
+      action,
+      subject,
+    ].where((e) => e.trim().isNotEmpty).join(' · ');
+    final change = primaryChangeLine(row, technical: technical, labels: labels);
     if (change != null && change.isNotEmpty) {
       if (base.isEmpty) return change;
       return '$base - $change';
@@ -172,9 +165,7 @@ class AuditFormatterService {
     return null;
   }
 
-  static final RegExp _detailsTableId = RegExp(
-    r'^([a-zA-Z_]+)\s+id=(\d+)',
-  );
+  static final RegExp _detailsTableId = RegExp(r'^([a-zA-Z_]+)\s+id=(\d+)');
 
   /// Επιστρέφει canonical `entity_type` και id από `details` π.χ. `tasks id=48`.
   (String, int)? _parseDetailsTableId(String? details) {
@@ -231,7 +222,9 @@ class AuditFormatterService {
       if (id != null && name != null && name.isNotEmpty) {
         return '$name (id $id)';
       }
-      return name?.trim().isNotEmpty == true ? name!.trim() : _entityTypeGreek(t);
+      return name?.trim().isNotEmpty == true
+          ? name!.trim()
+          : _entityTypeGreek(t);
     }
     final displayName = name?.trim();
     if (displayName != null && displayName.isNotEmpty) return displayName;
@@ -266,7 +259,11 @@ class AuditFormatterService {
       if (!hasOld && !hasNew) continue;
       final oldValue = oldMap[key];
       final newValue = newMap[key];
-      if (!AuditService.shouldIncludeFieldInAuditDiff(key, oldValue, newValue)) {
+      if (!AuditService.shouldIncludeFieldInAuditDiff(
+        key,
+        oldValue,
+        newValue,
+      )) {
         continue;
       }
       if (normalizedType == 'equipment' && key == 'remote_params') {
@@ -276,8 +273,7 @@ class AuditFormatterService {
           toolNames: labels.remoteToolNames,
         );
         if (toolLines.length == 1) {
-          final line =
-              'Αλλαγή παραμέτρων απομακρυσμένης · ${toolLines.first}';
+          final line = 'Αλλαγή παραμέτρων απομακρυσμένης · ${toolLines.first}';
           if (skipIfEquals == null || line != skipIfEquals) {
             lines.add(line);
           }
@@ -315,11 +311,7 @@ class AuditFormatterService {
     bool technical = false,
     AuditReferenceLabels labels = AuditReferenceLabels.empty,
   }) {
-    final lines = describeChanges(
-      row,
-      technical: technical,
-      labels: labels,
-    );
+    final lines = describeChanges(row, technical: technical, labels: labels);
     if (lines.isEmpty) return null;
     if (lines.length == 1) return lines.first;
     final fieldLabels = _changedFieldTitleLabels(

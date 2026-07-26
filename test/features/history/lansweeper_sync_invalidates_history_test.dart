@@ -67,10 +67,9 @@ void main() {
               'Προϋπόθεση: historyCallsProvider έχει φορτώσει πριν τη mutation',
         );
 
-        await container.read(lansweeperSyncProvider.notifier).markRegistered(
-              callId: callId,
-              ticketId: '123',
-            );
+        await container
+            .read(lansweeperSyncProvider.notifier)
+            .markRegistered(callId: callId, ticketId: '123');
 
         expect(
           container.read(historyCallsProvider).isLoading,

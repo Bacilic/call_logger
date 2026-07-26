@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -227,8 +227,7 @@ class _LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
   @override
   final TextEditingController _geminiApiKeyController = TextEditingController();
   @override
-  final AiPromptTemplateTextEditingController
-  _aiPromptTemplateController =
+  final AiPromptTemplateTextEditingController _aiPromptTemplateController =
       AiPromptTemplateTextEditingController();
   @override
   final TextEditingController _geminiEndpointController =
@@ -312,9 +311,7 @@ class _LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
         lansweeperHelpdeskWebPasswordProvider,
       );
       _geminiApiKeyController.text = ref.read(geminiApiKeyProvider);
-      _aiPromptTemplateController.text = ref.read(
-        geminiPromptTemplateProvider,
-      );
+      _aiPromptTemplateController.text = ref.read(geminiPromptTemplateProvider);
       _geminiEndpointController.text = ref.read(geminiEndpointProvider);
       _geminiPrimaryModelController.text = ref.read(geminiPrimaryModelProvider);
       _geminiFallbackModelController.text = ref.read(
@@ -460,9 +457,9 @@ class _LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
 
     final db = await DatabaseHelper.instance.database;
     if (!mounted) return;
-    final raw = await SettingsRepository(db).getSetting(
-      kLansweeperTicketSubmitFormPrefsSettingKey,
-    );
+    final raw = await SettingsRepository(
+      db,
+    ).getSetting(kLansweeperTicketSubmitFormPrefsSettingKey);
     if (!mounted || raw == null || raw.trim().isEmpty) return;
 
     try {
@@ -496,8 +493,7 @@ class _LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
     if (!config.rememberFormSelections) return;
     final payload = <String, dynamic>{
       'customFieldValues': Map<String, String>.from(_customFieldValues),
-      'ticketState':
-          _selectedTicketState ?? config.defaultTicketState,
+      'ticketState': _selectedTicketState ?? config.defaultTicketState,
     };
     final db = await DatabaseHelper.instance.database;
     if (!mounted) return;
@@ -546,10 +542,7 @@ class _LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
     super.dispose();
   }
 
-  Widget _wrapOptionalTooltip({
-    required Widget child,
-    String? message,
-  }) {
+  Widget _wrapOptionalTooltip({required Widget child, String? message}) {
     if (message == null || message.isEmpty) return child;
     return Tooltip(message: message, child: child);
   }
@@ -585,8 +578,7 @@ class _LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
         'Όλες οι επιλεγμένες είναι ήδη εξαιρεσμένες',
       LansweeperSyncState.unsent =>
         'Όλες οι επιλεγμένες είναι ήδη ακαταχώρητες',
-      LansweeperSyncState.sent =>
-        'Όλες οι επιλεγμένες είναι ήδη καταχωρημένες',
+      LansweeperSyncState.sent => 'Όλες οι επιλεγμένες είναι ήδη καταχωρημένες',
       _ => null,
     };
   }
@@ -664,8 +656,8 @@ class _LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
     final dashboardFilter = ref.watch(dashboardFilterProvider);
     final statsAsync = ref.watch(dashboardStatsProvider);
     final reportRangeTitle = statsAsync.when(
-      loading: () => dashboardFilter.dateFrom == null &&
-              dashboardFilter.dateTo == null
+      loading: () =>
+          dashboardFilter.dateFrom == null && dashboardFilter.dateTo == null
           ? 'Όλες: …'
           : dashboardFilter.kpiTotalCallsRangeTitle(),
       error: (_, _) => dashboardFilter.lansweeperReportRangeTitle(),
@@ -720,459 +712,503 @@ class _LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
     return DialogSnackbarScope(
       messengerKey: dialogMessengerKey,
       child: Stack(
-          fit: StackFit.expand,
-          children: [
-            Center(
-              child: AlertDialog(
-      title: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
+        fit: StackFit.expand,
         children: [
-          Expanded(
-            child: Text(
-              'Αναφορά Lansweeper · $reportRangeTitle',
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-          IconButton(
-            tooltip:
-                'Ρυθμίσεις Lansweeper (API, φόρμα, πράκτορας, αυτόματη σύνδεση Help Desk)',
-            padding: const EdgeInsets.all(4),
-            constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
-            onPressed: () {
-              unawaited(_openLansweeperConnectionSettingsDialog());
-            },
-            icon: AppAssetImage(
-              assetPath: 'assets/lansweeper_settings.png',
-              height: 28,
-              width: 28,
-              filterQuality: FilterQuality.medium,
-              fallbackIcon: Icons.settings,
-            ),
-          ),
-        ],
-      ),
-      content: SizedBox(
-        width: 900,
-        height: 560,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            LansweeperReportFilterBar(
-              selected: _reportFilter,
-              counts: reportCounts,
-              hasAnyCallsInRange: hasAnyCallsInRange,
-              reportRangeTitle: reportRangeTitle,
-              onSelect: (filter) => setState(() => _reportFilter = filter),
-            ),
-            const SizedBox(height: 6),
-            Expanded(
-              child: callsAsync.when(
-                loading: () => const Center(child: CircularProgressIndicator()),
-                error: (e, _) =>
-                    Center(
-                      child: Text(
-                        'Σφάλμα φόρτωσης κλήσεων: ${humanizeUserFacingError(e)}',
-                      ),
+          Center(
+            child: AlertDialog(
+              title: Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Αναφορά Lansweeper · $reportRangeTitle',
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
                     ),
-                data: (calls) {
-                  final allItems = LansweeperReportItemMapper.toItems(calls);
-                  final items = _filterReportItems(allItems);
-                  final grouped = LansweeperReportItemMapper.groupByCaller(items);
-                  final groupedRows =
-                      LansweeperReportItemMapper.groupedRowData(grouped);
-                  final itemByKey = {
-                    for (final item in items) item.key: item,
-                  };
-                  final selected = items
-                      .where((e) => _selectedKeys.contains(e.key))
-                      .toList();
-                  final primarySelected = _primarySelectedItem(items);
-                  final isPrimaryRegistered = primarySelected != null &&
-                      LansweeperReportItemMapper.isRegisteredCall(
-                        primarySelected,
-                      );
-                  final isPrimaryFailed =
-                      primarySelected != null &&
-                      LansweeperReportItemMapper.isFailedCall(primarySelected);
-                  final canImmediateApiSubmit = primarySelected != null &&
-                      !syncState.isLoading &&
-                      canSubmitToApi &&
-                      connectionReady &&
-                      !isPrimaryRegistered;
-                  final canResubmitApi = canImmediateApiSubmit && isPrimaryFailed;
-                  if (primarySelected != null && selected.isNotEmpty) {
-                    _prefillForm(primarySelected, selected);
-                  }
-                  final totalSelectedSeconds = selected.fold<int>(
-                    0,
-                    (sum, item) => sum + item.durationSeconds,
-                  );
-                  final selectedCallId = primarySelected?.call.id;
-                  final geminiKeyReady = geminiApiKey.trim().isNotEmpty;
-                  final aiCooldownActive = _isAiCooldownActive;
-                  final aiCooldownSeconds = _aiCooldownRemainingSeconds;
-                  final aiSuggestEnabled =
-                      selected.isNotEmpty &&
-                      geminiKeyReady &&
-                      !_aiSuggestRunning &&
-                      !aiCooldownActive;
-                  final aiSuggestTooltip = selected.isEmpty
-                      ? 'Επιλέξτε κλήση'
-                      : !geminiKeyReady
-                      ? 'Ορίστε Gemini API key στις ρυθμίσεις'
-                      : aiCooldownActive
-                      ? 'Αναμένεται διαθεσιμότητα ποσόστωσης'
-                      : null;
-                  final promptPreviewEnabled =
-                      selected.isNotEmpty &&
-                      !_aiSuggestRunning &&
-                      !aiCooldownActive;
-                  final promptPreviewTooltip = selected.isEmpty
-                      ? 'Επιλέξτε κλήση'
-                      : _aiSuggestRunning
-                      ? 'Περιμένετε την ολοκλήρωση της πρότασης'
-                      : null;
-                  final linksAsync = selectedCallId != null
-                      ? ref.watch(callExternalLinksProvider(selectedCallId))
-                      : const AsyncData<List<Map<String, dynamic>>>(
-                          <Map<String, dynamic>>[],
-                        );
-
-                  if (allItems.isEmpty) {
-                    return _buildNoCallsInRangeEmptyState(
-                      context,
-                      reportRangeTitle,
-                    );
-                  }
-                  if (items.isEmpty) {
-                    return Center(
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 24),
-                        child: Text(
-                          'Δεν υπάρχουν κλήσεις στην επιλεγμένη κατηγορία '
-                          'Lansweeper.\n'
-                          'Δοκιμάστε άλλο φίλτρο (π.χ. «Όλες»).',
-                          style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                            color: Theme.of(context)
-                                .colorScheme
-                                .onSurfaceVariant,
+                  ),
+                  IconButton(
+                    tooltip:
+                        'Ρυθμίσεις Lansweeper (API, φόρμα, πράκτορας, αυτόματη σύνδεση Help Desk)',
+                    padding: const EdgeInsets.all(4),
+                    constraints: const BoxConstraints(
+                      minWidth: 40,
+                      minHeight: 40,
+                    ),
+                    onPressed: () {
+                      unawaited(_openLansweeperConnectionSettingsDialog());
+                    },
+                    icon: AppAssetImage(
+                      assetPath: 'assets/lansweeper_settings.png',
+                      height: 28,
+                      width: 28,
+                      filterQuality: FilterQuality.medium,
+                      fallbackIcon: Icons.settings,
+                    ),
+                  ),
+                ],
+              ),
+              content: SizedBox(
+                width: 900,
+                height: 560,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    LansweeperReportFilterBar(
+                      selected: _reportFilter,
+                      counts: reportCounts,
+                      hasAnyCallsInRange: hasAnyCallsInRange,
+                      reportRangeTitle: reportRangeTitle,
+                      onSelect: (filter) =>
+                          setState(() => _reportFilter = filter),
+                    ),
+                    const SizedBox(height: 6),
+                    Expanded(
+                      child: callsAsync.when(
+                        loading: () =>
+                            const Center(child: CircularProgressIndicator()),
+                        error: (e, _) => Center(
+                          child: Text(
+                            'Σφάλμα φόρτωσης κλήσεων: ${humanizeUserFacingError(e)}',
                           ),
-                          textAlign: TextAlign.center,
                         ),
-                      ),
-                    );
-                  }
+                        data: (calls) {
+                          final allItems = LansweeperReportItemMapper.toItems(
+                            calls,
+                          );
+                          final items = _filterReportItems(allItems);
+                          final grouped =
+                              LansweeperReportItemMapper.groupByCaller(items);
+                          final groupedRows =
+                              LansweeperReportItemMapper.groupedRowData(
+                                grouped,
+                              );
+                          final itemByKey = {
+                            for (final item in items) item.key: item,
+                          };
+                          final selected = items
+                              .where((e) => _selectedKeys.contains(e.key))
+                              .toList();
+                          final primarySelected = _primarySelectedItem(items);
+                          final isPrimaryRegistered =
+                              primarySelected != null &&
+                              LansweeperReportItemMapper.isRegisteredCall(
+                                primarySelected,
+                              );
+                          final isPrimaryFailed =
+                              primarySelected != null &&
+                              LansweeperReportItemMapper.isFailedCall(
+                                primarySelected,
+                              );
+                          final canImmediateApiSubmit =
+                              primarySelected != null &&
+                              !syncState.isLoading &&
+                              canSubmitToApi &&
+                              connectionReady &&
+                              !isPrimaryRegistered;
+                          final canResubmitApi =
+                              canImmediateApiSubmit && isPrimaryFailed;
+                          if (primarySelected != null && selected.isNotEmpty) {
+                            _prefillForm(primarySelected, selected);
+                          }
+                          final totalSelectedSeconds = selected.fold<int>(
+                            0,
+                            (sum, item) => sum + item.durationSeconds,
+                          );
+                          final selectedCallId = primarySelected?.call.id;
+                          final geminiKeyReady = geminiApiKey.trim().isNotEmpty;
+                          final aiCooldownActive = _isAiCooldownActive;
+                          final aiCooldownSeconds = _aiCooldownRemainingSeconds;
+                          final aiSuggestEnabled =
+                              selected.isNotEmpty &&
+                              geminiKeyReady &&
+                              !_aiSuggestRunning &&
+                              !aiCooldownActive;
+                          final aiSuggestTooltip = selected.isEmpty
+                              ? 'Επιλέξτε κλήση'
+                              : !geminiKeyReady
+                              ? 'Ορίστε Gemini API key στις ρυθμίσεις'
+                              : aiCooldownActive
+                              ? 'Αναμένεται διαθεσιμότητα ποσόστωσης'
+                              : null;
+                          final promptPreviewEnabled =
+                              selected.isNotEmpty &&
+                              !_aiSuggestRunning &&
+                              !aiCooldownActive;
+                          final promptPreviewTooltip = selected.isEmpty
+                              ? 'Επιλέξτε κλήση'
+                              : _aiSuggestRunning
+                              ? 'Περιμένετε την ολοκλήρωση της πρότασης'
+                              : null;
+                          final linksAsync = selectedCallId != null
+                              ? ref.watch(
+                                  callExternalLinksProvider(selectedCallId),
+                                )
+                              : const AsyncData<List<Map<String, dynamic>>>(
+                                  <Map<String, dynamic>>[],
+                                );
 
-                  return Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                        Expanded(
-                          flex: 2,
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                          if (allItems.isEmpty) {
+                            return _buildNoCallsInRangeEmptyState(
+                              context,
+                              reportRangeTitle,
+                            );
+                          }
+                          if (items.isEmpty) {
+                            return Center(
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 24,
+                                ),
+                                child: Text(
+                                  'Δεν υπάρχουν κλήσεις στην επιλεγμένη κατηγορία '
+                                  'Lansweeper.\n'
+                                  'Δοκιμάστε άλλο φίλτρο (π.χ. «Όλες»).',
+                                  style: Theme.of(context).textTheme.bodyLarge
+                                      ?.copyWith(
+                                        color: Theme.of(
+                                          context,
+                                        ).colorScheme.onSurfaceVariant,
+                                      ),
+                                  textAlign: TextAlign.center,
+                                ),
+                              ),
+                            );
+                          }
+
+                          return Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(
-                                'Επιλεγμένες: ${selected.length} | '
-                                'Σύνολο διάρκειας: '
-                                '${LansweeperReportItemMapper.totalDurationLabel(totalSelectedSeconds)}',
-                                style: Theme.of(context).textTheme.titleSmall,
-                              ),
-                              const SizedBox(height: 4),
                               Expanded(
-                                child: LansweeperReportCallList(
-                                  grouped: groupedRows,
-                                  selectedKeys: _selectedKeys,
-                                  totalDurationLabel:
-                                      LansweeperReportItemMapper.totalDurationLabel,
-                                  ticketViewUrlTemplate:
-                                      lansweeperTicketViewUrl,
-                                  isSyncLoading: syncState.isLoading,
-                                  ticketLinkEnabled: connectionReady,
-                                  onToggleGroup: (groupItems, checked) {
-                                    _toggleGroup(
-                                      groupItems
-                                          .map((row) => itemByKey[row.key]!)
-                                          .toList(),
-                                      checked,
-                                    );
-                                  },
-                                  onToggleItem: (row, checked) {
-                                    _toggleItem(itemByKey[row.key]!, checked);
-                                  },
-                                  onBadgePressed: (row) {
-                                    unawaited(
-                                      _toggleRegistrationFromBadge(
-                                        itemByKey[row.key]!,
-                                      ),
-                                    );
-                                  },
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          flex: 3,
-                          child: SingleChildScrollView(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                LansweeperSyncForm(
-                                  titleController: _titleController,
-                                  notesController: _notesController,
-                                  solutionController: _solutionController,
-                                  config: ticketConfig,
-                                  customFieldValues: _customFieldValues,
-                                  onCustomFieldChanged: (id, value) => setState(
-                                    () => _customFieldValues[id] = value,
-                                  ),
-                                  ticketState:
-                                      _selectedTicketState ??
-                                      ticketConfig.defaultTicketState,
-                                  onTicketStateChanged: (value) => setState(
-                                    () => _selectedTicketState = value,
-                                  ),
-                                  isSuggesting: _aiSuggestRunning,
-                                  suggestModelLabel: _aiSuggestRunning
-                                      ? _aiCurrentModel
-                                      : null,
-                                  suggestElapsedLabel: _aiSuggestRunning
-                                      ? _aiSuggestElapsedSeconds
-                                          .toStringAsFixed(2)
-                                      : null,
-                                  cooldownRemainingSeconds: aiCooldownActive
-                                      ? aiCooldownSeconds
-                                      : null,
-                                  cooldownModelLabel: aiCooldownActive
-                                      ? _aiCooldownModel
-                                      : null,
-                                  onCancelAutoResubmit: aiCooldownActive &&
-                                          _aiAutoResubmitArmed
-                                      ? _cancelAiAutoResubmit
-                                      : null,
-                                  suggestDisabledTooltip: aiSuggestTooltip,
-                                  onSuggest: aiSuggestEnabled
-                                      ? () => unawaited(
-                                          _suggestWithAi(selected),
-                                        )
-                                      : null,
-                                  previewDisabledTooltip: promptPreviewTooltip,
-                                  onPreviewPrompt: promptPreviewEnabled
-                                      ? () => unawaited(
-                                          _showAiPromptPreview(selected),
-                                        )
-                                      : null,
-                                  onEditPromptTemplate: () => unawaited(
-                                    _openAiPromptTemplateEditorDialog(),
-                                  ),
-                                ),
-                                    const SizedBox(height: 10),
-                                    Card(
-                                      child: Padding(
-                                        padding: const EdgeInsets.all(12),
-                                        child: Wrap(
-                                          spacing: 8,
-                                          runSpacing: 8,
-                                          children: [
-                                            _wrapOptionalTooltip(
-                                              message: isPrimaryRegistered
-                                                  ? 'Η κλήση είναι ήδη καταχωρημένη'
-                                                  : null,
-                                              child: _wrapLansweeperConnectionTooltip(
-                                                status: connectionStatus,
-                                                child: FilledButton.icon(
-                                                  onPressed: canImmediateApiSubmit
-                                                      ? () => unawaited(
-                                                          _submitSelected(
-                                                            primarySelected,
-                                                            selected,
-                                                            resubmit: false,
-                                                          ),
-                                                        )
-                                                      : null,
-                                                  icon: _connectionAwareIcon(
-                                                    status: connectionStatus,
-                                                    icon: Icons
-                                                        .cloud_upload_rounded,
-                                                  ),
-                                                  label: const Text(
-                                                    'Άμεση Καταχώρηση',
-                                                  ),
-                                                ),
-                                              ),
-                                            ),
-                                            if (isPrimaryFailed)
-                                              _wrapLansweeperConnectionTooltip(
-                                                status: connectionStatus,
-                                                child: OutlinedButton.icon(
-                                                  onPressed: canResubmitApi
-                                                      ? () => unawaited(
-                                                          _submitSelected(
-                                                            primarySelected,
-                                                            selected,
-                                                            resubmit: true,
-                                                          ),
-                                                        )
-                                                      : null,
-                                                  icon: _connectionAwareIcon(
-                                                    status: connectionStatus,
-                                                    icon: Icons.refresh_rounded,
-                                                  ),
-                                                  label: const Text(
-                                                    'Επαναϋποβολή',
-                                                  ),
-                                                ),
-                                              ),
-                                            OutlinedButton.icon(
-                                              onPressed:
-                                                  (primarySelected != null &&
-                                                      !syncState.isLoading)
-                                                  ? () => _manualMark(
-                                                      primarySelected,
-                                                    )
-                                                  : null,
-                                              icon: const Icon(
-                                                Icons.edit_note_rounded,
-                                              ),
-                                              label: const Text(
-                                                'Χειροκίνητη Σήμανση',
-                                              ),
-                                            ),
-                                            _buildLansweeperStateButton(
-                                              selected: selected,
-                                              isLoading: syncState.isLoading,
-                                              targetState:
-                                                  LansweeperSyncState.excluded,
-                                              label: 'Εξαίρεση',
-                                              allowWhen: !isPrimaryRegistered,
-                                              blockedTooltip:
-                                                  'Η κλήση είναι ήδη καταχωρημένη',
-                                              onPressed: () =>
-                                                  _setStateForAllSelected(
-                                                    selected,
-                                                    LansweeperSyncState
-                                                        .excluded,
-                                                  ),
-                                            ),
-                                            _buildLansweeperStateButton(
-                                              selected: selected,
-                                              isLoading: syncState.isLoading,
-                                              targetState:
-                                                  LansweeperSyncState.unsent,
-                                              label: 'Ακαταχώρητη',
-                                              onPressed: () =>
-                                                  _setStateForAllSelected(
-                                                    selected,
-                                                    LansweeperSyncState.unsent,
-                                                  ),
-                                            ),
-                                            _buildLansweeperStateButton(
-                                              selected: selected,
-                                              isLoading: syncState.isLoading,
-                                              targetState:
-                                                  LansweeperSyncState.sent,
-                                              label: 'Καταχωρημένη',
-                                              onPressed: () =>
-                                                  _setStateForAllSelected(
-                                                    selected,
-                                                    LansweeperSyncState.sent,
-                                                  ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
+                                flex: 2,
+                                child: Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.stretch,
+                                  children: [
+                                    Text(
+                                      'Επιλεγμένες: ${selected.length} | '
+                                      'Σύνολο διάρκειας: '
+                                      '${LansweeperReportItemMapper.totalDurationLabel(totalSelectedSeconds)}',
+                                      style: Theme.of(
+                                        context,
+                                      ).textTheme.titleSmall,
                                     ),
-                                    const SizedBox(height: 10),
-                                    linksAsync.when(
-                                      loading: () => const Card(
-                                        child: Padding(
-                                          padding: EdgeInsets.all(16),
-                                          child: Center(
-                                            child: CircularProgressIndicator(),
-                                          ),
-                                        ),
+                                    const SizedBox(height: 4),
+                                    Expanded(
+                                      child: LansweeperReportCallList(
+                                        grouped: groupedRows,
+                                        selectedKeys: _selectedKeys,
+                                        totalDurationLabel:
+                                            LansweeperReportItemMapper
+                                                .totalDurationLabel,
+                                        ticketViewUrlTemplate:
+                                            lansweeperTicketViewUrl,
+                                        isSyncLoading: syncState.isLoading,
+                                        ticketLinkEnabled: connectionReady,
+                                        onToggleGroup: (groupItems, checked) {
+                                          _toggleGroup(
+                                            groupItems
+                                                .map(
+                                                  (row) => itemByKey[row.key]!,
+                                                )
+                                                .toList(),
+                                            checked,
+                                          );
+                                        },
+                                        onToggleItem: (row, checked) {
+                                          _toggleItem(
+                                            itemByKey[row.key]!,
+                                            checked,
+                                          );
+                                        },
+                                        onBadgePressed: (row) {
+                                          unawaited(
+                                            _toggleRegistrationFromBadge(
+                                              itemByKey[row.key]!,
+                                            ),
+                                          );
+                                        },
                                       ),
-                                      error: (e, _) => Card(
-                                        child: Padding(
-                                          padding: const EdgeInsets.all(12),
-                                          child: Text(
-                                            'Σφάλμα ιστορικού: ${humanizeUserFacingError(e)}',
-                                          ),
-                                        ),
-                                      ),
-                                      data: (links) =>
-                                          SyncHistoryList(links: links),
                                     ),
                                   ],
                                 ),
                               ),
-                            ),
-                    ],
-                  );
-                },
-              ),
-            ),
-          ],
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Κλείσιμο'),
-        ),
-        callsAsync.maybeWhen(
-          data: (calls) {
-            if (calls.isEmpty) return const SizedBox.shrink();
-            final items = LansweeperReportItemMapper.toItems(calls);
-            final selected = items
-                .where((e) => _selectedKeys.contains(e.key))
-                .toList();
-            final totalSelectedSeconds = selected.fold<int>(
-              0,
-              (sum, item) => sum + item.durationSeconds,
-            );
-            final hasSelection = selected.isNotEmpty;
-            final hasFormText =
-                _titleController.text.trim().isNotEmpty ||
-                _notesController.text.trim().isNotEmpty ||
-                _solutionController.text.trim().isNotEmpty;
-            return _wrapLansweeperConnectionTooltip(
-              status: connectionStatus,
-              child: FilledButton.icon(
-                onPressed: (hasSelection || hasFormText) &&
-                        canOpenTicketForm &&
-                        connectionReady
-                    ? () => _copyAndOpen(
-                        ticketFormUrl: lansweeperTicketFormUrl,
-                        durationSeconds: hasSelection ? totalSelectedSeconds : null,
-                      )
-                    : null,
-                icon: _connectionAwareIcon(
-                  status: connectionStatus,
-                  icon: Icons.open_in_new_rounded,
+                              const SizedBox(width: 10),
+                              Expanded(
+                                flex: 3,
+                                child: SingleChildScrollView(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.stretch,
+                                    children: [
+                                      LansweeperSyncForm(
+                                        titleController: _titleController,
+                                        notesController: _notesController,
+                                        solutionController: _solutionController,
+                                        config: ticketConfig,
+                                        customFieldValues: _customFieldValues,
+                                        onCustomFieldChanged: (id, value) =>
+                                            setState(
+                                              () => _customFieldValues[id] =
+                                                  value,
+                                            ),
+                                        ticketState:
+                                            _selectedTicketState ??
+                                            ticketConfig.defaultTicketState,
+                                        onTicketStateChanged: (value) =>
+                                            setState(
+                                              () =>
+                                                  _selectedTicketState = value,
+                                            ),
+                                        isSuggesting: _aiSuggestRunning,
+                                        suggestModelLabel: _aiSuggestRunning
+                                            ? _aiCurrentModel
+                                            : null,
+                                        suggestElapsedLabel: _aiSuggestRunning
+                                            ? _aiSuggestElapsedSeconds
+                                                  .toStringAsFixed(2)
+                                            : null,
+                                        cooldownRemainingSeconds:
+                                            aiCooldownActive
+                                            ? aiCooldownSeconds
+                                            : null,
+                                        cooldownModelLabel: aiCooldownActive
+                                            ? _aiCooldownModel
+                                            : null,
+                                        onCancelAutoResubmit:
+                                            aiCooldownActive &&
+                                                _aiAutoResubmitArmed
+                                            ? _cancelAiAutoResubmit
+                                            : null,
+                                        suggestDisabledTooltip:
+                                            aiSuggestTooltip,
+                                        onSuggest: aiSuggestEnabled
+                                            ? () => unawaited(
+                                                _suggestWithAi(selected),
+                                              )
+                                            : null,
+                                        previewDisabledTooltip:
+                                            promptPreviewTooltip,
+                                        onPreviewPrompt: promptPreviewEnabled
+                                            ? () => unawaited(
+                                                _showAiPromptPreview(selected),
+                                              )
+                                            : null,
+                                        onEditPromptTemplate: () => unawaited(
+                                          _openAiPromptTemplateEditorDialog(),
+                                        ),
+                                      ),
+                                      const SizedBox(height: 10),
+                                      Card(
+                                        child: Padding(
+                                          padding: const EdgeInsets.all(12),
+                                          child: Wrap(
+                                            spacing: 8,
+                                            runSpacing: 8,
+                                            children: [
+                                              _wrapOptionalTooltip(
+                                                message: isPrimaryRegistered
+                                                    ? 'Η κλήση είναι ήδη καταχωρημένη'
+                                                    : null,
+                                                child: _wrapLansweeperConnectionTooltip(
+                                                  status: connectionStatus,
+                                                  child: FilledButton.icon(
+                                                    onPressed:
+                                                        canImmediateApiSubmit
+                                                        ? () => unawaited(
+                                                            _submitSelected(
+                                                              primarySelected,
+                                                              selected,
+                                                              resubmit: false,
+                                                            ),
+                                                          )
+                                                        : null,
+                                                    icon: _connectionAwareIcon(
+                                                      status: connectionStatus,
+                                                      icon: Icons
+                                                          .cloud_upload_rounded,
+                                                    ),
+                                                    label: const Text(
+                                                      'Άμεση Καταχώρηση',
+                                                    ),
+                                                  ),
+                                                ),
+                                              ),
+                                              if (isPrimaryFailed)
+                                                _wrapLansweeperConnectionTooltip(
+                                                  status: connectionStatus,
+                                                  child: OutlinedButton.icon(
+                                                    onPressed: canResubmitApi
+                                                        ? () => unawaited(
+                                                            _submitSelected(
+                                                              primarySelected,
+                                                              selected,
+                                                              resubmit: true,
+                                                            ),
+                                                          )
+                                                        : null,
+                                                    icon: _connectionAwareIcon(
+                                                      status: connectionStatus,
+                                                      icon:
+                                                          Icons.refresh_rounded,
+                                                    ),
+                                                    label: const Text(
+                                                      'Επαναϋποβολή',
+                                                    ),
+                                                  ),
+                                                ),
+                                              OutlinedButton.icon(
+                                                onPressed:
+                                                    (primarySelected != null &&
+                                                        !syncState.isLoading)
+                                                    ? () => _manualMark(
+                                                        primarySelected,
+                                                      )
+                                                    : null,
+                                                icon: const Icon(
+                                                  Icons.edit_note_rounded,
+                                                ),
+                                                label: const Text(
+                                                  'Χειροκίνητη Σήμανση',
+                                                ),
+                                              ),
+                                              _buildLansweeperStateButton(
+                                                selected: selected,
+                                                isLoading: syncState.isLoading,
+                                                targetState: LansweeperSyncState
+                                                    .excluded,
+                                                label: 'Εξαίρεση',
+                                                allowWhen: !isPrimaryRegistered,
+                                                blockedTooltip:
+                                                    'Η κλήση είναι ήδη καταχωρημένη',
+                                                onPressed: () =>
+                                                    _setStateForAllSelected(
+                                                      selected,
+                                                      LansweeperSyncState
+                                                          .excluded,
+                                                    ),
+                                              ),
+                                              _buildLansweeperStateButton(
+                                                selected: selected,
+                                                isLoading: syncState.isLoading,
+                                                targetState:
+                                                    LansweeperSyncState.unsent,
+                                                label: 'Ακαταχώρητη',
+                                                onPressed: () =>
+                                                    _setStateForAllSelected(
+                                                      selected,
+                                                      LansweeperSyncState
+                                                          .unsent,
+                                                    ),
+                                              ),
+                                              _buildLansweeperStateButton(
+                                                selected: selected,
+                                                isLoading: syncState.isLoading,
+                                                targetState:
+                                                    LansweeperSyncState.sent,
+                                                label: 'Καταχωρημένη',
+                                                onPressed: () =>
+                                                    _setStateForAllSelected(
+                                                      selected,
+                                                      LansweeperSyncState.sent,
+                                                    ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(height: 10),
+                                      linksAsync.when(
+                                        loading: () => const Card(
+                                          child: Padding(
+                                            padding: EdgeInsets.all(16),
+                                            child: Center(
+                                              child:
+                                                  CircularProgressIndicator(),
+                                            ),
+                                          ),
+                                        ),
+                                        error: (e, _) => Card(
+                                          child: Padding(
+                                            padding: const EdgeInsets.all(12),
+                                            child: Text(
+                                              'Σφάλμα ιστορικού: ${humanizeUserFacingError(e)}',
+                                            ),
+                                          ),
+                                        ),
+                                        data: (links) =>
+                                            SyncHistoryList(links: links),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ],
+                          );
+                        },
+                      ),
+                    ),
+                  ],
                 ),
-                label: const Text('Αντιγραφή & Άνοιγμα Lansweeper'),
               ),
-            );
-          },
-          orElse: () => const SizedBox.shrink(),
-        ),
-      ],
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('Κλείσιμο'),
+                ),
+                callsAsync.maybeWhen(
+                  data: (calls) {
+                    if (calls.isEmpty) return const SizedBox.shrink();
+                    final items = LansweeperReportItemMapper.toItems(calls);
+                    final selected = items
+                        .where((e) => _selectedKeys.contains(e.key))
+                        .toList();
+                    final totalSelectedSeconds = selected.fold<int>(
+                      0,
+                      (sum, item) => sum + item.durationSeconds,
+                    );
+                    final hasSelection = selected.isNotEmpty;
+                    final hasFormText =
+                        _titleController.text.trim().isNotEmpty ||
+                        _notesController.text.trim().isNotEmpty ||
+                        _solutionController.text.trim().isNotEmpty;
+                    return _wrapLansweeperConnectionTooltip(
+                      status: connectionStatus,
+                      child: FilledButton.icon(
+                        onPressed:
+                            (hasSelection || hasFormText) &&
+                                canOpenTicketForm &&
+                                connectionReady
+                            ? () => _copyAndOpen(
+                                ticketFormUrl: lansweeperTicketFormUrl,
+                                durationSeconds: hasSelection
+                                    ? totalSelectedSeconds
+                                    : null,
+                              )
+                            : null,
+                        icon: _connectionAwareIcon(
+                          status: connectionStatus,
+                          icon: Icons.open_in_new_rounded,
+                        ),
+                        label: const Text('Αντιγραφή & Άνοιγμα Lansweeper'),
+                      ),
+                    );
+                  },
+                  orElse: () => const SizedBox.shrink(),
+                ),
+              ],
+            ),
           ),
-            ),
-            Positioned(
-              right: 20,
-              bottom: 20,
-              child: SafeArea(
-                child: QuickCallFloatingButton(
-                  scope: QuickCallFabScope.overlayRoute,
-                ),
+          Positioned(
+            right: 20,
+            bottom: 20,
+            child: SafeArea(
+              child: QuickCallFloatingButton(
+                scope: QuickCallFabScope.overlayRoute,
               ),
             ),
-          ],
-        ),
+          ),
+        ],
+      ),
     );
   }
 }

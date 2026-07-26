@@ -62,21 +62,23 @@ void main() {
   }
 
   group('deleteDataIssuesByType', () {
-    test('διαγράφει ΜΟΝΟ τον ζητούμενο τύπο και επιστρέφει το πλήθος',
-        () async {
-      final deleted = await repository.deleteDataIssuesByType(
-        dbPath,
-        'missing_sheet',
-      );
+    test(
+      'διαγράφει ΜΟΝΟ τον ζητούμενο τύπο και επιστρέφει το πλήθος',
+      () async {
+        final deleted = await repository.deleteDataIssuesByType(
+          dbPath,
+          'missing_sheet',
+        );
 
-      expect(deleted, 3);
-      expect(await countByType('missing_sheet'), 0);
-      expect(
-        await countByType('duplicate_code_discarded'),
-        1,
-        reason: 'Οι άλλες ομάδες δεν πρέπει να αγγίζονται.',
-      );
-    });
+        expect(deleted, 3);
+        expect(await countByType('missing_sheet'), 0);
+        expect(
+          await countByType('duplicate_code_discarded'),
+          1,
+          reason: 'Οι άλλες ομάδες δεν πρέπει να αγγίζονται.',
+        );
+      },
+    );
 
     test('επιστρέφει 0 για τύπο χωρίς εγγραφές', () async {
       final deleted = await repository.deleteDataIssuesByType(

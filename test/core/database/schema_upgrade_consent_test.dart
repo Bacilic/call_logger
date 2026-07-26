@@ -109,15 +109,16 @@ void main() {
       final runner = await runDatabaseInitChecks(closeConnectionFirst: true);
       expect(runner.result.isSuccess, isTrue);
 
-      final versionRows = await openDatabase(
-        dbPath,
-        readOnly: true,
-        singleInstance: false,
-      ).then((db) async {
-        final rows = await db.rawQuery('PRAGMA user_version');
-        await db.close();
-        return rows;
-      });
+      final versionRows =
+          await openDatabase(
+            dbPath,
+            readOnly: true,
+            singleInstance: false,
+          ).then((db) async {
+            final rows = await db.rawQuery('PRAGMA user_version');
+            await db.close();
+            return rows;
+          });
       expect(versionRows.first['user_version'], kDatabaseSchemaVersion);
     },
   );
@@ -137,15 +138,16 @@ void main() {
       expect(runner.result.isSuccess, isTrue);
       expect(runner.result.recoveryKind, isNull);
 
-      final versionRows = await openDatabase(
-        dbPath,
-        readOnly: true,
-        singleInstance: false,
-      ).then((db) async {
-        final rows = await db.rawQuery('PRAGMA user_version');
-        await db.close();
-        return rows;
-      });
+      final versionRows =
+          await openDatabase(
+            dbPath,
+            readOnly: true,
+            singleInstance: false,
+          ).then((db) async {
+            final rows = await db.rawQuery('PRAGMA user_version');
+            await db.close();
+            return rows;
+          });
       expect(versionRows.first['user_version'], kDatabaseSchemaVersion);
     },
   );

@@ -1,4 +1,4 @@
-﻿import 'dart:io';
+import 'dart:io';
 import 'dart:typed_data';
 
 import '../../../core/widgets/dialog_snackbar_scope.dart';
@@ -52,7 +52,8 @@ class DictionarySettingsDialog extends ConsumerStatefulWidget {
 }
 
 class _DictionarySettingsDialogState
-    extends ConsumerState<DictionarySettingsDialog> with DialogSnackbarHost {
+    extends ConsumerState<DictionarySettingsDialog>
+    with DialogSnackbarHost {
   final _settings = SettingsService();
   late final TextEditingController _sourcePathCtrl;
   late final TextEditingController _exportPathCtrl;
@@ -83,8 +84,7 @@ class _DictionarySettingsDialogState
     setState(() {});
   }
 
-  bool get _sourcePathDirty =>
-      _sourcePathCtrl.text.trim() != _savedSourcePath;
+  bool get _sourcePathDirty => _sourcePathCtrl.text.trim() != _savedSourcePath;
 
   bool get _lexiconCategoriesDirty =>
       _lexiconCategoriesCtrl.text.trim() != _savedLexiconCategories;
@@ -124,9 +124,7 @@ class _DictionarySettingsDialogState
     }
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerHighest.withValues(
-          alpha: 0.5,
-        ),
+        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
         borderRadius: BorderRadius.circular(8),
         border: Border.all(color: theme.dividerColor),
       ),
@@ -140,10 +138,7 @@ class _DictionarySettingsDialogState
               style: theme.textTheme.titleSmall,
             ),
             const SizedBox(height: 6),
-            SelectableText(
-              statusText,
-              style: theme.textTheme.bodySmall,
-            ),
+            SelectableText(statusText, style: theme.textTheme.bodySmall),
           ],
         ),
       ),
@@ -168,9 +163,7 @@ class _DictionarySettingsDialogState
     final validation = await validateCoreDictionaryFile(t);
     if (validation != null) {
       if (mounted) {
-        showDialogSnackBar(
-          SnackBar(content: Text(validation)),
-        );
+        showDialogSnackBar(SnackBar(content: Text(validation)));
       }
       return;
     }
@@ -178,14 +171,17 @@ class _DictionarySettingsDialogState
     final ok = await ref.read(coreLexiconProvider.notifier).loadFromDiskPath(t);
     if (!mounted) return;
     if (!ok) {
-      final err = ref.read(coreLexiconProvider).lastError ?? 'Αποτυχία φόρτωσης.';
+      final err =
+          ref.read(coreLexiconProvider).lastError ?? 'Αποτυχία φόρτωσης.';
       showDialogSnackBar(SnackBar(content: Text(err)));
       return;
     }
     _markSourcePathSaved(t);
     setState(() {});
     showDialogSnackBar(
-      const SnackBar(content: Text('Αποθηκεύτηκε και φορτώθηκε λεξικό-πυρήνας')),
+      const SnackBar(
+        content: Text('Αποθηκεύτηκε και φορτώθηκε λεξικό-πυρήνας'),
+      ),
     );
   }
 
@@ -205,7 +201,9 @@ class _DictionarySettingsDialogState
       if (mounted) {
         showDialogSnackBar(
           const SnackBar(
-            content: Text('Ορίστε τουλάχιστον μία κατηγορία (χωρισμένες με κόμμα)'),
+            content: Text(
+              'Ορίστε τουλάχιστον μία κατηγορία (χωρισμένες με κόμμα)',
+            ),
           ),
         );
       }
@@ -250,9 +248,7 @@ class _DictionarySettingsDialogState
       } else {
         final err =
             ref.read(coreLexiconProvider).lastError ?? 'Αποτυχία εγκατάστασης.';
-        showDialogSnackBar(
-          SnackBar(content: Text(err)),
-        );
+        showDialogSnackBar(SnackBar(content: Text(err)));
       }
     } finally {
       if (mounted) setState(() => _compileBusy = false);
@@ -311,19 +307,17 @@ class _DictionarySettingsDialogState
       _ => 0.0,
     };
 
-    ref.listen<LexiconLanguageRecalcState>(lexiconLanguageRecalcProvider,
-        (prev, next) {
+    ref.listen<LexiconLanguageRecalcState>(lexiconLanguageRecalcProvider, (
+      prev,
+      next,
+    ) {
       if (next is LexiconLanguageRecalcSuccess) {
         showDialogSnackBar(
-          const SnackBar(
-            content: Text('Ολοκληρώθηκε ο επανέλεγχος γλωσσών'),
-          ),
+          const SnackBar(content: Text('Ολοκληρώθηκε ο επανέλεγχος γλωσσών')),
         );
         ref.read(lexiconLanguageRecalcProvider.notifier).acknowledge();
       } else if (next is LexiconLanguageRecalcError) {
-        showDialogSnackBar(
-          SnackBar(content: Text(next.message)),
-        );
+        showDialogSnackBar(SnackBar(content: Text(next.message)));
         ref.read(lexiconLanguageRecalcProvider.notifier).acknowledge();
       }
     });
@@ -334,176 +328,180 @@ class _DictionarySettingsDialogState
       messengerKey: dialogMessengerKey,
       child: Center(
         child: AlertDialog(
-      title: const Text('Ρυθμίσεις λεξικού'),
-      content: SizedBox(
-        width: 480,
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              if (recalcLoading) ...[
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(4),
-                  child: LinearProgressIndicator(
-                    value: recalcProgress.clamp(0.0, 1.0),
-                    minHeight: 6,
-                  ),
-                ),
-                const SizedBox(height: 12),
-              ],
-              Align(
-                alignment: Alignment.centerLeft,
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    FilledButton.tonalIcon(
-                      onPressed: recalcLoading
-                          ? null
-                          : () => ref
-                              .read(lexiconLanguageRecalcProvider.notifier)
-                              .recalculate(),
-                      style: FilledButton.styleFrom(
-                        visualDensity: VisualDensity.compact,
-                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          title: const Text('Ρυθμίσεις λεξικού'),
+          content: SizedBox(
+            width: 480,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (recalcLoading) ...[
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(4),
+                      child: LinearProgressIndicator(
+                        value: recalcProgress.clamp(0.0, 1.0),
+                        minHeight: 6,
                       ),
-                      icon: const Icon(Icons.translate_outlined, size: 18),
-                      label: const Text('Επανέλεγχος Γλωσσών'),
                     ),
-                    const SizedBox(width: 2),
-                    Tooltip(
-                      message: _languageRecalcInfoTooltip,
-                      preferBelow: false,
-                      waitDuration: const Duration(milliseconds: 350),
-                      child: Padding(
-                        padding: const EdgeInsets.all(6),
-                        child: Icon(
-                          Icons.info_outline,
-                          size: 18,
-                          color: theme.colorScheme.onSurfaceVariant,
+                    const SizedBox(height: 12),
+                  ],
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        FilledButton.tonalIcon(
+                          onPressed: recalcLoading
+                              ? null
+                              : () => ref
+                                    .read(
+                                      lexiconLanguageRecalcProvider.notifier,
+                                    )
+                                    .recalculate(),
+                          style: FilledButton.styleFrom(
+                            visualDensity: VisualDensity.compact,
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          ),
+                          icon: const Icon(Icons.translate_outlined, size: 18),
+                          label: const Text('Επανέλεγχος Γλωσσών'),
+                        ),
+                        const SizedBox(width: 2),
+                        Tooltip(
+                          message: _languageRecalcInfoTooltip,
+                          preferBelow: false,
+                          waitDuration: const Duration(milliseconds: 350),
+                          child: Padding(
+                            padding: const EdgeInsets.all(6),
+                            child: Icon(
+                              Icons.info_outline,
+                              size: 18,
+                              color: theme.colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  _coreLexiconStatusPanel(theme),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _sourcePathCtrl,
+                    onChanged: (_) => setState(() {}),
+                    decoration: InputDecoration(
+                      labelText: 'Διαδρομή πηγής TXT (ορθογραφία)',
+                      border: const OutlineInputBorder(),
+                      suffixIcon: IconButton(
+                        icon: const Icon(Icons.folder_open),
+                        onPressed: _compileBusy ? null : _pickSaveSourcePath,
+                      ),
+                    ),
+                    onSubmitted: (_) {
+                      if (_sourcePathDirty) _saveSourcePath();
+                    },
+                  ),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: TextButton.icon(
+                      onPressed: _compileBusy || !_sourcePathDirty
+                          ? null
+                          : _saveSourcePath,
+                      icon: const Icon(Icons.save_outlined),
+                      label: const Text('Αποθήκευση πηγής'),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: _exportPathCtrl,
+                    decoration: InputDecoration(
+                      labelText: 'Διαδρομή εξαγωγής Compile (TXT)',
+                      border: const OutlineInputBorder(),
+                      suffixIcon: IconButton(
+                        icon: const Icon(Icons.save_alt),
+                        onPressed: _pickSaveExportPath,
+                      ),
+                    ),
+                    onSubmitted: (_) => _saveExportPath(),
+                  ),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: TextButton.icon(
+                      onPressed: _saveExportPath,
+                      icon: const Icon(Icons.save_outlined),
+                      label: const Text('Αποθήκευση εξαγωγής'),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: _lexiconCategoriesCtrl,
+                    onChanged: (_) => setState(() {}),
+                    decoration: const InputDecoration(
+                      labelText: 'Κατηγορίες λεξικού (dropdown)',
+                      hintText:
+                          'Διαχωρίστε με κόμμα, π.χ. Γενική, Τεχνικός Όρος, Όνομα',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: TextButton.icon(
+                      onPressed: !_lexiconCategoriesDirty
+                          ? null
+                          : _saveLexiconCategories,
+                      icon: const Icon(Icons.save_outlined),
+                      label: const Text('Αποθήκευση κατηγοριών'),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      FilledButton.tonal(
+                        onPressed: () async {
+                          await widget.onImportTxt();
+                        },
+                        child: const Text('Εισαγωγή από αρχείο'),
+                      ),
+                      Tooltip(
+                        message: _importTxtInfoTooltip,
+                        preferBelow: false,
+                        waitDuration: const Duration(milliseconds: 350),
+                        child: Padding(
+                          padding: const EdgeInsets.all(6),
+                          child: Icon(
+                            Icons.info_outline,
+                            size: 18,
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
                         ),
                       ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 16),
-              _coreLexiconStatusPanel(theme),
-              const SizedBox(height: 12),
-              TextField(
-                controller: _sourcePathCtrl,
-                onChanged: (_) => setState(() {}),
-                decoration: InputDecoration(
-                  labelText: 'Διαδρομή πηγής TXT (ορθογραφία)',
-                  border: const OutlineInputBorder(),
-                  suffixIcon: IconButton(
-                    icon: const Icon(Icons.folder_open),
-                    onPressed: _compileBusy ? null : _pickSaveSourcePath,
-                  ),
-                ),
-                onSubmitted: (_) {
-                  if (_sourcePathDirty) _saveSourcePath();
-                },
-              ),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: TextButton.icon(
-                  onPressed: _compileBusy || !_sourcePathDirty
-                      ? null
-                      : _saveSourcePath,
-                  icon: const Icon(Icons.save_outlined),
-                  label: const Text('Αποθήκευση πηγής'),
-                ),
-              ),
-              const SizedBox(height: 8),
-              TextField(
-                controller: _exportPathCtrl,
-                decoration: InputDecoration(
-                  labelText: 'Διαδρομή εξαγωγής Compile (TXT)',
-                  border: const OutlineInputBorder(),
-                  suffixIcon: IconButton(
-                    icon: const Icon(Icons.save_alt),
-                    onPressed: _pickSaveExportPath,
-                  ),
-                ),
-                onSubmitted: (_) => _saveExportPath(),
-              ),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: TextButton.icon(
-                  onPressed: _saveExportPath,
-                  icon: const Icon(Icons.save_outlined),
-                  label: const Text('Αποθήκευση εξαγωγής'),
-                ),
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: _lexiconCategoriesCtrl,
-                onChanged: (_) => setState(() {}),
-                decoration: const InputDecoration(
-                  labelText: 'Κατηγορίες λεξικού (dropdown)',
-                  hintText:
-                      'Διαχωρίστε με κόμμα, π.χ. Γενική, Τεχνικός Όρος, Όνομα',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: TextButton.icon(
-                  onPressed: !_lexiconCategoriesDirty
-                      ? null
-                      : _saveLexiconCategories,
-                  icon: const Icon(Icons.save_outlined),
-                  label: const Text('Αποθήκευση κατηγοριών'),
-                ),
-              ),
-              const SizedBox(height: 16),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                children: [
-                  FilledButton.tonal(
-                    onPressed: () async {
-                      await widget.onImportTxt();
-                    },
-                    child: const Text('Εισαγωγή από αρχείο'),
-                  ),
-                  Tooltip(
-                    message: _importTxtInfoTooltip,
-                    preferBelow: false,
-                    waitDuration: const Duration(milliseconds: 350),
-                    child: Padding(
-                      padding: const EdgeInsets.all(6),
-                      child: Icon(
-                        Icons.info_outline,
-                        size: 18,
-                        color: theme.colorScheme.onSurfaceVariant,
+                      FilledButton(
+                        onPressed: _compileBusy ? null : _runCompile,
+                        child: _compileBusy
+                            ? const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Text('Εξαγωγή / Δημιουργία'),
                       ),
-                    ),
-                  ),
-                  FilledButton(
-                    onPressed: _compileBusy ? null : _runCompile,
-                    child: _compileBusy
-                        ? const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Text('Εξαγωγή / Δημιουργία'),
+                    ],
                   ),
                 ],
               ),
-            ],
+            ),
           ),
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Κλείσιμο'),
-        ),
-      ],
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Κλείσιμο'),
+            ),
+          ],
         ),
       ),
     );

@@ -22,7 +22,8 @@ enum CriticalOperation {
 ///
 /// Το σήμα πρέπει να επιζεί όταν το widget που ξεκίνησε την ενέργεια καταστραφεί
 /// (π.χ. κλείσιμο διαλόγου ιστορικού κατά την αποστολή Lansweeper).
-class ActiveCriticalOperationsNotifier extends Notifier<Set<CriticalOperation>> {
+class ActiveCriticalOperationsNotifier
+    extends Notifier<Set<CriticalOperation>> {
   final Map<CriticalOperation, int> _refCounts = <CriticalOperation, int>{};
 
   @override
@@ -60,5 +61,5 @@ class ActiveCriticalOperationsNotifier extends Notifier<Set<CriticalOperation>> 
 
 final activeCriticalOperationsProvider =
     NotifierProvider<ActiveCriticalOperationsNotifier, Set<CriticalOperation>>(
-  ActiveCriticalOperationsNotifier.new,
-);
+      ActiveCriticalOperationsNotifier.new,
+    );

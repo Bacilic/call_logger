@@ -75,7 +75,9 @@ void main() {
         ],
         equipment: [_e(id: 100, code: 'PC-1')],
         departments: [DepartmentModel(id: 10, name: 'IT')],
-        userToEquipmentIds: {1: [100]},
+        userToEquipmentIds: {
+          1: [100],
+        },
       );
       addTearDown(container.dispose);
 
@@ -134,7 +136,10 @@ void main() {
             DepartmentModel(id: 101, name: 'R&D'),
             DepartmentModel(id: 102, name: 'Sales'),
           ],
-          userToEquipmentIds: {521: [921], 522: [922]},
+          userToEquipmentIds: {
+            521: [921],
+            522: [922],
+          },
         );
         addTearDown(container.dispose);
 
@@ -158,30 +163,36 @@ void main() {
       },
     );
 
-    test('associateCurrentIfNeeded: ορφανός καλούντας δημιουργεί χρήστη', () async {
-      final container = await _containerWithCatalog(
-        users: [],
-        equipment: [],
-        departments: [DepartmentModel(id: 1, name: 'Τμήμα Δοκιμής')],
-      );
-      addTearDown(container.dispose);
+    test(
+      'associateCurrentIfNeeded: ορφανός καλούντας δημιουργεί χρήστη',
+      () async {
+        final container = await _containerWithCatalog(
+          users: [],
+          equipment: [],
+          departments: [DepartmentModel(id: 1, name: 'Τμήμα Δοκιμής')],
+        );
+        addTearDown(container.dispose);
 
-      final n = container.read(callSmartEntityProvider.notifier);
-      n.updateCallerDisplayText('Ορφανός Καλών');
-      n.checkContent(callerText: 'Ορφανός Καλών');
-      n.updatePhone('5551');
-      n.checkContent(phoneText: '5551');
+        final n = container.read(callSmartEntityProvider.notifier);
+        n.updateCallerDisplayText('Ορφανός Καλών');
+        n.checkContent(callerText: 'Ορφανός Καλών');
+        n.updatePhone('5551');
+        n.checkContent(phoneText: '5551');
 
-      expect(
-        container.read(callSmartEntityProvider).needsNewCallerCreation,
-        isTrue,
-      );
+        expect(
+          container.read(callSmartEntityProvider).needsNewCallerCreation,
+          isTrue,
+        );
 
-      final message = await n.associateCurrentIfNeeded();
-      expect(message, isNotNull);
-      expect(message!.contains('Σφάλμα'), isFalse);
-      expect(container.read(callSmartEntityProvider).selectedCaller?.id, isNotNull);
-    });
+        final message = await n.associateCurrentIfNeeded();
+        expect(message, isNotNull);
+        expect(message!.contains('Σφάλμα'), isFalse);
+        expect(
+          container.read(callSmartEntityProvider).selectedCaller?.id,
+          isNotNull,
+        );
+      },
+    );
 
     test('quickAddOrphanToDepartment: κοινόχρηστο τηλέφωνο σε τμήμα', () async {
       final container = await _containerWithCatalog(
@@ -211,10 +222,7 @@ void main() {
       expect(result, isNotNull);
       expect(result!.requiresConfirmation, isFalse);
       expect(result.successMessage, isNotNull);
-      expect(
-        container.read(callSmartEntityProvider).departmentText,
-        deptName,
-      );
+      expect(container.read(callSmartEntityProvider).departmentText, deptName);
     });
   });
 }

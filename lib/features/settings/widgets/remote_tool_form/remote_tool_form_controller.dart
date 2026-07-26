@@ -33,7 +33,8 @@ class RemoteToolArgRow {
 
 /// Κατάσταση και καθαρή λογική φόρμας εργαλείου (χωρίς UI).
 class RemoteToolFormController extends ChangeNotifier {
-  RemoteToolFormController({RemoteTool? initialTool}) : initialTool = initialTool {
+  RemoteToolFormController({RemoteTool? initialTool})
+    : initialTool = initialTool {
     final t = initialTool;
     nameC = TextEditingController(text: t?.name ?? '');
     pathC = TextEditingController(text: t?.executablePath ?? '');

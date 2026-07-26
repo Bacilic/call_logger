@@ -71,9 +71,7 @@ void main() {
     );
 
     expect(
-      messages.any(
-        (m) => m.contains('Δεν γίνεται καμία αλλαγή'),
-      ),
+      messages.any((m) => m.contains('Δεν γίνεται καμία αλλαγή')),
       isTrue,
       reason: 'Το Άκυρο πρέπει να δηλώνει ότι δεν αλλάζει τίποτα',
     );

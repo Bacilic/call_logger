@@ -94,10 +94,7 @@ void main() {
           expect(row['network_mac'], '11:22');
           expect(row['network_description'], 'Dell Optiplex');
           expect(row['network_comments'], 'ετικέτα');
-          expect(
-            row['network_source'],
-            contains('Χειροκίνητη αντιστοίχιση'),
-          );
+          expect(row['network_source'], contains('Χειροκίνητη αντιστοίχιση'));
           expect(row['network_source'], contains('N1'));
         } finally {
           await db.close();

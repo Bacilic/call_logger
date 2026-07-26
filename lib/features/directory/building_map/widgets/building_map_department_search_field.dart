@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../../../core/models/building_map_floor.dart';
@@ -9,19 +9,13 @@ import '../../models/department_model.dart';
 
 /// Επιλογή autocomplete: τμήμα καταλόγου + αν είναι τοποθετημένο σε διαθέσιμο φύλλο χάρτη.
 class _DeptMapOption {
-  const _DeptMapOption({
-    required this.department,
-    required this.isPlacedOnMap,
-  });
+  const _DeptMapOption({required this.department, required this.isPlacedOnMap});
 
   final DepartmentModel department;
   final bool isPlacedOnMap;
 }
 
-bool _departmentPlacedOnMap(
-  DepartmentModel d,
-  List<BuildingMapFloor> floors,
-) {
+bool _departmentPlacedOnMap(DepartmentModel d, List<BuildingMapFloor> floors) {
   final floorIds = floors.map((f) => f.id).toSet();
   final mf = d.mapFloor?.trim();
   if (mf == null || mf.isEmpty) return false;
@@ -74,7 +68,8 @@ class BuildingMapDepartmentSearchField extends StatefulWidget {
   final FocusNode focusNode;
 
   /// Επιλογή τμήματος που **είναι** στο χάρτη.
-  final Future<void> Function(DepartmentModel department) onNavigateToDepartment;
+  final Future<void> Function(DepartmentModel department)
+  onNavigateToDepartment;
 
   /// Enter χωρίς επιλεγμένη πρόταση / fallback substring ([jumpToDepartmentFromSearch]).
   final Future<void> Function(String rawQuery) onSubmitFallback;
@@ -229,8 +224,7 @@ class _BuildingMapDepartmentSearchFieldState
           focusNode: widget.focusNode,
           textEditingController: widget.controller,
           optionsBuilder: (TextEditingValue value) {
-            final effectiveText =
-                _isKeyboardPreview ? _typedQuery : value.text;
+            final effectiveText = _isKeyboardPreview ? _typedQuery : value.text;
             return _departmentMapOptions(
               lookup: lookup,
               query: effectiveText,
@@ -279,8 +273,9 @@ class _BuildingMapDepartmentSearchFieldState
                       return ListTile(
                         dense: true,
                         selected: isHighlighted,
-                        selectedTileColor:
-                            theme.colorScheme.primary.withValues(alpha: 0.12),
+                        selectedTileColor: theme.colorScheme.primary.withValues(
+                          alpha: 0.12,
+                        ),
                         title: Text(
                           opt.department.name,
                           style: opt.isPlacedOnMap
@@ -302,97 +297,96 @@ class _BuildingMapDepartmentSearchFieldState
           },
           fieldViewBuilder:
               (context, textController, focusNodeParam, onFieldSubmitted) {
-            return Focus(
-              onKeyEvent: (node, event) {
-                if (event is! KeyDownEvent) {
-                  return KeyEventResult.ignored;
-                }
-                final options = _options(_typedQuery);
-                if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
-                  if (options.isEmpty) return KeyEventResult.ignored;
-                  _keyboardOptionIndex =
-                      (_keyboardOptionIndex + 1).clamp(0, options.length - 1);
-                  _isKeyboardPreview = true;
-                  _setControllerText(
-                    textController,
-                    options[_keyboardOptionIndex].department.name,
-                  );
-                  return KeyEventResult.handled;
-                }
-                if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
-                  if (options.isEmpty) return KeyEventResult.ignored;
-                  _keyboardOptionIndex = _keyboardOptionIndex <= 0
-                      ? 0
-                      : _keyboardOptionIndex - 1;
-                  _isKeyboardPreview = true;
-                  _setControllerText(
-                    textController,
-                    options[_keyboardOptionIndex].department.name,
-                  );
-                  return KeyEventResult.handled;
-                }
-                if (event.logicalKey == LogicalKeyboardKey.enter &&
-                    options.isNotEmpty &&
-                    _keyboardOptionIndex >= 0 &&
-                    _keyboardOptionIndex < options.length) {
-                  _commitOption(options[_keyboardOptionIndex]);
-                  return KeyEventResult.handled;
-                }
-                return KeyEventResult.ignored;
-              },
-              child: TextField(
-                controller: textController,
-                focusNode: focusNodeParam,
-                spellCheckConfiguration: platformSpellCheckConfiguration,
-                decoration: InputDecoration(
-                  labelText: 'Αναζήτηση τμήματος (όλα τα φύλλα)',
-                  prefixIcon: const Icon(Icons.search),
-                  border: const OutlineInputBorder(),
-                  isDense: true,
-                  suffixIcon: Semantics(
-                    label: 'Καθαρισμός αναζήτησης χάρτη',
-                    child: IconButton(
-                      icon: const Icon(Icons.close, size: 20),
-                      onPressed: () {
-                        textController.clear();
-                        _typedQuery = '';
-                        _keyboardOptionIndex = -1;
-                        setState(() => _offMapNotice = null);
-                      },
-                      tooltip: 'Καθαρισμός',
+                return Focus(
+                  onKeyEvent: (node, event) {
+                    if (event is! KeyDownEvent) {
+                      return KeyEventResult.ignored;
+                    }
+                    final options = _options(_typedQuery);
+                    if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
+                      if (options.isEmpty) return KeyEventResult.ignored;
+                      _keyboardOptionIndex = (_keyboardOptionIndex + 1).clamp(
+                        0,
+                        options.length - 1,
+                      );
+                      _isKeyboardPreview = true;
+                      _setControllerText(
+                        textController,
+                        options[_keyboardOptionIndex].department.name,
+                      );
+                      return KeyEventResult.handled;
+                    }
+                    if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+                      if (options.isEmpty) return KeyEventResult.ignored;
+                      _keyboardOptionIndex = _keyboardOptionIndex <= 0
+                          ? 0
+                          : _keyboardOptionIndex - 1;
+                      _isKeyboardPreview = true;
+                      _setControllerText(
+                        textController,
+                        options[_keyboardOptionIndex].department.name,
+                      );
+                      return KeyEventResult.handled;
+                    }
+                    if (event.logicalKey == LogicalKeyboardKey.enter &&
+                        options.isNotEmpty &&
+                        _keyboardOptionIndex >= 0 &&
+                        _keyboardOptionIndex < options.length) {
+                      _commitOption(options[_keyboardOptionIndex]);
+                      return KeyEventResult.handled;
+                    }
+                    return KeyEventResult.ignored;
+                  },
+                  child: TextField(
+                    controller: textController,
+                    focusNode: focusNodeParam,
+                    spellCheckConfiguration: platformSpellCheckConfiguration,
+                    decoration: InputDecoration(
+                      labelText: 'Αναζήτηση τμήματος (όλα τα φύλλα)',
+                      prefixIcon: const Icon(Icons.search),
+                      border: const OutlineInputBorder(),
+                      isDense: true,
+                      suffixIcon: Semantics(
+                        label: 'Καθαρισμός αναζήτησης χάρτη',
+                        child: IconButton(
+                          icon: const Icon(Icons.close, size: 20),
+                          onPressed: () {
+                            textController.clear();
+                            _typedQuery = '';
+                            _keyboardOptionIndex = -1;
+                            setState(() => _offMapNotice = null);
+                          },
+                          tooltip: 'Καθαρισμός',
+                        ),
+                      ),
                     ),
+                    onChanged: (value) {
+                      if (_isKeyboardPreview) {
+                        _isKeyboardPreview = false;
+                        return;
+                      }
+                      _typedQuery = value;
+                      _keyboardOptionIndex = -1;
+                      _lastAutoScrollIndex = -1;
+                    },
+                    onSubmitted: (_) async {
+                      final options = _options(_typedQuery);
+                      if (options.isNotEmpty &&
+                          _keyboardOptionIndex >= 0 &&
+                          _keyboardOptionIndex < options.length) {
+                        await _commitOption(options[_keyboardOptionIndex]);
+                        return;
+                      }
+                      await _handleSubmitRaw();
+                    },
                   ),
-                ),
-                onChanged: (value) {
-                  if (_isKeyboardPreview) {
-                    _isKeyboardPreview = false;
-                    return;
-                  }
-                  _typedQuery = value;
-                  _keyboardOptionIndex = -1;
-                  _lastAutoScrollIndex = -1;
-                },
-                onSubmitted: (_) async {
-                  final options = _options(_typedQuery);
-                  if (options.isNotEmpty &&
-                      _keyboardOptionIndex >= 0 &&
-                      _keyboardOptionIndex < options.length) {
-                    await _commitOption(options[_keyboardOptionIndex]);
-                    return;
-                  }
-                  await _handleSubmitRaw();
-                },
-              ),
-            );
-          },
+                );
+              },
         ),
         if (_offMapNotice != null)
           Padding(
             padding: const EdgeInsets.only(top: 6),
-            child: Text(
-              _offMapNotice!,
-              style: noticeStyle,
-            ),
+            child: Text(_offMapNotice!, style: noticeStyle),
           ),
       ],
     );

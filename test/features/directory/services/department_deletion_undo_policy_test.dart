@@ -21,18 +21,21 @@ void main() {
       expect(many.snackbarMessage, 'Σημειώθηκαν ως διαγραμμένα 3 τμήματα.');
     });
 
-    test('μετακίνηση υπαλλήλων → canOfferUndo true και μήνυμα πλήρους αναίρεσης', () {
-      final result = resolveDepartmentDeletionUndo(
-        deletedDepartmentCount: 1,
-        movedEmployeeCount: 2,
-        movedOrDeletedAssetCount: 0,
-      );
-      expect(result.canOfferUndo, isTrue);
-      expect(
-        result.snackbarMessage,
-        contains('Επαναφέρθηκαν και τα μετακινημένα στοιχεία'),
-      );
-    });
+    test(
+      'μετακίνηση υπαλλήλων → canOfferUndo true και μήνυμα πλήρους αναίρεσης',
+      () {
+        final result = resolveDepartmentDeletionUndo(
+          deletedDepartmentCount: 1,
+          movedEmployeeCount: 2,
+          movedOrDeletedAssetCount: 0,
+        );
+        expect(result.canOfferUndo, isTrue);
+        expect(
+          result.snackbarMessage,
+          contains('Επαναφέρθηκαν και τα μετακινημένα στοιχεία'),
+        );
+      },
+    );
 
     test(
       'μετακίνηση/διαγραφή κοινόχρηστων χωρίς υπαλλήλους → canOfferUndo true',

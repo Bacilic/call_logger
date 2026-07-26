@@ -199,43 +199,40 @@ void main() {
       },
     );
 
-    test(
-      'εξοπλισμός μόνο από τηλέφωνο διατηρεί ετικέτα «Τηλέφωνο»',
-      () {
-        final userWithPhone = UserModel(
-          id: 20,
-          firstName: 'Τηλ',
-          lastName: 'Φωνο',
-          phones: PhoneListParser.splitPhones('2101234567'),
-          departmentId: _kDepartmentId,
-        );
-        final phoneEquipment = EquipmentModel(
-          id: 400,
-          code: 'PC-PHONE',
-          type: 'PC',
-        );
-        lookup.injectInMemoryCatalogForTests(
-          users: [userWithPhone],
-          equipment: [phoneEquipment],
-          departmentRows: [
-            DepartmentModel(id: _kDepartmentId, name: _kDepartmentName),
-          ],
-          userToEquipmentIds: {20: [400]},
-        );
+    test('εξοπλισμός μόνο από τηλέφωνο διατηρεί ετικέτα «Τηλέφωνο»', () {
+      final userWithPhone = UserModel(
+        id: 20,
+        firstName: 'Τηλ',
+        lastName: 'Φωνο',
+        phones: PhoneListParser.splitPhones('2101234567'),
+        departmentId: _kDepartmentId,
+      );
+      final phoneEquipment = EquipmentModel(
+        id: 400,
+        code: 'PC-PHONE',
+        type: 'PC',
+      );
+      lookup.injectInMemoryCatalogForTests(
+        users: [userWithPhone],
+        equipment: [phoneEquipment],
+        departmentRows: [
+          DepartmentModel(id: _kDepartmentId, name: _kDepartmentName),
+        ],
+        userToEquipmentIds: {
+          20: [400],
+        },
+      );
 
-        final header = SmartEntitySelectorState(
-          selectedPhone: '2101234567',
-        );
-        final suggestions = buildInitialEquipmentSuggestions(header, lookup);
+      final header = SmartEntitySelectorState(selectedPhone: '2101234567');
+      final suggestions = buildInitialEquipmentSuggestions(header, lookup);
 
-        expect(
-          _sourceLabelForCode(suggestions, 'PC-PHONE'),
-          'Τηλέφωνο',
-          reason: greekExpectMsg(
-            'Η ροή τηλεφώνου δεν επηρεάζεται από τη διόρθωση καλούντα',
-          ),
-        );
-      },
-    );
+      expect(
+        _sourceLabelForCode(suggestions, 'PC-PHONE'),
+        'Τηλέφωνο',
+        reason: greekExpectMsg(
+          'Η ροή τηλεφώνου δεν επηρεάζεται από τη διόρθωση καλούντα',
+        ),
+      );
+    });
   });
 }

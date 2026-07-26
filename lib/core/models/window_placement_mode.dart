@@ -9,9 +9,9 @@ enum WindowPlacementMode {
 
 extension WindowPlacementModeStorage on WindowPlacementMode {
   String get storageValue => switch (this) {
-        WindowPlacementMode.lastPosition => 'last',
-        WindowPlacementMode.alwaysCenter => 'center',
-      };
+    WindowPlacementMode.lastPosition => 'last',
+    WindowPlacementMode.alwaysCenter => 'center',
+  };
 
   static WindowPlacementMode? fromStorage(String? raw) {
     return switch (raw) {
@@ -22,8 +22,7 @@ extension WindowPlacementModeStorage on WindowPlacementMode {
   }
 
   String get settingsLabel => switch (this) {
-        WindowPlacementMode.lastPosition =>
-          'Τελευταία θέση κατά τον τερματισμό',
-        WindowPlacementMode.alwaysCenter => 'Πάντα στο κέντρο της οθόνης',
-      };
+    WindowPlacementMode.lastPosition => 'Τελευταία θέση κατά τον τερματισμό',
+    WindowPlacementMode.alwaysCenter => 'Πάντα στο κέντρο της οθόνης',
+  };
 }

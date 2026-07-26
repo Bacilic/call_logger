@@ -13,24 +13,26 @@ import '../widgets/lamp_import_report_dialog.dart';
 import 'lamp_path_management.dart';
 import 'lamp_screen_host.dart';
 
-typedef RecreateConfirmationCallback = Future<bool> Function({
-  required String fileName,
-});
+typedef RecreateConfirmationCallback =
+    Future<bool> Function({required String fileName});
 
-typedef ImportReportFlowCallback = Future<LampImportReportOutcome?> Function({
-  required Stopwatch stopwatch,
-  required LampImportReadPathContext readPathContext,
-  required Future<LampImportResult> Function(
-    void Function(LampImportProgress progress) onProgress,
-  ) importRunner,
-});
+typedef ImportReportFlowCallback =
+    Future<LampImportReportOutcome?> Function({
+      required Stopwatch stopwatch,
+      required LampImportReadPathContext readPathContext,
+      required Future<LampImportResult> Function(
+        void Function(LampImportProgress progress) onProgress,
+      )
+      importRunner,
+    });
 
 /// Ανανέωση των ειδοποιήσεων σύγκρισης βάσεων (ανάγνωση έναντι εξόδου).
 /// Εγχέεται στα τεστ ώστε το [runImport] να μη χρειάζεται ζωντανό [WidgetRef].
-typedef LampDbComparisonRefresh = Future<void> Function({
-  required String readPath,
-  required String outputPath,
-});
+typedef LampDbComparisonRefresh =
+    Future<void> Function({
+      required String readPath,
+      required String outputPath,
+    });
 
 class LampImportRunResult {
   const LampImportRunResult({
@@ -87,7 +89,8 @@ class LampImportController {
     if (outputFormatError != null) {
       return outputFormatError;
     }
-    if (outputPathCheck != null && lampOutputPathBlocksImport(outputPathCheck)) {
+    if (outputPathCheck != null &&
+        lampOutputPathBlocksImport(outputPathCheck)) {
       return outputPathCheck.userMessageGreek;
     }
     return null;
@@ -109,8 +112,9 @@ class LampImportController {
       icon: const Icon(Icons.play_arrow),
       label: Text(kLampExcelImportButtonLabel),
     );
-    final tooltipMessage =
-        importing ? 'Εκτελείται εισαγωγή Excel…' : blockReason;
+    final tooltipMessage = importing
+        ? 'Εκτελείται εισαγωγή Excel…'
+        : blockReason;
     if (enabled || tooltipMessage == null) {
       return button;
     }
@@ -145,7 +149,8 @@ class LampImportController {
     required LampImportReadPathContext readPathContext,
     required Future<LampImportResult> Function(
       void Function(LampImportProgress progress) onProgress,
-    ) importRunner,
+    )
+    importRunner,
   }) {
     final callback = _showImportReportDialog;
     if (callback != null) {
@@ -212,13 +217,12 @@ class LampImportController {
     final readPathEmpty = readBeforeImport.isEmpty;
     final readPathContext = LampImportReadPathContext(
       readPathEmpty: readPathEmpty,
-      readDiffersFromOutput: !readPathEmpty &&
-          !LampOldDbValidator.pathsReferToSameFile(
-            readBeforeImport,
-            outPath,
-          ),
-      currentReadFileName:
-          readBeforeImport.isEmpty ? null : p.basename(readBeforeImport),
+      readDiffersFromOutput:
+          !readPathEmpty &&
+          !LampOldDbValidator.pathsReferToSameFile(readBeforeImport, outPath),
+      currentReadFileName: readBeforeImport.isEmpty
+          ? null
+          : p.basename(readBeforeImport),
     );
 
     try {
@@ -269,8 +273,8 @@ class LampImportController {
 
       return LampImportRunResult(
         successMessage: successMessage,
-        runIntegrityCheck: outcome?.action ==
-            LampImportReportCloseAction.runIntegrityCheck,
+        runIntegrityCheck:
+            outcome?.action == LampImportReportCloseAction.runIntegrityCheck,
       );
     } catch (e) {
       if (!host.mounted) {
@@ -303,10 +307,9 @@ class LampImportController {
       await override(readPath: readPath, outputPath: outputPath);
       return;
     }
-    await host.ref.read(lampDbComparisonProvider.notifier).refresh(
-      readPathOverride: readPath,
-      outputPathOverride: outputPath,
-    );
+    await host.ref
+        .read(lampDbComparisonProvider.notifier)
+        .refresh(readPathOverride: readPath, outputPathOverride: outputPath);
   }
 
   String _successMessageFor({
@@ -336,8 +339,9 @@ class LampImportController {
       return null;
     } on FileSystemException catch (e) {
       return 'Ο φάκελος εξόδου δεν είναι προσβάσιμος '
-          '(${p.basename(parent.path)}). Ελέγξτε δίσκο δικτύου/USB ή τη διαδρομή. '
-          '${e.message}'.trim();
+              '(${p.basename(parent.path)}). Ελέγξτε δίσκο δικτύου/USB ή τη διαδρομή. '
+              '${e.message}'
+          .trim();
     }
   }
 }

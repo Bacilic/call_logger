@@ -17,17 +17,14 @@ Future<bool> tryEphemeralWalCheckpoint(String dbPath) async {
 
   Database? db;
   try {
-    db = await openDatabase(
-      dbPath,
-      readOnly: false,
-      singleInstance: true,
-    ).timeout(
-      Duration(seconds: databaseWalCheckpointTimeoutSeconds),
-      onTimeout: () => throw TimeoutException(
-        'ephemeral openDatabase timed out after '
-        '${databaseWalCheckpointTimeoutSeconds}s',
-      ),
-    );
+    db = await openDatabase(dbPath, readOnly: false, singleInstance: true)
+        .timeout(
+          Duration(seconds: databaseWalCheckpointTimeoutSeconds),
+          onTimeout: () => throw TimeoutException(
+            'ephemeral openDatabase timed out after '
+            '${databaseWalCheckpointTimeoutSeconds}s',
+          ),
+        );
     await db
         .rawQuery('PRAGMA wal_checkpoint(TRUNCATE)')
         .timeout(
@@ -66,10 +63,7 @@ Future<({bool deleted, String? message})> tryDeleteStaleSidecarIfSafe(
     final stat = await file.stat();
     if (stat.size <= 0) {
       await file.delete();
-      return (
-        deleted: true,
-        message: 'Διαγράφηκε κενό sidecar: $sidecarPath',
-      );
+      return (deleted: true, message: 'Διαγράφηκε κενό sidecar: $sidecarPath');
     }
 
     RandomAccessFile? raf;
@@ -95,15 +89,9 @@ Future<({bool deleted, String? message})> tryDeleteStaleSidecarIfSafe(
     }
 
     await file.delete();
-    return (
-      deleted: true,
-      message: 'Διαγράφηκε stale sidecar: $sidecarPath',
-    );
+    return (deleted: true, message: 'Διαγράφηκε stale sidecar: $sidecarPath');
   } catch (e) {
-    return (
-      deleted: false,
-      message: 'Αποτυχία καθαρισμού $sidecarPath: $e',
-    );
+    return (deleted: false, message: 'Αποτυχία καθαρισμού $sidecarPath: $e');
   }
 }
 

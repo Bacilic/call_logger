@@ -151,11 +151,17 @@ void main() {
         final vlasisEqId = await equipmentIdOf('3602');
 
         expect(
-          await phones.countPhoneReferencesExcludingAudit(drososPhoneId, '2854'),
+          await phones.countPhoneReferencesExcludingAudit(
+            drososPhoneId,
+            '2854',
+          ),
           9,
         );
         expect(
-          await phones.countPhoneReferencesExcludingAudit(vlasisPhoneId, '2852'),
+          await phones.countPhoneReferencesExcludingAudit(
+            vlasisPhoneId,
+            '2852',
+          ),
           5,
         );
         expect(

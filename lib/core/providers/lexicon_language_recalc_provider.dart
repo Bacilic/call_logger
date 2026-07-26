@@ -1,4 +1,4 @@
-﻿import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../services/master_dictionary_service.dart';
 import 'core_lexicon_provider.dart';
@@ -27,7 +27,8 @@ final class LexiconLanguageRecalcError extends LexiconLanguageRecalcState {
   final String message;
 }
 
-class LexiconLanguageRecalcNotifier extends Notifier<LexiconLanguageRecalcState> {
+class LexiconLanguageRecalcNotifier
+    extends Notifier<LexiconLanguageRecalcState> {
   @override
   LexiconLanguageRecalcState build() => const LexiconLanguageRecalcIdle();
 
@@ -60,8 +61,8 @@ class LexiconLanguageRecalcNotifier extends Notifier<LexiconLanguageRecalcState>
 
 final lexiconLanguageRecalcProvider =
     NotifierProvider<LexiconLanguageRecalcNotifier, LexiconLanguageRecalcState>(
-  LexiconLanguageRecalcNotifier.new,
-);
+      LexiconLanguageRecalcNotifier.new,
+    );
 
 /// Αυξάνεται μετά από αλλαγές στο master λεξικό ώστε η οθόνη διαχείρισης να ξαναφορτώσει το grid.
 class LexiconMasterDataRevisionNotifier extends Notifier<int> {
@@ -73,5 +74,5 @@ class LexiconMasterDataRevisionNotifier extends Notifier<int> {
 
 final lexiconMasterDataRevisionProvider =
     NotifierProvider<LexiconMasterDataRevisionNotifier, int>(
-  LexiconMasterDataRevisionNotifier.new,
-);
+      LexiconMasterDataRevisionNotifier.new,
+    );

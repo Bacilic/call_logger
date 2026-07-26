@@ -6,8 +6,8 @@ import 'package:flutter/services.dart';
 import '../../../core/database/old_database/lamp_issue_resolution_models.dart';
 import '../../../core/utils/search_text_normalizer.dart';
 
-typedef LampEntityCodeSearchCallback = Future<List<LampEntityCodeSuggestion>>
-    Function(String query);
+typedef LampEntityCodeSearchCallback =
+    Future<List<LampEntityCodeSuggestion>> Function(String query);
 
 /// Πεδίο κωδικού με autocomplete ονόματος/κωδικού (μοτίβο desktop overlay).
 class LampEntityCodeAutocomplete extends StatefulWidget {
@@ -34,11 +34,13 @@ class LampEntityCodeAutocomplete extends StatefulWidget {
       _LampEntityCodeAutocompleteState();
 }
 
-class _LampEntityCodeAutocompleteState extends State<LampEntityCodeAutocomplete> {
+class _LampEntityCodeAutocompleteState
+    extends State<LampEntityCodeAutocomplete> {
   final LayerLink _layerLink = LayerLink();
   final FocusNode _focusNode = FocusNode();
   OverlayEntry? _overlayEntry;
-  List<LampEntityCodeSuggestion> _suggestions = const <LampEntityCodeSuggestion>[];
+  List<LampEntityCodeSuggestion> _suggestions =
+      const <LampEntityCodeSuggestion>[];
   int _selectedIndex = 0;
   Timer? _searchDebounce;
   int _searchGeneration = 0;
@@ -85,7 +87,10 @@ class _LampEntityCodeAutocompleteState extends State<LampEntityCodeAutocomplete>
 
   void _scheduleSearch() {
     _searchDebounce?.cancel();
-    _searchDebounce = Timer(const Duration(milliseconds: 120), _refreshSuggestions);
+    _searchDebounce = Timer(
+      const Duration(milliseconds: 120),
+      _refreshSuggestions,
+    );
   }
 
   Future<void> _refreshSuggestions() async {

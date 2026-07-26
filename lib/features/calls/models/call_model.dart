@@ -1,4 +1,4 @@
-﻿import '../../../core/utils/history_entity_display_utils.dart';
+import '../../../core/utils/history_entity_display_utils.dart';
 
 /// Μοντέλο κλήσης (πίνακας calls).
 class CallModel {
@@ -73,10 +73,10 @@ class CallModel {
       lansweeperMainTicketId: map['lansweeper_main_ticket_id'] as String?,
       lansweeperLastSyncAt: map['lansweeper_last_sync_at'] as String?,
       isDeleted: (map['is_deleted'] as int?) == 1,
-      callerLinkedDeleted:
-          historyEntityIsDeleted(map['caller_is_deleted']),
-      equipmentLinkedDeleted:
-          historyEntityIsDeleted(map['equipment_is_deleted']),
+      callerLinkedDeleted: historyEntityIsDeleted(map['caller_is_deleted']),
+      equipmentLinkedDeleted: historyEntityIsDeleted(
+        map['equipment_is_deleted'],
+      ),
     );
   }
 

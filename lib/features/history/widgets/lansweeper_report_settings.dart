@@ -82,9 +82,7 @@ mixin LansweeperReportSettingsMixin on LansweeperReportDialogStateHost {
       await launchUrl(uri, mode: LaunchMode.externalApplication);
     }
     if (!mounted) return;
-    showDialogSnackBar(
-      SnackBar(content: Text('Άνοιξε ο σύνδεσμος: $chosen')),
-    );
+    showDialogSnackBar(SnackBar(content: Text('Άνοιξε ο σύνδεσμος: $chosen')));
   }
 
   Future<void> _lansweeperTicketFormHelpFromSettings() async {
@@ -97,9 +95,7 @@ mixin LansweeperReportSettingsMixin on LansweeperReportDialogStateHost {
       await launchUrl(uri, mode: LaunchMode.externalApplication);
     }
     if (!mounted) return;
-    showDialogSnackBar(
-      SnackBar(content: Text('Άνοιξε ο σύνδεσμος: $chosen')),
-    );
+    showDialogSnackBar(SnackBar(content: Text('Άνοιξε ο σύνδεσμος: $chosen')));
   }
 
   Future<void> _lansweeperTicketViewHelpFromSettings() async {
@@ -112,9 +108,7 @@ mixin LansweeperReportSettingsMixin on LansweeperReportDialogStateHost {
       await launchUrl(uri, mode: LaunchMode.externalApplication);
     }
     if (!mounted) return;
-    showDialogSnackBar(
-      SnackBar(content: Text('Άνοιξε ο σύνδεσμος: $chosen')),
-    );
+    showDialogSnackBar(SnackBar(content: Text('Άνοιξε ο σύνδεσμος: $chosen')));
   }
 
   Future<void> _lansweeperLoginHelpFromSettings() async {
@@ -127,9 +121,7 @@ mixin LansweeperReportSettingsMixin on LansweeperReportDialogStateHost {
       await launchUrl(uri, mode: LaunchMode.externalApplication);
     }
     if (!mounted) return;
-    showDialogSnackBar(
-      SnackBar(content: Text('Άνοιξε ο σύνδεσμος: $chosen')),
-    );
+    showDialogSnackBar(SnackBar(content: Text('Άνοιξε ο σύνδεσμος: $chosen')));
   }
 
   void _scheduleLansweeperSettingsSave({bool recheckConnection = false}) {
@@ -140,9 +132,7 @@ mixin LansweeperReportSettingsMixin on LansweeperReportDialogStateHost {
         if (!mounted) return;
         _persistLansweeperSettingsSafely();
         if (!recheckConnection) return;
-        unawaited(
-          ref.read(lansweeperConnectionProbeProvider.notifier).check(),
-        );
+        unawaited(ref.read(lansweeperConnectionProbeProvider.notifier).check());
       },
     );
   }

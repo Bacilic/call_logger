@@ -287,45 +287,48 @@ List<Override> _recordingOverrides(Map<String, String> recorded) {
 }
 
 void main() {
-  testWidgets('persistLansweeperSettings γράφει και τα 13 πεδία στους σωστούς providers', (tester) async {
-    final recorded = <String, String>{};
-    late WidgetRef capturedRef;
+  testWidgets(
+    'persistLansweeperSettings γράφει και τα 13 πεδία στους σωστούς providers',
+    (tester) async {
+      final recorded = <String, String>{};
+      late WidgetRef capturedRef;
 
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: _recordingOverrides(recorded),
-        child: Consumer(
-          builder: (context, ref, _) {
-            capturedRef = ref;
-            return const SizedBox.shrink();
-          },
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: _recordingOverrides(recorded),
+          child: Consumer(
+            builder: (context, ref, _) {
+              capturedRef = ref;
+              return const SizedBox.shrink();
+            },
+          ),
         ),
-      ),
-    );
+      );
 
-    persistLansweeperSettings(capturedRef, _kValues);
-    await tester.pump();
+      persistLansweeperSettings(capturedRef, _kValues);
+      await tester.pump();
 
-    expect(recorded['apiUrl'], _vApiUrl);
-    expect(recorded['ticketFormUrl'], _vTicketFormUrl);
-    expect(recorded['ticketViewUrl'], _vTicketViewUrl);
-    expect(recorded['loginUrl'], _vLoginUrl);
+      expect(recorded['apiUrl'], _vApiUrl);
+      expect(recorded['ticketFormUrl'], _vTicketFormUrl);
+      expect(recorded['ticketViewUrl'], _vTicketViewUrl);
+      expect(recorded['loginUrl'], _vLoginUrl);
 
-    expect(recorded['lansweeperApiKey'], _vLansweeperApiKey);
-    expect(recorded['geminiApiKey'], _vGeminiApiKey);
-    expect(recorded['lansweeperApiKey'], isNot(_vGeminiApiKey));
+      expect(recorded['lansweeperApiKey'], _vLansweeperApiKey);
+      expect(recorded['geminiApiKey'], _vGeminiApiKey);
+      expect(recorded['lansweeperApiKey'], isNot(_vGeminiApiKey));
 
-    expect(recorded['helpdeskUsername'], _vHelpdeskUsername);
-    expect(recorded['helpdeskPassword'], _vHelpdeskPassword);
-    expect(recorded['helpdeskUsername'], isNot(_vHelpdeskPassword));
+      expect(recorded['helpdeskUsername'], _vHelpdeskUsername);
+      expect(recorded['helpdeskPassword'], _vHelpdeskPassword);
+      expect(recorded['helpdeskUsername'], isNot(_vHelpdeskPassword));
 
-    expect(recorded['geminiPrimaryModel'], _vGeminiPrimaryModel);
-    expect(recorded['geminiFallbackModel'], _vGeminiFallbackModel);
-    expect(recorded['geminiPrimaryModel'], isNot(_vGeminiFallbackModel));
+      expect(recorded['geminiPrimaryModel'], _vGeminiPrimaryModel);
+      expect(recorded['geminiFallbackModel'], _vGeminiFallbackModel);
+      expect(recorded['geminiPrimaryModel'], isNot(_vGeminiFallbackModel));
 
-    expect(recorded['agentUsername'], _vAgentUsername);
-    expect(recorded['geminiPromptTemplate'], _vGeminiPromptTemplate);
-    expect(recorded['geminiEndpoint'], _vGeminiEndpoint);
-    expect(recorded, hasLength(13));
-  });
+      expect(recorded['agentUsername'], _vAgentUsername);
+      expect(recorded['geminiPromptTemplate'], _vGeminiPromptTemplate);
+      expect(recorded['geminiEndpoint'], _vGeminiEndpoint);
+      expect(recorded, hasLength(13));
+    },
+  );
 }

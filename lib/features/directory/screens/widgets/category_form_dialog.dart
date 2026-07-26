@@ -103,7 +103,8 @@ class _CategoryFormDialogState extends State<CategoryFormDialog>
             child: const Text('Ακύρωση Αλλαγών'),
           ),
           FilledButton(
-            onPressed: () => Navigator.of(ctx).pop(_CategoryFormDismissChoice.keep),
+            onPressed: () =>
+                Navigator.of(ctx).pop(_CategoryFormDismissChoice.keep),
             child: const Text('Διατήρηση'),
           ),
         ],
@@ -135,9 +136,7 @@ class _CategoryFormDialogState extends State<CategoryFormDialog>
   }
 
   void _showError(String message) {
-    showDialogSnackBar(
-      SnackBar(content: Text(message)),
-    );
+    showDialogSnackBar(SnackBar(content: Text(message)));
   }
 
   Future<void> _onSave() async {
@@ -153,9 +152,7 @@ class _CategoryFormDialogState extends State<CategoryFormDialog>
         if (!mounted) return;
         if (restored) {
           showDialogSnackBar(
-            SnackBar(
-              content: Text(kCategoryRestoredFromDeletedUserMessage),
-            ),
+            SnackBar(content: Text(kCategoryRestoredFromDeletedUserMessage)),
           );
         }
         Navigator.of(context).pop();
@@ -206,9 +203,7 @@ class _CategoryFormDialogState extends State<CategoryFormDialog>
         if (!mounted) return;
         if (restored) {
           showDialogSnackBar(
-            SnackBar(
-              content: Text(kCategoryRestoredFromDeletedUserMessage),
-            ),
+            SnackBar(content: Text(kCategoryRestoredFromDeletedUserMessage)),
           );
         }
       }
@@ -262,49 +257,49 @@ class _CategoryFormDialogState extends State<CategoryFormDialog>
     return DialogSnackbarScope(
       messengerKey: dialogMessengerKey,
       child: PopScope(
-      canPop: false,
-      onPopInvokedWithResult: (didPop, _) async {
-        if (didPop) return;
-        await _requestClose();
-      },
-      child: DraggableDialogShell(
-        title: Text(_isEdit ? 'Επεξεργασία κατηγορίας' : 'Νέα κατηγορία'),
-        builder: (titleHandle) => AlertDialog(
-        title: titleHandle,
-        content: SizedBox(
-          width: 400,
-          child: TextField(
-            controller: _controller,
-            decoration: const InputDecoration(
-              labelText: 'Όνομα',
-              border: OutlineInputBorder(),
+        canPop: false,
+        onPopInvokedWithResult: (didPop, _) async {
+          if (didPop) return;
+          await _requestClose();
+        },
+        child: DraggableDialogShell(
+          title: Text(_isEdit ? 'Επεξεργασία κατηγορίας' : 'Νέα κατηγορία'),
+          builder: (titleHandle) => AlertDialog(
+            title: titleHandle,
+            content: SizedBox(
+              width: 400,
+              child: TextField(
+                controller: _controller,
+                decoration: const InputDecoration(
+                  labelText: 'Όνομα',
+                  border: OutlineInputBorder(),
+                ),
+                autofocus: true,
+                onSubmitted: (_) {
+                  if (_saveEnabled) _onSave();
+                },
+              ),
             ),
-            autofocus: true,
-            onSubmitted: (_) {
-              if (_saveEnabled) _onSave();
-            },
+            actions: [
+              if (_isEdit)
+                TextButton(
+                  onPressed: _onDelete,
+                  style: TextButton.styleFrom(
+                    foregroundColor: Theme.of(context).colorScheme.error,
+                  ),
+                  child: const Text('Διαγραφή'),
+                ),
+              TextButton(
+                onPressed: _cancelAndClose,
+                child: const Text('Ακύρωση'),
+              ),
+              FilledButton(
+                onPressed: _saveEnabled ? _onSave : null,
+                child: const Text('Αποθήκευση'),
+              ),
+            ],
           ),
         ),
-        actions: [
-          if (_isEdit)
-            TextButton(
-              onPressed: _onDelete,
-              style: TextButton.styleFrom(
-                foregroundColor: Theme.of(context).colorScheme.error,
-              ),
-              child: const Text('Διαγραφή'),
-            ),
-          TextButton(
-            onPressed: _cancelAndClose,
-            child: const Text('Ακύρωση'),
-          ),
-          FilledButton(
-            onPressed: _saveEnabled ? _onSave : null,
-            child: const Text('Αποθήκευση'),
-          ),
-        ],
-      ),
-      ),
       ),
     );
   }

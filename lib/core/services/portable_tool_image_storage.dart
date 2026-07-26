@@ -24,17 +24,12 @@ class PortableToolImageStorage {
       final ext = p.extension(baseName);
       var i = 1;
       while (await File(dest).exists()) {
-        dest = p.join(
-          AppConfig.portableImagesDirectory,
-          '${stem}_$i$ext',
-        );
+        dest = p.join(AppConfig.portableImagesDirectory, '${stem}_$i$ext');
         i++;
       }
     }
     await File(src).copy(dest);
-    return p
-        .join(storedPrefix, p.basename(dest))
-        .replaceAll('\\', '/');
+    return p.join(storedPrefix, p.basename(dest)).replaceAll('\\', '/');
   }
 
   /// Επίλυση `icon_asset_key` σε απόλυτη διαδρομή αρχείου (ή null).
@@ -47,7 +42,10 @@ class PortableToolImageStorage {
       final rel = normalized.substring(storedPrefix.length);
       if (rel.isEmpty) return null;
       final abs = p.normalize(
-        p.join(AppConfig.portableImagesDirectory, rel.replaceAll('/', p.separator)),
+        p.join(
+          AppConfig.portableImagesDirectory,
+          rel.replaceAll('/', p.separator),
+        ),
       );
       if (File(abs).existsSync()) return abs;
       return null;

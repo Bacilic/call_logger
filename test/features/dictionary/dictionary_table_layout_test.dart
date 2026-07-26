@@ -3,10 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   group('lexiconRowsForColumnGroup', () {
-    final rows = List.generate(
-      10,
-      (i) => {'display_word': 'w$i'},
-    );
+    final rows = List.generate(10, (i) => {'display_word': 'w$i'});
 
     test('distributes rows in newspaper column order', () {
       expect(
@@ -37,11 +34,7 @@ void main() {
 
     test('returns empty for invalid group index', () {
       expect(
-        lexiconRowsForColumnGroup(
-          rows: rows,
-          groupIndex: 3,
-          columnsCount: 3,
-        ),
+        lexiconRowsForColumnGroup(rows: rows, groupIndex: 3, columnsCount: 3),
         isEmpty,
       );
     });

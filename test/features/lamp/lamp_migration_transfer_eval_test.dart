@@ -99,7 +99,9 @@ void main() {
         destinationItems: const ['PC-01', 'PC-02'],
       );
 
-      final unlinked = items.where((i) => i.action == TransferFieldAction.unlinked);
+      final unlinked = items.where(
+        (i) => i.action == TransferFieldAction.unlinked,
+      );
       expect(unlinked, hasLength(1));
       expect(unlinked.first.value, 'PC-02');
       expect(unlinked.first.warningMessage, 'Θα αποσυνδεθεί');
@@ -137,10 +139,10 @@ void main() {
 
   group('parseEquipmentCodes', () {
     test('αφαιρεί διπλότυπα με κανονικοποιημένη σύγκριση', () {
-      expect(
-        LampMigrationService.parseEquipmentCodes('PC-01, pc-01; PC-02'),
-        ['PC-01', 'PC-02'],
-      );
+      expect(LampMigrationService.parseEquipmentCodes('PC-01, pc-01; PC-02'), [
+        'PC-01',
+        'PC-02',
+      ]);
     });
   });
 }

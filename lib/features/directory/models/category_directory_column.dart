@@ -8,16 +8,15 @@ class CategoryDirectoryColumn {
   final String label;
   final String? sortKey;
 
-  static const selection =
-      CategoryDirectoryColumn._('selection', 'Επιλογή', null);
+  static const selection = CategoryDirectoryColumn._(
+    'selection',
+    'Επιλογή',
+    null,
+  );
   static const id = CategoryDirectoryColumn._('id', 'ID', 'id');
   static const name = CategoryDirectoryColumn._('name', 'Όνομα', 'name');
 
-  static const List<CategoryDirectoryColumn> all = [
-    selection,
-    id,
-    name,
-  ];
+  static const List<CategoryDirectoryColumn> all = [selection, id, name];
 
   static CategoryDirectoryColumn? fromKey(String k) {
     for (final c in all) {
@@ -32,10 +31,7 @@ class CategoryDirectoryColumn {
     if (!order.contains(selection)) {
       return List<CategoryDirectoryColumn>.from(order);
     }
-    return [
-      selection,
-      ...order.where((c) => c != selection),
-    ];
+    return [selection, ...order.where((c) => c != selection)];
   }
 
   String get editFocusField => 'name';

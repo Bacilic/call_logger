@@ -33,11 +33,7 @@ class ConflictBadge extends StatelessWidget {
           height: 16,
           alignment: Alignment.center,
           decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-          child: const Icon(
-            Icons.priority_high,
-            size: 11,
-            color: Colors.white,
-          ),
+          child: const Icon(Icons.priority_high, size: 11, color: Colors.white),
         ),
       ),
     );

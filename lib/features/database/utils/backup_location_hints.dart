@@ -18,7 +18,7 @@ class BackupLocationHints {
   /// Γράμμα τόμου `A`–`Z` αν η διαδρομή είναι της μορφής `F:\...`, αλλιώς null (π.χ. UNC).
   static String? windowsDriveLetterFromPath(String path) {
     final t = path.trim().replaceAll('/', '\\');
-    if (t.length < 2 || t.codeUnitAt(1) != 0x3A /* ':' */) {
+    if (t.length < 2 || t.codeUnitAt(1) != 0x3A /* ':' */ ) {
       return null;
     }
     final u = t.codeUnitAt(0);
@@ -46,9 +46,7 @@ class BackupLocationHints {
   ) {
     if (databaseDriveLetter == null) return List<String>.from(driveLabels);
     return driveLabels
-        .where(
-          (l) => leadingDriveLetterFromLabel(l) != databaseDriveLetter,
-        )
+        .where((l) => leadingDriveLetterFromLabel(l) != databaseDriveLetter)
         .toList();
   }
 
@@ -83,7 +81,8 @@ class BackupLocationHints {
     return out;
   }
 
-  static Iterable<({String letter, int driveType})> _iterEligibleWindowsDriveMeta() sync* {
+  static Iterable<({String letter, int driveType})>
+  _iterEligibleWindowsDriveMeta() sync* {
     final mask = GetLogicalDrives().value;
     for (var i = 0; i < 26; i++) {
       if ((mask & (1 << i)) == 0) continue;
@@ -91,9 +90,7 @@ class BackupLocationHints {
       final rootPtr = '$letter:\\'.toPcwstr(allocator: calloc);
       try {
         final t = GetDriveType(rootPtr);
-        if (t == DRIVE_CDROM ||
-            t == DRIVE_UNKNOWN ||
-            t == DRIVE_NO_ROOT_DIR) {
+        if (t == DRIVE_CDROM || t == DRIVE_UNKNOWN || t == DRIVE_NO_ROOT_DIR) {
           continue;
         }
         yield (letter: letter, driveType: t);
@@ -119,24 +116,18 @@ class BackupLocationHints {
     }
 
     if (filtered.isNotEmpty) {
-      add(
-        'Προτείνεται αποθήκευση αντιγράφων ασφαλείας στους δίσκους: ',
-      );
+      add('Προτείνεται αποθήκευση αντιγράφων ασφαλείας στους δίσκους: ');
       _addJoinedDriveLabels(segs, filtered);
       add('. ');
     } else if (driveLabels.isNotEmpty &&
         dbLetter != null &&
-        driveLabels.every(
-          (l) => leadingDriveLetterFromLabel(l) == dbLetter,
-        )) {
+        driveLabels.every((l) => leadingDriveLetterFromLabel(l) == dbLetter)) {
       add(
         'Προτείνεται αποθήκευση αντιγράφων ασφαλείας σε άλλο τόμο ή '
         'δικτυακό φάκελο — δεν εντοπίστηκε άλλος τόμος πέραν του τόμου της βάσης. ',
       );
     } else if (driveLabels.isNotEmpty) {
-      add(
-        'Προτείνεται αποθήκευση αντιγράφων ασφαλείας στους δίσκους: ',
-      );
+      add('Προτείνεται αποθήκευση αντιγράφων ασφαλείας στους δίσκους: ');
       _addJoinedDriveLabels(segs, driveLabels);
       add('. ');
     } else {
@@ -175,7 +166,7 @@ class BackupLocationHints {
     if (letter != null &&
         label.startsWith(letter) &&
         label.length > letter.length &&
-        label.codeUnitAt(letter.length) == 0x20 /* space */) {
+        label.codeUnitAt(letter.length) == 0x20 /* space */ ) {
       segs.add(BackupCaptionSegment(letter, bold: true));
       segs.add(BackupCaptionSegment(label.substring(letter.length)));
       return;

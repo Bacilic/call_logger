@@ -17,10 +17,15 @@ import 'package:flutter_test/flutter_test.dart';
 
 /// Γεμίζει τη φόρμα και επιβεβαιώνει πεδία (όπως μια πραγματική ημιτελής κλήση).
 void _fillHalfEnteredCall(ProviderContainer container) {
-  container.read(callHeaderProvider.notifier)
+  container
+      .read(callHeaderProvider.notifier)
       .updateCallerDisplayText('Βαρβάρα Νακαστσή');
-  container.read(callHeaderProvider.notifier).updateDepartmentText('Γραμματεία ΤΕΠ');
-  container.read(callEntryProvider.notifier).setNotes('Δεν συνδέεται ο εκτυπωτής');
+  container
+      .read(callHeaderProvider.notifier)
+      .updateDepartmentText('Γραμματεία ΤΕΠ');
+  container
+      .read(callEntryProvider.notifier)
+      .setNotes('Δεν συνδέεται ο εκτυπωτής');
   container.read(callEntryProvider.notifier).setCategory('Δίκτυο');
   // Οι επιβεβαιώσεις πεδίων ενεργοποιούν ΚΑΙ το μάνταλο μεγάλης προβολής.
   container.read(callsFieldConfirmationsProvider.notifier).confirmCaller();
@@ -107,7 +112,8 @@ void main() {
       expect(
         container.read(callsFieldConfirmationsProvider).caller,
         isTrue,
-        reason: 'Χωρίς resetAll οι επιβεβαιώσεις της ακυρωμένης κλήσης επιβιώνουν',
+        reason:
+            'Χωρίς resetAll οι επιβεβαιώσεις της ακυρωμένης κλήσης επιβιώνουν',
       );
       expect(
         container.read(callsScreenExpandedLatchProvider),
@@ -132,7 +138,10 @@ void main() {
       clearCallFormCompletely(outerRef);
 
       expect(container.read(callsFieldConfirmationsProvider).caller, isFalse);
-      expect(container.read(callsFieldConfirmationsProvider).department, isFalse);
+      expect(
+        container.read(callsFieldConfirmationsProvider).department,
+        isFalse,
+      );
       expect(container.read(callsScreenExpandedLatchProvider), isFalse);
       expect(container.read(callHeaderProvider).selectedCaller, isNull);
       expect(container.read(callEntryProvider).notes, isEmpty);

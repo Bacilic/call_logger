@@ -1,4 +1,4 @@
-﻿import 'dart:math' as math;
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -45,13 +45,11 @@ class AiPromptTemplateField extends StatefulWidget {
   final int maxLines;
 
   @override
-  State<AiPromptTemplateField> createState() =>
-      _AiPromptTemplateFieldState();
+  State<AiPromptTemplateField> createState() => _AiPromptTemplateFieldState();
 }
 
 class _AiPromptTemplateFieldState extends State<AiPromptTemplateField> {
-  AiPromptTemplateValidation _validation =
-      AiPromptTemplateValidation.valid;
+  AiPromptTemplateValidation _validation = AiPromptTemplateValidation.valid;
 
   static const _kShortColorHint =
       'Πράσινο: Δεσμευτές Θέσης · Μπλε: Περιοχές · Μωβ: JSON απάντησης';
@@ -536,7 +534,8 @@ class _AiPromptTemplateFieldState extends State<AiPromptTemplateField> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final baseStyle = theme.textTheme.bodyMedium?.copyWith(height: 1.45) ??
+    final baseStyle =
+        theme.textTheme.bodyMedium?.copyWith(height: 1.45) ??
         const TextStyle(fontSize: 14, height: 1.45);
     final hintStyle = theme.textTheme.bodySmall?.copyWith(
       color: theme.colorScheme.onSurfaceVariant,
@@ -550,9 +549,7 @@ class _AiPromptTemplateFieldState extends State<AiPromptTemplateField> {
         Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            Expanded(
-              child: Text(_kShortColorHint, style: hintStyle),
-            ),
+            Expanded(child: Text(_kShortColorHint, style: hintStyle)),
             IconButton(
               tooltip: 'Πώς λειτουργεί η προτροπή',
               visualDensity: VisualDensity.compact,
@@ -636,7 +633,9 @@ class _AiPromptTemplateFieldState extends State<AiPromptTemplateField> {
         ],
         if (!validation.isValid && validation.errors.length > 1) ...[
           const SizedBox(height: 4),
-          ...validation.errors.skip(1).map(
+          ...validation.errors
+              .skip(1)
+              .map(
                 (error) => Padding(
                   padding: const EdgeInsets.only(bottom: 2),
                   child: Text(
@@ -650,7 +649,9 @@ class _AiPromptTemplateFieldState extends State<AiPromptTemplateField> {
         ],
         if (validation.warnings.length > 1) ...[
           const SizedBox(height: 4),
-          ...validation.warnings.skip(1).map(
+          ...validation.warnings
+              .skip(1)
+              .map(
                 (warning) => Padding(
                   padding: const EdgeInsets.only(bottom: 2),
                   child: Row(
@@ -721,8 +722,7 @@ class _PromptSuggestionsOverlay extends StatelessWidget {
             itemBuilder: (context, index) {
               final suggestion = suggestions[index];
               final selected = index == selectedIndex;
-              final isBlock =
-                  suggestion.kind == _PromptSuggestionKind.block;
+              final isBlock = suggestion.kind == _PromptSuggestionKind.block;
               return MouseRegion(
                 onEnter: (_) => onHovered(index),
                 child: InkWell(
@@ -752,8 +752,9 @@ class _PromptSuggestionsOverlay extends StatelessWidget {
                           child: Text(
                             suggestion.label,
                             style: theme.textTheme.bodyMedium?.copyWith(
-                              fontWeight:
-                                  selected ? FontWeight.w600 : FontWeight.w400,
+                              fontWeight: selected
+                                  ? FontWeight.w600
+                                  : FontWeight.w400,
                             ),
                             overflow: TextOverflow.ellipsis,
                           ),
@@ -772,10 +773,7 @@ class _PromptSuggestionsOverlay extends StatelessWidget {
 }
 
 class _PromptHelpSection extends StatelessWidget {
-  const _PromptHelpSection({
-    required this.title,
-    required this.body,
-  });
+  const _PromptHelpSection({required this.title, required this.body});
 
   final String title;
   final String body;
@@ -793,10 +791,7 @@ class _PromptHelpSection extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 6),
-        Text(
-          body,
-          style: theme.textTheme.bodyMedium?.copyWith(height: 1.45),
-        ),
+        Text(body, style: theme.textTheme.bodyMedium?.copyWith(height: 1.45)),
       ],
     );
   }

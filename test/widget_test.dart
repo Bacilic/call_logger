@@ -32,10 +32,7 @@ void main() {
         await pumpUntilSettledLong(tester);
       });
 
-      expect(
-        find.byType(NavigationRail),
-        findsOneWidget,
-      );
+      expect(find.byType(NavigationRail), findsOneWidget);
       // Τηλέφωνο, Καλών, Τμήμα, Εξοπλισμός, Σημειώσεις, Κατηγορία (κ.ά.)
       expect(find.byType(TextField), findsAtLeastNWidgets(4));
 

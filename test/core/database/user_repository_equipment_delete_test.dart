@@ -200,8 +200,9 @@ void main() {
           'equipment_id': equipmentId,
         });
 
-        final atRisk =
-            await repo.findExclusiveEquipmentForUserDelete([deletedUserId]);
+        final atRisk = await repo.findExclusiveEquipmentForUserDelete([
+          deletedUserId,
+        ]);
         expect(atRisk, isEmpty);
 
         await repo.deleteUsers([deletedUserId]);

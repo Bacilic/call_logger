@@ -23,57 +23,56 @@ List<Override> _editorDialogOverrides() {
 }
 
 void main() {
-  testWidgets(
-    'αποθήκευση προτύπου δείχνει snackbar μέσα στον διάλογο',
-    (tester) async {
-      final rootMessengerKey = GlobalKey<ScaffoldMessengerState>();
+  testWidgets('αποθήκευση προτύπου δείχνει snackbar μέσα στον διάλογο', (
+    tester,
+  ) async {
+    final rootMessengerKey = GlobalKey<ScaffoldMessengerState>();
 
-      await tester.pumpWidget(
-        ProviderScope(
-          overrides: _editorDialogOverrides(),
-          child: MaterialApp(
-            home: ScaffoldMessenger(
-              key: rootMessengerKey,
-              child: Scaffold(
-                body: Builder(
-                  builder: (context) => FilledButton(
-                    onPressed: () {
-                      showDialog<void>(
-                        context: context,
-                        builder: (_) => AiPromptTemplateEditorDialog(
-                          savedTemplate: _kValidSavedTemplate,
-                          onSave: (_) async {},
-                        ),
-                      );
-                    },
-                    child: const Text('Άνοιγμα επεξεργαστή'),
-                  ),
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: _editorDialogOverrides(),
+        child: MaterialApp(
+          home: ScaffoldMessenger(
+            key: rootMessengerKey,
+            child: Scaffold(
+              body: Builder(
+                builder: (context) => FilledButton(
+                  onPressed: () {
+                    showDialog<void>(
+                      context: context,
+                      builder: (_) => AiPromptTemplateEditorDialog(
+                        savedTemplate: _kValidSavedTemplate,
+                        onSave: (_) async {},
+                      ),
+                    );
+                  },
+                  child: const Text('Άνοιγμα επεξεργαστή'),
                 ),
               ),
             ),
           ),
         ),
-      );
+      ),
+    );
 
-      await tester.tap(find.text('Άνοιγμα επεξεργαστή'));
-      await tester.pumpAndSettle();
+    await tester.tap(find.text('Άνοιγμα επεξεργαστή'));
+    await tester.pumpAndSettle();
 
-      await tester.enterText(find.byType(TextField), '$_kValidSavedTemplate\n');
-      await tester.pump();
+    await tester.enterText(find.byType(TextField), '$_kValidSavedTemplate\n');
+    await tester.pump();
 
-      await tester.tap(find.widgetWithText(FilledButton, 'Αποθήκευση'));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 100));
+    await tester.tap(find.widgetWithText(FilledButton, 'Αποθήκευση'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
 
-      expect(find.text('Το πρότυπο αποθηκεύτηκε.'), findsOneWidget);
-      expect(
-        find.descendant(
-          of: find.byType(DialogSnackbarScope),
-          matching: find.text('Το πρότυπο αποθηκεύτηκε.'),
-        ),
-        findsOneWidget,
-      );
-      expect(find.byType(AlertDialog), findsOneWidget);
-    },
-  );
+    expect(find.text('Το πρότυπο αποθηκεύτηκε.'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byType(DialogSnackbarScope),
+        matching: find.text('Το πρότυπο αποθηκεύτηκε.'),
+      ),
+      findsOneWidget,
+    );
+    expect(find.byType(AlertDialog), findsOneWidget);
+  });
 }

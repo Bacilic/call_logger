@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 import 'dart:io';
 
 import 'package:call_logger/core/about/providers/app_version_provider.dart';
@@ -28,17 +28,17 @@ void main() {
   setUpAll(() {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(SystemChannels.platform, (call) async {
-      switch (call.method) {
-        case 'Clipboard.setData':
-          final args = call.arguments as Map<Object?, Object?>;
-          clipboardText = args['text'] as String?;
+          switch (call.method) {
+            case 'Clipboard.setData':
+              final args = call.arguments as Map<Object?, Object?>;
+              clipboardText = args['text'] as String?;
+              return null;
+            case 'Clipboard.getData':
+              if (clipboardText == null) return null;
+              return <String, Object?>{'text': clipboardText};
+          }
           return null;
-        case 'Clipboard.getData':
-          if (clipboardText == null) return null;
-          return <String, Object?>{'text': clipboardText};
-      }
-      return null;
-    });
+        });
   });
 
   tearDownAll(() {
@@ -68,7 +68,8 @@ void main() {
     ReleasePublisherService Function({
       required String updateFolderPath,
       void Function(String message)? onProgress,
-    })? serviceFactory,
+    })?
+    serviceFactory,
   }) async {
     if (initialFolder != null) {
       SharedPreferences.setMockInitialValues({
@@ -86,7 +87,7 @@ void main() {
               child: ReleasePublisherCard(
                 networkFolderClassifier:
                     networkFolderClassifier ??
-                        fixedKind(NetworkFolderKind.unknown),
+                    fixedKind(NetworkFolderKind.unknown),
                 networkClassifyDebounce: Duration.zero,
                 serviceFactory: serviceFactory,
               ),
@@ -277,8 +278,9 @@ void main() {
     },
   );
 
-  testWidgets('empty Unreleased shows warning; cancel does not publish',
-      (tester) async {
+  testWidgets('empty Unreleased shows warning; cancel does not publish', (
+    tester,
+  ) async {
     var publishCalls = 0;
 
     await pumpCard(
@@ -324,8 +326,9 @@ void main() {
     expect(publishCalls, 0);
   });
 
-  testWidgets('empty Unreleased dialog includes installer-only option',
-      (tester) async {
+  testWidgets('empty Unreleased dialog includes installer-only option', (
+    tester,
+  ) async {
     await pumpCard(
       tester,
       initialFolder: tempDir.path,
@@ -363,8 +366,9 @@ void main() {
     );
   });
 
-  testWidgets('installer button calls writeInstallerOnly not publish',
-      (tester) async {
+  testWidgets('installer button calls writeInstallerOnly not publish', (
+    tester,
+  ) async {
     var publishCalls = 0;
     var installerCalls = 0;
 
@@ -403,75 +407,77 @@ void main() {
     expect(publishCalls, 0);
   });
 
-  testWidgets('while slow installer runs both buttons disabled and timer shows',
-      (tester) async {
-    final gate = Completer<ReleasePublishResult>();
+  testWidgets(
+    'while slow installer runs both buttons disabled and timer shows',
+    (tester) async {
+      final gate = Completer<ReleasePublishResult>();
 
-    await pumpCard(
-      tester,
-      initialFolder: tempDir.path,
-      serviceFactory: ({required updateFolderPath, onProgress}) {
-        return _TrackingPublisherService(
-          projectRoot: projectRoot.path,
-          updateFolderPath: updateFolderPath,
-          onPublish: () {},
-          preview: const ReleasePublishPreview(
-            currentVersion: '0.23.1',
-            currentBuild: 31,
-            nextVersion: '0.23.2',
-            nextBuild: 32,
-            unreleasedEntryCount: 1,
-            hasUnreleasedEntries: true,
-            bumpKind: VersionBumpKind.patch,
-          ),
-          writeInstallerResult: () => gate.future,
-        );
-      },
-    );
-    await tester.enterText(
-      find.byKey(const Key('release_update_folder_field')),
-      tempDir.path,
-    );
-    await tester.pumpAndSettle();
+      await pumpCard(
+        tester,
+        initialFolder: tempDir.path,
+        serviceFactory: ({required updateFolderPath, onProgress}) {
+          return _TrackingPublisherService(
+            projectRoot: projectRoot.path,
+            updateFolderPath: updateFolderPath,
+            onPublish: () {},
+            preview: const ReleasePublishPreview(
+              currentVersion: '0.23.1',
+              currentBuild: 31,
+              nextVersion: '0.23.2',
+              nextBuild: 32,
+              unreleasedEntryCount: 1,
+              hasUnreleasedEntries: true,
+              bumpKind: VersionBumpKind.patch,
+            ),
+            writeInstallerResult: () => gate.future,
+          );
+        },
+      );
+      await tester.enterText(
+        find.byKey(const Key('release_update_folder_field')),
+        tempDir.path,
+      );
+      await tester.pumpAndSettle();
 
-    await tester.tap(find.byKey(const Key('release_installer_only_button')));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 50));
+      await tester.tap(find.byKey(const Key('release_installer_only_button')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
 
-    expect(findPublishButton(tester).onPressed, isNull);
-    expect(
-      tester
-          .widget<OutlinedButton>(
-            find.byKey(const Key('release_installer_only_button')),
-          )
-          .onPressed,
-      isNull,
-    );
-    expect(
-      tester
-          .widget<IconButton>(
-            find.byKey(const Key('release_copy_cli_button')),
-          )
-          .onPressed,
-      isNull,
-    );
-    expect(
-      tester
-          .widget<IconButton>(
-            find.byKey(const Key('release_cli_settings_button')),
-          )
-          .onPressed,
-      isNull,
-    );
-    expect(find.byKey(const Key('release_elapsed_timer')), findsOneWidget);
-    expect(find.textContaining('Χρόνος:'), findsOneWidget);
+      expect(findPublishButton(tester).onPressed, isNull);
+      expect(
+        tester
+            .widget<OutlinedButton>(
+              find.byKey(const Key('release_installer_only_button')),
+            )
+            .onPressed,
+        isNull,
+      );
+      expect(
+        tester
+            .widget<IconButton>(
+              find.byKey(const Key('release_copy_cli_button')),
+            )
+            .onPressed,
+        isNull,
+      );
+      expect(
+        tester
+            .widget<IconButton>(
+              find.byKey(const Key('release_cli_settings_button')),
+            )
+            .onPressed,
+        isNull,
+      );
+      expect(find.byKey(const Key('release_elapsed_timer')), findsOneWidget);
+      expect(find.textContaining('Χρόνος:'), findsOneWidget);
 
-    gate.complete(
-      const ReleasePublishResult(status: ReleasePublishStatus.success),
-    );
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 100));
-  });
+      gate.complete(
+        const ReleasePublishResult(status: ReleasePublishStatus.success),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+    },
+  );
 
   testWidgets('copy CLI button writes command to clipboard', (tester) async {
     await pumpCard(
@@ -512,8 +518,9 @@ void main() {
     expect(find.textContaining(expected), findsOneWidget);
   });
 
-  testWidgets('copy CLI button uses auto-detected minor bump from preview',
-      (tester) async {
+  testWidgets('copy CLI button uses auto-detected minor bump from preview', (
+    tester,
+  ) async {
     await pumpCard(
       tester,
       initialFolder: tempDir.path,
@@ -553,8 +560,9 @@ void main() {
     );
   });
 
-  testWidgets('CLI settings dialog saves and restores default template',
-      (tester) async {
+  testWidgets('CLI settings dialog saves and restores default template', (
+    tester,
+  ) async {
     await pumpCard(tester, initialFolder: tempDir.path);
     await tester.enterText(
       find.byKey(const Key('release_update_folder_field')),
@@ -565,7 +573,10 @@ void main() {
     await tester.tap(find.byKey(const Key('release_cli_settings_button')));
     await tester.pumpAndSettle();
 
-    expect(find.byKey(const Key('release_cli_settings_dialog')), findsOneWidget);
+    expect(
+      find.byKey(const Key('release_cli_settings_dialog')),
+      findsOneWidget,
+    );
 
     const custom =
         'dart run tool/publish.dart --bump={bump} --folder="{folder}" --allow-empty';
@@ -591,31 +602,31 @@ void main() {
     );
   });
 
-  testWidgets('CLI settings dialog shows parameter help including allow-empty',
-      (tester) async {
-    await pumpCard(tester, initialFolder: tempDir.path);
-    await tester.enterText(
-      find.byKey(const Key('release_update_folder_field')),
-      tempDir.path,
-    );
-    await tester.pumpAndSettle();
+  testWidgets(
+    'CLI settings dialog shows parameter help including allow-empty',
+    (tester) async {
+      await pumpCard(tester, initialFolder: tempDir.path);
+      await tester.enterText(
+        find.byKey(const Key('release_update_folder_field')),
+        tempDir.path,
+      );
+      await tester.pumpAndSettle();
 
-    await tester.tap(find.byKey(const Key('release_cli_settings_button')));
-    await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('release_cli_settings_button')));
+      await tester.pumpAndSettle();
 
-    expect(find.textContaining('--allow-empty'), findsOneWidget);
-    expect(find.textContaining('{bump}'), findsWidgets);
-    expect(find.textContaining('{folder}'), findsWidgets);
-  });
+      expect(find.textContaining('--allow-empty'), findsOneWidget);
+      expect(find.textContaining('{bump}'), findsWidgets);
+      expect(find.textContaining('{folder}'), findsWidgets);
+    },
+  );
 
   testWidgets('copy CLI disabled when folder invalid', (tester) async {
     await pumpCard(tester);
 
     expect(
       tester
-          .widget<IconButton>(
-            find.byKey(const Key('release_copy_cli_button')),
-          )
+          .widget<IconButton>(find.byKey(const Key('release_copy_cli_button')))
           .onPressed,
       isNull,
     );
@@ -632,11 +643,11 @@ void main() {
 
 class _FixedKindClassifier extends NetworkFolderClassifier {
   _FixedKindClassifier(this.kind)
-      : super(
-          driveTypeResolver: (_) async => false,
-          localSharesProvider: () async => const <String>[],
-          isWindows: () => true,
-        );
+    : super(
+        driveTypeResolver: (_) async => false,
+        localSharesProvider: () async => const <String>[],
+        isWindows: () => true,
+      );
 
   final NetworkFolderKind kind;
 
@@ -653,10 +664,10 @@ class _TrackingPublisherService extends ReleasePublisherService {
     this.onWriteInstaller,
     this.writeInstallerResult,
   }) : super(
-          buildReleaseDirectory: p.join(projectRoot, 'build'),
-          processRunner: (_, _, {workingDirectory, onOutput}) async => 0,
-          clock: () => DateTime(2026, 7, 19),
-        );
+         buildReleaseDirectory: p.join(projectRoot, 'build'),
+         processRunner: (_, _, {workingDirectory, onOutput}) async => 0,
+         clock: () => DateTime(2026, 7, 19),
+       );
 
   final void Function() onPublish;
   final void Function()? onWriteInstaller;

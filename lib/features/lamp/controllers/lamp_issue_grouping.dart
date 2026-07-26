@@ -64,7 +64,9 @@ bool isManualReviewGroupableIssueType(LampIssueType issueType) {
 }
 
 /// Κανονικοποιημένη αρχική τιμή πρότασης για κλειδί ομάδας.
-String manualReviewNormalizedOriginalValue(LampIssueResolutionProposal proposal) {
+String manualReviewNormalizedOriginalValue(
+  LampIssueResolutionProposal proposal,
+) {
   final raw = proposal.originalValue?.trim() ?? '';
   return _groupingNormalizer.normalizeReferenceText(raw);
 }
@@ -97,7 +99,8 @@ LampManualReviewGroupKey? manualReviewGroupKey(
 List<List<LampIssueResolutionProposal>> groupManualReviewProposals(
   List<LampIssueResolutionProposal> proposals,
 ) {
-  final groups = <LampManualReviewGroupKey, List<LampIssueResolutionProposal>>{};
+  final groups =
+      <LampManualReviewGroupKey, List<LampIssueResolutionProposal>>{};
   final order = <LampManualReviewGroupKey>[];
 
   for (final proposal in proposals) {

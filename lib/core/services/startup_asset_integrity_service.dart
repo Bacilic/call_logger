@@ -38,11 +38,7 @@ class StartupAssetIntegrityService {
       label: 'Κατάλογος πόρων',
       isDirectory: false,
     ),
-    (
-      relativePath: 'assets',
-      label: 'Εικόνες εφαρμογής',
-      isDirectory: true,
-    ),
+    (relativePath: 'assets', label: 'Εικόνες εφαρμογής', isDirectory: true),
     (
       relativePath: 'packages/cupertino_icons/assets/CupertinoIcons.ttf',
       label: 'Εικονίδια Cupertino',

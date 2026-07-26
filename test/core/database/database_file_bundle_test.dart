@@ -28,9 +28,15 @@ void main() {
       await File('$mainPath-wal').writeAsString('wal');
       await File('$mainPath-shm').writeAsString('shm');
 
-      await renameDatabaseBundle(mainPath, 'call_logger_pre_restore_25-07-2026.db');
+      await renameDatabaseBundle(
+        mainPath,
+        'call_logger_pre_restore_25-07-2026.db',
+      );
 
-      final renamed = p.join(tempDir.path, 'call_logger_pre_restore_25-07-2026.db');
+      final renamed = p.join(
+        tempDir.path,
+        'call_logger_pre_restore_25-07-2026.db',
+      );
       expect(await File(mainPath).exists(), isFalse);
       expect(await File(renamed).exists(), isTrue);
       expect(await File(renamed).readAsString(), 'main');

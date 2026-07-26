@@ -1,7 +1,7 @@
 /// In-memory καταγραφή cooldown ανά μοντέλο ΤΝ (δεν αποθηκεύεται στη βάση).
 class AiModelCooldownRegistry {
   AiModelCooldownRegistry({DateTime Function()? now})
-      : _now = now ?? DateTime.now;
+    : _now = now ?? DateTime.now;
 
   final DateTime Function() _now;
   final Map<String, DateTime> _availableAtByModel = {};

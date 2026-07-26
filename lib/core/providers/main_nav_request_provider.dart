@@ -46,5 +46,5 @@ class MainNavRequestNotifier extends Notifier<MainNavRequest?> {
 
 final mainNavRequestProvider =
     NotifierProvider<MainNavRequestNotifier, MainNavRequest?>(
-  MainNavRequestNotifier.new,
-);
+      MainNavRequestNotifier.new,
+    );

@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -54,6 +54,7 @@ class LansweeperSyncRequest {
   final String notes;
   final String solution;
   final String agentUsername;
+
   /// Συνολική διάρκεια (δευτερόλεπτα) για την αποστολή· αν λείπει, χρησιμοποιείται η διάρκεια της κλήσης.
   final int? durationSeconds;
 }
@@ -138,9 +139,7 @@ class LansweeperSyncService {
     LansweeperRawPoster? poster,
   }) {
     final settings = settingsService ?? SettingsService();
-    return LansweeperSyncService._(
-      poster ?? _defaultPosterFor(settings),
-    );
+    return LansweeperSyncService._(poster ?? _defaultPosterFor(settings));
   }
 
   LansweeperSyncService._(this._poster);
@@ -213,13 +212,12 @@ class LansweeperSyncService {
             ? request.title.trim()
             : _buildSubject(request.call),
         'Description': request.problem.trim(),
-        if (config.ticketType.trim().isNotEmpty) 'Type': config.ticketType.trim(),
-        if (config.priority.trim().isNotEmpty) 'Priority': config.priority.trim(),
+        if (config.ticketType.trim().isNotEmpty)
+          'Type': config.ticketType.trim(),
+        if (config.priority.trim().isNotEmpty)
+          'Priority': config.priority.trim(),
         if (config.team.trim().isNotEmpty) 'Team': config.team.trim(),
-        'CustomFields': _encodeCustomFields(
-          config,
-          request.customFieldValues,
-        ),
+        'CustomFields': _encodeCustomFields(config, request.customFieldValues),
         ..._requesterFields(request.agentUsername),
       };
 
@@ -431,10 +429,7 @@ class LansweeperSyncService {
     final customFields = <Map<String, String>>[];
     for (final field in config.customFields) {
       final value = values[field.id] ?? field.defaultValue;
-      customFields.add({
-        'name': field.apiName,
-        'value': value,
-      });
+      customFields.add({'name': field.apiName, 'value': value});
     }
     return jsonEncode({'customFields': customFields});
   }
@@ -496,8 +491,7 @@ class LansweeperSyncService {
       body = '$notesTrim\n\nΛύση:\n$solutionTrim';
     }
     if (durationSeconds == null) return body;
-    final durationLine =
-        'Χρόνος: ${formatCallDurationLabel(durationSeconds)}';
+    final durationLine = 'Χρόνος: ${formatCallDurationLabel(durationSeconds)}';
     if (body.isEmpty) return durationLine;
     return '$body\n\n$durationLine';
   }
@@ -506,12 +500,11 @@ class LansweeperSyncService {
     required String notes,
     required String solution,
     int? durationSeconds,
-  }) =>
-      buildTicketDescription(
-        notes: notes,
-        solution: solution,
-        durationSeconds: durationSeconds,
-      );
+  }) => buildTicketDescription(
+    notes: notes,
+    solution: solution,
+    durationSeconds: durationSeconds,
+  );
 
   Map<String, dynamic>? _tryDecodeJson(String body) {
     try {

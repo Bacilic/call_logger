@@ -44,9 +44,8 @@ void main() {
           body: ListView.builder(
             padding: const EdgeInsets.all(16),
             itemCount: viewModels.length,
-            itemBuilder: (context, index) => EquipmentResultCard(
-              viewModel: viewModels[index],
-            ),
+            itemBuilder: (context, index) =>
+                EquipmentResultCard(viewModel: viewModels[index]),
           ),
         ),
       ),
@@ -70,63 +69,66 @@ void main() {
     final p50 = frameMicros[frameMicros.length ~/ 2];
     final p90 = frameMicros[(frameMicros.length * 0.9).floor()];
     final max = frameMicros.last;
-    final avg =
-        frameMicros.reduce((a, b) => a + b) ~/ frameMicros.length;
+    final avg = frameMicros.reduce((a, b) => a + b) ~/ frameMicros.length;
 
     debugPrint('==== ΜΕΤΡΗΣΗ ΚΥΛΙΣΗΣ ΛΑΜΠΑΣ ====');
     debugPrint('fromRow x40:      ${ms(vmWatch.elapsedMicroseconds)} ms');
     debugPrint('Αρχικό build:     ${ms(buildWatch.elapsedMicroseconds)} ms');
     debugPrint('Καρέ κύλισης (60 δείγματα, drag 240px):');
-    debugPrint('  μέσος: ${ms(avg)} ms · p50: ${ms(p50)} ms · '
-        'p90: ${ms(p90)} ms · max: ${ms(max)} ms');
-    debugPrint('  (στόχος για 60fps: < 16.7 ms ανά καρέ σε release — '
-        'εδώ debug VM, μετράμε ΣΥΓΚΡΙΤΙΚΑ)');
+    debugPrint(
+      '  μέσος: ${ms(avg)} ms · p50: ${ms(p50)} ms · '
+      'p90: ${ms(p90)} ms · max: ${ms(max)} ms',
+    );
+    debugPrint(
+      '  (στόχος για 60fps: < 16.7 ms ανά καρέ σε release — '
+      'εδώ debug VM, μετράμε ΣΥΓΚΡΙΤΙΚΑ)',
+    );
     debugPrint('=================================');
   });
 }
 
 Map<String, Object?> _row(int i) => <String, Object?>{
-      'code': 1000 + i,
-      'description': 'Εκτυπωτής Laser A3 · μηχάνημα ορόφου $i',
-      'serial_no': 'SN12345678$i',
-      'asset_no': 'INV-2021-00$i',
-      'state_name': 'Ενεργός',
-      'set_master': 1000,
-      'receiving_date': '2021-03-15',
-      'end_of_guarantee_date': '2024-03-15',
-      'cost': '850',
-      'equipment_comments': 'Δικτυακός εκτυπωτής γραφείου με αναφορά $i',
-      'model_id': 42,
-      'model_name': 'LaserJet Pro MFP M42$i',
-      'category_name': 'Εκτυπωτές',
-      'subcategory_name': 'Laser',
-      'manufacturer_name': 'HP',
-      'model_attributes': 'A3, 40ppm, Δικτυακός',
-      'consumables': 'Toner HP 59A',
-      'contract_id': 15,
-      'contract_name': 'ΣΥΜ-2021-$i',
-      'contract_category_name': 'Εκτυπωτικός Εξοπλισμός',
-      'supplier_name': 'Office Solutions A.E.',
-      'contract_award': 'ΑΝΑΘ-2021-12',
-      'contract_declaration': 'ΔΙΑΚ-2020-45',
-      'maintenance_contract': 'Συντήρηση',
-      'contract_comments': 'Ετήσια υποστήριξη',
-      'owner_id': 7,
-      'last_name': 'Παπαδόπουλος',
-      'first_name': 'Γιώργος',
-      'owner_email': 'g.papadopoulos$i@org.gr',
-      'owner_phones': '210 1234567; 690000000$i',
-      'office_id': 3,
-      'office_name': 'Τμήμα Πληροφορικής',
-      'organization_name': 'Δ/νση Τεχνολογιών',
-      'office_email': 'info@dept.gr',
-      'office_phones': '210 9876543',
-      'building': 'Κτίριο Α',
-      'level': 2,
-      'ip_address': '10.10.212.$i',
-      'network_name': 'PC10$i',
-      'network_node': '257',
-      'network_vlan': 'Μαιευτική',
-      'network_mac': '0025228750A$i',
-      'network_description': 'VERO PC P4 2.6GHz',
-    };
+  'code': 1000 + i,
+  'description': 'Εκτυπωτής Laser A3 · μηχάνημα ορόφου $i',
+  'serial_no': 'SN12345678$i',
+  'asset_no': 'INV-2021-00$i',
+  'state_name': 'Ενεργός',
+  'set_master': 1000,
+  'receiving_date': '2021-03-15',
+  'end_of_guarantee_date': '2024-03-15',
+  'cost': '850',
+  'equipment_comments': 'Δικτυακός εκτυπωτής γραφείου με αναφορά $i',
+  'model_id': 42,
+  'model_name': 'LaserJet Pro MFP M42$i',
+  'category_name': 'Εκτυπωτές',
+  'subcategory_name': 'Laser',
+  'manufacturer_name': 'HP',
+  'model_attributes': 'A3, 40ppm, Δικτυακός',
+  'consumables': 'Toner HP 59A',
+  'contract_id': 15,
+  'contract_name': 'ΣΥΜ-2021-$i',
+  'contract_category_name': 'Εκτυπωτικός Εξοπλισμός',
+  'supplier_name': 'Office Solutions A.E.',
+  'contract_award': 'ΑΝΑΘ-2021-12',
+  'contract_declaration': 'ΔΙΑΚ-2020-45',
+  'maintenance_contract': 'Συντήρηση',
+  'contract_comments': 'Ετήσια υποστήριξη',
+  'owner_id': 7,
+  'last_name': 'Παπαδόπουλος',
+  'first_name': 'Γιώργος',
+  'owner_email': 'g.papadopoulos$i@org.gr',
+  'owner_phones': '210 1234567; 690000000$i',
+  'office_id': 3,
+  'office_name': 'Τμήμα Πληροφορικής',
+  'organization_name': 'Δ/νση Τεχνολογιών',
+  'office_email': 'info@dept.gr',
+  'office_phones': '210 9876543',
+  'building': 'Κτίριο Α',
+  'level': 2,
+  'ip_address': '10.10.212.$i',
+  'network_name': 'PC10$i',
+  'network_node': '257',
+  'network_vlan': 'Μαιευτική',
+  'network_mac': '0025228750A$i',
+  'network_description': 'VERO PC P4 2.6GHz',
+};

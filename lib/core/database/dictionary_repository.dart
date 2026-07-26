@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
@@ -98,8 +98,9 @@ class DictionaryRepository {
     final key = DictionaryService.canonicalLexiconKey(word);
     if (key.length < 2) return;
     final display = word.trim().isEmpty ? key : word.trim();
-    final metricsWord =
-        DictionaryService.hasGreekTonos(display) ? display : key;
+    final metricsWord = DictionaryService.hasGreekTonos(display)
+        ? display
+        : key;
     final m = LexiconWordMetrics.compute(metricsWord);
     final existing = await db.query(
       AppConfig.userDictionaryTable,
@@ -120,11 +121,13 @@ class DictionaryRepository {
     }
     final curDisplay =
         (existing.first['display_word'] as String?)?.trim() ?? key;
-    final nextDisplay = DictionaryService.preferLexiconDisplay(display, curDisplay)
+    final nextDisplay =
+        DictionaryService.preferLexiconDisplay(display, curDisplay)
         ? display
         : curDisplay;
-    final nextMetrics =
-        DictionaryService.hasGreekTonos(nextDisplay) ? nextDisplay : key;
+    final nextMetrics = DictionaryService.hasGreekTonos(nextDisplay)
+        ? nextDisplay
+        : key;
     final nm = LexiconWordMetrics.compute(nextMetrics);
     await db.update(
       AppConfig.userDictionaryTable,
@@ -153,12 +156,9 @@ class DictionaryRepository {
           if (key.isEmpty) return null;
           final display =
               (r['display_word'] as String?)?.trim().isNotEmpty == true
-                  ? (r['display_word'] as String).trim()
-                  : key;
-          return UserLexiconEntry(
-            normalizedKey: key,
-            displayWord: display,
-          );
+              ? (r['display_word'] as String).trim()
+              : key;
+          return UserLexiconEntry(normalizedKey: key, displayWord: display);
         })
         .whereType<UserLexiconEntry>()
         .toList();
@@ -184,8 +184,9 @@ class DictionaryRepository {
   }) async {
     if (oldKey == newKey && displayWord == null) return;
     final display = (displayWord ?? newKey).trim();
-    final metricsWord =
-        DictionaryService.hasGreekTonos(display) ? display : newKey;
+    final metricsWord = DictionaryService.hasGreekTonos(display)
+        ? display
+        : newKey;
     final m = LexiconWordMetrics.compute(metricsWord);
     await db.transaction((txn) async {
       if (oldKey != newKey) {
@@ -310,19 +311,15 @@ class DictionaryRepository {
   }) async {
     final w = displayWord.trim();
     final m = LexiconWordMetrics.compute(w);
-    await db.insert(
-      AppConfig.fullDictionaryTable,
-      {
-        'word': w,
-        'normalized_word': normalizedKey,
-        'source': source,
-        'language': language,
-        'category': category,
-        'letters_count': m.lettersCount,
-        'diacritic_mark_count': m.diacriticMarkCount,
-      },
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
+    await db.insert(AppConfig.fullDictionaryTable, {
+      'word': w,
+      'normalized_word': normalizedKey,
+      'source': source,
+      'language': language,
+      'category': category,
+      'letters_count': m.lettersCount,
+      'diacritic_mark_count': m.diacriticMarkCount,
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
   Future<List<String>> getDictionaryExportDisplayLinesOrdered() async {
@@ -349,10 +346,9 @@ class DictionaryRepository {
     for (final r in userRows) {
       final key = (r['word'] as String?)?.trim() ?? '';
       if (key.length < 2) continue;
-      final display =
-          (r['display_word'] as String?)?.trim().isNotEmpty == true
-              ? (r['display_word'] as String).trim()
-              : key;
+      final display = (r['display_word'] as String?)?.trim().isNotEmpty == true
+          ? (r['display_word'] as String).trim()
+          : key;
       if (surfaces.add(display)) {
         sortKeys[display] = key;
       }
@@ -378,26 +374,21 @@ class DictionaryRepository {
     for (final r in userRows) {
       final key = (r['word'] as String?)?.trim() ?? '';
       if (key.length < 2) continue;
-      final display =
-          (r['display_word'] as String?)?.trim().isNotEmpty == true
-              ? (r['display_word'] as String).trim()
-              : key;
+      final display = (r['display_word'] as String?)?.trim().isNotEmpty == true
+          ? (r['display_word'] as String).trim()
+          : key;
       final norm = DictionaryService.canonicalLexiconKey(key);
       final lang = detectDictionaryLanguage(display);
       final m = LexiconWordMetrics.compute(display);
-      await txn.insert(
-        AppConfig.fullDictionaryTable,
-        {
-          'word': display,
-          'normalized_word': norm,
-          'source': 'user',
-          'language': lang,
-          'category': AppConfig.lexiconCategoryUnspecified,
-          'letters_count': m.lettersCount,
-          'diacritic_mark_count': m.diacriticMarkCount,
-        },
-        conflictAlgorithm: ConflictAlgorithm.ignore,
-      );
+      await txn.insert(AppConfig.fullDictionaryTable, {
+        'word': display,
+        'normalized_word': norm,
+        'source': 'user',
+        'language': lang,
+        'category': AppConfig.lexiconCategoryUnspecified,
+        'letters_count': m.lettersCount,
+        'diacritic_mark_count': m.diacriticMarkCount,
+      }, conflictAlgorithm: ConflictAlgorithm.ignore);
     }
     await txn.delete(AppConfig.userDictionaryTable);
   }
@@ -491,7 +482,8 @@ class DictionaryRepository {
       args.add('%${normalizedSearch.trim()}%');
     }
 
-    var innerSelect = '''
+    var innerSelect =
+        '''
 WITH full_part AS (
   SELECT
     f.id AS entry_id,
@@ -545,7 +537,8 @@ SELECT * FROM combined WHERE 1=1
       innerSelect += ' AND pending_user = 1';
     }
     if (language == kLexiconMixedScriptsFilter) {
-      innerSelect += '''
+      innerSelect +=
+          '''
  AND (
   (
    EXISTS (
@@ -614,10 +607,7 @@ SELECT * FROM combined WHERE 1=1
     }
 
     if (countOnly) {
-      return (
-        'SELECT COUNT(*) AS c FROM ($innerSelect) AS cnt',
-        args,
-      );
+      return ('SELECT COUNT(*) AS c FROM ($innerSelect) AS cnt', args);
     }
 
     final limArgs = <Object?>[...args, limit, offset];

@@ -15,8 +15,9 @@ import '../utils/backup_schedule_utils.dart';
 import 'database_backup_settings_provider.dart';
 
 /// Προγραμματιστής εβδομαδιαίου ωρολογίου (έλεγχος κάθε 1 λεπτό) + έλεγχος εκκίνησης.
-final backupSchedulerProvider =
-    NotifierProvider<BackupSchedulerNotifier, int>(BackupSchedulerNotifier.new);
+final backupSchedulerProvider = NotifierProvider<BackupSchedulerNotifier, int>(
+  BackupSchedulerNotifier.new,
+);
 
 class BackupSchedulerNotifier extends Notifier<int> {
   Timer? _timer;
@@ -81,7 +82,10 @@ class BackupSchedulerNotifier extends Notifier<int> {
     final now = DateTime.now();
     final notifier = ref.read(databaseBackupSettingsProvider.notifier);
 
-    if (BackupScheduleStatusFormatter.isScheduleSatisfiedForToday(settings, now)) {
+    if (BackupScheduleStatusFormatter.isScheduleSatisfiedForToday(
+      settings,
+      now,
+    )) {
       if (BackupScheduleStatus.normalize(settings.lastBackupStatus) ==
           BackupScheduleStatus.missed) {
         await notifier.setLastBackupStatus(BackupScheduleStatus.none);
@@ -90,7 +94,10 @@ class BackupSchedulerNotifier extends Notifier<int> {
       return;
     }
 
-    if (!BackupScheduleStatusFormatter.shouldMarkScheduleMissed(settings, now)) {
+    if (!BackupScheduleStatusFormatter.shouldMarkScheduleMissed(
+      settings,
+      now,
+    )) {
       if (BackupScheduleStatus.normalize(settings.lastBackupStatus) ==
           BackupScheduleStatus.missed) {
         await notifier.setLastBackupStatus(BackupScheduleStatus.none);
@@ -127,9 +134,9 @@ class BackupSchedulerNotifier extends Notifier<int> {
     final baseName = p.basenameWithoutExtension(db.path);
     final content =
         await BackupDestinationFolderValidator.inspectDestinationContent(
-      destinationDirectory: dest,
-      dbBaseName: baseName,
-    );
+          destinationDirectory: dest,
+          dbBaseName: baseName,
+        );
 
     final notifier = ref.read(databaseBackupSettingsProvider.notifier);
     final st = BackupScheduleStatus.normalize(settings.lastBackupStatus);
@@ -226,8 +233,8 @@ class BackupSchedulerNotifier extends Notifier<int> {
         result.success
             ? BackupScheduleStatus.success
             : (result.failureCode == DatabaseBackupFailureCode.folderMissing
-                ? BackupScheduleStatus.folderMissing
-                : BackupScheduleStatus.failed),
+                  ? BackupScheduleStatus.folderMissing
+                  : BackupScheduleStatus.failed),
       );
       state = state + 1;
     } finally {

@@ -2,10 +2,7 @@ import 'search_text_normalizer.dart';
 
 /// Όρια ενεργού τμήματος σε πεδίο τηλεφώνων με κόμμα (για autocomplete).
 class PhoneFieldSegmentBounds {
-  const PhoneFieldSegmentBounds({
-    required this.start,
-    required this.end,
-  });
+  const PhoneFieldSegmentBounds({required this.start, required this.end});
 
   final int start;
 
@@ -92,8 +89,9 @@ class PhoneListParser {
     final bounds = activeSegmentBounds(text, cursor);
     final before = text.substring(0, bounds.start);
     final after = text.substring(bounds.end);
-    final suffix =
-        appendTrailingCommaWhenAtEnd && after.trim().isEmpty ? ', ' : '';
+    final suffix = appendTrailingCommaWhenAtEnd && after.trim().isEmpty
+        ? ', '
+        : '';
     final newText = '$before$replacement$suffix$after';
     final newCursor = before.length + replacement.length + suffix.length;
     return (text: newText, cursor: newCursor);

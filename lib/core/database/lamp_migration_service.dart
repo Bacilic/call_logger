@@ -182,18 +182,18 @@ bool _normalizedFieldTextValuesEquivalent(String? left, String? right) {
   return _normalizedFieldText(left) == _normalizedFieldText(right);
 }
 
-
 List<String> _splitFormListField(String key, String? raw) {
   final text = raw?.trim() ?? '';
   if (text.isEmpty) return const <String>[];
   return switch (key) {
     'phones' => PhoneListParser.splitPhones(text),
     'equipment_codes' => LampMigrationService.parseEquipmentCodes(text),
-    _ => text
-        .split(RegExp(r'[,\n;]+'))
-        .map((token) => token.trim())
-        .where((token) => token.isNotEmpty)
-        .toList(growable: false),
+    _ =>
+      text
+          .split(RegExp(r'[,\n;]+'))
+          .map((token) => token.trim())
+          .where((token) => token.isNotEmpty)
+          .toList(growable: false),
   };
 }
 
@@ -436,20 +436,14 @@ class LampPendingEntityCreation {
 enum LampSoftDeletedDecisionAction { reactivate, createNew }
 
 class LampSoftDeletedDecision {
-  const LampSoftDeletedDecision({
-    required this.action,
-    required this.recordId,
-  });
+  const LampSoftDeletedDecision({required this.action, required this.recordId});
 
   final LampSoftDeletedDecisionAction action;
   final int recordId;
 }
 
 class LampSoftDeletedMatch {
-  const LampSoftDeletedMatch({
-    required this.id,
-    required this.label,
-  });
+  const LampSoftDeletedMatch({required this.id, required this.label});
 
   final int id;
   final String label;
@@ -535,8 +529,12 @@ class LampMigrationService {
     if (selectedCandidateId != null) return null;
     return switch (target) {
       LampTransferTarget.owner => _detectSoftDeletedOwnerMatch(formValues),
-      LampTransferTarget.department => _detectSoftDeletedDepartmentMatch(formValues),
-      LampTransferTarget.equipment => _detectSoftDeletedEquipmentMatch(formValues),
+      LampTransferTarget.department => _detectSoftDeletedDepartmentMatch(
+        formValues,
+      ),
+      LampTransferTarget.equipment => _detectSoftDeletedEquipmentMatch(
+        formValues,
+      ),
     };
   }
 
@@ -616,10 +614,10 @@ class LampMigrationService {
       }
       final policyConflicts =
           PhoneDepartmentPolicy.findConflictsForUserAssignment(
-        phones: phones,
-        targetDepartmentId: targetDepartmentId,
-        editingUserId: selectedCandidateId,
-      );
+            phones: phones,
+            targetDepartmentId: targetDepartmentId,
+            editingUserId: selectedCandidateId,
+          );
       for (final c in policyConflicts) {
         if (c.hasOtherUserOwners) {
           conflicts.add(
@@ -662,10 +660,7 @@ class LampMigrationService {
           AND (${selectedCandidateId == null ? '1 = 1' : 'u.id != ?'})
         ORDER BY e.code_equipment COLLATE NOCASE ASC, u.last_name COLLATE NOCASE ASC, u.first_name COLLATE NOCASE ASC
         ''',
-        <Object?>[
-          ...equipmentCodes,
-          ?selectedCandidateId,
-        ],
+        <Object?>[...equipmentCodes, ?selectedCandidateId],
       );
       final ownersByCode = <String, Set<String>>{};
       for (final row in rows) {
@@ -702,10 +697,10 @@ class LampMigrationService {
 
     final policyConflicts =
         PhoneDepartmentPolicy.findConflictsForUserAssignment(
-      phones: phones,
-      targetDepartmentId: selectedCandidateId,
-      editingUserId: null,
-    );
+          phones: phones,
+          targetDepartmentId: selectedCandidateId,
+          editingUserId: null,
+        );
     final conflicts = <LampOwnerConflict>[];
     for (final c in policyConflicts) {
       if (c.hasOtherUserOwners) {
@@ -761,10 +756,7 @@ class LampMigrationService {
 
     final currentOwnerNames = currentOwners
         .map(
-          (row) => _fullName(
-            _text(row['first_name']),
-            _text(row['last_name']),
-          ),
+          (row) => _fullName(_text(row['first_name']), _text(row['last_name'])),
         )
         .where((name) => name.isNotEmpty)
         .toList(growable: false);
@@ -840,11 +832,7 @@ class LampMigrationService {
             destination: candidateFormValues[selected] ?? newRecordFormValues,
             lamp: newRecordFormValues,
             listKeys: const <String>{'phones'},
-            singleValueKeys: const <String>{
-              'building',
-              'level',
-              'notes',
-            },
+            singleValueKeys: const <String>{'building', 'level', 'notes'},
           );
 
     return LampMigrationDraft(
@@ -967,8 +955,7 @@ class LampMigrationService {
           '${selectedPhones.length} τηλέφωνα · '
           '${linkedEquipmentCodes.length} εξοπλισμοί στη νέα βάση.';
     }
-    final userEquipmentRows = await db.rawQuery(
-      '''
+    final userEquipmentRows = await db.rawQuery('''
       SELECT
         ue.user_id AS user_id,
         e.code_equipment AS code
@@ -976,8 +963,7 @@ class LampMigrationService {
       JOIN equipment e ON e.id = ue.equipment_id
       WHERE COALESCE(e.is_deleted, 0) = 0
       ORDER BY ue.user_id ASC, e.code_equipment COLLATE NOCASE ASC
-      ''',
-    );
+      ''');
     final equipmentCodesByUserId = <int, List<String>>{};
     for (final row in userEquipmentRows) {
       final userId = row['user_id'] as int?;
@@ -996,8 +982,8 @@ class LampMigrationService {
                 .where((v) => v.isNotEmpty)
                 .join(', ')
           : '';
-      final linkedEquipmentCodesCsv = (equipmentCodesByUserId[id] ?? const <String>[])
-          .join(', ');
+      final linkedEquipmentCodesCsv =
+          (equipmentCodesByUserId[id] ?? const <String>[]).join(', ');
       final departmentId = row['department_id'] as int?;
       var departmentName = '';
       if (departmentId != null) {
@@ -1006,7 +992,9 @@ class LampMigrationService {
           () => '',
         );
         if (departmentName.isEmpty) {
-          final fetched = await departmentsRepo.getDepartmentNameById(departmentId);
+          final fetched = await departmentsRepo.getDepartmentNameById(
+            departmentId,
+          );
           departmentName = fetched?.trim() ?? '';
           departmentNameCache[departmentId] = departmentName;
         }
@@ -1112,8 +1100,7 @@ class LampMigrationService {
 
     final candidateFormValues = <int, Map<String, String>>{};
     final departmentNameCache = <int, String>{};
-    final ownerRows = await db.rawQuery(
-      '''
+    final ownerRows = await db.rawQuery('''
       SELECT
         ue.equipment_id AS equipment_id,
         u.first_name AS first_name,
@@ -1122,8 +1109,7 @@ class LampMigrationService {
       JOIN users u ON u.id = ue.user_id
       WHERE COALESCE(u.is_deleted, 0) = 0
       ORDER BY ue.equipment_id ASC, u.last_name COLLATE NOCASE ASC, u.first_name COLLATE NOCASE ASC
-      ''',
-    );
+      ''');
     final ownersByEquipmentId = <int, List<String>>{};
     for (final row in ownerRows) {
       final equipmentId = row['equipment_id'] as int?;
@@ -1132,9 +1118,9 @@ class LampMigrationService {
         _text(row['last_name']),
       );
       if (equipmentId == null || ownerName.isEmpty) continue;
-      ownersByEquipmentId.putIfAbsent(equipmentId, () => <String>[]).add(
-        ownerName,
-      );
+      ownersByEquipmentId
+          .putIfAbsent(equipmentId, () => <String>[])
+          .add(ownerName);
     }
     for (final row in active) {
       final id = row['id'] as int?;
@@ -1147,7 +1133,9 @@ class LampMigrationService {
           () => '',
         );
         if (departmentName.isEmpty) {
-          final fetched = await departmentsRepo.getDepartmentNameById(departmentId);
+          final fetched = await departmentsRepo.getDepartmentNameById(
+            departmentId,
+          );
           departmentName = fetched?.trim() ?? '';
           departmentNameCache[departmentId] = departmentName;
         }
@@ -1176,8 +1164,7 @@ class LampMigrationService {
     final formValues = selectedId == null
         ? Map<String, String>.from(newRecordFormValues)
         : _mergeExistingWithLamp(
-            destination:
-                candidateFormValues[selectedId] ?? newRecordFormValues,
+            destination: candidateFormValues[selectedId] ?? newRecordFormValues,
             lamp: newRecordFormValues,
             listKeys: const <String>{},
             singleValueKeys: const <String>{
@@ -1227,17 +1214,14 @@ class LampMigrationService {
       levelText: levelText,
       floors: buildingMapFloors,
     );
-    final map = DepartmentFloorSync.mergeFloorContext(
-      <String, dynamic>{
-        'name': name,
-        'name_key': _norm(name),
-        'building': _nullable(formValues['building']),
-        'notes': _nullable(formValues['notes']),
-        'map_hidden': 1,
-        'is_deleted': 0,
-      },
-      manualFloorId: matchedFloorId,
-    );
+    final map = DepartmentFloorSync.mergeFloorContext(<String, dynamic>{
+      'name': name,
+      'name_key': _norm(name),
+      'building': _nullable(formValues['building']),
+      'notes': _nullable(formValues['notes']),
+      'map_hidden': 1,
+      'is_deleted': 0,
+    }, manualFloorId: matchedFloorId);
     final reactivateId =
         softDeletedDecision?.action == LampSoftDeletedDecisionAction.reactivate
         ? softDeletedDecision!.recordId
@@ -1316,14 +1300,17 @@ class LampMigrationService {
       selectedCandidateId: selectedCandidateId,
     );
     final decisionsById = <String, LampOwnerConflictAction>{
-      for (final decision in ownerConflictDecisions ?? const <LampOwnerConflictDecision>[])
+      for (final decision
+          in ownerConflictDecisions ?? const <LampOwnerConflictDecision>[])
         decision.conflictId: decision.action,
     };
     final unresolvedConflicts = conflicts
         .where((conflict) => !decisionsById.containsKey(conflict.conflictId))
         .toList(growable: false);
     if (unresolvedConflicts.isNotEmpty) {
-      throw StateError('Απαιτείται επίλυση διενέξεων για κοινόχρηστα τηλέφωνα.');
+      throw StateError(
+        'Απαιτείται επίλυση διενέξεων για κοινόχρηστα τηλέφωνα.',
+      );
     }
 
     final transferPhones = <String>{
@@ -1406,7 +1393,8 @@ class LampMigrationService {
       selectedCandidateId: selectedCandidateId,
     );
     final decisionsById = <String, LampOwnerConflictAction>{
-      for (final decision in ownerConflictDecisions ?? const <LampOwnerConflictDecision>[])
+      for (final decision
+          in ownerConflictDecisions ?? const <LampOwnerConflictDecision>[])
         decision.conflictId: decision.action,
     };
     final unresolvedConflicts = conflicts
@@ -1465,89 +1453,91 @@ class LampMigrationService {
       );
     }
 
-    return db.transaction((txn) async {
-      final departmentId = departmentName.isEmpty
-          ? null
-          : await departments.getOrCreateDepartmentIdByName(
-              departmentName,
+    return db
+        .transaction((txn) async {
+          final departmentId = departmentName.isEmpty
+              ? null
+              : await departments.getOrCreateDepartmentIdByName(
+                  departmentName,
+                  executor: txn,
+                );
+
+          if (!phonePolicyBatch.isEmpty) {
+            await PhoneDepartmentPolicy.applyUserPhoneConflictResolutions(
+              phones: phoneRepo,
+              resolutions: phonePolicyBatch,
+              targetDepartmentId: departmentId,
               executor: txn,
             );
+          }
 
-      if (!phonePolicyBatch.isEmpty) {
-        await PhoneDepartmentPolicy.applyUserPhoneConflictResolutions(
-          phones: phoneRepo,
-          resolutions: phonePolicyBatch,
-          targetDepartmentId: departmentId,
-          executor: txn,
-        );
-      }
+          for (final code in transferEquipmentCodes) {
+            await equipment.removeEquipmentFromAllUsers(code, executor: txn);
+          }
 
-      for (final code in transferEquipmentCodes) {
-        await equipment.removeEquipmentFromAllUsers(code, executor: txn);
-      }
+          final int savedUserId;
+          final bool updated;
+          final String message;
+          if (updateUserId != null) {
+            await users.updateUser(
+              updateUserId,
+              <String, dynamic>{
+                'first_name': firstName,
+                'last_name': lastName,
+                'phones': resolvedPhones,
+                'department_id': departmentId,
+                'location': _nullable(formValues['location']),
+                'notes': _nullable(formValues['notes']),
+                'is_deleted': 0,
+              },
+              executor: txn,
+              skipPhonePolicyValidation: !phonePolicyBatch.isEmpty,
+            );
+            savedUserId = updateUserId;
+            updated = true;
+            message = selectedCandidateId != null
+                ? 'Ενημερώθηκε υπάρχων χρήστης.'
+                : 'Επαναφέρθηκε διαγραμμένος χρήστης.';
+          } else {
+            savedUserId = await users.insertUser(
+              firstName: firstName,
+              lastName: lastName,
+              phones: resolvedPhones,
+              departmentId: departmentId,
+              location: _nullable(formValues['location']),
+              notes: _nullable(formValues['notes']),
+              executor: txn,
+              skipPhonePolicyValidation: !phonePolicyBatch.isEmpty,
+            );
+            updated = false;
+            message = 'Δημιουργήθηκε νέος χρήστης.';
+          }
 
-      final int savedUserId;
-      final bool updated;
-      final String message;
-      if (updateUserId != null) {
-        await users.updateUser(
-          updateUserId,
-          <String, dynamic>{
-            'first_name': firstName,
-            'last_name': lastName,
-            'phones': resolvedPhones,
-            'department_id': departmentId,
-            'location': _nullable(formValues['location']),
-            'notes': _nullable(formValues['notes']),
-            'is_deleted': 0,
-          },
-          executor: txn,
-          skipPhonePolicyValidation: !phonePolicyBatch.isEmpty,
-        );
-        savedUserId = updateUserId;
-        updated = true;
-        message = selectedCandidateId != null
-            ? 'Ενημερώθηκε υπάρχων χρήστης.'
-            : 'Επαναφέρθηκε διαγραμμένος χρήστης.';
-      } else {
-        savedUserId = await users.insertUser(
-          firstName: firstName,
-          lastName: lastName,
-          phones: resolvedPhones,
-          departmentId: departmentId,
-          location: _nullable(formValues['location']),
-          notes: _nullable(formValues['notes']),
-          executor: txn,
-          skipPhonePolicyValidation: !phonePolicyBatch.isEmpty,
-        );
-        updated = false;
-        message = 'Δημιουργήθηκε νέος χρήστης.';
-      }
-
-      await _assignUserPhonesToDepartment(
-        phoneRepo: phoneRepo,
-        departmentId: departmentId,
-        phones: resolvedPhones,
-        executor: txn,
-      );
-      await _syncOwnerEquipmentLinks(
-        userId: savedUserId,
-        equipmentCodes: resolvedEquipmentCodes,
-        confirmEntityCreations: confirmEntityCreations,
-        executor: txn,
-      );
-      return LampMigrationSaveResult(
-        id: savedUserId,
-        updated: updated,
-        message: message,
-      );
-    }).then((result) async {
-      if (!phonePolicyBatch.isEmpty) {
-        LookupService.instance.resetForReload();
-        await LookupService.instance.loadFromDatabase();
-      }
-      return result;
-    });
+          await _assignUserPhonesToDepartment(
+            phoneRepo: phoneRepo,
+            departmentId: departmentId,
+            phones: resolvedPhones,
+            executor: txn,
+          );
+          await _syncOwnerEquipmentLinks(
+            userId: savedUserId,
+            equipmentCodes: resolvedEquipmentCodes,
+            confirmEntityCreations: confirmEntityCreations,
+            executor: txn,
+          );
+          return LampMigrationSaveResult(
+            id: savedUserId,
+            updated: updated,
+            message: message,
+          );
+        })
+        .then((result) async {
+          if (!phonePolicyBatch.isEmpty) {
+            LookupService.instance.resetForReload();
+            await LookupService.instance.loadFromDatabase();
+          }
+          return result;
+        });
   }
 
   /// Μετατροπή αποφάσεων οδηγού Λάμπας σε batch πολιτικής (ίδιο με user_form_dialog).
@@ -1618,8 +1608,7 @@ class LampMigrationService {
     final desiredEquipmentIds = <int>{};
     final equipmentLabelById = <int, String>{
       for (final row in allEquipment)
-        if (row['id'] is int)
-          row['id'] as int: _text(row['code_equipment']),
+        if (row['id'] is int) row['id'] as int: _text(row['code_equipment']),
     };
     for (final code in equipmentCodes) {
       final matched = allEquipment.firstWhere(
@@ -1638,10 +1627,7 @@ class LampMigrationService {
         throw StateError(_kPendingEntityCreationError);
       }
       final createdId = await equipment.insertEquipmentFromMap(
-        <String, dynamic>{
-          'code_equipment': trimmedCode,
-          'is_deleted': 0,
-        },
+        <String, dynamic>{'code_equipment': trimmedCode, 'is_deleted': 0},
         executor: executor,
       );
       desiredEquipmentIds.add(createdId);
@@ -1665,8 +1651,9 @@ class LampMigrationService {
       for (final row in existingLinks)
         if (row['equipment_id'] is int) row['equipment_id'] as int,
     };
-    for (final equipmentId
-        in existingEquipmentIds.difference(desiredEquipmentIds)) {
+    for (final equipmentId in existingEquipmentIds.difference(
+      desiredEquipmentIds,
+    )) {
       await equipment.unlinkUserFromEquipment(
         userId,
         equipmentId,
@@ -1681,8 +1668,9 @@ class LampMigrationService {
         ),
       );
     }
-    for (final equipmentId
-        in desiredEquipmentIds.difference(existingEquipmentIds)) {
+    for (final equipmentId in desiredEquipmentIds.difference(
+      existingEquipmentIds,
+    )) {
       await equipment.linkUserToEquipment(
         userId,
         equipmentId,
@@ -1743,7 +1731,8 @@ class LampMigrationService {
         );
       }
 
-      keepCurrentOwners = conflicts.isNotEmpty &&
+      keepCurrentOwners =
+          conflicts.isNotEmpty &&
           decisionsById[conflicts.first.conflictId] ==
               LampOwnerConflictAction.keepWithoutAssignment;
     } else {
@@ -1800,11 +1789,7 @@ class LampMigrationService {
       }
 
       final id = await equipment.insertEquipmentFromMap(values, executor: txn);
-      await equipment.replaceEquipmentUsers(
-        id,
-        ownerUserIds,
-        executor: txn,
-      );
+      await equipment.replaceEquipmentUsers(id, ownerUserIds, executor: txn);
       return LampMigrationSaveResult(
         id: id,
         updated: false,
@@ -1864,10 +1849,7 @@ class LampMigrationService {
     if (target.isEmpty) return null;
     final db = await DatabaseHelper.instance.database;
     final e = executor ?? db;
-    final users = await e.query(
-      'users',
-      where: 'COALESCE(is_deleted, 0) = 0',
-    );
+    final users = await e.query('users', where: 'COALESCE(is_deleted, 0) = 0');
     for (final row in users) {
       if ((row['is_deleted'] as int?) == 1) continue;
       final key = UserIdentityNormalizer.identityKeyForPerson(
@@ -2017,10 +1999,7 @@ class LampMigrationService {
         if (id == null) continue;
         return LampSoftDeletedMatch(
           id: id,
-          label: _fullName(
-            _text(row['first_name']),
-            _text(row['last_name']),
-          ),
+          label: _fullName(_text(row['first_name']), _text(row['last_name'])),
         );
       }
     }
@@ -2054,10 +2033,7 @@ class LampMigrationService {
     final row = deletedRows.first;
     final id = row['id'] as int?;
     if (id == null) return null;
-    return LampSoftDeletedMatch(
-      id: id,
-      label: _text(row['name']),
-    );
+    return LampSoftDeletedMatch(id: id, label: _text(row['name']));
   }
 
   Future<LampSoftDeletedMatch?> _detectSoftDeletedEquipmentMatch(
@@ -2145,5 +2121,4 @@ class LampMigrationService {
     }
     return normalizedUnique;
   }
-
 }

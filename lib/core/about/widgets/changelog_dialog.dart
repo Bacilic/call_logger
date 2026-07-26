@@ -1,4 +1,4 @@
-﻿import 'dart:math' as math;
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -113,8 +113,10 @@ class ChangelogDialog extends ConsumerWidget {
                         key: const Key('changelog_restart_button'),
                         icon: const Icon(Icons.restart_alt),
                         onPressed: () {
-                          final rootNav =
-                              Navigator.of(context, rootNavigator: true);
+                          final rootNav = Navigator.of(
+                            context,
+                            rootNavigator: true,
+                          );
                           rootNav.pop();
                           WidgetsBinding.instance.addPostFrameCallback((_) {
                             final ctx = rootNav.context;
@@ -130,8 +132,10 @@ class ChangelogDialog extends ConsumerWidget {
                         key: const Key('changelog_update_button'),
                         onPressed: () {
                           final manifest = updateManifest;
-                          final rootNav =
-                              Navigator.of(context, rootNavigator: true);
+                          final rootNav = Navigator.of(
+                            context,
+                            rootNavigator: true,
+                          );
                           rootNav.pop();
                           WidgetsBinding.instance.addPostFrameCallback((_) {
                             final ctx = rootNav.context;

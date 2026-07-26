@@ -33,21 +33,21 @@ class ParsedNetworkIssueRow {
 /// Αποτέλεσμα αντιστοίχισης εγγραφής ουράς σε εξοπλισμό.
 class NetworkIssueMatchResult {
   const NetworkIssueMatchResult.success()
-      : success = true,
-        conflict = false,
-        message = null,
-        existingIp = null,
-        existingNetworkName = null,
-        proposedIp = null,
-        proposedNetworkName = null;
+    : success = true,
+      conflict = false,
+      message = null,
+      existingIp = null,
+      existingNetworkName = null,
+      proposedIp = null,
+      proposedNetworkName = null;
 
   const NetworkIssueMatchResult.error(this.message)
-      : success = false,
-        conflict = false,
-        existingIp = null,
-        existingNetworkName = null,
-        proposedIp = null,
-        proposedNetworkName = null;
+    : success = false,
+      conflict = false,
+      existingIp = null,
+      existingNetworkName = null,
+      proposedIp = null,
+      proposedNetworkName = null;
 
   const NetworkIssueMatchResult.conflict({
     required this.message,
@@ -55,8 +55,8 @@ class NetworkIssueMatchResult {
     required this.existingNetworkName,
     required this.proposedIp,
     required this.proposedNetworkName,
-  })  : success = false,
-        conflict = true;
+  }) : success = false,
+       conflict = true;
 
   final bool success;
   final bool conflict;
@@ -70,7 +70,7 @@ class NetworkIssueMatchResult {
 /// Parser και εφαρμογή αντιστοίχισης εγγραφών ουράς δικτύου — μόνο βάση.
 class LampNetworkIssueResolutionService {
   LampNetworkIssueResolutionService({LampDatabaseProvider? databaseProvider})
-      : _databaseProvider = databaseProvider ?? LampDatabaseProvider.instance;
+    : _databaseProvider = databaseProvider ?? LampDatabaseProvider.instance;
 
   final LampDatabaseProvider _databaseProvider;
 
@@ -137,7 +137,10 @@ class LampNetworkIssueResolutionService {
       if (compactQuery.isNotEmpty && code.toString().contains(compactQuery)) {
         return true;
       }
-      return SearchTextNormalizer.matchesNormalizedQuery(label, normalizedQuery);
+      return SearchTextNormalizer.matchesNormalizedQuery(
+        label,
+        normalizedQuery,
+      );
     }
 
     for (final row in rows) {
@@ -188,7 +191,9 @@ class LampNetworkIssueResolutionService {
       limit: 1,
     );
     if (issueRows.isEmpty) {
-      return const NetworkIssueMatchResult.error('Η εγγραφή ουράς δεν βρέθηκε.');
+      return const NetworkIssueMatchResult.error(
+        'Η εγγραφή ουράς δεν βρέθηκε.',
+      );
     }
 
     final rawValue = issueRows.first['raw_value']?.toString() ?? '';
@@ -217,22 +222,24 @@ class LampNetworkIssueResolutionService {
     final existingIp = _nonEmptyText(equipment['ip_address']);
     final existingNetworkName = _nonEmptyText(equipment['network_name']);
 
-    final ipConflict = existingIp != null &&
-        proposedIp.isNotEmpty &&
-        existingIp != proposedIp;
-    final nameConflict = existingNetworkName != null &&
+    final ipConflict =
+        existingIp != null && proposedIp.isNotEmpty && existingIp != proposedIp;
+    final nameConflict =
+        existingNetworkName != null &&
         proposedNetworkName.isNotEmpty &&
         existingNetworkName != proposedNetworkName;
 
     if ((ipConflict || nameConflict) && !overwrite) {
       return NetworkIssueMatchResult.conflict(
-        message: 'Ο εξοπλισμός $equipmentCode έχει ήδη στοιχεία δικτύου '
+        message:
+            'Ο εξοπλισμός $equipmentCode έχει ήδη στοιχεία δικτύου '
             'που διαφέρουν από την εγγραφή ουράς.',
         existingIp: existingIp,
         existingNetworkName: existingNetworkName,
         proposedIp: proposedIp.isEmpty ? null : proposedIp,
-        proposedNetworkName:
-            proposedNetworkName.isEmpty ? null : proposedNetworkName,
+        proposedNetworkName: proposedNetworkName.isEmpty
+            ? null
+            : proposedNetworkName,
       );
     }
 

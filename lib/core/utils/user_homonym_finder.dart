@@ -54,10 +54,12 @@ class UserHomonymFinder {
     return switch (mode) {
       UserHomonymMatchMode.fullName =>
         UserIdentityNormalizer.identityKeyForPerson(firstName, lastName),
-      UserHomonymMatchMode.firstNameOnly =>
-        UserIdentityNormalizer.firstNameKey(firstName),
-      UserHomonymMatchMode.lastNameOnly =>
-        UserIdentityNormalizer.lastNameKey(lastName),
+      UserHomonymMatchMode.firstNameOnly => UserIdentityNormalizer.firstNameKey(
+        firstName,
+      ),
+      UserHomonymMatchMode.lastNameOnly => UserIdentityNormalizer.lastNameKey(
+        lastName,
+      ),
     };
   }
 
@@ -72,10 +74,12 @@ class UserHomonymFinder {
     final otherKey = switch (mode) {
       UserHomonymMatchMode.fullName =>
         UserIdentityNormalizer.identityKeyForPerson(uf, ul),
-      UserHomonymMatchMode.firstNameOnly =>
-        UserIdentityNormalizer.firstNameKey(uf),
-      UserHomonymMatchMode.lastNameOnly =>
-        UserIdentityNormalizer.lastNameKey(ul),
+      UserHomonymMatchMode.firstNameOnly => UserIdentityNormalizer.firstNameKey(
+        uf,
+      ),
+      UserHomonymMatchMode.lastNameOnly => UserIdentityNormalizer.lastNameKey(
+        ul,
+      ),
     };
     return otherKey.isNotEmpty && otherKey == candidateKey;
   }

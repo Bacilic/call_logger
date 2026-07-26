@@ -63,13 +63,8 @@ class BuildingMapEditLayout extends ConsumerWidget {
                         TextSpan(
                           text: deptToMap == null
                               ? 'Κανένα'
-                              : _departmentName(
-                                  activeDepartments,
-                                  deptToMap,
-                                ),
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                          ),
+                              : _departmentName(activeDepartments, deptToMap),
+                          style: const TextStyle(fontWeight: FontWeight.bold),
                         ),
                       ],
                     ),

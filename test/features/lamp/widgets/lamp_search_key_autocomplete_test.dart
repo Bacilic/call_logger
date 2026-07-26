@@ -29,15 +29,13 @@ void main() {
       search.dispose();
     });
 
-    testWidgets('εμφανίζει προτάσεις όταν πληκτρολογείται κλειδί χωρίς :',
-        (tester) async {
+    testWidgets('εμφανίζει προτάσεις όταν πληκτρολογείται κλειδί χωρίς :', (
+      tester,
+    ) async {
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
-            body: LampSearchKeyAutocomplete(
-              search: search,
-              onSubmitted: () {},
-            ),
+            body: LampSearchKeyAutocomplete(search: search, onSubmitted: () {}),
           ),
         ),
       );
@@ -58,10 +56,7 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
-            body: LampSearchKeyAutocomplete(
-              search: search,
-              onSubmitted: () {},
-            ),
+            body: LampSearchKeyAutocomplete(search: search, onSubmitted: () {}),
           ),
         ),
       );
@@ -85,10 +80,7 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
-            body: LampSearchKeyAutocomplete(
-              search: search,
-              onSubmitted: () {},
-            ),
+            body: LampSearchKeyAutocomplete(search: search, onSubmitted: () {}),
           ),
         ),
       );
@@ -98,10 +90,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 50));
 
       await tester.tap(
-        find.descendant(
-          of: find.byType(ListView),
-          matching: find.text('ip'),
-        ),
+        find.descendant(of: find.byType(ListView), matching: find.text('ip')),
       );
       await tester.pump();
 
@@ -113,58 +102,53 @@ void main() {
       await tester.pump();
     });
 
-    testWidgets(
-      'ΣΕΝΑΡΙΟ WINDOWS: κλικ ποντικιού σε πρόταση την εφαρμόζει '
-      '(δεν τη σκοτώνει το unfocus του tap-outside)',
-      (tester) async {
-        debugDefaultTargetPlatformOverride = TargetPlatform.windows;
-        try {
-          await tester.pumpWidget(
-            MaterialApp(
-              home: Scaffold(
-                body: LampSearchKeyAutocomplete(
-                  search: search,
-                  onSubmitted: () {},
-                ),
+    testWidgets('ΣΕΝΑΡΙΟ WINDOWS: κλικ ποντικιού σε πρόταση την εφαρμόζει '
+        '(δεν τη σκοτώνει το unfocus του tap-outside)', (tester) async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+      try {
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: LampSearchKeyAutocomplete(
+                search: search,
+                onSubmitted: () {},
               ),
             ),
-          );
+          ),
+        );
 
-          await tester.enterText(find.byType(TextField), 'ip');
-          await tester.pump();
-          await tester.pump(const Duration(milliseconds: 50));
+        await tester.enterText(find.byType(TextField), 'ip');
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 50));
 
-          // Ρεαλιστικό κλικ ποντικιού: πάτημα → μεσολαβεί καρέ (όπου
-          // εφαρμόζεται τυχόν unfocus/αφαίρεση overlay) → άφημα.
-          final target = tester.getCenter(
-            find.descendant(
-              of: find.byType(ListView),
-              matching: find.text('ip'),
-            ),
-          );
-          final gesture = await tester.startGesture(
-            target,
-            kind: PointerDeviceKind.mouse,
-          );
-          await tester.pump(const Duration(milliseconds: 80));
-          await gesture.up();
-          await tester.pump();
+        // Ρεαλιστικό κλικ ποντικιού: πάτημα → μεσολαβεί καρέ (όπου
+        // εφαρμόζεται τυχόν unfocus/αφαίρεση overlay) → άφημα.
+        final target = tester.getCenter(
+          find.descendant(of: find.byType(ListView), matching: find.text('ip')),
+        );
+        final gesture = await tester.startGesture(
+          target,
+          kind: PointerDeviceKind.mouse,
+        );
+        await tester.pump(const Duration(milliseconds: 80));
+        await gesture.up();
+        await tester.pump();
 
-          expect(
-            search.globalController.text,
-            'ip:',
-            reason: 'Το κλικ ποντικιού στην πρόταση πρέπει να την εφαρμόζει '
-                'και σε desktop (Windows), όχι μόνο σε αφή.',
-          );
-        } finally {
-          FocusManager.instance.primaryFocus?.unfocus();
-          await tester.pump();
-          await tester.pumpWidget(const SizedBox.shrink());
-          await tester.pump();
-          debugDefaultTargetPlatformOverride = null;
-        }
-      },
-    );
+        expect(
+          search.globalController.text,
+          'ip:',
+          reason:
+              'Το κλικ ποντικιού στην πρόταση πρέπει να την εφαρμόζει '
+              'και σε desktop (Windows), όχι μόνο σε αφή.',
+        );
+      } finally {
+        FocusManager.instance.primaryFocus?.unfocus();
+        await tester.pump();
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pump();
+        debugDefaultTargetPlatformOverride = null;
+      }
+    });
 
     testWidgets(
       'ΣΕΝΑΡΙΟ WINDOWS: βελάκι κάτω + Enter επιλέγει τη δεύτερη πρόταση',
@@ -200,7 +184,8 @@ void main() {
           expect(
             search.globalController.text,
             '${shown[1]}:',
-            reason: 'Το βελάκι πρέπει να μετακινεί την επιλογή και το Enter '
+            reason:
+                'Το βελάκι πρέπει να μετακινεί την επιλογή και το Enter '
                 'να εφαρμόζει την ενεργή πρόταση.',
           );
 
@@ -210,7 +195,8 @@ void main() {
           expect(
             editable.widget.focusNode.hasPrimaryFocus,
             isTrue,
-            reason: 'Μετά την επιλογή με Enter, η εστίαση πρέπει να μένει '
+            reason:
+                'Μετά την επιλογή με Enter, η εστίαση πρέπει να μένει '
                 'ΜΕΣΑ στο πεδίο αναζήτησης ώστε ο χρήστης να συνεχίσει '
                 'να πληκτρολογεί την τιμή.',
           );
@@ -230,10 +216,7 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
-            body: LampSearchKeyAutocomplete(
-              search: search,
-              onSubmitted: () {},
-            ),
+            body: LampSearchKeyAutocomplete(search: search, onSubmitted: () {}),
           ),
         ),
       );

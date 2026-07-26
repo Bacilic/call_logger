@@ -79,7 +79,9 @@ Future<void> showIntegrityCorruptionBlockoutDialog(
               SizedBox(height: 8),
               Text('• Άνοιγμα πίνακα συντήρησης βάσης (VACUUM / REINDEX)'),
               Text('• Επαναφορά από αντίγραφο ασφαλείας (.zip)'),
-              Text('• Επικοινωνία με διαχειριστή IT αν το πρόβλημα επαναλαμβάνεται'),
+              Text(
+                '• Επικοινωνία με διαχειριστή IT αν το πρόβλημα επαναλαμβάνεται',
+              ),
             ],
           ),
         ),
@@ -124,7 +126,7 @@ Future<bool> showIntegrityLockRetryDialog(
             Text(
               message ??
                   'Η επιδιόρθωση δεν ολοκληρώθηκε επειδή το αρχείο βάσης '
-                  'χρησιμοποιείται από άλλη διεργασία.',
+                      'χρησιμοποιείται από άλλη διεργασία.',
             ),
             const SizedBox(height: 16),
             _LockDiagnosticSection(dbPath: dbPath),
@@ -231,9 +233,9 @@ class _IntegrityChoiceDialogState extends State<_IntegrityChoiceDialog> {
       labelToId[label] = id;
     }
     labels.sort(
-      (a, b) => SearchTextNormalizer.normalizeForSearch(a).compareTo(
-        SearchTextNormalizer.normalizeForSearch(b),
-      ),
+      (a, b) => SearchTextNormalizer.normalizeForSearch(
+        a,
+      ).compareTo(SearchTextNormalizer.normalizeForSearch(b)),
     );
     _userLabels = labels;
     _userLabelToId = labelToId;
@@ -354,7 +356,10 @@ class _IntegrityChoiceDialogState extends State<_IntegrityChoiceDialog> {
         child: _loading
             ? const Center(child: CircularProgressIndicator())
             : _error != null
-            ? Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error))
+            ? Text(
+                _error!,
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
+              )
             : SingleChildScrollView(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -506,7 +511,6 @@ class _IntegrityChoiceDialogState extends State<_IntegrityChoiceDialog> {
       },
     );
   }
-
 }
 
 enum _ChoiceMode { disconnect, reassign, delete, linkUser }

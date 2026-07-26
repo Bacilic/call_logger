@@ -8,11 +8,10 @@ class LansweeperHostReachabilityResult {
     this.message = '',
   });
 
-  const LansweeperHostReachabilityResult.reachable()
-      : this._(reachable: true);
+  const LansweeperHostReachabilityResult.reachable() : this._(reachable: true);
 
   const LansweeperHostReachabilityResult.unreachable(String message)
-      : this._(reachable: false, message: message);
+    : this._(reachable: false, message: message);
 
   final bool reachable;
   final String message;

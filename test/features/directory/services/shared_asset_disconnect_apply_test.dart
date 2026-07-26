@@ -165,15 +165,25 @@ void main() {
         final sourceDeptId = await insertDepartment('Τμήμα Πηγής Shared');
         final targetDeptId = await insertDepartment('Τμήμα Στόχος Phone');
 
-        final transferPhoneId = await insertPhone(phoneTransfer, departmentId: sourceDeptId);
+        final transferPhoneId = await insertPhone(
+          phoneTransfer,
+          departmentId: sourceDeptId,
+        );
         await linkPhoneToDepartment(sourceDeptId, transferPhoneId);
-        final deletePhoneId = await insertPhone(phoneDelete, departmentId: sourceDeptId);
+        final deletePhoneId = await insertPhone(
+          phoneDelete,
+          departmentId: sourceDeptId,
+        );
         await linkPhoneToDepartment(sourceDeptId, deletePhoneId);
 
-        final eqTransferId =
-            await insertEquipment(eqTransfer, departmentId: sourceDeptId);
-        final eqDeleteId =
-            await insertEquipment(eqDelete, departmentId: sourceDeptId);
+        final eqTransferId = await insertEquipment(
+          eqTransfer,
+          departmentId: sourceDeptId,
+        );
+        final eqDeleteId = await insertEquipment(
+          eqDelete,
+          departmentId: sourceDeptId,
+        );
 
         final batch = SharedAssetDisconnectBatchResult(
           phonesToKeep: [phoneKeep],
@@ -186,9 +196,7 @@ void main() {
           },
           phonesToDelete: [phoneDelete],
           equipmentToDelete: [eqDelete],
-          newDepartmentNamesToCreate: {
-            newEqDeptName: <String>{},
-          },
+          newDepartmentNamesToCreate: {newEqDeptName: <String>{}},
         );
 
         await applyDepartmentSharedAssetDisconnectBatch(

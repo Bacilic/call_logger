@@ -78,16 +78,16 @@ class SectionCard extends StatelessWidget {
                     ),
                   ),
                   if (trailing != null) ...[
-                    if (hugContent) const SizedBox(width: 12) else const Spacer(),
+                    if (hugContent)
+                      const SizedBox(width: 12)
+                    else
+                      const Spacer(),
                     trailing!,
                   ],
                 ],
               ),
             ),
-          Padding(
-            padding: contentPadding,
-            child: child,
-          ),
+          Padding(padding: contentPadding, child: child),
         ],
       ),
     );

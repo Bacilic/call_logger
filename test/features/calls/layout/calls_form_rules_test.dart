@@ -51,7 +51,11 @@ Future<void> _pumpExpandedCallsScreen(WidgetTester tester) async {
   await tester.pump();
   await tester.testTextInput.receiveAction(TextInputAction.done);
   await tester.pump(const Duration(milliseconds: 300));
-  await pumpUntilSettled(tester, steps: 40, step: const Duration(milliseconds: 60));
+  await pumpUntilSettled(
+    tester,
+    steps: 40,
+    step: const Duration(milliseconds: 60),
+  );
 }
 
 void main() {
@@ -152,8 +156,9 @@ void main() {
         expect(find.byType(CallStatusBar), findsOneWidget);
         expect(submitFinder, findsOneWidget);
 
-        final categoryY =
-            tester.getCenter(find.byType(CategoryAutocompleteField)).dy;
+        final categoryY = tester
+            .getCenter(find.byType(CategoryAutocompleteField))
+            .dy;
         // Ανοχή αρκετά μικρή ώστε δεύτερη γραμμή (απόσταση ≈ 60 px και πάνω) να
         // κοκκινίζει, αρκετά μεγάλη ώστε να αντέχει διαφορετικά ύψη widget.
         const sameLineTolerance = 24.0;

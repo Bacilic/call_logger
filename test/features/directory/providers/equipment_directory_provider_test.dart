@@ -1,4 +1,4 @@
-﻿// Unit tests: EquipmentDirectoryNotifier — αρχική κατάσταση, στήλες, reorder, toggle, load + join users.
+// Unit tests: EquipmentDirectoryNotifier — αρχική κατάσταση, στήλες, reorder, toggle, load + join users.
 //
 // Ολόκληρο αρχείο:
 //   flutter test test/features/directory/providers/equipment_directory_provider_test.dart
@@ -149,9 +149,7 @@ void main() {
           equipmentDirectoryProvider.overrideWith(
             () => _FakeEquipmentDirectoryNotifier(
               initialState: EquipmentDirectoryState(
-                visibleColumnKeys: {
-                  for (final c in initialVisible) c.key,
-                },
+                visibleColumnKeys: {for (final c in initialVisible) c.key},
               ),
             ),
           ),
@@ -174,91 +172,93 @@ void main() {
       );
     });
 
-    test('toggleColumn προσθέτει, αφαιρεί και επαναφέρει defaults όταν αδειάζει', () {
-      final container = ProviderContainer(
-        overrides: [
-          equipmentDirectoryProvider.overrideWith(
-            () => _FakeEquipmentDirectoryNotifier(
-              initialState: EquipmentDirectoryState(
-                visibleColumnKeys: {EquipmentColumn.code.key},
+    test(
+      'toggleColumn προσθέτει, αφαιρεί και επαναφέρει defaults όταν αδειάζει',
+      () {
+        final container = ProviderContainer(
+          overrides: [
+            equipmentDirectoryProvider.overrideWith(
+              () => _FakeEquipmentDirectoryNotifier(
+                initialState: EquipmentDirectoryState(
+                  visibleColumnKeys: {EquipmentColumn.code.key},
+                ),
               ),
             ),
-          ),
-        ],
-      );
-      addTearDown(container.dispose);
+          ],
+        );
+        addTearDown(container.dispose);
 
-      final notifier = container.read(equipmentDirectoryProvider.notifier);
+        final notifier = container.read(equipmentDirectoryProvider.notifier);
 
-      notifier.toggleColumn(EquipmentColumn.phone);
-      expect(
-        container.read(equipmentDirectoryProvider).orderedVisibleColumns,
-        orderedEquals([EquipmentColumn.code, EquipmentColumn.phone]),
-      );
+        notifier.toggleColumn(EquipmentColumn.phone);
+        expect(
+          container.read(equipmentDirectoryProvider).orderedVisibleColumns,
+          orderedEquals([EquipmentColumn.code, EquipmentColumn.phone]),
+        );
 
-      notifier.toggleColumn(EquipmentColumn.phone);
-      expect(
-        container.read(equipmentDirectoryProvider).orderedVisibleColumns,
-        orderedEquals([EquipmentColumn.code]),
-      );
+        notifier.toggleColumn(EquipmentColumn.phone);
+        expect(
+          container.read(equipmentDirectoryProvider).orderedVisibleColumns,
+          orderedEquals([EquipmentColumn.code]),
+        );
 
-      notifier.toggleColumn(EquipmentColumn.code);
-      expect(
-        container.read(equipmentDirectoryProvider).orderedVisibleColumns,
-        orderedEquals(EquipmentColumn.defaults),
-      );
-    });
+        notifier.toggleColumn(EquipmentColumn.code);
+        expect(
+          container.read(equipmentDirectoryProvider).orderedVisibleColumns,
+          orderedEquals(EquipmentColumn.defaults),
+        );
+      },
+    );
 
     // load(): join εξοπλισμού με χρήστες από `user_equipment` + userRows· null owner χωρίς σύνδεση.
     //   flutter test test/features/directory/providers/equipment_directory_provider_test.dart --plain-name "load συσχετίζει σωστά owner μέσω user_equipment και διατηρεί null όταν λείπει"
-    test('load συσχετίζει σωστά owner μέσω user_equipment και διατηρεί null όταν λείπει', () async {
-      final container = ProviderContainer(
-        overrides: [
-          equipmentDirectoryProvider.overrideWith(
-            () => _FakeEquipmentDirectoryNotifier(
-              initialState: EquipmentDirectoryState(),
-              equipmentRows: [
-                {
-                  'id': 1,
-                  'code_equipment': 'PC-01',
-                  'type': 'Desktop',
-                  'notes': 'Γραφείο',
-                  'remote_params': '{"2":"10.0.0.10","3":"AD-001"}',
-                  'default_remote_tool': '2',
-                },
-                {
-                  'id': 2,
-                  'code_equipment': 'PC-02',
-                  'type': 'Laptop',
-                },
-              ],
-              linkRows: [
-                {'user_id': 10, 'equipment_id': 1},
-              ],
-              userRows: [
-                {
-                  'id': 10,
-                  'first_name': 'Μαρία',
-                  'last_name': 'Παπαδοπούλου',
-                  'phone': '2100000000',
-                  'location': '2ος',
-                },
-              ],
+    test(
+      'load συσχετίζει σωστά owner μέσω user_equipment και διατηρεί null όταν λείπει',
+      () async {
+        final container = ProviderContainer(
+          overrides: [
+            equipmentDirectoryProvider.overrideWith(
+              () => _FakeEquipmentDirectoryNotifier(
+                initialState: EquipmentDirectoryState(),
+                equipmentRows: [
+                  {
+                    'id': 1,
+                    'code_equipment': 'PC-01',
+                    'type': 'Desktop',
+                    'notes': 'Γραφείο',
+                    'remote_params': '{"2":"10.0.0.10","3":"AD-001"}',
+                    'default_remote_tool': '2',
+                  },
+                  {'id': 2, 'code_equipment': 'PC-02', 'type': 'Laptop'},
+                ],
+                linkRows: [
+                  {'user_id': 10, 'equipment_id': 1},
+                ],
+                userRows: [
+                  {
+                    'id': 10,
+                    'first_name': 'Μαρία',
+                    'last_name': 'Παπαδοπούλου',
+                    'phone': '2100000000',
+                    'location': '2ος',
+                  },
+                ],
+              ),
             ),
-          ),
-        ],
-      );
-      addTearDown(container.dispose);
+          ],
+        );
+        addTearDown(container.dispose);
 
-      final notifier = container.read(equipmentDirectoryProvider.notifier);
-      await notifier.load();
+        final notifier = container.read(equipmentDirectoryProvider.notifier);
+        await notifier.load();
 
-      final state = container.read(equipmentDirectoryProvider);
-      expect(state.filteredItems.length, 2);
-      expect(state.filteredItems.first.$1.code, 'PC-01');
-      expect(state.filteredItems.first.$2?.name, 'Μαρία Παπαδοπούλου');
-      expect(state.filteredItems[1].$1.code, 'PC-02');
-      expect(state.filteredItems[1].$2, isNull);
-    });
+        final state = container.read(equipmentDirectoryProvider);
+        expect(state.filteredItems.length, 2);
+        expect(state.filteredItems.first.$1.code, 'PC-01');
+        expect(state.filteredItems.first.$2?.name, 'Μαρία Παπαδοπούλου');
+        expect(state.filteredItems[1].$1.code, 'PC-02');
+        expect(state.filteredItems[1].$2, isNull);
+      },
+    );
   });
 }

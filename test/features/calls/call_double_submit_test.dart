@@ -51,7 +51,11 @@ Future<void> _fillValidCallForm(
   await tester.sendKeyDownEvent(LogicalKeyboardKey.tab);
   await tester.sendKeyUpEvent(LogicalKeyboardKey.tab);
   await tester.pump(const Duration(milliseconds: 450));
-  await pumpUntilSettled(tester, steps: 40, step: const Duration(milliseconds: 60));
+  await pumpUntilSettled(
+    tester,
+    steps: 40,
+    step: const Duration(milliseconds: 60),
+  );
   await pumpUntilSettledLong(tester);
 
   final categoryField = find.byWidgetPredicate(
@@ -164,7 +168,11 @@ void main() {
         final taskCount = await tester.runAsync(
           () => _countTasksForMarker(_doubleSubmitMarker),
         );
-        expect(taskCount, 0, reason: 'Χωρίς εκκρεμότητα δεν δημιουργείται task');
+        expect(
+          taskCount,
+          0,
+          reason: 'Χωρίς εκκρεμότητα δεν δημιουργείται task',
+        );
       },
       semanticsEnabled: false,
       timeout: const Timeout(Duration(minutes: 2)),

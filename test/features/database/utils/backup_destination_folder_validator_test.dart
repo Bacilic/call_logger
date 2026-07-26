@@ -6,15 +6,18 @@ import 'package:path/path.dart' as p;
 
 void main() {
   group('BackupDestinationFolderValidator', () {
-    test('missing directory is reported distinctly from invalid path', () async {
-      final missing = p.join(
-        Directory.systemTemp.path,
-        'call_logger_missing_dir_test_xyz',
-      );
-      final result = await BackupDestinationFolderValidator.validate(missing);
-      expect(result.kind, BackupDestinationValidationKind.missingDirectory);
-      expect(result.errorMessage, 'Ο φάκελος δεν υπάρχει');
-    });
+    test(
+      'missing directory is reported distinctly from invalid path',
+      () async {
+        final missing = p.join(
+          Directory.systemTemp.path,
+          'call_logger_missing_dir_test_xyz',
+        );
+        final result = await BackupDestinationFolderValidator.validate(missing);
+        expect(result.kind, BackupDestinationValidationKind.missingDirectory);
+        expect(result.errorMessage, 'Ο φάκελος δεν υπάρχει');
+      },
+    );
 
     test('empty path is ok', () async {
       final result = await BackupDestinationFolderValidator.validate('   ');
@@ -28,9 +31,9 @@ void main() {
       );
       final result =
           await BackupDestinationFolderValidator.inspectDestinationContent(
-        destinationDirectory: missing,
-        dbBaseName: 'call_logger',
-      );
+            destinationDirectory: missing,
+            dbBaseName: 'call_logger',
+          );
       expect(result.kind, BackupDestinationContentKind.folderMissing);
     });
 
@@ -48,9 +51,9 @@ void main() {
       });
       final result =
           await BackupDestinationFolderValidator.inspectDestinationContent(
-        destinationDirectory: dir.path,
-        dbBaseName: 'call_logger',
-      );
+            destinationDirectory: dir.path,
+            dbBaseName: 'call_logger',
+          );
       expect(result.kind, BackupDestinationContentKind.folderEmptyNoFiles);
     });
 
@@ -66,15 +69,13 @@ void main() {
           await dir.delete(recursive: true);
         } catch (_) {}
       });
-      final file = File(
-        p.join(dir.path, '2026-06-06_18-12_call_logger.zip'),
-      );
+      final file = File(p.join(dir.path, '2026-06-06_18-12_call_logger.zip'));
       await file.writeAsString('x');
       final result =
           await BackupDestinationFolderValidator.inspectDestinationContent(
-        destinationDirectory: dir.path,
-        dbBaseName: 'call_logger',
-      );
+            destinationDirectory: dir.path,
+            dbBaseName: 'call_logger',
+          );
       expect(result.kind, BackupDestinationContentKind.folderOk);
       expect(result.matchingBackupFileCount, 1);
       expect(result.latestBackupModified, isNotNull);

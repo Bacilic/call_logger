@@ -1,4 +1,4 @@
-﻿import 'dart:io';
+import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -297,12 +297,12 @@ class _BuildingMapFloorsBodyState extends ConsumerState<BuildingMapFloorsBody> {
                                   departmentId: id,
                                   floorId: currentSheetId,
                                 );
-                                final draftAfter =
-                                    ref.read(buildingMapDraftShapeProvider);
-                                final nextMode =
-                                    draftAfter != null
-                                        ? MapToolMode.edit
-                                        : MapToolMode.draw;
+                                final draftAfter = ref.read(
+                                  buildingMapDraftShapeProvider,
+                                );
+                                final nextMode = draftAfter != null
+                                    ? MapToolMode.edit
+                                    : MapToolMode.draw;
                                 ref
                                     .read(
                                       buildingMapDeptSelectionHudVisibleProvider

@@ -451,7 +451,11 @@ class _TaskFormDialogState extends ConsumerState<_TaskFormDialog> {
                     style: Theme.of(context).textTheme.titleSmall,
                   ),
                   const SizedBox(height: 8),
-                  for (var i = 0; i < widget.task!.snoozeEntries.length; i++) ...[
+                  for (
+                    var i = 0;
+                    i < widget.task!.snoozeEntries.length;
+                    i++
+                  ) ...[
                     Text(
                       'Αναβολή ${i + 1} — '
                       '${DateFormat('dd/MM HH:mm').format(widget.task!.snoozeEntries[i].snoozedAt)}',

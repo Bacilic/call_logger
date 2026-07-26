@@ -1,4 +1,4 @@
-﻿import 'dart:io';
+import 'dart:io';
 
 import 'package:call_logger/core/database/calls_repository.dart';
 import 'package:call_logger/core/database/database_helper.dart';
@@ -78,7 +78,11 @@ Future<void> pumpUntilSettled(
 
 /// Μεγαλύτερη αναμονή μετά την πρώτη φόρτωση (async providers, debounce ~350ms).
 Future<void> pumpUntilSettledLong(WidgetTester tester) async {
-  await pumpUntilSettled(tester, steps: 45, step: const Duration(milliseconds: 60));
+  await pumpUntilSettled(
+    tester,
+    steps: 45,
+    step: const Duration(milliseconds: 60),
+  );
 }
 
 /// Περιμένει ολοκλήρωση lookup cache (πραγματικό async I/O).
@@ -162,10 +166,7 @@ Future<void> seedIsolatedTestDatabase() async {
     'is_deleted': 0,
   });
   final phoneId = await db.insert('phones', {'number': kTestPhoneDigits});
-  await db.insert('user_phones', {
-    'user_id': userId,
-    'phone_id': phoneId,
-  });
+  await db.insert('user_phones', {'user_id': userId, 'phone_id': phoneId});
 
   final equipmentId = await db.insert('equipment', {
     'code_equipment': kTestEquipmentCode,
@@ -177,10 +178,7 @@ Future<void> seedIsolatedTestDatabase() async {
     'equipment_id': equipmentId,
   });
 
-  await db.insert('categories', {
-    'name': kTestCategoryName,
-    'is_deleted': 0,
-  });
+  await db.insert('categories', {'name': kTestCategoryName, 'is_deleted': 0});
 
   LookupService.instance.resetForReload();
   await LookupService.instance.loadFromDatabase();
@@ -243,8 +241,12 @@ List<Override> callLoggerTestProviderOverrides() {
     showDictionaryNavProvider.overrideWith((ref) async => true),
     coreLexiconProvider.overrideWith(() => _TestCoreLexiconNotifier()),
     // Αποφυγή επιπλέον async queries στο `remote_tools` κατά widget tests (locks / timers).
-    remoteToolsCatalogProvider.overrideWith((ref) async => const <RemoteTool>[]),
-    remoteToolsAllCatalogProvider.overrideWith((ref) async => const <RemoteTool>[]),
+    remoteToolsCatalogProvider.overrideWith(
+      (ref) async => const <RemoteTool>[],
+    ),
+    remoteToolsAllCatalogProvider.overrideWith(
+      (ref) async => const <RemoteTool>[],
+    ),
     remoteToolFormPairsProvider.overrideWith(
       (ref) async => const <RemoteToolFormPair>[],
     ),

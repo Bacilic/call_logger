@@ -8,19 +8,19 @@ import '../utils/backup_schedule_utils.dart';
 /// Φόρτωση και αποθήκευση [DatabaseBackupSettings] στον πίνακα `app_settings`.
 final databaseBackupSettingsProvider =
     NotifierProvider<DatabaseBackupSettingsNotifier, DatabaseBackupSettings>(
-  DatabaseBackupSettingsNotifier.new,
-);
+      DatabaseBackupSettingsNotifier.new,
+    );
 
-class DatabaseBackupSettingsNotifier
-    extends Notifier<DatabaseBackupSettings> {
+class DatabaseBackupSettingsNotifier extends Notifier<DatabaseBackupSettings> {
   @override
   DatabaseBackupSettings build() => DatabaseBackupSettings.defaults();
 
   Future<void> load() async {
     try {
       final db = await DatabaseHelper.instance.database;
-      final raw = await SettingsRepository(db)
-          .getSetting(DatabaseBackupSettings.appSettingsKey);
+      final raw = await SettingsRepository(
+        db,
+      ).getSetting(DatabaseBackupSettings.appSettingsKey);
       state = DatabaseBackupSettings.fromJsonString(raw);
     } catch (_) {
       state = DatabaseBackupSettings.defaults();
@@ -29,10 +29,9 @@ class DatabaseBackupSettingsNotifier
 
   Future<void> _persist() async {
     final db = await DatabaseHelper.instance.database;
-    await SettingsRepository(db).saveSetting(
-      DatabaseBackupSettings.appSettingsKey,
-      state.toJsonString(),
-    );
+    await SettingsRepository(
+      db,
+    ).saveSetting(DatabaseBackupSettings.appSettingsKey, state.toJsonString());
   }
 
   Future<void> setDestinationDirectory(String value) async {
@@ -138,9 +137,7 @@ class DatabaseBackupSettingsNotifier
   }
 
   Future<void> setRetentionMaxCopies(int value) async {
-    state = state.copyWith(
-      retentionMaxCopies: value.clamp(1, 9999),
-    );
+    state = state.copyWith(retentionMaxCopies: value.clamp(1, 9999));
     await _persist();
   }
 
@@ -150,9 +147,7 @@ class DatabaseBackupSettingsNotifier
   }
 
   Future<void> setRetentionMaxAgeDays(int value) async {
-    state = state.copyWith(
-      retentionMaxAgeDays: value.clamp(1, 9999),
-    );
+    state = state.copyWith(retentionMaxAgeDays: value.clamp(1, 9999));
     await _persist();
   }
 }

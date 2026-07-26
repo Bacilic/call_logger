@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/providers/user_form_edit_intent_provider.dart';
@@ -80,11 +80,15 @@ class _UsersTabState extends ConsumerState<UsersTab>
     final visibleColumns = state.orderedVisibleColumns;
     final personal = state.catalogMode == UserCatalogMode.personal;
     final hasQuery = state.searchQuery.trim().isNotEmpty;
-    final personalBadgeCount =
-        (!personal && hasQuery) ? state.filteredUsers.length : 0;
-    final sharedBadgeCount =
-        (personal && hasQuery) ? state.filteredNonUserPhones.length : 0;
-    final continuousScrollAsync = ref.watch(catalogUsersContinuousScrollProvider);
+    final personalBadgeCount = (!personal && hasQuery)
+        ? state.filteredUsers.length
+        : 0;
+    final sharedBadgeCount = (personal && hasQuery)
+        ? state.filteredNonUserPhones.length
+        : 0;
+    final continuousScrollAsync = ref.watch(
+      catalogUsersContinuousScrollProvider,
+    );
     final continuousScroll = continuousScrollAsync.value ?? true;
     syncCatalogSearchControllerFromState(
       controller: _searchController,
@@ -131,8 +135,7 @@ class _UsersTabState extends ConsumerState<UsersTab>
                 sharedBadgeCount: sharedBadgeCount,
                 onPersonal: () =>
                     notifier.setCatalogMode(UserCatalogMode.personal),
-                onShared: () =>
-                    notifier.setCatalogMode(UserCatalogMode.shared),
+                onShared: () => notifier.setCatalogMode(UserCatalogMode.shared),
               ),
               if (personal) ...[
                 IconButton(
@@ -164,7 +167,8 @@ class _UsersTabState extends ConsumerState<UsersTab>
                       _openForm(context, ref, user, focusedField: focusedField),
                   focusedRowIndex: state.focusedRowIndex,
                   onSetFocusedRowIndex: notifier.setFocusedRowIndex,
-                  onRequestDelete: () => _confirmAndDeleteSelected(context, ref),
+                  onRequestDelete: () =>
+                      _confirmAndDeleteSelected(context, ref),
                   onRequestBulkEdit: () => _openBulkEdit(context, ref),
                   continuousScroll: continuousScroll,
                 )
@@ -205,8 +209,12 @@ class _UsersTabState extends ConsumerState<UsersTab>
                               .where((u) => u.id == id)
                               .toList();
                           if (candidates.isNotEmpty) {
-                            _openForm(context, ref, candidates.first,
-                                isClone: true);
+                            _openForm(
+                              context,
+                              ref,
+                              candidates.first,
+                              isClone: true,
+                            );
                           }
                         }
                       : null,
@@ -272,7 +280,10 @@ class _UsersTabState extends ConsumerState<UsersTab>
     );
   }
 
-  Future<void> _confirmAndDeleteSelected(BuildContext context, WidgetRef ref) async {
+  Future<void> _confirmAndDeleteSelected(
+    BuildContext context,
+    WidgetRef ref,
+  ) async {
     final state = ref.read(directoryProvider);
     if (state.selectedIds.isEmpty) return;
     final selectedUsers = state.allUsers
@@ -311,10 +322,11 @@ class _UsersTabState extends ConsumerState<UsersTab>
     final ids = state.selectedIds.toList();
     final db = await DatabaseHelper.instance.database;
     final userRepo = UserRepository(db);
-    final exclusivePhones =
-        await userRepo.findExclusivePhonesForUserDelete(ids);
-    final exclusiveEquipment =
-        await userRepo.findExclusiveEquipmentForUserDelete(ids);
+    final exclusivePhones = await userRepo.findExclusivePhonesForUserDelete(
+      ids,
+    );
+    final exclusiveEquipment = await userRepo
+        .findExclusiveEquipmentForUserDelete(ids);
     final usersToDelete = selectedUsers;
 
     final originalUserPhones = <int, List<String>>{};
@@ -323,14 +335,13 @@ class _UsersTabState extends ConsumerState<UsersTab>
       final uid = u.id;
       if (uid == null) continue;
       originalUserPhones[uid] = await userRepo.userPhoneNumbersOrdered(db, uid);
-      originalUserEquipmentIds[uid] =
-          (await userRepo.equipmentIdsForUser(uid)).toList();
+      originalUserEquipmentIds[uid] = (await userRepo.equipmentIdsForUser(
+        uid,
+      )).toList();
     }
 
-    final pendingPhoneBatches = <({
-      SharedAssetDisconnectBatchResult batch,
-      int? sourceDepartmentId,
-    })>[];
+    final pendingPhoneBatches =
+        <({SharedAssetDisconnectBatchResult batch, int? sourceDepartmentId})>[];
     if (exclusivePhones.isNotEmpty) {
       if (!context.mounted) return;
       final confirmed = await _collectExclusivePhoneDisconnectBatches(
@@ -347,10 +358,8 @@ class _UsersTabState extends ConsumerState<UsersTab>
       if (!context.mounted || !confirmed) return;
     }
 
-    final pendingEquipmentBatches = <({
-      SharedAssetDisconnectBatchResult batch,
-      int? sourceDepartmentId,
-    })>[];
+    final pendingEquipmentBatches =
+        <({SharedAssetDisconnectBatchResult batch, int? sourceDepartmentId})>[];
     if (exclusiveEquipment.isNotEmpty) {
       if (!context.mounted) return;
       final confirmed = await _collectExclusiveEquipmentDisconnectBatches(
@@ -547,10 +556,7 @@ class _UsersTabState extends ConsumerState<UsersTab>
           children: [
             Expanded(
               child: tooltipAllNames != null
-                  ? Tooltip(
-                      message: tooltipAllNames,
-                      child: Text(message),
-                    )
+                  ? Tooltip(message: tooltipAllNames, child: Text(message))
                   : Text(message),
             ),
             IconButton(
@@ -585,9 +591,7 @@ class _UsersTabState extends ConsumerState<UsersTab>
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text(
-            'Δεν υπάρχει συσχετισμένο τμήμα για αυτόν τον αριθμό.',
-          ),
+          content: Text('Δεν υπάρχει συσχετισμένο τμήμα για αυτόν τον αριθμό.'),
         ),
       );
       return;
@@ -597,9 +601,9 @@ class _UsersTabState extends ConsumerState<UsersTab>
     final row = await DepartmentRepository(db).getDepartmentRowById(deptId);
     if (!context.mounted) return;
     if (row == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Δεν βρέθηκε το τμήμα.')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Δεν βρέθηκε το τμήμα.')));
       return;
     }
     final model = DepartmentModel.fromMap(row);
@@ -763,11 +767,8 @@ class _CatalogModeToggle extends StatelessWidget {
               'assets/phone_personal.png',
               width: 28,
               height: 28,
-              errorBuilder: (context, error, stackTrace) => Icon(
-                Icons.phone_in_talk,
-                color: scheme.primary,
-                size: 28,
-              ),
+              errorBuilder: (context, error, stackTrace) =>
+                  Icon(Icons.phone_in_talk, color: scheme.primary, size: 28),
             ),
           ),
         ),
@@ -784,11 +785,8 @@ class _CatalogModeToggle extends StatelessWidget {
               'assets/phone_department.png',
               width: 28,
               height: 28,
-              errorBuilder: (context, error, stackTrace) => Icon(
-                Icons.business,
-                color: scheme.primary,
-                size: 28,
-              ),
+              errorBuilder: (context, error, stackTrace) =>
+                  Icon(Icons.business, color: scheme.primary, size: 28),
             ),
           ),
         ),
@@ -810,9 +808,7 @@ class _CatalogModeToggle extends StatelessWidget {
       children: [
         AnimatedContainer(
           duration: const Duration(milliseconds: 120),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(8),
-          ),
+          decoration: BoxDecoration(borderRadius: BorderRadius.circular(8)),
           child: Material(
             color: selected
                 ? scheme.primaryContainer.withValues(alpha: 0.92)
@@ -821,10 +817,7 @@ class _CatalogModeToggle extends StatelessWidget {
             child: InkWell(
               borderRadius: BorderRadius.circular(8),
               onTap: onTap,
-              child: Padding(
-                padding: const EdgeInsets.all(6),
-                child: child,
-              ),
+              child: Padding(padding: const EdgeInsets.all(6), child: child),
             ),
           ),
         ),
@@ -843,10 +836,10 @@ class _CatalogModeToggle extends StatelessWidget {
               child: Text(
                 badgeText,
                 style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w700,
-                      fontSize: 10,
-                    ),
+                  color: Colors.white,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 10,
+                ),
               ),
             ),
           ),
@@ -865,15 +858,15 @@ class _UserColumnSelectorOverlay extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(directoryProvider);
     final notifier = ref.read(directoryProvider.notifier);
-    final continuousScrollAsync =
-        ref.watch(catalogUsersContinuousScrollProvider);
+    final continuousScrollAsync = ref.watch(
+      catalogUsersContinuousScrollProvider,
+    );
     final continuousScroll = continuousScrollAsync.value ?? true;
     final theme = Theme.of(context);
     final order = state.columnOrder;
     final keys = state.visibleColumnKeys;
     final sel = UserDirectoryColumn.selection;
-    final orderRest =
-        order.where((c) => c != sel).toList(growable: false);
+    final orderRest = order.where((c) => c != sel).toList(growable: false);
     final selOn = keys.contains(sel.key);
 
     return CatalogColumnSelectorShell(
@@ -961,10 +954,9 @@ class _UserColumnSelectorOverlay extends ConsumerWidget {
             value: continuousScroll,
             onChanged: (bool val) async {
               final db = await DatabaseHelper.instance.database;
-              await SettingsRepository(db).saveSetting(
-                kCatalogContinuousScrollUsersKey,
-                val.toString(),
-              );
+              await SettingsRepository(
+                db,
+              ).saveSetting(kCatalogContinuousScrollUsersKey, val.toString());
               ref.invalidate(catalogUsersContinuousScrollProvider);
             },
           ),
@@ -973,4 +965,3 @@ class _UserColumnSelectorOverlay extends ConsumerWidget {
     );
   }
 }
-

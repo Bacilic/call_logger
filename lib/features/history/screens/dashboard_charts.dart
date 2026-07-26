@@ -1,4 +1,4 @@
-﻿import 'dart:math' as math;
+import 'dart:math' as math;
 
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
@@ -61,7 +61,8 @@ class _BarSparklineChartState extends State<BarSparklineChart> {
       return null;
     }
 
-    final renderBox = _chartKey.currentContext?.findRenderObject() as RenderBox?;
+    final renderBox =
+        _chartKey.currentContext?.findRenderObject() as RenderBox?;
     if (renderBox == null || !renderBox.hasSize) {
       return null;
     }
@@ -73,10 +74,7 @@ class _BarSparklineChartState extends State<BarSparklineChart> {
     final anchorGlobalX = chartTopLeft.dx + clampedAnchorX;
     final screenWidth = MediaQuery.sizeOf(overlayContext).width;
     final left = (anchorGlobalX - tooltipWidth / 2)
-        .clamp(
-          8.0,
-          math.max(8.0, screenWidth - tooltipWidth - 8),
-        )
+        .clamp(8.0, math.max(8.0, screenWidth - tooltipWidth - 8))
         .toDouble();
     final top = chartTopLeft.dy - 6;
 
@@ -91,9 +89,7 @@ class _BarSparklineChartState extends State<BarSparklineChart> {
             offset: const Offset(0, -1),
             child: Align(
               alignment: Alignment.bottomCenter,
-              child: IgnorePointer(
-                child: _BarSparklineTooltip(text: text),
-              ),
+              child: IgnorePointer(child: _BarSparklineTooltip(text: text)),
             ),
           ),
         ),
@@ -294,7 +290,8 @@ class _SparklineChartState extends State<SparklineChart> {
       return null;
     }
 
-    final renderBox = _chartKey.currentContext?.findRenderObject() as RenderBox?;
+    final renderBox =
+        _chartKey.currentContext?.findRenderObject() as RenderBox?;
     if (renderBox == null || !renderBox.hasSize) {
       return null;
     }
@@ -306,10 +303,7 @@ class _SparklineChartState extends State<SparklineChart> {
     final anchorGlobalX = chartTopLeft.dx + clampedAnchorX;
     final screenWidth = MediaQuery.sizeOf(overlayContext).width;
     final left = (anchorGlobalX - tooltipWidth / 2)
-        .clamp(
-          8.0,
-          math.max(8.0, screenWidth - tooltipWidth - 8),
-        )
+        .clamp(8.0, math.max(8.0, screenWidth - tooltipWidth - 8))
         .toDouble();
     final top = chartTopLeft.dy - 6;
 
@@ -324,9 +318,7 @@ class _SparklineChartState extends State<SparklineChart> {
             offset: const Offset(0, -1),
             child: Align(
               alignment: Alignment.bottomCenter,
-              child: IgnorePointer(
-                child: _BarSparklineTooltip(text: text),
-              ),
+              child: IgnorePointer(child: _BarSparklineTooltip(text: text)),
             ),
           ),
         ),
@@ -425,10 +417,7 @@ class _SparklineChartState extends State<SparklineChart> {
 }
 
 class HourlyBarChart extends StatelessWidget {
-  const HourlyBarChart({
-    super.key,
-    required this.buckets, required this.color,
-  });
+  const HourlyBarChart({super.key, required this.buckets, required this.color});
 
   final List<HourlyBucket> buckets;
   final Color color;

@@ -1,4 +1,4 @@
-﻿import 'package:flutter/gestures.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
 import '../utils/linkable_text_parser.dart';
@@ -47,7 +47,8 @@ class LinkableSelectableTextState extends State<LinkableSelectableText> {
 
     final theme = Theme.of(context);
     final baseStyle = widget.style ?? theme.textTheme.bodyMedium;
-    final resolvedLinkStyle = widget.linkStyle ??
+    final resolvedLinkStyle =
+        widget.linkStyle ??
         baseStyle?.copyWith(
           color: theme.colorScheme.primary,
           decoration: TextDecoration.underline,
@@ -80,9 +81,7 @@ class LinkableSelectableTextState extends State<LinkableSelectableText> {
       return SelectableText('', style: baseStyle);
     }
 
-    return SelectableText.rich(
-      TextSpan(style: baseStyle, children: children),
-    );
+    return SelectableText.rich(TextSpan(style: baseStyle, children: children));
   }
 
   Future<void> _openLink(
@@ -106,9 +105,9 @@ class LinkableSelectableTextState extends State<LinkableSelectableText> {
   }
 
   void _showSnackBar(BuildContext context, String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   /// Ενεργοποιεί το ίδιο onTap που θα έτρεχε από κλικ στον αναγνωρισμένο σύνδεσμο.

@@ -27,7 +27,9 @@ class _FakeHooks implements DatabasePathSwitchHooks {
   }
 
   @override
-  Future<void> reportVerificationFailure(DatabaseInitRunnerResult runner) async {
+  Future<void> reportVerificationFailure(
+    DatabaseInitRunnerResult runner,
+  ) async {
     calls.add('reportVerificationFailure');
     reportCallCount++;
     reportedRunner = runner;
@@ -108,28 +110,25 @@ void main() {
     },
   );
 
-  test(
-    'επιτυχής σειρά κλήσεων: begin → show → hide → apply → end',
-    () async {
-      final hooks = _FakeHooks();
-      final runner = DatabaseInitRunnerResult(
-        result: DatabaseInitResult.success(path),
-        isLocalDevMode: false,
-      );
+  test('επιτυχής σειρά κλήσεων: begin → show → hide → apply → end', () async {
+    final hooks = _FakeHooks();
+    final runner = DatabaseInitRunnerResult(
+      result: DatabaseInitResult.success(path),
+      isLocalDevMode: false,
+    );
 
-      await runDatabasePathSwitch(
-        path: path,
-        hooks: hooks,
-        verify: (_) async => (ok: true, runner: runner),
-      );
+    await runDatabasePathSwitch(
+      path: path,
+      hooks: hooks,
+      verify: (_) async => (ok: true, runner: runner),
+    );
 
-      expect(hooks.calls, [
-        'declareSwitchBegin',
-        'showVerifyingIndicator',
-        'hideVerifyingIndicator',
-        'applySwitchToSession',
-        'declareSwitchEnd',
-      ]);
-    },
-  );
+    expect(hooks.calls, [
+      'declareSwitchBegin',
+      'showVerifyingIndicator',
+      'hideVerifyingIndicator',
+      'applySwitchToSession',
+      'declareSwitchEnd',
+    ]);
+  });
 }

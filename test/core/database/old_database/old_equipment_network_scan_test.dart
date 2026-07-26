@@ -61,14 +61,13 @@ void main() {
       final networkIssues = _scannerNetworkIssues(result.issues);
 
       expect(networkIssues, hasLength(2));
-      expect(
-        networkIssues.map((i) => i['issue_type']).toSet(),
-        <String>{'network_duplicate_ip'},
-      );
-      expect(
-        networkIssues.map((i) => i['row_number']).toSet(),
-        <Object?>{101, 102},
-      );
+      expect(networkIssues.map((i) => i['issue_type']).toSet(), <String>{
+        'network_duplicate_ip',
+      });
+      expect(networkIssues.map((i) => i['row_number']).toSet(), <Object?>{
+        101,
+        102,
+      });
       for (final issue in networkIssues) {
         expect(issue['column_name'], 'ip_address');
         expect(issue['message'], contains('192.168.1.10'));
@@ -86,10 +85,10 @@ void main() {
           .toList();
 
       expect(networkIssues, hasLength(2));
-      expect(
-        networkIssues.map((i) => i['row_number']).toSet(),
-        <Object?>{201, 202},
-      );
+      expect(networkIssues.map((i) => i['row_number']).toSet(), <Object?>{
+        201,
+        202,
+      });
       for (final issue in networkIssues) {
         expect(issue['column_name'], 'network_name');
       }
@@ -101,15 +100,15 @@ void main() {
       await _insertEquipment(dbPath, code: 302, ipAddress: 'κείμενο');
 
       final result = await repository.scanIntegrityIssues(dbPath);
-      final networkIssues = _scannerNetworkIssues(result.issues)
-          .where((issue) => issue['issue_type'] == 'network_invalid_ip')
-          .toList();
+      final networkIssues = _scannerNetworkIssues(
+        result.issues,
+      ).where((issue) => issue['issue_type'] == 'network_invalid_ip').toList();
 
       expect(networkIssues, hasLength(2));
-      expect(
-        networkIssues.map((i) => i['row_number']).toSet(),
-        <Object?>{301, 302},
-      );
+      expect(networkIssues.map((i) => i['row_number']).toSet(), <Object?>{
+        301,
+        302,
+      });
       for (final issue in networkIssues) {
         expect(issue['column_name'], 'ip_address');
       }
@@ -147,7 +146,9 @@ void main() {
       await _insertLegacyEquipment(dbPath, code: 101, description: 'Παλιός');
 
       final result = await repository.scanIntegrityIssues(dbPath);
-      final networkStep = result.steps.firstWhere((s) => s.id == 'network_data');
+      final networkStep = result.steps.firstWhere(
+        (s) => s.id == 'network_data',
+      );
 
       expect(networkStep.status, OldIntegrityStepStatus.success);
       expect(networkStep.issuesFound, 0);
@@ -200,7 +201,10 @@ void main() {
 }
 
 Future<String> _createDbWithNetworkColumns(Directory tempDir) async {
-  final dbPath = p.join(tempDir.path, 'network-${DateTime.now().microsecondsSinceEpoch}.sqlite');
+  final dbPath = p.join(
+    tempDir.path,
+    'network-${DateTime.now().microsecondsSinceEpoch}.sqlite',
+  );
   final db = await openDatabase(dbPath, singleInstance: false);
   try {
     await createOldDatabaseSchema(db);

@@ -16,10 +16,12 @@ class LexiconListFiltersModel {
   final String? langFilter;
   final String? sourceFilter;
   final String? categoryFilter;
+
   /// null = αυτόματος αριθμός ομάδων στηλών· 1–4 = σταθερός.
   final int? columnGroups;
   final String lettersCompareOp;
   final String lettersCount;
+
   /// null = όλα· `none` | `1` | `2` | `3` | `gt3`
   final String? diacriticMarksFilter;
   final int page;
@@ -61,15 +63,15 @@ class LexiconListFiltersModel {
   }
 
   Map<String, dynamic> toJson() => {
-        if (langFilter != null) 'lang': langFilter,
-        if (sourceFilter != null) 'source': sourceFilter,
-        if (categoryFilter != null) 'category': categoryFilter,
-        if (columnGroups != null) 'column_groups': columnGroups,
-        'letters_op': lettersCompareOp,
-        if (lettersCount.isNotEmpty) 'letters_count': lettersCount,
-        if (diacriticMarksFilter != null) 'diacritic': diacriticMarksFilter,
-        if (page != 0) 'page': page,
-      };
+    if (langFilter != null) 'lang': langFilter,
+    if (sourceFilter != null) 'source': sourceFilter,
+    if (categoryFilter != null) 'category': categoryFilter,
+    if (columnGroups != null) 'column_groups': columnGroups,
+    'letters_op': lettersCompareOp,
+    if (lettersCount.isNotEmpty) 'letters_count': lettersCount,
+    if (diacriticMarksFilter != null) 'diacritic': diacriticMarksFilter,
+    if (page != 0) 'page': page,
+  };
 
   static LexiconListFiltersModel fromJson(Map<String, dynamic> json) {
     final rawOp = json['letters_op'] as String? ?? '>=';
@@ -79,8 +81,8 @@ class LexiconListFiltersModel {
     final lettersCount = sanitizeLettersCount(rawLetters);
 
     final rawDiacritic = json['diacritic'] as String?;
-    final diacritic = rawDiacritic != null &&
-            _allowedDiacriticFilters.contains(rawDiacritic)
+    final diacritic =
+        rawDiacritic != null && _allowedDiacriticFilters.contains(rawDiacritic)
         ? rawDiacritic
         : null;
 

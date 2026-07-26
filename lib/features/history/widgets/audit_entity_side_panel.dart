@@ -135,11 +135,13 @@ class AuditEntitySidePanel extends ConsumerWidget {
           'Δεν υπάρχει συγκεκριμένη οντότητα.',
       ];
       return AuditEntityPreviewBody(
-        entityType:
-            isBackup ? AuditEntityTypes.backup : AuditEntityTypes.maintenance,
+        entityType: isBackup
+            ? AuditEntityTypes.backup
+            : AuditEntityTypes.maintenance,
         showPreviewTitle: false,
         preview: AuditEntityPreview(
-          title: entry.action ??
+          title:
+              entry.action ??
               (isBackup ? 'Αντίγραφο ασφαλείας' : 'Συντήρηση βάσης'),
           lines: previewLines,
         ),
@@ -166,13 +168,11 @@ class AuditEntitySidePanel extends ConsumerWidget {
     }
 
     final previewAsync = ref.watch(
-      auditEntityPreviewProvider(
-        (
-          auditId: entry.id,
-          entityType: entry.entityType,
-          entityId: entry.entityId,
-        ),
-      ),
+      auditEntityPreviewProvider((
+        auditId: entry.id,
+        entityType: entry.entityType,
+        entityId: entry.entityId,
+      )),
     );
 
     return previewAsync.when(

@@ -1,4 +1,4 @@
-﻿import 'dart:convert';
+import 'dart:convert';
 
 import 'package:call_logger/core/services/lansweeper_sync_service.dart';
 import 'package:call_logger/core/services/lansweeper_ticket_submit_config.dart';
@@ -47,7 +47,8 @@ LansweeperWorkflowRequest _workflowRequest({
     agentUsername: agentUsername,
     durationSeconds: durationSeconds,
     config: config ?? LansweeperTicketSubmitConfig.defaults(),
-    customFieldValues: customFieldValues ??
+    customFieldValues:
+        customFieldValues ??
         const {
           'category': 'Yes',
           'incident_category': 'Hardware στα Endpoints (PCs, Printers κλπ.)',
@@ -76,12 +77,12 @@ void _registerTestLansweeperSettings() {
     'lansweeper_api_url': _kTestApiUrl,
     'lansweeper_api_key': _kTestApiKey,
   };
-  SettingsService.registerAppSettingsProvider(
-    (key) async => store[key],
-    (key, value) async {
-      store[key] = value;
-    },
-  );
+  SettingsService.registerAppSettingsProvider((key) async => store[key], (
+    key,
+    value,
+  ) async {
+    store[key] = value;
+  });
 }
 
 void main() {
@@ -109,10 +110,7 @@ void main() {
     });
 
     test('formatCallDurationLabel ώρες ως HH:MM', () {
-      expect(
-        LansweeperSyncService.formatCallDurationLabel(3725),
-        '01:02',
-      );
+      expect(LansweeperSyncService.formatCallDurationLabel(3725), '01:02');
     });
   });
 
@@ -133,11 +131,7 @@ void main() {
     setUp(() {
       _registerTestLansweeperSettings();
       fakePoster = _RecordingFakePoster(
-        responses: const [
-          successWithTicketId,
-          successOnly,
-          successOnly,
-        ],
+        responses: const [successWithTicketId, successOnly, successOnly],
       );
       service = LansweeperSyncService(poster: fakePoster.call);
     });
@@ -185,11 +179,7 @@ void main() {
       'Πεδία αιτούντος υπάρχουν και στα τρία actions: για agent email → Email+AgentEmail· για agent domain\\username → Username+AgentUsername',
       () async {
         fakePoster = _RecordingFakePoster(
-          responses: const [
-            successWithTicketId,
-            successOnly,
-            successOnly,
-          ],
+          responses: const [successWithTicketId, successOnly, successOnly],
         );
         service = LansweeperSyncService(poster: fakePoster.call);
 
@@ -207,11 +197,7 @@ void main() {
         }
 
         fakePoster = _RecordingFakePoster(
-          responses: const [
-            successWithTicketId,
-            successOnly,
-            successOnly,
-          ],
+          responses: const [successWithTicketId, successOnly, successOnly],
         );
         service = LansweeperSyncService(poster: fakePoster.call);
 
@@ -279,11 +265,7 @@ void main() {
       'Fallback: όταν το AddNote επιστρέφει αποτυχία, στέλνεται EditTicket με Description=buildTicketDescription(...) και το αποτέλεσμα είναι success=true με warning',
       () async {
         fakePoster = _RecordingFakePoster(
-          responses: const [
-            successWithTicketId,
-            failure,
-            successOnly,
-          ],
+          responses: const [successWithTicketId, failure, successOnly],
         );
         service = LansweeperSyncService(poster: fakePoster.call);
 
@@ -315,11 +297,7 @@ void main() {
       'Ολική αποτυχία: όταν αποτυγχάνει και το AddNote και το fallback EditTicket → success=false, failedStep="AddNote", ticketId διατηρείται',
       () async {
         fakePoster = _RecordingFakePoster(
-          responses: const [
-            successWithTicketId,
-            failure,
-            failure,
-          ],
+          responses: const [successWithTicketId, failure, failure],
         );
         service = LansweeperSyncService(poster: fakePoster.call);
 

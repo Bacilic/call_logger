@@ -104,42 +104,43 @@ void main() {
       await _flushSqfliteLockTimers(tester);
     });
 
-    testWidgets('εικονίδιο εκκρεμοτήτων δείχνει badge όταν υπάρχουν εκκρεμείς', (
-      tester,
-    ) async {
-      _useWideShellViewport(tester);
-      addTearDown(() {
-        tester.view.resetPhysicalSize();
-        tester.view.resetDevicePixelRatio();
-      });
-      await tester.runAsync(() async {
-        await tester.pumpWidget(
-          ProviderScope(
-            overrides: [
-              ...callLoggerTestProviderOverrides(),
-              showLampNavProvider.overrideWith((ref) async => true),
-              enableSpellCheckProvider.overrideWith((ref) async => true),
-              globalPendingTasksCountProvider.overrideWith((ref) async => 4),
-            ],
-            child: const MyApp(),
-          ),
-        );
-        await tester.pump();
-        await pumpUntilSettledLong(tester);
-        final container = ProviderScope.containerOf(
-          tester.element(find.byType(MaterialApp)),
-        );
-        await container.read(lookupServiceProvider.future);
-        await container.read(globalPendingTasksCountProvider.future);
-      });
-      await pumpUntilSettled(tester);
+    testWidgets(
+      'εικονίδιο εκκρεμοτήτων δείχνει badge όταν υπάρχουν εκκρεμείς',
+      (tester) async {
+        _useWideShellViewport(tester);
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+        await tester.runAsync(() async {
+          await tester.pumpWidget(
+            ProviderScope(
+              overrides: [
+                ...callLoggerTestProviderOverrides(),
+                showLampNavProvider.overrideWith((ref) async => true),
+                enableSpellCheckProvider.overrideWith((ref) async => true),
+                globalPendingTasksCountProvider.overrideWith((ref) async => 4),
+              ],
+              child: const MyApp(),
+            ),
+          );
+          await tester.pump();
+          await pumpUntilSettledLong(tester);
+          final container = ProviderScope.containerOf(
+            tester.element(find.byType(MaterialApp)),
+          );
+          await container.read(lookupServiceProvider.future);
+          await container.read(globalPendingTasksCountProvider.future);
+        });
+        await pumpUntilSettled(tester);
 
-      final badgeFinder = _tasksNavBadge(tester);
-      expect(badgeFinder, findsOneWidget);
-      final badge = tester.widget<Badge>(badgeFinder);
-      expect(badge.isLabelVisible, isTrue);
-      expect((badge.label! as Text).data, '4');
-    });
+        final badgeFinder = _tasksNavBadge(tester);
+        expect(badgeFinder, findsOneWidget);
+        final badge = tester.widget<Badge>(badgeFinder);
+        expect(badge.isLabelVisible, isTrue);
+        expect((badge.label! as Text).data, '4');
+      },
+    );
 
     testWidgets('εναλλαγή προορισμού επιστρέφει στις Κλήσεις', (tester) async {
       _useWideShellViewport(tester);

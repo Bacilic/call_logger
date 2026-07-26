@@ -43,11 +43,36 @@ void main() {
         appendTexts('model', <String>['model', 'model_name']);
         appendTexts('model', <String>['42', 'Logitech M185']);
         appendTexts('contracts', <String>['contract', 'contract_name']);
-        appendTexts('equipment', <String>['code', 'description', 'model', 'serial_no']);
-        appendTexts('equipment', <String>['2350', 'Ποντίκι Α', '42', 'SN-DUP-001']);
-        appendTexts('equipment', <String>['2351', 'Ποντίκι Β', '42', 'SN-DUP-001']);
-        appendTexts('equipment', <String>['2352', 'Ποντίκι Γ', '42', 'SN-DUP-001']);
-        appendTexts('equipment', <String>['2353', 'Ποντίκι Δ', '42', 'SN-DUP-001']);
+        appendTexts('equipment', <String>[
+          'code',
+          'description',
+          'model',
+          'serial_no',
+        ]);
+        appendTexts('equipment', <String>[
+          '2350',
+          'Ποντίκι Α',
+          '42',
+          'SN-DUP-001',
+        ]);
+        appendTexts('equipment', <String>[
+          '2351',
+          'Ποντίκι Β',
+          '42',
+          'SN-DUP-001',
+        ]);
+        appendTexts('equipment', <String>[
+          '2352',
+          'Ποντίκι Γ',
+          '42',
+          'SN-DUP-001',
+        ]);
+        appendTexts('equipment', <String>[
+          '2353',
+          'Ποντίκι Δ',
+          '42',
+          'SN-DUP-001',
+        ]);
 
         final xlsxPath = p.join(tempDir.path, 'dup_serial.xlsx');
         File(xlsxPath).writeAsBytesSync(excel.encode()!);
@@ -71,10 +96,12 @@ void main() {
             columns: <String>['code'],
             orderBy: 'code ASC',
           );
-          expect(
-            codes.map((row) => row['code']).toList(),
-            <Object?>[2350, 2351, 2352, 2353],
-          );
+          expect(codes.map((row) => row['code']).toList(), <Object?>[
+            2350,
+            2351,
+            2352,
+            2353,
+          ]);
         } finally {
           await db.close();
         }
@@ -96,11 +123,36 @@ void main() {
         appendTexts('model', <String>['model', 'model_name']);
         appendTexts('model', <String>['42', 'Logitech M185']);
         appendTexts('contracts', <String>['contract', 'contract_name']);
-        appendTexts('equipment', <String>['code', 'description', 'model', 'serial_no']);
-        appendTexts('equipment', <String>['2350', 'Ποντίκι Α', '42', 'SN-DUP-001']);
-        appendTexts('equipment', <String>['2351', 'Ποντίκι Β', '42', 'SN-DUP-001']);
-        appendTexts('equipment', <String>['2352', 'Ποντίκι Γ', '42', 'SN-DUP-001']);
-        appendTexts('equipment', <String>['2353', 'Ποντίκι Δ', '42', 'SN-DUP-001']);
+        appendTexts('equipment', <String>[
+          'code',
+          'description',
+          'model',
+          'serial_no',
+        ]);
+        appendTexts('equipment', <String>[
+          '2350',
+          'Ποντίκι Α',
+          '42',
+          'SN-DUP-001',
+        ]);
+        appendTexts('equipment', <String>[
+          '2351',
+          'Ποντίκι Β',
+          '42',
+          'SN-DUP-001',
+        ]);
+        appendTexts('equipment', <String>[
+          '2352',
+          'Ποντίκι Γ',
+          '42',
+          'SN-DUP-001',
+        ]);
+        appendTexts('equipment', <String>[
+          '2353',
+          'Ποντίκι Δ',
+          '42',
+          'SN-DUP-001',
+        ]);
 
         final xlsxPath = p.join(tempDir.path, 'dup_serial_scan.xlsx');
         File(xlsxPath).writeAsBytesSync(excel.encode()!);

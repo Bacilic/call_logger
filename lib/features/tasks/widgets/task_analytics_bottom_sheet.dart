@@ -27,8 +27,7 @@ class TaskAnalyticsBottomSheet extends ConsumerWidget {
         '${DateFormat('dd/MM/yyyy').format(analyticsFilter.endDate)}';
     final activePreset = asyncDates.value?.activePreset;
     final selectedPresetDays = activePreset?.presetDayCount;
-    final allRangeSelected =
-        activePreset == TaskAnalyticsDatePreset.all;
+    final allRangeSelected = activePreset == TaskAnalyticsDatePreset.all;
 
     return ClipRRect(
       borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
@@ -175,10 +174,7 @@ class TaskAnalyticsBottomSheet extends ConsumerWidget {
     if (dates == null) return;
     final result = await showCalendarRangePickerDialog(
       context,
-      initialValue: DateTimeRange(
-        start: dates.startDate,
-        end: dates.endDate,
-      ),
+      initialValue: DateTimeRange(start: dates.startDate, end: dates.endDate),
     );
     if (!context.mounted || result == null) return;
     if (result.wasCleared) {

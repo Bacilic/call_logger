@@ -107,7 +107,9 @@ class _CallDeleteDialogState extends ConsumerState<_CallDeleteDialog>
       if (!mounted) return;
       setState(() => _busy = false);
       showDialogSnackBar(
-        SnackBar(content: Text('Αποτυχία διαγραφής: ${humanizeUserFacingError(e)}')),
+        SnackBar(
+          content: Text('Αποτυχία διαγραφής: ${humanizeUserFacingError(e)}'),
+        ),
       );
     }
   }
@@ -118,69 +120,71 @@ class _CallDeleteDialogState extends ConsumerState<_CallDeleteDialog>
       messengerKey: dialogMessengerKey,
       child: Center(
         child: AlertDialog(
-      title: const Text('Διαγραφή κλήσης'),
-      content: _loading
-          ? const SizedBox(
-              height: 100,
-              child: Center(child: CircularProgressIndicator()),
-            )
-          : Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                if (_linkedTasks > 0)
-                  Text(
-                    'Βρέθηκαν $_linkedTasks συνδεδεμένες εκκρεμότητες για την κλήση.',
-                  )
-                else
-                  const Text('Επιβεβαιώστε τη διαγραφή της κλήσης.'),
-                const SizedBox(height: 10),
-                SwitchListTile.adaptive(
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text('Οριστική διαγραφή (hard delete)'),
-                  subtitle: const Text('Χωρίς δυνατότητα επαναφοράς.'),
-                  value: _hardDelete,
-                  onChanged: _busy
-                      ? null
-                      : (v) => setState(() => _hardDelete = v),
+          title: const Text('Διαγραφή κλήσης'),
+          content: _loading
+              ? const SizedBox(
+                  height: 100,
+                  child: Center(child: CircularProgressIndicator()),
+                )
+              : Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    if (_linkedTasks > 0)
+                      Text(
+                        'Βρέθηκαν $_linkedTasks συνδεδεμένες εκκρεμότητες για την κλήση.',
+                      )
+                    else
+                      const Text('Επιβεβαιώστε τη διαγραφή της κλήσης.'),
+                    const SizedBox(height: 10),
+                    SwitchListTile.adaptive(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('Οριστική διαγραφή (hard delete)'),
+                      subtitle: const Text('Χωρίς δυνατότητα επαναφοράς.'),
+                      value: _hardDelete,
+                      onChanged: _busy
+                          ? null
+                          : (v) => setState(() => _hardDelete = v),
+                    ),
+                  ],
                 ),
-              ],
-            ),
-      actions: _loading
-          ? [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: const Text('Κλείσιμο'),
-              ),
-            ]
-          : [
-              TextButton(
-                onPressed: _busy ? null : () => Navigator.of(context).pop(),
-                child: const Text('Ακύρωση διαγραφής'),
-              ),
-              if (_linkedTasks > 0) ...[
-                FilledButton.tonal(
-                  onPressed: _busy
-                      ? null
-                      : () => _delete(taskAction: 'nullify'),
-                  child: const Text('Διαγραφή μόνο κλήσης (αποσύνδεση tasks)'),
-                ),
-                FilledButton(
-                  onPressed: _busy
-                      ? null
-                      : () => _delete(taskAction: 'cascade'),
-                  child: const Text(
-                    'Διαγραφή κλήσης και συνδεδεμένων εκκρεμοτήτων',
+          actions: _loading
+              ? [
+                  TextButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    child: const Text('Κλείσιμο'),
                   ),
-                ),
-              ] else
-                FilledButton(
-                  onPressed: _busy
-                      ? null
-                      : () => _delete(taskAction: 'nullify'),
-                  child: const Text('Διαγραφή κλήσης'),
-                ),
-            ],
+                ]
+              : [
+                  TextButton(
+                    onPressed: _busy ? null : () => Navigator.of(context).pop(),
+                    child: const Text('Ακύρωση διαγραφής'),
+                  ),
+                  if (_linkedTasks > 0) ...[
+                    FilledButton.tonal(
+                      onPressed: _busy
+                          ? null
+                          : () => _delete(taskAction: 'nullify'),
+                      child: const Text(
+                        'Διαγραφή μόνο κλήσης (αποσύνδεση tasks)',
+                      ),
+                    ),
+                    FilledButton(
+                      onPressed: _busy
+                          ? null
+                          : () => _delete(taskAction: 'cascade'),
+                      child: const Text(
+                        'Διαγραφή κλήσης και συνδεδεμένων εκκρεμοτήτων',
+                      ),
+                    ),
+                  ] else
+                    FilledButton(
+                      onPressed: _busy
+                          ? null
+                          : () => _delete(taskAction: 'nullify'),
+                      child: const Text('Διαγραφή κλήσης'),
+                    ),
+                ],
         ),
       ),
     );
@@ -238,7 +242,11 @@ class _CallBulkDeleteDialogState extends ConsumerState<_CallBulkDeleteDialog>
       if (!mounted) return;
       setState(() => _busy = false);
       showDialogSnackBar(
-        SnackBar(content: Text('Αποτυχία μαζικής διαγραφής: ${humanizeUserFacingError(e)}')),
+        SnackBar(
+          content: Text(
+            'Αποτυχία μαζικής διαγραφής: ${humanizeUserFacingError(e)}',
+          ),
+        ),
       );
     }
   }
@@ -249,46 +257,48 @@ class _CallBulkDeleteDialogState extends ConsumerState<_CallBulkDeleteDialog>
       messengerKey: dialogMessengerKey,
       child: Center(
         child: AlertDialog(
-      title: const Text('Μαζική διαγραφή κλήσεων'),
-      content: _loading
-          ? const SizedBox(
-              height: 100,
-              child: Center(child: CircularProgressIndicator()),
-            )
-          : Text(
-              _linkedTasksCount > 0
-                  ? 'Οι ${widget.callIds.length} επιλεγμένες κλήσεις έχουν συνολικά $_linkedTasksCount συνδεδεμένες εκκρεμότητες.'
-                  : 'Να διαγραφούν οι ${widget.callIds.length} επιλεγμένες κλήσεις;',
-            ),
-      actions: _loading
-          ? [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: const Text('Κλείσιμο'),
-              ),
-            ]
-          : [
-              TextButton(
-                onPressed: _busy ? null : () => Navigator.of(context).pop(),
-                child: const Text('Ακύρωση'),
-              ),
-              if (_linkedTasksCount > 0) ...[
-                FilledButton.tonal(
-                  onPressed: _busy ? null : () => _executeDelete('nullify'),
-                  child: const Text('Διαγραφή μόνο κλήσεων (αποσύνδεση tasks)'),
+          title: const Text('Μαζική διαγραφή κλήσεων'),
+          content: _loading
+              ? const SizedBox(
+                  height: 100,
+                  child: Center(child: CircularProgressIndicator()),
+                )
+              : Text(
+                  _linkedTasksCount > 0
+                      ? 'Οι ${widget.callIds.length} επιλεγμένες κλήσεις έχουν συνολικά $_linkedTasksCount συνδεδεμένες εκκρεμότητες.'
+                      : 'Να διαγραφούν οι ${widget.callIds.length} επιλεγμένες κλήσεις;',
                 ),
-                FilledButton(
-                  onPressed: _busy ? null : () => _executeDelete('cascade'),
-                  child: const Text(
-                    'Διαγραφή κλήσεων + συνδεδεμένων εκκρεμοτήτων',
+          actions: _loading
+              ? [
+                  TextButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    child: const Text('Κλείσιμο'),
                   ),
-                ),
-              ] else
-                FilledButton(
-                  onPressed: _busy ? null : () => _executeDelete('nullify'),
-                  child: const Text('Μαζική διαγραφή'),
-                ),
-            ],
+                ]
+              : [
+                  TextButton(
+                    onPressed: _busy ? null : () => Navigator.of(context).pop(),
+                    child: const Text('Ακύρωση'),
+                  ),
+                  if (_linkedTasksCount > 0) ...[
+                    FilledButton.tonal(
+                      onPressed: _busy ? null : () => _executeDelete('nullify'),
+                      child: const Text(
+                        'Διαγραφή μόνο κλήσεων (αποσύνδεση tasks)',
+                      ),
+                    ),
+                    FilledButton(
+                      onPressed: _busy ? null : () => _executeDelete('cascade'),
+                      child: const Text(
+                        'Διαγραφή κλήσεων + συνδεδεμένων εκκρεμοτήτων',
+                      ),
+                    ),
+                  ] else
+                    FilledButton(
+                      onPressed: _busy ? null : () => _executeDelete('nullify'),
+                      child: const Text('Μαζική διαγραφή'),
+                    ),
+                ],
         ),
       ),
     );

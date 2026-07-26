@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -87,9 +87,9 @@ class _LansweeperConnectionSettingsDialogState
       padding: const EdgeInsets.only(top: 8, bottom: 4),
       child: Text(
         title,
-        style: Theme.of(context).textTheme.titleSmall?.copyWith(
-              fontWeight: FontWeight.w600,
-            ),
+        style: Theme.of(
+          context,
+        ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
       ),
     );
   }
@@ -180,451 +180,471 @@ class _LansweeperConnectionSettingsDialogState
         unawaited(_requestClose());
       },
       child: AlertDialog(
-      title: const Text('Ρυθμίσεις Lansweeper'),
-      content: SizedBox(
-        width: 520,
-        child: Scrollbar(
-          controller: _scrollController,
-          thumbVisibility: true,
-          child: SingleChildScrollView(
+        title: const Text('Ρυθμίσεις Lansweeper'),
+        content: SizedBox(
+          width: 520,
+          child: Scrollbar(
             controller: _scrollController,
-            padding: const EdgeInsets.only(right: 16),
-            child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              _sectionTitle('Σύνδεση API (Ticket API)'),
-              TextFormField(
-                controller: widget.apiUrlController,
-                onChanged: (_) => widget.onLansweeperUrlChanged(),
-                decoration: const InputDecoration(
-                  labelText: 'URL API (api.aspx)',
-                  hintText: 'http://[διακομιστής]:[πύλη]/api.aspx',
-                  border: OutlineInputBorder(),
-                  isDense: true,
-                ),
-              ),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: TextButton.icon(
-                  onPressed: widget.onApiHelpLink,
-                  icon: const Icon(Icons.open_in_new_rounded, size: 18),
-                  label: const Text('Έλεγχος συνδέσμου'),
-                ),
-              ),
-              const SizedBox(height: 4),
-              TextFormField(
-                controller: widget.apiKeyController,
-                onChanged: (_) => widget.onSettingsChanged(),
-                decoration: const InputDecoration(
-                  labelText: 'Lansweeper API key',
-                  hintText: 'API key…',
-                  border: OutlineInputBorder(),
-                  isDense: true,
-                ),
-              ),
-              const Divider(height: 24),
-              _sectionTitle('Φόρμα νέου αιτήματος (browser)'),
-              TextFormField(
-                controller: widget.ticketFormUrlController,
-                onChanged: (_) => widget.onLansweeperUrlChanged(),
-                decoration: const InputDecoration(
-                  labelText: 'URL φόρμας νέου αιτήματος',
-                  hintText: '…/helpdesk/NewTicket.aspx…',
-                  border: OutlineInputBorder(),
-                  isDense: true,
-                ),
-              ),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: TextButton.icon(
-                  onPressed: widget.onTicketFormHelpLink,
-                  icon: const Icon(Icons.open_in_new_rounded, size: 18),
-                  label: const Text('Έλεγχος συνδέσμου'),
-                ),
-              ),
-              const SizedBox(height: 8),
-              TextFormField(
-                controller: widget.ticketViewUrlController,
-                onChanged: (_) => widget.onLansweeperUrlChanged(),
-                decoration: const InputDecoration(
-                  labelText: 'URL προβολής ticket',
-                  hintText: '…/helpdesk/ticket.aspx?tid={tid}',
-                  helperText:
-                      'Χρησιμοποιήστε {tid} ως θέση του αριθμού ticket στη λίστα αναφοράς.',
-                  border: OutlineInputBorder(),
-                  isDense: true,
-                ),
-              ),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: TextButton.icon(
-                  onPressed: widget.onTicketViewHelpLink,
-                  icon: const Icon(Icons.open_in_new_rounded, size: 18),
-                  label: const Text('Έλεγχος συνδέσμου'),
-                ),
-              ),
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                title: const Text(
-                  'Άνοιγμα ticket μετά την Άμεση Καταχώρηση',
-                ),
-                subtitle: const Text(
-                  'Μετά επιτυχή καταχώρηση μέσω API, άνοιγμα του αιτήματος '
-                  'στον περιηγητή με βάση το URL προβολής ticket.',
-                ),
-                value: ref.watch(lansweeperOpenTicketAfterApiSubmitProvider),
-                onChanged: (v) {
-                  unawaited(
-                    ref
-                        .read(lansweeperOpenTicketAfterApiSubmitProvider.notifier)
-                        .setEnabled(v),
-                  );
-                },
-              ),
-              const Divider(height: 24),
-              _sectionTitle('Πράκτορας & αιτών API (ίδια τιμή)'),
-              TextFormField(
-                controller: widget.agentUsernameController,
-                onChanged: (_) {
-                  widget.onSettingsChanged();
-                  setState(() {});
-                },
-                decoration: const InputDecoration(
-                  labelText: 'Πράκτορας = αιτών (domain\\username)',
-                  hintText: 'π.χ. gnk\\v.drosos',
-                  border: OutlineInputBorder(),
-                  isDense: true,
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.only(top: 6),
-                child: Text(
-                  'Στο AddTicket στέλνονται Username και AgentUsername με την ίδια τιμή '
-                  '(όπως στο Lansweeper: domain\\username). '
-                  'Ο έλεγχος καλεί το API με δοκιμαστικό αίτημα — αν επιτύχει, δημιουργείται ticket που μπορείτε να διαγράψετε.',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+            thumbVisibility: true,
+            child: SingleChildScrollView(
+              controller: _scrollController,
+              padding: const EdgeInsets.only(right: 16),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _sectionTitle('Σύνδεση API (Ticket API)'),
+                  TextFormField(
+                    controller: widget.apiUrlController,
+                    onChanged: (_) => widget.onLansweeperUrlChanged(),
+                    decoration: const InputDecoration(
+                      labelText: 'URL API (api.aspx)',
+                      hintText: 'http://[διακομιστής]:[πύλη]/api.aspx',
+                      border: OutlineInputBorder(),
+                      isDense: true,
+                    ),
+                  ),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: TextButton.icon(
+                      onPressed: widget.onApiHelpLink,
+                      icon: const Icon(Icons.open_in_new_rounded, size: 18),
+                      label: const Text('Έλεγχος συνδέσμου'),
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  TextFormField(
+                    controller: widget.apiKeyController,
+                    onChanged: (_) => widget.onSettingsChanged(),
+                    decoration: const InputDecoration(
+                      labelText: 'Lansweeper API key',
+                      hintText: 'API key…',
+                      border: OutlineInputBorder(),
+                      isDense: true,
+                    ),
+                  ),
+                  const Divider(height: 24),
+                  _sectionTitle('Φόρμα νέου αιτήματος (browser)'),
+                  TextFormField(
+                    controller: widget.ticketFormUrlController,
+                    onChanged: (_) => widget.onLansweeperUrlChanged(),
+                    decoration: const InputDecoration(
+                      labelText: 'URL φόρμας νέου αιτήματος',
+                      hintText: '…/helpdesk/NewTicket.aspx…',
+                      border: OutlineInputBorder(),
+                      isDense: true,
+                    ),
+                  ),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: TextButton.icon(
+                      onPressed: widget.onTicketFormHelpLink,
+                      icon: const Icon(Icons.open_in_new_rounded, size: 18),
+                      label: const Text('Έλεγχος συνδέσμου'),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  TextFormField(
+                    controller: widget.ticketViewUrlController,
+                    onChanged: (_) => widget.onLansweeperUrlChanged(),
+                    decoration: const InputDecoration(
+                      labelText: 'URL προβολής ticket',
+                      hintText: '…/helpdesk/ticket.aspx?tid={tid}',
+                      helperText:
+                          'Χρησιμοποιήστε {tid} ως θέση του αριθμού ticket στη λίστα αναφοράς.',
+                      border: OutlineInputBorder(),
+                      isDense: true,
+                    ),
+                  ),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: TextButton.icon(
+                      onPressed: widget.onTicketViewHelpLink,
+                      icon: const Icon(Icons.open_in_new_rounded, size: 18),
+                      label: const Text('Έλεγχος συνδέσμου'),
+                    ),
+                  ),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text(
+                      'Άνοιγμα ticket μετά την Άμεση Καταχώρηση',
+                    ),
+                    subtitle: const Text(
+                      'Μετά επιτυχή καταχώρηση μέσω API, άνοιγμα του αιτήματος '
+                      'στον περιηγητή με βάση το URL προβολής ticket.',
+                    ),
+                    value: ref.watch(
+                      lansweeperOpenTicketAfterApiSubmitProvider,
+                    ),
+                    onChanged: (v) {
+                      unawaited(
+                        ref
+                            .read(
+                              lansweeperOpenTicketAfterApiSubmitProvider
+                                  .notifier,
+                            )
+                            .setEnabled(v),
+                      );
+                    },
+                  ),
+                  const Divider(height: 24),
+                  _sectionTitle('Πράκτορας & αιτών API (ίδια τιμή)'),
+                  TextFormField(
+                    controller: widget.agentUsernameController,
+                    onChanged: (_) {
+                      widget.onSettingsChanged();
+                      setState(() {});
+                    },
+                    decoration: const InputDecoration(
+                      labelText: 'Πράκτορας = αιτών (domain\\username)',
+                      hintText: 'π.χ. gnk\\v.drosos',
+                      border: OutlineInputBorder(),
+                      isDense: true,
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.only(top: 6),
+                    child: Text(
+                      'Στο AddTicket στέλνονται Username και AgentUsername με την ίδια τιμή '
+                      '(όπως στο Lansweeper: domain\\username). '
+                      'Ο έλεγχος καλεί το API με δοκιμαστικό αίτημα — αν επιτύχει, δημιουργείται ticket που μπορείτε να διαγράψετε.',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         color: Theme.of(context).colorScheme.onSurfaceVariant,
                       ),
-                ),
-              ),
-              if (lansweeperAgentValueLooksLikeDisplayName(
-                widget.agentUsernameController.text,
-              ))
-                Padding(
-                  padding: const EdgeInsets.only(top: 6),
-                  child: Text(
-                    'Η τιμή δεν μοιάζει με έγκυρη ταυτότητα (domain\\username ή '
-                    'email). Ελέγξτε τη μορφή πριν τον έλεγχο API.',
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    ),
+                  ),
+                  if (lansweeperAgentValueLooksLikeDisplayName(
+                    widget.agentUsernameController.text,
+                  ))
+                    Padding(
+                      padding: const EdgeInsets.only(top: 6),
+                      child: Text(
+                        'Η τιμή δεν μοιάζει με έγκυρη ταυτότητα (domain\\username ή '
+                        'email). Ελέγξτε τη μορφή πριν τον έλεγχο API.',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
                           color: Theme.of(context).colorScheme.error,
                         ),
-                  ),
-                ),
-              const SizedBox(height: 10),
-              FilledButton.tonalIcon(
-                onPressed: _agentProbeRunning ? null : _runAgentApiProbe,
-                icon: _agentProbeRunning
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.badge_outlined, size: 20),
-                label: Text(
-                  _agentProbeRunning
-                      ? 'Έλεγχος πράκτορα…'
-                      : 'Έλεγχος πράκτορα API',
-                ),
-              ),
-              if (_agentProbeMessage != null) ...[
-                const SizedBox(height: 10),
-                DecoratedBox(
-                  decoration: BoxDecoration(
-                    color: (_agentProbeOk == true ? Colors.green : Colors.red)
-                        .withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: (_agentProbeOk == true ? Colors.green : Colors.red)
-                          .withValues(alpha: 0.45),
+                      ),
+                    ),
+                  const SizedBox(height: 10),
+                  FilledButton.tonalIcon(
+                    onPressed: _agentProbeRunning ? null : _runAgentApiProbe,
+                    icon: _agentProbeRunning
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.badge_outlined, size: 20),
+                    label: Text(
+                      _agentProbeRunning
+                          ? 'Έλεγχος πράκτορα…'
+                          : 'Έλεγχος πράκτορα API',
                     ),
                   ),
-                  child: Padding(
-                    padding: const EdgeInsets.all(10),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Icon(
-                          _agentProbeOk == true
-                              ? Icons.check_circle_outline
-                              : Icons.error_outline,
-                          color: _agentProbeOk == true
-                              ? Colors.green.shade800
-                              : Colors.red.shade800,
-                          size: 22,
+                  if (_agentProbeMessage != null) ...[
+                    const SizedBox(height: 10),
+                    DecoratedBox(
+                      decoration: BoxDecoration(
+                        color:
+                            (_agentProbeOk == true ? Colors.green : Colors.red)
+                                .withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color:
+                              (_agentProbeOk == true
+                                      ? Colors.green
+                                      : Colors.red)
+                                  .withValues(alpha: 0.45),
                         ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            _agentProbeMessage!,
-                            style: Theme.of(context).textTheme.bodyMedium,
-                          ),
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.all(10),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Icon(
+                              _agentProbeOk == true
+                                  ? Icons.check_circle_outline
+                                  : Icons.error_outline,
+                              color: _agentProbeOk == true
+                                  ? Colors.green.shade800
+                                  : Colors.red.shade800,
+                              size: 22,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                _agentProbeMessage!,
+                                style: Theme.of(context).textTheme.bodyMedium,
+                              ),
+                            ),
+                          ],
                         ),
-                      ],
+                      ),
                     ),
-                  ),
-                ),
-              ],
-              const Divider(height: 24),
-              _sectionTitle('Help Desk — αυτόματη σύνδεση (browser)'),
-              Text(
-                'Η εφαρμογή δεν μεταφέρει συνεδρία στον περιηγητή. Με ενεργή επιλογή ανοίγει πρώτα η σελίδα σύνδεσης και μετά η φόρμα. Χρησιμοποιήστε «Έλεγχος διαπιστευτηρίων» για επαλήθευση.',
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  ],
+                  const Divider(height: 24),
+                  _sectionTitle('Help Desk — αυτόματη σύνδεση (browser)'),
+                  Text(
+                    'Η εφαρμογή δεν μεταφέρει συνεδρία στον περιηγητή. Με ενεργή επιλογή ανοίγει πρώτα η σελίδα σύνδεσης και μετά η φόρμα. Χρησιμοποιήστε «Έλεγχος διαπιστευτηρίων» για επαλήθευση.',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
                       color: Theme.of(context).colorScheme.onSurfaceVariant,
                     ),
-              ),
-              const SizedBox(height: 8),
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                title: const Text('Άνοιγμα σελίδας σύνδεσης πριν τη φόρμα'),
-                value: autoLogin,
-                onChanged: (v) {
-                  unawaited(
-                    ref.read(lansweeperHelpdeskAutoLoginProvider.notifier).setEnabled(v),
-                  );
-                },
-              ),
-              TextFormField(
-                controller: widget.loginUrlController,
-                onChanged: (_) => widget.onLansweeperUrlChanged(),
-                decoration: const InputDecoration(
-                  labelText: 'URL σελίδας σύνδεσης (login.aspx)',
-                  hintText: 'http://…/login.aspx',
-                  border: OutlineInputBorder(),
-                  isDense: true,
-                ),
-              ),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: TextButton.icon(
-                  onPressed: widget.onLoginHelpLink,
-                  icon: const Icon(Icons.open_in_new_rounded, size: 18),
-                  label: const Text('Έλεγχος συνδέσμου'),
-                ),
-              ),
-              const SizedBox(height: 8),
-              TextFormField(
-                controller: widget.helpdeskUsernameController,
-                onChanged: (_) => widget.onSettingsChanged(),
-                decoration: const InputDecoration(
-                  labelText: 'Όνομα χρήστη Help Desk',
-                  border: OutlineInputBorder(),
-                  isDense: true,
-                ),
-              ),
-              const SizedBox(height: 8),
-              TextFormField(
-                controller: widget.helpdeskPasswordController,
-                onChanged: (_) => widget.onSettingsChanged(),
-                obscureText: _obscureHelpdeskPassword,
-                decoration: InputDecoration(
-                  labelText: 'Κωδικός Help Desk',
-                  border: const OutlineInputBorder(),
-                  isDense: true,
-                  suffixIcon: IconButton(
-                    tooltip: _obscureHelpdeskPassword
-                        ? 'Εμφάνιση κωδικού'
-                        : 'Απόκρυψη κωδικού',
-                    onPressed: () {
-                      setState(() {
-                        _obscureHelpdeskPassword = !_obscureHelpdeskPassword;
-                      });
+                  ),
+                  const SizedBox(height: 8),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Άνοιγμα σελίδας σύνδεσης πριν τη φόρμα'),
+                    value: autoLogin,
+                    onChanged: (v) {
+                      unawaited(
+                        ref
+                            .read(lansweeperHelpdeskAutoLoginProvider.notifier)
+                            .setEnabled(v),
+                      );
                     },
-                    icon: Icon(
-                      _obscureHelpdeskPassword
-                          ? Icons.visibility_rounded
-                          : Icons.visibility_off_rounded,
+                  ),
+                  TextFormField(
+                    controller: widget.loginUrlController,
+                    onChanged: (_) => widget.onLansweeperUrlChanged(),
+                    decoration: const InputDecoration(
+                      labelText: 'URL σελίδας σύνδεσης (login.aspx)',
+                      hintText: 'http://…/login.aspx',
+                      border: OutlineInputBorder(),
+                      isDense: true,
                     ),
                   ),
-                ),
-              ),
-              const SizedBox(height: 12),
-              FilledButton.tonalIcon(
-                onPressed: _credentialTestRunning ? null : _runCredentialTest,
-                icon: _credentialTestRunning
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.verified_user_outlined, size: 20),
-                label: Text(
-                  _credentialTestRunning
-                      ? 'Έλεγχος…'
-                      : 'Έλεγχος διαπιστευτηρίων',
-                ),
-              ),
-              if (_credentialTestMessage != null) ...[
-                const SizedBox(height: 10),
-                DecoratedBox(
-                  decoration: BoxDecoration(
-                    color: (_credentialTestOk == true
-                            ? Colors.green
-                            : Colors.red)
-                        .withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: (_credentialTestOk == true
-                              ? Colors.green
-                              : Colors.red)
-                          .withValues(alpha: 0.45),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: TextButton.icon(
+                      onPressed: widget.onLoginHelpLink,
+                      icon: const Icon(Icons.open_in_new_rounded, size: 18),
+                      label: const Text('Έλεγχος συνδέσμου'),
                     ),
                   ),
-                  child: Padding(
-                    padding: const EdgeInsets.all(10),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Icon(
-                          _credentialTestOk == true
-                              ? Icons.check_circle_outline
-                              : Icons.error_outline,
-                          color: _credentialTestOk == true
-                              ? Colors.green.shade800
-                              : Colors.red.shade800,
-                          size: 22,
+                  const SizedBox(height: 8),
+                  TextFormField(
+                    controller: widget.helpdeskUsernameController,
+                    onChanged: (_) => widget.onSettingsChanged(),
+                    decoration: const InputDecoration(
+                      labelText: 'Όνομα χρήστη Help Desk',
+                      border: OutlineInputBorder(),
+                      isDense: true,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  TextFormField(
+                    controller: widget.helpdeskPasswordController,
+                    onChanged: (_) => widget.onSettingsChanged(),
+                    obscureText: _obscureHelpdeskPassword,
+                    decoration: InputDecoration(
+                      labelText: 'Κωδικός Help Desk',
+                      border: const OutlineInputBorder(),
+                      isDense: true,
+                      suffixIcon: IconButton(
+                        tooltip: _obscureHelpdeskPassword
+                            ? 'Εμφάνιση κωδικού'
+                            : 'Απόκρυψη κωδικού',
+                        onPressed: () {
+                          setState(() {
+                            _obscureHelpdeskPassword =
+                                !_obscureHelpdeskPassword;
+                          });
+                        },
+                        icon: Icon(
+                          _obscureHelpdeskPassword
+                              ? Icons.visibility_rounded
+                              : Icons.visibility_off_rounded,
                         ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            _credentialTestMessage!,
-                            style: Theme.of(context).textTheme.bodyMedium,
-                          ),
-                        ),
-                      ],
+                      ),
                     ),
                   ),
-                ),
-              ],
-              const Divider(height: 24),
-              _sectionTitle('Τεχνητή Νοημοσύνη'),
-              Text(
-                'Απαιτείται για την αυτόματη πρόταση τίτλου/περιγραφής ticket.',
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  const SizedBox(height: 12),
+                  FilledButton.tonalIcon(
+                    onPressed: _credentialTestRunning
+                        ? null
+                        : _runCredentialTest,
+                    icon: _credentialTestRunning
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.verified_user_outlined, size: 20),
+                    label: Text(
+                      _credentialTestRunning
+                          ? 'Έλεγχος…'
+                          : 'Έλεγχος διαπιστευτηρίων',
+                    ),
+                  ),
+                  if (_credentialTestMessage != null) ...[
+                    const SizedBox(height: 10),
+                    DecoratedBox(
+                      decoration: BoxDecoration(
+                        color:
+                            (_credentialTestOk == true
+                                    ? Colors.green
+                                    : Colors.red)
+                                .withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color:
+                              (_credentialTestOk == true
+                                      ? Colors.green
+                                      : Colors.red)
+                                  .withValues(alpha: 0.45),
+                        ),
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.all(10),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Icon(
+                              _credentialTestOk == true
+                                  ? Icons.check_circle_outline
+                                  : Icons.error_outline,
+                              color: _credentialTestOk == true
+                                  ? Colors.green.shade800
+                                  : Colors.red.shade800,
+                              size: 22,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                _credentialTestMessage!,
+                                style: Theme.of(context).textTheme.bodyMedium,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                  const Divider(height: 24),
+                  _sectionTitle('Τεχνητή Νοημοσύνη'),
+                  Text(
+                    'Απαιτείται για την αυτόματη πρόταση τίτλου/περιγραφής ticket.',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
                       color: Theme.of(context).colorScheme.onSurfaceVariant,
                     ),
-              ),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: TextButton.icon(
-                  onPressed: widget.onAiHelpLink,
-                  icon: const Icon(Icons.open_in_new_rounded, size: 18),
-                  label: const Text(
-                    'Δωρεάν κλειδί από: aistudio.google.com',
                   ),
-                ),
-              ),
-              TextFormField(
-                controller: widget.geminiApiKeyController,
-                onChanged: (_) => widget.onSettingsChanged(),
-                obscureText: _obscureGeminiKey,
-                decoration: InputDecoration(
-                  labelText: 'Gemini API key',
-                  hintText: 'AIza…',
-                  border: const OutlineInputBorder(),
-                  isDense: true,
-                  suffixIcon: IconButton(
-                    tooltip: _obscureGeminiKey
-                        ? 'Εμφάνιση κλειδιού'
-                        : 'Απόκρυψη κλειδιού',
-                    onPressed: () {
-                      setState(() {
-                        _obscureGeminiKey = !_obscureGeminiKey;
-                      });
-                    },
-                    icon: Icon(
-                      _obscureGeminiKey
-                          ? Icons.visibility_rounded
-                          : Icons.visibility_off_rounded,
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: TextButton.icon(
+                      onPressed: widget.onAiHelpLink,
+                      icon: const Icon(Icons.open_in_new_rounded, size: 18),
+                      label: const Text(
+                        'Δωρεάν κλειδί από: aistudio.google.com',
+                      ),
                     ),
                   ),
-                ),
+                  TextFormField(
+                    controller: widget.geminiApiKeyController,
+                    onChanged: (_) => widget.onSettingsChanged(),
+                    obscureText: _obscureGeminiKey,
+                    decoration: InputDecoration(
+                      labelText: 'Gemini API key',
+                      hintText: 'AIza…',
+                      border: const OutlineInputBorder(),
+                      isDense: true,
+                      suffixIcon: IconButton(
+                        tooltip: _obscureGeminiKey
+                            ? 'Εμφάνιση κλειδιού'
+                            : 'Απόκρυψη κλειδιού',
+                        onPressed: () {
+                          setState(() {
+                            _obscureGeminiKey = !_obscureGeminiKey;
+                          });
+                        },
+                        icon: Icon(
+                          _obscureGeminiKey
+                              ? Icons.visibility_rounded
+                              : Icons.visibility_off_rounded,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  TextFormField(
+                    controller: widget.geminiEndpointController,
+                    onChanged: (_) => widget.onSettingsChanged(),
+                    decoration: const InputDecoration(
+                      labelText: 'Διεύθυνση κλήσης API του Gemini',
+                      hintText:
+                          '…/models/{προτεύων μοντέλο}:generateContent?key={κλειδί API}',
+                      helperText:
+                          'Χρησιμοποιήστε {προτεύων μοντέλο} και {κλειδί API} ως placeholders.',
+                      border: OutlineInputBorder(),
+                      isDense: true,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Υποβάθμιση σε εφεδρικό μοντέλο'),
+                    subtitle: const Text(
+                      'Αν το κύριο μοντέλο είναι υπερφορτωμένο (503), δοκιμάζεται '
+                      'αυτόματα το εφεδρικό μοντέλο.',
+                    ),
+                    value: geminiFallbackEnabled,
+                    onChanged: (v) {
+                      unawaited(
+                        ref
+                            .read(geminiFallbackEnabledProvider.notifier)
+                            .setEnabled(v),
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 10),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text(
+                      'Αυτόματη επανυποβολή μέχρι την επιτυχία',
+                    ),
+                    subtitle: const Text(
+                      'Μετά από αναμονή ποσόστωσης, επαναλαμβάνεται αυτόματα '
+                      'η πρόταση ΤΝ όσο το παράθυρο παραμένει ανοιχτό.',
+                    ),
+                    value: ref.watch(geminiAutoResubmitEnabledProvider),
+                    onChanged: (v) {
+                      unawaited(
+                        ref
+                            .read(geminiAutoResubmitEnabledProvider.notifier)
+                            .setEnabled(v),
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 4),
+                  GeminiModelsSection(
+                    primaryModelController: widget.geminiPrimaryModelController,
+                    fallbackModelController:
+                        widget.geminiFallbackModelController,
+                    apiKeyController: widget.geminiApiKeyController,
+                    fallbackEnabled: geminiFallbackEnabled,
+                    endpointTemplate:
+                        widget.geminiEndpointController.text.trim().isEmpty
+                        ? kDefaultGeminiEndpoint
+                        : widget.geminiEndpointController.text,
+                    onChanged: widget.onSettingsChanged,
+                  ),
+                  const Divider(height: 24),
+                  const LansweeperTicketSubmitSettingsSection(),
+                  const Divider(height: 24),
+                  _sectionTitle('Κατάσταση σύνδεσης'),
+                  LansweeperConnectionStatusIndicator(status: connectionStatus),
+                ],
               ),
-              const SizedBox(height: 8),
-              TextFormField(
-                controller: widget.geminiEndpointController,
-                onChanged: (_) => widget.onSettingsChanged(),
-                decoration: const InputDecoration(
-                  labelText: 'Διεύθυνση κλήσης API του Gemini',
-                  hintText:
-                      '…/models/{προτεύων μοντέλο}:generateContent?key={κλειδί API}',
-                  helperText:
-                      'Χρησιμοποιήστε {προτεύων μοντέλο} και {κλειδί API} ως placeholders.',
-                  border: OutlineInputBorder(),
-                  isDense: true,
-                ),
-              ),
-              const SizedBox(height: 10),
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                title: const Text('Υποβάθμιση σε εφεδρικό μοντέλο'),
-                subtitle: const Text(
-                  'Αν το κύριο μοντέλο είναι υπερφορτωμένο (503), δοκιμάζεται '
-                  'αυτόματα το εφεδρικό μοντέλο.',
-                ),
-                value: geminiFallbackEnabled,
-                onChanged: (v) {
-                  unawaited(
-                    ref
-                        .read(geminiFallbackEnabledProvider.notifier)
-                        .setEnabled(v),
-                  );
-                },
-              ),
-              const SizedBox(height: 10),
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                title: const Text('Αυτόματη επανυποβολή μέχρι την επιτυχία'),
-                subtitle: const Text(
-                  'Μετά από αναμονή ποσόστωσης, επαναλαμβάνεται αυτόματα '
-                  'η πρόταση ΤΝ όσο το παράθυρο παραμένει ανοιχτό.',
-                ),
-                value: ref.watch(geminiAutoResubmitEnabledProvider),
-                onChanged: (v) {
-                  unawaited(
-                    ref
-                        .read(geminiAutoResubmitEnabledProvider.notifier)
-                        .setEnabled(v),
-                  );
-                },
-              ),
-              const SizedBox(height: 4),
-              GeminiModelsSection(
-                primaryModelController: widget.geminiPrimaryModelController,
-                fallbackModelController: widget.geminiFallbackModelController,
-                apiKeyController: widget.geminiApiKeyController,
-                fallbackEnabled: geminiFallbackEnabled,
-                endpointTemplate: widget.geminiEndpointController.text.trim().isEmpty
-                    ? kDefaultGeminiEndpoint
-                    : widget.geminiEndpointController.text,
-                onChanged: widget.onSettingsChanged,
-              ),
-              const Divider(height: 24),
-              const LansweeperTicketSubmitSettingsSection(),
-              const Divider(height: 24),
-              _sectionTitle('Κατάσταση σύνδεσης'),
-              LansweeperConnectionStatusIndicator(status: connectionStatus),
-            ],
+            ),
           ),
         ),
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => unawaited(_requestClose()),
-          child: const Text('Κλείσιμο'),
-        ),
-      ],
+        actions: [
+          TextButton(
+            onPressed: () => unawaited(_requestClose()),
+            child: const Text('Κλείσιμο'),
+          ),
+        ],
       ),
     );
   }

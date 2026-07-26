@@ -5,7 +5,9 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   group('LampImportReportDialog', () {
-    testWidgets('phase A shows progress without dismiss or cancel', (tester) async {
+    testWidgets('phase A shows progress without dismiss or cancel', (
+      tester,
+    ) async {
       final progressNotifier = ValueNotifier<LampImportProgressUiState>(
         const LampImportProgressUiState(
           currentMessage: 'Ανάγνωση Excel',
@@ -54,8 +56,9 @@ void main() {
       expect(find.text('Ακύρωση'), findsNothing);
     });
 
-    testWidgets('phase B success shows auto integrity message and only close',
-        (tester) async {
+    testWidgets('phase B success shows auto integrity message and only close', (
+      tester,
+    ) async {
       final progressNotifier = ValueNotifier<LampImportProgressUiState>(
         const LampImportProgressUiState(
           currentMessage: 'Ολοκληρώθηκε',
@@ -115,25 +118,19 @@ void main() {
       );
       expect(find.text('Εγγραφές που εισήχθησαν'), findsOneWidget);
       expect(find.textContaining('Γραφεία / Τμήματα'), findsOneWidget);
-      expect(find.textContaining('0 — ελέγξτε το φύλλο στο Excel'), findsOneWidget);
-      expect(find.textContaining('Προβλήματα ETL: 3'), findsOneWidget);
       expect(
-        find.textContaining('αυτόματα'),
+        find.textContaining('0 — ελέγξτε το φύλλο στο Excel'),
         findsOneWidget,
       );
+      expect(find.textContaining('Προβλήματα ETL: 3'), findsOneWidget);
+      expect(find.textContaining('αυτόματα'), findsOneWidget);
       expect(find.text('Κλείσιμο'), findsOneWidget);
       expect(find.text('Έλεγχος για προβλήματα'), findsNothing);
-      expect(
-        find.textContaining('Συνιστάται πλήρης έλεγχος'),
-        findsNothing,
-      );
+      expect(find.textContaining('Συνιστάται πλήρης έλεγχος'), findsNothing);
 
       await tester.tap(find.text('Κλείσιμο'));
       await tester.pumpAndSettle();
-      expect(
-        find.byType(LampImportReportDialog),
-        findsNothing,
-      );
+      expect(find.byType(LampImportReportDialog), findsNothing);
     });
 
     testWidgets(
@@ -192,183 +189,174 @@ void main() {
           ),
           findsOneWidget,
         );
-        expect(
-          find.textContaining('ορίστηκε ως βάση ανάγνωσης'),
-          findsNothing,
-        );
+        expect(find.textContaining('ορίστηκε ως βάση ανάγνωσης'), findsNothing);
       },
     );
 
-    testWidgets(
-      'με κενή ανάγνωση δείχνει ενημερωτική γραμμή χωρίς διακόπτη',
-      (tester) async {
-        final progressNotifier = ValueNotifier<LampImportProgressUiState>(
-          const LampImportProgressUiState(),
-        );
-        final reportNotifier = ValueNotifier<LampImportReportUiState?>(
-          LampImportReportUiState.success(
-            databaseFileName: 'fresh_out.db',
-            durationSeconds: 1,
-            importedRows: const <String, int>{'equipment': 1},
-            issueCount: 0,
-            readPathContext: const LampImportReadPathContext(
-              readPathEmpty: true,
-              readDiffersFromOutput: false,
-            ),
+    testWidgets('με κενή ανάγνωση δείχνει ενημερωτική γραμμή χωρίς διακόπτη', (
+      tester,
+    ) async {
+      final progressNotifier = ValueNotifier<LampImportProgressUiState>(
+        const LampImportProgressUiState(),
+      );
+      final reportNotifier = ValueNotifier<LampImportReportUiState?>(
+        LampImportReportUiState.success(
+          databaseFileName: 'fresh_out.db',
+          durationSeconds: 1,
+          importedRows: const <String, int>{'equipment': 1},
+          issueCount: 0,
+          readPathContext: const LampImportReadPathContext(
+            readPathEmpty: true,
+            readDiffersFromOutput: false,
           ),
-        );
-        addTearDown(progressNotifier.dispose);
-        addTearDown(reportNotifier.dispose);
+        ),
+      );
+      addTearDown(progressNotifier.dispose);
+      addTearDown(reportNotifier.dispose);
 
-        await tester.pumpWidget(
-          MaterialApp(
-            home: Builder(
-              builder: (context) {
-                return Scaffold(
-                  body: Center(
-                    child: FilledButton(
-                      onPressed: () {
-                        showDialog<LampImportReportOutcome>(
-                          context: context,
-                          builder: (_) => LampImportReportDialog(
-                            progressListenable: progressNotifier,
-                            reportListenable: reportNotifier,
-                          ),
-                        );
-                      },
-                      child: const Text('Άνοιγμα'),
-                    ),
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (context) {
+              return Scaffold(
+                body: Center(
+                  child: FilledButton(
+                    onPressed: () {
+                      showDialog<LampImportReportOutcome>(
+                        context: context,
+                        builder: (_) => LampImportReportDialog(
+                          progressListenable: progressNotifier,
+                          reportListenable: reportNotifier,
+                        ),
+                      );
+                    },
+                    child: const Text('Άνοιγμα'),
                   ),
-                );
-              },
-            ),
+                ),
+              );
+            },
           ),
-        );
-        await tester.tap(find.text('Άνοιγμα'));
-        await tester.pumpAndSettle();
+        ),
+      );
+      await tester.tap(find.text('Άνοιγμα'));
+      await tester.pumpAndSettle();
 
-        expect(find.byType(Switch), findsNothing);
-        expect(
-          find.textContaining('Η νέα βάση ορίστηκε ως βάση ανάγνωσης'),
-          findsOneWidget,
-        );
-      },
-    );
+      expect(find.byType(Switch), findsNothing);
+      expect(
+        find.textContaining('Η νέα βάση ορίστηκε ως βάση ανάγνωσης'),
+        findsOneWidget,
+      );
+    });
 
-    testWidgets(
-      'επιστρέφει action και setAsReadDatabase από τον διακόπτη',
-      (tester) async {
-        LampImportReportOutcome? outcome;
-        final progressNotifier = ValueNotifier<LampImportProgressUiState>(
-          const LampImportProgressUiState(),
-        );
-        final reportNotifier = ValueNotifier<LampImportReportUiState?>(
-          LampImportReportUiState.success(
-            databaseFileName: 'fresh_out.db',
-            durationSeconds: 1,
-            importedRows: const <String, int>{'equipment': 1},
-            issueCount: 0,
-            readPathContext: const LampImportReadPathContext(
-              readPathEmpty: false,
-              readDiffersFromOutput: true,
-            ),
+    testWidgets('επιστρέφει action και setAsReadDatabase από τον διακόπτη', (
+      tester,
+    ) async {
+      LampImportReportOutcome? outcome;
+      final progressNotifier = ValueNotifier<LampImportProgressUiState>(
+        const LampImportProgressUiState(),
+      );
+      final reportNotifier = ValueNotifier<LampImportReportUiState?>(
+        LampImportReportUiState.success(
+          databaseFileName: 'fresh_out.db',
+          durationSeconds: 1,
+          importedRows: const <String, int>{'equipment': 1},
+          issueCount: 0,
+          readPathContext: const LampImportReadPathContext(
+            readPathEmpty: false,
+            readDiffersFromOutput: true,
           ),
-        );
-        addTearDown(progressNotifier.dispose);
-        addTearDown(reportNotifier.dispose);
+        ),
+      );
+      addTearDown(progressNotifier.dispose);
+      addTearDown(reportNotifier.dispose);
 
-        await tester.pumpWidget(
-          MaterialApp(
-            home: Builder(
-              builder: (context) {
-                return Scaffold(
-                  body: Center(
-                    child: FilledButton(
-                      onPressed: () async {
-                        outcome = await showDialog<LampImportReportOutcome>(
-                          context: context,
-                          builder: (_) => LampImportReportDialog(
-                            progressListenable: progressNotifier,
-                            reportListenable: reportNotifier,
-                          ),
-                        );
-                      },
-                      child: const Text('Άνοιγμα'),
-                    ),
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (context) {
+              return Scaffold(
+                body: Center(
+                  child: FilledButton(
+                    onPressed: () async {
+                      outcome = await showDialog<LampImportReportOutcome>(
+                        context: context,
+                        builder: (_) => LampImportReportDialog(
+                          progressListenable: progressNotifier,
+                          reportListenable: reportNotifier,
+                        ),
+                      );
+                    },
+                    child: const Text('Άνοιγμα'),
                   ),
-                );
-              },
-            ),
+                ),
+              );
+            },
           ),
-        );
-        await tester.tap(find.text('Άνοιγμα'));
-        await tester.pumpAndSettle();
+        ),
+      );
+      await tester.tap(find.text('Άνοιγμα'));
+      await tester.pumpAndSettle();
 
-        await tester.tap(find.byType(Switch));
-        await tester.pumpAndSettle();
-        await tester.tap(find.text('Κλείσιμο'));
-        await tester.pumpAndSettle();
+      await tester.tap(find.byType(Switch));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Κλείσιμο'));
+      await tester.pumpAndSettle();
 
-        expect(
-          outcome?.action,
-          LampImportReportCloseAction.dismiss,
-        );
-        expect(outcome?.setAsReadDatabase, isTrue);
-      },
-    );
+      expect(outcome?.action, LampImportReportCloseAction.dismiss);
+      expect(outcome?.setAsReadDatabase, isTrue);
+    });
 
-    testWidgets(
-      'αποτυχία με errno=32 δείχνει ειδικό μήνυμα κλειδώματος',
-      (tester) async {
-        final progressNotifier = ValueNotifier<LampImportProgressUiState>(
-          const LampImportProgressUiState(),
-        );
-        final reportNotifier = ValueNotifier<LampImportReportUiState?>(
-          LampImportReportUiState.failure(
-            errorMessage:
-                'PathAccessException: Cannot delete file, errno = 32',
-          ),
-        );
-        addTearDown(progressNotifier.dispose);
-        addTearDown(reportNotifier.dispose);
+    testWidgets('αποτυχία με errno=32 δείχνει ειδικό μήνυμα κλειδώματος', (
+      tester,
+    ) async {
+      final progressNotifier = ValueNotifier<LampImportProgressUiState>(
+        const LampImportProgressUiState(),
+      );
+      final reportNotifier = ValueNotifier<LampImportReportUiState?>(
+        LampImportReportUiState.failure(
+          errorMessage: 'PathAccessException: Cannot delete file, errno = 32',
+        ),
+      );
+      addTearDown(progressNotifier.dispose);
+      addTearDown(reportNotifier.dispose);
 
-        await tester.pumpWidget(
-          MaterialApp(
-            home: Builder(
-              builder: (context) {
-                return Scaffold(
-                  body: Center(
-                    child: FilledButton(
-                      onPressed: () {
-                        showDialog<void>(
-                          context: context,
-                          builder: (_) => LampImportReportDialog(
-                            progressListenable: progressNotifier,
-                            reportListenable: reportNotifier,
-                          ),
-                        );
-                      },
-                      child: const Text('Άνοιγμα'),
-                    ),
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (context) {
+              return Scaffold(
+                body: Center(
+                  child: FilledButton(
+                    onPressed: () {
+                      showDialog<void>(
+                        context: context,
+                        builder: (_) => LampImportReportDialog(
+                          progressListenable: progressNotifier,
+                          reportListenable: reportNotifier,
+                        ),
+                      );
+                    },
+                    child: const Text('Άνοιγμα'),
                   ),
-                );
-              },
-            ),
+                ),
+              );
+            },
           ),
-        );
-        await tester.tap(find.text('Άνοιγμα'));
-        await tester.pumpAndSettle();
+        ),
+      );
+      await tester.tap(find.text('Άνοιγμα'));
+      await tester.pumpAndSettle();
 
-        expect(
-          find.textContaining('πιθανόν χρησιμοποιείται από την εφαρμογή'),
-          findsOneWidget,
-        );
-        expect(find.textContaining('ημιτελές'), findsNothing);
-      },
-    );
+      expect(
+        find.textContaining('πιθανόν χρησιμοποιείται από την εφαρμογή'),
+        findsOneWidget,
+      );
+      expect(find.textContaining('ημιτελές'), findsNothing);
+    });
 
-    testWidgets('phase B failure shows error with copy and only close',
-        (tester) async {
+    testWidgets('phase B failure shows error with copy and only close', (
+      tester,
+    ) async {
       final progressNotifier = ValueNotifier<LampImportProgressUiState>(
         const LampImportProgressUiState(
           currentMessage: 'Ανάγνωση Excel',
@@ -376,9 +364,7 @@ void main() {
         ),
       );
       final reportNotifier = ValueNotifier<LampImportReportUiState?>(
-        LampImportReportUiState.failure(
-          errorMessage: 'Σφάλμα δοκιμής import',
-        ),
+        LampImportReportUiState.failure(errorMessage: 'Σφάλμα δοκιμής import'),
       );
       addTearDown(progressNotifier.dispose);
       addTearDown(reportNotifier.dispose);

@@ -26,7 +26,9 @@ void main() {
       // Στην πραγματική Λάμπα τα διπλότυπα υπάρχουν ήδη στη βάση· αφαιρούμε
       // τους δείκτες μοναδικότητας ώστε τα σενάρια επίλυσης να σπέρνονται.
       await db.execute('DROP INDEX IF EXISTS ux_equipment_asset_no_clean');
-      await db.execute('DROP INDEX IF EXISTS ux_equipment_model_serial_no_clean');
+      await db.execute(
+        'DROP INDEX IF EXISTS ux_equipment_model_serial_no_clean',
+      );
     } finally {
       await db.close();
     }
@@ -183,7 +185,10 @@ void main() {
           ],
         );
 
-        final remaining = await _countIssues(dbPath, issueType: 'duplicate_asset_no');
+        final remaining = await _countIssues(
+          dbPath,
+          issueType: 'duplicate_asset_no',
+        );
         expect(remaining, 1);
         expect(await _issueExists(dbPath, issueId), isTrue);
         final assetCounts = await _assetNoCounts(dbPath, 'DUP-ASSET');
@@ -304,7 +309,10 @@ void main() {
             whereArgs: <Object?>[3001, 3002],
             orderBy: 'code ASC',
           );
-          expect(equipment.map((row) => row['office']).toList(), <Object?>[officeId, officeId]);
+          expect(equipment.map((row) => row['office']).toList(), <Object?>[
+            officeId,
+            officeId,
+          ]);
         } finally {
           await db.close();
         }
@@ -664,10 +672,7 @@ void main() {
         final result = await service.applyDecisions(
           databasePath: dbPath,
           decisions: <LampIssueResolutionDecision>[
-            LampIssueResolutionDecision(
-              proposal: proposal,
-              textInput: '1',
-            ),
+            LampIssueResolutionDecision(proposal: proposal, textInput: '1'),
           ],
         );
 
@@ -727,10 +732,7 @@ void main() {
         final result = await service.applyDecisions(
           databasePath: dbPath,
           decisions: <LampIssueResolutionDecision>[
-            LampIssueResolutionDecision(
-              proposal: proposal,
-              textInput: '99999',
-            ),
+            LampIssueResolutionDecision(proposal: proposal, textInput: '99999'),
           ],
         );
 
@@ -836,9 +838,7 @@ void main() {
           proposedAction: LampIssueResolutionAction.unresolved,
           confidence: 0,
           notes: 'δοκιμή αναβολής',
-          metadata: <String, Object?>{
-            'operation': 'defer_issue',
-          },
+          metadata: <String, Object?>{'operation': 'defer_issue'},
         );
 
         final result = await service.applyDecisions(
@@ -872,31 +872,25 @@ void main() {
       },
     );
 
-    test(
-      'ακύρωση μέσα σε παρτίδα: εφαρμόζεται μόνο η πρώτη απόφαση',
-      () async {
-        final decisions = await _threeOfficeAutoDecisions(dbPath, service);
-        final cancelToken = ResolutionCancelToken();
-        var appliedCount = 0;
+    test('ακύρωση μέσα σε παρτίδα: εφαρμόζεται μόνο η πρώτη απόφαση', () async {
+      final decisions = await _threeOfficeAutoDecisions(dbPath, service);
+      final cancelToken = ResolutionCancelToken();
+      var appliedCount = 0;
 
-        final result = await service.applyDecisions(
-          databasePath: dbPath,
-          decisions: decisions,
-          cancelToken: cancelToken,
-          onDecisionApplied: (_) {
-            appliedCount++;
-            cancelToken.cancel();
-          },
-        );
+      final result = await service.applyDecisions(
+        databasePath: dbPath,
+        decisions: decisions,
+        cancelToken: cancelToken,
+        onDecisionApplied: (_) {
+          appliedCount++;
+          cancelToken.cancel();
+        },
+      );
 
-        expect(appliedCount, 1);
-        expect(result.resolved, 1);
-        expect(
-          await _countIssues(dbPath, issueType: 'non_numeric_fk'),
-          2,
-        );
-      },
-    );
+      expect(appliedCount, 1);
+      expect(result.resolved, 1);
+      expect(await _countIssues(dbPath, issueType: 'non_numeric_fk'), 2);
+    });
   });
 }
 
@@ -907,11 +901,7 @@ Future<List<LampIssueResolutionDecision>> _threeOfficeAutoDecisions(
   await _seedBaseReferenceData(dbPath);
   const officeText = 'Βασικό Γραφείο';
   for (final code in <int>[9001, 9002, 9003]) {
-    await _insertEquipment(
-      dbPath,
-      code: code,
-      officeOriginalText: officeText,
-    );
+    await _insertEquipment(dbPath, code: code, officeOriginalText: officeText);
     await _insertIssue(
       dbPath,
       issueType: 'non_numeric_fk',
@@ -931,6 +921,7 @@ Future<List<LampIssueResolutionDecision>> _threeOfficeAutoDecisions(
       .map((p) => LampIssueResolutionDecision(proposal: p))
       .toList();
 }
+
 Future<void> _seedBaseReferenceData(String dbPath) async {
   final db = await openDatabase(dbPath, singleInstance: false);
   try {

@@ -2,11 +2,7 @@ import 'package:flutter/material.dart';
 
 /// Μικρό εικονίδιο πληροφοριών με tooltip περιορισμένου πλάτους (~1/3 οθόνης).
 class InfoHintIcon extends StatelessWidget {
-  const InfoHintIcon({
-    super.key,
-    required this.message,
-    this.size = 18,
-  });
+  const InfoHintIcon({super.key, required this.message, this.size = 18});
 
   final String message;
   final double size;

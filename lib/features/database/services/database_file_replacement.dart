@@ -7,20 +7,18 @@ import '../../../core/database/database_file_bundle.dart';
 import '../../../core/database/database_file_classifier.dart';
 
 /// Ταξινομητής αρχείου βάσης (προεπιλογή: [classifyDatabaseFile]).
-typedef DatabaseFileClassifierFn = Future<DatabaseFileKind> Function(
-  String path,
-);
+typedef DatabaseFileClassifierFn =
+    Future<DatabaseFileKind> Function(String path);
 
 /// Αποτέλεσμα ασφαλούς αντικατάστασης αρχείου βάσης.
 class DatabaseFileReplacementResult {
-  const DatabaseFileReplacementResult.success({
-    this.preRestoreBackupPath,
-  })  : success = true,
-        message = null;
+  const DatabaseFileReplacementResult.success({this.preRestoreBackupPath})
+    : success = true,
+      message = null;
 
   const DatabaseFileReplacementResult.failure(this.message)
-      : success = false,
-        preRestoreBackupPath = null;
+    : success = false,
+      preRestoreBackupPath = null;
 
   final bool success;
   final String? message;
@@ -153,10 +151,7 @@ class DatabaseFileReplacement {
       await prepareTemp(tempPath);
 
       if (targetExists) {
-        final preRestoreName = previewPreRestoreFileName(
-          target,
-          now: now,
-        );
+        final preRestoreName = previewPreRestoreFileName(target, now: now);
         preRestorePath = p.join(dir, preRestoreName);
         await renameDatabaseBundle(target, preRestoreName);
       }

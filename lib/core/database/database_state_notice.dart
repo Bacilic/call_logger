@@ -3,11 +3,7 @@ import 'package:path/path.dart' as p;
 import 'database_file_classifier.dart';
 
 /// Είδος προειδοποίησης για ανοιχτή βάση Καταγραφής (παλιά / κενή / ημιτελής).
-enum DatabaseNoticeKind {
-  none,
-  oldDatabase,
-  emptyDatabase,
-}
+enum DatabaseNoticeKind { none, oldDatabase, emptyDatabase }
 
 /// Ειδοποίηση κατάστασης βάσης για εμφάνιση στη λωρίδα UI.
 class DatabaseStateNotice {

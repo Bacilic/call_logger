@@ -16,10 +16,7 @@ Future<void> testExecutable(FutureOr<void> Function() testMain) async {
     // `lib/core/widgets/reorder_grab_handle.dart`), οπότε η διαρροή είναι σταθερά
     // μία. Το όριο μένει σκόπιμα στο 1: δεύτερος αδέσποτος `TextPainter` θα ήταν
     // δικός μας και ΠΡΕΠΕΙ να κοκκινίσει.
-    notDisposed: {
-      'ValueNotifier<AppErrorResult?>': null,
-      'TextPainter': 1,
-    },
+    notDisposed: {'ValueNotifier<AppErrorResult?>': null, 'TextPainter': 1},
     // Singleton παλέτας τμημάτων + Flutter ImageCache (decode εικόνων στο framework).
     classes: [
       'DepartmentPaletteStore',

@@ -1,4 +1,4 @@
-﻿import 'dart:io';
+import 'dart:io';
 
 import 'package:call_logger/core/database/old_database/lamp_data_issue_type_labels.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -61,106 +61,74 @@ void main() {
       },
     );
 
-    test(
-      'μήνυμα ελέγχου για office/contract περιέχει ελληνικές ετικέτες '
-      '(όχι office/contract)',
-      () {
-        final officeMessage = _integrityFkUserMessage('office');
-        expect(officeMessage, contains('γραφείο'));
-        expect(officeMessage, isNot(contains('office')));
+    test('μήνυμα ελέγχου για office/contract περιέχει ελληνικές ετικέτες '
+        '(όχι office/contract)', () {
+      final officeMessage = _integrityFkUserMessage('office');
+      expect(officeMessage, contains('γραφείο'));
+      expect(officeMessage, isNot(contains('office')));
 
-        final contractMessage = _integrityFkUserMessage('contract');
-        expect(contractMessage, contains('συμβόλαιο'));
-        expect(contractMessage, isNot(contains('contract')));
-      },
-    );
+      final contractMessage = _integrityFkUserMessage('contract');
+      expect(contractMessage, contains('συμβόλαιο'));
+      expect(contractMessage, isNot(contains('contract')));
+    });
 
-    test(
-      'πηγές integrity/import χρησιμοποιούν lampDataIssueColumnDisplayLabel '
-      'και ελληνικό μήνυμα κύριου εξοπλισμού',
-      () {
-        final equipmentRepo = File(equipmentRepoPath).readAsStringSync();
-        final excelImporter = File(excelImporterPath).readAsStringSync();
+    test('πηγές integrity/import χρησιμοποιούν lampDataIssueColumnDisplayLabel '
+        'και ελληνικό μήνυμα κύριου εξοπλισμού', () {
+      final equipmentRepo = File(equipmentRepoPath).readAsStringSync();
+      final excelImporter = File(excelImporterPath).readAsStringSync();
 
-        expect(
-          equipmentRepo,
-          contains('lampDataIssueColumnDisplayLabel'),
-        );
-        expect(
-          excelImporter,
-          contains('lampDataIssueColumnDisplayLabel'),
-        );
-        expect(
-          equipmentRepo,
-          isNot(contains('έγκυρο ID για office.')),
-        );
-        expect(
-          equipmentRepo,
-          isNot(contains(r'έγκυρο ID για $col.')),
-        );
-        expect(
-          excelImporter,
-          isNot(contains(r'έγκυρο ID για ${fk.column}.')),
-        );
+      expect(equipmentRepo, contains('lampDataIssueColumnDisplayLabel'));
+      expect(excelImporter, contains('lampDataIssueColumnDisplayLabel'));
+      expect(equipmentRepo, isNot(contains('έγκυρο ID για office.')));
+      expect(equipmentRepo, isNot(contains(r'έγκυρο ID για $col.')));
+      expect(excelImporter, isNot(contains(r'έγκυρο ID για ${fk.column}.')));
 
-        const greekSetMaster =
-            'Ο κύριος εξοπλισμός δεν αντιστοιχεί σε έγκυρο κωδικό εξοπλισμού.';
-        expect(equipmentRepo, contains(greekSetMaster));
-        expect(excelImporter, contains(greekSetMaster));
-        expect(
-          equipmentRepo,
-          isNot(
-            contains(
-              'Το set_master δεν αντιστοιχεί σε έγκυρο code εξοπλισμού.',
-            ),
-          ),
-        );
-        expect(
-          excelImporter,
-          isNot(
-            contains(
-              'Το set_master δεν αντιστοιχεί σε έγκυρο code εξοπλισμού.',
-            ),
-          ),
-        );
-      },
-    );
+      const greekSetMaster =
+          'Ο κύριος εξοπλισμός δεν αντιστοιχεί σε έγκυρο κωδικό εξοπλισμού.';
+      expect(equipmentRepo, contains(greekSetMaster));
+      expect(excelImporter, contains(greekSetMaster));
+      expect(
+        equipmentRepo,
+        isNot(
+          contains('Το set_master δεν αντιστοιχεί σε έγκυρο code εξοπλισμού.'),
+        ),
+      );
+      expect(
+        excelImporter,
+        isNot(
+          contains('Το set_master δεν αντιστοιχεί σε έγκυρο code εξοπλισμού.'),
+        ),
+      );
+    });
 
-    test(
-      'ετικέτες αποσύνδεσης υπαλλήλου χωρίς original_text / '
-      'υπάλληλος_original_text',
-      () {
-        final analyzer = File(fkAnalyzerPath).readAsStringSync();
+    test('ετικέτες αποσύνδεσης υπαλλήλου χωρίς original_text / '
+        'υπάλληλος_original_text', () {
+      final analyzer = File(fkAnalyzerPath).readAsStringSync();
 
-        expect(
-          analyzer,
-          contains('Αποσύνδεση υπαλλήλου, διατήρηση του αρχικού κειμένου'),
-        );
-        expect(
-          analyzer,
+      expect(
+        analyzer,
+        contains('Αποσύνδεση υπαλλήλου, διατήρηση του αρχικού κειμένου'),
+      );
+      expect(
+        analyzer,
+        contains('Αποσύνδεση υπαλλήλου και εκκαθάριση του αρχικού κειμένου'),
+      );
+      expect(
+        analyzer,
+        isNot(
           contains(
-            'Αποσύνδεση υπαλλήλου και εκκαθάριση του αρχικού κειμένου',
+            'Αποσύνδεση υπαλλήλου και διατήρηση κειμένου στο original_text',
           ),
-        );
-        expect(
-          analyzer,
-          isNot(
-            contains(
-              'Αποσύνδεση υπαλλήλου και διατήρηση κειμένου στο original_text',
-            ),
-          ),
-        );
-        expect(
-          analyzer,
-          isNot(
-            contains(
-              'Αποσύνδεση υπαλλήλου και εκκαθάριση owner_original_text',
-            ),
-          ),
-        );
-        expect(analyzer, isNot(contains('υπάλληλος_original_text')));
-      },
-    );
+        ),
+      );
+      expect(
+        analyzer,
+        isNot(
+          contains('Αποσύνδεση υπαλλήλου και εκκαθάριση owner_original_text'),
+        ),
+      );
+      expect(analyzer, isNot(contains('υπάλληλος_original_text')));
+    });
 
     test(
       'διάλογος χειροκίνητης επισκόπησης δεν διαφθείρει ταυτότητες με replaceAll',

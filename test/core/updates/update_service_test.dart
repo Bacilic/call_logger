@@ -35,29 +35,31 @@ void main() {
     );
   }
 
-  test('dev build → no update and does not resolve folder or read files',
-      () async {
-    var resolveCalls = 0;
-    var readCalls = 0;
-    final service = buildService(
-      resolveFolder: () async {
-        resolveCalls++;
-        return tempDir.path;
-      },
-      readFile: (path) async {
-        readCalls++;
-        return '{}';
-      },
-      isDevelopmentBuild: () => true,
-    );
+  test(
+    'dev build → no update and does not resolve folder or read files',
+    () async {
+      var resolveCalls = 0;
+      var readCalls = 0;
+      final service = buildService(
+        resolveFolder: () async {
+          resolveCalls++;
+          return tempDir.path;
+        },
+        readFile: (path) async {
+          readCalls++;
+          return '{}';
+        },
+        isDevelopmentBuild: () => true,
+      );
 
-    final result = await service.checkForUpdate();
+      final result = await service.checkForUpdate();
 
-    expect(result.updateAvailable, isFalse);
-    expect(result.manifest, isNull);
-    expect(resolveCalls, 0);
-    expect(readCalls, 0);
-  });
+      expect(result.updateAvailable, isFalse);
+      expect(result.manifest, isNull);
+      expect(resolveCalls, 0);
+      expect(readCalls, 0);
+    },
+  );
 
   test('non-dev build keeps normal check behavior for newer version', () async {
     final currentDir = Directory(p.join(tempDir.path, 'current'));
@@ -178,8 +180,9 @@ void main() {
   test('broken JSON → silently no update', () async {
     final currentDir = Directory(p.join(tempDir.path, 'current'));
     await currentDir.create(recursive: true);
-    await File(p.join(currentDir.path, 'version.json'))
-        .writeAsString('{not-json');
+    await File(
+      p.join(currentDir.path, 'version.json'),
+    ).writeAsString('{not-json');
 
     final service = buildService(
       resolveFolder: () async => tempDir.path,

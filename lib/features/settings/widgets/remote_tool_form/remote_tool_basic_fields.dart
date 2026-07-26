@@ -22,6 +22,7 @@ class NameAutocompleteField extends StatelessWidget {
   final List<String> suggestions;
   final List<RemoteTool> nonDeleted;
   final int? excludeId;
+
   /// Στη δημιουργία: ετικέτα με * (υποχρεωτικό πεδίο).
   final bool isCreate;
 
@@ -36,9 +37,7 @@ class NameAutocompleteField extends StatelessWidget {
         if (q.isEmpty) {
           return suggestions.take(16);
         }
-        return suggestions
-            .where((n) => n.toLowerCase().contains(q))
-            .take(24);
+        return suggestions.where((n) => n.toLowerCase().contains(q)).take(24);
       },
       optionsViewBuilder: (context, onSelected, options) {
         return Align(
@@ -66,28 +65,28 @@ class NameAutocompleteField extends StatelessWidget {
       },
       fieldViewBuilder:
           (context, textEditingController, focusNode, onFieldSubmitted) {
-        return TextFormField(
-          controller: textEditingController,
-          focusNode: focusNode,
-          decoration: InputDecoration(
-            labelText: isCreate ? 'Όνομα εργαλείου *' : 'Όνομα εργαλείου',
-            border: const OutlineInputBorder(),
-          ),
-          autovalidateMode: AutovalidateMode.onUserInteraction,
-          validator: (v) {
-            final name = v?.trim() ?? '';
-            if (name.isEmpty) return 'Υποχρεωτικό όνομα εργαλείου.';
-            final n = name.toLowerCase();
-            for (final t in nonDeleted) {
-              if (excludeId != null && t.id == excludeId) continue;
-              if (t.name.trim().toLowerCase() == n) {
-                return 'Υπάρχει ήδη εργαλείο με αυτό το όνομα.';
-              }
-            }
-            return null;
+            return TextFormField(
+              controller: textEditingController,
+              focusNode: focusNode,
+              decoration: InputDecoration(
+                labelText: isCreate ? 'Όνομα εργαλείου *' : 'Όνομα εργαλείου',
+                border: const OutlineInputBorder(),
+              ),
+              autovalidateMode: AutovalidateMode.onUserInteraction,
+              validator: (v) {
+                final name = v?.trim() ?? '';
+                if (name.isEmpty) return 'Υποχρεωτικό όνομα εργαλείου.';
+                final n = name.toLowerCase();
+                for (final t in nonDeleted) {
+                  if (excludeId != null && t.id == excludeId) continue;
+                  if (t.name.trim().toLowerCase() == n) {
+                    return 'Υπάρχει ήδη εργαλείο με αυτό το όνομα.';
+                  }
+                }
+                return null;
+              },
+            );
           },
-        );
-      },
     );
   }
 }
@@ -104,6 +103,7 @@ class ExecutablePathField extends StatelessWidget {
   final TextEditingController controller;
   final VoidCallback onPick;
   final bool enabled;
+
   /// Στη δημιουργία: ετικέτα με * (υποχρεωτικό πεδίο).
   final bool isCreate;
 

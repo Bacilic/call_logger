@@ -18,10 +18,7 @@ class DialogSnackbarScope extends StatelessWidget {
   Widget build(BuildContext context) {
     return ScaffoldMessenger(
       key: messengerKey,
-      child: Scaffold(
-        backgroundColor: Colors.transparent,
-        body: child,
-      ),
+      child: Scaffold(backgroundColor: Colors.transparent, body: child),
     );
   }
 }

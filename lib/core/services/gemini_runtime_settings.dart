@@ -1,4 +1,4 @@
-﻿import '../database/database_helper.dart';
+import '../database/database_helper.dart';
 import '../database/settings_repository.dart';
 import 'gemini_ticket_service.dart';
 
@@ -33,7 +33,8 @@ class GeminiRuntimeSettings {
       final legacyEndpoint = endpointRaw.isNotEmpty
           ? GeminiTicketService.normalizeEndpointTemplate(endpointRaw)
           : '';
-      primaryModel = GeminiTicketService.modelFromEndpoint(legacyEndpoint) ??
+      primaryModel =
+          GeminiTicketService.modelFromEndpoint(legacyEndpoint) ??
           kDefaultGeminiPrimaryModel;
     }
     if (primaryModel.isEmpty) {

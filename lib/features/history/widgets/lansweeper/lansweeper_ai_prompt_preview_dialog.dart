@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../../../core/widgets/dialog_snackbar_scope.dart';
@@ -10,9 +10,8 @@ Future<void> showLansweeperAiPromptPreviewDialog(
 }) {
   return showDialog<void>(
     context: context,
-    builder: (dialogContext) => _LansweeperAiPromptPreviewDialog(
-      promptText: promptText,
-    ),
+    builder: (dialogContext) =>
+        _LansweeperAiPromptPreviewDialog(promptText: promptText),
   );
 }
 
@@ -27,7 +26,8 @@ class _LansweeperAiPromptPreviewDialog extends StatefulWidget {
 }
 
 class _LansweeperAiPromptPreviewDialogState
-    extends State<_LansweeperAiPromptPreviewDialog> with DialogSnackbarHost {
+    extends State<_LansweeperAiPromptPreviewDialog>
+    with DialogSnackbarHost {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);

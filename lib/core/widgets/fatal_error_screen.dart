@@ -33,8 +33,7 @@ class _FatalErrorScreenState extends State<FatalErrorScreen> {
     super.dispose();
   }
 
-  bool get _isLayoutError =>
-      widget.result.kind == AppErrorKind.uiLayoutError;
+  bool get _isLayoutError => widget.result.kind == AppErrorKind.uiLayoutError;
 
   Future<void> _copyFullReport(BuildContext context) async {
     final text = widget.result.buildClipboardReport();

@@ -28,7 +28,8 @@ final class LampUnresolvedSkipCurrent extends LampUnresolvedResolutionOutcome {
 }
 
 /// Χειροκίνητη σύνδεση με αριθμητικό κωδικό.
-final class LampUnresolvedSetFieldManual extends LampUnresolvedResolutionOutcome {
+final class LampUnresolvedSetFieldManual
+    extends LampUnresolvedResolutionOutcome {
   const LampUnresolvedSetFieldManual(this.codeInput);
 
   final String codeInput;
@@ -49,15 +50,14 @@ final class LampUnresolvedDeferAll extends LampUnresolvedResolutionOutcome {
   const LampUnresolvedDeferAll();
 }
 
-typedef LampManualFkLookup = Future<String?> Function(
-  String column,
-  int targetId,
-);
+typedef LampManualFkLookup =
+    Future<String?> Function(String column, int targetId);
 
-typedef LampEntityCodeSearch = Future<List<LampEntityCodeSuggestion>> Function(
-  String column,
-  String query,
-);
+typedef LampEntityCodeSearch =
+    Future<List<LampEntityCodeSuggestion>> Function(
+      String column,
+      String query,
+    );
 
 Future<LampUnresolvedResolutionOutcome?> showLampUnresolvedResolutionDialog({
   required BuildContext context,
@@ -299,7 +299,8 @@ class _LampUnresolvedResolutionDialogState
                   'Αρχική τιμή: ${proposal.originalValue}',
                   style: theme.textTheme.bodyLarge,
                 ),
-              if (diagnosticType != null && diagnosticType.trim().isNotEmpty) ...[
+              if (diagnosticType != null &&
+                  diagnosticType.trim().isNotEmpty) ...[
                 const SizedBox(height: 8),
                 SelectableText(
                   'Φύση σφάλματος: ${_diagnosticTypeLabel(diagnosticType)}',
@@ -314,10 +315,7 @@ class _LampUnresolvedResolutionDialogState
                   SelectableText(line, style: theme.textTheme.bodySmall),
               ],
               const SizedBox(height: 8),
-              SelectableText(
-                proposal.notes,
-                style: theme.textTheme.bodySmall,
-              ),
+              SelectableText(proposal.notes, style: theme.textTheme.bodySmall),
               const SizedBox(height: 16),
               Text(
                 'Η πρόταση δεν μπορεί να επιλυθεί αυτόματα. Επιλέξτε πώς να '
@@ -326,10 +324,7 @@ class _LampUnresolvedResolutionDialogState
               ),
               if (_supportsFieldActions) ...[
                 const SizedBox(height: 20),
-                Text(
-                  'Διόρθωση με κωδικό',
-                  style: theme.textTheme.titleSmall,
-                ),
+                Text('Διόρθωση με κωδικό', style: theme.textTheme.titleSmall),
                 const SizedBox(height: 8),
                 LampEntityCodeAutocomplete(
                   controller: _codeController,
@@ -362,19 +357,16 @@ class _LampUnresolvedResolutionDialogState
                   child: FilledButton(
                     onPressed: _canApplyManualCode
                         ? () => Navigator.of(context).pop(
-                              LampUnresolvedSetFieldManual(
-                                _codeController.text.trim(),
-                              ),
-                            )
+                            LampUnresolvedSetFieldManual(
+                              _codeController.text.trim(),
+                            ),
+                          )
                         : null,
                     child: const Text('Εφαρμογή κωδικού'),
                   ),
                 ),
                 const SizedBox(height: 16),
-                Text(
-                  'Εκκαθάριση πεδίου',
-                  style: theme.textTheme.titleSmall,
-                ),
+                Text('Εκκαθάριση πεδίου', style: theme.textTheme.titleSmall),
                 const SizedBox(height: 4),
                 Text(
                   'Θα αδειάσει το πεδίο «$fieldLabel» του εξοπλισμού '
@@ -385,9 +377,9 @@ class _LampUnresolvedResolutionDialogState
                 Align(
                   alignment: Alignment.centerLeft,
                   child: OutlinedButton(
-                    onPressed: () => Navigator.of(context).pop(
-                      const LampUnresolvedClearField(),
-                    ),
+                    onPressed: () => Navigator.of(
+                      context,
+                    ).pop(const LampUnresolvedClearField()),
                     child: const Text('Εκκαθάριση πεδίου'),
                   ),
                 ),
@@ -430,9 +422,9 @@ class _LampUnresolvedResolutionDialogState
             Tooltip(
               message: _applyToAll
                   ? 'Όλες οι υπόλοιπες ανεπίλυτες εγγραφές μένουν ανοιχτές· '
-                      'θα ξαναρωτηθείς στον επόμενο έλεγχο.'
+                        'θα ξαναρωτηθείς στον επόμενο έλεγχο.'
                   : 'Η τρέχουσα εγγραφή μένει ανοιχτή· θα ξαναρωτηθείς στον '
-                      'επόμενο έλεγχο.',
+                        'επόμενο έλεγχο.',
               child: OutlinedButton(
                 onPressed: () => Navigator.of(context).pop(
                   _applyToAll
@@ -446,9 +438,9 @@ class _LampUnresolvedResolutionDialogState
             Tooltip(
               message: _applyToAll
                   ? 'Όλες οι υπόλοιπες ανεπίλυτες εγγραφές καταχωρούνται ως '
-                      'αναβληθείσες και φεύγουν από τις ροές επίλυσης.'
+                        'αναβληθείσες και φεύγουν από τις ροές επίλυσης.'
                   : 'Η τρέχουσα εγγραφή καταχωρείται ως αναβληθείσα και '
-                      'φεύγει από τις ροές επίλυσης.',
+                        'φεύγει από τις ροές επίλυσης.',
               child: FilledButton.tonal(
                 onPressed: () => Navigator.of(context).pop(
                   _applyToAll

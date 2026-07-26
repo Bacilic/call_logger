@@ -178,7 +178,9 @@ class _UserPhoneDepartmentConflictDialogState
                               Text(
                                 'Δεν είναι δυνατή μεταφορά χωρίς τμήμα χρήστη. '
                                 'Ακυρώστε ή ορίστε τμήμα.',
-                                style: TextStyle(color: theme.colorScheme.error),
+                                style: TextStyle(
+                                  color: theme.colorScheme.error,
+                                ),
                               ),
                             ] else ...[
                               const SizedBox(height: 6),
@@ -191,7 +193,9 @@ class _UserPhoneDepartmentConflictDialogState
                                 child: Column(
                                   children: [
                                     for (final option in _optionsFor(c))
-                                      RadioListTile<_UserPhoneConflictResolution>(
+                                      RadioListTile<
+                                        _UserPhoneConflictResolution
+                                      >(
                                         dense: true,
                                         value: option,
                                         title: _resolutionLabel(c, option),
@@ -216,7 +220,8 @@ class _UserPhoneDepartmentConflictDialogState
             child: const Text('Ακύρωση'),
           ),
           FilledButton(
-            onPressed: _allResolved &&
+            onPressed:
+                _allResolved &&
                     widget.conflicts.every((c) => _optionsFor(c).isNotEmpty)
                 ? () => Navigator.of(context).pop(_buildResult())
                 : null,

@@ -15,8 +15,11 @@ import 'directory_support.dart';
 
 /// Persistence χρηστών (`users`, `user_phones`, `user_equipment`).
 class UserRepository {
-  UserRepository(this.db, {DirectorySupport? support, DepartmentRepository? departments})
-      : _support = support ?? DirectorySupport(db) {
+  UserRepository(
+    this.db, {
+    DirectorySupport? support,
+    DepartmentRepository? departments,
+  }) : _support = support ?? DirectorySupport(db) {
     _departments = departments ?? DepartmentRepository(db, support: _support);
   }
 
@@ -246,8 +249,7 @@ class UserRepository {
   Future<List<String>> userPhoneNumbersOrdered(
     DatabaseExecutor e,
     int userId,
-  ) =>
-      _userPhoneNumbersOrdered(e, userId);
+  ) => _userPhoneNumbersOrdered(e, userId);
 
   Future<List<String>> _userPhoneNumbersOrdered(
     DatabaseExecutor e,
@@ -265,7 +267,10 @@ class UserRepository {
     return rows.map((r) => r['number'] as String?).whereType<String>().toList();
   }
 
-  Future<String?> _departmentNameForUserTxn(DatabaseExecutor txn, int userId) async {
+  Future<String?> _departmentNameForUserTxn(
+    DatabaseExecutor txn,
+    int userId,
+  ) async {
     final rows = await txn.rawQuery(
       '''
       SELECT d.name AS name FROM users u
@@ -328,10 +333,7 @@ class UserRepository {
         ? <String, dynamic>{}
         : _userRowAuditValues(newRow);
     oldAudit['linked_phone_numbers'] = oldPhoneList;
-    newAudit['linked_phone_numbers'] = await _userPhoneNumbersOrdered(
-      txn,
-      id,
-    );
+    newAudit['linked_phone_numbers'] = await _userPhoneNumbersOrdered(txn, id);
     oldAudit['linked_equipment'] = oldEq;
     newAudit['linked_equipment'] = await _linkedEquipmentSnapshotsForUser(
       txn,
@@ -468,7 +470,8 @@ class UserRepository {
           whereArgs: [id],
           limit: 1,
         );
-        final deptId = map['department_id'] as int? ??
+        final deptId =
+            map['department_id'] as int? ??
             (userRows.isEmpty ? null : userRows.first['department_id'] as int?);
         await _validateUserPhoneAssignmentPolicy(
           phones: list,
@@ -517,8 +520,7 @@ class UserRepository {
   ) async {
     if (userIds.isEmpty) return const [];
     final placeholders = _support.sqlPlaceholders(userIds.length);
-    final rows = await db.rawQuery(
-      '''
+    final rows = await db.rawQuery('''
       SELECT up.user_id AS user_id,
              up.phone_id AS phone_id,
              p.number AS number,
@@ -533,9 +535,7 @@ class UserRepository {
           SELECT phone_id FROM user_phones GROUP BY phone_id HAVING COUNT(*) = 1
         )
       ORDER BY p.number COLLATE NOCASE ASC
-      ''',
-      userIds,
-    );
+      ''', userIds);
     return rows
         .map(
           (r) => ExclusivePhoneForUserDelete(
@@ -556,7 +556,7 @@ class UserRepository {
   /// κάτοχος εκτός των [userIds]. Αν υπάρχουν πολλοί κάτοχοι μέσα στους
   /// διαγραφόμενους, κρατάται ο πρώτος (μικρότερο `user_id`).
   Future<List<ExclusiveEquipmentForUserDelete>>
-      findExclusiveEquipmentForUserDelete(List<int> userIds) async {
+  findExclusiveEquipmentForUserDelete(List<int> userIds) async {
     if (userIds.isEmpty) return const [];
     final placeholders = _support.sqlPlaceholders(userIds.length);
     final rows = await db.rawQuery(
@@ -704,7 +704,7 @@ class UserRepository {
   /// υπάλληλο, τα πρωτότυπα τηλέφωνα (αριθμοί) και equipment ids ώστε να μπορεί
   /// να αναιρεθεί πλήρως η σύνδεσή τους αργότερα.
   Future<Map<int, ({List<String> phoneNumbers, List<int> equipmentIds})>>
-      deleteUsersInTxn(DatabaseExecutor txn, List<int> ids) async {
+  deleteUsersInTxn(DatabaseExecutor txn, List<int> ids) async {
     final result =
         <int, ({List<String> phoneNumbers, List<int> equipmentIds})>{};
     if (ids.isEmpty) return result;
@@ -757,10 +757,7 @@ class UserRepository {
     return result;
   }
 
-  Future<void> restoreUsers(
-    List<int> ids, {
-    DatabaseExecutor? executor,
-  }) async {
+  Future<void> restoreUsers(List<int> ids, {DatabaseExecutor? executor}) async {
     if (ids.isEmpty) return;
 
     Future<void> run(DatabaseExecutor txn) async {
@@ -884,11 +881,12 @@ class UserRepository {
           final targetDepartmentId = userRows.isEmpty
               ? null
               : userRows.first['department_id'] as int?;
-          final conflicts = PhoneDepartmentPolicy.findConflictsForUserAssignment(
-            phones: [trimmedPhone],
-            targetDepartmentId: targetDepartmentId,
-            editingUserId: userId,
-          );
+          final conflicts =
+              PhoneDepartmentPolicy.findConflictsForUserAssignment(
+                phones: [trimmedPhone],
+                targetDepartmentId: targetDepartmentId,
+                editingUserId: userId,
+              );
           if (conflicts.isEmpty) {
             await _support.replaceUserPhonesInTxn(txn, userId, [
               ...existing,
@@ -980,6 +978,7 @@ class UserRepository {
         newValues: nv.isEmpty ? null : nv,
       );
     }
+
     if (executor != null) {
       await run(executor);
       return;

@@ -4,9 +4,9 @@ import '../screens/widgets/shared_asset_disconnect_dialog.dart';
 /// Σταδιακή απόφαση για υπαλλήλους: μεταφορά σε τμήμα προορισμού ή διαγραφή (χωρίς UI).
 class EmployeeReassignmentDraft {
   EmployeeReassignmentDraft(List<DepartmentEmployeeReassignCandidate> employees)
-      : _employees = List<DepartmentEmployeeReassignCandidate>.unmodifiable(
-          employees,
-        );
+    : _employees = List<DepartmentEmployeeReassignCandidate>.unmodifiable(
+        employees,
+      );
 
   final List<DepartmentEmployeeReassignCandidate> _employees;
   final Map<int, SharedAssetTransferTarget> _assignments = {};
@@ -14,9 +14,9 @@ class EmployeeReassignmentDraft {
 
   /// Υπάλληλοι χωρίς απόφαση ακόμη (ούτε μεταφορά ούτε διαγραφή, σειρά εισόδου).
   List<DepartmentEmployeeReassignCandidate> get remaining => [
-        for (final e in _employees)
-          if (!_assignments.containsKey(e.id) && !_toDelete.contains(e.id)) e,
-      ];
+    for (final e in _employees)
+      if (!_assignments.containsKey(e.id) && !_toDelete.contains(e.id)) e,
+  ];
 
   int get remainingCount => remaining.length;
 
@@ -56,7 +56,7 @@ class EmployeeReassignmentDraft {
   }
 
   DepartmentEmployeeReassignBatch build() => DepartmentEmployeeReassignBatch(
-        transfers: Map.of(_assignments),
-        toDelete: Set.of(_toDelete),
-      );
+    transfers: Map.of(_assignments),
+    toDelete: Set.of(_toDelete),
+  );
 }

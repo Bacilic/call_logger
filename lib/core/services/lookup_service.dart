@@ -73,6 +73,7 @@ class LookupService {
   final List<UserModel> _users = [];
   final List<EquipmentModel> _equipment = [];
   Map<int, List<EquipmentModel>> _equipmentByUserId = {};
+
   /// Αντίστροφο ευρετήριο: equipment_id → user ids (για M2M).
   final Map<int, List<int>> _userIdsByEquipmentId = {};
 
@@ -225,10 +226,8 @@ class LookupService {
     if (q.isEmpty) return [];
     return _users.where((u) {
       if (u.isDeleted) return false;
-      final phoneMatch = SearchTextNormalizer.matchesNormalizedQuery(
-            u.phoneJoined,
-            q,
-          ) ||
+      final phoneMatch =
+          SearchTextNormalizer.matchesNormalizedQuery(u.phoneJoined, q) ||
           u.phones.any(
             (p) => SearchTextNormalizer.matchesNormalizedQuery(p, q),
           );
@@ -449,10 +448,7 @@ class LookupService {
       }
     }
 
-    final merged = <EquipmentModel>[
-      ...byId.values,
-      ...byCodeFallback.values,
-    ];
+    final merged = <EquipmentModel>[...byId.values, ...byCodeFallback.values];
     merged.sort((a, b) => a.displayLabel.compareTo(b.displayLabel));
     return merged;
   }
@@ -565,11 +561,12 @@ class LookupService {
 
   /// Κοινόχρηστα (απευθείας στο τμήμα) τηλέφωνα, ταξινομημένα.
   List<String> getDirectPhonesByDepartment(int departmentId) {
-    final list = List<String>.from(
-      _departmentDirectPhones[departmentId] ?? const <String>[],
-    )
-      ..removeWhere((p) => p.trim().isEmpty)
-      ..sort((a, b) => a.compareTo(b));
+    final list =
+        List<String>.from(
+            _departmentDirectPhones[departmentId] ?? const <String>[],
+          )
+          ..removeWhere((p) => p.trim().isEmpty)
+          ..sort((a, b) => a.compareTo(b));
     return list;
   }
 
@@ -717,6 +714,7 @@ class LookupService {
     required List<UserModel> users,
     required List<EquipmentModel> equipment,
     required List<DepartmentModel> departmentRows,
+
     /// userId → λίστα equipment ids (M2M). Αν null/κενό, χωρίς συσχετίσεις.
     Map<int, List<int>>? userToEquipmentIds,
   }) {

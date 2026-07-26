@@ -26,10 +26,8 @@ class RemoteToolIcon extends StatelessWidget {
           : Icon(fallback, size: size);
     }
 
-    Widget broken() => Icon(
-      fallback ?? Icons.broken_image_outlined,
-      size: size,
-    );
+    Widget broken() =>
+        Icon(fallback ?? Icons.broken_image_outlined, size: size);
 
     if (raw.startsWith('assets/')) {
       return Image.asset(

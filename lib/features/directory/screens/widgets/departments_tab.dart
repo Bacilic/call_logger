@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/database/database_helper.dart';
@@ -65,14 +65,14 @@ class _DepartmentsTabState extends ConsumerState<DepartmentsTab>
   Widget build(BuildContext context) {
     final floorsCatalogAsync = ref.watch(buildingMapFloorsCatalogProvider);
     final floorsById = <int, BuildingMapFloor>{
-      for (final f in floorsCatalogAsync.value ?? <BuildingMapFloor>[])
-        f.id: f,
+      for (final f in floorsCatalogAsync.value ?? <BuildingMapFloor>[]) f.id: f,
     };
     final state = ref.watch(departmentDirectoryProvider);
     final notifier = ref.read(departmentDirectoryProvider.notifier);
     final visibleColumns = state.orderedVisibleColumns;
-    final continuousScrollAsync =
-        ref.watch(catalogDepartmentsContinuousScrollProvider);
+    final continuousScrollAsync = ref.watch(
+      catalogDepartmentsContinuousScrollProvider,
+    );
     final continuousScroll = continuousScrollAsync.value ?? true;
     syncCatalogSearchControllerFromState(
       controller: _searchController,
@@ -174,8 +174,12 @@ class _DepartmentsTabState extends ConsumerState<DepartmentsTab>
                               .where((d) => d.id == id)
                               .toList();
                           if (candidates.isNotEmpty) {
-                            _openForm(context, ref, candidates.first,
-                                isClone: true);
+                            _openForm(
+                              context,
+                              ref,
+                              candidates.first,
+                              isClone: true,
+                            );
                           }
                         }
                       : null,
@@ -251,9 +255,7 @@ class _DepartmentsTabState extends ConsumerState<DepartmentsTab>
     final toDelete = state.allDepartments
         .where(
           (d) =>
-              d.id != null &&
-              !d.isDeleted &&
-              state.selectedIds.contains(d.id),
+              d.id != null && !d.isDeleted && state.selectedIds.contains(d.id),
         )
         .toList();
     if (toDelete.isEmpty) return;
@@ -327,8 +329,9 @@ class _DepartmentsTabState extends ConsumerState<DepartmentsTab>
             final userRepo = UserRepository(dbEx);
 
             var phoneBatch = const SharedAssetDisconnectBatchResult();
-            final exPhones =
-                await userRepo.findExclusivePhonesForUserDelete([userId]);
+            final exPhones = await userRepo.findExclusivePhonesForUserDelete([
+              userId,
+            ]);
             if (exPhones.isNotEmpty) {
               if (!context.mounted) return;
               final b = await showSharedAssetDisconnectFlow(
@@ -345,8 +348,9 @@ class _DepartmentsTabState extends ConsumerState<DepartmentsTab>
             }
 
             var equipmentBatch = const SharedAssetDisconnectBatchResult();
-            final exEquip =
-                await userRepo.findExclusiveEquipmentForUserDelete([userId]);
+            final exEquip = await userRepo.findExclusiveEquipmentForUserDelete([
+              userId,
+            ]);
             if (exEquip.isNotEmpty) {
               if (!context.mounted) return;
               final b = await showSharedAssetDisconnectFlow(
@@ -398,7 +402,8 @@ class _DepartmentsTabState extends ConsumerState<DepartmentsTab>
           );
           if (!context.mounted || collected == null) return;
           sharedBatch = collected;
-          movedOrDeletedAssetCount += sharedBatch.phoneTransfers.length +
+          movedOrDeletedAssetCount +=
+              sharedBatch.phoneTransfers.length +
               sharedBatch.phonesToDelete.length +
               sharedBatch.equipmentTransfers.length +
               sharedBatch.equipmentToDelete.length;
@@ -451,8 +456,7 @@ class _DepartmentsTabState extends ConsumerState<DepartmentsTab>
                     : (u.name ?? '').trim(),
               ),
         ];
-        final movedTotal =
-            employees.length + phones.length + equipment.length;
+        final movedTotal = employees.length + phones.length + equipment.length;
         final proposedNewName = target.newDepartmentName?.trim() ?? '';
         final dominantTargetIsNew = proposedNewName.isNotEmpty;
 
@@ -468,8 +472,7 @@ class _DepartmentsTabState extends ConsumerState<DepartmentsTab>
             proposedNewName: proposedNewName,
           );
           if (!context.mounted) return;
-          if (guard == null ||
-              guard == DepartmentRenameGuardChoice.cancel) {
+          if (guard == null || guard == DepartmentRenameGuardChoice.cancel) {
             return;
           }
           if (guard == DepartmentRenameGuardChoice.renameInstead) {
@@ -488,9 +491,7 @@ class _DepartmentsTabState extends ConsumerState<DepartmentsTab>
         );
         if (employees.isNotEmpty) {
           employeeBatch = DepartmentEmployeeReassignBatch(
-            transfers: {
-              for (final e in employees) e.id: target,
-            },
+            transfers: {for (final e in employees) e.id: target},
           );
           movedEmployeeCount += employees.length;
         }
@@ -502,12 +503,8 @@ class _DepartmentsTabState extends ConsumerState<DepartmentsTab>
             newDeptNames[proposedNewName] = {...phones};
           }
           sharedBatch = SharedAssetDisconnectBatchResult(
-            phoneTransfers: {
-              for (final p in phones) p: target,
-            },
-            equipmentTransfers: {
-              for (final c in equipment) c: target,
-            },
+            phoneTransfers: {for (final p in phones) p: target},
+            equipmentTransfers: {for (final c in equipment) c: target},
             newDepartmentNamesToCreate: newDeptNames,
           );
           movedOrDeletedAssetCount += phones.length + equipment.length;
@@ -579,15 +576,15 @@ class _DepartmentsTabState extends ConsumerState<DepartmentsTab>
 
     final UserDeletionUndoRecord deletedEmployeesUndo;
     try {
-      deletedEmployeesUndo =
-          await applyDepartmentDeletionPlansAtomic(db, plans);
+      deletedEmployeesUndo = await applyDepartmentDeletionPlansAtomic(
+        db,
+        plans,
+      );
     } catch (e, st) {
       if (!context.mounted) return;
       showDatabasePersistenceErrorSnackBar(
         context,
-        Exception(
-          'Η διαγραφή τμήματος απέτυχε και καμία αλλαγή δεν έγινε. $e',
-        ),
+        Exception('Η διαγραφή τμήματος απέτυχε και καμία αλλαγή δεν έγινε. $e'),
         st,
       );
       return;
@@ -687,8 +684,9 @@ class _DepartmentsTabState extends ConsumerState<DepartmentsTab>
       softDeletedPhones: softDeletedPhones,
       equipmentTransfers: equipmentTransfers,
       softDeletedEquipment: softDeletedEquipment,
-      deletedEmployeesUndo:
-          deletedEmployeesUndo.deletedUserIds.isEmpty ? null : deletedEmployeesUndo,
+      deletedEmployeesUndo: deletedEmployeesUndo.deletedUserIds.isEmpty
+          ? null
+          : deletedEmployeesUndo,
       createdDepartmentIds: createdDepartmentIds,
     );
 
@@ -711,8 +709,9 @@ class _DepartmentsTabState extends ConsumerState<DepartmentsTab>
       len += add.length;
     }
     final truncated = take < names.length;
-    final displayNames =
-        truncated ? '${names.sublist(0, take).join(', ')}...' : namesPart;
+    final displayNames = truncated
+        ? '${names.sublist(0, take).join(', ')}...'
+        : namesPart;
     final tooltipAllNames = names.isEmpty ? null : names.join(', ');
 
     final undoPolicy = resolveDepartmentDeletionUndo(
@@ -730,11 +729,14 @@ class _DepartmentsTabState extends ConsumerState<DepartmentsTab>
       if (newName != null && newName.isNotEmpty) {
         transferTargets['new:$newName'] = (name: newName, isNew: true);
       } else if (target.departmentId != null) {
-        final match = LookupService.instance.departments
-            .where((d) => d.id == target.departmentId);
+        final match = LookupService.instance.departments.where(
+          (d) => d.id == target.departmentId,
+        );
         final name = match.isEmpty ? '' : match.first.name.trim();
-        transferTargets['id:${target.departmentId}'] =
-            (name: name.isEmpty ? 'τμήμα' : name, isNew: false);
+        transferTargets['id:${target.departmentId}'] = (
+          name: name.isEmpty ? 'τμήμα' : name,
+          isNew: false,
+        );
       }
     }
 
@@ -788,18 +790,14 @@ class _DepartmentsTabState extends ConsumerState<DepartmentsTab>
           children: [
             Expanded(
               child: tooltipAllNames != null
-                  ? Tooltip(
-                      message: tooltipAllNames,
-                      child: Text(message),
-                    )
+                  ? Tooltip(message: tooltipAllNames, child: Text(message))
                   : Text(message),
             ),
             IconButton(
               icon: const Icon(Icons.close, size: 20),
               onPressed: () => messenger.hideCurrentSnackBar(),
               style: IconButton.styleFrom(
-                foregroundColor:
-                    Theme.of(context).colorScheme.onInverseSurface,
+                foregroundColor: Theme.of(context).colorScheme.onInverseSurface,
                 padding: const EdgeInsets.all(4),
                 minimumSize: const Size(32, 32),
               ),
@@ -837,15 +835,15 @@ class _DepartmentColumnSelectorOverlay extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(departmentDirectoryProvider);
     final notifier = ref.read(departmentDirectoryProvider.notifier);
-    final continuousScrollAsync =
-        ref.watch(catalogDepartmentsContinuousScrollProvider);
+    final continuousScrollAsync = ref.watch(
+      catalogDepartmentsContinuousScrollProvider,
+    );
     final continuousScroll = continuousScrollAsync.value ?? true;
     final theme = Theme.of(context);
     final order = state.columnOrder;
     final keys = state.visibleColumnKeys;
     final sel = DepartmentDirectoryColumn.selection;
-    final orderRest =
-        order.where((c) => c != sel).toList(growable: false);
+    final orderRest = order.where((c) => c != sel).toList(growable: false);
     final selOn = keys.contains(sel.key);
 
     return CatalogColumnSelectorShell(
@@ -891,7 +889,8 @@ class _DepartmentColumnSelectorOverlay extends ConsumerWidget {
                   color: Colors.transparent,
                   child: ListTile(
                     contentPadding: const EdgeInsets.symmetric(horizontal: 8),
-                    onTap: () => notifier.setDepartmentColumnVisible(col, !isOn),
+                    onTap: () =>
+                        notifier.setDepartmentColumnVisible(col, !isOn),
                     leading: Checkbox(
                       value: isOn,
                       onChanged: (v) {

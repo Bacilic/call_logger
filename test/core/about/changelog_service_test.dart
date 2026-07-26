@@ -29,10 +29,7 @@ void main() {
     });
 
     test('treats missing category arrays as empty', () {
-      final entry = ChangelogEntry.fromJson({
-        'version': '0.1.0',
-        'date': '',
-      });
+      final entry = ChangelogEntry.fromJson({'version': '0.1.0', 'date': ''});
 
       expect(entry.added, isEmpty);
       expect(entry.improvements, isEmpty);
@@ -87,8 +84,10 @@ void main() {
 
     test('latest released version matches pubspec NAME', () async {
       final pubspec = File('pubspec.yaml').readAsStringSync();
-      final match = RegExp(r'^version:\s*([\d.]+)\+', multiLine: true)
-          .firstMatch(pubspec);
+      final match = RegExp(
+        r'^version:\s*([\d.]+)\+',
+        multiLine: true,
+      ).firstMatch(pubspec);
       expect(match, isNotNull, reason: 'pubspec.yaml version line');
       final pubVersion = match!.group(1)!;
 

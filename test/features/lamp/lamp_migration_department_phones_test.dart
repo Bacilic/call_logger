@@ -16,7 +16,9 @@ void main() {
     setUpAll(() async {
       initSqfliteFfiForTests();
       final dir = await Directory.systemTemp.createTemp('lamp_dept_phones_');
-      await DatabaseHelper.bindTestDatabaseFile('${dir.path}/lamp_dept_phones.db');
+      await DatabaseHelper.bindTestDatabaseFile(
+        '${dir.path}/lamp_dept_phones.db',
+      );
       await DatabaseHelper.instance.database;
       service = LampMigrationService();
     });
@@ -80,9 +82,7 @@ void main() {
       () async {
         final result = await service.save(
           target: LampTransferTarget.department,
-          formValues: departmentForm(
-            phones: '2310501000, 2310501001',
-          ),
+          formValues: departmentForm(phones: '2310501000, 2310501001'),
           selectedCandidateId: null,
         );
 
@@ -99,10 +99,7 @@ void main() {
       'ενημέρωση υπάρχοντος → προ-γέμισμα με ένωση υπαρχόντων ∪ office_phones',
       () async {
         const departmentName = 'Φαρμακείο';
-        await insertDepartment(
-          name: departmentName,
-          phones: ['2310501000'],
-        );
+        await insertDepartment(name: departmentName, phones: ['2310501000']);
 
         final draft = await service.buildDraft(
           target: LampTransferTarget.department,
@@ -113,10 +110,7 @@ void main() {
         );
 
         expect(draft.selectedCandidateId, isNotNull);
-        expect(
-          draft.formValues['phones'],
-          '2310501000, 2310501001',
-        );
+        expect(draft.formValues['phones'], '2310501000, 2310501001');
       },
     );
 
@@ -133,10 +127,7 @@ void main() {
 
       await service.save(
         target: LampTransferTarget.department,
-        formValues: departmentForm(
-          name: departmentName,
-          phones: '',
-        ),
+        formValues: departmentForm(name: departmentName, phones: ''),
         selectedCandidateId: deptId,
       );
 
@@ -144,20 +135,17 @@ void main() {
       expect(after[deptId], before[deptId]);
     });
 
-    test(
-      'buildDraft νέου τμήματος → phones seed από office_phones',
-      () async {
-        final draft = await service.buildDraft(
-          target: LampTransferTarget.department,
-          sourceRow: {
-            'office_name': 'Φαρμακείο',
-            'office_phones': '2310501000, 2310501001',
-          },
-        );
+    test('buildDraft νέου τμήματος → phones seed από office_phones', () async {
+      final draft = await service.buildDraft(
+        target: LampTransferTarget.department,
+        sourceRow: {
+          'office_name': 'Φαρμακείο',
+          'office_phones': '2310501000, 2310501001',
+        },
+      );
 
-        expect(draft.selectedCandidateId, isNull);
-        expect(draft.formValues['phones'], '2310501000, 2310501001');
-      },
-    );
+      expect(draft.selectedCandidateId, isNull);
+      expect(draft.formValues['phones'], '2310501000, 2310501001');
+    });
   });
 }

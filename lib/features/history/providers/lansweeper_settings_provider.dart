@@ -123,8 +123,9 @@ class LansweeperTicketViewUrlNotifier extends Notifier<String> {
     final db = await DatabaseHelper.instance.database;
     if (!ref.mounted) return;
     final saved =
-        (await SettingsRepository(db).getSetting(kLansweeperTicketViewUrlSettingKey))
-            ?.trim() ??
+        (await SettingsRepository(
+          db,
+        ).getSetting(kLansweeperTicketViewUrlSettingKey))?.trim() ??
         '';
     if (!ref.mounted) return;
     state = saved.isNotEmpty ? saved : kDefaultLansweeperTicketViewUrl;
@@ -261,10 +262,9 @@ class LansweeperHelpdeskAutoLoginNotifier extends Notifier<bool> {
     state = value;
     final db = await DatabaseHelper.instance.database;
     if (!ref.mounted) return;
-    await SettingsRepository(db).saveSetting(
-      kLansweeperHelpdeskAutoLoginSettingKey,
-      value ? '1' : '0',
-    );
+    await SettingsRepository(
+      db,
+    ).saveSetting(kLansweeperHelpdeskAutoLoginSettingKey, value ? '1' : '0');
   }
 }
 
@@ -330,11 +330,12 @@ class LansweeperHelpdeskLoginUrlNotifier extends Notifier<String> {
     if (!ref.mounted) return;
     final repo = SettingsRepository(db);
     final saved =
-        (await repo.getSetting(kLansweeperHelpdeskLoginUrlSettingKey))?.trim() ??
+        (await repo.getSetting(
+          kLansweeperHelpdeskLoginUrlSettingKey,
+        ))?.trim() ??
         '';
     if (!ref.mounted) return;
-    if (saved.isNotEmpty &&
-        LansweeperUrlRules.isBrowserLaunchableUrl(saved)) {
+    if (saved.isNotEmpty && LansweeperUrlRules.isBrowserLaunchableUrl(saved)) {
       state = saved;
       return;
     }
@@ -396,10 +397,10 @@ class LansweeperHelpdeskWebUsernameNotifier extends Notifier<String> {
   }
 }
 
-final lansweeperHelpdeskWebUsernameProvider = NotifierProvider.autoDispose<
-    LansweeperHelpdeskWebUsernameNotifier,
-    String
->(LansweeperHelpdeskWebUsernameNotifier.new);
+final lansweeperHelpdeskWebUsernameProvider =
+    NotifierProvider.autoDispose<LansweeperHelpdeskWebUsernameNotifier, String>(
+      LansweeperHelpdeskWebUsernameNotifier.new,
+    );
 
 /// Κωδικός web console Lansweeper (αποθηκεύεται όπως το API key, τοπικά).
 class LansweeperHelpdeskWebPasswordNotifier extends Notifier<String> {
@@ -434,7 +435,7 @@ class LansweeperHelpdeskWebPasswordNotifier extends Notifier<String> {
   }
 }
 
-final lansweeperHelpdeskWebPasswordProvider = NotifierProvider.autoDispose<
-    LansweeperHelpdeskWebPasswordNotifier,
-    String
->(LansweeperHelpdeskWebPasswordNotifier.new);
+final lansweeperHelpdeskWebPasswordProvider =
+    NotifierProvider.autoDispose<LansweeperHelpdeskWebPasswordNotifier, String>(
+      LansweeperHelpdeskWebPasswordNotifier.new,
+    );

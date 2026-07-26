@@ -1,4 +1,4 @@
-﻿import 'dart:io';
+import 'dart:io';
 
 import 'package:justkawal_excel_updated/justkawal_excel_updated.dart';
 import 'package:path/path.dart' as p;
@@ -488,8 +488,7 @@ class OldExcelImporter {
             columnName: 'set_master',
             rawValue: raw,
             issueType: 'set_master_self_reference',
-            message:
-                'Το set_master δείχνει στον ίδιο εξοπλισμό (code=$code).',
+            message: 'Το set_master δείχνει στον ίδιο εξοπλισμό (code=$code).',
           ),
         );
         continue;
@@ -704,8 +703,9 @@ Future<void> _deleteDatabaseFileWithSidecars(
   // Τελική αποτυχία: διάγνωσε (best-effort) ΠΟΙΟΣ κρατά το αρχείο και ονόμασέ τον.
   var holder = '';
   try {
-    holder = (await const LockDiagnosticService().detectLockingProcess(path))
-        .trim();
+    holder = (await const LockDiagnosticService().detectLockingProcess(
+      path,
+    )).trim();
   } catch (_) {
     holder = '';
   }

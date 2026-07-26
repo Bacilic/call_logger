@@ -53,9 +53,7 @@ Future<ProviderContainer> _containerWithSharedPhoneOwners({
   svc.injectInMemoryCatalogForTests(
     users: owners,
     equipment: equipment,
-    departmentRows: [
-      DepartmentModel(id: _kDeptA, name: _kDeptAName),
-    ],
+    departmentRows: [DepartmentModel(id: _kDeptA, name: _kDeptAName)],
     userToEquipmentIds: userToEquipmentIds,
   );
   final container = ProviderContainer(
@@ -194,9 +192,7 @@ void main() {
         svc.injectInMemoryCatalogForTests(
           users: [...owners, outsider],
           equipment: const [],
-          departmentRows: [
-            DepartmentModel(id: _kDeptA, name: _kDeptAName),
-          ],
+          departmentRows: [DepartmentModel(id: _kDeptA, name: _kDeptAName)],
         );
         final container = ProviderContainer(
           overrides: [
@@ -210,10 +206,7 @@ void main() {
 
         final n = container.read(callSmartEntityProvider.notifier);
         n.setCaller(outsider);
-        expect(
-          container.read(callSmartEntityProvider).selectedCaller?.id,
-          99,
-        );
+        expect(container.read(callSmartEntityProvider).selectedCaller?.id, 99);
 
         n.setPhone(_kPhone);
         n.performPhoneLookup(_kPhone);

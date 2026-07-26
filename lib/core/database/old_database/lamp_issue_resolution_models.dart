@@ -209,10 +209,7 @@ class ManualFkTargetSpec {
 
 /// Πρόταση autocomplete κωδικού/ονόματος για χειροκίνητη σύνδεση FK.
 class LampEntityCodeSuggestion {
-  const LampEntityCodeSuggestion({
-    required this.code,
-    required this.label,
-  });
+  const LampEntityCodeSuggestion({required this.code, required this.label});
 
   final int code;
   final String label;

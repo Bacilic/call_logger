@@ -75,16 +75,18 @@ class DepartmentDeletionInventory {
         .where((n) => n.isNotEmpty)
         .toList();
     final ownedPhones = svc.getCallerOwnedPhonesByDepartment(departmentId);
-    final ownedEquipment =
-        svc.getCallerOwnedEquipmentByDepartment(departmentId);
+    final ownedEquipment = svc.getCallerOwnedEquipmentByDepartment(
+      departmentId,
+    );
     return DepartmentDeletionInventory(
       departmentName: departmentName,
       employeeNames: employeeNames,
       employeeOwnedPhoneCount: ownedPhones.length,
       employeeOwnedEquipmentCount: ownedEquipment.length,
       sharedPhones: svc.getDirectPhonesByDepartment(departmentId),
-      sharedEquipmentCodes:
-          svc.getSharedEquipmentCodesByDepartment(departmentId),
+      sharedEquipmentCodes: svc.getSharedEquipmentCodesByDepartment(
+        departmentId,
+      ),
     );
   }
 }

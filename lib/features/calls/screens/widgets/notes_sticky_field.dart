@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -274,9 +274,7 @@ class NotesStickyFieldState extends ConsumerState<NotesStickyField> {
     // βλ. CallsScreenLayout.kNotesColumnMaxWidth) — το κείμενο το γεμίζει.
     return LayoutBuilder(
       builder: (context, c) {
-        final maxW = c.maxWidth.isFinite && c.maxWidth > 0
-            ? c.maxWidth
-            : 400.0;
+        final maxW = c.maxWidth.isFinite && c.maxWidth > 0 ? c.maxWidth : 400.0;
 
         return AnimatedContainer(
           duration: const Duration(milliseconds: 120),
@@ -353,13 +351,11 @@ class NotesStickyFieldState extends ConsumerState<NotesStickyField> {
                           builder: (context, value, _) {
                             return Text(
                               '${value.text.length} / 500',
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .bodySmall
+                              style: Theme.of(context).textTheme.bodySmall
                                   ?.copyWith(
-                                    color: Theme.of(context)
-                                        .colorScheme
-                                        .onSurfaceVariant,
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.onSurfaceVariant,
                                     fontWeight: FontWeight.w500,
                                   ),
                             );
@@ -399,8 +395,8 @@ class _StickyPendingToggle extends ConsumerWidget {
     final labelColor = !notesNonEmpty
         ? theme.colorScheme.onSurface.withValues(alpha: 0.38)
         : isPending
-            ? _kActiveColor
-            : theme.colorScheme.onSurfaceVariant;
+        ? _kActiveColor
+        : theme.colorScheme.onSurfaceVariant;
 
     final label = Text(
       'Εκκρεμότητα',
@@ -453,9 +449,8 @@ class _StickyPendingToggle extends ConsumerWidget {
       cursor: SystemMouseCursors.click,
       child: GestureDetector(
         behavior: HitTestBehavior.translucent,
-        onTap: () => ref
-            .read(notesFieldHintTickProvider.notifier)
-            .requestHintFlash(),
+        onTap: () =>
+            ref.read(notesFieldHintTickProvider.notifier).requestHintFlash(),
         child: row,
       ),
     );

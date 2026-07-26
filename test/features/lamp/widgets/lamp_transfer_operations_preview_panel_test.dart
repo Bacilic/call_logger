@@ -116,28 +116,28 @@ void main() {
       expect(find.text('Νέο'), findsNWidgets(4));
     });
 
-    test('isTransferFieldReadOnly — κενό unchanged πεδίο παραμένει επεξεργάσιμο', () {
-      expect(
-        isTransferFieldReadOnly(
-          TransferFieldAction.unchanged,
-          currentValue: '',
-          destinationValue: null,
-        ),
-        isFalse,
-      );
-      expect(
-        isTransferFieldReadOnly(
-          TransferFieldAction.unchanged,
-          currentValue: 'Φαρμακείο',
-          destinationValue: 'Φαρμακείο',
-        ),
-        isTrue,
-      );
-      expect(
-        isTransferFieldReadOnly(TransferFieldAction.linked),
-        isTrue,
-      );
-    });
+    test(
+      'isTransferFieldReadOnly — κενό unchanged πεδίο παραμένει επεξεργάσιμο',
+      () {
+        expect(
+          isTransferFieldReadOnly(
+            TransferFieldAction.unchanged,
+            currentValue: '',
+            destinationValue: null,
+          ),
+          isFalse,
+        );
+        expect(
+          isTransferFieldReadOnly(
+            TransferFieldAction.unchanged,
+            currentValue: 'Φαρμακείο',
+            destinationValue: 'Φαρμακείο',
+          ),
+          isTrue,
+        );
+        expect(isTransferFieldReadOnly(TransferFieldAction.linked), isTrue);
+      },
+    );
 
     test('reactive αξιολόγηση — τροποποίηση σημειώσεων σε υπάρχον τμήμα', () {
       final draft = _departmentDraft(
@@ -192,10 +192,7 @@ void main() {
             body: SizedBox(
               width: 460,
               height: 620,
-              child: _ReactiveFormHarness(
-                draft: draft,
-                selectedCandidateId: 5,
-              ),
+              child: _ReactiveFormHarness(draft: draft, selectedCandidateId: 5),
             ),
           ),
         ),

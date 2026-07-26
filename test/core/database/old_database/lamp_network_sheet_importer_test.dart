@@ -508,10 +508,7 @@ void main() {
           );
           expect(match.single['ip_address'], '10.0.0.5');
           expect(match.single['network_name'], 'PC3846');
-          expect(
-            match.single['network_source'],
-            isNot(contains('ΑΣΥΜΦΩΝΙΑ')),
-          );
+          expect(match.single['network_source'], isNot(contains('ΑΣΥΜΦΩΝΙΑ')));
 
           final mismatch = await db.query(
             'equipment',

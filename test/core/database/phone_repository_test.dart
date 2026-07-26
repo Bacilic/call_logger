@@ -18,8 +18,9 @@ void main() {
 
     setUpAll(() async {
       initSqfliteFfiForTests();
-      final dir =
-          await Directory.systemTemp.createTemp('phone_repository_test_');
+      final dir = await Directory.systemTemp.createTemp(
+        'phone_repository_test_',
+      );
       await DatabaseHelper.bindTestDatabaseFile('${dir.path}/phone_repo.db');
       db = await DatabaseHelper.instance.database;
     });
@@ -93,10 +94,20 @@ void main() {
 
         await repo.addDepartmentDirectPhone(deptId, phoneNumber);
 
-        expect(await db.query('phones', where: 'number = ?', whereArgs: [phoneNumber]),
-            hasLength(1));
         expect(
-          await db.query('department_phones', where: 'phone_id = ?', whereArgs: [phoneId]),
+          await db.query(
+            'phones',
+            where: 'number = ?',
+            whereArgs: [phoneNumber],
+          ),
+          hasLength(1),
+        );
+        expect(
+          await db.query(
+            'department_phones',
+            where: 'phone_id = ?',
+            whereArgs: [phoneId],
+          ),
           hasLength(1),
         );
         expect(await db.query('audit_log'), hasLength(1));
@@ -119,7 +130,11 @@ void main() {
       expect(await repo.phoneNumberExists(phoneNumber), isFalse);
       expect(await repo.getPhoneIdByNumber(phoneNumber), isNull);
 
-      final row = await db.query('phones', where: 'id = ?', whereArgs: [phoneId]);
+      final row = await db.query(
+        'phones',
+        where: 'id = ?',
+        whereArgs: [phoneId],
+      );
       expect(row.single['is_deleted'], 1);
 
       final auditRows = await db.query(
@@ -169,45 +184,52 @@ void main() {
       expect(newV?['department_id'], deptId);
     });
 
-    test('updatePhoneDepartment: υπάρχων αριθμός — audit old/new department', () async {
-      const phoneNumber = '2310999906';
-      final oldDeptId = await insertDepartment('Παλιό Τμήμα Phone');
-      final newDeptId = await insertDepartment('Νέο Τμήμα Phone');
+    test(
+      'updatePhoneDepartment: υπάρχων αριθμός — audit old/new department',
+      () async {
+        const phoneNumber = '2310999906';
+        final oldDeptId = await insertDepartment('Παλιό Τμήμα Phone');
+        final newDeptId = await insertDepartment('Νέο Τμήμα Phone');
 
-      final phoneId = await db.insert('phones', {
-        'number': phoneNumber,
-        'department_id': oldDeptId,
-        'is_deleted': 0,
-      });
-      await db.insert('department_phones', {
-        'department_id': oldDeptId,
-        'phone_id': phoneId,
-      });
+        final phoneId = await db.insert('phones', {
+          'number': phoneNumber,
+          'department_id': oldDeptId,
+          'is_deleted': 0,
+        });
+        await db.insert('department_phones', {
+          'department_id': oldDeptId,
+          'phone_id': phoneId,
+        });
 
-      await db.delete('audit_log');
-      await repo.updatePhoneDepartment(phoneNumber, newDeptId);
+        await db.delete('audit_log');
+        await repo.updatePhoneDepartment(phoneNumber, newDeptId);
 
-      final phoneRows = await db.query('phones', where: 'id = ?', whereArgs: [phoneId]);
-      expect(phoneRows.single['department_id'], newDeptId);
+        final phoneRows = await db.query(
+          'phones',
+          where: 'id = ?',
+          whereArgs: [phoneId],
+        );
+        expect(phoneRows.single['department_id'], newDeptId);
 
-      final deptLinks = await db.query(
-        'department_phones',
-        where: 'phone_id = ?',
-        whereArgs: [phoneId],
-      );
-      expect(deptLinks.single['department_id'], newDeptId);
+        final deptLinks = await db.query(
+          'department_phones',
+          where: 'phone_id = ?',
+          whereArgs: [phoneId],
+        );
+        expect(deptLinks.single['department_id'], newDeptId);
 
-      final auditRows = await db.query(
-        'audit_log',
-        where: 'entity_id = ?',
-        whereArgs: [phoneId],
-      );
-      expect(auditRows, hasLength(1));
-      final oldV = decodeJson(auditRows.single['old_values_json'] as String?);
-      final newV = decodeJson(auditRows.single['new_values_json'] as String?);
-      expect(oldV?['department_id'], oldDeptId);
-      expect(newV?['department_id'], newDeptId);
-    });
+        final auditRows = await db.query(
+          'audit_log',
+          where: 'entity_id = ?',
+          whereArgs: [phoneId],
+        );
+        expect(auditRows, hasLength(1));
+        final oldV = decodeJson(auditRows.single['old_values_json'] as String?);
+        final newV = decodeJson(auditRows.single['new_values_json'] as String?);
+        expect(oldV?['department_id'], oldDeptId);
+        expect(newV?['department_id'], newDeptId);
+      },
+    );
 
     test('removePhoneFromAllUsers: audit + χωρίς executor', () async {
       const phoneNumber = '2310999907';
@@ -215,16 +237,19 @@ void main() {
         'number': phoneNumber,
         'is_deleted': 0,
       });
-      await db.insert('user_phones', {
-        'user_id': userId,
-        'phone_id': phoneId,
-      });
+      await db.insert('user_phones', {'user_id': userId, 'phone_id': phoneId});
 
       await db.delete('audit_log');
       await repo.removePhoneFromAllUsers(phoneNumber);
 
-      expect(await db.query('user_phones', where: 'phone_id = ?', whereArgs: [phoneId]),
-          isEmpty);
+      expect(
+        await db.query(
+          'user_phones',
+          where: 'phone_id = ?',
+          whereArgs: [phoneId],
+        ),
+        isEmpty,
+      );
 
       final auditRows = await db.query(
         'audit_log',
@@ -240,17 +265,20 @@ void main() {
         'number': phoneNumber,
         'is_deleted': 0,
       });
-      await db.insert('user_phones', {
-        'user_id': userId,
-        'phone_id': phoneId,
-      });
+      await db.insert('user_phones', {'user_id': userId, 'phone_id': phoneId});
 
       await db.transaction((txn) async {
         await repo.removePhoneFromAllUsers(phoneNumber, executor: txn);
       });
 
-      expect(await db.query('user_phones', where: 'phone_id = ?', whereArgs: [phoneId]),
-          isEmpty);
+      expect(
+        await db.query(
+          'user_phones',
+          where: 'phone_id = ?',
+          whereArgs: [phoneId],
+        ),
+        isEmpty,
+      );
     });
 
     test(
@@ -272,7 +300,11 @@ void main() {
         );
 
         expect(
-          await db.query('phones', where: 'number = ?', whereArgs: [phoneNumber]),
+          await db.query(
+            'phones',
+            where: 'number = ?',
+            whereArgs: [phoneNumber],
+          ),
           isEmpty,
         );
         expect(await db.query('department_phones'), isEmpty);

@@ -63,7 +63,11 @@ Future<void> _pumpExpandedCallsScreen(
   await tester.pump();
   await tester.testTextInput.receiveAction(TextInputAction.done);
   await tester.pump(const Duration(milliseconds: 300));
-  await pumpUntilSettled(tester, steps: 40, step: const Duration(milliseconds: 60));
+  await pumpUntilSettled(
+    tester,
+    steps: 40,
+    step: const Duration(milliseconds: 60),
+  );
 }
 
 Future<void> _seedRecentCallsForCardPanels() async {
@@ -105,7 +109,11 @@ Future<void> _openGlobalRecentCard(WidgetTester tester) async {
         .read(showGlobalCallsToggleProvider.notifier)
         .setVisible(true);
   });
-  await pumpUntilSettled(tester, steps: 40, step: const Duration(milliseconds: 60));
+  await pumpUntilSettled(
+    tester,
+    steps: 40,
+    step: const Duration(milliseconds: 60),
+  );
 }
 
 /// Πλάτος της capped στήλης πλέγματος (ConstrainedBox μέσα στο [_LayoutColumnWidthCap]).
@@ -148,7 +156,9 @@ double _layoutColumnHostWidth(WidgetTester tester, Finder cardFinder) {
   expect(
     columnCap,
     isNotNull,
-    reason: greekExpectMsg('Αναμενόταν ConstrainedBox πλάτους στήλης πλέγματος'),
+    reason: greekExpectMsg(
+      'Αναμενόταν ConstrainedBox πλάτους στήλης πλέγματος',
+    ),
   );
 
   final box = columnCap!.renderObject;
@@ -197,38 +207,42 @@ void main() {
       await tester.pump(const Duration(seconds: 11));
     }, semanticsEnabled: false);
 
-    testWidgets('UserInfoCard: η στήλη δεν ξεπερνά το max πλάτος κάρτας', (
-      tester,
-    ) async {
-      await _pumpExpandedCallsScreen(tester);
+    testWidgets(
+      'UserInfoCard: η στήλη δεν ξεπερνά το max πλάτος κάρτας',
+      (tester) async {
+        await _pumpExpandedCallsScreen(tester);
 
-      expect(find.byType(UserInfoCard), findsOneWidget);
+        expect(find.byType(UserInfoCard), findsOneWidget);
 
-      _expectColumnWidthAtMost(
-        tester,
-        find.byType(UserInfoCard),
-        CallsScreenLayout.kRecentCallsCardColumnMaxWidth,
-        cardLabel: 'UserInfoCard (στοίβα caller+ιστορικό)',
-      );
-      await tester.pump(const Duration(seconds: 11));
-    }, semanticsEnabled: false);
+        _expectColumnWidthAtMost(
+          tester,
+          find.byType(UserInfoCard),
+          CallsScreenLayout.kRecentCallsCardColumnMaxWidth,
+          cardLabel: 'UserInfoCard (στοίβα caller+ιστορικό)',
+        );
+        await tester.pump(const Duration(seconds: 11));
+      },
+      semanticsEnabled: false,
+    );
 
-    testWidgets('RecentCallsList: η στήλη δεν ξεπερνά το max πλάτος κάρτας', (
-      tester,
-    ) async {
-      await _pumpExpandedCallsScreen(tester);
+    testWidgets(
+      'RecentCallsList: η στήλη δεν ξεπερνά το max πλάτος κάρτας',
+      (tester) async {
+        await _pumpExpandedCallsScreen(tester);
 
-      expect(find.byType(RecentCallsList), findsOneWidget);
-      await pumpUntilSettled(tester, steps: 20);
+        expect(find.byType(RecentCallsList), findsOneWidget);
+        await pumpUntilSettled(tester, steps: 20);
 
-      _expectColumnWidthAtMost(
-        tester,
-        find.byType(RecentCallsList),
-        CallsScreenLayout.kRecentCallsCardColumnMaxWidth,
-        cardLabel: 'RecentCallsList',
-      );
-      await tester.pump(const Duration(seconds: 11));
-    }, semanticsEnabled: false);
+        _expectColumnWidthAtMost(
+          tester,
+          find.byType(RecentCallsList),
+          CallsScreenLayout.kRecentCallsCardColumnMaxWidth,
+          cardLabel: 'RecentCallsList',
+        );
+        await tester.pump(const Duration(seconds: 11));
+      },
+      semanticsEnabled: false,
+    );
 
     testWidgets(
       'GlobalRecentCallsList: η στήλη δεν ξεπερνά το max πλάτος κάρτας',
@@ -291,23 +305,22 @@ void main() {
       semanticsEnabled: false,
     );
 
-    testWidgets('μεσαίο viewport: στοίβα στήλων αντί οριζόντιου πλέγματος — χωρίς overflow', (
-      tester,
-    ) async {
-      await _pumpExpandedCallsScreen(
-        tester,
-        viewport: const Size(1150, 900),
-      );
-      await _openGlobalRecentCard(tester);
-      expect(
-        tester.takeException(),
-        isNull,
-        reason: greekExpectMsg(
-          'Μεσαίο πλάτος παραθύρου: στοίβα στήλων χωρίς RenderFlex overflow',
-        ),
-      );
-      expect(find.byType(MiniMapCard), findsOneWidget);
-      await tester.pump(const Duration(seconds: 11));
-    }, semanticsEnabled: false);
+    testWidgets(
+      'μεσαίο viewport: στοίβα στήλων αντί οριζόντιου πλέγματος — χωρίς overflow',
+      (tester) async {
+        await _pumpExpandedCallsScreen(tester, viewport: const Size(1150, 900));
+        await _openGlobalRecentCard(tester);
+        expect(
+          tester.takeException(),
+          isNull,
+          reason: greekExpectMsg(
+            'Μεσαίο πλάτος παραθύρου: στοίβα στήλων χωρίς RenderFlex overflow',
+          ),
+        );
+        expect(find.byType(MiniMapCard), findsOneWidget);
+        await tester.pump(const Duration(seconds: 11));
+      },
+      semanticsEnabled: false,
+    );
   });
 }

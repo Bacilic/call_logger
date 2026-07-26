@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 
 import '../utils/task_duration_format.dart';
 import '../../../core/widgets/deleted_catalog_entity_text.dart';
@@ -119,8 +119,9 @@ class TaskCard extends ConsumerStatefulWidget {
     final createdAt = task.createdAtDateTime;
     final completedAt = task.updatedAtDateTime;
     final snoozeEntries = task.snoozeEntries;
-    final lastSnoozeAt =
-        snoozeEntries.isNotEmpty ? snoozeEntries.last.snoozedAt : null;
+    final lastSnoozeAt = snoozeEntries.isNotEmpty
+        ? snoozeEntries.last.snoozedAt
+        : null;
 
     switch (status) {
       case TaskStatus.open:
@@ -128,9 +129,7 @@ class TaskCard extends ConsumerStatefulWidget {
         return rel.isEmpty ? 'Ανοικτή εκκρεμότητα' : 'Δημιουργία: $rel';
       case TaskStatus.snoozed:
         if (snoozeEntries.isEmpty) return 'Αναβληθείσα εκκρεμότητα';
-        final lines = <String>[
-          'Αναβολές: ${snoozeEntries.length}',
-        ];
+        final lines = <String>['Αναβολές: ${snoozeEntries.length}'];
         for (final entry in snoozeEntries.asMap().entries) {
           final i = entry.key + 1;
           final line =
@@ -218,10 +217,17 @@ class _TaskCardState extends ConsumerState<TaskCard> {
       spacing: 12.0,
       runSpacing: 4.0,
       children: [
-        if (hasUser) row(Icons.person_outline, user, linkedDeleted: t.callerLinkedDeleted),
+        if (hasUser)
+          row(Icons.person_outline, user, linkedDeleted: t.callerLinkedDeleted),
         if (hasPhone) row(Icons.phone_outlined, phone),
-        if (hasDept) row(Icons.domain, dept, linkedDeleted: t.departmentLinkedDeleted),
-        if (hasEquip) row(Icons.computer_outlined, equip, linkedDeleted: t.equipmentLinkedDeleted),
+        if (hasDept)
+          row(Icons.domain, dept, linkedDeleted: t.departmentLinkedDeleted),
+        if (hasEquip)
+          row(
+            Icons.computer_outlined,
+            equip,
+            linkedDeleted: t.equipmentLinkedDeleted,
+          ),
       ],
     );
   }
@@ -291,7 +297,9 @@ class _TaskCardState extends ConsumerState<TaskCard> {
     final task = widget.task;
     if (!task.isQuickAdd || task.id == null || !mounted) return;
 
-    final settings = ref.read(taskSettingsConfigProvider).maybeWhen(
+    final settings = ref
+        .read(taskSettingsConfigProvider)
+        .maybeWhen(
           data: (c) => c,
           orElse: () => TaskSettingsConfig.defaultConfig(),
         );
@@ -330,21 +338,23 @@ class _TaskCardState extends ConsumerState<TaskCard> {
         ? task.solutionNotes!.trim()
         : 'Κλείσιμο μετά από επιτυχή επεξεργασία οντότητας';
     try {
-      await ref.read(tasksProvider.notifier).updateTask(
-        task.copyWith(
-          status: TaskStatus.closed.toDbValue,
-          solutionNotes: notes,
-        ),
-      );
+      await ref
+          .read(tasksProvider.notifier)
+          .updateTask(
+            task.copyWith(
+              status: TaskStatus.closed.toDbValue,
+              solutionNotes: notes,
+            ),
+          );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Εκκρεμότητα ολοκληρώθηκε.')),
       );
     } on TaskSaveException catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.message)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.message)));
     }
   }
 
@@ -369,7 +379,8 @@ class _TaskCardState extends ConsumerState<TaskCard> {
     final statusTooltip = TaskCard._buildStatusTooltip(task, status);
     final pendingDeleteTaskId = ref.watch(pendingTaskDeleteProvider);
     final deleteMenuEnabled = pendingDeleteTaskId == null;
-    final isPendingDeleteSelf = pendingDeleteTaskId != null &&
+    final isPendingDeleteSelf =
+        pendingDeleteTaskId != null &&
         task.id != null &&
         pendingDeleteTaskId == task.id;
 
@@ -441,7 +452,9 @@ class _TaskCardState extends ConsumerState<TaskCard> {
                                       visualDensity: VisualDensity.compact,
                                     ),
                                     onPressed: () {
-                                      setState(() => _showSolution = !_showSolution);
+                                      setState(
+                                        () => _showSolution = !_showSolution,
+                                      );
                                     },
                                     child: Row(
                                       mainAxisSize: MainAxisSize.min,
@@ -479,10 +492,10 @@ class _TaskCardState extends ConsumerState<TaskCard> {
                               : task.description!,
                         ),
                       if ((task.isQuickAdd
-                                  ? task.cleanDescription
-                                  : task.description)
-                              ?.isNotEmpty ==
-                          true &&
+                                      ? task.cleanDescription
+                                      : task.description)
+                                  ?.isNotEmpty ==
+                              true &&
                           _hasEntityMetadata())
                         const SizedBox(height: 8),
                       _buildEntityMetadata(theme),
@@ -519,7 +532,8 @@ class _TaskCardState extends ConsumerState<TaskCard> {
                           ),
                       ],
                     ),
-                    if (widget.onComplete != null && status != TaskStatus.closed)
+                    if (widget.onComplete != null &&
+                        status != TaskStatus.closed)
                       IconButton(
                         icon: const Icon(Icons.check_circle_outline),
                         tooltip: 'Ολοκλήρωση',
@@ -567,11 +581,7 @@ class _TaskCardState extends ConsumerState<TaskCard> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Divider(
-                    height: 10,
-                    thickness: 0.5,
-                    color: Colors.black87,
-                  ),
+                  Divider(height: 10, thickness: 0.5, color: Colors.black87),
                   LinkableSelectableText(
                     text: task.solutionNotes!.trim(),
                     style: theme.textTheme.bodySmall?.copyWith(
@@ -592,10 +602,7 @@ class _TaskCardState extends ConsumerState<TaskCard> {
             'Εκκρεμεί η διαγραφή· πατήστε «Αναίρεση» στο μήνυμα κάτω για επαναφορά',
         child: AbsorbPointer(
           absorbing: true,
-          child: Opacity(
-            opacity: 0.5,
-            child: card,
-          ),
+          child: Opacity(opacity: 0.5, child: card),
         ),
       );
     }

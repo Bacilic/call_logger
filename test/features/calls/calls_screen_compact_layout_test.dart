@@ -1,4 +1,4 @@
-﻿// Widget tests: θέση Τελευταίες Κλήσεις — κλειστό = κάτω δεξιά, ανοιχτό expanded = slot πλάνου.
+// Widget tests: θέση Τελευταίες Κλήσεις — κλειστό = κάτω δεξιά, ανοιχτό expanded = slot πλάνου.
 //
 //   flutter test test/features/calls/calls_screen_compact_layout_test.dart
 
@@ -99,7 +99,10 @@ void _expectToggleInteractive(WidgetTester tester, {required String phase}) {
   );
 }
 
-void _expectToggleAnchoredBottomRight(WidgetTester tester, {required String phase}) {
+void _expectToggleAnchoredBottomRight(
+  WidgetTester tester, {
+  required String phase,
+}) {
   _expectToggleInteractive(tester, phase: phase);
   final viewport = _callsViewportRect(tester);
   final toggleRect = tester.getRect(_globalRecentToggleFinder());
@@ -252,7 +255,11 @@ Future<void> _confirmPhoneField(WidgetTester tester) async {
   await tester.sendKeyDownEvent(LogicalKeyboardKey.tab);
   await tester.sendKeyUpEvent(LogicalKeyboardKey.tab);
   await tester.pump(const Duration(milliseconds: 450));
-  await pumpUntilSettled(tester, steps: 40, step: const Duration(milliseconds: 60));
+  await pumpUntilSettled(
+    tester,
+    steps: 40,
+    step: const Duration(milliseconds: 60),
+  );
 }
 
 Future<void> _setGlobalRecentOpen(WidgetTester tester, bool open) async {
@@ -296,7 +303,9 @@ void main() {
         _expectScreenTitleAbsent(phase: 'αρχική συμπτυγμένη');
 
         final viewport = _callsViewportRect(tester);
-        final selectorRect = tester.getRect(find.byType(SmartEntitySelectorWidget));
+        final selectorRect = tester.getRect(
+          find.byType(SmartEntitySelectorWidget),
+        );
         final ratio = _verticalCenterRatio(selectorRect, viewport);
 
         expect(
@@ -350,8 +359,9 @@ void main() {
         _expectScreenTitleAbsent(phase: 'πληκτρολόγηση ≥2 ψηφίων');
 
         final viewport = _callsViewportRect(tester);
-        final selectorRect =
-            tester.getRect(find.byType(SmartEntitySelectorWidget));
+        final selectorRect = tester.getRect(
+          find.byType(SmartEntitySelectorWidget),
+        );
         final ratio = _verticalCenterRatio(selectorRect, viewport);
         expect(
           ratio,
@@ -421,13 +431,12 @@ void main() {
 
         reporter.logStep('Συμπτυγμένη + κλειστή ΤΚ');
         await _setGlobalRecentOpen(tester, false);
-        _expectToggleAnchoredBottomRight(
-          tester,
-          phase: 'συμπτυγμένη, κλειστή',
-        );
+        _expectToggleAnchoredBottomRight(tester, phase: 'συμπτυγμένη, κλειστή');
         _expectGlobalRecentListAbsent(phase: 'συμπτυγμένη, κλειστή');
 
-        reporter.logStep('Συμπτυγμένη + ανοιχτή ΤΚ — κάρτα στη ροή, ελάχιστο κενό');
+        reporter.logStep(
+          'Συμπτυγμένη + ανοιχτή ΤΚ — κάρτα στη ροή, ελάχιστο κενό',
+        );
         await _tapGlobalRecentToggle(tester);
         _expectToggleAbsent(phase: 'συμπτυγμένη, ανοιχτή');
         expect(
@@ -463,13 +472,12 @@ void main() {
 
         reporter.logStep('Αναπτυγμένη + κλειστή ΤΚ — διακόπτης κάτω δεξιά');
         await _setGlobalRecentOpen(tester, false);
-        _expectToggleAnchoredBottomRight(
-          tester,
-          phase: 'αναπτυγμένη, κλειστή',
-        );
+        _expectToggleAnchoredBottomRight(tester, phase: 'αναπτυγμένη, κλειστή');
         _expectGlobalRecentListAbsent(phase: 'αναπτυγμένη, κλειστή');
 
-        reporter.logStep('Αναπτυγμένη + ανοιχτή ΤΚ — κάρτα στο πλέγμα, χωρίς εξωτερικό διακόπτη');
+        reporter.logStep(
+          'Αναπτυγμένη + ανοιχτή ΤΚ — κάρτα στο πλέγμα, χωρίς εξωτερικό διακόπτη',
+        );
         await _tapGlobalRecentToggle(tester);
         _expectToggleAbsent(phase: 'αναπτυγμένη, ανοιχτή');
         _expectGlobalRecentListInPlanSlot(
@@ -477,7 +485,9 @@ void main() {
           phase: 'αναπτυγμένη, ανοιχτή (Πρότυπο-Α #1)',
         );
 
-        reporter.logStep('Αναπτυγμένη — κλείσιμο από Switch κάρτας, διακόπτης κάτω δεξιά');
+        reporter.logStep(
+          'Αναπτυγμένη — κλείσιμο από Switch κάρτας, διακόπτης κάτω δεξιά',
+        );
         await _closeGlobalRecentViaCardSwitch(tester);
         _expectToggleAnchoredBottomRight(
           tester,
@@ -498,10 +508,13 @@ void main() {
         );
         _expectScreenTitleAbsent(phase: 'μετά Εκκαθάριση');
         final viewportAfterClear = _callsViewportRect(tester);
-        final selectorRectAfterClear =
-            tester.getRect(find.byType(SmartEntitySelectorWidget));
-        final ratioAfterClear =
-            _verticalCenterRatio(selectorRectAfterClear, viewportAfterClear);
+        final selectorRectAfterClear = tester.getRect(
+          find.byType(SmartEntitySelectorWidget),
+        );
+        final ratioAfterClear = _verticalCenterRatio(
+          selectorRectAfterClear,
+          viewportAfterClear,
+        );
         expect(
           ratioAfterClear,
           inInclusiveRange(
@@ -513,10 +526,7 @@ void main() {
             'κάθετα στο κέντρο του viewport',
           ),
         );
-        _expectToggleAnchoredBottomRight(
-          tester,
-          phase: 'μετά Εκκαθάριση',
-        );
+        _expectToggleAnchoredBottomRight(tester, phase: 'μετά Εκκαθάριση');
 
         reporter.recordPass(
           'ΤΚ: κλειστή κάτω δεξιά, ανοιχτή expanded στο slot πλάνου',

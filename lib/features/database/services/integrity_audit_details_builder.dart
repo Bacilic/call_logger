@@ -36,7 +36,11 @@ class IntegrityAuditDetailsBuilder {
     return 'Τμήμα ID $id$status';
   }
 
-  String equipmentLabel({required int? id, String? code, bool deleted = false}) {
+  String equipmentLabel({
+    required int? id,
+    String? code,
+    bool deleted = false,
+  }) {
     if (id == null) return 'άγνωστος εξοπλισμός';
     final status = deleted ? ' [Διαγραμμένο]' : ' [Ενεργό]';
     final trimmed = code?.trim();
@@ -65,8 +69,12 @@ class IntegrityAuditDetailsBuilder {
     return 'Κατηγορία ID $id$status';
   }
 
-  ({String details, Map<String, dynamic> oldValues, Map<String, dynamic> newValues})
-      userDepartmentChange({
+  ({
+    String details,
+    Map<String, dynamic> oldValues,
+    Map<String, dynamic> newValues,
+  })
+  userDepartmentChange({
     required String userLabel,
     required String? oldDepartmentLabel,
     required String? newDepartmentLabel,
@@ -88,10 +96,12 @@ class IntegrityAuditDetailsBuilder {
     );
   }
 
-  ({String details, Map<String, dynamic> oldValues, Map<String, dynamic> newValues})
-      junctionCleanup({
-    required DatabaseIntegrityFinding finding,
-  }) {
+  ({
+    String details,
+    Map<String, dynamic> oldValues,
+    Map<String, dynamic> newValues,
+  })
+  junctionCleanup({required DatabaseIntegrityFinding finding}) {
     return (
       details: 'Εκκαθάριση ορφανής σύνδεσης: ${finding.description}',
       oldValues: Map<String, dynamic>.from(finding.context),
@@ -99,8 +109,12 @@ class IntegrityAuditDetailsBuilder {
     );
   }
 
-  ({String details, Map<String, dynamic> oldValues, Map<String, dynamic> newValues})
-      fkChange({
+  ({
+    String details,
+    Map<String, dynamic> oldValues,
+    Map<String, dynamic> newValues,
+  })
+  fkChange({
     required String entityLabel,
     required String fieldLabel,
     required Object? oldValue,
@@ -114,8 +128,12 @@ class IntegrityAuditDetailsBuilder {
     );
   }
 
-  ({String details, Map<String, dynamic> oldValues, Map<String, dynamic> newValues})
-      simpleAction({
+  ({
+    String details,
+    Map<String, dynamic> oldValues,
+    Map<String, dynamic> newValues,
+  })
+  simpleAction({
     required String details,
     Map<String, dynamic>? oldValues,
     Map<String, dynamic>? newValues,

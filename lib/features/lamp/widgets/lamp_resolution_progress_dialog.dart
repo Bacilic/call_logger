@@ -122,10 +122,7 @@ class _LampResolutionProgressDialogState
                 LinearProgressIndicator(value: progressValue),
                 const SizedBox(height: 12),
               ],
-              Text(
-                _statusText(),
-                style: theme.textTheme.bodyMedium,
-              ),
+              Text(_statusText(), style: theme.textTheme.bodyMedium),
               const SizedBox(height: 12),
               Expanded(
                 child: DecoratedBox(

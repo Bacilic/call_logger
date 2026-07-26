@@ -45,7 +45,8 @@ void main() {
         expect(
           container.read(dashboardCallsForReportProvider).hasValue,
           isTrue,
-          reason: 'Προϋπόθεση: ο provider έχει φορτώσει δεδομένα πριν τη mutation',
+          reason:
+              'Προϋπόθεση: ο provider έχει φορτώσει δεδομένα πριν τη mutation',
         );
 
         refreshAfterCallMutation(_capturedRef!, invalidateHistory: true);

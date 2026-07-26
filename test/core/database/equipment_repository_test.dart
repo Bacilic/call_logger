@@ -22,8 +22,9 @@ void main() {
 
     setUpAll(() async {
       initSqfliteFfiForTests();
-      final dir =
-          await Directory.systemTemp.createTemp('equipment_repository_test_');
+      final dir = await Directory.systemTemp.createTemp(
+        'equipment_repository_test_',
+      );
       await DatabaseHelper.bindTestDatabaseFile(
         '${dir.path}/equipment_repo.db',
       );
@@ -58,9 +59,9 @@ void main() {
     });
 
     Map<String, dynamic> equipmentRow(String code) => {
-          'code_equipment': code,
-          'is_deleted': 0,
-        };
+      'code_equipment': code,
+      'is_deleted': 0,
+    };
 
     Map<String, dynamic>? decodeJson(String? raw) {
       if (raw == null || raw.trim().isEmpty) return null;
@@ -105,7 +106,11 @@ void main() {
       final id = await repo.insertEquipmentFromMap(equipmentRow('PC-NEW'));
 
       expect(id, greaterThan(0));
-      final rows = await db.query('equipment', where: 'id = ?', whereArgs: [id]);
+      final rows = await db.query(
+        'equipment',
+        where: 'id = ?',
+        whereArgs: [id],
+      );
       expect(rows.single['code_equipment'], 'PC-NEW');
       expect(rows.single['is_deleted'], 0);
     });
@@ -159,7 +164,11 @@ void main() {
         await db.delete('audit_log');
         await repo.updateEquipmentDepartment(code, newDeptId);
 
-        final row = await db.query('equipment', where: 'id = ?', whereArgs: [eqId]);
+        final row = await db.query(
+          'equipment',
+          where: 'id = ?',
+          whereArgs: [eqId],
+        );
         expect(row.single['department_id'], newDeptId);
 
         final auditRows = await db.query(
@@ -189,7 +198,11 @@ void main() {
       await db.delete('audit_log');
       await repo.clearEquipmentSharedDepartment(code, deptId);
 
-      final row = await db.query('equipment', where: 'id = ?', whereArgs: [eqId]);
+      final row = await db.query(
+        'equipment',
+        where: 'id = ?',
+        whereArgs: [eqId],
+      );
       expect(row.single['department_id'], isNull);
 
       final auditRows = await db.query(
@@ -205,7 +218,9 @@ void main() {
     });
 
     test('replaceEquipmentUsers: audit σύνδεσης/αποσύνδεσης χρηστών', () async {
-      final eqId = await repo.insertEquipmentFromMap(equipmentRow('PC-REPLACE'));
+      final eqId = await repo.insertEquipmentFromMap(
+        equipmentRow('PC-REPLACE'),
+      );
 
       await db.delete('audit_log');
       await repo.replaceEquipmentUsers(eqId, [userId]);
@@ -213,10 +228,7 @@ void main() {
       final linkAudit = await db.query(
         'audit_log',
         where: 'entity_id = ? AND details = ?',
-        whereArgs: [
-          eqId,
-          'equipment id=$eqId (αντικατάσταση χρηστών)',
-        ],
+        whereArgs: [eqId, 'equipment id=$eqId (αντικατάσταση χρηστών)'],
       );
       expect(linkAudit, hasLength(1));
 
@@ -226,15 +238,18 @@ void main() {
       final unlinkAudit = await db.query(
         'audit_log',
         where: 'entity_id = ? AND details = ?',
-        whereArgs: [
-          eqId,
-          'equipment id=$eqId (αντικατάσταση χρηστών)',
-        ],
+        whereArgs: [eqId, 'equipment id=$eqId (αντικατάσταση χρηστών)'],
       );
       expect(unlinkAudit, hasLength(1));
 
-      expect(await db.query('user_equipment', where: 'equipment_id = ?', whereArgs: [eqId]),
-          isEmpty);
+      expect(
+        await db.query(
+          'user_equipment',
+          where: 'equipment_id = ?',
+          whereArgs: [eqId],
+        ),
+        isEmpty,
+      );
     });
 
     test('copyUserEquipmentLinks', () async {
@@ -287,12 +302,12 @@ void main() {
         'user_id': userId,
         'equipment_id': eqId,
       });
-      await db.insert('calls', {
-        'equipment_id': eqId,
-        'is_deleted': 0,
-      });
+      await db.insert('calls', {'equipment_id': eqId, 'is_deleted': 0});
 
-      expect(await repo.countEquipmentReferencesExcludingAudit(eqId), greaterThanOrEqualTo(2));
+      expect(
+        await repo.countEquipmentReferencesExcludingAudit(eqId),
+        greaterThanOrEqualTo(2),
+      );
     });
 
     test('getEquipmentDefaultRemoteToolUsageCounts', () async {
@@ -327,7 +342,11 @@ void main() {
       await repo.deleteEquipments([eqId]);
 
       expect(
-        (await db.query('equipment', where: 'id = ?', whereArgs: [eqId])).single['is_deleted'],
+        (await db.query(
+          'equipment',
+          where: 'id = ?',
+          whereArgs: [eqId],
+        )).single['is_deleted'],
         1,
       );
       expect(
@@ -343,7 +362,11 @@ void main() {
       await repo.restoreEquipment([eqId]);
 
       expect(
-        (await db.query('equipment', where: 'id = ?', whereArgs: [eqId])).single['is_deleted'],
+        (await db.query(
+          'equipment',
+          where: 'id = ?',
+          whereArgs: [eqId],
+        )).single['is_deleted'],
         0,
       );
       expect(
@@ -373,7 +396,11 @@ void main() {
         );
 
         expect(
-          await db.query('equipment', where: 'code_equipment = ?', whereArgs: [code]),
+          await db.query(
+            'equipment',
+            where: 'code_equipment = ?',
+            whereArgs: [code],
+          ),
           isEmpty,
         );
       },
@@ -394,21 +421,26 @@ void main() {
           'equipment_id': eqId,
         });
 
-        await db.transaction((txn) async {
-          expect(
-            await repo.countUsersLinkedToEquipment(eqId, executor: txn),
-            2,
-          );
-          await repo.deleteEquipments([eqId], executor: txn);
-          expect(
-            await repo.countUsersLinkedToEquipment(eqId, executor: txn),
-            0,
-          );
-        }).timeout(const Duration(seconds: 10));
+        await db
+            .transaction((txn) async {
+              expect(
+                await repo.countUsersLinkedToEquipment(eqId, executor: txn),
+                2,
+              );
+              await repo.deleteEquipments([eqId], executor: txn);
+              expect(
+                await repo.countUsersLinkedToEquipment(eqId, executor: txn),
+                0,
+              );
+            })
+            .timeout(const Duration(seconds: 10));
 
         expect(
-          (await db.query('equipment', where: 'id = ?', whereArgs: [eqId]))
-              .single['is_deleted'],
+          (await db.query(
+            'equipment',
+            where: 'id = ?',
+            whereArgs: [eqId],
+          )).single['is_deleted'],
           1,
         );
       },

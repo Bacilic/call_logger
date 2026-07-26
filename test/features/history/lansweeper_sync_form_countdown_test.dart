@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-
 void main() {
   group('LansweeperSyncForm cooldown UI', () {
     late SpellCheckController titleController;
@@ -54,9 +53,7 @@ void main() {
         ),
       );
 
-      final button = tester.widget<FilledButton>(
-        find.byType(FilledButton),
-      );
+      final button = tester.widget<FilledButton>(find.byType(FilledButton));
       expect(button.onPressed, isNull);
       expect(find.text('gemini-flash-latest'), findsOneWidget);
     });
@@ -65,10 +62,7 @@ void main() {
       tester,
     ) async {
       await tester.pumpWidget(
-        buildForm(
-          cooldownRemainingSeconds: 42,
-          cooldownModelLabel: 'model-x',
-        ),
+        buildForm(cooldownRemainingSeconds: 42, cooldownModelLabel: 'model-x'),
       );
 
       expect(find.text('42 δλ'), findsOneWidget);
@@ -82,10 +76,7 @@ void main() {
     testWidgets('χρώματα στα όρια 30/10 δευτερολέπτων', (tester) async {
       Future<Color?> colorFor(int seconds) async {
         await tester.pumpWidget(
-          buildForm(
-            cooldownRemainingSeconds: seconds,
-            cooldownModelLabel: 'm',
-          ),
+          buildForm(cooldownRemainingSeconds: seconds, cooldownModelLabel: 'm'),
         );
         final text = tester.widget<Text>(find.text('$seconds δλ'));
         return text.style?.color;

@@ -135,7 +135,9 @@ class _TaskSettingsDialogState extends ConsumerState<TaskSettingsDialog>
         );
       }
     } else if (parsedDays != initialDays) {
-      changes.add('Μέγιστο εύρος αναβολής (ημέρες): $initialDays -> $parsedDays');
+      changes.add(
+        'Μέγιστο εύρος αναβολής (ημέρες): $initialDays -> $parsedDays',
+      );
     }
 
     if (draft.autoCloseQuickAdds != initial.autoCloseQuickAdds) {
@@ -148,7 +150,8 @@ class _TaskSettingsDialogState extends ConsumerState<TaskSettingsDialog>
   }
 
   bool get _hasChanges => _buildChanges().isNotEmpty;
-  bool get _isDaysValid => _validateMaxDaysInput(_maxDaysController.text) == null;
+  bool get _isDaysValid =>
+      _validateMaxDaysInput(_maxDaysController.text) == null;
 
   Future<bool> _confirmDiscardIfNeeded() async {
     final changes = _buildChanges();
@@ -205,9 +208,9 @@ class _TaskSettingsDialogState extends ConsumerState<TaskSettingsDialog>
       padding: const EdgeInsets.only(top: 8, bottom: 8),
       child: Text(
         text,
-        style: Theme.of(context).textTheme.titleSmall?.copyWith(
-              fontWeight: FontWeight.bold,
-            ),
+        style: Theme.of(
+          context,
+        ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
       ),
     );
   }
@@ -227,7 +230,11 @@ class _TaskSettingsDialogState extends ConsumerState<TaskSettingsDialog>
     } catch (e) {
       if (mounted) {
         showDialogSnackBar(
-          SnackBar(content: Text('Αποτυχία αποθήκευσης: ${humanizeUserFacingError(e)}')),
+          SnackBar(
+            content: Text(
+              'Αποτυχία αποθήκευσης: ${humanizeUserFacingError(e)}',
+            ),
+          ),
         );
       }
     }
@@ -258,195 +265,202 @@ class _TaskSettingsDialogState extends ConsumerState<TaskSettingsDialog>
 
     return _wrapDialog(
       PopScope<Object?>(
-      canPop: false,
-      onPopInvokedWithResult: (didPop, _) async {
-        if (didPop) return;
-        final navigator = Navigator.of(context);
-        final discard = await _confirmDiscardIfNeeded();
-        if (discard && mounted) {
-          navigator.pop();
-        }
-      },
-      child: AlertDialog(
-        title: const Text('Ρυθμίσεις εκκρεμοτήτων'),
-        content: SizedBox(
-          width: 440,
-          child: Form(
-            key: _formKey,
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  _sectionTitle('Ωράριο εκκρεμοτήτων'),
-                  ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: FittedBox(
-                      fit: BoxFit.scaleDown,
-                      alignment: Alignment.centerLeft,
-                      child: Text(
-                        'Ώρα τελευταίας εκκρεμότητας («μέσα στο ωράριο»)',
-                        maxLines: 1,
-                        style: Theme.of(context).textTheme.titleMedium,
+        canPop: false,
+        onPopInvokedWithResult: (didPop, _) async {
+          if (didPop) return;
+          final navigator = Navigator.of(context);
+          final discard = await _confirmDiscardIfNeeded();
+          if (discard && mounted) {
+            navigator.pop();
+          }
+        },
+        child: AlertDialog(
+          title: const Text('Ρυθμίσεις εκκρεμοτήτων'),
+          content: SizedBox(
+            width: 440,
+            child: Form(
+              key: _formKey,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _sectionTitle('Ωράριο εκκρεμοτήτων'),
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          'Ώρα τελευταίας εκκρεμότητας («μέσα στο ωράριο»)',
+                          maxLines: 1,
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
+                      ),
+                      subtitle: Text(_formatTime(d.dayEndTime)),
+                      trailing: const Icon(Icons.access_time),
+                      onTap: () => _pickTime(
+                        'Όριο τέλους ωραρίου',
+                        d.dayEndTime,
+                        (t) =>
+                            setState(() => _draft = d.copyWith(dayEndTime: t)),
                       ),
                     ),
-                    subtitle: Text(_formatTime(d.dayEndTime)),
-                    trailing: const Icon(Icons.access_time),
-                    onTap: () => _pickTime(
-                      'Όριο τέλους ωραρίου',
-                      d.dayEndTime,
-                      (t) => setState(() => _draft = d.copyWith(dayEndTime: t)),
-                    ),
-                  ),
-                  ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: const Text('Ώρα έναρξης ωραρίου'),
-                    subtitle: Text(_formatTime(d.nextBusinessHour)),
-                    trailing: const Icon(Icons.wb_sunny_outlined),
-                    onTap: () => _pickTime(
-                      'Ώρα επόμενης εργάσιμης',
-                      d.nextBusinessHour,
-                      (t) => setState(() => _draft = d.copyWith(nextBusinessHour: t)),
-                    ),
-                  ),
-                  SwitchListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: const Text('Παράλειψη Σαββατοκύριακων'),
-                    value: d.skipWeekends,
-                    onChanged: (v) =>
-                        setState(() => _draft = d.copyWith(skipWeekends: v)),
-                  ),
-                  _sectionTitle('Ολοκλήρωση εκκρεμοτήτας μέσα σε:'),
-                  Text(
-                    'Προεπιλεγμένη ώρα ολοκλήρωσης μίας νέας εκκρεμότητας',
-                    style: Theme.of(context).textTheme.labelLarge,
-                  ),
-                  const SizedBox(height: 8),
-                  SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: Row(
-                      children: [
-                        TaskDueOptionTooltip(
-                          message: TaskDueOptionTooltips.plusOneHour(),
-                          child: ChoiceChip(
-                            label: const Text('+1 ώρα'),
-                            selected:
-                                d.defaultSnoozeOption == TaskSettingsConfig.kOneHour,
-                            onSelected: (_) => setState(
-                              () => _draft = d.copyWith(
-                                defaultSnoozeOption: TaskSettingsConfig.kOneHour,
-                              ),
-                            ),
-                          ),
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('Ώρα έναρξης ωραρίου'),
+                      subtitle: Text(_formatTime(d.nextBusinessHour)),
+                      trailing: const Icon(Icons.wb_sunny_outlined),
+                      onTap: () => _pickTime(
+                        'Ώρα επόμενης εργάσιμης',
+                        d.nextBusinessHour,
+                        (t) => setState(
+                          () => _draft = d.copyWith(nextBusinessHour: t),
                         ),
-                        const SizedBox(width: 8),
-                        TaskDueOptionTooltip(
-                          message: TaskDueOptionTooltips.withinSchedule(
-                            d.nextBusinessHour,
-                            d.dayEndTime,
-                          ),
-                          child: ChoiceChip(
-                            label: const Text('Μέσα στο ωράριο'),
-                            selected:
-                                d.defaultSnoozeOption == TaskSettingsConfig.kDayEnd,
-                            onSelected: (_) => setState(
-                              () => _draft = d.copyWith(
-                                defaultSnoozeOption: TaskSettingsConfig.kDayEnd,
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        TaskDueOptionTooltip(
-                          message: TaskDueOptionTooltips.nextBusiness(
-                            d.nextBusinessHour,
-                          ),
-                          child: ChoiceChip(
-                            label: const Text('Επόμενη εργάσιμη'),
-                            selected: d.defaultSnoozeOption ==
-                                TaskSettingsConfig.kNextBusiness,
-                            onSelected: (_) => setState(
-                              () => _draft = d.copyWith(
-                                defaultSnoozeOption:
-                                    TaskSettingsConfig.kNextBusiness,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  TextFormField(
-                    controller: _maxDaysController,
-                    keyboardType: TextInputType.number,
-                    decoration: InputDecoration(
-                      labelText: 'Μέγιστο εύρος αναβολής (ημέρες)',
-                      border: const OutlineInputBorder(),
-                      errorStyle: TextStyle(
-                        color: Theme.of(context).colorScheme.error,
                       ),
-                      suffixIcon: _maxDaysController.text.isNotEmpty
-                          ? Semantics(
-                              label: 'Καθαρισμός εύρους ημερών',
-                              child: IconButton(
-                                icon: const Icon(Icons.close, size: 20),
-                                onPressed: _maxDaysController.clear,
-                                tooltip: 'Καθαρισμός εύρους ημερών',
+                    ),
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('Παράλειψη Σαββατοκύριακων'),
+                      value: d.skipWeekends,
+                      onChanged: (v) =>
+                          setState(() => _draft = d.copyWith(skipWeekends: v)),
+                    ),
+                    _sectionTitle('Ολοκλήρωση εκκρεμοτήτας μέσα σε:'),
+                    Text(
+                      'Προεπιλεγμένη ώρα ολοκλήρωσης μίας νέας εκκρεμότητας',
+                      style: Theme.of(context).textTheme.labelLarge,
+                    ),
+                    const SizedBox(height: 8),
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: [
+                          TaskDueOptionTooltip(
+                            message: TaskDueOptionTooltips.plusOneHour(),
+                            child: ChoiceChip(
+                              label: const Text('+1 ώρα'),
+                              selected:
+                                  d.defaultSnoozeOption ==
+                                  TaskSettingsConfig.kOneHour,
+                              onSelected: (_) => setState(
+                                () => _draft = d.copyWith(
+                                  defaultSnoozeOption:
+                                      TaskSettingsConfig.kOneHour,
+                                ),
                               ),
-                            )
-                          : null,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          TaskDueOptionTooltip(
+                            message: TaskDueOptionTooltips.withinSchedule(
+                              d.nextBusinessHour,
+                              d.dayEndTime,
+                            ),
+                            child: ChoiceChip(
+                              label: const Text('Μέσα στο ωράριο'),
+                              selected:
+                                  d.defaultSnoozeOption ==
+                                  TaskSettingsConfig.kDayEnd,
+                              onSelected: (_) => setState(
+                                () => _draft = d.copyWith(
+                                  defaultSnoozeOption:
+                                      TaskSettingsConfig.kDayEnd,
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          TaskDueOptionTooltip(
+                            message: TaskDueOptionTooltips.nextBusiness(
+                              d.nextBusinessHour,
+                            ),
+                            child: ChoiceChip(
+                              label: const Text('Επόμενη εργάσιμη'),
+                              selected:
+                                  d.defaultSnoozeOption ==
+                                  TaskSettingsConfig.kNextBusiness,
+                              onSelected: (_) => setState(
+                                () => _draft = d.copyWith(
+                                  defaultSnoozeOption:
+                                      TaskSettingsConfig.kNextBusiness,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                    validator: _validateMaxDaysInput,
-                  ),
-                  const SizedBox(height: 16),
-                  SwitchListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: const Text('Αυτόματο κλείσιμο Γρήγορων Προσθηκών'),
-                    value: _draft?.autoCloseQuickAdds ?? true,
-                    onChanged: (v) => setState(
-                      () => _draft = _draft?.copyWith(autoCloseQuickAdds: v),
+                    const SizedBox(height: 16),
+                    TextFormField(
+                      controller: _maxDaysController,
+                      keyboardType: TextInputType.number,
+                      decoration: InputDecoration(
+                        labelText: 'Μέγιστο εύρος αναβολής (ημέρες)',
+                        border: const OutlineInputBorder(),
+                        errorStyle: TextStyle(
+                          color: Theme.of(context).colorScheme.error,
+                        ),
+                        suffixIcon: _maxDaysController.text.isNotEmpty
+                            ? Semantics(
+                                label: 'Καθαρισμός εύρους ημερών',
+                                child: IconButton(
+                                  icon: const Icon(Icons.close, size: 20),
+                                  onPressed: _maxDaysController.clear,
+                                  tooltip: 'Καθαρισμός εύρους ημερών',
+                                ),
+                              )
+                            : null,
+                      ),
+                      validator: _validateMaxDaysInput,
                     ),
-                  ),
-                  const SizedBox(height: 8),
-                  SwitchListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: const Text(
-                      'Εμφάνιση μετρητή στο μενού Εκκρεμοτήτων (Badge)',
+                    const SizedBox(height: 16),
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('Αυτόματο κλείσιμο Γρήγορων Προσθηκών'),
+                      value: _draft?.autoCloseQuickAdds ?? true,
+                      onChanged: (v) => setState(
+                        () => _draft = _draft?.copyWith(autoCloseQuickAdds: v),
+                      ),
                     ),
-                    subtitle: const Text(
-                      'Εμφανίζει στο πλαϊνό μενού το πλήθος ανοιχτών και αναβεβλημένων εκκρεμοτήτων.',
+                    const SizedBox(height: 8),
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text(
+                        'Εμφάνιση μετρητή στο μενού Εκκρεμοτήτων (Badge)',
+                      ),
+                      subtitle: const Text(
+                        'Εμφανίζει στο πλαϊνό μενού το πλήθος ανοιχτών και αναβεβλημένων εκκρεμοτήτων.',
+                      ),
+                      value: ref.watch(showTasksBadgeProvider).value ?? true,
+                      onChanged: (value) async {
+                        await _settings.setShowTasksBadge(value);
+                        if (!mounted) return;
+                        ref.invalidate(showTasksBadgeProvider);
+                        setState(() {});
+                      },
                     ),
-                    value: ref.watch(showTasksBadgeProvider).value ?? true,
-                    onChanged: (value) async {
-                      await _settings.setShowTasksBadge(value);
-                      if (!mounted) return;
-                      ref.invalidate(showTasksBadgeProvider);
-                      setState(() {});
-                    },
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),
+          actions: [
+            TextButton(
+              onPressed: () async {
+                final navigator = Navigator.of(context);
+                final discard = await _confirmDiscardIfNeeded();
+                if (discard && mounted) navigator.pop();
+              },
+              child: const Text('Ακύρωση'),
+            ),
+            FilledButton(
+              onPressed: (_hasChanges && _isDaysValid) ? _onSave : null,
+              child: const Text('Αποθήκευση'),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () async {
-              final navigator = Navigator.of(context);
-              final discard = await _confirmDiscardIfNeeded();
-              if (discard && mounted) navigator.pop();
-            },
-            child: const Text('Ακύρωση'),
-          ),
-          FilledButton(
-            onPressed: (_hasChanges && _isDaysValid) ? _onSave : null,
-            child: const Text('Αποθήκευση'),
-          ),
-        ],
-      ),
       ),
     );
   }
 }
-

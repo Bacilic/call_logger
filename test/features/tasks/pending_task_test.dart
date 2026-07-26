@@ -60,7 +60,9 @@ void main() {
               (w.decoration?.hintText?.contains('Σημειώσεις') ?? false),
         );
         final pendingNotes = '$kTestHistorySearchMarker εκκρεμότητα ροή';
-        reporter.logStep('Συμπλήρωση σημειώσεων (υποχρεωτικό για ενεργό checkbox)');
+        reporter.logStep(
+          'Συμπλήρωση σημειώσεων (υποχρεωτικό για ενεργό checkbox)',
+        );
         await tester.tap(notesFinder);
         await pumpUntilSettled(tester);
         await tester.enterText(notesFinder, pendingNotes);
@@ -91,7 +93,9 @@ void main() {
         expect(
           container.read(callEntryProvider).isPending,
           isTrue,
-          reason: greekExpectMsg('Η εκκρεμότητα πρέπει να είναι ενεργή πριν την υποβολή'),
+          reason: greekExpectMsg(
+            'Η εκκρεμότητα πρέπει να είναι ενεργή πριν την υποβολή',
+          ),
         );
         // Άμεση κλήση submitCall μέσω notifier (ίδιο ref με το provider) + runAsync για I/O SQLite.
         final submitOk = await tester.runAsync(() async {
@@ -100,10 +104,15 @@ void main() {
         expect(
           submitOk,
           isTrue,
-          reason: greekExpectMsg('Η υποβολή κλήσης πρέπει να ολοκληρωθεί επιτυχώς'),
+          reason: greekExpectMsg(
+            'Η υποβολή κλήσης πρέπει να ολοκληρωθεί επιτυχώς',
+          ),
         );
         await tester.pump();
-        reporter.logTiming('Υποβολή κλήσης με εκκρεμότητα (UI + SQLite)', sw.elapsed);
+        reporter.logTiming(
+          'Υποβολή κλήσης με εκκρεμότητα (UI + SQLite)',
+          sw.elapsed,
+        );
 
         // Έλεγχοι βάσης σε runAsync ώστε το sqflite να μην κολλάει στο fake clock του binding.
         final verification = await tester.runAsync(() async {
@@ -127,18 +136,26 @@ void main() {
           return (calls, tasks);
         });
         await tester.pump();
-        expect(verification, isNotNull, reason: greekExpectMsg('Έλεγχος βάσης μέσω runAsync'));
+        expect(
+          verification,
+          isNotNull,
+          reason: greekExpectMsg('Έλεγχος βάσης μέσω runAsync'),
+        );
         final calls = verification!.$1;
         final tasks = verification.$2;
         expect(
           calls,
           isNotEmpty,
-          reason: greekExpectMsg('Η κλήση πρέπει να αποθηκευτεί ως εκκρεμής (pending)'),
+          reason: greekExpectMsg(
+            'Η κλήση πρέπει να αποθηκευτεί ως εκκρεμής (pending)',
+          ),
         );
         expect(
           tasks,
           isNotEmpty,
-          reason: greekExpectMsg('Πρέπει να δημιουργηθεί εγγραφή εκκρεμότητας (tasks)'),
+          reason: greekExpectMsg(
+            'Πρέπει να δημιουργηθεί εγγραφή εκκρεμότητας (tasks)',
+          ),
         );
 
         reporter.recordPass('Εκκρεμότητα με απομονωμένη βάση');

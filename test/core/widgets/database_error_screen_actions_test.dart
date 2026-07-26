@@ -104,28 +104,27 @@ void main() {
     }
 
     for (final kind in DatabaseInitRecoveryKind.values) {
-      testWidgets(
-        'recoveryKind.$kind: βασικά κουμπιά διάσωσης πάντα παρόντα',
-        (tester) async {
-          await _pumpErrorScreen(
-            tester,
-            DatabaseInitResult(
-              status: DatabaseStatus.applicationError,
-              message: 'Δοκιμαστικό για $kind',
-              path: r'C:\data\call_logger.db',
-              recoveryKind: kind,
-            ),
-          );
+      testWidgets('recoveryKind.$kind: βασικά κουμπιά διάσωσης πάντα παρόντα', (
+        tester,
+      ) async {
+        await _pumpErrorScreen(
+          tester,
+          DatabaseInitResult(
+            status: DatabaseStatus.applicationError,
+            message: 'Δοκιμαστικό για $kind',
+            path: r'C:\data\call_logger.db',
+            recoveryKind: kind,
+          ),
+        );
 
-          expect(_findByLabel('Επιλογή αρχείου βάσης'), findsOneWidget);
-          expect(_findByLabel('Δημιουργία νέας βάσης'), findsOneWidget);
-          if (kind == DatabaseInitRecoveryKind.timeout) {
-            expect(_findByLabel('Επανεκκίνηση εφαρμογής'), findsOneWidget);
-          } else {
-            expect(_findByLabel('Επαναδοκιμή'), findsOneWidget);
-          }
-        },
-      );
+        expect(_findByLabel('Επιλογή αρχείου βάσης'), findsOneWidget);
+        expect(_findByLabel('Δημιουργία νέας βάσης'), findsOneWidget);
+        if (kind == DatabaseInitRecoveryKind.timeout) {
+          expect(_findByLabel('Επανεκκίνηση εφαρμογής'), findsOneWidget);
+        } else {
+          expect(_findByLabel('Επαναδοκιμή'), findsOneWidget);
+        }
+      });
     }
   });
 
@@ -139,10 +138,7 @@ void main() {
           recoveryKind: DatabaseInitRecoveryKind.wrongDatabaseLamp,
         ),
       );
-      expect(
-        _findByLabel('Επαναφορά από αντίγραφο ασφαλείας'),
-        findsOneWidget,
-      );
+      expect(_findByLabel('Επαναφορά από αντίγραφο ασφαλείας'), findsOneWidget);
     });
 
     testWidgets('εμφανίζεται για wrongDatabaseUnknown', (tester) async {
@@ -154,10 +150,7 @@ void main() {
           recoveryKind: DatabaseInitRecoveryKind.wrongDatabaseUnknown,
         ),
       );
-      expect(
-        _findByLabel('Επαναφορά από αντίγραφο ασφαλείας'),
-        findsOneWidget,
-      );
+      expect(_findByLabel('Επαναφορά από αντίγραφο ασφαλείας'), findsOneWidget);
     });
 
     testWidgets('εμφανίζεται για corruptedOrMigration', (tester) async {
@@ -169,10 +162,7 @@ void main() {
           recoveryKind: DatabaseInitRecoveryKind.corruptedOrMigration,
         ),
       );
-      expect(
-        _findByLabel('Επαναφορά από αντίγραφο ασφαλείας'),
-        findsOneWidget,
-      );
+      expect(_findByLabel('Επαναφορά από αντίγραφο ασφαλείας'), findsOneWidget);
     });
 
     testWidgets('εμφανίζεται για fileNotFound', (tester) async {
@@ -184,10 +174,7 @@ void main() {
           path: r'C:\missing\call_logger.db',
         ),
       );
-      expect(
-        _findByLabel('Επαναφορά από αντίγραφο ασφαλείας'),
-        findsOneWidget,
-      );
+      expect(_findByLabel('Επαναφορά από αντίγραφο ασφαλείας'), findsOneWidget);
     });
 
     testWidgets('ΔΕΝ εμφανίζεται για locked', (tester) async {
@@ -199,10 +186,7 @@ void main() {
           recoveryKind: DatabaseInitRecoveryKind.locked,
         ),
       );
-      expect(
-        _findByLabel('Επαναφορά από αντίγραφο ασφαλείας'),
-        findsNothing,
-      );
+      expect(_findByLabel('Επαναφορά από αντίγραφο ασφαλείας'), findsNothing);
     });
 
     testWidgets('ΔΕΝ εμφανίζεται για timeout', (tester) async {
@@ -214,10 +198,7 @@ void main() {
           recoveryKind: DatabaseInitRecoveryKind.timeout,
         ),
       );
-      expect(
-        _findByLabel('Επαναφορά από αντίγραφο ασφαλείας'),
-        findsNothing,
-      );
+      expect(_findByLabel('Επαναφορά από αντίγραφο ασφαλείας'), findsNothing);
     });
   });
 

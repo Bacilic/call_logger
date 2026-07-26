@@ -118,65 +118,75 @@ void main() {
         expect(await totalUserCount(), 1);
       });
 
-      test('απόφαση επαναφορά → ενεργοποίηση soft-deleted, χωρίς νέα γραμμή', () async {
-        final db = await DatabaseHelper.instance.database;
-        final deletedId = await db.insert('users', {
-          'first_name': 'Γιώργος',
-          'last_name': 'Παπαδόπουλος',
-          'notes': 'παλιό',
-          'is_deleted': 1,
-        });
+      test(
+        'απόφαση επαναφορά → ενεργοποίηση soft-deleted, χωρίς νέα γραμμή',
+        () async {
+          final db = await DatabaseHelper.instance.database;
+          final deletedId = await db.insert('users', {
+            'first_name': 'Γιώργος',
+            'last_name': 'Παπαδόπουλος',
+            'notes': 'παλιό',
+            'is_deleted': 1,
+          });
 
-        final result = await service.save(
-          target: LampTransferTarget.owner,
-          formValues: ownerForm(),
-          selectedCandidateId: null,
-          softDeletedDecision: LampSoftDeletedDecision(
-            action: LampSoftDeletedDecisionAction.reactivate,
-            recordId: deletedId,
-          ),
-        );
+          final result = await service.save(
+            target: LampTransferTarget.owner,
+            formValues: ownerForm(),
+            selectedCandidateId: null,
+            softDeletedDecision: LampSoftDeletedDecision(
+              action: LampSoftDeletedDecisionAction.reactivate,
+              recordId: deletedId,
+            ),
+          );
 
-        expect(result.id, deletedId);
-        expect(result.updated, isTrue);
-        expect(await totalUserCount(), 1);
-        expect(await activeUserCount(), 1);
+          expect(result.id, deletedId);
+          expect(result.updated, isTrue);
+          expect(await totalUserCount(), 1);
+          expect(await activeUserCount(), 1);
 
-        final row = await db.query('users', where: 'id = ?', whereArgs: [deletedId]);
-        expect(row.first['is_deleted'], 0);
-        expect(row.first['notes'], 'από Λάμπα');
-      });
+          final row = await db.query(
+            'users',
+            where: 'id = ?',
+            whereArgs: [deletedId],
+          );
+          expect(row.first['is_deleted'], 0);
+          expect(row.first['notes'], 'από Λάμπα');
+        },
+      );
 
-      test('απόφαση δημιουργία νέας → νέος χρήστης, soft-deleted μένει διαγραμμένος', () async {
-        final db = await DatabaseHelper.instance.database;
-        final deletedId = await db.insert('users', {
-          'first_name': 'Γιώργος',
-          'last_name': 'Παπαδόπουλος',
-          'is_deleted': 1,
-        });
+      test(
+        'απόφαση δημιουργία νέας → νέος χρήστης, soft-deleted μένει διαγραμμένος',
+        () async {
+          final db = await DatabaseHelper.instance.database;
+          final deletedId = await db.insert('users', {
+            'first_name': 'Γιώργος',
+            'last_name': 'Παπαδόπουλος',
+            'is_deleted': 1,
+          });
 
-        final result = await service.save(
-          target: LampTransferTarget.owner,
-          formValues: ownerForm(),
-          selectedCandidateId: null,
-          softDeletedDecision: LampSoftDeletedDecision(
-            action: LampSoftDeletedDecisionAction.createNew,
-            recordId: deletedId,
-          ),
-        );
+          final result = await service.save(
+            target: LampTransferTarget.owner,
+            formValues: ownerForm(),
+            selectedCandidateId: null,
+            softDeletedDecision: LampSoftDeletedDecision(
+              action: LampSoftDeletedDecisionAction.createNew,
+              recordId: deletedId,
+            ),
+          );
 
-        expect(result.id, isNot(deletedId));
-        expect(result.updated, isFalse);
-        expect(await totalUserCount(), 2);
-        expect(await activeUserCount(), 1);
+          expect(result.id, isNot(deletedId));
+          expect(result.updated, isFalse);
+          expect(await totalUserCount(), 2);
+          expect(await activeUserCount(), 1);
 
-        final deletedRow = await db.query(
-          'users',
-          where: 'id = ?',
-          whereArgs: [deletedId],
-        );
-        expect(deletedRow.first['is_deleted'], 1);
-      });
+          final deletedRow = await db.query(
+            'users',
+            where: 'id = ?',
+            whereArgs: [deletedId],
+          );
+          expect(deletedRow.first['is_deleted'], 1);
+        },
+      );
 
       test('ενεργός όμοιος → καμία προειδοποίηση soft-deleted', () async {
         final db = await DatabaseHelper.instance.database;
@@ -284,47 +294,53 @@ void main() {
         expect(row.first['notes'], 'από Λάμπα');
       });
 
-      test('απόφαση δημιουργία νέας → νέος κωδικός, soft-deleted μένει διαγραμμένος', () async {
-        final db = await DatabaseHelper.instance.database;
-        final deletedId = await db.insert('equipment', {
-          'code_equipment': 'PC-SOFT-DEL',
-          'is_deleted': 1,
-        });
+      test(
+        'απόφαση δημιουργία νέας → νέος κωδικός, soft-deleted μένει διαγραμμένος',
+        () async {
+          final db = await DatabaseHelper.instance.database;
+          final deletedId = await db.insert('equipment', {
+            'code_equipment': 'PC-SOFT-DEL',
+            'is_deleted': 1,
+          });
 
-        final result = await service.save(
-          target: LampTransferTarget.equipment,
-          formValues: equipmentForm(),
-          selectedCandidateId: null,
-          softDeletedDecision: LampSoftDeletedDecision(
-            action: LampSoftDeletedDecisionAction.createNew,
-            recordId: deletedId,
-          ),
-        );
+          final result = await service.save(
+            target: LampTransferTarget.equipment,
+            formValues: equipmentForm(),
+            selectedCandidateId: null,
+            softDeletedDecision: LampSoftDeletedDecision(
+              action: LampSoftDeletedDecisionAction.createNew,
+              recordId: deletedId,
+            ),
+          );
 
-        expect(result.id, isNot(deletedId));
-        expect(await totalEquipmentCount(), 2);
-        expect(await activeEquipmentCount(), 1);
-      });
+          expect(result.id, isNot(deletedId));
+          expect(await totalEquipmentCount(), 2);
+          expect(await activeEquipmentCount(), 1);
+        },
+      );
 
-      test('ενεργός όμοιος κωδικός → καμία προειδοποίηση soft-deleted', () async {
-        final db = await DatabaseHelper.instance.database;
-        await db.insert('equipment', {
-          'code_equipment': 'PC-SOFT-DEL',
-          'is_deleted': 1,
-        });
-        await db.insert('equipment', {
-          'code_equipment': 'PC-SOFT-DEL',
-          'is_deleted': 0,
-        });
+      test(
+        'ενεργός όμοιος κωδικός → καμία προειδοποίηση soft-deleted',
+        () async {
+          final db = await DatabaseHelper.instance.database;
+          await db.insert('equipment', {
+            'code_equipment': 'PC-SOFT-DEL',
+            'is_deleted': 1,
+          });
+          await db.insert('equipment', {
+            'code_equipment': 'PC-SOFT-DEL',
+            'is_deleted': 0,
+          });
 
-        final match = await service.detectSoftDeletedMatch(
-          target: LampTransferTarget.equipment,
-          formValues: equipmentForm(),
-          selectedCandidateId: null,
-        );
+          final match = await service.detectSoftDeletedMatch(
+            target: LampTransferTarget.equipment,
+            formValues: equipmentForm(),
+            selectedCandidateId: null,
+          );
 
-        expect(match, isNull);
-      });
+          expect(match, isNull);
+        },
+      );
     });
 
     group('τμήμα', () {
@@ -388,28 +404,31 @@ void main() {
         expect(row.first['notes'], 'από Λάμπα');
       });
 
-      test('απόφαση δημιουργία νέας → νέο τμήμα, soft-deleted μένει διαγραμμένο', () async {
-        final db = await DatabaseHelper.instance.database;
-        final deletedId = await db.insert('departments', {
-          'name': 'Φαρμακείο',
-          'name_key': 'φαρμακειο',
-          'is_deleted': 1,
-        });
+      test(
+        'απόφαση δημιουργία νέας → νέο τμήμα, soft-deleted μένει διαγραμμένο',
+        () async {
+          final db = await DatabaseHelper.instance.database;
+          final deletedId = await db.insert('departments', {
+            'name': 'Φαρμακείο',
+            'name_key': 'φαρμακειο',
+            'is_deleted': 1,
+          });
 
-        final result = await service.save(
-          target: LampTransferTarget.department,
-          formValues: departmentForm(),
-          selectedCandidateId: null,
-          softDeletedDecision: LampSoftDeletedDecision(
-            action: LampSoftDeletedDecisionAction.createNew,
-            recordId: deletedId,
-          ),
-        );
+          final result = await service.save(
+            target: LampTransferTarget.department,
+            formValues: departmentForm(),
+            selectedCandidateId: null,
+            softDeletedDecision: LampSoftDeletedDecision(
+              action: LampSoftDeletedDecisionAction.createNew,
+              recordId: deletedId,
+            ),
+          );
 
-        expect(result.id, isNot(deletedId));
-        expect(await totalDepartmentCount(), 2);
-        expect(await activeDepartmentCount(), 1);
-      });
+          expect(result.id, isNot(deletedId));
+          expect(await totalDepartmentCount(), 2);
+          expect(await activeDepartmentCount(), 1);
+        },
+      );
 
       test('ενεργό όμοιο τμήμα → καμία προειδοποίηση soft-deleted', () async {
         final db = await DatabaseHelper.instance.database;

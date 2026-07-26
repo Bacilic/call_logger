@@ -105,17 +105,15 @@ void main() {
         expect(
           _titlesOf(ghost!),
           [_kTitleA],
-          reason: 'Αναμενόμενο φάντασμα: χωρίς invalidate μένουν τα δεδομένα της Α',
+          reason:
+              'Αναμενόμενο φάντασμα: χωρίς invalidate μένουν τα δεδομένα της Α',
         );
         expect(_titlesOf(ghost), isNot(contains(_kTitleB)));
 
         // Η ζωντανή βάση Β έχει μόνο τη δική της εγγραφή.
         final dbB = await DatabaseHelper.instance.database;
         final rowsB = await dbB.query('tasks', columns: ['title']);
-        expect(
-          rowsB.map((r) => r['title']).toList(),
-          [_kTitleB],
-        );
+        expect(rowsB.map((r) => r['title']).toList(), [_kTitleB]);
 
         // Αποφυγή unused / εξασφάλιση ότι το Consumer έδεσε ref.
         expect(widgetRef, isNotNull);
@@ -192,13 +190,10 @@ void main() {
             departmentId: 7,
           ),
         );
-        smart.setEquipment(
-          EquipmentModel(id: 99, code: 'EQ-A-99'),
-        );
-        container.read(callEntryProvider.notifier).setCategory(
-              'Κατηγορία Α',
-              categoryId: 5,
-            );
+        smart.setEquipment(EquipmentModel(id: 99, code: 'EQ-A-99'));
+        container
+            .read(callEntryProvider.notifier)
+            .setCategory('Κατηγορία Α', categoryId: 5);
 
         final before = container.read(callSmartEntityProvider);
         expect(before.selectedCaller?.id, 42);

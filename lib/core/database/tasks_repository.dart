@@ -1,4 +1,4 @@
-﻿import 'dart:convert';
+import 'dart:convert';
 
 import 'package:flutter/material.dart' show DateTimeRange, TimeOfDay;
 import 'package:intl/intl.dart';
@@ -234,9 +234,10 @@ class TasksRepository {
   /// Αποθήκευση ρυθμίσεων εκκρεμοτήτων στο `app_settings`.
   Future<void> saveTaskSettingsConfig(TaskSettingsConfig config) async {
     final dbSave = await DatabaseHelper.instance.database;
-    await SettingsRepository(
-      dbSave,
-    ).saveSetting(TaskSettingsConfig.appSettingsKey, jsonEncode(config.toMap()));
+    await SettingsRepository(dbSave).saveSetting(
+      TaskSettingsConfig.appSettingsKey,
+      jsonEncode(config.toMap()),
+    );
   }
 
   /// Τίτλος εκκρεμότητας από σημειώσεις/κατηγορία (μορφή φόρμας κλήσης).
@@ -357,7 +358,7 @@ class TasksRepository {
     DatabaseExecutor executor, {
     required Map<String, dynamic> row,
     Future<void> Function(DatabaseExecutor txn, String auditOriginSuffix)?
-        afterTaskInserted,
+    afterTaskInserted,
   }) async {
     final id = await executor.insert('tasks', row);
     await _auditTaskCreate(executor, id, row);
@@ -563,15 +564,13 @@ class TasksRepository {
   /// Ελάχιστη/μέγιστη ημερομηνία δημιουργίας εκκρεμοτήτων (ημέρα μόνο).
   Future<({DateTime start, DateTime end})> getTaskCreationDateSpan() async {
     final db = await _db;
-    final rows = await db.rawQuery(
-      '''
+    final rows = await db.rawQuery('''
       SELECT MIN(created_at) AS min_created, MAX(created_at) AS max_created
       FROM tasks
       WHERE COALESCE(is_deleted, 0) = 0
         AND created_at IS NOT NULL
         AND TRIM(created_at) != ''
-      ''',
-    );
+      ''');
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     if (rows.isEmpty) {
@@ -1054,8 +1053,7 @@ class TasksRepository {
     final sortDirection = filter.sortAscending ? 'ASC' : 'DESC';
     final orderByClause = 'ORDER BY $sortColumn $sortDirection';
 
-    final rows = await db.rawQuery(
-      '''
+    final rows = await db.rawQuery('''
       SELECT tasks.*,
         COALESCE(u.is_deleted, 0) AS caller_is_deleted,
         COALESCE(e.is_deleted, 0) AS equipment_is_deleted,
@@ -1065,9 +1063,7 @@ class TasksRepository {
       LEFT JOIN equipment e ON e.id = tasks.equipment_id
       LEFT JOIN departments d ON d.id = tasks.department_id
       $where $orderByClause
-      ''',
-      args,
-    );
+      ''', args);
     return rows.map((row) => Task.fromMap(row)).toList();
   }
 
@@ -1143,9 +1139,7 @@ class TasksRepository {
       });
     } catch (e) {
       if (e is TaskSaveException) rethrow;
-      throw TaskSaveException(
-        'Η εκκρεμότητα δεν ενημερώθηκε. Δοκιμάστε ξανά.',
-      );
+      throw TaskSaveException('Η εκκρεμότητα δεν ενημερώθηκε. Δοκιμάστε ξανά.');
     }
   }
 
@@ -1195,12 +1189,9 @@ class TasksRepository {
   ) async {
     final db = await _db;
     return db.transaction((txn) async {
-      return IntegrityService(db).integrityUpdateTaskFk(
-        txn,
-        taskId,
-        field,
-        newValue,
-      );
+      return IntegrityService(
+        db,
+      ).integrityUpdateTaskFk(txn, taskId, field, newValue);
     });
   }
 

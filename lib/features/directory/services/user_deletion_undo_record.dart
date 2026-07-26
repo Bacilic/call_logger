@@ -5,10 +5,7 @@ import '../../../core/database/user_repository.dart';
 
 /// Ζεύγος τμήματος + αριθμού που προστέθηκε ως direct-phone κατά τη διαγραφή.
 class PhoneDeptAdd {
-  const PhoneDeptAdd({
-    required this.departmentId,
-    required this.phoneNumber,
-  });
+  const PhoneDeptAdd({required this.departmentId, required this.phoneNumber});
 
   final int departmentId;
   final String phoneNumber;
@@ -178,11 +175,7 @@ Future<void> applyUserDeletionUndoInTxn(
     }
 
     for (final entry in record.originalUserPhones.entries) {
-      await users.replaceUserPhones(
-        entry.key,
-        entry.value,
-        executor: txn,
-      );
+      await users.replaceUserPhones(entry.key, entry.value, executor: txn);
     }
 
     for (final entry in record.originalUserEquipmentIds.entries) {

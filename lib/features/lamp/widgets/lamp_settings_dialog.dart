@@ -117,13 +117,15 @@ class _LampSettingsDialogShellState
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       final path = widget.controller.path;
-      ref.read(lampExcelPathHealthProvider.notifier).refresh(
-        pathOverride: path.excelController.text.trim(),
-      );
-      ref.read(lampDbComparisonProvider.notifier).refresh(
-        readPathOverride: path.readDbController.text.trim(),
-        outputPathOverride: path.outputDbController.text.trim(),
-      );
+      ref
+          .read(lampExcelPathHealthProvider.notifier)
+          .refresh(pathOverride: path.excelController.text.trim());
+      ref
+          .read(lampDbComparisonProvider.notifier)
+          .refresh(
+            readPathOverride: path.readDbController.text.trim(),
+            outputPathOverride: path.outputDbController.text.trim(),
+          );
     });
   }
 
@@ -166,8 +168,10 @@ class _LampSettingsDialogShellState
                       label: 'Αρχείο Excel (πηγή δεδομένων)',
                       infoTooltip: _kExcelInfoTooltip,
                       onPick: () => widget.controller.onPickExcel(),
-                      onChanged:
-                          widget.controller.path.notifySettingsDialogFieldsChanged,
+                      onChanged: widget
+                          .controller
+                          .path
+                          .notifySettingsDialogFieldsChanged,
                     ),
                     const SizedBox(height: 6),
                     LampExcelPathCheckPanel(
@@ -178,8 +182,8 @@ class _LampSettingsDialogShellState
                     if (widget.controller.path.outputPathFormatWarning() !=
                         null) ...[
                       LampPathFormatWarningBanner(
-                        message:
-                            widget.controller.path.outputPathFormatWarning()!,
+                        message: widget.controller.path
+                            .outputPathFormatWarning()!,
                       ),
                       const SizedBox(height: 6),
                     ],
@@ -188,8 +192,10 @@ class _LampSettingsDialogShellState
                       label: 'Βάση δεδομένων που δημιουργεί το Excel',
                       infoTooltip: _kOutputDbInfoTooltip,
                       onPick: () => widget.controller.onPickDatabaseOutput(),
-                      onChanged:
-                          widget.controller.path.notifySettingsDialogFieldsChanged,
+                      onChanged: widget
+                          .controller
+                          .path
+                          .notifySettingsDialogFieldsChanged,
                     ),
                     const SizedBox(height: 6),
                     LampPathCheckPanel(
@@ -201,18 +207,18 @@ class _LampSettingsDialogShellState
                       alignment: Alignment.centerLeft,
                       child: widget.controller.importController
                           .excelImportButton(
-                        onImport: () => widget.controller.onRunImport(),
-                        message: null,
-                        outputPathCheck: outputPathCheck,
-                        excelPathCheck: excelPathCheck,
-                      ),
+                            onImport: () => widget.controller.onRunImport(),
+                            message: null,
+                            outputPathCheck: outputPathCheck,
+                            excelPathCheck: excelPathCheck,
+                          ),
                     ),
                     const SizedBox(height: 12),
                     if (widget.controller.path.readPathFormatWarning() !=
                         null) ...[
                       LampPathFormatWarningBanner(
-                        message:
-                            widget.controller.path.readPathFormatWarning()!,
+                        message: widget.controller.path
+                            .readPathFormatWarning()!,
                       ),
                       const SizedBox(height: 6),
                     ],
@@ -221,14 +227,17 @@ class _LampSettingsDialogShellState
                       label: 'Βάση Δεδομένων που χρησιμοποιεί η Λάμπα',
                       infoTooltip: _kReadDbInfoTooltip,
                       onPick: () => widget.controller.onPickReadDatabase(),
-                      onChanged:
-                          widget.controller.path.notifySettingsDialogFieldsChanged,
+                      onChanged: widget
+                          .controller
+                          .path
+                          .notifySettingsDialogFieldsChanged,
                       trailing: Tooltip(
                         waitDuration: const Duration(milliseconds: 300),
                         showDuration: const Duration(seconds: 6),
                         message: matchButtonState.tooltip,
                         child: IconButton(
-                          onPressed: matchButtonState.enabled &&
+                          onPressed:
+                              matchButtonState.enabled &&
                                   !importing &&
                                   !integrityChecking
                               ? () async {
@@ -289,7 +298,8 @@ class _LampSettingsDialogShellState
                             '${LampSettingsStore.defaultMaxSearchResults}',
                       ),
                     ),
-                    if (dialogFeedback != null && dialogFeedback.isNotEmpty) ...[
+                    if (dialogFeedback != null &&
+                        dialogFeedback.isNotEmpty) ...[
                       const SizedBox(height: 12),
                       LampSettingsDialogFeedbackPanel(
                         message: dialogFeedback,

@@ -9,15 +9,11 @@ void main() {
       expect(orders, hasLength(2));
       expect(
         orders,
-        contains(
-          (firstName: 'Γιώργος', lastName: 'Παπαδόπουλος'),
-        ),
+        contains((firstName: 'Γιώργος', lastName: 'Παπαδόπουλος')),
       );
       expect(
         orders,
-        contains(
-          (firstName: 'Παπαδόπουλος', lastName: 'Γιώργος'),
-        ),
+        contains((firstName: 'Παπαδόπουλος', lastName: 'Γιώργος')),
       );
     });
 

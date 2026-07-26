@@ -136,7 +136,8 @@ Future<String?> showLansweeperOptionalTicketIdDialog(
             child: const Text('Άκυρο'),
           ),
           FilledButton(
-            onPressed: () => Navigator.of(ctx).pop(ticketController.text.trim()),
+            onPressed: () =>
+                Navigator.of(ctx).pop(ticketController.text.trim()),
             child: const Text('Αποθήκευση'),
           ),
         ],

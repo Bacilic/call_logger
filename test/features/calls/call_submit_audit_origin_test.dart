@@ -32,11 +32,13 @@ void main() {
     Future<ProviderContainer> createContainer() =>
         AssociationTwoStepRunner.createContainer();
 
-    bool hasCallOrigin(String? details, int callId) =>
-        (details ?? '').contains(DirectorySupport.auditOriginSuffixFromCall(callId));
+    bool hasCallOrigin(String? details, int callId) => (details ?? '').contains(
+      DirectorySupport.auditOriginSuffixFromCall(callId),
+    );
 
-    bool hasTaskOrigin(String? details, int taskId) =>
-        (details ?? '').contains(DirectorySupport.auditOriginSuffixFromTask(taskId));
+    bool hasTaskOrigin(String? details, int taskId) => (details ?? '').contains(
+      DirectorySupport.auditOriginSuffixFromTask(taskId),
+    );
 
     test(
       'submitCall με νέο καλούντα + νέο τηλέφωνο: παράγωγες εγγραφές «από κλήση #N»',
@@ -62,7 +64,10 @@ void main() {
         );
 
         await smart.associateCurrentIfNeeded();
-        expect(container.read(callSmartEntityProvider).selectedCaller?.id, isNotNull);
+        expect(
+          container.read(callSmartEntityProvider).selectedCaller?.id,
+          isNotNull,
+        );
 
         final entry = container.read(callEntryProvider.notifier);
         entry.setNotes('Δοκιμή προέλευσης UI κλήσης');
@@ -72,8 +77,9 @@ void main() {
         expect(ok, isTrue);
 
         final db = await DatabaseHelper.instance.database;
-        final callId = (await db.query('calls', orderBy: 'id DESC', limit: 1))
-            .single['id'] as int;
+        final callId =
+            (await db.query('calls', orderBy: 'id DESC', limit: 1)).single['id']
+                as int;
 
         final audits = await db.query('audit_log', orderBy: 'id ASC');
         expect(audits.length, greaterThan(1));
@@ -126,8 +132,9 @@ void main() {
         expect(ok, isTrue);
 
         final db = await DatabaseHelper.instance.database;
-        final taskId = (await db.query('tasks', orderBy: 'id DESC', limit: 1))
-            .single['id'] as int;
+        final taskId =
+            (await db.query('tasks', orderBy: 'id DESC', limit: 1)).single['id']
+                as int;
 
         final audits = await db.query('audit_log', orderBy: 'id ASC');
         final mainTask = audits.firstWhere(

@@ -76,9 +76,7 @@ class AuditLogModel {
       userPerforming: map['user_performing'] as String?,
       details: map['details'] as String?,
       entityType: map['entity_type'] as String?,
-      entityId: eid == null
-          ? null
-          : (eid is int ? eid : (eid as num).toInt()),
+      entityId: eid == null ? null : (eid is int ? eid : (eid as num).toInt()),
       entityName: map['entity_name'] as String?,
       oldValuesJson: map['old_values_json'] as String?,
       newValuesJson: map['new_values_json'] as String?,

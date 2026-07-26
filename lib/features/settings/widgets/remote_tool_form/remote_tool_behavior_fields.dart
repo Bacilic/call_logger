@@ -3,11 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../../core/models/remote_tool_role.dart';
 
 class RoleDropdown extends StatelessWidget {
-  const RoleDropdown({
-    super.key,
-    required this.value,
-    required this.onChanged,
-  });
+  const RoleDropdown({super.key, required this.value, required this.onChanged});
 
   final ToolRole value;
   final ValueChanged<ToolRole>? onChanged;
@@ -57,7 +53,11 @@ class RoleDropdown extends StatelessWidget {
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Icon(Icons.info_outline, size: 18, color: theme.colorScheme.primary),
+            Icon(
+              Icons.info_outline,
+              size: 18,
+              color: theme.colorScheme.primary,
+            ),
             const SizedBox(width: 8),
             Expanded(
               child: Text(

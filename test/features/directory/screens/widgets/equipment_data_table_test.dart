@@ -13,78 +13,75 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   // Έλεγχος επικεφαλίδων και κελιών (κωδικός, κάτοχος, IP, εργαλείο απομακρυσμένης).
   //   flutter test test/features/directory/screens/widgets/equipment_data_table_test.dart --plain-name "EquipmentDataTable εμφανίζει δυναμικές στήλες και τιμές γραμμών"
-  testWidgets('EquipmentDataTable εμφανίζει δυναμικές στήλες και τιμές γραμμών', (tester) async {
-    final items = [
-      (
-        EquipmentModel(
-          id: 1,
-          code: 'PC-01',
-          type: 'Desktop',
-          remoteParams: const {'2': '10.0.0.1'},
-          defaultRemoteTool: '2',
+  testWidgets(
+    'EquipmentDataTable εμφανίζει δυναμικές στήλες και τιμές γραμμών',
+    (tester) async {
+      final items = [
+        (
+          EquipmentModel(
+            id: 1,
+            code: 'PC-01',
+            type: 'Desktop',
+            remoteParams: const {'2': '10.0.0.1'},
+            defaultRemoteTool: '2',
+          ),
+          UserModel(
+            id: 100,
+            firstName: 'Γιάννης',
+            lastName: 'Ιωάννου',
+            phones: const ['2101234567'],
+          ),
         ),
-        UserModel(
-          id: 100,
-          firstName: 'Γιάννης',
-          lastName: 'Ιωάννου',
-          phones: const ['2101234567'],
-        ),
-      ),
-    ];
-    final visibleColumns = [
-      EquipmentColumn.code,
-      EquipmentColumn.owner,
-      EquipmentColumn.remoteParams,
-      EquipmentColumn.defaultRemote,
-    ];
+      ];
+      final visibleColumns = [
+        EquipmentColumn.code,
+        EquipmentColumn.owner,
+        EquipmentColumn.remoteParams,
+        EquipmentColumn.defaultRemote,
+      ];
 
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: SizedBox(
-            width: 1000,
-            height: 500,
-            child: EquipmentDataTable(
-              items: items,
-              selectedIds: {},
-              sortColumn: null,
-              sortAscending: true,
-              visibleColumns: visibleColumns,
-              onToggleSelection: (_) {},
-              onSetSort: (_, _) {},
-              onEditEquipment: (_, {focusedField}) {},
-              continuousScroll: true,
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SizedBox(
+              width: 1000,
+              height: 500,
+              child: EquipmentDataTable(
+                items: items,
+                selectedIds: {},
+                sortColumn: null,
+                sortAscending: true,
+                visibleColumns: visibleColumns,
+                onToggleSelection: (_) {},
+                onSetSort: (_, _) {},
+                onEditEquipment: (_, {focusedField}) {},
+                continuousScroll: true,
+              ),
             ),
           ),
         ),
-      ),
-    );
-    await tester.pumpAndSettle();
+      );
+      await tester.pumpAndSettle();
 
-    expect(find.text('Κωδικός'), findsOneWidget);
-    expect(find.text('Κάτοχος'), findsOneWidget);
-    expect(find.text('Παράμετροι απομακρυσμένης'), findsOneWidget);
-    expect(find.text('Εργαλείο Απομακρυσμένης'), findsOneWidget);
+      expect(find.text('Κωδικός'), findsOneWidget);
+      expect(find.text('Κάτοχος'), findsOneWidget);
+      expect(find.text('Παράμετροι απομακρυσμένης'), findsOneWidget);
+      expect(find.text('Εργαλείο Απομακρυσμένης'), findsOneWidget);
 
-    expect(find.text('PC-01'), findsOneWidget);
-    expect(find.text('Γιάννης Ιωάννου'), findsOneWidget);
-    expect(find.textContaining('2: 10.0.0.1'), findsOneWidget);
-    expect(find.text('2'), findsOneWidget);
-  });
+      expect(find.text('PC-01'), findsOneWidget);
+      expect(find.text('Γιάννης Ιωάννου'), findsOneWidget);
+      expect(find.textContaining('2: 10.0.0.1'), findsOneWidget);
+      expect(find.text('2'), findsOneWidget);
+    },
+  );
 
   // Χωρίς κάτοχο/κενά πεδία: «Χωρίς κάτοχο» και em dash στα κενά.
   //   flutter test test/features/directory/screens/widgets/equipment_data_table_test.dart --plain-name "EquipmentDataTable εμφανίζει παύλα όταν owner ή πεδία λείπουν"
-  testWidgets('EquipmentDataTable εμφανίζει παύλα όταν owner ή πεδία λείπουν', (tester) async {
+  testWidgets('EquipmentDataTable εμφανίζει παύλα όταν owner ή πεδία λείπουν', (
+    tester,
+  ) async {
     final items = [
-      (
-        EquipmentModel(
-          id: 2,
-          code: 'PC-02',
-          type: 'Laptop',
-          notes: null,
-        ),
-        null,
-      ),
+      (EquipmentModel(id: 2, code: 'PC-02', type: 'Laptop', notes: null), null),
     ];
     final visibleColumns = [
       EquipmentColumn.owner,

@@ -122,9 +122,7 @@ void main() {
 Future<String> _createMinimalExcel(String dir) async {
   final excel = Excel.createExcel();
   void appendTexts(String sheet, List<String> values) {
-    excel[sheet].appendRow(
-      values.map<CellValue?>(TextCellValue.new).toList(),
-    );
+    excel[sheet].appendRow(values.map<CellValue?>(TextCellValue.new).toList());
   }
 
   appendTexts('offices', <String>['office', 'office_name']);
@@ -135,7 +133,12 @@ Future<String> _createMinimalExcel(String dir) async {
   appendTexts('model', <String>['1', 'Model']);
   appendTexts('contracts', <String>['contract', 'contract_name']);
   appendTexts('contracts', <String>['1', 'Σύμβαση']);
-  appendTexts('equipment', <String>['code', 'description', 'model', 'serial_no']);
+  appendTexts('equipment', <String>[
+    'code',
+    'description',
+    'model',
+    'serial_no',
+  ]);
   appendTexts('equipment', <String>['100', 'PC', '1', 'SN1']);
 
   final path = p.join(dir, 'minimal_locked.xlsx');

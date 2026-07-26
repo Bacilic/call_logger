@@ -11,11 +11,7 @@ import 'installer_script_builder.dart';
 /// Είδος bump έκδοσης (το build αυξάνεται πάντα κατά 1).
 enum VersionBumpKind { patch, minor }
 
-enum ReleasePublishStatus {
-  success,
-  emptyUnreleasedWarning,
-  failure,
-}
+enum ReleasePublishStatus { success, emptyUnreleasedWarning, failure }
 
 class ReleasePublishResult {
   const ReleasePublishResult({
@@ -56,12 +52,13 @@ class ReleasePublishPreview {
   final VersionBumpKind bumpKind;
 }
 
-typedef ReleaseProcessRunner = Future<int> Function(
-  String executable,
-  List<String> arguments, {
-  String? workingDirectory,
-  void Function(String line)? onOutput,
-});
+typedef ReleaseProcessRunner =
+    Future<int> Function(
+      String executable,
+      List<String> arguments, {
+      String? workingDirectory,
+      void Function(String line)? onOutput,
+    });
 
 /// Ανάγνωση zip από δίσκο για επαλήθευση SHA (injectable στα τεστ).
 typedef ZipVerificationReader = Future<Uint8List> Function(String zipPath);
@@ -170,15 +167,13 @@ class ReleasePublisherService {
         return const ReleasePublishResult(
           status: ReleasePublishStatus.failure,
           failedStep: 'εγγραφή εγκαταστάτη',
-          message:
-              'Ο φάκελος ενημερώσεων δεν υπάρχει ή δεν είναι προσβάσιμος.',
+          message: 'Ο φάκελος ενημερώσεων δεν υπάρχει ή δεν είναι προσβάσιμος.',
         );
       }
       final batPath = p.join(folder, 'install_call_logger.bat');
-      await File(batPath).writeAsBytes(
-        InstallerScriptBuilder.buildBytes(),
-        flush: true,
-      );
+      await File(
+        batPath,
+      ).writeAsBytes(InstallerScriptBuilder.buildBytes(), flush: true);
       return const ReleasePublishResult(
         status: ReleasePublishStatus.success,
         message: 'Ο εγκαταστάτης install_call_logger.bat ανανεώθηκε.',
@@ -301,8 +296,9 @@ class ReleasePublisherService {
 
       final zipPath = p.join(currentDir.path, zipName);
       await File(zipPath).writeAsBytes(zipBytes, flush: true);
-      await File(p.join(releasesDir.path, zipName))
-          .writeAsBytes(zipBytes, flush: true);
+      await File(
+        p.join(releasesDir.path, zipName),
+      ).writeAsBytes(zipBytes, flush: true);
 
       _progress('Εγγραφή current/app…');
       for (final entry in packaged.entries) {
@@ -313,10 +309,9 @@ class ReleasePublisherService {
 
       _progress('Παραγωγή install_call_logger.bat…');
       final batPath = p.join(updateFolderPath, 'install_call_logger.bat');
-      await File(batPath).writeAsBytes(
-        InstallerScriptBuilder.buildBytes(),
-        flush: true,
-      );
+      await File(
+        batPath,
+      ).writeAsBytes(InstallerScriptBuilder.buildBytes(), flush: true);
 
       _progress('Επαλήθευση ακεραιότητας zip…');
       final onDisk = await verificationReader(zipPath);
@@ -340,8 +335,7 @@ class ReleasePublisherService {
         'zipFile': zipName,
         'sha256': sha,
       };
-      final manifestJson =
-          const JsonEncoder.withIndent('  ').convert(manifest);
+      final manifestJson = const JsonEncoder.withIndent('  ').convert(manifest);
       final versionTmp = File(p.join(currentDir.path, 'version.json.tmp'));
       final versionFinal = File(p.join(currentDir.path, 'version.json'));
       await versionTmp.writeAsString(manifestJson, flush: true);
@@ -397,9 +391,9 @@ class ReleasePublisherService {
   Future<Map<String, dynamic>> _readUnreleasedMap() async {
     final list = await _readChangelogJson();
     final unreleased = list.cast<Map>().firstWhere(
-          (e) => (e['version'] as String?) == 'Unreleased',
-          orElse: () => <String, dynamic>{},
-        );
+      (e) => (e['version'] as String?) == 'Unreleased',
+      orElse: () => <String, dynamic>{},
+    );
     return Map<String, dynamic>.from(unreleased);
   }
 
@@ -418,8 +412,7 @@ class ReleasePublisherService {
     Map<String, dynamic> unreleased,
   ) {
     final added = unreleased['added'];
-    if (added is List &&
-        added.any((e) => e.toString().trim().isNotEmpty)) {
+    if (added is List && added.any((e) => e.toString().trim().isNotEmpty)) {
       return VersionBumpKind.minor;
     }
     return VersionBumpKind.patch;
@@ -434,13 +427,13 @@ class ReleasePublisherService {
   }
 
   Map<String, dynamic> _emptyUnreleased() => {
-        'version': 'Unreleased',
-        'date': '',
-        'added': <String>[],
-        'improvements': <String>[],
-        'changed': <String>[],
-        'fixed': <String>[],
-      };
+    'version': 'Unreleased',
+    'date': '',
+    'added': <String>[],
+    'improvements': <String>[],
+    'changed': <String>[],
+    'fixed': <String>[],
+  };
 
   static List<String> _stringList(dynamic raw) {
     if (raw is! List) return [];
@@ -462,8 +455,7 @@ class ReleasePublisherService {
     if (unreleasedIndex < 0) {
       throw StateError('Δεν βρέθηκε ενότητα Unreleased στο changelog.json.');
     }
-    final unreleased =
-        Map<String, dynamic>.from(list[unreleasedIndex] as Map);
+    final unreleased = Map<String, dynamic>.from(list[unreleasedIndex] as Map);
 
     if (bumpKind == VersionBumpKind.minor) {
       final sealed = Map<String, dynamic>.from(unreleased);
@@ -537,12 +529,13 @@ class ReleasePublisherService {
     final topStart = afterUnreleased + nextMatch.start;
     final unreleasedBody = content.substring(afterUnreleased, topStart).trim();
     final afterTopHeaderLine = content.indexOf('\n', topStart);
-    final topHeaderEnd =
-        afterTopHeaderLine < 0 ? content.length : afterTopHeaderLine + 1;
-    final restMatch =
-        nextHeader.firstMatch(content.substring(topHeaderEnd));
-    final topEnd =
-        restMatch == null ? content.length : topHeaderEnd + restMatch.start;
+    final topHeaderEnd = afterTopHeaderLine < 0
+        ? content.length
+        : afterTopHeaderLine + 1;
+    final restMatch = nextHeader.firstMatch(content.substring(topHeaderEnd));
+    final topEnd = restMatch == null
+        ? content.length
+        : topHeaderEnd + restMatch.start;
     final topBody = content.substring(topHeaderEnd, topEnd).trimRight();
 
     final incoming = _parseMdSections(unreleasedBody);
@@ -564,9 +557,7 @@ class ReleasePublisherService {
   }
 
   static Map<String, List<String>> _parseMdSections(String body) {
-    final result = {
-      for (final key in _categoryKeys) key: <String>[],
-    };
+    final result = {for (final key in _categoryKeys) key: <String>[]};
     final titleToKey = {
       for (final e in _mdSectionTitles.entries) e.value: e.key,
     };

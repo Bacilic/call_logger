@@ -11,10 +11,8 @@ final taskAnalyticsFilterProvider = Provider.autoDispose<TaskAnalyticsFilter>((
 ) {
   final asyncDates = ref.watch(taskAnalyticsDateProvider);
   return asyncDates.when(
-    data: (dates) => TaskAnalyticsFilter(
-      startDate: dates.startDate,
-      endDate: dates.endDate,
-    ),
+    data: (dates) =>
+        TaskAnalyticsFilter(startDate: dates.startDate, endDate: dates.endDate),
     loading: () {
       final now = DateTime.now();
       final today = DateTime(now.year, now.month, now.day);

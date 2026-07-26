@@ -2,12 +2,7 @@
 library;
 
 /// Ποιο πεδίο συμπληρώνεται στο δεύτερο βήμα (πορτοκαλί).
-enum AssociationOrangeFill {
-  phone,
-  department,
-  equipment,
-  none,
-}
+enum AssociationOrangeFill { phone, department, equipment, none }
 
 /// Ένα σενάριο διφασικής καταχώρησης οντότητας από την οθόνη κλήσεων.
 class AssociationTwoStepScenario {

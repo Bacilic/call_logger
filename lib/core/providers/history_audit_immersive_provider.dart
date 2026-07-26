@@ -12,5 +12,5 @@ class HistoryAuditImmersiveNotifier extends Notifier<bool> {
 
 final historyAuditImmersiveProvider =
     NotifierProvider<HistoryAuditImmersiveNotifier, bool>(
-  HistoryAuditImmersiveNotifier.new,
-);
+      HistoryAuditImmersiveNotifier.new,
+    );

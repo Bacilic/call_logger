@@ -4,7 +4,8 @@ part of 'smart_entity_selector_provider.dart';
 mixin SmartEntitySelectorLookupsMixin on Notifier<SmartEntitySelectorState> {
   SmartEntitySelectorNotifier get _host => this as SmartEntitySelectorNotifier;
 
-  bool get _hasManualEquipmentSelection => state.equipmentText.trim().isNotEmpty;
+  bool get _hasManualEquipmentSelection =>
+      state.equipmentText.trim().isNotEmpty;
 
   List<String> _splitPhones(String? rawPhone) {
     return PhoneListParser.splitPhones(rawPhone);
@@ -196,8 +197,10 @@ mixin SmartEntitySelectorLookupsMixin on Notifier<SmartEntitySelectorState> {
         .then((bundle) {
           if (!ref.mounted) return;
           if (generation != _host._phoneLookupGeneration) return;
-          final currentDigits = (state.selectedPhone ?? '')
-              .replaceAll(RegExp(r'[^0-9]'), '');
+          final currentDigits = (state.selectedPhone ?? '').replaceAll(
+            RegExp(r'[^0-9]'),
+            '',
+          );
           if (currentDigits != digits) return;
           _applyPhoneLookupWithCatalog(digits, bundle.service);
         })
@@ -290,11 +293,11 @@ mixin SmartEntitySelectorLookupsMixin on Notifier<SmartEntitySelectorState> {
           .map((u) => u.departmentId)
           .whereType<int>()
           .toSet();
-      final allShareSameDepartment = users.isNotEmpty &&
+      final allShareSameDepartment =
+          users.isNotEmpty &&
           users.every((u) => u.departmentId != null) &&
           sharedDeptIds.length == 1;
-      final sharedDeptId =
-          allShareSameDepartment ? sharedDeptIds.single : null;
+      final sharedDeptId = allShareSameDepartment ? sharedDeptIds.single : null;
       final sharedDeptName = sharedDeptId == null
           ? null
           : lookup.departmentIdToName[sharedDeptId];
@@ -305,7 +308,8 @@ mixin SmartEntitySelectorLookupsMixin on Notifier<SmartEntitySelectorState> {
       // Αν ο ήδη δεμένος καλούντας είναι ένας από τους κατόχους, μην τον
       // ξεδέσεις (κοινόχρηστο τηλέφωνο βάρδιας μετά από autofill εξοπλισμού).
       final selectedCallerId = state.selectedCaller?.id;
-      final selectedCallerIsOwner = selectedCallerId != null &&
+      final selectedCallerIsOwner =
+          selectedCallerId != null &&
           users.any((u) => u.id == selectedCallerId);
       if (selectedCallerIsOwner) {
         state = state.copyWith(
@@ -652,8 +656,7 @@ mixin SmartEntitySelectorLookupsMixin on Notifier<SmartEntitySelectorState> {
         _autofillPhoneFromUserProfile(user);
       }
     } finally {
-      final lookupForRestore =
-          ref.read(lookupServiceProvider).value?.service;
+      final lookupForRestore = ref.read(lookupServiceProvider).value?.service;
       if (state.selectedDepartmentId != null) {
         _restoreDepartmentPhoneCandidatesIfNeeded(lookupForRestore);
       }

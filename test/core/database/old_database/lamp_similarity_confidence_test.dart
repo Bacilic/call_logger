@@ -44,7 +44,8 @@ void main() {
       expect(
         score,
         greaterThanOrEqualTo(90),
-        reason: 'Η αντίστροφη σειρά ονοματεπωνύμου πρέπει να θεωρείται σχεδόν ταύτιση',
+        reason:
+            'Η αντίστροφη σειρά ονοματεπωνύμου πρέπει να θεωρείται σχεδόν ταύτιση',
       );
     });
 
@@ -55,7 +56,10 @@ void main() {
       final score = resolution.similarityConfidenceScore(a, b);
 
       expect(score, greaterThan(20));
-      expect(score, greaterThan(LampMigrationService.kSuggestionConfidenceThreshold));
+      expect(
+        score,
+        greaterThan(LampMigrationService.kSuggestionConfidenceThreshold),
+      );
     });
 
     test('ακριβής ταύτιση μετά κανονικοποίηση παραμένει 100', () {

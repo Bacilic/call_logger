@@ -23,10 +23,7 @@ class _CallsNavigationIcon extends ConsumerWidget {
       showDuration: const Duration(seconds: 4),
       message:
           'Καταγραφή νέας κλήσης τεχνικής υποστήριξης\nΚύρια οθόνη – πατήστε εδώ όταν χτυπά τηλέφωνο',
-      child: const Icon(
-        Icons.phone_in_talk,
-        key: ValueKey('nav_rail_calls'),
-      ),
+      child: const Icon(Icons.phone_in_talk, key: ValueKey('nav_rail_calls')),
     );
     return Badge(
       isLabelVisible: showBadge,
@@ -69,10 +66,7 @@ class _DictionaryNavigationIcon extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const book = Icon(
-      Icons.menu_book,
-      key: ValueKey('nav_rail_dictionary'),
-    );
+    const book = Icon(Icons.menu_book, key: ValueKey('nav_rail_dictionary'));
     final child = showWarning
         ? Stack(
             clipBehavior: Clip.none,
@@ -104,10 +98,7 @@ class _LampNavigationIcon extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const lamp = Icon(
-      Icons.lightbulb_outline,
-      key: ValueKey('nav_rail_lamp'),
-    );
+    const lamp = Icon(Icons.lightbulb_outline, key: ValueKey('nav_rail_lamp'));
     final child = showWarning
         ? Stack(
             clipBehavior: Clip.none,

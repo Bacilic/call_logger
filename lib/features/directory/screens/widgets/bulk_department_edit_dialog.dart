@@ -157,92 +157,93 @@ class _BulkDepartmentEditDialogState extends State<BulkDepartmentEditDialog>
       messengerKey: dialogMessengerKey,
       child: Center(
         child: AlertDialog(
-      constraints: BoxConstraints(maxWidth: bodyW + 72),
-      title: Text(
-        'Μαζική επεξεργασία (${widget.selectedDepartments.length} τμήματα)',
-      ),
-      content: SizedBox(
-        width: bodyW,
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              for (var i = 0; i < _fieldKeys.length; i++) ...[
-                if (_fieldKeys[i] == 'color') ...[
-                  Text(labels['color']!, style: theme.textTheme.titleSmall),
-                  const SizedBox(height: 8),
-                  DecoratedBox(
-                    decoration: ShapeDecoration(
-                      shape: RoundedRectangleBorder(
-                        side: BorderSide(color: outlineColor),
-                        borderRadius: const BorderRadius.all(
-                          Radius.circular(4),
+          constraints: BoxConstraints(maxWidth: bodyW + 72),
+          title: Text(
+            'Μαζική επεξεργασία (${widget.selectedDepartments.length} τμήματα)',
+          ),
+          content: SizedBox(
+            width: bodyW,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  for (var i = 0; i < _fieldKeys.length; i++) ...[
+                    if (_fieldKeys[i] == 'color') ...[
+                      Text(labels['color']!, style: theme.textTheme.titleSmall),
+                      const SizedBox(height: 8),
+                      DecoratedBox(
+                        decoration: ShapeDecoration(
+                          shape: RoundedRectangleBorder(
+                            side: BorderSide(color: outlineColor),
+                            borderRadius: const BorderRadius.all(
+                              Radius.circular(4),
+                            ),
+                          ),
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(8, 8, 8, 8),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              if (_hasDifferentValues('color'))
+                                Text(
+                                  _conflictHint,
+                                  style: theme.textTheme.bodyMedium?.copyWith(
+                                    color: theme.colorScheme.onSurfaceVariant,
+                                  ),
+                                ),
+                              if (_hasDifferentValues('color'))
+                                const SizedBox(height: 8),
+                              DepartmentColorPalette(
+                                showHeading: false,
+                                compact: true,
+                                selected: _bulkPaletteColor,
+                                onColorSelected: (c) {
+                                  setState(() {
+                                    _bulkPaletteColor = c;
+                                    _controllers['color']!.text =
+                                        colorToDepartmentHex(c);
+                                  });
+                                },
+                              ),
+                            ],
+                          ),
                         ),
                       ),
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(8, 8, 8, 8),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          if (_hasDifferentValues('color'))
-                            Text(
-                              _conflictHint,
-                              style: theme.textTheme.bodyMedium?.copyWith(
-                                color: theme.colorScheme.onSurfaceVariant,
-                              ),
-                            ),
-                          if (_hasDifferentValues('color'))
-                            const SizedBox(height: 8),
-                          DepartmentColorPalette(
-                            showHeading: false,
-                            compact: true,
-                            selected: _bulkPaletteColor,
-                            onColorSelected: (c) {
-                              setState(() {
-                                _bulkPaletteColor = c;
-                                _controllers['color']!.text =
-                                    colorToDepartmentHex(c);
-                              });
-                            },
-                          ),
-                        ],
+                    ] else
+                      TextFormField(
+                        controller: _controllers[_fieldKeys[i]],
+                        decoration: InputDecoration(
+                          labelText: labels[_fieldKeys[i]],
+                          hintText: _hasDifferentValues(_fieldKeys[i])
+                              ? _conflictHint
+                              : null,
+                          hintMaxLines: 4,
+                          alignLabelWithHint: _fieldKeys[i] == 'notes',
+                          border: const OutlineInputBorder(),
+                        ),
+                        spellCheckConfiguration:
+                            platformSpellCheckConfiguration,
+                        maxLines: _fieldKeys[i] == 'notes' ? 3 : 1,
+                        onChanged: (_) => setState(() {}),
                       ),
-                    ),
-                  ),
-                ] else
-                  TextFormField(
-                    controller: _controllers[_fieldKeys[i]],
-                    decoration: InputDecoration(
-                      labelText: labels[_fieldKeys[i]],
-                      hintText: _hasDifferentValues(_fieldKeys[i])
-                          ? _conflictHint
-                          : null,
-                      hintMaxLines: 4,
-                      alignLabelWithHint: _fieldKeys[i] == 'notes',
-                      border: const OutlineInputBorder(),
-                    ),
-                    spellCheckConfiguration: platformSpellCheckConfiguration,
-                    maxLines: _fieldKeys[i] == 'notes' ? 3 : 1,
-                    onChanged: (_) => setState(() {}),
-                  ),
-                const SizedBox(height: 16),
-              ],
-            ],
+                    const SizedBox(height: 16),
+                  ],
+                ],
+              ),
+            ),
           ),
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Ακύρωση'),
-        ),
-        FilledButton(
-          onPressed: _isDirty ? _save : null,
-          child: const Text('Αποθήκευση'),
-        ),
-      ],
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Ακύρωση'),
+            ),
+            FilledButton(
+              onPressed: _isDirty ? _save : null,
+              child: const Text('Αποθήκευση'),
+            ),
+          ],
         ),
       ),
     );

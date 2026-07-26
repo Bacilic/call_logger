@@ -31,12 +31,18 @@ mixin SettingsServiceRemoteLansweeperMixin {
   /// Δεν αποθηκεύεται ανά εργαλείο· κοινή για όλα τα διαλόγους.
   Future<bool> getRemoteToolPrioritySwapMode() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool(SettingsService._prefKey(_keyRemoteToolPrioritySwapMode)) ?? false;
+    return prefs.getBool(
+          SettingsService._prefKey(_keyRemoteToolPrioritySwapMode),
+        ) ??
+        false;
   }
 
   Future<void> setRemoteToolPrioritySwapMode(bool value) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(SettingsService._prefKey(_keyRemoteToolPrioritySwapMode), value);
+    await prefs.setBool(
+      SettingsService._prefKey(_keyRemoteToolPrioritySwapMode),
+      value,
+    );
   }
 
   // --- Ρυθμίσεις απομακρυσμένης σύνδεσης (app_settings) ---
@@ -55,14 +61,19 @@ mixin SettingsServiceRemoteLansweeperMixin {
     if (id == null) {
       await SettingsService._setAppSetting!(_keyCallsPrimaryToolId, '');
     } else {
-      await SettingsService._setAppSetting!(_keyCallsPrimaryToolId, id.toString());
+      await SettingsService._setAppSetting!(
+        _keyCallsPrimaryToolId,
+        id.toString(),
+      );
     }
   }
 
   /// Αν false, τα δευτερεύοντα εργαλεία μπαίνουν σε overflow menu.
   Future<bool> getCallsShowSecondaryRemoteActions() async {
     final value = SettingsService._getAppSetting != null
-        ? await SettingsService._getAppSetting!(_keyCallsShowSecondaryRemoteActions)
+        ? await SettingsService._getAppSetting!(
+            _keyCallsShowSecondaryRemoteActions,
+          )
         : null;
     if (value == null || value.trim().isEmpty) return true;
     final lower = value.trim().toLowerCase();
@@ -81,7 +92,9 @@ mixin SettingsServiceRemoteLansweeperMixin {
   /// Προεπιλογή: true.
   Future<bool> getCallsShowEmptyRemoteLaunchers() async {
     final value = SettingsService._getAppSetting != null
-        ? await SettingsService._getAppSetting!(_keyCallsShowEmptyRemoteLaunchers)
+        ? await SettingsService._getAppSetting!(
+            _keyCallsShowEmptyRemoteLaunchers,
+          )
         : null;
     if (value == null || value.trim().isEmpty) return true;
     final lower = value.trim().toLowerCase();
@@ -90,7 +103,10 @@ mixin SettingsServiceRemoteLansweeperMixin {
 
   Future<void> setCallsShowEmptyRemoteLaunchers(bool value) async {
     if (SettingsService._setAppSetting == null) return;
-    await SettingsService._setAppSetting!(_keyCallsShowEmptyRemoteLaunchers, value ? '1' : '0');
+    await SettingsService._setAppSetting!(
+      _keyCallsShowEmptyRemoteLaunchers,
+      value ? '1' : '0',
+    );
   }
 
   /// Έχει ολοκληρωθεί το one-shot migration legacy remote_tools → arguments_json.
@@ -105,7 +121,10 @@ mixin SettingsServiceRemoteLansweeperMixin {
 
   Future<void> setRemoteToolsV2Migrated(bool value) async {
     if (SettingsService._setAppSetting == null) return;
-    await SettingsService._setAppSetting!(_keyRemoteToolsV2Migrated, value ? '1' : '0');
+    await SettingsService._setAppSetting!(
+      _keyRemoteToolsV2Migrated,
+      value ? '1' : '0',
+    );
   }
 
   /// URL API Lansweeper (`lansweeper_api_url`). Legacy `lansweeper_url` μόνο αν περιέχει `api.aspx`.
@@ -116,7 +135,9 @@ mixin SettingsServiceRemoteLansweeperMixin {
     if (_looksLikeLansweeperApiUrl(normalizedDirect)) {
       return normalizedDirect;
     }
-    final legacy = await SettingsService._getAppSetting!(_legacyKeyLansweeperUrl);
+    final legacy = await SettingsService._getAppSetting!(
+      _legacyKeyLansweeperUrl,
+    );
     final normalizedLegacy = legacy?.trim() ?? '';
     if (_looksLikeLansweeperApiUrl(normalizedLegacy)) {
       return normalizedLegacy;
@@ -155,61 +176,84 @@ mixin SettingsServiceRemoteLansweeperMixin {
   /// Όνομα χρήστη πράκτορα Lansweeper (μόνιμη ρύθμιση, κοινό σε υποβολές).
   Future<String?> getLansweeperAgentUsername() async {
     if (SettingsService._getAppSetting == null) return null;
-    final value = await SettingsService._getAppSetting!(_keyLansweeperAgentUsername);
+    final value = await SettingsService._getAppSetting!(
+      _keyLansweeperAgentUsername,
+    );
     final normalized = value?.trim() ?? '';
     return normalized.isEmpty ? null : normalized;
   }
 
   Future<void> setLansweeperAgentUsername(String value) async {
     if (SettingsService._setAppSetting == null) return;
-    await SettingsService._setAppSetting!(_keyLansweeperAgentUsername, value.trim());
+    await SettingsService._setAppSetting!(
+      _keyLansweeperAgentUsername,
+      value.trim(),
+    );
   }
 
   /// Αυτόματο άνοιγμα σελίδας σύνδεσης πριν τη φόρμα αιτήματος (browser).
   Future<bool> getLansweeperHelpdeskAutoLogin() async {
     if (SettingsService._getAppSetting == null) return false;
-    final raw = await SettingsService._getAppSetting!(_keyLansweeperHelpdeskAutoLogin);
+    final raw = await SettingsService._getAppSetting!(
+      _keyLansweeperHelpdeskAutoLogin,
+    );
     final t = (raw ?? '').trim().toLowerCase();
     return t == '1' || t == 'true' || t == 'yes';
   }
 
   Future<void> setLansweeperHelpdeskAutoLogin(bool value) async {
     if (SettingsService._setAppSetting == null) return;
-    await SettingsService._setAppSetting!(_keyLansweeperHelpdeskAutoLogin, value ? '1' : '0');
+    await SettingsService._setAppSetting!(
+      _keyLansweeperHelpdeskAutoLogin,
+      value ? '1' : '0',
+    );
   }
 
   Future<String?> getLansweeperHelpdeskLoginUrl() async {
     if (SettingsService._getAppSetting == null) return null;
-    final v = (await SettingsService._getAppSetting!(_keyLansweeperHelpdeskLoginUrl))?.trim();
+    final v = (await SettingsService._getAppSetting!(
+      _keyLansweeperHelpdeskLoginUrl,
+    ))?.trim();
     return v == null || v.isEmpty ? null : v;
   }
 
   Future<void> setLansweeperHelpdeskLoginUrl(String value) async {
     if (SettingsService._setAppSetting == null) return;
-    await SettingsService._setAppSetting!(_keyLansweeperHelpdeskLoginUrl, value.trim());
+    await SettingsService._setAppSetting!(
+      _keyLansweeperHelpdeskLoginUrl,
+      value.trim(),
+    );
   }
 
   Future<String?> getLansweeperHelpdeskWebUsername() async {
     if (SettingsService._getAppSetting == null) return null;
-    final v =
-        (await SettingsService._getAppSetting!(_keyLansweeperHelpdeskWebUsername))?.trim();
+    final v = (await SettingsService._getAppSetting!(
+      _keyLansweeperHelpdeskWebUsername,
+    ))?.trim();
     return v == null || v.isEmpty ? null : v;
   }
 
   Future<void> setLansweeperHelpdeskWebUsername(String value) async {
     if (SettingsService._setAppSetting == null) return;
-    await SettingsService._setAppSetting!(_keyLansweeperHelpdeskWebUsername, value.trim());
+    await SettingsService._setAppSetting!(
+      _keyLansweeperHelpdeskWebUsername,
+      value.trim(),
+    );
   }
 
   Future<String?> getLansweeperHelpdeskWebPassword() async {
     if (SettingsService._getAppSetting == null) return null;
-    final v =
-        (await SettingsService._getAppSetting!(_keyLansweeperHelpdeskWebPassword))?.trim();
+    final v = (await SettingsService._getAppSetting!(
+      _keyLansweeperHelpdeskWebPassword,
+    ))?.trim();
     return v == null || v.isEmpty ? null : v;
   }
 
   Future<void> setLansweeperHelpdeskWebPassword(String value) async {
     if (SettingsService._setAppSetting == null) return;
-    await SettingsService._setAppSetting!(_keyLansweeperHelpdeskWebPassword, value);
+    await SettingsService._setAppSetting!(
+      _keyLansweeperHelpdeskWebPassword,
+      value,
+    );
   }
 }

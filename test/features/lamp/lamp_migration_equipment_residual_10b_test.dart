@@ -15,7 +15,9 @@ void main() {
     setUpAll(() async {
       initSqfliteFfiForTests();
       final dir = await Directory.systemTemp.createTemp('lamp_equip_res_10b_');
-      await DatabaseHelper.bindTestDatabaseFile('${dir.path}/lamp_equip_res_10b.db');
+      await DatabaseHelper.bindTestDatabaseFile(
+        '${dir.path}/lamp_equip_res_10b.db',
+      );
       await DatabaseHelper.instance.database;
       service = LampMigrationService();
     });
@@ -53,7 +55,11 @@ void main() {
         );
 
         expect(
-          await db.query('users', where: 'first_name = ?', whereArgs: ['Ορφανός']),
+          await db.query(
+            'users',
+            where: 'first_name = ?',
+            whereArgs: ['Ορφανός'],
+          ),
           isEmpty,
         );
       },
@@ -82,7 +88,11 @@ void main() {
           hasLength(1),
         );
         expect(
-          await db.query('equipment', where: 'code_equipment = ?', whereArgs: ['PC-RES-10B']),
+          await db.query(
+            'equipment',
+            where: 'code_equipment = ?',
+            whereArgs: ['PC-RES-10B'],
+          ),
           hasLength(1),
         );
         final owners = await users.getEquipmentOwnerSnapshots(result.id);

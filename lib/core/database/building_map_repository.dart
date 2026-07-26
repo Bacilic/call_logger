@@ -6,7 +6,7 @@ import 'directory_support.dart';
 /// Persistence χάρτη κτιρίου (`building_map_floors` + σχετικές τοποθετήσεις τμημάτων).
 class BuildingMapRepository {
   BuildingMapRepository(this.db, [DirectorySupport? support])
-      : _support = support ?? DirectorySupport(db);
+    : _support = support ?? DirectorySupport(db);
 
   final Database db;
   // Κρατιέται για κοινούς βοηθούς σε επόμενες φάσεις (ίδιο συμβόλαιο με CategoryRepository).
@@ -14,7 +14,7 @@ class BuildingMapRepository {
   final DirectorySupport _support;
 
   Future<void> Function(int deptId, Map<String, dynamic> fields)?
-      _updateDepartment;
+  _updateDepartment;
 
   /// Σύνδεση με `DepartmentRepository.updateDepartment` — ορίζεται από orchestrator.
   void bindUpdateDepartment(
@@ -27,22 +27,22 @@ class BuildingMapRepository {
   /// με τις προεπιλογές τους όταν αφαιρείται εντελώς το τμήμα από τον χάρτη.
   static const Map<String, dynamic> _kBuildingMapPlacementClearedDefaults =
       <String, dynamic>{
-    'map_floor': null,
-    'map_x': 0.0,
-    'map_y': 0.0,
-    'map_width': 0.0,
-    'map_height': 0.0,
-    'map_rotation': 0.0,
-    'map_label_offset_x': null,
-    'map_label_offset_y': null,
-    'map_anchor_offset_x': null,
-    'map_anchor_offset_y': null,
-    'map_custom_name': null,
-    'map_label_font_scale': null,
-    'map_label_width': null,
-    'map_label_height': null,
-    'map_hidden': 0,
-  };
+        'map_floor': null,
+        'map_x': 0.0,
+        'map_y': 0.0,
+        'map_width': 0.0,
+        'map_height': 0.0,
+        'map_rotation': 0.0,
+        'map_label_offset_x': null,
+        'map_label_offset_y': null,
+        'map_anchor_offset_x': null,
+        'map_anchor_offset_y': null,
+        'map_custom_name': null,
+        'map_label_font_scale': null,
+        'map_label_width': null,
+        'map_label_height': null,
+        'map_hidden': 0,
+      };
 
   /// Ονόματα στηλών που επηρεάζονται από [clearedBuildingMapPlacementColumns].
   static Iterable<String> get buildingMapPlacementColumnNames =>

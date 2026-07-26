@@ -1,4 +1,4 @@
-﻿import 'dart:convert';
+import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
@@ -7,10 +7,7 @@ import 'gemini_ticket_service.dart';
 
 /// Αποτέλεσμα ερώτησης ΤΝ για ορθογραφία λέξης.
 class SpellingLookupGeminiResult {
-  const SpellingLookupGeminiResult({
-    required this.suggestions,
-    this.note,
-  });
+  const SpellingLookupGeminiResult({required this.suggestions, this.note});
 
   final List<String> suggestions;
   final String? note;

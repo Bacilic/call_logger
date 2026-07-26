@@ -9,25 +9,29 @@ mixin SettingsServiceAnalyticsFiltersMixin {
       'dashboard_exclude_calls_without_category';
   static const String _keyTaskAnalyticsDatePreset =
       'task_analytics_date_preset_v1';
-  static const String _keyTaskAnalyticsDateFrom =
-      'task_analytics_date_from_v1';
+  static const String _keyTaskAnalyticsDateFrom = 'task_analytics_date_from_v1';
   static const String _keyTaskAnalyticsDateTo = 'task_analytics_date_to_v1';
 
   /// Τελευταία επιλογή εύρους ημερομηνιών στον πίνακα στατιστικών κλήσεων.
   /// Προεπιλογή: `today`.
   Future<String> getDashboardDatePreset() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(SettingsService._prefKey(_keyDashboardDatePreset)) ?? 'today';
+    return prefs.getString(SettingsService._prefKey(_keyDashboardDatePreset)) ??
+        'today';
   }
 
   Future<DateTime?> getDashboardCustomDateFrom() async {
     final prefs = await SharedPreferences.getInstance();
-    return _parseStoredDate(prefs.getString(SettingsService._prefKey(_keyDashboardDateFrom)));
+    return _parseStoredDate(
+      prefs.getString(SettingsService._prefKey(_keyDashboardDateFrom)),
+    );
   }
 
   Future<DateTime?> getDashboardCustomDateTo() async {
     final prefs = await SharedPreferences.getInstance();
-    return _parseStoredDate(prefs.getString(SettingsService._prefKey(_keyDashboardDateTo)));
+    return _parseStoredDate(
+      prefs.getString(SettingsService._prefKey(_keyDashboardDateTo)),
+    );
   }
 
   Future<void> setDashboardDateFilter({
@@ -36,13 +40,19 @@ mixin SettingsServiceAnalyticsFiltersMixin {
     DateTime? customTo,
   }) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(SettingsService._prefKey(_keyDashboardDatePreset), preset);
+    await prefs.setString(
+      SettingsService._prefKey(_keyDashboardDatePreset),
+      preset,
+    );
     if (preset == 'custom' && customFrom != null && customTo != null) {
       await prefs.setString(
         SettingsService._prefKey(_keyDashboardDateFrom),
         _formatStoredDate(customFrom),
       );
-      await prefs.setString(SettingsService._prefKey(_keyDashboardDateTo), _formatStoredDate(customTo));
+      await prefs.setString(
+        SettingsService._prefKey(_keyDashboardDateTo),
+        _formatStoredDate(customTo),
+      );
     } else {
       await prefs.remove(SettingsService._prefKey(_keyDashboardDateFrom));
       await prefs.remove(SettingsService._prefKey(_keyDashboardDateTo));
@@ -52,7 +62,9 @@ mixin SettingsServiceAnalyticsFiltersMixin {
   /// Απόκρυψη κλήσεων χωρίς κατηγορία στο γράφημα «Κατανομή Βλαβών». Προεπιλογή: false.
   Future<bool> getDashboardExcludeCallsWithoutCategory() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool(SettingsService._prefKey(_keyDashboardExcludeCallsWithoutCategory)) ??
+    return prefs.getBool(
+          SettingsService._prefKey(_keyDashboardExcludeCallsWithoutCategory),
+        ) ??
         false;
   }
 
@@ -68,17 +80,24 @@ mixin SettingsServiceAnalyticsFiltersMixin {
   /// Προεπιλογή: `all` (πλήρες εύρος δημιουργίας).
   Future<String> getTaskAnalyticsDatePreset() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(SettingsService._prefKey(_keyTaskAnalyticsDatePreset)) ?? 'all';
+    return prefs.getString(
+          SettingsService._prefKey(_keyTaskAnalyticsDatePreset),
+        ) ??
+        'all';
   }
 
   Future<DateTime?> getTaskAnalyticsCustomDateFrom() async {
     final prefs = await SharedPreferences.getInstance();
-    return _parseStoredDate(prefs.getString(SettingsService._prefKey(_keyTaskAnalyticsDateFrom)));
+    return _parseStoredDate(
+      prefs.getString(SettingsService._prefKey(_keyTaskAnalyticsDateFrom)),
+    );
   }
 
   Future<DateTime?> getTaskAnalyticsCustomDateTo() async {
     final prefs = await SharedPreferences.getInstance();
-    return _parseStoredDate(prefs.getString(SettingsService._prefKey(_keyTaskAnalyticsDateTo)));
+    return _parseStoredDate(
+      prefs.getString(SettingsService._prefKey(_keyTaskAnalyticsDateTo)),
+    );
   }
 
   Future<void> setTaskAnalyticsDateFilter({
@@ -87,7 +106,10 @@ mixin SettingsServiceAnalyticsFiltersMixin {
     DateTime? customTo,
   }) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(SettingsService._prefKey(_keyTaskAnalyticsDatePreset), preset);
+    await prefs.setString(
+      SettingsService._prefKey(_keyTaskAnalyticsDatePreset),
+      preset,
+    );
     if (preset == 'custom' && customFrom != null && customTo != null) {
       await prefs.setString(
         _keyTaskAnalyticsDateFrom,

@@ -10,8 +10,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 const _kWarningFileTarget =
     'Το αρχείο ορίζει τον στόχο — τα ορίσματα με {TARGET} θα αγνοηθούν κατά την εκτέλεση.';
-const _kWarningDuplicates =
-    'Υπάρχουν διπλότυπα ορίσματα με την ίδια τιμή.';
+const _kWarningDuplicates = 'Υπάρχουν διπλότυπα ορίσματα με την ίδια τιμή.';
 const _kWarningRdpTargetSyntax =
     'Για RDP ο στόχος γράφεται /v:{TARGET} — κολλητά, χωρίς κενό. Σκέτο {TARGET} ή "/v: {TARGET}" ερμηνεύεται από το mstsc ως αρχείο σύνδεσης.';
 
@@ -73,7 +72,9 @@ void main() {
       await finishTest(tester);
     });
 
-    testWidgets('placeholder σε κενή λίστα δημιουργεί γραμμή με token', (tester) async {
+    testWidgets('placeholder σε κενή λίστα δημιουργεί γραμμή με token', (
+      tester,
+    ) async {
       await pumpEditor(tester);
 
       await tester.tap(find.text('{TARGET}'));
@@ -114,7 +115,9 @@ void main() {
       await finishTest(tester);
     });
 
-    testWidgets('saving=true απενεργοποιεί προσθήκη και placeholders', (tester) async {
+    testWidgets('saving=true απενεργοποιεί προσθήκη και placeholders', (
+      tester,
+    ) async {
       await pumpEditor(tester);
 
       controller.saving = true;
@@ -239,7 +242,9 @@ void main() {
       await finishTest(tester);
     });
 
-    testWidgets('rdp: /v: {TARGET} με κενό → προειδοποίηση /v:', (tester) async {
+    testWidgets('rdp: /v: {TARGET} με κενό → προειδοποίηση /v:', (
+      tester,
+    ) async {
       await pumpEditor(tester);
       await setRoleAndArgs(tester, ToolRole.rdp, ['/v: {TARGET}']);
 
@@ -255,7 +260,9 @@ void main() {
       await finishTest(tester);
     });
 
-    testWidgets('vnc: -host={TARGET} → χωρίς προειδοποίηση /v:', (tester) async {
+    testWidgets('vnc: -host={TARGET} → χωρίς προειδοποίηση /v:', (
+      tester,
+    ) async {
       await pumpEditor(tester);
       await setRoleAndArgs(tester, ToolRole.vnc, ['-host={TARGET}']);
 
@@ -267,11 +274,7 @@ void main() {
       'ενεργά {FILE} + {TARGET} → προειδοποίηση σύγκρουσης και εξαφάνιση με απενεργοποίηση',
       (tester) async {
         await pumpEditor(tester);
-        await setRoleAndArgs(
-          tester,
-          ToolRole.rdp,
-          ['{FILE}', '{TARGET}'],
-        );
+        await setRoleAndArgs(tester, ToolRole.rdp, ['{FILE}', '{TARGET}']);
 
         expect(find.textContaining(_kWarningFileTarget), findsOneWidget);
 
@@ -283,13 +286,14 @@ void main() {
       },
     );
 
-    testWidgets('δύο ίδια ενεργά ορίσματα → προειδοποίηση διπλοτύπου', (tester) async {
+    testWidgets('δύο ίδια ενεργά ορίσματα → προειδοποίηση διπλοτύπου', (
+      tester,
+    ) async {
       await pumpEditor(tester);
-      await setRoleAndArgs(
-        tester,
-        ToolRole.rdp,
-        ['-password=secret', '-password=secret'],
-      );
+      await setRoleAndArgs(tester, ToolRole.rdp, [
+        '-password=secret',
+        '-password=secret',
+      ]);
 
       expect(find.textContaining(_kWarningDuplicates), findsOneWidget);
       await finishTest(tester);

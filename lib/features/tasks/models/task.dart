@@ -148,12 +148,13 @@ class Task {
       updatedAt: map['updated_at'] as String?,
       origin: normalizeOrigin(map['origin'] as String?),
       isDeleted: (map['is_deleted'] as int?) == 1,
-      callerLinkedDeleted:
-          historyEntityIsDeleted(map['caller_is_deleted']),
-      equipmentLinkedDeleted:
-          historyEntityIsDeleted(map['equipment_is_deleted']),
-      departmentLinkedDeleted:
-          historyEntityIsDeleted(map['department_is_deleted']),
+      callerLinkedDeleted: historyEntityIsDeleted(map['caller_is_deleted']),
+      equipmentLinkedDeleted: historyEntityIsDeleted(
+        map['equipment_is_deleted'],
+      ),
+      departmentLinkedDeleted: historyEntityIsDeleted(
+        map['department_is_deleted'],
+      ),
     );
   }
 
@@ -242,10 +243,7 @@ class Task {
     phoneText ?? '',
     equipmentText ?? '',
     departmentText ?? '',
-    snoozeEntries
-        .map((e) => e.note ?? '')
-        .where((s) => s.isNotEmpty)
-        .join(' '),
+    snoozeEntries.map((e) => e.note ?? '').where((s) => s.isNotEmpty).join(' '),
   ].join(' ');
 
   DateTime? get dueDateTime => _parseDateTime(dueDate);
@@ -294,8 +292,9 @@ class Task {
   /// Επιστρέφει νέο Task με append στο ιστορικό αναβολών.
   Task addSnoozeEntry(DateTime date, {String? note}) {
     final trimmedNote = note?.trim();
-    final effectiveNote =
-        (trimmedNote != null && trimmedNote.isNotEmpty) ? trimmedNote : null;
+    final effectiveNote = (trimmedNote != null && trimmedNote.isNotEmpty)
+        ? trimmedNote
+        : null;
     final entry = TaskSnoozeEntry(
       snoozedAt: DateTime.now(),
       dueAt: date,
@@ -323,8 +322,9 @@ class Task {
     for (var i = 0; i < entries.length; i++) {
       final entry = entries[i];
       final trimmed = notes[i]?.trim();
-      final effectiveNote =
-          (trimmed != null && trimmed.isNotEmpty) ? trimmed : null;
+      final effectiveNote = (trimmed != null && trimmed.isNotEmpty)
+          ? trimmed
+          : null;
       next.add({
         'snoozedAt': entry.snoozedAt.toIso8601String(),
         if (entry.dueAt != null) 'dueAt': entry.dueAt!.toIso8601String(),

@@ -75,7 +75,8 @@ Future<void> _openUserFormInDialog(
 Future<void> _pumpUntilUserSaveCompletes(WidgetTester tester) async {
   const maxAttempts = 40;
   for (var i = 0; i < maxAttempts; i++) {
-    final formOpen = find.text(_kNewUserTitle).evaluate().isNotEmpty ||
+    final formOpen =
+        find.text(_kNewUserTitle).evaluate().isNotEmpty ||
         find.text(_kEditUserTitle).evaluate().isNotEmpty;
     if (!formOpen) return;
     await tester.runAsync(() async {
@@ -92,8 +93,7 @@ Future<bool> _userExistsByName(String firstName, String lastName) async {
   final db = await DatabaseHelper.instance.database;
   final rows = await db.query(
     'users',
-    where:
-        'first_name = ? AND last_name = ? AND COALESCE(is_deleted, 0) = 0',
+    where: 'first_name = ? AND last_name = ? AND COALESCE(is_deleted, 0) = 0',
     whereArgs: [firstName, lastName],
     limit: 1,
   );
@@ -102,8 +102,7 @@ Future<bool> _userExistsByName(String firstName, String lastName) async {
 
 UserModel _findSeededTestUser(DirectoryNotifier notifier) {
   return notifier.allUsersForUi.firstWhere(
-    (u) =>
-        u.firstName == kTestUserFirstName && u.lastName == kTestUserLastName,
+    (u) => u.firstName == kTestUserFirstName && u.lastName == kTestUserLastName,
   );
 }
 
@@ -158,55 +157,54 @@ void main() {
       },
     );
 
-    testWidgets(
-      'δημιουργία: επιτυχής αποθήκευση νέου χρήστη στη βάση',
-      (tester) async {
-        tester.view.physicalSize = const Size(1600, 900);
-        tester.view.devicePixelRatio = 1.0;
-        addTearDown(() {
-          tester.view.resetPhysicalSize();
-          tester.view.resetDevicePixelRatio();
-        });
+    testWidgets('δημιουργία: επιτυχής αποθήκευση νέου χρήστη στη βάση', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(1600, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
 
-        final container = ProviderContainer(
-          overrides: callLoggerTestProviderOverrides(),
-        );
-        addTearDown(container.dispose);
+      final container = ProviderContainer(
+        overrides: callLoggerTestProviderOverrides(),
+      );
+      addTearDown(container.dispose);
 
-        late DirectoryNotifier notifier;
-        await tester.runAsync(() async {
-          await container.read(lookupServiceProvider.future);
-          notifier = container.read(directoryProvider.notifier);
-          await notifier.loadUsers();
-          await _openUserFormInDialog(tester, container, notifier: notifier);
-        });
+      late DirectoryNotifier notifier;
+      await tester.runAsync(() async {
+        await container.read(lookupServiceProvider.future);
+        notifier = container.read(directoryProvider.notifier);
+        await notifier.loadUsers();
+        await _openUserFormInDialog(tester, container, notifier: notifier);
+      });
 
-        await tester.enterText(_lastNameField(), _kCharSplitUserLastName);
-        await tester.enterText(_firstNameField(), _kCharSplitUserFirstName);
-        await pumpUntilSettled(tester);
+      await tester.enterText(_lastNameField(), _kCharSplitUserLastName);
+      await tester.enterText(_firstNameField(), _kCharSplitUserFirstName);
+      await pumpUntilSettled(tester);
 
-        final addButton = find.widgetWithText(FilledButton, 'Προσθήκη');
-        expect(
-          tester.widget<FilledButton>(addButton).onPressed,
-          isNotNull,
-          reason: greekExpectMsg(
-            'Η προσθήκη ενεργοποιείται με συμπληρωμένα υποχρεωτικά ονόματα',
-          ),
-        );
+      final addButton = find.widgetWithText(FilledButton, 'Προσθήκη');
+      expect(
+        tester.widget<FilledButton>(addButton).onPressed,
+        isNotNull,
+        reason: greekExpectMsg(
+          'Η προσθήκη ενεργοποιείται με συμπληρωμένα υποχρεωτικά ονόματα',
+        ),
+      );
 
-        await tester.tap(addButton);
-        await pumpUntilSettled(tester);
-        await _pumpUntilUserSaveCompletes(tester);
+      await tester.tap(addButton);
+      await pumpUntilSettled(tester);
+      await _pumpUntilUserSaveCompletes(tester);
 
-        final exists = await tester.runAsync(
-          () => _userExistsByName(
-            _kCharSplitUserFirstName,
-            _kCharSplitUserLastName,
-          ),
-        );
-        expect(exists, isTrue);
-      },
-    );
+      final exists = await tester.runAsync(
+        () => _userExistsByName(
+          _kCharSplitUserFirstName,
+          _kCharSplitUserLastName,
+        ),
+      );
+      expect(exists, isTrue);
+    });
 
     testWidgets(
       'επεξεργασία: αλλαγή εμφανίζει διάλογο επιβεβαίωσης, χωρίς αλλαγές όχι',
@@ -257,7 +255,10 @@ void main() {
           );
         });
 
-        await tester.enterText(_notesField(), 'Νέα σημείωση δοκιμής χαρακτηρισμού');
+        await tester.enterText(
+          _notesField(),
+          'Νέα σημείωση δοκιμής χαρακτηρισμού',
+        );
         await pumpUntilSettled(tester);
         await tester.tapAt(const Offset(8, 8));
         await pumpUntilSettled(tester);
@@ -319,8 +320,7 @@ void main() {
           find.descendant(
             of: find.byWidgetPredicate(
               (w) =>
-                  w is InputDecorator &&
-                  w.decoration.labelText == 'Τηλέφωνο',
+                  w is InputDecorator && w.decoration.labelText == 'Τηλέφωνο',
             ),
             matching: find.byType(EditableText),
           ),

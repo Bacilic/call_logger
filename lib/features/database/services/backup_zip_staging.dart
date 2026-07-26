@@ -22,18 +22,18 @@ class BackupZipInspection {
   });
 
   const BackupZipInspection.failure(String message)
-      : this._(success: false, errorMessage: message);
+    : this._(success: false, errorMessage: message);
 
   const BackupZipInspection.success({
     required String extractedDatabasePath,
     required DatabaseFileProfile profile,
     required BackupZipManifest manifest,
   }) : this._(
-          success: true,
-          extractedDatabasePath: extractedDatabasePath,
-          profile: profile,
-          manifest: manifest,
-        );
+         success: true,
+         extractedDatabasePath: extractedDatabasePath,
+         profile: profile,
+         manifest: manifest,
+       );
 
   final bool success;
   final String? extractedDatabasePath;
@@ -117,8 +117,7 @@ Future<BackupZipInspection> extractSelectedBackupZipEntry(
   }
 
   final manifest = BackupZipManifest.readFromArchive(archive);
-  final fileProfile =
-      await (profile ?? profileDatabaseFile)(extractedPath);
+  final fileProfile = await (profile ?? profileDatabaseFile)(extractedPath);
 
   return BackupZipInspection.success(
     extractedDatabasePath: extractedPath,

@@ -1,4 +1,4 @@
-﻿// Καρτέλα και widgets προβλημάτων ETL: ομαδοποίηση, λίστες, αντιγραφή.
+// Καρτέλα και widgets προβλημάτων ETL: ομαδοποίηση, λίστες, αντιγραφή.
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -265,9 +265,8 @@ class LampIssueHelpers {
     return grouped;
   }
 
-  static List<MapEntry<String, List<Map<String, Object?>>>> sortedIssueGroupEntries(
-    List<Map<String, Object?>> issues,
-  ) {
+  static List<MapEntry<String, List<Map<String, Object?>>>>
+  sortedIssueGroupEntries(List<Map<String, Object?>> issues) {
     final grouped = groupedIssuesByType(issues);
     final entries = grouped.entries.toList();
     entries.sort((a, b) {
@@ -446,9 +445,7 @@ class LampIssueGroupHeaderCard extends StatelessWidget {
         onTap: copySelectionMode ? null : onToggleExpanded,
         child: Container(
           decoration: BoxDecoration(
-            border: Border(
-              left: BorderSide(color: familyColor, width: 4),
-            ),
+            border: Border(left: BorderSide(color: familyColor, width: 4)),
           ),
           child: Padding(
             padding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
@@ -500,7 +497,9 @@ class LampIssueGroupHeaderCard extends StatelessWidget {
                             height: 18,
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
-                        : Icon(LampIssueHelpers.resolveIssueIcon(lampIssueType!)),
+                        : Icon(
+                            LampIssueHelpers.resolveIssueIcon(lampIssueType!),
+                          ),
                   ),
                 ] else if (isNetworkCategory) ...[
                   const SizedBox(width: 4),
@@ -635,7 +634,9 @@ class _LampIssuesTabState extends State<LampIssuesTab> {
   bool _copySelectionMode = false;
   final Set<String> _selectedCategoryKeys = <String>{};
 
-  void _enterCopySelectionMode(List<MapEntry<String, List<Map<String, Object?>>>> groups) {
+  void _enterCopySelectionMode(
+    List<MapEntry<String, List<Map<String, Object?>>>> groups,
+  ) {
     setState(() {
       _copySelectionMode = true;
       _selectedCategoryKeys
@@ -715,9 +716,7 @@ class _LampIssuesTabState extends State<LampIssuesTab> {
                       ? null
                       : () => _toggleSelectAllCategories(groups),
                   child: Text(
-                    allCategoriesSelected
-                        ? 'Αποεπιλογή όλων'
-                        : 'Επιλογή όλων',
+                    allCategoriesSelected ? 'Αποεπιλογή όλων' : 'Επιλογή όλων',
                   ),
                 ),
                 FilledButton.tonalIcon(
@@ -772,10 +771,7 @@ class _LampIssuesTabState extends State<LampIssuesTab> {
           child: ListView(
             padding: const EdgeInsets.all(16),
             children: [
-              ..._buildOpenIssueWidgets(
-                context: context,
-                groups: groups,
-              ),
+              ..._buildOpenIssueWidgets(context: context, groups: groups),
               if (widget.issuesController.deferredIssues.isNotEmpty)
                 LampDeferredIssuesSection(
                   issuesController: widget.issuesController,
@@ -818,15 +814,17 @@ class _LampIssuesTabState extends State<LampIssuesTab> {
       final rawIssueType = group.key;
       final groupIssues = group.value;
       if (ref.isHeader) {
-        final lampIssueType =
-            LampIssueHelpers.lampIssueTypeForRaw(rawIssueType);
-        final isInformational =
-            LampIssueResolutionController.isInformationalIssueType(
+        final lampIssueType = LampIssueHelpers.lampIssueTypeForRaw(
           rawIssueType,
         );
+        final isInformational =
+            LampIssueResolutionController.isInformationalIssueType(
+              rawIssueType,
+            );
         // Οι πληροφοριακοί τύποι υπερισχύουν: το network_sheet_invalid δεν
         // πρέπει να πάρει κουμπί επίλυσης δικτύου (δεν έχει τίποτα να επιλύσει).
-        final isNetworkCategory = !isInformational &&
+        final isNetworkCategory =
+            !isInformational &&
             LampIssueResolutionController.isNetworkIssueType(rawIssueType);
         final expanded = widget.issuesController.expandedIssueGroupKeys
             .contains(rawIssueType);
@@ -840,25 +838,27 @@ class _LampIssuesTabState extends State<LampIssuesTab> {
             onToggleExpanded: () =>
                 widget.onToggleGroup(rawIssueType, expanded),
             resolvingIssueType: widget.resolutionController.resolvingIssueType,
-            canResolve: lampIssueType != null &&
+            canResolve:
+                lampIssueType != null &&
                 widget.resolutionController.canResolveIssueType(lampIssueType),
             onResolve: lampIssueType == null
                 ? null
                 : () => widget.resolutionController.runIssueResolution(
-                      lampIssueType,
-                    ),
+                    lampIssueType,
+                  ),
             isNetworkCategory: lampIssueType == null && isNetworkCategory,
             resolvingNetworkIssueType:
                 widget.resolutionController.resolvingNetworkIssueType,
-            canResolveNetwork: isNetworkCategory &&
+            canResolveNetwork:
+                isNetworkCategory &&
                 widget.resolutionController.canResolveNetworkIssueType(
                   rawIssueType,
                 ),
             onResolveNetwork: isNetworkCategory
                 ? () => widget.resolutionController.runNetworkIssueResolution(
-                      rawIssueType,
-                      groupIssues,
-                    )
+                    rawIssueType,
+                    groupIssues,
+                  )
                 : null,
             copySelectionMode: _copySelectionMode,
             copySelected: _selectedCategoryKeys.contains(rawIssueType),
@@ -875,7 +875,7 @@ class _LampIssuesTabState extends State<LampIssuesTab> {
                 : null,
             onClearGroup: isInformational
                 ? () => widget.resolutionController
-                    .clearInformationalIssueGroup(rawIssueType)
+                      .clearInformationalIssueGroup(rawIssueType)
                 : null,
           ),
         );
@@ -946,7 +946,9 @@ class _LampDeferredIssuesSectionState extends State<LampDeferredIssuesSection> {
                 ),
                 trailing: TextButton(
                   onPressed: () async {
-                    await widget.issuesController.reopenDeferredGroup(group.key);
+                    await widget.issuesController.reopenDeferredGroup(
+                      group.key,
+                    );
                     if (mounted) setState(() {});
                   },
                   child: const Text('Επαναφορά σε ανοιχτά'),

@@ -23,7 +23,10 @@ void main() {
 
     test('ταιριάζει ακριβές κείμενο ετικέτας', () {
       expect(
-        LampFloorResolver.resolveFloorId(levelText: '4ος όροφος', floors: floors),
+        LampFloorResolver.resolveFloorId(
+          levelText: '4ος όροφος',
+          floors: floors,
+        ),
         7,
       );
     });

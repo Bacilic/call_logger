@@ -1,9 +1,5 @@
-﻿/// Φυσική (αλφαριθμητική) σύγκριση κειμένου: `2` πριν το `10` (σε αντίθεση με απλή λεξικογραφική).
-int naturalCompareStrings(
-  String a,
-  String b, {
-  bool ignoreCase = true,
-}) {
+/// Φυσική (αλφαριθμητική) σύγκριση κειμένου: `2` πριν το `10` (σε αντίθεση με απλή λεξικογραφική).
+int naturalCompareStrings(String a, String b, {bool ignoreCase = true}) {
   final sa = ignoreCase ? a.toLowerCase() : a;
   final sb = ignoreCase ? b.toLowerCase() : b;
   var ia = 0;

@@ -64,7 +64,11 @@ Future<void> _pumpExpandedCallsScreen(
   await tester.pump();
   await tester.testTextInput.receiveAction(TextInputAction.done);
   await tester.pump(const Duration(milliseconds: 300));
-  await pumpUntilSettled(tester, steps: 40, step: const Duration(milliseconds: 60));
+  await pumpUntilSettled(
+    tester,
+    steps: 40,
+    step: const Duration(milliseconds: 60),
+  );
 }
 
 Future<void> _seedRecentCallsForCardPanels() async {
@@ -153,7 +157,9 @@ void main() {
 
         // Σειρά στηλών: caller stack αριστερά, χάρτης δεξιά.
         final leftLane = callerLane.left <= mapLane.left ? callerLane : mapLane;
-        final rightLane = identical(leftLane, callerLane) ? mapLane : callerLane;
+        final rightLane = identical(leftLane, callerLane)
+            ? mapLane
+            : callerLane;
 
         final gap = rightLane.left - leftLane.right;
         expect(
@@ -191,8 +197,9 @@ void main() {
               .first,
         );
 
-        final clusterLeft =
-            lanes.map((r) => r.left).reduce((a, b) => a < b ? a : b);
+        final clusterLeft = lanes
+            .map((r) => r.left)
+            .reduce((a, b) => a < b ? a : b);
         final leftSpace = clusterLeft - scrollRect.left;
 
         expect(

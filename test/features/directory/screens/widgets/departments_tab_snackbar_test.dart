@@ -32,9 +32,7 @@ class _FakeDepartmentDirectoryNotifier extends DepartmentDirectoryNotifier {
     final toDelete = state.allDepartments
         .where(
           (d) =>
-              d.id != null &&
-              !d.isDeleted &&
-              state.selectedIds.contains(d.id),
+              d.id != null && !d.isDeleted && state.selectedIds.contains(d.id),
         )
         .toList();
     if (toDelete.isEmpty) return;
@@ -108,10 +106,7 @@ void main() {
       });
 
       const deptId = 9002;
-      final department = DepartmentModel(
-        id: deptId,
-        name: 'Snack Τμήμα',
-      );
+      final department = DepartmentModel(id: deptId, name: 'Snack Τμήμα');
       final initial = DepartmentDirectoryState(
         allDepartments: [department],
         filteredDepartments: [department],
@@ -147,9 +142,7 @@ void main() {
           matching: find.widgetWithText(FilledButton, 'Διαγραφή'),
         ),
       );
-      for (var i = 0;
-          i < 60 && find.byType(SnackBar).evaluate().isEmpty;
-          i++) {
+      for (var i = 0; i < 60 && find.byType(SnackBar).evaluate().isEmpty; i++) {
         await tester.runAsync(
           () => Future<void>.delayed(const Duration(milliseconds: 50)),
         );
@@ -169,7 +162,8 @@ void main() {
       );
 
       final hostState =
-          tester.state(find.byType(_DepartmentsTabHost)) as _DepartmentsTabHostState;
+          tester.state(find.byType(_DepartmentsTabHost))
+              as _DepartmentsTabHostState;
       hostState.removeTab();
       await tester.pump();
 

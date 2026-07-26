@@ -53,15 +53,15 @@ void main() {
   setUpAll(() {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(SystemChannels.platform, (call) async {
-      switch (call.method) {
-        case 'Clipboard.setData':
-          final args = call.arguments as Map<Object?, Object?>;
-          copyCalls.add(args['text'] as String);
-          return null;
-        default:
-          return null;
-      }
-    });
+          switch (call.method) {
+            case 'Clipboard.setData':
+              final args = call.arguments as Map<Object?, Object?>;
+              copyCalls.add(args['text'] as String);
+              return null;
+            default:
+              return null;
+          }
+        });
   });
 
   tearDownAll(() {
@@ -127,7 +127,9 @@ void main() {
       },
     );
 
-    testWidgets('copyText αντιγράφει και εμφανίζει επιβεβαίωση', (tester) async {
+    testWidgets('copyText αντιγράφει και εμφανίζει επιβεβαίωση', (
+      tester,
+    ) async {
       _TestDialogState? dialogState;
 
       await tester.binding.setSurfaceSize(const Size(1024, 900));
@@ -141,9 +143,8 @@ void main() {
                 onPressed: () {
                   showDialog<void>(
                     context: context,
-                    builder: (_) => _TestDialog(
-                      onReady: (state) => dialogState = state,
-                    ),
+                    builder: (_) =>
+                        _TestDialog(onReady: (state) => dialogState = state),
                   );
                 },
                 child: const Text('Άνοιγμα'),

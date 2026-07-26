@@ -19,7 +19,9 @@ void main() {
     setUpAll(() async {
       initSqfliteFfiForTests();
       final dir = await Directory.systemTemp.createTemp('lamp_dept_res_10a_');
-      await DatabaseHelper.bindTestDatabaseFile('${dir.path}/lamp_dept_res_10a.db');
+      await DatabaseHelper.bindTestDatabaseFile(
+        '${dir.path}/lamp_dept_res_10a.db',
+      );
       await DatabaseHelper.instance.database;
       service = LampMigrationService();
     });
@@ -104,7 +106,8 @@ void main() {
           selectedCandidateId: null,
           ownerConflictDecisions: [
             LampOwnerConflictDecision(
-              conflictId: 'phone:${SearchTextNormalizer.normalizeForSearch(phone)}',
+              conflictId:
+                  'phone:${SearchTextNormalizer.normalizeForSearch(phone)}',
               action: LampOwnerConflictAction.transferToSelectedOwner,
             ),
           ],

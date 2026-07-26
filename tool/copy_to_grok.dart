@@ -15,7 +15,9 @@ import 'package:path/path.dart' as p;
 void main(List<String> arguments) {
   try {
     final projectRoot = Directory.current;
-    final grokDir = Directory('${projectRoot.path}${Platform.pathSeparator}Grok');
+    final grokDir = Directory(
+      '${projectRoot.path}${Platform.pathSeparator}Grok',
+    );
     final sep = Platform.pathSeparator;
 
     _prepareGrokDirectory(grokDir);
@@ -28,7 +30,10 @@ void main(List<String> arguments) {
       exit(1);
     }
 
-    final libDir = Directory('${projectRoot.path}$sep''lib');
+    final libDir = Directory(
+      '${projectRoot.path}$sep'
+      'lib',
+    );
     final rootAbs = p.normalize(projectRoot.absolute.path);
 
     final allFilenames = _collectAllFilenames(projectRoot, libDir);
@@ -40,7 +45,10 @@ void main(List<String> arguments) {
 
     var autoOk = outcomes.whereType<_CopyOk>().toList();
     final ambiguousList = outcomes.whereType<_CopyAmbiguous>().toList();
-    final missing = outcomes.whereType<_CopyMissing>().map((m) => m.item).toList();
+    final missing = outcomes
+        .whereType<_CopyMissing>()
+        .map((m) => m.item)
+        .toList();
 
     autoOk = _dedupeCopyOkBySource(autoOk);
 
@@ -87,7 +95,8 @@ void main(List<String> arguments) {
       fuzzyCopied++;
     }
 
-    final totalCopied = automaticCopied + ambiguousInteractiveCopied + fuzzyCopied;
+    final totalCopied =
+        automaticCopied + ambiguousInteractiveCopied + fuzzyCopied;
 
     _printFinalSummary(
       totalCopied: totalCopied,
@@ -316,7 +325,9 @@ List<_FuzzyGroup> _findFuzzyGroups(
       if (s > best) best = s;
     }
 
-    groups.add(_FuzzyGroup(displayName: displayName, files: list, bestScore: best));
+    groups.add(
+      _FuzzyGroup(displayName: displayName, files: list, bestScore: best),
+    );
   }
 
   return groups;
@@ -344,7 +355,12 @@ void _appendCopiesFromFuzzyGroup(
     var destFilename = useSuffix
         ? _destFilenameWithEncodedPath(f, rootAbs)
         : p.basename(f.path);
-    destFilename = _ensureUniqueDestName(destFilename, usedDestNames, f, rootAbs);
+    destFilename = _ensureUniqueDestName(
+      destFilename,
+      usedDestNames,
+      f,
+      rootAbs,
+    );
     copies.add(
       _CopyOk(
         source: f,
@@ -437,7 +453,12 @@ _InteractivePickResult _handleAmbiguousInteractive(
       var destFilename = useSuffix
           ? _destFilenameWithEncodedPath(f, rootAbs)
           : p.basename(f.path);
-      destFilename = _ensureUniqueDestName(destFilename, usedDestNames, f, rootAbs);
+      destFilename = _ensureUniqueDestName(
+        destFilename,
+        usedDestNames,
+        f,
+        rootAbs,
+      );
       copies.add(
         _CopyOk(
           source: f,
@@ -506,9 +527,15 @@ String _destFilenameWithEncodedPath(File source, String projectRootAbs) {
   final stem = p.basenameWithoutExtension(fileName);
   final ext = p.extension(fileName);
 
-  final sanitizedParts = segments.map(_sanitizePathSegmentForFilename).where((s) => s.isNotEmpty).toList();
+  final sanitizedParts = segments
+      .map(_sanitizePathSegmentForFilename)
+      .where((s) => s.isNotEmpty)
+      .toList();
   final suffix = sanitizedParts.join('_');
-  final name = suffix.isEmpty ? '$stem$ext' : '$stem''_$suffix$ext';
+  final name = suffix.isEmpty
+      ? '$stem$ext'
+      : '$stem'
+            '_$suffix$ext';
 
   return _trimFilenameForWindows(name, maxTotalChars: 200);
 }
@@ -650,7 +677,11 @@ _InteractivePickResult _handleMissingInteractive(
 sealed class _CopyOutcome {}
 
 final class _CopyOk extends _CopyOutcome {
-  _CopyOk({required this.source, required this.destFilename, required this.srcDisplay});
+  _CopyOk({
+    required this.source,
+    required this.destFilename,
+    required this.srcDisplay,
+  });
 
   final File source;
   final String destFilename;
@@ -703,7 +734,8 @@ _CopyOutcome _resolveItem(
     final normalized = item.replaceAll('/', sep);
     final candidates = [
       '${projectRoot.path}$sep$normalized',
-      '${projectRoot.path}$sep''lib$sep$normalized',
+      '${projectRoot.path}$sep'
+          'lib$sep$normalized',
     ];
     for (final pathStr in candidates) {
       final file = File(pathStr);
@@ -715,7 +747,11 @@ _CopyOutcome _resolveItem(
     }
     if (found != null) {
       final srcDisplay = _displaySourceForLog(found.absolute.path, rootAbs);
-      return _CopyOk(source: found, destFilename: destFilename, srcDisplay: srcDisplay);
+      return _CopyOk(
+        source: found,
+        destFilename: destFilename,
+        srcDisplay: srcDisplay,
+      );
     }
     return _CopyMissing(item);
   }
@@ -775,7 +811,9 @@ void _printFinalSummary({
   }
   final skippedTotal = skippedAmbiguous + skippedFuzzy;
   if (skippedTotal > 0) {
-    parts.add('παραλήφθηκαν $skippedTotal (αμφισημία: $skippedAmbiguous · fuzzy: $skippedFuzzy)');
+    parts.add(
+      'παραλήφθηκαν $skippedTotal (αμφισημία: $skippedAmbiguous · fuzzy: $skippedFuzzy)',
+    );
   }
   print('${parts.join(' · ')}.');
 }
@@ -835,7 +873,8 @@ String _displaySourceForLog(String sourceAbsolute, String projectRootAbsolute) {
   String relativePart;
   if (normSource.startsWith('$libRoot${p.separator}')) {
     relativePart = p.relative(normSource, from: libRoot);
-  } else if (normSource.startsWith('$normRoot${p.separator}') || normSource == normRoot) {
+  } else if (normSource.startsWith('$normRoot${p.separator}') ||
+      normSource == normRoot) {
     relativePart = p.relative(normSource, from: normRoot);
   } else {
     relativePart = p.basename(normSource);
@@ -854,7 +893,8 @@ void _openOrFocusGrokInExplorer(Directory grokDir) {
   final rawPath = grokDir.absolute.path;
   final psEscapedPath = rawPath.replaceAll("'", "''");
 
-  final script = r'''
+  final script =
+      r'''
 Add-Type @"
 using System;
 using System.Runtime.InteropServices;
@@ -888,21 +928,18 @@ if ($hwndLast -ne [IntPtr]::Zero) {
 } else {
   Start-Process explorer.exe -ArgumentList $target
 }
-'''.replaceAll('PLACEHOLDER', psEscapedPath);
+'''
+          .replaceAll('PLACEHOLDER', psEscapedPath);
 
   try {
-    final r = Process.runSync(
-      'powershell.exe',
-      [
-        '-NoProfile',
-        '-NonInteractive',
-        '-ExecutionPolicy',
-        'Bypass',
-        '-Command',
-        script,
-      ],
-      runInShell: false,
-    );
+    final r = Process.runSync('powershell.exe', [
+      '-NoProfile',
+      '-NonInteractive',
+      '-ExecutionPolicy',
+      'Bypass',
+      '-Command',
+      script,
+    ], runInShell: false);
     if (r.exitCode != 0) {
       print(
         '[Grok] Προειδοποίηση: άνοιγμα φακέλου στην Εξερεύνηση — κωδικός ${r.exitCode}.',

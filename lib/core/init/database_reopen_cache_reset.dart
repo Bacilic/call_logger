@@ -69,7 +69,8 @@ void invalidateDatabaseScopedCaches(WidgetRef ref) {
   }
 
   final phase = SchedulerBinding.instance.schedulerPhase;
-  final safeToRunNow = phase == SchedulerPhase.idle ||
+  final safeToRunNow =
+      phase == SchedulerPhase.idle ||
       phase == SchedulerPhase.postFrameCallbacks;
   if (safeToRunNow) {
     run();

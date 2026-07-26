@@ -19,8 +19,9 @@ void main() {
 
     setUpAll(() async {
       initSqfliteFfiForTests();
-      final dir =
-          await Directory.systemTemp.createTemp('department_repository_test_');
+      final dir = await Directory.systemTemp.createTemp(
+        'department_repository_test_',
+      );
       await DatabaseHelper.bindTestDatabaseFile(
         '${dir.path}/department_repo.db',
       );
@@ -40,44 +41,48 @@ void main() {
     });
 
     Map<String, dynamic> departmentRow(String name) => {
-          'name': name,
-          'name_key': SearchTextNormalizer.normalizeForSearch(name),
+      'name': name,
+      'name_key': SearchTextNormalizer.normalizeForSearch(name),
+      'is_deleted': 0,
+    };
+
+    test(
+      'getDepartments / getActiveDepartments / getDepartmentRowById / getDepartmentNameById',
+      () async {
+        final activeId = await db.insert('departments', {
+          'name': 'Ενεργό Τμήμα',
+          'name_key': SearchTextNormalizer.normalizeForSearch('Ενεργό Τμήμα'),
           'is_deleted': 0,
-        };
+        });
+        await db.insert('departments', {
+          'name': 'Διαγραμμένο Τμήμα',
+          'name_key': SearchTextNormalizer.normalizeForSearch(
+            'Διαγραμμένο Τμήμα',
+          ),
+          'is_deleted': 1,
+        });
 
-    test('getDepartments / getActiveDepartments / getDepartmentRowById / getDepartmentNameById',
-        () async {
-      final activeId = await db.insert('departments', {
-        'name': 'Ενεργό Τμήμα',
-        'name_key': SearchTextNormalizer.normalizeForSearch('Ενεργό Τμήμα'),
-        'is_deleted': 0,
-      });
-      await db.insert('departments', {
-        'name': 'Διαγραμμένο Τμήμα',
-        'name_key':
-            SearchTextNormalizer.normalizeForSearch('Διαγραμμένο Τμήμα'),
-        'is_deleted': 1,
-      });
+        final all = await repo.getDepartments();
+        expect(all, hasLength(2));
 
-      final all = await repo.getDepartments();
-      expect(all, hasLength(2));
+        final active = await repo.getActiveDepartments();
+        expect(active, hasLength(1));
+        expect(active.single['id'], activeId);
 
-      final active = await repo.getActiveDepartments();
-      expect(active, hasLength(1));
-      expect(active.single['id'], activeId);
+        final row = await repo.getDepartmentRowById(activeId);
+        expect(row?['name'], 'Ενεργό Τμήμα');
 
-      final row = await repo.getDepartmentRowById(activeId);
-      expect(row?['name'], 'Ενεργό Τμήμα');
-
-      expect(await repo.getDepartmentNameById(activeId), 'Ενεργό Τμήμα');
-      expect(await repo.getDepartmentNameById(99999), isNull);
-    });
+        expect(await repo.getDepartmentNameById(activeId), 'Ενεργό Τμήμα');
+        expect(await repo.getDepartmentNameById(99999), isNull);
+      },
+    );
 
     test('departmentNameExists: κανονικοποίηση ονόματος', () async {
       await db.insert('departments', {
         'name': 'Τμήμα Πληροφορικής',
-        'name_key':
-            SearchTextNormalizer.normalizeForSearch('Τμήμα Πληροφορικής'),
+        'name_key': SearchTextNormalizer.normalizeForSearch(
+          'Τμήμα Πληροφορικής',
+        ),
         'is_deleted': 0,
       });
 
@@ -85,19 +90,22 @@ void main() {
       expect(await repo.departmentNameExists('Άγνωστο'), isFalse);
     });
 
-    test('getOrCreateDepartmentIdByName: δημιουργία μία φορά + επανάχρηση', () async {
-      final first = await repo.getOrCreateDepartmentIdByName(
-        'Τμήμα GetOrCreate Lock',
-        recordAudit: false,
-      );
-      final second = await repo.getOrCreateDepartmentIdByName(
-        'τμήμα getorcreate lock',
-        recordAudit: false,
-      );
-      expect(first, isNotNull);
-      expect(second, equals(first));
-      expect(await db.query('departments'), hasLength(1));
-    });
+    test(
+      'getOrCreateDepartmentIdByName: δημιουργία μία φορά + επανάχρηση',
+      () async {
+        final first = await repo.getOrCreateDepartmentIdByName(
+          'Τμήμα GetOrCreate Lock',
+          recordAudit: false,
+        );
+        final second = await repo.getOrCreateDepartmentIdByName(
+          'τμήμα getorcreate lock',
+          recordAudit: false,
+        );
+        expect(first, isNotNull);
+        expect(second, equals(first));
+        expect(await db.query('departments'), hasLength(1));
+      },
+    );
 
     test('getOrCreateDepartmentIdByName: executor awareness', () async {
       int? idInTxn;
@@ -117,56 +125,70 @@ void main() {
       expect(rows, hasLength(1));
     });
 
-    test('insertDepartment: DepartmentExistsException για διπλό όνομα', () async {
-      const name = 'Διπλό Τμήμα';
-      await repo.insertDepartment(departmentRow(name));
+    test(
+      'insertDepartment: DepartmentExistsException για διπλό όνομα',
+      () async {
+        const name = 'Διπλό Τμήμα';
+        await repo.insertDepartment(departmentRow(name));
 
-      await expectLater(
-        repo.insertDepartment(departmentRow(name)),
-        throwsA(
-          isA<DepartmentExistsException>().having(
-            (e) => e.isDeleted,
-            'isDeleted',
-            false,
+        await expectLater(
+          repo.insertDepartment(departmentRow(name)),
+          throwsA(
+            isA<DepartmentExistsException>().having(
+              (e) => e.isDeleted,
+              'isDeleted',
+              false,
+            ),
           ),
-        ),
-      );
-    });
+        );
+      },
+    );
 
-    test('softDeleteDepartment / restoreDepartments: is_deleted και audit', () async {
-      final id = await repo.insertDepartment(departmentRow('Τμήμα Audit'));
-      await settings.saveSetting(
-        DatabaseHelper.auditUserPerformingSettingsKey,
-        'Admin Τμημάτων',
-      );
+    test(
+      'softDeleteDepartment / restoreDepartments: is_deleted και audit',
+      () async {
+        final id = await repo.insertDepartment(departmentRow('Τμήμα Audit'));
+        await settings.saveSetting(
+          DatabaseHelper.auditUserPerformingSettingsKey,
+          'Admin Τμημάτων',
+        );
 
-      await db.delete('audit_log');
-      await repo.softDeleteDepartment(id);
+        await db.delete('audit_log');
+        await repo.softDeleteDepartment(id);
 
-      final deleted = await db.query('departments', where: 'id = ?', whereArgs: [id]);
-      expect(deleted.single['is_deleted'], 1);
+        final deleted = await db.query(
+          'departments',
+          where: 'id = ?',
+          whereArgs: [id],
+        );
+        expect(deleted.single['is_deleted'], 1);
 
-      final deleteAudit = await db.query(
-        'audit_log',
-        where: 'entity_id = ? AND action = ?',
-        whereArgs: [id, DatabaseHelper.auditActionDelete],
-      );
-      expect(deleteAudit, hasLength(1));
-      expect(deleteAudit.single['user_performing'], 'Admin Τμημάτων');
+        final deleteAudit = await db.query(
+          'audit_log',
+          where: 'entity_id = ? AND action = ?',
+          whereArgs: [id, DatabaseHelper.auditActionDelete],
+        );
+        expect(deleteAudit, hasLength(1));
+        expect(deleteAudit.single['user_performing'], 'Admin Τμημάτων');
 
-      await db.delete('audit_log');
-      await repo.restoreDepartments([id]);
+        await db.delete('audit_log');
+        await repo.restoreDepartments([id]);
 
-      final restored = await db.query('departments', where: 'id = ?', whereArgs: [id]);
-      expect(restored.single['is_deleted'], 0);
+        final restored = await db.query(
+          'departments',
+          where: 'id = ?',
+          whereArgs: [id],
+        );
+        expect(restored.single['is_deleted'], 0);
 
-      final restoreAudit = await db.query(
-        'audit_log',
-        where: 'entity_id = ? AND action = ?',
-        whereArgs: [id, DatabaseHelper.auditActionRestore],
-      );
-      expect(restoreAudit, hasLength(1));
-    });
+        final restoreAudit = await db.query(
+          'audit_log',
+          where: 'entity_id = ? AND action = ?',
+          whereArgs: [id, DatabaseHelper.auditActionRestore],
+        );
+        expect(restoreAudit, hasLength(1));
+      },
+    );
 
     test('backfillDepartmentFloorIdsFromMapFloor', () async {
       final floorId = await db.insert('building_map_floors', {
@@ -186,13 +208,18 @@ void main() {
       final count = await repo.backfillDepartmentFloorIdsFromMapFloor();
       expect(count, 1);
 
-      final row = await db.query('departments', where: 'id = ?', whereArgs: [deptId]);
+      final row = await db.query(
+        'departments',
+        where: 'id = ?',
+        whereArgs: [deptId],
+      );
       expect(row.single['floor_id'], floorId);
     });
 
     test('backfillAllDepartmentNameKeys: μετρητές και σύγκρουση', () async {
-      final canonicalKey =
-          SearchTextNormalizer.normalizeForSearch('ΤΜΗΜΑ ΠΛΗΡΟΦΟΡΙΚΗΣ');
+      final canonicalKey = SearchTextNormalizer.normalizeForSearch(
+        'ΤΜΗΜΑ ΠΛΗΡΟΦΟΡΙΚΗΣ',
+      );
       await db.insert('departments', {
         'name': 'ΤΜΗΜΑ ΠΛΗΡΟΦΟΡΙΚΗΣ',
         'name_key': canonicalKey,
@@ -217,17 +244,18 @@ void main() {
 
         await expectLater(
           db.transaction((txn) async {
-            await repo.insertDepartment(
-              departmentRow(deptName),
-              executor: txn,
-            );
+            await repo.insertDepartment(departmentRow(deptName), executor: txn);
             throw StateError('προσομοίωση σφάλματος');
           }),
           throwsA(isA<StateError>()),
         );
 
         expect(
-          await db.query('departments', where: 'name = ?', whereArgs: [deptName]),
+          await db.query(
+            'departments',
+            where: 'name = ?',
+            whereArgs: [deptName],
+          ),
           isEmpty,
         );
       },

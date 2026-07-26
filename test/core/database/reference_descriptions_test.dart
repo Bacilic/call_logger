@@ -91,13 +91,12 @@ void main() {
         'number': '2851',
         'is_deleted': 0,
       });
-      await db.insert('user_phones', {
-        'user_id': userId,
-        'phone_id': phoneId,
-      });
+      await db.insert('user_phones', {'user_id': userId, 'phone_id': phoneId});
 
-      final descriptions =
-          await phones.phoneReferenceDescriptions(phoneId, '2851');
+      final descriptions = await phones.phoneReferenceDescriptions(
+        phoneId,
+        '2851',
+      );
       expect(descriptions, contains('Άννα Πατσαρίκα'));
     });
 
@@ -110,8 +109,10 @@ void main() {
       await insertCall(phoneText: '2851');
       await insertCall(phoneText: '2851');
 
-      final descriptions =
-          await phones.phoneReferenceDescriptions(phoneId, '2851');
+      final descriptions = await phones.phoneReferenceDescriptions(
+        phoneId,
+        '2851',
+      );
       expect(descriptions, contains('3 κλήσεις ιστορικού'));
     });
 
@@ -136,8 +137,9 @@ void main() {
         'equipment_id': equipmentId,
       });
 
-      final descriptions =
-          await equipment.equipmentReferenceDescriptions(equipmentId);
+      final descriptions = await equipment.equipmentReferenceDescriptions(
+        equipmentId,
+      );
       expect(descriptions, contains('Βλάσης Οικονόμου'));
     });
   });

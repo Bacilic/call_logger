@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/services/lansweeper_ticket_submit_config.dart';
@@ -88,22 +88,15 @@ class LansweeperSyncForm extends ConsumerWidget {
       ),
       selectedItemBuilder: (context) => field.options
           .map(
-            (option) => Text(
-              option,
-              overflow: TextOverflow.ellipsis,
-              maxLines: 1,
-            ),
+            (option) =>
+                Text(option, overflow: TextOverflow.ellipsis, maxLines: 1),
           )
           .toList(),
       items: field.options
           .map(
             (option) => DropdownMenuItem<String>(
               value: option,
-              child: Text(
-                option,
-                overflow: TextOverflow.ellipsis,
-                maxLines: 2,
-              ),
+              child: Text(option, overflow: TextOverflow.ellipsis, maxLines: 2),
             ),
           )
           .toList(),
@@ -161,7 +154,7 @@ class LansweeperSyncForm extends ConsumerWidget {
 
     final cooldownTooltip = inCooldown
         ? 'Αναμένεται διαθεσιμότητα ποσόστωσης για το μοντέλο '
-            '${cooldownModelLabel ?? 'ΤΝ'}.'
+              '${cooldownModelLabel ?? 'ΤΝ'}.'
         : suggestDisabledTooltip;
 
     final suggestRow = Row(
@@ -175,9 +168,9 @@ class LansweeperSyncForm extends ConsumerWidget {
           Text(
             '${suggestElapsedLabel!} δλ',
             style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  fontFeatures: const [FontFeature.tabularFigures()],
-                  color: Theme.of(context).colorScheme.primary,
-                ),
+              fontFeatures: const [FontFeature.tabularFigures()],
+              color: Theme.of(context).colorScheme.primary,
+            ),
           ),
         ],
         if (inCooldown) ...[
@@ -185,10 +178,10 @@ class LansweeperSyncForm extends ConsumerWidget {
           Text(
             '${cooldownRemainingSeconds!} δλ',
             style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  fontFeatures: const [FontFeature.tabularFigures()],
-                  color: cooldownRemainingColor(cooldownRemainingSeconds!),
-                  fontWeight: FontWeight.w600,
-                ),
+              fontFeatures: const [FontFeature.tabularFigures()],
+              color: cooldownRemainingColor(cooldownRemainingSeconds!),
+              fontWeight: FontWeight.w600,
+            ),
           ),
           if (onCancelAutoResubmit != null) ...[
             const SizedBox(width: 6),
@@ -241,10 +234,8 @@ class LansweeperSyncForm extends ConsumerWidget {
           ),
           items: formConfig.ticketStates
               .map(
-                (state) => DropdownMenuItem<String>(
-                  value: state,
-                  child: Text(state),
-                ),
+                (state) =>
+                    DropdownMenuItem<String>(value: state, child: Text(state)),
               )
               .toList(),
           onChanged: onTicketStateChanged == null
@@ -268,9 +259,9 @@ class LansweeperSyncForm extends ConsumerWidget {
             const SizedBox(height: 8),
             Text(
               'Φόρμα καταχώρησης Lansweeper',
-              style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                    fontWeight: FontWeight.w600,
-                  ),
+              style: Theme.of(
+                context,
+              ).textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 8),
             LexiconSpellTextFormField(

@@ -95,13 +95,10 @@ void main() {
 
       expect(inventory.hasSharedAssets, isTrue);
       expect(inventory.isEmpty, isFalse);
-      expect(
-        inventory.buildSummaryLines(),
-        [
-          '1 κοινόχρηστο τηλέφωνο',
-          '2 κοινόχρηστοι εξοπλισμοί',
-        ],
-      );
+      expect(inventory.buildSummaryLines(), [
+        '1 κοινόχρηστο τηλέφωνο',
+        '2 κοινόχρηστοι εξοπλισμοί',
+      ]);
 
       const manyPhones = DepartmentDeletionInventory(
         departmentName: 'Τμήμα Α',
@@ -111,13 +108,10 @@ void main() {
         sharedPhones: ['1', '2', '3'],
         sharedEquipmentCodes: ['EQ'],
       );
-      expect(
-        manyPhones.buildSummaryLines(),
-        [
-          '3 κοινόχρηστα τηλέφωνα',
-          '1 κοινόχρηστος εξοπλισμός',
-        ],
-      );
+      expect(manyPhones.buildSummaryLines(), [
+        '3 κοινόχρηστα τηλέφωνα',
+        '1 κοινόχρηστος εξοπλισμός',
+      ]);
     });
   });
 }

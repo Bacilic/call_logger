@@ -75,8 +75,7 @@ Future<List<EquipmentDeletionSummary>> deletionSummaries(
     final rawCode = codeRows.isEmpty
         ? null
         : (codeRows.first['code_equipment'] as String?)?.trim();
-    final code =
-        (rawCode == null || rawCode.isEmpty) ? id.toString() : rawCode;
+    final code = (rawCode == null || rawCode.isEmpty) ? id.toString() : rawCode;
 
     String? ownerName;
     String? phone;

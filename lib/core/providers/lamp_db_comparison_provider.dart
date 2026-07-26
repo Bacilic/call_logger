@@ -52,5 +52,5 @@ class LampDbComparisonNotifier extends AsyncNotifier<List<String>> {
 
 final lampDbComparisonProvider =
     AsyncNotifierProvider<LampDbComparisonNotifier, List<String>>(
-  LampDbComparisonNotifier.new,
-);
+      LampDbComparisonNotifier.new,
+    );

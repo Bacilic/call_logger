@@ -19,8 +19,9 @@ void main() {
 
     setUpAll(() async {
       initSqfliteFfiForTests();
-      final dir =
-          await Directory.systemTemp.createTemp('building_map_repo_test_');
+      final dir = await Directory.systemTemp.createTemp(
+        'building_map_repo_test_',
+      );
       await DatabaseHelper.bindTestDatabaseFile(
         '${dir.path}/building_map_repo.db',
       );
@@ -33,11 +34,9 @@ void main() {
       await db.delete('building_map_floors');
       departments = DepartmentRepository(db);
       repo = BuildingMapRepository(db, DirectorySupport(db));
-      repo.bindUpdateDepartment(
-        (deptId, fields) async {
-          await departments.updateDepartment(deptId, fields);
-        },
-      );
+      repo.bindUpdateDepartment((deptId, fields) async {
+        await departments.updateDepartment(deptId, fields);
+      });
     });
 
     tearDownAll(() async {
@@ -117,23 +116,22 @@ void main() {
       });
       await db.insert('departments', {
         'name': 'Τμήμα Διαγραμμένο',
-        'name_key':
-            SearchTextNormalizer.normalizeForSearch('Τμήμα Διαγραμμένο'),
+        'name_key': SearchTextNormalizer.normalizeForSearch(
+          'Τμήμα Διαγραμμένο',
+        ),
         'is_deleted': 1,
         'map_floor': idStr,
       });
       await db.insert('departments', {
         'name': 'Τμήμα Χωρίς Χάρτη',
-        'name_key':
-            SearchTextNormalizer.normalizeForSearch('Τμήμα Χωρίς Χάρτη'),
+        'name_key': SearchTextNormalizer.normalizeForSearch(
+          'Τμήμα Χωρίς Χάρτη',
+        ),
         'is_deleted': 0,
         'map_floor': null,
       });
 
-      expect(
-        await repo.countDepartmentsReferencingMapFloor(floorId),
-        1,
-      );
+      expect(await repo.countDepartmentsReferencingMapFloor(floorId), 1);
     });
 
     test(
@@ -149,8 +147,7 @@ void main() {
 
         final deptId = await db.insert('departments', {
           'name': 'Τμήμα Με Χάρτη',
-          'name_key':
-              SearchTextNormalizer.normalizeForSearch('Τμήμα Με Χάρτη'),
+          'name_key': SearchTextNormalizer.normalizeForSearch('Τμήμα Με Χάρτη'),
           'is_deleted': 0,
           'map_floor': idStr,
           'floor_id': 99,
@@ -174,7 +171,11 @@ void main() {
         await repo.deleteBuildingMapFloorClearingDepartmentMaps(floorId);
 
         expect(
-          await db.query('building_map_floors', where: 'id = ?', whereArgs: [floorId]),
+          await db.query(
+            'building_map_floors',
+            where: 'id = ?',
+            whereArgs: [floorId],
+          ),
           isEmpty,
         );
 
@@ -182,8 +183,7 @@ void main() {
           'departments',
           where: 'id = ?',
           whereArgs: [deptId],
-        ))
-            .single;
+        )).single;
 
         expect(dept['map_floor'], isNull);
         expect(dept['floor_id'], isNull);
@@ -209,7 +209,8 @@ void main() {
     test(
       'static clearedBuildingMapPlacementColumns / buildingMapPlacementColumnNames',
       () async {
-        final defaults = BuildingMapRepository.clearedBuildingMapPlacementColumns();
+        final defaults =
+            BuildingMapRepository.clearedBuildingMapPlacementColumns();
         expect(defaults['map_floor'], isNull);
         expect(defaults['map_x'], 0.0);
         expect(defaults['map_y'], 0.0);
@@ -222,23 +223,27 @@ void main() {
 
         final withExtras =
             BuildingMapRepository.clearedBuildingMapPlacementColumns(
-          clearFloorId: true,
-          clearDepartmentHex: true,
-        );
+              clearFloorId: true,
+              clearDepartmentHex: true,
+            );
         expect(withExtras['floor_id'], isNull);
         expect(withExtras['color'], isNull);
         expect(withExtras['map_hidden'], 0);
 
-        final names = BuildingMapRepository.buildingMapPlacementColumnNames.toList();
-        expect(names, containsAll([
-          'map_floor',
-          'map_x',
-          'map_y',
-          'map_width',
-          'map_height',
-          'map_rotation',
-          'map_hidden',
-        ]));
+        final names = BuildingMapRepository.buildingMapPlacementColumnNames
+            .toList();
+        expect(
+          names,
+          containsAll([
+            'map_floor',
+            'map_x',
+            'map_y',
+            'map_width',
+            'map_height',
+            'map_rotation',
+            'map_hidden',
+          ]),
+        );
         expect(names, hasLength(defaults.keys.length));
       },
     );

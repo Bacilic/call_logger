@@ -115,15 +115,17 @@ void main() {
           tester.element(find.byType(MaterialApp)),
         );
         reporter.logStep('Εφαρμογή φίλτρου αναζήτησης στο Ιστορικό');
-        container.read(historyFilterProvider.notifier).update(
-          (s) => s.copyWith(keyword: kTestHistorySearchMarker),
-        );
+        container
+            .read(historyFilterProvider.notifier)
+            .update((s) => s.copyWith(keyword: kTestHistorySearchMarker));
         await pumpUntilSettled(tester);
 
         expect(
           find.textContaining(kTestHistorySearchMarker),
           findsWidgets,
-          reason: greekExpectMsg('Ο πίνακας ιστορικού πρέπει να εμφανίζει το σημείο αναζήτησης'),
+          reason: greekExpectMsg(
+            'Ο πίνακας ιστορικού πρέπει να εμφανίζει το σημείο αναζήτησης',
+          ),
         );
         reporter.recordPass('Αναζήτηση στο Ιστορικό');
         await flushCallLoggerSqfliteLockTimers(tester);

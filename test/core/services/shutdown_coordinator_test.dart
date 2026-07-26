@@ -33,14 +33,7 @@ void main() {
 
         expect(
           order,
-          [
-            'persist',
-            'wal',
-            'backup',
-            'closeDb',
-            'crashLog',
-            'terminate',
-          ],
+          ['persist', 'wal', 'backup', 'closeDb', 'crashLog', 'terminate'],
           reason: greekExpectMsg(
             'Η σειρά βημάτων πρέπει να τελειώνει με crash log και μετά terminate',
           ),
@@ -132,66 +125,70 @@ void main() {
       expect(failed.single.label, 'Συγχώνευση αρχείων βάσης');
     });
 
-    test('χρονικό όριο ασφαλείας καλεί terminate και σημειώνει διακόπηκε',
-        () async {
-      var clock = DateTime(2026, 7, 19, 12, 0, 0);
-      final hang = Completer<void>();
-      var terminated = false;
-      final events = <ShutdownStepEvent>[];
+    test(
+      'χρονικό όριο ασφαλείας καλεί terminate και σημειώνει διακόπηκε',
+      () async {
+        var clock = DateTime(2026, 7, 19, 12, 0, 0);
+        final hang = Completer<void>();
+        var terminated = false;
+        final events = <ShutdownStepEvent>[];
 
-      final coordinator = ShutdownCoordinator(
-        safetyTimeout: const Duration(seconds: 20),
-        now: () => clock,
-        delay: (duration) async {
-          clock = clock.add(duration);
-        },
-        persistWindowBounds: () => hang.future,
-        walCheckpoint: () async {},
-        exitBackup: () async {},
-        closeConnection: () async {},
-        closeCrashLog: () async {},
-        terminate: () {
-          terminated = true;
-        },
-      );
+        final coordinator = ShutdownCoordinator(
+          safetyTimeout: const Duration(seconds: 20),
+          now: () => clock,
+          delay: (duration) async {
+            clock = clock.add(duration);
+          },
+          persistWindowBounds: () => hang.future,
+          walCheckpoint: () async {},
+          exitBackup: () async {},
+          closeConnection: () async {},
+          closeCrashLog: () async {},
+          terminate: () {
+            terminated = true;
+          },
+        );
 
-      final sub = coordinator.events.listen(events.add);
-      await coordinator.run();
-      await sub.cancel();
+        final sub = coordinator.events.listen(events.add);
+        await coordinator.run();
+        await sub.cancel();
 
-      expect(terminated, isTrue);
-      expect(
-        events.any((e) => e.phase == ShutdownStepPhase.interrupted),
-        isTrue,
-        reason: greekExpectMsg(
-          'Το τρέχον βήμα πρέπει να σημειωθεί ως διακόπηκε',
-        ),
-      );
-      expect(
-        events
-            .where((e) => e.phase == ShutdownStepPhase.interrupted)
-            .single
-            .label,
-        'Αποθήκευση θέσης παραθύρου',
-      );
-    });
+        expect(terminated, isTrue);
+        expect(
+          events.any((e) => e.phase == ShutdownStepPhase.interrupted),
+          isTrue,
+          reason: greekExpectMsg(
+            'Το τρέχον βήμα πρέπει να σημειωθεί ως διακόπηκε',
+          ),
+        );
+        expect(
+          events
+              .where((e) => e.phase == ShutdownStepPhase.interrupted)
+              .single
+              .label,
+          'Αποθήκευση θέσης παραθύρου',
+        );
+      },
+    );
 
-    test('exit(0) δεν καλείται — μόνο η injectable συνάρτηση τερματισμού',
-        () async {
-      var terminateCalled = false;
-      final coordinator = ShutdownCoordinator(
-        persistWindowBounds: () async {},
-        walCheckpoint: () async {},
-        exitBackup: () async {},
-        closeConnection: () async {},
-        closeCrashLog: () async {},
-        terminate: () {
-          terminateCalled = true;
-        },
-      );
-      await coordinator.run();
-      expect(terminateCalled, isTrue);
-      expect(coordinator.terminateCalled, isTrue);
-    });
+    test(
+      'exit(0) δεν καλείται — μόνο η injectable συνάρτηση τερματισμού',
+      () async {
+        var terminateCalled = false;
+        final coordinator = ShutdownCoordinator(
+          persistWindowBounds: () async {},
+          walCheckpoint: () async {},
+          exitBackup: () async {},
+          closeConnection: () async {},
+          closeCrashLog: () async {},
+          terminate: () {
+            terminateCalled = true;
+          },
+        );
+        await coordinator.run();
+        expect(terminateCalled, isTrue);
+        expect(coordinator.terminateCalled, isTrue);
+      },
+    );
   });
 }

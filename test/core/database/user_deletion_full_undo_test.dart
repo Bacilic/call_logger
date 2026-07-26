@@ -54,19 +54,13 @@ void main() {
     }
 
     Future<int> insertPhone(String number) async {
-      return db.insert('phones', {
-        'number': number,
-        'is_deleted': 0,
-      });
+      return db.insert('phones', {'number': number, 'is_deleted': 0});
     }
 
-    Future<({
-      int userId,
-      int deptId,
-      int dept2Id,
-      int phoneId,
-      int equipmentId,
-    })> seedExclusiveUser() async {
+    Future<
+      ({int userId, int deptId, int dept2Id, int phoneId, int equipmentId})
+    >
+    seedExclusiveUser() async {
       final deptId = await insertDepartment('Τμήμα Δ');
       final dept2Id = await insertDepartment('Τμήμα Δ2');
       final userId = await db.insert('users', {
@@ -76,10 +70,7 @@ void main() {
         'is_deleted': 0,
       });
       final phoneId = await insertPhone('2310111111');
-      await db.insert('user_phones', {
-        'user_id': userId,
-        'phone_id': phoneId,
-      });
+      await db.insert('user_phones', {'user_id': userId, 'phone_id': phoneId});
       final equipmentId = await db.insert('equipment', {
         'code_equipment': 'EQ-UNDO-1',
         'department_id': null,
@@ -115,9 +106,7 @@ void main() {
       );
       await applyPersonalEquipmentDisconnectBatch(
         db,
-        const SharedAssetDisconnectBatchResult(
-          equipmentToKeep: ['EQ-UNDO-1'],
-        ),
+        const SharedAssetDisconnectBatchResult(equipmentToKeep: ['EQ-UNDO-1']),
         sourceDepartmentId: deptId,
       );
     }
@@ -204,10 +193,7 @@ void main() {
             seed.userId: [seed.equipmentId],
           },
           phoneDeptAdds: [
-            PhoneDeptAdd(
-              departmentId: seed.dept2Id,
-              phoneNumber: '2310111111',
-            ),
+            PhoneDeptAdd(departmentId: seed.dept2Id, phoneNumber: '2310111111'),
           ],
           equipmentDeptSets: [
             EquipmentDeptSet(
@@ -367,10 +353,7 @@ void main() {
           'is_deleted': 0,
         });
         final phoneId = await insertPhone('2310222222');
-        await db.insert('user_phones', {
-          'user_id': userY,
-          'phone_id': phoneId,
-        });
+        await db.insert('user_phones', {'user_id': userY, 'phone_id': phoneId});
         await db.insert('user_phones', {
           'user_id': userOther,
           'phone_id': phoneId,
@@ -381,9 +364,7 @@ void main() {
           originalUserPhones: {
             userY: ['2310222222'],
           },
-          originalUserEquipmentIds: {
-            userY: const [],
-          },
+          originalUserEquipmentIds: {userY: const []},
           phoneDeptAdds: const [],
           equipmentDeptSets: const [],
           softDeletedPhoneNumbers: const [],

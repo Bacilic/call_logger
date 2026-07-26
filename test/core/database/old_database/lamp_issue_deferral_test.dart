@@ -35,12 +35,13 @@ void main() {
   });
 
   group('Λάμπα · αναβολή προβλημάτων ETL', () {
-    test('υπάρχουσα βάση χωρίς στήλη status αναβαθμίζεται και μετράει μόνο open', () async {
-      final legacyDb = await openDatabase(dbPath, singleInstance: false);
-      try {
-        await legacyDb.execute('DROP TABLE IF EXISTS data_issues');
-        await legacyDb.execute(
-          '''
+    test(
+      'υπάρχουσα βάση χωρίς στήλη status αναβαθμίζεται και μετράει μόνο open',
+      () async {
+        final legacyDb = await openDatabase(dbPath, singleInstance: false);
+        try {
+          await legacyDb.execute('DROP TABLE IF EXISTS data_issues');
+          await legacyDb.execute('''
           CREATE TABLE data_issues (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             sheet TEXT,
@@ -51,50 +52,55 @@ void main() {
             message TEXT,
             created_at TEXT NOT NULL
           )
-          ''',
+          ''');
+          await legacyDb.insert('data_issues', <String, Object?>{
+            'sheet': 'integrity_scan',
+            'issue_type': 'unknown_id',
+            'raw_value': '999',
+            'column_name': 'office',
+            'row_number': 100,
+            'message': 'δοκιμή',
+            'created_at': '2026-01-01T00:00:00',
+          });
+        } finally {
+          await legacyDb.close();
+        }
+
+        final openIssues = await repository.dataIssues(dbPath);
+        expect(openIssues, hasLength(1));
+        expect(openIssues.single['status'], kDataIssueStatusOpen);
+
+        final openCount = await repository.dataIssueCount(dbPath);
+        expect(openCount, 1);
+      },
+    );
+
+    test(
+      'deferDataIssuesByIds μεταφέρει εγγραφές σε deferred και εξαιρούνται από open',
+      () async {
+        final issueId = await _insertIssue(
+          dbPath,
+          issueType: 'unknown_id',
+          rawValue: '42',
+          columnName: 'office',
+          rowNumber: 200,
         );
-        await legacyDb.insert('data_issues', <String, Object?>{
-          'sheet': 'integrity_scan',
-          'issue_type': 'unknown_id',
-          'raw_value': '999',
-          'column_name': 'office',
-          'row_number': 100,
-          'message': 'δοκιμή',
-          'created_at': '2026-01-01T00:00:00',
-        });
-      } finally {
-        await legacyDb.close();
-      }
 
-      final openIssues = await repository.dataIssues(dbPath);
-      expect(openIssues, hasLength(1));
-      expect(openIssues.single['status'], kDataIssueStatusOpen);
+        final deferred = await repository.deferDataIssuesByIds(dbPath, <int>[
+          issueId,
+        ]);
+        expect(deferred, 1);
 
-      final openCount = await repository.dataIssueCount(dbPath);
-      expect(openCount, 1);
-    });
+        expect(await repository.dataIssueCount(dbPath), 0);
+        final openIssues = await repository.dataIssues(dbPath);
+        expect(openIssues, isEmpty);
 
-    test('deferDataIssuesByIds μεταφέρει εγγραφές σε deferred και εξαιρούνται από open', () async {
-      final issueId = await _insertIssue(
-        dbPath,
-        issueType: 'unknown_id',
-        rawValue: '42',
-        columnName: 'office',
-        rowNumber: 200,
-      );
-
-      final deferred = await repository.deferDataIssuesByIds(dbPath, <int>[issueId]);
-      expect(deferred, 1);
-
-      expect(await repository.dataIssueCount(dbPath), 0);
-      final openIssues = await repository.dataIssues(dbPath);
-      expect(openIssues, isEmpty);
-
-      final deferredIssues = await repository.deferredDataIssues(dbPath);
-      expect(deferredIssues, hasLength(1));
-      expect(deferredIssues.single['id'], issueId);
-      expect(deferredIssues.single['status'], kDataIssueStatusDeferred);
-    });
+        final deferredIssues = await repository.deferredDataIssues(dbPath);
+        expect(deferredIssues, hasLength(1));
+        expect(deferredIssues.single['id'], issueId);
+        expect(deferredIssues.single['status'], kDataIssueStatusDeferred);
+      },
+    );
 
     test('reopenDeferredDataIssuesByType επαναφέρει σε open', () async {
       final issueId = await _insertIssue(
@@ -156,13 +162,16 @@ void main() {
         rawValue: 'ASSET-2',
         columnName: 'asset_no',
       );
-      await repository.deferDataIssuesByIds(
-        dbPath,
-        <int>[deferredId, deferredAssetId],
-      );
+      await repository.deferDataIssuesByIds(dbPath, <int>[
+        deferredId,
+        deferredAssetId,
+      ]);
 
       final grouped = await repository.deferredDataIssuesGroupedByType(dbPath);
-      expect(grouped.keys, containsAll(<String>['unknown_id', 'duplicate_asset_no']));
+      expect(
+        grouped.keys,
+        containsAll(<String>['unknown_id', 'duplicate_asset_no']),
+      );
       expect(grouped['unknown_id'], hasLength(1));
       expect(grouped['duplicate_asset_no'], hasLength(1));
       expect(await repository.dataIssueCount(dbPath), 2);

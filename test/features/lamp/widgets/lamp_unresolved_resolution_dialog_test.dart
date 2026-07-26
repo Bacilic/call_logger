@@ -101,13 +101,10 @@ void main() {
     String column,
     String query,
   ) async {
-    return filterEntityCodeSuggestions(
-      const <LampEntityCodeSuggestion>[
-        LampEntityCodeSuggestion(code: 1, label: 'Βασικό Γραφείο'),
-        LampEntityCodeSuggestion(code: 2, label: 'Δευτερεύον Γραφείο'),
-      ],
-      query,
-    );
+    return filterEntityCodeSuggestions(const <LampEntityCodeSuggestion>[
+      LampEntityCodeSuggestion(code: 1, label: 'Βασικό Γραφείο'),
+      LampEntityCodeSuggestion(code: 2, label: 'Δευτερεύον Γραφείο'),
+    ], query);
   }
 
   Future<void> dismissOpenDialog(WidgetTester tester) async {
@@ -222,16 +219,15 @@ void main() {
       },
     );
 
-    testWidgets(
-      'δεν εμφανίζει «Στοιχεία εγγραφής» χωρίς rowContext metadata',
-      (tester) async {
-        await openDialog(tester, onResult: (_) {});
+    testWidgets('δεν εμφανίζει «Στοιχεία εγγραφής» χωρίς rowContext metadata', (
+      tester,
+    ) async {
+      await openDialog(tester, onResult: (_) {});
 
-        expect(find.text('Στοιχεία εγγραφής'), findsNothing);
+      expect(find.text('Στοιχεία εγγραφής'), findsNothing);
 
-        await dismissOpenDialog(tester);
-      },
-    );
+      await dismissOpenDialog(tester);
+    });
 
     testWidgets(
       'εμφανίζει διακόπτη εμβέλειας «Εφαρμογή σε όλα τα υπόλοιπα ανεπίλυτα»',
@@ -250,7 +246,9 @@ void main() {
       },
     );
 
-    testWidgets('εμφανίζει τις νέες ενέργειες δίπλα στις υπάρχουσες', (tester) async {
+    testWidgets('εμφανίζει τις νέες ενέργειες δίπλα στις υπάρχουσες', (
+      tester,
+    ) async {
       await openDialog(tester, onResult: (_) {});
 
       expect(find.text('Ακύρωση επίλυσης'), findsOneWidget);
@@ -260,48 +258,51 @@ void main() {
       expect(find.text('Παράλειψη τρέχουσας'), findsNothing);
       expect(find.text('Αναβολή όλων των ανεπίλυτων'), findsNothing);
       expect(find.text('Διόρθωση με κωδικό'), findsOneWidget);
-      expect(find.widgetWithText(OutlinedButton, 'Εκκαθάριση πεδίου'), findsOneWidget);
+      expect(
+        find.widgetWithText(OutlinedButton, 'Εκκαθάριση πεδίου'),
+        findsOneWidget,
+      );
 
       await dismissOpenDialog(tester);
     });
 
-    testWidgets('έγκυρος αριθμητικός κωδικός εμφανίζει ετικέτα και ενεργοποιεί εφαρμογή', (
-      tester,
-    ) async {
-      LampUnresolvedResolutionOutcome? captured;
-      await openDialog(
-        tester,
-        manualFkLookup: fakeLookup,
-        onResult: (outcome) => captured = outcome,
-      );
+    testWidgets(
+      'έγκυρος αριθμητικός κωδικός εμφανίζει ετικέτα και ενεργοποιεί εφαρμογή',
+      (tester) async {
+        LampUnresolvedResolutionOutcome? captured;
+        await openDialog(
+          tester,
+          manualFkLookup: fakeLookup,
+          onResult: (outcome) => captured = outcome,
+        );
 
-      await tester.ensureVisible(find.byType(TextField));
-      await tester.enterText(find.byType(TextField), '1');
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 350));
-      await tester.pump();
+        await tester.ensureVisible(find.byType(TextField));
+        await tester.enterText(find.byType(TextField), '1');
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 350));
+        await tester.pump();
 
-      expect(find.textContaining('Βασικό Γραφείο'), findsOneWidget);
+        expect(find.textContaining('Βασικό Γραφείο'), findsOneWidget);
 
-      final applyButton = find.widgetWithText(FilledButton, 'Εφαρμογή κωδικού');
-      expect(tester.widget<FilledButton>(applyButton).onPressed, isNotNull);
+        final applyButton = find.widgetWithText(
+          FilledButton,
+          'Εφαρμογή κωδικού',
+        );
+        expect(tester.widget<FilledButton>(applyButton).onPressed, isNotNull);
 
-      await tester.ensureVisible(applyButton);
-      await tester.tap(applyButton);
-      await tester.pump();
+        await tester.ensureVisible(applyButton);
+        await tester.tap(applyButton);
+        await tester.pump();
 
-      expect(captured, isA<LampUnresolvedSetFieldManual>());
-      expect((captured! as LampUnresolvedSetFieldManual).codeInput, '1');
-    });
+        expect(captured, isA<LampUnresolvedSetFieldManual>());
+        expect((captured! as LampUnresolvedSetFieldManual).codeInput, '1');
+      },
+    );
 
     testWidgets('ανύπαρκτος κωδικός κρατά απενεργοποιημένη την εφαρμογή', (
       tester,
     ) async {
-      await openDialog(
-        tester,
-        manualFkLookup: fakeLookup,
-        onResult: (_) {},
-      );
+      await openDialog(tester, manualFkLookup: fakeLookup, onResult: (_) {});
 
       await tester.ensureVisible(find.byType(TextField));
       await tester.enterText(find.byType(TextField), '99999');
@@ -319,12 +320,12 @@ void main() {
       tester,
     ) async {
       LampUnresolvedResolutionOutcome? captured;
-      await openDialog(
-        tester,
-        onResult: (outcome) => captured = outcome,
-      );
+      await openDialog(tester, onResult: (outcome) => captured = outcome);
 
-      final clearButton = find.widgetWithText(OutlinedButton, 'Εκκαθάριση πεδίου');
+      final clearButton = find.widgetWithText(
+        OutlinedButton,
+        'Εκκαθάριση πεδίου',
+      );
       await tester.ensureVisible(clearButton);
       await tester.tap(clearButton);
       await tester.pump();
@@ -332,12 +333,11 @@ void main() {
       expect(captured, isA<LampUnresolvedClearField>());
     });
 
-    testWidgets('Αναβολή επιστρέφει LampUnresolvedDeferCurrent', (tester) async {
+    testWidgets('Αναβολή επιστρέφει LampUnresolvedDeferCurrent', (
+      tester,
+    ) async {
       LampUnresolvedResolutionOutcome? captured;
-      await openDialog(
-        tester,
-        onResult: (outcome) => captured = outcome,
-      );
+      await openDialog(tester, onResult: (outcome) => captured = outcome);
 
       await tester.tap(find.widgetWithText(FilledButton, 'Αναβολή'));
       await tester.pump();
@@ -345,12 +345,11 @@ void main() {
       expect(captured, isA<LampUnresolvedDeferCurrent>());
     });
 
-    testWidgets('Αναβολή όλων επιστρέφει LampUnresolvedDeferAll', (tester) async {
+    testWidgets('Αναβολή όλων επιστρέφει LampUnresolvedDeferAll', (
+      tester,
+    ) async {
       LampUnresolvedResolutionOutcome? captured;
-      await openDialog(
-        tester,
-        onResult: (outcome) => captured = outcome,
-      );
+      await openDialog(tester, onResult: (outcome) => captured = outcome);
 
       await tester.ensureVisible(
         find.widgetWithText(
@@ -371,12 +370,11 @@ void main() {
       expect(captured, isA<LampUnresolvedDeferAll>());
     });
 
-    testWidgets('Παράλειψη επιστρέφει LampUnresolvedSkipCurrent', (tester) async {
+    testWidgets('Παράλειψη επιστρέφει LampUnresolvedSkipCurrent', (
+      tester,
+    ) async {
       LampUnresolvedResolutionOutcome? captured;
-      await openDialog(
-        tester,
-        onResult: (outcome) => captured = outcome,
-      );
+      await openDialog(tester, onResult: (outcome) => captured = outcome);
 
       await tester.tap(find.widgetWithText(OutlinedButton, 'Παράλειψη'));
       await tester.pump();
@@ -384,12 +382,11 @@ void main() {
       expect(captured, isA<LampUnresolvedSkipCurrent>());
     });
 
-    testWidgets('Παράλειψη όλων επιστρέφει LampUnresolvedSkipAll', (tester) async {
+    testWidgets('Παράλειψη όλων επιστρέφει LampUnresolvedSkipAll', (
+      tester,
+    ) async {
       LampUnresolvedResolutionOutcome? captured;
-      await openDialog(
-        tester,
-        onResult: (outcome) => captured = outcome,
-      );
+      await openDialog(tester, onResult: (outcome) => captured = outcome);
 
       await tester.ensureVisible(
         find.widgetWithText(
@@ -414,10 +411,7 @@ void main() {
       tester,
     ) async {
       LampUnresolvedResolutionOutcome? captured;
-      await openDialog(
-        tester,
-        onResult: (outcome) => captured = outcome,
-      );
+      await openDialog(tester, onResult: (outcome) => captured = outcome);
 
       await tester.tap(find.text('Ακύρωση επίλυσης'));
       await tester.pump();

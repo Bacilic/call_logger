@@ -13,7 +13,10 @@ class LampIssueDuplicateAnalyzers {
     Database db,
   ) async {
     final labels = await _support.loadFkLabelMaps(db);
-    final issues = await _support.openIssues(db, LampIssueType.duplicateAssetNo);
+    final issues = await _support.openIssues(
+      db,
+      LampIssueType.duplicateAssetNo,
+    );
     final byAsset = <String, List<int>>{};
     for (final issue in issues) {
       final raw = _support.text(issue['raw_value']);
@@ -56,7 +59,10 @@ class LampIssueDuplicateAnalyzers {
     Database db,
   ) async {
     final labels = await _support.loadFkLabelMaps(db);
-    final issues = await _support.openIssues(db, LampIssueType.duplicateModelSerial);
+    final issues = await _support.openIssues(
+      db,
+      LampIssueType.duplicateModelSerial,
+    );
     final issueIdsBySerial = <String, List<int>>{};
     for (final issue in issues) {
       final raw = _support.text(issue['raw_value']);
@@ -110,7 +116,10 @@ class LampIssueDuplicateAnalyzers {
     Database db,
   ) async {
     final labels = await _support.loadFkLabelMaps(db);
-    final issues = await _support.openIssues(db, LampIssueType.scientificSerial);
+    final issues = await _support.openIssues(
+      db,
+      LampIssueType.scientificSerial,
+    );
     final proposals = <LampIssueResolutionProposal>[];
     for (final issue in issues) {
       final code = _support.toInt(issue['row_number']);
@@ -342,9 +351,7 @@ class LampIssueDuplicateAnalyzers {
             'confidenceIsNominal': true,
             if (equipment != null) ...<String, Object?>{
               'rowContextCode': code,
-              'rowContextDescription': _support.text(
-                equipment['description'],
-              ),
+              'rowContextDescription': _support.text(equipment['description']),
               'rowContextAssetNo': _support.text(equipment['asset_no']),
               'rowContextSerialNo': _support.text(equipment['serial_no']),
             },

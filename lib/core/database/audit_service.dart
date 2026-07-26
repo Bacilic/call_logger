@@ -249,17 +249,12 @@ class AuditService {
     String field,
     dynamic oldValue,
     dynamic newValue,
-  ) =>
-      AuditDiffHelper.shouldIncludeField(field, oldValue, newValue);
+  ) => AuditDiffHelper.shouldIncludeField(field, oldValue, newValue);
 
   static String _searchValueText(String field, dynamic value) {
     if (value == null) return '';
     if (field == 'remote_params') return '';
-    return AuditDiffHelper.humanizeFieldValue(
-      field,
-      value,
-      forSearch: true,
-    );
+    return AuditDiffHelper.humanizeFieldValue(field, value, forSearch: true);
   }
 
   static String _subactionSearchText({
@@ -376,7 +371,6 @@ class AuditService {
     }
     return null;
   }
-
 
   static String? _formatFloorValue(dynamic value) {
     if (value == null) return 'χωρις οροφο';

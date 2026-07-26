@@ -1,4 +1,4 @@
-﻿import 'dart:io';
+import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -60,7 +60,8 @@ class CallsScreenLayout extends ConsumerWidget {
   static const double kRecentCallsCardColumnMaxWidth = 560;
 
   /// Ανώτατο πλάτος στήλης — ταιριάζει με [GlobalRecentCallsList].
-  static const double kGlobalRecentCardColumnMaxWidth = _kGlobalRecentCardMaxWidth;
+  static const double kGlobalRecentCardColumnMaxWidth =
+      _kGlobalRecentCardMaxWidth;
 
   /// Ανώτατο πλάτος στήλης για [EquipmentRecentCallsPanel].
   static const double kEquipmentRecentCardColumnMaxWidth = 560;
@@ -78,8 +79,8 @@ class CallsScreenLayout extends ConsumerWidget {
           data: (v) => v,
           orElse: () => CallsScreenCardsVisibility.defaults,
         );
-    final showExpandedPlanBody = anyGroupActive ||
-        (cardsVis.showGlobalRecentCard && tkOpen);
+    final showExpandedPlanBody =
+        anyGroupActive || (cardsVis.showGlobalRecentCard && tkOpen);
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -87,8 +88,10 @@ class CallsScreenLayout extends ConsumerWidget {
             ? constraints.maxWidth
             : MediaQuery.sizeOf(context).width;
         final innerHeight = constraints.maxHeight.isFinite
-            ? (constraints.maxHeight - 2 * _kScreenPadding)
-                .clamp(0.0, double.infinity)
+            ? (constraints.maxHeight - 2 * _kScreenPadding).clamp(
+                0.0,
+                double.infinity,
+              )
             : double.infinity;
 
         return Padding(
@@ -149,10 +152,7 @@ class _CallsMainContent extends StatelessWidget {
         return Stack(
           alignment: isExpanded ? Alignment.topCenter : Alignment.center,
           fit: StackFit.expand,
-          children: [
-            ...previousChildren,
-            ?currentChild,
-          ],
+          children: [...previousChildren, ?currentChild],
         );
       },
       child: isExpanded
@@ -216,7 +216,8 @@ class _CompactCallsLayout extends ConsumerWidget {
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                         const SizedBox(
-                          height: CallsScreenLayout._kCompactFormToRecentCardGap,
+                          height:
+                              CallsScreenLayout._kCompactFormToRecentCardGap,
                         ),
                         Align(
                           alignment: Alignment.centerRight,
@@ -315,7 +316,8 @@ class _ExpandedPlanBody extends ConsumerWidget {
 
     final callerId = header.selectedCaller?.id;
     final hasCallerHistory = callerId != null;
-    final hasEquipmentHistory = selectedEquipmentCode.isNotEmpty &&
+    final hasEquipmentHistory =
+        selectedEquipmentCode.isNotEmpty &&
         groups.equipmentTier == EquipmentGroupTier.matchedRecord;
 
     final tkOpenInGrid = ref.watch(showGlobalCallsToggleProvider);
@@ -326,8 +328,7 @@ class _ExpandedPlanBody extends ConsumerWidget {
       showRemoteTools: showRemoteButtons,
       hasCallerHistoryData: hasCallerHistory,
       hasEquipmentHistoryData: hasEquipmentHistory,
-      showGlobalRecentCard:
-          cardsVis.showGlobalRecentCard && tkOpenInGrid,
+      showGlobalRecentCard: cardsVis.showGlobalRecentCard && tkOpenInGrid,
     );
 
     final plan = CallsLayoutEngine.build(groups, visibility);
@@ -364,7 +365,8 @@ class _GlobalRecentToggle extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return TextButton.icon(
-      onPressed: () => ref.read(showGlobalCallsToggleProvider.notifier).toggle(),
+      onPressed: () =>
+          ref.read(showGlobalCallsToggleProvider.notifier).toggle(),
       icon: Icon(showExpanded ? Icons.expand_less : Icons.history),
       label: const Text('Τελευταίες Κλήσεις'),
     );
@@ -560,10 +562,7 @@ class _LayoutColumnWidthCap extends StatelessWidget {
       builder: (context, constraints) {
         final cappedMax = math.min(constraints.maxWidth, maxWidth!);
         if (fillCappedWidth) {
-          return SizedBox(
-            width: cappedMax,
-            child: child,
-          );
+          return SizedBox(width: cappedMax, child: child);
         }
         return ConstrainedBox(
           constraints: BoxConstraints(maxWidth: cappedMax),
@@ -645,8 +644,9 @@ class _LayoutColumnWidget extends ConsumerWidget {
     // (έξυπνο πλάτος από την πιο επιμήκη εγγραφή, με οροφή το cap στήλης).
     final stretch = _columnFillsCappedWidth(column);
     return Column(
-      crossAxisAlignment:
-          stretch ? CrossAxisAlignment.stretch : CrossAxisAlignment.start,
+      crossAxisAlignment: stretch
+          ? CrossAxisAlignment.stretch
+          : CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
         for (var i = 0; i < slots.length; i++) ...[
@@ -695,9 +695,7 @@ class _SlotWidget extends ConsumerWidget {
         // κάρτα. Σε στήλη start η κάρτα αγκαλιάζει το περιεχόμενό της.
         return RemoteConnectionButtons(header: header, tools: tools);
       case CallsLayoutSlot.equipmentHistory:
-        return EquipmentRecentCallsPanel(
-          equipmentCode: selectedEquipmentCode,
-        );
+        return EquipmentRecentCallsPanel(equipmentCode: selectedEquipmentCode);
       case CallsLayoutSlot.callerCard:
         // Σε στήλη με start alignment η κάρτα αγκαλιάζει το περιεχόμενό της.
         final user = header.selectedCaller;
@@ -802,8 +800,10 @@ class _CategoryTimerSubmitRow extends ConsumerWidget {
     final notifier = ref.read(callEntryProvider.notifier);
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    final submitPadding =
-        const EdgeInsets.symmetric(vertical: 14, horizontal: 14);
+    final submitPadding = const EdgeInsets.symmetric(
+      vertical: 14,
+      horizontal: 14,
+    );
     final primarySubmit = ElevatedButton.icon(
       onPressed: header.canSubmitCall
           ? () async {
@@ -819,14 +819,14 @@ class _CategoryTimerSubmitRow extends ConsumerWidget {
                 );
               } on CallSaveException catch (e) {
                 if (!context.mounted) return;
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text(e.message)),
-                );
+                ScaffoldMessenger.of(
+                  context,
+                ).showSnackBar(SnackBar(content: Text(e.message)));
               } on TaskSaveException catch (e) {
                 if (!context.mounted) return;
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text(e.message)),
-                );
+                ScaffoldMessenger.of(
+                  context,
+                ).showSnackBar(SnackBar(content: Text(e.message)));
               }
             }
           : null,
@@ -849,5 +849,4 @@ class _CategoryTimerSubmitRow extends ConsumerWidget {
             child: primarySubmit,
           );
   }
-
 }

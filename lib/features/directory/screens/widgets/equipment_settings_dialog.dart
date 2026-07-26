@@ -29,7 +29,8 @@ class _EquipmentSettingsDialog extends ConsumerStatefulWidget {
 }
 
 class _EquipmentSettingsDialogState
-    extends ConsumerState<_EquipmentSettingsDialog> with DialogSnackbarHost {
+    extends ConsumerState<_EquipmentSettingsDialog>
+    with DialogSnackbarHost {
   final SettingsService _settings = SettingsService();
   late final SpellCheckController _controller;
 
@@ -92,11 +93,11 @@ class _EquipmentSettingsDialogState
         messengerKey: dialogMessengerKey,
         child: Center(
           child: AlertDialog(
-        content: const SizedBox(
-          width: 360,
-          height: 100,
-          child: Center(child: CircularProgressIndicator()),
-        ),
+            content: const SizedBox(
+              width: 360,
+              height: 100,
+              child: Center(child: CircularProgressIndicator()),
+            ),
           ),
         ),
       );
@@ -106,49 +107,49 @@ class _EquipmentSettingsDialogState
       messengerKey: dialogMessengerKey,
       child: Center(
         child: AlertDialog(
-      title: const Text('Τύποι εξοπλισμού'),
-      content: SizedBox(
-        width: 480,
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text(
-                'Χρησιμοποιούνται στα αναδυόμενα πεδία τύπου εξοπλισμού. '
-                'Διαχωρίστε τις τιμές με κόμμα.',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
+          title: const Text('Τύποι εξοπλισμού'),
+          content: SizedBox(
+            width: 480,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    'Χρησιμοποιούνται στα αναδυόμενα πεδία τύπου εξοπλισμού. '
+                    'Διαχωρίστε τις τιμές με κόμμα.',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  LexiconSpellTextFormField(
+                    controller: _controller,
+                    maxLines: 6,
+                    minLines: 3,
+                    onChanged: (_) => setState(() {}),
+                    decoration: const InputDecoration(
+                      labelText: 'Τύποι εξοπλισμού',
+                      hintText:
+                          'Διαχωρίστε με κόμμα, π.χ. Υπολογιστής, Εκτυπωτής, Οθόνη',
+                      border: OutlineInputBorder(),
+                      alignLabelWithHint: true,
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(height: 16),
-              LexiconSpellTextFormField(
-                controller: _controller,
-                maxLines: 6,
-                minLines: 3,
-                onChanged: (_) => setState(() {}),
-                decoration: const InputDecoration(
-                  labelText: 'Τύποι εξοπλισμού',
-                  hintText:
-                      'Διαχωρίστε με κόμμα, π.χ. Υπολογιστής, Εκτυπωτής, Οθόνη',
-                  border: OutlineInputBorder(),
-                  alignLabelWithHint: true,
-                ),
-              ),
-            ],
+            ),
           ),
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(false),
-          child: const Text('Ακύρωση'),
-        ),
-        FilledButton(
-          onPressed: _hasChanges ? _save : null,
-          child: const Text('Αποθήκευση'),
-        ),
-      ],
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Ακύρωση'),
+            ),
+            FilledButton(
+              onPressed: _hasChanges ? _save : null,
+              child: const Text('Αποθήκευση'),
+            ),
+          ],
         ),
       ),
     );

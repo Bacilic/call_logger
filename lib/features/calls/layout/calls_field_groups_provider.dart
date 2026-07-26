@@ -1,4 +1,4 @@
-﻿import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../provider/call_header_provider.dart';
 import '../provider/lookup_provider.dart';
@@ -11,7 +11,8 @@ final callsFieldConfirmationsProvider =
       CallsFieldConfirmationsNotifier.new,
     );
 
-class CallsFieldConfirmationsNotifier extends Notifier<CallsFieldConfirmations> {
+class CallsFieldConfirmationsNotifier
+    extends Notifier<CallsFieldConfirmations> {
   @override
   CallsFieldConfirmations build() => CallsFieldConfirmations.empty;
 

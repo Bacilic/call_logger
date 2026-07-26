@@ -105,9 +105,7 @@ void main() {
           await applyDepartmentEmployeeReassignBatch(
             db,
             DepartmentEmployeeReassignBatch(
-              transfers: {
-                userId: SharedAssetTransferTarget.existing(targetId),
-              },
+              transfers: {userId: SharedAssetTransferTarget.existing(targetId)},
             ),
             executor: txn,
           );
@@ -124,10 +122,9 @@ void main() {
             sourceDepartmentId: sourceId,
             executor: txn,
           );
-          await DepartmentRepository(db).softDeleteDepartments(
-            [sourceId],
-            executor: txn,
-          );
+          await DepartmentRepository(
+            db,
+          ).softDeleteDepartments([sourceId], executor: txn);
         });
 
         final userRows = await db.query(
@@ -168,84 +165,79 @@ void main() {
       },
     );
 
-    test(
-      'rollback: εξαίρεση πριν το commit αφήνει όλα αμετάβλητα',
-      () async {
-        final sourceId = await insertDepartment('Πηγή Rollback');
-        final targetId = await insertDepartment('Στόχος Rollback');
-        final userId = await insertUser(
-          firstName: 'Βήτα',
-          lastName: 'Υπάλληλος',
-          departmentId: sourceId,
-        );
-        final phoneId = await insertSharedPhone('2310555002', sourceId);
-        final eqId = await insertSharedEquipment('PC-ATOMIC-2', sourceId);
+    test('rollback: εξαίρεση πριν το commit αφήνει όλα αμετάβλητα', () async {
+      final sourceId = await insertDepartment('Πηγή Rollback');
+      final targetId = await insertDepartment('Στόχος Rollback');
+      final userId = await insertUser(
+        firstName: 'Βήτα',
+        lastName: 'Υπάλληλος',
+        departmentId: sourceId,
+      );
+      final phoneId = await insertSharedPhone('2310555002', sourceId);
+      final eqId = await insertSharedEquipment('PC-ATOMIC-2', sourceId);
 
-        await expectLater(
-          () => db.transaction((txn) async {
-            await applyDepartmentEmployeeReassignBatch(
-              db,
-              DepartmentEmployeeReassignBatch(
-                transfers: {
-                  userId: SharedAssetTransferTarget.existing(targetId),
-                },
-              ),
-              executor: txn,
-            );
-            await applyDepartmentSharedAssetDisconnectBatch(
-              db,
-              SharedAssetDisconnectBatchResult(
-                phoneTransfers: {
-                  '2310555002': SharedAssetTransferTarget.existing(targetId),
-                },
-                equipmentTransfers: {
-                  'PC-ATOMIC-2': SharedAssetTransferTarget.existing(targetId),
-                },
-              ),
-              sourceDepartmentId: sourceId,
-              executor: txn,
-            );
-            throw StateError('intentional rollback');
-          }),
-          throwsA(isA<StateError>()),
-        );
+      await expectLater(
+        () => db.transaction((txn) async {
+          await applyDepartmentEmployeeReassignBatch(
+            db,
+            DepartmentEmployeeReassignBatch(
+              transfers: {userId: SharedAssetTransferTarget.existing(targetId)},
+            ),
+            executor: txn,
+          );
+          await applyDepartmentSharedAssetDisconnectBatch(
+            db,
+            SharedAssetDisconnectBatchResult(
+              phoneTransfers: {
+                '2310555002': SharedAssetTransferTarget.existing(targetId),
+              },
+              equipmentTransfers: {
+                'PC-ATOMIC-2': SharedAssetTransferTarget.existing(targetId),
+              },
+            ),
+            sourceDepartmentId: sourceId,
+            executor: txn,
+          );
+          throw StateError('intentional rollback');
+        }),
+        throwsA(isA<StateError>()),
+      );
 
-        final userRows = await db.query(
-          'users',
-          where: 'id = ?',
-          whereArgs: [userId],
-        );
-        expect(userRows.single['department_id'], sourceId);
+      final userRows = await db.query(
+        'users',
+        where: 'id = ?',
+        whereArgs: [userId],
+      );
+      expect(userRows.single['department_id'], sourceId);
 
-        final deptRows = await db.query(
-          'departments',
-          where: 'id = ?',
-          whereArgs: [sourceId],
-        );
-        expect(deptRows.single['is_deleted'], 0);
+      final deptRows = await db.query(
+        'departments',
+        where: 'id = ?',
+        whereArgs: [sourceId],
+      );
+      expect(deptRows.single['is_deleted'], 0);
 
-        final phoneRows = await db.query(
-          'phones',
-          where: 'id = ?',
-          whereArgs: [phoneId],
-        );
-        expect(phoneRows.single['department_id'], sourceId);
-        expect(
-          await db.query(
-            'department_phones',
-            where: 'department_id = ? AND phone_id = ?',
-            whereArgs: [sourceId, phoneId],
-          ),
-          hasLength(1),
-        );
+      final phoneRows = await db.query(
+        'phones',
+        where: 'id = ?',
+        whereArgs: [phoneId],
+      );
+      expect(phoneRows.single['department_id'], sourceId);
+      expect(
+        await db.query(
+          'department_phones',
+          where: 'department_id = ? AND phone_id = ?',
+          whereArgs: [sourceId, phoneId],
+        ),
+        hasLength(1),
+      );
 
-        final eqRows = await db.query(
-          'equipment',
-          where: 'id = ?',
-          whereArgs: [eqId],
-        );
-        expect(eqRows.single['department_id'], sourceId);
-      },
-    );
+      final eqRows = await db.query(
+        'equipment',
+        where: 'id = ?',
+        whereArgs: [eqId],
+      );
+      expect(eqRows.single['department_id'], sourceId);
+    });
   });
 }

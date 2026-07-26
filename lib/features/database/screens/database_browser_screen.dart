@@ -18,10 +18,11 @@ const String _kDatabaseBrowserZoomByTableSettingsKey =
     'database_browser_preview_zoom_by_table';
 
 /// Αποθηκευμένο επίπεδο μεγέθυνσης ανά πίνακα προεπισκόπησης (0.5–2.0· προεπιλογή 1.0).
-final databaseBrowserZoomByTableProvider = NotifierProvider.autoDispose<
-    DatabaseBrowserZoomByTableNotifier, Map<String, double>>(
-  DatabaseBrowserZoomByTableNotifier.new,
-);
+final databaseBrowserZoomByTableProvider =
+    NotifierProvider.autoDispose<
+      DatabaseBrowserZoomByTableNotifier,
+      Map<String, double>
+    >(DatabaseBrowserZoomByTableNotifier.new);
 
 class DatabaseBrowserZoomByTableNotifier extends Notifier<Map<String, double>> {
   @override
@@ -31,8 +32,9 @@ class DatabaseBrowserZoomByTableNotifier extends Notifier<Map<String, double>> {
   Future<void> load() async {
     try {
       final dbZoom = await DatabaseHelper.instance.database;
-      final raw = await SettingsRepository(dbZoom)
-          .getSetting(_kDatabaseBrowserZoomByTableSettingsKey);
+      final raw = await SettingsRepository(
+        dbZoom,
+      ).getSetting(_kDatabaseBrowserZoomByTableSettingsKey);
       if (raw == null || raw.trim().isEmpty) {
         state = {};
         return;
@@ -57,10 +59,9 @@ class DatabaseBrowserZoomByTableNotifier extends Notifier<Map<String, double>> {
 
   Future<void> _persist() async {
     final dbZoom = await DatabaseHelper.instance.database;
-    await SettingsRepository(dbZoom).saveSetting(
-      _kDatabaseBrowserZoomByTableSettingsKey,
-      jsonEncode(state),
-    );
+    await SettingsRepository(
+      dbZoom,
+    ).saveSetting(_kDatabaseBrowserZoomByTableSettingsKey, jsonEncode(state));
   }
 
   Future<void> setZoomForTable(String tableName, double zoom) async {
@@ -78,17 +79,11 @@ class DatabaseBrowserZoomByTableNotifier extends Notifier<Map<String, double>> {
   }
 
   Future<void> zoomOutFor(String tableName) {
-    return setZoomForTable(
-      tableName,
-      zoomFor(tableName) - 0.1,
-    );
+    return setZoomForTable(tableName, zoomFor(tableName) - 0.1);
   }
 
   Future<void> zoomInFor(String tableName) {
-    return setZoomForTable(
-      tableName,
-      zoomFor(tableName) + 0.1,
-    );
+    return setZoomForTable(tableName, zoomFor(tableName) + 0.1);
   }
 
   Future<void> resetFor(String tableName) {
@@ -148,8 +143,7 @@ const List<String> _kMenuTableOrder = [
 
 List<String> _orderedTableNames(List<String> raw) {
   final orderMap = {
-    for (var i = 0; i < _kMenuTableOrder.length; i++)
-      _kMenuTableOrder[i]: i,
+    for (var i = 0; i < _kMenuTableOrder.length; i++) _kMenuTableOrder[i]: i,
   };
   final copy = List<String>.from(raw);
   copy.sort((a, b) {
@@ -174,6 +168,7 @@ class DatabaseBrowserScreen extends ConsumerStatefulWidget {
 
   final DatabaseInitResult databaseResult;
   final VoidCallback onOpenDatabaseSettings;
+
   /// Μετά από νέα βάση / επανασύνδεση — ίδιο με `MainShell.onDatabaseReopened`.
   final Future<void> Function()? onDatabaseReopened;
 
@@ -190,6 +185,7 @@ class _DatabaseBrowserScreenState extends ConsumerState<DatabaseBrowserScreen> {
   TablePreviewResult? _preview;
   String _tableSchema = '';
   bool _previewLoading = false;
+
   /// Κάρτα στατιστικών: false = συμπτυγμένη (προεπιλογή μέχρι φόρτωση ρύθμισης).
   bool _statsCardExpanded = false;
 
@@ -299,10 +295,7 @@ class _DatabaseBrowserScreenState extends ConsumerState<DatabaseBrowserScreen> {
           tooltip: 'Ρυθμίσεις βάσης δεδομένων',
           icon: const Icon(Icons.dataset_linked),
           padding: const EdgeInsets.only(left: 4, top: 2),
-          constraints: const BoxConstraints(
-            minWidth: 40,
-            minHeight: 40,
-          ),
+          constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
           alignment: Alignment.topCenter,
           onPressed: widget.onOpenDatabaseSettings,
         ),
@@ -310,10 +303,7 @@ class _DatabaseBrowserScreenState extends ConsumerState<DatabaseBrowserScreen> {
           tooltip: 'Συντήρηση',
           icon: const Icon(Icons.cleaning_services_outlined),
           padding: const EdgeInsets.only(left: 4),
-          constraints: const BoxConstraints(
-            minWidth: 40,
-            minHeight: 40,
-          ),
+          constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
           alignment: Alignment.topCenter,
           onPressed: _openDatabaseMaintenance,
         ),
@@ -335,8 +325,9 @@ class _DatabaseBrowserScreenState extends ConsumerState<DatabaseBrowserScreen> {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Material(
-        color: theme.colorScheme.errorContainer
-            .withValues(alpha: theme.brightness == Brightness.dark ? 0.45 : 0.95),
+        color: theme.colorScheme.errorContainer.withValues(
+          alpha: theme.brightness == Brightness.dark ? 0.45 : 0.95,
+        ),
         borderRadius: BorderRadius.circular(8),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -378,10 +369,10 @@ class _DatabaseBrowserScreenState extends ConsumerState<DatabaseBrowserScreen> {
 
     final backupText = stats != null
         ? (stats.lastBackupTime != null
-            ? DateFormat.yMMMd('el').add_Hm().format(
-                  stats.lastBackupTime!.toLocal(),
-                )
-            : 'Δεν έχει γίνει ακόμα')
+              ? DateFormat.yMMMd(
+                  'el',
+                ).add_Hm().format(stats.lastBackupTime!.toLocal())
+              : 'Δεν έχει γίνει ακόμα')
         : (statsAsync.isLoading ? '…' : '—');
 
     final sizeLabel = stats != null
@@ -447,9 +438,7 @@ class _DatabaseBrowserScreenState extends ConsumerState<DatabaseBrowserScreen> {
                       ),
                     ),
                     Tooltip(
-                      message: _statsCardExpanded
-                          ? 'Σύμπτυξη'
-                          : 'Επέκταση',
+                      message: _statsCardExpanded ? 'Σύμπτυξη' : 'Επέκταση',
                       child: Icon(
                         _statsCardExpanded
                             ? Icons.expand_less
@@ -486,8 +475,9 @@ class _DatabaseBrowserScreenState extends ConsumerState<DatabaseBrowserScreen> {
                           Text(
                             r.details!,
                             style: theme.textTheme.bodySmall?.copyWith(
-                              color: theme.colorScheme.error
-                                  .withValues(alpha: 0.85),
+                              color: theme.colorScheme.error.withValues(
+                                alpha: 0.85,
+                              ),
                             ),
                           ),
                         ],
@@ -514,10 +504,7 @@ class _DatabaseBrowserScreenState extends ConsumerState<DatabaseBrowserScreen> {
                           ),
                         ],
                         statRow('Μέγεθος αρχείου', sizeLabel),
-                        statRow(
-                          'Τελευταίο αντίγραφο ασφαλείας',
-                          backupText,
-                        ),
+                        statRow('Τελευταίο αντίγραφο ασφαλείας', backupText),
                         Padding(
                           padding: const EdgeInsets.only(top: 6),
                           child: Row(
@@ -716,39 +703,36 @@ class _DatabaseBrowserScreenState extends ConsumerState<DatabaseBrowserScreen> {
             child: _previewLoading
                 ? const Center(child: CircularProgressIndicator())
                 : _error != null && _preview == null
-                    ? Center(
-                        child: Padding(
-                          padding: const EdgeInsets.all(24),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                'Σφάλμα προεπισκόπησης',
-                                style: theme.textTheme.titleMedium?.copyWith(
-                                  color: theme.colorScheme.error,
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              Text(
-                                _error!,
-                                style: theme.textTheme.bodySmall,
-                                textAlign: TextAlign.center,
-                              ),
-                            ],
-                          ),
-                        ),
-                      )
-                    : _preview == null || _preview!.columns.isEmpty
-                        ? Center(
-                            child: Text(
-                              'Δεν υπάρχουν στήλες ή δεδομένα.',
-                              style: theme.textTheme.bodyLarge,
+                ? Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            'Σφάλμα προεπισκόπησης',
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              color: theme.colorScheme.error,
                             ),
-                          )
-                        : _TablePreviewGrid(
-                            preview: _preview!,
-                            zoom: tableZoom,
                           ),
+                          const SizedBox(height: 8),
+                          Text(
+                            _error!,
+                            style: theme.textTheme.bodySmall,
+                            textAlign: TextAlign.center,
+                          ),
+                        ],
+                      ),
+                    ),
+                  )
+                : _preview == null || _preview!.columns.isEmpty
+                ? Center(
+                    child: Text(
+                      'Δεν υπάρχουν στήλες ή δεδομένα.',
+                      style: theme.textTheme.bodyLarge,
+                    ),
+                  )
+                : _TablePreviewGrid(preview: _preview!, zoom: tableZoom),
           ),
         ],
       );
@@ -836,9 +820,7 @@ class _DatabaseBrowserScreenState extends ConsumerState<DatabaseBrowserScreen> {
           ],
         ),
       ),
-      subtitle: Text(
-        display != name ? name : 'Πάτα για προεπισκόπηση',
-      ),
+      subtitle: Text(display != name ? name : 'Πάτα για προεπισκόπηση'),
       onTap: () => _selectTable(name),
       dense: true,
       visualDensity: VisualDensity.compact,
@@ -848,10 +830,7 @@ class _DatabaseBrowserScreenState extends ConsumerState<DatabaseBrowserScreen> {
 
 /// Πλέγμα προεπισκόπησης πίνακα (Excel-like): πλάτη από περιεχόμενο, ονόματα στηλών ολόκληρα, ευμετάβλητα πλάτη (resize).
 class _TablePreviewGrid extends StatefulWidget {
-  const _TablePreviewGrid({
-    required this.preview,
-    required this.zoom,
-  });
+  const _TablePreviewGrid({required this.preview, required this.zoom});
 
   final TablePreviewResult preview;
   final double zoom;
@@ -865,14 +844,17 @@ class _TablePreviewGridState extends State<_TablePreviewGrid> {
   static const double _maxColWidth = 500.0;
   static const double _cellPadding = 12.0;
   static const double _resizeHandleWidth = 8.0;
+
   /// Επιπλέον πλάτος ώστε το όνομα της στήλης να μην κόβεται (SelectableText + font metrics).
   static const double _headerWidthBuffer = 20.0;
   static const double _rowHeight = 40.0;
   static const double _headerHeight = 44.0;
 
   final ScrollController _verticalScrollController = ScrollController();
+
   /// Οδηγεί το οριζόντιο scroll του **πραγματικού** πίνακα.
   final ScrollController _horizontalScrollController = ScrollController();
+
   /// «Φάντασμα» controller για την ορατή οριζόντια μπάρα (κάτω του viewport).
   final ScrollController _ghostHScrollController = ScrollController();
   bool _hSyncing = false;
@@ -897,15 +879,18 @@ class _TablePreviewGridState extends State<_TablePreviewGrid> {
       return;
     }
     final theme = Theme.of(context);
-    final headerStyle = theme.textTheme.titleSmall?.copyWith(
-      fontWeight: FontWeight.w600,
-    ) ?? const TextStyle(fontWeight: FontWeight.w600);
+    final headerStyle =
+        theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600) ??
+        const TextStyle(fontWeight: FontWeight.w600);
     final cellStyle = theme.textTheme.bodySmall ?? const TextStyle();
 
     final widths = <double>[];
     for (var c = 0; c < preview.columns.length; c++) {
       final colName = preview.columns[c];
-      double w = _textWidth(colName, headerStyle) + _cellPadding * 2 + _headerWidthBuffer;
+      double w =
+          _textWidth(colName, headerStyle) +
+          _cellPadding * 2 +
+          _headerWidthBuffer;
       for (final row in preview.rows) {
         final cellStr = _cellText(row[colName]);
         final cellW = _textWidth(cellStr, cellStyle) + _cellPadding * 2;
@@ -1007,7 +992,9 @@ class _TablePreviewGridState extends State<_TablePreviewGrid> {
       children: [
         TableRow(
           decoration: BoxDecoration(
-            color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+            color: theme.colorScheme.surfaceContainerHighest.withValues(
+              alpha: 0.5,
+            ),
           ),
           children: List.generate(preview.columns.length, (c) {
             return SizedBox(
@@ -1032,9 +1019,8 @@ class _TablePreviewGridState extends State<_TablePreviewGrid> {
                   GestureDetector(
                     onHorizontalDragUpdate: (details) {
                       setState(() {
-                        final newW =
-                            (_columnWidths[c] + details.delta.dx)
-                                .clamp(_minColWidth, _maxColWidth);
+                        final newW = (_columnWidths[c] + details.delta.dx)
+                            .clamp(_minColWidth, _maxColWidth);
                         _columnWidths[c] = newW;
                       });
                     },
@@ -1044,8 +1030,9 @@ class _TablePreviewGridState extends State<_TablePreviewGrid> {
                       child: SizedBox(
                         width: _resizeHandleWidth,
                         child: Container(
-                          color: theme.colorScheme.outline
-                              .withValues(alpha: 0.2),
+                          color: theme.colorScheme.outline.withValues(
+                            alpha: 0.2,
+                          ),
                         ),
                       ),
                     ),
@@ -1068,11 +1055,7 @@ class _TablePreviewGridState extends State<_TablePreviewGrid> {
                   ),
                   child: Align(
                     alignment: Alignment.centerLeft,
-                    child: SelectableText(
-                      text,
-                      style: cellStyle,
-                      maxLines: 1,
-                    ),
+                    child: SelectableText(text, style: cellStyle, maxLines: 1),
                   ),
                 ),
               );
@@ -1108,10 +1091,7 @@ class _TablePreviewGridState extends State<_TablePreviewGrid> {
                       scale: widget.zoom,
                       alignment: Alignment.topLeft,
                       filterQuality: FilterQuality.medium,
-                      child: SizedBox(
-                        width: layoutWidth,
-                        child: table,
-                      ),
+                      child: SizedBox(width: layoutWidth, child: table),
                     ),
                   ),
                 ),

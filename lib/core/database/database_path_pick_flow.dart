@@ -1,4 +1,4 @@
-﻿import 'package:file_picker/file_picker.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:path/path.dart' as p;
 
 import '../utils/file_picker_session.dart';
@@ -12,7 +12,9 @@ import 'database_init_runner.dart';
 /// Επιλογή αρχείου `.db` (προτίμηση) ή φακέλου → `call_logger.db` μέσα.
 /// Επιστρέφει `null` αν ακυρώθηκε η επιλογή ή έγινε refocus σε ανοιχτό picker.
 Future<String?> pickDatabasePathWithSystemPicker() async {
-  final session = await FilePickerSession.run(_pickDatabasePathWithSystemPickerImpl);
+  final session = await FilePickerSession.run(
+    _pickDatabasePathWithSystemPickerImpl,
+  );
   if (session.refocusedExisting) return null;
   return session.value;
 }
@@ -28,8 +30,7 @@ Future<String?> _pickDatabasePathWithSystemPickerImpl() async {
     return null;
   }
 
-  if (fileResult.files.isNotEmpty &&
-      fileResult.files.single.path != null) {
+  if (fileResult.files.isNotEmpty && fileResult.files.single.path != null) {
     return fileResult.files.single.path!.trim();
   }
 
@@ -45,10 +46,11 @@ Future<String?> _pickDatabasePathWithSystemPickerImpl() async {
 }
 
 /// Εκτελεστής ελέγχων αρχικοποίησης (προεπιλογή: [runDatabaseInitChecks]).
-typedef DatabaseInitChecksRunner = Future<DatabaseInitRunnerResult> Function({
-  bool closeConnectionFirst,
-  DatabaseInitProgressNotifier? progressNotifier,
-});
+typedef DatabaseInitChecksRunner =
+    Future<DatabaseInitRunnerResult> Function({
+      bool closeConnectionFirst,
+      DatabaseInitProgressNotifier? progressNotifier,
+    });
 
 /// Ορίζει διαδρομή, τρέχει ελέγχους αρχικοποίησης· σε αποτυχία επαναφέρει την προηγούμενη.
 Future<({bool ok, DatabaseInitRunnerResult runner})> setAndVerifyDatabasePath(

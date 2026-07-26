@@ -38,8 +38,10 @@ void main() {
         await _preloadSiblingCatalogs(container);
 
         final usersBefore = container.read(directoryProvider).allUsers.length;
-        final equipmentBefore =
-            container.read(equipmentDirectoryProvider).allItems.length;
+        final equipmentBefore = container
+            .read(equipmentDirectoryProvider)
+            .allItems
+            .length;
 
         const callerName = 'Νέος Κατάλογος';
         const phone = '208881';
@@ -74,11 +76,14 @@ void main() {
               'directoryProvider πρέπει να περιέχει τον νέο χρήστη χωρίς loadUsers()',
         );
 
-        final equipmentAfter =
-            container.read(equipmentDirectoryProvider).allItems;
+        final equipmentAfter = container
+            .read(equipmentDirectoryProvider)
+            .allItems;
         expect(equipmentAfter.length, greaterThan(equipmentBefore));
         expect(
-          equipmentAfter.any((row) => (row.$1.code ?? '').trim() == equipmentCode),
+          equipmentAfter.any(
+            (row) => (row.$1.code ?? '').trim() == equipmentCode,
+          ),
           isTrue,
           reason:
               'equipmentDirectoryProvider πρέπει να περιέχει τον νέο εξοπλισμό χωρίς load()',
@@ -97,8 +102,10 @@ void main() {
         const orphanPhone = '7771';
         const deptName = 'Τμήμα Κοινόχρηστου Τηλεφώνου';
 
-        final phonesBefore =
-            container.read(directoryProvider).allNonUserPhones.length;
+        final phonesBefore = container
+            .read(directoryProvider)
+            .allNonUserPhones
+            .length;
 
         final notifier = container.read(callSmartEntityProvider.notifier);
         notifier.updatePhone(orphanPhone);

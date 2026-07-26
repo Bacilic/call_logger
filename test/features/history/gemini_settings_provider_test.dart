@@ -16,20 +16,15 @@ const _kCustomPromptTemplate = 'Προσαρμοσμένο πρότυπο {Τί�
 const _kLegacyEndpointRaw =
     'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key={apiKey}';
 
-final _kLegacyEndpointNormalized = GeminiTicketService.normalizeEndpointTemplate(
-  _kLegacyEndpointRaw,
-);
+final _kLegacyEndpointNormalized =
+    GeminiTicketService.normalizeEndpointTemplate(_kLegacyEndpointRaw);
 
 const _kLegacyFixedModelEndpoint =
     'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={κλειδί API}';
 
 Future<void> _clearGeminiSettings() async {
   final db = await DatabaseHelper.instance.database;
-  await db.delete(
-    'app_settings',
-    where: 'key LIKE ?',
-    whereArgs: ['gemini_%'],
-  );
+  await db.delete('app_settings', where: 'key LIKE ?', whereArgs: ['gemini_%']);
 }
 
 Future<SettingsRepository> _settingsRepo() async {
@@ -38,9 +33,7 @@ Future<SettingsRepository> _settingsRepo() async {
 }
 
 ProviderContainer _testContainer() {
-  return ProviderContainer(
-    overrides: callLoggerTestProviderOverrides(),
-  );
+  return ProviderContainer(overrides: callLoggerTestProviderOverrides());
 }
 
 Future<void> _pumpUntil(
@@ -73,20 +66,28 @@ void main() {
     });
 
     group('geminiPromptTemplateProvider', () {
-      test('επιστρέφει kDefaultAiPromptTemplate όταν η βάση είναι κενή', () async {
-        final container = _testContainer();
-        addTearDown(container.dispose);
+      test(
+        'επιστρέφει kDefaultAiPromptTemplate όταν η βάση είναι κενή',
+        () async {
+          final container = _testContainer();
+          addTearDown(container.dispose);
 
-        container.listen(geminiPromptTemplateProvider, (_, _) {});
-        container.read(geminiPromptTemplateProvider);
-        await _pumpHydration();
+          container.listen(geminiPromptTemplateProvider, (_, _) {});
+          container.read(geminiPromptTemplateProvider);
+          await _pumpHydration();
 
-        expect(container.read(geminiPromptTemplateProvider), kDefaultAiPromptTemplate);
-        expect(
-          await (await _settingsRepo()).getSetting(kGeminiPromptTemplateSettingKey),
-          isNull,
-        );
-      });
+          expect(
+            container.read(geminiPromptTemplateProvider),
+            kDefaultAiPromptTemplate,
+          );
+          expect(
+            await (await _settingsRepo()).getSetting(
+              kGeminiPromptTemplateSettingKey,
+            ),
+            isNull,
+          );
+        },
+      );
 
       test('διατηρεί αποθηκευμένη τιμή μετά hydrate', () async {
         await (await _settingsRepo()).saveSetting(
@@ -98,13 +99,21 @@ void main() {
         addTearDown(container.dispose);
 
         container.listen(geminiPromptTemplateProvider, (_, _) {});
-        expect(container.read(geminiPromptTemplateProvider), kDefaultAiPromptTemplate);
-
-        await _pumpUntil(
-          () => container.read(geminiPromptTemplateProvider) == _kCustomPromptTemplate,
+        expect(
+          container.read(geminiPromptTemplateProvider),
+          kDefaultAiPromptTemplate,
         );
 
-        expect(container.read(geminiPromptTemplateProvider), _kCustomPromptTemplate);
+        await _pumpUntil(
+          () =>
+              container.read(geminiPromptTemplateProvider) ==
+              _kCustomPromptTemplate,
+        );
+
+        expect(
+          container.read(geminiPromptTemplateProvider),
+          _kCustomPromptTemplate,
+        );
       });
 
       test('setPromptTemplate με κενό αποθηκεύει default', () async {
@@ -114,11 +123,18 @@ void main() {
         container.listen(geminiPromptTemplateProvider, (_, _) {});
         container.read(geminiPromptTemplateProvider);
         await _pumpHydration();
-        await container.read(geminiPromptTemplateProvider.notifier).setPromptTemplate('');
+        await container
+            .read(geminiPromptTemplateProvider.notifier)
+            .setPromptTemplate('');
 
-        expect(container.read(geminiPromptTemplateProvider), kDefaultAiPromptTemplate);
         expect(
-          await (await _settingsRepo()).getSetting(kGeminiPromptTemplateSettingKey),
+          container.read(geminiPromptTemplateProvider),
+          kDefaultAiPromptTemplate,
+        );
+        expect(
+          await (await _settingsRepo()).getSetting(
+            kGeminiPromptTemplateSettingKey,
+          ),
           kDefaultAiPromptTemplate,
         );
       });
@@ -137,10 +153,14 @@ void main() {
         container.listen(geminiEndpointProvider, (_, _) {});
         await _pumpUntil(
           () =>
-              container.read(geminiEndpointProvider) == _kLegacyEndpointNormalized,
+              container.read(geminiEndpointProvider) ==
+              _kLegacyEndpointNormalized,
         );
 
-        expect(container.read(geminiEndpointProvider), _kLegacyEndpointNormalized);
+        expect(
+          container.read(geminiEndpointProvider),
+          _kLegacyEndpointNormalized,
+        );
       });
 
       test('setEndpoint κανονικοποιεί legacy input', () async {
@@ -154,7 +174,10 @@ void main() {
             .read(geminiEndpointProvider.notifier)
             .setEndpoint(_kLegacyEndpointRaw);
 
-        expect(container.read(geminiEndpointProvider), _kLegacyEndpointNormalized);
+        expect(
+          container.read(geminiEndpointProvider),
+          _kLegacyEndpointNormalized,
+        );
         expect(
           await (await _settingsRepo()).getSetting(kGeminiEndpointSettingKey),
           _kLegacyEndpointNormalized,
@@ -163,26 +186,36 @@ void main() {
     });
 
     group('geminiPrimaryModelProvider', () {
-      test('legacy fallback μέσω modelFromEndpoint όταν λείπει ρητή τιμή', () async {
-        await (await _settingsRepo()).saveSetting(
-          kGeminiEndpointSettingKey,
-          _kLegacyFixedModelEndpoint,
-        );
+      test(
+        'legacy fallback μέσω modelFromEndpoint όταν λείπει ρητή τιμή',
+        () async {
+          await (await _settingsRepo()).saveSetting(
+            kGeminiEndpointSettingKey,
+            _kLegacyFixedModelEndpoint,
+          );
 
-        final container = _testContainer();
-        addTearDown(container.dispose);
+          final container = _testContainer();
+          addTearDown(container.dispose);
 
-        container.listen(geminiPrimaryModelProvider, (_, _) {});
-        await _pumpUntil(
-          () => container.read(geminiPrimaryModelProvider) == 'gemini-2.0-flash',
-        );
+          container.listen(geminiPrimaryModelProvider, (_, _) {});
+          await _pumpUntil(
+            () =>
+                container.read(geminiPrimaryModelProvider) ==
+                'gemini-2.0-flash',
+          );
 
-        expect(container.read(geminiPrimaryModelProvider), 'gemini-2.0-flash');
-        expect(
-          await (await _settingsRepo()).getSetting(kGeminiPrimaryModelSettingKey),
-          isNull,
-        );
-      });
+          expect(
+            container.read(geminiPrimaryModelProvider),
+            'gemini-2.0-flash',
+          );
+          expect(
+            await (await _settingsRepo()).getSetting(
+              kGeminiPrimaryModelSettingKey,
+            ),
+            isNull,
+          );
+        },
+      );
 
       test('χρησιμοποιεί ρητή τιμή primary model όταν υπάρχει', () async {
         const explicitModel = 'gemini-2.5-pro';
@@ -299,7 +332,9 @@ void main() {
 
         expect(container.read(geminiAutoResubmitEnabledProvider), isFalse);
         expect(
-          await (await _settingsRepo()).getSetting(kGeminiAutoResubmitSettingKey),
+          await (await _settingsRepo()).getSetting(
+            kGeminiAutoResubmitSettingKey,
+          ),
           '0',
         );
       });
@@ -328,7 +363,10 @@ void main() {
         final savedState = container.read(geminiModelsProbeCacheProvider);
         expect(savedState, isNotNull);
         expect(savedState!.result.availableModels.length, 1);
-        expect(savedState.result.availableModels.first.id, 'gemini-flash-latest');
+        expect(
+          savedState.result.availableModels.first.id,
+          'gemini-flash-latest',
+        );
         expect(savedState.result.totalChecked, 3);
         expect(savedState.result.message, '1 διαθέσιμο μοντέλο.');
 
@@ -352,7 +390,10 @@ void main() {
         );
 
         final hydrated = container2.read(geminiModelsProbeCacheProvider);
-        expect(hydrated!.result.availableModels.first.id, 'gemini-flash-latest');
+        expect(
+          hydrated!.result.availableModels.first.id,
+          'gemini-flash-latest',
+        );
         expect(hydrated.result.totalChecked, 3);
       });
     });

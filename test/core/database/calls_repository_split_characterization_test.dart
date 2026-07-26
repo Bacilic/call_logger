@@ -70,10 +70,7 @@ void main() {
       final index = rows.single['search_index'] as String?;
       expect(index, isNotNull);
       expect(index!.trim(), isNotEmpty);
-      expect(
-        index,
-        contains(SearchTextNormalizer.normalizeForSearch(marker)),
-      );
+      expect(index, contains(SearchTextNormalizer.normalizeForSearch(marker)));
     });
 
     test(
@@ -105,43 +102,46 @@ void main() {
       },
     );
 
-    test('getDashboardStatistics αθροίζει κλήσεις στο εύρος ημερομηνιών', () async {
-      await repo.insertCall(
-        CallModel(
-          date: '2025-06-01',
-          time: '09:00',
-          issue: 'dash-a',
-          duration: 60,
-        ),
-      );
-      await repo.insertCall(
-        CallModel(
-          date: '2025-06-01',
-          time: '10:00',
-          issue: 'dash-b',
-          duration: 120,
-        ),
-      );
-      await repo.insertCall(
-        CallModel(
-          date: '2025-06-02',
-          time: '11:00',
-          issue: 'dash-c',
-          duration: 30,
-        ),
-      );
+    test(
+      'getDashboardStatistics αθροίζει κλήσεις στο εύρος ημερομηνιών',
+      () async {
+        await repo.insertCall(
+          CallModel(
+            date: '2025-06-01',
+            time: '09:00',
+            issue: 'dash-a',
+            duration: 60,
+          ),
+        );
+        await repo.insertCall(
+          CallModel(
+            date: '2025-06-01',
+            time: '10:00',
+            issue: 'dash-b',
+            duration: 120,
+          ),
+        );
+        await repo.insertCall(
+          CallModel(
+            date: '2025-06-02',
+            time: '11:00',
+            issue: 'dash-c',
+            duration: 30,
+          ),
+        );
 
-      final stats = await repo.getDashboardStatistics(
-        DashboardFilterModel(
-          dateFrom: DateTime(2025, 6, 1),
-          dateTo: DateTime(2025, 6, 1),
-        ),
-      );
+        final stats = await repo.getDashboardStatistics(
+          DashboardFilterModel(
+            dateFrom: DateTime(2025, 6, 1),
+            dateTo: DateTime(2025, 6, 1),
+          ),
+        );
 
-      expect(stats.totalCalls, 2);
-      expect(stats.totalDurationSeconds, 180);
-      expect(stats.avgDurationSeconds, 90);
-    });
+        expect(stats.totalCalls, 2);
+        expect(stats.totalDurationSeconds, 180);
+        expect(stats.avgDurationSeconds, 90);
+      },
+    );
 
     test(
       'getDashboardStatistics — κλήση χωρίς τμήμα/καλούντα → Άγνωστο/Άγνωστος',

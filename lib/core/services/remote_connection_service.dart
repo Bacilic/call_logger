@@ -1,4 +1,4 @@
-﻿import 'dart:io';
+import 'dart:io';
 
 import '../database/remote_tools_repository.dart';
 import '../models/remote_tool.dart';
@@ -63,11 +63,7 @@ class RemoteConnectionService {
   }
 
   Future<String?> getValidPathForTool(RemoteTool tool) =>
-      validExecutablePathForTool(
-        repo: _toolsRepo,
-        tool: tool,
-        role: tool.role,
-      );
+      validExecutablePathForTool(repo: _toolsRepo, tool: tool, role: tool.role);
 
   Future<bool> _isVncPortOpen(String host) async {
     try {

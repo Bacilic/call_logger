@@ -148,8 +148,7 @@ abstract final class BackupScheduleStatusFormatter {
   static bool shouldShowBackupMissedAlert(
     DatabaseBackupSettings settings,
     DateTime now,
-  ) =>
-      shouldMarkScheduleMissed(settings, now);
+  ) => shouldMarkScheduleMissed(settings, now);
 
   static String formatLocalDateTime(DateTime local) {
     final w = _weekdayShort[local.weekday - 1];
@@ -207,9 +206,7 @@ abstract final class BackupScheduleStatusFormatter {
         final latest = content.latestBackupModified;
         final countPart = n == 1 ? '1 αρχείο' : '$n αρχεία';
         if (latest == null) {
-          return n == 1
-              ? 'Βρέθηκε $countPart'
-              : 'Βρέθηκαν $countPart';
+          return n == 1 ? 'Βρέθηκε $countPart' : 'Βρέθηκαν $countPart';
         }
         final stamp = DateFormat('dd/MM/yyyy HH:mm').format(latest.toLocal());
         return n == 1
@@ -229,7 +226,8 @@ abstract final class BackupScheduleStatusFormatter {
     if (p == null || weekdays.isEmpty) return null;
 
     final todayStart = DateTime(now.year, now.month, now.day);
-    final attemptedToday = lastBackupAttempt != null &&
+    final attemptedToday =
+        lastBackupAttempt != null &&
         BackupScheduleUtils.isSameLocalDate(lastBackupAttempt, now);
 
     for (var dayOffset = 0; dayOffset <= 14; dayOffset++) {
@@ -274,8 +272,7 @@ abstract final class BackupScheduleStatusFormatter {
 
     if (!settings.backupOnExit) {
       return const BackupScheduleStatusInfo(
-        hintText:
-            'Τα αυτόματα αντίγραφα είναι απενεργοποιημένα.',
+        hintText: 'Τα αυτόματα αντίγραφα είναι απενεργοποιημένα.',
       );
     }
 
@@ -322,14 +319,18 @@ abstract final class BackupScheduleStatusFormatter {
               'Επόμενο αυτόματο αντίγραφο: εντός του επόμενου λεπτού '
               '(έλεγχος κάθε λεπτό, όσο η εφαρμογή είναι ανοιχτή).';
         } else {
-          nextText =
-              'Επόμενο αυτόματο αντίγραφο: ${formatLocalDateTime(next)}';
+          nextText = 'Επόμενο αυτόματο αντίγραφο: ${formatLocalDateTime(next)}';
         }
       }
 
-      final attemptedToday = settings.lastBackupAttempt != null &&
-          BackupScheduleUtils.isSameLocalDate(settings.lastBackupAttempt!, current);
-      final atWindow = BackupScheduleUtils.isScheduledWeekday(
+      final attemptedToday =
+          settings.lastBackupAttempt != null &&
+          BackupScheduleUtils.isSameLocalDate(
+            settings.lastBackupAttempt!,
+            current,
+          );
+      final atWindow =
+          BackupScheduleUtils.isScheduledWeekday(
             current,
             settings.backupDays,
           ) &&

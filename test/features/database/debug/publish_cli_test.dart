@@ -1,4 +1,4 @@
-﻿import 'dart:io';
+import 'dart:io';
 
 import 'package:call_logger/features/database/debug/publish_cli.dart';
 import 'package:call_logger/features/database/debug/release_publisher_service.dart';
@@ -44,10 +44,7 @@ void main() {
     });
 
     test('rejects invalid bump', () {
-      final result = parsePublishCliArgs([
-        '--bump=major',
-        '--folder=/x',
-      ]);
+      final result = parsePublishCliArgs(['--bump=major', '--folder=/x']);
       expect(result.args, isNull);
       expect(result.error, isNotNull);
     });
@@ -125,10 +122,7 @@ void main() {
       final lines = <String>[];
       final tracker = _CallTracker();
       final code = await runPublishCli(
-        PublishCliArgs(
-          bumpKind: VersionBumpKind.patch,
-          folder: tempDir.path,
-        ),
+        PublishCliArgs(bumpKind: VersionBumpKind.patch, folder: tempDir.path),
         writeLine: lines.add,
         isInteractive: false,
         serviceFactory: ({required updateFolderPath, onProgress}) {
@@ -154,10 +148,7 @@ void main() {
     test('returns 1 on failure', () async {
       final tracker = _CallTracker();
       final code = await runPublishCli(
-        PublishCliArgs(
-          bumpKind: VersionBumpKind.patch,
-          folder: tempDir.path,
-        ),
+        PublishCliArgs(bumpKind: VersionBumpKind.patch, folder: tempDir.path),
         writeLine: (_) {},
         isInteractive: false,
         serviceFactory: ({required updateFolderPath, onProgress}) {
@@ -183,10 +174,7 @@ void main() {
       final tracker = _CallTracker();
       var promptCalls = 0;
       final code = await runPublishCli(
-        PublishCliArgs(
-          bumpKind: VersionBumpKind.patch,
-          folder: tempDir.path,
-        ),
+        PublishCliArgs(bumpKind: VersionBumpKind.patch, folder: tempDir.path),
         writeLine: (_) {},
         isInteractive: true,
         promptEmptyUnreleased: () {
@@ -212,10 +200,7 @@ void main() {
     test('empty Unreleased + installerOnly calls writeInstallerOnly', () async {
       final tracker = _CallTracker();
       final code = await runPublishCli(
-        PublishCliArgs(
-          bumpKind: VersionBumpKind.patch,
-          folder: tempDir.path,
-        ),
+        PublishCliArgs(bumpKind: VersionBumpKind.patch, folder: tempDir.path),
         writeLine: (_) {},
         isInteractive: true,
         promptEmptyUnreleased: () => EmptyUnreleasedChoice.installerOnly,
@@ -243,10 +228,7 @@ void main() {
       () async {
         final tracker = _CallTracker();
         final code = await runPublishCli(
-          PublishCliArgs(
-            bumpKind: VersionBumpKind.patch,
-            folder: tempDir.path,
-          ),
+          PublishCliArgs(bumpKind: VersionBumpKind.patch, folder: tempDir.path),
           writeLine: (_) {},
           isInteractive: true,
           promptEmptyUnreleased: () => EmptyUnreleasedChoice.publishAnyway,
@@ -274,10 +256,7 @@ void main() {
       var promptCalls = 0;
       final lines = <String>[];
       final code = await runPublishCli(
-        PublishCliArgs(
-          bumpKind: VersionBumpKind.patch,
-          folder: tempDir.path,
-        ),
+        PublishCliArgs(bumpKind: VersionBumpKind.patch, folder: tempDir.path),
         writeLine: lines.add,
         isInteractive: false,
         promptEmptyUnreleased: () {
@@ -339,10 +318,7 @@ void main() {
       final tracker = _CallTracker();
       var promptCalls = 0;
       final code = await runPublishCli(
-        PublishCliArgs(
-          bumpKind: VersionBumpKind.patch,
-          folder: tempDir.path,
-        ),
+        PublishCliArgs(bumpKind: VersionBumpKind.patch, folder: tempDir.path),
         writeLine: (_) {},
         isInteractive: true,
         promptEmptyUnreleased: () {
@@ -388,10 +364,10 @@ class _FakePublisherService extends ReleasePublisherService {
       status: ReleasePublishStatus.success,
     ),
   }) : super(
-          buildReleaseDirectory: p.join(projectRoot, 'build'),
-          processRunner: (_, _, {workingDirectory, onOutput}) async => 0,
-          clock: () => DateTime(2026, 7, 22),
-        );
+         buildReleaseDirectory: p.join(projectRoot, 'build'),
+         processRunner: (_, _, {workingDirectory, onOutput}) async => 0,
+         clock: () => DateTime(2026, 7, 22),
+       );
 
   final ReleasePublishPreview preview;
   final _CallTracker tracker;

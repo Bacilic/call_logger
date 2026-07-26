@@ -10,9 +10,7 @@ import '../../test_reporter.dart';
 
 Widget _host(Widget child) {
   return MaterialApp(
-    home: Scaffold(
-      body: Center(child: child),
-    ),
+    home: Scaffold(body: Center(child: child)),
   );
 }
 
@@ -56,11 +54,7 @@ void main() {
 
     testWidgets('χωρίς τίτλο: αποδίδει μόνο το περιεχόμενο', (tester) async {
       await tester.pumpWidget(
-        _host(
-          const SectionCard(
-            child: Text('σκέτο περιεχόμενο'),
-          ),
-        ),
+        _host(const SectionCard(child: Text('σκέτο περιεχόμενο'))),
       );
 
       expect(find.text('σκέτο περιεχόμενο'), findsOneWidget);

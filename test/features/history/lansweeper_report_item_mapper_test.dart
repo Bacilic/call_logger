@@ -154,10 +154,14 @@ void main() {
         ),
       ];
 
-      final combined =
-          LansweeperReportItemMapper.combinedSelectedNotes(selected);
+      final combined = LansweeperReportItemMapper.combinedSelectedNotes(
+        selected,
+      );
 
-      expect(combined, contains('[15/03/2026 10:30] Γιάννης: Πρώτο • Λεπτομέρεια Α'));
+      expect(
+        combined,
+        contains('[15/03/2026 10:30] Γιάννης: Πρώτο • Λεπτομέρεια Α'),
+      );
       expect(combined, contains('[16/03/2026 11:00] Μαρία: Δεύτερο'));
       expect(combined.split('\n'), hasLength(2));
     });
@@ -196,10 +200,7 @@ void main() {
 
   group('LansweeperReportItemMapper normalized state helpers', () {
     test('κενή κατάσταση -> unsent', () {
-      final item = _item(
-        key: 'a',
-        call: _call(lansweeperState: null),
-      );
+      final item = _item(key: 'a', call: _call(lansweeperState: null));
       expect(
         LansweeperReportItemMapper.normalizedLansweeperState(item),
         LansweeperSyncState.unsent,

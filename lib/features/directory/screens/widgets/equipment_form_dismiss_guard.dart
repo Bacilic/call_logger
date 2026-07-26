@@ -1,4 +1,4 @@
-﻿part of 'equipment_form_dialog.dart';
+part of 'equipment_form_dialog.dart';
 
 enum _EditDismissAction { save, discard, keepEditing }
 
@@ -9,6 +9,7 @@ mixin EquipmentFormDismissGuardMixin on EquipmentFormDialogStateHost {
     if (_isEdit) return _isDirty;
     return _createHasRequiredFields && _isDirty;
   }
+
   String _formStateSignature() {
     final sb = StringBuffer()
       ..write(_codeController.text)
@@ -29,8 +30,7 @@ mixin EquipmentFormDismissGuardMixin on EquipmentFormDialogStateHost {
     final remoteKeys = <String>{
       ..._expandedRemoteKeys,
       ..._remoteParamValues.keys,
-    }.toList()
-      ..sort();
+    }.toList()..sort();
     for (final k in remoteKeys) {
       if (EquipmentRemoteParamKey.isReservedKey(k)) continue;
       sb

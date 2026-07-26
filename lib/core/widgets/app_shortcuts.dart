@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 import 'dart:io' show Platform;
 import 'dart:ui' show AppExitResponse;
 
@@ -91,7 +91,9 @@ class _AppShortcutsState extends ConsumerState<AppShortcuts>
     );
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      unawaited(ref.read(coreLexiconProvider.notifier).bootstrapFromSavedPath());
+      unawaited(
+        ref.read(coreLexiconProvider.notifier).bootstrapFromSavedPath(),
+      );
     });
     HardwareKeyboard.instance.addHandler(_handleGlobalQuickCallKey);
   }
@@ -100,8 +102,7 @@ class _AppShortcutsState extends ConsumerState<AppShortcuts>
   /// Τρέχει το πολύ μία φορά ανά εκκίνηση (μόνο από το post-frame στο initState).
   void _warnIfMissingStartupAssets() {
     if (!mounted) return;
-    final missing =
-        StartupAssetIntegrityService().findMissingCriticalAssets();
+    final missing = StartupAssetIntegrityService().findMissingCriticalAssets();
     if (missing.isEmpty) return;
     if (!mounted) return;
 
@@ -208,7 +209,8 @@ class _AppShortcutsState extends ConsumerState<AppShortcuts>
     // μηχανής Flutter που κατέρρεε (0xc0000005). Το παράθυρο μένει σκόπιμα ορατό,
     // δείχνοντας την οθόνη προόδου — δεν το κρύβουμε, γιατί ο διάλογος προόδου ζει
     // μέσα σε αυτό. Δες lib/core/services/shutdown_coordinator.dart.
-    final coordinator = widget.shutdownCoordinatorFactory?.call() ??
+    final coordinator =
+        widget.shutdownCoordinatorFactory?.call() ??
         ShutdownCoordinator(
           persistWindowBounds: _persistWindowBoundsIfNeeded,
           walCheckpoint: () =>
@@ -265,8 +267,9 @@ class _AppShortcutsState extends ConsumerState<AppShortcuts>
       final dbPath = await settings.getDatabasePath();
       if (dbPath.trim().isEmpty) return null;
       return ShutdownTraceService(
-        logsDirectory:
-            ShutdownTraceService.logsDirectoryForDatabasePath(dbPath),
+        logsDirectory: ShutdownTraceService.logsDirectoryForDatabasePath(
+          dbPath,
+        ),
         enabled: true,
         retentionCount: await settings.getShutdownTraceRetentionCount(),
       );

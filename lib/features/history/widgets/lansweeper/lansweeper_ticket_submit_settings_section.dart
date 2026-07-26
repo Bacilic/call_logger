@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -30,9 +30,9 @@ class LansweeperTicketSubmitSettingsSection extends ConsumerWidget {
       children: [
         Text(
           'Παραμετροποίηση καταχώρησης εισιτηρίου',
-          style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                fontWeight: FontWeight.w600,
-              ),
+          style: Theme.of(
+            context,
+          ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
         ),
         const SizedBox(height: 8),
         _CustomFieldsEditor(config: config, notifier: notifier),
@@ -99,8 +99,7 @@ class LansweeperTicketSubmitSettingsSection extends ConsumerWidget {
           contentPadding: EdgeInsets.zero,
           title: const Text('Ενεργό βήμα σημείωσης (AddNote)'),
           value: config.enableAddNoteStep,
-          onChanged: (value) =>
-              unawaited(notifier.setEnableAddNoteStep(value)),
+          onChanged: (value) => unawaited(notifier.setEnableAddNoteStep(value)),
         ),
         SwitchListTile(
           contentPadding: EdgeInsets.zero,
@@ -123,8 +122,7 @@ class LansweeperTicketSubmitSettingsSection extends ConsumerWidget {
             'Όταν είναι ενεργό, προστίθεται γραμμή «Χρόνος: MM:SS» στη σημείωση λύσης.',
           ),
           value: config.includeNoteTime,
-          onChanged: (value) =>
-              unawaited(notifier.setIncludeNoteTime(value)),
+          onChanged: (value) => unawaited(notifier.setIncludeNoteTime(value)),
         ),
         const SizedBox(height: 8),
         Align(
@@ -202,8 +200,9 @@ class _ListWithDefaultSectionState extends State<_ListWithDefaultSection> {
   @override
   void didUpdateWidget(covariant _ListWithDefaultSection oldWidget) {
     super.didUpdateWidget(oldWidget);
-    final nextText =
-        LansweeperTicketSubmitSettingsSection.linesText(widget.values);
+    final nextText = LansweeperTicketSubmitSettingsSection.linesText(
+      widget.values,
+    );
     if (_controller.text != nextText) {
       _controller.text = nextText;
     }
@@ -229,9 +228,9 @@ class _ListWithDefaultSectionState extends State<_ListWithDefaultSection> {
       children: [
         Text(
           widget.title,
-          style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                fontWeight: FontWeight.w600,
-              ),
+          style: Theme.of(
+            context,
+          ).textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w600),
         ),
         const SizedBox(height: 6),
         TextFormField(
@@ -276,10 +275,7 @@ class _ListWithDefaultSectionState extends State<_ListWithDefaultSection> {
 }
 
 class _CustomFieldsEditor extends ConsumerWidget {
-  const _CustomFieldsEditor({
-    required this.config,
-    required this.notifier,
-  });
+  const _CustomFieldsEditor({required this.config, required this.notifier});
 
   final LansweeperTicketSubmitConfig config;
   final LansweeperTicketSubmitConfigNotifier notifier;
@@ -313,9 +309,9 @@ class _CustomFieldsEditor extends ConsumerWidget {
             Expanded(
               child: Text(
                 'Πεδία εισιτηρίου (custom fields)',
-                style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                      fontWeight: FontWeight.w600,
-                    ),
+                style: Theme.of(
+                  context,
+                ).textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w600),
               ),
             ),
             TextButton.icon(
@@ -461,9 +457,7 @@ class _CustomFieldEditDialogState extends State<_CustomFieldEditDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: Text(
-        widget.initial == null ? 'Νέο πεδίο' : 'Επεξεργασία πεδίου',
-      ),
+      title: Text(widget.initial == null ? 'Νέο πεδίο' : 'Επεξεργασία πεδίου'),
       content: SizedBox(
         width: 420,
         child: SingleChildScrollView(

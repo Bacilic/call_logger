@@ -1,4 +1,4 @@
-﻿// Οθόνη Λάμπας: συντονισμός καρτελών, controllers και dialogs.
+// Οθόνη Λάμπας: συντονισμός καρτελών, controllers και dialogs.
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -35,7 +35,8 @@ class LampScreen extends ConsumerStatefulWidget {
   ConsumerState<LampScreen> createState() => _LampScreenState();
 }
 
-class _LampScreenState extends ConsumerState<LampScreen> implements LampScreenHost {
+class _LampScreenState extends ConsumerState<LampScreen>
+    implements LampScreenHost {
   late final LampScreenShared _shared;
   late final LampPathController _path;
   late final LampSearchController _search;
@@ -239,8 +240,8 @@ class _LampScreenState extends ConsumerState<LampScreen> implements LampScreenHo
   Future<void> _loadSettings() async {
     await _path.loadPathsFromSettings();
     _search.maxSearchResults = await _shared.settings.getMaxSearchResults();
-    _search.maxSearchResultsController.text =
-        _search.maxSearchResults.toString();
+    _search.maxSearchResultsController.text = _search.maxSearchResults
+        .toString();
     await _path.applyPersistedReadAndValidate(
       announce: true,
       source: 'έναρξη',
@@ -294,11 +295,13 @@ class _LampScreenState extends ConsumerState<LampScreen> implements LampScreenHo
         onDbNotOk: _onReadPathNotOk,
       ),
       onImportFailureReload: () async {
-        await ref.read(lampReadPathHealthProvider.notifier).refresh(
-          pathOverride: _path.readDbController.text.trim(),
-          outputPathOverride: _path.outputDbController.text.trim(),
-          excelPathOverride: _path.excelController.text.trim(),
-        );
+        await ref
+            .read(lampReadPathHealthProvider.notifier)
+            .refresh(
+              pathOverride: _path.readDbController.text.trim(),
+              outputPathOverride: _path.outputDbController.text.trim(),
+              excelPathOverride: _path.excelController.text.trim(),
+            );
         await _issues.loadIssues();
       },
     );
@@ -432,9 +435,8 @@ class _LampScreenState extends ConsumerState<LampScreen> implements LampScreenHo
         onDbOk: _onReadPathOk,
         onDbNotOk: _onReadPathNotOk,
       ),
-      onRunIntegrityCheck: () => _integrity.runIntegrityCheck(
-        reloadIssues: _issues.loadIssues,
-      ),
+      onRunIntegrityCheck: () =>
+          _integrity.runIntegrityCheck(reloadIssues: _issues.loadIssues),
       onRunImport: _runImport,
       onClose: _closeLampSettingsDialog,
       isImporting: () => _import.importing,
@@ -500,7 +502,11 @@ class _LampScreenState extends ConsumerState<LampScreen> implements LampScreenHo
           TabBar(
             tabs: [
               const Tab(text: 'Αναζήτηση'),
-              if (showEtlTab) const Tab(text: 'Προβλήματα Εξαγωγής, Μετασχηματισμού και Φόρτωσης (ETL)'),
+              if (showEtlTab)
+                const Tab(
+                  text:
+                      'Προβλήματα Εξαγωγής, Μετασχηματισμού και Φόρτωσης (ETL)',
+                ),
               if (showTablesTab) const Tab(text: 'Πίνακες'),
             ],
           ),
@@ -565,10 +571,7 @@ class _LampScreenState extends ConsumerState<LampScreen> implements LampScreenHo
                     runSpacing: LampSearchController.searchFieldSpacing,
                     children: [
                       _smallField(_search.phoneController, 'Τηλέφωνο'),
-                      _smallField(
-                        _search.codeController,
-                        'Κωδικός Εξοπλισμού',
-                      ),
+                      _smallField(_search.codeController, 'Κωδικός Εξοπλισμού'),
                       _smallField(_search.ownerController, 'Υπάλληλος'),
                       _smallField(_search.officeController, 'Τμήμα'),
                       _smallField(

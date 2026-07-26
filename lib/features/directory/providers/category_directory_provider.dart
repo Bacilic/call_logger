@@ -1,4 +1,4 @@
-﻿import 'dart:convert';
+import 'dart:convert';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -38,18 +38,18 @@ class CategoryDirectoryState {
     this.focusedRowIndex,
     List<CategoryDirectoryColumn>? columnOrder,
     Set<String>? visibleColumnKeys,
-  })  : columnOrder = CategoryDirectoryColumn.pinSelectionFirst(
-          List<CategoryDirectoryColumn>.from(
-            columnOrder ?? CategoryDirectoryColumn.all,
-          ),
-        ),
-        visibleColumnKeys = visibleColumnKeys != null &&
-                visibleColumnKeys.isNotEmpty
-            ? Set<String>.from(visibleColumnKeys)
-            : {
-                CategoryDirectoryColumn.selection.key,
-                CategoryDirectoryColumn.name.key,
-              };
+  }) : columnOrder = CategoryDirectoryColumn.pinSelectionFirst(
+         List<CategoryDirectoryColumn>.from(
+           columnOrder ?? CategoryDirectoryColumn.all,
+         ),
+       ),
+       visibleColumnKeys =
+           visibleColumnKeys != null && visibleColumnKeys.isNotEmpty
+           ? Set<String>.from(visibleColumnKeys)
+           : {
+               CategoryDirectoryColumn.selection.key,
+               CategoryDirectoryColumn.name.key,
+             };
 
   final List<CategoryModel> allCategories;
   final List<CategoryModel> filteredCategories;
@@ -65,7 +65,7 @@ class CategoryDirectoryState {
   List<CategoryDirectoryColumn> get orderedVisibleColumns {
     return [
       for (final c in columnOrder)
-        if (visibleColumnKeys.contains(c.key)) c
+        if (visibleColumnKeys.contains(c.key)) c,
     ];
   }
 }
@@ -136,8 +136,9 @@ class CategoryDirectoryNotifier extends Notifier<CategoryDirectoryState> {
 
   Future<_CategoryColumnLayout?> _readColumnLayoutFromSettings() async {
     final db = await DatabaseHelper.instance.database;
-    final raw =
-        await SettingsRepository(db).getSetting(_catalogCategoriesVisibleColumnsKey);
+    final raw = await SettingsRepository(
+      db,
+    ).getSetting(_catalogCategoriesVisibleColumnsKey);
     if (raw == null || raw.trim().isEmpty) return null;
     return _parseColumnLayoutFromJson(raw);
   }
@@ -149,14 +150,13 @@ class CategoryDirectoryNotifier extends Notifier<CategoryDirectoryState> {
       'order': order.map((c) => c.key).toList(),
       'visible': [
         for (final c in order)
-          if (vis.contains(c.key)) c.key
+          if (vis.contains(c.key)) c.key,
       ],
     });
     final dbSet = await DatabaseHelper.instance.database;
-    await SettingsRepository(dbSet).saveSetting(
-      _catalogCategoriesVisibleColumnsKey,
-      payload,
-    );
+    await SettingsRepository(
+      dbSet,
+    ).saveSetting(_catalogCategoriesVisibleColumnsKey, payload);
   }
 
   Future<void> loadCategories() async {
@@ -188,13 +188,15 @@ class CategoryDirectoryNotifier extends Notifier<CategoryDirectoryState> {
   }
 
   void filterAndSort() {
-    final q =
-        SearchTextNormalizer.normalizeForSearch(state.searchQuery);
+    final q = SearchTextNormalizer.normalizeForSearch(state.searchQuery);
     var list = state.allCategories;
     if (q.isNotEmpty) {
       list = list
           .where(
-            (c) => SearchTextNormalizer.containsAllTokens(c.name, state.searchQuery),
+            (c) => SearchTextNormalizer.containsAllTokens(
+              c.name,
+              state.searchQuery,
+            ),
           )
           .toList();
     }
@@ -219,7 +221,9 @@ class CategoryDirectoryNotifier extends Notifier<CategoryDirectoryState> {
     }
     final len = list.length;
     final idx = state.focusedRowIndex;
-    final clamped = idx != null && idx >= len ? (len > 0 ? len - 1 : null) : idx;
+    final clamped = idx != null && idx >= len
+        ? (len > 0 ? len - 1 : null)
+        : idx;
     state = CategoryDirectoryState(
       allCategories: state.allCategories,
       filteredCategories: list,
@@ -257,8 +261,7 @@ class CategoryDirectoryNotifier extends Notifier<CategoryDirectoryState> {
       lastDeleted: identical(lastDeleted, _kPatchKeep)
           ? state.lastDeleted
           : lastDeleted as List<CategoryModel>?,
-      focusedRowIndex:
-          keepFocusedRow ? state.focusedRowIndex : focusedRow,
+      focusedRowIndex: keepFocusedRow ? state.focusedRowIndex : focusedRow,
       columnOrder: columnOrder ?? state.columnOrder,
       visibleColumnKeys: visibleColumnKeys ?? state.visibleColumnKeys,
     );
@@ -266,9 +269,7 @@ class CategoryDirectoryNotifier extends Notifier<CategoryDirectoryState> {
 
   void setFocusedRowIndex(int? index) {
     final len = state.filteredCategories.length;
-    final clamped = index == null || len == 0
-        ? null
-        : index.clamp(0, len - 1);
+    final clamped = index == null || len == 0 ? null : index.clamp(0, len - 1);
     _patch(focusedRow: clamped, keepFocusedRow: false);
   }
 
@@ -283,8 +284,9 @@ class CategoryDirectoryNotifier extends Notifier<CategoryDirectoryState> {
   }
 
   void toggleSelection(int id) {
-    if (!state.visibleColumnKeys
-        .contains(CategoryDirectoryColumn.selection.key)) {
+    if (!state.visibleColumnKeys.contains(
+      CategoryDirectoryColumn.selection.key,
+    )) {
       return;
     }
     final next = Set<int>.from(state.selectedIds);
@@ -414,7 +416,7 @@ class CategoryDirectoryNotifier extends Notifier<CategoryDirectoryState> {
   }
 }
 
-final categoryDirectoryProvider = NotifierProvider<
-    CategoryDirectoryNotifier, CategoryDirectoryState>(
-  CategoryDirectoryNotifier.new,
-);
+final categoryDirectoryProvider =
+    NotifierProvider<CategoryDirectoryNotifier, CategoryDirectoryState>(
+      CategoryDirectoryNotifier.new,
+    );

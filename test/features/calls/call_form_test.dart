@@ -1,4 +1,4 @@
-﻿// Widget tests: πλήρης / αρνητική ροή φόρμας κλήσης με απομονωμένη βάση.
+// Widget tests: πλήρης / αρνητική ροή φόρμας κλήσης με απομονωμένη βάση.
 //
 // Ολόκληρο αρχείο:
 //   flutter test test/features/calls/call_form_test.dart
@@ -53,7 +53,9 @@ void main() {
         final reporter = GreekTestReportCollector();
         final sw = Stopwatch()..start();
 
-        reporter.logStep('Ξεκινά φόρτωση εφαρμογής με απομονωμένη βάση δοκιμών');
+        reporter.logStep(
+          'Ξεκινά φόρτωση εφαρμογής με απομονωμένη βάση δοκιμών',
+        );
         await tester.runAsync(() async {
           await tester.pumpWidget(
             ProviderScope(
@@ -77,21 +79,27 @@ void main() {
         expect(
           find.byType(NavigationRail),
           findsOneWidget,
-          reason: greekExpectMsg('Κύριο κέλυφος με πλευρική πλοήγηση (οθόνη Κλήσεων χωρίς AppBar τίτλου)'),
+          reason: greekExpectMsg(
+            'Κύριο κέλυφος με πλευρική πλοήγηση (οθόνη Κλήσεων χωρίς AppBar τίτλου)',
+          ),
         );
 
         final phoneField = callLoggerPhoneTextField();
         expect(
           phoneField,
           findsOneWidget,
-          reason: greekExpectMsg('Πεδίο τηλεφώνου (Semantics: Αριθμός τηλεφώνου)'),
+          reason: greekExpectMsg(
+            'Πεδίο τηλεφώνου (Semantics: Αριθμός τηλεφώνου)',
+          ),
         );
         reporter.logStep('Αυτόματη πληκτρολόγηση εσωτερικού τηλεφώνου');
         await tester.tap(phoneField);
         await pumpUntilSettled(tester);
         await tester.enterText(phoneField, kTestPhoneDigits);
         await tester.pump(); // trigger onChanged
-        await tester.pump(const Duration(milliseconds: 500)); // debounce / async lookup
+        await tester.pump(
+          const Duration(milliseconds: 500),
+        ); // debounce / async lookup
         await pumpUntilSettled(tester);
         await tester.testTextInput.receiveAction(TextInputAction.done);
         // Μετά το Done: debounce 250 ms πριν το performPhoneLookup στο πεδίο τηλεφώνου.
@@ -102,7 +110,11 @@ void main() {
         await tester.pump(const Duration(milliseconds: 450));
 
         sw.start();
-        await pumpUntilSettled(tester, steps: 40, step: const Duration(milliseconds: 60));
+        await pumpUntilSettled(
+          tester,
+          steps: 40,
+          step: const Duration(milliseconds: 60),
+        );
         reporter.logTiming('Lookup μετά πληκτρολόγηση τηλεφώνου', sw.elapsed);
         // Επιπλέον χρόνος για debounce lookup + async ενημέρωση UI (κάρτα χρήστη).
         await pumpUntilSettledLong(tester);
@@ -113,7 +125,9 @@ void main() {
             'Μετά το lookup ο καλώντας από το seed πρέπει να εμφανίζεται (ή σε πεδίο ή σε κάρτα)',
           ),
         );
-        reporter.logStep('Επιβεβαίωση εμφάνισης εξοπλισμού και τμήματος μετά το lookup');
+        reporter.logStep(
+          'Επιβεβαίωση εμφάνισης εξοπλισμού και τμήματος μετά το lookup',
+        );
         expect(
           find.textContaining(kTestEquipmentCode),
           findsWidgets,
@@ -124,7 +138,9 @@ void main() {
         expect(
           find.textContaining(kTestDepartmentName),
           findsWidgets,
-          reason: greekExpectMsg('Το τμήμα του seed πρέπει να συμπληρώνεται ή να εμφανίζεται στο προφίλ'),
+          reason: greekExpectMsg(
+            'Το τμήμα του seed πρέπει να συμπληρώνεται ή να εμφανίζεται στο προφίλ',
+          ),
         );
 
         final categoryField = find.byWidgetPredicate(
@@ -148,7 +164,11 @@ void main() {
               w is TextField &&
               (w.decoration?.hintText?.contains('Σημειώσεις') ?? false),
         );
-        expect(notesFinder, findsOneWidget, reason: greekExpectMsg('Πεδίο σημειώσεων'));
+        expect(
+          notesFinder,
+          findsOneWidget,
+          reason: greekExpectMsg('Πεδίο σημειώσεων'),
+        );
         reporter.logStep('Συμπλήρωση σημειώσεων');
         await tester.tap(notesFinder);
         await pumpUntilSettled(tester);
@@ -162,7 +182,9 @@ void main() {
         expect(
           tester.widget<ElevatedButton>(submitFinder).onPressed,
           isNotNull,
-          reason: greekExpectMsg('Με συμπληρωμένο τηλέφωνο το κουμπί υποβολής πρέπει να είναι ενεργό'),
+          reason: greekExpectMsg(
+            'Με συμπληρωμένο τηλέφωνο το κουμπί υποβολής πρέπει να είναι ενεργό',
+          ),
         );
 
         reporter.logStep('Υποβολή καταγραφής κλήσης');
@@ -282,9 +304,7 @@ void main() {
         expect(
           find.byType(NotesStickyField),
           findsOneWidget,
-          reason: greekExpectMsg(
-            'Μετά submit (Done) εμφανίζονται σημειώσεις',
-          ),
+          reason: greekExpectMsg('Μετά submit (Done) εμφανίζονται σημειώσεις'),
         );
 
         await tester.pump(const Duration(seconds: 11));
@@ -456,7 +476,9 @@ void main() {
         expect(
           find.byType(NotesStickyField),
           findsOneWidget,
-          reason: greekExpectMsg('Με ενεργή ομάδα τηλεφώνου εμφανίζονται σημειώσεις'),
+          reason: greekExpectMsg(
+            'Με ενεργή ομάδα τηλεφώνου εμφανίζονται σημειώσεις',
+          ),
         );
 
         await tester.tap(find.byTooltip('Καθαρισμός όλων των πεδίων'));

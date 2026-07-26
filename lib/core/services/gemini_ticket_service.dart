@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -76,10 +76,7 @@ class GeminiModelsQuotaProbeResult {
 
 /// Αποθηκευμένο αποτέλεσμα μαζικού ελέγχου ποσόστωσης μοντέλων.
 class GeminiModelsProbeCache {
-  const GeminiModelsProbeCache({
-    required this.checkedAt,
-    required this.result,
-  });
+  const GeminiModelsProbeCache({required this.checkedAt, required this.result});
 
   final DateTime checkedAt;
   final GeminiModelsQuotaProbeResult result;
@@ -158,10 +155,7 @@ class GeminiModelsProbeCache {
       'message': result.message,
       'availableModels': [
         for (final model in result.availableModels)
-          <String, String>{
-            'id': model.id,
-            'displayName': model.displayName,
-          },
+          <String, String>{'id': model.id, 'displayName': model.displayName},
       ],
       'typedModelWarnings': [
         for (final warning in result.typedModelWarnings)
@@ -293,7 +287,6 @@ class GeminiException implements Exception {
 }
 
 abstract final class GeminiTicketService {
-
   static String buildPrompt({
     required String promptTemplate,
     required String callerText,
@@ -342,7 +335,9 @@ abstract final class GeminiTicketService {
 
   /// Κανονικοποιεί παλιά endpoints (`{apiKey}`, σταθερό μοντέλο) στο πρότυπο placeholders.
   static String normalizeEndpointTemplate(String endpoint) {
-    var template = endpoint.trim().isEmpty ? kDefaultGeminiEndpoint : endpoint.trim();
+    var template = endpoint.trim().isEmpty
+        ? kDefaultGeminiEndpoint
+        : endpoint.trim();
     template = template.replaceAll('{apiKey}', kGeminiApiKeyPlaceholder);
     final match = _modelPattern.firstMatch(template);
     if (match != null) {
@@ -350,7 +345,10 @@ abstract final class GeminiTicketService {
       if (modelId.isNotEmpty &&
           modelId != kGeminiPrimaryModelPlaceholder &&
           !template.contains(kGeminiPrimaryModelPlaceholder)) {
-        template = template.replaceFirst(_modelPattern, 'models/$kGeminiPrimaryModelPlaceholder');
+        template = template.replaceFirst(
+          _modelPattern,
+          'models/$kGeminiPrimaryModelPlaceholder',
+        );
       }
     }
     return template;
@@ -466,8 +464,7 @@ abstract final class GeminiTicketService {
             if (!_isTextGenerationModel(raw)) continue;
             final id = _modelIdFromApiName(raw['name']?.toString() ?? '');
             if (id.isEmpty) continue;
-            final displayName =
-                (raw['displayName'] as String? ?? id).trim();
+            final displayName = (raw['displayName'] as String? ?? id).trim();
             results.add(GeminiTextModel(id: id, displayName: displayName));
           }
         }
@@ -518,9 +515,7 @@ abstract final class GeminiTicketService {
       if (primary.isNotEmpty) {
         typedEntries.add((id: primary, slot: 'κύριο'));
       }
-      if (checkTypedFallback &&
-          fallback.isNotEmpty &&
-          fallback != primary) {
+      if (checkTypedFallback && fallback.isNotEmpty && fallback != primary) {
         typedEntries.add((id: fallback, slot: 'εφεδρικό'));
       }
       final extrasToProbe = typedEntries
@@ -860,9 +855,8 @@ abstract final class GeminiTicketService {
     }
   }
 
-  static ({String title, String description, String solution})? parseSuggestionJson(
-    String text,
-  ) {
+  static ({String title, String description, String solution})?
+  parseSuggestionJson(String text) {
     try {
       var payload = text.trim();
       if (payload.startsWith('```')) {

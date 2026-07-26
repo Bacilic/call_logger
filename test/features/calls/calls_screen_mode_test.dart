@@ -1,4 +1,4 @@
-﻿import 'package:call_logger/features/calls/layout/calls_field_groups_provider.dart';
+import 'package:call_logger/features/calls/layout/calls_field_groups_provider.dart';
 import 'package:call_logger/features/calls/provider/call_header_provider.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -28,7 +28,10 @@ void main() {
     expect(container.read(callsFieldGroupsProvider).isPhoneGroupActive, isTrue);
 
     container.read(callsFieldConfirmationsProvider.notifier).unconfirmPhone();
-    expect(container.read(callsFieldGroupsProvider).isPhoneGroupActive, isFalse);
+    expect(
+      container.read(callsFieldGroupsProvider).isPhoneGroupActive,
+      isFalse,
+    );
   });
 
   test('Εκκαθάριση flow releases latch via resetAll + release', () {

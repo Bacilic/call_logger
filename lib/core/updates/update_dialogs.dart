@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -57,28 +57,30 @@ Future<void> runUpdatePrepareFlow(
   // Fire-and-forget σκόπιμα: ο διάλογος προόδου μπαίνει σύγχρονα στο navigator
   // stack και κλείνει παρακάτω με pop. ΜΗΝ γίνει await (θα κρέμαγε — το future
   // ολοκληρώνεται μόνο στο κλείσιμο, που κάνει ο ίδιος ο επόμενος κώδικας).
-  unawaited(showDialog<void>(
-    context: context,
-    barrierDismissible: false,
-    builder: (ctx) => PopScope(
-      canPop: false,
-      child: AlertDialog(
-        title: const Text('Προετοιμασία ενημέρωσης'),
-        content: ValueListenableBuilder<String>(
-          valueListenable: progress,
-          builder: (_, message, _) => Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const LinearProgressIndicator(),
-              const SizedBox(height: 16),
-              Text(message),
-            ],
+  unawaited(
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => PopScope(
+        canPop: false,
+        child: AlertDialog(
+          title: const Text('Προετοιμασία ενημέρωσης'),
+          content: ValueListenableBuilder<String>(
+            valueListenable: progress,
+            builder: (_, message, _) => Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const LinearProgressIndicator(),
+                const SizedBox(height: 16),
+                Text(message),
+              ],
+            ),
           ),
         ),
       ),
     ),
-  ));
+  );
 
   late UpdateInstallResult result;
   try {
@@ -134,25 +136,27 @@ Future<void> launchPendingUpdateNow(BuildContext context) async {
   final container = ProviderScope.containerOf(context);
 
   // Fire-and-forget σκόπιμα (βλ. σχόλιο στο runUpdatePrepareFlow).
-  unawaited(showDialog<void>(
-    context: context,
-    barrierDismissible: false,
-    builder: (ctx) => PopScope(
-      canPop: false,
-      child: AlertDialog(
-        title: const Text('Επανεκκίνηση'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: const [
-            LinearProgressIndicator(),
-            SizedBox(height: 16),
-            Text('Η εφαρμογή θα κλείσει και θα ανοίξει ξανά αυτόματα…'),
-          ],
+  unawaited(
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => PopScope(
+        canPop: false,
+        child: AlertDialog(
+          title: const Text('Επανεκκίνηση'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: const [
+              LinearProgressIndicator(),
+              SizedBox(height: 16),
+              Text('Η εφαρμογή θα κλείσει και θα ανοίξει ξανά αυτόματα…'),
+            ],
+          ),
         ),
       ),
     ),
-  ));
+  );
 
   // Δώσε ένα frame στο framework να ζωγραφίσει τον διάλογο ΠΡΙΝ ξεκινήσει η
   // ακολουθία τερματισμού (launchPendingUpdate → exit), αλλιώς ο διάλογος

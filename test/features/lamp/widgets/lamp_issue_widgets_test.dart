@@ -1,4 +1,4 @@
-﻿import 'package:call_logger/features/lamp/controllers/lamp_issue_resolution_controller.dart';
+import 'package:call_logger/features/lamp/controllers/lamp_issue_resolution_controller.dart';
 import 'package:call_logger/features/lamp/widgets/lamp_issue_widgets.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -32,69 +32,68 @@ void main() {
       );
     });
 
-    testWidgets('LampIssueEntryListTile · title και subtitle είναι SelectableText',
-        (tester) async {
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: LampIssueEntryListTile(
-              issue: <String, Object?>{
-                'row_number': 42,
-                'column_name': 'serial_no',
-                'raw_value': 'ABC123',
-                'message': 'Δοκιμαστικό μήνυμα',
-              },
-            ),
-          ),
-        ),
-      );
-
-      expect(find.byType(SelectableText), findsNWidgets(2));
-    });
-
     testWidgets(
-      'LampIssueEntryListTile · Στήλη και μήνυμα εξελληνισμένα '
-      '(όχι office/contract)',
+      'LampIssueEntryListTile · title και subtitle είναι SelectableText',
       (tester) async {
         await tester.pumpWidget(
           MaterialApp(
             home: Scaffold(
-              body: Column(
-                children: [
-                  LampIssueEntryListTile(
-                    issue: <String, Object?>{
-                      'row_number': 100,
-                      'column_name': 'office',
-                      'raw_value': 'Τμήμα Α',
-                      'message':
-                          'Η τιμή δεν αντιστοιχεί σε έγκυρο ID για office.',
-                    },
-                  ),
-                  LampIssueEntryListTile(
-                    issue: <String, Object?>{
-                      'row_number': 200,
-                      'column_name': 'contract',
-                      'raw_value': 'Σύμβαση Χ',
-                      'message':
-                          'Η τιμή δεν αντιστοιχεί σε έγκυρο ID για contract.',
-                    },
-                  ),
-                ],
+              body: LampIssueEntryListTile(
+                issue: <String, Object?>{
+                  'row_number': 42,
+                  'column_name': 'serial_no',
+                  'raw_value': 'ABC123',
+                  'message': 'Δοκιμαστικό μήνυμα',
+                },
               ),
             ),
           ),
         );
 
-        expect(find.textContaining('Στήλη: γραφείο'), findsOneWidget);
-        expect(find.textContaining('για γραφείο.'), findsOneWidget);
-        expect(find.textContaining('Στήλη: συμβόλαιο'), findsOneWidget);
-        expect(find.textContaining('για συμβόλαιο.'), findsOneWidget);
-        expect(find.textContaining('Στήλη: office'), findsNothing);
-        expect(find.textContaining('για office.'), findsNothing);
-        expect(find.textContaining('Στήλη: contract'), findsNothing);
-        expect(find.textContaining('για contract.'), findsNothing);
+        expect(find.byType(SelectableText), findsNWidgets(2));
       },
     );
+
+    testWidgets('LampIssueEntryListTile · Στήλη και μήνυμα εξελληνισμένα '
+        '(όχι office/contract)', (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Column(
+              children: [
+                LampIssueEntryListTile(
+                  issue: <String, Object?>{
+                    'row_number': 100,
+                    'column_name': 'office',
+                    'raw_value': 'Τμήμα Α',
+                    'message':
+                        'Η τιμή δεν αντιστοιχεί σε έγκυρο ID για office.',
+                  },
+                ),
+                LampIssueEntryListTile(
+                  issue: <String, Object?>{
+                    'row_number': 200,
+                    'column_name': 'contract',
+                    'raw_value': 'Σύμβαση Χ',
+                    'message':
+                        'Η τιμή δεν αντιστοιχεί σε έγκυρο ID για contract.',
+                  },
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+
+      expect(find.textContaining('Στήλη: γραφείο'), findsOneWidget);
+      expect(find.textContaining('για γραφείο.'), findsOneWidget);
+      expect(find.textContaining('Στήλη: συμβόλαιο'), findsOneWidget);
+      expect(find.textContaining('για συμβόλαιο.'), findsOneWidget);
+      expect(find.textContaining('Στήλη: office'), findsNothing);
+      expect(find.textContaining('για office.'), findsNothing);
+      expect(find.textContaining('Στήλη: contract'), findsNothing);
+      expect(find.textContaining('για contract.'), findsNothing);
+    });
   });
 
   group('issueResolutionPriority (ΓΕΝ-3)', () {
@@ -220,12 +219,16 @@ void main() {
       );
     }
 
-    testWidgets('με onClearGroup εμφανίζεται κουμπί εκκαθάρισης που καλείται',
-        (tester) async {
+    testWidgets('με onClearGroup εμφανίζεται κουμπί εκκαθάρισης που καλείται', (
+      tester,
+    ) async {
       var cleared = false;
       await pumpHeader(tester, onClearGroup: () => cleared = true);
 
-      final button = find.widgetWithIcon(IconButton, Icons.delete_sweep_outlined);
+      final button = find.widgetWithIcon(
+        IconButton,
+        Icons.delete_sweep_outlined,
+      );
       expect(button, findsOneWidget);
       expect(
         find.byTooltip('Εκκαθάριση ομάδας (2 πληροφοριακές εγγραφές)'),
@@ -236,8 +239,9 @@ void main() {
       expect(cleared, isTrue);
     });
 
-    testWidgets('χωρίς onClearGroup δεν υπάρχει κουμπί εκκαθάρισης',
-        (tester) async {
+    testWidgets('χωρίς onClearGroup δεν υπάρχει κουμπί εκκαθάρισης', (
+      tester,
+    ) async {
       await pumpHeader(tester);
       expect(
         find.widgetWithIcon(IconButton, Icons.delete_sweep_outlined),

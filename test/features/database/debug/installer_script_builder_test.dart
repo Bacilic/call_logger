@@ -1,4 +1,4 @@
-﻿import 'dart:convert';
+import 'dart:convert';
 
 import 'package:call_logger/features/database/debug/installer_script_builder.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -36,7 +36,8 @@ void main() {
         expect(
           next >= 0x80 && next <= 0xBF,
           isFalse,
-          reason: 'UTF-8-like pair at $i: '
+          reason:
+              'UTF-8-like pair at $i: '
               '0x${b.toRadixString(16)} 0x${next.toRadixString(16)}',
         );
       }
@@ -89,8 +90,9 @@ void main() {
 
     test('echo progress message immediately precedes robocopy', () {
       final lines = script.split(RegExp(r'\r?\n'));
-      final robocopyIndex =
-          lines.indexWhere((l) => l.toLowerCase().contains('robocopy'));
+      final robocopyIndex = lines.indexWhere(
+        (l) => l.toLowerCase().contains('robocopy'),
+      );
       expect(robocopyIndex, greaterThan(0));
       expect(lines[robocopyIndex - 1].trim(), 'echo Αντιγραφή αρχείων...');
     });

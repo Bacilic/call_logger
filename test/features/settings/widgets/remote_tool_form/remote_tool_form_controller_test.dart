@@ -5,15 +5,17 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   group('RemoteToolFormController — lock πριν εξαγωγή', () {
-    test('νέο εργαλείο: isDirty false στην αρχή, true μετά από αλλαγή πεδίου',
-        () {
-      final c = RemoteToolFormController();
-      addTearDown(c.dispose);
+    test(
+      'νέο εργαλείο: isDirty false στην αρχή, true μετά από αλλαγή πεδίου',
+      () {
+        final c = RemoteToolFormController();
+        addTearDown(c.dispose);
 
-      expect(c.isDirty, isFalse);
-      c.nameC.text = 'Tool A';
-      expect(c.isDirty, isTrue);
-    });
+        expect(c.isDirty, isFalse);
+        c.nameC.text = 'Tool A';
+        expect(c.isDirty, isTrue);
+      },
+    );
 
     test('createHasRequiredFields: true μόνο όταν name και path μη κενά', () {
       final c = RemoteToolFormController();
@@ -53,40 +55,42 @@ void main() {
       expect(edit.canSubmitSave, isTrue);
     });
 
-    test('toRemoteTool: πεδία, trim, φιλτράρισμα κενών ορισμάτων, null optional',
-        () {
-      final c = RemoteToolFormController();
-      addTearDown(c.dispose);
+    test(
+      'toRemoteTool: πεδία, trim, φιλτράρισμα κενών ορισμάτων, null optional',
+      () {
+        final c = RemoteToolFormController();
+        addTearDown(c.dispose);
 
-      c.nameC.text = '  My Tool  ';
-      c.pathC.text = '  C:\\app.exe  ';
-      c.iconC.text = '   ';
-      c.testIpC.text = '  ';
-      c.role = ToolRole.rdp;
-      c.isActive = false;
-      c.addArg();
-      c.argRows[0].valueC.text = '  -host=x  ';
-      c.argRows[0].descC.text = ' desc ';
-      c.addArg();
-      c.argRows[1].valueC.text = '   ';
-      c.argRows[1].descC.text = 'ignored';
+        c.nameC.text = '  My Tool  ';
+        c.pathC.text = '  C:\\app.exe  ';
+        c.iconC.text = '   ';
+        c.testIpC.text = '  ';
+        c.role = ToolRole.rdp;
+        c.isActive = false;
+        c.addArg();
+        c.argRows[0].valueC.text = '  -host=x  ';
+        c.argRows[0].descC.text = ' desc ';
+        c.addArg();
+        c.argRows[1].valueC.text = '   ';
+        c.argRows[1].descC.text = 'ignored';
 
-      final tool = c.toRemoteTool(id: 42);
+        final tool = c.toRemoteTool(id: 42);
 
-      expect(tool.id, 42);
-      expect(tool.name, 'My Tool');
-      expect(tool.executablePath, r'C:\app.exe');
-      expect(tool.role, ToolRole.rdp);
-      expect(tool.sortOrder, 0);
-      expect(tool.isActive, isFalse);
-      expect(tool.isExclusive, isFalse);
-      expect(tool.iconAssetKey, isNull);
-      expect(tool.suggestedValuesJson, isNull);
-      expect(tool.testTargetIp, isNull);
-      expect(tool.arguments, hasLength(1));
-      expect(tool.arguments.single.value, '-host=x');
-      expect(tool.arguments.single.description, 'desc');
-    });
+        expect(tool.id, 42);
+        expect(tool.name, 'My Tool');
+        expect(tool.executablePath, r'C:\app.exe');
+        expect(tool.role, ToolRole.rdp);
+        expect(tool.sortOrder, 0);
+        expect(tool.isActive, isFalse);
+        expect(tool.isExclusive, isFalse);
+        expect(tool.iconAssetKey, isNull);
+        expect(tool.suggestedValuesJson, isNull);
+        expect(tool.testTargetIp, isNull);
+        expect(tool.arguments, hasLength(1));
+        expect(tool.arguments.single.value, '-host=x');
+        expect(tool.arguments.single.description, 'desc');
+      },
+    );
 
     test('validateName: κενό όνομα και διπλότυπο case-insensitive', () {
       final c = RemoteToolFormController();
@@ -202,23 +206,25 @@ void main() {
       },
     );
 
-    test('formStateSignature: αλλάζει με reorder και (απ)ενεργοποίηση ορίσματος',
-        () {
-      final c = RemoteToolFormController();
-      addTearDown(c.dispose);
+    test(
+      'formStateSignature: αλλάζει με reorder και (απ)ενεργοποίηση ορίσματος',
+      () {
+        final c = RemoteToolFormController();
+        addTearDown(c.dispose);
 
-      c.addArg();
-      c.addArg();
-      c.argRows[0].valueC.text = 'a';
-      c.argRows[1].valueC.text = 'b';
-      final sigBefore = c.formStateSignature();
+        c.addArg();
+        c.addArg();
+        c.argRows[0].valueC.text = 'a';
+        c.argRows[1].valueC.text = 'b';
+        final sigBefore = c.formStateSignature();
 
-      c.reorderArgs(0, 1);
-      expect(c.formStateSignature(), isNot(equals(sigBefore)));
+        c.reorderArgs(0, 1);
+        expect(c.formStateSignature(), isNot(equals(sigBefore)));
 
-      final sigAfterReorder = c.formStateSignature();
-      c.setArgActive(0, false);
-      expect(c.formStateSignature(), isNot(equals(sigAfterReorder)));
-    });
+        final sigAfterReorder = c.formStateSignature();
+        c.setArgActive(0, false);
+        expect(c.formStateSignature(), isNot(equals(sigAfterReorder)));
+      },
+    );
   });
 }

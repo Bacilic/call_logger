@@ -1,6 +1,7 @@
 import 'package:sqflite_common/sqflite.dart';
 
 import 'database_helper.dart';
+
 /// Λειτουργίες SQL συντήρησης βάσης (VACUUM, REINDEX).
 class DatabaseMaintenanceRepository {
   DatabaseMaintenanceRepository(this.db);
@@ -28,7 +29,9 @@ class DatabaseStatsRepository {
     return n is int ? n : int.tryParse(n.toString()) ?? 0;
   }
 
-  Future<Map<String, int>> countRowsForTables(Iterable<String> tableNames) async {
+  Future<Map<String, int>> countRowsForTables(
+    Iterable<String> tableNames,
+  ) async {
     final out = <String, int>{};
     for (final name in tableNames) {
       out[name] = await countRowsInTable(name);

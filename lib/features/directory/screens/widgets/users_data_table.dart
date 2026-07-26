@@ -37,8 +37,10 @@ class UsersDataTable extends StatefulWidget {
   final int? focusedRowIndex;
   final void Function(int? index)? onSetFocusedRowIndex;
   final VoidCallback? onRequestDelete;
+
   /// Κλήση όταν Enter/Space με πολλαπλή επιλογή → ανοίγει μαζική επεξεργασία.
   final VoidCallback? onRequestBulkEdit;
+
   /// true = συνεχής κύλιση· false = σελίδες [_rowsPerPage] με ίδιο Table, resize, βελάκι sort.
   final bool continuousScroll;
 
@@ -68,6 +70,7 @@ class _UsersDataTableState extends State<UsersDataTable> {
   final Map<String, double> _columnWidths = Map<String, double>.from(
     _defaultWidthsByKey,
   );
+
   /// Δείκτης πρώτης γραμμής τρέχουσας σελίδας (όταν [continuousScroll] == false).
   int _pagedFirstRowIndex = 0;
 
@@ -158,7 +161,8 @@ class _UsersDataTableState extends State<UsersDataTable> {
       children: [
         TableRow(
           decoration: BoxDecoration(
-            color: headingColor ??
+            color:
+                headingColor ??
                 Theme.of(context).colorScheme.surfaceContainerHighest,
           ),
           children: [
@@ -173,9 +177,9 @@ class _UsersDataTableState extends State<UsersDataTable> {
                         child: InkWell(
                           onTap: columns[i].onSort != null
                               ? () => columns[i].onSort!(
-                                    0,
-                                    i == sortedIndex ? !asc : true,
-                                  )
+                                  0,
+                                  i == sortedIndex ? !asc : true,
+                                )
                               : null,
                           child: Container(
                             height: headingHeight,
@@ -202,8 +206,9 @@ class _UsersDataTableState extends State<UsersDataTable> {
                                         ? Icons.arrow_drop_up
                                         : Icons.arrow_drop_down,
                                     size: 18,
-                                    color:
-                                        Theme.of(context).colorScheme.onSurface,
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.onSurface,
                                   ),
                                 ],
                               ],
@@ -229,15 +234,12 @@ class _UsersDataTableState extends State<UsersDataTable> {
     );
   }
 
-  TableRow _dataRowToTableRow(
-    BuildContext context,
-    DataRow dataRow,
-  ) {
+  TableRow _dataRowToTableRow(BuildContext context, DataRow dataRow) {
     final theme = Theme.of(context);
     final dataTableTheme = theme.dataTableTheme;
     final rowColor = dataRow.selected
         ? (dataTableTheme.dataRowColor?.resolve({WidgetState.selected}) ??
-            theme.colorScheme.primaryContainer.withValues(alpha: 0.3))
+              theme.colorScheme.primaryContainer.withValues(alpha: 0.3))
         : dataTableTheme.dataRowColor?.resolve({WidgetState.selected});
     return TableRow(
       decoration: BoxDecoration(color: rowColor),
@@ -282,8 +284,9 @@ class _UsersDataTableState extends State<UsersDataTable> {
     }
     if (key == LogicalKeyboardKey.arrowUp) {
       if (onSetFocus != null) {
-        final next =
-            current == null ? len - 1 : (current - 1).clamp(0, len - 1);
+        final next = current == null
+            ? len - 1
+            : (current - 1).clamp(0, len - 1);
         onSetFocus(next);
       }
       return KeyEventResult.handled;
@@ -331,9 +334,11 @@ class _UsersDataTableState extends State<UsersDataTable> {
                   widget.onToggleSelection(id);
                 }
               },
-              allSelected: widget.users.isNotEmpty &&
-                  widget.users.every((u) =>
-                      u.id != null && widget.selectedIds.contains(u.id)),
+              allSelected:
+                  widget.users.isNotEmpty &&
+                  widget.users.every(
+                    (u) => u.id != null && widget.selectedIds.contains(u.id),
+                  ),
             ),
           ),
         );
@@ -395,8 +400,7 @@ class _UsersDataTableState extends State<UsersDataTable> {
                 columns,
                 headingHeight,
                 headingColor,
-                dataTableTheme.headingTextStyle ??
-                    theme.textTheme.titleSmall!,
+                dataTableTheme.headingTextStyle ?? theme.textTheme.titleSmall!,
                 columnWidths,
               ),
               Expanded(
@@ -404,11 +408,9 @@ class _UsersDataTableState extends State<UsersDataTable> {
                   controller: _verticalScrollController,
                   child: Table(
                     columnWidths: columnWidths,
-                    defaultVerticalAlignment:
-                        TableCellVerticalAlignment.middle,
+                    defaultVerticalAlignment: TableCellVerticalAlignment.middle,
                     children: [
-                      for (final row in rows)
-                        _dataRowToTableRow(context, row),
+                      for (final row in rows) _dataRowToTableRow(context, row),
                     ],
                   ),
                 ),
@@ -445,13 +447,13 @@ class _UsersDataTableState extends State<UsersDataTable> {
 
     void goFirst() => setState(() => _pagedFirstRowIndex = 0);
     void goPrev() => setState(
-          () => _pagedFirstRowIndex =
-              (start - _rowsPerPage).clamp(0, lastPageStart),
-        );
+      () =>
+          _pagedFirstRowIndex = (start - _rowsPerPage).clamp(0, lastPageStart),
+    );
     void goNext() => setState(() {
-          final next = start + _rowsPerPage;
-          if (next < n) _pagedFirstRowIndex = next;
-        });
+      final next = start + _rowsPerPage;
+      if (next < n) _pagedFirstRowIndex = next;
+    });
     void goLast() => setState(() => _pagedFirstRowIndex = lastPageStart);
 
     return Theme(
@@ -467,8 +469,9 @@ class _UsersDataTableState extends State<UsersDataTable> {
         ),
       ),
       child: Material(
-        color:
-            theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.65),
+        color: theme.colorScheme.surfaceContainerHighest.withValues(
+          alpha: 0.65,
+        ),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
           child: Row(
@@ -540,9 +543,12 @@ class _UsersDataTableState extends State<UsersDataTable> {
         );
         const columnSpacing = 24.0;
         const horizontalMargin = 16.0;
-        final widthSum =
-            visible.fold<double>(0, (a, c) => a + _widthForColumn(c));
-        final tableWidth = widthSum +
+        final widthSum = visible.fold<double>(
+          0,
+          (a, c) => a + _widthForColumn(c),
+        );
+        final tableWidth =
+            widthSum +
             (visible.length - 1) * columnSpacing +
             horizontalMargin * 2;
 
@@ -821,7 +827,8 @@ class _UsersTableSource extends DataTableSource {
     if (index < 0 || index >= _users.length) return null;
     final user = _users[index];
     final id = user.id;
-    final selected = _selectionVisible && id != null && _selectedIds.contains(id);
+    final selected =
+        _selectionVisible && id != null && _selectedIds.contains(id);
     final focused = index == _focusedRowIndex && _focusHighlightColor != null;
     final cells = <DataCell>[
       for (final col in _visibleColumns)
@@ -829,7 +836,8 @@ class _UsersTableSource extends DataTableSource {
     ];
     return DataRow(
       selected: selected,
-      onSelectChanged: _selectionVisible && id != null && _onToggleSelection != null
+      onSelectChanged:
+          _selectionVisible && id != null && _onToggleSelection != null
           ? (_) => _onToggleSelection!(id)
           : null,
       color: focused ? WidgetStateProperty.all(_focusHighlightColor) : null,

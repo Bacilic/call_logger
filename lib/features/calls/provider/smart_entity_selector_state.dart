@@ -197,7 +197,7 @@ class SmartEntitySelectorState {
   }
 
   ({bool phoneNeedsShared, bool equipmentNeedsShared})
-      _computeOrphanNeedsSharedFlags(LookupService lookup) {
+  _computeOrphanNeedsSharedFlags(LookupService lookup) {
     final deptText = departmentText.trim();
     final departmentId =
         selectedDepartmentId ?? lookup.findDepartmentByName(deptText)?.id;
@@ -237,7 +237,10 @@ class SmartEntitySelectorState {
           return usage.departmentId != departmentId;
         })();
 
-    return (phoneNeedsShared: phoneNeedsShared, equipmentNeedsShared: equipmentNeedsShared);
+    return (
+      phoneNeedsShared: phoneNeedsShared,
+      equipmentNeedsShared: equipmentNeedsShared,
+    );
   }
 
   static bool _ownedUsageNeedsSharedForDepartment({
@@ -348,8 +351,7 @@ class SmartEntitySelectorState {
       final deptText = departmentText.trim();
       if (deptText.isEmpty) return base;
 
-      final deptExists =
-          lookup?.findDepartmentByName(deptText)?.id != null;
+      final deptExists = lookup?.findDepartmentByName(deptText)?.id != null;
       final deptPart = deptExists
           ? 'στο τμήμα: $deptText'
           : 'στο τμήμα: $deptText (νέο τμήμα)';
@@ -359,8 +361,7 @@ class SmartEntitySelectorState {
 
     if (needsOrphanDepartmentQuickAddResolved(lookup)) {
       final deptText = departmentText.trim();
-      final deptExists =
-          lookup?.findDepartmentByName(deptText)?.id != null;
+      final deptExists = lookup?.findDepartmentByName(deptText)?.id != null;
       final deptPart = deptExists
           ? 'Προσθήκη ως κοινόχρηστων στο τμήμα $deptText'
           : 'Προσθήκη ως κοινόχρηστων στο τμήμα $deptText (νέο τμήμα)';

@@ -22,12 +22,12 @@ void main() {
   Future<void> createAllCriticalAssets(Directory flutterAssets) async {
     await flutterAssets.create(recursive: true);
     await Directory(p.join(flutterAssets.path, 'fonts')).create();
-    await File(p.join(flutterAssets.path, 'FontManifest.json')).writeAsString(
-      '[]',
-    );
-    await File(p.join(flutterAssets.path, 'AssetManifest.bin')).writeAsBytes(
-      const <int>[],
-    );
+    await File(
+      p.join(flutterAssets.path, 'FontManifest.json'),
+    ).writeAsString('[]');
+    await File(
+      p.join(flutterAssets.path, 'AssetManifest.bin'),
+    ).writeAsBytes(const <int>[]);
     await Directory(p.join(flutterAssets.path, 'assets')).create();
     final cupertino = File(
       p.join(
@@ -61,9 +61,9 @@ void main() {
           p.join(tempRoot.path, 'flutter_assets'),
         );
         await createAllCriticalAssets(flutterAssets);
-        await Directory(p.join(flutterAssets.path, 'fonts')).delete(
-          recursive: true,
-        );
+        await Directory(
+          p.join(flutterAssets.path, 'fonts'),
+        ).delete(recursive: true);
         await File(p.join(flutterAssets.path, 'AssetManifest.bin')).delete();
 
         final missing = StartupAssetIntegrityService(

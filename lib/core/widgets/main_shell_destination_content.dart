@@ -41,8 +41,8 @@ mixin MainShellDestinationContentMixin on ConsumerState<MainShell> {
   }
 
   Future<void> _loadAcknowledgedDatabaseNoticeIdentity() async {
-    final value =
-        await SettingsService().getAcknowledgedDatabaseNoticeIdentity();
+    final value = await SettingsService()
+        .getAcknowledgedDatabaseNoticeIdentity();
     if (!mounted) return;
     setState(() {
       _acknowledgedNoticeIdentity = value;
@@ -92,9 +92,7 @@ mixin MainShellDestinationContentMixin on ConsumerState<MainShell> {
       case MainNavDestination.calls:
         return const CallsScreen();
       case MainNavDestination.tasks:
-        return PrimaryScrollController.none(
-          child: const TasksScreen(),
-        );
+        return PrimaryScrollController.none(child: const TasksScreen());
       case MainNavDestination.directory:
         return const DirectoryScreen();
       case MainNavDestination.history:
@@ -116,7 +114,10 @@ mixin MainShellDestinationContentMixin on ConsumerState<MainShell> {
 
   /// Απορροφά scroll notifications από εκκρεμότητες ώστε το εξωτερικό AppBar
   /// να μην ενεργοποιεί Material 3 scrolled-under tint.
-  Widget _absorbTasksScrollForOuterAppBar(MainNavDestination dest, Widget child) {
+  Widget _absorbTasksScrollForOuterAppBar(
+    MainNavDestination dest,
+    Widget child,
+  ) {
     if (dest != MainNavDestination.tasks) return child;
     return NotificationListener<ScrollNotification>(
       onNotification: (_) => true,
@@ -168,7 +169,11 @@ mixin MainShellDestinationContentMixin on ConsumerState<MainShell> {
                   IconButton(
                     key: const ValueKey('database_state_notice_dismiss'),
                     tooltip: 'Κλείσιμο',
-                    icon: const Icon(Icons.close, size: 20, color: Colors.black87),
+                    icon: const Icon(
+                      Icons.close,
+                      size: 20,
+                      color: Colors.black87,
+                    ),
                     onPressed: () {
                       unawaited(_dismissDatabaseStateNotice());
                     },
@@ -199,7 +204,11 @@ mixin MainShellDestinationContentMixin on ConsumerState<MainShell> {
                   IconButton(
                     key: const ValueKey('database_switch_success_dismiss'),
                     tooltip: 'Κλείσιμο',
-                    icon: const Icon(Icons.close, size: 20, color: Colors.black87),
+                    icon: const Icon(
+                      Icons.close,
+                      size: 20,
+                      color: Colors.black87,
+                    ),
                     onPressed: () {
                       ref
                           .read(databaseSwitchSuccessNoticeProvider.notifier)

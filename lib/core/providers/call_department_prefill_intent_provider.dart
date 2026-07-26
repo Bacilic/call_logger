@@ -18,5 +18,5 @@ class CallDepartmentPrefillIntentNotifier extends Notifier<String?> {
 
 final callDepartmentPrefillIntentProvider =
     NotifierProvider<CallDepartmentPrefillIntentNotifier, String?>(
-  CallDepartmentPrefillIntentNotifier.new,
-);
+      CallDepartmentPrefillIntentNotifier.new,
+    );

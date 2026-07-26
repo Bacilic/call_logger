@@ -23,6 +23,5 @@ class TaskSettingsConfigNotifier extends AsyncNotifier<TaskSettingsConfig> {
 
 final taskSettingsConfigProvider =
     AsyncNotifierProvider<TaskSettingsConfigNotifier, TaskSettingsConfig>(
-  TaskSettingsConfigNotifier.new,
-);
-
+      TaskSettingsConfigNotifier.new,
+    );

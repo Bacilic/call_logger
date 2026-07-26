@@ -1,9 +1,5 @@
-﻿/// Τύπος αναγνωρισμένου συνδέσμου μέσα σε ελεύθερο κείμενο.
-enum LinkableTextKind {
-  url,
-  uncPath,
-  localPath,
-}
+/// Τύπος αναγνωρισμένου συνδέσμου μέσα σε ελεύθερο κείμενο.
+enum LinkableTextKind { url, uncPath, localPath }
 
 /// Ένα τμήμα κειμένου: απλό ή σύνδεσμος.
 sealed class LinkableTextSegment {
@@ -44,7 +40,9 @@ abstract final class LinkableTextParser {
 
     for (final match in _pattern.allMatches(input)) {
       if (match.start > cursor) {
-        segments.add(PlainLinkableTextSegment(input.substring(cursor, match.start)));
+        segments.add(
+          PlainLinkableTextSegment(input.substring(cursor, match.start)),
+        );
       }
 
       final raw = match.group(0)!;
@@ -83,7 +81,8 @@ abstract final class LinkableTextParser {
 
   static String _normalizeMatch(String raw, LinkableTextKind kind) {
     var value = raw.trim();
-    while (value.isNotEmpty && _trailingPunctuation.contains(value[value.length - 1])) {
+    while (value.isNotEmpty &&
+        _trailingPunctuation.contains(value[value.length - 1])) {
       value = value.substring(0, value.length - 1);
     }
     if (kind == LinkableTextKind.url) {

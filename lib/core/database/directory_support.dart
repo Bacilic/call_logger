@@ -26,9 +26,9 @@ class DirectorySupport {
   String sqlPlaceholders(int count) => List.filled(count, '?').join(',');
 
   Future<Set<String>> phoneColumnNames(DatabaseExecutor e) async =>
-      (await e.rawQuery('PRAGMA table_info(phones)'))
-          .map((r) => r['name'] as String)
-          .toSet();
+      (await e.rawQuery(
+        'PRAGMA table_info(phones)',
+      )).map((r) => r['name'] as String).toSet();
 
   Future<void> ensurePhonesDepartmentColumn(DatabaseExecutor executor) async {
     final names = await phoneColumnNames(executor);
@@ -92,9 +92,7 @@ class DirectorySupport {
       whereArgs: [departmentId],
       limit: 1,
     );
-    final name = rows.isEmpty
-        ? null
-        : (rows.first['name'] as String?)?.trim();
+    final name = rows.isEmpty ? null : (rows.first['name'] as String?)?.trim();
     return {
       'department_id': departmentId,
       if (name != null && name.isNotEmpty) 'department_text': name,
@@ -153,23 +151,22 @@ class DirectorySupport {
   Future<Map<int, String>> phoneNumbersByIds(
     DatabaseExecutor e,
     Set<int> ids,
-  ) =>
-      idLabelMap(e, 'phones', 'number', ids);
+  ) => idLabelMap(e, 'phones', 'number', ids);
 
   Future<Map<int, String>> equipmentCodesByIds(
     DatabaseExecutor e,
     Set<int> ids,
-  ) =>
-      idLabelMap(e, 'equipment', 'code_equipment', ids);
+  ) => idLabelMap(e, 'equipment', 'code_equipment', ids);
 
   static bool auditValuesEqual(dynamic a, dynamic b) =>
       AuditService.valuesEqual(a, b);
 
   /// Ενώνει βασικές λεπτομέρειες audit με ονομαστικές γραμμές συνδέσεων.
   static String mergeAuditDetailLines(String base, List<String> extras) {
-    final parts = <String>[base, ...extras]
-        .map((s) => s.trim())
-        .where((s) => s.isNotEmpty);
+    final parts = <String>[
+      base,
+      ...extras,
+    ].map((s) => s.trim()).where((s) => s.isNotEmpty);
     return parts.join(' · ');
   }
 
@@ -205,9 +202,7 @@ class DirectorySupport {
       return base?.trim() ?? '';
     }
     // ΜΗΝ κάνουμε trim στο suffix — το « — » πρέπει να διατηρηθεί.
-    final s = suffix.startsWith(' — ')
-        ? suffix
-        : ' — ${suffix.trim()}';
+    final s = suffix.startsWith(' — ') ? suffix : ' — ${suffix.trim()}';
     final b = base?.trim() ?? '';
     if (b.isEmpty) return s;
     if (b.endsWith(s) || b.contains(s)) return b;
@@ -321,16 +316,15 @@ class DirectorySupport {
     int userId,
     Set<int> beforeIds,
     Set<int> afterIds,
-  ) =>
-      describeUserEntityLinkDeltaInTxn(
-        txn,
-        userId: userId,
-        beforeIds: beforeIds,
-        afterIds: afterIds,
-        table: 'phones',
-        labelColumn: 'number',
-        entityType: AuditEntityTypes.phone,
-      );
+  ) => describeUserEntityLinkDeltaInTxn(
+    txn,
+    userId: userId,
+    beforeIds: beforeIds,
+    afterIds: afterIds,
+    table: 'phones',
+    labelColumn: 'number',
+    entityType: AuditEntityTypes.phone,
+  );
 
   Future<List<String>> auditEquipmentUserLinkDeltaInTxn(
     DatabaseExecutor txn,
@@ -338,16 +332,15 @@ class DirectorySupport {
     int userId,
     Set<int> beforeIds,
     Set<int> afterIds,
-  ) =>
-      describeUserEntityLinkDeltaInTxn(
-        txn,
-        userId: userId,
-        beforeIds: beforeIds,
-        afterIds: afterIds,
-        table: 'equipment',
-        labelColumn: 'code_equipment',
-        entityType: AuditEntityTypes.equipment,
-      );
+  ) => describeUserEntityLinkDeltaInTxn(
+    txn,
+    userId: userId,
+    beforeIds: beforeIds,
+    afterIds: afterIds,
+    table: 'equipment',
+    labelColumn: 'code_equipment',
+    entityType: AuditEntityTypes.equipment,
+  );
 
   Future<int?> upsertPhoneIdByNumber(
     DatabaseExecutor txn,
@@ -394,10 +387,7 @@ class DirectorySupport {
     if (pid == null) return;
     await txn.update(
       'phones',
-      {
-        'department_id': departmentId,
-        'is_deleted': 0,
-      },
+      {'department_id': departmentId, 'is_deleted': 0},
       where: 'id = ?',
       whereArgs: [pid],
     );

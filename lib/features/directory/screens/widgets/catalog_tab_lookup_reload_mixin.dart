@@ -13,13 +13,13 @@ mixin CatalogTabLookupReloadMixin<T extends ConsumerStatefulWidget>
     if (_catalogLookupReloadSub != null) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      _catalogLookupReloadSub ??=
-          ref.listenManual<AsyncValue<LookupLoadResult>>(
-        lookupServiceProvider,
-        (_, _) {
-          if (mounted) setState(() {});
-        },
-      );
+      _catalogLookupReloadSub ??= ref
+          .listenManual<AsyncValue<LookupLoadResult>>(lookupServiceProvider, (
+            _,
+            _,
+          ) {
+            if (mounted) setState(() {});
+          });
     });
   }
 

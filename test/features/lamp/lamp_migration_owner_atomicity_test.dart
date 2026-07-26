@@ -12,8 +12,12 @@ void main() {
 
     setUpAll(() async {
       initSqfliteFfiForTests();
-      final dir = await Directory.systemTemp.createTemp('lamp_owner_atomicity_');
-      await DatabaseHelper.bindTestDatabaseFile('${dir.path}/lamp_owner_atomicity.db');
+      final dir = await Directory.systemTemp.createTemp(
+        'lamp_owner_atomicity_',
+      );
+      await DatabaseHelper.bindTestDatabaseFile(
+        '${dir.path}/lamp_owner_atomicity.db',
+      );
       await DatabaseHelper.instance.database;
       service = LampMigrationService();
     });

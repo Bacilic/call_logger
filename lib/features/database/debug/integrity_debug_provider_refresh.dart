@@ -8,9 +8,10 @@ import '../providers/database_integrity_provider.dart';
 import 'integrity_debug_seeder_service.dart';
 
 /// Provider για τον debug seeder (μόνο debug/desktop — το UI ελέγχει [IntegrityDebugSeederService.isEnabled]).
-final integrityDebugSeederServiceProvider = Provider<IntegrityDebugSeederService>(
-  (ref) => IntegrityDebugSeederService(),
-);
+final integrityDebugSeederServiceProvider =
+    Provider<IntegrityDebugSeederService>(
+      (ref) => IntegrityDebugSeederService(),
+    );
 
 /// Ανανέωση Riverpod state μετά την ενεργοποίηση της `integrity_debug.db`.
 Future<void> refreshProvidersAfterIntegrityDebugSwitch(WidgetRef ref) async {

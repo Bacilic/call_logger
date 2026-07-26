@@ -1,4 +1,4 @@
-﻿import 'dart:math' as math;
+import 'dart:math' as math;
 
 import 'package:intl/intl.dart';
 
@@ -93,10 +93,7 @@ class HourlyBucket {
 
 /// Σημείο mini bar sparkline με κείμενο tooltip.
 class KpiBarSparklinePoint {
-  const KpiBarSparklinePoint({
-    required this.value,
-    required this.tooltip,
-  });
+  const KpiBarSparklinePoint({required this.value, required this.tooltip});
 
   final double value;
   final String tooltip;

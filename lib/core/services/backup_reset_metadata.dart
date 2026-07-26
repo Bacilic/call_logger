@@ -56,9 +56,7 @@ class BackupResetMetadataReader {
 
       final dir = Directory(dest);
       if (!await dir.exists()) {
-        return BackupResetMetadata(
-          destinationFolderName: p.basename(dest),
-        );
+        return BackupResetMetadata(destinationFolderName: p.basename(dest));
       }
 
       DateTime? latestModified;

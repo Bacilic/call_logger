@@ -75,8 +75,7 @@ void main() {
           overrides: [
             callHeaderProvider.overrideWith(() => notifier),
             lookupServiceProvider.overrideWith(
-              (ref) async =>
-                  LookupLoadResult(service: _FakeLookupService()),
+              (ref) async => LookupLoadResult(service: _FakeLookupService()),
             ),
           ],
         );
@@ -115,8 +114,7 @@ void main() {
           overrides: [
             callHeaderProvider.overrideWith(() => notifier),
             lookupServiceProvider.overrideWith(
-              (ref) async =>
-                  LookupLoadResult(service: _FakeLookupService()),
+              (ref) async => LookupLoadResult(service: _FakeLookupService()),
             ),
           ],
         );

@@ -195,24 +195,21 @@ void main() {
       },
     );
 
-    test(
-      'ίδια διαδρομή με διαφορετικό callCount → διαφορετική ταυτότητα',
-      () {
-        final a = databaseContentIdentity(
-          dbPath: path,
-          latestCallDate: '2023-03-14',
-          callCount: 100,
-          fileModifiedMs: 1000,
-        );
-        final b = databaseContentIdentity(
-          dbPath: path,
-          latestCallDate: '2023-03-14',
-          callCount: 200,
-          fileModifiedMs: 1000,
-        );
-        expect(a, isNot(equals(b)));
-      },
-    );
+    test('ίδια διαδρομή με διαφορετικό callCount → διαφορετική ταυτότητα', () {
+      final a = databaseContentIdentity(
+        dbPath: path,
+        latestCallDate: '2023-03-14',
+        callCount: 100,
+        fileModifiedMs: 1000,
+      );
+      final b = databaseContentIdentity(
+        dbPath: path,
+        latestCallDate: '2023-03-14',
+        callCount: 200,
+        fileModifiedMs: 1000,
+      );
+      expect(a, isNot(equals(b)));
+    });
 
     test(
       'ίδια διαδρομή με διαφορετικό equipmentCount → διαφορετική ταυτότητα',

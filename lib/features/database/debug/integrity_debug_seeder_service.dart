@@ -19,10 +19,10 @@ class IntegrityDebugSeedResult {
   });
 
   const IntegrityDebugSeedResult.success(String path)
-      : this._(success: true, databasePath: path);
+    : this._(success: true, databasePath: path);
 
   const IntegrityDebugSeedResult.failure(String message)
-      : this._(success: false, errorMessage: message);
+    : this._(success: false, errorMessage: message);
 
   final bool success;
   final String? errorMessage;
@@ -168,8 +168,7 @@ class IntegrityDebugSeederService {
   }
 
   Future<void> _insertBaseCatalog(Transaction txn) async {
-    final kitchenKey =
-        SearchTextNormalizer.normalizeForSearch('Debug Κουζίνα');
+    final kitchenKey = SearchTextNormalizer.normalizeForSearch('Debug Κουζίνα');
     final kitchenDeptId = await txn.insert('departments', {
       'name': 'Debug Κουζίνα',
       'name_key': kitchenKey,
@@ -223,7 +222,6 @@ class IntegrityDebugSeederService {
       'updated_at': now,
       'is_deleted': 0,
     });
-
   }
 
   Future<void> _insertOrphanPhone(Transaction txn) async {
@@ -288,7 +286,9 @@ class IntegrityDebugSeederService {
   Future<void> _insertUsersInvalidDepartment(Transaction txn) async {
     final deletedDeptId = await txn.insert('departments', {
       'name': 'Debug Διαγραμμένο Τμήμα',
-      'name_key': SearchTextNormalizer.normalizeForSearch('Debug Διαγραμμένο Τμήμα'),
+      'name_key': SearchTextNormalizer.normalizeForSearch(
+        'Debug Διαγραμμένο Τμήμα',
+      ),
       'is_deleted': 1,
     });
     await txn.insert('users', {
@@ -576,10 +576,7 @@ class IntegrityDebugSeederService {
         'number': phoneNumber,
         'is_deleted': 0,
       });
-      await txn.insert('user_phones', {
-        'user_id': userId,
-        'phone_id': phoneId,
-      });
+      await txn.insert('user_phones', {'user_id': userId, 'phone_id': phoneId});
 
       final equipmentId = await txn.insert('equipment', {
         'code_equipment': equipmentCode,

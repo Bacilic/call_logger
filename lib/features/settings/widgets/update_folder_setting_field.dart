@@ -44,8 +44,7 @@ class _UpdateFolderSettingFieldState extends State<UpdateFolderSettingField> {
   bool _showLocalOnlyWarning = false;
   bool _loading = true;
 
-  SettingsService get _settings =>
-      widget.settingsService ?? SettingsService();
+  SettingsService get _settings => widget.settingsService ?? SettingsService();
 
   NetworkFolderClassifier get _classifier =>
       widget.networkFolderClassifier ?? NetworkFolderClassifier.system();
@@ -59,9 +58,7 @@ class _UpdateFolderSettingFieldState extends State<UpdateFolderSettingField> {
   @override
   void initState() {
     super.initState();
-    _classifyDebouncer = SearchDebouncer(
-      delay: widget.networkClassifyDebounce,
-    );
+    _classifyDebouncer = SearchDebouncer(delay: widget.networkClassifyDebounce);
     _controller.addListener(_onTextChanged);
     unawaited(_loadActivePath());
   }

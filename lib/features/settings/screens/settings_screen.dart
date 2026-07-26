@@ -119,8 +119,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           : WindowPlacementMode.alwaysCenter;
       final crashLogRetention = await _settings.getCrashLogRetentionCount();
       final shutdownTraceEnabled = await _settings.getShutdownTraceEnabled();
-      final shutdownTraceRetention =
-          await _settings.getShutdownTraceRetentionCount();
+      final shutdownTraceRetention = await _settings
+          .getShutdownTraceRetentionCount();
       final showUpdateOnStartup = await _settings.getShowUpdateOnStartup();
       final databasePath = await _settings.getDatabasePath();
       final logsDirectoryPath = databasePath.trim().isEmpty
@@ -153,8 +153,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             _crashLogRetentionController.text = crashLogRetention.toString();
           }
           if (!_shutdownTraceRetentionFocus.hasFocus) {
-            _shutdownTraceRetentionController.text =
-                shutdownTraceRetention.toString();
+            _shutdownTraceRetentionController.text = shutdownTraceRetention
+                .toString();
           }
           _isLoadingSettings = false;
         });
@@ -189,8 +189,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   Future<void> _persistShutdownTraceRetentionCount() async {
     final raw = _shutdownTraceRetentionController.text.trim();
     if (raw.isEmpty) {
-      _shutdownTraceRetentionController.text =
-          _shutdownTraceRetentionCount.toString();
+      _shutdownTraceRetentionController.text = _shutdownTraceRetentionCount
+          .toString();
       return;
     }
     final n = int.tryParse(raw);
@@ -468,9 +468,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                         setState(() => _showUpdateOnStartup = value);
                       }
                     },
-              title: const Text(
-                'Εμφάνιση μηνύματος ενημέρωσης στην εκκίνηση',
-              ),
+              title: const Text('Εμφάνιση μηνύματος ενημέρωσης στην εκκίνηση'),
               subtitle: const Text(
                 'Απενεργοποιεί μόνο το αυτόματο μήνυμα· η κόκκινη κουκίδα '
                 'στην έκδοση και ο έλεγχος ενημερώσεων παραμένουν ενεργά.',
@@ -663,23 +661,23 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     children: [
                       RadioListTile<WindowPlacementMode?>(
                         value: WindowPlacementMode.lastPosition,
-                      title: Text(
-                        WindowPlacementMode.lastPosition.settingsLabel,
+                        title: Text(
+                          WindowPlacementMode.lastPosition.settingsLabel,
+                        ),
+                        subtitle: const Text(
+                          'Αποθηκεύεται η θέση και το μέγεθος όταν κλείνετε ή μετακινείτε το παράθυρο.',
+                        ),
+                        contentPadding: EdgeInsets.zero,
                       ),
-                      subtitle: const Text(
-                        'Αποθηκεύεται η θέση και το μέγεθος όταν κλείνετε ή μετακινείτε το παράθυρο.',
-                      ),
-                      contentPadding: EdgeInsets.zero,
-                    ),
                       RadioListTile<WindowPlacementMode?>(
                         value: WindowPlacementMode.alwaysCenter,
-                      title: Text(
-                        WindowPlacementMode.alwaysCenter.settingsLabel,
-                      ),
-                      subtitle: const Text(
-                        'Το μέγεθος παραμένει αποθηκευμένο· η θέση κεντράρεται σε κάθε εκκίνηση.',
-                      ),
-                      contentPadding: EdgeInsets.zero,
+                        title: Text(
+                          WindowPlacementMode.alwaysCenter.settingsLabel,
+                        ),
+                        subtitle: const Text(
+                          'Το μέγεθος παραμένει αποθηκευμένο· η θέση κεντράρεται σε κάθε εκκίνηση.',
+                        ),
+                        contentPadding: EdgeInsets.zero,
                       ),
                     ],
                   ),
@@ -722,7 +720,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       if (mounted) setState(() => _showQuickCallFab = value);
                       ref.invalidate(showQuickCallFabProvider);
                     },
-              title: const Text('Υπτάμενο κουμπί γρήγορης κλήσης (Ctrl+Shift+N)'),
+              title: const Text(
+                'Υπτάμενο κουμπί γρήγορης κλήσης (Ctrl+Shift+N)',
+              ),
               subtitle: const Text(
                 'Εμφάνιση FAB γρήγορης καταγραφής σε λεξικό, στατιστικά, ρυθμίσεις και προβολή χάρτη.',
               ),
@@ -820,7 +820,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 _enableSpellCheck
                     ? 'Κρύβει το στοιχείο πλοήγησης «Λεξικό»· ο ορθογραφικός έλεγχος παραμένει ενεργός.'
                     : 'Το «Λεξικό» κρύβεται αυτόματα όταν ο ορθογραφικός έλεγχος είναι απενεργοποιημένος. '
-                        'Ενεργοποιήστε πρώτα τον ορθογραφικό έλεγχο για να εμφανιστεί.',
+                          'Ενεργοποιήστε πρώτα τον ορθογραφικό έλεγχο για να εμφανιστεί.',
               ),
             ),
             const SizedBox(height: 32),
@@ -836,10 +836,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             const SizedBox(height: 8),
             ListTile(
               contentPadding: EdgeInsets.zero,
-              leading: Icon(
-                Icons.restart_alt,
-                color: theme.colorScheme.error,
-              ),
+              leading: Icon(Icons.restart_alt, color: theme.colorScheme.error),
               title: const Text('Ξεκίνα από την αρχή (Επαναφορά ρυθμίσεων)'),
               subtitle: const Text(
                 'Αποσύνδεση από την τρέχουσα βάση και επαναφορά τοπικών ρυθμίσεων. '

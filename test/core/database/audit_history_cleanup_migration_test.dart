@@ -24,8 +24,9 @@ void main() {
 
     setUpAll(() async {
       initSqfliteFfiForTests();
-      final dir =
-          await Directory.systemTemp.createTemp('audit_history_cleanup_');
+      final dir = await Directory.systemTemp.createTemp(
+        'audit_history_cleanup_',
+      );
       await DatabaseHelper.bindTestDatabaseFile('${dir.path}/audit_v35.db');
       db = await DatabaseHelper.instance.database;
     });
@@ -142,9 +143,7 @@ void main() {
           'entity_id': userId,
           'entity_name': 'Δοκιμή Χρήστης',
           'details': 'users id=$userId · Προσθήκη τηλεφώνου $phoneNumber',
-          'old_values_json': jsonEncode({
-            'linked_phone_numbers': <String>[],
-          }),
+          'old_values_json': jsonEncode({'linked_phone_numbers': <String>[]}),
           'new_values_json': jsonEncode({
             'linked_phone_numbers': [phoneNumber],
           }),

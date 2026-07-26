@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -285,10 +285,12 @@ class _SmartEntityPhoneFieldState extends State<SmartEntityPhoneField> {
                   ),
                 ),
                 ConflictBadge(
-                  severity:
-                      widget.header.conflictSeverityFor(SelectorField.phone),
-                  message:
-                      widget.header.conflictTooltipFor(SelectorField.phone),
+                  severity: widget.header.conflictSeverityFor(
+                    SelectorField.phone,
+                  ),
+                  message: widget.header.conflictTooltipFor(
+                    SelectorField.phone,
+                  ),
                 ),
               ],
             ),
@@ -340,10 +342,13 @@ class _SmartEntityPhoneFieldState extends State<SmartEntityPhoneField> {
                   focusNode: focusNode,
                   textEditingController: controller,
                   optionsBuilder: (value) {
-                    final effectiveText =
-                        _isKeyboardPreview ? _typedQuery : value.text;
-                    final text =
-                        effectiveText.replaceAll(RegExp(r'[^0-9]'), '');
+                    final effectiveText = _isKeyboardPreview
+                        ? _typedQuery
+                        : value.text;
+                    final text = effectiveText.replaceAll(
+                      RegExp(r'[^0-9]'),
+                      '',
+                    );
                     if (header.phoneCandidates.isNotEmpty) {
                       final candidates = sortPhonesByRecent(
                         List<String>.from(header.phoneCandidates),
@@ -424,211 +429,228 @@ class _SmartEntityPhoneFieldState extends State<SmartEntityPhoneField> {
                       onPhoneCommitted: onPhoneCommitted,
                     );
                   },
-                  fieldViewBuilder: (
-                    context,
-                    textController,
-                    focusNodeParam,
-                    onFieldSubmitted,
-                  ) {
-                    return Semantics(
-                      label: 'Αριθμός τηλεφώνου',
-                      child: Focus(
-                        onKeyEvent: (node, event) {
-                          if (event is! KeyDownEvent) {
-                            return KeyEventResult.ignored;
-                          }
-                          final phoneCandidatesVisible =
-                              header.phoneCandidates.isNotEmpty &&
-                              _showSuggestionList &&
-                              (controller.text.trim().isEmpty ||
-                                  _isKeyboardPreview);
-                          if (phoneCandidatesVisible) {
-                            final overlayPhones = sortPhonesByRecent(
-                              List<String>.from(header.phoneCandidates),
-                              header.recentPhones,
-                            );
-                            if (event.logicalKey ==
-                                LogicalKeyboardKey.arrowDown) {
-                              if (overlayPhones.isEmpty) {
+                  fieldViewBuilder:
+                      (
+                        context,
+                        textController,
+                        focusNodeParam,
+                        onFieldSubmitted,
+                      ) {
+                        return Semantics(
+                          label: 'Αριθμός τηλεφώνου',
+                          child: Focus(
+                            onKeyEvent: (node, event) {
+                              if (event is! KeyDownEvent) {
                                 return KeyEventResult.ignored;
                               }
-                              setState(() {
+                              final phoneCandidatesVisible =
+                                  header.phoneCandidates.isNotEmpty &&
+                                  _showSuggestionList &&
+                                  (controller.text.trim().isEmpty ||
+                                      _isKeyboardPreview);
+                              if (phoneCandidatesVisible) {
+                                final overlayPhones = sortPhonesByRecent(
+                                  List<String>.from(header.phoneCandidates),
+                                  header.recentPhones,
+                                );
+                                if (event.logicalKey ==
+                                    LogicalKeyboardKey.arrowDown) {
+                                  if (overlayPhones.isEmpty) {
+                                    return KeyEventResult.ignored;
+                                  }
+                                  setState(() {
+                                    _keyboardOptionIndex =
+                                        (_keyboardOptionIndex + 1).clamp(
+                                          0,
+                                          overlayPhones.length - 1,
+                                        );
+                                  });
+                                  _isKeyboardPreview = true;
+                                  _setControllerText(
+                                    textController,
+                                    overlayPhones[_keyboardOptionIndex],
+                                  );
+                                  return KeyEventResult.handled;
+                                }
+                                if (event.logicalKey ==
+                                    LogicalKeyboardKey.arrowUp) {
+                                  if (overlayPhones.isEmpty) {
+                                    return KeyEventResult.ignored;
+                                  }
+                                  setState(() {
+                                    _keyboardOptionIndex =
+                                        _keyboardOptionIndex <= 0
+                                        ? 0
+                                        : _keyboardOptionIndex - 1;
+                                  });
+                                  _isKeyboardPreview = true;
+                                  _setControllerText(
+                                    textController,
+                                    overlayPhones[_keyboardOptionIndex],
+                                  );
+                                  return KeyEventResult.handled;
+                                }
+                                if (event.logicalKey ==
+                                        LogicalKeyboardKey.enter &&
+                                    overlayPhones.isNotEmpty &&
+                                    _keyboardOptionIndex >= 0 &&
+                                    _keyboardOptionIndex <
+                                        overlayPhones.length) {
+                                  _commitPhoneSelection(
+                                    value: overlayPhones[_keyboardOptionIndex],
+                                    controller: textController,
+                                    focusNode: focusNode,
+                                    nextFocusNode: nextFocusNode,
+                                    header: header,
+                                    notifier: notifier,
+                                    onPhoneCommitted: onPhoneCommitted,
+                                  );
+                                  return KeyEventResult.handled;
+                                }
+                                return KeyEventResult.ignored;
+                              }
+                              final shouldHideInlineSuggestions =
+                                  event.logicalKey ==
+                                      LogicalKeyboardKey.arrowDown ||
+                                  event.logicalKey ==
+                                      LogicalKeyboardKey.arrowUp ||
+                                  event.logicalKey == LogicalKeyboardKey.enter;
+                              if (_showSuggestionList &&
+                                  shouldHideInlineSuggestions) {
+                                setState(() => _showSuggestionList = false);
+                              }
+                              final options = _phoneAutocompleteOptions(
+                                _typedQuery,
+                                header,
+                                lookupService,
+                              );
+                              if (event.logicalKey ==
+                                  LogicalKeyboardKey.arrowDown) {
+                                if (options.isEmpty) {
+                                  return KeyEventResult.ignored;
+                                }
                                 _keyboardOptionIndex =
                                     (_keyboardOptionIndex + 1).clamp(
-                                  0,
-                                  overlayPhones.length - 1,
+                                      0,
+                                      options.length - 1,
+                                    );
+                                _isKeyboardPreview = true;
+                                _setControllerText(
+                                  textController,
+                                  options[_keyboardOptionIndex],
                                 );
-                              });
-                              _isKeyboardPreview = true;
-                              _setControllerText(
-                                textController,
-                                overlayPhones[_keyboardOptionIndex],
-                              );
-                              return KeyEventResult.handled;
-                            }
-                            if (event.logicalKey ==
-                                LogicalKeyboardKey.arrowUp) {
-                              if (overlayPhones.isEmpty) {
-                                return KeyEventResult.ignored;
+                                return KeyEventResult.handled;
                               }
-                              setState(() {
-                                _keyboardOptionIndex =
-                                    _keyboardOptionIndex <= 0
+                              if (event.logicalKey ==
+                                  LogicalKeyboardKey.arrowUp) {
+                                if (options.isEmpty) {
+                                  return KeyEventResult.ignored;
+                                }
+                                _keyboardOptionIndex = _keyboardOptionIndex <= 0
                                     ? 0
                                     : _keyboardOptionIndex - 1;
-                              });
-                              _isKeyboardPreview = true;
-                              _setControllerText(
-                                textController,
-                                overlayPhones[_keyboardOptionIndex],
-                              );
-                              return KeyEventResult.handled;
-                            }
-                            if (event.logicalKey == LogicalKeyboardKey.enter &&
-                                overlayPhones.isNotEmpty &&
-                                _keyboardOptionIndex >= 0 &&
-                                _keyboardOptionIndex < overlayPhones.length) {
-                              _commitPhoneSelection(
-                                value: overlayPhones[_keyboardOptionIndex],
-                                controller: textController,
-                                focusNode: focusNode,
-                                nextFocusNode: nextFocusNode,
-                                header: header,
-                                notifier: notifier,
-                                onPhoneCommitted: onPhoneCommitted,
-                              );
-                              return KeyEventResult.handled;
-                            }
-                            return KeyEventResult.ignored;
-                          }
-                          final shouldHideInlineSuggestions =
-                              event.logicalKey ==
-                                  LogicalKeyboardKey.arrowDown ||
-                              event.logicalKey == LogicalKeyboardKey.arrowUp ||
-                              event.logicalKey == LogicalKeyboardKey.enter;
-                          if (_showSuggestionList &&
-                              shouldHideInlineSuggestions) {
-                            setState(() => _showSuggestionList = false);
-                          }
-                          final options = _phoneAutocompleteOptions(
-                            _typedQuery,
-                            header,
-                            lookupService,
-                          );
-                          if (event.logicalKey ==
-                              LogicalKeyboardKey.arrowDown) {
-                            if (options.isEmpty) return KeyEventResult.ignored;
-                            _keyboardOptionIndex = (_keyboardOptionIndex + 1)
-                                .clamp(0, options.length - 1);
-                            _isKeyboardPreview = true;
-                            _setControllerText(
-                              textController,
-                              options[_keyboardOptionIndex],
-                            );
-                            return KeyEventResult.handled;
-                          }
-                          if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
-                            if (options.isEmpty) return KeyEventResult.ignored;
-                            _keyboardOptionIndex = _keyboardOptionIndex <= 0
-                                ? 0
-                                : _keyboardOptionIndex - 1;
-                            _isKeyboardPreview = true;
-                            _setControllerText(
-                              textController,
-                              options[_keyboardOptionIndex],
-                            );
-                            return KeyEventResult.handled;
-                          }
-                          if (event.logicalKey == LogicalKeyboardKey.enter &&
-                              options.isNotEmpty &&
-                              _keyboardOptionIndex >= 0 &&
-                              _keyboardOptionIndex < options.length) {
-                            _commitPhoneSelection(
-                              value: options[_keyboardOptionIndex],
+                                _isKeyboardPreview = true;
+                                _setControllerText(
+                                  textController,
+                                  options[_keyboardOptionIndex],
+                                );
+                                return KeyEventResult.handled;
+                              }
+                              if (event.logicalKey ==
+                                      LogicalKeyboardKey.enter &&
+                                  options.isNotEmpty &&
+                                  _keyboardOptionIndex >= 0 &&
+                                  _keyboardOptionIndex < options.length) {
+                                _commitPhoneSelection(
+                                  value: options[_keyboardOptionIndex],
+                                  controller: textController,
+                                  focusNode: focusNode,
+                                  nextFocusNode: nextFocusNode,
+                                  header: header,
+                                  notifier: notifier,
+                                  onPhoneCommitted: onPhoneCommitted,
+                                );
+                                return KeyEventResult.handled;
+                              }
+                              return KeyEventResult.ignored;
+                            },
+                            child: TextField(
                               controller: textController,
-                              focusNode: focusNode,
-                              nextFocusNode: nextFocusNode,
-                              header: header,
-                              notifier: notifier,
-                              onPhoneCommitted: onPhoneCommitted,
-                            );
-                            return KeyEventResult.handled;
-                          }
-                          return KeyEventResult.ignored;
-                        },
-                        child: TextField(
-                          controller: textController,
-                          focusNode: focusNodeParam,
-                          autofocus: true,
-                          spellCheckConfiguration:
-                              platformSpellCheckConfiguration,
-                          decoration: InputDecoration(
-                            hintStyle: TextStyle(
-                              color: Theme.of(context).hintColor,
+                              focusNode: focusNodeParam,
+                              autofocus: true,
+                              spellCheckConfiguration:
+                                  platformSpellCheckConfiguration,
+                              decoration: InputDecoration(
+                                hintStyle: TextStyle(
+                                  color: Theme.of(context).hintColor,
+                                ),
+                                border: const OutlineInputBorder(),
+                                isDense: true,
+                                suffixIcon:
+                                    showInlineFieldClearButton(
+                                      textController.text,
+                                    )
+                                    ? Semantics(
+                                        label: 'Καθαρισμός Τηλεφώνου',
+                                        child: IconButton(
+                                          icon: const Icon(
+                                            Icons.close,
+                                            size: 20,
+                                          ),
+                                          onPressed: () {
+                                            textController.clear();
+                                            _typedQuery = '';
+                                            _keyboardOptionIndex = -1;
+                                            onClearAll();
+                                          },
+                                          tooltip: 'Καθαρισμός Τηλεφώνου',
+                                        ),
+                                      )
+                                    : null,
+                              ),
+                              inputFormatters: [
+                                FilteringTextInputFormatter.digitsOnly,
+                              ],
+                              keyboardType: TextInputType.number,
+                              onChanged: _onPhoneChanged,
+                              onSubmitted: (value) {
+                                final options = _phoneAutocompleteOptions(
+                                  _typedQuery,
+                                  header,
+                                  lookupService,
+                                );
+                                if (options.isNotEmpty &&
+                                    _keyboardOptionIndex >= 0 &&
+                                    _keyboardOptionIndex < options.length) {
+                                  _commitPhoneSelection(
+                                    value: options[_keyboardOptionIndex],
+                                    controller: textController,
+                                    focusNode: focusNode,
+                                    nextFocusNode: nextFocusNode,
+                                    header: header,
+                                    notifier: notifier,
+                                    onPhoneCommitted: onPhoneCommitted,
+                                  );
+                                  return;
+                                }
+                                final digits = value.replaceAll(
+                                  RegExp(r'[^0-9]'),
+                                  '',
+                                );
+                                if (digits.length < 2) {
+                                  onLessThan2DigitsSubmit();
+                                  return;
+                                }
+                                // Lookup πριν την επέκταση· το debounced timer ακυρώνεται σε dispose.
+                                _performLookup();
+                                onPhoneCommitted();
+                                widget.onPhoneSubmitted();
+                                nextFocusNode.requestFocus();
+                              },
                             ),
-                            border: const OutlineInputBorder(),
-                            isDense: true,
-                            suffixIcon: showInlineFieldClearButton(
-                              textController.text,
-                            )
-                                ? Semantics(
-                                    label: 'Καθαρισμός Τηλεφώνου',
-                                    child: IconButton(
-                                      icon: const Icon(Icons.close, size: 20),
-                                      onPressed: () {
-                                        textController.clear();
-                                        _typedQuery = '';
-                                        _keyboardOptionIndex = -1;
-                                        onClearAll();
-                                      },
-                                      tooltip: 'Καθαρισμός Τηλεφώνου',
-                                    ),
-                                  )
-                                : null,
                           ),
-                          inputFormatters: [
-                            FilteringTextInputFormatter.digitsOnly,
-                          ],
-                          keyboardType: TextInputType.number,
-                          onChanged: _onPhoneChanged,
-                          onSubmitted: (value) {
-                            final options = _phoneAutocompleteOptions(
-                              _typedQuery,
-                              header,
-                              lookupService,
-                            );
-                            if (options.isNotEmpty &&
-                                _keyboardOptionIndex >= 0 &&
-                                _keyboardOptionIndex < options.length) {
-                              _commitPhoneSelection(
-                                value: options[_keyboardOptionIndex],
-                                controller: textController,
-                                focusNode: focusNode,
-                                nextFocusNode: nextFocusNode,
-                                header: header,
-                                notifier: notifier,
-                                onPhoneCommitted: onPhoneCommitted,
-                              );
-                              return;
-                            }
-                            final digits = value.replaceAll(
-                              RegExp(r'[^0-9]'),
-                              '',
-                            );
-                            if (digits.length < 2) {
-                              onLessThan2DigitsSubmit();
-                              return;
-                            }
-                            // Lookup πριν την επέκταση· το debounced timer ακυρώνεται σε dispose.
-                            _performLookup();
-                            onPhoneCommitted();
-                            widget.onPhoneSubmitted();
-                            nextFocusNode.requestFocus();
-                          },
-                        ),
-                      ),
-                    );
-                  },
+                        );
+                      },
                 ),
               ),
             ),

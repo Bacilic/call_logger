@@ -66,9 +66,7 @@ Future<ProviderContainer> _pumpViewport(
           body: withTextFieldAbove
               ? Column(
                   children: [
-                    const TextField(
-                      key: Key('pan_test_text_field'),
-                    ),
+                    const TextField(key: Key('pan_test_text_field')),
                     viewport,
                   ],
                 )
@@ -201,11 +199,7 @@ void main() {
     testWidgets(
       'Space μέσα σε εστιασμένο πεδίο κειμένου: ΔΕΝ ενεργοποιεί pan',
       (tester) async {
-        await _pumpViewport(
-          tester,
-          imgFile: imgFile,
-          withTextFieldAbove: true,
-        );
+        await _pumpViewport(tester, imgFile: imgFile, withTextFieldAbove: true);
         await tester.tap(find.byKey(const Key('pan_test_text_field')));
         await tester.pump();
 

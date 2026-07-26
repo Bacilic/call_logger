@@ -70,10 +70,9 @@ void main() {
           'is_deleted': 0,
         });
 
-        await EquipmentRepository(db).clearEquipmentSharedDepartment(
-          code,
-          deptId,
-        );
+        await EquipmentRepository(
+          db,
+        ).clearEquipmentSharedDepartment(code, deptId);
         final afterClear = (await db.query(
           'equipment',
           where: 'id = ?',
@@ -96,12 +95,13 @@ void main() {
             .loadDepartments();
 
         await expectLater(
-          container.read(departmentDirectoryProvider.notifier)
+          container
+              .read(departmentDirectoryProvider.notifier)
               .updateDepartmentSharedAssets(
-            deptId,
-            sharedPhones: const [],
-            sharedEquipmentCodes: const [],
-          ),
+                deptId,
+                sharedPhones: const [],
+                sharedEquipmentCodes: const [],
+              ),
           throwsA(isA<StateError>()),
         );
 
@@ -114,77 +114,71 @@ void main() {
       },
     );
 
-    test(
-      '(β) μεταφορά σε τμήμα Τ2: department_id == Τ2.id',
-      () async {
-        final deptId = await _insertDepartment('Τμήμα Πηγή');
-        final targetId = await _insertDepartment('Τμήμα Στόχος');
-        const code = 'EQ-TRANSFER-SHARED';
-        final db = await DatabaseHelper.instance.database;
-        final equipmentId = await db.insert('equipment', {
-          'code_equipment': code,
-          'department_id': deptId,
-          'is_deleted': 0,
-        });
+    test('(β) μεταφορά σε τμήμα Τ2: department_id == Τ2.id', () async {
+      final deptId = await _insertDepartment('Τμήμα Πηγή');
+      final targetId = await _insertDepartment('Τμήμα Στόχος');
+      const code = 'EQ-TRANSFER-SHARED';
+      final db = await DatabaseHelper.instance.database;
+      final equipmentId = await db.insert('equipment', {
+        'code_equipment': code,
+        'department_id': deptId,
+        'is_deleted': 0,
+      });
 
-        await _reloadLookup(container);
-        await container
-            .read(departmentDirectoryProvider.notifier)
-            .loadDepartments();
+      await _reloadLookup(container);
+      await container
+          .read(departmentDirectoryProvider.notifier)
+          .loadDepartments();
 
-        await container
-            .read(departmentDirectoryProvider.notifier)
-            .updateDepartmentSharedAssets(
-          deptId,
-          sharedPhones: const [],
-          sharedEquipmentCodes: const [],
-          equipmentTransfers: {code: targetId},
-        );
+      await container
+          .read(departmentDirectoryProvider.notifier)
+          .updateDepartmentSharedAssets(
+            deptId,
+            sharedPhones: const [],
+            sharedEquipmentCodes: const [],
+            equipmentTransfers: {code: targetId},
+          );
 
-        final row = (await db.query(
-          'equipment',
-          where: 'id = ?',
-          whereArgs: [equipmentId],
-        )).single;
-        expect(row['department_id'], targetId);
-        expect(row['is_deleted'], 0);
-      },
-    );
+      final row = (await db.query(
+        'equipment',
+        where: 'id = ?',
+        whereArgs: [equipmentId],
+      )).single;
+      expect(row['department_id'], targetId);
+      expect(row['is_deleted'], 0);
+    });
 
-    test(
-      '(γ) διαγραφή: soft-deleted',
-      () async {
-        final deptId = await _insertDepartment('Τμήμα Διαγραφής');
-        const code = 'EQ-DELETE-SHARED';
-        final db = await DatabaseHelper.instance.database;
-        final equipmentId = await db.insert('equipment', {
-          'code_equipment': code,
-          'department_id': deptId,
-          'is_deleted': 0,
-        });
+    test('(γ) διαγραφή: soft-deleted', () async {
+      final deptId = await _insertDepartment('Τμήμα Διαγραφής');
+      const code = 'EQ-DELETE-SHARED';
+      final db = await DatabaseHelper.instance.database;
+      final equipmentId = await db.insert('equipment', {
+        'code_equipment': code,
+        'department_id': deptId,
+        'is_deleted': 0,
+      });
 
-        await _reloadLookup(container);
-        await container
-            .read(departmentDirectoryProvider.notifier)
-            .loadDepartments();
+      await _reloadLookup(container);
+      await container
+          .read(departmentDirectoryProvider.notifier)
+          .loadDepartments();
 
-        await container
-            .read(departmentDirectoryProvider.notifier)
-            .updateDepartmentSharedAssets(
-          deptId,
-          sharedPhones: const [],
-          sharedEquipmentCodes: const [],
-          equipmentToSoftDelete: [code],
-        );
+      await container
+          .read(departmentDirectoryProvider.notifier)
+          .updateDepartmentSharedAssets(
+            deptId,
+            sharedPhones: const [],
+            sharedEquipmentCodes: const [],
+            equipmentToSoftDelete: [code],
+          );
 
-        final row = (await db.query(
-          'equipment',
-          where: 'id = ?',
-          whereArgs: [equipmentId],
-        )).single;
-        expect(row['is_deleted'], 1);
-      },
-    );
+      final row = (await db.query(
+        'equipment',
+        where: 'id = ?',
+        whereArgs: [equipmentId],
+      )).single;
+      expect(row['is_deleted'], 1);
+    });
 
     test(
       '(δ) με κάτοχο: όχι «σε κίνδυνο» — αφαίρεση χωρίς ερώτηση, πέφτει στον κάτοχο',
@@ -220,10 +214,10 @@ void main() {
         await container
             .read(departmentDirectoryProvider.notifier)
             .updateDepartmentSharedAssets(
-          deptId,
-          sharedPhones: const [],
-          sharedEquipmentCodes: const [],
-        );
+              deptId,
+              sharedPhones: const [],
+              sharedEquipmentCodes: const [],
+            );
 
         final row = (await db.query(
           'equipment',

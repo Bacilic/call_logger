@@ -35,8 +35,10 @@ void main() {
         const typedName = 'Τμήμα Πληροφορικής';
         const uppercaseName = 'ΤΜΗΜΑ ΠΛΗΡΟΦΟΡΙΚΗΣ';
 
-        final firstId =
-            await repo.getOrCreateDepartmentIdByName(typedName, recordAudit: false);
+        final firstId = await repo.getOrCreateDepartmentIdByName(
+          typedName,
+          recordAudit: false,
+        );
         final secondId = await repo.getOrCreateDepartmentIdByName(
           uppercaseName,
           recordAudit: false,
@@ -55,60 +57,71 @@ void main() {
       },
     );
 
-    test('backfillAllDepartmentNameKeys updates stale keys without merging duplicates', () async {
-      final db = await DatabaseHelper.instance.database;
-      final canonicalKey =
-          SearchTextNormalizer.normalizeForSearch('ΤΜΗΜΑ ΠΛΗΡΟΦΟΡΙΚΗΣ');
-      final staleKey = 'τμήμα πληροφορικής';
+    test(
+      'backfillAllDepartmentNameKeys updates stale keys without merging duplicates',
+      () async {
+        final db = await DatabaseHelper.instance.database;
+        final canonicalKey = SearchTextNormalizer.normalizeForSearch(
+          'ΤΜΗΜΑ ΠΛΗΡΟΦΟΡΙΚΗΣ',
+        );
+        final staleKey = 'τμήμα πληροφορικής';
 
-      final winnerId = await db.insert('departments', {
-        'name': 'ΤΜΗΜΑ ΠΛΗΡΟΦΟΡΙΚΗΣ',
-        'name_key': canonicalKey,
-        'is_deleted': 0,
-      });
-      final loserId = await db.insert('departments', {
-        'name': 'Τμήμα Πληροφορικής',
-        'name_key': staleKey,
-        'is_deleted': 0,
-      });
+        final winnerId = await db.insert('departments', {
+          'name': 'ΤΜΗΜΑ ΠΛΗΡΟΦΟΡΙΚΗΣ',
+          'name_key': canonicalKey,
+          'is_deleted': 0,
+        });
+        final loserId = await db.insert('departments', {
+          'name': 'Τμήμα Πληροφορικής',
+          'name_key': staleKey,
+          'is_deleted': 0,
+        });
 
-      final result = await repo.backfillAllDepartmentNameKeys();
+        final result = await repo.backfillAllDepartmentNameKeys();
 
-      expect(result.updated, 0);
-      expect(result.skippedCollision, 1);
+        expect(result.updated, 0);
+        expect(result.skippedCollision, 1);
 
-      final winner = await db.query(
-        'departments',
-        where: 'id = ?',
-        whereArgs: [winnerId],
-      );
-      final loser = await db.query(
-        'departments',
-        where: 'id = ?',
-        whereArgs: [loserId],
-      );
-      expect(winner.single['name_key'], canonicalKey);
-      expect(loser.single['name_key'], staleKey);
-    });
+        final winner = await db.query(
+          'departments',
+          where: 'id = ?',
+          whereArgs: [winnerId],
+        );
+        final loser = await db.query(
+          'departments',
+          where: 'id = ?',
+          whereArgs: [loserId],
+        );
+        expect(winner.single['name_key'], canonicalKey);
+        expect(loser.single['name_key'], staleKey);
+      },
+    );
 
-    test('backfillAllDepartmentNameKeys fixes legacy sigma key when no collision', () async {
-      final db = await DatabaseHelper.instance.database;
-      const name = 'Τμήμα Πληροφορικής';
-      final expected = SearchTextNormalizer.normalizeForSearch(name);
-      final legacyKey = 'τμήμα πληροφορικής';
+    test(
+      'backfillAllDepartmentNameKeys fixes legacy sigma key when no collision',
+      () async {
+        final db = await DatabaseHelper.instance.database;
+        const name = 'Τμήμα Πληροφορικής';
+        final expected = SearchTextNormalizer.normalizeForSearch(name);
+        final legacyKey = 'τμήμα πληροφορικής';
 
-      final id = await db.insert('departments', {
-        'name': name,
-        'name_key': legacyKey,
-        'is_deleted': 0,
-      });
+        final id = await db.insert('departments', {
+          'name': name,
+          'name_key': legacyKey,
+          'is_deleted': 0,
+        });
 
-      final result = await repo.backfillAllDepartmentNameKeys();
+        final result = await repo.backfillAllDepartmentNameKeys();
 
-      expect(result.updated, 1);
-      final row = await db.query('departments', where: 'id = ?', whereArgs: [id]);
-      expect(row.single['name_key'], expected);
-      expect(row.single['name_key'], isNot(legacyKey));
-    });
+        expect(result.updated, 1);
+        final row = await db.query(
+          'departments',
+          where: 'id = ?',
+          whereArgs: [id],
+        );
+        expect(row.single['name_key'], expected);
+        expect(row.single['name_key'], isNot(legacyKey));
+      },
+    );
   });
 }

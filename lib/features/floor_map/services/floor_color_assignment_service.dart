@@ -54,15 +54,9 @@ class FloorColorAssignmentService {
   ];
 
   /// Προεπισκόπηση του επόμενου χρώματος χωρίς ενημέρωση cache (για διάλογο επιβεβαίωσης).
-  Color peekNextDistinctColor(
-    int floorId, {
-    Iterable<Color>? additionalUsed,
-  }) {
+  Color peekNextDistinctColor(int floorId, {Iterable<Color>? additionalUsed}) {
     final cached = _usedColorsPerFloor[floorId] ?? <Color>{};
-    final combined = <Color>{
-      ...cached,
-      ...?additionalUsed,
-    };
+    final combined = <Color>{...cached, ...?additionalUsed};
     return _computeNextDistinctColor(combined);
   }
 
@@ -72,15 +66,9 @@ class FloorColorAssignmentService {
   ///
   /// Το [additionalUsed] χρησιμοποιείται για χρώματα που ήδη εμφανίζονται στο
   /// φύλλο από τη βάση αλλά δεν έχουν ακόμη γραφτεί στο in-memory cache.
-  Color getNextDistinctColor(
-    int floorId, {
-    Iterable<Color>? additionalUsed,
-  }) {
+  Color getNextDistinctColor(int floorId, {Iterable<Color>? additionalUsed}) {
     final cached = _usedColorsPerFloor.putIfAbsent(floorId, () => <Color>{});
-    final combined = <Color>{
-      ...cached,
-      ...?additionalUsed,
-    };
+    final combined = <Color>{...cached, ...?additionalUsed};
     final chosen = _computeNextDistinctColor(combined);
     cached.add(chosen);
     return chosen;
@@ -105,11 +93,7 @@ class FloorColorAssignmentService {
 
   /// Ενημερώνει το cache: αφαιρεί προαιρετικά ένα παλιό χρώμα από το σύνολο
   /// χρήσης και προσθέτει το [newColor]. Καλεί [onColorOverride] αν έχει οριστεί.
-  void overrideColor(
-    int floorId,
-    Color newColor, {
-    Color? replaceUsed,
-  }) {
+  void overrideColor(int floorId, Color newColor, {Color? replaceUsed}) {
     final used = _usedColorsPerFloor.putIfAbsent(floorId, () => <Color>{});
     if (replaceUsed != null) {
       used.remove(replaceUsed);

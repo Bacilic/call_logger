@@ -20,9 +20,7 @@ void main() {
       addTearDown(controller.close);
 
       await tester.pumpWidget(
-        MaterialApp(
-          home: ShutdownProgressScreen(events: controller.stream),
-        ),
+        MaterialApp(home: ShutdownProgressScreen(events: controller.stream)),
       );
 
       expect(find.text('Κλείσιμο εφαρμογής'), findsOneWidget);
@@ -95,31 +93,30 @@ void main() {
       },
     );
 
-    testWidgets(
-      'scheduleShutdownProgressReveal: εμφανίζεται μετά τα 500 ms',
-      (tester) async {
-        var revealed = false;
-        const stillRunning = true;
+    testWidgets('scheduleShutdownProgressReveal: εμφανίζεται μετά τα 500 ms', (
+      tester,
+    ) async {
+      var revealed = false;
+      const stillRunning = true;
 
-        final timer = scheduleShutdownProgressReveal(
-          delay: const Duration(milliseconds: 500),
-          onReveal: () => revealed = true,
-          isShutdownStillRunning: () => stillRunning,
-        );
-        addTearDown(timer.cancel);
+      final timer = scheduleShutdownProgressReveal(
+        delay: const Duration(milliseconds: 500),
+        onReveal: () => revealed = true,
+        isShutdownStillRunning: () => stillRunning,
+      );
+      addTearDown(timer.cancel);
 
-        await tester.pump(const Duration(milliseconds: 499));
-        expect(revealed, isFalse);
+      await tester.pump(const Duration(milliseconds: 499));
+      expect(revealed, isFalse);
 
-        await tester.pump(const Duration(milliseconds: 1));
-        expect(
-          revealed,
-          isTrue,
-          reason: greekExpectMsg(
-            'Μετά τα 500 ms πρέπει να εμφανιστεί η οθόνη προόδου',
-          ),
-        );
-      },
-    );
+      await tester.pump(const Duration(milliseconds: 1));
+      expect(
+        revealed,
+        isTrue,
+        reason: greekExpectMsg(
+          'Μετά τα 500 ms πρέπει να εμφανιστεί η οθόνη προόδου',
+        ),
+      );
+    });
   });
 }

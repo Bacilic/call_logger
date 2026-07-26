@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -195,7 +195,9 @@ class _MainShellState extends ConsumerState<MainShell>
   }) {
     switch (dest) {
       case MainNavDestination.calls:
-        final callsIcon = _CallsNavigationIcon(isOnCallsScreen: isOnCallsScreen);
+        final callsIcon = _CallsNavigationIcon(
+          isOnCallsScreen: isOnCallsScreen,
+        );
         return NavigationRailDestination(
           icon: callsIcon,
           selectedIcon: callsIcon,
@@ -402,7 +404,9 @@ class _MainShellState extends ConsumerState<MainShell>
         NavigationRailTheme.of(context).unselectedLabelTextStyle ??
         Theme.of(context).textTheme.labelMedium;
 
-    final currentNavForQuickCall = ref.watch(mainShellEffectiveDestinationProvider);
+    final currentNavForQuickCall = ref.watch(
+      mainShellEffectiveDestinationProvider,
+    );
     if (currentNavForQuickCall != effectiveDestination) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
@@ -468,105 +472,108 @@ class _MainShellState extends ConsumerState<MainShell>
                 )
               : null,
           body: Row(
-        children: [
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              Expanded(
-                child: NavigationRail(
-                  extended: railExtended,
-                  selectedIndex: selectedRailIndex < 0 ? 0 : selectedRailIndex,
-                  onDestinationSelected: (index) {
-                    unawaited(
-                      _selectDestination(visibleDestinations[index]),
-                    );
-                  },
-                  leading: wideEnoughForExtendedRail
-                      ? IconButton(
-                          key: const ValueKey('nav_rail_toggle'),
-                          icon: Icon(
-                            railExtended
-                                ? Icons.chevron_left
-                                : Icons.chevron_right,
-                          ),
-                          tooltip: railExtended
-                              ? 'Σύμπτυξη πλοήγησης'
-                              : 'Επέκταση πλοήγησης',
-                          onPressed: () async {
-                            final next = !_navRailShowLabels;
-                            setState(() => _navRailShowLabels = next);
-                            await SettingsService().setNavRailShowLabels(next);
-                          },
-                        )
-                      : null,
-                  trailing: Padding(
-                    padding: const EdgeInsets.only(
-                      bottom: 8,
-                      left: 8,
-                      right: 8,
-                    ),
-                    child: Tooltip(
-                      waitDuration: const Duration(milliseconds: 600),
-                      showDuration: const Duration(seconds: 4),
-                      message: 'Γενικές ρυθμίσεις της εφαρμογής',
-                      child: InkWell(
-                        borderRadius: BorderRadius.circular(12),
-                        onTap: _openSettingsScreen,
-                        child: SizedBox(
-                          height: 48,
-                          width: railExtended ? 220 : 56,
-                          child: Row(
-                            mainAxisAlignment: railExtended
-                                ? MainAxisAlignment.start
-                                : MainAxisAlignment.center,
-                            children: [
-                              if (railExtended) const SizedBox(width: 12),
-                              const Icon(Icons.settings),
-                              if (railExtended) ...[
-                                const SizedBox(width: 16),
-                                Text('Ρυθμίσεις', style: railLabelStyle),
-                              ],
-                            ],
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Expanded(
+                    child: NavigationRail(
+                      extended: railExtended,
+                      selectedIndex: selectedRailIndex < 0
+                          ? 0
+                          : selectedRailIndex,
+                      onDestinationSelected: (index) {
+                        unawaited(
+                          _selectDestination(visibleDestinations[index]),
+                        );
+                      },
+                      leading: wideEnoughForExtendedRail
+                          ? IconButton(
+                              key: const ValueKey('nav_rail_toggle'),
+                              icon: Icon(
+                                railExtended
+                                    ? Icons.chevron_left
+                                    : Icons.chevron_right,
+                              ),
+                              tooltip: railExtended
+                                  ? 'Σύμπτυξη πλοήγησης'
+                                  : 'Επέκταση πλοήγησης',
+                              onPressed: () async {
+                                final next = !_navRailShowLabels;
+                                setState(() => _navRailShowLabels = next);
+                                await SettingsService().setNavRailShowLabels(
+                                  next,
+                                );
+                              },
+                            )
+                          : null,
+                      trailing: Padding(
+                        padding: const EdgeInsets.only(
+                          bottom: 8,
+                          left: 8,
+                          right: 8,
+                        ),
+                        child: Tooltip(
+                          waitDuration: const Duration(milliseconds: 600),
+                          showDuration: const Duration(seconds: 4),
+                          message: 'Γενικές ρυθμίσεις της εφαρμογής',
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(12),
+                            onTap: _openSettingsScreen,
+                            child: SizedBox(
+                              height: 48,
+                              width: railExtended ? 220 : 56,
+                              child: Row(
+                                mainAxisAlignment: railExtended
+                                    ? MainAxisAlignment.start
+                                    : MainAxisAlignment.center,
+                                children: [
+                                  if (railExtended) const SizedBox(width: 12),
+                                  const Icon(Icons.settings),
+                                  if (railExtended) ...[
+                                    const SizedBox(width: 16),
+                                    Text('Ρυθμίσεις', style: railLabelStyle),
+                                  ],
+                                ],
+                              ),
+                            ),
                           ),
                         ),
                       ),
+                      destinations: [
+                        for (final d in visibleDestinations)
+                          _railDestination(
+                            d,
+                            showBadge,
+                            pendingCount,
+                            isOnCallsScreen:
+                                effectiveDestination ==
+                                MainNavDestination.calls,
+                            showCoreLexiconWarning:
+                                d == MainNavDestination.dictionary &&
+                                showCoreLexiconWarning,
+                            showLampReadPathWarning:
+                                d == MainNavDestination.lamp &&
+                                showLampReadPathWarning,
+                          ),
+                      ],
                     ),
                   ),
-                  destinations: [
-                    for (final d in visibleDestinations)
-                      _railDestination(
-                        d,
-                        showBadge,
-                        pendingCount,
-                        isOnCallsScreen:
-                            effectiveDestination == MainNavDestination.calls,
-                        showCoreLexiconWarning:
-                            d == MainNavDestination.dictionary &&
-                            showCoreLexiconWarning,
-                        showLampReadPathWarning:
-                            d == MainNavDestination.lamp &&
-                            showLampReadPathWarning,
-                      ),
-                  ],
-                ),
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: VersionChip(extended: railExtended),
+                  ),
+                ],
               ),
-              Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: VersionChip(extended: railExtended),
+              const VerticalDivider(thickness: 1, width: 1),
+              Expanded(
+                child: _absorbTasksScrollForOuterAppBar(
+                  effectiveDestination,
+                  _destinationContentColumn(effectiveDestination),
+                ),
               ),
             ],
           ),
-          const VerticalDivider(thickness: 1, width: 1),
-          Expanded(
-            child: _absorbTasksScrollForOuterAppBar(
-              effectiveDestination,
-              _destinationContentColumn(
-                effectiveDestination,
-              ),
-            ),
-          ),
-        ],
-      ),
         ),
         const UpdateStartupPromptListener(),
       ],

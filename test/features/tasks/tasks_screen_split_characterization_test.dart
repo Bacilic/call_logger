@@ -34,7 +34,12 @@ Future<int> _seedOpenTask({required String title}) async {
 
 Future<Map<String, Object?>?> _readTaskRow(int id) async {
   final db = await DatabaseHelper.instance.database;
-  final rows = await db.query('tasks', where: 'id = ?', whereArgs: [id], limit: 1);
+  final rows = await db.query(
+    'tasks',
+    where: 'id = ?',
+    whereArgs: [id],
+    limit: 1,
+  );
   return rows.isEmpty ? null : rows.first;
 }
 
@@ -58,20 +63,14 @@ Future<void> _pumpTasksScreen(WidgetTester tester) async {
 
 Finder _completeButtonForTask(String title) {
   return find.descendant(
-    of: find.ancestor(
-      of: find.text(title),
-      matching: find.byType(TaskCard),
-    ),
+    of: find.ancestor(of: find.text(title), matching: find.byType(TaskCard)),
     matching: find.byTooltip('Ολοκλήρωση'),
   );
 }
 
 Finder _actionsMenuForTask(String title) {
   return find.descendant(
-    of: find.ancestor(
-      of: find.text(title),
-      matching: find.byType(TaskCard),
-    ),
+    of: find.ancestor(of: find.text(title), matching: find.byType(TaskCard)),
     matching: find.byTooltip('Ενέργειες'),
   );
 }

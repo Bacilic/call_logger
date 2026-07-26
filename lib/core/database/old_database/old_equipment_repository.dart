@@ -1,4 +1,4 @@
-﻿import 'dart:io';
+import 'dart:io';
 
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
@@ -508,9 +508,8 @@ class OldEquipmentRepository {
     );
   }
 
-  Future<Map<String, List<Map<String, Object?>>>> deferredDataIssuesGroupedByType(
-    String databasePath,
-  ) async {
+  Future<Map<String, List<Map<String, Object?>>>>
+  deferredDataIssuesGroupedByType(String databasePath) async {
     final issues = await deferredDataIssues(databasePath);
     final grouped = <String, List<Map<String, Object?>>>{};
     for (final issue in issues) {
@@ -543,10 +542,7 @@ class OldEquipmentRepository {
   Future<void> _ensureDataIssueSchemaOnPath(String databasePath) async {
     final path = databasePath.trim();
     if (path.isEmpty) return;
-    final db = await _databaseProvider.open(
-      path,
-      mode: LampDatabaseMode.write,
-    );
+    final db = await _databaseProvider.open(path, mode: LampDatabaseMode.write);
     await _ensureDataIssueModelColumns(db);
   }
 
@@ -556,10 +552,7 @@ class OldEquipmentRepository {
   ) async {
     if (issueIds.isEmpty) return 0;
     final path = databasePath.trim();
-    final db = await _databaseProvider.open(
-      path,
-      mode: LampDatabaseMode.write,
-    );
+    final db = await _databaseProvider.open(path, mode: LampDatabaseMode.write);
     await _ensureDataIssueModelColumns(db);
     final placeholders = List<String>.filled(issueIds.length, '?').join(',');
     return db.update(
@@ -575,10 +568,7 @@ class OldEquipmentRepository {
     String issueType,
   ) async {
     final path = databasePath.trim();
-    final db = await _databaseProvider.open(
-      path,
-      mode: LampDatabaseMode.write,
-    );
+    final db = await _databaseProvider.open(path, mode: LampDatabaseMode.write);
     await _ensureDataIssueModelColumns(db);
     return db.update(
       'data_issues',
@@ -670,15 +660,11 @@ class OldEquipmentRepository {
       for (final row in rows) {
         final sourceId = _toInt(row['_source_id']) ?? 0;
         final normalizedText = _buildNormalizedSearchText(row);
-        batch.insert(
-          'search_index',
-          <String, Object?>{
-            'source_table': 'equipment',
-            'source_id': sourceId,
-            'normalized_text': normalizedText,
-          },
-          conflictAlgorithm: ConflictAlgorithm.replace,
-        );
+        batch.insert('search_index', <String, Object?>{
+          'source_table': 'equipment',
+          'source_id': sourceId,
+          'normalized_text': normalizedText,
+        }, conflictAlgorithm: ConflictAlgorithm.replace);
       }
       await batch.commit(noResult: true);
     });
@@ -862,8 +848,7 @@ class OldEquipmentRepository {
       ),
       _IntegrityScanStepSpec(
         id: 'set_master_self_reference',
-        label:
-            'Έλεγχος κύριου εξοπλισμού που δείχνει στον ίδιο εξοπλισμό',
+        label: 'Έλεγχος κύριου εξοπλισμού που δείχνει στον ίδιο εξοπλισμό',
         weight: 1,
         runner: _scanSelfMaster,
       ),
@@ -1021,12 +1006,7 @@ class OldEquipmentRepository {
         rawValue,
       );
       if (existingFkFingerprints.contains(fpTriple)) return;
-      final rowKey = _fkIssueRowKey(
-        issueType,
-        columnName,
-        rawValue,
-        rowNumber,
-      );
+      final rowKey = _fkIssueRowKey(issueType, columnName, rawValue, rowNumber);
       if (seenRowKeys.contains(rowKey)) return;
       seenRowKeys.add(rowKey);
       out.add(
@@ -1198,8 +1178,7 @@ class OldEquipmentRepository {
       out.add(
         _scanIssue(
           issueType: 'serial_scientific_notation',
-          message:
-              'Σειριακός σε επιστημονική μορφή για code=$code: $serial',
+          message: 'Σειριακός σε επιστημονική μορφή για code=$code: $serial',
           rowNumber: code,
           columnName: 'serial_no',
           rawValue: serial,
@@ -1219,10 +1198,7 @@ class OldEquipmentRepository {
     final path = databasePath.trim();
     final trimmed = serial.trim();
     if (path.isEmpty || trimmed.isEmpty) return false;
-    final db = await _databaseProvider.open(
-      path,
-      mode: LampDatabaseMode.read,
-    );
+    final db = await _databaseProvider.open(path, mode: LampDatabaseMode.read);
     final where = exceptCode != null
         ? 'serial_no = ? AND code <> ?'
         : 'serial_no = ?';
@@ -1527,10 +1503,7 @@ class OldEquipmentRepository {
   ) async {
     if (issues.isEmpty) return 0;
     final path = databasePath.trim();
-    final db = await _databaseProvider.open(
-      path,
-      mode: LampDatabaseMode.write,
-    );
+    final db = await _databaseProvider.open(path, mode: LampDatabaseMode.write);
     await _ensureDataIssueModelColumns(db);
     var inserted = 0;
     await db.transaction((txn) async {
@@ -1545,10 +1518,12 @@ class OldEquipmentRepository {
         final row = <String, Object?>{
           'sheet': issue['sheet'],
           if (hasEntityType)
-            'entity_type': _resolveDataIssueEntityType(issue, _normalizeText) ??
+            'entity_type':
+                _resolveDataIssueEntityType(issue, _normalizeText) ??
                 oldDataIssueEntityTypeEquipment,
           if (hasOrigin)
-            'origin': _resolveDataIssueOrigin(issue, _normalizeText) ??
+            'origin':
+                _resolveDataIssueOrigin(issue, _normalizeText) ??
                 oldDataIssueOriginIntegrityScan,
           'row_number': issue['row_number'],
           'column_name': issue['column_name'],
@@ -1558,9 +1533,7 @@ class OldEquipmentRepository {
           'created_at': issue['created_at'] ?? DateTime.now().toIso8601String(),
           if (hasStatus) 'status': issue['status'] ?? kDataIssueStatusOpen,
         };
-        await txn.insert('data_issues', <String, Object?>{
-          ...row,
-        });
+        await txn.insert('data_issues', <String, Object?>{...row});
         existing.add(key);
         inserted++;
       }
@@ -1577,10 +1550,7 @@ class OldEquipmentRepository {
       return const <Map<String, Object?>>[];
     }
     final path = databasePath.trim();
-    final db = await _databaseProvider.open(
-      path,
-      mode: LampDatabaseMode.read,
-    );
+    final db = await _databaseProvider.open(path, mode: LampDatabaseMode.read);
     final existing = await _loadDataIssueIdentityKeys(db);
     return <Map<String, Object?>>[
       for (final issue in candidateIssues)
@@ -2232,7 +2202,9 @@ class OldEquipmentRepository {
     List<LampScopedSearchTerm> terms,
   ) {
     for (final term in terms) {
-      final normalizedValue = SearchTextNormalizer.normalizeForSearch(term.value);
+      final normalizedValue = SearchTextNormalizer.normalizeForSearch(
+        term.value,
+      );
       if (normalizedValue.isEmpty) return false;
       var matched = false;
       for (final column in term.columns) {

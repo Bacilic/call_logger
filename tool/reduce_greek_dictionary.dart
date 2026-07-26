@@ -1,4 +1,4 @@
-﻿// ignore_for_file: avoid_print, avoid_relative_lib_imports
+// ignore_for_file: avoid_print, avoid_relative_lib_imports
 
 import 'dart:convert';
 import 'dart:io';
@@ -30,9 +30,11 @@ Future<void> _run(List<String> args) async {
   final projectRoot = Directory.current;
   final opts = _parseArgs(args);
 
-  final subtlexPath = opts['subtlex'] ??
+  final subtlexPath =
+      opts['subtlex'] ??
       p.join(projectRoot.path, 'tool', 'input', 'SUBTLEX-GR_CD.txt');
-  var greekLexPath = opts['greeklex'] ??
+  var greekLexPath =
+      opts['greeklex'] ??
       p.join(
         projectRoot.path,
         'tool',
@@ -41,19 +43,15 @@ Future<void> _run(List<String> args) async {
         'GreekLex_v101',
         'GreekLex_LowerCase.txt',
       );
-  final itPath = opts['it-terms'] ??
+  final itPath =
+      opts['it-terms'] ??
       p.join(projectRoot.path, 'tool', 'data', 'greek_it_terms.txt');
-  final outPath = opts['out'] ??
-      p.join(
-        projectRoot.path,
-        'assets',
-        'dictionaries',
-        'greek_core_60k.txt',
-      );
+  final outPath =
+      opts['out'] ??
+      p.join(projectRoot.path, 'assets', 'dictionaries', 'greek_core_60k.txt');
 
   final target = int.tryParse(opts['target'] ?? '57500') ?? 57500;
-  final greekLexExtra =
-      int.tryParse(opts['greeklex-extra'] ?? '4500') ?? 4500;
+  final greekLexExtra = int.tryParse(opts['greeklex-extra'] ?? '4500') ?? 4500;
   final rank = opts['rank'] ?? 'freq';
   final tryDownload =
       args.contains('--download') || opts.containsKey('download');
@@ -83,8 +81,8 @@ Future<void> _run(List<String> args) async {
   final merged = _loadSubtlexMerged(subtlexPath, rank: rank);
   print('  Μοναδικά κλειδιά μετά συγχώνευση: ${merged.length}');
 
-  final entries =
-      merged.entries.toList()..sort((a, b) => b.value.score.compareTo(a.value.score));
+  final entries = merged.entries.toList()
+    ..sort((a, b) => b.value.score.compareTo(a.value.score));
 
   final picked = <String, Set<String>>{};
   for (final e in entries) {
@@ -123,8 +121,10 @@ Future<void> _run(List<String> args) async {
   for (final key in sortedKeys) {
     final variants = picked[key]!.toList()
       ..sort((a, b) {
-        final primary =
-            DictionaryService.primaryDisplayForVariants(key, picked[key]!);
+        final primary = DictionaryService.primaryDisplayForVariants(
+          key,
+          picked[key]!,
+        );
         if (a == primary) return -1;
         if (b == primary) return 1;
         return a.compareTo(b);
@@ -143,7 +143,9 @@ Future<void> _run(List<String> args) async {
     sink.writeln(line);
   }
   await sink.close();
-  print('Έγγραφο: $outPath (${outputLines.length} γραμμές, ${picked.length} κλειδιά)');
+  print(
+    'Έγγραφο: $outPath (${outputLines.length} γραμμές, ${picked.length} κλειδιά)',
+  );
   print(
     'SUBTLEX-GR: Dimitropoulou et al. (2010), Frontiers in Psychology (BCBL)',
   );
@@ -161,7 +163,10 @@ Map<String, String> _parseArgs(List<String> args) {
   return m;
 }
 
-Map<String, _RankedWord> _loadSubtlexMerged(String path, {required String rank}) {
+Map<String, _RankedWord> _loadSubtlexMerged(
+  String path, {
+  required String rank,
+}) {
   final lines = File(path).readAsLinesSync(encoding: utf8);
   var pastHeader = false;
   final freqSum = <String, int>{};
@@ -368,10 +373,7 @@ Future<void> _download(String url, String destPath) async {
     final request = await client.getUrl(uri);
     final response = await request.close();
     if (response.statusCode != 200) {
-      throw HttpException(
-        'HTTP ${response.statusCode}',
-        uri: uri,
-      );
+      throw HttpException('HTTP ${response.statusCode}', uri: uri);
     }
     final chunks = <int>[];
     await for (final b in response) {

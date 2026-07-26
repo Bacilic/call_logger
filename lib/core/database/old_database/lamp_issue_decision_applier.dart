@@ -442,7 +442,8 @@ class LampIssueDecisionApplier {
         );
       case LampIssueResolutionOperations.setFieldManual:
         final manualCode = _support.toInt(metadata['code'] ?? proposal.row);
-        final manualFkColumn = metadata['fkColumn']?.toString() ?? proposal.column;
+        final manualFkColumn =
+            metadata['fkColumn']?.toString() ?? proposal.column;
         final manualInput = decision.textInput?.trim();
         final manualTargetId = _support.toInt(manualInput);
         if (manualCode == null || manualFkColumn == null) {
@@ -499,7 +500,8 @@ class LampIssueDecisionApplier {
         }
       case LampIssueResolutionOperations.clearField:
         final clearCode = _support.toInt(metadata['code'] ?? proposal.row);
-        final clearFkColumn = metadata['fkColumn']?.toString() ?? proposal.column;
+        final clearFkColumn =
+            metadata['fkColumn']?.toString() ?? proposal.column;
         if (clearCode == null || clearFkColumn == null) {
           throw StateError('Λείπουν στοιχεία εκκαθάρισης πεδίου.');
         }
@@ -525,8 +527,10 @@ class LampIssueDecisionApplier {
         if (proposal.issueIds.isEmpty) {
           throw StateError('Δεν υπάρχουν εγγραφές προβλήματος για αναβολή.');
         }
-        final deferPlaceholders =
-            List<String>.filled(proposal.issueIds.length, '?').join(',');
+        final deferPlaceholders = List<String>.filled(
+          proposal.issueIds.length,
+          '?',
+        ).join(',');
         await txn.update(
           'data_issues',
           <String, Object?>{'status': kDataIssueStatusDeferred},
@@ -739,7 +743,9 @@ class LampIssueDecisionApplier {
   }) async {
     final spec = ManualFkTargetSpec.forColumn(fkColumn);
     if (spec == null) {
-      throw StateError('Μη υποστηριζόμενο πεδίο για χειροκίνητη σύνδεση: $fkColumn.');
+      throw StateError(
+        'Μη υποστηριζόμενο πεδίο για χειροκίνητη σύνδεση: $fkColumn.',
+      );
     }
     final rows = await db.query(
       spec.table,
@@ -848,7 +854,8 @@ class LampIssueDecisionApplier {
       final rawValue = _support.text(row['raw_value']);
       switch (issueType) {
         case 'duplicate_asset_no':
-          if (rawValue != null && !await _duplicateAssetNoRemains(db, rawValue)) {
+          if (rawValue != null &&
+              !await _duplicateAssetNoRemains(db, rawValue)) {
             resolved.add(id);
           }
         case 'duplicate_model_serial':

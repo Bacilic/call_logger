@@ -38,7 +38,8 @@ List<DatabaseSwitchBlocker> collectDatabaseSwitchBlockers(WidgetRef ref) {
 
   final smart = ref.read(callSmartEntityProvider);
   final entry = ref.read(callEntryProvider);
-  final hasOpenCallForm = smart.hasAnyContent ||
+  final hasOpenCallForm =
+      smart.hasAnyContent ||
       entry.isCallTimerRunning ||
       entry.durationSeconds > 0 ||
       entry.notes.trim().isNotEmpty ||
@@ -90,8 +91,9 @@ Future<bool> _finalizeAllowedDatabaseSwitch(
   BuildContext context,
   WidgetRef ref,
 ) async {
-  final labels =
-      await ref.read(pendingDeferredActionsProvider.notifier).settleAll();
+  final labels = await ref
+      .read(pendingDeferredActionsProvider.notifier)
+      .settleAll();
   if (!context.mounted) return true;
   final messenger = ScaffoldMessenger.of(context);
   messenger.clearSnackBars();
@@ -137,8 +139,9 @@ Future<bool> ensureDatabaseSwitchAllowed(
     return _finalizeAllowedDatabaseSwitch(context, ref);
   }
 
-  final nonInterruptible =
-      blockers.where((b) => !b.interruptible).toList(growable: false);
+  final nonInterruptible = blockers
+      .where((b) => !b.interruptible)
+      .toList(growable: false);
   if (nonInterruptible.isNotEmpty) {
     if (!context.mounted) return false;
     await showDialog<void>(
@@ -207,12 +210,14 @@ Future<bool> ensureDatabaseSwitchAllowed(
       return _finalizeAllowedDatabaseSwitch(context, ref);
     case _OpenCallFormGuardChoice.goToCall:
       if (context.mounted) {
-        Navigator.of(context, rootNavigator: true)
-            .popUntil((route) => route.isFirst);
+        Navigator.of(
+          context,
+          rootNavigator: true,
+        ).popUntil((route) => route.isFirst);
       }
-      ref.read(mainNavRequestProvider.notifier).request(
-            const MainNavRequest(destination: MainNavDestination.calls),
-          );
+      ref
+          .read(mainNavRequestProvider.notifier)
+          .request(const MainNavRequest(destination: MainNavDestination.calls));
       return false;
     case _OpenCallFormGuardChoice.cancel:
     case null:
@@ -220,8 +225,4 @@ Future<bool> ensureDatabaseSwitchAllowed(
   }
 }
 
-enum _OpenCallFormGuardChoice {
-  cancel,
-  discardCall,
-  goToCall,
-}
+enum _OpenCallFormGuardChoice { cancel, discardCall, goToCall }

@@ -16,9 +16,7 @@ void main() {
     setUpAll(() async {
       initSqfliteFfiForTests();
       final dir = await Directory.systemTemp.createTemp('integrity_test_');
-      await DatabaseHelper.bindTestDatabaseFile(
-        '${dir.path}/integrity.db',
-      );
+      await DatabaseHelper.bindTestDatabaseFile('${dir.path}/integrity.db');
       await DatabaseHelper.instance.database;
       service = DatabaseIntegrityService();
     });
@@ -35,28 +33,31 @@ void main() {
       await releaseCallLoggerTestDatabase();
     });
 
-    test('PRAGMA quick_check runs first and passes on clean database', () async {
-      final progressSteps = <int>[];
-      final checkNames = <String>[];
+    test(
+      'PRAGMA quick_check runs first and passes on clean database',
+      () async {
+        final progressSteps = <int>[];
+        final checkNames = <String>[];
 
-      final report = await service.runChecks(
-        onProgress: (p) {
-          progressSteps.add(p.currentStep);
-          checkNames.add(p.currentCheckName);
-        },
-      );
+        final report = await service.runChecks(
+          onProgress: (p) {
+            progressSteps.add(p.currentStep);
+            checkNames.add(p.currentCheckName);
+          },
+        );
 
-      expect(checkNames.first, 'Έλεγχος SQLite (PRAGMA)');
-      expect(
-        report.findings.where(
-          (f) =>
-              f.category == IntegrityCategory.technicalFlow &&
-              f.title.contains('PRAGMA'),
-        ),
-        isEmpty,
-      );
-      expect(progressSteps, equals(List.generate(19, (i) => i + 1)));
-    });
+        expect(checkNames.first, 'Έλεγχος SQLite (PRAGMA)');
+        expect(
+          report.findings.where(
+            (f) =>
+                f.category == IntegrityCategory.technicalFlow &&
+                f.title.contains('PRAGMA'),
+          ),
+          isEmpty,
+        );
+        expect(progressSteps, equals(List.generate(19, (i) => i + 1)));
+      },
+    );
 
     test('detects orphan phone without user or department link', () async {
       final db = await DatabaseHelper.instance.database;
@@ -86,7 +87,9 @@ void main() {
 
       final report = await service.runChecks();
       expect(
-        report.findings.any((f) => f.title == 'Κλήση χωρίς ευρετήριο αναζήτησης'),
+        report.findings.any(
+          (f) => f.title == 'Κλήση χωρίς ευρετήριο αναζήτησης',
+        ),
         isTrue,
       );
     });
@@ -140,23 +143,26 @@ void main() {
       );
     });
 
-    test('detects user with non-existent department_id via LEFT JOIN', () async {
-      final db = await DatabaseHelper.instance.database;
-      await db.insert('users', {
-        'first_name': 'Test',
-        'last_name': 'Orphan',
-        'department_id': 99999,
-        'is_deleted': 0,
-      });
+    test(
+      'detects user with non-existent department_id via LEFT JOIN',
+      () async {
+        final db = await DatabaseHelper.instance.database;
+        await db.insert('users', {
+          'first_name': 'Test',
+          'last_name': 'Orphan',
+          'department_id': 99999,
+          'is_deleted': 0,
+        });
 
-      final report = await service.runChecks();
-      final findings = report.findings
-          .where((f) => f.title == 'Χρήστης με άκυρο τμήμα')
-          .toList();
+        final report = await service.runChecks();
+        final findings = report.findings
+            .where((f) => f.title == 'Χρήστης με άκυρο τμήμα')
+            .toList();
 
-      expect(findings, hasLength(1));
-      expect(findings.first.severity, IntegritySeverity.critical);
-    });
+        expect(findings, hasLength(1));
+        expect(findings.first.severity, IntegritySeverity.critical);
+      },
+    );
 
     test('detects department with mismatched name_key', () async {
       final db = await DatabaseHelper.instance.database;
@@ -194,9 +200,7 @@ VALUES ('Κενό κλειδί', '', 0)
       await db.insert('phones', {'number': '8888', 'is_deleted': 0});
 
       final progress = <DatabaseIntegrityProgress>[];
-      await service.runChecks(
-        onProgress: (p) => progress.add(p),
-      );
+      await service.runChecks(onProgress: (p) => progress.add(p));
 
       expect(progress, hasLength(19));
       expect(progress.first.currentStep, 1);
@@ -212,44 +216,56 @@ VALUES ('Κενό κλειδί', '', 0)
       expect(orphanStep.totalRowsChecked, greaterThan(0));
     });
 
-    test('clean seeded database has no critical referential findings', () async {
-      final report = await service.runChecks();
-      final criticalReferential = report.findings.where(
-        (f) =>
-            f.severity == IntegritySeverity.critical &&
-            f.category == IntegrityCategory.referential,
-      );
-      expect(criticalReferential, isEmpty);
-    });
+    test(
+      'clean seeded database has no critical referential findings',
+      () async {
+        final report = await service.runChecks();
+        final criticalReferential = report.findings.where(
+          (f) =>
+              f.severity == IntegritySeverity.critical &&
+              f.category == IntegrityCategory.referential,
+        );
+        expect(criticalReferential, isEmpty);
+      },
+    );
 
-    test('orphan user_equipment shows employee name and equipment code', () async {
-      final db = await DatabaseHelper.instance.database;
-      final userId = await db.insert('users', {
-        'first_name': 'Γιάννης',
-        'last_name': 'Παπαδόπουλος',
-        'department_id': null,
-        'is_deleted': 1,
-      });
-      final equipmentId = await db.insert('equipment', {
-        'code_equipment': 'PC-LAP-001',
-        'is_deleted': 0,
-      });
-      await db.insert('user_equipment', {
-        'user_id': userId,
-        'equipment_id': equipmentId,
-      });
+    test(
+      'orphan user_equipment shows employee name and equipment code',
+      () async {
+        final db = await DatabaseHelper.instance.database;
+        final userId = await db.insert('users', {
+          'first_name': 'Γιάννης',
+          'last_name': 'Παπαδόπουλος',
+          'department_id': null,
+          'is_deleted': 1,
+        });
+        final equipmentId = await db.insert('equipment', {
+          'code_equipment': 'PC-LAP-001',
+          'is_deleted': 0,
+        });
+        await db.insert('user_equipment', {
+          'user_id': userId,
+          'equipment_id': equipmentId,
+        });
 
-      final report = await service.runChecks();
-      final findings = report.findings
-          .where((f) => f.title == 'Ορφανή συσχέτιση χρήστη–εξοπλισμού')
-          .toList();
+        final report = await service.runChecks();
+        final findings = report.findings
+            .where((f) => f.title == 'Ορφανή συσχέτιση χρήστη–εξοπλισμού')
+            .toList();
 
-      expect(findings, hasLength(1));
-      expect(findings.first.description, contains('Παπαδόπουλος Γιάννης (id=$userId)'));
-      expect(findings.first.description, contains('PC-LAP-001 (id=$equipmentId)'));
-      expect(findings.first.description, isNot(contains('user_id=')));
-      expect(findings.first.description, isNot(contains('equipment_id=')));
-    });
+        expect(findings, hasLength(1));
+        expect(
+          findings.first.description,
+          contains('Παπαδόπουλος Γιάννης (id=$userId)'),
+        );
+        expect(
+          findings.first.description,
+          contains('PC-LAP-001 (id=$equipmentId)'),
+        );
+        expect(findings.first.description, isNot(contains('user_id=')));
+        expect(findings.first.description, isNot(contains('equipment_id=')));
+      },
+    );
 
     test('runCheck targets single check type', () async {
       final db = await DatabaseHelper.instance.database;
@@ -257,7 +273,10 @@ VALUES ('Κενό κλειδί', '', 0)
 
       final findings = await service.runCheck(IntegrityCheckType.orphanPhone);
       expect(findings, isNotEmpty);
-      expect(findings.every((f) => f.checkType == IntegrityCheckType.orphanPhone), isTrue);
+      expect(
+        findings.every((f) => f.checkType == IntegrityCheckType.orphanPhone),
+        isTrue,
+      );
     });
 
     test('flags only hard-missing call references, not soft-deleted', () async {
@@ -308,10 +327,15 @@ VALUES ('Κενό κλειδί', '', 0)
         'last_name': 'B',
         'is_deleted': 1,
       });
-      final phoneId = await db.insert('phones', {'number': '5555', 'is_deleted': 0});
+      final phoneId = await db.insert('phones', {
+        'number': '5555',
+        'is_deleted': 0,
+      });
       await db.insert('user_phones', {'user_id': userId, 'phone_id': phoneId});
 
-      final findings = await service.runCheck(IntegrityCheckType.orphanUserPhones);
+      final findings = await service.runCheck(
+        IntegrityCheckType.orphanUserPhones,
+      );
       expect(findings, hasLength(1));
       expect(findings.first.context['user_id'], userId);
       expect(findings.first.context['phone_id'], phoneId);
@@ -329,7 +353,9 @@ VALUES ('Κενό κλειδί', '', 0)
         final findings = await service.runCheck(
           IntegrityCheckType.equipmentInvalidDepartment,
         );
-        final mine = findings.where((f) => f.affectedId == equipmentId).toList();
+        final mine = findings
+            .where((f) => f.affectedId == equipmentId)
+            .toList();
 
         expect(mine, hasLength(1));
         expect(mine.first.severity, IntegritySeverity.critical);
@@ -434,7 +460,10 @@ VALUES ('Κενό κλειδί', '', 0)
         final invalidDeptFindings = await service.runCheck(
           IntegrityCheckType.phoneInvalidDepartment,
         );
-        expect(invalidDeptFindings.where((f) => f.affectedId == phoneId), isEmpty);
+        expect(
+          invalidDeptFindings.where((f) => f.affectedId == phoneId),
+          isEmpty,
+        );
 
         final orphanFindings = await service.runCheck(
           IntegrityCheckType.orphanPhone,
@@ -481,7 +510,8 @@ VALUES ('Κενό κλειδί', '', 0)
       expect(md, contains('**Κρίσιμα:** 1'));
       expect(md, contains('**Προειδοποιήσεις:** 1'));
       expect(md, contains('Εκκρεμότητες #1'));
-      expect(md, contains('Κλήσεις #2'));    });
+      expect(md, contains('Κλήσεις #2'));
+    });
 
     test('reports no issues when findings empty', () {
       final report = DatabaseIntegrityReport(

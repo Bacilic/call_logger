@@ -45,6 +45,7 @@ class BuildingMapFloorDepartmentsButton extends ConsumerWidget {
   });
 
   final BuildingMapFloorDepartmentsDialogMode mode;
+
   /// Προαιρετικός τίτλος που εμφανίζεται στον διάλογο (π.χ. ετικέτα φύλλου). Αν είναι
   /// null, εμφανίζεται «Φύλλο #id».
   final String? floorTitle;
@@ -67,9 +68,7 @@ class BuildingMapFloorDepartmentsButton extends ConsumerWidget {
     final hasHidden = hiddenCount > 0;
     final enabled = sheetId != null && totalOnSheet > 0;
     final icon = Icon(
-      hasHidden
-          ? Icons.visibility_off_outlined
-          : Icons.visibility_outlined,
+      hasHidden ? Icons.visibility_off_outlined : Icons.visibility_outlined,
     );
 
     final button = IconButton(
@@ -87,12 +86,7 @@ class BuildingMapFloorDepartmentsButton extends ConsumerWidget {
                 floorTitle: floorTitle ?? 'Φύλλο #$sheetId',
               );
             },
-      icon: hasHidden
-          ? Badge.count(
-              count: hiddenCount,
-              child: icon,
-            )
-          : icon,
+      icon: hasHidden ? Badge.count(count: hiddenCount, child: icon) : icon,
     );
     return button;
   }
@@ -140,15 +134,13 @@ class _BuildingMapFloorDepartmentsDialogState
     extends ConsumerState<_BuildingMapFloorDepartmentsDialog>
     with DialogSnackbarHost {
   final TextEditingController _searchCtrl = TextEditingController();
-  final ScrollController _floorDeptListScrollController =
-      ScrollController();
+  final ScrollController _floorDeptListScrollController = ScrollController();
   final Set<int> _selected = <int>{};
   int? _renamingId;
   TextEditingController? _renameCtrl;
   FocusNode? _renameFocus;
 
-  bool get _isEdit =>
-      widget.mode == BuildingMapFloorDepartmentsDialogMode.edit;
+  bool get _isEdit => widget.mode == BuildingMapFloorDepartmentsDialogMode.edit;
 
   @override
   void initState() {
@@ -168,17 +160,18 @@ class _BuildingMapFloorDepartmentsDialogState
   List<DepartmentModel> _departmentsForSheet() {
     final all = ref.watch(departmentDirectoryProvider).allDepartments;
     final sheetStr = widget.currentSheetId.toString();
-    final list = all
-        .where(
-          (d) =>
-              !d.isDeleted &&
-              (d.mapFloor ?? '') == sheetStr &&
-              d.id != null,
-        )
-        .toList()
-      ..sort(
-        (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
-      );
+    final list =
+        all
+            .where(
+              (d) =>
+                  !d.isDeleted &&
+                  (d.mapFloor ?? '') == sheetStr &&
+                  d.id != null,
+            )
+            .toList()
+          ..sort(
+            (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
+          );
     return list;
   }
 
@@ -202,9 +195,9 @@ class _BuildingMapFloorDepartmentsDialogState
   Future<void> _setHidden(DepartmentModel d, bool hidden) async {
     if (d.id == null) return;
     final db = await DatabaseHelper.instance.database;
-    await DepartmentRepository(db).updateDepartment(d.id!, {
-      'map_hidden': hidden ? 1 : 0,
-    });
+    await DepartmentRepository(
+      db,
+    ).updateDepartment(d.id!, {'map_hidden': hidden ? 1 : 0});
     await ref.read(departmentDirectoryProvider.notifier).loadDepartments();
     if (mounted) setState(() {});
   }
@@ -222,10 +215,11 @@ class _BuildingMapFloorDepartmentsDialogState
 
   Future<void> _changeColor(DepartmentModel d) async {
     if (d.id == null) return;
-    final initial =
-        tryParseDepartmentHex(d.color) ?? const Color(0xFF1976D2);
-    final picked =
-        await showBuildingMapFillColorPicker(context, initialColor: initial);
+    final initial = tryParseDepartmentHex(d.color) ?? const Color(0xFF1976D2);
+    final picked = await showBuildingMapFillColorPicker(
+      context,
+      initialColor: initial,
+    );
     if (!mounted || picked == null) return;
     await ref
         .read(buildingMapControllerProvider)
@@ -350,18 +344,18 @@ class _BuildingMapFloorDepartmentsDialogState
         decoration: const InputDecoration(
           isDense: true,
           border: OutlineInputBorder(),
-          contentPadding:
-              EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+          contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 6),
           hintText: 'Κενό = επαναφορά στο όνομα τμήματος',
         ),
         textInputAction: TextInputAction.done,
         onSubmitted: (_) => _commitRename(d),
       );
     } else {
-      final hasCustom =
-          (d.mapCustomName?.trim().isNotEmpty ?? false);
+      final hasCustom = (d.mapCustomName?.trim().isNotEmpty ?? false);
       nameWidget = Tooltip(
-        message: hasCustom ? 'Επωνυμία χάρτη: ${d.displayName}\nΌνομα τμήματος: ${d.name}' : d.name,
+        message: hasCustom
+            ? 'Επωνυμία χάρτη: ${d.displayName}\nΌνομα τμήματος: ${d.name}'
+            : d.name,
         child: Text(
           d.displayName,
           maxLines: 1,
@@ -409,7 +403,9 @@ class _BuildingMapFloorDepartmentsDialogState
             tooltip: hidden ? 'Εμφάνιση στον χάρτη' : 'Απόκρυψη από τον χάρτη',
             visualDensity: VisualDensity.compact,
             icon: Icon(
-              hidden ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+              hidden
+                  ? Icons.visibility_off_outlined
+                  : Icons.visibility_outlined,
               color: hidden
                   ? theme.colorScheme.onSurfaceVariant
                   : theme.colorScheme.primary,
@@ -442,9 +438,7 @@ class _BuildingMapFloorDepartmentsDialogState
           Tooltip(
             message: _isEdit
                 ? 'Αλλαγή χρώματος περιοχής'
-                : (color != null
-                    ? colorToDepartmentHex(color)
-                    : 'Χωρίς χρώμα'),
+                : (color != null ? colorToDepartmentHex(color) : 'Χωρίς χρώμα'),
             child: InkWell(
               onTap: _isEdit ? () => _changeColor(d) : null,
               borderRadius: BorderRadius.circular(4),
@@ -485,180 +479,181 @@ class _BuildingMapFloorDepartmentsDialogState
       messengerKey: dialogMessengerKey,
       child: Center(
         child: AlertDialog(
-      titlePadding: const EdgeInsets.fromLTRB(24, 20, 8, 0),
-      contentPadding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
-      title: Row(
-        children: [
-          Expanded(
-            child: Text(
-              'Τμήματα ορόφου – ${widget.floorTitle}',
-              style: theme.textTheme.titleLarge,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
+          titlePadding: const EdgeInsets.fromLTRB(24, 20, 8, 0),
+          contentPadding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+          title: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'Τμήματα ορόφου – ${widget.floorTitle}',
+                  style: theme.textTheme.titleLarge,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              IconButton(
+                tooltip: 'Κλείσιμο',
+                onPressed: () => Navigator.pop(context),
+                icon: const Icon(Icons.close),
+              ),
+            ],
+          ),
+          content: SizedBox(
+            width: 560,
+            height: 520,
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final showSearch = _floorDeptListWouldScrollWithoutSearch(
+                  departmentCount: all.length,
+                  contentMaxHeight: constraints.maxHeight,
+                );
+                final filtered = _filtered(
+                  all,
+                  queryText: showSearch ? null : '',
+                );
+                final filteredIds = filtered
+                    .where((d) => d.id != null)
+                    .map((d) => d.id!)
+                    .toList(growable: false);
+                final allFilteredSelected =
+                    filteredIds.isNotEmpty &&
+                    filteredIds.every((id) => _selected.contains(id));
+                final bool? selectionMasterValue = filteredIds.isEmpty
+                    ? false
+                    : (allFilteredSelected
+                          ? true
+                          : (filteredIds.every((id) => !_selected.contains(id))
+                                ? false
+                                : null));
+
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    if (showSearch) ...[
+                      TextField(
+                        controller: _searchCtrl,
+                        decoration: const InputDecoration(
+                          isDense: true,
+                          labelText: 'Αναζήτηση',
+                          prefixIcon: Icon(Icons.search),
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                    ],
+                    Row(
+                      children: [
+                        if (_isEdit)
+                          Tooltip(
+                            message: filteredIds.isEmpty
+                                ? 'Επιλογή τμημάτων'
+                                : (allFilteredSelected
+                                      ? 'Αποεπιλογή όλων στη λίστα'
+                                      : 'Επιλογή όλων στη λίστα'),
+                            child: Checkbox(
+                              tristate: true,
+                              visualDensity: VisualDensity.compact,
+                              value: selectionMasterValue,
+                              onChanged: filteredIds.isEmpty
+                                  ? null
+                                  : (_) {
+                                      setState(() {
+                                        if (allFilteredSelected) {
+                                          for (final id in filteredIds) {
+                                            _selected.remove(id);
+                                          }
+                                        } else {
+                                          for (final id in filteredIds) {
+                                            _selected.add(id);
+                                          }
+                                        }
+                                      });
+                                    },
+                            ),
+                          ),
+                        Tooltip(
+                          message: allVisible
+                              ? 'Απόκρυψη όλων από τον χάρτη'
+                              : 'Εμφάνιση όλων στον χάρτη',
+                          child: IconButton(
+                            visualDensity: VisualDensity.compact,
+                            onPressed: all.isEmpty
+                                ? null
+                                : () async {
+                                    final targetHidden = allVisible;
+                                    await _setHiddenBulk(
+                                      all.map((d) => d.id!),
+                                      targetHidden,
+                                    );
+                                  },
+                            icon: Icon(
+                              allVisible
+                                  ? Icons.visibility_off_outlined
+                                  : Icons.visibility_outlined,
+                              color: all.isEmpty
+                                  ? theme.colorScheme.onSurfaceVariant
+                                  : theme.colorScheme.primary,
+                            ),
+                          ),
+                        ),
+                        Text(
+                          all.isEmpty
+                              ? 'Κανένα τμήμα στο φύλλο'
+                              : '${all.length} τμήματα · $hiddenCount κρυμμένα',
+                          style: theme.textTheme.bodySmall,
+                        ),
+                        const Spacer(),
+                        if (_isEdit)
+                          TextButton.icon(
+                            onPressed: _selected.isEmpty
+                                ? null
+                                : () {
+                                    final picked = all
+                                        .where((d) => _selected.contains(d.id))
+                                        .toList(growable: false);
+                                    _bulkRemoveFromMap(picked);
+                                  },
+                            icon: const Icon(Icons.delete_sweep_outlined),
+                            label: Text(
+                              _selected.isEmpty
+                                  ? 'Αφαίρεση από χάρτη'
+                                  : 'Αφαίρεση ${_selected.length} από χάρτη',
+                            ),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Expanded(
+                      child: filtered.isEmpty
+                          ? Center(
+                              child: Text(
+                                all.isEmpty
+                                    ? 'Δεν υπάρχουν τμήματα χαρτογραφημένα σε αυτό το φύλλο.'
+                                    : 'Κανένα αποτέλεσμα για την αναζήτηση.',
+                                style: theme.textTheme.bodyMedium,
+                              ),
+                            )
+                          : Scrollbar(
+                              controller: _floorDeptListScrollController,
+                              thumbVisibility: true,
+                              child: ListView.builder(
+                                controller: _floorDeptListScrollController,
+                                itemCount: filtered.length,
+                                itemBuilder: (_, i) => _buildRow(filtered[i]),
+                              ),
+                            ),
+                    ),
+                  ],
+                );
+              },
             ),
           ),
-          IconButton(
-            tooltip: 'Κλείσιμο',
-            onPressed: () => Navigator.pop(context),
-            icon: const Icon(Icons.close),
-          ),
-        ],
-      ),
-      content: SizedBox(
-        width: 560,
-        height: 520,
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final showSearch = _floorDeptListWouldScrollWithoutSearch(
-              departmentCount: all.length,
-              contentMaxHeight: constraints.maxHeight,
-            );
-            final filtered = _filtered(
-              all,
-              queryText: showSearch ? null : '',
-            );
-            final filteredIds = filtered
-                .where((d) => d.id != null)
-                .map((d) => d.id!)
-                .toList(growable: false);
-            final allFilteredSelected = filteredIds.isNotEmpty &&
-                filteredIds.every((id) => _selected.contains(id));
-            final bool? selectionMasterValue = filteredIds.isEmpty
-                ? false
-                : (allFilteredSelected
-                    ? true
-                    : (filteredIds.every((id) => !_selected.contains(id))
-                        ? false
-                        : null));
-
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                if (showSearch) ...[
-                  TextField(
-                    controller: _searchCtrl,
-                    decoration: const InputDecoration(
-                      isDense: true,
-                      labelText: 'Αναζήτηση',
-                      prefixIcon: Icon(Icons.search),
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                ],
-                Row(
-                  children: [
-                    if (_isEdit)
-                      Tooltip(
-                        message: filteredIds.isEmpty
-                            ? 'Επιλογή τμημάτων'
-                            : (allFilteredSelected
-                                ? 'Αποεπιλογή όλων στη λίστα'
-                                : 'Επιλογή όλων στη λίστα'),
-                        child: Checkbox(
-                          tristate: true,
-                          visualDensity: VisualDensity.compact,
-                          value: selectionMasterValue,
-                          onChanged: filteredIds.isEmpty
-                              ? null
-                              : (_) {
-                                  setState(() {
-                                    if (allFilteredSelected) {
-                                      for (final id in filteredIds) {
-                                        _selected.remove(id);
-                                      }
-                                    } else {
-                                      for (final id in filteredIds) {
-                                        _selected.add(id);
-                                      }
-                                    }
-                                  });
-                                },
-                        ),
-                      ),
-                    Tooltip(
-                      message: allVisible
-                          ? 'Απόκρυψη όλων από τον χάρτη'
-                          : 'Εμφάνιση όλων στον χάρτη',
-                      child: IconButton(
-                        visualDensity: VisualDensity.compact,
-                        onPressed: all.isEmpty
-                            ? null
-                            : () async {
-                                final targetHidden = allVisible;
-                                await _setHiddenBulk(
-                                  all.map((d) => d.id!),
-                                  targetHidden,
-                                );
-                              },
-                        icon: Icon(
-                          allVisible
-                              ? Icons.visibility_off_outlined
-                              : Icons.visibility_outlined,
-                          color: all.isEmpty
-                              ? theme.colorScheme.onSurfaceVariant
-                              : theme.colorScheme.primary,
-                        ),
-                      ),
-                    ),
-                    Text(
-                      all.isEmpty
-                          ? 'Κανένα τμήμα στο φύλλο'
-                          : '${all.length} τμήματα · $hiddenCount κρυμμένα',
-                      style: theme.textTheme.bodySmall,
-                    ),
-                    const Spacer(),
-                    if (_isEdit)
-                      TextButton.icon(
-                        onPressed: _selected.isEmpty
-                            ? null
-                            : () {
-                                final picked = all
-                                    .where((d) => _selected.contains(d.id))
-                                    .toList(growable: false);
-                                _bulkRemoveFromMap(picked);
-                              },
-                        icon: const Icon(Icons.delete_sweep_outlined),
-                        label: Text(
-                          _selected.isEmpty
-                              ? 'Αφαίρεση από χάρτη'
-                              : 'Αφαίρεση ${_selected.length} από χάρτη',
-                        ),
-                      ),
-                  ],
-                ),
-                const SizedBox(height: 6),
-                Expanded(
-                  child: filtered.isEmpty
-                      ? Center(
-                          child: Text(
-                            all.isEmpty
-                                ? 'Δεν υπάρχουν τμήματα χαρτογραφημένα σε αυτό το φύλλο.'
-                                : 'Κανένα αποτέλεσμα για την αναζήτηση.',
-                            style: theme.textTheme.bodyMedium,
-                          ),
-                        )
-                      : Scrollbar(
-                          controller: _floorDeptListScrollController,
-                          thumbVisibility: true,
-                          child: ListView.builder(
-                            controller: _floorDeptListScrollController,
-                            itemCount: filtered.length,
-                            itemBuilder: (_, i) => _buildRow(filtered[i]),
-                          ),
-                        ),
-                ),
-              ],
-            );
-          },
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Κλείσιμο'),
-        ),
-      ],
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Κλείσιμο'),
+            ),
+          ],
         ),
       ),
     );

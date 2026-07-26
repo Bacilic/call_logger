@@ -11,9 +11,12 @@ import 'package:path/path.dart' as p;
 
 const _zipPath = r'E:\call logger\backup\call_logger_2026-07-25.zip';
 
-ZipRestoreRunner _runnerReturning(DatabaseRestoreResult result,
-    {List<String>? capturedTargets}) {
-  return (String zipPath, {
+ZipRestoreRunner _runnerReturning(
+  DatabaseRestoreResult result, {
+  List<String>? capturedTargets,
+}) {
+  return (
+    String zipPath, {
     required String targetDatabasePath,
     String? databaseEntryName,
   }) async {
@@ -88,23 +91,25 @@ void main() {
       );
     });
 
-    test('αποτυχία: επιστρέφει το μήνυμα της υπηρεσίας χωρίς διαδρομή',
-        () async {
-      final outcome = await DatabaseZipPickRestore.restore(
-        _zipPath,
-        closeConnection: _closesFine,
-        runRestore: _runnerReturning(
-          const DatabaseRestoreResult(
-            success: false,
-            message: 'Το αρχείο zip δεν βρέθηκε.',
+    test(
+      'αποτυχία: επιστρέφει το μήνυμα της υπηρεσίας χωρίς διαδρομή',
+      () async {
+        final outcome = await DatabaseZipPickRestore.restore(
+          _zipPath,
+          closeConnection: _closesFine,
+          runRestore: _runnerReturning(
+            const DatabaseRestoreResult(
+              success: false,
+              message: 'Το αρχείο zip δεν βρέθηκε.',
+            ),
           ),
-        ),
-      );
+        );
 
-      expect(outcome.isRestored, isFalse);
-      expect(outcome.databasePath, isNull);
-      expect(outcome.errorMessage, 'Το αρχείο zip δεν βρέθηκε.');
-    });
+        expect(outcome.isRestored, isFalse);
+        expect(outcome.databasePath, isNull);
+        expect(outcome.errorMessage, 'Το αρχείο zip δεν βρέθηκε.');
+      },
+    );
 
     test('success true αλλά χωρίς διαδρομή μετράει ως αποτυχία', () async {
       final outcome = await DatabaseZipPickRestore.restore(
@@ -119,8 +124,7 @@ void main() {
       expect(outcome.errorMessage, 'Αποτυχία επαναφοράς από zip.');
     });
 
-    test(
-        'αποτυχία κλεισίματος σύνδεσης ΔΕΝ καταπίνεται: μπαίνει στο μήνυμα '
+    test('αποτυχία κλεισίματος σύνδεσης ΔΕΝ καταπίνεται: μπαίνει στο μήνυμα '
         'όταν αποτύχει και η επαναφορά', () async {
       final outcome = await DatabaseZipPickRestore.restore(
         _zipPath,
@@ -140,21 +144,22 @@ void main() {
     });
 
     test(
-        'αποτυχία κλεισίματος δεν ενοχλεί τον χρήστη όταν η επαναφορά πέτυχε',
-        () async {
-      final outcome = await DatabaseZipPickRestore.restore(
-        _zipPath,
-        closeConnection: _closeThrows,
-        runRestore: _runnerReturning(
-          const DatabaseRestoreResult(
-            success: true,
-            databasePath: r'E:\call logger\backup\call_logger.db',
+      'αποτυχία κλεισίματος δεν ενοχλεί τον χρήστη όταν η επαναφορά πέτυχε',
+      () async {
+        final outcome = await DatabaseZipPickRestore.restore(
+          _zipPath,
+          closeConnection: _closeThrows,
+          runRestore: _runnerReturning(
+            const DatabaseRestoreResult(
+              success: true,
+              databasePath: r'E:\call logger\backup\call_logger.db',
+            ),
           ),
-        ),
-      );
+        );
 
-      expect(outcome.isRestored, isTrue);
-      expect(outcome.errorMessage, isNull);
-    });
+        expect(outcome.isRestored, isTrue);
+        expect(outcome.errorMessage, isNull);
+      },
+    );
   });
 }

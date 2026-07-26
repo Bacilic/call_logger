@@ -1,4 +1,4 @@
-﻿import 'dashboard_filter_model.dart';
+import 'dashboard_filter_model.dart';
 
 /// Προκαθορισμένο εύρος ημερομηνιών για τον πίνακα στατιστικών κλήσεων.
 enum DashboardDatePreset {
@@ -21,7 +21,10 @@ enum DashboardDatePreset {
   }
 
   /// Αναγνώριση preset από τρέχον φίλτρο (null = custom / μη τυπικό εύρος).
-  static DashboardDatePreset? detect(DashboardFilterModel filter, {DateTime? now}) {
+  static DashboardDatePreset? detect(
+    DashboardFilterModel filter, {
+    DateTime? now,
+  }) {
     final n = now != null
         ? DashboardFilterModel.dayOnly(now)
         : DashboardFilterModel.dayOnly(DateTime.now());

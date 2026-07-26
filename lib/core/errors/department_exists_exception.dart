@@ -7,6 +7,5 @@ class DepartmentExistsException implements Exception {
   final bool isDeleted;
 
   @override
-  String toString() =>
-      'DepartmentExistsException(isDeleted: $isDeleted)';
+  String toString() => 'DepartmentExistsException(isDeleted: $isDeleted)';
 }

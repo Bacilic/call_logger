@@ -1,4 +1,4 @@
-﻿import 'dart:io';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
@@ -71,7 +71,8 @@ Future<String?> _pickSqliteDatabaseSavePathImpl({
   String? defaultSuggestedFileName,
 }) async {
   final hint = initialPathHint?.trim();
-  final initialDir = initialDirectoryForFilePicker(
+  final initialDir =
+      initialDirectoryForFilePicker(
         (hint != null && hint.isNotEmpty) ? hint : AppConfig.defaultDbPath,
       ) ??
       path.dirname(AppConfig.defaultDbPath);
@@ -152,6 +153,7 @@ class CreateNewDatabaseFlow {
         ScaffoldMessenger.of(context).showSnackBar(snackBar);
       }
     }
+
     String? currentDb;
     try {
       currentDb = (await DatabaseHelper.instance.database).path;
@@ -179,7 +181,9 @@ class CreateNewDatabaseFlow {
       if (context.mounted) {
         showFlowSnackBar(
           SnackBar(
-            content: const Text('Δεν ήταν δυνατή η ανάγνωση της τρέχουσας βάσης.'),
+            content: const Text(
+              'Δεν ήταν δυνατή η ανάγνωση της τρέχουσας βάσης.',
+            ),
             backgroundColor: Theme.of(context).colorScheme.error,
           ),
         );

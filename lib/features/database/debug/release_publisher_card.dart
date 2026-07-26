@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -36,7 +36,8 @@ class ReleasePublisherCard extends ConsumerStatefulWidget {
   final ReleasePublisherService Function({
     required String updateFolderPath,
     void Function(String message)? onProgress,
-  })? serviceFactory;
+  })?
+  serviceFactory;
 
   @override
   ConsumerState<ReleasePublisherCard> createState() =>
@@ -305,8 +306,7 @@ class _ReleasePublisherCardState extends ConsumerState<ReleasePublisherCard> {
         _statusIsError = false;
       } else {
         final step = result.failedStep ?? 'άγνωστο';
-        _statusMessage =
-            'Αποτυχία στο βήμα «$step»: ${result.message ?? ''}';
+        _statusMessage = 'Αποτυχία στο βήμα «$step»: ${result.message ?? ''}';
       }
     });
   }
@@ -343,8 +343,7 @@ class _ReleasePublisherCardState extends ConsumerState<ReleasePublisherCard> {
         _statusMessage = '$base (συνολικός χρόνος: $elapsed)';
       } else {
         final step = result.failedStep ?? 'άγνωστο';
-        _statusMessage =
-            'Αποτυχία στο βήμα «$step»: ${result.message ?? ''}';
+        _statusMessage = 'Αποτυχία στο βήμα «$step»: ${result.message ?? ''}';
       }
     });
   }
@@ -405,9 +404,9 @@ class _ReleasePublisherCardState extends ConsumerState<ReleasePublisherCard> {
   }
 
   static String _bumpKindLabel(VersionBumpKind kind) => switch (kind) {
-        VersionBumpKind.patch => 'patch',
-        VersionBumpKind.minor => 'minor',
-      };
+    VersionBumpKind.patch => 'patch',
+    VersionBumpKind.minor => 'minor',
+  };
 
   Future<void> _onPublishPressed() async {
     if (!_canPublish) return;
@@ -712,10 +711,11 @@ class _ReleasePublisherCardState extends ConsumerState<ReleasePublisherCard> {
             if (_statusMessage != null) ...[
               const SizedBox(height: 12),
               Material(
-                color: (_statusIsError
-                        ? scheme.errorContainer
-                        : scheme.primaryContainer)
-                    .withValues(alpha: 0.55),
+                color:
+                    (_statusIsError
+                            ? scheme.errorContainer
+                            : scheme.primaryContainer)
+                        .withValues(alpha: 0.55),
                 borderRadius: BorderRadius.circular(8),
                 child: Padding(
                   padding: const EdgeInsets.all(12),

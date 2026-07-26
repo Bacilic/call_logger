@@ -83,8 +83,7 @@ class DashboardPaletteColors {
   final Color chartCardBorder;
   final Color chartGridLine;
 
-  Color rankColor(int index) =>
-      rankSwatches[index % rankSwatches.length];
+  Color rankColor(int index) => rankSwatches[index % rankSwatches.length];
 
   factory DashboardPaletteColors.from(DashboardPalette palette) {
     switch (palette) {

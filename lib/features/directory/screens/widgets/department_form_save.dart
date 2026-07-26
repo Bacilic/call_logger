@@ -266,9 +266,7 @@ mixin DepartmentFormSaveMixin on DepartmentFormDialogStateHost {
                       text: name,
                       style: const TextStyle(fontWeight: FontWeight.bold),
                     ),
-                    const TextSpan(
-                      text: '. Δώστε νέο διακριτικό όνομα (π.χ. ',
-                    ),
+                    const TextSpan(text: '. Δώστε νέο διακριτικό όνομα (π.χ. '),
                     TextSpan(text: '«$example»'),
                     const TextSpan(text: ').'),
                   ],

@@ -23,10 +23,7 @@ const Map<String, String> _kMaintenanceTableLabels = {
 
 /// Διάλογος συντήρησης βάσης (εκκαθάριση whitelist, VACUUM/REINDEX, νέα βάση).
 class DatabaseMaintenancePanel extends ConsumerStatefulWidget {
-  const DatabaseMaintenancePanel({
-    super.key,
-    required this.onDatabaseReopened,
-  });
+  const DatabaseMaintenancePanel({super.key, required this.onDatabaseReopened});
 
   final Future<void> Function() onDatabaseReopened;
 
@@ -37,9 +34,8 @@ class DatabaseMaintenancePanel extends ConsumerStatefulWidget {
     return showDialog<void>(
       context: context,
       barrierDismissible: false,
-      builder: (ctx) => DatabaseMaintenancePanel(
-        onDatabaseReopened: onDatabaseReopened,
-      ),
+      builder: (ctx) =>
+          DatabaseMaintenancePanel(onDatabaseReopened: onDatabaseReopened),
     );
   }
 
@@ -56,8 +52,10 @@ class _DatabaseMaintenancePanelState
   int _auditMonths = 6;
 
   AuditRetentionConfig _retentionCfg = const AuditRetentionConfig();
-  final TextEditingController _retentionDaysController = TextEditingController();
-  final TextEditingController _retentionRowsController = TextEditingController();
+  final TextEditingController _retentionDaysController =
+      TextEditingController();
+  final TextEditingController _retentionRowsController =
+      TextEditingController();
 
   @override
   void initState() {
@@ -77,10 +75,10 @@ class _DatabaseMaintenancePanelState
     if (!mounted) return;
     setState(() {
       _retentionCfg = c;
-      _retentionDaysController.text =
-          c.maxAgeDays != null ? '${c.maxAgeDays}' : '';
-      _retentionRowsController.text =
-          c.maxRows != null ? '${c.maxRows}' : '';
+      _retentionDaysController.text = c.maxAgeDays != null
+          ? '${c.maxAgeDays}'
+          : '';
+      _retentionRowsController.text = c.maxRows != null ? '${c.maxRows}' : '';
     });
   }
 
@@ -107,7 +105,10 @@ class _DatabaseMaintenancePanelState
         }
         _showBanner('Οι ρυθμίσεις retention audit αποθηκεύτηκαν.');
       } catch (e) {
-        _showBanner('Σφάλμα αποθήκευσης: ${humanizeUserFacingError(e)}', error: true);
+        _showBanner(
+          'Σφάλμα αποθήκευσης: ${humanizeUserFacingError(e)}',
+          error: true,
+        );
       }
     });
   }
@@ -225,9 +226,7 @@ class _DatabaseMaintenancePanelState
         context: context,
         builder: (ctx) => AlertDialog(
           title: const Text('Αποτυχία αντιγράφου ασφαλείας'),
-          content: Text(
-            r.message ?? 'Άγνωστο σφάλμα.',
-          ),
+          content: Text(r.message ?? 'Άγνωστο σφάλμα.'),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(ctx).pop(false),
@@ -288,7 +287,10 @@ class _DatabaseMaintenancePanelState
         _showBanner('Το VACUUM ολοκληρώθηκε.');
         _invalidateCaches();
       } catch (e) {
-        _showBanner('Σφάλμα VACUUM: ${humanizeUserFacingError(e)}', error: true);
+        _showBanner(
+          'Σφάλμα VACUUM: ${humanizeUserFacingError(e)}',
+          error: true,
+        );
       }
     });
   }
@@ -306,22 +308,21 @@ class _DatabaseMaintenancePanelState
         _showBanner('Το REINDEX ολοκληρώθηκε.');
         _invalidateCaches();
       } catch (e) {
-        _showBanner('Σφάλμα REINDEX: ${humanizeUserFacingError(e)}', error: true);
+        _showBanner(
+          'Σφάλμα REINDEX: ${humanizeUserFacingError(e)}',
+          error: true,
+        );
       }
     });
   }
 
-  Future<void> _onClearTableFull(
-    BuildContext context,
-    String table,
-  ) async {
+  Future<void> _onClearTableFull(BuildContext context, String table) async {
     final label = _kMaintenanceTableLabels[table] ?? table;
     if (!await _ensureBackupOrWarn(context) || !context.mounted) return;
     final ok = await _doubleConfirm(
       context,
       title: 'Πλήρες καθάρισμα: $label',
-      body:
-          'Θα διαγραφούν όλες οι εγγραφές του πίνακα «$label» ($table).',
+      body: 'Θα διαγραφούν όλες οι εγγραφές του πίνακα «$label» ($table).',
     );
     if (!ok || !context.mounted) return;
     await _runGuarded(() async {
@@ -342,8 +343,7 @@ class _DatabaseMaintenancePanelState
     final ok = await _doubleConfirm(
       context,
       title: 'Εκκαθάριση audit',
-      body:
-          'Θα διαγραφούν εγγραφές audit παλαιότερες των $_auditMonths μηνών.',
+      body: 'Θα διαγραφούν εγγραφές audit παλαιότερες των $_auditMonths μηνών.',
     );
     if (!ok || !context.mounted) return;
     await _runGuarded(() async {
@@ -370,8 +370,7 @@ class _DatabaseMaintenancePanelState
       lastDate: DateTime.now(),
     );
     if (picked == null || !context.mounted) return;
-    final cutoff =
-        DateTime(picked.year, picked.month, picked.day);
+    final cutoff = DateTime(picked.year, picked.month, picked.day);
     if (!await _ensureBackupOrWarn(context) || !context.mounted) return;
     final ok = await _doubleConfirm(
       context,
@@ -436,9 +435,7 @@ class _DatabaseMaintenancePanelState
         children: [
           Icon(Icons.build_circle_outlined, color: theme.colorScheme.primary),
           const SizedBox(width: 10),
-          const Expanded(
-            child: Text('Συντήρηση Βάσης Δεδομένων'),
-          ),
+          const Expanded(child: Text('Συντήρηση Βάσης Δεδομένων')),
         ],
       ),
       content: SizedBox(
@@ -452,10 +449,12 @@ class _DatabaseMaintenancePanelState
                   if (_banner != null) ...[
                     Material(
                       color: _bannerError
-                          ? theme.colorScheme.errorContainer
-                              .withValues(alpha: 0.9)
-                          : theme.colorScheme.primaryContainer
-                              .withValues(alpha: 0.55),
+                          ? theme.colorScheme.errorContainer.withValues(
+                              alpha: 0.9,
+                            )
+                          : theme.colorScheme.primaryContainer.withValues(
+                              alpha: 0.55,
+                            ),
                       borderRadius: BorderRadius.circular(8),
                       child: Padding(
                         padding: const EdgeInsets.all(10),
@@ -489,7 +488,11 @@ class _DatabaseMaintenancePanelState
                     value: _retentionCfg.enabled,
                     onChanged: _busy
                         ? null
-                        : (v) => setState(() => _retentionCfg = _retentionCfg.copyWith(enabled: v)),
+                        : (v) => setState(
+                            () => _retentionCfg = _retentionCfg.copyWith(
+                              enabled: v,
+                            ),
+                          ),
                   ),
                   SwitchListTile(
                     contentPadding: EdgeInsets.zero,
@@ -498,9 +501,10 @@ class _DatabaseMaintenancePanelState
                     onChanged: _busy || !_retentionCfg.enabled
                         ? null
                         : (v) => setState(
-                              () => _retentionCfg =
-                                  _retentionCfg.copyWith(purgeOnAppStart: v),
+                            () => _retentionCfg = _retentionCfg.copyWith(
+                              purgeOnAppStart: v,
                             ),
+                          ),
                   ),
                   const SizedBox(height: 8),
                   TextField(
@@ -548,8 +552,9 @@ class _DatabaseMaintenancePanelState
                   const SizedBox(height: 24),
                   _sectionTitle(theme, 'Εκκαθάριση'),
                   const SizedBox(height: 8),
-                  ...DatabaseMaintenanceService.purgeableTablesUiOrder
-                      .map((t) => _tableSection(context, theme, t)),
+                  ...DatabaseMaintenanceService.purgeableTablesUiOrder.map(
+                    (t) => _tableSection(context, theme, t),
+                  ),
                   const SizedBox(height: 16),
                   _sectionTitle(theme, 'Βελτιστοποίηση'),
                   const SizedBox(height: 8),
@@ -584,7 +589,9 @@ class _DatabaseMaintenancePanelState
                       backgroundColor: theme.colorScheme.error,
                       foregroundColor: theme.colorScheme.onError,
                     ),
-                    onPressed: _busy ? null : () => _onCreateNewDatabase(context),
+                    onPressed: _busy
+                        ? null
+                        : () => _onCreateNewDatabase(context),
                     icon: const Icon(Icons.warning_amber_rounded),
                     label: const Text('Δημιουργία νέας βάσης'),
                   ),
@@ -668,10 +675,7 @@ class _DatabaseMaintenancePanelState
             if (table == 'audit_log') ...[
               Row(
                 children: [
-                  Text(
-                    'Μήνες:',
-                    style: theme.textTheme.bodySmall,
-                  ),
+                  Text('Μήνες:', style: theme.textTheme.bodySmall),
                   Expanded(
                     child: Slider(
                       value: _auditMonths.toDouble(),
@@ -684,10 +688,7 @@ class _DatabaseMaintenancePanelState
                           : (v) => setState(() => _auditMonths = v.round()),
                     ),
                   ),
-                  Text(
-                    '$_auditMonths',
-                    style: theme.textTheme.labelLarge,
-                  ),
+                  Text('$_auditMonths', style: theme.textTheme.labelLarge),
                 ],
               ),
               Wrap(
@@ -695,14 +696,14 @@ class _DatabaseMaintenancePanelState
                 runSpacing: 8,
                 children: [
                   OutlinedButton.icon(
-                    onPressed:
-                        _busy ? null : () => _onAuditOlderThanMonths(context),
+                    onPressed: _busy
+                        ? null
+                        : () => _onAuditOlderThanMonths(context),
                     icon: const Icon(Icons.delete_sweep_outlined),
                     label: Text('Διαγραφή παλαιότερων των $_auditMonths μηνών'),
                   ),
                   OutlinedButton.icon(
-                    onPressed:
-                        _busy ? null : () => _onAuditPickDate(context),
+                    onPressed: _busy ? null : () => _onAuditPickDate(context),
                     icon: const Icon(Icons.calendar_month_outlined),
                     label: const Text('Με βάση ημερομηνία…'),
                   ),
@@ -715,12 +716,11 @@ class _DatabaseMaintenancePanelState
                 runSpacing: 8,
                 children: [
                   OutlinedButton.icon(
-                    onPressed:
-                        _busy ? null : () => _onTasksClosedSixMonths(context),
+                    onPressed: _busy
+                        ? null
+                        : () => _onTasksClosedSixMonths(context),
                     icon: const Icon(Icons.task_alt),
-                    label: const Text(
-                      'Κλειστές > 6 μηνών',
-                    ),
+                    label: const Text('Κλειστές > 6 μηνών'),
                   ),
                 ],
               ),
@@ -729,8 +729,9 @@ class _DatabaseMaintenancePanelState
             Align(
               alignment: Alignment.centerLeft,
               child: TextButton.icon(
-                onPressed:
-                    _busy ? null : () => _onClearTableFull(context, table),
+                onPressed: _busy
+                    ? null
+                    : () => _onClearTableFull(context, table),
                 icon: Icon(
                   Icons.delete_forever_outlined,
                   color: theme.colorScheme.error,

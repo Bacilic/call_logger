@@ -79,19 +79,16 @@ class CallsLayoutRow {
 
 /// Full layout plan for expanded mode.
 class CallsLayoutPlan {
-  const CallsLayoutPlan({
-    required this.template,
-    required this.rows,
-  });
+  const CallsLayoutPlan({required this.template, required this.rows});
 
   final CallsLayoutTemplate template;
   final List<CallsLayoutRow> rows;
 
   /// Flat ordered slot list (for tests / debugging).
   List<CallsLayoutSlot> get allSlots => [
-        for (final row in rows)
-          for (final col in row.columns) ...col.slots,
-      ];
+    for (final row in rows)
+      for (final col in row.columns) ...col.slots,
+  ];
 }
 
 /// Ελάχιστο χρήσιμο πλάτος στήλης για απόφαση στοίβας (όχι υποχρεωτικά ίσο
@@ -131,7 +128,7 @@ bool callsLayoutShouldStackRow({
   final gutters = (cols.length - 1) * columnGap;
   final needed =
       cols.map(callsLayoutColumnMinWidth).fold<double>(0, (a, b) => a + b) +
-          gutters;
+      gutters;
   return contentWidth < needed;
 }
 

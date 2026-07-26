@@ -236,10 +236,7 @@ Future<void> applyDepartmentSharedAssetDisconnectBatch(
   if (batch.equipmentToDelete.isNotEmpty) {
     final equipmentIds = <int>[];
     for (final code in batch.equipmentToDelete) {
-      final id = await equipment.getEquipmentIdByCode(
-        code,
-        executor: executor,
-      );
+      final id = await equipment.getEquipmentIdByCode(code, executor: executor);
       if (id != null) equipmentIds.add(id);
     }
     if (equipmentIds.isNotEmpty) {
@@ -247,4 +244,3 @@ Future<void> applyDepartmentSharedAssetDisconnectBatch(
     }
   }
 }
-

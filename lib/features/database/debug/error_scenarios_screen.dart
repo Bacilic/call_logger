@@ -1,4 +1,4 @@
-﻿import 'package:flutter/gestures.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -38,7 +38,8 @@ class _ErrorScenariosScreenState extends ConsumerState<ErrorScenariosScreen> {
 
       if (!result.success) {
         setState(() {
-          _seedError = result.errorMessage ?? 'Αποτυχία δημιουργίας debug βάσης.';
+          _seedError =
+              result.errorMessage ?? 'Αποτυχία δημιουργίας debug βάσης.';
         });
         return;
       }
@@ -56,7 +57,9 @@ class _ErrorScenariosScreenState extends ConsumerState<ErrorScenariosScreen> {
   }
 
   void _openNewCallWithDokimastikoDepartment() {
-    ref.read(mainNavRequestProvider.notifier).request(
+    ref
+        .read(mainNavRequestProvider.notifier)
+        .request(
           MainNavRequest(
             destination: MainNavDestination.calls,
             callPrefillDepartmentName:
@@ -66,7 +69,9 @@ class _ErrorScenariosScreenState extends ConsumerState<ErrorScenariosScreen> {
   }
 
   void _openCatalogForDeletionCheck() {
-    ref.read(mainNavRequestProvider.notifier).request(
+    ref
+        .read(mainNavRequestProvider.notifier)
+        .request(
           const MainNavRequest(destination: MainNavDestination.directory),
         );
   }
@@ -82,8 +87,8 @@ class _ErrorScenariosScreenState extends ConsumerState<ErrorScenariosScreen> {
       _formatGreekList(IntegrityDebugSeederService.dokimastikoSharedPhones);
 
   String get _dokimastikoEquipmentLabel => _formatGreekList(
-        IntegrityDebugSeederService.dokimastikoSharedEquipmentCodes,
-      );
+    IntegrityDebugSeederService.dokimastikoSharedEquipmentCodes,
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -193,10 +198,7 @@ class _ErrorScenariosScreenState extends ConsumerState<ErrorScenariosScreen> {
             title: 'Έλεγχος ακεραιότητας βάσης',
             descriptionSpans: [
               const TextSpan(text: 'Κάντε κλικ '),
-              _linkSpan(
-                scheme: scheme,
-                onTap: _openIntegrityCheck,
-              ),
+              _linkSpan(scheme: scheme, onTap: _openIntegrityCheck),
               const TextSpan(
                 text: ' για να ελέγξετε την ορθή επίλυση των διαφορών.',
               ),
@@ -232,10 +234,7 @@ class _ErrorScenariosScreenState extends ConsumerState<ErrorScenariosScreen> {
                     'με 6 υπαλλήλους, προσωπικά τηλέφωνα (285x) και εξοπλισμό (36x). '
                     'Κάντε κλικ ',
               ),
-              _linkSpan(
-                scheme: scheme,
-                onTap: _openCatalogForDeletionCheck,
-              ),
+              _linkSpan(scheme: scheme, onTap: _openCatalogForDeletionCheck),
               const TextSpan(text: ' για έλεγχο στον κατάλογο.'),
             ],
           ),
@@ -251,10 +250,7 @@ class _ErrorScenariosScreenState extends ConsumerState<ErrorScenariosScreen> {
   }
 }
 
-TextSpan _linkSpan({
-  required ColorScheme scheme,
-  required VoidCallback onTap,
-}) {
+TextSpan _linkSpan({required ColorScheme scheme, required VoidCallback onTap}) {
   return TextSpan(
     text: 'εδώ',
     style: TextStyle(

@@ -159,7 +159,10 @@ void main() {
 
         expect(invoked, isTrue);
 
-        await tester.sendKeyUpEvent(LogicalKeyboardKey.keyN, platform: 'windows');
+        await tester.sendKeyUpEvent(
+          LogicalKeyboardKey.keyN,
+          platform: 'windows',
+        );
         await tester.sendKeyUpEvent(
           LogicalKeyboardKey.shiftLeft,
           platform: 'windows',
@@ -233,7 +236,10 @@ void main() {
           reason: 'Χωρίς Focus(autofocus) τα πλήκτρα δεν φτάνουν στο Shortcuts',
         );
 
-        await tester.sendKeyUpEvent(LogicalKeyboardKey.keyN, platform: 'windows');
+        await tester.sendKeyUpEvent(
+          LogicalKeyboardKey.keyN,
+          platform: 'windows',
+        );
         await tester.sendKeyUpEvent(
           LogicalKeyboardKey.shiftLeft,
           platform: 'windows',
@@ -293,7 +299,8 @@ void main() {
         expect(
           _quickCallDialog(),
           findsOneWidget,
-          reason: 'Ctrl+Shift+N πρέπει να ανοίγει διάλογο γρήγορης κλήσης '
+          reason:
+              'Ctrl+Shift+N πρέπει να ανοίγει διάλογο γρήγορης κλήσης '
               'στην οθόνη εκκρεμοτήτων',
         );
 
@@ -320,7 +327,8 @@ void main() {
         expect(
           _quickCallDialog(),
           findsOneWidget,
-          reason: 'Ctrl+Shift+N πρέπει να δουλεύει στην καρτέλα Διάφορα '
+          reason:
+              'Ctrl+Shift+N πρέπει να δουλεύει στην καρτέλα Διάφορα '
               '(χωρίς πίνακα/Focus hover)',
         );
 
@@ -373,7 +381,8 @@ void main() {
         expect(
           _quickCallDialog(),
           findsOneWidget,
-          reason: 'Ctrl+Ν (ελληνική διάταξη) πρέπει να ανοίγει διάλογο '
+          reason:
+              'Ctrl+Ν (ελληνική διάταξη) πρέπει να ανοίγει διάλογο '
               'γρήγορης κλήσης',
         );
 

@@ -6,14 +6,16 @@ mixin EquipmentFormRemoteParamsMixin on EquipmentFormDialogStateHost {
     _expandedRemoteKeys.clear();
     _exclusiveRemoteToolId = null;
     if (e == null) return;
-    _exclusiveRemoteToolId =
-        EquipmentRemoteParamKey.exclusiveToolIdFrom(e.remoteParams);
+    _exclusiveRemoteToolId = EquipmentRemoteParamKey.exclusiveToolIdFrom(
+      e.remoteParams,
+    );
     // Φόρτωσε όλες τις τιμές (και τις ιστορικές `__stash_`) κάτω από το πραγματικό
     // κλειδί `<tool_id>`· οι ενεργές τιμές υπερισχύουν των ιστορικών.
     for (final entry in e.remoteParams.entries) {
       if (entry.key == EquipmentRemoteParamKey.exclusiveToolKey) continue;
-      final stashReal =
-          EquipmentRemoteParamKey.remoteParamStashRealKeyOrNull(entry.key);
+      final stashReal = EquipmentRemoteParamKey.remoteParamStashRealKeyOrNull(
+        entry.key,
+      );
       final realKey = stashReal ?? entry.key;
       if (int.tryParse(realKey) == null) continue;
       if (stashReal != null && _remoteParamValues.containsKey(realKey)) {
@@ -140,7 +142,8 @@ mixin EquipmentFormRemoteParamsMixin on EquipmentFormDialogStateHost {
       return null;
     }
 
-    final exclusiveValid = _exclusiveRemoteToolId != null &&
+    final exclusiveValid =
+        _exclusiveRemoteToolId != null &&
         toolForId(_exclusiveRemoteToolId!) != null;
     final int? zoneAValue = exclusiveValid ? _exclusiveRemoteToolId : null;
 
@@ -148,7 +151,8 @@ mixin EquipmentFormRemoteParamsMixin on EquipmentFormDialogStateHost {
     String? warning;
     if (zoneAValue != null) {
       final selTool = toolForId(zoneAValue);
-      final selParam = (_remoteParamControllers['$zoneAValue']?.text ?? '').trim();
+      final selParam = (_remoteParamControllers['$zoneAValue']?.text ?? '')
+          .trim();
       if (selTool != null &&
           selParam.isEmpty &&
           (selTool.role == ToolRole.rdp || selTool.role == ToolRole.anydesk)) {
@@ -174,23 +178,22 @@ mixin EquipmentFormRemoteParamsMixin on EquipmentFormDialogStateHost {
           ),
         );
       } else {
-        rows.add(
-          _buildRemoteParamField(key, pairs, catalog),
-        );
+        rows.add(_buildRemoteParamField(key, pairs, catalog));
       }
     }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text('Εμφάνιση στην κλήση: Επιλέξτε «Όλα» ή ένα μόνο εργαλείο για αυτόν τον εξοπλισμό.', style: theme.textTheme.titleSmall),
+        Text(
+          'Εμφάνιση στην κλήση: Επιλέξτε «Όλα» ή ένα μόνο εργαλείο για αυτόν τον εξοπλισμό.',
+          style: theme.textTheme.titleSmall,
+        ),
         const SizedBox(height: 8),
         DropdownButtonFormField<int?>(
           key: ValueKey('zoneA-${zoneAValue ?? 'all'}'),
           initialValue: zoneAValue,
-          decoration: const InputDecoration(
-            border: OutlineInputBorder(),
-          ),
+          decoration: const InputDecoration(border: OutlineInputBorder()),
           items: [
             const DropdownMenuItem<int?>(
               value: null,
@@ -344,10 +347,14 @@ mixin EquipmentFormRemoteParamsMixin on EquipmentFormDialogStateHost {
               : (isHostAddress ? (vncDefault ?? 'IP ή hostname') : null),
         ),
         keyboardType: isHostAddress
-            ? const TextInputType.numberWithOptions(decimal: true, signed: false)
+            ? const TextInputType.numberWithOptions(
+                decimal: true,
+                signed: false,
+              )
             : TextInputType.text,
-        inputFormatters:
-            isHostAddress ? [CommaToDotDecimalSeparatorFormatter()] : null,
+        inputFormatters: isHostAddress
+            ? [CommaToDotDecimalSeparatorFormatter()]
+            : null,
         onChanged: (_) {
           _syncRemoteValueFromController(paramKey);
           setState(() {});
@@ -356,10 +363,7 @@ mixin EquipmentFormRemoteParamsMixin on EquipmentFormDialogStateHost {
     );
   }
 
-  bool _toolAcceptsFileParam(
-    String key,
-    List<RemoteToolFormPair> pairs,
-  ) {
+  bool _toolAcceptsFileParam(String key, List<RemoteToolFormPair> pairs) {
     for (final p in pairs) {
       if (p.key == key) return p.acceptsFileParam;
     }

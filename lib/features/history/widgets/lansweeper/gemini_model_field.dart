@@ -44,7 +44,8 @@ class GeminiModelsSection extends ConsumerStatefulWidget {
   final String endpointTemplate;
 
   @override
-  ConsumerState<GeminiModelsSection> createState() => _GeminiModelsSectionState();
+  ConsumerState<GeminiModelsSection> createState() =>
+      _GeminiModelsSectionState();
 }
 
 class _GeminiModelsSectionState extends ConsumerState<GeminiModelsSection> {
@@ -129,7 +130,9 @@ class _GeminiModelsSectionState extends ConsumerState<GeminiModelsSection> {
       final slot = _slotFromWarningLabel(warning.slotLabel);
       if (slot == null) continue;
       if (_valueFor(slot) != warning.modelId) continue;
-      if (slot == _GeminiModelSlot.fallback && !widget.fallbackEnabled) continue;
+      if (slot == _GeminiModelSlot.fallback && !widget.fallbackEnabled) {
+        continue;
+      }
       _failedQuotaModelBySlot[slot] = warning.modelId;
     }
   }
@@ -289,7 +292,8 @@ class _GeminiModelsSectionState extends ConsumerState<GeminiModelsSection> {
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(ctx).pop(_DuplicateModelAction.cancel),
+            onPressed: () =>
+                Navigator.of(ctx).pop(_DuplicateModelAction.cancel),
             child: const Text('Άκυρο'),
           ),
           TextButton(
@@ -327,7 +331,9 @@ class _GeminiModelsSectionState extends ConsumerState<GeminiModelsSection> {
         existingSlot: otherSlot,
       );
       _resolvingDuplicate = false;
-      if (!mounted || action == null || action == _DuplicateModelAction.cancel) {
+      if (!mounted ||
+          action == null ||
+          action == _DuplicateModelAction.cancel) {
         setState(() {});
         return;
       }
@@ -501,9 +507,9 @@ class _GeminiModelsSectionState extends ConsumerState<GeminiModelsSection> {
     );
     if (!mounted) return;
     if (result.totalChecked > 0) {
-      await ref.read(geminiModelsProbeCacheProvider.notifier).saveFromResult(
-            result,
-          );
+      await ref
+          .read(geminiModelsProbeCacheProvider.notifier)
+          .saveFromResult(result);
     }
     final savedCache = ref.read(geminiModelsProbeCacheProvider);
     setState(() {
@@ -537,19 +543,14 @@ class _GeminiModelsSectionState extends ConsumerState<GeminiModelsSection> {
     if (models.isEmpty) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Δεν υπάρχουν άλλα διαθέσιμα μοντέλα.'),
-        ),
+        const SnackBar(content: Text('Δεν υπάρχουν άλλα διαθέσιμα μοντέλα.')),
       );
       return;
     }
 
     final selected = await showDialog<String>(
       context: context,
-      builder: (ctx) => _GeminiModelPickerDialog(
-        title: title,
-        models: models,
-      ),
+      builder: (ctx) => _GeminiModelPickerDialog(title: title, models: models),
     );
     if (!mounted || selected == null) return;
     await _assignModel(selected, slot);
@@ -578,9 +579,9 @@ class _GeminiModelsSectionState extends ConsumerState<GeminiModelsSection> {
           Expanded(
             child: Text(
               _typedQuotaWarningMessage,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Colors.red.shade900,
-                  ),
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(color: Colors.red.shade900),
             ),
           ),
         ],
@@ -633,9 +634,8 @@ class _GeminiModelsSectionState extends ConsumerState<GeminiModelsSection> {
           tooltip: 'Λίστα μοντέλων',
           onPressed: !enabled || _loadingModels
               ? null
-              : () => unawaited(
-                    _openModelPicker(slot: slot, title: pickerTitle),
-                  ),
+              : () =>
+                    unawaited(_openModelPicker(slot: slot, title: pickerTitle)),
           icon: const Icon(Icons.list_alt_rounded, size: 20),
         ),
       ),
@@ -704,18 +704,18 @@ class _GeminiModelsSectionState extends ConsumerState<GeminiModelsSection> {
           const SizedBox(height: 4),
           Text(
             lastProbeLabel,
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: onSurfaceVariant,
-                ),
+            style: Theme.of(
+              context,
+            ).textTheme.bodySmall?.copyWith(color: onSurfaceVariant),
           ),
         ],
         if (_probeIsStale) ...[
           const SizedBox(height: 4),
           Text(
             'Προτείνεται ανανέωση (πάνω από 3 μήνες).',
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: Colors.orange.shade900,
-                ),
+            style: Theme.of(
+              context,
+            ).textTheme.bodySmall?.copyWith(color: Colors.orange.shade900),
           ),
         ],
       ],
@@ -734,9 +734,7 @@ class _GeminiModelsSectionState extends ConsumerState<GeminiModelsSection> {
       decoration: BoxDecoration(
         color: accent.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: accent.withValues(alpha: 0.45),
-        ),
+        border: Border.all(color: accent.withValues(alpha: 0.45)),
       ),
       child: Padding(
         padding: const EdgeInsets.all(10),
@@ -774,9 +772,9 @@ class _GeminiModelsSectionState extends ConsumerState<GeminiModelsSection> {
               const SizedBox(height: 10),
               Text(
                 'Επόμενη επιλογή chip:',
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: onSurfaceVariant,
-                    ),
+                style: Theme.of(
+                  context,
+                ).textTheme.bodySmall?.copyWith(color: onSurfaceVariant),
               ),
               const SizedBox(height: 6),
               SegmentedButton<_GeminiModelSlot>(
@@ -919,18 +917,18 @@ class _GeminiModelsSectionState extends ConsumerState<GeminiModelsSection> {
           const SizedBox(height: 6),
           Text(
             _probeProgress!,
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: onSurfaceVariant,
-                ),
+            style: Theme.of(
+              context,
+            ).textTheme.bodySmall?.copyWith(color: onSurfaceVariant),
           ),
         ],
         if (_statusMessage != null) ...[
           const SizedBox(height: 6),
           Text(
             _statusMessage!,
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: onSurfaceVariant,
-                ),
+            style: Theme.of(
+              context,
+            ).textTheme.bodySmall?.copyWith(color: onSurfaceVariant),
           ),
         ],
         if (probe != null && probe.totalChecked > 0) ...[
@@ -947,10 +945,7 @@ class _GeminiModelsSectionState extends ConsumerState<GeminiModelsSection> {
 }
 
 class _GeminiModelPickerDialog extends StatefulWidget {
-  const _GeminiModelPickerDialog({
-    required this.title,
-    required this.models,
-  });
+  const _GeminiModelPickerDialog({required this.title, required this.models});
 
   final String title;
   final List<GeminiTextModel> models;

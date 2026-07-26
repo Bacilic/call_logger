@@ -71,35 +71,41 @@ void main() {
       },
     );
 
-    test('αποτυχία και των δύο προσπαθειών επιστρέφει DatabaseInitException', () async {
-      DatabaseHelper.testSimulatedRetriableOpenFailures = 99;
+    test(
+      'αποτυχία και των δύο προσπαθειών επιστρέφει DatabaseInitException',
+      () async {
+        DatabaseHelper.testSimulatedRetriableOpenFailures = 99;
 
-      await expectLater(
-        _withInitWatchdog(DatabaseHelper.instance.initializeDatabase()),
-        throwsA(
-          isA<DatabaseInitException>().having(
-            (e) => e.result.status,
-            'status',
-            isNot(DatabaseStatus.success),
+        await expectLater(
+          _withInitWatchdog(DatabaseHelper.instance.initializeDatabase()),
+          throwsA(
+            isA<DatabaseInitException>().having(
+              (e) => e.result.status,
+              'status',
+              isNot(DatabaseStatus.success),
+            ),
           ),
-        ),
-      );
-    });
+        );
+      },
+    );
 
-    test('επιτυχία στη 2η προσπάθεια επιστρέφει έγκυρη σύνδεση με σχήμα', () async {
-      DatabaseHelper.testSimulatedRetriableOpenFailures = 1;
+    test(
+      'επιτυχία στη 2η προσπάθεια επιστρέφει έγκυρη σύνδεση με σχήμα',
+      () async {
+        DatabaseHelper.testSimulatedRetriableOpenFailures = 1;
 
-      final db = await _withInitWatchdog(
-        DatabaseHelper.instance.initializeDatabase(),
-      );
+        final db = await _withInitWatchdog(
+          DatabaseHelper.instance.initializeDatabase(),
+        );
 
-      expect(db.isOpen, isTrue);
-      final tables = await db.query(
-        'sqlite_master',
-        where: 'type = ?',
-        whereArgs: ['table'],
-      );
-      expect(tables, isNotEmpty);
-    });
+        expect(db.isOpen, isTrue);
+        final tables = await db.query(
+          'sqlite_master',
+          where: 'type = ?',
+          whereArgs: ['table'],
+        );
+        expect(tables, isNotEmpty);
+      },
+    );
   });
 }

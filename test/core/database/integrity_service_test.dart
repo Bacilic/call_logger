@@ -17,8 +17,9 @@ void main() {
 
     setUpAll(() async {
       initSqfliteFfiForTests();
-      final dir =
-          await Directory.systemTemp.createTemp('integrity_service_test_');
+      final dir = await Directory.systemTemp.createTemp(
+        'integrity_service_test_',
+      );
       await DatabaseHelper.bindTestDatabaseFile(
         '${dir.path}/integrity_service.db',
       );
@@ -37,14 +38,10 @@ void main() {
       await db.delete('equipment');
       await db.delete('users');
       await db.delete('departments');
-      await db.insert(
-        'app_settings',
-        {
-          'key': DatabaseHelper.auditUserPerformingSettingsKey,
-          'value': 'Tester Integrity',
-        },
-        conflictAlgorithm: ConflictAlgorithm.replace,
-      );
+      await db.insert('app_settings', {
+        'key': DatabaseHelper.auditUserPerformingSettingsKey,
+        'value': 'Tester Integrity',
+      }, conflictAlgorithm: ConflictAlgorithm.replace);
       repo = IntegrityService(db);
     });
 
@@ -53,57 +50,77 @@ void main() {
     });
 
     Future<List<Map<String, dynamic>>> integrityAuditRows() => db.query(
-          'audit_log',
-          where: 'action = ?',
-          whereArgs: [DatabaseHelper.auditActionIntegrityFix],
-          orderBy: 'id ASC',
+      'audit_log',
+      where: 'action = ?',
+      whereArgs: [DatabaseHelper.auditActionIntegrityFix],
+      orderBy: 'id ASC',
+    );
+
+    test(
+      'softDeletePhoneForIntegrity: καθαρισμός junctions + is_deleted + audit',
+      () async {
+        final deptId = await db.insert('departments', {
+          'name': 'Τμήμα Τηλ',
+          'name_key': SearchTextNormalizer.normalizeForSearch('Τμήμα Τηλ'),
+          'is_deleted': 0,
+        });
+        final userId = await db.insert('users', {
+          'first_name': 'Χ',
+          'last_name': 'Ρήστης',
+          'is_deleted': 0,
+        });
+        final phoneId = await db.insert('phones', {
+          'number': '21009999',
+          'department_id': deptId,
+          'is_deleted': 0,
+        });
+        await db.insert('department_phones', {
+          'department_id': deptId,
+          'phone_id': phoneId,
+        });
+        await db.insert('user_phones', {
+          'user_id': userId,
+          'phone_id': phoneId,
+        });
+
+        await repo.softDeletePhoneForIntegrity(
+          phoneId: phoneId,
+          details: 'test soft delete phone',
         );
 
-    test('softDeletePhoneForIntegrity: καθαρισμός junctions + is_deleted + audit',
-        () async {
-      final deptId = await db.insert('departments', {
-        'name': 'Τμήμα Τηλ',
-        'name_key': SearchTextNormalizer.normalizeForSearch('Τμήμα Τηλ'),
-        'is_deleted': 0,
-      });
-      final userId = await db.insert('users', {
-        'first_name': 'Χ',
-        'last_name': 'Ρήστης',
-        'is_deleted': 0,
-      });
-      final phoneId = await db.insert('phones', {
-        'number': '21009999',
-        'department_id': deptId,
-        'is_deleted': 0,
-      });
-      await db.insert('department_phones', {
-        'department_id': deptId,
-        'phone_id': phoneId,
-      });
-      await db.insert('user_phones', {
-        'user_id': userId,
-        'phone_id': phoneId,
-      });
+        expect(
+          await db.query(
+            'department_phones',
+            where: 'phone_id = ?',
+            whereArgs: [phoneId],
+          ),
+          isEmpty,
+        );
+        expect(
+          await db.query(
+            'user_phones',
+            where: 'phone_id = ?',
+            whereArgs: [phoneId],
+          ),
+          isEmpty,
+        );
+        final phoneRow = await db.query(
+          'phones',
+          where: 'id = ?',
+          whereArgs: [phoneId],
+        );
+        expect(phoneRow.single['is_deleted'], 1);
+        expect(phoneRow.single['department_id'], isNull);
 
-      await repo.softDeletePhoneForIntegrity(
-        phoneId: phoneId,
-        details: 'test soft delete phone',
-      );
-
-      expect(await db.query('department_phones', where: 'phone_id = ?', whereArgs: [phoneId]), isEmpty);
-      expect(await db.query('user_phones', where: 'phone_id = ?', whereArgs: [phoneId]), isEmpty);
-      final phoneRow = await db.query('phones', where: 'id = ?', whereArgs: [phoneId]);
-      expect(phoneRow.single['is_deleted'], 1);
-      expect(phoneRow.single['department_id'], isNull);
-
-      final audits = await integrityAuditRows();
-      expect(audits, hasLength(1));
-      expect(audits.single['action'], DatabaseHelper.auditActionIntegrityFix);
-      expect(audits.single['user_performing'], 'Tester Integrity');
-      expect(audits.single['entity_type'], AuditEntityTypes.phone);
-      expect(audits.single['entity_id'], phoneId);
-      expect(audits.single['details'], 'test soft delete phone');
-    });
+        final audits = await integrityAuditRows();
+        expect(audits, hasLength(1));
+        expect(audits.single['action'], DatabaseHelper.auditActionIntegrityFix);
+        expect(audits.single['user_performing'], 'Tester Integrity');
+        expect(audits.single['entity_type'], AuditEntityTypes.phone);
+        expect(audits.single['entity_id'], phoneId);
+        expect(audits.single['details'], 'test soft delete phone');
+      },
+    );
 
     test('deleteOrphanUserPhonesJunction: αφαιρεί σύνδεση + audit', () async {
       final userId = await db.insert('users', {
@@ -111,7 +128,10 @@ void main() {
         'last_name': 'User',
         'is_deleted': 1,
       });
-      final phoneId = await db.insert('phones', {'number': '2200', 'is_deleted': 0});
+      final phoneId = await db.insert('phones', {
+        'number': '2200',
+        'is_deleted': 0,
+      });
       await db.insert('user_phones', {'user_id': userId, 'phone_id': phoneId});
 
       await repo.deleteOrphanUserPhonesJunction(
@@ -121,7 +141,11 @@ void main() {
       );
 
       expect(
-        await db.query('user_phones', where: 'user_id = ? AND phone_id = ?', whereArgs: [userId, phoneId]),
+        await db.query(
+          'user_phones',
+          where: 'user_id = ? AND phone_id = ?',
+          whereArgs: [userId, phoneId],
+        ),
         isEmpty,
       );
       final audits = await integrityAuditRows();
@@ -130,285 +154,338 @@ void main() {
       expect(audits.single['entity_id'], phoneId);
     });
 
-    test('deleteOrphanDepartmentPhonesJunction: αφαιρεί σύνδεση + audit', () async {
-      final deptId = await db.insert('departments', {
-        'name': 'Διαγραμμένο',
-        'name_key': 'διαγραμμενο',
-        'is_deleted': 1,
-      });
-      final phoneId = await db.insert('phones', {'number': '2300', 'is_deleted': 0});
-      await db.insert('department_phones', {
-        'department_id': deptId,
-        'phone_id': phoneId,
-      });
+    test(
+      'deleteOrphanDepartmentPhonesJunction: αφαιρεί σύνδεση + audit',
+      () async {
+        final deptId = await db.insert('departments', {
+          'name': 'Διαγραμμένο',
+          'name_key': 'διαγραμμενο',
+          'is_deleted': 1,
+        });
+        final phoneId = await db.insert('phones', {
+          'number': '2300',
+          'is_deleted': 0,
+        });
+        await db.insert('department_phones', {
+          'department_id': deptId,
+          'phone_id': phoneId,
+        });
 
-      await repo.deleteOrphanDepartmentPhonesJunction(
-        departmentId: deptId,
-        phoneId: phoneId,
-        details: 'orphan department_phones',
-      );
+        await repo.deleteOrphanDepartmentPhonesJunction(
+          departmentId: deptId,
+          phoneId: phoneId,
+          details: 'orphan department_phones',
+        );
 
-      expect(
-        await db.query(
+        expect(
+          await db.query(
+            'department_phones',
+            where: 'department_id = ? AND phone_id = ?',
+            whereArgs: [deptId, phoneId],
+          ),
+          isEmpty,
+        );
+        expect(await integrityAuditRows(), hasLength(1));
+      },
+    );
+
+    test(
+      'deleteOrphanUserEquipmentJunction: αφαιρεί σύνδεση + audit',
+      () async {
+        final userId = await db.insert('users', {
+          'first_name': 'X',
+          'last_name': 'Y',
+          'is_deleted': 1,
+        });
+        final eqId = await db.insert('equipment', {
+          'code_equipment': 'EQ-ORPH',
+          'is_deleted': 0,
+        });
+        await db.insert('user_equipment', {
+          'user_id': userId,
+          'equipment_id': eqId,
+        });
+
+        await repo.deleteOrphanUserEquipmentJunction(
+          userId: userId,
+          equipmentId: eqId,
+          details: 'orphan user_equipment',
+        );
+
+        expect(
+          await db.query(
+            'user_equipment',
+            where: 'user_id = ? AND equipment_id = ?',
+            whereArgs: [userId, eqId],
+          ),
+          isEmpty,
+        );
+        final audits = await integrityAuditRows();
+        expect(audits.single['entity_type'], AuditEntityTypes.equipment);
+        expect(audits.single['entity_id'], eqId);
+      },
+    );
+
+    test(
+      'linkOrphanPhoneToDepartmentForIntegrity: department_id + junction + audit',
+      () async {
+        final deptId = await db.insert('departments', {
+          'name': 'Στόχος',
+          'name_key': 'στοχος',
+          'is_deleted': 0,
+        });
+        final phoneId = await db.insert('phones', {
+          'number': '2400',
+          'is_deleted': 1,
+        });
+
+        await repo.linkOrphanPhoneToDepartmentForIntegrity(
+          phoneId: phoneId,
+          departmentId: deptId,
+          details: 'link phone to dept',
+        );
+
+        final phoneRow = await db.query(
+          'phones',
+          where: 'id = ?',
+          whereArgs: [phoneId],
+        );
+        expect(phoneRow.single['department_id'], deptId);
+        expect(phoneRow.single['is_deleted'], 0);
+        final junction = await db.query(
           'department_phones',
           where: 'department_id = ? AND phone_id = ?',
           whereArgs: [deptId, phoneId],
-        ),
-        isEmpty,
-      );
-      expect(await integrityAuditRows(), hasLength(1));
-    });
+        );
+        expect(junction, hasLength(1));
+        expect(await integrityAuditRows(), hasLength(1));
+      },
+    );
 
-    test('deleteOrphanUserEquipmentJunction: αφαιρεί σύνδεση + audit', () async {
-      final userId = await db.insert('users', {
-        'first_name': 'X',
-        'last_name': 'Y',
-        'is_deleted': 1,
-      });
-      final eqId = await db.insert('equipment', {
-        'code_equipment': 'EQ-ORPH',
-        'is_deleted': 0,
-      });
-      await db.insert('user_equipment', {
-        'user_id': userId,
-        'equipment_id': eqId,
-      });
+    test(
+      'linkOrphanPhoneToUserForIntegrity: προσθήκη τηλεφώνου σε χρήστη + audit',
+      () async {
+        final userId = await db.insert('users', {
+          'first_name': 'Νέος',
+          'last_name': 'Χρήστης',
+          'is_deleted': 0,
+        });
+        final phoneId = await db.insert('phones', {
+          'number': '2500',
+          'is_deleted': 0,
+        });
 
-      await repo.deleteOrphanUserEquipmentJunction(
-        userId: userId,
-        equipmentId: eqId,
-        details: 'orphan user_equipment',
-      );
+        await repo.linkOrphanPhoneToUserForIntegrity(
+          phoneId: phoneId,
+          userId: userId,
+          details: 'link phone to user',
+        );
 
-      expect(
-        await db.query(
-          'user_equipment',
-          where: 'user_id = ? AND equipment_id = ?',
-          whereArgs: [userId, eqId],
-        ),
-        isEmpty,
-      );
-      final audits = await integrityAuditRows();
-      expect(audits.single['entity_type'], AuditEntityTypes.equipment);
-      expect(audits.single['entity_id'], eqId);
-    });
+        final links = await db.query(
+          'user_phones',
+          where: 'user_id = ? AND phone_id = ?',
+          whereArgs: [userId, phoneId],
+        );
+        expect(links, hasLength(1));
+        final audits = await integrityAuditRows();
+        expect(audits, hasLength(1));
+        expect(audits.single['entity_name'], '2500');
+      },
+    );
 
-    test('linkOrphanPhoneToDepartmentForIntegrity: department_id + junction + audit',
-        () async {
-      final deptId = await db.insert('departments', {
-        'name': 'Στόχος',
-        'name_key': 'στοχος',
-        'is_deleted': 0,
-      });
-      final phoneId = await db.insert('phones', {
-        'number': '2400',
-        'is_deleted': 1,
-      });
+    test(
+      'softDeleteUserForIntegrity: deleteUsers + ξεχωριστό audit integrity-fix',
+      () async {
+        final userId = await db.insert('users', {
+          'first_name': 'Διαγραφή',
+          'last_name': 'Integrity',
+          'is_deleted': 0,
+        });
 
-      await repo.linkOrphanPhoneToDepartmentForIntegrity(
-        phoneId: phoneId,
-        departmentId: deptId,
-        details: 'link phone to dept',
-      );
+        await repo.softDeleteUserForIntegrity(
+          userId: userId,
+          details: 'soft delete user integrity',
+        );
 
-      final phoneRow = await db.query('phones', where: 'id = ?', whereArgs: [phoneId]);
-      expect(phoneRow.single['department_id'], deptId);
-      expect(phoneRow.single['is_deleted'], 0);
-      final junction = await db.query(
-        'department_phones',
-        where: 'department_id = ? AND phone_id = ?',
-        whereArgs: [deptId, phoneId],
-      );
-      expect(junction, hasLength(1));
-      expect(await integrityAuditRows(), hasLength(1));
-    });
+        final row = await db.query(
+          'users',
+          where: 'id = ?',
+          whereArgs: [userId],
+        );
+        expect(row.single['is_deleted'], 1);
 
-    test('linkOrphanPhoneToUserForIntegrity: προσθήκη τηλεφώνου σε χρήστη + audit',
-        () async {
-      final userId = await db.insert('users', {
-        'first_name': 'Νέος',
-        'last_name': 'Χρήστης',
-        'is_deleted': 0,
-      });
-      final phoneId = await db.insert('phones', {
-        'number': '2500',
-        'is_deleted': 0,
-      });
+        final integrityAudits = await integrityAuditRows();
+        expect(integrityAudits, hasLength(1));
+        expect(integrityAudits.single['entity_type'], AuditEntityTypes.user);
+        expect(integrityAudits.single['entity_id'], userId);
+        expect(integrityAudits.single['details'], 'soft delete user integrity');
 
-      await repo.linkOrphanPhoneToUserForIntegrity(
-        phoneId: phoneId,
-        userId: userId,
-        details: 'link phone to user',
-      );
+        final deleteAudits = await db.query(
+          'audit_log',
+          where: 'action = ? AND entity_id = ?',
+          whereArgs: [DatabaseHelper.auditActionDelete, userId],
+        );
+        expect(deleteAudits, hasLength(1));
+      },
+    );
 
-      final links = await db.query(
-        'user_phones',
-        where: 'user_id = ? AND phone_id = ?',
-        whereArgs: [userId, phoneId],
-      );
-      expect(links, hasLength(1));
-      final audits = await integrityAuditRows();
-      expect(audits, hasLength(1));
-      expect(audits.single['entity_name'], '2500');
-    });
+    test(
+      'updateUserDepartmentForIntegrity: updateUser + ξεχωριστό audit integrity-fix',
+      () async {
+        final deptId = await db.insert('departments', {
+          'name': 'Νέο Τμήμα',
+          'name_key': 'νεο τμημα',
+          'is_deleted': 0,
+        });
+        final userId = await db.insert('users', {
+          'first_name': 'Μετακίνηση',
+          'last_name': 'Χρήστη',
+          'department_id': null,
+          'is_deleted': 0,
+        });
 
-    test('softDeleteUserForIntegrity: deleteUsers + ξεχωριστό audit integrity-fix',
-        () async {
-      final userId = await db.insert('users', {
-        'first_name': 'Διαγραφή',
-        'last_name': 'Integrity',
-        'is_deleted': 0,
-      });
+        await repo.updateUserDepartmentForIntegrity(
+          userId: userId,
+          departmentId: deptId,
+          details: 'assign department',
+        );
 
-      await repo.softDeleteUserForIntegrity(
-        userId: userId,
-        details: 'soft delete user integrity',
-      );
+        final row = await db.query(
+          'users',
+          where: 'id = ?',
+          whereArgs: [userId],
+        );
+        expect(row.single['department_id'], deptId);
 
-      final row = await db.query('users', where: 'id = ?', whereArgs: [userId]);
-      expect(row.single['is_deleted'], 1);
+        final audits = await integrityAuditRows();
+        expect(audits, hasLength(1));
+        expect(audits.single['entity_id'], userId);
+        expect(audits.single['details'], 'assign department');
+      },
+    );
 
-      final integrityAudits = await integrityAuditRows();
-      expect(integrityAudits, hasLength(1));
-      expect(integrityAudits.single['entity_type'], AuditEntityTypes.user);
-      expect(integrityAudits.single['entity_id'], userId);
-      expect(integrityAudits.single['details'], 'soft delete user integrity');
+    test(
+      'fixDepartmentNameKeyForIntegrity: ενημέρωση name_key + audit',
+      () async {
+        final deptId = await db.insert('departments', {
+          'name': 'Παλιό Όνομα',
+          'name_key': 'παλιο',
+          'is_deleted': 0,
+        });
 
-      final deleteAudits = await db.query(
-        'audit_log',
-        where: 'action = ? AND entity_id = ?',
-        whereArgs: [DatabaseHelper.auditActionDelete, userId],
-      );
-      expect(deleteAudits, hasLength(1));
-    });
+        await repo.fixDepartmentNameKeyForIntegrity(
+          departmentId: deptId,
+          nameKey: 'νεο κλειδι',
+          details: 'fix name_key',
+        );
 
-    test('updateUserDepartmentForIntegrity: updateUser + ξεχωριστό audit integrity-fix',
-        () async {
-      final deptId = await db.insert('departments', {
-        'name': 'Νέο Τμήμα',
-        'name_key': 'νεο τμημα',
-        'is_deleted': 0,
-      });
-      final userId = await db.insert('users', {
-        'first_name': 'Μετακίνηση',
-        'last_name': 'Χρήστη',
-        'department_id': null,
-        'is_deleted': 0,
-      });
+        final row = await db.query(
+          'departments',
+          where: 'id = ?',
+          whereArgs: [deptId],
+        );
+        expect(row.single['name_key'], 'νεο κλειδι');
+        final audits = await integrityAuditRows();
+        expect(audits.single['entity_type'], AuditEntityTypes.department);
+        expect(audits.single['entity_id'], deptId);
+      },
+    );
 
-      await repo.updateUserDepartmentForIntegrity(
-        userId: userId,
-        departmentId: deptId,
-        details: 'assign department',
-      );
+    test(
+      'integrityDepartmentLabel: ενεργό / διαγραμμένο / ανύπαρκτο / null',
+      () async {
+        expect(await repo.integrityDepartmentLabel(db, null), '—');
 
-      final row = await db.query('users', where: 'id = ?', whereArgs: [userId]);
-      expect(row.single['department_id'], deptId);
+        final activeId = await db.insert('departments', {
+          'name': 'Ενεργό',
+          'name_key': 'ενεργο',
+          'is_deleted': 0,
+        });
+        expect(
+          await repo.integrityDepartmentLabel(db, activeId),
+          'Τμήμα Ενεργό [Ενεργό] (ID $activeId)',
+        );
 
-      final audits = await integrityAuditRows();
-      expect(audits, hasLength(1));
-      expect(audits.single['entity_id'], userId);
-      expect(audits.single['details'], 'assign department');
-    });
+        final deletedId = await db.insert('departments', {
+          'name': 'Παλιό',
+          'name_key': 'παλιο',
+          'is_deleted': 1,
+        });
+        expect(
+          await repo.integrityDepartmentLabel(db, deletedId),
+          contains('[Διαγραμμένο]'),
+        );
 
-    test('fixDepartmentNameKeyForIntegrity: ενημέρωση name_key + audit', () async {
-      final deptId = await db.insert('departments', {
-        'name': 'Παλιό Όνομα',
-        'name_key': 'παλιο',
-        'is_deleted': 0,
-      });
+        expect(
+          await repo.integrityDepartmentLabel(db, 99999),
+          'Τμήμα ID 99999 [Ανύπαρκτο]',
+        );
+      },
+    );
 
-      await repo.fixDepartmentNameKeyForIntegrity(
-        departmentId: deptId,
-        nameKey: 'νεο κλειδι',
-        details: 'fix name_key',
-      );
+    test(
+      'integrityUserLabel: ενεργός / διαγραμμένος / ανύπαρκτος / null',
+      () async {
+        expect(await repo.integrityUserLabel(db, null), '—');
 
-      final row = await db.query('departments', where: 'id = ?', whereArgs: [deptId]);
-      expect(row.single['name_key'], 'νεο κλειδι');
-      final audits = await integrityAuditRows();
-      expect(audits.single['entity_type'], AuditEntityTypes.department);
-      expect(audits.single['entity_id'], deptId);
-    });
+        final activeId = await db.insert('users', {
+          'first_name': 'Γιάννης',
+          'last_name': 'Δοκιμή',
+          'is_deleted': 0,
+        });
+        expect(
+          await repo.integrityUserLabel(db, activeId),
+          'Χρήστης Γιάννης Δοκιμή [Ενεργός] (ID $activeId)',
+        );
 
-    test('integrityDepartmentLabel: ενεργό / διαγραμμένο / ανύπαρκτο / null', () async {
-      expect(await repo.integrityDepartmentLabel(db, null), '—');
+        final deletedId = await db.insert('users', {
+          'first_name': 'Παλιός',
+          'last_name': 'Χρήστης',
+          'is_deleted': 1,
+        });
+        expect(
+          await repo.integrityUserLabel(db, deletedId),
+          contains('[Διαγραμμένος]'),
+        );
 
-      final activeId = await db.insert('departments', {
-        'name': 'Ενεργό',
-        'name_key': 'ενεργο',
-        'is_deleted': 0,
-      });
-      expect(
-        await repo.integrityDepartmentLabel(db, activeId),
-        'Τμήμα Ενεργό [Ενεργό] (ID $activeId)',
-      );
+        expect(
+          await repo.integrityUserLabel(db, 88888),
+          'Χρήστης ID 88888 [Ανύπαρκτος]',
+        );
+      },
+    );
 
-      final deletedId = await db.insert('departments', {
-        'name': 'Παλιό',
-        'name_key': 'παλιο',
-        'is_deleted': 1,
-      });
-      expect(
-        await repo.integrityDepartmentLabel(db, deletedId),
-        contains('[Διαγραμμένο]'),
-      );
+    test(
+      'integrityUpdateTaskFk: έγκυρο πεδίο ενημερώνει + επιστρέφει παλιά γραμμή',
+      () async {
+        final now = DateTime.now().toIso8601String();
+        final taskId = await db.insert('tasks', {
+          'title': 'FK task',
+          'status': 'open',
+          'search_index': 'x',
+          'caller_id': 5,
+          'created_at': now,
+          'updated_at': now,
+          'is_deleted': 0,
+        });
 
-      expect(
-        await repo.integrityDepartmentLabel(db, 99999),
-        'Τμήμα ID 99999 [Ανύπαρκτο]',
-      );
-    });
+        final oldRow = await repo.integrityUpdateTaskFk(
+          db,
+          taskId,
+          'caller_id',
+          null,
+        );
+        expect(oldRow, isNotNull);
+        expect(oldRow!['caller_id'], 5);
 
-    test('integrityUserLabel: ενεργός / διαγραμμένος / ανύπαρκτος / null', () async {
-      expect(await repo.integrityUserLabel(db, null), '—');
-
-      final activeId = await db.insert('users', {
-        'first_name': 'Γιάννης',
-        'last_name': 'Δοκιμή',
-        'is_deleted': 0,
-      });
-      expect(
-        await repo.integrityUserLabel(db, activeId),
-        'Χρήστης Γιάννης Δοκιμή [Ενεργός] (ID $activeId)',
-      );
-
-      final deletedId = await db.insert('users', {
-        'first_name': 'Παλιός',
-        'last_name': 'Χρήστης',
-        'is_deleted': 1,
-      });
-      expect(
-        await repo.integrityUserLabel(db, deletedId),
-        contains('[Διαγραμμένος]'),
-      );
-
-      expect(
-        await repo.integrityUserLabel(db, 88888),
-        'Χρήστης ID 88888 [Ανύπαρκτος]',
-      );
-    });
-
-    test('integrityUpdateTaskFk: έγκυρο πεδίο ενημερώνει + επιστρέφει παλιά γραμμή',
-        () async {
-      final now = DateTime.now().toIso8601String();
-      final taskId = await db.insert('tasks', {
-        'title': 'FK task',
-        'status': 'open',
-        'search_index': 'x',
-        'caller_id': 5,
-        'created_at': now,
-        'updated_at': now,
-        'is_deleted': 0,
-      });
-
-      final oldRow = await repo.integrityUpdateTaskFk(db, taskId, 'caller_id', null);
-      expect(oldRow, isNotNull);
-      expect(oldRow!['caller_id'], 5);
-
-      final updated = await db.query('tasks', where: 'id = ?', whereArgs: [taskId]);
-      expect(updated.single['caller_id'], isNull);
-    });
+        final updated = await db.query(
+          'tasks',
+          where: 'id = ?',
+          whereArgs: [taskId],
+        );
+        expect(updated.single['caller_id'], isNull);
+      },
+    );
 
     test('integrityUpdateTaskFk: άκυρο πεδίο → ArgumentError', () async {
       await expectLater(
@@ -463,89 +540,103 @@ void main() {
       expect(audits.single['entity_name'], 'Διαγραφή Task');
     });
 
-    test('disconnectPhoneFromDepartmentForIntegrity: NULL department_id + audit',
-        () async {
-      final phoneId = await db.insert('phones', {
-        'number': '21008888',
-        'department_id': 990101,
-        'is_deleted': 0,
-      });
+    test(
+      'disconnectPhoneFromDepartmentForIntegrity: NULL department_id + audit',
+      () async {
+        final phoneId = await db.insert('phones', {
+          'number': '21008888',
+          'department_id': 990101,
+          'is_deleted': 0,
+        });
 
-      await repo.disconnectPhoneFromDepartmentForIntegrity(
-        phoneId: phoneId,
-        details: 'test disconnect phone dept',
-        oldValues: {'department_id': 990101},
-        newValues: {'department_id': null},
-      );
+        await repo.disconnectPhoneFromDepartmentForIntegrity(
+          phoneId: phoneId,
+          details: 'test disconnect phone dept',
+          oldValues: {'department_id': 990101},
+          newValues: {'department_id': null},
+        );
 
-      final row = await db.query('phones', where: 'id = ?', whereArgs: [phoneId]);
-      expect(row.single['department_id'], isNull);
+        final row = await db.query(
+          'phones',
+          where: 'id = ?',
+          whereArgs: [phoneId],
+        );
+        expect(row.single['department_id'], isNull);
 
-      final audits = await integrityAuditRows();
-      expect(audits, hasLength(1));
-      expect(audits.single['entity_type'], AuditEntityTypes.phone);
-      expect(audits.single['entity_id'], phoneId);
-    });
+        final audits = await integrityAuditRows();
+        expect(audits, hasLength(1));
+        expect(audits.single['entity_type'], AuditEntityTypes.phone);
+        expect(audits.single['entity_id'], phoneId);
+      },
+    );
 
-    test('disconnectEquipmentFromDepartmentForIntegrity: NULL department_id + audit',
-        () async {
-      final equipmentId = await db.insert('equipment', {
-        'code_equipment': 'EQ-DISCONNECT',
-        'department_id': 990301,
-        'is_deleted': 0,
-      });
+    test(
+      'disconnectEquipmentFromDepartmentForIntegrity: NULL department_id + audit',
+      () async {
+        final equipmentId = await db.insert('equipment', {
+          'code_equipment': 'EQ-DISCONNECT',
+          'department_id': 990301,
+          'is_deleted': 0,
+        });
 
-      await repo.disconnectEquipmentFromDepartmentForIntegrity(
-        equipmentId: equipmentId,
-        details: 'test disconnect equipment dept',
-        oldValues: {'department_id': 990301},
-        newValues: {'department_id': null},
-      );
+        await repo.disconnectEquipmentFromDepartmentForIntegrity(
+          equipmentId: equipmentId,
+          details: 'test disconnect equipment dept',
+          oldValues: {'department_id': 990301},
+          newValues: {'department_id': null},
+        );
 
-      final row = await db.query(
-        'equipment',
-        where: 'id = ?',
-        whereArgs: [equipmentId],
-      );
-      expect(row.single['department_id'], isNull);
+        final row = await db.query(
+          'equipment',
+          where: 'id = ?',
+          whereArgs: [equipmentId],
+        );
+        expect(row.single['department_id'], isNull);
 
-      final audits = await integrityAuditRows();
-      expect(audits, hasLength(1));
-      expect(audits.single['entity_type'], AuditEntityTypes.equipment);
-      expect(audits.single['entity_id'], equipmentId);
-    });
+        final audits = await integrityAuditRows();
+        expect(audits, hasLength(1));
+        expect(audits.single['entity_type'], AuditEntityTypes.equipment);
+        expect(audits.single['entity_id'], equipmentId);
+      },
+    );
 
-    test('clearDepartmentFloorForIntegrity: καθαρισμός floor_id και map_* + audit',
-        () async {
-      final deptId = await db.insert('departments', {
-        'name': 'Χάρτης Dept',
-        'name_key': 'χαρτης_dept',
-        'floor_id': 990201,
-        'map_floor': 990201,
-        'map_x': 100.0,
-        'map_y': 200.0,
-        'map_width': 50.0,
-        'map_height': 40.0,
-        'is_deleted': 0,
-      });
+    test(
+      'clearDepartmentFloorForIntegrity: καθαρισμός floor_id και map_* + audit',
+      () async {
+        final deptId = await db.insert('departments', {
+          'name': 'Χάρτης Dept',
+          'name_key': 'χαρτης_dept',
+          'floor_id': 990201,
+          'map_floor': 990201,
+          'map_x': 100.0,
+          'map_y': 200.0,
+          'map_width': 50.0,
+          'map_height': 40.0,
+          'is_deleted': 0,
+        });
 
-      await repo.clearDepartmentFloorForIntegrity(
-        departmentId: deptId,
-        details: 'test clear department floor',
-        oldValues: {'floor_id': 990201},
-        newValues: {'floor_id': null},
-      );
+        await repo.clearDepartmentFloorForIntegrity(
+          departmentId: deptId,
+          details: 'test clear department floor',
+          oldValues: {'floor_id': 990201},
+          newValues: {'floor_id': null},
+        );
 
-      final row = await db.query('departments', where: 'id = ?', whereArgs: [deptId]);
-      expect(row.single['floor_id'], isNull);
-      expect(row.single['map_floor'], isNull);
-      expect(row.single['map_x'], 0.0);
-      expect(row.single['map_y'], 0.0);
+        final row = await db.query(
+          'departments',
+          where: 'id = ?',
+          whereArgs: [deptId],
+        );
+        expect(row.single['floor_id'], isNull);
+        expect(row.single['map_floor'], isNull);
+        expect(row.single['map_x'], 0.0);
+        expect(row.single['map_y'], 0.0);
 
-      final audits = await integrityAuditRows();
-      expect(audits, hasLength(1));
-      expect(audits.single['entity_type'], AuditEntityTypes.department);
-      expect(audits.single['entity_id'], deptId);
-    });
+        final audits = await integrityAuditRows();
+        expect(audits, hasLength(1));
+        expect(audits.single['entity_type'], AuditEntityTypes.department);
+        expect(audits.single['entity_id'], deptId);
+      },
+    );
   });
 }

@@ -11,10 +11,11 @@ class UpdateSourceConfig {
     required this.getUserUpdateFolderPath,
     String Function()? executableDirectoryResolver,
     Future<String?> Function(String filePath)? readUpdateSourceJson,
-  })  : _executableDirectoryResolver = executableDirectoryResolver ??
-            (() => AppConfig.applicationExecutableDirectory),
-        _readUpdateSourceJson =
-            readUpdateSourceJson ?? _defaultReadUpdateSourceJson;
+  }) : _executableDirectoryResolver =
+           executableDirectoryResolver ??
+           (() => AppConfig.applicationExecutableDirectory),
+       _readUpdateSourceJson =
+           readUpdateSourceJson ?? _defaultReadUpdateSourceJson;
 
   final Future<String?> Function() getUserUpdateFolderPath;
   final String Function() _executableDirectoryResolver;

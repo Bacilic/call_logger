@@ -9,7 +9,9 @@ class RemoteArgsService {
 
   final DatabaseHelper _db;
 
-  Future<List<RemoteToolArg>> _argsForToolRow(Map<String, dynamic> toolRow) async {
+  Future<List<RemoteToolArg>> _argsForToolRow(
+    Map<String, dynamic> toolRow,
+  ) async {
     final tool = RemoteTool.fromMap(toolRow);
     final key = tool.role.dbValue;
     return tool.arguments

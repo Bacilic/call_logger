@@ -14,4 +14,3 @@ class ExclusivePhoneForUserDelete {
   final int? departmentId;
   final String? departmentName;
 }
-

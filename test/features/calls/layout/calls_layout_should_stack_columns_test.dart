@@ -6,21 +6,21 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   group('callsLayoutShouldStackRow / Columns', () {
     CallsLayoutPlan planWithThreeCols() => CallsLayoutPlan(
-          template: CallsLayoutTemplate.a,
-          rows: [
-            CallsLayoutRow([
-              CallsLayoutColumn.singleSlot(CallsLayoutSlot.notes),
-              CallsLayoutColumn.singleSlot(CallsLayoutSlot.categoryPending),
-              CallsLayoutColumn.singleSlot(CallsLayoutSlot.remoteTools),
-            ]),
-          ],
-        );
+      template: CallsLayoutTemplate.a,
+      rows: [
+        CallsLayoutRow([
+          CallsLayoutColumn.singleSlot(CallsLayoutSlot.notes),
+          CallsLayoutColumn.singleSlot(CallsLayoutSlot.categoryPending),
+          CallsLayoutColumn.singleSlot(CallsLayoutSlot.remoteTools),
+        ]),
+      ],
+    );
 
     CallsLayoutRow templateBInfoRow() => CallsLayoutRow([
-          CallsLayoutColumn.singleSlot(CallsLayoutSlot.remoteTools),
-          CallsLayoutColumn.singleSlot(CallsLayoutSlot.map),
-          CallsLayoutColumn.singleSlot(CallsLayoutSlot.callerCard),
-        ]);
+      CallsLayoutColumn.singleSlot(CallsLayoutSlot.remoteTools),
+      CallsLayoutColumn.singleSlot(CallsLayoutSlot.map),
+      CallsLayoutColumn.singleSlot(CallsLayoutSlot.callerCard),
+    ]);
 
     test('στοίβα όταν πλάτος < breakpoint', () {
       expect(
@@ -36,10 +36,7 @@ void main() {
       // Πριν: 4 στήλες με ίσο 380 → στοίβα μέχρι ~1568.
       // Τώρα: 3 στήλες με slot mins 180+336+280+32 = 828.
       expect(
-        callsLayoutShouldStackRow(
-          contentWidth: 1185,
-          row: templateBInfoRow(),
-        ),
+        callsLayoutShouldStackRow(contentWidth: 1185, row: templateBInfoRow()),
         isFalse,
       );
     });
@@ -47,10 +44,7 @@ void main() {
     test('template B info row: στοίβα μόνο όταν δεν χωράνε τα ελάχιστα', () {
       // 180+336+280+32 = 828
       expect(
-        callsLayoutShouldStackRow(
-          contentWidth: 820,
-          row: templateBInfoRow(),
-        ),
+        callsLayoutShouldStackRow(contentWidth: 820, row: templateBInfoRow()),
         isTrue,
       );
     });
@@ -77,15 +71,9 @@ void main() {
         CallsLayoutColumn.singleSlot(CallsLayoutSlot.map),
       ]);
       // Πάνω από breakpoint 980· 180+336+280+320+48 = 1164 — στοίβα στα 1000
-      expect(
-        callsLayoutShouldStackRow(contentWidth: 1000, row: fat),
-        isTrue,
-      );
+      expect(callsLayoutShouldStackRow(contentWidth: 1000, row: fat), isTrue);
       // 280+336+16 = 632 — οριζόντια στα 1000
-      expect(
-        callsLayoutShouldStackRow(contentWidth: 1000, row: thin),
-        isFalse,
-      );
+      expect(callsLayoutShouldStackRow(contentWidth: 1000, row: thin), isFalse);
     });
   });
 }

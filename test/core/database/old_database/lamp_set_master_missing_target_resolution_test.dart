@@ -16,9 +16,7 @@ void main() {
   late LampIssueResolutionService service;
 
   setUp(() async {
-    tempDir = await Directory.systemTemp.createTemp(
-      'lamp-set-master-missing-',
-    );
+    tempDir = await Directory.systemTemp.createTemp('lamp-set-master-missing-');
     dbPath = p.join(tempDir.path, 'lamp.sqlite');
     service = LampIssueResolutionService();
     final db = await openDatabase(dbPath, singleInstance: false);
@@ -37,35 +35,32 @@ void main() {
   });
 
   group('Λάμπα · επίλυση set_master_missing_target', () {
-    test(
-      'ο αναλυτής παράγει ανεπίλυτη πρόταση με στοιχεία εγγραφής',
-      () async {
-        await _insertEquipment(dbPath, code: 100, setMaster: 999);
-        await _insertIssue(
-          dbPath,
-          issueType: 'set_master_missing_target',
-          rawValue: '999',
-          columnName: 'set_master',
-          rowNumber: 100,
-          message:
-              'Το set_master δεν αντιστοιχεί σε υπαρκτό εξοπλισμό για code=100.',
-        );
+    test('ο αναλυτής παράγει ανεπίλυτη πρόταση με στοιχεία εγγραφής', () async {
+      await _insertEquipment(dbPath, code: 100, setMaster: 999);
+      await _insertIssue(
+        dbPath,
+        issueType: 'set_master_missing_target',
+        rawValue: '999',
+        columnName: 'set_master',
+        rowNumber: 100,
+        message:
+            'Το set_master δεν αντιστοιχεί σε υπαρκτό εξοπλισμό για code=100.',
+      );
 
-        final proposals = await service.analyzeIssues(
-          databasePath: dbPath,
-          issueType: LampIssueType.setMasterMissingTarget,
-        );
+      final proposals = await service.analyzeIssues(
+        databasePath: dbPath,
+        issueType: LampIssueType.setMasterMissingTarget,
+      );
 
-        expect(proposals, hasLength(1));
-        final proposal = proposals.single;
-        expect(proposal.row, 100);
-        expect(proposal.column, 'set_master');
-        expect(proposal.originalValue, '999');
-        expect(proposal.proposedAction, LampIssueResolutionAction.unresolved);
-        expect(proposal.metadata['rowContextCode'], 100);
-        expect(proposal.metadata['rowContextDescription'], 'Εξοπλισμός 100');
-      },
-    );
+      expect(proposals, hasLength(1));
+      final proposal = proposals.single;
+      expect(proposal.row, 100);
+      expect(proposal.column, 'set_master');
+      expect(proposal.originalValue, '999');
+      expect(proposal.proposedAction, LampIssueResolutionAction.unresolved);
+      expect(proposal.metadata['rowContextCode'], 100);
+      expect(proposal.metadata['rowContextDescription'], 'Εξοπλισμός 100');
+    });
 
     test(
       'ο αναλυτής βρίσκει τον κωδικό από το message όταν λείπει το row_number',
@@ -91,45 +86,42 @@ void main() {
       },
     );
 
-    test(
-      'χειροκίνητη σύνδεση με υπαρκτό κωδικό ενημερώνει το set_master '
-      'και κλείνει την εγγραφή προβλήματος',
-      () async {
-        await _insertEquipment(dbPath, code: 100, setMaster: 999);
-        await _insertEquipment(dbPath, code: 200, setMaster: null);
-        final issueId = await _insertIssue(
-          dbPath,
-          issueType: 'set_master_missing_target',
-          rawValue: '999',
-          columnName: 'set_master',
-          rowNumber: 100,
-          message:
-              'Το set_master δεν αντιστοιχεί σε υπαρκτό εξοπλισμό για code=100.',
-        );
+    test('χειροκίνητη σύνδεση με υπαρκτό κωδικό ενημερώνει το set_master '
+        'και κλείνει την εγγραφή προβλήματος', () async {
+      await _insertEquipment(dbPath, code: 100, setMaster: 999);
+      await _insertEquipment(dbPath, code: 200, setMaster: null);
+      final issueId = await _insertIssue(
+        dbPath,
+        issueType: 'set_master_missing_target',
+        rawValue: '999',
+        columnName: 'set_master',
+        rowNumber: 100,
+        message:
+            'Το set_master δεν αντιστοιχεί σε υπαρκτό εξοπλισμό για code=100.',
+      );
 
-        final proposals = await service.analyzeIssues(
-          databasePath: dbPath,
-          issueType: LampIssueType.setMasterMissingTarget,
-        );
-        expect(proposals, hasLength(1));
+      final proposals = await service.analyzeIssues(
+        databasePath: dbPath,
+        issueType: LampIssueType.setMasterMissingTarget,
+      );
+      expect(proposals, hasLength(1));
 
-        await service.applyDecisions(
-          databasePath: dbPath,
-          decisions: <LampIssueResolutionDecision>[
-            LampIssueResolutionDecision(
-              proposal: _withOperation(
-                proposals.single,
-                LampIssueResolutionOperations.setFieldManual,
-              ),
-              textInput: '200',
+      await service.applyDecisions(
+        databasePath: dbPath,
+        decisions: <LampIssueResolutionDecision>[
+          LampIssueResolutionDecision(
+            proposal: _withOperation(
+              proposals.single,
+              LampIssueResolutionOperations.setFieldManual,
             ),
-          ],
-        );
+            textInput: '200',
+          ),
+        ],
+      );
 
-        expect(await _equipmentSetMaster(dbPath, 100), 200);
-        expect(await _issueExists(dbPath, issueId), isFalse);
-      },
-    );
+      expect(await _equipmentSetMaster(dbPath, 100), 200);
+      expect(await _issueExists(dbPath, issueId), isFalse);
+    });
 
     test(
       'η εκκαθάριση πεδίου μηδενίζει το set_master και κλείνει την εγγραφή',

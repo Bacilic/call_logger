@@ -9,7 +9,7 @@ import 'user_repository.dart';
 /// Orchestrator επιδιορθώσεων ακεραιότητας καταλόγου και εκκρεμοτήτων.
 class IntegrityService {
   IntegrityService(this.db, {DirectorySupport? support, UserRepository? users})
-      : _support = support ?? DirectorySupport(db) {
+    : _support = support ?? DirectorySupport(db) {
     _users = users ?? UserRepository(db, support: _support);
   }
 
@@ -233,11 +233,10 @@ class IntegrityService {
         where: 'phone_id = ?',
         whereArgs: [phoneId],
       );
-      await txn.insert(
-        'department_phones',
-        {'department_id': departmentId, 'phone_id': phoneId},
-        conflictAlgorithm: ConflictAlgorithm.ignore,
-      );
+      await txn.insert('department_phones', {
+        'department_id': departmentId,
+        'phone_id': phoneId,
+      }, conflictAlgorithm: ConflictAlgorithm.ignore);
       final ap = await _support.auditPerformingUser(executor: txn);
       await AuditService.log(
         txn,
@@ -272,11 +271,9 @@ class IntegrityService {
     if (number.isEmpty) return;
     final existing = await _users.userPhoneNumbersOrdered(db, userId);
     if (existing.contains(number)) return;
-    await _users.updateUser(
-      userId,
-      {'phones': [...existing, number]},
-      recordAudit: false,
-    );
+    await _users.updateUser(userId, {
+      'phones': [...existing, number],
+    }, recordAudit: false);
     final ap = await _support.auditPerformingUser();
     await AuditService.log(
       db,
@@ -346,11 +343,9 @@ class IntegrityService {
     Map<String, dynamic>? oldValues,
     Map<String, dynamic>? newValues,
   }) async {
-    await _users.updateUser(
-      userId,
-      {'department_id': departmentId},
-      recordAudit: false,
-    );
+    await _users.updateUser(userId, {
+      'department_id': departmentId,
+    }, recordAudit: false);
     final ap = await _support.auditPerformingUser();
     await AuditService.log(
       db,
@@ -531,9 +526,10 @@ class IntegrityService {
     Map<String, dynamic>? oldValues,
     Map<String, dynamic>? newValues,
   }) async {
-    final placementClear = BuildingMapRepository.clearedBuildingMapPlacementColumns(
-      clearFloorId: true,
-    );
+    final placementClear =
+        BuildingMapRepository.clearedBuildingMapPlacementColumns(
+          clearFloorId: true,
+        );
     await db.transaction((txn) async {
       final rows = await txn.query(
         'departments',

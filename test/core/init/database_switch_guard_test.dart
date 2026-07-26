@@ -37,16 +37,15 @@ Future<WidgetRef> _pumpWidgetRef(
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets(
-    'καθαρή φόρμα κλήσης → collectDatabaseSwitchBlockers κενή',
-    (tester) async {
-      final container = ProviderContainer();
-      addTearDown(container.dispose);
-      final ref = await _pumpWidgetRef(tester, container);
+  testWidgets('καθαρή φόρμα κλήσης → collectDatabaseSwitchBlockers κενή', (
+    tester,
+  ) async {
+    final container = ProviderContainer();
+    addTearDown(container.dispose);
+    final ref = await _pumpWidgetRef(tester, container);
 
-      expect(collectDatabaseSwitchBlockers(ref), isEmpty);
-    },
-  );
+    expect(collectDatabaseSwitchBlockers(ref), isEmpty);
+  });
 
   testWidgets(
     'setCaller + setCategory → εμπόδιο openCallForm (interruptible)',
@@ -55,13 +54,14 @@ void main() {
       addTearDown(container.dispose);
       final ref = await _pumpWidgetRef(tester, container);
 
-      container.read(callSmartEntityProvider.notifier).setCaller(
+      container
+          .read(callSmartEntityProvider.notifier)
+          .setCaller(
             UserModel(id: 42, firstName: 'Δοκιμή', lastName: 'Καλούντας'),
           );
-      container.read(callEntryProvider.notifier).setCategory(
-            'Δίκτυο',
-            categoryId: 3,
-          );
+      container
+          .read(callEntryProvider.notifier)
+          .setCategory('Δίκτυο', categoryId: 3);
 
       final blockers = collectDatabaseSwitchBlockers(ref);
       expect(blockers, isNotEmpty);
@@ -76,26 +76,21 @@ void main() {
     },
   );
 
-  testWidgets(
-    'μόνο ενεργό χρονόμετρο → εμπόδιο openCallForm',
-    (tester) async {
-      final container = ProviderContainer();
-      addTearDown(container.dispose);
-      final ref = await _pumpWidgetRef(tester, container);
+  testWidgets('μόνο ενεργό χρονόμετρο → εμπόδιο openCallForm', (tester) async {
+    final container = ProviderContainer();
+    addTearDown(container.dispose);
+    final ref = await _pumpWidgetRef(tester, container);
 
-      container.read(callEntryProvider.notifier).startTimerOnce();
+    container.read(callEntryProvider.notifier).startTimerOnce();
 
-      final blockers = collectDatabaseSwitchBlockers(ref);
-      expect(
-        blockers.any(
-          (b) => b.kind == DatabaseSwitchBlockerKind.openCallForm,
-        ),
-        isTrue,
-      );
+    final blockers = collectDatabaseSwitchBlockers(ref);
+    expect(
+      blockers.any((b) => b.kind == DatabaseSwitchBlockerKind.openCallForm),
+      isTrue,
+    );
 
-      container.read(callEntryProvider.notifier).reset();
-    },
-  );
+    container.read(callEntryProvider.notifier).reset();
+  });
 
   testWidgets(
     'μητρώο lansweeperTicketSubmit → μη διακόψιμο εμπόδιο· end το αφαιρεί',
@@ -142,9 +137,9 @@ void main() {
         ),
       );
 
-      container.read(callSmartEntityProvider.notifier).setCaller(
-            UserModel(id: 7, firstName: 'Άννα', lastName: 'Δοκιμή'),
-          );
+      container
+          .read(callSmartEntityProvider.notifier)
+          .setCaller(UserModel(id: 7, firstName: 'Άννα', lastName: 'Δοκιμή'));
       container.read(callEntryProvider.notifier).setCategory('Υλικό');
       container.read(callEntryProvider.notifier).startTimerOnce();
 
@@ -156,10 +151,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(allowed, isTrue);
-      expect(
-        container.read(callSmartEntityProvider).selectedCaller,
-        isNull,
-      );
+      expect(container.read(callSmartEntityProvider).selectedCaller, isNull);
       expect(container.read(callEntryProvider).category, isEmpty);
       expect(container.read(callEntryProvider).durationSeconds, 0);
     },

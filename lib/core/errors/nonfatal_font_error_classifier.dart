@@ -8,8 +8,7 @@ bool isNonFatalFontLoadError(Object error, [StackTrace? stack]) {
     return false;
   }
 
-  final isFontAsset =
-      message.contains('.ttf') || message.contains('.otf');
+  final isFontAsset = message.contains('.ttf') || message.contains('.otf');
   if (isFontAsset) {
     return true;
   }

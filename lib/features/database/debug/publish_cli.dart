@@ -1,4 +1,4 @@
-﻿import 'dart:convert';
+import 'dart:convert';
 import 'dart:io';
 
 import 'release_publisher_service.dart';
@@ -86,17 +86,11 @@ PublishCliParseResult parsePublishCliArgs(List<String> arguments) {
     );
   }
   if (folder == null || folder.isEmpty) {
-    return const PublishCliParseResult.error(
-      'Απαιτείται --folder=<διαδρομή>.',
-    );
+    return const PublishCliParseResult.error('Απαιτείται --folder=<διαδρομή>.');
   }
 
   return PublishCliParseResult.ok(
-    PublishCliArgs(
-      bumpKind: bumpKind,
-      folder: folder,
-      allowEmpty: allowEmpty,
-    ),
+    PublishCliArgs(bumpKind: bumpKind, folder: folder, allowEmpty: allowEmpty),
   );
 }
 
@@ -110,15 +104,14 @@ String buildPublishCliCommand(
     VersionBumpKind.patch => 'patch',
     VersionBumpKind.minor => 'minor',
   };
-  return template
-      .replaceAll('{bump}', bump)
-      .replaceAll('{folder}', folder);
+  return template.replaceAll('{bump}', bump).replaceAll('{folder}', folder);
 }
 
-typedef PublishCliServiceFactory = ReleasePublisherService Function({
-  required String updateFolderPath,
-  void Function(String message)? onProgress,
-});
+typedef PublishCliServiceFactory =
+    ReleasePublisherService Function({
+      required String updateFolderPath,
+      void Function(String message)? onProgress,
+    });
 
 /// Εκτέλεση δημοσίευσης μέσω CLI.
 ///
@@ -136,14 +129,12 @@ Future<int> runPublishCli(
   }
 
   final interactive = isInteractive ?? stdin.hasTerminal;
-  final prompt = promptEmptyUnreleased ??
+  final prompt =
+      promptEmptyUnreleased ??
       (() => _defaultPromptEmptyUnreleased(writeLine: log));
 
   final factory = serviceFactory ?? _defaultServiceFactory;
-  final service = factory(
-    updateFolderPath: args.folder,
-    onProgress: log,
-  );
+  final service = factory(updateFolderPath: args.folder, onProgress: log);
 
   late final ReleasePublishPreview preview;
   try {
@@ -178,9 +169,7 @@ Future<int> runPublishCli(
       case EmptyUnreleasedChoice.installerOnly:
         return _mapPublishResult(await service.writeInstallerOnly(), log);
       case EmptyUnreleasedChoice.publishAnyway:
-        log(
-          'Η δημοσίευση χωρίς καταχωρήσεις Unreleased δεν επιτρέπεται.',
-        );
+        log('Η δημοσίευση χωρίς καταχωρήσεις Unreleased δεν επιτρέπεται.');
         return 2;
     }
   }

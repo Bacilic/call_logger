@@ -70,11 +70,9 @@ void main() {
 
         await db.delete('audit_log');
 
-        await users.updateUser(
-          userId,
-          {'phones': [existingPhone, newPhone]},
-          skipPhonePolicyValidation: true,
-        );
+        await users.updateUser(userId, {
+          'phones': [existingPhone, newPhone],
+        }, skipPhonePolicyValidation: true);
 
         final rows = await allAuditRows();
         expect(rows, hasLength(1));
@@ -215,14 +213,10 @@ void main() {
 
         await db.delete('audit_log');
 
-        await departments.saveDepartmentWithFloorContext(
-          deptId,
-          {
-            'color': '#EF5350',
-            'map_x': 100.0,
-          },
-          drawingFloorId: 3,
-        );
+        await departments.saveDepartmentWithFloorContext(deptId, {
+          'color': '#EF5350',
+          'map_x': 100.0,
+        }, drawingFloorId: 3);
 
         final rows = await allAuditRows();
         expect(rows, hasLength(1));

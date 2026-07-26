@@ -110,21 +110,22 @@ class LampPathController {
     final settings = host.shared.settings;
     await settings.setReadPath(read);
     await settings.setOutputPath(output);
-    await host.ref.read(lampReadPathHealthProvider.notifier).refresh(
-      pathOverride: effectiveReadPathForValidation(),
-      outputPathOverride: output,
-      excelPathOverride: excel,
-    );
-    await host.ref.read(lampOutputPathHealthProvider.notifier).refresh(
-      pathOverride: output,
-    );
-    await host.ref.read(lampExcelPathHealthProvider.notifier).refresh(
-      pathOverride: excel,
-    );
-    await host.ref.read(lampDbComparisonProvider.notifier).refresh(
-      readPathOverride: read,
-      outputPathOverride: output,
-    );
+    await host.ref
+        .read(lampReadPathHealthProvider.notifier)
+        .refresh(
+          pathOverride: effectiveReadPathForValidation(),
+          outputPathOverride: output,
+          excelPathOverride: excel,
+        );
+    await host.ref
+        .read(lampOutputPathHealthProvider.notifier)
+        .refresh(pathOverride: output);
+    await host.ref
+        .read(lampExcelPathHealthProvider.notifier)
+        .refresh(pathOverride: excel);
+    await host.ref
+        .read(lampDbComparisonProvider.notifier)
+        .refresh(readPathOverride: read, outputPathOverride: output);
     if (host.mounted) {
       host.lampSettingsDialogSetState?.call(() {});
     }
@@ -149,13 +150,15 @@ class LampPathController {
       readDbController.text = outRaw ?? '';
     }
     outputDbController.text = outRaw ?? '';
-    await host.ref.read(lampExcelPathHealthProvider.notifier).refresh(
-      pathOverride: excelController.text.trim(),
-    );
-    await host.ref.read(lampDbComparisonProvider.notifier).refresh(
-      readPathOverride: readDbController.text.trim(),
-      outputPathOverride: outputDbController.text.trim(),
-    );
+    await host.ref
+        .read(lampExcelPathHealthProvider.notifier)
+        .refresh(pathOverride: excelController.text.trim());
+    await host.ref
+        .read(lampDbComparisonProvider.notifier)
+        .refresh(
+          readPathOverride: readDbController.text.trim(),
+          outputPathOverride: outputDbController.text.trim(),
+        );
   }
 
   Future<void> applyPersistedReadAndValidate({
@@ -173,21 +176,22 @@ class LampPathController {
     final settings = host.shared.settings;
     await settings.setReadPath(read);
     await settings.setOutputPath(output);
-    await host.ref.read(lampReadPathHealthProvider.notifier).refresh(
-      pathOverride: read,
-      outputPathOverride: output,
-      excelPathOverride: excelController.text.trim(),
-    );
-    await host.ref.read(lampOutputPathHealthProvider.notifier).refresh(
-      pathOverride: output,
-    );
-    await host.ref.read(lampExcelPathHealthProvider.notifier).refresh(
-      pathOverride: excelController.text.trim(),
-    );
-    await host.ref.read(lampDbComparisonProvider.notifier).refresh(
-      readPathOverride: read,
-      outputPathOverride: output,
-    );
+    await host.ref
+        .read(lampReadPathHealthProvider.notifier)
+        .refresh(
+          pathOverride: read,
+          outputPathOverride: output,
+          excelPathOverride: excelController.text.trim(),
+        );
+    await host.ref
+        .read(lampOutputPathHealthProvider.notifier)
+        .refresh(pathOverride: output);
+    await host.ref
+        .read(lampExcelPathHealthProvider.notifier)
+        .refresh(pathOverride: excelController.text.trim());
+    await host.ref
+        .read(lampDbComparisonProvider.notifier)
+        .refresh(readPathOverride: read, outputPathOverride: output);
     if (!host.mounted) return;
     final result = host.readPathCheck;
     if (result == null) return;
@@ -209,9 +213,7 @@ class LampPathController {
         result.status == LampOldDbStatus.pendingCreation) {
       return;
     }
-    final prefix = source == 'έναρξη'
-        ? 'Λάμπα: '
-        : 'Έλεγχος βάσης ($source): ';
+    final prefix = source == 'έναρξη' ? 'Λάμπα: ' : 'Έλεγχος βάσης ($source): ';
     final message = host.lampSettingsDialogOpen
         ? result.userMessageGreek
         : '$prefix${result.userMessageGreek}';
@@ -257,9 +259,9 @@ class LampPathController {
     }
     excelController.text = path;
     await host.shared.settings.setExcelPath(path);
-    await host.ref.read(lampExcelPathHealthProvider.notifier).refresh(
-      pathOverride: path,
-    );
+    await host.ref
+        .read(lampExcelPathHealthProvider.notifier)
+        .refresh(pathOverride: path);
     if (host.mounted) {
       host.lampSettingsDialogSetState?.call(() {});
       host.showSnack('Ορίστηκε αρχείο Excel: ${p.basename(path)}');
@@ -334,13 +336,12 @@ class LampPathController {
       }
       await onReadSynced(source: 'αλλαγή αρχείου εξόδου');
     } else {
-      await host.ref.read(lampOutputPathHealthProvider.notifier).refresh(
-        pathOverride: portablePath,
-      );
-      await host.ref.read(lampDbComparisonProvider.notifier).refresh(
-        readPathOverride: readT,
-        outputPathOverride: portablePath,
-      );
+      await host.ref
+          .read(lampOutputPathHealthProvider.notifier)
+          .refresh(pathOverride: portablePath);
+      await host.ref
+          .read(lampDbComparisonProvider.notifier)
+          .refresh(readPathOverride: readT, outputPathOverride: portablePath);
       if (host.mounted) {
         host.showSnack(
           'Η διαδρομή εξόδου (δημιουργίας) ενημερώθηκε. Η βάση προς «ανάγνωση» παρέμεινε ξεχωριστή.',
@@ -426,9 +427,9 @@ class LampPathFormatWarningBanner extends StatelessWidget {
             Expanded(
               child: Text(
                 message,
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: scheme.onErrorContainer,
-                ),
+                style: Theme.of(
+                  context,
+                ).textTheme.bodySmall?.copyWith(color: scheme.onErrorContainer),
               ),
             ),
           ],
@@ -467,9 +468,9 @@ class LampDbComparisonBanner extends StatelessWidget {
                     if (i > 0) const SizedBox(height: 6),
                     Text(
                       messages[i],
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: orange,
-                      ),
+                      style: Theme.of(
+                        context,
+                      ).textTheme.bodySmall?.copyWith(color: orange),
                     ),
                   ],
                 ],
@@ -532,10 +533,7 @@ class LampPathRow extends StatelessWidget {
             ),
           ),
         ),
-        if (trailing != null) ...[
-          const SizedBox(width: 8),
-          trailing!,
-        ],
+        if (trailing != null) ...[const SizedBox(width: 8), trailing!],
         const SizedBox(width: 12),
         OutlinedButton.icon(
           onPressed: onPick,
@@ -685,7 +683,8 @@ class LampExcelPathCheckPanel extends StatelessWidget {
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
                   if (showMessage) ...[
-                    if (excelController.text.isNotEmpty) const SizedBox(height: 4),
+                    if (excelController.text.isNotEmpty)
+                      const SizedBox(height: 4),
                     Text(
                       r.userMessageGreek,
                       style: Theme.of(context).textTheme.bodySmall,

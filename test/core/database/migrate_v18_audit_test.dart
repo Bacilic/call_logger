@@ -7,10 +7,7 @@ void main() {
   databaseFactory = databaseFactoryFfi;
 
   test('migrateDatabaseToV18 είναι idempotent και προσθέτει στήλες', () async {
-    final db = await openDatabase(
-      inMemoryDatabasePath,
-      singleInstance: false,
-    );
+    final db = await openDatabase(inMemoryDatabasePath, singleInstance: false);
     try {
       await db.execute('''
         CREATE TABLE audit_log (
@@ -26,13 +23,16 @@ void main() {
 
       final info = await db.rawQuery('PRAGMA table_info(audit_log)');
       final names = info.map((r) => r['name'] as String).toSet();
-      expect(names, containsAll(<String>[
-        'entity_type',
-        'entity_id',
-        'entity_name',
-        'old_values_json',
-        'new_values_json',
-      ]));
+      expect(
+        names,
+        containsAll(<String>[
+          'entity_type',
+          'entity_id',
+          'entity_name',
+          'old_values_json',
+          'new_values_json',
+        ]),
+      );
 
       final idx = await db.rawQuery(
         "SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='audit_log'",

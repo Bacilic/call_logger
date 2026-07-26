@@ -7,10 +7,7 @@ import 'package:call_logger/core/models/remote_tool_role.dart';
 import 'package:call_logger/features/directory/screens/widgets/remote_param_help_text.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-RemoteTool _tool({
-  required ToolRole role,
-  String name = 'Δοκιμαστικό',
-}) {
+RemoteTool _tool({required ToolRole role, String name = 'Δοκιμαστικό'}) {
   return RemoteTool(
     id: 1,
     name: name,

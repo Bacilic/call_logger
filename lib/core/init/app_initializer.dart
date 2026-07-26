@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -59,8 +59,8 @@ class AppInitializer {
       var spellCheckReady = false;
       if (runnerResult.result.isSuccess) {
         try {
-          spellCheckReady =
-              await CoreLexiconService.instance.bootstrapFromSavedPath();
+          spellCheckReady = await CoreLexiconService.instance
+              .bootstrapFromSavedPath();
         } catch (_) {
           spellCheckReady = false;
         }

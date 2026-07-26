@@ -148,11 +148,12 @@ class _LampTransferWizardDialogState extends State<LampTransferWizardDialog> {
         }
       }
       var confirmEntityCreations = false;
-      final pendingCreations = await widget.service.detectPendingEntityCreations(
-        target: draft.target,
-        formValues: formValues,
-        selectedCandidateId: _selectedCandidateId,
-      );
+      final pendingCreations = await widget.service
+          .detectPendingEntityCreations(
+            target: draft.target,
+            formValues: formValues,
+            selectedCandidateId: _selectedCandidateId,
+          );
       if (pendingCreations.isNotEmpty) {
         final confirmed = await _showPendingEntityCreationsDialog(
           pendingCreations,
@@ -519,14 +520,15 @@ class _LampTransferWizardDialogState extends State<LampTransferWizardDialog> {
                           child: Column(
                             children: [
                               RadioListTile<LampOwnerConflictAction>(
-                                value:
-                                    LampOwnerConflictAction.transferToSelectedOwner,
+                                value: LampOwnerConflictAction
+                                    .transferToSelectedOwner,
                                 dense: true,
                                 contentPadding: EdgeInsets.zero,
                                 title: Text(_transferOptionLabel(conflict)),
                               ),
                               RadioListTile<LampOwnerConflictAction>(
-                                value: LampOwnerConflictAction.keepWithoutAssignment,
+                                value: LampOwnerConflictAction
+                                    .keepWithoutAssignment,
                                 dense: true,
                                 contentPadding: EdgeInsets.zero,
                                 title: Text(_skipOptionLabel(conflict)),
@@ -551,7 +553,8 @@ class _LampTransferWizardDialogState extends State<LampTransferWizardDialog> {
                       for (final conflict in conflicts)
                         LampOwnerConflictDecision(
                           conflictId: conflict.conflictId,
-                          action: selections[conflict.conflictId] ??
+                          action:
+                              selections[conflict.conflictId] ??
                               LampOwnerConflictAction.keepWithoutAssignment,
                         ),
                     ];
@@ -689,8 +692,7 @@ class _LampTransferWizardDialogState extends State<LampTransferWizardDialog> {
     return switch (conflict.kind) {
       LampOwnerConflictKind.equipment =>
         'Καταχώρηση χρήστη χωρίς αυτόν τον εξοπλισμό',
-      LampOwnerConflictKind.phone =>
-        'Καταχώρηση χρήστη χωρίς αυτό το τηλέφωνο',
+      LampOwnerConflictKind.phone => 'Καταχώρηση χρήστη χωρίς αυτό το τηλέφωνο',
     };
   }
 
@@ -701,14 +703,11 @@ class _LampTransferWizardDialogState extends State<LampTransferWizardDialog> {
     setState(() {
       _selectedCandidateId = value;
       for (final entry in selectedValues.entries) {
-        final controller = _controllers.putIfAbsent(
-          entry.key,
-          () {
-            final created = TextEditingController();
-            created.addListener(_onFormValuesChanged);
-            return created;
-          },
-        );
+        final controller = _controllers.putIfAbsent(entry.key, () {
+          final created = TextEditingController();
+          created.addListener(_onFormValuesChanged);
+          return created;
+        });
         if (controller.text != entry.value) {
           controller.text = entry.value;
         }

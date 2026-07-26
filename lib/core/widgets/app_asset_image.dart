@@ -40,11 +40,7 @@ class AppAssetImage extends StatelessWidget {
       filterQuality: filterQuality,
       errorBuilder: (_, _, _) =>
           fallback ??
-          Icon(
-            fallbackIcon,
-            size: fallbackSize,
-            color: fallbackColor,
-          ),
+          Icon(fallbackIcon, size: fallbackSize, color: fallbackColor),
     );
   }
 }

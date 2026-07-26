@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/models/building_map_floor.dart';
@@ -36,9 +36,9 @@ int compareBuildingMapFloorsByNumericLabel(
   BuildingMapFloor a,
   BuildingMapFloor b,
 ) {
-  final cmp = buildingMapFloorNumericSortKey(a).compareTo(
-    buildingMapFloorNumericSortKey(b),
-  );
+  final cmp = buildingMapFloorNumericSortKey(
+    a,
+  ).compareTo(buildingMapFloorNumericSortKey(b));
   if (cmp != 0) return cmp;
   return compareBuildingMapFloorDisplayLabels(a, b);
 }
@@ -90,9 +90,10 @@ class BuildingMapFloorsMenuButton extends ConsumerWidget {
         final cmd = parts[0];
         final id = int.tryParse(parts[1]);
         if (id == null) return;
-        final floor = floors
-            .cast<BuildingMapFloor?>()
-            .firstWhere((fl) => fl?.id == id, orElse: () => null);
+        final floor = floors.cast<BuildingMapFloor?>().firstWhere(
+          (fl) => fl?.id == id,
+          orElse: () => null,
+        );
         if (floor == null) return;
         switch (cmd) {
           case 'pick':
@@ -116,9 +117,7 @@ class BuildingMapFloorsMenuButton extends ConsumerWidget {
                 color: Theme.of(ctx).colorScheme.primary,
               ),
               const SizedBox(width: 10),
-              const Expanded(
-                child: Text('Προσθήκη νέας κάτοψης'),
-              ),
+              const Expanded(child: Text('Προσθήκη νέας κάτοψης')),
             ],
           ),
         ),
@@ -138,10 +137,7 @@ class BuildingMapFloorsMenuButton extends ConsumerWidget {
                         horizontal: 16,
                         vertical: 12,
                       ),
-                      child: Text(
-                        label,
-                        overflow: TextOverflow.ellipsis,
-                      ),
+                      child: Text(label, overflow: TextOverflow.ellipsis),
                     ),
                   ),
                   IconButton(

@@ -37,9 +37,7 @@ void main() {
     required Future<bool> Function() getShowUpdateOnStartup,
   }) async {
     final container = ProviderContainer(
-      overrides: [
-        updateCheckProvider.overrideWith((ref) async => result),
-      ],
+      overrides: [updateCheckProvider.overrideWith((ref) async => result)],
     );
     addTearDown(container.dispose);
 
@@ -73,18 +71,15 @@ void main() {
     },
   );
 
-  testWidgets(
-    'με ρύθμιση false δεν εμφανίζεται ο διάλογος',
-    (tester) async {
-      await pumpListener(
-        tester,
-        result: available,
-        getShowUpdateOnStartup: () async => false,
-      );
+  testWidgets('με ρύθμιση false δεν εμφανίζεται ο διάλογος', (tester) async {
+    await pumpListener(
+      tester,
+      result: available,
+      getShowUpdateOnStartup: () async => false,
+    );
 
-      expect(find.text('Διαθέσιμη νέα έκδοση'), findsNothing);
-    },
-  );
+    expect(find.text('Διαθέσιμη νέα έκδοση'), findsNothing);
+  });
 
   testWidgets(
     'δεύτερη ενεργοποίηση στην ίδια συνεδρία δεν ξαναεμφανίζει τον διάλογο',

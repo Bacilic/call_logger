@@ -39,8 +39,8 @@ class _MiscellaneousTabState extends State<MiscellaneousTab> {
                 Text(
                   'Επιστροφή',
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w600,
-                      ),
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ],
             ),
@@ -50,7 +50,8 @@ class _MiscellaneousTabState extends State<MiscellaneousTab> {
             MiscView.categories => const CategoriesView(),
             MiscView.remoteTools => RemoteToolsManagementScreen(
               embedded: true,
-              onBackToDashboard: () => setState(() => _view = MiscView.dashboard),
+              onBackToDashboard: () =>
+                  setState(() => _view = MiscView.dashboard),
             ),
             MiscView.dashboard => const SizedBox.shrink(),
           },

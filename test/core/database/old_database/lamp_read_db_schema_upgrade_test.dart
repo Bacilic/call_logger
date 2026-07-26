@@ -1,4 +1,4 @@
-﻿import 'dart:io';
+import 'dart:io';
 
 import 'package:call_logger/core/database/old_database/lamp_database_provider.dart';
 import 'package:call_logger/core/database/old_database/old_equipment_repository.dart';
@@ -142,7 +142,9 @@ void main() {
   late OldEquipmentRepository repository;
 
   setUp(() async {
-    tempDir = await Directory.systemTemp.createTemp('lamp-read-schema-upgrade-');
+    tempDir = await Directory.systemTemp.createTemp(
+      'lamp-read-schema-upgrade-',
+    );
     dbPath = p.join(tempDir.path, 'bare_lamp.db');
     repository = OldEquipmentRepository();
   });
@@ -201,7 +203,10 @@ void main() {
 
       final verifyDb = await openDatabase(dbPath, singleInstance: false);
       try {
-        final triggersAfter = await _sqliteMasterNames(verifyDb, type: 'trigger');
+        final triggersAfter = await _sqliteMasterNames(
+          verifyDb,
+          type: 'trigger',
+        );
         final indexesAfter = await _sqliteMasterNames(verifyDb, type: 'index');
         expect(
           triggersAfter.contains('trg_equipment_set_master_no_self_insert'),

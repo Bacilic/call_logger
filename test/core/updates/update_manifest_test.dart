@@ -23,10 +23,7 @@ void main() {
     test('returns null for broken or incomplete JSON', () {
       expect(UpdateManifest.fromJson(null), isNull);
       expect(UpdateManifest.fromJson(<String, dynamic>{}), isNull);
-      expect(
-        UpdateManifest.fromJson({'version': '0.24.0'}),
-        isNull,
-      );
+      expect(UpdateManifest.fromJson({'version': '0.24.0'}), isNull);
       expect(
         UpdateManifest.fromJson({
           'version': '',

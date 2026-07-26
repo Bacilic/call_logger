@@ -44,10 +44,7 @@ void main() {
     await DatabaseHelper.instance.createNewDatabaseFile(source);
     final before = await _bytes(source);
 
-    final result = await createUpgradeCopy(
-      source,
-      now: DateTime(2026, 7, 25),
-    );
+    final result = await createUpgradeCopy(source, now: DateTime(2026, 7, 25));
     expect(
       result.isSuccess,
       isTrue,
@@ -63,10 +60,7 @@ void main() {
     await writer.rawQuery('PRAGMA user_version = 30');
     await writer.close();
 
-    final result = await createUpgradeCopy(
-      source,
-      now: DateTime(2026, 7, 25),
-    );
+    final result = await createUpgradeCopy(source, now: DateTime(2026, 7, 25));
     expect(result.isSuccess, isTrue);
     final copyPath = result.copyPath!;
 
@@ -80,15 +74,14 @@ void main() {
     await upgraded.close();
     expect(rows.first['user_version'], kDatabaseSchemaVersion);
 
-    final sourceVersion = await openDatabase(
-      source,
-      readOnly: true,
-      singleInstance: false,
-    ).then((db) async {
-      final v = await db.rawQuery('PRAGMA user_version');
-      await db.close();
-      return v.first['user_version'];
-    });
+    final sourceVersion =
+        await openDatabase(source, readOnly: true, singleInstance: false).then((
+          db,
+        ) async {
+          final v = await db.rawQuery('PRAGMA user_version');
+          await db.close();
+          return v.first['user_version'];
+        });
     expect(sourceVersion, 30);
   });
 
@@ -109,10 +102,7 @@ void main() {
     final wal = File('$source-wal');
     expect(await wal.exists(), isTrue);
 
-    final result = await createUpgradeCopy(
-      source,
-      now: DateTime(2026, 7, 25),
-    );
+    final result = await createUpgradeCopy(source, now: DateTime(2026, 7, 25));
     expect(result.isSuccess, isTrue);
     final copyPath = result.copyPath!;
     // Μετά το checkpoint μπορεί να μην υπάρχει -wal στο πρωτότυπο,
@@ -187,10 +177,7 @@ void main() {
     final occupied = File(p.join(tempDir.path, firstName));
     await occupied.writeAsString('occupied');
 
-    final result = await createUpgradeCopy(
-      source,
-      now: DateTime(2026, 7, 25),
-    );
+    final result = await createUpgradeCopy(source, now: DateTime(2026, 7, 25));
     expect(result.isSuccess, isTrue);
     expect(result.copyPath, isNot(equals(occupied.path)));
     expect(await occupied.readAsString(), 'occupied');

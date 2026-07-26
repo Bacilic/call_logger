@@ -21,8 +21,10 @@ class PortableBackupAvailability {
     required bool lexiconLoaded,
   }) async {
     final mapFiles = await BuildingMapStorage.listPortableImageFiles();
-    final toolImages = await PortableToolImageStorage.portableImagesFolderHasFiles();
-    final lampDb = await PortableLampStorage.lampReadDbExistsInPortableDataBase();
+    final toolImages =
+        await PortableToolImageStorage.portableImagesFolderHasFiles();
+    final lampDb =
+        await PortableLampStorage.lampReadDbExistsInPortableDataBase();
     return PortableBackupAvailability(
       hasMapImages: mapFiles.isNotEmpty,
       hasToolImages: toolImages,

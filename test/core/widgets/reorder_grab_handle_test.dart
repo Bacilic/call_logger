@@ -21,12 +21,7 @@ Widget _reorderHost(Widget handle) {
         children: [
           KeyedSubtree(
             key: const ValueKey('row'),
-            child: Row(
-              children: [
-                handle,
-                const Text('στοιχείο'),
-              ],
-            ),
+            child: Row(children: [handle, const Text('στοιχείο')]),
           ),
         ],
       ),
@@ -42,9 +37,7 @@ void main() {
     '(το σχήμα του δείκτη ελέγχεται οπτικά, όχι εδώ)',
     experimentalLeakTesting: LeakTesting.settings.withIgnoredAll(),
     (tester) async {
-      await tester.pumpWidget(
-        _reorderHost(const ReorderGrabHandle(index: 0)),
-      );
+      await tester.pumpWidget(_reorderHost(const ReorderGrabHandle(index: 0)));
       await tester.pump();
 
       expect(find.byIcon(Icons.drag_handle), findsOneWidget);

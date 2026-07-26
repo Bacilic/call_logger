@@ -43,13 +43,9 @@ Future<void> applyDepartmentEmployeeReassignBatch(
   }
 
   for (final entry in resolved.entries) {
-    await users.updateUser(
-      entry.key,
-      <String, dynamic>{
-        'department_id': entry.value,
-      },
-      executor: executor,
-    );
+    await users.updateUser(entry.key, <String, dynamic>{
+      'department_id': entry.value,
+    }, executor: executor);
   }
 
   if (executor == null && createdNewDepartments) {
@@ -57,4 +53,3 @@ Future<void> applyDepartmentEmployeeReassignBatch(
     await LookupService.instance.loadFromDatabase();
   }
 }
-

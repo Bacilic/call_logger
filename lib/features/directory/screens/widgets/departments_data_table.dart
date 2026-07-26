@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../../../core/models/building_map_floor.dart';
@@ -37,7 +37,8 @@ class DepartmentsDataTable extends StatefulWidget {
   final List<DepartmentDirectoryColumn> visibleColumns;
   final void Function(int id) onToggleSelection;
   final void Function(String? column, bool ascending) onSetSort;
-  final void Function(DepartmentModel d, {String? focusedField}) onEditDepartment;
+  final void Function(DepartmentModel d, {String? focusedField})
+  onEditDepartment;
   final int? focusedRowIndex;
   final void Function(int? index)? onSetFocusedRowIndex;
   final VoidCallback? onRequestDelete;
@@ -80,8 +81,9 @@ class _DepartmentsDataTableState extends State<DepartmentsDataTable> {
   final FocusNode _tableFocusNode = FocusNode();
   final ScrollController _verticalScrollController = ScrollController();
   final ScrollController _horizontalScrollController = ScrollController();
-  final Map<String, double> _columnWidths =
-      Map<String, double>.from(_defaultWidthsByKey);
+  final Map<String, double> _columnWidths = Map<String, double>.from(
+    _defaultWidthsByKey,
+  );
   int _pagedFirstRowIndex = 0;
 
   @override
@@ -176,7 +178,8 @@ class _DepartmentsDataTableState extends State<DepartmentsDataTable> {
       children: [
         TableRow(
           decoration: BoxDecoration(
-            color: headingColor ??
+            color:
+                headingColor ??
                 Theme.of(context).colorScheme.surfaceContainerHighest,
           ),
           children: [
@@ -191,9 +194,9 @@ class _DepartmentsDataTableState extends State<DepartmentsDataTable> {
                         child: InkWell(
                           onTap: columns[i].onSort != null
                               ? () => columns[i].onSort!(
-                                    0,
-                                    i == sortedIndex ? !asc : true,
-                                  )
+                                  0,
+                                  i == sortedIndex ? !asc : true,
+                                )
                               : null,
                           child: Container(
                             height: headingHeight,
@@ -220,8 +223,9 @@ class _DepartmentsDataTableState extends State<DepartmentsDataTable> {
                                         ? Icons.arrow_drop_up
                                         : Icons.arrow_drop_down,
                                     size: 18,
-                                    color:
-                                        Theme.of(context).colorScheme.onSurface,
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.onSurface,
                                   ),
                                 ],
                               ],
@@ -252,7 +256,7 @@ class _DepartmentsDataTableState extends State<DepartmentsDataTable> {
     final dataTableTheme = theme.dataTableTheme;
     final rowColor = dataRow.selected
         ? (dataTableTheme.dataRowColor?.resolve({WidgetState.selected}) ??
-            theme.colorScheme.primaryContainer.withValues(alpha: 0.3))
+              theme.colorScheme.primaryContainer.withValues(alpha: 0.3))
         : dataTableTheme.dataRowColor?.resolve({WidgetState.selected});
     return TableRow(
       decoration: BoxDecoration(color: rowColor),
@@ -297,8 +301,9 @@ class _DepartmentsDataTableState extends State<DepartmentsDataTable> {
     }
     if (key == LogicalKeyboardKey.arrowUp) {
       if (onSetFocus != null) {
-        final next =
-            current == null ? len - 1 : (current - 1).clamp(0, len - 1);
+        final next = current == null
+            ? len - 1
+            : (current - 1).clamp(0, len - 1);
         onSetFocus(next);
       }
       return KeyEventResult.handled;
@@ -346,9 +351,11 @@ class _DepartmentsDataTableState extends State<DepartmentsDataTable> {
                   widget.onToggleSelection(id);
                 }
               },
-              allSelected: widget.departments.isNotEmpty &&
-                  widget.departments.every((d) =>
-                      d.id != null && widget.selectedIds.contains(d.id)),
+              allSelected:
+                  widget.departments.isNotEmpty &&
+                  widget.departments.every(
+                    (d) => d.id != null && widget.selectedIds.contains(d.id),
+                  ),
             ),
           ),
         );
@@ -410,8 +417,7 @@ class _DepartmentsDataTableState extends State<DepartmentsDataTable> {
                 columns,
                 headingHeight,
                 headingColor,
-                dataTableTheme.headingTextStyle ??
-                    theme.textTheme.titleSmall!,
+                dataTableTheme.headingTextStyle ?? theme.textTheme.titleSmall!,
                 columnWidths,
               ),
               Expanded(
@@ -419,11 +425,9 @@ class _DepartmentsDataTableState extends State<DepartmentsDataTable> {
                   controller: _verticalScrollController,
                   child: Table(
                     columnWidths: columnWidths,
-                    defaultVerticalAlignment:
-                        TableCellVerticalAlignment.middle,
+                    defaultVerticalAlignment: TableCellVerticalAlignment.middle,
                     children: [
-                      for (final row in rows)
-                        _dataRowToTableRow(context, row),
+                      for (final row in rows) _dataRowToTableRow(context, row),
                     ],
                   ),
                 ),
@@ -460,13 +464,13 @@ class _DepartmentsDataTableState extends State<DepartmentsDataTable> {
 
     void goFirst() => setState(() => _pagedFirstRowIndex = 0);
     void goPrev() => setState(
-          () => _pagedFirstRowIndex =
-              (start - _rowsPerPage).clamp(0, lastPageStart),
-        );
+      () =>
+          _pagedFirstRowIndex = (start - _rowsPerPage).clamp(0, lastPageStart),
+    );
     void goNext() => setState(() {
-          final next = start + _rowsPerPage;
-          if (next < n) _pagedFirstRowIndex = next;
-        });
+      final next = start + _rowsPerPage;
+      if (next < n) _pagedFirstRowIndex = next;
+    });
     void goLast() => setState(() => _pagedFirstRowIndex = lastPageStart);
 
     return Theme(
@@ -482,8 +486,9 @@ class _DepartmentsDataTableState extends State<DepartmentsDataTable> {
         ),
       ),
       child: Material(
-        color:
-            theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.65),
+        color: theme.colorScheme.surfaceContainerHighest.withValues(
+          alpha: 0.65,
+        ),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
           child: Row(
@@ -560,9 +565,12 @@ class _DepartmentsDataTableState extends State<DepartmentsDataTable> {
         );
         const columnSpacing = 24.0;
         const horizontalMargin = 16.0;
-        final widthSum =
-            visible.fold<double>(0, (a, c) => a + _widthForColumn(c));
-        final tableWidth = widthSum +
+        final widthSum = visible.fold<double>(
+          0,
+          (a, c) => a + _widthForColumn(c),
+        );
+        final tableWidth =
+            widthSum +
             (visible.length - 1) * columnSpacing +
             horizontalMargin * 2;
 
@@ -918,7 +926,8 @@ class _DepartmentsTableSource extends DataTableSource {
     ];
     return DataRow(
       selected: selected,
-      onSelectChanged: _selectionVisible && id != null && _onToggleSelection != null
+      onSelectChanged:
+          _selectionVisible && id != null && _onToggleSelection != null
           ? (_) => _onToggleSelection!(id)
           : null,
       color: focused ? WidgetStateProperty.all(_focusHighlightColor) : null,

@@ -12,93 +12,81 @@ Widget _testPanelHost({
   required RemoteToolFormController controller,
   required GlobalKey<FormState> formKey,
   VoidCallback? onSave,
-}) =>
-    MaterialApp(
-      home: Scaffold(
-        body: SingleChildScrollView(
-          child: Form(
-            key: formKey,
-            child: ListenableBuilder(
-              listenable: controller,
-              builder: (context, _) => Column(
-                children: [
-                  RemoteToolTestPanel(
-                    controller: controller,
-                    onRunTest: () {},
-                  ),
-                  FilledButton(
-                    onPressed: onSave,
-                    child: const Text('Αποθήκευση'),
-                  ),
-                ],
-              ),
-            ),
+}) => MaterialApp(
+  home: Scaffold(
+    body: SingleChildScrollView(
+      child: Form(
+        key: formKey,
+        child: ListenableBuilder(
+          listenable: controller,
+          builder: (context, _) => Column(
+            children: [
+              RemoteToolTestPanel(controller: controller, onRunTest: () {}),
+              FilledButton(onPressed: onSave, child: const Text('Αποθήκευση')),
+            ],
           ),
         ),
       ),
-    );
+    ),
+  ),
+);
 
 Finder _testIpField() => find.descendant(
-      of: find.byWidgetPredicate(
-        (w) =>
-            w is InputDecorator &&
-            w.decoration.labelText ==
-                'Δοκιμαστική IP / Hostname (για δοκιμή)',
-      ),
-      matching: find.byType(EditableText),
-    );
+  of: find.byWidgetPredicate(
+    (w) =>
+        w is InputDecorator &&
+        w.decoration.labelText == 'Δοκιμαστική IP / Hostname (για δοκιμή)',
+  ),
+  matching: find.byType(EditableText),
+);
 
 void main() {
   group('RemoteToolTestPanel — επικύρωση και μορφοποίηση IP', () {
-    testWidgets(
-      'κόμμα numpad γίνεται τελεία στο πεδίο δοκιμαστικής IP',
-      (tester) async {
-        final controller = RemoteToolFormController();
-        addTearDown(controller.dispose);
+    testWidgets('κόμμα numpad γίνεται τελεία στο πεδίο δοκιμαστικής IP', (
+      tester,
+    ) async {
+      final controller = RemoteToolFormController();
+      addTearDown(controller.dispose);
 
-        await tester.pumpWidget(_testPanelHost(
-          controller: controller,
-          formKey: GlobalKey<FormState>(),
-        ));
+      await tester.pumpWidget(
+        _testPanelHost(controller: controller, formKey: GlobalKey<FormState>()),
+      );
 
-        await tester.enterText(_testIpField(), '10,10,25,12');
-        await tester.pump();
+      await tester.enterText(_testIpField(), '10,10,25,12');
+      await tester.pump();
 
-        expect(
-          controller.testIpC.text,
-          '10.10.25.12',
-          reason: greekExpectMsg(
-            'Το CommaToDotDecimalSeparatorFormatter μετατρέπει κόμμα σε τελεία',
-          ),
-        );
-      },
-    );
+      expect(
+        controller.testIpC.text,
+        '10.10.25.12',
+        reason: greekExpectMsg(
+          'Το CommaToDotDecimalSeparatorFormatter μετατρέπει κόμμα σε τελεία',
+        ),
+      );
+    });
 
-    testWidgets(
-      '«11.0265.0656» εμφανίζει μήνυμα πλήθους ομάδων IP',
-      (tester) async {
-        final controller = RemoteToolFormController();
-        addTearDown(controller.dispose);
+    testWidgets('«11.0265.0656» εμφανίζει μήνυμα πλήθους ομάδων IP', (
+      tester,
+    ) async {
+      final controller = RemoteToolFormController();
+      addTearDown(controller.dispose);
 
-        await tester.pumpWidget(_testPanelHost(
-          controller: controller,
-          formKey: GlobalKey<FormState>(),
-        ));
+      await tester.pumpWidget(
+        _testPanelHost(controller: controller, formKey: GlobalKey<FormState>()),
+      );
 
-        await tester.enterText(_testIpField(), '11.0265.0656');
-        await tester.pump();
+      await tester.enterText(_testIpField(), '11.0265.0656');
+      await tester.pump();
 
-        expect(
-          find.textContaining(
-            'Η IP θέλει 4 αριθμούς χωρισμένους με τελείες — βρέθηκαν 3.',
-          ),
-          findsOneWidget,
-          reason: greekExpectMsg(
-            'Η άκυρη IP με 3 ομάδες δείχνει στοχευμένο μήνυμα πλήθους',
-          ),
-        );
-      },
-    );
+      expect(
+        find.textContaining(
+          'Η IP θέλει 4 αριθμούς χωρισμένους με τελείες — βρέθηκαν 3.',
+        ),
+        findsOneWidget,
+        reason: greekExpectMsg(
+          'Η άκυρη IP με 3 ομάδες δείχνει στοχευμένο μήνυμα πλήθους',
+        ),
+      );
+    });
 
     testWidgets(
       'κενό πεδίο: κανένα μήνυμα σφάλματος και η αποθήκευση δεν μπλοκάρεται',
@@ -108,15 +96,17 @@ void main() {
         final formKey = GlobalKey<FormState>();
         var saved = false;
 
-        await tester.pumpWidget(_testPanelHost(
-          controller: controller,
-          formKey: formKey,
-          onSave: () {
-            if (formKey.currentState?.validate() ?? false) {
-              saved = true;
-            }
-          },
-        ));
+        await tester.pumpWidget(
+          _testPanelHost(
+            controller: controller,
+            formKey: formKey,
+            onSave: () {
+              if (formKey.currentState?.validate() ?? false) {
+                saved = true;
+              }
+            },
+          ),
+        );
 
         await tester.tap(find.text('Αποθήκευση'));
         await tester.pump();
@@ -127,15 +117,16 @@ void main() {
       },
     );
 
-    testWidgets(
-      'άκυρη τιμή: μήνυμα σφάλματος και μπλοκάρισμα αποθήκευσης',
-      (tester) async {
-        final controller = RemoteToolFormController();
-        addTearDown(controller.dispose);
-        final formKey = GlobalKey<FormState>();
-        var saved = false;
+    testWidgets('άκυρη τιμή: μήνυμα σφάλματος και μπλοκάρισμα αποθήκευσης', (
+      tester,
+    ) async {
+      final controller = RemoteToolFormController();
+      addTearDown(controller.dispose);
+      final formKey = GlobalKey<FormState>();
+      var saved = false;
 
-        await tester.pumpWidget(_testPanelHost(
+      await tester.pumpWidget(
+        _testPanelHost(
           controller: controller,
           formKey: formKey,
           onSave: () {
@@ -143,27 +134,28 @@ void main() {
               saved = true;
             }
           },
-        ));
+        ),
+      );
 
-        await tester.enterText(_testIpField(), '!!!άκυρο!!!');
-        await tester.pump();
-        await tester.tap(find.text('Αποθήκευση'));
-        await tester.pump();
+      await tester.enterText(_testIpField(), '!!!άκυρο!!!');
+      await tester.pump();
+      await tester.tap(find.text('Αποθήκευση'));
+      await tester.pump();
 
-        expect(find.textContaining('Μη έγκυρη διεύθυνση'), findsOneWidget);
-        expect(saved, isFalse);
-      },
-    );
+      expect(find.textContaining('Μη έγκυρη διεύθυνση'), findsOneWidget);
+      expect(saved, isFalse);
+    });
 
-    testWidgets(
-      'έγκυρη IP: κανένα μήνυμα σφάλματος και επιτυχής επικύρωση',
-      (tester) async {
-        final controller = RemoteToolFormController();
-        addTearDown(controller.dispose);
-        final formKey = GlobalKey<FormState>();
-        var saved = false;
+    testWidgets('έγκυρη IP: κανένα μήνυμα σφάλματος και επιτυχής επικύρωση', (
+      tester,
+    ) async {
+      final controller = RemoteToolFormController();
+      addTearDown(controller.dispose);
+      final formKey = GlobalKey<FormState>();
+      var saved = false;
 
-        await tester.pumpWidget(_testPanelHost(
+      await tester.pumpWidget(
+        _testPanelHost(
           controller: controller,
           formKey: formKey,
           onSave: () {
@@ -171,27 +163,28 @@ void main() {
               saved = true;
             }
           },
-        ));
+        ),
+      );
 
-        await tester.enterText(_testIpField(), '192.168.1.10');
-        await tester.pump();
-        await tester.tap(find.text('Αποθήκευση'));
-        await tester.pump();
+      await tester.enterText(_testIpField(), '192.168.1.10');
+      await tester.pump();
+      await tester.tap(find.text('Αποθήκευση'));
+      await tester.pump();
 
-        expect(find.textContaining('Μη έγκυρη διεύθυνση'), findsNothing);
-        expect(saved, isTrue);
-      },
-    );
+      expect(find.textContaining('Μη έγκυρη διεύθυνση'), findsNothing);
+      expect(saved, isTrue);
+    });
 
-    testWidgets(
-      'έγκυρος κωδικός 3–6 ψηφίων: κανένα μήνυμα σφάλματος',
-      (tester) async {
-        final controller = RemoteToolFormController();
-        addTearDown(controller.dispose);
-        final formKey = GlobalKey<FormState>();
-        var saved = false;
+    testWidgets('έγκυρος κωδικός 3–6 ψηφίων: κανένα μήνυμα σφάλματος', (
+      tester,
+    ) async {
+      final controller = RemoteToolFormController();
+      addTearDown(controller.dispose);
+      final formKey = GlobalKey<FormState>();
+      var saved = false;
 
-        await tester.pumpWidget(_testPanelHost(
+      await tester.pumpWidget(
+        _testPanelHost(
           controller: controller,
           formKey: formKey,
           onSave: () {
@@ -199,27 +192,26 @@ void main() {
               saved = true;
             }
           },
-        ));
+        ),
+      );
 
-        await tester.enterText(_testIpField(), '922');
-        await tester.pump();
-        await tester.tap(find.text('Αποθήκευση'));
-        await tester.pump();
+      await tester.enterText(_testIpField(), '922');
+      await tester.pump();
+      await tester.tap(find.text('Αποθήκευση'));
+      await tester.pump();
 
-        expect(find.textContaining('Μη έγκυρη διεύθυνση'), findsNothing);
-        expect(saved, isTrue);
-      },
-    );
+      expect(find.textContaining('Μη έγκυρη διεύθυνση'), findsNothing);
+      expect(saved, isTrue);
+    });
 
-    testWidgets(
-      'έγκυρο hostname: κανένα μήνυμα σφάλματος',
-      (tester) async {
-        final controller = RemoteToolFormController();
-        addTearDown(controller.dispose);
-        final formKey = GlobalKey<FormState>();
-        var saved = false;
+    testWidgets('έγκυρο hostname: κανένα μήνυμα σφάλματος', (tester) async {
+      final controller = RemoteToolFormController();
+      addTearDown(controller.dispose);
+      final formKey = GlobalKey<FormState>();
+      var saved = false;
 
-        await tester.pumpWidget(_testPanelHost(
+      await tester.pumpWidget(
+        _testPanelHost(
           controller: controller,
           formKey: formKey,
           onSave: () {
@@ -227,17 +219,17 @@ void main() {
               saved = true;
             }
           },
-        ));
+        ),
+      );
 
-        await tester.enterText(_testIpField(), 'server1');
-        await tester.pump();
-        await tester.tap(find.text('Αποθήκευση'));
-        await tester.pump();
+      await tester.enterText(_testIpField(), 'server1');
+      await tester.pump();
+      await tester.tap(find.text('Αποθήκευση'));
+      await tester.pump();
 
-        expect(find.textContaining('Μη έγκυρη διεύθυνση'), findsNothing);
-        expect(saved, isTrue);
-      },
-    );
+      expect(find.textContaining('Μη έγκυρη διεύθυνση'), findsNothing);
+      expect(saved, isTrue);
+    });
 
     test(
       'η φόρμα εργαλείου δείχνει καθαρό κωδικό ενώ η σύνοψη λίστας τον κρύβει',

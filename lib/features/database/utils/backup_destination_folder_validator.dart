@@ -39,15 +39,14 @@ class BackupDestinationValidationResult {
       BackupDestinationValidationResult(BackupDestinationValidationKind.ok);
 
   String? get errorMessage => switch (kind) {
-        BackupDestinationValidationKind.ok => null,
-        BackupDestinationValidationKind.invalidPath => 'Δώστε έγκυρη διαδρομή',
-        BackupDestinationValidationKind.missingDirectory =>
-          'Ο φάκελος δεν υπάρχει',
-        BackupDestinationValidationKind.notADirectory =>
-          'Η διαδρομή δεν είναι φάκελος',
-        BackupDestinationValidationKind.accessDenied =>
-          'Δεν επιτρέπεται η πρόσβαση',
-      };
+    BackupDestinationValidationKind.ok => null,
+    BackupDestinationValidationKind.invalidPath => 'Δώστε έγκυρη διαδρομή',
+    BackupDestinationValidationKind.missingDirectory => 'Ο φάκελος δεν υπάρχει',
+    BackupDestinationValidationKind.notADirectory =>
+      'Η διαδρομή δεν είναι φάκελος',
+    BackupDestinationValidationKind.accessDenied =>
+      'Δεν επιτρέπεται η πρόσβαση',
+  };
 }
 
 /// Έλεγχος διαδρομής προορισμού backup (κενό = χωρίς φάκελο).
@@ -89,7 +88,7 @@ class BackupDestinationFolderValidator {
   /// `.\\` ή `./` στην αρχή (Windows) — μη έγκυρη διαδρομή.
   static bool _isWindowsDotRelative(String path) {
     if (path.length < 2) return false;
-    if (path.codeUnitAt(0) != 0x2e /* . */) return false;
+    if (path.codeUnitAt(0) != 0x2e /* . */ ) return false;
     final s1 = path.codeUnitAt(1);
     return s1 == 0x5c /* \ */ || s1 == 0x2f /* / */;
   }
@@ -100,8 +99,7 @@ class BackupDestinationFolderValidator {
     if (idx < 0) return false;
     if (idx != 1) return true;
     final c0 = path.codeUnitAt(0);
-    final isLetter =
-        (c0 >= 0x41 && c0 <= 0x5a) || (c0 >= 0x61 && c0 <= 0x7a);
+    final isLetter = (c0 >= 0x41 && c0 <= 0x5a) || (c0 >= 0x61 && c0 <= 0x7a);
     if (!isLetter) return true;
     return path.indexOf(':', 2) >= 0;
   }

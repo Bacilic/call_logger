@@ -34,16 +34,8 @@ class BulkEquipmentEditDialog extends StatefulWidget {
 
 class _BulkEquipmentEditDialogState extends State<BulkEquipmentEditDialog>
     with DialogSnackbarHost {
-  static const _fieldKeys = [
-    'type',
-    'notes',
-    'owner',
-  ];
-  static const _dbKeys = [
-    'type',
-    'notes',
-    'user_id',
-  ];
+  static const _fieldKeys = ['type', 'notes', 'owner'];
+  static const _dbKeys = ['type', 'notes', 'user_id'];
 
   final Map<String, bool> _applyField = {
     'type': false,
@@ -95,10 +87,9 @@ class _BulkEquipmentEditDialogState extends State<BulkEquipmentEditDialog>
     }
     final parsed = NameParserUtility.parse(textForSearch);
     final dbIns = await DatabaseHelper.instance.database;
-    return UserRepository(dbIns).insertUser(
-      firstName: parsed.firstName,
-      lastName: parsed.lastName,
-    );
+    return UserRepository(
+      dbIns,
+    ).insertUser(firstName: parsed.firstName, lastName: parsed.lastName);
   }
 
   static String _normalized(String? v) => v?.trim() ?? '';
@@ -209,237 +200,249 @@ class _BulkEquipmentEditDialogState extends State<BulkEquipmentEditDialog>
 
   @override
   Widget build(BuildContext context) {
-    final labels = {
-      'type': 'Τύπος',
-      'notes': 'Σημειώσεις',
-      'owner': 'Κάτοχος',
-    };
+    final labels = {'type': 'Τύπος', 'notes': 'Σημειώσεις', 'owner': 'Κάτοχος'};
     return DialogSnackbarScope(
       messengerKey: dialogMessengerKey,
       child: Center(
         child: AlertDialog(
-      title: Text(
-        'Μαζική επεξεργασία (${widget.selectedRows.length} εξοπλισμός)',
-      ),
-      content: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            for (var i = 0; i < _fieldKeys.length; i++) ...[
-              Row(
-                children: [
-                  SizedBox(
-                    width: 200,
-                    child: CheckboxListTile(
-                      value: _applyField[_fieldKeys[i]]!,
-                      onChanged: (v) => setState(
-                        () => _applyField[_fieldKeys[i]] = v ?? false,
+          title: Text(
+            'Μαζική επεξεργασία (${widget.selectedRows.length} εξοπλισμός)',
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                for (var i = 0; i < _fieldKeys.length; i++) ...[
+                  Row(
+                    children: [
+                      SizedBox(
+                        width: 200,
+                        child: CheckboxListTile(
+                          value: _applyField[_fieldKeys[i]]!,
+                          onChanged: (v) => setState(
+                            () => _applyField[_fieldKeys[i]] = v ?? false,
+                          ),
+                          title: Text(labels[_fieldKeys[i]]!),
+                          controlAffinity: ListTileControlAffinity.leading,
+                          contentPadding: EdgeInsets.zero,
+                        ),
                       ),
-                      title: Text(labels[_fieldKeys[i]]!),
-                      controlAffinity: ListTileControlAffinity.leading,
-                      contentPadding: EdgeInsets.zero,
-                    ),
-                  ),
-                  Expanded(
-                    child: _fieldKeys[i] == 'owner'
-                        ? Consumer(
-                            builder: (context, ref, _) {
-                              final async = ref.watch(lookupServiceProvider);
-                              return async.when(
-                                data: (bundle) {
-                                  final service = bundle.service;
-                                  if (_selectedUserId != null &&
-                                      !_ownerTextInitialized) {
-                                    final u = service.users
-                                        .where((u) => u.id == _selectedUserId)
-                                        .firstOrNull;
-                                    if (u != null) {
-                                      WidgetsBinding.instance
-                                          .addPostFrameCallback((_) {
-                                            if (mounted) {
-                                              _ownerController.text =
-                                                  u.fullNameWithDepartment;
-                                              setState(
-                                                () => _ownerTextInitialized =
-                                                    true,
-                                              );
-                                            }
-                                          });
-                                    } else {
-                                      _ownerTextInitialized = true;
-                                    }
-                                  }
-                                  final theme = Theme.of(context);
-                                  return Autocomplete<String>(
-                                    displayStringForOption: (String o) => o,
-                                    focusNode: _ownerFocusNode,
-                                    textEditingController: _ownerController,
-                                    optionsBuilder: (TextEditingValue value) {
-                                      final q =
-                                          SearchTextNormalizer.normalizeForSearch(
-                                            value.text,
-                                          );
-                                      final users = q.isEmpty
-                                          ? service.users
-                                          : service.searchUsersByQuery(
-                                              value.text.trim(),
-                                            );
-                                      return users
-                                          .where((u) => u.id != null)
-                                          .map((u) => u.fullNameWithDepartment)
-                                          .where(
-                                            (option) =>
-                                                SearchTextNormalizer.matchesNormalizedQuery(
-                                                  option,
-                                                  q,
-                                                ),
-                                          )
-                                          .toList();
-                                    },
-                                    onSelected: (String selection) {
-                                      final u = service.users
-                                          .where(
-                                            (user) =>
-                                                user.fullNameWithDepartment ==
-                                                selection,
-                                          )
-                                          .firstOrNull;
-                                      if (u != null && u.id != null) {
-                                        setState(() {
-                                          _selectedUserId = u.id;
-                                          _ownerController.text =
-                                              u.name ??
-                                              u.fullNameWithDepartment;
-                                        });
+                      Expanded(
+                        child: _fieldKeys[i] == 'owner'
+                            ? Consumer(
+                                builder: (context, ref, _) {
+                                  final async = ref.watch(
+                                    lookupServiceProvider,
+                                  );
+                                  return async.when(
+                                    data: (bundle) {
+                                      final service = bundle.service;
+                                      if (_selectedUserId != null &&
+                                          !_ownerTextInitialized) {
+                                        final u = service.users
+                                            .where(
+                                              (u) => u.id == _selectedUserId,
+                                            )
+                                            .firstOrNull;
+                                        if (u != null) {
+                                          WidgetsBinding.instance
+                                              .addPostFrameCallback((_) {
+                                                if (mounted) {
+                                                  _ownerController.text =
+                                                      u.fullNameWithDepartment;
+                                                  setState(
+                                                    () =>
+                                                        _ownerTextInitialized =
+                                                            true,
+                                                  );
+                                                }
+                                              });
+                                        } else {
+                                          _ownerTextInitialized = true;
+                                        }
                                       }
-                                    },
-                                    fieldViewBuilder:
-                                        (
-                                          context,
-                                          textController,
-                                          focusNode,
-                                          onFieldSubmitted,
-                                        ) {
-                                          return TextField(
-                                            controller: textController,
-                                            focusNode: focusNode,
-                                            decoration: InputDecoration(
-                                              hintText:
-                                                  _hasDifferentValues('owner')
-                                                  ? '(Διαφορετικές τιμές)'
-                                                  : 'Πληκτρολόγησε όνομα ή άφησε κενό (Άγνωστος κάτοχος)',
-                                              hintStyle: theme
-                                                  .textTheme
-                                                  .bodyMedium
-                                                  ?.copyWith(
-                                                    color: theme
-                                                        .colorScheme
-                                                        .onSurfaceVariant
-                                                        .withValues(alpha: 0.7),
+                                      final theme = Theme.of(context);
+                                      return Autocomplete<String>(
+                                        displayStringForOption: (String o) => o,
+                                        focusNode: _ownerFocusNode,
+                                        textEditingController: _ownerController,
+                                        optionsBuilder: (TextEditingValue value) {
+                                          final q =
+                                              SearchTextNormalizer.normalizeForSearch(
+                                                value.text,
+                                              );
+                                          final users = q.isEmpty
+                                              ? service.users
+                                              : service.searchUsersByQuery(
+                                                  value.text.trim(),
+                                                );
+                                          return users
+                                              .where((u) => u.id != null)
+                                              .map(
+                                                (u) => u.fullNameWithDepartment,
+                                              )
+                                              .where(
+                                                (option) =>
+                                                    SearchTextNormalizer.matchesNormalizedQuery(
+                                                      option,
+                                                      q,
+                                                    ),
+                                              )
+                                              .toList();
+                                        },
+                                        onSelected: (String selection) {
+                                          final u = service.users
+                                              .where(
+                                                (user) =>
+                                                    user.fullNameWithDepartment ==
+                                                    selection,
+                                              )
+                                              .firstOrNull;
+                                          if (u != null && u.id != null) {
+                                            setState(() {
+                                              _selectedUserId = u.id;
+                                              _ownerController.text =
+                                                  u.name ??
+                                                  u.fullNameWithDepartment;
+                                            });
+                                          }
+                                        },
+                                        fieldViewBuilder:
+                                            (
+                                              context,
+                                              textController,
+                                              focusNode,
+                                              onFieldSubmitted,
+                                            ) {
+                                              return TextField(
+                                                controller: textController,
+                                                focusNode: focusNode,
+                                                decoration: InputDecoration(
+                                                  hintText:
+                                                      _hasDifferentValues(
+                                                        'owner',
+                                                      )
+                                                      ? '(Διαφορετικές τιμές)'
+                                                      : 'Πληκτρολόγησε όνομα ή άφησε κενό (Άγνωστος κάτοχος)',
+                                                  hintStyle: theme
+                                                      .textTheme
+                                                      .bodyMedium
+                                                      ?.copyWith(
+                                                        color: theme
+                                                            .colorScheme
+                                                            .onSurfaceVariant
+                                                            .withValues(
+                                                              alpha: 0.7,
+                                                            ),
+                                                      ),
+                                                  border:
+                                                      const OutlineInputBorder(),
+                                                  suffixIcon: Semantics(
+                                                    label: 'Καθαρισμός Κατόχου',
+                                                    child: IconButton(
+                                                      icon: const Icon(
+                                                        Icons.close,
+                                                        size: 20,
+                                                      ),
+                                                      onPressed: () {
+                                                        textController.clear();
+                                                        setState(
+                                                          () =>
+                                                              _selectedUserId =
+                                                                  null,
+                                                        );
+                                                      },
+                                                      tooltip:
+                                                          'Καθαρισμός Κατόχου',
+                                                    ),
                                                   ),
-                                              border:
-                                                  const OutlineInputBorder(),
-                                              suffixIcon: Semantics(
-                                                label: 'Καθαρισμός Κατόχου',
-                                                child: IconButton(
-                                                  icon: const Icon(
-                                                    Icons.close,
-                                                    size: 20,
-                                                  ),
-                                                  onPressed: () {
-                                                    textController.clear();
+                                                ),
+                                                onChanged: (value) {
+                                                  if (value.trim().isEmpty) {
                                                     setState(
                                                       () => _selectedUserId =
                                                           null,
                                                     );
-                                                  },
-                                                  tooltip: 'Καθαρισμός Κατόχου',
-                                                ),
-                                              ),
-                                            ),
-                                            onChanged: (value) {
-                                              if (value.trim().isEmpty) {
-                                                setState(
-                                                  () => _selectedUserId = null,
-                                                );
-                                              }
+                                                  }
+                                                },
+                                              );
                                             },
-                                          );
-                                        },
+                                      );
+                                    },
+                                    loading: () => const SizedBox(
+                                      height: 48,
+                                      child: Center(child: Text('Φόρτωση...')),
+                                    ),
+                                    error: (_, e) => const Text('Σφάλμα'),
                                   );
                                 },
-                                loading: () => const SizedBox(
-                                  height: 48,
-                                  child: Center(child: Text('Φόρτωση...')),
-                                ),
-                                error: (_, e) => const Text('Σφάλμα'),
-                              );
-                            },
-                          )
-                        : _fieldKeys[i] == 'type'
-                        ? FutureBuilder<List<String>>(
-                            future: SettingsService().getEquipmentTypesList(),
-                            builder: (context, snapshot) {
-                              var options =
-                                  snapshot.data ?? ['Υπολογιστής', 'Εκτυπωτής'];
-                              if (_selectedType != null &&
-                                  _selectedType!.trim().isNotEmpty &&
-                                  !options.contains(_selectedType)) {
-                                options = [_selectedType!, ...options];
-                              }
-                              return DropdownButtonFormField<String?>(
-                                initialValue: _selectedType,
+                              )
+                            : _fieldKeys[i] == 'type'
+                            ? FutureBuilder<List<String>>(
+                                future: SettingsService()
+                                    .getEquipmentTypesList(),
+                                builder: (context, snapshot) {
+                                  var options =
+                                      snapshot.data ??
+                                      ['Υπολογιστής', 'Εκτυπωτής'];
+                                  if (_selectedType != null &&
+                                      _selectedType!.trim().isNotEmpty &&
+                                      !options.contains(_selectedType)) {
+                                    options = [_selectedType!, ...options];
+                                  }
+                                  return DropdownButtonFormField<String?>(
+                                    initialValue: _selectedType,
+                                    decoration: InputDecoration(
+                                      hintText: _hasDifferentValues('type')
+                                          ? '(Διαφορετικές τιμές)'
+                                          : null,
+                                      border: const OutlineInputBorder(),
+                                    ),
+                                    items: [
+                                      ...options.map(
+                                        (o) => DropdownMenuItem<String?>(
+                                          value: o,
+                                          child: Text(o),
+                                        ),
+                                      ),
+                                      const DropdownMenuItem<String?>(
+                                        value: null,
+                                        child: Text('Κανένας'),
+                                      ),
+                                    ],
+                                    onChanged: (v) =>
+                                        setState(() => _selectedType = v),
+                                  );
+                                },
+                              )
+                            : TextFormField(
+                                controller: _controllers[_fieldKeys[i]],
                                 decoration: InputDecoration(
-                                  hintText: _hasDifferentValues('type')
+                                  hintText: _hasDifferentValues(_fieldKeys[i])
                                       ? '(Διαφορετικές τιμές)'
                                       : null,
                                   border: const OutlineInputBorder(),
                                 ),
-                                items: [
-                                  ...options.map(
-                                    (o) => DropdownMenuItem<String?>(
-                                      value: o,
-                                      child: Text(o),
-                                    ),
-                                  ),
-                                  const DropdownMenuItem<String?>(
-                                    value: null,
-                                    child: Text('Κανένας'),
-                                  ),
-                                ],
-                                onChanged: (v) =>
-                                    setState(() => _selectedType = v),
-                              );
-                            },
-                          )
-                        : TextFormField(
-                            controller: _controllers[_fieldKeys[i]],
-                            decoration: InputDecoration(
-                              hintText: _hasDifferentValues(_fieldKeys[i])
-                                  ? '(Διαφορετικές τιμές)'
-                                  : null,
-                              border: const OutlineInputBorder(),
-                            ),
-                            spellCheckConfiguration:
-                                platformSpellCheckConfiguration,
-                            onChanged: (_) => setState(() {}),
-                          ),
+                                spellCheckConfiguration:
+                                    platformSpellCheckConfiguration,
+                                onChanged: (_) => setState(() {}),
+                              ),
+                      ),
+                    ],
                   ),
+                  const SizedBox(height: 8),
                 ],
-              ),
-              const SizedBox(height: 8),
-            ],
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Ακύρωση'),
+            ),
+            FilledButton(onPressed: _save, child: const Text('Αποθήκευση')),
           ],
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Ακύρωση'),
-        ),
-        FilledButton(onPressed: _save, child: const Text('Αποθήκευση')),
-      ],
         ),
       ),
     );

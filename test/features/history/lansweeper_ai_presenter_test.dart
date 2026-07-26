@@ -129,10 +129,7 @@ void main() {
     final now = DateTime(2026, 7, 5, 12, 0, 0);
 
     test('null until -> null', () {
-      expect(
-        LansweeperAiPresenter.cooldownRemainingSeconds(null, now),
-        isNull,
-      );
+      expect(LansweeperAiPresenter.cooldownRemainingSeconds(null, now), isNull);
     });
 
     test('παρελθόν until -> null', () {
@@ -145,67 +142,67 @@ void main() {
 
     test('μέλλον until -> σωστά δευτερόλεπτα', () {
       final until = now.add(const Duration(seconds: 42));
-      expect(
-        LansweeperAiPresenter.cooldownRemainingSeconds(until, now),
-        42,
-      );
+      expect(LansweeperAiPresenter.cooldownRemainingSeconds(until, now), 42);
     });
   });
 
   group('LansweeperAiPresenter.buildRequest', () {
-    test('μοναδικοποίηση πεδίων, combined issue, pass-through title/notes/solution', () {
-      final selected = <ReportCallItem>[
-        _item(
-          key: 'a',
-          caller: 'Γιάννης',
-          call: _call(
-            callerText: 'Γιάννης',
-            equipmentText: 'PC-01',
-            departmentText: ' IT ',
-            category: 'Hardware',
-            issue: 'Πρόβλημα Α',
-            date: '2026-03-15',
-            time: '10:30:00',
+    test(
+      'μοναδικοποίηση πεδίων, combined issue, pass-through title/notes/solution',
+      () {
+        final selected = <ReportCallItem>[
+          _item(
+            key: 'a',
+            caller: 'Γιάννης',
+            call: _call(
+              callerText: 'Γιάννης',
+              equipmentText: 'PC-01',
+              departmentText: ' IT ',
+              category: 'Hardware',
+              issue: 'Πρόβλημα Α',
+              date: '2026-03-15',
+              time: '10:30:00',
+            ),
           ),
-        ),
-        _item(
-          key: 'b',
-          caller: 'Μαρία',
-          call: _call(
-            callerText: 'Μαρία',
-            equipmentText: 'PC-01',
-            departmentText: 'IT',
-            category: 'Software',
-            issue: 'Πρόβλημα Β',
-            date: '2026-03-16',
-            time: '11:00:00',
+          _item(
+            key: 'b',
+            caller: 'Μαρία',
+            call: _call(
+              callerText: 'Μαρία',
+              equipmentText: 'PC-01',
+              departmentText: 'IT',
+              category: 'Software',
+              issue: 'Πρόβλημα Β',
+              date: '2026-03-16',
+              time: '11:00:00',
+            ),
           ),
-        ),
-      ];
+        ];
 
-      const titleText = 'Τίτλος δοκιμής';
-      const notesText = 'Σημειώσεις δοκιμής';
-      const solutionText = 'Λύση δοκιμής';
+        const titleText = 'Τίτλος δοκιμής';
+        const notesText = 'Σημειώσεις δοκιμής';
+        const solutionText = 'Λύση δοκιμής';
 
-      final request = LansweeperAiPresenter.buildRequest(
-        selected: selected,
-        titleText: titleText,
-        notesText: notesText,
-        solutionText: solutionText,
-      );
+        final request = LansweeperAiPresenter.buildRequest(
+          selected: selected,
+          titleText: titleText,
+          notesText: notesText,
+          solutionText: solutionText,
+        );
 
-      expect(request.callerText, 'Γιάννης, Μαρία');
-      expect(request.equipmentText, 'PC-01');
-      expect(request.departmentText, 'IT');
-      expect(request.category, 'Hardware, Software');
-      expect(
-        request.issue,
-        LansweeperReportItemMapper.combinedAiIssue(selected),
-      );
-      expect(request.titleText, titleText);
-      expect(request.notesText, notesText);
-      expect(request.solutionText, solutionText);
-    });
+        expect(request.callerText, 'Γιάννης, Μαρία');
+        expect(request.equipmentText, 'PC-01');
+        expect(request.departmentText, 'IT');
+        expect(request.category, 'Hardware, Software');
+        expect(
+          request.issue,
+          LansweeperReportItemMapper.combinedAiIssue(selected),
+        );
+        expect(request.titleText, titleText);
+        expect(request.notesText, notesText);
+        expect(request.solutionText, solutionText);
+      },
+    );
   });
 
   group('LansweeperAiPresenter.prefillTitle', () {

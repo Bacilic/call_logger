@@ -22,23 +22,23 @@ import '../../features/database/widgets/restore_from_backup_dialog.dart';
 /// Αποτέλεσμα της ενορχηστρωμένης ροής επαναφοράς από `.zip`.
 class RestoreFromBackupZipFlowResult {
   const RestoreFromBackupZipFlowResult.cancelled()
-      : cancelled = true,
-        failed = false,
-        restoredPath = null,
-        pathToOpen = null,
-        errorMessage = null,
-        summaryMessage = null,
-        warnings = const <String>[],
-        preRestoreBackupPath = null;
+    : cancelled = true,
+      failed = false,
+      restoredPath = null,
+      pathToOpen = null,
+      errorMessage = null,
+      summaryMessage = null,
+      warnings = const <String>[],
+      preRestoreBackupPath = null;
 
   const RestoreFromBackupZipFlowResult.failed(this.errorMessage)
-      : cancelled = false,
-        failed = true,
-        restoredPath = null,
-        pathToOpen = null,
-        summaryMessage = null,
-        warnings = const <String>[],
-        preRestoreBackupPath = null;
+    : cancelled = false,
+      failed = true,
+      restoredPath = null,
+      pathToOpen = null,
+      summaryMessage = null,
+      warnings = const <String>[],
+      preRestoreBackupPath = null;
 
   const RestoreFromBackupZipFlowResult.completed({
     required this.restoredPath,
@@ -46,9 +46,9 @@ class RestoreFromBackupZipFlowResult {
     this.summaryMessage,
     this.warnings = const <String>[],
     this.preRestoreBackupPath,
-  })  : cancelled = false,
-        failed = false,
-        errorMessage = null;
+  }) : cancelled = false,
+       failed = false,
+       errorMessage = null;
 
   final bool cancelled;
   final bool failed;
@@ -222,16 +222,16 @@ Future<RestoreFromBackupZipFlowResult> runRestoreFromBackupZipFlow({
     initialDestination: initialDestination,
     preferredDatabaseFileName: preferredName,
     isFullBackupArchive: inventory.isFullBackupArchive,
-    fullBackupPortablesDescription:
-        inventory.portablePresence.describeFoundPortables(),
+    fullBackupPortablesDescription: inventory.portablePresence
+        .describeFoundPortables(),
   );
 
   if (decision == null) {
     final cleanupMsg = await cleanupStagedDatabase(extractedPath);
     if (cleanupMsg != null && context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(cleanupMsg)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(cleanupMsg)));
     }
     return const RestoreFromBackupZipFlowResult.cancelled();
   }
@@ -252,9 +252,7 @@ Future<RestoreFromBackupZipFlowResult> runRestoreFromBackupZipFlow({
   final restoreLabel = ValueNotifier<String>('Επαναφορά από zip…');
   _showBusyDialog(context, restoreLabel);
   String? preRestorePath;
-  final warnings = <String>[
-    ...inventory.cleanupWarnings,
-  ];
+  final warnings = <String>[...inventory.cleanupWarnings];
   String? summary;
   String? failureMessage;
   try {
@@ -287,13 +285,14 @@ Future<RestoreFromBackupZipFlowResult> runRestoreFromBackupZipFlow({
     if (failureMessage == null) {
       final portables =
           await DatabaseBackupService.restorePortablesFromBackupZip(
-        zipPath,
-        restoredDatabasePath: targetPath,
-      );
+            zipPath,
+            restoredDatabasePath: targetPath,
+          );
       warnings.addAll(portables.warnings);
       summary = portables.message;
       if (preRestorePath != null) {
-        summary = '${summary ?? 'Η επαναφορά ολοκληρώθηκε.'}\n'
+        summary =
+            '${summary ?? 'Η επαναφορά ολοκληρώθηκε.'}\n'
             'προηγούμενη βάση: ${p.basename(preRestorePath)}';
       }
     }
@@ -469,7 +468,7 @@ Future<void> _showRestoreSuccessFeedback({
   }
 
   if (!context.mounted) return;
-  ScaffoldMessenger.of(context).showSnackBar(
-    SnackBar(content: Text(buffer.toString())),
-  );
+  ScaffoldMessenger.of(
+    context,
+  ).showSnackBar(SnackBar(content: Text(buffer.toString())));
 }

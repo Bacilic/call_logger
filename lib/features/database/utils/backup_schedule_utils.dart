@@ -57,8 +57,7 @@ class BackupScheduleUtils {
   static bool hasReachedTimeToday(DateTime now, String time) {
     final p = parseTime(time);
     if (p == null) return false;
-    final slot =
-        DateTime(now.year, now.month, now.day, p.hour, p.minute);
+    final slot = DateTime(now.year, now.month, now.day, p.hour, p.minute);
     return !now.isBefore(slot);
   }
 
@@ -71,15 +70,17 @@ class BackupScheduleUtils {
     final p = parseTime(time);
     if (p == null || weekdays.isEmpty) return null;
 
-    final todaySlot =
-        DateTime(now.year, now.month, now.day, p.hour, p.minute);
+    final todaySlot = DateTime(now.year, now.month, now.day, p.hour, p.minute);
     if (weekdays.contains(now.weekday) && !todaySlot.isAfter(now)) {
       return todaySlot;
     }
 
     for (var d = 1; d <= 14; d++) {
-      final day = DateTime(now.year, now.month, now.day)
-          .subtract(Duration(days: d));
+      final day = DateTime(
+        now.year,
+        now.month,
+        now.day,
+      ).subtract(Duration(days: d));
       final slot = DateTime(day.year, day.month, day.day, p.hour, p.minute);
       if (weekdays.contains(day.weekday) && !slot.isAfter(now)) {
         return slot;

@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 
 import '../../../calls/models/call_model.dart';
 import 'lansweeper_report_call_tile.dart';
@@ -57,10 +57,10 @@ final class _GroupDividerEntry extends _LansweeperReportListEntry {
 }
 
 final class _CallEntry extends _LansweeperReportListEntry {
-  const _CallEntry({
-    required this.item,
-    required this.isLastInGroup,
-  }) : super(isLastInGroup ? _kCallRowExtent + _kGroupBottomExtent : _kCallRowExtent);
+  const _CallEntry({required this.item, required this.isLastInGroup})
+    : super(
+        isLastInGroup ? _kCallRowExtent + _kGroupBottomExtent : _kCallRowExtent,
+      );
 
   final LansweeperReportCallRowData item;
   final bool isLastInGroup;
@@ -70,7 +70,9 @@ final class _CallEntry extends _LansweeperReportListEntry {
   static const double _kGroupBottomExtent = 16;
 }
 
-String _flattenCacheKey(Map<String, List<LansweeperReportCallRowData>> grouped) {
+String _flattenCacheKey(
+  Map<String, List<LansweeperReportCallRowData>> grouped,
+) {
   final buffer = StringBuffer();
   for (final entry in grouped.entries) {
     buffer.write(entry.key);

@@ -24,10 +24,7 @@ int lampTableSortOrderKey(String a, String b) {
     'model',
     'contracts',
   ];
-  const technicalTables = <String>[
-    'data_issues',
-    'search_index',
-  ];
+  const technicalTables = <String>['data_issues', 'search_index'];
 
   final isTechA = technicalTables.contains(a);
   final isTechB = technicalTables.contains(b);

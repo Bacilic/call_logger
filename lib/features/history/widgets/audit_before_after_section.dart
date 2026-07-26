@@ -33,10 +33,7 @@ class AuditBeforeAfterSection extends StatelessWidget {
         : changes.where((c) => c != primary).toList();
     return ExpansionTile(
       initiallyExpanded: hasOld || hasNew,
-      title: Text(
-        'Τι άλλαξε',
-        style: theme.textTheme.titleSmall,
-      ),
+      title: Text('Τι άλλαξε', style: theme.textTheme.titleSmall),
       childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
       children: [
         if (extraChanges.isNotEmpty)
@@ -46,16 +43,8 @@ class AuditBeforeAfterSection extends StatelessWidget {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    '• ',
-                    style: theme.textTheme.bodySmall,
-                  ),
-                  Expanded(
-                    child: Text(
-                      line,
-                      style: theme.textTheme.bodySmall,
-                    ),
-                  ),
+                  Text('• ', style: theme.textTheme.bodySmall),
+                  Expanded(child: Text(line, style: theme.textTheme.bodySmall)),
                 ],
               ),
             ),

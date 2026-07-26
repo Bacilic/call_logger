@@ -1,55 +1,27 @@
 import 'package:http/http.dart' as http;
 
-
-
 /// Αποτέλεσμα πρότασης τίτλου/περιγραφής/λύσης για ticket.
 
 typedef AiTicketSuggestion = ({
-
   String title,
 
   String description,
 
   String solution,
-
 });
-
-
 
 /// Εύρος αποτυχίας πρότασης ΤΝ — καθορίζει retry/fallback.
 
-enum AiSuggestionFailureScope {
-
-  model,
-
-  infrastructure,
-
-}
-
-
+enum AiSuggestionFailureScope { model, infrastructure }
 
 /// Λόγος μετάβασης σε εφεδρικό μοντέλο (για μηνύματα UI).
 
-enum AiFallbackReason {
-
-  modelFailure,
-
-  rateLimited,
-
-  overloaded,
-
-  cooldown,
-
-}
-
-
+enum AiFallbackReason { modelFailure, rateLimited, overloaded, cooldown }
 
 /// Κείμενα εισόδου για χτίσιμο προτροπής και κλήση ΤΝ.
 
 class AiTicketSuggestionRequest {
-
   const AiTicketSuggestionRequest({
-
     required this.callerText,
 
     required this.equipmentText,
@@ -65,10 +37,7 @@ class AiTicketSuggestionRequest {
     required this.notesText,
 
     required this.solutionText,
-
   });
-
-
 
   final String callerText;
 
@@ -85,17 +54,12 @@ class AiTicketSuggestionRequest {
   final String notesText;
 
   final String solutionText;
-
 }
-
-
 
 /// Σφάλμα πρότασης ΤΝ (ρύθμιση, HTTP, μορφή απάντησης).
 
 class AiSuggestionException implements Exception {
-
   const AiSuggestionException(
-
     this.message, {
 
     this.statusCode,
@@ -105,10 +69,7 @@ class AiSuggestionException implements Exception {
     this.retryAvailableAt,
 
     this.waitingModel,
-
   });
-
-
 
   final String message;
 
@@ -120,32 +81,20 @@ class AiSuggestionException implements Exception {
 
   final String? waitingModel;
 
-
-
   @override
-
   String toString() => message;
-
 }
-
-
 
 /// Γενική διεπαφή πρότασης ticket μέσω ΤΝ (ανεξάρτητη από πάροχο).
 
 abstract interface class AiTicketSuggestionService {
-
   String buildPrompt(AiTicketSuggestionRequest request);
-
-
 
   /// Μήνυμα σφάλματος ρύθμισης ή null όταν η διαμόρφωση είναι έγκυρη.
 
   String? validateConfiguration();
 
-
-
   Future<AiTicketSuggestion> suggest(
-
     AiTicketSuggestionRequest request, {
 
     required http.Client client,
@@ -153,10 +102,6 @@ abstract interface class AiTicketSuggestionService {
     void Function(String model)? onModelAttempt,
 
     void Function(String fromModel, String toModel, AiFallbackReason reason)?
-
-        onFallback,
-
+    onFallback,
   });
-
 }
-

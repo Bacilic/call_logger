@@ -59,9 +59,7 @@ Future<List<FileSystemEntity>> _listBackupDbFiles(String destinationDir) async {
   return dir
       .listSync()
       .where(
-        (e) =>
-            e is File &&
-            (e.path.endsWith('.db') || e.path.endsWith('.zip')),
+        (e) => e is File && (e.path.endsWith('.db') || e.path.endsWith('.zip')),
       )
       .toList();
 }
@@ -117,9 +115,9 @@ void main() {
 
   group('DatabaseExitBackup.runIfEnabled (τεστ-φρουρός)', () {
     test('μία κλήση exit backup δημιουργεί αρχείο και audit', () async {
-      await _saveBackupSettings(_exitBackupSettings(
-        destinationDirectory: backupDestDir,
-      ));
+      await _saveBackupSettings(
+        _exitBackupSettings(destinationDirectory: backupDestDir),
+      );
 
       await DatabaseExitBackup.runIfEnabled();
 
@@ -133,45 +131,46 @@ void main() {
       );
     });
 
-    test('διπλή παράλληλη κλήση → ένα αρχείο backup και ένα audit επιτυχίας', () async {
-      await _saveBackupSettings(_exitBackupSettings(
-        destinationDirectory: backupDestDir,
-      ));
+    test(
+      'διπλή παράλληλη κλήση → ένα αρχείο backup και ένα audit επιτυχίας',
+      () async {
+        await _saveBackupSettings(
+          _exitBackupSettings(destinationDirectory: backupDestDir),
+        );
 
-      await Future.wait([
-        DatabaseExitBackup.runIfEnabled(),
-        DatabaseExitBackup.runIfEnabled(),
-      ]);
+        await Future.wait([
+          DatabaseExitBackup.runIfEnabled(),
+          DatabaseExitBackup.runIfEnabled(),
+        ]);
 
-      final backupFiles = await _listBackupDbFiles(backupDestDir);
-      expect(
-        backupFiles,
-        hasLength(1),
-        reason: 'Δύο ταυτόχρονες κλήσεις exit backup πρέπει να παράγουν ένα αρχείο',
-      );
-      expect(
-        p.basename(backupFiles.single.path),
-        contains(dbBaseName),
-      );
+        final backupFiles = await _listBackupDbFiles(backupDestDir);
+        expect(
+          backupFiles,
+          hasLength(1),
+          reason:
+              'Δύο ταυτόχρονες κλήσεις exit backup πρέπει να παράγουν ένα αρχείο',
+        );
+        expect(p.basename(backupFiles.single.path), contains(dbBaseName));
 
-      final audits = await _exitBackupAuditRows();
-      final successAudits = audits
-          .where((r) => r['action'] == 'ΑΝΤΙΓΡΑΦΟ ΑΣΦΑΛΕΙΑΣ ΕΠΙΤΥΧΙΑ')
-          .toList();
-      expect(
-        successAudits,
-        hasLength(1),
-        reason: 'Μία επιτυχής καταγραφή audit για exit backup',
-      );
-    });
+        final audits = await _exitBackupAuditRows();
+        final successAudits = audits
+            .where((r) => r['action'] == 'ΑΝΤΙΓΡΑΦΟ ΑΣΦΑΛΕΙΑΣ ΕΠΙΤΥΧΙΑ')
+            .toList();
+        expect(
+          successAudits,
+          hasLength(1),
+          reason: 'Μία επιτυχής καταγραφή audit για exit backup',
+        );
+      },
+    );
 
     test(
       'αποτυχία backup (ανύπαρκτος φάκελος) δεν αφήνει τη βάση κλειδωμένη',
       () async {
         final missingDest = p.join(tempRoot.path, 'missing_backup_folder');
-        await _saveBackupSettings(_exitBackupSettings(
-          destinationDirectory: missingDest,
-        ));
+        await _saveBackupSettings(
+          _exitBackupSettings(destinationDirectory: missingDest),
+        );
 
         await DatabaseExitBackup.runIfEnabled();
 
@@ -191,7 +190,9 @@ void main() {
         expect(failedAudits, isNotEmpty);
 
         final repo = SettingsRepository(reopened);
-        final raw = await repo.getSetting(DatabaseBackupSettings.appSettingsKey);
+        final raw = await repo.getSetting(
+          DatabaseBackupSettings.appSettingsKey,
+        );
         final saved = DatabaseBackupSettings.fromJsonString(raw);
         expect(
           BackupScheduleStatus.normalize(saved.lastBackupStatus),
@@ -206,14 +207,11 @@ void main() {
         final blockedDest = p.join(tempRoot.path, 'blocked_dest_file');
         await File(blockedDest).writeAsString('not-a-directory');
 
-        await _saveBackupSettings(_exitBackupSettings(
-          destinationDirectory: blockedDest,
-        ));
-
-        await expectLater(
-          DatabaseExitBackup.runIfEnabled(),
-          completes,
+        await _saveBackupSettings(
+          _exitBackupSettings(destinationDirectory: blockedDest),
         );
+
+        await expectLater(DatabaseExitBackup.runIfEnabled(), completes);
 
         final backupFiles = await _listBackupDbFiles(blockedDest);
         expect(backupFiles, isEmpty);

@@ -17,7 +17,9 @@ void main() {
   late OldEquipmentRepository repository;
 
   setUp(() async {
-    tempDir = await Directory.systemTemp.createTemp('lamp-serial-checker-test-');
+    tempDir = await Directory.systemTemp.createTemp(
+      'lamp-serial-checker-test-',
+    );
     dbPath = p.join(tempDir.path, 'lamp.sqlite');
     repository = OldEquipmentRepository();
     final db = await openDatabase(dbPath, singleInstance: false);

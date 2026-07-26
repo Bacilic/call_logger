@@ -23,8 +23,7 @@ String humanizeUserFacingError(Object error) {
       return 'Η βάση δεδομένων είναι προσωρινά απασχολημένη. '
           'Δοκιμάστε ξανά σε λίγα δευτερόλεπτα.';
     }
-    if (text.contains('database_closed') ||
-        error.isDatabaseClosedError()) {
+    if (text.contains('database_closed') || error.isDatabaseClosedError()) {
       return 'Η σύνδεση με τη βάση ανανεώθηκε. Δοκιμάστε ξανά την ενέργεια.';
     }
   }
@@ -35,7 +34,6 @@ String humanizeUserFacingError(Object error) {
   }
 
   final details = error.toString();
-  final clipped =
-      details.length <= 120 ? details : details.substring(0, 120);
+  final clipped = details.length <= 120 ? details : details.substring(0, 120);
   return 'Απρόβλεπτο σφάλμα. Τεχνικές λεπτομέρειες: $clipped';
 }

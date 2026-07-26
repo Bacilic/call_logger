@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -116,7 +116,8 @@ abstract final class LansweeperHelpdeskLoginProbe {
         if (loc.isNotEmpty && !locLower.contains('login.aspx')) {
           return const LansweeperHelpdeskLoginProbeResult(
             ok: true,
-            message: 'Τα διαπιστευτήρια ελέγχθηκαν: η σύνδεση φαίνεται επιτυχής.',
+            message:
+                'Τα διαπιστευτήρια ελέγχθηκαν: η σύνδεση φαίνεται επιτυχής.',
           );
         }
         if (loc.isEmpty) {

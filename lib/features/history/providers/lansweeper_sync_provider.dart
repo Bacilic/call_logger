@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -109,12 +109,12 @@ class LansweeperSyncNotifier extends AsyncNotifier<void> {
 
       final config = input.config ?? LansweeperTicketSubmitConfig.defaults();
       final existingTicketIdRaw = (call.lansweeperMainTicketId ?? '').trim();
-      final existingTicketId =
-          existingTicketIdRaw.isEmpty ? null : existingTicketIdRaw;
-      final targetState =
-          (input.targetTicketState?.trim().isNotEmpty ?? false)
-              ? input.targetTicketState!.trim()
-              : config.defaultTicketState;
+      final existingTicketId = existingTicketIdRaw.isEmpty
+          ? null
+          : existingTicketIdRaw;
+      final targetState = (input.targetTicketState?.trim().isNotEmpty ?? false)
+          ? input.targetTicketState!.trim()
+          : config.defaultTicketState;
 
       final service = ref.read(lansweeperSyncServiceProvider);
       final result = await service.submitTicketWorkflow(
@@ -225,10 +225,7 @@ class LansweeperSyncNotifier extends AsyncNotifier<void> {
       );
     } on LansweeperSyncPrecheckException catch (e) {
       state = const AsyncData(null);
-      return LansweeperCommandResult(
-        success: false,
-        message: e.message,
-      );
+      return LansweeperCommandResult(success: false, message: e.message);
     } catch (e, st) {
       state = AsyncError(e, st);
       final db = await DatabaseHelper.instance.database;

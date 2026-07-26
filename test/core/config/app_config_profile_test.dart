@@ -4,24 +4,15 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   group('AppConfig.parseCliProfile', () {
     test('parses --profile name', () {
-      expect(
-        AppConfig.parseCliProfile(['--profile', 'test1']),
-        'test1',
-      );
+      expect(AppConfig.parseCliProfile(['--profile', 'test1']), 'test1');
     });
 
     test('parses --profile=name', () {
-      expect(
-        AppConfig.parseCliProfile(['--profile=dev_env']),
-        'dev_env',
-      );
+      expect(AppConfig.parseCliProfile(['--profile=dev_env']), 'dev_env');
     });
 
     test('rejects invalid characters', () {
-      expect(
-        AppConfig.parseCliProfile(['--profile', '../evil']),
-        isNull,
-      );
+      expect(AppConfig.parseCliProfile(['--profile', '../evil']), isNull);
     });
 
     test('returns null without flag', () {
@@ -97,7 +88,9 @@ void main() {
     });
 
     test('--restarted-after-crash μόνο του είναι έγκυρο', () {
-      final result = AppConfig.validateCliArguments(['--restarted-after-crash']);
+      final result = AppConfig.validateCliArguments([
+        '--restarted-after-crash',
+      ]);
       expect(result.isValid, isTrue);
       expect(result.restartedAfterCrash, isTrue);
       expect(result.profile, isNull);

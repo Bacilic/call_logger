@@ -43,7 +43,8 @@ abstract final class RemoteParamValidator {
   }
 
   /// Επικύρωση host (VNC/RDP χωρίς αρχείο) — κοινή για φόρμα εξοπλισμού και πίνακα δοκιμής.
-  static String? validateHostAddress(String value) => _validateHostAddress(value);
+  static String? validateHostAddress(String value) =>
+      _validateHostAddress(value);
 
   static String? _validateHostAddress(String value) {
     if (VncRemoteTarget.resolveValidVncHost(value) != null) return null;

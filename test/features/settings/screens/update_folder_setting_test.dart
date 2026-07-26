@@ -44,14 +44,14 @@ void main() {
     const active = r'\\fileserver\updates\call_logger';
     await pumpField(
       tester,
-      config: UpdateSourceConfig(
-        getUserUpdateFolderPath: () async => active,
-      ),
+      config: UpdateSourceConfig(getUserUpdateFolderPath: () async => active),
     );
 
     expect(
       tester
-          .widget<TextField>(find.byKey(const Key('settings_update_folder_field')))
+          .widget<TextField>(
+            find.byKey(const Key('settings_update_folder_field')),
+          )
           .controller!
           .text,
       active,
@@ -115,9 +115,7 @@ void main() {
 
     await pumpField(
       tester,
-      config: UpdateSourceConfig(
-        getUserUpdateFolderPath: () async => r'C:\x',
-      ),
+      config: UpdateSourceConfig(getUserUpdateFolderPath: () async => r'C:\x'),
       classifier: fixedKind(NetworkFolderKind.unknown),
     );
     await tester.pump();
@@ -132,11 +130,11 @@ void main() {
 
 class _FixedKindClassifier extends NetworkFolderClassifier {
   _FixedKindClassifier(this.kind)
-      : super(
-          driveTypeResolver: (_) async => false,
-          localSharesProvider: () async => const <String>[],
-          isWindows: () => true,
-        );
+    : super(
+        driveTypeResolver: (_) async => false,
+        localSharesProvider: () async => const <String>[],
+        isWindows: () => true,
+      );
 
   final NetworkFolderKind kind;
 

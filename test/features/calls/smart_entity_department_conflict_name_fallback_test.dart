@@ -29,9 +29,9 @@ UserModel _teiUser() {
 }
 
 List<DepartmentModel> _departments() => [
-      DepartmentModel(id: _kTeiId, name: _kTeiName),
-      DepartmentModel(id: _kOtherId, name: _kOtherName),
-    ];
+  DepartmentModel(id: _kTeiId, name: _kTeiName),
+  DepartmentModel(id: _kOtherId, name: _kOtherName),
+];
 
 Future<ProviderContainer> _containerWithCatalog() async {
   final svc = LookupService.instance;
@@ -58,10 +58,7 @@ Future<void> _loadEditCallWithDepartmentText(
 }) async {
   final notifier = container.read(callSmartEntityProvider.notifier);
   await notifier.loadFromCall(
-    CallModel(
-      phoneText: _kPhone,
-      departmentText: departmentText,
-    ),
+    CallModel(phoneText: _kPhone, departmentText: departmentText),
   );
   final afterLoad = container.read(callSmartEntityProvider);
   expect(
@@ -81,7 +78,10 @@ void main() {
         final container = await _containerWithCatalog();
         addTearDown(container.dispose);
 
-        await _loadEditCallWithDepartmentText(container, departmentText: _kTeiName);
+        await _loadEditCallWithDepartmentText(
+          container,
+          departmentText: _kTeiName,
+        );
 
         expect(
           container
@@ -141,31 +141,27 @@ void main() {
       },
     );
 
-    test(
-      'γ) selectedDepartmentId δεμένο σε άλλο τμήμα → ασυμφωνία',
-      () async {
-        final container = await _containerWithCatalog();
-        addTearDown(container.dispose);
-        final n = container.read(callSmartEntityProvider.notifier);
+    test('γ) selectedDepartmentId δεμένο σε άλλο τμήμα → ασυμφωνία', () async {
+      final container = await _containerWithCatalog();
+      addTearDown(container.dispose);
+      final n = container.read(callSmartEntityProvider.notifier);
 
-        n.selectDepartment(
-          DepartmentModel(id: _kOtherId, name: _kOtherName),
-        );
-        expect(
-          container.read(callSmartEntityProvider).selectedDepartmentId,
-          _kOtherId,
-        );
-        n.updatePhone(_kPhone);
-        n.performPhoneLookup(_kPhone);
+      n.selectDepartment(DepartmentModel(id: _kOtherId, name: _kOtherName));
+      expect(
+        container.read(callSmartEntityProvider).selectedDepartmentId,
+        _kOtherId,
+      );
+      n.updatePhone(_kPhone);
+      n.performPhoneLookup(_kPhone);
 
-        final s = container.read(callSmartEntityProvider);
-        expect(s.selectedDepartmentId, _kOtherId);
-        expect(
-          s.conflictSeverityFor(SelectorField.department),
-          ConflictSeverity.mismatch,
-          reason: 'Δεμένο id διαφορετικού τμήματος — ασυμφωνία ακόμα κι αν υπάρχει κείμενο',
-        );
-      },
-    );
+      final s = container.read(callSmartEntityProvider);
+      expect(s.selectedDepartmentId, _kOtherId);
+      expect(
+        s.conflictSeverityFor(SelectorField.department),
+        ConflictSeverity.mismatch,
+        reason:
+            'Δεμένο id διαφορετικού τμήματος — ασυμφωνία ακόμα κι αν υπάρχει κείμενο',
+      );
+    });
   });
 }

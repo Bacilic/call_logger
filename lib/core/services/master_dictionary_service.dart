@@ -1,4 +1,4 @@
-﻿import 'dart:convert';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
 
@@ -141,8 +141,7 @@ class MasterDictionaryService {
   Future<void> addCustomWord({
     required String word,
     required String category,
-  }) =>
-      addCustomWords(input: word, category: category);
+  }) => addCustomWords(input: word, category: category);
 
   /// Προσθήκη πολλών λέξεων (διαχωρισμός με κενά/κόμμα), all-or-nothing.
   ///
@@ -180,9 +179,7 @@ class MasterDictionaryService {
       }
       final lang = DictionaryRepository.detectDictionaryLanguage(display);
       if (lang == DictionaryRepository.kLexiconLanguageMix) {
-        errors.add(
-          "Η λέξη '$display' περιέχει μη αποδεκτούς χαρακτήρες.",
-        );
+        errors.add("Η λέξη '$display' περιέχει μη αποδεκτούς χαρακτήρες.");
         continue;
       }
       final existing = await dictAdd.countFullDictionaryExactWord(display);
@@ -227,8 +224,8 @@ class MasterDictionaryService {
     required String category,
     String? language,
   }) async {
-    final lang = language ??
-        DictionaryRepository.detectDictionaryLanguage(displayWord);
+    final lang =
+        language ?? DictionaryRepository.detectDictionaryLanguage(displayWord);
     final d = await _dict();
     await d.upsertFullFromUserDraft(
       normalizedKey: normalizedKey,

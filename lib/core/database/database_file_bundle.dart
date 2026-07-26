@@ -3,10 +3,7 @@ import 'dart:io';
 import 'package:path/path.dart' as p;
 
 /// Μετονομάζει το κύριο αρχείο βάσης και τα υπαρκτά sidecars `-wal` / `-shm`.
-Future<void> renameDatabaseBundle(
-  String dbPath,
-  String newMainFileName,
-) async {
+Future<void> renameDatabaseBundle(String dbPath, String newMainFileName) async {
   final dir = p.dirname(dbPath);
   final newMain = p.join(dir, newMainFileName);
   final wal = '$dbPath-wal';

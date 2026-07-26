@@ -25,7 +25,9 @@ const _stubEquipmentSuggestions = <LampEntityCodeSuggestion>[
   LampEntityCodeSuggestion(code: 6002, label: 'Laptop Dell · SN999'),
 ];
 
-Future<List<LampEntityCodeSuggestion>> _stubSearchEquipment(String query) async {
+Future<List<LampEntityCodeSuggestion>> _stubSearchEquipment(
+  String query,
+) async {
   return filterEntityCodeSuggestions(_stubEquipmentSuggestions, query);
 }
 
@@ -37,7 +39,7 @@ Future<String?> _stubEquipmentPreview(int code) async {
 class _FakeNetworkIssueResolutionService
     extends LampNetworkIssueResolutionService {
   _FakeNetworkIssueResolutionService()
-      : super(databaseProvider: LampDatabaseProvider.instance);
+    : super(databaseProvider: LampDatabaseProvider.instance);
 
   bool deleteIssueCalled = false;
 
@@ -59,7 +61,7 @@ class _FakeNetworkIssueResolutionService
 class _FakeScanNetworkIssueResolutionService
     extends LampNetworkIssueResolutionService {
   _FakeScanNetworkIssueResolutionService()
-      : super(databaseProvider: LampDatabaseProvider.instance);
+    : super(databaseProvider: LampDatabaseProvider.instance);
 
   String? lastFixColumn;
   String? lastFixNewValue;
@@ -115,17 +117,17 @@ void main() {
   setUpAll(() {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(SystemChannels.platform, (call) async {
-      switch (call.method) {
-        case 'Clipboard.setData':
-          final args = call.arguments as Map<Object?, Object?>;
-          clipboardText = args['text'] as String?;
+          switch (call.method) {
+            case 'Clipboard.setData':
+              final args = call.arguments as Map<Object?, Object?>;
+              clipboardText = args['text'] as String?;
+              return null;
+            case 'Clipboard.getData':
+              if (clipboardText == null) return null;
+              return <String, Object?>{'text': clipboardText};
+          }
           return null;
-        case 'Clipboard.getData':
-          if (clipboardText == null) return null;
-          return <String, Object?>{'text': clipboardText};
-      }
-      return null;
-    });
+        });
   });
 
   tearDownAll(() {
@@ -140,7 +142,7 @@ void main() {
   Future<_DialogPumpResult> pumpDialog(
     WidgetTester tester, {
     Future<List<LampEntityCodeSuggestion>> Function(String query)?
-        searchEquipmentSuggestions,
+    searchEquipmentSuggestions,
     Future<String?> Function(int code)? equipmentPreview,
     LampNetworkIssueResolutionService? service,
     String issueType = 'network_unmatched',
@@ -164,7 +166,8 @@ void main() {
                     context: context,
                     builder: (_) => LampNetworkIssueResolutionDialog(
                       issueType: issueType,
-                      issues: issues ??
+                      issues:
+                          issues ??
                           const [
                             <String, Object?>{
                               'id': 1,
@@ -173,8 +176,8 @@ void main() {
                           ],
                       service: session.service,
                       databasePath: '/fake/path',
-                      searchEquipmentSuggestions: searchEquipmentSuggestions ??
-                          _stubSearchEquipment,
+                      searchEquipmentSuggestions:
+                          searchEquipmentSuggestions ?? _stubSearchEquipment,
                       equipmentPreview:
                           equipmentPreview ?? _stubEquipmentPreview,
                     ),
@@ -275,38 +278,36 @@ void main() {
     },
   );
 
-  testWidgets(
-    '«Αντιγραφή όλων» βάζει κείμενο που περιέχει IP και hostname',
-    (tester) async {
-      await pumpDialog(tester);
+  testWidgets('«Αντιγραφή όλων» βάζει κείμενο που περιέχει IP και hostname', (
+    tester,
+  ) async {
+    await pumpDialog(tester);
 
-      final copyAll = find.text('Αντιγραφή όλων');
-      await tester.ensureVisible(copyAll);
-      await tester.tap(copyAll);
-      await tester.pump();
+    final copyAll = find.text('Αντιγραφή όλων');
+    await tester.ensureVisible(copyAll);
+    await tester.tap(copyAll);
+    await tester.pump();
 
-      expect(clipboardText, isNotNull);
-      expect(clipboardText, contains('10.10.212.23'));
-      expect(clipboardText, contains('PC-TEST'));
-      expect(clipboardText, contains('IP: 10.10.212.23'));
-      expect(clipboardText, contains('Hostname: PC-TEST'));
-      expect(find.textContaining('Αντιγράφηκε:'), findsOneWidget);
+    expect(clipboardText, isNotNull);
+    expect(clipboardText, contains('10.10.212.23'));
+    expect(clipboardText, contains('PC-TEST'));
+    expect(clipboardText, contains('IP: 10.10.212.23'));
+    expect(clipboardText, contains('Hostname: PC-TEST'));
+    expect(find.textContaining('Αντιγράφηκε:'), findsOneWidget);
 
-      await closeDialog(tester);
-    },
-  );
+    await closeDialog(tester);
+  });
 
-  testWidgets(
-    'το πεδίο εξοπλισμού χρησιμοποιεί LampEntityCodeAutocomplete',
-    (tester) async {
-      await pumpDialog(tester);
+  testWidgets('το πεδίο εξοπλισμού χρησιμοποιεί LampEntityCodeAutocomplete', (
+    tester,
+  ) async {
+    await pumpDialog(tester);
 
-      expect(find.byType(LampEntityCodeAutocomplete), findsOneWidget);
-      expect(find.text('Κωδικός ή όνομα εξοπλισμού'), findsOneWidget);
+    expect(find.byType(LampEntityCodeAutocomplete), findsOneWidget);
+    expect(find.text('Κωδικός ή όνομα εξοπλισμού'), findsOneWidget);
 
-      await closeDialog(tester);
-    },
-  );
+    await closeDialog(tester);
+  });
 
   testWidgets(
     'το πεδίο εξοπλισμού εστιάζεται αυτόματα μόλις ανοίξει ο διάλογος',
@@ -322,7 +323,8 @@ void main() {
       expect(
         editable.widget.focusNode.hasPrimaryFocus,
         isTrue,
-        reason: 'Με το άνοιγμα του οδηγού, ο χρήστης πρέπει να μπορεί να '
+        reason:
+            'Με το άνοιγμα του οδηγού, ο χρήστης πρέπει να μπορεί να '
             'πληκτρολογήσει χωρίς κλικ μέσα στο πεδίο.',
       );
 
@@ -330,147 +332,132 @@ void main() {
     },
   );
 
-  testWidgets(
-    'επιλογή πρότασης εμφανίζει γραμμή «Θα συνδεθεί με:»',
-    (tester) async {
-      await pumpDialog(tester);
+  testWidgets('επιλογή πρότασης εμφανίζει γραμμή «Θα συνδεθεί με:»', (
+    tester,
+  ) async {
+    await pumpDialog(tester);
 
-      final field = find.descendant(
-        of: find.byType(LampEntityCodeAutocomplete),
-        matching: find.byType(TextField),
-      );
-      await tester.ensureVisible(field);
-      await tester.tap(field);
-      await tester.pump();
-      await tester.enterText(field, 'Εκτυπ');
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 150));
+    final field = find.descendant(
+      of: find.byType(LampEntityCodeAutocomplete),
+      matching: find.byType(TextField),
+    );
+    await tester.ensureVisible(field);
+    await tester.tap(field);
+    await tester.pump();
+    await tester.enterText(field, 'Εκτυπ');
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 150));
 
-      await tester.tap(find.textContaining('Εκτυπωτής (5001)'));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 350));
+    await tester.tap(find.textContaining('Εκτυπωτής (5001)'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 350));
 
-      expect(find.textContaining('Θα συνδεθεί με:'), findsOneWidget);
-      expect(
-        find.textContaining('Εκτυπωτής · SN123 · Λογιστήριο'),
-        findsOneWidget,
-      );
+    expect(find.textContaining('Θα συνδεθεί με:'), findsOneWidget);
+    expect(
+      find.textContaining('Εκτυπωτής · SN123 · Λογιστήριο'),
+      findsOneWidget,
+    );
 
-      await closeDialog(tester);
-    },
-  );
+    await closeDialog(tester);
+  });
 
-  testWidgets(
-    'πάτημα «Διαγραφή από την ουρά» εμφανίζει διάλογο επιβεβαίωσης',
-    (tester) async {
-      await pumpDialog(tester);
+  testWidgets('πάτημα «Διαγραφή από την ουρά» εμφανίζει διάλογο επιβεβαίωσης', (
+    tester,
+  ) async {
+    await pumpDialog(tester);
 
-      await tester.tap(find.text('Διαγραφή από την ουρά'));
-      await tester.pumpAndSettle();
+    await tester.tap(find.text('Διαγραφή από την ουρά'));
+    await tester.pumpAndSettle();
 
-      expect(find.text('Οριστική διαγραφή;'), findsOneWidget);
+    expect(find.text('Οριστική διαγραφή;'), findsOneWidget);
 
-      await tester.tap(find.text('Άκυρο'));
-      await tester.pumpAndSettle();
-      await closeDialog(tester);
-    },
-  );
+    await tester.tap(find.text('Άκυρο'));
+    await tester.pumpAndSettle();
+    await closeDialog(tester);
+  });
 
-  testWidgets(
-    '«Άκυρο» στον διάλογο επιβεβαίωσης δεν καλεί deleteIssue',
-    (tester) async {
-      final session = await pumpDialog(tester);
+  testWidgets('«Άκυρο» στον διάλογο επιβεβαίωσης δεν καλεί deleteIssue', (
+    tester,
+  ) async {
+    final session = await pumpDialog(tester);
 
-      await tester.tap(find.text('Διαγραφή από την ουρά'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Άκυρο'));
-      await tester.pumpAndSettle();
+    await tester.tap(find.text('Διαγραφή από την ουρά'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Άκυρο'));
+    await tester.pumpAndSettle();
 
-      expect(
-        (session.service as _FakeNetworkIssueResolutionService)
-            .deleteIssueCalled,
-        isFalse,
-      );
-      expect(find.text('Διαγραφή από την ουρά'), findsOneWidget);
-      expect(find.text('Οριστική διαγραφή;'), findsNothing);
+    expect(
+      (session.service as _FakeNetworkIssueResolutionService).deleteIssueCalled,
+      isFalse,
+    );
+    expect(find.text('Διαγραφή από την ουρά'), findsOneWidget);
+    expect(find.text('Οριστική διαγραφή;'), findsNothing);
 
-      await closeDialog(tester);
-    },
-  );
+    await closeDialog(tester);
+  });
 
-  testWidgets(
-    '«Διαγραφή» στον διάλογο επιβεβαίωσης καλεί deleteIssue',
-    (tester) async {
-      final session = await pumpDialog(tester);
+  testWidgets('«Διαγραφή» στον διάλογο επιβεβαίωσης καλεί deleteIssue', (
+    tester,
+  ) async {
+    final session = await pumpDialog(tester);
 
-      await tester.tap(find.text('Διαγραφή από την ουρά'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.widgetWithText(FilledButton, 'Διαγραφή'));
-      await tester.pumpAndSettle();
+    await tester.tap(find.text('Διαγραφή από την ουρά'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, 'Διαγραφή'));
+    await tester.pumpAndSettle();
 
-      expect(
-        (session.service as _FakeNetworkIssueResolutionService)
-            .deleteIssueCalled,
-        isTrue,
-      );
-      expect(session.outcome, LampNetworkIssueDialogOutcome.completed);
-    },
-  );
+    expect(
+      (session.service as _FakeNetworkIssueResolutionService).deleteIssueCalled,
+      isTrue,
+    );
+    expect(session.outcome, LampNetworkIssueDialogOutcome.completed);
+  });
 
-  testWidgets(
-    '«Παράλειψη» σε μία εγγραφή κλείνει με nothingChanged',
-    (tester) async {
-      final session = await pumpAndSkipLastIssue(tester);
+  testWidgets('«Παράλειψη» σε μία εγγραφή κλείνει με nothingChanged', (
+    tester,
+  ) async {
+    final session = await pumpAndSkipLastIssue(tester);
 
-      expect(session.outcome, LampNetworkIssueDialogOutcome.nothingChanged);
-    },
-  );
+    expect(session.outcome, LampNetworkIssueDialogOutcome.nothingChanged);
+  });
 
-  testWidgets(
-    'εμφανίζει τον κωδικό εξοπλισμού από το Excel',
-    (tester) async {
-      await pumpDialog(tester);
+  testWidgets('εμφανίζει τον κωδικό εξοπλισμού από το Excel', (tester) async {
+    await pumpDialog(tester);
 
-      expect(
-        find.widgetWithText(
-          SelectableText,
-          'Κωδικός εξοπλισμού (Excel): 5001',
-        ),
-        findsOneWidget,
-      );
+    expect(
+      find.widgetWithText(SelectableText, 'Κωδικός εξοπλισμού (Excel): 5001'),
+      findsOneWidget,
+    );
 
-      await closeDialog(tester);
-    },
-  );
+    await closeDialog(tester);
+  });
 
-  testWidgets(
-    'δεν εμφανίζει πληροφορία internet από το parsed raw_value',
-    (tester) async {
-      await pumpDialog(tester);
+  testWidgets('δεν εμφανίζει πληροφορία internet από το parsed raw_value', (
+    tester,
+  ) async {
+    await pumpDialog(tester);
 
-      expect(find.textContaining('yes'), findsNothing);
-      expect(find.textContaining('internet'), findsNothing);
-      expect(find.textContaining('WORKGROUP'), findsNothing);
+    expect(find.textContaining('yes'), findsNothing);
+    expect(find.textContaining('internet'), findsNothing);
+    expect(find.textContaining('WORKGROUP'), findsNothing);
 
-      await closeDialog(tester);
-    },
-  );
+    await closeDialog(tester);
+  });
 
-  testWidgets(
-    '«Αντιγραφή όλων» περιλαμβάνει τον κωδικό εξοπλισμού Excel',
-    (tester) async {
-      await pumpDialog(tester);
+  testWidgets('«Αντιγραφή όλων» περιλαμβάνει τον κωδικό εξοπλισμού Excel', (
+    tester,
+  ) async {
+    await pumpDialog(tester);
 
-      final copyAll = find.text('Αντιγραφή όλων');
-      await tester.ensureVisible(copyAll);
-      await tester.tap(copyAll);
-      await tester.pump();
+    final copyAll = find.text('Αντιγραφή όλων');
+    await tester.ensureVisible(copyAll);
+    await tester.tap(copyAll);
+    await tester.pump();
 
-      expect(clipboardText, contains('Κωδικός εξοπλισμού (Excel): 5001'));
+    expect(clipboardText, contains('Κωδικός εξοπλισμού (Excel): 5001'));
 
-      await closeDialog(tester);
-    },
-  );
+    await closeDialog(tester);
+  });
 
   testWidgets(
     'scan mode: εμφανίζει κωδικό εξοπλισμού, μήνυμα και πεδίο «Διόρθωση IP»',
@@ -482,10 +469,7 @@ void main() {
         findsOneWidget,
       );
       expect(
-        find.widgetWithText(
-          SelectableText,
-          'Μη έγκυρη μορφή IPv4: «10.1.1».',
-        ),
+        find.widgetWithText(SelectableText, 'Μη έγκυρη μορφή IPv4: «10.1.1».'),
         findsOneWidget,
       );
       expect(find.text('Διόρθωση IP'), findsOneWidget);
@@ -518,25 +502,24 @@ void main() {
     },
   );
 
-  testWidgets(
-    'scan mode: σφάλμα διόρθωσης εμφανίζει μήνυμα και δεν προχωρά',
-    (tester) async {
-      final scanService = _FakeScanNetworkIssueResolutionService();
-      await pumpScanDialog(
-        tester,
-        service: scanService,
-        returnInvalidIpError: true,
-      );
+  testWidgets('scan mode: σφάλμα διόρθωσης εμφανίζει μήνυμα και δεν προχωρά', (
+    tester,
+  ) async {
+    final scanService = _FakeScanNetworkIssueResolutionService();
+    await pumpScanDialog(
+      tester,
+      service: scanService,
+      returnInvalidIpError: true,
+    );
 
-      await tester.tap(find.text('Αποθήκευση διόρθωσης'));
-      await tester.pumpAndSettle();
+    await tester.tap(find.text('Αποθήκευση διόρθωσης'));
+    await tester.pumpAndSettle();
 
-      expect(find.text('Μη έγκυρη μορφή IPv4.'), findsOneWidget);
-      expect(find.text('Αποθήκευση διόρθωσης'), findsOneWidget);
+    expect(find.text('Μη έγκυρη μορφή IPv4.'), findsOneWidget);
+    expect(find.text('Αποθήκευση διόρθωσης'), findsOneWidget);
 
-      await closeDialog(tester);
-    },
-  );
+    await closeDialog(tester);
+  });
 
   testWidgets(
     'scan mode: υπάρχει κουμπί «Αποδοχή ως έχει» που ανοίγει διάλογο αιτιολογίας',
@@ -556,24 +539,23 @@ void main() {
     },
   );
 
-  testWidgets(
-    'scan mode: κενή αιτιολογία — το «Αποδοχή» είναι ανενεργό',
-    (tester) async {
-      final scanService = _FakeScanNetworkIssueResolutionService();
-      await pumpScanDialog(tester, service: scanService);
+  testWidgets('scan mode: κενή αιτιολογία — το «Αποδοχή» είναι ανενεργό', (
+    tester,
+  ) async {
+    final scanService = _FakeScanNetworkIssueResolutionService();
+    await pumpScanDialog(tester, service: scanService);
 
-      await tester.tap(find.text('Αποδοχή ως έχει'));
-      await tester.pumpAndSettle();
+    await tester.tap(find.text('Αποδοχή ως έχει'));
+    await tester.pumpAndSettle();
 
-      final acceptButton = find.widgetWithText(FilledButton, 'Αποδοχή');
-      expect(tester.widget<FilledButton>(acceptButton).onPressed, isNull);
-      expect(scanService.lastAcceptIssueId, isNull);
+    final acceptButton = find.widgetWithText(FilledButton, 'Αποδοχή');
+    expect(tester.widget<FilledButton>(acceptButton).onPressed, isNull);
+    expect(scanService.lastAcceptIssueId, isNull);
 
-      await tester.tap(find.text('Άκυρο'));
-      await tester.pumpAndSettle();
-      await closeDialog(tester);
-    },
-  );
+    await tester.tap(find.text('Άκυρο'));
+    await tester.pumpAndSettle();
+    await closeDialog(tester);
+  });
 
   testWidgets(
     'scan mode: «Αποδοχή» με αιτιολογία καλεί acceptIssue και ολοκληρώνει',
@@ -586,8 +568,7 @@ void main() {
 
       final reasonField = find.byWidgetPredicate(
         (widget) =>
-            widget is TextField &&
-            widget.decoration?.labelText == 'Αιτιολογία',
+            widget is TextField && widget.decoration?.labelText == 'Αιτιολογία',
       );
       await tester.enterText(reasonField, 'Σκόπιμη διπλή IP σε DHCP');
       await tester.pump();
@@ -601,17 +582,16 @@ void main() {
     },
   );
 
-  testWidgets(
-    'ροή αντιστοίχισης: εμφανίζει ActionChip «Πρόταση: 5001»',
-    (tester) async {
-      await pumpDialog(tester);
+  testWidgets('ροή αντιστοίχισης: εμφανίζει ActionChip «Πρόταση: 5001»', (
+    tester,
+  ) async {
+    await pumpDialog(tester);
 
-      expect(find.widgetWithText(ActionChip, 'Πρόταση: 5001'), findsOneWidget);
-      expect(find.text('Προτεινόμενοι κωδικοί:'), findsOneWidget);
+    expect(find.widgetWithText(ActionChip, 'Πρόταση: 5001'), findsOneWidget);
+    expect(find.text('Προτεινόμενοι κωδικοί:'), findsOneWidget);
 
-      await closeDialog(tester);
-    },
-  );
+    await closeDialog(tester);
+  });
 
   testWidgets(
     'ροή αντιστοίχισης: πάτημα chip γεμίζει τον κωδικό και εμφανίζει προεπισκόπηση',
@@ -633,15 +613,12 @@ void main() {
     },
   );
 
-  testWidgets(
-    'scan mode: δεν εμφανίζονται προτάσεις κωδικών',
-    (tester) async {
-      await pumpScanDialog(tester);
+  testWidgets('scan mode: δεν εμφανίζονται προτάσεις κωδικών', (tester) async {
+    await pumpScanDialog(tester);
 
-      expect(find.textContaining('Πρόταση:'), findsNothing);
-      expect(find.text('Προτεινόμενοι κωδικοί:'), findsNothing);
+    expect(find.textContaining('Πρόταση:'), findsNothing);
+    expect(find.text('Προτεινόμενοι κωδικοί:'), findsNothing);
 
-      await closeDialog(tester);
-    },
-  );
+    await closeDialog(tester);
+  });
 }

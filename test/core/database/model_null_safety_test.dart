@@ -30,10 +30,7 @@ Future<Set<String>> _nullableColumns(Database db, String table) async {
       .toSet();
 }
 
-Map<String, dynamic> _allNullRow(
-  Set<String> columns,
-  Set<String> nullable,
-) {
+Map<String, dynamic> _allNullRow(Set<String> columns, Set<String> nullable) {
   return {
     for (final col in columns)
       col: nullable.contains(col) ? null : _nonNullPlaceholder(col),
@@ -143,7 +140,9 @@ void main() {
       test('${pair.table}: fromMap με NULL nullable στήλες', () async {
         final nullable = nullableByTable[pair.table]!;
         final allColumns = nullable.union({
-          for (final row in await db.rawQuery('PRAGMA table_info(${pair.table})'))
+          for (final row in await db.rawQuery(
+            'PRAGMA table_info(${pair.table})',
+          ))
             row['name'] as String,
         });
         final row = _allNullRow(allColumns, nullable);

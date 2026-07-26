@@ -45,9 +45,10 @@ final databaseIntegrityServiceProvider = Provider<DatabaseIntegrityService>(
   (ref) => DatabaseIntegrityService(),
 );
 
-final databaseIntegrityFixServiceProvider = Provider<DatabaseIntegrityFixService>(
-  (ref) => DatabaseIntegrityFixService(),
-);
+final databaseIntegrityFixServiceProvider =
+    Provider<DatabaseIntegrityFixService>(
+      (ref) => DatabaseIntegrityFixService(),
+    );
 
 /// Κλειδιά ευρημάτων σε εξέλιξη επιδιόρθωσης (για disable κουμπιών UI).
 class IntegrityFixingKeysNotifier extends Notifier<Set<String>> {
@@ -61,8 +62,8 @@ class IntegrityFixingKeysNotifier extends Notifier<Set<String>> {
 
 final integrityFixingKeysProvider =
     NotifierProvider<IntegrityFixingKeysNotifier, Set<String>>(
-  IntegrityFixingKeysNotifier.new,
-);
+      IntegrityFixingKeysNotifier.new,
+    );
 
 class DatabaseIntegrityNotifier extends Notifier<DatabaseIntegrityState> {
   @override
@@ -163,7 +164,9 @@ class DatabaseIntegrityNotifier extends Notifier<DatabaseIntegrityState> {
   /// Μετά ατομική επιδιόρθωση: αφαιρεί μόνο το διορθωμένο εύρημα από τη λίστα.
   /// Δεν ξανατρέχει ολόκληρο τον έλεγχο τύπου — τα υπόλοιπα ομοειδή ευρήματα
   /// παραμένουν μέχρι ατομική ή μαζική επιδιόρθωση.
-  Future<void> _refreshAfterSingleFix(DatabaseIntegrityFinding fixedFinding) async {
+  Future<void> _refreshAfterSingleFix(
+    DatabaseIntegrityFinding fixedFinding,
+  ) async {
     if (state is! DatabaseIntegritySuccess) return;
     final current = state as DatabaseIntegritySuccess;
 
@@ -192,7 +195,9 @@ class DatabaseIntegrityNotifier extends Notifier<DatabaseIntegrityState> {
     var updatedFindings = List<DatabaseIntegrityFinding>.from(
       current.report.findings,
     );
-    updatedFindings.removeWhere((f) => removedFindingKeys.contains(f.findingKey));
+    updatedFindings.removeWhere(
+      (f) => removedFindingKeys.contains(f.findingKey),
+    );
 
     final recheck = await service.runCheck(checkType);
     updatedFindings.removeWhere((f) => f.checkType == checkType);
@@ -215,5 +220,5 @@ class DatabaseIntegrityNotifier extends Notifier<DatabaseIntegrityState> {
 
 final databaseIntegrityProvider =
     NotifierProvider<DatabaseIntegrityNotifier, DatabaseIntegrityState>(
-  DatabaseIntegrityNotifier.new,
-);
+      DatabaseIntegrityNotifier.new,
+    );

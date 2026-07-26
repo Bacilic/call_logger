@@ -1,4 +1,4 @@
-﻿import '../../../core/models/calls_screen_cards_visibility.dart';
+import '../../../core/models/calls_screen_cards_visibility.dart';
 import 'calls_field_groups.dart';
 import 'calls_layout_plan.dart';
 import 'calls_layout_template.dart';
@@ -44,8 +44,7 @@ class CallsLayoutVisibility {
           cards.showEquipmentRecentPanel &&
           groups.equipmentTier == EquipmentGroupTier.matchedRecord &&
           hasEquipmentHistoryData,
-      showGlobalRecentCard:
-          showGlobalRecentCard ?? cards.showGlobalRecentCard,
+      showGlobalRecentCard: showGlobalRecentCard ?? cards.showGlobalRecentCard,
       showRemoteTools: showRemoteTools && groups.isEquipmentGroupActive,
       hasCallerHistoryData: hasCallerHistoryData,
       hasEquipmentHistoryData: hasEquipmentHistoryData,
@@ -89,9 +88,7 @@ class CallsLayoutEngine {
 
     if (groups.isPhoneGroupActive) {
       rows.add(
-        CallsLayoutRow([
-          CallsLayoutColumn.singleSlot(CallsLayoutSlot.notes),
-        ]),
+        CallsLayoutRow([CallsLayoutColumn.singleSlot(CallsLayoutSlot.notes)]),
       );
     }
 
@@ -164,7 +161,8 @@ class CallsLayoutEngine {
       if (v.showRemoteTools)
         CallsLayoutColumn.singleSlot(CallsLayoutSlot.remoteTools),
       if (v.showMapCard) CallsLayoutColumn.singleSlot(CallsLayoutSlot.map),
-      if (v.showUserCard) CallsLayoutColumn.singleSlot(CallsLayoutSlot.callerCard),
+      if (v.showUserCard)
+        CallsLayoutColumn.singleSlot(CallsLayoutSlot.callerCard),
     ]);
 
     final rowHistory = CallsLayoutRow([

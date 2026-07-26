@@ -29,10 +29,7 @@ import '../../provider/call_entry_provider.dart';
 
 /// Πεδίο αυτόματης συμπλήρωσης κατηγορίας (`categories`) με `category_id` όταν ταιριάζει.
 class CategoryAutocompleteField extends ConsumerStatefulWidget {
-  const CategoryAutocompleteField({
-    super.key,
-    required this.onCategoryChanged,
-  });
+  const CategoryAutocompleteField({super.key, required this.onCategoryChanged});
 
   final void Function(String text, int? categoryId) onCategoryChanged;
 
@@ -67,14 +64,8 @@ class _CategoryAutocompleteFieldState
     final q = query.trim().toLowerCase();
     final filtered = q.isEmpty
         ? List<String>.from(all)
-        : all
-            .where(
-              (c) => c.toLowerCase().contains(q),
-            )
-            .toList();
-    filtered.sort(
-      (a, b) => a.toLowerCase().compareTo(b.toLowerCase()),
-    );
+        : all.where((c) => c.toLowerCase().contains(q)).toList();
+    filtered.sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
     return filtered;
   }
 
@@ -87,7 +78,10 @@ class _CategoryAutocompleteFieldState
     _suppressCategoryNotify = false;
   }
 
-  void _pushCategoryState(String rawText, List<({int id, String name})> entries) {
+  void _pushCategoryState(
+    String rawText,
+    List<({int id, String name})> entries,
+  ) {
     if (_suppressCategoryNotify) return;
     final trimmed = rawText.trim();
     if (trimmed.isEmpty) {
@@ -123,9 +117,7 @@ class _CategoryAutocompleteFieldState
         );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Η κατηγορία "$value" προστέθηκε'),
-          ),
+          SnackBar(content: Text('Η κατηγορία "$value" προστέθηκε')),
         );
       }
       _setControllerText(_controller, value);
@@ -134,7 +126,9 @@ class _CategoryAutocompleteFieldState
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Αποτυχία προσθήκης: ${humanizeUserFacingError(e)}')),
+        SnackBar(
+          content: Text('Αποτυχία προσθήκης: ${humanizeUserFacingError(e)}'),
+        ),
       );
     }
   }
@@ -149,7 +143,9 @@ class _CategoryAutocompleteFieldState
     final allCategoryNames = entries.map((e) => e.name).toList();
     final categoriesReady = asyncEntries.hasValue;
 
-    final entryCategory = ref.watch(callEntryProvider.select((s) => s.category));
+    final entryCategory = ref.watch(
+      callEntryProvider.select((s) => s.category),
+    );
     if (entryCategory.isEmpty && _controller.text.isNotEmpty) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
@@ -163,14 +159,16 @@ class _CategoryAutocompleteFieldState
     }
 
     final trimmed = _controller.text.trim();
-    final showAdd = categoriesReady &&
+    final showAdd =
+        categoriesReady &&
         trimmed.isNotEmpty &&
         categoryEntryMatchingNormalized(trimmed, entries) == null;
     final hasText = _controller.text.isNotEmpty;
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final maxInner = constraints.maxWidth.isFinite && constraints.maxWidth > 0
+        final maxInner =
+            constraints.maxWidth.isFinite && constraints.maxWidth > 0
             ? math.min(400.0, constraints.maxWidth)
             : 400.0;
         final notesOuterWidth = maxInner;
@@ -188,7 +186,8 @@ class _CategoryAutocompleteFieldState
                 final trimmed = tev.text.trim();
                 // Με κενό πεδίο πάντα δείχνουμε πλήρη λίστα: αποφεύγει race όπου το
                 // optionsBuilder τρέχει πριν το onChanged μηδενίσει το suppress μετά από επιλογή.
-                final blocked = _suppressOptionsUntilTyping &&
+                final blocked =
+                    _suppressOptionsUntilTyping &&
                     trimmed.isNotEmpty &&
                     trimmed == _controller.text.trim();
                 return blocked ? const Iterable<String>.empty() : options;
@@ -205,197 +204,209 @@ class _CategoryAutocompleteFieldState
                   widget.onCategoryChanged(selection, null);
                 }
               },
-              fieldViewBuilder: (
-                BuildContext context,
-                TextEditingController textEditingController,
-                FocusNode focusNode,
-                VoidCallback onFieldSubmitted,
-              ) {
-                return Focus(
-                  onKeyEvent: (node, event) {
-                    if (event is! KeyDownEvent) {
-                      return KeyEventResult.ignored;
-                    }
-                    final options = _sortedOptions(
-                      allCategoryNames,
-                      textEditingController.text,
-                    );
-                    if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
-                      if (options.isEmpty) return KeyEventResult.ignored;
-                      setState(() {
-                        _keyboardOptionIndex =
-                            (_keyboardOptionIndex + 1).clamp(
-                              0,
-                              options.length - 1,
-                            );
-                      });
-                      return KeyEventResult.handled;
-                    }
-                    if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
-                      if (options.isEmpty) return KeyEventResult.ignored;
-                      setState(() {
-                        _keyboardOptionIndex =
-                            _keyboardOptionIndex <= 0
+              fieldViewBuilder:
+                  (
+                    BuildContext context,
+                    TextEditingController textEditingController,
+                    FocusNode focusNode,
+                    VoidCallback onFieldSubmitted,
+                  ) {
+                    return Focus(
+                      onKeyEvent: (node, event) {
+                        if (event is! KeyDownEvent) {
+                          return KeyEventResult.ignored;
+                        }
+                        final options = _sortedOptions(
+                          allCategoryNames,
+                          textEditingController.text,
+                        );
+                        if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
+                          if (options.isEmpty) return KeyEventResult.ignored;
+                          setState(() {
+                            _keyboardOptionIndex = (_keyboardOptionIndex + 1)
+                                .clamp(0, options.length - 1);
+                          });
+                          return KeyEventResult.handled;
+                        }
+                        if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+                          if (options.isEmpty) return KeyEventResult.ignored;
+                          setState(() {
+                            _keyboardOptionIndex = _keyboardOptionIndex <= 0
                                 ? 0
                                 : _keyboardOptionIndex - 1;
-                      });
-                      return KeyEventResult.handled;
-                    }
-                    if (event.logicalKey == LogicalKeyboardKey.enter &&
-                        options.isNotEmpty &&
-                        _keyboardOptionIndex >= 0 &&
-                        _keyboardOptionIndex < options.length) {
-                      final selected = options[_keyboardOptionIndex];
-                      setState(() {
-                        _suppressOptionsUntilTyping = true;
-                      });
-                      _setControllerText(textEditingController, selected);
-                      final m = categoryEntryMatchingNormalized(selected, entries);
-                      if (m != null) {
-                        widget.onCategoryChanged(m.name, m.id);
-                      } else {
-                        widget.onCategoryChanged(selected, null);
-                      }
-                      _keyboardOptionIndex = -1;
-                      return KeyEventResult.handled;
-                    }
-                    return KeyEventResult.ignored;
-                  },
-                  child: TextField(
-                    controller: textEditingController,
-                    focusNode: focusNode,
-                    spellCheckConfiguration: platformSpellCheckConfiguration,
-                    decoration: InputDecoration(
-                      labelText: 'Κατηγορία προβλήματος',
-                      border: const OutlineInputBorder(),
-                      isDense: true,
-                      suffixIcon: (!hasText && !showAdd)
-                          ? null
-                          : Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                if (hasText)
-                                  IconButton(
-                                    icon: Icon(
-                                      Icons.close,
-                                      color: Colors.red.shade300,
-                                    ),
-                                    tooltip: 'Διαγραφή',
-                                    onPressed: () {
-                                      textEditingController.clear();
-                                      setState(() {
-                                        _keyboardOptionIndex = -1;
-                                        // Το clear() δεν καλεί onChanged· ξεμπλοκάρουμε ρητά για συνέπεια.
-                                        _suppressOptionsUntilTyping = false;
-                                      });
-                                      widget.onCategoryChanged('', null);
-                                    },
-                                  ),
-                                if (showAdd)
-                                  IconButton(
-                                    icon: const Icon(
-                                      Icons.add_circle,
-                                      color: Colors.green,
-                                    ),
-                                    tooltip: 'Προσθήκη κατηγορίας',
-                                    onPressed: () =>
-                                        _onAddNew(textEditingController.text),
-                                  ),
-                              ],
-                            ),
-                    ),
-                    onChanged: (value) {
-                      setState(() {
-                        _keyboardOptionIndex = -1;
-                        _suppressOptionsUntilTyping = false;
-                      });
-                      final m = categoryEntryMatchingNormalized(value, entries);
-                      if (m != null && value.trim() != m.name) {
-                        WidgetsBinding.instance.addPostFrameCallback((_) {
-                          if (!mounted) return;
-                          _setControllerText(textEditingController, m.name);
-                          widget.onCategoryChanged(m.name, m.id);
-                        });
-                        return;
-                      }
-                      _pushCategoryState(value, entries);
-                    },
-                    onSubmitted: (value) {
-                      final options = _sortedOptions(allCategoryNames, value);
-                      if (options.isNotEmpty &&
-                          _keyboardOptionIndex >= 0 &&
-                          _keyboardOptionIndex < options.length) {
-                        final selected = options[_keyboardOptionIndex];
-                        setState(() {
-                          _suppressOptionsUntilTyping = true;
-                        });
-                        _setControllerText(textEditingController, selected);
-                        final m = categoryEntryMatchingNormalized(selected, entries);
-                        if (m != null) {
-                          widget.onCategoryChanged(m.name, m.id);
-                        } else {
-                          widget.onCategoryChanged(selected, null);
+                          });
+                          return KeyEventResult.handled;
                         }
-                        setState(() {
-                          _keyboardOptionIndex = -1;
-                        });
-                        return;
-                      }
-                      onFieldSubmitted();
-                      _pushCategoryState(value.trim(), entries);
-                    },
-                  ),
-                );
-              },
-              optionsViewBuilder: (
-                BuildContext context,
-                AutocompleteOnSelected<String> onSelected,
-                Iterable<String> options,
-              ) {
-                final opts = options.toList();
-                if (opts.isEmpty) {
-                  return const SizedBox.shrink();
-                }
-                return Align(
-                  alignment: Alignment.topLeft,
-                  child: Material(
-                    elevation: 4,
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(
-                        maxHeight: 220,
-                        minWidth: 200,
-                      ),
-                      child: ListView.builder(
-                        padding: EdgeInsets.zero,
-                        shrinkWrap: true,
-                        itemCount: opts.length,
-                        itemBuilder: (context, index) {
-                          final option = opts[index];
-                          final isActive = _keyboardOptionIndex == index;
-                          return ColoredBox(
-                            color: isActive
-                                ? Theme.of(
-                                    context,
-                                  ).colorScheme.primaryContainer
-                                : Colors.transparent,
-                            child: ListTile(
-                              dense: true,
-                              title: Text(option),
-                              onTap: () {
-                                setState(() {
-                                  _keyboardOptionIndex = -1;
-                                  _suppressOptionsUntilTyping = true;
-                                });
-                                onSelected(option);
-                              },
-                            ),
+                        if (event.logicalKey == LogicalKeyboardKey.enter &&
+                            options.isNotEmpty &&
+                            _keyboardOptionIndex >= 0 &&
+                            _keyboardOptionIndex < options.length) {
+                          final selected = options[_keyboardOptionIndex];
+                          setState(() {
+                            _suppressOptionsUntilTyping = true;
+                          });
+                          _setControllerText(textEditingController, selected);
+                          final m = categoryEntryMatchingNormalized(
+                            selected,
+                            entries,
                           );
+                          if (m != null) {
+                            widget.onCategoryChanged(m.name, m.id);
+                          } else {
+                            widget.onCategoryChanged(selected, null);
+                          }
+                          _keyboardOptionIndex = -1;
+                          return KeyEventResult.handled;
+                        }
+                        return KeyEventResult.ignored;
+                      },
+                      child: TextField(
+                        controller: textEditingController,
+                        focusNode: focusNode,
+                        spellCheckConfiguration:
+                            platformSpellCheckConfiguration,
+                        decoration: InputDecoration(
+                          labelText: 'Κατηγορία προβλήματος',
+                          border: const OutlineInputBorder(),
+                          isDense: true,
+                          suffixIcon: (!hasText && !showAdd)
+                              ? null
+                              : Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    if (hasText)
+                                      IconButton(
+                                        icon: Icon(
+                                          Icons.close,
+                                          color: Colors.red.shade300,
+                                        ),
+                                        tooltip: 'Διαγραφή',
+                                        onPressed: () {
+                                          textEditingController.clear();
+                                          setState(() {
+                                            _keyboardOptionIndex = -1;
+                                            // Το clear() δεν καλεί onChanged· ξεμπλοκάρουμε ρητά για συνέπεια.
+                                            _suppressOptionsUntilTyping = false;
+                                          });
+                                          widget.onCategoryChanged('', null);
+                                        },
+                                      ),
+                                    if (showAdd)
+                                      IconButton(
+                                        icon: const Icon(
+                                          Icons.add_circle,
+                                          color: Colors.green,
+                                        ),
+                                        tooltip: 'Προσθήκη κατηγορίας',
+                                        onPressed: () => _onAddNew(
+                                          textEditingController.text,
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                        ),
+                        onChanged: (value) {
+                          setState(() {
+                            _keyboardOptionIndex = -1;
+                            _suppressOptionsUntilTyping = false;
+                          });
+                          final m = categoryEntryMatchingNormalized(
+                            value,
+                            entries,
+                          );
+                          if (m != null && value.trim() != m.name) {
+                            WidgetsBinding.instance.addPostFrameCallback((_) {
+                              if (!mounted) return;
+                              _setControllerText(textEditingController, m.name);
+                              widget.onCategoryChanged(m.name, m.id);
+                            });
+                            return;
+                          }
+                          _pushCategoryState(value, entries);
+                        },
+                        onSubmitted: (value) {
+                          final options = _sortedOptions(
+                            allCategoryNames,
+                            value,
+                          );
+                          if (options.isNotEmpty &&
+                              _keyboardOptionIndex >= 0 &&
+                              _keyboardOptionIndex < options.length) {
+                            final selected = options[_keyboardOptionIndex];
+                            setState(() {
+                              _suppressOptionsUntilTyping = true;
+                            });
+                            _setControllerText(textEditingController, selected);
+                            final m = categoryEntryMatchingNormalized(
+                              selected,
+                              entries,
+                            );
+                            if (m != null) {
+                              widget.onCategoryChanged(m.name, m.id);
+                            } else {
+                              widget.onCategoryChanged(selected, null);
+                            }
+                            setState(() {
+                              _keyboardOptionIndex = -1;
+                            });
+                            return;
+                          }
+                          onFieldSubmitted();
+                          _pushCategoryState(value.trim(), entries);
                         },
                       ),
-                    ),
-                  ),
-                );
-              },
+                    );
+                  },
+              optionsViewBuilder:
+                  (
+                    BuildContext context,
+                    AutocompleteOnSelected<String> onSelected,
+                    Iterable<String> options,
+                  ) {
+                    final opts = options.toList();
+                    if (opts.isEmpty) {
+                      return const SizedBox.shrink();
+                    }
+                    return Align(
+                      alignment: Alignment.topLeft,
+                      child: Material(
+                        elevation: 4,
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(
+                            maxHeight: 220,
+                            minWidth: 200,
+                          ),
+                          child: ListView.builder(
+                            padding: EdgeInsets.zero,
+                            shrinkWrap: true,
+                            itemCount: opts.length,
+                            itemBuilder: (context, index) {
+                              final option = opts[index];
+                              final isActive = _keyboardOptionIndex == index;
+                              return ColoredBox(
+                                color: isActive
+                                    ? Theme.of(
+                                        context,
+                                      ).colorScheme.primaryContainer
+                                    : Colors.transparent,
+                                child: ListTile(
+                                  dense: true,
+                                  title: Text(option),
+                                  onTap: () {
+                                    setState(() {
+                                      _keyboardOptionIndex = -1;
+                                      _suppressOptionsUntilTyping = true;
+                                    });
+                                    onSelected(option);
+                                  },
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                      ),
+                    );
+                  },
             ),
           ),
         );

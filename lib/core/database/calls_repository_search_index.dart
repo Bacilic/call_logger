@@ -1,4 +1,4 @@
-﻿part of 'calls_repository.dart';
+part of 'calls_repository.dart';
 
 mixin CallsRepositorySearchIndexMixin on CallsRepositoryCore {
   /// Συγκεντρώνει κείμενα κλήσης + συσχετισμένου χρήστη/εξοπλισμού για `search_index` (σχήμα v1).
@@ -69,6 +69,7 @@ mixin CallsRepositorySearchIndexMixin on CallsRepositoryCore {
 
     return SearchTextNormalizer.normalizeForSearch(parts.join(' '));
   }
+
   Future<void> _rebuildSearchIndexForCallRows(
     DatabaseExecutor executor,
     List<Map<String, dynamic>> rows,

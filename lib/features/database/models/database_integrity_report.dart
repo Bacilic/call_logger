@@ -8,8 +8,8 @@ class DatabaseIntegrityReport {
     required this.findings,
     DateTime? checkedAt,
     int? schemaVersion,
-  })  : checkedAt = checkedAt ?? DateTime.now(),
-        schemaVersion = schemaVersion ?? databaseSchemaVersionV1;
+  }) : checkedAt = checkedAt ?? DateTime.now(),
+       schemaVersion = schemaVersion ?? databaseSchemaVersionV1;
 
   final List<DatabaseIntegrityFinding> findings;
   final DateTime checkedAt;
@@ -74,16 +74,16 @@ class DatabaseIntegrityReport {
     }
 
     for (final category in IntegrityCategory.values) {
-      final inCategory =
-          findings.where((f) => f.category == category).toList();
+      final inCategory = findings.where((f) => f.category == category).toList();
       if (inCategory.isEmpty) continue;
 
       buffer.writeln('## ${categoryLabelEl(category)}');
       buffer.writeln();
 
       for (final severity in IntegritySeverity.values) {
-        final inSeverity =
-            inCategory.where((f) => f.severity == severity).toList();
+        final inSeverity = inCategory
+            .where((f) => f.severity == severity)
+            .toList();
         if (inSeverity.isEmpty) continue;
 
         buffer.writeln('### ${severityLabelEl(severity)}');

@@ -28,10 +28,7 @@ class _RecordingUrlOpener {
 Widget _wrap(Widget child) {
   return MaterialApp(
     home: Scaffold(
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: child,
-      ),
+      body: Padding(padding: const EdgeInsets.all(16), child: child),
     ),
   );
 }
@@ -40,33 +37,27 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('LinkableSelectableText', () {
-    testWidgets(
-      'URL στο κείμενο καλεί τον opener με το σωστό URL',
-      (tester) async {
-        const url = 'https://example.com/ticket/42';
-        final urlRecorder = _RecordingUrlOpener();
-        final opener = LinkableTargetOpener(
-          launchUrl: urlRecorder.launch,
-        );
+    testWidgets('URL στο κείμενο καλεί τον opener με το σωστό URL', (
+      tester,
+    ) async {
+      const url = 'https://example.com/ticket/42';
+      final urlRecorder = _RecordingUrlOpener();
+      final opener = LinkableTargetOpener(launchUrl: urlRecorder.launch);
 
-        await tester.pumpWidget(
-          _wrap(
-            LinkableSelectableText(
-              text: 'Δες το $url εδώ',
-              targetOpener: opener,
-            ),
-          ),
-        );
+      await tester.pumpWidget(
+        _wrap(
+          LinkableSelectableText(text: 'Δες το $url εδώ', targetOpener: opener),
+        ),
+      );
 
-        final state = tester.state<LinkableSelectableTextState>(
-          find.byType(LinkableSelectableText),
-        );
-        await state.triggerLinkTap(url);
-        await tester.pumpAndSettle();
+      final state = tester.state<LinkableSelectableTextState>(
+        find.byType(LinkableSelectableText),
+      );
+      await state.triggerLinkTap(url);
+      await tester.pumpAndSettle();
 
-        expect(urlRecorder.launchedUri, Uri.parse(url));
-      },
-    );
+      expect(urlRecorder.launchedUri, Uri.parse(url));
+    });
 
     testWidgets(
       'ανύπαρκτη τοπική διαδρομή εμφανίζει SnackBar και δεν καλεί opener',

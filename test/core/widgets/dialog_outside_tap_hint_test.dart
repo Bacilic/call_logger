@@ -58,9 +58,7 @@ class _FakeLookupService extends LookupService {
   List<DepartmentModel> searchDepartments(String query) {
     final q = query.trim().toLowerCase();
     if (q.isEmpty) return _departments;
-    return _departments
-        .where((d) => d.name.toLowerCase().contains(q))
-        .toList();
+    return _departments.where((d) => d.name.toLowerCase().contains(q)).toList();
   }
 }
 
@@ -77,7 +75,6 @@ Finder _departmentField() {
     matching: find.byType(TextField),
   );
 }
-
 
 Future<void> _pumpHarness(WidgetTester tester) async {
   await tester.pumpWidget(
@@ -128,10 +125,7 @@ Future<void> _openQuickCallDialog(WidgetTester tester) async {
   await tester.pump();
   await tester.pump(const Duration(milliseconds: 300));
   await pumpUntilSettled(tester);
-  expect(
-    find.byKey(const ValueKey('quick_call_dialog')),
-    findsOneWidget,
-  );
+  expect(find.byKey(const ValueKey('quick_call_dialog')), findsOneWidget);
 }
 
 Future<void> _dismissQuickCallDialog(WidgetTester tester) async {
@@ -174,7 +168,10 @@ void main() {
 
         await tester.tap(_departmentField());
         await pumpUntilSettled(tester);
-        await tester.enterText(_departmentField(), _kTestDepartmentName.substring(0, 3));
+        await tester.enterText(
+          _departmentField(),
+          _kTestDepartmentName.substring(0, 3),
+        );
         await pumpUntilSettled(tester);
 
         final option = find.descendant(

@@ -43,8 +43,11 @@ class AuditFilterModel {
   /// Επόμενη ημέρα 00:00 (τοπική) για `timestamp <` (συμπερίληψη dateTo).
   String? get dateToExclusiveIso {
     if (dateTo == null) return null;
-    final next = DateTime(dateTo!.year, dateTo!.month, dateTo!.day)
-        .add(const Duration(days: 1));
+    final next = DateTime(
+      dateTo!.year,
+      dateTo!.month,
+      dateTo!.day,
+    ).add(const Duration(days: 1));
     return next.toIso8601String();
   }
 }

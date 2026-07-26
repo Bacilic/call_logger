@@ -69,11 +69,7 @@ void main() {
             (ref) async => AuditReferenceLabels.empty,
           ),
         ],
-        child: const MaterialApp(
-          home: Scaffold(
-            body: ApplicationAuditTab(),
-          ),
-        ),
+        child: const MaterialApp(home: Scaffold(body: ApplicationAuditTab())),
       ),
     );
     await tester.pumpAndSettle();
@@ -87,10 +83,8 @@ void main() {
   }
 
   Finder actionField() => find.byWidgetPredicate(
-        (w) =>
-            w is TextField &&
-            w.decoration?.labelText == 'Ενέργεια',
-      );
+    (w) => w is TextField && w.decoration?.labelText == 'Ενέργεια',
+  );
 
   group('ApplicationAuditTab autocomplete φίλτρα', () {
     testWidgets('πληκτρολόγηση φιλτράρει τις προτάσεις ενέργειας', (

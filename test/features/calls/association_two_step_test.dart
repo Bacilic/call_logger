@@ -57,14 +57,16 @@ void main() {
         late ProviderContainer container;
         try {
           container = await AssociationTwoStepRunner.createContainer();
-          final result = await AssociationTwoStepRunner.run(container, scenario);
+          final result = await AssociationTwoStepRunner.run(
+            container,
+            scenario,
+          );
           scenarioResults.add(result);
 
           if (result.passed) {
             reporter.recordPass('${scenario.id}: ${scenario.title}');
           } else {
-            final hint =
-                scenario.knownBugHint ?? result.failures.join(' | ');
+            final hint = scenario.knownBugHint ?? result.failures.join(' | ');
             reporter.recordFail(
               '${scenario.id}: ${scenario.title}',
               hint: hint,
@@ -77,7 +79,7 @@ void main() {
             reason: result.failures.isEmpty
                 ? null
                 : '${scenario.id}:\n${result.failures.join('\n')}'
-                    '${scenario.knownBugHint != null ? '\n[Γνωστό] ${scenario.knownBugHint}' : ''}',
+                      '${scenario.knownBugHint != null ? '\n[Γνωστό] ${scenario.knownBugHint}' : ''}',
           );
         } finally {
           container.dispose();

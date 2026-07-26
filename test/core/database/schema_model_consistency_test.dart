@@ -49,9 +49,7 @@ typedef _ModelPair = ({
 
 Future<Set<String>> _tableColumns(Database db, String table) async {
   final rows = await db.rawQuery('PRAGMA table_info($table)');
-  return rows
-      .map((row) => row['name'] as String)
-      .toSet();
+  return rows.map((row) => row['name'] as String).toSet();
 }
 
 void main() {
@@ -186,7 +184,8 @@ void main() {
       ),
       (
         table: 'categories',
-        sampleToMap: () => const CategoryModel(id: 1, name: 'Cat', isDeleted: false).toMap(),
+        sampleToMap: () =>
+            const CategoryModel(id: 1, name: 'Cat', isDeleted: false).toMap(),
         fromMap: CategoryModel.fromMap,
       ),
     ];
@@ -202,10 +201,8 @@ void main() {
         final modelColumns = columns.difference(schemaOnly);
         final toMapKeys = pair.sampleToMap().keys.toSet().difference(toMapOnly);
 
-        final missingFromToMap =
-            modelColumns.difference(toMapKeys);
-        final missingFromSchema =
-            toMapKeys.difference(columns);
+        final missingFromToMap = modelColumns.difference(toMapKeys);
+        final missingFromSchema = toMapKeys.difference(columns);
 
         expect(
           missingFromToMap,
@@ -222,9 +219,7 @@ void main() {
               '$missingFromSchema',
         );
 
-        final row = <String, dynamic>{
-          for (final col in columns) col: null,
-        };
+        final row = <String, dynamic>{for (final col in columns) col: null};
         for (final col in modelColumns) {
           row[col] = _sampleValueForColumn(
             col,

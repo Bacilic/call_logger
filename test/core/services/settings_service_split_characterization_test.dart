@@ -36,12 +36,12 @@ void main() {
 
     test('remote_lansweeper: get/set calls primary tool id', () async {
       final store = <String, String>{};
-      SettingsService.registerAppSettingsProvider(
-        (key) async => store[key],
-        (key, value) async {
-          store[key] = value;
-        },
-      );
+      SettingsService.registerAppSettingsProvider((key) async => store[key], (
+        key,
+        value,
+      ) async {
+        store[key] = value;
+      });
       final settings = SettingsService();
       expect(await settings.getCallsPrimaryToolId(), isNull);
       await settings.setCallsPrimaryToolId(42);
@@ -97,12 +97,12 @@ void main() {
       final store = <String, String>{
         'lansweeper_api_url': 'https://example.com/api.aspx',
       };
-      SettingsService.registerAppSettingsProvider(
-        (key) async => store[key],
-        (key, value) async {
-          store[key] = value;
-        },
-      );
+      SettingsService.registerAppSettingsProvider((key) async => store[key], (
+        key,
+        value,
+      ) async {
+        store[key] = value;
+      });
       final settings = SettingsService();
       expect(
         await settings.getLansweeperApiUrl(),
@@ -115,26 +115,24 @@ void main() {
         'lansweeper_api_url': 'not-a-valid-url',
         'lansweeper_url': 'ftp://legacy.example.com/page',
       };
-      SettingsService.registerAppSettingsProvider(
-        (key) async => store[key],
-        (key, value) async {
-          store[key] = value;
-        },
-      );
+      SettingsService.registerAppSettingsProvider((key) async => store[key], (
+        key,
+        value,
+      ) async {
+        store[key] = value;
+      });
       final settings = SettingsService();
       expect(await settings.getLansweeperApiUrl(), isNull);
     });
 
     test('getEquipmentTypesList: CSV με κενά και άδειες τιμές', () async {
-      final store = <String, String>{
-        'equipment_types': '  PC , , Laptop ,  ',
-      };
-      SettingsService.registerAppSettingsProvider(
-        (key) async => store[key],
-        (key, value) async {
-          store[key] = value;
-        },
-      );
+      final store = <String, String>{'equipment_types': '  PC , , Laptop ,  '};
+      SettingsService.registerAppSettingsProvider((key) async => store[key], (
+        key,
+        value,
+      ) async {
+        store[key] = value;
+      });
       final settings = SettingsService();
       expect(await settings.getEquipmentTypesList(), ['PC', 'Laptop']);
     });

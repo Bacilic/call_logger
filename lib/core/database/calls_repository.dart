@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:intl/intl.dart';
@@ -64,6 +64,7 @@ class CallsRepository
     'lansweeper_last_sync_at',
     'is_deleted',
   ];
+
   /// Ενημέρωση ενός FK πεδίου κλήσης (integrity fix — χωρίς audit, το κάνει ο caller).
   Future<Map<String, dynamic>?> integrityUpdateCallFk(
     DatabaseExecutor executor,
@@ -125,7 +126,7 @@ class CallsRepository
     DatabaseExecutor executor,
     CallModel call, {
     Future<void> Function(DatabaseExecutor txn, String auditOriginSuffix)?
-        afterCallInserted,
+    afterCallInserted,
   }) async {
     final map = _callInsertMap(call);
     map['search_index'] = await _buildCallSearchIndex(executor, map);
@@ -165,9 +166,7 @@ class CallsRepository
   /// Κλήση + audit στο ίδιο transaction· σε αποτυχία rollback ([CallSaveException]).
   Future<int> insertCall(CallModel call) async {
     try {
-      return await db.transaction(
-        (txn) => insertCallOnExecutor(txn, call),
-      );
+      return await db.transaction((txn) => insertCallOnExecutor(txn, call));
     } catch (e) {
       if (e is CallSaveException) rethrow;
       throw CallSaveException('Η κλήση δεν αποθηκεύτηκε. Δοκιμάστε ξανά.');
@@ -260,6 +259,7 @@ class CallsRepository
       throw CallSaveException('Η κλήση δεν ενημερώθηκε. Δοκιμάστε ξανά.');
     }
   }
+
   Future<int> cloneCall(int sourceCallId) async {
     final source = await getCallById(sourceCallId);
     if (source == null) {
@@ -516,6 +516,7 @@ class CallsRepository
     );
     return (rows.first['c'] as int?) ?? 0;
   }
+
   Future<CallModel?> getCallById(int callId) async {
     final rows = await db.query(
       'calls',

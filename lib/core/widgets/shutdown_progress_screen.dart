@@ -169,43 +169,43 @@ class _ShutdownStepTile extends StatelessWidget {
     final theme = Theme.of(context);
     final (icon, color, trailing) = switch (status) {
       _StepStatus.pending => (
-          Icons.circle_outlined,
-          theme.colorScheme.outline,
-          null,
-        ),
+        Icons.circle_outlined,
+        theme.colorScheme.outline,
+        null,
+      ),
       _StepStatus.running => (
-          Icons.hourglass_top,
-          theme.colorScheme.primary,
-          Text(
-            _formatElapsed(elapsedMs),
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.colorScheme.primary,
-              fontFeatures: const [FontFeature.tabularFigures()],
-            ),
+        Icons.hourglass_top,
+        theme.colorScheme.primary,
+        Text(
+          _formatElapsed(elapsedMs),
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.primary,
+            fontFeatures: const [FontFeature.tabularFigures()],
           ),
         ),
+      ),
       _StepStatus.completed => (
-          Icons.check_circle,
-          theme.colorScheme.primary,
-          elapsedMs > 0
-              ? Text(
-                  _formatElapsed(elapsedMs),
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                )
-              : null,
-        ),
+        Icons.check_circle,
+        theme.colorScheme.primary,
+        elapsedMs > 0
+            ? Text(
+                _formatElapsed(elapsedMs),
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              )
+            : null,
+      ),
       _StepStatus.failed || _StepStatus.interrupted => (
-          Icons.cancel,
-          theme.colorScheme.error,
-          Text(
-            'διακόπηκε',
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.colorScheme.error,
-            ),
+        Icons.cancel,
+        theme.colorScheme.error,
+        Text(
+          'διακόπηκε',
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.error,
           ),
         ),
+      ),
     };
 
     return ListTile(

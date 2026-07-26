@@ -36,10 +36,10 @@ void main() {
     });
 
     Map<String, dynamic> departmentRow(String name) => {
-          'name': name,
-          'name_key': SearchTextNormalizer.normalizeForSearch(name),
-          'is_deleted': 0,
-        };
+      'name': name,
+      'name_key': SearchTextNormalizer.normalizeForSearch(name),
+      'is_deleted': 0,
+    };
 
     test(
       'atomicity: failure μέσα σε εξωτερική transaction κάνει rollback insertDepartment',
@@ -88,11 +88,19 @@ void main() {
         );
 
         expect(
-          await db.query('departments', where: 'name = ?', whereArgs: [deptName]),
+          await db.query(
+            'departments',
+            where: 'name = ?',
+            whereArgs: [deptName],
+          ),
           isEmpty,
         );
         expect(
-          await db.query('phones', where: 'number = ?', whereArgs: ['2310999888']),
+          await db.query(
+            'phones',
+            where: 'number = ?',
+            whereArgs: ['2310999888'],
+          ),
           isEmpty,
         );
         expect(await db.query('department_phones'), isEmpty);
@@ -114,11 +122,9 @@ void main() {
             '2310111222',
             executor: txn,
           );
-          await departments.updateDepartment(
-            id,
-            {'notes': 'ενημέρωση εντός txn'},
-            executor: txn,
-          );
+          await departments.updateDepartment(id, {
+            'notes': 'ενημέρωση εντός txn',
+          }, executor: txn);
         });
 
         final deptRows = await db.query(
@@ -141,13 +147,14 @@ void main() {
     test(
       'regression: χωρίς executor insertDepartment / updateDepartment ίδια συμπεριφορά',
       () async {
-        final id = await departments.insertDepartment(departmentRow('Τμήμα Regression'));
+        final id = await departments.insertDepartment(
+          departmentRow('Τμήμα Regression'),
+        );
         expect(id, greaterThan(0));
 
-        final updated = await departments.updateDepartment(
-          id,
-          {'notes': 'σημείωση'},
-        );
+        final updated = await departments.updateDepartment(id, {
+          'notes': 'σημείωση',
+        });
         expect(updated, 1);
 
         final row = await db.query(
@@ -179,7 +186,9 @@ void main() {
     test(
       'regression: add/removeDepartmentDirectPhone χωρίς executor',
       () async {
-        final id = await departments.insertDepartment(departmentRow('Τμήμα Τηλέφωνα'));
+        final id = await departments.insertDepartment(
+          departmentRow('Τμήμα Τηλέφωνα'),
+        );
         await phones.addDepartmentDirectPhone(id, '2310333444');
         expect(
           await phones.getDepartmentDirectPhonesMap(),
@@ -187,7 +196,10 @@ void main() {
         );
 
         await phones.removeDepartmentDirectPhone(id, '2310333444');
-        expect(await phones.getDepartmentDirectPhonesMap(), isNot(contains(id)));
+        expect(
+          await phones.getDepartmentDirectPhonesMap(),
+          isNot(contains(id)),
+        );
       },
     );
   });

@@ -3,7 +3,9 @@ import 'package:call_logger/features/calls/provider/call_header_provider.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-final _pendingTaskFieldsProbe = Provider((ref) => callsFormPendingTaskFields(ref));
+final _pendingTaskFieldsProbe = Provider(
+  (ref) => callsFormPendingTaskFields(ref),
+);
 
 void main() {
   group('callsFormPendingTaskFields — phoneId vs phoneText', () {

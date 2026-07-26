@@ -10,10 +10,7 @@ import '../../../features/calls/provider/call_header_provider.dart';
 import '../../../features/database/providers/backup_scheduler_provider.dart';
 
 /// True όταν υπάρχει ενεργή ή μη αποθηκευμένη καταγραφή κλήσης.
-bool hasOpenCallSession(
-  CallEntryState entry,
-  SmartEntitySelectorState header,
-) {
+bool hasOpenCallSession(CallEntryState entry, SmartEntitySelectorState header) {
   if (entry.isCallTimerRunning || entry.retainPlayPauseAfterManualZero) {
     return true;
   }
@@ -34,9 +31,9 @@ class StartFromBeginningFlow {
   StartFromBeginningFlow._();
 
   static void _returnToCallsScreen(BuildContext context, WidgetRef ref) {
-    ref.read(mainNavRequestProvider.notifier).request(
-          const MainNavRequest(destination: MainNavDestination.calls),
-        );
+    ref
+        .read(mainNavRequestProvider.notifier)
+        .request(const MainNavRequest(destination: MainNavDestination.calls));
     Navigator.of(context).pop();
   }
 
@@ -190,10 +187,10 @@ class _ResetWarningBody extends StatelessWidget {
           Text(
             backupMeta.latestBackupLabel == null
                 ? 'Διατηρούνται αντίγραφα ασφαλείας στο φάκελο: '
-                    '${backupMeta.destinationFolderName}.'
+                      '${backupMeta.destinationFolderName}.'
                 : 'Διατηρούνται αντίγραφα ασφαλείας στο φάκελο: '
-                    '${backupMeta.destinationFolderName} — πιο πρόσφατο: '
-                    '${backupMeta.latestBackupLabel}.',
+                      '${backupMeta.destinationFolderName} — πιο πρόσφατο: '
+                      '${backupMeta.latestBackupLabel}.',
             style: bodyStyle,
           ),
         ],

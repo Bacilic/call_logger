@@ -78,7 +78,8 @@ void main() {
           expect(
             await out.exists(),
             isTrue,
-            reason: 'Το script σε φάκελο με κενό δεν εκτελέστηκε — '
+            reason:
+                'Το script σε φάκελο με κενό δεν εκτελέστηκε — '
                 'η γραμμή εντολών του cmd έσπασε.',
           );
           expect(await out.readAsString(), contains('PID=4242'));

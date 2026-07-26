@@ -21,6 +21,7 @@ class BuildingMapOmnisearchHit {
   final int entityId;
   final String title;
   final String? subtitle;
+
   /// Ετικέτα όπως εμφανίζεται στον χάρτη (αν διαφέρει από [title]).
   final String? mapDisplayLabel;
   final List<int> departmentIds;
@@ -29,17 +30,14 @@ class BuildingMapOmnisearchHit {
 /// Read-only αναζήτηση καταλόγου για τον χάρτη κτιρίου (τμήματα, χρήστες, εξοπλισμός).
 class OmnisearchService {
   OmnisearchService(this.db, [DirectorySupport? support])
-      : _support = support ?? DirectorySupport(db),
-        _buildingMap = BuildingMapRepository(db, support);
+    : _support = support ?? DirectorySupport(db),
+      _buildingMap = BuildingMapRepository(db, support);
 
   final Database db;
   final DirectorySupport _support;
   final BuildingMapRepository _buildingMap;
 
-  int _omnisearchRank({
-    required String query,
-    required List<String> fields,
-  }) {
+  int _omnisearchRank({required String query, required List<String> fields}) {
     var best = 3;
     for (final raw in fields) {
       final value = SearchTextNormalizer.normalizeForSearch(raw);
@@ -67,10 +65,7 @@ class OmnisearchService {
     return (g != null && g.isNotEmpty) ? '$g · ${f.label}' : f.label;
   }
 
-  bool _isDepartmentMappedOnMap(
-    Map<String, dynamic> row,
-    Set<int> floorIds,
-  ) {
+  bool _isDepartmentMappedOnMap(Map<String, dynamic> row, Set<int> floorIds) {
     final w = (row['map_width'] as num?)?.toDouble() ?? 0;
     final h = (row['map_height'] as num?)?.toDouble() ?? 0;
     if (w <= 0 || h <= 0) return false;
@@ -217,7 +212,15 @@ class OmnisearchService {
       userPhoneDepartmentIds.putIfAbsent(uid, () => <int>{}).add(did);
     }
 
-    final hits = <(int rank, int kindOrder, String sortKey, BuildingMapOmnisearchHit hit)>[];
+    final hits =
+        <
+          (
+            int rank,
+            int kindOrder,
+            String sortKey,
+            BuildingMapOmnisearchHit hit,
+          )
+        >[];
 
     for (final row in deptRows) {
       final id = row['id'] as int?;
@@ -259,7 +262,10 @@ class OmnisearchService {
       final phonesCsv = (row['phones_csv'] as String?)?.trim() ?? '';
       final deptName = (row['department_name'] as String?)?.trim() ?? '';
       final searchableText = '$fullName $phonesCsv $deptName'.trim();
-      if (!SearchTextNormalizer.matchesNormalizedQuery(searchableText, normalized)) {
+      if (!SearchTextNormalizer.matchesNormalizedQuery(
+        searchableText,
+        normalized,
+      )) {
         continue;
       }
       final departmentIds = <int>{};
@@ -307,7 +313,10 @@ class OmnisearchService {
       final notes = (row['notes'] as String?)?.trim() ?? '';
       final deptName = (row['department_name'] as String?)?.trim() ?? '';
       final searchableText = '$code $type $notes $deptName'.trim();
-      if (!SearchTextNormalizer.matchesNormalizedQuery(searchableText, normalized)) {
+      if (!SearchTextNormalizer.matchesNormalizedQuery(
+        searchableText,
+        normalized,
+      )) {
         continue;
       }
       final title = code.isNotEmpty
@@ -317,9 +326,7 @@ class OmnisearchService {
       if (type.isNotEmpty && type != title) subtitleParts.add(type);
       if (deptName.isNotEmpty) subtitleParts.add(deptName);
       final equipmentDepartmentId = row['department_id'] as int?;
-      final departmentIds = <int>[
-        ?equipmentDepartmentId,
-      ];
+      final departmentIds = <int>[?equipmentDepartmentId];
       if (departmentIds.length == 1 && departmentIds.first > 0) {
         final hint = _omnisearchUnmappedHintForDepartmentId(
           departmentIds.first,

@@ -140,8 +140,7 @@ class _SmartTransferField extends StatelessWidget {
     final lampHint = (field.lampValue?.trim().isNotEmpty ?? false)
         ? 'Λάμπα: ${field.lampValue!.trim()}'
         : null;
-    final destinationHint =
-        (field.destinationValue?.trim().isNotEmpty ?? false)
+    final destinationHint = (field.destinationValue?.trim().isNotEmpty ?? false)
         ? 'Προορισμός: ${field.destinationValue!.trim()}'
         : null;
 
@@ -302,9 +301,9 @@ class _WarningBanner extends StatelessWidget {
             Expanded(
               child: Text(
                 'Ελέγξτε τα πεδία με προειδοποίηση πριν την αποθήκευση.',
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: scheme.onErrorContainer,
-                ),
+                style: Theme.of(
+                  context,
+                ).textTheme.bodySmall?.copyWith(color: scheme.onErrorContainer),
               ),
             ),
           ],
@@ -356,10 +355,8 @@ class TransferFieldActionChip extends StatelessWidget {
   }
 }
 
-({Color background, Color border, Color foreground}) transferFieldActionChipColors(
-  TransferFieldAction action,
-  ColorScheme scheme,
-) {
+({Color background, Color border, Color foreground})
+transferFieldActionChipColors(TransferFieldAction action, ColorScheme scheme) {
   return switch (action) {
     TransferFieldAction.created => (
       background: const Color(0xFFE8F5E9),

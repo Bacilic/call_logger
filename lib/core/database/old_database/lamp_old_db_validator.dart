@@ -1,4 +1,4 @@
-﻿import 'dart:io';
+import 'dart:io';
 
 import 'package:path/path.dart' as path;
 import 'package:sqflite_common/sqflite.dart';
@@ -12,8 +12,10 @@ const String kLampExcelImportButtonLabel = 'Δημιουργία βάσης απ
 /// Αποτέλεσμα ελέγχου αρχείου .db «Λάμπα» για ανάγνωση (read path).
 enum LampOldDbStatus {
   pathEmpty,
+
   /// Η διαδρομή ανάγνωσης ταυτίζεται με εξόδου· το .db θα δημιουργηθεί από Excel.
   pendingCreation,
+
   /// Διαδρομή χωρίς κατάληξη .db ή άλλο σφάλμα μορφής (π.χ. επικόλληση φακέλου).
   invalidPathFormat,
   fileMissing,
@@ -22,8 +24,10 @@ enum LampOldDbStatus {
   openFailed,
   notOldEquipmentDb,
   ok,
+
   /// Διαδρομή εξόδου χωρίς υπάρχον αρχείο — θα δημιουργηθεί από import.
   outputPendingCreation,
+
   /// Έγκυρη βάση Λάμπας στη διαδρομή εξόδου — θα ξαναδημιουργηθεί από import.
   outputWillUpdate,
 
@@ -264,7 +268,9 @@ class LampOldDbValidator {
     final file = File(dbPath);
     try {
       if (!await file.exists()) {
-        return const LampOldDbCheckResult(LampOldDbStatus.outputPendingCreation);
+        return const LampOldDbCheckResult(
+          LampOldDbStatus.outputPendingCreation,
+        );
       }
     } on FileSystemException catch (e) {
       return LampOldDbCheckResult(

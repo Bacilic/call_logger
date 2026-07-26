@@ -80,7 +80,10 @@ void main() {
           (p) => p.originalValue == 'Άννα Πατσαρίκα',
         );
 
-        expect(proposal.proposedAction, isNot(LampIssueResolutionAction.unresolved));
+        expect(
+          proposal.proposedAction,
+          isNot(LampIssueResolutionAction.unresolved),
+        );
         expect(proposal.confidence, greaterThanOrEqualTo(80));
         expect(
           proposal.options.any(
@@ -117,9 +120,7 @@ void main() {
 Future<String> _importSemanticsWorkbook(Directory tempDir) async {
   final excel = Excel.createExcel();
   void appendTexts(String sheet, List<String> values) {
-    excel[sheet].appendRow(
-      values.map<CellValue?>(TextCellValue.new).toList(),
-    );
+    excel[sheet].appendRow(values.map<CellValue?>(TextCellValue.new).toList());
   }
 
   appendTexts('offices', <String>['office', 'office_name']);

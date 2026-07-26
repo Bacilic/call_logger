@@ -9,10 +9,10 @@ class AuditSummarySegment {
   const AuditSummarySegment._(this.kind, this.value);
 
   const AuditSummarySegment.text(String value)
-      : this._(AuditSummarySegmentKind.text, value);
+    : this._(AuditSummarySegmentKind.text, value);
 
   const AuditSummarySegment.color(String value)
-      : this._(AuditSummarySegmentKind.color, value);
+    : this._(AuditSummarySegmentKind.color, value);
 
   final AuditSummarySegmentKind kind;
   final String value;
@@ -29,7 +29,9 @@ List<AuditSummarySegment> parseAuditSummarySegments(String input) {
 
   for (final match in _auditSummaryHexTokenPattern.allMatches(input)) {
     if (match.start > cursor) {
-      segments.add(AuditSummarySegment.text(input.substring(cursor, match.start)));
+      segments.add(
+        AuditSummarySegment.text(input.substring(cursor, match.start)),
+      );
     }
     segments.add(AuditSummarySegment.color(match.group(0)!));
     cursor = match.end;
@@ -65,7 +67,12 @@ class AuditSummaryRichText extends StatelessWidget {
     final segments = parseAuditSummarySegments(text);
 
     if (segments.isEmpty) {
-      return Text('', style: effectiveStyle, maxLines: maxLines, overflow: overflow);
+      return Text(
+        '',
+        style: effectiveStyle,
+        maxLines: maxLines,
+        overflow: overflow,
+      );
     }
 
     return Text.rich(
@@ -118,19 +125,17 @@ void showSaveConfirmationSnackBar(
 }) {
   final theme = Theme.of(context);
   final snackBarTheme = theme.snackBarTheme;
-  final textStyle = (snackBarTheme.contentTextStyle ?? theme.textTheme.bodyMedium)
-      ?.copyWith(
-        color: snackBarTheme.contentTextStyle?.color ??
+  final textStyle =
+      (snackBarTheme.contentTextStyle ?? theme.textTheme.bodyMedium)?.copyWith(
+        color:
+            snackBarTheme.contentTextStyle?.color ??
             theme.colorScheme.onInverseSurface,
       );
 
   final target = messenger ?? ScaffoldMessenger.maybeOf(context);
   target?.showSnackBar(
     SnackBar(
-      content: AuditSummaryRichText(
-        text: message,
-        style: textStyle,
-      ),
+      content: AuditSummaryRichText(text: message, style: textStyle),
       duration: saveConfirmationSnackBarDuration(message),
     ),
   );

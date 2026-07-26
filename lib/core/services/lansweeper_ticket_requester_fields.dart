@@ -1,4 +1,4 @@
-﻿import 'package:email_validator/email_validator.dart';
+import 'package:email_validator/email_validator.dart';
 
 /// Πεδία για Lansweeper `AddTicket`: πράκτορας (agent) και αιτών (requester)
 /// με την **ίδια** καταχώριση — χρήστης τομέα `domain\username`.
@@ -10,15 +10,9 @@ Map<String, String> lansweeperAgentAsMatchingRequesterFields(
 ) {
   final value = domainUsername.trim();
   if (lansweeperAgentValueLooksLikeEmail(value)) {
-    return <String, String>{
-      'Email': value,
-      'AgentEmail': value,
-    };
+    return <String, String>{'Email': value, 'AgentEmail': value};
   }
-  return <String, String>{
-    'Username': value,
-    'AgentUsername': value,
-  };
+  return <String, String>{'Username': value, 'AgentUsername': value};
 }
 
 /// Κρίνει αν η τιμή μοιάζει με έγκυρο email (πακέτο `email_validator`,

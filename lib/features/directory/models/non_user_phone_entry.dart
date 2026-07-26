@@ -9,13 +9,15 @@ class NonUserPhoneEntry {
 
   final int phoneId;
   final String number;
+
   /// Ονόματα τμημάτων (π.χ. GROUP_CONCAT) ή κενό.
   final String? departmentNamesDisplay;
+
   /// Ελάχιστο id έγκυρου τμήματος για άνοιγμα φόρμας τμήματος (ή null).
   final int? primaryDepartmentId;
 
   String get departmentLabel =>
       (departmentNamesDisplay?.trim().isNotEmpty ?? false)
-          ? departmentNamesDisplay!.trim()
-          : '—';
+      ? departmentNamesDisplay!.trim()
+      : '—';
 }

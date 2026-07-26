@@ -4,17 +4,17 @@ import 'package:call_logger/features/calls/utils/remote_param_validator.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 RemoteTool _tool(ToolRole role, {int id = 1}) => RemoteTool(
-      id: id,
-      name: 'Test $role',
-      role: role,
-      executablePath: r'C:\test.exe',
-      sortOrder: 1,
-      isActive: true,
-    );
+  id: id,
+  name: 'Test $role',
+  role: role,
+  executablePath: r'C:\test.exe',
+  sortOrder: 1,
+  isActive: true,
+);
 
 void main() {
   group('RemoteParamValidator', () {
-  group('VNC (ToolRole.vnc)', () {
+    group('VNC (ToolRole.vnc)', () {
       final vnc = _tool(ToolRole.vnc);
 
       test('10.0.0.55 → null', () {
@@ -248,16 +248,16 @@ void main() {
       final rdpHost = _tool(ToolRole.rdp, id: 2);
 
       String? validateVnc(String value) => RemoteParamValidator.validate(
-            tool: vnc,
-            value: value,
-            acceptsFileParam: false,
-          );
+        tool: vnc,
+        value: value,
+        acceptsFileParam: false,
+      );
 
       String? validateRdpHost(String value) => RemoteParamValidator.validate(
-            tool: rdpHost,
-            value: value,
-            acceptsFileParam: false,
-          );
+        tool: rdpHost,
+        value: value,
+        acceptsFileParam: false,
+      );
 
       test('3164, hostname και έγκυρη IPv4 παραμένουν έγκυρα', () {
         for (final value in ['3164', 'server1', '10.0.0.55']) {
@@ -290,25 +290,34 @@ void main() {
         expect(validateRdpHost('10.10Ο.25.12'), msg);
       });
 
-      test('μη αποδεκτός χαρακτήρας → «Μη αποδεκτός χαρακτήρας "x" στη διεύθυνση.»', () {
-        const msg = 'Μη αποδεκτός χαρακτήρας "x" στη διεύθυνση.';
-        expect(validateVnc('10.10.x.25'), msg);
-        expect(validateRdpHost('10.10.x.25'), msg);
-      });
+      test(
+        'μη αποδεκτός χαρακτήρας → «Μη αποδεκτός χαρακτήρας "x" στη διεύθυνση.»',
+        () {
+          const msg = 'Μη αποδεκτός χαρακτήρας "x" στη διεύθυνση.';
+          expect(validateVnc('10.10.x.25'), msg);
+          expect(validateRdpHost('10.10.x.25'), msg);
+        },
+      );
 
-      test('3 ομάδες → «Η IP θέλει 4 αριθμούς χωρισμένους με τελείες — βρέθηκαν 3.»', () {
-        const msg =
-            'Η IP θέλει 4 αριθμούς χωρισμένους με τελείες — βρέθηκαν 3.';
-        expect(validateVnc('10.10.25'), msg);
-        expect(validateRdpHost('10.10.25'), msg);
-      });
+      test(
+        '3 ομάδες → «Η IP θέλει 4 αριθμούς χωρισμένους με τελείες — βρέθηκαν 3.»',
+        () {
+          const msg =
+              'Η IP θέλει 4 αριθμούς χωρισμένους με τελείες — βρέθηκαν 3.';
+          expect(validateVnc('10.10.25'), msg);
+          expect(validateRdpHost('10.10.25'), msg);
+        },
+      );
 
-      test('5 ομάδες → «Η IP θέλει 4 αριθμούς χωρισμένους με τελείες — βρέθηκαν 5.»', () {
-        const msg =
-            'Η IP θέλει 4 αριθμούς χωρισμένους με τελείες — βρέθηκαν 5.';
-        expect(validateVnc('10.10.25.12.5'), msg);
-        expect(validateRdpHost('10.10.25.12.5'), msg);
-      });
+      test(
+        '5 ομάδες → «Η IP θέλει 4 αριθμούς χωρισμένους με τελείες — βρέθηκαν 5.»',
+        () {
+          const msg =
+              'Η IP θέλει 4 αριθμούς χωρισμένους με τελείες — βρέθηκαν 5.';
+          expect(validateVnc('10.10.25.12.5'), msg);
+          expect(validateRdpHost('10.10.25.12.5'), msg);
+        },
+      );
 
       test('256 → «Το 256 ξεπερνά το όριο 255 κάθε τμήματος της IP.»', () {
         const msg = 'Το 256 ξεπερνά το όριο 255 κάθε τμήματος της IP.';

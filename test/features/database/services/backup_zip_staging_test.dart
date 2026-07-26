@@ -48,9 +48,7 @@ void main() {
           utf8.encode('STAGEDDB'),
         ),
       );
-      archive.addFile(
-        ArchiveFile('other.db', 5, utf8.encode('OTHER')),
-      );
+      archive.addFile(ArchiveFile('other.db', 5, utf8.encode('OTHER')));
       final manifest = BackupZipManifest(
         originalDatabasePath: r'D:\old\call_logger.db',
         databaseFileName: 'call_logger.db',
@@ -77,7 +75,9 @@ void main() {
       expect(inventory.eligibleCandidates, hasLength(2));
       expect(await File(destination).readAsString(), 'DO_NOT_TOUCH');
       expect(
-        File(DatabaseZipPickRestore.targetDatabasePathFor(zipPath)).existsSync(),
+        File(
+          DatabaseZipPickRestore.targetDatabasePathFor(zipPath),
+        ).existsSync(),
         isFalse,
         reason: 'η απογραφή δεν εξάγει μόνιμα την επιλεγμένη βάση',
       );

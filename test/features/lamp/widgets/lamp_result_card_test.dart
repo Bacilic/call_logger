@@ -13,16 +13,16 @@ void main() {
     await initializeDateFormatting('el');
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(SystemChannels.platform, (call) async {
-      switch (call.method) {
-        case 'Clipboard.setData':
-          final args = call.arguments as Map<Object?, Object?>;
-          clipboardText = args['text'] as String?;
+          switch (call.method) {
+            case 'Clipboard.setData':
+              final args = call.arguments as Map<Object?, Object?>;
+              clipboardText = args['text'] as String?;
+              return null;
+            case 'Clipboard.getData':
+              return <String, Object?>{'text': clipboardText};
+          }
           return null;
-        case 'Clipboard.getData':
-          return <String, Object?>{'text': clipboardText};
-      }
-      return null;
-    });
+        });
   });
 
   tearDownAll(() {
@@ -95,9 +95,11 @@ void main() {
   testWidgets('Lamp result card κρύβει κενές ενότητες και γραμμές', (
     tester,
   ) async {
-    await _pumpCard(tester, width: 1300, row: const <String, Object?>{
-      'code': 1001,
-    });
+    await _pumpCard(
+      tester,
+      width: 1300,
+      row: const <String, Object?>{'code': 1001},
+    );
 
     expect(find.text('ΕΞΟΠΛΙΣΜΟΣ'), findsOneWidget);
     expect(find.text('ΜΟΝΤΕΛΟ'), findsNothing);
@@ -139,9 +141,7 @@ void main() {
   ) async {
     await _pumpCard(tester, width: 1300, row: _fullRow);
 
-    await tester.tap(
-      find.byTooltip('Αντιγραφή Email').first,
-    );
+    await tester.tap(find.byTooltip('Αντιγραφή Email').first);
     await tester.pump();
 
     final clipboard = await Clipboard.getData(Clipboard.kTextPlain);
@@ -160,23 +160,29 @@ void main() {
       tester,
       width: 1300,
       row: _fullRow,
-      onSaveSection: ({required id, required sectionType, required updatedFields}) async {
-        savedFields = updatedFields;
-        return const EquipmentSectionSaveResult(success: true);
-      },
+      onSaveSection:
+          ({required id, required sectionType, required updatedFields}) async {
+            savedFields = updatedFields;
+            return const EquipmentSectionSaveResult(success: true);
+          },
     );
 
     await tester.tap(find.byTooltip('Επεξεργασία ΙΔΙΟΚΤΗΤΗΣ'));
     await tester.pumpAndSettle();
     expect(find.widgetWithText(FilledButton, 'Αποθήκευση'), findsOneWidget);
-    final saveButton =
-        tester.widget<FilledButton>(find.widgetWithText(FilledButton, 'Αποθήκευση'));
+    final saveButton = tester.widget<FilledButton>(
+      find.widgetWithText(FilledButton, 'Αποθήκευση'),
+    );
     expect(saveButton.onPressed, isNull);
 
-    await tester.enterText(find.widgetWithText(TextFormField, 'Email'), 'new@example.gr');
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'Email'),
+      'new@example.gr',
+    );
     await tester.pumpAndSettle();
-    final enabledSave =
-        tester.widget<FilledButton>(find.widgetWithText(FilledButton, 'Αποθήκευση'));
+    final enabledSave = tester.widget<FilledButton>(
+      find.widgetWithText(FilledButton, 'Αποθήκευση'),
+    );
     expect(enabledSave.onPressed, isNotNull);
 
     await tester.tap(find.widgetWithText(FilledButton, 'Αποθήκευση'));
@@ -204,9 +210,7 @@ void main() {
       final elementBeforeHover = tester.element(sectionFinder);
 
       final cardCenter = tester.getCenter(find.byType(EquipmentResultCard));
-      final gesture = await tester.createGesture(
-        kind: PointerDeviceKind.mouse,
-      );
+      final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
       await gesture.addPointer(location: cardCenter);
       await gesture.moveTo(cardCenter);
       await tester.pump();
@@ -215,7 +219,8 @@ void main() {
       expect(
         identical(elementBeforeHover, elementAfterHover),
         isTrue,
-        reason: 'Το hover δεν πρέπει να προκαλεί rebuild του περιεχομένου ενότητας',
+        reason:
+            'Το hover δεν πρέπει να προκαλεί rebuild του περιεχομένου ενότητας',
       );
 
       final card = tester.widget<Card>(find.byType(Card));

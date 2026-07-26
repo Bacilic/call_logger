@@ -44,132 +44,126 @@ Color? _firstMatchingColor(TextSpan span, String fragment) {
 
 void main() {
   group('AiPromptTemplateTextEditingController', () {
-    testWidgets(
-      'buildTextSpan χρωματίζει placeholders και blocks',
-      (tester) async {
-        late TextSpan span;
-        const baseStyle = TextStyle(fontSize: 14, height: 1.45);
-        final controller = AiPromptTemplateTextEditingController(
-          text:
-              'Υπάλληλος: {Υπάλληλος}. {@Τμήμα}Τμήμα: {Τμήμα}. {@/Τμήμα}',
-        );
-        addTearDown(controller.dispose);
+    testWidgets('buildTextSpan χρωματίζει placeholders και blocks', (
+      tester,
+    ) async {
+      late TextSpan span;
+      const baseStyle = TextStyle(fontSize: 14, height: 1.45);
+      final controller = AiPromptTemplateTextEditingController(
+        text: 'Υπάλληλος: {Υπάλληλος}. {@Τμήμα}Τμήμα: {Τμήμα}. {@/Τμήμα}',
+      );
+      addTearDown(controller.dispose);
 
-        await tester.pumpWidget(
-          MaterialApp(
-            home: Builder(
-              builder: (context) {
-                span = controller.buildTextSpan(
-                  context: context,
-                  style: baseStyle,
-                  withComposing: false,
-                );
-                return const SizedBox.shrink();
-              },
-            ),
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (context) {
+              span = controller.buildTextSpan(
+                context: context,
+                style: baseStyle,
+                withComposing: false,
+              );
+              return const SizedBox.shrink();
+            },
           ),
-        );
+        ),
+      );
 
-        expect(
-          _firstMatchingColor(span, '{Υπάλληλος}'),
-          _kPlaceholderGreen,
-          reason: 'Το γνωστό placeholder πρέπει να είναι πράσινο',
-        );
-        expect(
-          _firstMatchingColor(span, '{@Τμήμα}'),
-          _kBlockBlue,
-          reason: 'Το άνοιγμα block πρέπει να είναι μπλε',
-        );
-        expect(
-          _firstMatchingColor(span, '{@/Τμήμα}'),
-          _kBlockBlue,
-          reason: 'Το κλείσιμο block πρέπει να είναι μπλε',
-        );
-      },
-    );
+      expect(
+        _firstMatchingColor(span, '{Υπάλληλος}'),
+        _kPlaceholderGreen,
+        reason: 'Το γνωστό placeholder πρέπει να είναι πράσινο',
+      );
+      expect(
+        _firstMatchingColor(span, '{@Τμήμα}'),
+        _kBlockBlue,
+        reason: 'Το άνοιγμα block πρέπει να είναι μπλε',
+      );
+      expect(
+        _firstMatchingColor(span, '{@/Τμήμα}'),
+        _kBlockBlue,
+        reason: 'Το κλείσιμο block πρέπει να είναι μπλε',
+      );
+    });
   });
 
   group('AiPromptTemplateField (widget)', () {
-    testWidgets(
-      'δεν χρησιμοποιεί διπλό Stack/Transform για highlight',
-      (tester) async {
-        final controller = AiPromptTemplateTextEditingController(
-          text: _multiLineOverflowTemplate(),
-        );
-        addTearDown(controller.dispose);
+    testWidgets('δεν χρησιμοποιεί διπλό Stack/Transform για highlight', (
+      tester,
+    ) async {
+      final controller = AiPromptTemplateTextEditingController(
+        text: _multiLineOverflowTemplate(),
+      );
+      addTearDown(controller.dispose);
 
-        await tester.pumpWidget(
-          MaterialApp(
-            home: Scaffold(
-              body: AiPromptTemplateField(controller: controller),
-            ),
-          ),
-        );
-        await tester.pumpAndSettle();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(body: AiPromptTemplateField(controller: controller)),
+        ),
+      );
+      await tester.pumpAndSettle();
 
-        expect(
-          find.byType(TextField),
-          findsOneWidget,
-          reason: 'Ένα μόνο TextField για εισαγωγή και απόδοση',
-        );
-        expect(
-          find.text('JSON απάντησης'),
-          findsOneWidget,
-          reason: 'Κουμπί εισαγωγής blueprint JSON',
-        );
-        expect(
-          find.byTooltip('Πώς λειτουργεί η προτροπή'),
-          findsOneWidget,
-          reason: 'Εικονίδιο βοήθειας για την προτροπή',
-        );
+      expect(
+        find.byType(TextField),
+        findsOneWidget,
+        reason: 'Ένα μόνο TextField για εισαγωγή και απόδοση',
+      );
+      expect(
+        find.text('JSON απάντησης'),
+        findsOneWidget,
+        reason: 'Κουμπί εισαγωγής blueprint JSON',
+      );
+      expect(
+        find.byTooltip('Πώς λειτουργεί η προτροπή'),
+        findsOneWidget,
+        reason: 'Εικονίδιο βοήθειας για την προτροπή',
+      );
 
-        final textField = tester.widget<TextField>(find.byType(TextField));
-        expect(
-          textField.style?.color,
-          isNot(Colors.transparent),
-          reason:
-              'Το κείμενο δεν πρέπει να είναι διαφανές — ο controller κάνει highlight',
-        );
-      },
-    );
+      final textField = tester.widget<TextField>(find.byType(TextField));
+      expect(
+        textField.style?.color,
+        isNot(Colors.transparent),
+        reason:
+            'Το κείμενο δεν πρέπει να είναι διαφανές — ο controller κάνει highlight',
+      );
+    });
 
-    testWidgets(
-      'πολλές γραμμές: scroll χωρίς ξεχωριστό highlight layer',
-      (tester) async {
-        final controller = AiPromptTemplateTextEditingController(
-          text: _multiLineOverflowTemplate(),
-        );
-        addTearDown(controller.dispose);
+    testWidgets('πολλές γραμμές: scroll χωρίς ξεχωριστό highlight layer', (
+      tester,
+    ) async {
+      final controller = AiPromptTemplateTextEditingController(
+        text: _multiLineOverflowTemplate(),
+      );
+      addTearDown(controller.dispose);
 
-        await tester.pumpWidget(
-          MaterialApp(
-            home: Scaffold(
-              body: SingleChildScrollView(
-                child: SizedBox(
-                  width: 480,
-                  child: AiPromptTemplateField(
-                    controller: controller,
-                    minLines: 5,
-                    maxLines: 10,
-                  ),
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SingleChildScrollView(
+              child: SizedBox(
+                width: 480,
+                child: AiPromptTemplateField(
+                  controller: controller,
+                  minLines: 5,
+                  maxLines: 10,
                 ),
               ),
             ),
           ),
-        );
-        await tester.pumpAndSettle();
+        ),
+      );
+      await tester.pumpAndSettle();
 
-        expect(
-          find.textContaining('5η γραμμή υπερχείλισης'),
-          findsOneWidget,
-          reason: 'Η τελευταία γραμμή εμφανίζεται στο ίδιο πεδίο',
-        );
-        expect(
-          find.textContaining('{Υπάλληλος}'),
-          findsOneWidget,
-          reason: 'Τα placeholders εμφανίζονται στο ίδιο πεδίο (buildTextSpan)',
-        );
-      },
-    );
+      expect(
+        find.textContaining('5η γραμμή υπερχείλισης'),
+        findsOneWidget,
+        reason: 'Η τελευταία γραμμή εμφανίζεται στο ίδιο πεδίο',
+      );
+      expect(
+        find.textContaining('{Υπάλληλος}'),
+        findsOneWidget,
+        reason: 'Τα placeholders εμφανίζονται στο ίδιο πεδίο (buildTextSpan)',
+      );
+    });
   });
 }

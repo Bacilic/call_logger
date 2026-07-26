@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../providers/building_map_providers.dart';
@@ -49,7 +49,9 @@ class BuildingMapSearchUnresolvedBanner extends ConsumerWidget {
                 TextButton(
                   onPressed: () {
                     ref
-                        .read(buildingMapSearchUnresolvedNoticeProvider.notifier)
+                        .read(
+                          buildingMapSearchUnresolvedNoticeProvider.notifier,
+                        )
                         .clear();
                     ref
                         .read(buildingMapToolProvider.notifier)

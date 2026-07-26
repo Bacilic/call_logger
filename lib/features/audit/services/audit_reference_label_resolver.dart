@@ -13,7 +13,9 @@ class AuditReferenceLabelResolver {
     return AuditReferenceLabelResolver(DepartmentRepository(db));
   }
 
-  Future<AuditReferenceLabels> resolveForRows(Iterable<AuditLogModel> rows) async {
+  Future<AuditReferenceLabels> resolveForRows(
+    Iterable<AuditLogModel> rows,
+  ) async {
     final deptIds = <int>{};
     for (final row in rows) {
       collectDepartmentIds(row, deptIds);

@@ -24,9 +24,7 @@ class ApplicationPrefsSnapshot {
     if (!await dir.exists()) {
       await dir.create(recursive: true);
     }
-    return File(
-      p.join(dir.path, 'pending_reset_${_profileScopeLabel()}.json'),
-    );
+    return File(p.join(dir.path, 'pending_reset_${_profileScopeLabel()}.json'));
   }
 
   static bool _keyBelongsToCurrentProfile(String key) {
@@ -100,10 +98,7 @@ class ApplicationPrefsSnapshot {
       } else if (value is String) {
         await prefs.setString(key, value);
       } else if (value is List) {
-        await prefs.setStringList(
-          key,
-          value.map((e) => e.toString()).toList(),
-        );
+        await prefs.setStringList(key, value.map((e) => e.toString()).toList());
       }
     }
 

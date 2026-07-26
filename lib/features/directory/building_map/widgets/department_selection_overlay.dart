@@ -27,7 +27,8 @@ class DepartmentSelectionOverlay extends StatefulWidget {
       _DepartmentSelectionOverlayState();
 }
 
-class _DepartmentSelectionOverlayState extends State<DepartmentSelectionOverlay> {
+class _DepartmentSelectionOverlayState
+    extends State<DepartmentSelectionOverlay> {
   late final TextEditingController _searchController;
   late final ScrollController _scrollController;
   bool _groupByFloor = true;
@@ -108,8 +109,9 @@ class _DepartmentSelectionOverlayState extends State<DepartmentSelectionOverlay>
       final out = <({String title, List<DepartmentModel> deps})>[];
       for (final id in ids) {
         final f = floorById[id];
-        final title =
-            f != null ? buildingMapFloorDisplayLabel(f) : 'Όροφος #$id';
+        final title = f != null
+            ? buildingMapFloorDisplayLabel(f)
+            : 'Όροφος #$id';
         out.add((title: title, deps: buckets[id]!));
       }
       if (buckets.containsKey(null)) {
@@ -196,8 +198,9 @@ class _DepartmentSelectionOverlayState extends State<DepartmentSelectionOverlay>
                               ),
                             ),
                             Padding(
-                              padding:
-                                  const EdgeInsets.symmetric(horizontal: 16),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                              ),
                               child: TextField(
                                 controller: _searchController,
                                 autofocus: true,
@@ -249,90 +252,87 @@ class _DepartmentSelectionOverlayState extends State<DepartmentSelectionOverlay>
                                               child: Padding(
                                                 padding:
                                                     const EdgeInsets.fromLTRB(
-                                                  16,
-                                                  12,
-                                                  16,
-                                                  8,
-                                                ),
+                                                      16,
+                                                      12,
+                                                      16,
+                                                      8,
+                                                    ),
                                                 child: Text(
                                                   sec.title,
                                                   style: theme
-                                                      .textTheme.titleSmall
+                                                      .textTheme
+                                                      .titleSmall
                                                       ?.copyWith(
-                                                    color: theme
-                                                        .colorScheme.primary,
-                                                  ),
+                                                        color: theme
+                                                            .colorScheme
+                                                            .primary,
+                                                      ),
                                                 ),
                                               ),
                                             ),
                                             SliverPadding(
                                               padding:
                                                   const EdgeInsets.symmetric(
-                                                horizontal: 12,
-                                              ),
+                                                    horizontal: 12,
+                                                  ),
                                               sliver: SliverGrid(
                                                 gridDelegate:
                                                     SliverGridDelegateWithFixedCrossAxisCount(
-                                                  crossAxisCount: cols,
-                                                  mainAxisSpacing: 6,
-                                                  crossAxisSpacing: 6,
-                                                  childAspectRatio: 2.4,
-                                                ),
-                                                delegate:
-                                                    SliverChildBuilderDelegate(
-                                                  (context, index) {
-                                                    final d = sec.deps[index];
-                                                    final mapped = d.isMapped;
-                                                    return Opacity(
-                                                      opacity: mapped ? 0.52 : 1,
-                                                      child: Card(
-                                                        margin:
-                                                            EdgeInsets.zero,
-                                                        child: InkWell(
-                                                          onTap: () => widget
-                                                              .onSelectDepartment(
-                                                            d.id!,
-                                                          ),
-                                                          child: Padding(
-                                                            padding:
-                                                                const EdgeInsets
-                                                                    .symmetric(
-                                                              horizontal: 6,
-                                                              vertical: 4,
+                                                      crossAxisCount: cols,
+                                                      mainAxisSpacing: 6,
+                                                      crossAxisSpacing: 6,
+                                                      childAspectRatio: 2.4,
+                                                    ),
+                                                delegate: SliverChildBuilderDelegate((
+                                                  context,
+                                                  index,
+                                                ) {
+                                                  final d = sec.deps[index];
+                                                  final mapped = d.isMapped;
+                                                  return Opacity(
+                                                    opacity: mapped ? 0.52 : 1,
+                                                    child: Card(
+                                                      margin: EdgeInsets.zero,
+                                                      child: InkWell(
+                                                        onTap: () => widget
+                                                            .onSelectDepartment(
+                                                              d.id!,
                                                             ),
-                                                            child: Column(
-                                                              crossAxisAlignment:
-                                                                  CrossAxisAlignment
-                                                                      .start,
-                                                              mainAxisAlignment:
-                                                                  MainAxisAlignment
-                                                                      .center,
-                                                              children: [
-                                                                Text(
-                                                                  d.name,
-                                                                  maxLines: 2,
-                                                                  softWrap: true,
-                                                                  style: theme
-                                                                      .textTheme
-                                                                      .bodyMedium
-                                                                      ?.copyWith(
-                                                                    fontStyle:
-                                                                        mapped
-                                                                            ? FontStyle
-                                                                                .italic
-                                                                            : FontStyle
-                                                                                .normal,
-                                                                  ),
-                                                                ),
-                                                              ],
-                                                            ),
+                                                        child: Padding(
+                                                          padding:
+                                                              const EdgeInsets.symmetric(
+                                                                horizontal: 6,
+                                                                vertical: 4,
+                                                              ),
+                                                          child: Column(
+                                                            crossAxisAlignment:
+                                                                CrossAxisAlignment
+                                                                    .start,
+                                                            mainAxisAlignment:
+                                                                MainAxisAlignment
+                                                                    .center,
+                                                            children: [
+                                                              Text(
+                                                                d.name,
+                                                                maxLines: 2,
+                                                                softWrap: true,
+                                                                style: theme
+                                                                    .textTheme
+                                                                    .bodyMedium
+                                                                    ?.copyWith(
+                                                                      fontStyle:
+                                                                          mapped
+                                                                          ? FontStyle.italic
+                                                                          : FontStyle.normal,
+                                                                    ),
+                                                              ),
+                                                            ],
                                                           ),
                                                         ),
                                                       ),
-                                                    );
-                                                  },
-                                                  childCount: sec.deps.length,
-                                                ),
+                                                    ),
+                                                  );
+                                                }, childCount: sec.deps.length),
                                               ),
                                             ),
                                           ],

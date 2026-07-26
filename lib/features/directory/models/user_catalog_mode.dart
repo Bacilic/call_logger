@@ -1,5 +1,2 @@
 /// Λειτουργία καταλόγου στην καρτέλα Υπάλληλοι: χρήστες ή τηλέφωνα χωρίς σύνδεση χρήστη.
-enum UserCatalogMode {
-  personal,
-  shared,
-}
+enum UserCatalogMode { personal, shared }

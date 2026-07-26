@@ -466,79 +466,79 @@ abstract final class AuditDiffHelper {
   static List<String> orderedDiffKeys(String entityType, Set<String> keys) {
     final order = switch (entityType) {
       'call' => const [
-          'status',
-          'category_text',
-          'category_id',
-          'caller_text',
-          'caller_id',
-          'phone_text',
-          'department_text',
-          'equipment_text',
-          'equipment_id',
-          'issue',
-          'duration',
-          'is_priority',
-          'date',
-          'time',
-          'lansweeper_state',
-        ],
+        'status',
+        'category_text',
+        'category_id',
+        'caller_text',
+        'caller_id',
+        'phone_text',
+        'department_text',
+        'equipment_text',
+        'equipment_id',
+        'issue',
+        'duration',
+        'is_priority',
+        'date',
+        'time',
+        'lansweeper_state',
+      ],
       'task' => const [
-          'status',
-          'priority',
-          'due_date',
-          'solution_notes',
-          'title',
-          'description',
-          'department_text',
-          'user_text',
-          'equipment_text',
-          'phone_text',
-        ],
+        'status',
+        'priority',
+        'due_date',
+        'solution_notes',
+        'title',
+        'description',
+        'department_text',
+        'user_text',
+        'equipment_text',
+        'phone_text',
+      ],
       'department' => const [
-          'name',
-          'color',
-          'building',
-          'map_floor',
-          'floor_id',
-          'notes',
-          'map_x',
-          'map_y',
-          'map_width',
-          'map_height',
-          'map_rotation',
-        ],
+        'name',
+        'color',
+        'building',
+        'map_floor',
+        'floor_id',
+        'notes',
+        'map_x',
+        'map_y',
+        'map_width',
+        'map_height',
+        'map_rotation',
+      ],
       'user' => const [
-          'department_id',
-          'department_text',
-          'email',
-          'phone',
-          'linked_phone_numbers',
-          'linked_equipment',
-        ],
+        'department_id',
+        'department_text',
+        'email',
+        'phone',
+        'linked_phone_numbers',
+        'linked_equipment',
+      ],
       'equipment' => const [
-          'department_id',
-          'type',
-          'code_equipment',
-          'remote_params',
-          'linked_users',
-        ],
+        'department_id',
+        'type',
+        'code_equipment',
+        'remote_params',
+        'linked_users',
+      ],
       'phone' => const ['linked_user_id', 'department_id'],
       'backup' => const [
-          'trigger_el',
-          'outcome',
-          'destination',
-          'output_path',
-          'scheduled_time',
-          'skip_reason',
-        ],
+        'trigger_el',
+        'outcome',
+        'destination',
+        'output_path',
+        'scheduled_time',
+        'skip_reason',
+      ],
       'maintenance' => const [
-          'rows_merged',
-          'rows_deleted',
-          'table',
-          'removed',
-          'cutoff',
-          'path',
-        ],
+        'rows_merged',
+        'rows_deleted',
+        'table',
+        'removed',
+        'cutoff',
+        'path',
+      ],
       _ => const <String>[],
     };
     final out = <String>[];
@@ -574,13 +574,15 @@ abstract final class AuditDiffHelper {
 
   /// Σύνθεση diff από αλυσίδα γραμμών audit (παλιότερη → νεότερη).
   static ({Map<String, dynamic> oldDiff, Map<String, dynamic> newDiff})
-      computeChainedDiff(
+  computeChainedDiff(
     List<({Map<String, dynamic>? oldMap, Map<String, dynamic>? newMap})> chain,
   ) {
     Map<String, dynamic>? baselineOld;
     Map<String, dynamic>? finalNew;
     for (final step in chain) {
-      if (baselineOld == null && step.oldMap != null && step.oldMap!.isNotEmpty) {
+      if (baselineOld == null &&
+          step.oldMap != null &&
+          step.oldMap!.isNotEmpty) {
         baselineOld = Map<String, dynamic>.from(step.oldMap!);
       }
       if (step.newMap != null && step.newMap!.isNotEmpty) {
@@ -651,10 +653,7 @@ abstract final class AuditDiffHelper {
     return out;
   }
 
-  static String remoteToolDisplayName(
-    int toolId,
-    Map<int, String> toolNames,
-  ) {
+  static String remoteToolDisplayName(int toolId, Map<int, String> toolNames) {
     final name = toolNames[toolId]?.trim();
     if (name != null && name.isNotEmpty) return name;
     return 'Εργαλείο #$toolId';

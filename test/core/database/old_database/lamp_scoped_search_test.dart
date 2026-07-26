@@ -111,28 +111,30 @@ void main() {
     expect(result.rows.single['code'], 100);
   });
 
-  test('απλό κείμενο χωρίς κλειδιά — ίδια συμπεριφορά με παλιά globalSearch',
-      () async {
-    await seedCategoryComputers();
+  test(
+    'απλό κείμενο χωρίς κλειδιά — ίδια συμπεριφορά με παλιά globalSearch',
+    () async {
+      await seedCategoryComputers();
 
-    final legacy = await repository.globalSearch(
-      dbPath,
-      'γραφειου',
-      maxDisplay: 10,
-    );
-    final parsed = LampSearchQueryParser.parse('γραφειου');
-    final scoped = await repository.globalSearch(
-      dbPath,
-      'γραφειου',
-      maxDisplay: 10,
-      scopedTerms: parsed.scopedTerms,
-      freeText: parsed.freeText,
-    );
+      final legacy = await repository.globalSearch(
+        dbPath,
+        'γραφειου',
+        maxDisplay: 10,
+      );
+      final parsed = LampSearchQueryParser.parse('γραφειου');
+      final scoped = await repository.globalSearch(
+        dbPath,
+        'γραφειου',
+        maxDisplay: 10,
+        scopedTerms: parsed.scopedTerms,
+        freeText: parsed.freeText,
+      );
 
-    expect(scoped.totalCount, legacy.totalCount);
-    expect(
-      scoped.rows.map((r) => r['code']).toList(),
-      legacy.rows.map((r) => r['code']).toList(),
-    );
-  });
+      expect(scoped.totalCount, legacy.totalCount);
+      expect(
+        scoped.rows.map((r) => r['code']).toList(),
+        legacy.rows.map((r) => r['code']).toList(),
+      );
+    },
+  );
 }

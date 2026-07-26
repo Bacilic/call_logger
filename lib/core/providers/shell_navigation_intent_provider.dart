@@ -21,5 +21,5 @@ class ShellNavigationIntentNotifier extends Notifier<MainNavDestination?> {
 
 final shellNavigationIntentProvider =
     NotifierProvider<ShellNavigationIntentNotifier, MainNavDestination?>(
-  ShellNavigationIntentNotifier.new,
-);
+      ShellNavigationIntentNotifier.new,
+    );

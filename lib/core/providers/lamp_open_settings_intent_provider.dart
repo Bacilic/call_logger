@@ -12,5 +12,5 @@ class LampOpenSettingsRequestNotifier extends Notifier<int> {
 
 final lampOpenSettingsRequestProvider =
     NotifierProvider<LampOpenSettingsRequestNotifier, int>(
-  LampOpenSettingsRequestNotifier.new,
-);
+      LampOpenSettingsRequestNotifier.new,
+    );

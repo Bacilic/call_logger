@@ -20,10 +20,9 @@ class ResolvedDatabasePath {
 /// Έλεγχος ύπαρξης αρχείου με σύντομο timeout (χρήσιμο για αργά δίκτυα).
 Future<bool> databaseFileExistsQuick(String dbPath) async {
   try {
-    return await File(dbPath).exists().timeout(
-          const Duration(seconds: 2),
-          onTimeout: () => false,
-        );
+    return await File(
+      dbPath,
+    ).exists().timeout(const Duration(seconds: 2), onTimeout: () => false);
   } on TimeoutException {
     return false;
   } catch (_) {

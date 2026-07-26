@@ -10,11 +10,7 @@ class CalendarRangePicker extends StatefulWidget {
   final DateTimeRange? value;
   final ValueChanged<DateTimeRange?> onChanged;
 
-  const CalendarRangePicker({
-    super.key,
-    this.value,
-    required this.onChanged,
-  });
+  const CalendarRangePicker({super.key, this.value, required this.onChanged});
 
   @override
   State<CalendarRangePicker> createState() => CalendarRangePickerState();
@@ -94,7 +90,8 @@ class CalendarRangePickerState extends State<CalendarRangePicker> {
       _controller.text = _dateFormat.format(from);
       return;
     }
-    _controller.text = '${_dateFormat.format(from)} - ${_dateFormat.format(to)}';
+    _controller.text =
+        '${_dateFormat.format(from)} - ${_dateFormat.format(to)}';
   }
 
   @override
@@ -169,7 +166,8 @@ class CalendarRangePickerState extends State<CalendarRangePicker> {
     final screenWidth = MediaQuery.sizeOf(context).width;
     const overlayWidth = 350.0;
     final useRightAnchors =
-        (topLeft.dx + overlayWidth) > screenWidth || topLeft.dx > screenWidth / 2;
+        (topLeft.dx + overlayWidth) > screenWidth ||
+        topLeft.dx > screenWidth / 2;
 
     _overlayEntry = OverlayEntry(
       builder: (context) => _CalendarOverlay(
@@ -263,8 +261,9 @@ class CalendarRangePickerState extends State<CalendarRangePicker> {
                 hintText: 'ΗΗ/ΜΜ/ΕΕΕΕ - ΗΗ/ΜΜ/ΕΕΕΕ',
                 border: const OutlineInputBorder(),
                 errorBorder: OutlineInputBorder(
-                  borderSide:
-                      BorderSide(color: Theme.of(context).colorScheme.error),
+                  borderSide: BorderSide(
+                    color: Theme.of(context).colorScheme.error,
+                  ),
                 ),
                 errorText: _errorText,
                 suffixIcon: ValueListenableBuilder<TextEditingValue>(
@@ -276,7 +275,8 @@ class CalendarRangePickerState extends State<CalendarRangePicker> {
                       mainAxisAlignment: MainAxisAlignment.end,
                       children: [
                         Tooltip(
-                          message: 'Οδηγός Εισαγωγής\n'
+                          message:
+                              'Οδηγός Εισαγωγής\n'
                               '• "7" -> Ημέρα τρέχοντος μηνός\n'
                               '• "1/2" -> Ημερομηνία τρέχοντος έτους\n'
                               '• "1/2\\26" -> Έτος 2026 (1, 2 ή 4 ψηφία)\n'
@@ -396,15 +396,16 @@ class _CalendarOverlay extends StatelessWidget {
   Widget build(BuildContext context) {
     return Stack(
       children: [
-        GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: onDismiss,
-        ),
+        GestureDetector(behavior: HitTestBehavior.opaque, onTap: onDismiss),
         CompositedTransformFollower(
           link: layerLink,
           showWhenUnlinked: false,
-          followerAnchor: useRightAnchors ? Alignment.topRight : Alignment.topLeft,
-          targetAnchor: useRightAnchors ? Alignment.bottomRight : Alignment.bottomLeft,
+          followerAnchor: useRightAnchors
+              ? Alignment.topRight
+              : Alignment.topLeft,
+          targetAnchor: useRightAnchors
+              ? Alignment.bottomRight
+              : Alignment.bottomLeft,
           offset: const Offset(0, 8),
           child: TapRegion(
             child: Material(
@@ -441,9 +442,7 @@ class _CalendarOverlay extends StatelessWidget {
 
   Widget _buildBottomActions(BuildContext context) {
     return FilledButton.icon(
-      style: FilledButton.styleFrom(
-        textStyle: const TextStyle(fontSize: 12),
-      ),
+      style: FilledButton.styleFrom(textStyle: const TextStyle(fontSize: 12)),
       onPressed: rangeStart != null ? onApply : null,
       icon: const Icon(Icons.check, size: 18),
       label: const Text('Εφαρμογή'),
@@ -458,18 +457,21 @@ class _CalendarOverlay extends StatelessWidget {
         IconButton(
           icon: const Icon(Icons.arrow_back_ios_new, size: 18),
           onPressed: () {
-            final prev = DateTime(displayedMonth.year, displayedMonth.month - 1);
+            final prev = DateTime(
+              displayedMonth.year,
+              displayedMonth.month - 1,
+            );
             onMonthChanged(prev);
           },
         ),
-        Text(
-          monthLabel,
-          style: Theme.of(context).textTheme.titleSmall,
-        ),
+        Text(monthLabel, style: Theme.of(context).textTheme.titleSmall),
         IconButton(
           icon: const Icon(Icons.arrow_forward_ios, size: 18),
           onPressed: () {
-            final next = DateTime(displayedMonth.year, displayedMonth.month + 1);
+            final next = DateTime(
+              displayedMonth.year,
+              displayedMonth.month + 1,
+            );
             onMonthChanged(next);
           },
         ),
@@ -502,7 +504,10 @@ class _CalendarOverlay extends StatelessWidget {
     final firstOfMonth = DateTime(year, month, 1);
     final offset = (firstOfMonth.weekday - firstDayOfWeek + 7) % 7;
     final firstDisplayed = firstOfMonth.subtract(Duration(days: offset));
-    final dates = List.generate(42, (i) => firstDisplayed.add(Duration(days: i)));
+    final dates = List.generate(
+      42,
+      (i) => firstDisplayed.add(Duration(days: i)),
+    );
 
     final theme = Theme.of(context);
     final selectedStart = value != null
@@ -514,13 +519,18 @@ class _CalendarOverlay extends StatelessWidget {
     final rangeStartNorm = rangeStart != null
         ? DateTime(rangeStart!.year, rangeStart!.month, rangeStart!.day)
         : null;
-    final rangeEndNorm =
-        rangeEnd != null ? DateTime(rangeEnd!.year, rangeEnd!.month, rangeEnd!.day) : null;
+    final rangeEndNorm = rangeEnd != null
+        ? DateTime(rangeEnd!.year, rangeEnd!.month, rangeEnd!.day)
+        : null;
     final rangeMin = (rangeStartNorm != null && rangeEndNorm != null)
-        ? (rangeStartNorm.isBefore(rangeEndNorm) ? rangeStartNorm : rangeEndNorm)
+        ? (rangeStartNorm.isBefore(rangeEndNorm)
+              ? rangeStartNorm
+              : rangeEndNorm)
         : rangeStartNorm;
     final rangeMax = (rangeStartNorm != null && rangeEndNorm != null)
-        ? (rangeStartNorm.isBefore(rangeEndNorm) ? rangeEndNorm : rangeStartNorm)
+        ? (rangeStartNorm.isBefore(rangeEndNorm)
+              ? rangeEndNorm
+              : rangeStartNorm)
         : rangeEndNorm ?? rangeStartNorm;
     final isPreviewingSelection = rangeMin != null;
 
@@ -533,12 +543,14 @@ class _CalendarOverlay extends StatelessWidget {
             final idx = row * 7 + col;
             final date = dates[idx];
             final isCurrentMonth = date.month == month && date.year == year;
-            final isSelected = !isPreviewingSelection &&
+            final isSelected =
+                !isPreviewingSelection &&
                 selectedStart != null &&
                 selectedEnd != null &&
                 !date.isBefore(selectedStart) &&
                 !date.isAfter(selectedEnd);
-            final isInPreviewRange = rangeMin != null &&
+            final isInPreviewRange =
+                rangeMin != null &&
                 rangeMax != null &&
                 !date.isBefore(rangeMin) &&
                 !date.isAfter(rangeMax);
@@ -547,7 +559,9 @@ class _CalendarOverlay extends StatelessWidget {
             if (isSelected) {
               cellColor = theme.colorScheme.primaryContainer;
             } else if (isInPreviewRange) {
-              cellColor = theme.colorScheme.primaryContainer.withValues(alpha: 0.6);
+              cellColor = theme.colorScheme.primaryContainer.withValues(
+                alpha: 0.6,
+              );
             }
 
             final textOpacity = isCurrentMonth ? 1.0 : 0.3;
@@ -568,11 +582,13 @@ class _CalendarOverlay extends StatelessWidget {
                       child: Text(
                         '${date.day}',
                         style: theme.textTheme.bodySmall?.copyWith(
-                          fontWeight:
-                              isSelected || isInPreviewRange ? FontWeight.bold : null,
-                          color: (theme.textTheme.bodySmall?.color ??
-                                  theme.colorScheme.onSurface)
-                              .withValues(alpha: textOpacity),
+                          fontWeight: isSelected || isInPreviewRange
+                              ? FontWeight.bold
+                              : null,
+                          color:
+                              (theme.textTheme.bodySmall?.color ??
+                                      theme.colorScheme.onSurface)
+                                  .withValues(alpha: textOpacity),
                         ),
                       ),
                     ),
@@ -614,11 +630,12 @@ class _CalendarOverlay extends StatelessWidget {
 const double _kDateRangeDialogTopInset = kToolbarHeight + 20;
 
 class CalendarRangePickerDialogResult {
-  const CalendarRangePickerDialogResult.selected(this.range) : wasCleared = false;
+  const CalendarRangePickerDialogResult.selected(this.range)
+    : wasCleared = false;
 
   const CalendarRangePickerDialogResult.cleared()
-      : range = null,
-        wasCleared = true;
+    : range = null,
+      wasCleared = true;
 
   final DateTimeRange? range;
   final bool wasCleared;
@@ -634,7 +651,8 @@ class _CalendarRangePickerDialogBody extends StatefulWidget {
       _CalendarRangePickerDialogBodyState();
 }
 
-class _CalendarRangePickerDialogBodyState extends State<_CalendarRangePickerDialogBody> {
+class _CalendarRangePickerDialogBodyState
+    extends State<_CalendarRangePickerDialogBody> {
   final GlobalKey<CalendarRangePickerState> _pickerKey =
       GlobalKey<CalendarRangePickerState>();
 
@@ -656,14 +674,14 @@ class _CalendarRangePickerDialogBodyState extends State<_CalendarRangePickerDial
             value: widget.initialValue,
             onChanged: (range) {
               if (range == null) {
-                Navigator.of(context).pop(
-                  const CalendarRangePickerDialogResult.cleared(),
-                );
+                Navigator.of(
+                  context,
+                ).pop(const CalendarRangePickerDialogResult.cleared());
                 return;
               }
-              Navigator.of(context).pop(
-                CalendarRangePickerDialogResult.selected(range),
-              );
+              Navigator.of(
+                context,
+              ).pop(CalendarRangePickerDialogResult.selected(range));
             },
           ),
         ),
@@ -693,8 +711,7 @@ Future<CalendarRangePickerDialogResult?> showCalendarRangePickerDialog(
 }) {
   return showDialog<CalendarRangePickerDialogResult>(
     context: context,
-    builder: (dialogContext) => _CalendarRangePickerDialogBody(
-      initialValue: initialValue,
-    ),
+    builder: (dialogContext) =>
+        _CalendarRangePickerDialogBody(initialValue: initialValue),
   );
 }

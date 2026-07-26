@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -31,8 +31,9 @@ class LansweeperTicketSubmitConfigNotifier
     try {
       final db = await DatabaseHelper.instance.database;
       if (!ref.mounted) return;
-      final raw = await SettingsRepository(db)
-          .getSetting(kLansweeperTicketSubmitConfigSettingKey);
+      final raw = await SettingsRepository(
+        db,
+      ).getSetting(kLansweeperTicketSubmitConfigSettingKey);
       if (!ref.mounted) return;
       if (raw == null) {
         state = LansweeperTicketSubmitConfig.defaults();
@@ -128,8 +129,9 @@ class LansweeperTicketSubmitConfigNotifier
       state.priority,
       fallbackList: LansweeperTicketSubmitConfig.defaultPriorities,
     );
-    final selected =
-        list.contains(state.priority) ? state.priority : list.first;
+    final selected = list.contains(state.priority)
+        ? state.priority
+        : list.first;
     state = state.copyWith(priorities: list, priority: selected);
     await _persist();
   }
@@ -176,8 +178,8 @@ class LansweeperTicketSubmitConfigNotifier
   }
 }
 
-final lansweeperTicketSubmitConfigProvider = NotifierProvider.autoDispose<
-    LansweeperTicketSubmitConfigNotifier,
-    LansweeperTicketSubmitConfig>(
-  LansweeperTicketSubmitConfigNotifier.new,
-);
+final lansweeperTicketSubmitConfigProvider =
+    NotifierProvider.autoDispose<
+      LansweeperTicketSubmitConfigNotifier,
+      LansweeperTicketSubmitConfig
+    >(LansweeperTicketSubmitConfigNotifier.new);

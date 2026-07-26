@@ -6,13 +6,7 @@ import '../../features/database/services/database_maintenance_service.dart';
 import '../utils/linkable_text_parser.dart';
 
 /// Αποτέλεσμα προσπάθειας ανοίγματος συνδέσμου ή διαδρομής.
-enum LinkOpenResult {
-  opened,
-  pathNotFound,
-  invalidUrl,
-  urlOpenFailed,
-  error,
-}
+enum LinkOpenResult { opened, pathNotFound, invalidUrl, urlOpenFailed, error }
 
 typedef FileExistsFn = Future<bool> Function(String path);
 typedef DirectoryExistsFn = Future<bool> Function(String path);
@@ -28,17 +22,21 @@ class LinkableTargetOpener {
     RevealFileInExplorerFn? revealFileInExplorer,
     OpenFolderInExplorerFn? openFolderInExplorer,
     LaunchUrlFn? launchUrl,
-  })  : _fileExists = fileExists ?? ((path) => File(path).exists()),
-        _directoryExists = directoryExists ?? ((path) => Directory(path).exists()),
-        _revealFileInExplorer = revealFileInExplorer ??
-            DatabaseMaintenanceService.revealFileInExplorer,
-        _openFolderInExplorer = openFolderInExplorer ??
-            DatabaseMaintenanceService.openFolderInExplorer,
-        _launchUrl = launchUrl ??
-            ((uri) => url_launcher.launchUrl(
-                  uri,
-                  mode: url_launcher.LaunchMode.externalApplication,
-                ));
+  }) : _fileExists = fileExists ?? ((path) => File(path).exists()),
+       _directoryExists =
+           directoryExists ?? ((path) => Directory(path).exists()),
+       _revealFileInExplorer =
+           revealFileInExplorer ??
+           DatabaseMaintenanceService.revealFileInExplorer,
+       _openFolderInExplorer =
+           openFolderInExplorer ??
+           DatabaseMaintenanceService.openFolderInExplorer,
+       _launchUrl =
+           launchUrl ??
+           ((uri) => url_launcher.launchUrl(
+             uri,
+             mode: url_launcher.LaunchMode.externalApplication,
+           ));
 
   final FileExistsFn _fileExists;
   final DirectoryExistsFn _directoryExists;

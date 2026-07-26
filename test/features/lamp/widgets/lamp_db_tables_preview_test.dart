@@ -30,8 +30,9 @@ ScrollController _horizontalController(WidgetTester tester) {
 
 void main() {
   group('LampSimpleDataPreview', () {
-    testWidgets('εμφανίζει δύο Scrollbar και λειτουργεί η οριζόντια κύλιση',
-        (tester) async {
+    testWidgets('εμφανίζει δύο Scrollbar και λειτουργεί η οριζόντια κύλιση', (
+      tester,
+    ) async {
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(

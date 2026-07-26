@@ -1,4 +1,4 @@
-﻿// Αναπαραγωγή / διόρθωση: StateError από WidgetRef μετά το κλείσιμο διαλόγου
+// Αναπαραγωγή / διόρθωση: StateError από WidgetRef μετά το κλείσιμο διαλόγου
 // κατά την προετοιμασία ενημέρωσης (Ιστορικό Αλλαγών → Ενημέρωση).
 //
 //   flutter test test/core/updates/update_prepare_after_dialog_pop_test.dart
@@ -16,13 +16,13 @@ import 'package:flutter_test/flutter_test.dart';
 
 class _ImmediateSuccessInstaller extends UpdateInstallerService {
   _ImmediateSuccessInstaller()
-      : super(
-          installDirectory: '.',
-          resolveUpdateFolder: () async => null,
-          launchDetached: (exe, args, {workingDirectory}) async {},
-          terminateApp: () async {},
-          isDevelopmentBuild: () => false,
-        );
+    : super(
+        installDirectory: '.',
+        resolveUpdateFolder: () async => null,
+        launchDetached: (exe, args, {workingDirectory}) async {},
+        terminateApp: () async {},
+        isDevelopmentBuild: () => false,
+      );
 
   @override
   Future<UpdateInstallResult> prepareUpdate(
@@ -124,16 +124,20 @@ void main() {
                               TextButton(
                                 key: const Key('go'),
                                 onPressed: () {
-                                  final nav =
-                                      Navigator.of(c, rootNavigator: true);
+                                  final nav = Navigator.of(
+                                    c,
+                                    rootNavigator: true,
+                                  );
                                   nav.pop();
-                                  WidgetsBinding.instance
-                                      .addPostFrameCallback((_) {
+                                  WidgetsBinding.instance.addPostFrameCallback((
+                                    _,
+                                  ) {
                                     final ctx = nav.context;
                                     containerAfterPop =
                                         ProviderScope.containerOf(ctx);
-                                    containerAfterPop
-                                        .invalidate(pendingUpdateProvider);
+                                    containerAfterPop.invalidate(
+                                      pendingUpdateProvider,
+                                    );
                                   });
                                 },
                                 child: const Text('go'),
@@ -161,57 +165,54 @@ void main() {
     },
   );
 
-  testWidgets(
-    'ChangelogDialog → Ενημέρωση μετά το pop δεν ρίχνει StateError '
-    'και εμφανίζει διάλογο ετοιμότητας',
-    (tester) async {
-      await tester.pumpWidget(
-        ProviderScope(
-          overrides: [
-            appVersionProvider.overrideWith((ref) async => '0.24.5'),
-            changelogProvider.overrideWith((ref) async => const []),
-            updateCheckProvider.overrideWith(
-              (ref) async => UpdateCheckResult(
-                updateAvailable: true,
-                latestVersion: '0.25.0',
-                manifest: manifest,
-              ),
+  testWidgets('ChangelogDialog → Ενημέρωση μετά το pop δεν ρίχνει StateError '
+      'και εμφανίζει διάλογο ετοιμότητας', (tester) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          appVersionProvider.overrideWith((ref) async => '0.24.5'),
+          changelogProvider.overrideWith((ref) async => const []),
+          updateCheckProvider.overrideWith(
+            (ref) async => UpdateCheckResult(
+              updateAvailable: true,
+              latestVersion: '0.25.0',
+              manifest: manifest,
             ),
-            updateInstallerServiceProvider.overrideWithValue(
-              _ImmediateSuccessInstaller(),
-            ),
-            pendingUpdateProvider.overrideWith((ref) async => false),
-          ],
-          child: MaterialApp(
-            home: Builder(
-              builder: (context) => Scaffold(
-                body: TextButton(
-                  key: const Key('open_changelog'),
-                  onPressed: () {
-                    showDialog<void>(
-                      context: context,
-                      builder: (_) => const ChangelogDialog(),
-                    );
-                  },
-                  child: const Text('open'),
-                ),
+          ),
+          updateInstallerServiceProvider.overrideWithValue(
+            _ImmediateSuccessInstaller(),
+          ),
+          pendingUpdateProvider.overrideWith((ref) async => false),
+        ],
+        child: MaterialApp(
+          home: Builder(
+            builder: (context) => Scaffold(
+              body: TextButton(
+                key: const Key('open_changelog'),
+                onPressed: () {
+                  showDialog<void>(
+                    context: context,
+                    builder: (_) => const ChangelogDialog(),
+                  );
+                },
+                child: const Text('open'),
               ),
             ),
           ),
         ),
-      );
+      ),
+    );
 
-      await tester.tap(find.byKey(const Key('open_changelog')));
-      await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('open_changelog')));
+    await tester.pumpAndSettle();
 
-      await tester.tap(find.byKey(const Key('changelog_update_button')));
-      await tester.pump(); // post-frame + progress dialog
-      await tester.pump(const Duration(milliseconds: 50));
-      await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('changelog_update_button')));
+    await tester.pump(); // post-frame + progress dialog
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.pumpAndSettle();
 
-      expect(tester.takeException(), isNull);
-      expect(find.text('Η ενημέρωση είναι έτοιμη'), findsOneWidget);
-      expect(find.text('Αργότερα'), findsOneWidget);
-    },
-  );
+    expect(tester.takeException(), isNull);
+    expect(find.text('Η ενημέρωση είναι έτοιμη'), findsOneWidget);
+    expect(find.text('Αργότερα'), findsOneWidget);
+  });
 }

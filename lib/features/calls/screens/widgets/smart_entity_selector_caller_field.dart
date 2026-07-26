@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -375,10 +375,12 @@ class SmartEntityCallerFieldState extends State<SmartEntityCallerField> {
                   ),
                 ),
                 ConflictBadge(
-                  severity:
-                      widget.header.conflictSeverityFor(SelectorField.caller),
-                  message:
-                      widget.header.conflictTooltipFor(SelectorField.caller),
+                  severity: widget.header.conflictSeverityFor(
+                    SelectorField.caller,
+                  ),
+                  message: widget.header.conflictTooltipFor(
+                    SelectorField.caller,
+                  ),
                 ),
               ],
             ),
@@ -699,9 +701,10 @@ class SmartEntityCallerFieldState extends State<SmartEntityCallerField> {
                               ),
                               border: const OutlineInputBorder(),
                               isDense: true,
-                              suffixIcon: showInlineFieldClearButton(
-                                textController.text,
-                              )
+                              suffixIcon:
+                                  showInlineFieldClearButton(
+                                    textController.text,
+                                  )
                                   ? Semantics(
                                       label: 'Καθαρισμός Καλούντα',
                                       child: IconButton(

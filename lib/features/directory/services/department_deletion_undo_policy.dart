@@ -20,7 +20,6 @@ DepartmentDeletionUndoDecision resolveDepartmentDeletionUndo({
 
   return (
     canOfferUndo: true,
-    snackbarMessage:
-        '$baseMessage Επαναφέρθηκαν και τα μετακινημένα στοιχεία.',
+    snackbarMessage: '$baseMessage Επαναφέρθηκαν και τα μετακινημένα στοιχεία.',
   );
 }

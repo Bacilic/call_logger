@@ -57,19 +57,14 @@ class _EquipmentDeleteCountdownSnackBarContentState
         Expanded(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxHeight: 120),
-            child: SingleChildScrollView(
-              child: Text(widget.message),
-            ),
+            child: SingleChildScrollView(child: Text(widget.message)),
           ),
         ),
         TextButton(
           onPressed: widget.onConfirm,
           child: Text('Επιβεβαίωση ($_secondsLeft)'),
         ),
-        TextButton(
-          onPressed: widget.onUndo,
-          child: const Text('Αναίρεση'),
-        ),
+        TextButton(onPressed: widget.onUndo, child: const Text('Αναίρεση')),
       ],
     );
   }

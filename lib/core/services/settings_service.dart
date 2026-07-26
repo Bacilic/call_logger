@@ -1,4 +1,4 @@
-﻿import 'dart:convert';
+import 'dart:convert';
 
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
@@ -25,7 +25,8 @@ class SettingsService
         SettingsServiceCatalogsMixin {
   static const String _keyDatabasePath = 'database_path';
   static const String _keyDatabaseSetupState = 'database_setup_state_v1';
-  static const String _keyApplicationResetPending = 'application_reset_pending_v1';
+  static const String _keyApplicationResetPending =
+      'application_reset_pending_v1';
   static const String _keyRecentPaths = 'recent_database_paths';
   static const String _keyAcknowledgedDatabaseNoticeIdentity =
       'acknowledged_database_notice_identity_v1';
@@ -81,8 +82,9 @@ class SettingsService
   /// Ταυτότητα περιεχομένου βάσης για την οποία ο χρήστης έκλεισε τη λωρίδα ειδοποίησης.
   Future<String?> getAcknowledgedDatabaseNoticeIdentity() async {
     final prefs = await SharedPreferences.getInstance();
-    final value =
-        prefs.getString(_prefKey(_keyAcknowledgedDatabaseNoticeIdentity));
+    final value = prefs.getString(
+      _prefKey(_keyAcknowledgedDatabaseNoticeIdentity),
+    );
     if (value == null || value.trim().isEmpty) return null;
     return value;
   }
@@ -136,10 +138,7 @@ class SettingsService
       await prefs.remove(_prefKey(_keySchemaUpgradeConsentIdentity));
       return;
     }
-    await prefs.setString(
-      _prefKey(_keySchemaUpgradeConsentIdentity),
-      trimmed,
-    );
+    await prefs.setString(_prefKey(_keySchemaUpgradeConsentIdentity), trimmed);
   }
 
   /// Επιστρέφει την αποθηκευμένη διαδρομή βάσης δεδομένων.
@@ -161,11 +160,7 @@ class SettingsService
   Future<String> getUnconfiguredPlaceholderDatabasePath() async {
     final support = await getApplicationSupportDirectory();
     return p.normalize(
-      p.join(
-        support.path,
-        'unconfigured',
-        'pending_database_connection.db',
-      ),
+      p.join(support.path, 'unconfigured', 'pending_database_connection.db'),
     );
   }
 

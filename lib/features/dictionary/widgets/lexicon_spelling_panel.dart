@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -14,10 +14,7 @@ const double kLexiconSpellingPanelWidth = 300;
 
 /// Πλευρικό πάνελ βοήθειας ορθογραφίας (τοπικό λεξικό· ΤΝ/διαδίκτυο κατόπιν αιτήματος).
 class LexiconSpellingPanel extends ConsumerWidget {
-  const LexiconSpellingPanel({
-    super.key,
-    required this.onApplySuggestion,
-  });
+  const LexiconSpellingPanel({super.key, required this.onApplySuggestion});
 
   final Future<void> Function(String suggestion) onApplySuggestion;
 
@@ -86,10 +83,7 @@ class LexiconSpellingPanel extends ConsumerWidget {
               children: [
                 _sectionTitle(context, 'Τοπικό λεξικό'),
                 if (query.length < 2)
-                  _hintText(
-                    context,
-                    'Πληκτρολογήστε τουλάχιστον 2 χαρακτήρες.',
-                  )
+                  _hintText(context, 'Πληκτρολογήστε τουλάχιστον 2 χαρακτήρες.')
                 else if (spell == null)
                   _hintText(context, 'Φόρτωση λεξικού ορθογραφίας…')
                 else if (localSuggestions.isEmpty)
@@ -149,8 +143,8 @@ class LexiconSpellingPanel extends ConsumerWidget {
                   onPressed: query.isEmpty
                       ? null
                       : () => unawaited(
-                            LexiconSpellMenuHelper.openGoogleSpellSearch(query),
-                          ),
+                          LexiconSpellMenuHelper.openGoogleSpellSearch(query),
+                        ),
                   icon: const Icon(Icons.language_outlined, size: 18),
                   label: const Text('Αναζήτηση στο διαδίκτυο'),
                 ),
@@ -165,9 +159,9 @@ class LexiconSpellingPanel extends ConsumerWidget {
   static Widget _sectionTitle(BuildContext context, String title) {
     return Text(
       title,
-      style: Theme.of(context).textTheme.labelLarge?.copyWith(
-            fontWeight: FontWeight.w600,
-          ),
+      style: Theme.of(
+        context,
+      ).textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w600),
     );
   }
 
@@ -177,8 +171,8 @@ class LexiconSpellingPanel extends ConsumerWidget {
       child: Text(
         text,
         style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-            ),
+          color: Theme.of(context).colorScheme.onSurfaceVariant,
+        ),
       ),
     );
   }
@@ -232,10 +226,7 @@ class _SuggestionTile extends StatelessWidget {
       title: Text(label, maxLines: 2, overflow: TextOverflow.ellipsis),
       subtitle: subtitle == null
           ? null
-          : Text(
-              subtitle!,
-              style: theme.textTheme.labelSmall,
-            ),
+          : Text(subtitle!, style: theme.textTheme.labelSmall),
       trailing: IconButton(
         tooltip: 'Εφαρμογή στο πεδίο',
         icon: const Icon(Icons.check_circle_outline, size: 20),

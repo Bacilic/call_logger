@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -22,8 +22,10 @@ class LansweeperStateBadge extends StatelessWidget {
   final String? ticketId;
   final String? ticketViewUrlTemplate;
   final VoidCallback? onPressed;
+
   /// Σε [true], το chip εμφανίζεται οριζόντια (δίπλα σε ημερομηνία/διάρκεια).
   final bool inline;
+
   /// Όταν [false], ο σύνδεσμος ticket είναι αδρανής (χωρίς σύνδεση Lansweeper).
   final bool ticketLinkEnabled;
 
@@ -42,8 +44,8 @@ class LansweeperStateBadge extends StatelessWidget {
       _ => Colors.blueGrey,
     };
     final normalizedTicket = (ticketId ?? '').trim();
-    final ticketUrl = state == LansweeperSyncState.sent &&
-            normalizedTicket.isNotEmpty
+    final ticketUrl =
+        state == LansweeperSyncState.sent && normalizedTicket.isNotEmpty
         ? LansweeperUrlRules.buildTicketViewUrl(
             ticketViewUrlTemplate ?? '',
             normalizedTicket,
@@ -70,8 +72,9 @@ class LansweeperStateBadge extends StatelessWidget {
       onPressed: onPressed,
     );
 
-    final statusChip =
-        tooltip == null ? chip : Tooltip(message: tooltip, child: chip);
+    final statusChip = tooltip == null
+        ? chip
+        : Tooltip(message: tooltip, child: chip);
 
     if (inline) {
       return Row(
@@ -139,7 +142,10 @@ class _TicketIdLink extends StatelessWidget {
         child: InkWell(
           onTap: enabled
               ? () => unawaited(
-                  launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication),
+                  launchUrl(
+                    Uri.parse(url),
+                    mode: LaunchMode.externalApplication,
+                  ),
                 )
               : null,
           borderRadius: BorderRadius.circular(4),

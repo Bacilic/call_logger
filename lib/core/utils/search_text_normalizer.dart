@@ -69,7 +69,8 @@ class SearchTextNormalizer {
         .toList();
 
     return queryTokens.every(
-      (queryToken) => textTokens.any((textToken) => textToken.startsWith(queryToken)),
+      (queryToken) =>
+          textTokens.any((textToken) => textToken.startsWith(queryToken)),
     );
   }
 

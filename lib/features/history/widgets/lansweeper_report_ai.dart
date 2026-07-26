@@ -1,11 +1,10 @@
 part of 'lansweeper_report_dialog.dart';
 
 mixin LansweeperReportAiMixin on LansweeperReportDialogStateHost {
-  void _prefillForm(
-    ReportCallItem primary,
-    List<ReportCallItem> selected,
-  ) {
-    final signature = LansweeperReportItemMapper.selectedKeysSignature(selected);
+  void _prefillForm(ReportCallItem primary, List<ReportCallItem> selected) {
+    final signature = LansweeperReportItemMapper.selectedKeysSignature(
+      selected,
+    );
     if (_lastPrefilledKey == signature) return;
     _lastPrefilledKey = signature;
     final category = (primary.call.category ?? '').trim();
@@ -14,8 +13,9 @@ mixin LansweeperReportAiMixin on LansweeperReportDialogStateHost {
       category: category,
       id: id,
     );
-    _notesController.text =
-        LansweeperReportItemMapper.combinedSelectedNotes(selected);
+    _notesController.text = LansweeperReportItemMapper.combinedSelectedNotes(
+      selected,
+    );
     _solutionController.text = '';
   }
 
@@ -36,16 +36,11 @@ mixin LansweeperReportAiMixin on LansweeperReportDialogStateHost {
   Future<void> _showAiPromptPreview(List<ReportCallItem> selected) async {
     if (selected.isEmpty || _aiSuggestRunning || _isAiCooldownActive) return;
     final prompt = _buildAiPromptForSelected(selected);
-    await showLansweeperAiPromptPreviewDialog(
-      context,
-      promptText: prompt,
-    );
+    await showLansweeperAiPromptPreviewDialog(context, promptText: prompt);
   }
 
-  bool get _isAiCooldownActive => LansweeperAiPresenter.isCooldownActive(
-        _aiCooldownUntil,
-        DateTime.now(),
-      );
+  bool get _isAiCooldownActive =>
+      LansweeperAiPresenter.isCooldownActive(_aiCooldownUntil, DateTime.now());
 
   int? get _aiCooldownRemainingSeconds =>
       LansweeperAiPresenter.cooldownRemainingSeconds(
@@ -96,7 +91,10 @@ mixin LansweeperReportAiMixin on LansweeperReportDialogStateHost {
     }
 
     tick();
-    _aiCooldownTicker = Timer.periodic(const Duration(seconds: 1), (_) => tick());
+    _aiCooldownTicker = Timer.periodic(
+      const Duration(seconds: 1),
+      (_) => tick(),
+    );
   }
 
   Future<void> _suggestWithAi(List<ReportCallItem> selected) async {
@@ -106,9 +104,7 @@ mixin LansweeperReportAiMixin on LansweeperReportDialogStateHost {
     final configError = service.validateConfiguration();
     if (configError != null) {
       if (!mounted) return;
-      showDialogSnackBar(
-        SnackBar(content: Text(configError)),
-      );
+      showDialogSnackBar(SnackBar(content: Text(configError)));
       return;
     }
 
@@ -212,16 +208,13 @@ mixin LansweeperReportAiMixin on LansweeperReportDialogStateHost {
       _aiSuggestElapsedSeconds = 0;
       _aiCurrentModel = model;
     });
-    _aiSuggestTicker = Timer.periodic(
-      const Duration(milliseconds: 33),
-      (_) {
-        if (!mounted) return;
-        setState(() {
-          _aiSuggestElapsedSeconds =
-              _aiSuggestStopwatch.elapsedMilliseconds / 1000;
-        });
-      },
-    );
+    _aiSuggestTicker = Timer.periodic(const Duration(milliseconds: 33), (_) {
+      if (!mounted) return;
+      setState(() {
+        _aiSuggestElapsedSeconds =
+            _aiSuggestStopwatch.elapsedMilliseconds / 1000;
+      });
+    });
   }
 
   void _stopAiSuggestTicker() {

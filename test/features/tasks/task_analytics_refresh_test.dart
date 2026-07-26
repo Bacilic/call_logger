@@ -73,11 +73,16 @@ void main() {
 
         await container.read(taskAnalyticsProvider.future);
         expect(
-          container.read(taskAnalyticsProvider).requireValue.createdInRangeCount,
+          container
+              .read(taskAnalyticsProvider)
+              .requireValue
+              .createdInRangeCount,
           0,
         );
 
-        await container.read(taskServiceProvider).createFromCall(
+        await container
+            .read(taskServiceProvider)
+            .createFromCall(
               callId: null,
               callerName: 'Έμμεση εκκρεμότητα',
               description: 'Δοκιμή analytics refresh',
@@ -86,8 +91,9 @@ void main() {
 
         invalidateTaskListProviders(_capturedRef!);
 
-        final analyticsAfter =
-            await container.read(taskAnalyticsProvider.future);
+        final analyticsAfter = await container.read(
+          taskAnalyticsProvider.future,
+        );
         expect(
           analyticsAfter.createdInRangeCount,
           1,
@@ -106,7 +112,9 @@ void main() {
         final container = await _taskTestContainer();
         final orphanCallId = await _insertOrphanPendingCall();
 
-        final taskId = await container.read(taskServiceProvider).createFromCall(
+        final taskId = await container
+            .read(taskServiceProvider)
+            .createFromCall(
               callId: null,
               callerName: kTestUserFirstName,
               description: 'Ανοικτή προς κλείσιμο',
@@ -135,7 +143,9 @@ void main() {
         final tasks = await container.read(tasksProvider.future);
         final openTask = tasks.firstWhere((t) => t.id == taskId);
 
-        await container.read(tasksProvider.notifier).updateTask(
+        await container
+            .read(tasksProvider.notifier)
+            .updateTask(
               openTask.copyWith(
                 callId: orphanCallId,
                 status: TaskStatus.closed.toDbValue,
@@ -143,14 +153,14 @@ void main() {
               ),
             );
 
-        final analyticsAfter =
-            await container.read(taskAnalyticsProvider.future);
-        final totalAfter =
-            await container.read(totalTasksCountProvider.future);
-        final orphansAfter =
-            await container.read(orphanCallsProvider.future);
-        final directTotal =
-            await container.read(taskServiceProvider).getTotalTaskCount();
+        final analyticsAfter = await container.read(
+          taskAnalyticsProvider.future,
+        );
+        final totalAfter = await container.read(totalTasksCountProvider.future);
+        final orphansAfter = await container.read(orphanCallsProvider.future);
+        final directTotal = await container
+            .read(taskServiceProvider)
+            .getTotalTaskCount();
 
         expect(
           analyticsAfter.activeNowCount,

@@ -94,16 +94,18 @@ void main() {
       );
 
       expect(inventory.eligibleCandidates, hasLength(3));
-      expect(
-        inventory.eligibleCandidates.map((c) => c.entryName).toSet(),
-        {'giannis.db', 'db1.db', 'call_logger.db'},
-      );
+      expect(inventory.eligibleCandidates.map((c) => c.entryName).toSet(), {
+        'giannis.db',
+        'db1.db',
+        'call_logger.db',
+      });
       expect(inventory.rejectedCandidates, hasLength(4));
       expect(
-        inventory.rejectedCandidates
-            .any((r) => r.entryName.startsWith(
-                  '${PortableLampStorage.backupZipLampDbFolderName}/',
-                )),
+        inventory.rejectedCandidates.any(
+          (r) => r.entryName.startsWith(
+            '${PortableLampStorage.backupZipLampDbFolderName}/',
+          ),
+        ),
         isTrue,
       );
       expect(
@@ -111,8 +113,7 @@ void main() {
         everyElement(isNotEmpty),
       );
       expect(
-        inventory.eligibleCandidates
-            .any((c) => c.entryName.contains('lamp')),
+        inventory.eligibleCandidates.any((c) => c.entryName.contains('lamp')),
         isFalse,
       );
     },

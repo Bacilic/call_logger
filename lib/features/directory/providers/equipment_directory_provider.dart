@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -65,9 +65,7 @@ String _equipmentDeleteFeedbackLine({
     return 'Αφαιρέθηκε ο εξοπλισμός: $code από τον $n';
   }
   if (owner != null) {
-    final n = (owner.name ?? '').trim().isEmpty
-        ? 'χρήστη'
-        : owner.name!.trim();
+    final n = (owner.name ?? '').trim().isEmpty ? 'χρήστη' : owner.name!.trim();
     return 'Διαγράφηκε οριστικά ο εξοπλισμός: $code από τον $n και τον οργανισμό σας';
   }
   final dept = (departmentName ?? '').trim().isEmpty
@@ -87,7 +85,9 @@ List<EquipmentColumn> mergeEquipmentVisibleOrderIntoColumnOrder(
   for (final col in columnOrder) {
     if (visibleKeys.contains(col.key)) {
       if (queue.isEmpty) {
-        throw StateError('mergeEquipmentVisibleOrderIntoColumnOrder: empty queue');
+        throw StateError(
+          'mergeEquipmentVisibleOrderIntoColumnOrder: empty queue',
+        );
       }
       out.add(queue.removeAt(0));
     } else {
@@ -114,10 +114,12 @@ class EquipmentDirectoryState {
     this.showBuildingInLocationColumn = true,
     List<EquipmentColumn>? columnOrder,
     Set<String>? visibleColumnKeys,
-  })  : columnOrder = _normalizeColumnOrder(columnOrder),
-        visibleColumnKeys = _normalizeVisibleKeys(visibleColumnKeys);
+  }) : columnOrder = _normalizeColumnOrder(columnOrder),
+       visibleColumnKeys = _normalizeVisibleKeys(visibleColumnKeys);
 
-  static List<EquipmentColumn> _normalizeColumnOrder(List<EquipmentColumn>? raw) {
+  static List<EquipmentColumn> _normalizeColumnOrder(
+    List<EquipmentColumn>? raw,
+  ) {
     final order = <EquipmentColumn>[];
     final seen = <String>{};
     for (final c in raw ?? EquipmentColumn.all) {
@@ -152,18 +154,21 @@ class EquipmentDirectoryState {
   final List<EquipmentDeleteUndoEntry>? lastDeleted;
   final List<EquipmentRow>? lastBulkUpdated;
   final int? focusedRowIndex;
+
   /// Πλήρης σειρά όλων των στηλών (κρυφές παραμένουν στη λίστα).
   final List<EquipmentColumn> columnOrder;
+
   /// Ποια στήλη εμφανίζεται στον πίνακα.
   final Set<String> visibleColumnKeys;
+
   /// Πρόθεμα `[Κτίριο]` στη στήλη Τοποθεσία (πίνακας εξοπλισμού).
   final bool showBuildingInLocationColumn;
 
   /// Ορατές στήλες κατά [columnOrder].
   List<EquipmentColumn> get orderedVisibleColumns => [
-        for (final c in columnOrder)
-          if (visibleColumnKeys.contains(c.key)) c
-      ];
+    for (final c in columnOrder)
+      if (visibleColumnKeys.contains(c.key)) c,
+  ];
 
   EquipmentDirectoryState copyWith({
     List<EquipmentRow>? allItems,
@@ -189,9 +194,7 @@ class EquipmentDirectoryState {
           : sortColumn as EquipmentColumn?,
       sortAscending: sortAscending ?? this.sortAscending,
       selectedIds: selectedIds ?? this.selectedIds,
-      lastDeleted: clearLastDeleted
-          ? null
-          : (lastDeleted ?? this.lastDeleted),
+      lastDeleted: clearLastDeleted ? null : (lastDeleted ?? this.lastDeleted),
       lastBulkUpdated: lastBulkUpdated ?? this.lastBulkUpdated,
       focusedRowIndex: focusedRowIndex ?? this.focusedRowIndex,
       showBuildingInLocationColumn:
@@ -330,8 +333,9 @@ class EquipmentDirectoryNotifier extends Notifier<EquipmentDirectoryState> {
 
   Future<_EquipmentColumnLayout?> _readEquipmentLayoutFromSettings() async {
     final dbLayout = await DatabaseHelper.instance.database;
-    final raw =
-        await SettingsRepository(dbLayout).getSetting(_catalogEquipmentLayoutKey);
+    final raw = await SettingsRepository(
+      dbLayout,
+    ).getSetting(_catalogEquipmentLayoutKey);
     if (raw == null || raw.trim().isEmpty) return null;
     return _parseEquipmentLayoutFromJson(raw);
   }
@@ -342,16 +346,15 @@ class EquipmentDirectoryNotifier extends Notifier<EquipmentDirectoryState> {
       'order': s.columnOrder.map((c) => c.key).toList(),
       'visible': [
         for (final c in s.columnOrder)
-          if (s.visibleColumnKeys.contains(c.key)) c.key
+          if (s.visibleColumnKeys.contains(c.key)) c.key,
       ],
       'sortColumn': s.sortColumn?.key,
       'sortAscending': s.sortAscending,
     });
     final dbPersist = await DatabaseHelper.instance.database;
-    await SettingsRepository(dbPersist).saveSetting(
-      _catalogEquipmentLayoutKey,
-      payload,
-    );
+    await SettingsRepository(
+      dbPersist,
+    ).saveSetting(_catalogEquipmentLayoutKey, payload);
   }
 
   void _schedulePersistEquipmentLayout() {
@@ -392,8 +395,8 @@ class EquipmentDirectoryNotifier extends Notifier<EquipmentDirectoryState> {
     }
     if (!ref.mounted) return;
 
-    final showBuildingInLocation =
-        await SettingsService().getEquipmentLocationShowBuilding();
+    final showBuildingInLocation = await SettingsService()
+        .getEquipmentLocationShowBuilding();
     if (!ref.mounted) return;
 
     final equipmentRows = await getEquipmentRows();
@@ -401,8 +404,9 @@ class EquipmentDirectoryNotifier extends Notifier<EquipmentDirectoryState> {
     final userRows = await getUserRows();
     if (!ref.mounted) return;
     final dbLoad = await DatabaseHelper.instance.database;
-    final linkRows =
-        await EquipmentRepository(dbLoad).getAllUserEquipmentLinks();
+    final linkRows = await EquipmentRepository(
+      dbLoad,
+    ).getAllUserEquipmentLinks();
     if (!ref.mounted) return;
 
     final usersMap = <int, UserModel>{};
@@ -493,13 +497,11 @@ class EquipmentDirectoryNotifier extends Notifier<EquipmentDirectoryState> {
 
     final len = list.length;
     final idx = state.focusedRowIndex;
-    final clamped =
-        idx != null && idx >= len ? (len > 0 ? len - 1 : null) : idx;
+    final clamped = idx != null && idx >= len
+        ? (len > 0 ? len - 1 : null)
+        : idx;
 
-    state = state.copyWith(
-      filteredItems: list,
-      focusedRowIndex: clamped,
-    );
+    state = state.copyWith(filteredItems: list, focusedRowIndex: clamped);
   }
 
   static int _compareComparable(Comparable? a, Comparable? b) {
@@ -513,8 +515,7 @@ class EquipmentDirectoryNotifier extends Notifier<EquipmentDirectoryState> {
 
   void setFocusedRowIndex(int? index) {
     final len = state.filteredItems.length;
-    final clamped =
-        index == null || len == 0 ? null : index.clamp(0, len - 1);
+    final clamped = index == null || len == 0 ? null : index.clamp(0, len - 1);
     state = state.copyWith(focusedRowIndex: clamped);
   }
 
@@ -664,8 +665,9 @@ class EquipmentDirectoryNotifier extends Notifier<EquipmentDirectoryState> {
   Future<void> deleteSelected() async {
     if (state.selectedIds.isEmpty) return;
     final toProcess = state.allItems
-        .where((row) =>
-            row.$1.id != null && state.selectedIds.contains(row.$1.id))
+        .where(
+          (row) => row.$1.id != null && state.selectedIds.contains(row.$1.id),
+        )
         .toList();
     final undo = <EquipmentDeleteUndoEntry>[];
 
@@ -747,10 +749,7 @@ class EquipmentDirectoryNotifier extends Notifier<EquipmentDirectoryState> {
       }
     });
 
-    state = state.copyWith(
-      selectedIds: {},
-      lastDeleted: undo,
-    );
+    state = state.copyWith(selectedIds: {}, lastDeleted: undo);
     await _afterEquipmentMutation();
   }
 
@@ -761,10 +760,7 @@ class EquipmentDirectoryNotifier extends Notifier<EquipmentDirectoryState> {
     final equipment = EquipmentRepository(dbUndo);
     for (final e in list.reversed) {
       if (e.wasUnlinkOnly) {
-        await equipment.linkUserToEquipment(
-          e.unlinkedUserId!,
-          e.equipmentId,
-        );
+        await equipment.linkUserToEquipment(e.unlinkedUserId!, e.equipmentId);
       } else {
         await equipment.restoreEquipment([e.equipmentId]);
       }
@@ -773,12 +769,10 @@ class EquipmentDirectoryNotifier extends Notifier<EquipmentDirectoryState> {
     await _afterEquipmentMutation();
   }
 
-  Future<void> bulkUpdate(
-      List<int> ids, Map<String, dynamic> changes) async {
+  Future<void> bulkUpdate(List<int> ids, Map<String, dynamic> changes) async {
     if (ids.isEmpty || changes.isEmpty) return;
     final toUpdate = state.allItems
-        .where((row) =>
-            row.$1.id != null && ids.contains(row.$1.id))
+        .where((row) => row.$1.id != null && ids.contains(row.$1.id))
         .toList();
     if (toUpdate.isEmpty) return;
     final map = Map<String, dynamic>.from(changes);
@@ -812,10 +806,7 @@ class EquipmentDirectoryNotifier extends Notifier<EquipmentDirectoryState> {
         if (eid == null) continue;
         await equipment.updateEquipment(eid, row.$1.toMap());
         final uid = row.$2?.id;
-        await equipment.replaceEquipmentUsers(
-          eid,
-          uid != null ? [uid] : [],
-        );
+        await equipment.replaceEquipmentUsers(eid, uid != null ? [uid] : []);
         if (!ref.mounted) break;
       }
     } finally {
@@ -827,5 +818,7 @@ class EquipmentDirectoryNotifier extends Notifier<EquipmentDirectoryState> {
   }
 }
 
-final equipmentDirectoryProvider = NotifierProvider<EquipmentDirectoryNotifier,
-    EquipmentDirectoryState>(EquipmentDirectoryNotifier.new);
+final equipmentDirectoryProvider =
+    NotifierProvider<EquipmentDirectoryNotifier, EquipmentDirectoryState>(
+      EquipmentDirectoryNotifier.new,
+    );

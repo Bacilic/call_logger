@@ -6,8 +6,7 @@ class UserIdentityNormalizer {
   UserIdentityNormalizer._();
 
   static String identityKeyForPerson(String? firstName, String? lastName) {
-    final raw =
-        '${(firstName ?? '').trim()} ${(lastName ?? '').trim()}'.trim();
+    final raw = '${(firstName ?? '').trim()} ${(lastName ?? '').trim()}'.trim();
     if (raw.isEmpty) return '';
     return SearchTextNormalizer.normalizeForSearch(raw);
   }

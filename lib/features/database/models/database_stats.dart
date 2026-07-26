@@ -22,6 +22,5 @@ class DatabaseStats {
   /// `όνομα_πίνακα` → πλήθος εγγραφών (`COUNT(*)`).
   final Map<String, int> rowCountsByTable;
 
-  int rowCountForTable(String tableName) =>
-      rowCountsByTable[tableName] ?? 0;
+  int rowCountForTable(String tableName) => rowCountsByTable[tableName] ?? 0;
 }

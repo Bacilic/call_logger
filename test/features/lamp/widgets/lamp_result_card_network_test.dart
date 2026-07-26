@@ -23,18 +23,20 @@ void main() {
   };
 
   group('EquipmentViewModel — κάρτα Δίκτυο', () {
-    test('σειρά καρτών: Εξοπλισμός, Μοντέλο, Δίκτυο, Ιδιοκτήτης, Τμήμα, Σύμβαση',
-        () {
-      final vm = EquipmentViewModel.fromRow(rowWithNetwork());
-      expect(vm.sections.map((s) => s.type).toList(), <InfoSectionType>[
-        InfoSectionType.equipment,
-        InfoSectionType.model,
-        InfoSectionType.network,
-        InfoSectionType.owner,
-        InfoSectionType.department,
-        InfoSectionType.contract,
-      ]);
-    });
+    test(
+      'σειρά καρτών: Εξοπλισμός, Μοντέλο, Δίκτυο, Ιδιοκτήτης, Τμήμα, Σύμβαση',
+      () {
+        final vm = EquipmentViewModel.fromRow(rowWithNetwork());
+        expect(vm.sections.map((s) => s.type).toList(), <InfoSectionType>[
+          InfoSectionType.equipment,
+          InfoSectionType.model,
+          InfoSectionType.network,
+          InfoSectionType.owner,
+          InfoSectionType.department,
+          InfoSectionType.contract,
+        ]);
+      },
+    );
 
     test('η κάρτα Δίκτυο δείχνει όλα τα πεδία με τις σωστές ετικέτες', () {
       final vm = EquipmentViewModel.fromRow(rowWithNetwork());

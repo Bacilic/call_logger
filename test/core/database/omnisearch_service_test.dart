@@ -16,8 +16,9 @@ void main() {
 
     setUpAll(() async {
       initSqfliteFfiForTests();
-      final dir =
-          await Directory.systemTemp.createTemp('omnisearch_service_test_');
+      final dir = await Directory.systemTemp.createTemp(
+        'omnisearch_service_test_',
+      );
       await DatabaseHelper.bindTestDatabaseFile(
         '${dir.path}/omnisearch_service.db',
       );
@@ -79,33 +80,33 @@ void main() {
       });
     }
 
-    test('department hit: kind, entityId, title, mapDisplayLabel, subtitle', () async {
-      final floorId = await insertFloor(
-        label: 'Όροφος 1',
-        floorGroup: 'Κτίριο Α',
-      );
-      final deptId = await insertDepartment(
-        name: 'Τμήμα IT',
-        floorId: floorId,
-        mapCustomName: '  Τμήμα   Πληροφορικής  ',
-      );
+    test(
+      'department hit: kind, entityId, title, mapDisplayLabel, subtitle',
+      () async {
+        final floorId = await insertFloor(
+          label: 'Όροφος 1',
+          floorGroup: 'Κτίριο Α',
+        );
+        final deptId = await insertDepartment(
+          name: 'Τμήμα IT',
+          floorId: floorId,
+          mapCustomName: '  Τμήμα   Πληροφορικής  ',
+        );
 
-      final hits = await repo.searchBuildingMapOmnisearch('it');
-      expect(hits, hasLength(1));
-      final hit = hits.single;
-      expect(hit.kind, BuildingMapOmnisearchEntityKind.department);
-      expect(hit.entityId, deptId);
-      expect(hit.title, 'Τμήμα IT');
-      expect(hit.mapDisplayLabel, 'Τμήμα Πληροφορικής');
-      expect(hit.departmentIds, [deptId]);
-      expect(hit.subtitle, 'Τμήμα • Κτίριο Α · Όροφος 1 • χωρίς σχεδίαση');
-    });
+        final hits = await repo.searchBuildingMapOmnisearch('it');
+        expect(hits, hasLength(1));
+        final hit = hits.single;
+        expect(hit.kind, BuildingMapOmnisearchEntityKind.department);
+        expect(hit.entityId, deptId);
+        expect(hit.title, 'Τμήμα IT');
+        expect(hit.mapDisplayLabel, 'Τμήμα Πληροφορικής');
+        expect(hit.departmentIds, [deptId]);
+        expect(hit.subtitle, 'Τμήμα • Κτίριο Α · Όροφος 1 • χωρίς σχεδίαση');
+      },
+    );
 
     test('department: mapDisplayLabel null όταν ίδιο με title', () async {
-      await insertDepartment(
-        name: 'Τμήμα Ίδιο',
-        mapCustomName: 'Τμήμα Ίδιο',
-      );
+      await insertDepartment(name: 'Τμήμα Ίδιο', mapCustomName: 'Τμήμα Ίδιο');
 
       final hits = await repo.searchBuildingMapOmnisearch('ιδιο');
       expect(hits, hasLength(1));
@@ -132,10 +133,7 @@ void main() {
         'number': '2100',
         'is_deleted': 0,
       });
-      await db.insert('user_phones', {
-        'user_id': userId,
-        'phone_id': phoneId,
-      });
+      await db.insert('user_phones', {'user_id': userId, 'phone_id': phoneId});
 
       final hits = await repo.searchBuildingMapOmnisearch('παπα');
       expect(hits, hasLength(1));
@@ -200,47 +198,52 @@ void main() {
       expect(hits.map((h) => h.title), ['ACT-EQ']);
     });
 
-    test('ranking: ακριβές πριν από prefix πριν από contains, μετά kind, μετά αλφαβητικά',
-        () async {
-      await insertDepartment(name: 'Alpine Dept');
-      final userId = await db.insert('users', {
-        'first_name': 'Alphonse',
-        'last_name': 'User',
-        'is_deleted': 0,
-      });
-      await db.insert('equipment', {
-        'code_equipment': 'EQ-ALP',
-        'notes': 'contains alpine keyword',
-        'is_deleted': 0,
-      });
-      final exactDeptId = await insertDepartment(name: 'Alp');
+    test(
+      'ranking: ακριβές πριν από prefix πριν από contains, μετά kind, μετά αλφαβητικά',
+      () async {
+        await insertDepartment(name: 'Alpine Dept');
+        final userId = await db.insert('users', {
+          'first_name': 'Alphonse',
+          'last_name': 'User',
+          'is_deleted': 0,
+        });
+        await db.insert('equipment', {
+          'code_equipment': 'EQ-ALP',
+          'notes': 'contains alpine keyword',
+          'is_deleted': 0,
+        });
+        final exactDeptId = await insertDepartment(name: 'Alp');
 
-      final hits = await repo.searchBuildingMapOmnisearch('alp');
-      expect(hits.length, greaterThanOrEqualTo(3));
+        final hits = await repo.searchBuildingMapOmnisearch('alp');
+        expect(hits.length, greaterThanOrEqualTo(3));
 
-      final exactIdx = hits.indexWhere(
-        (h) =>
-            h.kind == BuildingMapOmnisearchEntityKind.department &&
-            h.entityId == exactDeptId,
-      );
-      final prefixIdx = hits.indexWhere(
-        (h) =>
-            h.kind == BuildingMapOmnisearchEntityKind.user &&
-            h.entityId == userId,
-      );
-      final containsIdx = hits.indexWhere(
-        (h) => h.kind == BuildingMapOmnisearchEntityKind.equipment,
-      );
+        final exactIdx = hits.indexWhere(
+          (h) =>
+              h.kind == BuildingMapOmnisearchEntityKind.department &&
+              h.entityId == exactDeptId,
+        );
+        final prefixIdx = hits.indexWhere(
+          (h) =>
+              h.kind == BuildingMapOmnisearchEntityKind.user &&
+              h.entityId == userId,
+        );
+        final containsIdx = hits.indexWhere(
+          (h) => h.kind == BuildingMapOmnisearchEntityKind.equipment,
+        );
 
-      expect(exactIdx, lessThan(prefixIdx));
-      expect(prefixIdx, lessThan(containsIdx));
-    });
+        expect(exactIdx, lessThan(prefixIdx));
+        expect(prefixIdx, lessThan(containsIdx));
+      },
+    );
 
     test('κενό query ή limit<=0 επιστρέφει κενή λίστα', () async {
       await insertDepartment(name: 'Τμήμα');
       expect(await repo.searchBuildingMapOmnisearch(''), isEmpty);
       expect(await repo.searchBuildingMapOmnisearch('   '), isEmpty);
-      expect(await repo.searchBuildingMapOmnisearch('τμημα', limit: 0), isEmpty);
+      expect(
+        await repo.searchBuildingMapOmnisearch('τμημα', limit: 0),
+        isEmpty,
+      );
     });
 
     test('limit περιορίζει αποτελέσματα', () async {

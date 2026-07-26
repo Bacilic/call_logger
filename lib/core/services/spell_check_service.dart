@@ -1,4 +1,4 @@
-﻿import 'dart:math' as math;
+import 'dart:math' as math;
 
 import '../database/database_helper.dart';
 import '../database/dictionary_repository.dart';
@@ -18,9 +18,7 @@ class LexiconSpellCheckService {
   bool get isInitialized => _initialized;
 
   /// Φόρτωση από χάρτη παραλλαγών (πυρήνας) + `user_dictionary`.
-  Future<void> init({
-    required Map<String, Set<String>> lexiconVariants,
-  }) async {
+  Future<void> init({required Map<String, Set<String>> lexiconVariants}) async {
     _variants
       ..clear()
       ..addAll({

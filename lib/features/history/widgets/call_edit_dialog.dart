@@ -240,7 +240,11 @@ class _CallEditDialogState extends ConsumerState<_CallEditDialog>
       if (!mounted) return;
       setState(() => _saving = false);
       showDialogSnackBar(
-        SnackBar(content: Text('Αποτυχία ενημέρωσης κλήσης: ${humanizeUserFacingError(e)}')),
+        SnackBar(
+          content: Text(
+            'Αποτυχία ενημέρωσης κλήσης: ${humanizeUserFacingError(e)}',
+          ),
+        ),
       );
     }
   }
@@ -261,7 +265,9 @@ class _CallEditDialogState extends ConsumerState<_CallEditDialog>
       if (!mounted) return;
       setState(() => _hardCloneBusy = false);
       showDialogSnackBar(
-        SnackBar(content: Text('Αποτυχία κλωνοποίησης: ${humanizeUserFacingError(e)}')),
+        SnackBar(
+          content: Text('Αποτυχία κλωνοποίησης: ${humanizeUserFacingError(e)}'),
+        ),
       );
     }
   }
@@ -280,237 +286,245 @@ class _CallEditDialogState extends ConsumerState<_CallEditDialog>
       messengerKey: dialogMessengerKey,
       child: Center(
         child: AlertDialog(
-      title: const Text('Επεξεργασία κλήσης'),
-      content: SizedBox(
-        width: 980,
-        child: _loading
-            ? const SizedBox(
-                height: 280,
-                child: Center(child: CircularProgressIndicator()),
-              )
-            : SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    if (hasLansweeperTicket) ...[
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: theme.colorScheme.errorContainer.withValues(
-                            alpha: 0.55,
-                          ),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                            color: theme.colorScheme.error.withValues(
-                              alpha: 0.4,
-                            ),
-                          ),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Προσοχή: Η κλήση έχει Lansweeper ticket ή κατάσταση sent.',
-                              style: theme.textTheme.bodyMedium,
-                            ),
-                            const SizedBox(height: 8),
-                            const Text(
-                              'Οι αλλαγές δεν θα επανασταλούν αυτόματα στο Lansweeper.',
-                            ),
-                            const SizedBox(height: 8),
-                            Align(
-                              alignment: Alignment.centerLeft,
-                              child: OutlinedButton.icon(
-                                onPressed: _hardCloneBusy ? null : _cloneCall,
-                                icon: _hardCloneBusy
-                                    ? const SizedBox(
-                                        width: 16,
-                                        height: 16,
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 2,
-                                        ),
-                                      )
-                                    : const Icon(Icons.copy_all_outlined),
-                                label: const Text('Κλωνοποίηση ως νέα κλήση'),
+          title: const Text('Επεξεργασία κλήσης'),
+          content: SizedBox(
+            width: 980,
+            child: _loading
+                ? const SizedBox(
+                    height: 280,
+                    child: Center(child: CircularProgressIndicator()),
+                  )
+                : SingleChildScrollView(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        if (hasLansweeperTicket) ...[
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: theme.colorScheme.errorContainer
+                                  .withValues(alpha: 0.55),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: theme.colorScheme.error.withValues(
+                                  alpha: 0.4,
+                                ),
                               ),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Προσοχή: Η κλήση έχει Lansweeper ticket ή κατάσταση sent.',
+                                  style: theme.textTheme.bodyMedium,
+                                ),
+                                const SizedBox(height: 8),
+                                const Text(
+                                  'Οι αλλαγές δεν θα επανασταλούν αυτόματα στο Lansweeper.',
+                                ),
+                                const SizedBox(height: 8),
+                                Align(
+                                  alignment: Alignment.centerLeft,
+                                  child: OutlinedButton.icon(
+                                    onPressed: _hardCloneBusy
+                                        ? null
+                                        : _cloneCall,
+                                    icon: _hardCloneBusy
+                                        ? const SizedBox(
+                                            width: 16,
+                                            height: 16,
+                                            child: CircularProgressIndicator(
+                                              strokeWidth: 2,
+                                            ),
+                                          )
+                                        : const Icon(Icons.copy_all_outlined),
+                                    label: const Text(
+                                      'Κλωνοποίηση ως νέα κλήση',
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                        ],
+                        LayoutBuilder(
+                          builder: (context, constraints) {
+                            const gaps = 36.0; // 3 * 12 μεταξύ πεδίων.
+                            final mw = constraints.maxWidth;
+                            final available = (mw - gaps).clamp(
+                              200.0,
+                              double.infinity,
+                            );
+                            final w1 = (available * 0.26).clamp(170.0, 280.0);
+                            final w2 = (available * 0.32).clamp(200.0, 340.0);
+                            final wDept = (available * 0.22).clamp(
+                              150.0,
+                              250.0,
+                            );
+                            final w3 = (available * 0.2).clamp(140.0, 220.0);
+                            final minRowWidth =
+                                w1 + 12 + w2 + 12 + wDept + 12 + w3;
+                            final selector = SmartEntitySelectorWidget(
+                              provider: historyEditSmartEntityProvider,
+                              w1: w1,
+                              w2: w2,
+                              wDept: wDept,
+                              w3: w3,
+                              trailingRowChildren: const [],
+                            );
+                            if (mw + 0.5 < minRowWidth) {
+                              return SingleChildScrollView(
+                                scrollDirection: Axis.horizontal,
+                                child: SizedBox(
+                                  width: minRowWidth,
+                                  child: selector,
+                                ),
+                              );
+                            }
+                            return selector;
+                          },
+                        ),
+                        const SizedBox(height: 12),
+                        categoryEntriesAsync.when(
+                          data: (entries) {
+                            final options = <({int? id, String name})>[
+                              (id: null, name: '— Χωρίς κατηγορία —'),
+                              ...entries.map((e) => (id: e.id, name: e.name)),
+                            ];
+                            final selected =
+                                options.any((e) => e.id == _categoryId)
+                                ? _categoryId
+                                : null;
+                            return DropdownButtonFormField<int?>(
+                              initialValue: selected,
+                              decoration: const InputDecoration(
+                                labelText: 'Κατηγορία',
+                                border: OutlineInputBorder(),
+                                isDense: true,
+                              ),
+                              items: options
+                                  .map(
+                                    (entry) => DropdownMenuItem<int?>(
+                                      value: entry.id,
+                                      child: Text(entry.name),
+                                    ),
+                                  )
+                                  .toList(),
+                              onChanged: (value) {
+                                setState(() {
+                                  _categoryId = value;
+                                  _categoryText =
+                                      entries
+                                          .where((e) => e.id == value)
+                                          .map((e) => e.name)
+                                          .firstOrNull ??
+                                      '';
+                                });
+                              },
+                            );
+                          },
+                          loading: () => const SizedBox(
+                            height: 44,
+                            child: Center(
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            ),
+                          ),
+                          error: (_, _) => const SizedBox.shrink(),
+                        ),
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: TextFormField(
+                                readOnly: true,
+                                controller: _dateController,
+                                decoration: const InputDecoration(
+                                  labelText: 'Ημερομηνία',
+                                  border: OutlineInputBorder(),
+                                  isDense: true,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            IconButton.filledTonal(
+                              tooltip: 'Επιλογή ημερομηνίας',
+                              onPressed: _pickDate,
+                              icon: const Icon(Icons.calendar_today),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: TextFormField(
+                                readOnly: true,
+                                controller: _timeController,
+                                decoration: const InputDecoration(
+                                  labelText: 'Ώρα',
+                                  border: OutlineInputBorder(),
+                                  isDense: true,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            IconButton.filledTonal(
+                              tooltip: 'Επιλογή ώρας',
+                              onPressed: _pickTime,
+                              icon: const Icon(Icons.access_time),
                             ),
                           ],
                         ),
-                      ),
-                      const SizedBox(height: 12),
-                    ],
-                    LayoutBuilder(
-                      builder: (context, constraints) {
-                        const gaps = 36.0; // 3 * 12 μεταξύ πεδίων.
-                        final mw = constraints.maxWidth;
-                        final available = (mw - gaps).clamp(
-                          200.0,
-                          double.infinity,
-                        );
-                        final w1 = (available * 0.26).clamp(170.0, 280.0);
-                        final w2 = (available * 0.32).clamp(200.0, 340.0);
-                        final wDept = (available * 0.22).clamp(150.0, 250.0);
-                        final w3 = (available * 0.2).clamp(140.0, 220.0);
-                        final minRowWidth = w1 + 12 + w2 + 12 + wDept + 12 + w3;
-                        final selector = SmartEntitySelectorWidget(
-                          provider: historyEditSmartEntityProvider,
-                          w1: w1,
-                          w2: w2,
-                          wDept: wDept,
-                          w3: w3,
-                          trailingRowChildren: const [],
-                        );
-                        if (mw + 0.5 < minRowWidth) {
-                          return SingleChildScrollView(
-                            scrollDirection: Axis.horizontal,
-                            child: SizedBox(
-                              width: minRowWidth,
-                              child: selector,
-                            ),
-                          );
-                        }
-                        return selector;
-                      },
-                    ),
-                    const SizedBox(height: 12),
-                    categoryEntriesAsync.when(
-                      data: (entries) {
-                        final options = <({int? id, String name})>[
-                          (id: null, name: '— Χωρίς κατηγορία —'),
-                          ...entries.map((e) => (id: e.id, name: e.name)),
-                        ];
-                        final selected = options.any((e) => e.id == _categoryId)
-                            ? _categoryId
-                            : null;
-                        return DropdownButtonFormField<int?>(
-                          initialValue: selected,
+                        const SizedBox(height: 12),
+                        TextFormField(
+                          controller: _durationController,
+                          keyboardType: TextInputType.number,
                           decoration: const InputDecoration(
-                            labelText: 'Κατηγορία',
+                            labelText: 'Διάρκεια (sec)',
                             border: OutlineInputBorder(),
                             isDense: true,
                           ),
-                          items: options
-                              .map(
-                                (entry) => DropdownMenuItem<int?>(
-                                  value: entry.id,
-                                  child: Text(entry.name),
-                                ),
-                              )
-                              .toList(),
-                          onChanged: (value) {
-                            setState(() {
-                              _categoryId = value;
-                              _categoryText =
-                                  entries
-                                      .where((e) => e.id == value)
-                                      .map((e) => e.name)
-                                      .firstOrNull ??
-                                  '';
-                            });
-                          },
-                        );
-                      },
-                      loading: () => const SizedBox(
-                        height: 44,
-                        child: Center(
-                          child: CircularProgressIndicator(strokeWidth: 2),
                         ),
-                      ),
-                      error: (_, _) => const SizedBox.shrink(),
-                    ),
-                    const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextFormField(
-                            readOnly: true,
-                            controller: _dateController,
-                            decoration: const InputDecoration(
-                              labelText: 'Ημερομηνία',
-                              border: OutlineInputBorder(),
-                              isDense: true,
-                            ),
+                        const SizedBox(height: 12),
+                        LexiconSpellTextFormField(
+                          controller: _issueController,
+                          minLines: 2,
+                          maxLines: 5,
+                          decoration: const InputDecoration(
+                            labelText: 'Σημειώσεις',
+                            border: OutlineInputBorder(),
+                            alignLabelWithHint: true,
                           ),
                         ),
-                        const SizedBox(width: 8),
-                        IconButton.filledTonal(
-                          tooltip: 'Επιλογή ημερομηνίας',
-                          onPressed: _pickDate,
-                          icon: const Icon(Icons.calendar_today),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: TextFormField(
-                            readOnly: true,
-                            controller: _timeController,
-                            decoration: const InputDecoration(
-                              labelText: 'Ώρα',
-                              border: OutlineInputBorder(),
-                              isDense: true,
+                        const SizedBox(height: 12),
+                        if (historyEntityIsDeleted(
+                          selector.selectedCaller?.isDeleted,
+                        ))
+                          const Padding(
+                            padding: EdgeInsets.only(top: 10),
+                            child: Text(
+                              'Ο συνδεδεμένος καλών είναι διαγραμμένος στον κατάλογο. Θα διατηρηθεί το snapshot κειμένου.',
                             ),
                           ),
-                        ),
-                        const SizedBox(width: 8),
-                        IconButton.filledTonal(
-                          tooltip: 'Επιλογή ώρας',
-                          onPressed: _pickTime,
-                          icon: const Icon(Icons.access_time),
-                        ),
                       ],
                     ),
-                    const SizedBox(height: 12),
-                    TextFormField(
-                      controller: _durationController,
-                      keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(
-                        labelText: 'Διάρκεια (sec)',
-                        border: OutlineInputBorder(),
-                        isDense: true,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    LexiconSpellTextFormField(
-                      controller: _issueController,
-                      minLines: 2,
-                      maxLines: 5,
-                      decoration: const InputDecoration(
-                        labelText: 'Σημειώσεις',
-                        border: OutlineInputBorder(),
-                        alignLabelWithHint: true,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    if (historyEntityIsDeleted(
-                      selector.selectedCaller?.isDeleted,
-                    ))
-                      const Padding(
-                        padding: EdgeInsets.only(top: 10),
-                        child: Text(
-                          'Ο συνδεδεμένος καλών είναι διαγραμμένος στον κατάλογο. Θα διατηρηθεί το snapshot κειμένου.',
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: _saving ? null : () => Navigator.of(context).pop(),
-          child: const Text('Ακύρωση'),
-        ),
-        FilledButton.icon(
-          onPressed: _saving ? null : _save,
-          icon: _saving
-              ? const SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : const Icon(Icons.save),
-          label: const Text('Αποθήκευση'),
-        ),
-      ],
+                  ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: _saving ? null : () => Navigator.of(context).pop(),
+              child: const Text('Ακύρωση'),
+            ),
+            FilledButton.icon(
+              onPressed: _saving ? null : _save,
+              icon: _saving
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.save),
+              label: const Text('Αποθήκευση'),
+            ),
+          ],
         ),
       ),
     );

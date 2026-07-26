@@ -38,9 +38,7 @@ Future<ProviderContainer> _containerWithPrefixCodes() async {
   svc.injectInMemoryCatalogForTests(
     users: [owner],
     equipment: equipment,
-    departmentRows: [
-      DepartmentModel(id: _kDeptId, name: _kDeptName),
-    ],
+    departmentRows: [DepartmentModel(id: _kDeptId, name: _kDeptName)],
     userToEquipmentIds: {
       _kOwnerId: [506],
     },

@@ -66,29 +66,29 @@ void main() {
       await tester.pump();
     });
 
-    testWidgets(
-      'autofocus: το πεδίο εστιάζεται μόλις ανοίξει, χωρίς κλικ',
-      (tester) async {
-        await pumpField(tester, autofocus: true);
-        await tester.pump();
+    testWidgets('autofocus: το πεδίο εστιάζεται μόλις ανοίξει, χωρίς κλικ', (
+      tester,
+    ) async {
+      await pumpField(tester, autofocus: true);
+      await tester.pump();
 
-        final editable = tester.state<EditableTextState>(
-          find.byType(EditableText),
-        );
-        expect(
-          editable.widget.focusNode.hasPrimaryFocus,
-          isTrue,
-          reason: 'Με autofocus, ο χρήστης πρέπει να μπορεί να πληκτρολογήσει '
-              'αμέσως χωρίς κλικ μέσα στο πεδίο.',
-        );
+      final editable = tester.state<EditableTextState>(
+        find.byType(EditableText),
+      );
+      expect(
+        editable.widget.focusNode.hasPrimaryFocus,
+        isTrue,
+        reason:
+            'Με autofocus, ο χρήστης πρέπει να μπορεί να πληκτρολογήσει '
+            'αμέσως χωρίς κλικ μέσα στο πεδίο.',
+      );
 
-        // Χωρίς autofocus, το πεδίο ΔΕΝ πρέπει να αρπάζει την εστίαση μόνο του.
-        FocusManager.instance.primaryFocus?.unfocus();
-        await tester.pump();
-        await tester.pumpWidget(const SizedBox.shrink());
-        await tester.pump();
-      },
-    );
+      // Χωρίς autofocus, το πεδίο ΔΕΝ πρέπει να αρπάζει την εστίαση μόνο του.
+      FocusManager.instance.primaryFocus?.unfocus();
+      await tester.pump();
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
+    });
 
     testWidgets(
       'ΠΑΛΙΝΔΡΟΜΗΣΗ: το πεδίο ΔΕΝ ξαναχτίζεται όταν εμφανίζεται/κρύβεται η λίστα',
@@ -108,7 +108,8 @@ void main() {
         expect(
           identical(elementBefore, elementWithOverlay),
           isTrue,
-          reason: 'Η εμφάνιση της λίστας δεν πρέπει να ξαναχτίζει το πεδίο '
+          reason:
+              'Η εμφάνιση της λίστας δεν πρέπει να ξαναχτίζει το πεδίο '
               '(αλλιώς χάνεται η εστίαση/ο κέρσορας).',
         );
 
@@ -224,14 +225,8 @@ void main() {
         LampEntityCodeSuggestion(code: 12, label: 'Βασικό Γραφείο'),
       ];
 
-      expect(
-        filterEntityCodeSuggestions(source, 'βασικο').single.code,
-        12,
-      );
-      expect(
-        filterEntityCodeSuggestions(source, '12').single.code,
-        12,
-      );
+      expect(filterEntityCodeSuggestions(source, 'βασικο').single.code, 12);
+      expect(filterEntityCodeSuggestions(source, '12').single.code, 12);
     });
   });
 }

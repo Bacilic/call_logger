@@ -1,4 +1,4 @@
-﻿import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import '../../utils/user_identity_normalizer.dart';
 import 'lamp_data_issue_type_labels.dart';
@@ -394,7 +394,11 @@ class LampIssueFkAnalyzer {
     required bool fuzzyAllowed,
     Map<int, String>? detailedLabelById,
   }) {
-    final base = _support.baseProposal(issueType, issue, originalOverride: original);
+    final base = _support.baseProposal(
+      issueType,
+      issue,
+      originalOverride: original,
+    );
     final exact = references
         .where((r) => r.normalized == normalized && normalized.isNotEmpty)
         .toList();
@@ -930,7 +934,11 @@ class LampIssueFkAnalyzer {
     required String normalized,
     required List<Map<String, Object?>> owners,
   }) {
-    final base = _support.baseProposal(issueType, issue, originalOverride: original);
+    final base = _support.baseProposal(
+      issueType,
+      issue,
+      originalOverride: original,
+    );
     final raw = _support.text(issue['raw_value']) ?? '';
     if (issueType == LampIssueType.unknownId &&
         int.tryParse(raw.trim()) != null) {
@@ -1031,7 +1039,8 @@ class LampIssueFkAnalyzer {
           linkExistingOptions.add(
             LampIssueResolutionOption(
               id: 'owner_link_$ownerId',
-              label: 'Σύνδεση με υπάρχον: $ownerId · ${_support.ownerLabel(owner)}',
+              label:
+                  'Σύνδεση με υπάρχον: $ownerId · ${_support.ownerLabel(owner)}',
               action: LampIssueResolutionAction.autoFix,
               proposedId: ownerId,
               proposedMatch: _support.ownerLabel(owner),
@@ -1148,7 +1157,11 @@ class LampIssueFkAnalyzer {
   }) {
     final raw = _support.text(issue['raw_value']) ?? '';
     final rawId = int.tryParse(raw.trim());
-    final base = _support.baseProposal(issueType, issue, originalOverride: original);
+    final base = _support.baseProposal(
+      issueType,
+      issue,
+      originalOverride: original,
+    );
     if (issueType == LampIssueType.unknownId && rawId != null) {
       final idMatch = references.where((r) => r.id == rawId).toList();
       if (idMatch.isNotEmpty) {

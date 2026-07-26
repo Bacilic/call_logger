@@ -1,4 +1,4 @@
-﻿import '../../../core/services/lookup_service.dart';
+import '../../../core/services/lookup_service.dart';
 import '../provider/smart_entity_selector_provider.dart';
 import 'calls_field_confirmations.dart';
 import 'calls_layout_template.dart';
@@ -52,8 +52,13 @@ class CallsFieldGroups {
           template == other.template;
 
   @override
-  int get hashCode =>
-      Object.hash(isPhoneGroupActive, equipmentTier, isCallerGroupActive, isMapActive, template);
+  int get hashCode => Object.hash(
+    isPhoneGroupActive,
+    equipmentTier,
+    isCallerGroupActive,
+    isMapActive,
+    template,
+  );
 }
 
 /// Pure resolver — no Riverpod / Flutter imports.
@@ -66,8 +71,7 @@ class CallsFieldGroupsResolver {
     LookupService? lookup,
   ]) {
     final phoneValue = header.selectedPhone?.trim() ?? '';
-    final isPhoneGroupActive =
-        confirmations.phone && phoneValue.isNotEmpty;
+    final isPhoneGroupActive = confirmations.phone && phoneValue.isNotEmpty;
 
     final equipmentText = header.equipmentText.trim();
     final EquipmentGroupTier equipmentTier;
@@ -80,8 +84,7 @@ class CallsFieldGroupsResolver {
     }
 
     final callerId = header.selectedCaller?.id;
-    final isCallerGroupActive =
-        confirmations.caller && callerId != null;
+    final isCallerGroupActive = confirmations.caller && callerId != null;
 
     final isMapActive = CallsMapGate.isMapActive(header, lookup, confirmations);
 

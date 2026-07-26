@@ -107,7 +107,7 @@ class NetworkFolderClassifier {
   /// Γράμμα τόμου `A`–`Z` αν η διαδρομή είναι της μορφής `F:\...`, αλλιώς null.
   static String? _windowsDriveLetterFromPath(String path) {
     final t = path.trim().replaceAll('/', r'\');
-    if (t.length < 2 || t.codeUnitAt(1) != 0x3A /* ':' */) {
+    if (t.length < 2 || t.codeUnitAt(1) != 0x3A /* ':' */ ) {
       return null;
     }
     final u = t.codeUnitAt(0);
@@ -155,15 +155,12 @@ class NetworkFolderClassifier {
   static Future<List<String>> _systemLocalSharesProvider() async {
     if (!Platform.isWindows) return const <String>[];
     try {
-      final result = await Process.run(
-        'powershell',
-        const <String>[
-          '-NoProfile',
-          '-Command',
-          // Αποκλεισμός special/διαχειριστικών shares (C$, ADMIN$, IPC$…).
-          r'Get-SmbShare | Where-Object { -not $_.Special } | ForEach-Object { $_.Path }',
-        ],
-      ).timeout(const Duration(seconds: 2));
+      final result = await Process.run('powershell', const <String>[
+        '-NoProfile',
+        '-Command',
+        // Αποκλεισμός special/διαχειριστικών shares (C$, ADMIN$, IPC$…).
+        r'Get-SmbShare | Where-Object { -not $_.Special } | ForEach-Object { $_.Path }',
+      ]).timeout(const Duration(seconds: 2));
       if (result.exitCode != 0) return const <String>[];
       final stdout = result.stdout;
       final text = stdout is String

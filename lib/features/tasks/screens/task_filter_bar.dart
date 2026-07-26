@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/material.dart';
@@ -195,8 +195,9 @@ class _TaskFilterBarState extends ConsumerState<TaskFilterBar> {
                               : IconButton(
                                   tooltip: 'Καθαρισμός αναζήτησης',
                                   icon: const Icon(Icons.clear),
-                                  onPressed:
-                                      filtersEnabled ? _clearSearch : null,
+                                  onPressed: filtersEnabled
+                                      ? _clearSearch
+                                      : null,
                                 ),
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(12),

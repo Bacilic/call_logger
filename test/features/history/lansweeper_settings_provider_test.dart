@@ -11,8 +11,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import '../../test_setup.dart';
 
-const _kTicketFormUrl =
-    'http://10.10.201.22:81/helpdesk/NewTicket.aspx?tid=-7';
+const _kTicketFormUrl = 'http://10.10.201.22:81/helpdesk/NewTicket.aspx?tid=-7';
 
 const _kNonApiUrl = 'http://10.10.201.22:81/helpdesk/NewTicket.aspx';
 
@@ -31,9 +30,7 @@ Future<SettingsRepository> _settingsRepo() async {
 }
 
 ProviderContainer _testContainer() {
-  return ProviderContainer(
-    overrides: callLoggerTestProviderOverrides(),
-  );
+  return ProviderContainer(overrides: callLoggerTestProviderOverrides());
 }
 
 Future<void> _pumpUntil(
@@ -66,156 +63,209 @@ void main() {
     });
 
     group('lansweeperApiUrlProvider', () {
-      test('χρησιμοποιεί έγκυρο api url όταν υπάρχει στο κύριο κλειδί', () async {
-        await (await _settingsRepo()).saveSetting(
-          kLansweeperApiUrlSettingKey,
-          kExampleLansweeperApiUrl,
-        );
+      test(
+        'χρησιμοποιεί έγκυρο api url όταν υπάρχει στο κύριο κλειδί',
+        () async {
+          await (await _settingsRepo()).saveSetting(
+            kLansweeperApiUrlSettingKey,
+            kExampleLansweeperApiUrl,
+          );
 
-        final container = _testContainer();
-        addTearDown(container.dispose);
+          final container = _testContainer();
+          addTearDown(container.dispose);
 
-        container.listen(lansweeperApiUrlProvider, (_, _) {});
-        await _pumpUntil(
-          () => container.read(lansweeperApiUrlProvider) == kExampleLansweeperApiUrl,
-        );
+          container.listen(lansweeperApiUrlProvider, (_, _) {});
+          await _pumpUntil(
+            () =>
+                container.read(lansweeperApiUrlProvider) ==
+                kExampleLansweeperApiUrl,
+          );
 
-        expect(container.read(lansweeperApiUrlProvider), kExampleLansweeperApiUrl);
-      });
+          expect(
+            container.read(lansweeperApiUrlProvider),
+            kExampleLansweeperApiUrl,
+          );
+        },
+      );
 
-      test('legacy fallback από kLansweeperUrlSettingKey όταν το api κλειδί είναι μη-endpoint', () async {
-        await (await _settingsRepo()).saveSetting(
-          kLansweeperApiUrlSettingKey,
-          _kNonApiUrl,
-        );
-        await (await _settingsRepo()).saveSetting(
-          kLansweeperUrlSettingKey,
-          kExampleLansweeperApiUrl,
-        );
+      test(
+        'legacy fallback από kLansweeperUrlSettingKey όταν το api κλειδί είναι μη-endpoint',
+        () async {
+          await (await _settingsRepo()).saveSetting(
+            kLansweeperApiUrlSettingKey,
+            _kNonApiUrl,
+          );
+          await (await _settingsRepo()).saveSetting(
+            kLansweeperUrlSettingKey,
+            kExampleLansweeperApiUrl,
+          );
 
-        final container = _testContainer();
-        addTearDown(container.dispose);
+          final container = _testContainer();
+          addTearDown(container.dispose);
 
-        container.listen(lansweeperApiUrlProvider, (_, _) {});
-        await _pumpUntil(
-          () => container.read(lansweeperApiUrlProvider) == kExampleLansweeperApiUrl,
-        );
+          container.listen(lansweeperApiUrlProvider, (_, _) {});
+          await _pumpUntil(
+            () =>
+                container.read(lansweeperApiUrlProvider) ==
+                kExampleLansweeperApiUrl,
+          );
 
-        expect(container.read(lansweeperApiUrlProvider), kExampleLansweeperApiUrl);
-      });
+          expect(
+            container.read(lansweeperApiUrlProvider),
+            kExampleLansweeperApiUrl,
+          );
+        },
+      );
 
-      test('setApiKey αποθηκεύει και επιστρέφει τιμή (ενδεικτικό hydrate/set/save)', () async {
-        const apiKey = 'test-api-key-123';
+      test(
+        'setApiKey αποθηκεύει και επιστρέφει τιμή (ενδεικτικό hydrate/set/save)',
+        () async {
+          const apiKey = 'test-api-key-123';
 
-        final container = _testContainer();
-        addTearDown(container.dispose);
+          final container = _testContainer();
+          addTearDown(container.dispose);
 
-        container.listen(lansweeperApiKeyProvider, (_, _) {});
-        container.read(lansweeperApiKeyProvider);
-        await _pumpHydration();
+          container.listen(lansweeperApiKeyProvider, (_, _) {});
+          container.read(lansweeperApiKeyProvider);
+          await _pumpHydration();
 
-        await container.read(lansweeperApiKeyProvider.notifier).setApiKey(apiKey);
+          await container
+              .read(lansweeperApiKeyProvider.notifier)
+              .setApiKey(apiKey);
 
-        expect(container.read(lansweeperApiKeyProvider), apiKey);
-        expect(
-          await (await _settingsRepo()).getSetting(kLansweeperApiKeySettingKey),
-          apiKey,
-        );
-      });
+          expect(container.read(lansweeperApiKeyProvider), apiKey);
+          expect(
+            await (await _settingsRepo()).getSetting(
+              kLansweeperApiKeySettingKey,
+            ),
+            apiKey,
+          );
+        },
+      );
     });
 
     group('lansweeperTicketFormUrlProvider', () {
-      test('προτεραιότητα ticketRaw → apiRaw (μη-endpoint) → default', () async {
-        await (await _settingsRepo()).saveSetting(
-          kLansweeperUrlSettingKey,
-          _kTicketFormUrl,
-        );
+      test(
+        'προτεραιότητα ticketRaw → apiRaw (μη-endpoint) → default',
+        () async {
+          await (await _settingsRepo()).saveSetting(
+            kLansweeperUrlSettingKey,
+            _kTicketFormUrl,
+          );
 
-        final container = _testContainer();
-        addTearDown(container.dispose);
+          final container = _testContainer();
+          addTearDown(container.dispose);
 
-        container.listen(lansweeperTicketFormUrlProvider, (_, _) {});
-        await _pumpUntil(
-          () => container.read(lansweeperTicketFormUrlProvider) == _kTicketFormUrl,
-        );
+          container.listen(lansweeperTicketFormUrlProvider, (_, _) {});
+          await _pumpUntil(
+            () =>
+                container.read(lansweeperTicketFormUrlProvider) ==
+                _kTicketFormUrl,
+          );
 
-        expect(container.read(lansweeperTicketFormUrlProvider), _kTicketFormUrl);
-      });
+          expect(
+            container.read(lansweeperTicketFormUrlProvider),
+            _kTicketFormUrl,
+          );
+        },
+      );
 
-      test('fallback σε apiRaw όταν λείπει ticketRaw και το api δεν είναι endpoint', () async {
-        await (await _settingsRepo()).saveSetting(
-          kLansweeperApiUrlSettingKey,
-          _kNonApiUrl,
-        );
+      test(
+        'fallback σε apiRaw όταν λείπει ticketRaw και το api δεν είναι endpoint',
+        () async {
+          await (await _settingsRepo()).saveSetting(
+            kLansweeperApiUrlSettingKey,
+            _kNonApiUrl,
+          );
 
-        final container = _testContainer();
-        addTearDown(container.dispose);
+          final container = _testContainer();
+          addTearDown(container.dispose);
 
-        container.listen(lansweeperTicketFormUrlProvider, (_, _) {});
-        await _pumpUntil(
-          () => container.read(lansweeperTicketFormUrlProvider) == _kNonApiUrl,
-        );
+          container.listen(lansweeperTicketFormUrlProvider, (_, _) {});
+          await _pumpUntil(
+            () =>
+                container.read(lansweeperTicketFormUrlProvider) == _kNonApiUrl,
+          );
 
-        expect(container.read(lansweeperTicketFormUrlProvider), _kNonApiUrl);
-      });
+          expect(container.read(lansweeperTicketFormUrlProvider), _kNonApiUrl);
+        },
+      );
 
-      test('προεπιλογή kDefaultLansweeperUrl όταν λείπουν και τα δύο', () async {
-        final container = _testContainer();
-        addTearDown(container.dispose);
+      test(
+        'προεπιλογή kDefaultLansweeperUrl όταν λείπουν και τα δύο',
+        () async {
+          final container = _testContainer();
+          addTearDown(container.dispose);
 
-        container.listen(lansweeperTicketFormUrlProvider, (_, _) {});
-        container.read(lansweeperTicketFormUrlProvider);
-        await _pumpHydration();
+          container.listen(lansweeperTicketFormUrlProvider, (_, _) {});
+          container.read(lansweeperTicketFormUrlProvider);
+          await _pumpHydration();
 
-        expect(container.read(lansweeperTicketFormUrlProvider), kDefaultLansweeperUrl);
-      });
+          expect(
+            container.read(lansweeperTicketFormUrlProvider),
+            kDefaultLansweeperUrl,
+          );
+        },
+      );
     });
 
     group('lansweeperHelpdeskLoginUrlProvider', () {
-      test('παράγει login url από ticket form url όταν λείπει ρητή τιμή', () async {
-        await (await _settingsRepo()).saveSetting(
-          kLansweeperUrlSettingKey,
-          _kTicketFormUrl,
-        );
+      test(
+        'παράγει login url από ticket form url όταν λείπει ρητή τιμή',
+        () async {
+          await (await _settingsRepo()).saveSetting(
+            kLansweeperUrlSettingKey,
+            _kTicketFormUrl,
+          );
 
-        final expected = LansweeperUrlRules.loginUrlDerivedFromTicketFormUrl(
-          _kTicketFormUrl,
-        );
+          final expected = LansweeperUrlRules.loginUrlDerivedFromTicketFormUrl(
+            _kTicketFormUrl,
+          );
 
-        final container = _testContainer();
-        addTearDown(container.dispose);
+          final container = _testContainer();
+          addTearDown(container.dispose);
 
-        container.listen(lansweeperHelpdeskLoginUrlProvider, (_, _) {});
-        await _pumpUntil(
-          () => container.read(lansweeperHelpdeskLoginUrlProvider) == expected,
-        );
+          container.listen(lansweeperHelpdeskLoginUrlProvider, (_, _) {});
+          await _pumpUntil(
+            () =>
+                container.read(lansweeperHelpdeskLoginUrlProvider) == expected,
+          );
 
-        expect(container.read(lansweeperHelpdeskLoginUrlProvider), expected);
-        expect(
-          await (await _settingsRepo()).getSetting(
+          expect(container.read(lansweeperHelpdeskLoginUrlProvider), expected);
+          expect(
+            await (await _settingsRepo()).getSetting(
+              kLansweeperHelpdeskLoginUrlSettingKey,
+            ),
+            isNull,
+          );
+        },
+      );
+
+      test(
+        'διατηρεί ρητή τιμή login url όταν είναι browser-launchable',
+        () async {
+          const explicitLogin = 'http://10.10.201.22:81/login.aspx';
+          await (await _settingsRepo()).saveSetting(
             kLansweeperHelpdeskLoginUrlSettingKey,
-          ),
-          isNull,
-        );
-      });
+            explicitLogin,
+          );
 
-      test('διατηρεί ρητή τιμή login url όταν είναι browser-launchable', () async {
-        const explicitLogin = 'http://10.10.201.22:81/login.aspx';
-        await (await _settingsRepo()).saveSetting(
-          kLansweeperHelpdeskLoginUrlSettingKey,
-          explicitLogin,
-        );
+          final container = _testContainer();
+          addTearDown(container.dispose);
 
-        final container = _testContainer();
-        addTearDown(container.dispose);
+          container.listen(lansweeperHelpdeskLoginUrlProvider, (_, _) {});
+          await _pumpUntil(
+            () =>
+                container.read(lansweeperHelpdeskLoginUrlProvider) ==
+                explicitLogin,
+          );
 
-        container.listen(lansweeperHelpdeskLoginUrlProvider, (_, _) {});
-        await _pumpUntil(
-          () => container.read(lansweeperHelpdeskLoginUrlProvider) == explicitLogin,
-        );
-
-        expect(container.read(lansweeperHelpdeskLoginUrlProvider), explicitLogin);
-      });
+          expect(
+            container.read(lansweeperHelpdeskLoginUrlProvider),
+            explicitLogin,
+          );
+        },
+      );
     });
 
     group('lansweeperHelpdeskAutoLoginProvider', () {
@@ -260,10 +310,15 @@ void main() {
 
         container.listen(lansweeperOpenTicketAfterApiSubmitProvider, (_, _) {});
         await _pumpUntil(
-          () => container.read(lansweeperOpenTicketAfterApiSubmitProvider) == true,
+          () =>
+              container.read(lansweeperOpenTicketAfterApiSubmitProvider) ==
+              true,
         );
 
-        expect(container.read(lansweeperOpenTicketAfterApiSubmitProvider), isTrue);
+        expect(
+          container.read(lansweeperOpenTicketAfterApiSubmitProvider),
+          isTrue,
+        );
       });
 
       test('hydrate false από "0"', () async {
@@ -277,10 +332,15 @@ void main() {
 
         container.listen(lansweeperOpenTicketAfterApiSubmitProvider, (_, _) {});
         await _pumpUntil(
-          () => container.read(lansweeperOpenTicketAfterApiSubmitProvider) == false,
+          () =>
+              container.read(lansweeperOpenTicketAfterApiSubmitProvider) ==
+              false,
         );
 
-        expect(container.read(lansweeperOpenTicketAfterApiSubmitProvider), isFalse);
+        expect(
+          container.read(lansweeperOpenTicketAfterApiSubmitProvider),
+          isFalse,
+        );
       });
     });
 

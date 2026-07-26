@@ -15,7 +15,9 @@ mixin UserFormDismissGuardMixin on UserFormDialogStateHost {
     if (_phoneController.text.trim() != _snapPhone) return true;
     if (_notesController.text.trim() != _snapNotes) return true;
     // Εμφανιζόμενο κείμενο (όχι μόνο κανονικοποίηση): τόνοι/κεφαλαία μετράνε ως αλλαγή.
-    if (_departmentController.text.trim() != _initialDepartmentText) return true;
+    if (_departmentController.text.trim() != _initialDepartmentText) {
+      return true;
+    }
     return false;
   }
 
@@ -72,13 +74,13 @@ mixin UserFormDismissGuardMixin on UserFormDialogStateHost {
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(
-              ctx,
-            ).pop(_UserFormDismissChoice.continueEditing),
+            onPressed: () =>
+                Navigator.of(ctx).pop(_UserFormDismissChoice.continueEditing),
             child: const Text('Επεξεργασία'),
           ),
           TextButton(
-            onPressed: () => Navigator.of(ctx).pop(_UserFormDismissChoice.discard),
+            onPressed: () =>
+                Navigator.of(ctx).pop(_UserFormDismissChoice.discard),
             child: const Text('Ακύρωση Αλλαγών'),
           ),
           FilledButton(

@@ -74,16 +74,16 @@ class LampSearchQueryParser {
   /// Πεδία φίλτρων UI που καθρεφτίζονται από στοχευμένους όρους.
   static const Map<String, String> _mirrorFieldIdsByNormalizedKey =
       <String, String>{
-    'τηλεφωνο': 'phone',
-    'κωδικος': 'code',
-    'υπαλληλος': 'owner',
-    'ονομα': 'owner',
-    'ιδιοκτητης': 'owner',
-    'τμημα': 'office',
-    'σειριακος': 'serial',
-    'sn': 'serial',
-    'serial': 'serial',
-  };
+        'τηλεφωνο': 'phone',
+        'κωδικος': 'code',
+        'υπαλληλος': 'owner',
+        'ονομα': 'owner',
+        'ιδιοκτητης': 'owner',
+        'τμημα': 'office',
+        'σειριακος': 'serial',
+        'sn': 'serial',
+        'serial': 'serial',
+      };
 
   static Map<String, List<String>> _buildKeyColumnMap() {
     final map = <String, List<String>>{};
@@ -93,38 +93,20 @@ class LampSearchQueryParser {
       }
     }
 
-    register(
-      <String>['κωδικός', 'κωδικος'],
-      <String>['code'],
-    );
-    register(
-      <String>['περιγραφή', 'περιγραφη'],
-      <String>['description'],
-    );
+    register(<String>['κωδικός', 'κωδικος'], <String>['code']);
+    register(<String>['περιγραφή', 'περιγραφη'], <String>['description']);
     register(
       <String>['σειριακός', 'σειριακος', 'sn', 'serial'],
       <String>['serial_no'],
     );
-    register(
-      <String>['παγίο', 'παγιο'],
-      <String>['asset_no'],
-    );
+    register(<String>['παγίο', 'παγιο'], <String>['asset_no']);
     register(
       <String>['κατάσταση', 'κατασταση'],
       <String>['state_name', 'state_original_text'],
     );
-    register(
-      <String>['εγγύηση', 'εγγυηση'],
-      <String>['end_of_guarantee_date'],
-    );
-    register(
-      <String>['παραλαβή', 'παραλαβη'],
-      <String>['receiving_date'],
-    );
-    register(
-      <String>['σχόλια', 'σχολια'],
-      <String>['equipment_comments'],
-    );
+    register(<String>['εγγύηση', 'εγγυηση'], <String>['end_of_guarantee_date']);
+    register(<String>['παραλαβή', 'παραλαβη'], <String>['receiving_date']);
+    register(<String>['σχόλια', 'σχολια'], <String>['equipment_comments']);
     register(
       <String>['master'],
       <String>['set_master', 'set_master_original_text'],
@@ -133,10 +115,7 @@ class LampSearchQueryParser {
       <String>['μοντέλο', 'μοντελο'],
       <String>['model_name', 'model_original_text'],
     );
-    register(
-      <String>['κατηγορία', 'κατηγορια'],
-      <String>['category_name'],
-    );
+    register(<String>['κατηγορία', 'κατηγορια'], <String>['category_name']);
     register(
       <String>['υποκατηγορία', 'υποκατηγορια'],
       <String>['subcategory_name'],
@@ -149,38 +128,27 @@ class LampSearchQueryParser {
       <String>['χαρακτηριστικά', 'χαρακτηριστικα'],
       <String>['model_attributes', 'equipment_attributes'],
     );
-    register(
-      <String>['αναλώσιμα', 'αναλωσιμα'],
-      <String>['consumables'],
-    );
-    register(
-      <String>['ip'],
-      <String>['ip_address'],
-    );
-    register(
-      <String>['mac'],
-      <String>['network_mac'],
-    );
-    register(
-      <String>['vlan'],
-      <String>['network_vlan'],
-    );
-    register(
-      <String>['κόμβος', 'κομβος'],
-      <String>['network_node'],
-    );
+    register(<String>['αναλώσιμα', 'αναλωσιμα'], <String>['consumables']);
+    register(<String>['ip'], <String>['ip_address']);
+    register(<String>['mac'], <String>['network_mac']);
+    register(<String>['vlan'], <String>['network_vlan']);
+    register(<String>['κόμβος', 'κομβος'], <String>['network_node']);
     register(
       <String>['hostname', 'υπολογιστής', 'υπολογιστης'],
       <String>['network_name'],
     );
     register(
-      <String>['υπάλληλος', 'υπαλληλος', 'όνομα', 'ονομα', 'ιδιοκτήτης', 'ιδιοκτητης'],
+      <String>[
+        'υπάλληλος',
+        'υπαλληλος',
+        'όνομα',
+        'ονομα',
+        'ιδιοκτήτης',
+        'ιδιοκτητης',
+      ],
       <String>['last_name', 'first_name', 'owner_original_text'],
     );
-    register(
-      <String>['email'],
-      <String>['owner_email', 'office_email'],
-    );
+    register(<String>['email'], <String>['owner_email', 'office_email']);
     register(
       <String>['τηλέφωνο', 'τηλεφωνο'],
       <String>['owner_phones', 'office_phones'],
@@ -193,26 +161,14 @@ class LampSearchQueryParser {
       <String>['οργανισμός', 'οργανισμος'],
       <String>['organization_name'],
     );
-    register(
-      <String>['κτίριο', 'κτιριο'],
-      <String>['building'],
-    );
-    register(
-      <String>['όροφος', 'οροφος'],
-      <String>['level'],
-    );
+    register(<String>['κτίριο', 'κτιριο'], <String>['building']);
+    register(<String>['όροφος', 'οροφος'], <String>['level']);
     register(
       <String>['σύμβαση', 'συμβαση'],
       <String>['contract_name', 'contract_original_text'],
     );
-    register(
-      <String>['προμηθευτής', 'προμηθευτης'],
-      <String>['supplier_name'],
-    );
-    register(
-      <String>['ανάθεση', 'αναθεση'],
-      <String>['contract_award'],
-    );
+    register(<String>['προμηθευτής', 'προμηθευτης'], <String>['supplier_name']);
+    register(<String>['ανάθεση', 'αναθεση'], <String>['contract_award']);
     register(
       <String>['διακήρυξη', 'διακηρυξη'],
       <String>['contract_declaration'],
@@ -247,8 +203,9 @@ class LampSearchQueryParser {
       }
 
       final rawKey = input.substring(index, colonIndex).trim();
-      final normalizedKey =
-          SearchTextNormalizer.normalizeDictionaryForm(rawKey);
+      final normalizedKey = SearchTextNormalizer.normalizeDictionaryForm(
+        rawKey,
+      );
       var valueStart = colonIndex + 1;
       while (valueStart < length && input[valueStart] == ' ') {
         valueStart++;
@@ -300,18 +257,20 @@ class LampSearchQueryParser {
   }
 
   static List<String> suggestKeys(String prefix) {
-    final normalizedPrefix =
-        SearchTextNormalizer.normalizeDictionaryForm(prefix);
+    final normalizedPrefix = SearchTextNormalizer.normalizeDictionaryForm(
+      prefix,
+    );
     final matches = canonicalKeys
         .where(
-          (key) => SearchTextNormalizer.normalizeDictionaryForm(key)
-              .startsWith(normalizedPrefix),
+          (key) => SearchTextNormalizer.normalizeDictionaryForm(
+            key,
+          ).startsWith(normalizedPrefix),
         )
         .toList();
     matches.sort(
-      (a, b) => SearchTextNormalizer.normalizeDictionaryForm(a).compareTo(
-        SearchTextNormalizer.normalizeDictionaryForm(b),
-      ),
+      (a, b) => SearchTextNormalizer.normalizeDictionaryForm(
+        a,
+      ).compareTo(SearchTextNormalizer.normalizeDictionaryForm(b)),
     );
     return matches;
   }

@@ -70,11 +70,7 @@ void main() {
 
         await tester.pumpWidget(
           ProviderScope(
-            child: MaterialApp(
-              home: _CloseHarness(
-                coordinator: coordinator,
-              ),
-            ),
+            child: MaterialApp(home: _CloseHarness(coordinator: coordinator)),
           ),
         );
         await tester.pump();

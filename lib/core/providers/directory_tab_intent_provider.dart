@@ -16,5 +16,5 @@ class DirectoryTabIntentNotifier extends Notifier<int?> {
 
 final directoryTabIntentProvider =
     NotifierProvider<DirectoryTabIntentNotifier, int?>(
-  DirectoryTabIntentNotifier.new,
-);
+      DirectoryTabIntentNotifier.new,
+    );

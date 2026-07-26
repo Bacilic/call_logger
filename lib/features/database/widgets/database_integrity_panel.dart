@@ -10,10 +10,8 @@ import '../providers/database_integrity_provider.dart';
 import 'integrity_fix_dialogs.dart';
 
 /// Callback για μηνύματα επιτυχίας/σφάλματος μέσα στον διάλογο ακεραιότητας.
-typedef IntegrityFeedbackCallback = void Function(
-  String message, {
-  bool isError,
-});
+typedef IntegrityFeedbackCallback =
+    void Function(String message, {bool isError});
 
 /// Κατανοητές περιγραφές των ελέγχων (για tooltip πληροφοριών).
 const _integrityCheckDescriptions = <String>[
@@ -63,7 +61,8 @@ class DatabaseIntegrityDialog extends ConsumerStatefulWidget {
       _DatabaseIntegrityDialogState();
 }
 
-class _DatabaseIntegrityDialogState extends ConsumerState<DatabaseIntegrityDialog> {
+class _DatabaseIntegrityDialogState
+    extends ConsumerState<DatabaseIntegrityDialog> {
   String? _feedback;
   bool _feedbackIsError = false;
 
@@ -105,9 +104,7 @@ class _DatabaseIntegrityDialogState extends ConsumerState<DatabaseIntegrityDialo
         children: [
           Icon(Icons.fact_check_outlined, color: theme.colorScheme.primary),
           const SizedBox(width: 10),
-          const Expanded(
-            child: Text('Έλεγχος ακεραιότητας'),
-          ),
+          const Expanded(child: Text('Έλεγχος ακεραιότητας')),
         ],
       ),
       content: SizedBox(
@@ -120,7 +117,9 @@ class _DatabaseIntegrityDialogState extends ConsumerState<DatabaseIntegrityDialo
               Material(
                 color: _feedbackIsError
                     ? theme.colorScheme.errorContainer.withValues(alpha: 0.9)
-                    : theme.colorScheme.primaryContainer.withValues(alpha: 0.55),
+                    : theme.colorScheme.primaryContainer.withValues(
+                        alpha: 0.55,
+                      ),
                 borderRadius: BorderRadius.circular(8),
                 child: Padding(
                   padding: const EdgeInsets.symmetric(
@@ -177,9 +176,12 @@ class _DatabaseIntegrityDialogState extends ConsumerState<DatabaseIntegrityDialo
       ),
       actions: [
         TextButton.icon(
-          onPressed: ref.watch(databaseIntegrityProvider) is DatabaseIntegrityLoading
+          onPressed:
+              ref.watch(databaseIntegrityProvider) is DatabaseIntegrityLoading
               ? null
-              : () => ref.read(databaseIntegrityProvider.notifier).runCheck(force: true),
+              : () => ref
+                    .read(databaseIntegrityProvider.notifier)
+                    .runCheck(force: true),
           icon: const Icon(Icons.refresh, size: 18),
           label: const Text('Επανάληψη ελέγχου'),
         ),
@@ -194,10 +196,7 @@ class _DatabaseIntegrityDialogState extends ConsumerState<DatabaseIntegrityDialo
 
 /// Περιεχόμενο ελέγχου/επιδιόρθωσης ακεραιότητας (μέσα στο [DatabaseIntegrityDialog]).
 class DatabaseIntegrityPanel extends ConsumerStatefulWidget {
-  const DatabaseIntegrityPanel({
-    super.key,
-    this.onFeedback,
-  });
+  const DatabaseIntegrityPanel({super.key, this.onFeedback});
 
   final IntegrityFeedbackCallback? onFeedback;
 
@@ -206,7 +205,8 @@ class DatabaseIntegrityPanel extends ConsumerStatefulWidget {
       _DatabaseIntegrityPanelState();
 }
 
-class _DatabaseIntegrityPanelState extends ConsumerState<DatabaseIntegrityPanel> {
+class _DatabaseIntegrityPanelState
+    extends ConsumerState<DatabaseIntegrityPanel> {
   String _formatRowsChecked(int count) {
     if (count == 0) return '—';
     return NumberFormat.decimalPattern('el_GR').format(count);
@@ -278,12 +278,7 @@ class _DatabaseIntegrityPanelState extends ConsumerState<DatabaseIntegrityPanel>
         if (!context.mounted || !retryRequested) return;
         final retryResult = await retry();
         if (!context.mounted) return;
-        await _handleFixResult(
-          context,
-          finding,
-          retryResult,
-          retry: retry,
-        );
+        await _handleFixResult(context, finding, retryResult, retry: retry);
     }
   }
 
@@ -315,8 +310,7 @@ class _DatabaseIntegrityPanelState extends ConsumerState<DatabaseIntegrityPanel>
     }
 
     final notifier = ref.read(databaseIntegrityProvider.notifier);
-    Future<IntegrityFixResult> apply() =>
-        notifier.applyFix(finding, decision!);
+    Future<IntegrityFixResult> apply() => notifier.applyFix(finding, decision!);
 
     final result = await apply();
     if (!context.mounted) return;
@@ -343,9 +337,9 @@ class _DatabaseIntegrityPanelState extends ConsumerState<DatabaseIntegrityPanel>
 
     if (result.hasLockFailures) {
       final failedFindings = result.lockFailureFindings;
-      final firstLock = result.results.firstWhere(
-        (r) => r is IntegrityFixLockFailure,
-      ) as IntegrityFixLockFailure;
+      final firstLock =
+          result.results.firstWhere((r) => r is IntegrityFixLockFailure)
+              as IntegrityFixLockFailure;
       final retryRequested = await showIntegrityLockRetryDialog(
         context,
         dbPath: firstLock.dbPath,
@@ -439,8 +433,7 @@ class _DatabaseIntegrityPanelState extends ConsumerState<DatabaseIntegrityPanel>
                 checkType: checkType,
                 findings: groupFindings,
                 isGroupFixing: groupFixing,
-                onBulkFix: groupFindings.length > 1 &&
-                        checkType.allowsBulkFix
+                onBulkFix: groupFindings.length > 1 && checkType.allowsBulkFix
                     ? () => _runBulkFix(context, checkType, groupFindings)
                     : null,
                 onFixFinding: (finding) => _runSingleFix(context, finding),
@@ -567,10 +560,12 @@ class _FindingTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isCritical = finding.severity == IntegritySeverity.critical;
-    final dotColor =
-        isCritical ? theme.colorScheme.error : Colors.amber.shade700;
+    final dotColor = isCritical
+        ? theme.colorScheme.error
+        : Colors.amber.shade700;
 
-    final entityRef = finding.affectedEntity != null && finding.affectedId != null
+    final entityRef =
+        finding.affectedEntity != null && finding.affectedId != null
         ? '${DatabaseIntegrityReport.entityLabelEl(finding.affectedEntity)} #${finding.affectedId}'
         : null;
 

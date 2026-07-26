@@ -9,9 +9,9 @@ class UpdateCheckResult {
   });
 
   const UpdateCheckResult.none()
-      : updateAvailable = false,
-        latestVersion = null,
-        manifest = null;
+    : updateAvailable = false,
+      latestVersion = null,
+      manifest = null;
 
   final bool updateAvailable;
   final String? latestVersion;

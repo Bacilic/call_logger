@@ -1,4 +1,4 @@
-﻿import 'dart:io';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -38,9 +38,7 @@ class _PendingResetDatabaseScreenState
       if (!ok && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text(
-              'Δεν βρέθηκε αποθηκευμένη κατάσταση για αναίρεση.',
-            ),
+            content: Text('Δεν βρέθηκε αποθηκευμένη κατάσταση για αναίρεση.'),
             behavior: SnackBarBehavior.floating,
           ),
         );

@@ -14,10 +14,7 @@ enum LampExcelStatus {
 }
 
 class LampExcelCheckResult {
-  const LampExcelCheckResult(
-    this.status, {
-    this.technicalDetail,
-  });
+  const LampExcelCheckResult(this.status, {this.technicalDetail});
 
   final LampExcelStatus status;
   final String? technicalDetail;

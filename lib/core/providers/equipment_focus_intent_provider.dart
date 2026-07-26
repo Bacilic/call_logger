@@ -16,5 +16,5 @@ class EquipmentFocusIntentNotifier extends Notifier<int?> {
 
 final equipmentFocusIntentProvider =
     NotifierProvider<EquipmentFocusIntentNotifier, int?>(
-  EquipmentFocusIntentNotifier.new,
-);
+      EquipmentFocusIntentNotifier.new,
+    );

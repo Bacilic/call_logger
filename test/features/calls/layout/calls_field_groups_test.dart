@@ -1,4 +1,4 @@
-﻿import 'package:call_logger/features/calls/layout/calls_field_confirmations.dart';
+import 'package:call_logger/features/calls/layout/calls_field_confirmations.dart';
 import 'package:call_logger/features/calls/layout/calls_field_groups.dart';
 import 'package:call_logger/features/calls/layout/calls_layout_template.dart';
 import 'package:call_logger/features/calls/models/equipment_model.dart';
@@ -106,7 +106,10 @@ void main() {
     test('phone + caller → not phone-only template A', () {
       const confirmations = CallsFieldConfirmations(phone: true, caller: true);
       final groups = CallsFieldGroupsResolver.resolve(
-        _header(phone: '123', caller: UserModel(id: 1, firstName: 'A')),
+        _header(
+          phone: '123',
+          caller: UserModel(id: 1, firstName: 'A'),
+        ),
         confirmations,
       );
       expect(groups.isPhoneOnlyTemplateA, isFalse);

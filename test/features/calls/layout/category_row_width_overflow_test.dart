@@ -61,18 +61,21 @@ void main() {
     // 840–922: ζώνη γύρω/κάτω από το ελάχιστο επιτρεπτό παράθυρο, όπου η παλιά
     // υλοποίηση υπερχείλιζε. 1500: αντιπροσωπευτικό «μέγιστο» πλάτος.
     for (final width in [840.0, 890.0, 905.0, 922.0, 1500.0]) {
-      testWidgets('expanded, επιβεβαιωμένο τηλέφωνο: $width px χωρίς overflow',
-          (tester) async {
-        await _pumpCallsAtWidth(tester, width);
-        await _confirmPhoneField(tester);
-        await tester.pump(const Duration(milliseconds: 500));
-        expect(
-          tester.takeException(),
-          isNull,
-          reason: greekExpectMsgOrNull(width),
-        );
-        await tester.pump(const Duration(seconds: 11));
-      }, semanticsEnabled: false);
+      testWidgets(
+        'expanded, επιβεβαιωμένο τηλέφωνο: $width px χωρίς overflow',
+        (tester) async {
+          await _pumpCallsAtWidth(tester, width);
+          await _confirmPhoneField(tester);
+          await tester.pump(const Duration(milliseconds: 500));
+          expect(
+            tester.takeException(),
+            isNull,
+            reason: greekExpectMsgOrNull(width),
+          );
+          await tester.pump(const Duration(seconds: 11));
+        },
+        semanticsEnabled: false,
+      );
     }
   });
 }

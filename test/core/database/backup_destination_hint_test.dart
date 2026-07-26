@@ -39,9 +39,7 @@ void main() {
     );
     addTearDown(container.dispose);
 
-    final hint = await resolveValidBackupDestinationHint(
-      container: container,
-    );
+    final hint = await resolveValidBackupDestinationHint(container: container);
     expect(hint, validBackupDir.path);
   });
 

@@ -77,8 +77,10 @@ Future<UserDeletionUndoRecord> applyDepartmentEmployeeDeletionsInTxn(
     for (final entry in del.equipmentBatch.equipmentTransfers.entries) {
       final toId = await resolveTarget(entry.value);
       if (toId == null) continue;
-      final eqId =
-          await equipment.getEquipmentIdByCode(entry.key, executor: txn);
+      final eqId = await equipment.getEquipmentIdByCode(
+        entry.key,
+        executor: txn,
+      );
       await equipment.updateEquipmentDepartment(entry.key, toId, executor: txn);
       if (eqId != null) {
         equipmentDeptSets.add(

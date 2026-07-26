@@ -20,20 +20,25 @@ class EquipmentModel {
     this.location,
     this.isDeleted = false,
   }) : remoteParams = Map<String, String>.unmodifiable(
-          Map<String, String>.from(remoteParams),
-        );
+         Map<String, String>.from(remoteParams),
+       );
 
   final int? id;
+
   /// Κωδικός εξοπλισμού (από στήλη code_equipment).
   final String? code;
   final String? type;
   final String? notes;
+
   /// Παράμετροι ανά εργαλείο (κλειδί = `remote_tools.id` ως string).
   final Map<String, String> remoteParams;
+
   /// Προεπιλεγμένο εργαλείο απομακρυσμένης σύνδεσης (`remote_tools.id`).
   final String? defaultRemoteTool;
+
   /// Τμήμα απευθείας στον εξοπλισμό (πίνακας `departments`)· όταν λείπει κάτοχος.
   final int? departmentId;
+
   /// Τοποθεσία απευθείας στον εξοπλισμό (`equipment.location`).
   final String? location;
   final bool isDeleted;
@@ -86,8 +91,9 @@ class EquipmentModel {
   /// οριστεί και υπάρχει στον κατάλογο, αλλιώς το πρώτο με παράμετρο κατά σειρά
   /// ταξινόμησης ([effectiveDefaultRemoteToolId]).
   int? displayPrimaryRemoteToolId(List<RemoteTool> catalog) {
-    final exclusiveId =
-        EquipmentRemoteParamKey.exclusiveToolIdFrom(remoteParams);
+    final exclusiveId = EquipmentRemoteParamKey.exclusiveToolIdFrom(
+      remoteParams,
+    );
     if (exclusiveId != null) {
       for (final t in catalog) {
         if (t.id == exclusiveId) return exclusiveId;

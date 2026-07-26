@@ -14,7 +14,9 @@ void main() {
     setUpAll(() async {
       initSqfliteFfiForTests();
       final dir = await Directory.systemTemp.createTemp('lamp_dept_floor_');
-      await DatabaseHelper.bindTestDatabaseFile('${dir.path}/lamp_dept_floor.db');
+      await DatabaseHelper.bindTestDatabaseFile(
+        '${dir.path}/lamp_dept_floor.db',
+      );
       await DatabaseHelper.instance.database;
       service = LampMigrationService();
     });
@@ -30,10 +32,7 @@ void main() {
       await releaseCallLoggerTestDatabase();
     });
 
-    Future<int> insertFloorSheet({
-      required String label,
-      int? id,
-    }) async {
+    Future<int> insertFloorSheet({required String label, int? id}) async {
       final db = await DatabaseHelper.instance.database;
       return db.insert('building_map_floors', {
         'id': ?id,
@@ -102,17 +101,16 @@ void main() {
 
         final draft = await service.buildDraft(
           target: LampTransferTarget.department,
-          sourceRow: {
-            'office_name': 'Φαρμακείο',
-            'level': '9',
-          },
+          sourceRow: {'office_name': 'Φαρμακείο', 'level': '9'},
         );
         final preview = buildLampTransferPreview(
           draft: draft,
           currentFormValues: draft.formValues,
           selectedCandidateId: null,
         );
-        final levelField = preview.fields.firstWhere((f) => f.formKey == 'level');
+        final levelField = preview.fields.firstWhere(
+          (f) => f.formKey == 'level',
+        );
         expect(levelField.hasWarning, isTrue);
         expect(
           levelField.warningMessage,
@@ -152,10 +150,7 @@ void main() {
 
         final draft = await service.buildDraft(
           target: LampTransferTarget.department,
-          sourceRow: {
-            'office_name': 'Φαρμακείο',
-            'building': 'B',
-          },
+          sourceRow: {'office_name': 'Φαρμακείο', 'building': 'B'},
         );
 
         final preview = buildLampTransferPreview(

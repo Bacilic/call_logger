@@ -18,12 +18,15 @@ class UserModel {
   final int? id;
   final String? firstName;
   final String? lastName;
+
   /// Κανονικοποιημένα τηλέφωνα (από `phones` / `user_phones`).
   final List<String> phones;
   final int? departmentId;
+
   /// Φυσική τοποθεσία / γραφείο χρήστη (στήλη `users.location`).
   final String? location;
   final String? notes;
+
   /// Soft delete (πίνακας users.is_deleted).
   final bool isDeleted;
 

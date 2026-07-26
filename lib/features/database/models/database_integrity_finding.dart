@@ -2,12 +2,7 @@ import 'package:flutter/foundation.dart';
 
 enum IntegritySeverity { warning, critical }
 
-enum IntegrityCategory {
-  searchIndex,
-  referential,
-  technicalFlow,
-  temporal,
-}
+enum IntegrityCategory { searchIndex, referential, technicalFlow, temporal }
 
 /// Τύπος διαγνωστικού ελέγχου (1:1 με τα βήματα του [DatabaseIntegrityService]).
 enum IntegrityCheckType {
@@ -34,37 +29,36 @@ enum IntegrityCheckType {
 
 extension IntegrityCheckTypeLabels on IntegrityCheckType {
   String get displayNameEl => switch (this) {
-        IntegrityCheckType.pragmaQuickCheck => 'Έλεγχος SQLite (PRAGMA)',
-        IntegrityCheckType.orphanPhone => 'Ορφανά τηλέφωνα',
-        IntegrityCheckType.phoneInvalidDepartment =>
-          'Τηλέφωνα με ανύπαρκτο τμήμα',
-        IntegrityCheckType.callsMissingSearchIndex => 'Κλήσεις χωρίς ευρετήριο',
-        IntegrityCheckType.tasksMissingSearchIndex =>
-          'Εκκρεμότητες χωρίς ευρετήριο',
-        IntegrityCheckType.usersWithoutDepartment => 'Χρήστες χωρίς τμήμα',
-        IntegrityCheckType.usersInvalidDepartment =>
-          'Χρήστες σε διαγραμμένο/ανύπαρκτο τμήμα',
-        IntegrityCheckType.tasksInvalidCall => 'Εκκρεμότητες με άκυρη κλήση',
-        IntegrityCheckType.departmentsInvalidNameKey =>
-          'Τμήματα χωρίς έγκυρο name_key',
-        IntegrityCheckType.departmentInvalidFloor =>
-          'Τμήματα με ανύπαρκτο όροφο χάρτη',
-        IntegrityCheckType.orphanCallExternalLinks => 'Ορφανά call_external_links',
-        IntegrityCheckType.orphanUserPhones =>
-          'Ορφανές συσχετίσεις χρήστη–τηλεφώνου',
-        IntegrityCheckType.orphanDepartmentPhones => 'Ορφανά department_phones',
-        IntegrityCheckType.orphanUserEquipment =>
-          'Ορφανές συσχετίσεις χρήστη–εξοπλισμού',
-        IntegrityCheckType.equipmentInvalidDepartment =>
-          'Εξοπλισμός με ανύπαρκτο τμήμα',
-        IntegrityCheckType.callsDeletedLinkedEntities =>
-          'Κλήσεις με ανύπαρκτες αναφορές',
-        IntegrityCheckType.tasksDeletedLinkedEntities =>
-          'Εκκρεμότητες με ανύπαρκτες αναφορές',
-        IntegrityCheckType.tasksTemporalInconsistency =>
-          'Εκκρεμότητες: created_at > updated_at',
-        IntegrityCheckType.auditMissingSearchText => 'Audit χωρίς search_text',
-      };
+    IntegrityCheckType.pragmaQuickCheck => 'Έλεγχος SQLite (PRAGMA)',
+    IntegrityCheckType.orphanPhone => 'Ορφανά τηλέφωνα',
+    IntegrityCheckType.phoneInvalidDepartment => 'Τηλέφωνα με ανύπαρκτο τμήμα',
+    IntegrityCheckType.callsMissingSearchIndex => 'Κλήσεις χωρίς ευρετήριο',
+    IntegrityCheckType.tasksMissingSearchIndex =>
+      'Εκκρεμότητες χωρίς ευρετήριο',
+    IntegrityCheckType.usersWithoutDepartment => 'Χρήστες χωρίς τμήμα',
+    IntegrityCheckType.usersInvalidDepartment =>
+      'Χρήστες σε διαγραμμένο/ανύπαρκτο τμήμα',
+    IntegrityCheckType.tasksInvalidCall => 'Εκκρεμότητες με άκυρη κλήση',
+    IntegrityCheckType.departmentsInvalidNameKey =>
+      'Τμήματα χωρίς έγκυρο name_key',
+    IntegrityCheckType.departmentInvalidFloor =>
+      'Τμήματα με ανύπαρκτο όροφο χάρτη',
+    IntegrityCheckType.orphanCallExternalLinks => 'Ορφανά call_external_links',
+    IntegrityCheckType.orphanUserPhones =>
+      'Ορφανές συσχετίσεις χρήστη–τηλεφώνου',
+    IntegrityCheckType.orphanDepartmentPhones => 'Ορφανά department_phones',
+    IntegrityCheckType.orphanUserEquipment =>
+      'Ορφανές συσχετίσεις χρήστη–εξοπλισμού',
+    IntegrityCheckType.equipmentInvalidDepartment =>
+      'Εξοπλισμός με ανύπαρκτο τμήμα',
+    IntegrityCheckType.callsDeletedLinkedEntities =>
+      'Κλήσεις με ανύπαρκτες αναφορές',
+    IntegrityCheckType.tasksDeletedLinkedEntities =>
+      'Εκκρεμότητες με ανύπαρκτες αναφορές',
+    IntegrityCheckType.tasksTemporalInconsistency =>
+      'Εκκρεμότητες: created_at > updated_at',
+    IntegrityCheckType.auditMissingSearchText => 'Audit χωρίς search_text',
+  };
 }
 
 @immutable

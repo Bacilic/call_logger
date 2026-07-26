@@ -4,26 +4,23 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 Widget _host(Widget child) => MaterialApp(
-      home: Scaffold(body: SingleChildScrollView(child: child)),
-    );
+  home: Scaffold(body: SingleChildScrollView(child: child)),
+);
 
 Widget _testPanelHost({
   required RemoteToolFormController controller,
   required VoidCallback onRunTest,
-}) =>
-    MaterialApp(
-      home: Scaffold(
-        body: SingleChildScrollView(
-          child: ListenableBuilder(
-            listenable: controller,
-            builder: (context, _) => RemoteToolTestPanel(
-              controller: controller,
-              onRunTest: onRunTest,
-            ),
-          ),
-        ),
+}) => MaterialApp(
+  home: Scaffold(
+    body: SingleChildScrollView(
+      child: ListenableBuilder(
+        listenable: controller,
+        builder: (context, _) =>
+            RemoteToolTestPanel(controller: controller, onRunTest: onRunTest),
       ),
-    );
+    ),
+  ),
+);
 
 void main() {
   group('RemoteToolTestPanel — lock πριν εξαγωγή', () {
@@ -34,12 +31,7 @@ void main() {
         addTearDown(controller.dispose);
 
         await tester.pumpWidget(
-          _host(
-            RemoteToolTestPanel(
-              controller: controller,
-              onRunTest: () {},
-            ),
-          ),
+          _host(RemoteToolTestPanel(controller: controller, onRunTest: () {})),
         );
 
         expect(find.text('Εντολή δοκιμής'), findsNothing);
@@ -57,12 +49,7 @@ void main() {
         addTearDown(controller.dispose);
 
         await tester.pumpWidget(
-          _host(
-            RemoteToolTestPanel(
-              controller: controller,
-              onRunTest: () {},
-            ),
-          ),
+          _host(RemoteToolTestPanel(controller: controller, onRunTest: () {})),
         );
 
         expect(
@@ -88,10 +75,7 @@ void main() {
         );
         expect(btnBefore.onPressed, isNull);
 
-        await tester.enterText(
-          find.byType(TextFormField),
-          '192.168.1.10',
-        );
+        await tester.enterText(find.byType(TextFormField), '192.168.1.10');
         await tester.pump();
 
         final btnAfter = tester.widget<OutlinedButton>(

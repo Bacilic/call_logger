@@ -31,8 +31,7 @@ bool _isJpegPath(String path) {
 }
 
 Future<Uint8List> _encodePngBytes(ui.Image image) async {
-  final bd =
-      await image.toByteData(format: ui.ImageByteFormat.png);
+  final bd = await image.toByteData(format: ui.ImageByteFormat.png);
   if (bd == null) {
     throw StateError('PNG byte data');
   }
@@ -60,10 +59,9 @@ Future<void> _writeJpeg(String path, ui.Image image) async {
   img.fill(flattened, color: img.ColorRgb8(255, 255, 255));
   img.compositeImage(flattened, decoded, blend: img.BlendMode.alpha);
 
-  await File(path).writeAsBytes(
-    img.encodeJpg(flattened, quality: 92),
-    flush: true,
-  );
+  await File(
+    path,
+  ).writeAsBytes(img.encodeJpg(flattened, quality: 92), flush: true);
 }
 
 String _ensureImageExtension(String path, {required bool jpeg}) {
@@ -77,12 +75,15 @@ Future<void> exportBuildingMapSheetToImageFile({
   required BuildContext context,
   required String defaultFloorBaseName,
 }) async {
-  final boundary = buildingMapSheetExportRepaintKey.currentContext
-      ?.findRenderObject() as RenderRepaintBoundary?;
+  final boundary =
+      buildingMapSheetExportRepaintKey.currentContext?.findRenderObject()
+          as RenderRepaintBoundary?;
   if (boundary == null) {
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Ο χάρτης δεν είναι διαθέσιμος για εξαγωγή.')),
+      const SnackBar(
+        content: Text('Ο χάρτης δεν είναι διαθέσιμος για εξαγωγή.'),
+      ),
     );
     return;
   }
@@ -105,9 +106,9 @@ Future<void> exportBuildingMapSheetToImageFile({
     raster = await boundary.toImage(pixelRatio: pixelRatio);
   } catch (e) {
     if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Σφάλμα εξαγωγής: $e')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text('Σφάλμα εξαγωγής: $e')));
     return;
   }
 
@@ -122,14 +123,14 @@ Future<void> exportBuildingMapSheetToImageFile({
     }
     raster.dispose();
     if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Αποθηκεύτηκε: $outPath')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text('Αποθηκεύτηκε: $outPath')));
   } catch (e) {
     raster.dispose();
     if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Αποτυχία εγγραφής: $e')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text('Αποτυχία εγγραφής: $e')));
   }
 }

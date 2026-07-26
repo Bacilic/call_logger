@@ -1,4 +1,4 @@
-﻿import 'dart:io';
+import 'dart:io';
 
 import 'package:path/path.dart' as p;
 
@@ -42,8 +42,8 @@ class RemoteLauncherService {
     String? filePathForTest,
   }) {
     final host = testIp.trim();
-    final fp = filePathForTest ??
-        (tool.acceptsFileParam ? kPreviewRdpFilePath : null);
+    final fp =
+        filePathForTest ?? (tool.acceptsFileParam ? kPreviewRdpFilePath : null);
     return tool.effectiveActiveArguments
         .map((a) => a.value)
         .map(
@@ -151,10 +151,7 @@ class RemoteLauncherService {
   Future<({String? path, String? errorReason})> getStatusForRole(
     ToolRole role,
   ) async {
-    final path = await rawExecutablePathForTool(
-      repo: _toolsRepo,
-      role: role,
-    );
+    final path = await rawExecutablePathForTool(repo: _toolsRepo, role: role);
     final trimmed = path.trim();
     if (trimmed.isEmpty) return (path: null, errorReason: errorPathNotSet);
     try {
@@ -168,7 +165,9 @@ class RemoteLauncherService {
   Future<void> launchAnydeskEmpty() async {
     final path = await getValidAnydeskPath();
     if (path == null) {
-      throw Exception('Δεν βρέθηκε εγκατάσταση AnyDesk. Ελέγξτε τις ρυθμίσεις.');
+      throw Exception(
+        'Δεν βρέθηκε εγκατάσταση AnyDesk. Ελέγξτε τις ρυθμίσεις.',
+      );
     }
     await Process.start(path, [], mode: ProcessStartMode.detached);
   }
@@ -223,11 +222,7 @@ class RemoteLauncherService {
     }
 
     final fp = tool.acceptsFileParam ? kPreviewRdpFilePath : null;
-    final arguments = testArgumentList(
-      tool,
-      testIp,
-      filePathForTest: fp,
-    );
+    final arguments = testArgumentList(tool, testIp, filePathForTest: fp);
     await Process.start(path, arguments, mode: ProcessStartMode.detached);
   }
 }

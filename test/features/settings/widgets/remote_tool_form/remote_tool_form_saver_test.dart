@@ -20,8 +20,9 @@ void main() {
 
     setUpAll(() async {
       initSqfliteFfiForTests();
-      final dir = await Directory.systemTemp
-          .createTemp('remote_tool_form_saver_test_');
+      final dir = await Directory.systemTemp.createTemp(
+        'remote_tool_form_saver_test_',
+      );
       await DatabaseHelper.bindTestDatabaseFile('${dir.path}/rt_saver.db');
       db = await DatabaseHelper.instance.database;
     });
@@ -79,42 +80,41 @@ void main() {
       );
     }
 
-    test('commitNew: νέο εργαλείο στο τέλος → sort_order 1..n+1 χωρίς κενά', () async {
-      await seedTool(name: 'Alpha', sortOrder: 1);
-      await seedTool(name: 'Beta', sortOrder: 2);
-      await seedTool(name: 'Gamma', sortOrder: 3);
+    test(
+      'commitNew: νέο εργαλείο στο τέλος → sort_order 1..n+1 χωρίς κενά',
+      () async {
+        await seedTool(name: 'Alpha', sortOrder: 1);
+        await seedTool(name: 'Beta', sortOrder: 2);
+        await seedTool(name: 'Gamma', sortOrder: 3);
 
-      final args = [
-        const RemoteToolArgument(value: '-host={TARGET}', description: 'host'),
-      ];
-      final newId = await saver.commitNew(
-        toolFromForm: formTool(
-          id: 0,
-          name: 'Delta',
-          executablePath: r'C:\delta.exe',
-          arguments: args,
-        ),
-      );
+        final args = [
+          const RemoteToolArgument(
+            value: '-host={TARGET}',
+            description: 'host',
+          ),
+        ];
+        final newId = await saver.commitNew(
+          toolFromForm: formTool(
+            id: 0,
+            name: 'Delta',
+            executablePath: r'C:\delta.exe',
+            arguments: args,
+          ),
+        );
 
-      final all = await repo.getAllNonDeletedTools();
-      expect(all, hasLength(4));
-      expect(namesInOrder(all), ['Alpha', 'Beta', 'Gamma', 'Delta']);
-      expect(sortOrders(all), [1, 2, 3, 4]);
+        final all = await repo.getAllNonDeletedTools();
+        expect(all, hasLength(4));
+        expect(namesInOrder(all), ['Alpha', 'Beta', 'Gamma', 'Delta']);
+        expect(sortOrders(all), [1, 2, 3, 4]);
 
-      final inserted = await repo.getById(newId);
-      expect(inserted!.name, 'Delta');
-      expect(inserted.executablePath, r'C:\delta.exe');
-      expect(
-        jsonDecode(inserted.toMap()['arguments_json'] as String),
-        [
-          {
-            'value': '-host={TARGET}',
-            'description': 'host',
-            'is_active': true,
-          },
-        ],
-      );
-    });
+        final inserted = await repo.getById(newId);
+        expect(inserted!.name, 'Delta');
+        expect(inserted.executablePath, r'C:\delta.exe');
+        expect(jsonDecode(inserted.toMap()['arguments_json'] as String), [
+          {'value': '-host={TARGET}', 'description': 'host', 'is_active': true},
+        ]);
+      },
+    );
 
     test('commitEdit: διατηρεί τρέχουσα θέση και ενημερώνει πεδία', () async {
       await seedTool(name: 'A', sortOrder: 1);
@@ -141,16 +141,9 @@ void main() {
       expect(updated!.name, 'B-edited');
       expect(updated.executablePath, r'C:\b2.exe');
       expect(updated.sortOrder, 2);
-      expect(
-        jsonDecode(updated.toMap()['arguments_json'] as String),
-        [
-          {
-            'value': '/v:{TARGET}',
-            'description': 'rdp',
-            'is_active': true,
-          },
-        ],
-      );
+      expect(jsonDecode(updated.toMap()['arguments_json'] as String), [
+        {'value': '/v:{TARGET}', 'description': 'rdp', 'is_active': true},
+      ]);
     });
 
     test(
@@ -181,16 +174,9 @@ void main() {
         expect(soft!.deletedAt, isNull);
         expect(soft.name, 'Restored');
         expect(soft.executablePath, r'C:\restored.exe');
-        expect(
-          jsonDecode(soft.toMap()['arguments_json'] as String),
-          [
-            {
-              'value': '-id {TARGET}',
-              'description': 'ad',
-              'is_active': true,
-            },
-          ],
-        );
+        expect(jsonDecode(soft.toMap()['arguments_json'] as String), [
+          {'value': '-id {TARGET}', 'description': 'ad', 'is_active': true},
+        ]);
 
         final current = await repo.getById(idCurrent);
         expect(current!.deletedAt, isNotNull);
@@ -201,26 +187,28 @@ void main() {
       },
     );
 
-    test('loadNonDeleted / findSoftDeletedConflict / disambiguateSoftDeleted',
-        () async {
-      await seedTool(name: 'Live', sortOrder: 1);
-      final idDeleted = await seedTool(
-        name: 'Ghost',
-        sortOrder: 2,
-        deletedAt: DateTime.utc(2024, 6, 1).toIso8601String(),
-      );
+    test(
+      'loadNonDeleted / findSoftDeletedConflict / disambiguateSoftDeleted',
+      () async {
+        await seedTool(name: 'Live', sortOrder: 1);
+        final idDeleted = await seedTool(
+          name: 'Ghost',
+          sortOrder: 2,
+          deletedAt: DateTime.utc(2024, 6, 1).toIso8601String(),
+        );
 
-      final live = await saver.loadNonDeleted();
-      expect(live, hasLength(1));
-      expect(live.single.name, 'Live');
+        final live = await saver.loadNonDeleted();
+        expect(live, hasLength(1));
+        expect(live.single.name, 'Live');
 
-      final conflict = await saver.findSoftDeletedConflict('ghost');
-      expect(conflict!.id, idDeleted);
+        final conflict = await saver.findSoftDeletedConflict('ghost');
+        expect(conflict!.id, idDeleted);
 
-      await saver.disambiguateSoftDeleted(idDeleted);
-      final renamed = await repo.getById(idDeleted);
-      expect(renamed!.name, contains('διεγραμμένο'));
-      expect(renamed.name, contains('#$idDeleted'));
-    });
+        await saver.disambiguateSoftDeleted(idDeleted);
+        final renamed = await repo.getById(idDeleted);
+        expect(renamed!.name, contains('διεγραμμένο'));
+        expect(renamed.name, contains('#$idDeleted'));
+      },
+    );
   });
 }

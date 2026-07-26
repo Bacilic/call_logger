@@ -46,133 +46,142 @@ void main() {
       await releaseCallLoggerTestDatabase();
     });
 
-    test('soft-delete: getAllUsers / getActiveDepartments / getAllEquipment μόνο ενεργές',
-        () async {
-      final activeDeptId = await db.insert('departments', {
-        'name': 'Ενεργό Τμήμα',
-        'name_key': SearchTextNormalizer.normalizeForSearch('Ενεργό Τμήμα'),
-        'is_deleted': 0,
-      });
-      await db.insert('departments', {
-        'name': 'Διαγραμμένο Τμήμα',
-        'name_key':
-            SearchTextNormalizer.normalizeForSearch('Διαγραμμένο Τμήμα'),
-        'is_deleted': 1,
-      });
-
-      final activeUserId = await db.insert('users', {
-        'first_name': 'Ενεργός',
-        'last_name': 'Χρήστης',
-        'department_id': activeDeptId,
-        'is_deleted': 0,
-      });
-      await db.insert('users', {
-        'first_name': 'Διαγραμμένος',
-        'last_name': 'Χρήστης',
-        'department_id': activeDeptId,
-        'is_deleted': 1,
-      });
-
-      await db.insert('equipment', {
-        'code_equipment': 'PC-ACTIVE',
-        'is_deleted': 0,
-      });
-      await db.insert('equipment', {
-        'code_equipment': 'PC-DELETED',
-        'is_deleted': 1,
-      });
-
-      final userRows = await users.getAllUsers();
-      final departmentRows = await departments.getActiveDepartments();
-      final equipmentRows = await equipment.getAllEquipment();
-
-      expect(userRows, hasLength(1));
-      expect(userRows.single['id'], activeUserId);
-      expect(departmentRows, hasLength(1));
-      expect(departmentRows.single['id'], activeDeptId);
-      expect(equipmentRows, hasLength(1));
-      expect(equipmentRows.single['code_equipment'], 'PC-ACTIVE');
-    });
-
-    test('IN-placeholders: findExclusivePhonesForUserDelete για 0, 1 και πολλά id',
-        () async {
-      Future<void> linkPhone(int userId, String number) async {
-        final phoneId = await db.insert('phones', {'number': number});
-        await db.insert('user_phones', {
-          'user_id': userId,
-          'phone_id': phoneId,
+    test(
+      'soft-delete: getAllUsers / getActiveDepartments / getAllEquipment μόνο ενεργές',
+      () async {
+        final activeDeptId = await db.insert('departments', {
+          'name': 'Ενεργό Τμήμα',
+          'name_key': SearchTextNormalizer.normalizeForSearch('Ενεργό Τμήμα'),
+          'is_deleted': 0,
         });
-      }
+        await db.insert('departments', {
+          'name': 'Διαγραμμένο Τμήμα',
+          'name_key': SearchTextNormalizer.normalizeForSearch(
+            'Διαγραμμένο Τμήμα',
+          ),
+          'is_deleted': 1,
+        });
 
-      final userA = await db.insert('users', {
-        'first_name': 'Α',
-        'last_name': 'Μόνος',
-        'is_deleted': 0,
-      });
-      final userB = await db.insert('users', {
-        'first_name': 'Β',
-        'last_name': 'Κοινό',
-        'is_deleted': 0,
-      });
-      final userC = await db.insert('users', {
-        'first_name': 'Γ',
-        'last_name': 'Κοινό',
-        'is_deleted': 0,
-      });
+        final activeUserId = await db.insert('users', {
+          'first_name': 'Ενεργός',
+          'last_name': 'Χρήστης',
+          'department_id': activeDeptId,
+          'is_deleted': 0,
+        });
+        await db.insert('users', {
+          'first_name': 'Διαγραμμένος',
+          'last_name': 'Χρήστης',
+          'department_id': activeDeptId,
+          'is_deleted': 1,
+        });
 
-      await linkPhone(userA, '2345999101');
-      final sharedPhoneId = await db.insert('phones', {'number': '2345999102'});
-      await db.insert('user_phones', {
-        'user_id': userB,
-        'phone_id': sharedPhoneId,
-      });
-      await db.insert('user_phones', {
-        'user_id': userC,
-        'phone_id': sharedPhoneId,
-      });
-      await linkPhone(userB, '2345999103');
+        await db.insert('equipment', {
+          'code_equipment': 'PC-ACTIVE',
+          'is_deleted': 0,
+        });
+        await db.insert('equipment', {
+          'code_equipment': 'PC-DELETED',
+          'is_deleted': 1,
+        });
 
-      expect(await users.findExclusivePhonesForUserDelete([]), isEmpty);
+        final userRows = await users.getAllUsers();
+        final departmentRows = await departments.getActiveDepartments();
+        final equipmentRows = await equipment.getAllEquipment();
 
-      final one = await users.findExclusivePhonesForUserDelete([userA]);
-      expect(one, hasLength(1));
-      expect(one.single.userId, userA);
-      expect(one.single.number, '2345999101');
+        expect(userRows, hasLength(1));
+        expect(userRows.single['id'], activeUserId);
+        expect(departmentRows, hasLength(1));
+        expect(departmentRows.single['id'], activeDeptId);
+        expect(equipmentRows, hasLength(1));
+        expect(equipmentRows.single['code_equipment'], 'PC-ACTIVE');
+      },
+    );
 
-      final many = await users.findExclusivePhonesForUserDelete([userA, userB]);
-      expect(many, hasLength(2));
-      expect(
-        many.map((e) => e.number).toSet(),
-        {'2345999101', '2345999103'},
-      );
-      expect(many.every((e) => e.number != '2345999102'), isTrue);
-    });
+    test(
+      'IN-placeholders: findExclusivePhonesForUserDelete για 0, 1 και πολλά id',
+      () async {
+        Future<void> linkPhone(int userId, String number) async {
+          final phoneId = await db.insert('phones', {'number': number});
+          await db.insert('user_phones', {
+            'user_id': userId,
+            'phone_id': phoneId,
+          });
+        }
 
-    test('PRAGMA phones columns: διπλή κλήση updatePhoneDepartment χωρίς σφάλμα',
-        () async {
-      const phoneNumber = '2345999201';
-      final deptId = await db.insert('departments', {
-        'name': 'Τμήμα PRAGMA',
-        'name_key': SearchTextNormalizer.normalizeForSearch('Τμήμα PRAGMA'),
-        'is_deleted': 0,
-      });
+        final userA = await db.insert('users', {
+          'first_name': 'Α',
+          'last_name': 'Μόνος',
+          'is_deleted': 0,
+        });
+        final userB = await db.insert('users', {
+          'first_name': 'Β',
+          'last_name': 'Κοινό',
+          'is_deleted': 0,
+        });
+        final userC = await db.insert('users', {
+          'first_name': 'Γ',
+          'last_name': 'Κοινό',
+          'is_deleted': 0,
+        });
 
-      await phones.updatePhoneDepartment(phoneNumber, deptId);
-      await phones.updatePhoneDepartment(phoneNumber, deptId);
+        await linkPhone(userA, '2345999101');
+        final sharedPhoneId = await db.insert('phones', {
+          'number': '2345999102',
+        });
+        await db.insert('user_phones', {
+          'user_id': userB,
+          'phone_id': sharedPhoneId,
+        });
+        await db.insert('user_phones', {
+          'user_id': userC,
+          'phone_id': sharedPhoneId,
+        });
+        await linkPhone(userB, '2345999103');
 
-      final info = await db.rawQuery('PRAGMA table_info(phones)');
-      final names = info.map((r) => r['name'] as String).toSet();
-      expect(names, contains('department_id'));
-      expect(names, contains('is_deleted'));
+        expect(await users.findExclusivePhonesForUserDelete([]), isEmpty);
 
-      final row = await db.query(
-        'phones',
-        where: 'number = ?',
-        whereArgs: [phoneNumber],
-        limit: 1,
-      );
-      expect(row, hasLength(1));
-      expect(row.single['department_id'], deptId);
-    });
+        final one = await users.findExclusivePhonesForUserDelete([userA]);
+        expect(one, hasLength(1));
+        expect(one.single.userId, userA);
+        expect(one.single.number, '2345999101');
+
+        final many = await users.findExclusivePhonesForUserDelete([
+          userA,
+          userB,
+        ]);
+        expect(many, hasLength(2));
+        expect(many.map((e) => e.number).toSet(), {'2345999101', '2345999103'});
+        expect(many.every((e) => e.number != '2345999102'), isTrue);
+      },
+    );
+
+    test(
+      'PRAGMA phones columns: διπλή κλήση updatePhoneDepartment χωρίς σφάλμα',
+      () async {
+        const phoneNumber = '2345999201';
+        final deptId = await db.insert('departments', {
+          'name': 'Τμήμα PRAGMA',
+          'name_key': SearchTextNormalizer.normalizeForSearch('Τμήμα PRAGMA'),
+          'is_deleted': 0,
+        });
+
+        await phones.updatePhoneDepartment(phoneNumber, deptId);
+        await phones.updatePhoneDepartment(phoneNumber, deptId);
+
+        final info = await db.rawQuery('PRAGMA table_info(phones)');
+        final names = info.map((r) => r['name'] as String).toSet();
+        expect(names, contains('department_id'));
+        expect(names, contains('is_deleted'));
+
+        final row = await db.query(
+          'phones',
+          where: 'number = ?',
+          whereArgs: [phoneNumber],
+          limit: 1,
+        );
+        expect(row, hasLength(1));
+        expect(row.single['department_id'], deptId);
+      },
+    );
   });
 }

@@ -117,37 +117,37 @@ void main() {
       expect(newV?['linked_phone_numbers'], [phoneNumber]);
     });
 
-    test('phone αποσύνδεση: updateUser με κενά phones γράφει audit delta',
-        () async {
-      const phoneNumber = '2345888802';
+    test(
+      'phone αποσύνδεση: updateUser με κενά phones γράφει audit delta',
+      () async {
+        const phoneNumber = '2345888802';
 
-      final userId = await repo.insertUser(
-        firstName: 'Αποσύνδεση',
-        lastName: 'Τηλεφώνου',
-        phones: [phoneNumber],
-        skipPhonePolicyValidation: true,
-      );
+        final userId = await repo.insertUser(
+          firstName: 'Αποσύνδεση',
+          lastName: 'Τηλεφώνου',
+          phones: [phoneNumber],
+          skipPhonePolicyValidation: true,
+        );
 
-      await db.delete('audit_log');
+        await db.delete('audit_log');
 
-      await repo.updateUser(
-        userId,
-        {'phones': <String>[]},
-        skipPhonePolicyValidation: true,
-      );
+        await repo.updateUser(userId, {
+          'phones': <String>[],
+        }, skipPhonePolicyValidation: true);
 
-      final row = await findLinkDeltaAudit(
-        userId: userId,
-        entityType: AuditEntityTypes.phone,
-        label: phoneNumber,
-        isLink: false,
-      );
-      expect(row['action'], AuditActions.modifyUser);
-      final oldV = decodeJson(row['old_values_json'] as String?);
-      final newV = decodeJson(row['new_values_json'] as String?);
-      expect(oldV?['linked_phone_numbers'], [phoneNumber]);
-      expect(newV?['linked_phone_numbers'], <String>[]);
-    });
+        final row = await findLinkDeltaAudit(
+          userId: userId,
+          entityType: AuditEntityTypes.phone,
+          label: phoneNumber,
+          isLink: false,
+        );
+        expect(row['action'], AuditActions.modifyUser);
+        final oldV = decodeJson(row['old_values_json'] as String?);
+        final newV = decodeJson(row['new_values_json'] as String?);
+        expect(oldV?['linked_phone_numbers'], [phoneNumber]);
+        expect(newV?['linked_phone_numbers'], <String>[]);
+      },
+    );
 
     test('equipment αποσύνδεση: deleteUsers γράφει audit delta', () async {
       const code = 'PC-UNLINK-AUDIT';
@@ -181,40 +181,37 @@ void main() {
     });
 
     test(
-        'equipment σύνδεση: added-branch μέσω updateUser phones (ίδια λογική helper)',
-        () async {
-      // `_auditEquipmentUserLinkDeltaInTxn` δεν καλείται από δημόσιο API για σύνδεση·
-      // το added-branch κλειδώνεται μέσω phone updateUser (κοινός κώδικας helper).
-      const existingPhone = '2345888804';
-      const newPhone = '2345888805';
+      'equipment σύνδεση: added-branch μέσω updateUser phones (ίδια λογική helper)',
+      () async {
+        // `_auditEquipmentUserLinkDeltaInTxn` δεν καλείται από δημόσιο API για σύνδεση·
+        // το added-branch κλειδώνεται μέσω phone updateUser (κοινός κώδικας helper).
+        const existingPhone = '2345888804';
+        const newPhone = '2345888805';
 
-      final userId = await repo.insertUser(
-        firstName: 'Δεύτερο',
-        lastName: 'Τηλέφωνο',
-        phones: [existingPhone],
-        skipPhonePolicyValidation: true,
-      );
+        final userId = await repo.insertUser(
+          firstName: 'Δεύτερο',
+          lastName: 'Τηλέφωνο',
+          phones: [existingPhone],
+          skipPhonePolicyValidation: true,
+        );
 
-      await db.delete('audit_log');
+        await db.delete('audit_log');
 
-      await repo.updateUser(
-        userId,
-        {
+        await repo.updateUser(userId, {
           'phones': [existingPhone, newPhone],
-        },
-        skipPhonePolicyValidation: true,
-      );
+        }, skipPhonePolicyValidation: true);
 
-      final row = await findLinkDeltaAudit(
-        userId: userId,
-        entityType: AuditEntityTypes.phone,
-        label: newPhone,
-        isLink: true,
-      );
-      expect(row['action'], AuditActions.modifyUser);
-      final newV = decodeJson(row['new_values_json'] as String?);
-      expect(newV?['linked_phone_numbers'], [existingPhone, newPhone]);
-    });
+        final row = await findLinkDeltaAudit(
+          userId: userId,
+          entityType: AuditEntityTypes.phone,
+          label: newPhone,
+          isLink: true,
+        );
+        expect(row['action'], AuditActions.modifyUser);
+        final newV = decodeJson(row['new_values_json'] as String?);
+        expect(newV?['linked_phone_numbers'], [existingPhone, newPhone]);
+      },
+    );
 
     test('entityName fallback #id όταν λείπει ετικέτα στη βάση', () async {
       final equipmentId = await db.insert('equipment', {
@@ -241,10 +238,7 @@ void main() {
         isLink: false,
       );
       expect(row['entity_name'], 'Fallback Ετικέτας');
-      expect(
-        row['details'],
-        contains('Αποσύνδεση εξοπλισμού #$equipmentId'),
-      );
+      expect(row['details'], contains('Αποσύνδεση εξοπλισμού #$equipmentId'));
     });
   });
 }

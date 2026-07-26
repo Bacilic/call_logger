@@ -258,8 +258,7 @@ class DatabaseInitResult {
           DatabaseInitResult._isNoSuchColumnError(lower)) {
         msg = DatabaseInitResult._getUserFriendlyMessage(lower, raw);
       } else if (DatabaseInitResult._isSqliteLogicErrorCode1(lower)) {
-        msg =
-            'Προέκυψε πρόβλημα κατά την αναβάθμιση της βάσης δεδομένων.';
+        msg = 'Προέκυψε πρόβλημα κατά την αναβάθμιση της βάσης δεδομένων.';
       } else {
         msg =
             'Προέκυψε πρόβλημα κατά την αναβάθμιση του σχήματος της βάσης δεδομένων.';
@@ -374,8 +373,9 @@ class DatabaseInitResult {
 
     if (_isMissingApplicationFile(lower)) {
       final fileName = _extractMissingApplicationFileName(raw);
-      final filePart =
-          (fileName != null && fileName.isNotEmpty) ? ': $fileName' : '';
+      final filePart = (fileName != null && fileName.isNotEmpty)
+          ? ': $fileName'
+          : '';
       return build(
         status: DatabaseStatus.applicationError,
         message:
@@ -656,7 +656,8 @@ bool _isMissingApplicationFile(String lower) {
   if (lower.contains('databasefactory not initialized')) return true;
 
   // Πρωτογενή σήματα (αν κάποια ροή τα διατηρεί χωρίς να τα καταπιεί).
-  final nativeLib = lower.contains('failed to load dynamic library') ||
+  final nativeLib =
+      lower.contains('failed to load dynamic library') ||
       (lower.contains('sqlite3') &&
           (lower.contains('could not be found') ||
               lower.contains('error code: 126') ||

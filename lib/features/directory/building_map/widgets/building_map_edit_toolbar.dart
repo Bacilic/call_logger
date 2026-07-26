@@ -43,17 +43,16 @@ class BuildingMapEditToolbar extends ConsumerWidget {
         }
       }
     }
-    final canAdjustLabelFont = hasActiveCanvas &&
+    final canAdjustLabelFont =
+        hasActiveCanvas &&
         toolMode == MapToolMode.edit &&
         deptToMap != null &&
         draftShape != null;
     final currentScale = canAdjustLabelFont
         ? draftShape.labelFontScale
         : effectiveMapLabelFontScale(selectedDept?.mapLabelFontScale);
-    final atMinScale =
-        currentScale <= kBuildingMapLabelFontScaleMin + 0.001;
-    final atMaxScale =
-        currentScale >= kBuildingMapLabelFontScaleMax - 0.001;
+    final atMinScale = currentScale <= kBuildingMapLabelFontScaleMin + 0.001;
+    final atMaxScale = currentScale >= kBuildingMapLabelFontScaleMax - 0.001;
 
     String? currentFloorLabel;
     if (sheetId != null) {
@@ -170,12 +169,14 @@ class BuildingMapEditToolbar extends ConsumerWidget {
             ),
             onPressed: !hasActiveCanvas
                 ? null
-                : () =>
-                      ref.read(buildingMapPanLockProvider.notifier).toggle(),
+                : () => ref.read(buildingMapPanLockProvider.notifier).toggle(),
             icon: const Icon(Icons.open_with),
           ),
           if (!hasActiveCanvas)
-            Opacity(opacity: 0.42, child: IgnorePointer(child: labelFontControls))
+            Opacity(
+              opacity: 0.42,
+              child: IgnorePointer(child: labelFontControls),
+            )
           else
             labelFontControls,
           IconButton(
@@ -203,8 +204,7 @@ class BuildingMapEditToolbar extends ConsumerWidget {
                 : () async {
                     await exportBuildingMapSheetToImageFile(
                       context: context,
-                      defaultFloorBaseName:
-                          currentFloorLabel ?? 'Όροφος',
+                      defaultFloorBaseName: currentFloorLabel ?? 'Όροφος',
                     );
                   },
             icon: const Icon(Icons.download_outlined),

@@ -1,4 +1,4 @@
-﻿import 'package:call_logger/core/services/lookup_service.dart';
+import 'package:call_logger/core/services/lookup_service.dart';
 import 'package:call_logger/features/calls/layout/calls_field_confirmations.dart';
 import 'package:call_logger/features/calls/layout/calls_field_groups.dart';
 import 'package:call_logger/features/calls/layout/calls_layout_engine.dart';
@@ -27,9 +27,7 @@ void main() {
       lookup.injectInMemoryCatalogForTests(
         users: const [],
         equipment: const [],
-        departmentRows: [
-          DepartmentModel(id: 1, name: 'No map'),
-        ],
+        departmentRows: [DepartmentModel(id: 1, name: 'No map')],
       );
 
       expect(
@@ -139,10 +137,7 @@ void main() {
       );
       final plan = CallsLayoutEngine.build(groups, vis);
       expect(plan.rows.length, 2);
-      expect(
-        plan.allSlots,
-        isNot(contains(CallsLayoutSlot.map)),
-      );
+      expect(plan.allSlots, isNot(contains(CallsLayoutSlot.map)));
     });
   });
 }

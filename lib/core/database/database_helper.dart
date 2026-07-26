@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
@@ -570,8 +570,7 @@ class DatabaseHelper with DatabaseTableInspectionMixin {
     final profile = await profileDatabaseFile(dbPath);
     _lastDatabaseProfile = profile;
     final kind = profile.kind;
-    if (kind == DatabaseFileKind.callLogger ||
-        kind == DatabaseFileKind.empty) {
+    if (kind == DatabaseFileKind.callLogger || kind == DatabaseFileKind.empty) {
       return kind;
     }
 
@@ -612,10 +611,10 @@ class DatabaseHelper with DatabaseTableInspectionMixin {
       case DatabaseFileKind.unknown:
         message = profile.userVersion == 0
             ? 'Το αρχείο «$displayName» περιέχει πίνακες αλλά δηλώνει '
-                'έκδοση 0, οπότε δεν αναγνωρίζεται ως βάση της Καταγραφής '
-                'Κλήσεων.'
+                  'έκδοση 0, οπότε δεν αναγνωρίζεται ως βάση της Καταγραφής '
+                  'Κλήσεων.'
             : 'Το αρχείο «$displayName» δεν είναι βάση της Καταγραφής '
-                'Κλήσεων.';
+                  'Κλήσεων.';
         recoveryKind = DatabaseInitRecoveryKind.wrongDatabaseUnknown;
       case DatabaseFileKind.callLogger:
       case DatabaseFileKind.empty:

@@ -34,9 +34,7 @@ void main() {
           changelogProvider.overrideWith((ref) async => const []),
           updateCheckProvider.overrideWith((ref) async => updateResult),
         ],
-        child: const MaterialApp(
-          home: Scaffold(body: ChangelogDialog()),
-        ),
+        child: const MaterialApp(home: Scaffold(body: ChangelogDialog())),
       ),
     );
     await tester.pumpAndSettle();
@@ -60,17 +58,13 @@ void main() {
     },
   );
 
-  testWidgets(
-    'κουμπί Ενημέρωση κρυφό όταν δεν υπάρχει διαθέσιμη ενημέρωση',
-    (tester) async {
-      await pumpDialog(
-        tester,
-        updateResult: const UpdateCheckResult.none(),
-      );
+  testWidgets('κουμπί Ενημέρωση κρυφό όταν δεν υπάρχει διαθέσιμη ενημέρωση', (
+    tester,
+  ) async {
+    await pumpDialog(tester, updateResult: const UpdateCheckResult.none());
 
-      expect(find.byKey(const Key('changelog_update_button')), findsNothing);
-      expect(find.text('Ενημέρωση'), findsNothing);
-      expect(find.text('Κλείσιμο'), findsOneWidget);
-    },
-  );
+    expect(find.byKey(const Key('changelog_update_button')), findsNothing);
+    expect(find.text('Ενημέρωση'), findsNothing);
+    expect(find.text('Κλείσιμο'), findsOneWidget);
+  });
 }

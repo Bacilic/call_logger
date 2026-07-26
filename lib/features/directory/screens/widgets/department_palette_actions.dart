@@ -270,58 +270,62 @@ class DepartmentPaletteActions {
       builder: (ctx) {
         final theme = Theme.of(ctx);
         return AlertDialog(
-        title: const Text('Αντικατάσταση χρώματος'),
-        content: SizedBox(
-          width: 280,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text(
-                'Νέο χρώμα: ${colorToDepartmentHex(picked)}',
-                style: theme.textTheme.bodyMedium,
-              ),
-              const SizedBox(height: 8),
-              const Text('Επιλέξτε ποια θέση να αντικατασταθεί:'),
-              const SizedBox(height: 12),
-              Wrap(
-                spacing: 6,
-                runSpacing: 6,
-                children: [
-                  for (var i = 0; i < DepartmentPaletteStore.customSlotCount; i++)
-                    if (slots[i] != null)
-                      Material(
-                        color: Colors.transparent,
-                        child: InkWell(
-                          onTap: () => Navigator.pop(ctx, i),
-                          borderRadius: BorderRadius.circular(4),
-                          child: Tooltip(
-                            message: colorToDepartmentHex(slots[i]!),
-                            child: Container(
-                              width: 28,
-                              height: 28,
-                              decoration: BoxDecoration(
-                                color: slots[i],
-                                borderRadius: BorderRadius.circular(4),
-                                border: Border.all(
-                                  color: theme.colorScheme.outlineVariant,
+          title: const Text('Αντικατάσταση χρώματος'),
+          content: SizedBox(
+            width: 280,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  'Νέο χρώμα: ${colorToDepartmentHex(picked)}',
+                  style: theme.textTheme.bodyMedium,
+                ),
+                const SizedBox(height: 8),
+                const Text('Επιλέξτε ποια θέση να αντικατασταθεί:'),
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: [
+                    for (
+                      var i = 0;
+                      i < DepartmentPaletteStore.customSlotCount;
+                      i++
+                    )
+                      if (slots[i] != null)
+                        Material(
+                          color: Colors.transparent,
+                          child: InkWell(
+                            onTap: () => Navigator.pop(ctx, i),
+                            borderRadius: BorderRadius.circular(4),
+                            child: Tooltip(
+                              message: colorToDepartmentHex(slots[i]!),
+                              child: Container(
+                                width: 28,
+                                height: 28,
+                                decoration: BoxDecoration(
+                                  color: slots[i],
+                                  borderRadius: BorderRadius.circular(4),
+                                  border: Border.all(
+                                    color: theme.colorScheme.outlineVariant,
+                                  ),
                                 ),
                               ),
                             ),
                           ),
                         ),
-                      ),
-                ],
-              ),
-            ],
+                  ],
+                ),
+              ],
+            ),
           ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Άκυρο'),
-          ),
-        ],
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Άκυρο'),
+            ),
+          ],
         );
       },
     );

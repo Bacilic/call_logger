@@ -1,4 +1,4 @@
-﻿import 'dart:convert';
+import 'dart:convert';
 
 /// Τύπος widget για custom πεδίο φόρμας Lansweeper.
 enum LansweeperFieldWidgetType {
@@ -71,16 +71,16 @@ class LansweeperCustomFieldDef {
   }
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'api_name': apiName,
-        'form_label': formLabel,
-        'widget_type': widgetType.toStorage(),
-        'options': options,
-        'default_value': defaultValue,
-        'visible': visible,
-        'required': required,
-        'show_in_form': showInForm,
-      };
+    'id': id,
+    'api_name': apiName,
+    'form_label': formLabel,
+    'widget_type': widgetType.toStorage(),
+    'options': options,
+    'default_value': defaultValue,
+    'visible': visible,
+    'required': required,
+    'show_in_form': showInForm,
+  };
 
   static LansweeperCustomFieldDef fromJson(Map<String, dynamic> json) {
     final rawOptions = json['options'];
@@ -102,8 +102,9 @@ class LansweeperCustomFieldDef {
       defaultValue: json['default_value']?.toString() ?? '',
       visible: json['visible'] is bool ? json['visible'] as bool : true,
       required: json['required'] is bool ? json['required'] as bool : false,
-      showInForm:
-          json['show_in_form'] is bool ? json['show_in_form'] as bool : true,
+      showInForm: json['show_in_form'] is bool
+          ? json['show_in_form'] as bool
+          : true,
     );
   }
 }
@@ -238,22 +239,22 @@ class LansweeperTicketSubmitConfig {
   }
 
   Map<String, dynamic> toJson() => {
-        'schema_version': schemaVersion,
-        'custom_fields': customFields.map((f) => f.toJson()).toList(),
-        'ticket_states': ticketStates,
-        'default_ticket_state': defaultTicketState,
-        'note_type': noteType,
-        'ticket_type': ticketType,
-        'ticket_types': ticketTypes,
-        'priority': priority,
-        'priorities': priorities,
-        'team': team,
-        'teams': teams,
-        'enable_add_note_step': enableAddNoteStep,
-        'enable_state_update_step': enableStateUpdateStep,
-        'remember_form_selections': rememberFormSelections,
-        'include_note_time': includeNoteTime,
-      };
+    'schema_version': schemaVersion,
+    'custom_fields': customFields.map((f) => f.toJson()).toList(),
+    'ticket_states': ticketStates,
+    'default_ticket_state': defaultTicketState,
+    'note_type': noteType,
+    'ticket_type': ticketType,
+    'ticket_types': ticketTypes,
+    'priority': priority,
+    'priorities': priorities,
+    'team': team,
+    'teams': teams,
+    'enable_add_note_step': enableAddNoteStep,
+    'enable_state_update_step': enableStateUpdateStep,
+    'remember_form_selections': rememberFormSelections,
+    'include_note_time': includeNoteTime,
+  };
 
   static List<String> _stringList(Object? raw) {
     final out = <String>[];
@@ -318,9 +319,7 @@ class LansweeperTicketSubmitConfig {
           customFields.add(LansweeperCustomFieldDef.fromJson(item));
         } else if (item is Map) {
           customFields.add(
-            LansweeperCustomFieldDef.fromJson(
-              Map<String, dynamic>.from(item),
-            ),
+            LansweeperCustomFieldDef.fromJson(Map<String, dynamic>.from(item)),
           );
         }
       }
@@ -358,8 +357,8 @@ class LansweeperTicketSubmitConfig {
           : ticketStates,
       defaultTicketState:
           (json['default_ticket_state'] ?? json['defaultTicketState'])
-                  ?.toString() ??
-              'Closed',
+              ?.toString() ??
+          'Closed',
       noteType:
           (json['note_type'] ?? json['noteType'])?.toString() ?? 'Internal',
       ticketType: ticketType,

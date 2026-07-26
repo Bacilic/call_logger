@@ -7,7 +7,7 @@ import 'directory_support.dart';
 /// Persistence τηλεφώνων (`phones`, `department_phones`, σχετικά junctions).
 class PhoneRepository {
   PhoneRepository(this.db, {DirectorySupport? support})
-      : _support = support ?? DirectorySupport(db);
+    : _support = support ?? DirectorySupport(db);
 
   final Database db;
   final DirectorySupport _support;
@@ -110,7 +110,8 @@ class PhoneRepository {
       );
     }
     await db.transaction(
-      (txn) => _removeDepartmentDirectPhoneInTxn(txn, departmentId, phoneNumber),
+      (txn) =>
+          _removeDepartmentDirectPhoneInTxn(txn, departmentId, phoneNumber),
     );
   }
 
@@ -225,9 +226,7 @@ class PhoneRepository {
     );
     final taskCount = _readCount(taskLinks);
     if (taskCount > 0) {
-      out.add(
-        taskCount == 1 ? '1 εκκρεμότητα' : '$taskCount εκκρεμότητες',
-      );
+      out.add(taskCount == 1 ? '1 εκκρεμότητα' : '$taskCount εκκρεμότητες');
     }
 
     final digits = DirectorySupport.phoneDigitsOnly(phoneNumber.trim());
@@ -250,9 +249,7 @@ class PhoneRepository {
     final callCount = _readCount(callLinks);
     if (callCount > 0) {
       out.add(
-        callCount == 1
-            ? '1 κλήση ιστορικού'
-            : '$callCount κλήσεις ιστορικού',
+        callCount == 1 ? '1 κλήση ιστορικού' : '$callCount κλήσεις ιστορικού',
       );
     }
 
@@ -289,17 +286,10 @@ class PhoneRepository {
           where: 'phone_id = ?',
           whereArgs: [id],
         );
-        await txn.delete(
-          'user_phones',
-          where: 'phone_id = ?',
-          whereArgs: [id],
-        );
+        await txn.delete('user_phones', where: 'phone_id = ?', whereArgs: [id]);
         await txn.update(
           'phones',
-          {
-            'department_id': null,
-            'is_deleted': 1,
-          },
+          {'department_id': null, 'is_deleted': 1},
           where: 'id = ?',
           whereArgs: [id],
         );

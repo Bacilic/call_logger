@@ -68,8 +68,7 @@ class _AiPromptTemplateEditorDialogState
   }
 
   Future<bool> _confirmInvalidSave() async {
-    final validation =
-        AiPromptTemplateSyntax.validate(_draftController.text);
+    final validation = AiPromptTemplateSyntax.validate(_draftController.text);
     if (validation.isValid) return true;
 
     final proceed = await showDialog<bool>(
@@ -121,9 +120,7 @@ class _AiPromptTemplateEditorDialogState
       setState(() => _saving = false);
       showDialogSnackBar(
         SnackBar(
-          content: Text(
-            'Αποτυχία αποθήκευσης: ${humanizeUserFacingError(e)}',
-          ),
+          content: Text('Αποτυχία αποθήκευσης: ${humanizeUserFacingError(e)}'),
         ),
       );
     }
@@ -141,9 +138,9 @@ class _AiPromptTemplateEditorDialogState
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(ctx).pop(
-              _PromptEditorDismissChoice.continueEditing,
-            ),
+            onPressed: () => Navigator.of(
+              ctx,
+            ).pop(_PromptEditorDismissChoice.continueEditing),
             child: const Text('Συνέχεια επεξεργασίας'),
           ),
           FilledButton(
@@ -204,8 +201,7 @@ class _AiPromptTemplateEditorDialogState
 
   Future<void> _restoreDefault() async {
     final userDefault = ref.read(geminiPromptTemplateUserDefaultProvider);
-    final hasUserDefault =
-        userDefault != null && userDefault.trim().isNotEmpty;
+    final hasUserDefault = userDefault != null && userDefault.trim().isNotEmpty;
 
     if (!hasUserDefault) {
       final confirmed = await showDialog<bool>(
@@ -242,7 +238,8 @@ class _AiPromptTemplateEditorDialogState
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(ctx).pop(_RestoreDefaultChoice.cancel),
+            onPressed: () =>
+                Navigator.of(ctx).pop(_RestoreDefaultChoice.cancel),
             child: const Text('Άκυρο'),
           ),
           TextButton(
@@ -278,85 +275,83 @@ class _AiPromptTemplateEditorDialogState
     return DialogSnackbarScope(
       messengerKey: dialogMessengerKey,
       child: PopScope(
-      canPop: false,
-      onPopInvokedWithResult: (didPop, result) {
-        if (didPop) return;
-        unawaited(_requestClose());
-      },
-      child: AlertDialog(
-        title: const Text('Πρότυπο προτροπής Τεχνητής Νοημοσύνης'),
-        content: SizedBox(
-          width: 520,
-          child: Scrollbar(
-            controller: _scrollController,
-            thumbVisibility: true,
-            child: SingleChildScrollView(
+        canPop: false,
+        onPopInvokedWithResult: (didPop, result) {
+          if (didPop) return;
+          unawaited(_requestClose());
+        },
+        child: AlertDialog(
+          title: const Text('Πρότυπο προτροπής Τεχνητής Νοημοσύνης'),
+          content: SizedBox(
+            width: 520,
+            child: Scrollbar(
               controller: _scrollController,
-              padding: const EdgeInsets.only(right: 16),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Text(
-                    'Ορίζει πώς η ΤΝ προτείνει τίτλο, περιγραφή και λύση για μετατροπη της κλήσης σε ticket στο Lansweeper. '
-                    'Ο επεξεργαστής προτροπής υποστηρίζει αυτόματες προτάσεις όταν πληκτρολογήσετε \'{\'',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
+              thumbVisibility: true,
+              child: SingleChildScrollView(
+                controller: _scrollController,
+                padding: const EdgeInsets.only(right: 16),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      'Ορίζει πώς η ΤΝ προτείνει τίτλο, περιγραφή και λύση για μετατροπη της κλήσης σε ticket στο Lansweeper. '
+                      'Ο επεξεργαστής προτροπής υποστηρίζει αυτόματες προτάσεις όταν πληκτρολογήσετε \'{\'',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 8),
-                  AiPromptTemplateField(
-                    controller: _draftController,
-                  ),
-                  const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 4,
-                    children: [
-                      TextButton(
-                        style: TextButton.styleFrom(
-                          visualDensity: VisualDensity.compact,
-                          textStyle: subtleStyle,
+                    const SizedBox(height: 8),
+                    AiPromptTemplateField(controller: _draftController),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 4,
+                      children: [
+                        TextButton(
+                          style: TextButton.styleFrom(
+                            visualDensity: VisualDensity.compact,
+                            textStyle: subtleStyle,
+                          ),
+                          onPressed: _setUserDefault,
+                          child: const Text('Ορισμός ως Προεπιλογή'),
                         ),
-                        onPressed: _setUserDefault,
-                        child: const Text('Ορισμός ως Προεπιλογή'),
-                      ),
-                      TextButton(
-                        style: TextButton.styleFrom(
-                          visualDensity: VisualDensity.compact,
-                          textStyle: subtleStyle,
+                        TextButton(
+                          style: TextButton.styleFrom(
+                            visualDensity: VisualDensity.compact,
+                            textStyle: subtleStyle,
+                          ),
+                          onPressed: _restoreDefault,
+                          child: const Text('Επαναφορά Προεπιλογής'),
                         ),
-                        onPressed: _restoreDefault,
-                        child: const Text('Επαναφορά Προεπιλογής'),
-                      ),
-                    ],
-                  ),
-                ],
+                      ],
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
+          actions: [
+            TextButton(
+              onPressed: _isDirty ? _cancelEdits : null,
+              child: const Text('Ακύρωση'),
+            ),
+            FilledButton(
+              onPressed: _isDirty && !_saving ? () => unawaited(_save()) : null,
+              child: _saving
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Text('Αποθήκευση'),
+            ),
+            TextButton(
+              onPressed: () => unawaited(_requestClose()),
+              child: const Text('Κλείσιμο'),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: _isDirty ? _cancelEdits : null,
-            child: const Text('Ακύρωση'),
-          ),
-          FilledButton(
-            onPressed: _isDirty && !_saving ? () => unawaited(_save()) : null,
-            child: _saving
-                ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Text('Αποθήκευση'),
-          ),
-          TextButton(
-            onPressed: () => unawaited(_requestClose()),
-            child: const Text('Κλείσιμο'),
-          ),
-        ],
-      ),
       ),
     );
   }

@@ -18,52 +18,46 @@ class _TestDatabaseException extends DatabaseException {
 
 void main() {
   group('humanizeUserFacingError', () {
-    test('PhoneDepartmentPolicyException → μήνυμα με αριθμό, χωρίς Exception', () {
-      final error = PhoneDepartmentPolicyException([
-        const PhoneDepartmentConflict(
-          phone: '2917',
-          hasDepartmentLocationConflict: true,
-          hasOtherUserOwners: false,
-        ),
-      ]);
+    test(
+      'PhoneDepartmentPolicyException → μήνυμα με αριθμό, χωρίς Exception',
+      () {
+        final error = PhoneDepartmentPolicyException([
+          const PhoneDepartmentConflict(
+            phone: '2917',
+            hasDepartmentLocationConflict: true,
+            hasOtherUserOwners: false,
+          ),
+        ]);
 
-      final message = humanizeUserFacingError(error);
+        final message = humanizeUserFacingError(error);
 
-      expect(message, contains('2917'));
-      expect(message, contains('άλλο τμήμα'));
-      expect(message.toLowerCase(), isNot(contains('exception')));
-    });
+        expect(message, contains('2917'));
+        expect(message, contains('άλλο τμήμα'));
+        expect(message.toLowerCase(), isNot(contains('exception')));
+      },
+    );
 
     test('DatabaseException locked/busy → απασχολημένη βάση', () {
       final locked = _TestDatabaseException('database is locked');
       final busy = _TestDatabaseException('SQLITE_BUSY');
 
-      expect(
-        humanizeUserFacingError(locked),
-        contains('απασχολημένη'),
-      );
-      expect(
-        humanizeUserFacingError(busy),
-        contains('απασχολημένη'),
-      );
+      expect(humanizeUserFacingError(locked), contains('απασχολημένη'));
+      expect(humanizeUserFacingError(busy), contains('απασχολημένη'));
     });
 
     test('DatabaseException database_closed → ανανέωση σύνδεσης', () {
       final error = _TestDatabaseException('database_closed');
 
-      expect(
-        humanizeUserFacingError(error),
-        contains('ανανεώθηκε'),
-      );
+      expect(humanizeUserFacingError(error), contains('ανανεώθηκε'));
     });
 
     test('FileSystemException → πρόσβαση αρχείου', () {
-      final error = const FileSystemException('Permission denied', r'C:\tmp\db');
-
-      expect(
-        humanizeUserFacingError(error),
-        contains('πρόσβαση'),
+      final error = const FileSystemException(
+        'Permission denied',
+        r'C:\tmp\db',
       );
+
+      expect(humanizeUserFacingError(error), contains('πρόσβαση'));
     });
 
     test('άγνωστο σφάλμα → γενικό μήνυμα με τεχνικές λεπτομέρειες', () {

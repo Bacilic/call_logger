@@ -46,8 +46,12 @@ class _UserNameChangeConfirmDialogState
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final oldL = widget.oldDisplayName.trim().isEmpty ? '—' : widget.oldDisplayName.trim();
-    final newL = widget.newDisplayName.trim().isEmpty ? '—' : widget.newDisplayName.trim();
+    final oldL = widget.oldDisplayName.trim().isEmpty
+        ? '—'
+        : widget.oldDisplayName.trim();
+    final newL = widget.newDisplayName.trim().isEmpty
+        ? '—'
+        : widget.newDisplayName.trim();
 
     return AlertDialog(
       title: const Text('Αλλαγή ονοματεπώνυμου'),
@@ -66,8 +70,9 @@ class _UserNameChangeConfirmDialogState
               title: 'Ενημέρωση της ίδιας εγγραφής',
               subtitle:
                   'Το ιστορικό κλήσεων και οι συνδέσεις εξοπλισμού παραμένουν στην ίδια εγγραφή.',
-              onTap: () =>
-                  setState(() => _choice = UserNameChangeDialogChoice.sameRecord),
+              onTap: () => setState(
+                () => _choice = UserNameChangeDialogChoice.sameRecord,
+              ),
             ),
             const SizedBox(height: 8),
             _NameChangeOptionTile(
@@ -75,8 +80,9 @@ class _UserNameChangeConfirmDialogState
               title: 'Νέος υπάλληλος',
               subtitle:
                   'Δημιουργείται νέος χρήστης με τα νέα στοιχεία· αντιγράφονται οι συνδέσεις εξοπλισμού.\nΟ παλιός παραμένει ορατός· οι παλιές κλήσεις δεν αλλάζουν Καλών.',
-              onTap: () =>
-                  setState(() => _choice = UserNameChangeDialogChoice.newEmployee),
+              onTap: () => setState(
+                () => _choice = UserNameChangeDialogChoice.newEmployee,
+              ),
             ),
           ],
         ),

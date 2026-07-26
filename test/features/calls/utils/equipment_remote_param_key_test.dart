@@ -5,11 +5,11 @@ void main() {
   group('EquipmentRemoteParamKey', () {
     test('withExclusiveToolId + exclusiveToolIdFrom διατηρούν το id', () {
       const params = {'1': '10.0.0.1', '2': '123456789'};
-      final withExclusive = EquipmentRemoteParamKey.withExclusiveToolId(params, 2);
-      expect(
-        EquipmentRemoteParamKey.exclusiveToolIdFrom(withExclusive),
+      final withExclusive = EquipmentRemoteParamKey.withExclusiveToolId(
+        params,
         2,
       );
+      expect(EquipmentRemoteParamKey.exclusiveToolIdFrom(withExclusive), 2);
       expect(withExclusive[EquipmentRemoteParamKey.exclusiveToolKey], '2');
       expect(withExclusive['1'], '10.0.0.1');
     });
@@ -20,7 +20,10 @@ void main() {
         EquipmentRemoteParamKey.exclusiveToolKey: '2',
       };
       final cleared = EquipmentRemoteParamKey.withExclusiveToolId(params, null);
-      expect(cleared.containsKey(EquipmentRemoteParamKey.exclusiveToolKey), isFalse);
+      expect(
+        cleared.containsKey(EquipmentRemoteParamKey.exclusiveToolKey),
+        isFalse,
+      );
       expect(EquipmentRemoteParamKey.exclusiveToolIdFrom(cleared), isNull);
       expect(cleared['1'], '10.0.0.1');
     });

@@ -127,7 +127,9 @@ Duration saveConfirmationSnackBarDuration(String message) {
 }
 
 /// Αφαιρεί τεχνικά πεδία εκκρεμότητας πριν το diff επιβεβαίωσης αποθήκευσης.
-Map<String, dynamic> mapForTaskSaveConfirmationDiff(Map<String, dynamic> source) {
+Map<String, dynamic> mapForTaskSaveConfirmationDiff(
+  Map<String, dynamic> source,
+) {
   return {
     for (final entry in source.entries)
       if (entry.key != 'created_at' &&

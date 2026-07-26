@@ -1,4 +1,4 @@
-﻿import 'package:call_logger/core/services/lansweeper_ticket_requester_fields.dart';
+import 'package:call_logger/core/services/lansweeper_ticket_requester_fields.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -124,10 +124,7 @@ void main() {
     test(r'άκυρο dro@fd δεν χαρτογραφείται ως Email', () {
       expect(
         lansweeperAgentAsMatchingRequesterFields('dro@fd'),
-        <String, String>{
-          'Username': 'dro@fd',
-          'AgentUsername': 'dro@fd',
-        },
+        <String, String>{'Username': 'dro@fd', 'AgentUsername': 'dro@fd'},
       );
     });
 

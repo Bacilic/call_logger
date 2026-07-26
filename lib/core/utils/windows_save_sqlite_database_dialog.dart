@@ -71,7 +71,8 @@ String? _runSaveSqliteDatabaseDialog({
       ..nMaxFile = maxFileChars
       ..lpstrTitle = dialogTitle.toPwstr(allocator: arena)
       ..lpstrDefExt = 'db'.toPwstr(allocator: arena)
-      ..Flags = OFN_EXPLORER |
+      ..Flags =
+          OFN_EXPLORER |
           OFN_HIDEREADONLY |
           OFN_NOCHANGEDIR |
           OFN_OVERWRITEPROMPT;

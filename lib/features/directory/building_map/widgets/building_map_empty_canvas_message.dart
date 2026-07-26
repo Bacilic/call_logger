@@ -1,10 +1,7 @@
 import 'package:flutter/material.dart';
 
 class BuildingMapEmptyCanvasMessage extends StatelessWidget {
-  const BuildingMapEmptyCanvasMessage({
-    super.key,
-    required this.viewMode,
-  });
+  const BuildingMapEmptyCanvasMessage({super.key, required this.viewMode});
 
   /// Αν true: μήνυμα προβολής· αν false: μήνυμα επεξεργασίας (χωρίς κατόψεις).
   final bool viewMode;

@@ -5,11 +5,8 @@ import '../config/app_config.dart';
 /// Εμφανίζει μία φορά ενημερωτικό διάλογο όταν η εφαρμογή επανεκκινήθηκε
 /// αυτόματα από τα Windows μετά από κατάρρευση ή κόλλημα.
 class CrashRestartNotice extends StatefulWidget {
-  CrashRestartNotice({
-    super.key,
-    required this.child,
-    bool? showNotice,
-  }) : showNotice = showNotice ?? AppConfig.wasRestartedAfterCrash;
+  CrashRestartNotice({super.key, required this.child, bool? showNotice})
+    : showNotice = showNotice ?? AppConfig.wasRestartedAfterCrash;
 
   final Widget child;
   final bool showNotice;

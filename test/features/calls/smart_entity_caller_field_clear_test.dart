@@ -122,14 +122,30 @@ void main() {
         await tester.pump();
 
         final clearButton = find.byTooltip('Καθαρισμός Καλούντα');
-        expect(clearButton, findsOneWidget, reason: greekExpectMsg('Εμφανές κουμπί καθαρισμού καλούντα'));
+        expect(
+          clearButton,
+          findsOneWidget,
+          reason: greekExpectMsg('Εμφανές κουμπί καθαρισμού καλούντα'),
+        );
         await tester.tap(clearButton);
         await pumpUntilSettled(tester);
 
         final header = await _readHeader(tester);
-        expect(header.departmentText, _kDepartmentText, reason: greekExpectMsg('Το τμήμα παραμένει'));
-        expect(header.equipmentText, _kEquipmentText, reason: greekExpectMsg('Ο εξοπλισμός παραμένει'));
-        expect(header.callerDisplayText, '', reason: greekExpectMsg('Ο καλώντας καθαρίστηκε'));
+        expect(
+          header.departmentText,
+          _kDepartmentText,
+          reason: greekExpectMsg('Το τμήμα παραμένει'),
+        );
+        expect(
+          header.equipmentText,
+          _kEquipmentText,
+          reason: greekExpectMsg('Ο εξοπλισμός παραμένει'),
+        );
+        expect(
+          header.callerDisplayText,
+          '',
+          reason: greekExpectMsg('Ο καλώντας καθαρίστηκε'),
+        );
 
         await flushCallLoggerSqfliteLockTimers(tester);
       },
@@ -155,9 +171,21 @@ void main() {
         await tester.pump();
 
         final header = await _readHeader(tester);
-        expect(header.departmentText, _kDepartmentText, reason: greekExpectMsg('Το τμήμα παραμένει'));
-        expect(header.equipmentText, _kEquipmentText, reason: greekExpectMsg('Ο εξοπλισμός παραμένει'));
-        expect(header.callerDisplayText, '', reason: greekExpectMsg('Ο καλώντας καθαρίστηκε'));
+        expect(
+          header.departmentText,
+          _kDepartmentText,
+          reason: greekExpectMsg('Το τμήμα παραμένει'),
+        );
+        expect(
+          header.equipmentText,
+          _kEquipmentText,
+          reason: greekExpectMsg('Ο εξοπλισμός παραμένει'),
+        );
+        expect(
+          header.callerDisplayText,
+          '',
+          reason: greekExpectMsg('Ο καλώντας καθαρίστηκε'),
+        );
 
         await flushCallLoggerSqfliteLockTimers(tester);
       },

@@ -18,8 +18,9 @@ void main() {
 
     setUpAll(() async {
       initSqfliteFfiForTests();
-      final dir =
-          await Directory.systemTemp.createTemp('category_repository_test_');
+      final dir = await Directory.systemTemp.createTemp(
+        'category_repository_test_',
+      );
       await DatabaseHelper.bindTestDatabaseFile('${dir.path}/category_repo.db');
       db = await DatabaseHelper.instance.database;
     });
@@ -39,37 +40,42 @@ void main() {
 
     Future<void> noopRebuild(Transaction txn, int categoryId) async {}
 
-    test('getCategoryNames / getActiveCategoryRows: μόνο ενεργές, σωστή σειρά',
-        () async {
-      await db.insert('categories', {'name': 'Zebra', 'is_deleted': 0});
-      await db.insert('categories', {'name': 'Alpha', 'is_deleted': 0});
-      await db.insert('categories', {'name': 'Deleted', 'is_deleted': 1});
+    test(
+      'getCategoryNames / getActiveCategoryRows: μόνο ενεργές, σωστή σειρά',
+      () async {
+        await db.insert('categories', {'name': 'Zebra', 'is_deleted': 0});
+        await db.insert('categories', {'name': 'Alpha', 'is_deleted': 0});
+        await db.insert('categories', {'name': 'Deleted', 'is_deleted': 1});
 
-      final names = await repo.getCategoryNames();
-      expect(names, ['Alpha', 'Zebra']);
+        final names = await repo.getCategoryNames();
+        expect(names, ['Alpha', 'Zebra']);
 
-      final rows = await repo.getActiveCategoryRows();
-      expect(rows, hasLength(2));
-      expect(rows.map((r) => r['name']), ['Alpha', 'Zebra']);
-      expect(rows.every((r) => r['id'] != null), isTrue);
-    });
+        final rows = await repo.getActiveCategoryRows();
+        expect(rows, hasLength(2));
+        expect(rows.map((r) => r['name']), ['Alpha', 'Zebra']);
+        expect(rows.every((r) => r['id'] != null), isTrue);
+      },
+    );
 
-    test('findActiveCategoryByNormalizedName: κανονικοποίηση ονόματος', () async {
-      final id = await db.insert('categories', {
-        'name': '  Δίκτυο  ',
-        'is_deleted': 0,
-      });
+    test(
+      'findActiveCategoryByNormalizedName: κανονικοποίηση ονόματος',
+      () async {
+        final id = await db.insert('categories', {
+          'name': '  Δίκτυο  ',
+          'is_deleted': 0,
+        });
 
-      final hit = await repo.findActiveCategoryByNormalizedName('δίκτυο');
-      expect(hit, isNotNull);
-      expect(hit!.id, id);
-      expect(hit.name, 'Δίκτυο');
+        final hit = await repo.findActiveCategoryByNormalizedName('δίκτυο');
+        expect(hit, isNotNull);
+        expect(hit!.id, id);
+        expect(hit.name, 'Δίκτυο');
 
-      expect(
-        await repo.findActiveCategoryByNormalizedName('άγνωστη'),
-        isNull,
-      );
-    });
+        expect(
+          await repo.findActiveCategoryByNormalizedName('άγνωστη'),
+          isNull,
+        );
+      },
+    );
 
     test('insertCategoryAndGetId: νέα κατηγορία', () async {
       final r = await repo.insertCategoryAndGetId(
@@ -89,54 +95,56 @@ void main() {
       expect(rows.single['is_deleted'], 0);
     });
 
-    test('insertCategoryAndGetId: επαναφορά soft-deleted (restored:true)',
-        () async {
-      const originalName = 'Παλιά Κατηγορία';
-      final softId = await db.insert('categories', {
-        'name': originalName,
-        'is_deleted': 1,
-      });
+    test(
+      'insertCategoryAndGetId: επαναφορά soft-deleted (restored:true)',
+      () async {
+        const originalName = 'Παλιά Κατηγορία';
+        final softId = await db.insert('categories', {
+          'name': originalName,
+          'is_deleted': 1,
+        });
 
-      int? rebuildCategoryId;
-      Object? rebuildTxn;
+        int? rebuildCategoryId;
+        Object? rebuildTxn;
 
-      final r = await repo.insertCategoryAndGetId(
-        'παλιά κατηγορία',
-        rebuildSearchIndexInTxn: (txn, categoryId) async {
-          rebuildTxn = txn;
-          rebuildCategoryId = categoryId;
-        },
-      );
+        final r = await repo.insertCategoryAndGetId(
+          'παλιά κατηγορία',
+          rebuildSearchIndexInTxn: (txn, categoryId) async {
+            rebuildTxn = txn;
+            rebuildCategoryId = categoryId;
+          },
+        );
 
-      expect(r.restored, isTrue);
-      expect(r.id, softId);
+        expect(r.restored, isTrue);
+        expect(r.id, softId);
 
-      final rows = await db.query(
-        'categories',
-        where: 'id = ?',
-        whereArgs: [softId],
-      );
-      expect(rows.single['is_deleted'], 0);
-      expect(rows.single['name'], 'παλιά κατηγορία');
+        final rows = await db.query(
+          'categories',
+          where: 'id = ?',
+          whereArgs: [softId],
+        );
+        expect(rows.single['is_deleted'], 0);
+        expect(rows.single['name'], 'παλιά κατηγορία');
 
-      expect(rebuildCategoryId, softId);
-      expect(rebuildTxn, isNotNull);
+        expect(rebuildCategoryId, softId);
+        expect(rebuildTxn, isNotNull);
 
-      final auditRows = await db.query(
-        'audit_log',
-        where: 'entity_type = ? AND entity_id = ? AND action = ?',
-        whereArgs: [
-          AuditEntityTypes.category,
-          softId,
-          DatabaseHelper.auditActionRestore,
-        ],
-      );
-      expect(auditRows, hasLength(1));
-      expect(
-        auditRows.single['details'],
-        'categories id=$softId (επαναφορά από διαγραμμένη)',
-      );
-    });
+        final auditRows = await db.query(
+          'audit_log',
+          where: 'entity_type = ? AND entity_id = ? AND action = ?',
+          whereArgs: [
+            AuditEntityTypes.category,
+            softId,
+            DatabaseHelper.auditActionRestore,
+          ],
+        );
+        expect(auditRows, hasLength(1));
+        expect(
+          auditRows.single['details'],
+          'categories id=$softId (επαναφορά από διαγραμμένη)',
+        );
+      },
+    );
 
     test(
       'updateCategoryNameAndSyncCalls: όνομα, callback στην ίδια txn, audit',
@@ -236,7 +244,10 @@ void main() {
       final deleteAudits = await db.query(
         'audit_log',
         where: 'action = ? AND entity_type = ?',
-        whereArgs: [DatabaseHelper.auditActionDelete, AuditEntityTypes.category],
+        whereArgs: [
+          DatabaseHelper.auditActionDelete,
+          AuditEntityTypes.category,
+        ],
       );
       expect(deleteAudits, hasLength(2));
 

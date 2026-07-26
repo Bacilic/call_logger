@@ -1,42 +1,49 @@
-﻿import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/calls_screen_cards_visibility.dart';
 import '../services/settings_service.dart';
 
 /// Provider για ρύθμιση εμφάνισης ενεργού χρονομέτρου στη φόρμα κλήσεων.
 /// Invalidate μετά αλλαγή από την οθόνη ρυθμίσεων.
-final showActiveTimerProvider =
-    FutureProvider<bool>((ref) => SettingsService().getShowActiveTimer());
+final showActiveTimerProvider = FutureProvider<bool>(
+  (ref) => SettingsService().getShowActiveTimer(),
+);
 
 /// Εμφάνιση badge πλήθους εκκρεμοτήτων στο μενού. Invalidate μετά από Ρυθμίσεις.
-final showTasksBadgeProvider =
-    FutureProvider<bool>((ref) => SettingsService().getShowTasksBadge());
+final showTasksBadgeProvider = FutureProvider<bool>(
+  (ref) => SettingsService().getShowTasksBadge(),
+);
 
 /// Ορθογραφικός έλεγχος πεδίου σημειώσεων. Invalidate μετά από Ρυθμίσεις.
-final enableSpellCheckProvider =
-    FutureProvider<bool>((ref) => SettingsService().getEnableSpellCheck());
+final enableSpellCheckProvider = FutureProvider<bool>(
+  (ref) => SettingsService().getEnableSpellCheck(),
+);
 
 /// Εμφάνιση προορισμού Βάση Δεδομένων στο NavigationRail. Invalidate μετά από Ρυθμίσεις.
-final showDatabaseNavProvider =
-    FutureProvider<bool>((ref) => SettingsService().getShowDatabaseNav());
+final showDatabaseNavProvider = FutureProvider<bool>(
+  (ref) => SettingsService().getShowDatabaseNav(),
+);
 
 /// Εμφάνιση προορισμού Λάμπα (παλιά βάση) στο NavigationRail. Invalidate μετά από Ρυθμίσεις.
-final showLampNavProvider =
-    FutureProvider<bool>((ref) => SettingsService().getShowLampNav());
+final showLampNavProvider = FutureProvider<bool>(
+  (ref) => SettingsService().getShowLampNav(),
+);
 
 /// Εμφάνιση προορισμού Λεξικό στο NavigationRail. Invalidate μετά από Ρυθμίσεις.
-final showDictionaryNavProvider =
-    FutureProvider<bool>((ref) => SettingsService().getShowDictionaryNav());
+final showDictionaryNavProvider = FutureProvider<bool>(
+  (ref) => SettingsService().getShowDictionaryNav(),
+);
 
 /// Ορατότητα καρτελών οθόνης κλήσεων. Invalidate μετά από Ρυθμίσεις.
 final callsScreenCardsVisibilityProvider =
     FutureProvider<CallsScreenCardsVisibility>(
-  (ref) => SettingsService().getCallsScreenCardsVisibility(),
-);
+      (ref) => SettingsService().getCallsScreenCardsVisibility(),
+    );
 
 /// Εμφάνιση ιπτάμενου κουμπιού γρήγορης καταγραφής. Invalidate μετά από Ρυθμίσεις.
-final showQuickCallFabProvider =
-    FutureProvider<bool>((ref) => SettingsService().getShowQuickCallFab());
+final showQuickCallFabProvider = FutureProvider<bool>(
+  (ref) => SettingsService().getShowQuickCallFab(),
+);
 
 // Πρότυπο/προεπιλογή προτροπής Gemini (SQLite app_settings): βλ. gemini_settings_provider —
 // [geminiPromptTemplateProvider], [geminiPromptTemplateUserDefaultProvider].

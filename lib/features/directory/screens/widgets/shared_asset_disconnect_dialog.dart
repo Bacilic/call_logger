@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 
 import '../../../../core/database/database_helper.dart';
 import '../../../../core/database/equipment_repository.dart';
@@ -25,26 +25,18 @@ String _departmentOptionLabel(String option) {
 }
 
 /// Πλαίσιο αποδέσμευσης: κοινόχρηστο στοιχείο τμήματος ή προσωπικό στοιχείο χρήστη.
-enum SharedAssetDisconnectMode {
-  sharedAsset,
-  personalPhone,
-  personalEquipment,
-}
+enum SharedAssetDisconnectMode { sharedAsset, personalPhone, personalEquipment }
 
 /// Επιλογή στον κύριο διάλογο αποδέσμευσης κοινόχρηστου στοιχείου.
-enum SharedAssetDisconnectChoice {
-  keepInDepartment,
-  transfer,
-  delete,
-}
+enum SharedAssetDisconnectChoice { keepInDepartment, transfer, delete }
 
 /// Στόχος μεταφοράς (υπάρχον ή νέο τμήμα).
 class SharedAssetTransferTarget {
   const SharedAssetTransferTarget.existing(this.departmentId)
-      : newDepartmentName = null;
+    : newDepartmentName = null;
 
   const SharedAssetTransferTarget.createNew(this.newDepartmentName)
-      : departmentId = null;
+    : departmentId = null;
 
   final int? departmentId;
   final String? newDepartmentName;
@@ -53,15 +45,15 @@ class SharedAssetTransferTarget {
 /// Αποτέλεσμα ροής αποδέσμευσης για ένα στοιχείο.
 class SharedAssetDisconnectItemResult {
   const SharedAssetDisconnectItemResult.keep()
-      : choice = SharedAssetDisconnectChoice.keepInDepartment,
-        transferTarget = null;
+    : choice = SharedAssetDisconnectChoice.keepInDepartment,
+      transferTarget = null;
 
   const SharedAssetDisconnectItemResult.transfer(this.transferTarget)
-      : choice = SharedAssetDisconnectChoice.transfer;
+    : choice = SharedAssetDisconnectChoice.transfer;
 
   const SharedAssetDisconnectItemResult.delete()
-      : choice = SharedAssetDisconnectChoice.delete,
-        transferTarget = null;
+    : choice = SharedAssetDisconnectChoice.delete,
+      transferTarget = null;
 
   final SharedAssetDisconnectChoice choice;
   final SharedAssetTransferTarget? transferTarget;
@@ -138,9 +130,7 @@ Future<SharedAssetDisconnectBatchResult?> showSharedAssetDisconnectFlow({
         phoneTransfers[phone] = target;
         final newName = target.newDepartmentName?.trim();
         if (newName != null && newName.isNotEmpty) {
-          newDeptPhones
-              .putIfAbsent(newName, () => <String>{})
-              .add(phone);
+          newDeptPhones.putIfAbsent(newName, () => <String>{}).add(phone);
         }
       case SharedAssetDisconnectChoice.delete:
         phonesToDelete.add(phone);
@@ -263,8 +253,7 @@ String formatAssetReferenceDeleteMessage({
         ? 'Ο αριθμός $value συνδέεται με:'
         : 'Ο εξοπλισμός $value συνδέεται με:',
   );
-  final visibleCount =
-      descriptions.length > 5 ? 5 : descriptions.length;
+  final visibleCount = descriptions.length > 5 ? 5 : descriptions.length;
   for (var i = 0; i < visibleCount; i++) {
     buf.write('\n• ${descriptions[i]}');
   }
@@ -311,9 +300,7 @@ Future<SharedAssetDisconnectItemResult?> _resolveSingleItem({
       context: context,
       barrierDismissible: false,
       builder: (ctx) => DraggableDialogShell(
-        title: Text(
-          _disconnectDialogTitle(isPhone: isPhone, mode: mode),
-        ),
+        title: Text(_disconnectDialogTitle(isPhone: isPhone, mode: mode)),
         builder: (titleHandle) => AlertDialog(
           title: titleHandle,
           content: Text(
@@ -332,9 +319,9 @@ Future<SharedAssetDisconnectItemResult?> _resolveSingleItem({
             ),
             if (canKeepInDepartment)
               TextButton(
-                onPressed: () => Navigator.of(ctx).pop(
-                  SharedAssetDisconnectChoice.keepInDepartment,
-                ),
+                onPressed: () => Navigator.of(
+                  ctx,
+                ).pop(SharedAssetDisconnectChoice.keepInDepartment),
                 child: Text(
                   _keepInDepartmentLabel(
                     mode,
@@ -343,15 +330,13 @@ Future<SharedAssetDisconnectItemResult?> _resolveSingleItem({
                 ),
               ),
             TextButton(
-              onPressed: () => Navigator.of(ctx).pop(
-                SharedAssetDisconnectChoice.transfer,
-              ),
+              onPressed: () =>
+                  Navigator.of(ctx).pop(SharedAssetDisconnectChoice.transfer),
               child: const Text('Μεταφορά σε άλλο τμήμα'),
             ),
             FilledButton(
-              onPressed: () => Navigator.of(ctx).pop(
-                SharedAssetDisconnectChoice.delete,
-              ),
+              onPressed: () =>
+                  Navigator.of(ctx).pop(SharedAssetDisconnectChoice.delete),
               child: const Text('Διαγραφή'),
             ),
           ],
@@ -392,16 +377,17 @@ Future<SharedAssetTransferTarget?> _showTransferDialog({
   int? sourceDepartmentId,
   required List<DepartmentModel> availableDepartments,
 }) async {
-  final depts = availableDepartments
-      .where(
-        (d) =>
-            d.id != null &&
-            (sourceDepartmentId == null || d.id != sourceDepartmentId) &&
-            !d.isDeleted &&
-            d.name.trim().isNotEmpty,
-      )
-      .toList()
-    ..sort((a, b) => a.name.compareTo(b.name));
+  final depts =
+      availableDepartments
+          .where(
+            (d) =>
+                d.id != null &&
+                (sourceDepartmentId == null || d.id != sourceDepartmentId) &&
+                !d.isDeleted &&
+                d.name.trim().isNotEmpty,
+          )
+          .toList()
+        ..sort((a, b) => a.name.compareTo(b.name));
 
   return showDialog<SharedAssetTransferTarget>(
     context: context,
@@ -421,16 +407,17 @@ Future<SharedAssetTransferTarget?> showAssetTransferTargetPicker({
   required List<DepartmentModel> availableDepartments,
   int? sourceDepartmentId,
 }) async {
-  final depts = availableDepartments
-      .where(
-        (d) =>
-            d.id != null &&
-            (sourceDepartmentId == null || d.id != sourceDepartmentId) &&
-            !d.isDeleted &&
-            d.name.trim().isNotEmpty,
-      )
-      .toList()
-    ..sort((a, b) => a.name.compareTo(b.name));
+  final depts =
+      availableDepartments
+          .where(
+            (d) =>
+                d.id != null &&
+                (sourceDepartmentId == null || d.id != sourceDepartmentId) &&
+                !d.isDeleted &&
+                d.name.trim().isNotEmpty,
+          )
+          .toList()
+        ..sort((a, b) => a.name.compareTo(b.name));
 
   return showDialog<SharedAssetTransferTarget>(
     context: context,
@@ -462,12 +449,15 @@ class _SharedAssetTransferDialog extends StatefulWidget {
       _SharedAssetTransferDialogState();
 }
 
-class _SharedAssetTransferDialogState extends State<_SharedAssetTransferDialog> {
+class _SharedAssetTransferDialogState
+    extends State<_SharedAssetTransferDialog> {
   final _departmentController = TextEditingController();
   final _departmentFocus = FocusNode();
 
-  List<String> get _departmentNames =>
-      widget.departments.map((d) => d.name.trim()).where((n) => n.isNotEmpty).toList();
+  List<String> get _departmentNames => widget.departments
+      .map((d) => d.name.trim())
+      .where((n) => n.isNotEmpty)
+      .toList();
 
   @override
   void initState() {
@@ -548,9 +538,7 @@ class _SharedAssetTransferDialogState extends State<_SharedAssetTransferDialog> 
   Future<void> _submitNewDepartment(String newName) async {
     if (!await _confirmCreateDepartment(newName)) return;
     if (!mounted) return;
-    Navigator.of(context).pop(
-      SharedAssetTransferTarget.createNew(newName),
-    );
+    Navigator.of(context).pop(SharedAssetTransferTarget.createNew(newName));
   }
 
   Future<void> _submit() async {
@@ -558,9 +546,9 @@ class _SharedAssetTransferDialogState extends State<_SharedAssetTransferDialog> 
     if (text.isEmpty) return;
     final matched = _matchDepartment(text);
     if (matched?.id != null) {
-      Navigator.of(context).pop(
-        SharedAssetTransferTarget.existing(matched!.id!),
-      );
+      Navigator.of(
+        context,
+      ).pop(SharedAssetTransferTarget.existing(matched!.id!));
       return;
     }
     await _submitNewDepartment(text);

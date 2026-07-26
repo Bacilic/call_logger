@@ -1,11 +1,7 @@
 import 'package:flutter/material.dart';
 
 /// Επιλογή στη δικλείδα «μοιάζει με μετονομασία».
-enum DepartmentRenameGuardChoice {
-  renameInstead,
-  proceedDelete,
-  cancel,
-}
+enum DepartmentRenameGuardChoice { renameInstead, proceedDelete, cancel }
 
 /// Διάλογος δικλείδας όταν η μαζική μεταφορά σε νέο τμήμα μοιάζει με μετονομασία.
 Future<DepartmentRenameGuardChoice?> showDepartmentRenameGuardDialog({
@@ -16,8 +12,9 @@ Future<DepartmentRenameGuardChoice?> showDepartmentRenameGuardDialog({
   final source = sourceDepartmentName.trim().isEmpty
       ? '—'
       : sourceDepartmentName.trim();
-  final proposed =
-      proposedNewName.trim().isEmpty ? '—' : proposedNewName.trim();
+  final proposed = proposedNewName.trim().isEmpty
+      ? '—'
+      : proposedNewName.trim();
 
   return showDialog<DepartmentRenameGuardChoice>(
     context: context,
@@ -43,8 +40,8 @@ Future<DepartmentRenameGuardChoice?> showDepartmentRenameGuardDialog({
           child: const Text('Ακύρωση'),
         ),
         TextButton(
-          onPressed: () => Navigator.of(ctx)
-              .pop(DepartmentRenameGuardChoice.proceedDelete),
+          onPressed: () =>
+              Navigator.of(ctx).pop(DepartmentRenameGuardChoice.proceedDelete),
           child: const Text('Ναι, το τμήμα διαλύεται — συνέχεια'),
         ),
         FilledButton(

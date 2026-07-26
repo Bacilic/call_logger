@@ -13,11 +13,7 @@ enum DatabaseBackupNamingFormat {
 }
 
 /// Περιοδικό αυτόματο αντίγραφο (ενεργό όσο τρέχει η εφαρμογή).
-enum DatabaseBackupInterval {
-  never,
-  every4Hours,
-  daily,
-}
+enum DatabaseBackupInterval { never, every4Hours, daily }
 
 /// Ρυθμίσεις αντιγράφων ασφαλείας βάσης (αποθήκευση σε `app_settings` ως JSON).
 class DatabaseBackupSettings {
@@ -47,14 +43,19 @@ class DatabaseBackupSettings {
   final String destinationDirectory;
   final DatabaseBackupNamingFormat namingFormat;
   final bool zipOutput;
+
   /// Συμπερίληψη φακέλου `maps_images` στο zip (με `call_logger.db` εσωτερικά).
   final bool includeMapImagesInBackup;
+
   /// Συμπερίληψη φακέλου `images/` (εικονίδια εργαλείων).
   final bool includeToolImages;
+
   /// Συμπερίληψη φακέλου `dictionaries/` (λεξικό-πυρήνας).
   final bool includeLexicon;
+
   /// Συμπερίληψη αρχείου βάσης Λάμπας από portable `Data Base/`.
   final bool includeLampDb;
+
   /// Κύριος διακόπτης: αν false, δεν εκτελείται κανένα backup (ούτε χειροκίνητο).
   final bool backupOnExit;
   final DatabaseBackupInterval interval;
@@ -79,29 +80,30 @@ class DatabaseBackupSettings {
   final int retentionMaxAgeDays;
 
   static DatabaseBackupSettings defaults() => const DatabaseBackupSettings(
-        destinationDirectory: '',
-        namingFormat: DatabaseBackupNamingFormat.dateTimeThenBase,
-        zipOutput: false,
-        includeMapImagesInBackup: false,
-        includeToolImages: true,
-        includeLexicon: false,
-        includeLampDb: false,
-        backupOnExit: false,
-        interval: DatabaseBackupInterval.never,
-        backupDays: <int>[],
-        backupTime: '09:00',
-        lastBackupAttempt: null,
-        lastManualBackupAttempt: null,
-        lastBackupStatus: BackupScheduleStatus.none,
-        retentionMaxCopiesEnabled: false,
-        retentionMaxCopies: 30,
-        retentionMaxAgeEnabled: false,
-        retentionMaxAgeDays: 60,
-      );
+    destinationDirectory: '',
+    namingFormat: DatabaseBackupNamingFormat.dateTimeThenBase,
+    zipOutput: false,
+    includeMapImagesInBackup: false,
+    includeToolImages: true,
+    includeLexicon: false,
+    includeLampDb: false,
+    backupOnExit: false,
+    interval: DatabaseBackupInterval.never,
+    backupDays: <int>[],
+    backupTime: '09:00',
+    lastBackupAttempt: null,
+    lastManualBackupAttempt: null,
+    lastBackupStatus: BackupScheduleStatus.none,
+    retentionMaxCopiesEnabled: false,
+    retentionMaxCopies: 30,
+    retentionMaxAgeEnabled: false,
+    retentionMaxAgeDays: 60,
+  );
 
   /// Προσαρμοσμένο εβδομαδιαίο χρονοδιάγραμμα (αντικαθιστά το περιοδικό [interval] όταν ενεργό).
   bool get usesCustomSchedule =>
-      backupDays.isNotEmpty && BackupScheduleUtils.hasValidTimeString(backupTime);
+      backupDays.isNotEmpty &&
+      BackupScheduleUtils.hasValidTimeString(backupTime);
 
   /// Προτίμηση χρήστη: κάποιο portable περιεχόμενο επιλέχθηκε (χωρίς έλεγχο διαθεσιμότητας).
   bool get includesPortableBundleInZip =>
@@ -121,8 +123,7 @@ class DatabaseBackupSettings {
 
   bool effectiveIncludeMapImagesInBackup(
     PortableBackupAvailability availability,
-  ) =>
-      includeMapImagesInBackup && availability.hasMapImages;
+  ) => includeMapImagesInBackup && availability.hasMapImages;
 
   bool effectiveIncludeToolImages(PortableBackupAvailability availability) =>
       includeToolImages && availability.hasToolImages;
@@ -166,8 +167,7 @@ class DatabaseBackupSettings {
     int? retentionMaxAgeDays,
   }) {
     return DatabaseBackupSettings(
-      destinationDirectory:
-          destinationDirectory ?? this.destinationDirectory,
+      destinationDirectory: destinationDirectory ?? this.destinationDirectory,
       namingFormat: namingFormat ?? this.namingFormat,
       zipOutput: zipOutput ?? this.zipOutput,
       includeMapImagesInBackup:
@@ -185,8 +185,7 @@ class DatabaseBackupSettings {
       lastManualBackupAttempt: clearLastManualBackupAttempt
           ? null
           : (lastManualBackupAttempt ?? this.lastManualBackupAttempt),
-      lastBackupStatus:
-          lastBackupStatus ?? this.lastBackupStatus,
+      lastBackupStatus: lastBackupStatus ?? this.lastBackupStatus,
       retentionMaxCopiesEnabled:
           retentionMaxCopiesEnabled ?? this.retentionMaxCopiesEnabled,
       retentionMaxCopies: retentionMaxCopies ?? this.retentionMaxCopies,
@@ -197,25 +196,25 @@ class DatabaseBackupSettings {
   }
 
   Map<String, dynamic> toJson() => {
-        'destinationDirectory': destinationDirectory,
-        'namingFormat': namingFormat.index,
-        'zipOutput': zipOutput,
-        'includeMapImagesInBackup': includeMapImagesInBackup,
-        'includeToolImages': includeToolImages,
-        'includeLexicon': includeLexicon,
-        'includeLampDb': includeLampDb,
-        'backupOnExit': backupOnExit,
-        'interval': interval.index,
-        'backupDays': backupDays,
-        'backupTime': backupTime,
-        'lastBackupAttempt': lastBackupAttempt?.toIso8601String(),
-        'lastManualBackupAttempt': lastManualBackupAttempt?.toIso8601String(),
-        'lastBackupStatus': lastBackupStatus,
-        'retentionMaxCopiesEnabled': retentionMaxCopiesEnabled,
-        'retentionMaxCopies': retentionMaxCopies,
-        'retentionMaxAgeEnabled': retentionMaxAgeEnabled,
-        'retentionMaxAgeDays': retentionMaxAgeDays,
-      };
+    'destinationDirectory': destinationDirectory,
+    'namingFormat': namingFormat.index,
+    'zipOutput': zipOutput,
+    'includeMapImagesInBackup': includeMapImagesInBackup,
+    'includeToolImages': includeToolImages,
+    'includeLexicon': includeLexicon,
+    'includeLampDb': includeLampDb,
+    'backupOnExit': backupOnExit,
+    'interval': interval.index,
+    'backupDays': backupDays,
+    'backupTime': backupTime,
+    'lastBackupAttempt': lastBackupAttempt?.toIso8601String(),
+    'lastManualBackupAttempt': lastManualBackupAttempt?.toIso8601String(),
+    'lastBackupStatus': lastBackupStatus,
+    'retentionMaxCopiesEnabled': retentionMaxCopiesEnabled,
+    'retentionMaxCopies': retentionMaxCopies,
+    'retentionMaxAgeEnabled': retentionMaxAgeEnabled,
+    'retentionMaxAgeDays': retentionMaxAgeDays,
+  };
 
   static DatabaseBackupSettings fromJson(Map<String, dynamic> json) {
     int i(String k, int fallback) {
@@ -280,8 +279,9 @@ class DatabaseBackupSettings {
         if (v is String) return DateTime.tryParse(v);
         return null;
       }(),
-      lastBackupStatus:
-          BackupScheduleStatus.normalize(s('lastBackupStatus', 'none')),
+      lastBackupStatus: BackupScheduleStatus.normalize(
+        s('lastBackupStatus', 'none'),
+      ),
       retentionMaxCopiesEnabled: b('retentionMaxCopiesEnabled', false),
       retentionMaxCopies: i('retentionMaxCopies', 30).clamp(1, 9999),
       retentionMaxAgeEnabled: b('retentionMaxAgeEnabled', false),
@@ -335,23 +335,23 @@ class DatabaseBackupSettings {
 
   @override
   int get hashCode => Object.hashAll([
-        destinationDirectory,
-        namingFormat,
-        zipOutput,
-        includeMapImagesInBackup,
-        includeToolImages,
-        includeLexicon,
-        includeLampDb,
-        backupOnExit,
-        interval,
-        Object.hashAll(backupDays),
-        backupTime,
-        lastBackupAttempt,
-        lastManualBackupAttempt,
-        lastBackupStatus,
-        retentionMaxCopiesEnabled,
-        retentionMaxCopies,
-        retentionMaxAgeEnabled,
-        retentionMaxAgeDays,
-      ]);
+    destinationDirectory,
+    namingFormat,
+    zipOutput,
+    includeMapImagesInBackup,
+    includeToolImages,
+    includeLexicon,
+    includeLampDb,
+    backupOnExit,
+    interval,
+    Object.hashAll(backupDays),
+    backupTime,
+    lastBackupAttempt,
+    lastManualBackupAttempt,
+    lastBackupStatus,
+    retentionMaxCopiesEnabled,
+    retentionMaxCopies,
+    retentionMaxAgeEnabled,
+    retentionMaxAgeDays,
+  ]);
 }

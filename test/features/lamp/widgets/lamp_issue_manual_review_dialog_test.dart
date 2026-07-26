@@ -1,4 +1,4 @@
-﻿import 'package:call_logger/core/database/old_database/lamp_issue_resolution_service.dart';
+import 'package:call_logger/core/database/old_database/lamp_issue_resolution_service.dart';
 import 'package:call_logger/core/database/old_database/lamp_scientific_serial.dart';
 import 'package:call_logger/features/lamp/widgets/lamp_issue_manual_review_dialog.dart';
 import 'package:flutter/material.dart';
@@ -254,23 +254,22 @@ void main() {
     await tester.pump();
   }
 
-  testWidgets(
-    'η κεφαλίδα κάρτας έχει αντιγράψιμο κωδικό και πεδίο',
-    (tester) async {
-      await pumpManualReviewDialog(tester);
+  testWidgets('η κεφαλίδα κάρτας έχει αντιγράψιμο κωδικό και πεδίο', (
+    tester,
+  ) async {
+    await pumpManualReviewDialog(tester);
 
-      expect(
-        find.widgetWithText(SelectableText, 'Κωδικός εξοπλισμού: 5001'),
-        findsOneWidget,
-      );
-      expect(
-        find.widgetWithText(SelectableText, 'Πεδίο: αριθμός παγίου'),
-        findsOneWidget,
-      );
+    expect(
+      find.widgetWithText(SelectableText, 'Κωδικός εξοπλισμού: 5001'),
+      findsOneWidget,
+    );
+    expect(
+      find.widgetWithText(SelectableText, 'Πεδίο: αριθμός παγίου'),
+      findsOneWidget,
+    );
 
-      await tearDownDialog(tester);
-    },
-  );
+    await tearDownDialog(tester);
+  });
 
   testWidgets(
     'κρύβει τη βεβαιότητα όταν είναι ονομαστική (confidenceIsNominal)',
@@ -313,7 +312,9 @@ void main() {
           find.text('Κράτα την και διέγραψε τις άλλες εγγραφές'),
         );
         await tester.pump();
-        await tester.tap(find.widgetWithText(FilledButton, 'Εφαρμογή επιλεγμένων'));
+        await tester.tap(
+          find.widgetWithText(FilledButton, 'Εφαρμογή επιλεγμένων'),
+        );
         await tester.pumpAndSettle();
 
         expect(captured, isNotNull);
@@ -348,49 +349,51 @@ void main() {
         await pumpManualReviewDialog(tester);
 
         expect(find.byType(DropdownButtonFormField<int>), findsNothing);
-        expect(find.byType(RadioListTile<LampIssueResolutionOption?>), findsNWidgets(2));
+        expect(
+          find.byType(RadioListTile<LampIssueResolutionOption?>),
+          findsNWidgets(2),
+        );
 
         await tearDownDialog(tester);
       },
     );
   });
 
-  testWidgets(
-    'πριν επιλεγεί ενέργεια με τιμή δεν εμφανίζεται πεδίο κειμένου',
-    (tester) async {
-      await pumpManualReviewDialog(tester);
+  testWidgets('πριν επιλεγεί ενέργεια με τιμή δεν εμφανίζεται πεδίο κειμένου', (
+    tester,
+  ) async {
+    await pumpManualReviewDialog(tester);
 
-      expect(find.byType(TextField), findsNothing);
+    expect(find.byType(TextField), findsNothing);
 
-      await tearDownDialog(tester);
-    },
-  );
+    await tearDownDialog(tester);
+  });
 
-  testWidgets(
-    'το πεδίο «Νέα τιμή» εστιάζεται αυτόματα μόλις εμφανιστεί',
-    (tester) async {
-      await pumpManualReviewDialog(tester);
+  testWidgets('το πεδίο «Νέα τιμή» εστιάζεται αυτόματα μόλις εμφανιστεί', (
+    tester,
+  ) async {
+    await pumpManualReviewDialog(tester);
 
-      await tester.tap(find.text('Δώσε νέα τιμή στο code 5001'));
-      await tester.pump();
+    await tester.tap(find.text('Δώσε νέα τιμή στο code 5001'));
+    await tester.pump();
 
-      expect(find.byType(TextField), findsOneWidget);
-      final editable = tester.state<EditableTextState>(
-        find.descendant(
-          of: find.byType(TextField),
-          matching: find.byType(EditableText),
-        ),
-      );
-      expect(
-        editable.widget.focusNode.hasPrimaryFocus,
-        isTrue,
-        reason: 'Μόλις εμφανιστεί το πεδίο νέας τιμής, ο χρήστης πρέπει να '
-            'μπορεί να πληκτρολογήσει χωρίς κλικ.',
-      );
+    expect(find.byType(TextField), findsOneWidget);
+    final editable = tester.state<EditableTextState>(
+      find.descendant(
+        of: find.byType(TextField),
+        matching: find.byType(EditableText),
+      ),
+    );
+    expect(
+      editable.widget.focusNode.hasPrimaryFocus,
+      isTrue,
+      reason:
+          'Μόλις εμφανιστεί το πεδίο νέας τιμής, ο χρήστης πρέπει να '
+          'μπορεί να πληκτρολογήσει χωρίς κλικ.',
+    );
 
-      await tearDownDialog(tester);
-    },
-  );
+    await tearDownDialog(tester);
+  });
 
   testWidgets(
     'scientificSerial: με checker true εμφανίζεται προειδοποίηση διπλότυπου',
@@ -466,9 +469,10 @@ void main() {
         await tester.pumpAndSettle();
 
         // ΠΡΩΤΑ: καμία επιλογή, κουμπί ανενεργό, μετρητής 0.
-        final radioGroup = tester.widget<RadioGroup<LampIssueResolutionOption?>>(
-          find.byType(RadioGroup<LampIssueResolutionOption?>),
-        );
+        final radioGroup = tester
+            .widget<RadioGroup<LampIssueResolutionOption?>>(
+              find.byType(RadioGroup<LampIssueResolutionOption?>),
+            );
         expect(radioGroup.groupValue, isNull);
         expect(find.text('Αποφασισμένες: 0/1'), findsOneWidget);
         expect(
@@ -509,8 +513,7 @@ void main() {
         expect(
           captured!.any(
             (d) =>
-                d.option != null &&
-                !identical(d.option, kLampManualSkipOption),
+                d.option != null && !identical(d.option, kLampManualSkipOption),
           ),
           isFalse,
         );

@@ -22,8 +22,8 @@ TopDatabaseBanner topDatabaseBanner({
 /// του ξαναχτίσματος μετά από επαναρχικοποίηση εφαρμογής.
 final databaseSwitchSuccessNoticeProvider =
     NotifierProvider<DatabaseSwitchSuccessNoticeNotifier, String?>(
-  DatabaseSwitchSuccessNoticeNotifier.new,
-);
+      DatabaseSwitchSuccessNoticeNotifier.new,
+    );
 
 class DatabaseSwitchSuccessNoticeNotifier extends Notifier<String?> {
   @override

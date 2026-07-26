@@ -1,4 +1,4 @@
-﻿import 'package:call_logger/core/database/old_database/lamp_issue_resolution_models.dart';
+import 'package:call_logger/core/database/old_database/lamp_issue_resolution_models.dart';
 import 'package:call_logger/features/lamp/widgets/lamp_issue_manual_review_dialog.dart';
 import 'package:call_logger/features/lamp/widgets/lamp_issue_row_context.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -56,10 +56,7 @@ void main() {
       );
 
       expect(
-        lampResolutionConsequenceLine(
-          _proposal(description: null),
-          option,
-        ),
+        lampResolutionConsequenceLine(_proposal(description: null), option),
         'Επιλεγμένη ενέργεια: Κωδικός 5005 → υπάλληλος: 88 · Τσουκαλά Παναγιώτα',
       );
     });

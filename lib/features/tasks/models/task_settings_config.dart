@@ -64,9 +64,11 @@ class TaskSettingsConfig {
     final rawAuto = map['autoCloseQuickAdds'];
     final autoClose = rawAuto is bool ? rawAuto : true;
     return TaskSettingsConfig(
-      dayEndTime: _timeFromMap(map['dayEndTime']) ??
+      dayEndTime:
+          _timeFromMap(map['dayEndTime']) ??
           const TimeOfDay(hour: 13, minute: 0),
-      nextBusinessHour: _timeFromMap(map['nextBusinessHour']) ??
+      nextBusinessHour:
+          _timeFromMap(map['nextBusinessHour']) ??
           const TimeOfDay(hour: 8, minute: 0),
       skipWeekends: map['skipWeekends'] is bool
           ? map['skipWeekends'] as bool
@@ -136,4 +138,3 @@ class TaskSettingsConfig {
   /// Για επιλογή αναβολής από UI (επιτρέπει και άγνωστα strings → [kOneHour]).
   static String normalizeSnoozeOption(String v) => _normalizeOption(v);
 }
-

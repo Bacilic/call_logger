@@ -24,35 +24,34 @@ const _guardedRelativePaths = <String>[
 final _rawErrorInterpolation = RegExp(r": \$e'|\('\$e'\)");
 
 void main() {
-  test(
-    'τα διαχειριστικά πάνελ δεν παρεμβάλλουν ωμό \$e σε μηνύματα χρήστη',
-    () {
-      final packageRoot = Directory.current;
-      final violations = <String>[];
+  test('τα διαχειριστικά πάνελ δεν παρεμβάλλουν ωμό \$e σε μηνύματα χρήστη', () {
+    final packageRoot = Directory.current;
+    final violations = <String>[];
 
-      for (final relative in _guardedRelativePaths) {
-        final file = File('${packageRoot.path}${Platform.pathSeparator}'
-            '${relative.replaceAll('/', Platform.pathSeparator)}');
-        expect(
-          file.existsSync(),
-          isTrue,
-          reason: 'Λείπει το αρχείο-φρουρός: $relative',
-        );
-        final lines = file.readAsLinesSync();
-        for (var i = 0; i < lines.length; i++) {
-          if (_rawErrorInterpolation.hasMatch(lines[i])) {
-            violations.add('$relative:${i + 1}: ${lines[i].trim()}');
-          }
+    for (final relative in _guardedRelativePaths) {
+      final file = File(
+        '${packageRoot.path}${Platform.pathSeparator}'
+        '${relative.replaceAll('/', Platform.pathSeparator)}',
+      );
+      expect(
+        file.existsSync(),
+        isTrue,
+        reason: 'Λείπει το αρχείο-φρουρός: $relative',
+      );
+      final lines = file.readAsLinesSync();
+      for (var i = 0; i < lines.length; i++) {
+        if (_rawErrorInterpolation.hasMatch(lines[i])) {
+          violations.add('$relative:${i + 1}: ${lines[i].trim()}');
         }
       }
+    }
 
-      expect(
-        violations,
-        isEmpty,
-        reason:
-            'Βρέθηκε ωμή παρεμβολή \$e. Χρησιμοποίησε humanizeUserFacingError.\n'
-            '${violations.join('\n')}',
-      );
-    },
-  );
+    expect(
+      violations,
+      isEmpty,
+      reason:
+          'Βρέθηκε ωμή παρεμβολή \$e. Χρησιμοποίησε humanizeUserFacingError.\n'
+          '${violations.join('\n')}',
+    );
+  });
 }

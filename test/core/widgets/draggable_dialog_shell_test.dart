@@ -16,11 +16,7 @@ Widget _shellUnderTest() {
     title: const Text(_titleText),
     builder: (titleHandle) => AlertDialog(
       title: titleHandle,
-      content: const SizedBox(
-        width: 240,
-        height: 120,
-        child: Text(_bodyText),
-      ),
+      content: const SizedBox(width: 240, height: 120, child: Text(_bodyText)),
       actions: const [TextButton(onPressed: null, child: Text('OK'))],
     ),
   );
@@ -29,9 +25,7 @@ Widget _shellUnderTest() {
 Future<void> _pumpCenteredDialog(WidgetTester tester) async {
   await tester.pumpWidget(
     MaterialApp(
-      home: Scaffold(
-        body: Center(child: _shellUnderTest()),
-      ),
+      home: Scaffold(body: Center(child: _shellUnderTest())),
     ),
   );
   await tester.pumpAndSettle();
@@ -160,23 +154,22 @@ void main() {
       },
     );
 
-    testWidgets(
-      'MouseRegion με SystemMouseCursors.move πάνω από τον τίτλο',
-      (tester) async {
-        await _pumpCenteredDialog(tester);
+    testWidgets('MouseRegion με SystemMouseCursors.move πάνω από τον τίτλο', (
+      tester,
+    ) async {
+      await _pumpCenteredDialog(tester);
 
-        final regions = tester.widgetList<MouseRegion>(find.byType(MouseRegion));
-        final moveRegion = regions.where(
-          (r) => r.cursor == SystemMouseCursors.move,
-        );
-        expect(
-          moveRegion,
-          isNotEmpty,
-          reason: greekExpectMsg(
-            'Πρέπει να υπάρχει MouseRegion με SystemMouseCursors.move στον τίτλο',
-          ),
-        );
-      },
-    );
+      final regions = tester.widgetList<MouseRegion>(find.byType(MouseRegion));
+      final moveRegion = regions.where(
+        (r) => r.cursor == SystemMouseCursors.move,
+      );
+      expect(
+        moveRegion,
+        isNotEmpty,
+        reason: greekExpectMsg(
+          'Πρέπει να υπάρχει MouseRegion με SystemMouseCursors.move στον τίτλο',
+        ),
+      );
+    });
   });
 }

@@ -1,4 +1,4 @@
-﻿part of 'calls_repository.dart';
+part of 'calls_repository.dart';
 
 mixin CallsRepositoryDashboardMixin on CallsRepositoryCore {
   void _appendDashboardUserFilter(
@@ -13,6 +13,7 @@ mixin CallsRepositoryDashboardMixin on CallsRepositoryCore {
     args.add('%$nq%');
     args.add('%$nq%');
   }
+
   /// Στατιστικά κλήσεων για πίνακα ελέγχου: KPIs, ανά τμήμα, ανά βλάβη (`issue`).
   Future<DashboardSummaryModel> getDashboardStatistics(
     DashboardFilterModel filter,
@@ -171,8 +172,7 @@ WHERE ${wherePreviousPeriod.join(' AND ')}
 
     const categoryNameRawExpr =
         "COALESCE(NULLIF(TRIM(cat.name), ''), NULLIF(TRIM(calls.category_text), ''))";
-    final escapedNoCategory =
-        kDashboardNoCategoryLabel.replaceAll("'", "''");
+    final escapedNoCategory = kDashboardNoCategoryLabel.replaceAll("'", "''");
     final categoryLabelExpr =
         "CASE WHEN $categoryNameRawExpr IS NULL "
         "THEN '$escapedNoCategory' "

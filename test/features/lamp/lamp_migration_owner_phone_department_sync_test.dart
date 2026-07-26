@@ -16,8 +16,12 @@ void main() {
 
     setUpAll(() async {
       initSqfliteFfiForTests();
-      final dir = await Directory.systemTemp.createTemp('lamp_owner_dept_sync_');
-      await DatabaseHelper.bindTestDatabaseFile('${dir.path}/lamp_owner_dept_sync.db');
+      final dir = await Directory.systemTemp.createTemp(
+        'lamp_owner_dept_sync_',
+      );
+      await DatabaseHelper.bindTestDatabaseFile(
+        '${dir.path}/lamp_owner_dept_sync.db',
+      );
       await DatabaseHelper.instance.database;
       service = LampMigrationService();
     });
@@ -148,7 +152,10 @@ void main() {
         await expectLater(
           service.save(
             target: LampTransferTarget.owner,
-            formValues: ownerForm(phones: phone, departmentName: 'Τμήμα Προορισμού'),
+            formValues: ownerForm(
+              phones: phone,
+              departmentName: 'Τμήμα Προορισμού',
+            ),
             selectedCandidateId: null,
           ),
           throwsA(isA<StateError>()),
@@ -162,11 +169,15 @@ void main() {
 
         await service.save(
           target: LampTransferTarget.owner,
-          formValues: ownerForm(phones: phone, departmentName: 'Τμήμα Προορισμού'),
+          formValues: ownerForm(
+            phones: phone,
+            departmentName: 'Τμήμα Προορισμού',
+          ),
           selectedCandidateId: null,
           ownerConflictDecisions: [
             LampOwnerConflictDecision(
-              conflictId: 'phone:${SearchTextNormalizer.normalizeForSearch(phone)}',
+              conflictId:
+                  'phone:${SearchTextNormalizer.normalizeForSearch(phone)}',
               action: LampOwnerConflictAction.transferToSelectedOwner,
             ),
           ],
@@ -174,7 +185,10 @@ void main() {
 
         phonesMap = await phones.getDepartmentDirectPhonesMap();
         expect(phonesMap[deptTarget], contains(phone));
-        expect(phonesMap[deptSource] ?? const <String>[], isNot(contains(phone)));
+        expect(
+          phonesMap[deptSource] ?? const <String>[],
+          isNot(contains(phone)),
+        );
         expect(await phoneDepartmentId(phone), deptTarget);
       },
     );

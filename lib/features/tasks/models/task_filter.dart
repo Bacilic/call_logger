@@ -1,14 +1,7 @@
 import 'task.dart';
 
 /// Κριτήριο ταξινόμησης λίστας εκκρεμοτήτων (αντιστοιχεί σε στήλη SQLite).
-enum TaskSortOption {
-  createdAt,
-  dueAt,
-  priority,
-  department,
-  user,
-  equipment,
-}
+enum TaskSortOption { createdAt, dueAt, priority, department, user, equipment }
 
 /// Κριτήρια φιλτραρίσματος για λίστα εκκρεμοτήτων.
 class TaskFilter {
@@ -33,9 +26,9 @@ class TaskFilter {
 
   /// Προεπιλογή: κείμενο κενό, statuses open + snoozed, χωρίς ημερομηνίες.
   factory TaskFilter.initial() => TaskFilter(
-        searchQuery: '',
-        statuses: const [TaskStatus.open, TaskStatus.snoozed],
-      );
+    searchQuery: '',
+    statuses: const [TaskStatus.open, TaskStatus.snoozed],
+  );
 
   TaskFilter copyWith({
     String? searchQuery,

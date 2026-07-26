@@ -7,9 +7,8 @@ import 'database_helper.dart';
 import 'database_v1_schema.dart';
 
 /// Βήμα ελέγχου ακεραιότητας με count + διαγνωστικό query.
-typedef _IntegrityCheckRunner = Future<List<DatabaseIntegrityFinding>> Function(
-  Database db,
-);
+typedef _IntegrityCheckRunner =
+    Future<List<DatabaseIntegrityFinding>> Function(Database db);
 
 class _IntegrityCheckStep {
   const _IntegrityCheckStep({
@@ -87,7 +86,9 @@ class DatabaseIntegrityDiagnostics {
   }
 
   /// Στοχευμένη επαν-επαλήθευση ενός τύπου ελέγχου (χωρίς πλήρες 19-βηματικό scan).
-  Future<List<DatabaseIntegrityFinding>> runCheck(IntegrityCheckType type) async {
+  Future<List<DatabaseIntegrityFinding>> runCheck(
+    IntegrityCheckType type,
+  ) async {
     final db = await DatabaseHelper.instance.database;
     if (type == IntegrityCheckType.pragmaQuickCheck) {
       return _checkPragmaQuickCheck(db);
@@ -109,7 +110,8 @@ class DatabaseIntegrityDiagnostics {
         checkType: IntegrityCheckType.phoneInvalidDepartment,
         name: IntegrityCheckType.phoneInvalidDepartment.displayNameEl,
         tableScopeLabel: 'τηλέφωνα με τμήμα',
-        countSql: '''
+        countSql:
+            '''
 SELECT COUNT(*) FROM phones
 WHERE $_activePhones AND department_id IS NOT NULL
 ''',
@@ -119,21 +121,24 @@ WHERE $_activePhones AND department_id IS NOT NULL
         checkType: IntegrityCheckType.callsMissingSearchIndex,
         name: IntegrityCheckType.callsMissingSearchIndex.displayNameEl,
         tableScopeLabel: 'συνολικές κλήσεις',
-        countSql: 'SELECT COUNT(*) FROM calls WHERE COALESCE(is_deleted, 0) = 0',
+        countSql:
+            'SELECT COUNT(*) FROM calls WHERE COALESCE(is_deleted, 0) = 0',
         run: _checkCallsMissingSearchIndex,
       ),
       _IntegrityCheckStep(
         checkType: IntegrityCheckType.tasksMissingSearchIndex,
         name: IntegrityCheckType.tasksMissingSearchIndex.displayNameEl,
         tableScopeLabel: 'συνολικές εκκρεμότητες',
-        countSql: 'SELECT COUNT(*) FROM tasks WHERE COALESCE(is_deleted, 0) = 0',
+        countSql:
+            'SELECT COUNT(*) FROM tasks WHERE COALESCE(is_deleted, 0) = 0',
         run: _checkTasksMissingSearchIndex,
       ),
       _IntegrityCheckStep(
         checkType: IntegrityCheckType.usersWithoutDepartment,
         name: IntegrityCheckType.usersWithoutDepartment.displayNameEl,
         tableScopeLabel: 'συνολικοί χρήστες',
-        countSql: 'SELECT COUNT(*) FROM users WHERE COALESCE(is_deleted, 0) = 0',
+        countSql:
+            'SELECT COUNT(*) FROM users WHERE COALESCE(is_deleted, 0) = 0',
         run: _checkUsersWithoutDepartment,
       ),
       _IntegrityCheckStep(
@@ -216,7 +221,8 @@ WHERE COALESCE(is_deleted, 0) = 0 AND department_id IS NOT NULL
         checkType: IntegrityCheckType.callsDeletedLinkedEntities,
         name: IntegrityCheckType.callsDeletedLinkedEntities.displayNameEl,
         tableScopeLabel: 'κλήσεις με αναφορές',
-        countSql: '''
+        countSql:
+            '''
 SELECT COUNT(*) FROM calls c
 WHERE $_activeCalls
   AND (c.caller_id IS NOT NULL OR c.equipment_id IS NOT NULL OR c.category_id IS NOT NULL)
@@ -227,14 +233,16 @@ WHERE $_activeCalls
         checkType: IntegrityCheckType.tasksDeletedLinkedEntities,
         name: IntegrityCheckType.tasksDeletedLinkedEntities.displayNameEl,
         tableScopeLabel: 'συνολικές εκκρεμότητες',
-        countSql: 'SELECT COUNT(*) FROM tasks WHERE COALESCE(is_deleted, 0) = 0',
+        countSql:
+            'SELECT COUNT(*) FROM tasks WHERE COALESCE(is_deleted, 0) = 0',
         run: _checkTasksDeletedLinkedEntities,
       ),
       _IntegrityCheckStep(
         checkType: IntegrityCheckType.tasksTemporalInconsistency,
         name: IntegrityCheckType.tasksTemporalInconsistency.displayNameEl,
         tableScopeLabel: 'εκκρεμότητες με χρονικές στιγμές',
-        countSql: '''
+        countSql:
+            '''
 SELECT COUNT(*) FROM tasks t
 WHERE $_activeTasks
   AND t.created_at IS NOT NULL
@@ -325,10 +333,7 @@ WHERE COALESCE(p.is_deleted, 0) = 0
                 'δείχνει σε τμήμα (id=${r['department_id']}) που λείπει εντελώς από τη βάση.',
             affectedId: r['id'] as int?,
             affectedEntity: 'phones',
-            context: {
-              'phone_id': r['id'],
-              'department_id': r['department_id'],
-            },
+            context: {'phone_id': r['id'], 'department_id': r['department_id']},
           ),
         )
         .toList();
@@ -357,18 +362,14 @@ WHERE COALESCE(d.is_deleted, 0) = 0
                 'δείχνει σε όροφο χάρτη (id=${r['floor_id']}) που λείπει εντελώς από τη βάση.',
             affectedId: r['id'] as int?,
             affectedEntity: 'departments',
-            context: {
-              'department_id': r['id'],
-              'floor_id': r['floor_id'],
-            },
+            context: {'department_id': r['id'], 'floor_id': r['floor_id']},
           ),
         )
         .toList();
   }
 
-  static Future<List<DatabaseIntegrityFinding>> _checkEquipmentInvalidDepartment(
-    Database db,
-  ) async {
+  static Future<List<DatabaseIntegrityFinding>>
+  _checkEquipmentInvalidDepartment(Database db) async {
     // Soft-deleted τμήμα (is_deleted=1) ΔΕΝ είναι εύρημα — ιστορική αλήθεια.
     final rows = await db.rawQuery('''
 SELECT e.id, e.code_equipment, e.department_id
@@ -498,10 +499,7 @@ WHERE $_activeUsers
                 'Ο χρήστης ${r['last_name']} ${r['first_name']} δείχνει σε ανύπαρκτο ή διαγραμμένο τμήμα (department_id=${r['department_id']}).',
             affectedId: r['id'] as int?,
             affectedEntity: 'users',
-            context: {
-              'user_id': r['id'],
-              'department_id': r['department_id'],
-            },
+            context: {'user_id': r['id'], 'department_id': r['department_id']},
           ),
         )
         .toList();
@@ -562,10 +560,7 @@ WHERE COALESCE(d.is_deleted, 0) = 0
           description: 'Το τμήμα «$name» έχει κενό ή null name_key.',
           affectedId: r['id'] as int?,
           affectedEntity: 'departments',
-          context: {
-            'department_id': r['id'],
-            'expectedNameKey': expected,
-          },
+          context: {'department_id': r['id'], 'expectedNameKey': expected},
         ),
       );
     }
@@ -625,10 +620,7 @@ WHERE c.id IS NULL OR COALESCE(c.is_deleted, 0) = 1
                 'Η εγγραφή δείχνει σε ανύπαρκτη ή διαγραμμένη κλήση (call_id=${r['call_id']}).',
             affectedId: r['id'] as int?,
             affectedEntity: 'call_external_links',
-            context: {
-              'link_id': r['id'],
-              'call_id': r['call_id'],
-            },
+            context: {'link_id': r['id'], 'call_id': r['call_id']},
           ),
         )
         .toList();
@@ -661,10 +653,7 @@ WHERE p.id IS NULL OR COALESCE(p.is_deleted, 0) = 1
                 'δείχνει σε διαγραμμένη ή ανύπαρκτη εγγραφή.',
             affectedId: r['phone_id'] as int?,
             affectedEntity: 'user_phones',
-            context: {
-              'user_id': r['user_id'],
-              'phone_id': r['phone_id'],
-            },
+            context: {'user_id': r['user_id'], 'phone_id': r['phone_id']},
           ),
         )
         .toList();
@@ -741,9 +730,8 @@ WHERE u.id IS NULL OR COALESCE(u.is_deleted, 0) = 1
         .toList();
   }
 
-  static Future<List<DatabaseIntegrityFinding>> _checkCallsDeletedLinkedEntities(
-    Database db,
-  ) async {
+  static Future<List<DatabaseIntegrityFinding>>
+  _checkCallsDeletedLinkedEntities(Database db) async {
     // Soft-deleted αναφορές (is_deleted=1) ΔΕΝ είναι εύρημα — αποτελούν
     // «ιστορική αλήθεια» και εμφανίζονται με σήμανση «(διαγραμμένο)» στο UI.
     // Εύρημα είναι μόνο όταν η εγγραφή ΛΕΙΠΕΙ εντελώς από τον πίνακα.
@@ -837,9 +825,8 @@ WHERE $_activeCalls
     return findings;
   }
 
-  static Future<List<DatabaseIntegrityFinding>> _checkTasksDeletedLinkedEntities(
-    Database db,
-  ) async {
+  static Future<List<DatabaseIntegrityFinding>>
+  _checkTasksDeletedLinkedEntities(Database db) async {
     // Soft-deleted αναφορές ΔΕΝ είναι εύρημα (ιστορική αλήθεια, σήμανση
     // «(διαγραμμένο)» στο UI). Εύρημα μόνο όταν η εγγραφή λείπει εντελώς.
     final rows = await db.rawQuery('''
@@ -955,9 +942,8 @@ WHERE $_activeTasks
     return findings;
   }
 
-  static Future<List<DatabaseIntegrityFinding>> _checkTasksTemporalInconsistency(
-    Database db,
-  ) async {
+  static Future<List<DatabaseIntegrityFinding>>
+  _checkTasksTemporalInconsistency(Database db) async {
     final rows = await db.rawQuery('''
 SELECT t.id, t.title, t.created_at, t.updated_at
 FROM tasks t
@@ -1021,7 +1007,11 @@ WHERE a.entity_id IS NOT NULL
     return parts.join(' ');
   }
 
-  static String _formatUserLabel(int? userId, String? lastName, String? firstName) {
+  static String _formatUserLabel(
+    int? userId,
+    String? lastName,
+    String? firstName,
+  ) {
     if (userId == null) return 'άγνωστος υπάλληλος';
     final name = _formatPersonName(lastName, firstName);
     if (name.isNotEmpty) return '$name (id=$userId)';
@@ -1054,5 +1044,4 @@ WHERE a.entity_id IS NOT NULL
     }
     return 'τμήμα id=$departmentId';
   }
-
 }

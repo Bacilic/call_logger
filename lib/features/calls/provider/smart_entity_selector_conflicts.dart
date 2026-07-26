@@ -51,7 +51,10 @@ mixin SmartEntitySelectorConflictsMixin on Notifier<SmartEntitySelectorState> {
 
   /// Η «αλήθεια» που υπονοεί το πεδίο-πηγή: ένας μονοσήμαντος χρήστης και/ή ένα
   /// τμήμα. Επιστρέφει null όταν η πηγή είναι ασαφής (π.χ. >1 χρήστες) ή άγνωστη.
-  _SourceTruth? _resolveSourceTruth(SelectorField source, LookupService lookup) {
+  _SourceTruth? _resolveSourceTruth(
+    SelectorField source,
+    LookupService lookup,
+  ) {
     switch (source) {
       case SelectorField.phone:
         final digits = _phoneDigitsOfState();
@@ -63,7 +66,10 @@ mixin SmartEntitySelectorConflictsMixin on Notifier<SmartEntitySelectorState> {
         if (users.isEmpty) {
           final dept = lookup.getDepartmentByPhone(digits);
           if (dept?.id != null) {
-            return _SourceTruth(departmentId: dept!.id, departmentName: dept.name);
+            return _SourceTruth(
+              departmentId: dept!.id,
+              departmentName: dept.name,
+            );
           }
         }
         return null;
@@ -110,8 +116,9 @@ mixin SmartEntitySelectorConflictsMixin on Notifier<SmartEntitySelectorState> {
         final identityDiffers = selected?.id != null
             ? selected!.id != user.id
             : SearchTextNormalizer.normalizeForSearch(
-                    state.callerDisplayText) !=
-                SearchTextNormalizer.normalizeForSearch(user.name ?? '');
+                    state.callerDisplayText,
+                  ) !=
+                  SearchTextNormalizer.normalizeForSearch(user.name ?? '');
         if (identityDiffers) {
           _addConflict(
             out,
@@ -145,7 +152,7 @@ mixin SmartEntitySelectorConflictsMixin on Notifier<SmartEntitySelectorState> {
       final departmentDiffers = selectedDeptId != null
           ? selectedDeptId != truthDeptId
           : SearchTextNormalizer.normalizeForSearch(state.departmentText) !=
-              SearchTextNormalizer.normalizeForSearch(truthDeptName ?? '');
+                SearchTextNormalizer.normalizeForSearch(truthDeptName ?? '');
       if (departmentDiffers) {
         _addConflict(
           out,
@@ -162,9 +169,7 @@ mixin SmartEntitySelectorConflictsMixin on Notifier<SmartEntitySelectorState> {
       if (phone.isNotEmpty) {
         if (user != null) {
           if (!PhoneListParser.containsPhone(user.phoneJoined, phone)) {
-            final expected = user.phones.isEmpty
-                ? '—'
-                : user.phones.join(', ');
+            final expected = user.phones.isEmpty ? '—' : user.phones.join(', ');
             _addConflict(
               out,
               SelectorField.phone,
@@ -275,9 +280,6 @@ mixin SmartEntitySelectorConflictsMixin on Notifier<SmartEntitySelectorState> {
     _collectCallerUnknownWarning(source, lookup, out);
     out.remove(source); // §Α.5: η πηγή ποτέ δεν εμφανίζει δικό της δείκτη.
     out.removeWhere((_, v) => v.isEmpty);
-    state = state.copyWith(
-      conflicts: out,
-      clearConflicts: out.isEmpty,
-    );
+    state = state.copyWith(conflicts: out, clearConflicts: out.isEmpty);
   }
 }

@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -11,16 +11,14 @@ import 'lamp_issue_row_context.dart';
 /// Ρητή παράλειψη στον χειροκίνητο έλεγχο (διακριτή από «καμία επιλογή»).
 final LampIssueResolutionOption kLampManualSkipOption =
     const LampIssueResolutionOption(
-  id: '__skip_open__',
-  label: 'Παράλειψη / παραμένει ανοικτό',
-  action: LampIssueResolutionAction.unresolved,
-);
+      id: '__skip_open__',
+      label: 'Παράλειψη / παραμένει ανοικτό',
+      action: LampIssueResolutionAction.unresolved,
+    );
 
 /// Έλεγχος ύπαρξης σειριακού σε άλλον εξοπλισμό (πιθανό barcode).
-typedef LampSerialExistsChecker = Future<bool> Function(
-  String serial,
-  int? exceptCode,
-);
+typedef LampSerialExistsChecker =
+    Future<bool> Function(String serial, int? exceptCode);
 
 Future<List<LampIssueResolutionDecision>?> showLampIssueManualReviewDialog({
   required BuildContext context,
@@ -77,7 +75,8 @@ class _LampIssueManualReviewDialogState
 
   @override
   Widget build(BuildContext context) {
-    final grouped = widget.groupedIdenticalValues && widget.proposals.length > 1;
+    final grouped =
+        widget.groupedIdenticalValues && widget.proposals.length > 1;
     final selectedCount = grouped
         ? (_isDecidedOption(_selectedOptions[0]) ? 1 : 0)
         : _selectedOptions.values.where(_isDecidedOption).length;
@@ -96,9 +95,9 @@ class _LampIssueManualReviewDialogState
               Text(
                 'Η απόφαση θα εφαρμοστεί σε ${widget.proposals.length} εγγραφές '
                 'με την ίδια τιμή.',
-                style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                  fontWeight: FontWeight.w600,
-                ),
+                style: Theme.of(
+                  context,
+                ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
               ),
               const SizedBox(height: 8),
               Text(
@@ -111,7 +110,7 @@ class _LampIssueManualReviewDialogState
               grouped
                   ? 'Επιλέξτε ενέργεια που θα εφαρμοστεί σε όλες τις εγγραφές.'
                   : 'Επιλέξτε ενέργεια για όσα θέλετε να εφαρμοστούν τώρα. '
-                      'Όσα μείνουν χωρίς επιλογή παραμένουν ανοικτά.',
+                        'Όσα μείνουν χωρίς επιλογή παραμένουν ανοικτά.',
               style: Theme.of(context).textTheme.bodyMedium,
             ),
             const SizedBox(height: 12),
@@ -178,13 +177,16 @@ class _LampIssueManualReviewDialogState
       identical(option, kLampManualSkipOption);
 
   List<LampIssueResolutionDecision> _buildDecisions() {
-    final grouped = widget.groupedIdenticalValues && widget.proposals.length > 1;
+    final grouped =
+        widget.groupedIdenticalValues && widget.proposals.length > 1;
     if (grouped) {
       final option = _selectedOptions[0];
       if (option == null || _isExplicitSkip(option)) {
         return const <LampIssueResolutionDecision>[];
       }
-      final textInput = option.requiresTextInput ? _controllerFor(0).text : null;
+      final textInput = option.requiresTextInput
+          ? _controllerFor(0).text
+          : null;
       return <LampIssueResolutionDecision>[
         for (final proposal in widget.proposals)
           LampIssueResolutionDecision(
@@ -325,8 +327,9 @@ class _ManualReviewCardState extends State<_ManualReviewCard> {
   String? get _cleanDigits {
     final fromMeta = widget.proposal.metadata['cleanDigits']?.toString().trim();
     if (fromMeta != null && fromMeta.isNotEmpty) return fromMeta;
-    final fromOption =
-        widget.selectedOption?.metadata['cleanDigits']?.toString().trim();
+    final fromOption = widget.selectedOption?.metadata['cleanDigits']
+        ?.toString()
+        .trim();
     if (fromOption != null && fromOption.isNotEmpty) return fromOption;
     return null;
   }
@@ -476,7 +479,9 @@ class _ManualReviewCardState extends State<_ManualReviewCard> {
     final confidenceText = lampConfidenceDisplay(proposal);
     final cleanDigits = _cleanDigits;
     final showCleanDigitsLine =
-        _isScientificSerialContext && cleanDigits != null && cleanDigits.isNotEmpty;
+        _isScientificSerialContext &&
+        cleanDigits != null &&
+        cleanDigits.isNotEmpty;
     final warnings = _warningMessages();
     const warningColor = Color(0xFFE65100);
 
@@ -507,11 +512,8 @@ class _ManualReviewCardState extends State<_ManualReviewCard> {
               SelectableText(
                 'Αρχική τιμή: ${_proposalOriginalDisplay(proposal)}',
               ),
-            if (proposal.proposedMatch != null ||
-                proposal.proposedId != null)
-              SelectableText(
-                'Πρόταση: ${_proposalProposedDisplay(proposal)}',
-              ),
+            if (proposal.proposedMatch != null || proposal.proposedId != null)
+              SelectableText('Πρόταση: ${_proposalProposedDisplay(proposal)}'),
             if (rowContextLines.isNotEmpty) ...[
               const SizedBox(height: 8),
               Text('Στοιχεία εγγραφής', style: theme.textTheme.labelLarge),
@@ -598,9 +600,7 @@ class _ManualReviewCardState extends State<_ManualReviewCard> {
                       visualDensity: VisualDensity.compact,
                     ),
                     RadioListTile<String?>(
-                      title: const Text(
-                        'Δώσε νέα τιμή σε αυτή την εγγραφή',
-                      ),
+                      title: const Text('Δώσε νέα τιμή σε αυτή την εγγραφή'),
                       value: 'reassign',
                       dense: true,
                       contentPadding: EdgeInsets.zero,

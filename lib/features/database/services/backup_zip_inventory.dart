@@ -11,7 +11,8 @@ import '../../../core/services/portable_lamp_storage.dart';
 import 'backup_zip_manifest.dart';
 
 /// Προφίλ αρχείου βάσης (προεπιλογή: [profileDatabaseFile]).
-typedef DatabaseFileProfiler = Future<DatabaseFileProfile> Function(String path);
+typedef DatabaseFileProfiler =
+    Future<DatabaseFileProfile> Function(String path);
 
 /// Προεπιλεγμένο ανώτατο πλήθος υποψηφίων που προφιλάρονται ανά απογραφή.
 const int kBackupZipMaxCandidatesToCheck = 20;
@@ -169,7 +170,8 @@ BackupZipPortablePresence detectPortablePresence(Iterable<String> entryNames) {
       hasManifest = true;
       continue;
     }
-    if (name.startsWith(mapsPrefix) || name == mapsPrefix.substring(0, mapsPrefix.length - 1)) {
+    if (name.startsWith(mapsPrefix) ||
+        name == mapsPrefix.substring(0, mapsPrefix.length - 1)) {
       hasMaps = true;
     } else if (name.startsWith(imagesPrefix) ||
         name == AppConfig.portableImagesDirName) {
@@ -333,17 +335,16 @@ Future<BackupZipInventory> inventoryBackupZipListedEntries({
     final tempFile = File(tempPath);
 
     try {
-      await tempFile.writeAsBytes(
-        Uint8List.fromList(entry.bytes),
-        flush: true,
-      );
+      await tempFile.writeAsBytes(Uint8List.fromList(entry.bytes), flush: true);
     } catch (e) {
       eligible.add(
         BackupZipEligibleCandidate(
           entryName: entry.entryName,
           displayName: display,
           sizeBytes: entry.sizeBytes,
-          profile: const DatabaseFileProfile(kind: DatabaseFileKind.undetermined),
+          profile: const DatabaseFileProfile(
+            kind: DatabaseFileKind.undetermined,
+          ),
           checkFailed: true,
           checkWarning:
               'Ο έλεγχος απέτυχε (δεν γράφτηκε προσωρινό αρχείο). '

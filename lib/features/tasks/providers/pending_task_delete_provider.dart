@@ -13,5 +13,5 @@ class PendingTaskDeleteNotifier extends Notifier<int?> {
 
 final pendingTaskDeleteProvider =
     NotifierProvider<PendingTaskDeleteNotifier, int?>(
-  PendingTaskDeleteNotifier.new,
-);
+      PendingTaskDeleteNotifier.new,
+    );

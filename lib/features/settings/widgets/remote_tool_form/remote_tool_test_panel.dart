@@ -53,26 +53,19 @@ class RemoteToolTestPanel extends StatelessWidget {
           const SizedBox(height: 6),
           DecoratedBox(
             decoration: BoxDecoration(
-              color: theme.colorScheme.surfaceContainerHighest
-                  .withValues(alpha: 0.45),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(
-                color: theme.colorScheme.outlineVariant,
+              color: theme.colorScheme.surfaceContainerHighest.withValues(
+                alpha: 0.45,
               ),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: theme.colorScheme.outlineVariant),
             ),
             child: Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 12,
-                vertical: 10,
-              ),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               child: SelectableText(
                 controller.testCommandPreview,
                 style: theme.textTheme.bodySmall?.copyWith(
                   fontFamily: 'Consolas',
-                  fontFamilyFallback: const [
-                    'Courier New',
-                    'monospace',
-                  ],
+                  fontFamilyFallback: const ['Courier New', 'monospace'],
                 ),
               ),
             ),

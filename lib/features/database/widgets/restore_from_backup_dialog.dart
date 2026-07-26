@@ -109,7 +109,8 @@ class _RestoreFromBackupDialogState extends State<_RestoreFromBackupDialog> {
       preferredDatabaseFileName: widget.preferredDatabaseFileName,
     );
     final showOpenSwitch = restoreOpenSwitchMeaningful(_destination);
-    final preRestoreName = _destination == RestoreDestinationChoice.currentDatabase
+    final preRestoreName =
+        _destination == RestoreDestinationChoice.currentDatabase
         ? DatabaseFileReplacement.previewPreRestoreFileName(
             widget.currentDatabasePath,
           )
@@ -147,7 +148,10 @@ class _RestoreFromBackupDialogState extends State<_RestoreFromBackupDialog> {
               const SizedBox(height: 8),
               Text(_originText()),
               const SizedBox(height: 16),
-              Text('Πού να γίνει η επαναφορά;', style: theme.textTheme.titleSmall),
+              Text(
+                'Πού να γίνει η επαναφορά;',
+                style: theme.textTheme.titleSmall,
+              ),
               const SizedBox(height: 8),
               RadioGroup<RestoreDestinationChoice>(
                 groupValue: _destination,
@@ -229,7 +233,8 @@ class _RestoreFromBackupDialogState extends State<_RestoreFromBackupDialog> {
     }
     final currentNorm = p.normalize(widget.currentDatabasePath);
     final originalNorm = p.normalize(original);
-    final differs = currentNorm.replaceAll('/', '\\').toLowerCase() !=
+    final differs =
+        currentNorm.replaceAll('/', '\\').toLowerCase() !=
         originalNorm.replaceAll('/', '\\').toLowerCase();
     final buffer = StringBuffer('Αρχική διαδρομή βάσης:\n$original');
     if (differs) {
@@ -270,10 +275,7 @@ class _RestoreFromBackupDialogState extends State<_RestoreFromBackupDialog> {
 }
 
 class _ComparisonTable extends StatelessWidget {
-  const _ComparisonTable({
-    required this.current,
-    required this.backup,
-  });
+  const _ComparisonTable({required this.current, required this.backup});
 
   final DatabaseFileProfile? current;
   final DatabaseFileProfile backup;
@@ -282,14 +284,12 @@ class _ComparisonTable extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     Widget cell(String text, {bool header = false}) => Padding(
-          padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 6),
-          child: Text(
-            text,
-            style: header
-                ? theme.textTheme.labelLarge
-                : theme.textTheme.bodyMedium,
-          ),
-        );
+      padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 6),
+      child: Text(
+        text,
+        style: header ? theme.textTheme.labelLarge : theme.textTheme.bodyMedium,
+      ),
+    );
 
     return Table(
       columnWidths: const {
@@ -298,19 +298,28 @@ class _ComparisonTable extends StatelessWidget {
         2: FlexColumnWidth(1),
       },
       children: [
-        TableRow(children: [
-          cell('', header: true),
-          cell('Τρέχουσα', header: true),
-          cell('Αντίγραφο', header: true),
-        ]),
+        TableRow(
+          children: [
+            cell('', header: true),
+            cell('Τρέχουσα', header: true),
+            cell('Αντίγραφο', header: true),
+          ],
+        ),
         _row('Κλήσεις', current?.callCount, backup.callCount, cell),
         _row('Υπάλληλοι', current?.userCount, backup.userCount, cell),
-        _row('Εξοπλισμός', current?.equipmentCount, backup.equipmentCount, cell),
-        TableRow(children: [
-          cell('Τελευταία κλήση'),
-          cell(_dateOrDash(current?.latestCallDate)),
-          cell(_dateOrDash(backup.latestCallDate)),
-        ]),
+        _row(
+          'Εξοπλισμός',
+          current?.equipmentCount,
+          backup.equipmentCount,
+          cell,
+        ),
+        TableRow(
+          children: [
+            cell('Τελευταία κλήση'),
+            cell(_dateOrDash(current?.latestCallDate)),
+            cell(_dateOrDash(backup.latestCallDate)),
+          ],
+        ),
       ],
     );
   }
@@ -321,11 +330,13 @@ class _ComparisonTable extends StatelessWidget {
     int? backupValue,
     Widget Function(String, {bool header}) cell,
   ) {
-    return TableRow(children: [
-      cell(label),
-      cell(_countOrDash(currentValue)),
-      cell(_countOrDash(backupValue)),
-    ]);
+    return TableRow(
+      children: [
+        cell(label),
+        cell(_countOrDash(currentValue)),
+        cell(_countOrDash(backupValue)),
+      ],
+    );
   }
 
   String _countOrDash(int? value) => value == null ? '—' : '$value';

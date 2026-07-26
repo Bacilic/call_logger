@@ -84,42 +84,45 @@ void main() {
     expect(result.message, contains('παγίου'));
   });
 
-  test('αλλαγή γραφείου ιδιοκτήτη ενημερώνει μόνο owners (όχι αυτόματα εξοπλισμό)', () async {
-    final result = await repository.updateSection(
-      databasePath: dbPath,
-      id: 10,
-      sectionType: OldEquipmentSectionType.owner,
-      updatedFields: <String, Object?>{
-        'owner_office': 2,
-        'owner_phones': null,
-      },
-    );
-
-    expect(result.success, isTrue);
-    await LampDatabaseProvider.instance.close();
-
-    final db = await openDatabase(dbPath, singleInstance: false);
-    try {
-      final owner = await db.query(
-        'owners',
-        columns: <String>['office', 'phones'],
-        where: 'owner = ?',
-        whereArgs: <Object?>[10],
+  test(
+    'αλλαγή γραφείου ιδιοκτήτη ενημερώνει μόνο owners (όχι αυτόματα εξοπλισμό)',
+    () async {
+      final result = await repository.updateSection(
+        databasePath: dbPath,
+        id: 10,
+        sectionType: OldEquipmentSectionType.owner,
+        updatedFields: <String, Object?>{
+          'owner_office': 2,
+          'owner_phones': null,
+        },
       );
-      final equipment = await db.query(
-        'equipment',
-        columns: <String>['office', 'owner'],
-        where: 'code = ?',
-        whereArgs: <Object?>[100],
-      );
-      expect(owner.single['office'], 2);
-      expect(owner.single['phones'], isNull);
-      expect(equipment.single['office'], 1);
-      expect(equipment.single['owner'], 10);
-    } finally {
-      await db.close();
-    }
-  });
+
+      expect(result.success, isTrue);
+      await LampDatabaseProvider.instance.close();
+
+      final db = await openDatabase(dbPath, singleInstance: false);
+      try {
+        final owner = await db.query(
+          'owners',
+          columns: <String>['office', 'phones'],
+          where: 'owner = ?',
+          whereArgs: <Object?>[10],
+        );
+        final equipment = await db.query(
+          'equipment',
+          columns: <String>['office', 'owner'],
+          where: 'code = ?',
+          whereArgs: <Object?>[100],
+        );
+        expect(owner.single['office'], 2);
+        expect(owner.single['phones'], isNull);
+        expect(equipment.single['office'], 1);
+        expect(equipment.single['owner'], 10);
+      } finally {
+        await db.close();
+      }
+    },
+  );
 
   test(
     'scanIntegrityIssues εντοπίζει duplicate_model_serial όταν συνυπάρχουν διπλότυπα',
@@ -220,80 +223,95 @@ void main() {
     },
   );
 
-  test('serialExistsInLamp επιστρέφει σωστά αν υπάρχει άλλος σειριακός', () async {
-    await LampDatabaseProvider.instance.close();
-    final db = await openDatabase(dbPath, singleInstance: false);
-    try {
-      await db.insert('equipment', <String, Object?>{
-        'code': 3200,
-        'description': 'Εξοπλισμός Α',
-        'model': 1,
-        'serial_no': 'BARCODE-XYZ',
-      });
-      await db.insert('equipment', <String, Object?>{
-        'code': 3201,
-        'description': 'Εξοπλισμός Β',
-        'model': 1,
-        'serial_no': 'BARCODE-XYZ',
-      });
-    } finally {
-      await db.close();
-    }
+  test(
+    'serialExistsInLamp επιστρέφει σωστά αν υπάρχει άλλος σειριακός',
+    () async {
+      await LampDatabaseProvider.instance.close();
+      final db = await openDatabase(dbPath, singleInstance: false);
+      try {
+        await db.insert('equipment', <String, Object?>{
+          'code': 3200,
+          'description': 'Εξοπλισμός Α',
+          'model': 1,
+          'serial_no': 'BARCODE-XYZ',
+        });
+        await db.insert('equipment', <String, Object?>{
+          'code': 3201,
+          'description': 'Εξοπλισμός Β',
+          'model': 1,
+          'serial_no': 'BARCODE-XYZ',
+        });
+      } finally {
+        await db.close();
+      }
 
-    expect(
-      await repository.serialExistsInLamp(dbPath, 'BARCODE-XYZ', exceptCode: 3200),
-      isTrue,
-    );
-    expect(
-      await repository.serialExistsInLamp(dbPath, 'BARCODE-XYZ', exceptCode: 3201),
-      isTrue,
-    );
-    expect(
-      await repository.serialExistsInLamp(dbPath, 'BARCODE-XYZ', exceptCode: 9999),
-      isTrue,
-    );
-    expect(
-      await repository.serialExistsInLamp(dbPath, 'ΜΟΝΑΔΙΚΟΣ-123'),
-      isFalse,
-    );
-    expect(
-      await repository.serialExistsInLamp(dbPath, ''),
-      isFalse,
-    );
-  });
-
-  test('επιτρέπεται γραφείο εξοπλισμού διαφορετικό από το γραφείο του κατόχου', () async {
-    final result = await repository.updateSection(
-      databasePath: dbPath,
-      id: 100,
-      sectionType: OldEquipmentSectionType.equipment,
-      updatedFields: <String, Object?>{'office_id': 2},
-    );
-
-    expect(result.success, isTrue);
-    await LampDatabaseProvider.instance.close();
-
-    final db = await openDatabase(dbPath, singleInstance: false);
-    try {
-      final owner = await db.query(
-        'owners',
-        columns: <String>['office'],
-        where: 'owner = ?',
-        whereArgs: <Object?>[10],
+      expect(
+        await repository.serialExistsInLamp(
+          dbPath,
+          'BARCODE-XYZ',
+          exceptCode: 3200,
+        ),
+        isTrue,
       );
-      final equipment = await db.query(
-        'equipment',
-        columns: <String>['office', 'owner'],
-        where: 'code = ?',
-        whereArgs: <Object?>[100],
+      expect(
+        await repository.serialExistsInLamp(
+          dbPath,
+          'BARCODE-XYZ',
+          exceptCode: 3201,
+        ),
+        isTrue,
       );
-      expect(owner.single['office'], 1);
-      expect(equipment.single['office'], 2);
-      expect(equipment.single['owner'], 10);
-    } finally {
-      await db.close();
-    }
-  });
+      expect(
+        await repository.serialExistsInLamp(
+          dbPath,
+          'BARCODE-XYZ',
+          exceptCode: 9999,
+        ),
+        isTrue,
+      );
+      expect(
+        await repository.serialExistsInLamp(dbPath, 'ΜΟΝΑΔΙΚΟΣ-123'),
+        isFalse,
+      );
+      expect(await repository.serialExistsInLamp(dbPath, ''), isFalse);
+    },
+  );
+
+  test(
+    'επιτρέπεται γραφείο εξοπλισμού διαφορετικό από το γραφείο του κατόχου',
+    () async {
+      final result = await repository.updateSection(
+        databasePath: dbPath,
+        id: 100,
+        sectionType: OldEquipmentSectionType.equipment,
+        updatedFields: <String, Object?>{'office_id': 2},
+      );
+
+      expect(result.success, isTrue);
+      await LampDatabaseProvider.instance.close();
+
+      final db = await openDatabase(dbPath, singleInstance: false);
+      try {
+        final owner = await db.query(
+          'owners',
+          columns: <String>['office'],
+          where: 'owner = ?',
+          whereArgs: <Object?>[10],
+        );
+        final equipment = await db.query(
+          'equipment',
+          columns: <String>['office', 'owner'],
+          where: 'code = ?',
+          whereArgs: <Object?>[100],
+        );
+        expect(owner.single['office'], 1);
+        expect(equipment.single['office'], 2);
+        expect(equipment.single['owner'], 10);
+      } finally {
+        await db.close();
+      }
+    },
+  );
 }
 
 Future<void> _seed(Database db) async {

@@ -1,4 +1,4 @@
-﻿import 'dart:convert';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -25,11 +25,12 @@ class UpdateInstallResult {
   bool get success => status == UpdateInstallStatus.success;
 }
 
-typedef DetachedProcessLauncher = Future<void> Function(
-  String executable,
-  List<String> arguments, {
-  String? workingDirectory,
-});
+typedef DetachedProcessLauncher =
+    Future<void> Function(
+      String executable,
+      List<String> arguments, {
+      String? workingDirectory,
+    });
 
 typedef AppTerminator = Future<void> Function();
 
@@ -49,9 +50,9 @@ class UpdateInstallerService {
     DateTime Function()? clock,
     bool Function()? isDevelopmentBuild,
     this.onProgress,
-  })  : currentPid = currentPid ?? (() => pid),
-        clock = clock ?? DateTime.now,
-        isDevelopmentBuild = isDevelopmentBuild ?? (() => false);
+  }) : currentPid = currentPid ?? (() => pid),
+       clock = clock ?? DateTime.now,
+       isDevelopmentBuild = isDevelopmentBuild ?? (() => false);
 
   final String installDirectory;
   final Future<String?> Function() resolveUpdateFolder;
@@ -81,9 +82,7 @@ class UpdateInstallerService {
       if (name.contains('..') ||
           name.startsWith('/') ||
           RegExp(r'^[A-Za-z]:/').hasMatch(name)) {
-        throw StateError(
-          'Το πακετο περιεχει διαδρομη διαφυγης: $name',
-        );
+        throw StateError('Το πακετο περιεχει διαδρομη διαφυγης: $name');
       }
       for (final prefix in forbiddenZipPrefixes) {
         if (name == prefix.substring(0, prefix.length - 1) ||
@@ -204,9 +203,7 @@ class UpdateInstallerService {
         );
       }
 
-      final sourceZip = File(
-        p.join(updateFolder, 'current', manifest.zipFile),
-      );
+      final sourceZip = File(p.join(updateFolder, 'current', manifest.zipFile));
       if (!await sourceZip.exists()) {
         return UpdateInstallResult(
           status: UpdateInstallStatus.failure,
@@ -259,10 +256,9 @@ class UpdateInstallerService {
 
       final backupDir = Directory(p.join(installDirectory, backupDirName));
       final scriptPath = p.join(stagingRoot.path, 'updater.cmd');
-      await File(scriptPath).writeAsBytes(
-        utf8.encode(UpdaterScriptBuilder.build()),
-        flush: true,
-      );
+      await File(
+        scriptPath,
+      ).writeAsBytes(utf8.encode(UpdaterScriptBuilder.build()), flush: true);
 
       progress('Καταγραφή εκκρεμότητας…');
       await _pendingMarkerFile.writeAsString(
@@ -324,11 +320,9 @@ class UpdateInstallerService {
       // Το script δέχεται ΜΟΝΟ το PID· τις διαδρομές τις υπολογίζει από το
       // %~dp0 (βλ. UpdateCmdLauncher / UpdaterScriptBuilder). Έτσι διαδρομές
       // με κενά (Documents\Call Logger) δεν σπάνε τη γραμμή εντολών.
-      await launchDetached(
-        info.scriptPath,
-        ['${currentPid()}'],
-        workingDirectory: installDirectory,
-      );
+      await launchDetached(info.scriptPath, [
+        '${currentPid()}',
+      ], workingDirectory: installDirectory);
 
       // At-most-once αφού το script ξεκίνησε: αν αποτύχει το overlay, δεν
       // επαναλαμβάνεται αυτόματα σε βρόχο (μένει updater.log για διάγνωση).
@@ -359,10 +353,7 @@ class UpdateInstallerService {
       if (entry.isFile) {
         final out = File(p.join(destDir, name));
         await out.parent.create(recursive: true);
-        await out.writeAsBytes(
-          Uint8List.fromList(entry.content),
-          flush: true,
-        );
+        await out.writeAsBytes(Uint8List.fromList(entry.content), flush: true);
       } else {
         await Directory(p.join(destDir, name)).create(recursive: true);
       }

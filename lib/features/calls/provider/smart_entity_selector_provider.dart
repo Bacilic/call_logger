@@ -49,7 +49,6 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState>
 
   /// v2 §Β: ένα συμπληρωμένο πεδίο εξοπλισμού (isFilled) προστατεύεται και δεν
 
-
   /// Έως ένα quick task ανά κύκλο φόρμας· set μόνο μετά επιτυχή insert.
   int? _associationQuickTaskId;
 
@@ -58,7 +57,8 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState>
   bool _callerAwaitingPhoneAssociation = false;
 
   /// Παράγωγες εγγραφές audit πριν το id κλήσης/εκκρεμότητας (καλωδίωση Φάσης 3).
-  final PendingAuditOriginRows _pendingAuditOriginRows = PendingAuditOriginRows();
+  final PendingAuditOriginRows _pendingAuditOriginRows =
+      PendingAuditOriginRows();
 
   static const Set<String> _kMainAuditActionsWithoutOrigin = {
     'ΔΗΜΙΟΥΡΓΙΑ ΚΛΗΣΗΣ',
@@ -143,7 +143,10 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState>
   /// Κλήση μετά από Enter ή focus out· ενημερώνει hasAnyContent για εμφάνιση κουμπιού "Καθαρισμός όλων"
   /// και αποθηκεύει το equipmentText/departmentText. Το UI περνάει τις τρέχουσες τιμές πεδίων.
   /// Κρατά υπάρχουσα τιμή state όταν το UI περνάει κενό πεδίο πριν συγχρονιστεί με provider.
-  static String _mergeTextFieldIntoState(String? fieldValue, String stateValue) {
+  static String _mergeTextFieldIntoState(
+    String? fieldValue,
+    String stateValue,
+  ) {
     if (fieldValue == null) return stateValue;
     if (fieldValue.isEmpty && stateValue.trim().isNotEmpty) return stateValue;
     return fieldValue;
@@ -341,8 +344,7 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState>
         equipmentNoMatch: false,
         clearConflicts: true,
       );
-      final lookupForRestore =
-          ref.read(lookupServiceProvider).value?.service;
+      final lookupForRestore = ref.read(lookupServiceProvider).value?.service;
       _restoreDepartmentPhoneCandidatesIfNeeded(lookupForRestore);
       if (!preserveEquipment) {
         _restoreDepartmentEquipmentCandidatesIfNeeded(lookupForRestore);

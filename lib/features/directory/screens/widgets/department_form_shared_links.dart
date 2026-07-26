@@ -41,8 +41,7 @@ Widget _sharedConflictMoveLabel(
         ),
         TextSpan(text: ' της «$targetDepartmentName» '),
         TextSpan(
-          text:
-              '(αφαίρεσέ $removePronoun από «${item.sourceForMoveText}»)',
+          text: '(αφαίρεσέ $removePronoun από «${item.sourceForMoveText}»)',
         ),
       ],
     ),
@@ -59,7 +58,9 @@ Widget _sharedConflictKeepLabel(_SharedConflictItem item) {
             text: 'προσωπικό',
             style: _kSharedConflictEmphasisStyle,
           ),
-          TextSpan(text: ' του «${item.sourceForMoveText}» (μην το καταχωρήσεις ως '),
+          TextSpan(
+            text: ' του «${item.sourceForMoveText}» (μην το καταχωρήσεις ως ',
+          ),
           const TextSpan(
             text: 'κοινόχρηστο',
             style: _kSharedConflictEmphasisStyle,
@@ -424,10 +425,12 @@ mixin DepartmentFormSharedLinksMixin on DepartmentFormDialogStateHost {
     var phones = List<String>.from(sharedPhones);
     var equipment = List<String>.from(sharedEquipmentCodes);
 
-    final existingPhones =
-        lookup.getDirectPhonesByDepartment(departmentId).toSet();
-    final existingEq =
-        lookup.getSharedEquipmentCodesByDepartment(departmentId).toSet();
+    final existingPhones = lookup
+        .getDirectPhonesByDepartment(departmentId)
+        .toSet();
+    final existingEq = lookup
+        .getSharedEquipmentCodesByDepartment(departmentId)
+        .toSet();
     final sharedOnlyPhonesRemoved =
         existingPhones
             .difference(phones.toSet())
@@ -486,7 +489,9 @@ mixin DepartmentFormSharedLinksMixin on DepartmentFormDialogStateHost {
       phonesToDelete = phoneBatch.phonesToDelete;
       phoneTransferTargets.addAll(phoneBatch.phoneTransfers);
       for (final entry in phoneBatch.newDepartmentNamesToCreate.entries) {
-        newDeptNames.putIfAbsent(entry.key, () => <String>{}).addAll(entry.value);
+        newDeptNames
+            .putIfAbsent(entry.key, () => <String>{})
+            .addAll(entry.value);
       }
     }
 

@@ -80,10 +80,7 @@ void main() {
         'number': '2898',
         'is_deleted': 0,
       });
-      await db.insert('user_phones', {
-        'user_id': userId,
-        'phone_id': phoneId,
-      });
+      await db.insert('user_phones', {'user_id': userId, 'phone_id': phoneId});
       final equipmentId = await db.insert('equipment', {
         'code_equipment': '2113',
         'is_deleted': 0,

@@ -47,8 +47,7 @@ void main() {
           rawValue: '1234',
           columnName: 'set_master',
           rowNumber: null,
-          message:
-              'Το set_master δείχνει στον ίδιο εξοπλισμό (code=1234).',
+          message: 'Το set_master δείχνει στον ίδιο εξοπλισμό (code=1234).',
         );
 
         final proposals = await service.analyzeIssues(
@@ -73,8 +72,7 @@ void main() {
           rawValue: '1234',
           columnName: 'set_master',
           rowNumber: null,
-          message:
-              'Το set_master δείχνει στον ίδιο εξοπλισμό (code=1234).',
+          message: 'Το set_master δείχνει στον ίδιο εξοπλισμό (code=1234).',
         );
 
         final proposals = await service.analyzeIssues(
@@ -92,10 +90,7 @@ void main() {
 
         expect(result.resolved, 1);
         expect(result.unresolved, 0);
-        expect(
-          await _equipmentSetMaster(dbPath, 1234),
-          isNull,
-        );
+        expect(await _equipmentSetMaster(dbPath, 1234), isNull);
         expect(
           await _countIssues(dbPath, issueType: 'set_master_self_reference'),
           0,

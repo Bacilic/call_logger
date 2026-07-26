@@ -18,10 +18,7 @@ void main() {
         ],
       );
 
-      expect(
-        remoteToolArgumentsSummary(tool),
-        '-password=***',
-      );
+      expect(remoteToolArgumentsSummary(tool), '-password=***');
     });
   });
 

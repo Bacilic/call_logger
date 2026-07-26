@@ -23,13 +23,11 @@ String equipmentRowLocationFormattedLine(
     locRaw = eq.location;
   }
   final deptName =
-      (deptId != null
-              ? LookupService.instance.getDepartmentName(deptId)
-              : null)
+      (deptId != null ? LookupService.instance.getDepartmentName(deptId) : null)
           ?.trim() ??
       '';
-  final building =
-      (LookupService.instance.getDepartmentBuilding(deptId) ?? '').trim();
+  final building = (LookupService.instance.getDepartmentBuilding(deptId) ?? '')
+      .trim();
   final loc = (locRaw ?? '').trim();
 
   final hasB = building.isNotEmpty;
@@ -66,12 +64,7 @@ String equipmentRowLocationFormattedLine(
 
 /// Ορισμός στηλών πίνακα εξοπλισμού με key, label, displayValue και sortValue.
 class EquipmentColumn {
-  EquipmentColumn(
-    this.key,
-    this.label,
-    this.displayValue,
-    this.sortValue,
-  );
+  EquipmentColumn(this.key, this.label, this.displayValue, this.sortValue);
 
   final String key;
   final String label;
@@ -103,6 +96,7 @@ class EquipmentColumn {
     (row) => row.$1.type ?? '–',
     (row) => row.$1.type ?? '',
   );
+
   /// Κείμενο όταν δεν υπάρχει συνδεδεμένος κάτοχος (user_equipment).
   static const String emptyOwnerDisplayLabel = 'Χωρίς κάτοχο';
 
@@ -118,15 +112,10 @@ class EquipmentColumn {
     (row) => equipmentRowLocationFormattedLine(row),
     (row) => equipmentRowLocationFormattedLine(row),
   );
-  static final phone = EquipmentColumn(
-    'phone',
-    'Τηλέφωνο',
-    (row) {
-      final p = row.$2?.phoneJoined ?? '';
-      return p.isEmpty ? '–' : p;
-    },
-    (row) => row.$2?.phoneJoined ?? '',
-  );
+  static final phone = EquipmentColumn('phone', 'Τηλέφωνο', (row) {
+    final p = row.$2?.phoneJoined ?? '';
+    return p.isEmpty ? '–' : p;
+  }, (row) => row.$2?.phoneJoined ?? '');
   static final notes = EquipmentColumn(
     'notes',
     'Σημειώσεις',
@@ -141,9 +130,8 @@ class EquipmentColumn {
       if (p.isEmpty) return '–';
       return p.entries.map((e) => '${e.key}: ${e.value}').join(' · ');
     },
-    (row) => row.$1.remoteParams.entries
-        .map((e) => '${e.key}:${e.value}')
-        .join('|'),
+    (row) =>
+        row.$1.remoteParams.entries.map((e) => '${e.key}:${e.value}').join('|'),
   );
   static final defaultRemote = EquipmentColumn(
     'defaultRemote',
@@ -187,9 +175,6 @@ class EquipmentColumn {
     if (!order.any((c) => c.key == selection.key)) {
       return List<EquipmentColumn>.from(order);
     }
-    return [
-      selection,
-      ...order.where((c) => c.key != selection.key),
-    ];
+    return [selection, ...order.where((c) => c.key != selection.key)];
   }
 }

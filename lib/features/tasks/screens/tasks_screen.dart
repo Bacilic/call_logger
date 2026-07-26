@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -81,9 +81,7 @@ class _TasksScreenState extends ConsumerState<TasksScreen> {
         ],
       ),
       floatingActionButton: FloatingActionButton(
-        onPressed: canCreateTask
-            ? () => _openNewTaskForm(context, ref)
-            : null,
+        onPressed: canCreateTask ? () => _openNewTaskForm(context, ref) : null,
         child: const Icon(Icons.add),
       ),
       body: Column(

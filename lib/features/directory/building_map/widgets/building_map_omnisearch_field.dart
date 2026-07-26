@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/database/omnisearch_service.dart';
@@ -26,7 +26,8 @@ class BuildingMapOmnisearchField extends ConsumerStatefulWidget {
       _BuildingMapOmnisearchFieldState();
 }
 
-class _BuildingMapOmnisearchFieldState extends ConsumerState<BuildingMapOmnisearchField> {
+class _BuildingMapOmnisearchFieldState
+    extends ConsumerState<BuildingMapOmnisearchField> {
   final SearchDebouncer _debouncer = SearchDebouncer();
   bool _loading = false;
   List<BuildingMapOmnisearchHit> _hits = const [];
@@ -68,9 +69,7 @@ class _BuildingMapOmnisearchFieldState extends ConsumerState<BuildingMapOmnisear
     if (!widget.enabled) return;
     if (trimmed.isEmpty) {
       if (!mounted) return;
-      ref
-          .read(buildingMapSearchRevealedDepartmentIdProvider.notifier)
-          .clear();
+      ref.read(buildingMapSearchRevealedDepartmentIdProvider.notifier).clear();
       ref.read(buildingMapSearchUnresolvedNoticeProvider.notifier).clear();
       setState(() {
         _hits = const [];

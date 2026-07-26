@@ -96,14 +96,10 @@ void main() {
       return DepartmentDeletionPlan(
         departmentId: sourceId,
         employeeBatch: DepartmentEmployeeReassignBatch(
-          transfers: {
-            userId: SharedAssetTransferTarget.existing(targetId),
-          },
+          transfers: {userId: SharedAssetTransferTarget.existing(targetId)},
         ),
         sharedBatch: SharedAssetDisconnectBatchResult(
-          phoneTransfers: {
-            phone: SharedAssetTransferTarget.existing(targetId),
-          },
+          phoneTransfers: {phone: SharedAssetTransferTarget.existing(targetId)},
           equipmentTransfers: {
             equipmentCode: SharedAssetTransferTarget.existing(targetId),
           },
@@ -150,13 +146,19 @@ void main() {
         ]);
 
         expect(
-          (await db.query('users', where: 'id = ?', whereArgs: [user1]))
-              .single['department_id'],
+          (await db.query(
+            'users',
+            where: 'id = ?',
+            whereArgs: [user1],
+          )).single['department_id'],
           targetId,
         );
         expect(
-          (await db.query('users', where: 'id = ?', whereArgs: [user2]))
-              .single['department_id'],
+          (await db.query(
+            'users',
+            where: 'id = ?',
+            whereArgs: [user2],
+          )).single['department_id'],
           targetId,
         );
         expect(
@@ -261,18 +263,22 @@ void main() {
           throwsA(isA<DatabaseException>()),
         );
 
-        await db.execute(
-          'DROP TRIGGER IF EXISTS fail_second_dept_soft_delete',
-        );
+        await db.execute('DROP TRIGGER IF EXISTS fail_second_dept_soft_delete');
 
         expect(
-          (await db.query('users', where: 'id = ?', whereArgs: [user1]))
-              .single['department_id'],
+          (await db.query(
+            'users',
+            where: 'id = ?',
+            whereArgs: [user1],
+          )).single['department_id'],
           source1,
         );
         expect(
-          (await db.query('users', where: 'id = ?', whereArgs: [user2]))
-              .single['department_id'],
+          (await db.query(
+            'users',
+            where: 'id = ?',
+            whereArgs: [user2],
+          )).single['department_id'],
           source2,
         );
         expect(
@@ -292,23 +298,35 @@ void main() {
           0,
         );
         expect(
-          (await db.query('phones', where: 'id = ?', whereArgs: [phone1]))
-              .single['department_id'],
+          (await db.query(
+            'phones',
+            where: 'id = ?',
+            whereArgs: [phone1],
+          )).single['department_id'],
           source1,
         );
         expect(
-          (await db.query('phones', where: 'id = ?', whereArgs: [phone2]))
-              .single['department_id'],
+          (await db.query(
+            'phones',
+            where: 'id = ?',
+            whereArgs: [phone2],
+          )).single['department_id'],
           source2,
         );
         expect(
-          (await db.query('equipment', where: 'id = ?', whereArgs: [eq1]))
-              .single['department_id'],
+          (await db.query(
+            'equipment',
+            where: 'id = ?',
+            whereArgs: [eq1],
+          )).single['department_id'],
           source1,
         );
         expect(
-          (await db.query('equipment', where: 'id = ?', whereArgs: [eq2]))
-              .single['department_id'],
+          (await db.query(
+            'equipment',
+            where: 'id = ?',
+            whereArgs: [eq2],
+          )).single['department_id'],
           source2,
         );
       },

@@ -1,29 +1,24 @@
 /// Ρόλος εργαλείου απομακρυσμένης σύνδεσης (στήλη `remote_tools.role`).
-enum ToolRole {
-  vnc,
-  rdp,
-  anydesk,
-  generic,
-}
+enum ToolRole { vnc, rdp, anydesk, generic }
 
 extension ToolRoleDb on ToolRole {
   /// Τιμή για SQLite / JSON.
   String get dbValue => switch (this) {
-        ToolRole.vnc => 'vnc',
-        ToolRole.rdp => 'rdp',
-        ToolRole.anydesk => 'anydesk',
-        ToolRole.generic => 'generic',
-      };
+    ToolRole.vnc => 'vnc',
+    ToolRole.rdp => 'rdp',
+    ToolRole.anydesk => 'anydesk',
+    ToolRole.generic => 'generic',
+  };
 }
 
 extension ToolRoleShortLabel on ToolRole {
   /// Σύντομη ετικέτα για εμφάνιση σε λίστες / badges.
   String get shortLabel => switch (this) {
-        ToolRole.vnc => 'VNC',
-        ToolRole.rdp => 'RDP',
-        ToolRole.anydesk => 'AnyDesk',
-        ToolRole.generic => 'Γενικό',
-      };
+    ToolRole.vnc => 'VNC',
+    ToolRole.rdp => 'RDP',
+    ToolRole.anydesk => 'AnyDesk',
+    ToolRole.generic => 'Γενικό',
+  };
 }
 
 /// Από τιμή βάσης· άγνωστο/κενό → [ToolRole.generic].

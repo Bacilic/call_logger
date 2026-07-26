@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -18,10 +18,7 @@ void resetUpdateStartupPromptSessionForTests() {
 
 /// Ακούει τον [updateCheckProvider] και εμφανίζει το μήνυμα ενημέρωσης στην εκκίνηση.
 class UpdateStartupPromptListener extends ConsumerStatefulWidget {
-  const UpdateStartupPromptListener({
-    super.key,
-    this.getShowUpdateOnStartup,
-  });
+  const UpdateStartupPromptListener({super.key, this.getShowUpdateOnStartup});
 
   /// Έγχυση για τεστ· προεπιλογή: [SettingsService.getShowUpdateOnStartup].
   final Future<bool> Function()? getShowUpdateOnStartup;
@@ -49,8 +46,9 @@ class _UpdateStartupPromptListenerState
     if (_updateStartupPromptShownThisSession) return;
     if (!result.updateAvailable || result.manifest == null) return;
 
-    final show = await (widget.getShowUpdateOnStartup ??
-        () => SettingsService().getShowUpdateOnStartup())();
+    final show =
+        await (widget.getShowUpdateOnStartup ??
+            () => SettingsService().getShowUpdateOnStartup())();
     if (!show || !mounted) return;
     if (_updateStartupPromptShownThisSession) return;
 

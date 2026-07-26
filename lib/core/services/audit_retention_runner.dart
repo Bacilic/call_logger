@@ -22,8 +22,7 @@ class AuditRetentionRunner {
     AuditRetentionConfig config, {
     bool ignoreEnabledGate = false,
   }) async {
-    final hasPolicy =
-        config.maxAgeDays != null || config.maxRows != null;
+    final hasPolicy = config.maxAgeDays != null || config.maxRows != null;
     if (!ignoreEnabledGate) {
       if (!config.enabled && !hasPolicy) {
         return (byAge: 0, byTrim: 0);

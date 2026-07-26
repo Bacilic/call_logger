@@ -10,7 +10,7 @@ import 'directory_support.dart';
 /// Persistence εξοπλισμού (`equipment`, `user_equipment`).
 class EquipmentRepository {
   EquipmentRepository(this.db, {DirectorySupport? support})
-      : _support = support ?? DirectorySupport(db);
+    : _support = support ?? DirectorySupport(db);
 
   final Database db;
   final DirectorySupport _support;
@@ -87,8 +87,7 @@ class EquipmentRepository {
     final rows = await e.query(
       'equipment',
       columns: ['id'],
-      where:
-          'code_equipment = ? AND ${DirectorySupport.notDeletedClause}',
+      where: 'code_equipment = ? AND ${DirectorySupport.notDeletedClause}',
       whereArgs: [c],
       limit: 1,
     );
@@ -177,9 +176,7 @@ class EquipmentRepository {
     );
     final taskCount = _readCount(taskLinks);
     if (taskCount > 0) {
-      out.add(
-        taskCount == 1 ? '1 εκκρεμότητα' : '$taskCount εκκρεμότητες',
-      );
+      out.add(taskCount == 1 ? '1 εκκρεμότητα' : '$taskCount εκκρεμότητες');
     }
 
     final callLinks = await db.rawQuery(
@@ -216,9 +213,7 @@ class EquipmentRepository {
 
     if (callCount > 0) {
       out.add(
-        callCount == 1
-            ? '1 κλήση ιστορικού'
-            : '$callCount κλήσεις ιστορικού',
+        callCount == 1 ? '1 κλήση ιστορικού' : '$callCount κλήσεις ιστορικού',
       );
     }
 
@@ -811,7 +806,7 @@ class EquipmentRepository {
   }
 
   static ({Map<String, dynamic> oldDiff, Map<String, dynamic> newDiff})
-      _equipmentAuditDiff(
+  _equipmentAuditDiff(
     Map<String, dynamic> oldRow,
     Map<String, dynamic> updates,
   ) {
@@ -968,8 +963,7 @@ class EquipmentRepository {
     int userId,
     int equipmentId, {
     DatabaseExecutor? executor,
-  }) =>
-      linkUserToEquipment(userId, equipmentId, executor: executor);
+  }) => linkUserToEquipment(userId, equipmentId, executor: executor);
 
   Future<List<int>> getUserIdsLinkedToEquipment(int equipmentId) async {
     final rows = await db.query(

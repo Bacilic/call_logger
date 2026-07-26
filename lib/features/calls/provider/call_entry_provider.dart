@@ -149,9 +149,7 @@ class CallEntryNotifier extends Notifier<CallEntryState> {
     state = state.copyWith(category: value, categoryId: categoryId);
   }
 
-  String? _equipmentCodeForRecentInvalidation({
-    required dynamic header,
-  }) {
+  String? _equipmentCodeForRecentInvalidation({required dynamic header}) {
     final fromModel = header.selectedEquipment?.code?.trim();
     if (fromModel != null && fromModel.isNotEmpty) return fromModel;
     final fromText = header.equipmentText?.trim();
@@ -321,26 +319,31 @@ class CallEntryNotifier extends Notifier<CallEntryState> {
       final categoryName = state.category.trim().isEmpty
           ? null
           : state.category.trim();
-      final row = await ref.read(taskServiceProvider).buildCreateFromCallRow(
-        callId: null,
-        callerName: callerName,
-        description: state.notes,
-        callDate: callDate,
-        callerId: taskFields.callerId,
-        equipmentId: taskFields.equipmentId,
-        departmentId: taskFields.departmentId,
-        phoneId: taskFields.phoneId,
-        phoneText: taskFields.phoneText,
-        userText: taskFields.userText,
-        equipmentText: taskFields.equipmentText,
-        departmentText: taskFields.departmentText,
-        categoryName: categoryName,
-      );
+      final row = await ref
+          .read(taskServiceProvider)
+          .buildCreateFromCallRow(
+            callId: null,
+            callerName: callerName,
+            description: state.notes,
+            callDate: callDate,
+            callerId: taskFields.callerId,
+            equipmentId: taskFields.equipmentId,
+            departmentId: taskFields.departmentId,
+            phoneId: taskFields.phoneId,
+            phoneText: taskFields.phoneText,
+            userText: taskFields.userText,
+            equipmentText: taskFields.equipmentText,
+            departmentText: taskFields.departmentText,
+            categoryName: categoryName,
+          );
       final db = await DatabaseHelper.instance.database;
       final taskService = ref.read(taskServiceProvider);
       final headerNotifier = ref.read(callHeaderProvider.notifier);
       await db.transaction((DatabaseExecutor txn) async {
-        final taskId = await taskService.createFromCallOnExecutor(txn, row: row);
+        final taskId = await taskService.createFromCallOnExecutor(
+          txn,
+          row: row,
+        );
         await headerNotifier.stampPendingAuditOriginsForTask(txn, taskId);
       });
       ref.read(taskFilterProvider.notifier).update((_) => TaskFilter.initial());

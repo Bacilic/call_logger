@@ -25,8 +25,12 @@ void main() {
 
     setUpAll(() async {
       initSqfliteFfiForTests();
-      final dir = await Directory.systemTemp.createTemp('lamp_candidate_match_');
-      await DatabaseHelper.bindTestDatabaseFile('${dir.path}/lamp_candidate_match.db');
+      final dir = await Directory.systemTemp.createTemp(
+        'lamp_candidate_match_',
+      );
+      await DatabaseHelper.bindTestDatabaseFile(
+        '${dir.path}/lamp_candidate_match.db',
+      );
       await DatabaseHelper.instance.database;
       migrationService = LampMigrationService();
     });
@@ -70,49 +74,50 @@ void main() {
 
       final draft = await migrationService.buildDraft(
         target: LampTransferTarget.owner,
-        sourceRow: {
-          'owner_original_text': 'Ξενογλωσσος Τυχαιος Χρηστης Αλφα',
-        },
+        sourceRow: {'owner_original_text': 'Ξενογλωσσος Τυχαιος Χρηστης Αλφα'},
       );
 
       expect(draft.candidates, isEmpty);
       expect(draft.selectedCandidateId, isNull);
     });
 
-    test('ακριβής ταύτιση εμφανίζεται ακόμη κάτω από κατώφλι confidence', () async {
-      await seedNoiseUsers();
-      final db = await DatabaseHelper.instance.database;
-      final userId = await db.insert('users', {
-        'first_name': 'Γιώργος',
-        'last_name': 'Παπαδόπουλος',
-        'is_deleted': 0,
-      });
+    test(
+      'ακριβής ταύτιση εμφανίζεται ακόμη κάτω από κατώφλι confidence',
+      () async {
+        await seedNoiseUsers();
+        final db = await DatabaseHelper.instance.database;
+        final userId = await db.insert('users', {
+          'first_name': 'Γιώργος',
+          'last_name': 'Παπαδόπουλος',
+          'is_deleted': 0,
+        });
 
-      const source = 'Παπαδόπουλος Γιώργος';
-      final lowScoreMigration = LampMigrationService(
-        resolutionService: _LowConfidenceResolutionService(),
-      );
+        const source = 'Παπαδόπουλος Γιώργος';
+        final lowScoreMigration = LampMigrationService(
+          resolutionService: _LowConfidenceResolutionService(),
+        );
 
-      final draft = await lowScoreMigration.buildDraft(
-        target: LampTransferTarget.owner,
-        sourceRow: {
-          'owner_original_text': source,
-        },
-      );
+        final draft = await lowScoreMigration.buildDraft(
+          target: LampTransferTarget.owner,
+          sourceRow: {'owner_original_text': source},
+        );
 
-      expect(
-        draft.candidates.any((c) => c.id == userId && c.isExact),
-        isTrue,
-        reason: 'Ο ακριβής υποψήφιος πρέπει να εμφανίζεται παρά το χαμηλό fuzzy σκορ',
-      );
-      expect(
-        draft.candidates.every(
-          (c) =>
-              c.isExact ||
-              c.confidence >= LampMigrationService.kSuggestionConfidenceThreshold,
-        ),
-        isTrue,
-      );
-    });
+        expect(
+          draft.candidates.any((c) => c.id == userId && c.isExact),
+          isTrue,
+          reason:
+              'Ο ακριβής υποψήφιος πρέπει να εμφανίζεται παρά το χαμηλό fuzzy σκορ',
+        );
+        expect(
+          draft.candidates.every(
+            (c) =>
+                c.isExact ||
+                c.confidence >=
+                    LampMigrationService.kSuggestionConfidenceThreshold,
+          ),
+          isTrue,
+        );
+      },
+    );
   });
 }

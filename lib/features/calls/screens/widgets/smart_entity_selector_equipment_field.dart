@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -312,10 +312,12 @@ class _SmartEntityEquipmentFieldState extends State<SmartEntityEquipmentField> {
                   ),
                 ),
                 ConflictBadge(
-                  severity: widget.header
-                      .conflictSeverityFor(SelectorField.equipment),
-                  message: widget.header
-                      .conflictTooltipFor(SelectorField.equipment),
+                  severity: widget.header.conflictSeverityFor(
+                    SelectorField.equipment,
+                  ),
+                  message: widget.header.conflictTooltipFor(
+                    SelectorField.equipment,
+                  ),
                 ),
               ],
             ),
@@ -351,8 +353,9 @@ class _SmartEntityEquipmentFieldState extends State<SmartEntityEquipmentField> {
                   focusNode: focusNode,
                   textEditingController: controller,
                   optionsBuilder: (value) {
-                    final effectiveText =
-                        _isKeyboardPreview ? _typedQuery : value.text;
+                    final effectiveText = _isKeyboardPreview
+                        ? _typedQuery
+                        : value.text;
                     return _querySuggestions(
                       header,
                       lookupService,
@@ -418,207 +421,227 @@ class _SmartEntityEquipmentFieldState extends State<SmartEntityEquipmentField> {
                     widget.onContentChecked();
                     nextFocusNode.requestFocus();
                   },
-                  fieldViewBuilder: (
-                    context,
-                    textController,
-                    focusNodeParam,
-                    onFieldSubmitted,
-                  ) {
-                    return Semantics(
-                      label: 'Κωδικός εξοπλισμού',
-                      child: Focus(
-                        onKeyEvent: (node, event) {
-                          if (event is! KeyDownEvent) {
-                            return KeyEventResult.ignored;
-                          }
-                          final equipmentOverlayVisible =
-                              _showInitialList &&
-                              (controller.text.trim().isEmpty ||
-                                  _isKeyboardPreview) &&
-                              _lastInitialSuggestions.isNotEmpty &&
-                              (_typedQuery.trim().isEmpty ||
-                                  _isKeyboardPreview);
-                          if (equipmentOverlayVisible) {
-                            final overlayEquipments = _lastInitialSuggestions
-                                .map((suggestion) => suggestion.equipment)
-                                .toList();
-                            if (event.logicalKey ==
-                                LogicalKeyboardKey.arrowDown) {
-                              if (overlayEquipments.isEmpty) {
+                  fieldViewBuilder:
+                      (
+                        context,
+                        textController,
+                        focusNodeParam,
+                        onFieldSubmitted,
+                      ) {
+                        return Semantics(
+                          label: 'Κωδικός εξοπλισμού',
+                          child: Focus(
+                            onKeyEvent: (node, event) {
+                              if (event is! KeyDownEvent) {
                                 return KeyEventResult.ignored;
                               }
-                              setState(() {
+                              final equipmentOverlayVisible =
+                                  _showInitialList &&
+                                  (controller.text.trim().isEmpty ||
+                                      _isKeyboardPreview) &&
+                                  _lastInitialSuggestions.isNotEmpty &&
+                                  (_typedQuery.trim().isEmpty ||
+                                      _isKeyboardPreview);
+                              if (equipmentOverlayVisible) {
+                                final overlayEquipments =
+                                    _lastInitialSuggestions
+                                        .map(
+                                          (suggestion) => suggestion.equipment,
+                                        )
+                                        .toList();
+                                if (event.logicalKey ==
+                                    LogicalKeyboardKey.arrowDown) {
+                                  if (overlayEquipments.isEmpty) {
+                                    return KeyEventResult.ignored;
+                                  }
+                                  setState(() {
+                                    _keyboardOptionIndex =
+                                        (_keyboardOptionIndex + 1).clamp(
+                                          0,
+                                          overlayEquipments.length - 1,
+                                        );
+                                  });
+                                  _isKeyboardPreview = true;
+                                  _setControllerText(
+                                    textController,
+                                    _equipmentFieldText(
+                                      overlayEquipments[_keyboardOptionIndex],
+                                    ),
+                                  );
+                                  return KeyEventResult.handled;
+                                }
+                                if (event.logicalKey ==
+                                    LogicalKeyboardKey.arrowUp) {
+                                  if (overlayEquipments.isEmpty) {
+                                    return KeyEventResult.ignored;
+                                  }
+                                  setState(() {
+                                    _keyboardOptionIndex =
+                                        _keyboardOptionIndex <= 0
+                                        ? 0
+                                        : _keyboardOptionIndex - 1;
+                                  });
+                                  _isKeyboardPreview = true;
+                                  _setControllerText(
+                                    textController,
+                                    _equipmentFieldText(
+                                      overlayEquipments[_keyboardOptionIndex],
+                                    ),
+                                  );
+                                  return KeyEventResult.handled;
+                                }
+                                if (event.logicalKey ==
+                                        LogicalKeyboardKey.enter &&
+                                    overlayEquipments.isNotEmpty &&
+                                    _keyboardOptionIndex >= 0 &&
+                                    _keyboardOptionIndex <
+                                        overlayEquipments.length) {
+                                  _selectEquipment(
+                                    overlayEquipments[_keyboardOptionIndex],
+                                    fromCustomList: true,
+                                  );
+                                  widget.onContentChecked();
+                                  nextFocusNode.requestFocus();
+                                  return KeyEventResult.handled;
+                                }
+                                return KeyEventResult.ignored;
+                              }
+                              final options = _equipmentKeyboardOptions(
+                                header,
+                                lookupService,
+                              );
+                              if (event.logicalKey ==
+                                  LogicalKeyboardKey.arrowDown) {
+                                if (options.isEmpty) {
+                                  return KeyEventResult.ignored;
+                                }
                                 _keyboardOptionIndex =
                                     (_keyboardOptionIndex + 1).clamp(
-                                  0,
-                                  overlayEquipments.length - 1,
+                                      0,
+                                      options.length - 1,
+                                    );
+                                _isKeyboardPreview = true;
+                                _setControllerText(
+                                  textController,
+                                  _equipmentFieldText(
+                                    options[_keyboardOptionIndex],
+                                  ),
                                 );
-                              });
-                              _isKeyboardPreview = true;
-                              _setControllerText(
-                                textController,
-                                _equipmentFieldText(
-                                  overlayEquipments[_keyboardOptionIndex],
-                                ),
-                              );
-                              return KeyEventResult.handled;
-                            }
-                            if (event.logicalKey ==
-                                LogicalKeyboardKey.arrowUp) {
-                              if (overlayEquipments.isEmpty) {
-                                return KeyEventResult.ignored;
+                                return KeyEventResult.handled;
                               }
-                              setState(() {
-                                _keyboardOptionIndex =
-                                    _keyboardOptionIndex <= 0
+                              if (event.logicalKey ==
+                                  LogicalKeyboardKey.arrowUp) {
+                                if (options.isEmpty) {
+                                  return KeyEventResult.ignored;
+                                }
+                                _keyboardOptionIndex = _keyboardOptionIndex <= 0
                                     ? 0
                                     : _keyboardOptionIndex - 1;
-                              });
-                              _isKeyboardPreview = true;
-                              _setControllerText(
-                                textController,
-                                _equipmentFieldText(
-                                  overlayEquipments[_keyboardOptionIndex],
+                                _isKeyboardPreview = true;
+                                _setControllerText(
+                                  textController,
+                                  _equipmentFieldText(
+                                    options[_keyboardOptionIndex],
+                                  ),
+                                );
+                                return KeyEventResult.handled;
+                              }
+                              if (event.logicalKey ==
+                                      LogicalKeyboardKey.enter &&
+                                  options.isNotEmpty &&
+                                  _keyboardOptionIndex >= 0 &&
+                                  _keyboardOptionIndex < options.length) {
+                                _selectEquipment(options[_keyboardOptionIndex]);
+                                widget.onContentChecked();
+                                nextFocusNode.requestFocus();
+                                return KeyEventResult.handled;
+                              }
+                              return KeyEventResult.ignored;
+                            },
+                            child: TextField(
+                              controller: textController,
+                              focusNode: focusNodeParam,
+                              spellCheckConfiguration:
+                                  platformSpellCheckConfiguration,
+                              inputFormatters: [
+                                CommaToDotDecimalSeparatorFormatter(),
+                              ],
+                              decoration: InputDecoration(
+                                hintText: hintText,
+                                hintStyle: theme.textTheme.bodyMedium?.copyWith(
+                                  color: theme.colorScheme.onSurfaceVariant
+                                      .withValues(alpha: 0.7),
                                 ),
-                              );
-                              return KeyEventResult.handled;
-                            }
-                            if (event.logicalKey == LogicalKeyboardKey.enter &&
-                                overlayEquipments.isNotEmpty &&
-                                _keyboardOptionIndex >= 0 &&
-                                _keyboardOptionIndex <
-                                    overlayEquipments.length) {
-                              _selectEquipment(
-                                overlayEquipments[_keyboardOptionIndex],
-                                fromCustomList: true,
-                              );
-                              widget.onContentChecked();
-                              nextFocusNode.requestFocus();
-                              return KeyEventResult.handled;
-                            }
-                            return KeyEventResult.ignored;
-                          }
-                          final options = _equipmentKeyboardOptions(
-                            header,
-                            lookupService,
-                          );
-                          if (event.logicalKey ==
-                              LogicalKeyboardKey.arrowDown) {
-                            if (options.isEmpty) return KeyEventResult.ignored;
-                            _keyboardOptionIndex = (_keyboardOptionIndex + 1)
-                                .clamp(0, options.length - 1);
-                            _isKeyboardPreview = true;
-                            _setControllerText(
-                              textController,
-                              _equipmentFieldText(
-                                options[_keyboardOptionIndex],
+                                border: const OutlineInputBorder(),
+                                isDense: true,
+                                suffixIcon:
+                                    showInlineFieldClearButton(
+                                      textController.text,
+                                    )
+                                    ? Semantics(
+                                        label: 'Καθαρισμός Εξοπλισμού',
+                                        child: IconButton(
+                                          icon: const Icon(
+                                            Icons.close,
+                                            size: 20,
+                                          ),
+                                          onPressed: () {
+                                            textController.clear();
+                                            _typedQuery = '';
+                                            _keyboardOptionIndex = -1;
+                                            notifier.clearEquipment();
+                                          },
+                                          tooltip: 'Καθαρισμός Εξοπλισμού',
+                                        ),
+                                      )
+                                    : null,
                               ),
-                            );
-                            return KeyEventResult.handled;
-                          }
-                          if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
-                            if (options.isEmpty) return KeyEventResult.ignored;
-                            _keyboardOptionIndex = _keyboardOptionIndex <= 0
-                                ? 0
-                                : _keyboardOptionIndex - 1;
-                            _isKeyboardPreview = true;
-                            _setControllerText(
-                              textController,
-                              _equipmentFieldText(
-                                options[_keyboardOptionIndex],
-                              ),
-                            );
-                            return KeyEventResult.handled;
-                          }
-                          if (event.logicalKey == LogicalKeyboardKey.enter &&
-                              options.isNotEmpty &&
-                              _keyboardOptionIndex >= 0 &&
-                              _keyboardOptionIndex < options.length) {
-                            _selectEquipment(options[_keyboardOptionIndex]);
-                            widget.onContentChecked();
-                            nextFocusNode.requestFocus();
-                            return KeyEventResult.handled;
-                          }
-                          return KeyEventResult.ignored;
-                        },
-                        child: TextField(
-                          controller: textController,
-                          focusNode: focusNodeParam,
-                          spellCheckConfiguration:
-                              platformSpellCheckConfiguration,
-                          inputFormatters: [
-                            CommaToDotDecimalSeparatorFormatter(),
-                          ],
-                          decoration: InputDecoration(
-                            hintText: hintText,
-                            hintStyle: theme.textTheme.bodyMedium?.copyWith(
-                              color: theme.colorScheme.onSurfaceVariant
-                                  .withValues(alpha: 0.7),
+                              onChanged: (value) {
+                                if (_isKeyboardPreview) {
+                                  _isKeyboardPreview = false;
+                                  return;
+                                }
+                                _typedQuery = value;
+                                _keyboardOptionIndex = -1;
+                                _lastAutoScrollIndex = -1;
+                                if (value.trim().isEmpty) {
+                                  notifier.clearEquipment();
+                                  return;
+                                }
+                                if (_isSelectingEquipment) {
+                                  notifier.checkContent(equipmentText: value);
+                                  return;
+                                }
+                                final selected = header.selectedEquipment;
+                                if (selected != null &&
+                                    value != _equipmentFieldText(selected)) {
+                                  notifier.clearEquipment();
+                                }
+                                notifier.checkContent(equipmentText: value);
+                              },
+                              onSubmitted: (_) {
+                                final options = _equipmentKeyboardOptions(
+                                  header,
+                                  lookupService,
+                                );
+                                if (options.isNotEmpty &&
+                                    _keyboardOptionIndex >= 0 &&
+                                    _keyboardOptionIndex < options.length) {
+                                  _selectEquipment(
+                                    options[_keyboardOptionIndex],
+                                  );
+                                  widget.onContentChecked();
+                                  nextFocusNode.requestFocus();
+                                  return;
+                                }
+                                widget.onContentChecked();
+                                nextFocusNode.requestFocus();
+                                _performLookup();
+                              },
                             ),
-                            border: const OutlineInputBorder(),
-                            isDense: true,
-                            suffixIcon: showInlineFieldClearButton(
-                              textController.text,
-                            )
-                                ? Semantics(
-                                    label: 'Καθαρισμός Εξοπλισμού',
-                                    child: IconButton(
-                                      icon: const Icon(Icons.close, size: 20),
-                                      onPressed: () {
-                                        textController.clear();
-                                        _typedQuery = '';
-                                        _keyboardOptionIndex = -1;
-                                        notifier.clearEquipment();
-                                      },
-                                      tooltip: 'Καθαρισμός Εξοπλισμού',
-                                    ),
-                                  )
-                                : null,
                           ),
-                          onChanged: (value) {
-                            if (_isKeyboardPreview) {
-                              _isKeyboardPreview = false;
-                              return;
-                            }
-                            _typedQuery = value;
-                            _keyboardOptionIndex = -1;
-                            _lastAutoScrollIndex = -1;
-                            if (value.trim().isEmpty) {
-                              notifier.clearEquipment();
-                              return;
-                            }
-                            if (_isSelectingEquipment) {
-                              notifier.checkContent(equipmentText: value);
-                              return;
-                            }
-                            final selected = header.selectedEquipment;
-                            if (selected != null &&
-                                value != _equipmentFieldText(selected)) {
-                              notifier.clearEquipment();
-                            }
-                            notifier.checkContent(equipmentText: value);
-                          },
-                          onSubmitted: (_) {
-                            final options = _equipmentKeyboardOptions(
-                              header,
-                              lookupService,
-                            );
-                            if (options.isNotEmpty &&
-                                _keyboardOptionIndex >= 0 &&
-                                _keyboardOptionIndex < options.length) {
-                              _selectEquipment(options[_keyboardOptionIndex]);
-                              widget.onContentChecked();
-                              nextFocusNode.requestFocus();
-                              return;
-                            }
-                            widget.onContentChecked();
-                            nextFocusNode.requestFocus();
-                            _performLookup();
-                          },
-                        ),
-                      ),
-                    );
-                  },
+                        );
+                      },
                 ),
               ),
             ),

@@ -22,8 +22,8 @@ final auditServiceAsyncProvider = FutureProvider<AuditService>((ref) async {
 
 final auditFilterProvider =
     NotifierProvider<AuditFilterNotifier, AuditFilterModel>(
-  AuditFilterNotifier.new,
-);
+      AuditFilterNotifier.new,
+    );
 
 class AuditFilterNotifier extends Notifier<AuditFilterModel> {
   @override
@@ -34,8 +34,9 @@ class AuditFilterNotifier extends Notifier<AuditFilterModel> {
   }
 }
 
-final auditPageIndexProvider =
-    NotifierProvider<AuditPageIndexNotifier, int>(AuditPageIndexNotifier.new);
+final auditPageIndexProvider = NotifierProvider<AuditPageIndexNotifier, int>(
+  AuditPageIndexNotifier.new,
+);
 
 class AuditPageIndexNotifier extends Notifier<int> {
   @override
@@ -48,8 +49,9 @@ class AuditPageIndexNotifier extends Notifier<int> {
 
 const int kAuditPageSize = 50;
 
-final auditListProvider =
-    FutureProvider.autoDispose<AuditPageResult>((ref) async {
+final auditListProvider = FutureProvider.autoDispose<AuditPageResult>((
+  ref,
+) async {
   final filter = ref.watch(auditFilterProvider);
   final page = ref.watch(auditPageIndexProvider);
   final svc = await ref.watch(auditServiceAsyncProvider.future);
@@ -63,8 +65,7 @@ final auditListProvider =
     dateFromInclusiveIso: filter.dateFromInclusiveIso,
     dateToExclusiveIso: filter.dateToExclusiveIso,
   );
-  final items =
-      result.rows.map((m) => AuditLogModel.fromMap(m)).toList();
+  final items = result.rows.map((m) => AuditLogModel.fromMap(m)).toList();
   return AuditPageResult(items: items, totalCount: result.total);
 });
 
@@ -73,7 +74,9 @@ final auditPageReferenceLabelsProvider =
     FutureProvider.autoDispose<AuditReferenceLabels>((ref) async {
       final page = await ref.watch(auditListProvider.future);
       final db = await DatabaseHelper.instance.database;
-      return AuditReferenceLabelResolver.fromDatabase(db).resolveForRows(page.items);
+      return AuditReferenceLabelResolver.fromDatabase(
+        db,
+      ).resolveForRows(page.items);
     });
 
 /// Διαθέσιμες ενέργειες για dropdown φίλτρου, βάσει τρέχοντος τύπου οντότητας.
@@ -97,8 +100,8 @@ final auditActionOptionsProvider = FutureProvider.autoDispose<List<String>>((
 
 final selectedAuditEntryIdProvider =
     NotifierProvider<SelectedAuditEntryNotifier, int?>(
-  SelectedAuditEntryNotifier.new,
-);
+      SelectedAuditEntryNotifier.new,
+    );
 
 class SelectedAuditEntryNotifier extends Notifier<int?> {
   @override
@@ -119,24 +122,24 @@ class AuditSidePanelOpenNotifier extends Notifier<bool> {
 
 final auditSidePanelOpenProvider =
     NotifierProvider<AuditSidePanelOpenNotifier, bool>(
-  AuditSidePanelOpenNotifier.new,
-);
+      AuditSidePanelOpenNotifier.new,
+    );
 
 /// Προεπισκόπηση οντότητας για επιλεγμένη γραμμή (lazy + cache ανά id).
-final auditEntityPreviewProvider = FutureProvider.autoDispose.family<
-    AuditEntityPreview?,
-    ({int auditId, String? entityType, int? entityId})>(
-  (ref, key) async {
-    if (key.entityType == null ||
-        key.entityType!.trim().isEmpty ||
-        key.entityId == null) {
-      return null;
-    }
-    final db = await DatabaseHelper.instance.database;
-    final resolver = AuditEntityPreviewResolver(db);
-    return resolver.resolve(
-      entityType: key.entityType!,
-      entityId: key.entityId!,
-    );
-  },
-);
+final auditEntityPreviewProvider = FutureProvider.autoDispose
+    .family<
+      AuditEntityPreview?,
+      ({int auditId, String? entityType, int? entityId})
+    >((ref, key) async {
+      if (key.entityType == null ||
+          key.entityType!.trim().isEmpty ||
+          key.entityId == null) {
+        return null;
+      }
+      final db = await DatabaseHelper.instance.database;
+      final resolver = AuditEntityPreviewResolver(db);
+      return resolver.resolve(
+        entityType: key.entityType!,
+        entityId: key.entityId!,
+      );
+    });

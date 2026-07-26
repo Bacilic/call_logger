@@ -32,21 +32,18 @@ LampIssueResolutionOption _option(String operation) {
 
 void main() {
   group('decisionIsDestructive', () {
-    test(
-      'true όταν το option.metadata έχει delete_duplicate_asset_others',
-      () {
-        final decision = LampIssueResolutionDecision(
-          proposal: _minimalProposal(
-            metadata: const <String, Object?>{
-              'operation': 'delete_duplicate_serial_others',
-            },
-          ),
-          option: _option('delete_duplicate_asset_others'),
-        );
+    test('true όταν το option.metadata έχει delete_duplicate_asset_others', () {
+      final decision = LampIssueResolutionDecision(
+        proposal: _minimalProposal(
+          metadata: const <String, Object?>{
+            'operation': 'delete_duplicate_serial_others',
+          },
+        ),
+        option: _option('delete_duplicate_asset_others'),
+      );
 
-        expect(decisionIsDestructive(decision), isTrue);
-      },
-    );
+      expect(decisionIsDestructive(decision), isTrue);
+    });
 
     test(
       'true όταν μόνο το proposal.metadata έχει delete_duplicate_serial_others',
@@ -63,21 +60,18 @@ void main() {
       },
     );
 
-    test(
-      'false όταν το option υπερισχύει με μη διαγραφικό operation',
-      () {
-        final decision = LampIssueResolutionDecision(
-          proposal: _minimalProposal(
-            metadata: const <String, Object?>{
-              'operation': 'delete_duplicate_asset_others',
-            },
-          ),
-          option: _option('keep_primary'),
-        );
+    test('false όταν το option υπερισχύει με μη διαγραφικό operation', () {
+      final decision = LampIssueResolutionDecision(
+        proposal: _minimalProposal(
+          metadata: const <String, Object?>{
+            'operation': 'delete_duplicate_asset_others',
+          },
+        ),
+        option: _option('keep_primary'),
+      );
 
-        expect(decisionIsDestructive(decision), isFalse);
-      },
-    );
+      expect(decisionIsDestructive(decision), isFalse);
+    });
 
     test('false όταν λείπει operation', () {
       final decision = LampIssueResolutionDecision(

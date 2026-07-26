@@ -43,9 +43,7 @@ class AssociationTwoStepResult {
 class AssociationTwoStepRunner {
   AssociationTwoStepRunner._();
 
-  static Future<void> resetCatalog({
-    String? preseedDepartmentName,
-  }) async {
+  static Future<void> resetCatalog({String? preseedDepartmentName}) async {
     final db = await DatabaseHelper.instance.database;
     await migrateDatabaseToV11(db);
     await db.execute('''
@@ -78,7 +76,8 @@ class AssociationTwoStepRunner {
       } catch (_) {}
     }
 
-    if (preseedDepartmentName != null && preseedDepartmentName.trim().isNotEmpty) {
+    if (preseedDepartmentName != null &&
+        preseedDepartmentName.trim().isNotEmpty) {
       await db.insert('departments', {
         'name': preseedDepartmentName,
         'name_key': SearchTextNormalizer.normalizeForSearch(
@@ -159,8 +158,8 @@ class AssociationTwoStepRunner {
     }
 
     if (scenario.greenDepartment) {
-      final dept = scenario.preseedDepartmentName ??
-          scenario.departmentFor(suffix);
+      final dept =
+          scenario.preseedDepartmentName ?? scenario.departmentFor(suffix);
       notifier.updateDepartmentText(dept);
       notifier.checkContent(departmentText: dept);
     }
@@ -185,8 +184,8 @@ class AssociationTwoStepRunner {
         notifier.updatePhone(phone);
         notifier.checkContent(phoneText: phone);
       case AssociationOrangeFill.department:
-        final dept = scenario.preseedDepartmentName ??
-            scenario.departmentFor(suffix);
+        final dept =
+            scenario.preseedDepartmentName ?? scenario.departmentFor(suffix);
         notifier.updateDepartmentText(dept);
         notifier.checkContent(departmentText: dept);
       case AssociationOrangeFill.equipment:
@@ -283,7 +282,9 @@ class AssociationTwoStepRunner {
         );
       }
       if (needsAssociationAfterOrange) {
-        failures.add('G7: needsAssociation παραμένει true μετά πλήρες πράσινο.');
+        failures.add(
+          'G7: needsAssociation παραμένει true μετά πλήρες πράσινο.',
+        );
       }
     }
 
@@ -302,11 +303,7 @@ class AssociationTwoStepRunner {
     final departmentName =
         scenario.preseedDepartmentName ?? scenario.departmentFor(suffix);
 
-    _applyGreenFields(
-      notifier: notifier,
-      scenario: scenario,
-      suffix: suffix,
-    );
+    _applyGreenFields(notifier: notifier, scenario: scenario, suffix: suffix);
 
     final stateBeforeGreen = container.read(callSmartEntityProvider);
     if (!stateBeforeGreen.needsNewCallerCreation) {
@@ -320,7 +317,10 @@ class AssociationTwoStepRunner {
         orangeMessage: null,
         userCountAfterGreen: await _countActiveUsers(db),
         userCountAfterOrange: await _countActiveUsers(db),
-        equipmentCountAfterOrange: await _countEquipmentByCode(db, equipmentCode),
+        equipmentCountAfterOrange: await _countEquipmentByCode(
+          db,
+          equipmentCode,
+        ),
         needsAssociationAfterOrange: stateBeforeGreen.needsAssociation(lookup),
         selectedCallerIdAfterOrange: stateBeforeGreen.selectedCaller?.id,
         userDepartmentNameAfterOrange: null,
@@ -334,11 +334,7 @@ class AssociationTwoStepRunner {
 
     String? orangeMessage;
     if (scenario.hasOrangeStep) {
-      _applyOrangeFill(
-        notifier: notifier,
-        scenario: scenario,
-        suffix: suffix,
-      );
+      _applyOrangeFill(notifier: notifier, scenario: scenario, suffix: suffix);
 
       final stateBeforeOrange = container.read(callSmartEntityProvider);
       if (!stateBeforeOrange.needsAssociation(lookup)) {
@@ -353,8 +349,9 @@ class AssociationTwoStepRunner {
     }
 
     final stateAfterOrange = container.read(callSmartEntityProvider);
-    final lookupAfter = (await container.read(lookupServiceProvider.future))
-        .service;
+    final lookupAfter = (await container.read(
+      lookupServiceProvider.future,
+    )).service;
     final userCountAfterOrange = await _countActiveUsers(db);
     final equipmentCount = await _countEquipmentByCode(db, equipmentCode);
     final callerId = stateAfterOrange.selectedCaller?.id;
@@ -370,8 +367,9 @@ class AssociationTwoStepRunner {
       userCountAfterGreen: userCountAfterGreen,
       userCountAfterOrange: userCountAfterOrange,
       equipmentCountAfterOrange: equipmentCount,
-      needsAssociationAfterOrange:
-          stateAfterOrange.needsAssociation(lookupAfter),
+      needsAssociationAfterOrange: stateAfterOrange.needsAssociation(
+        lookupAfter,
+      ),
       selectedCallerIdAfterOrange: callerId,
       userDepartmentNameAfterOrange: deptName,
       equipmentCode: equipmentCode,
@@ -387,8 +385,9 @@ class AssociationTwoStepRunner {
       userCountAfterGreen: userCountAfterGreen,
       userCountAfterOrange: userCountAfterOrange,
       equipmentCountAfterOrange: equipmentCount,
-      needsAssociationAfterOrange:
-          stateAfterOrange.needsAssociation(lookupAfter),
+      needsAssociationAfterOrange: stateAfterOrange.needsAssociation(
+        lookupAfter,
+      ),
       selectedCallerIdAfterOrange: callerId,
       userDepartmentNameAfterOrange: deptName,
     );

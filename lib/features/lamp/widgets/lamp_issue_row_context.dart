@@ -1,4 +1,4 @@
-﻿import '../../../core/database/old_database/lamp_data_issue_type_labels.dart';
+import '../../../core/database/old_database/lamp_data_issue_type_labels.dart';
 import '../../../core/database/old_database/lamp_issue_resolution_models.dart';
 
 /// Επεξήγηση λεκτικής βαθμίδας βεβαιότητας στους οδηγούς επίλυσης.
@@ -92,8 +92,8 @@ bool _isClearOrDisconnectOption(LampIssueResolutionOption option) {
   if (option.action == LampIssueResolutionAction.createNew) return false;
   if (_isSkipSentinel(option)) return false;
 
-  final operation =
-      (option.metadata['operation']?.toString() ?? '').toLowerCase();
+  final operation = (option.metadata['operation']?.toString() ?? '')
+      .toLowerCase();
   if (operation.contains('null') || operation.contains('clear')) {
     return true;
   }
@@ -110,9 +110,7 @@ String _equipmentCodePrefix(LampIssueResolutionProposal proposal) {
   final description = proposal.metadata['rowContextDescription']
       ?.toString()
       .trim();
-  if (description != null &&
-      description.isNotEmpty &&
-      description != 'null') {
+  if (description != null && description.isNotEmpty && description != 'null') {
     return 'Κωδικός $row ($description)';
   }
   return 'Κωδικός $row';

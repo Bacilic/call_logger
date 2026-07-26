@@ -2,10 +2,7 @@ part of 'tasks_screen.dart';
 
 enum _ClosedEditMode { recreate, reopen, snooze }
 
-Future<void> _createTasksForOrphans(
-  BuildContext context,
-  WidgetRef ref,
-) async {
+Future<void> _createTasksForOrphans(BuildContext context, WidgetRef ref) async {
   final service = ref.read(taskServiceProvider);
   final created = await service.createTasksForOrphanCalls();
   if (!context.mounted) return;
@@ -24,15 +21,12 @@ Future<void> _createTasksForOrphans(
 }
 
 void _showTaskSaveError(BuildContext context, TaskSaveException e) {
-  ScaffoldMessenger.of(context).showSnackBar(
-    SnackBar(content: Text(e.message)),
-  );
+  ScaffoldMessenger.of(
+    context,
+  ).showSnackBar(SnackBar(content: Text(e.message)));
 }
 
-Future<void> _openNewTaskForm(
-  BuildContext context,
-  WidgetRef ref,
-) async {
+Future<void> _openNewTaskForm(BuildContext context, WidgetRef ref) async {
   final result = await showTaskFormDialog(context, task: null);
   if (!context.mounted || result == null) return;
   try {
@@ -59,21 +53,14 @@ Future<void> _openNewTaskForm(
   }
 }
 
-Future<void> _openTaskSettings(
-  BuildContext context,
-  WidgetRef ref,
-) async {
+Future<void> _openTaskSettings(BuildContext context, WidgetRef ref) async {
   await showDialog<void>(
     context: context,
     builder: (context) => const TaskSettingsDialog(),
   );
 }
 
-Future<void> _onEdit(
-  BuildContext context,
-  WidgetRef ref,
-  Task task,
-) async {
+Future<void> _onEdit(BuildContext context, WidgetRef ref, Task task) async {
   _ClosedEditMode? closedMode;
   if (TaskStatusX.fromString(task.status) == TaskStatus.closed) {
     closedMode = await _pickClosedEditMode(context, task);
@@ -200,8 +187,9 @@ String _buildClosedInfoText(Task task) {
     }
   }
   final snoozeEntries = task.snoozeEntries;
-  final lastSnoozeAt =
-      snoozeEntries.isNotEmpty ? snoozeEntries.last.snoozedAt : null;
+  final lastSnoozeAt = snoozeEntries.isNotEmpty
+      ? snoozeEntries.last.snoozedAt
+      : null;
   String fromLastSnoozeText = '';
   if (lastSnoozeAt != null && completedAt != null) {
     fromLastSnoozeText = durationSince(lastSnoozeAt, completedAt);
@@ -211,11 +199,11 @@ String _buildClosedInfoText(Task task) {
       : 'Καθόλου λύση';
   final durationSegment = durationText.isNotEmpty
       ? fromLastSnoozeText.isNotEmpty
-          ? ' ($durationText, από τελευταία αναβολή: $fromLastSnoozeText)'
-          : ' ($durationText)'
+            ? ' ($durationText, από τελευταία αναβολή: $fromLastSnoozeText)'
+            : ' ($durationText)'
       : fromLastSnoozeText.isNotEmpty
-          ? ' (από τελευταία αναβολή: $fromLastSnoozeText)'
-          : '';
+      ? ' (από τελευταία αναβολή: $fromLastSnoozeText)'
+      : '';
   return 'Η εκκρεμότητα έχει ολοκληρωθεί στις $completedText$durationSegment.\n'
       'Λύση: $solution';
 }
@@ -248,9 +236,7 @@ Future<_ClosedEditMode?> _pickClosedEditMode(
               const SizedBox(height: 8),
               DropdownButtonFormField<_ClosedEditMode>(
                 initialValue: selected,
-                decoration: const InputDecoration(
-                  border: OutlineInputBorder(),
-                ),
+                decoration: const InputDecoration(border: OutlineInputBorder()),
                 items: const [
                   DropdownMenuItem(
                     value: _ClosedEditMode.recreate,
@@ -287,11 +273,7 @@ Future<_ClosedEditMode?> _pickClosedEditMode(
   );
 }
 
-Future<void> _onSnooze(
-  BuildContext context,
-  WidgetRef ref,
-  Task task,
-) async {
+Future<void> _onSnooze(BuildContext context, WidgetRef ref, Task task) async {
   final service = ref.read(taskServiceProvider);
   final config =
       ref
@@ -304,10 +286,8 @@ Future<void> _onSnooze(
 
   final result = await showDialog<({String choice, String? note})>(
     context: context,
-    builder: (ctx) => _SnoozeChoiceDialog(
-      config: config,
-      maxRangeText: maxRangeText,
-    ),
+    builder: (ctx) =>
+        _SnoozeChoiceDialog(config: config, maxRangeText: maxRangeText),
   );
 
   if (!context.mounted || result == null) return;
@@ -397,11 +377,7 @@ Future<void> _onSnooze(
   }
 }
 
-Future<void> _onDelete(
-  BuildContext context,
-  WidgetRef ref,
-  Task task,
-) async {
+Future<void> _onDelete(BuildContext context, WidgetRef ref, Task task) async {
   if (task.id == null) return;
   final created = task.createdAtDateTime;
   final createdLabel = created != null
@@ -462,11 +438,7 @@ Future<void> _onDelete(
   );
 }
 
-Future<void> _onComplete(
-  BuildContext context,
-  WidgetRef ref,
-  Task task,
-) async {
+Future<void> _onComplete(BuildContext context, WidgetRef ref, Task task) async {
   final solutionNotes = await showTaskCloseDialog(
     context,
     initialSolutionNotes: task.solutionNotes,

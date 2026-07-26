@@ -208,10 +208,7 @@ Future<void> migrateDatabaseToV35(Database db) async {
         userPerforming: user,
         entityType: AuditEntityTypes.maintenance,
         details: 'auditHistoryCleanupV35',
-        newValues: {
-          'rows_merged': mergedCount,
-          'rows_deleted': deletedCount,
-        },
+        newValues: {'rows_merged': mergedCount, 'rows_deleted': deletedCount},
       );
     }
   });
@@ -350,10 +347,7 @@ String _v35MergeDetailsIfMissing(String? base, String? extra) {
 }
 
 Future<int> _v35CleanupSideEntityLinkRows(DatabaseExecutor txn) async {
-  final rows = await txn.query(
-    'audit_log',
-    orderBy: 'timestamp ASC, id ASC',
-  );
+  final rows = await txn.query('audit_log', orderBy: 'timestamp ASC, id ASC');
   if (rows.isEmpty) return 0;
 
   final userRows = rows.where(_v35IsUserSideLinkRow).toList();
@@ -368,10 +362,12 @@ Future<int> _v35CleanupSideEntityLinkRows(DatabaseExecutor txn) async {
         continue;
       }
       if (sideRow['entity_type'] == AuditEntityTypes.phone) {
-        final sideOld =
-            _v35DecodeJsonMap(sideRow['old_values_json'] as String?);
-        final sideNew =
-            _v35DecodeJsonMap(sideRow['new_values_json'] as String?);
+        final sideOld = _v35DecodeJsonMap(
+          sideRow['old_values_json'] as String?,
+        );
+        final sideNew = _v35DecodeJsonMap(
+          sideRow['new_values_json'] as String?,
+        );
         final linkedUserId =
             sideNew?['linked_user_id'] ?? sideOld?['linked_user_id'];
         final userEntityId = userRow['entity_id'];
@@ -419,11 +415,13 @@ bool _v35IsRemoteParamsRemoval(
   if (!newMap.containsKey('remote_params')) return false;
   final oldVal = oldMap['remote_params'];
   final newVal = newMap['remote_params'];
-  final oldEmpty = oldVal == null ||
+  final oldEmpty =
+      oldVal == null ||
       '$oldVal'.trim().isEmpty ||
       '$oldVal' == '{}' ||
       '$oldVal' == '[]';
-  final newEmpty = newVal == null ||
+  final newEmpty =
+      newVal == null ||
       '$newVal'.trim().isEmpty ||
       '$newVal' == '{}' ||
       '$newVal' == '[]';
@@ -439,11 +437,13 @@ bool _v35IsRemoteParamsAddition(
   if (!newMap.containsKey('remote_params')) return false;
   final oldVal = oldMap['remote_params'];
   final newVal = newMap['remote_params'];
-  final oldEmpty = oldVal == null ||
+  final oldEmpty =
+      oldVal == null ||
       '$oldVal'.trim().isEmpty ||
       '$oldVal' == '{}' ||
       '$oldVal' == '[]';
-  final newEmpty = newVal == null ||
+  final newEmpty =
+      newVal == null ||
       '$newVal'.trim().isEmpty ||
       '$newVal' == '{}' ||
       '$newVal' == '[]';
@@ -499,8 +499,9 @@ Future<int> _v35MergeEquipmentRemoteParamsPairs(DatabaseExecutor txn) async {
         }
         if (removeRow == null || addRow == null) continue;
 
-        final removeOld =
-            _v35DecodeJsonMap(removeRow['old_values_json'] as String?);
+        final removeOld = _v35DecodeJsonMap(
+          removeRow['old_values_json'] as String?,
+        );
         final addNew = _v35DecodeJsonMap(addRow['new_values_json'] as String?);
         final mergedOld = <String, dynamic>{
           if (removeOld != null) 'remote_params': removeOld['remote_params'],
@@ -529,11 +530,7 @@ Future<int> _v35MergeEquipmentRemoteParamsPairs(DatabaseExecutor txn) async {
           where: 'id = ?',
           whereArgs: [keepId],
         );
-        await txn.delete(
-          'audit_log',
-          where: 'id = ?',
-          whereArgs: [deleteId],
-        );
+        await txn.delete('audit_log', where: 'id = ?', whereArgs: [deleteId]);
         group.remove(addRow);
         merged++;
         break;
@@ -707,10 +704,7 @@ Future<void> migrateDatabaseToV32(Database db) async {
     if (normalized == null) continue;
     batch.update(
       'audit_log',
-      {
-        'action': normalized.action,
-        'details': normalized.details,
-      },
+      {'action': normalized.action, 'details': normalized.details},
       where: 'id = ?',
       whereArgs: [id],
     );
@@ -885,9 +879,7 @@ Future<void> migrateEquipmentDepartmentLocationColumns(Database db) async {
   final info = await db.rawQuery('PRAGMA table_info(equipment)');
   final names = info.map((r) => r['name'] as String).toSet();
   if (!names.contains('department_id')) {
-    await db.execute(
-      'ALTER TABLE equipment ADD COLUMN department_id INTEGER',
-    );
+    await db.execute('ALTER TABLE equipment ADD COLUMN department_id INTEGER');
   }
   if (!names.contains('location')) {
     await db.execute('ALTER TABLE equipment ADD COLUMN location TEXT');

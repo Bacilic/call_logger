@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 
 /// Placeholder προτροπής ΤΝ (token → ετικέτα UI).
 typedef AiPromptPlaceholder = ({String token, String label});
@@ -18,7 +18,8 @@ const List<AiPromptPlaceholder> kAiPromptPlaceholders = [
 const String kAiJsonResponseBlueprint =
     '{"title":"...","description":"...","solution":"..."}';
 
-const String kDefaultAiPromptTemplate = '''Δημιούργησε τίτλο και πλήρη περιγραφή για ticket helpdesk στο Lansweeper.
+const String kDefaultAiPromptTemplate =
+    '''Δημιούργησε τίτλο και πλήρη περιγραφή για ticket helpdesk στο Lansweeper.
 
 Υπάλληλος: {Υπάλληλος}. Τμήμα: {Τμήμα}.
 {@Εξοπλισμός}Εξοπλισμός: {Εξοπλισμός}. {@/Εξοπλισμός}
@@ -91,13 +92,12 @@ abstract final class AiPromptTemplateSyntax {
   ];
 
   static Set<String> get knownPlaceholderTokens => {
-        for (final p in kAiPromptPlaceholders) p.token,
-      };
+    for (final p in kAiPromptPlaceholders) p.token,
+  };
 
   static Set<String> get knownPlaceholderNames => {
-        for (final p in kAiPromptPlaceholders)
-          placeholderNameFromToken(p.token),
-      };
+    for (final p in kAiPromptPlaceholders) placeholderNameFromToken(p.token),
+  };
 
   static String placeholderNameFromToken(String token) {
     if (token.length < 3 || !token.startsWith('{') || !token.endsWith('}')) {
@@ -175,14 +175,14 @@ abstract final class AiPromptTemplateSyntax {
     if (missing.length == _jsonResponseKeys.length) {
       return <String>[
         'Η προτροπή δεν περιλαμβάνει οδηγίες μορφής JSON απάντησης '
-        '($kAiJsonResponseBlueprint) — η ΤΝ δεν θα γνωρίζει σε ποια μορφή να απαντήσει.',
+            '($kAiJsonResponseBlueprint) — η ΤΝ δεν θα γνωρίζει σε ποια μορφή να απαντήσει.',
       ];
     }
     if (missing.isEmpty) return const <String>[];
     return <String>[
       for (final key in missing)
         'Λείπει το πεδίο `$key` από το αναμενόμενο JSON αποτέλεσμα — '
-        'η απάντηση της ΤΝ δεν θα περιέχει ${_jsonKeyLabel(key)}.',
+            'η απάντηση της ΤΝ δεν θα περιέχει ${_jsonKeyLabel(key)}.',
     ];
   }
 
@@ -203,17 +203,17 @@ abstract final class AiPromptTemplateSyntax {
     }
     return <String>[
       'Η προτροπή περιλαμβάνει περισσότερες από μία οδηγίες μορφής JSON '
-      '($kAiJsonResponseBlueprint) — η ΤΝ μπορεί να μπερδευτεί. '
-      'Κρατήστε μόνο μία υπόδειξη απάντησης σε JSON.',
+          '($kAiJsonResponseBlueprint) — η ΤΝ μπορεί να μπερδευτεί. '
+          'Κρατήστε μόνο μία υπόδειξη απάντησης σε JSON.',
     ];
   }
 
   static String _jsonKeyLabel(String key) => switch (key) {
-        'title' => 'τίτλο',
-        'description' => 'περιγραφή/πρόβλημα',
-        'solution' => 'λύση',
-        _ => key,
-      };
+    'title' => 'τίτλο',
+    'description' => 'περιγραφή/πρόβλημα',
+    'solution' => 'λύση',
+    _ => key,
+  };
 
   static AiPromptTemplateValidation validate(String template) {
     final errors = <String>[];
@@ -283,9 +283,7 @@ abstract final class AiPromptTemplateSyntax {
       if (!knownPlaceholderTokens.contains(token)) {
         final suggestion = _suggestPlaceholder(token);
         if (suggestion != null) {
-          errors.add(
-            'Άγνωστο placeholder: `$token` — εννοείτε `$suggestion`;',
-          );
+          errors.add('Άγνωστο placeholder: `$token` — εννοείτε `$suggestion`;');
         } else {
           errors.add('Άγνωστο placeholder: `$token`.');
         }
@@ -428,24 +426,23 @@ abstract final class AiPromptTemplateSyntax {
     for (final span in tokenize(template)) {
       final style = switch (span.kind) {
         AiPromptTokenKind.plain => baseStyle,
-        AiPromptTokenKind.knownPlaceholder =>
-          baseStyle.copyWith(color: placeholder, fontWeight: FontWeight.w600),
-        AiPromptTokenKind.blockOpen ||
-        AiPromptTokenKind.blockClose =>
+        AiPromptTokenKind.knownPlaceholder => baseStyle.copyWith(
+          color: placeholder,
+          fontWeight: FontWeight.w600,
+        ),
+        AiPromptTokenKind.blockOpen || AiPromptTokenKind.blockClose =>
           baseStyle.copyWith(color: block, fontWeight: FontWeight.w600),
-        AiPromptTokenKind.jsonResponseInstruction =>
-          baseStyle.copyWith(
-            color: const Color(0xFF7C3AED),
-            fontWeight: FontWeight.w500,
-          ),
+        AiPromptTokenKind.jsonResponseInstruction => baseStyle.copyWith(
+          color: const Color(0xFF7C3AED),
+          fontWeight: FontWeight.w500,
+        ),
         AiPromptTokenKind.unknownPlaceholder ||
-        AiPromptTokenKind.unknownBlock =>
-          baseStyle.copyWith(
-            color: error,
-            fontWeight: FontWeight.w600,
-            decoration: TextDecoration.underline,
-            decorationColor: error,
-          ),
+        AiPromptTokenKind.unknownBlock => baseStyle.copyWith(
+          color: error,
+          fontWeight: FontWeight.w600,
+          decoration: TextDecoration.underline,
+          decorationColor: error,
+        ),
       };
       children.add(TextSpan(text: span.text, style: style));
     }

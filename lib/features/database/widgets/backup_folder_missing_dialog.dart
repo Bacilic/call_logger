@@ -68,8 +68,8 @@ Future<void> showBackupFolderMissingDialog({
     result.success
         ? BackupScheduleStatus.success
         : (result.failureCode == DatabaseBackupFailureCode.folderMissing
-            ? BackupScheduleStatus.folderMissing
-            : BackupScheduleStatus.failed),
+              ? BackupScheduleStatus.folderMissing
+              : BackupScheduleStatus.failed),
   );
 
   if (!context.mounted) return;
@@ -78,8 +78,8 @@ Future<void> showBackupFolderMissingDialog({
       content: Text(
         result.success
             ? (result.outputPath != null
-                ? 'Αντίγραφο: ${result.outputPath}'
-                : 'Το αντίγραφο ολοκληρώθηκε.')
+                  ? 'Αντίγραφο: ${result.outputPath}'
+                  : 'Το αντίγραφο ολοκληρώθηκε.')
             : (result.message ?? 'Η δημιουργία αντιγράφου απέτυχε.'),
       ),
       backgroundColor: result.success

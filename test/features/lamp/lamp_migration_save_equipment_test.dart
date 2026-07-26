@@ -18,7 +18,9 @@ void main() {
     setUpAll(() async {
       initSqfliteFfiForTests();
       final dir = await Directory.systemTemp.createTemp('lamp_equip_save_');
-      await DatabaseHelper.bindTestDatabaseFile('${dir.path}/lamp_equip_save.db');
+      await DatabaseHelper.bindTestDatabaseFile(
+        '${dir.path}/lamp_equip_save.db',
+      );
       await DatabaseHelper.instance.database;
       service = LampMigrationService();
     });
@@ -79,27 +81,24 @@ void main() {
       return rows.map((r) => r['user_id'] as int).toSet();
     }
 
-    test(
-      'blocks save when owner changes without conflict decision',
-      () async {
-        await expectLater(
-          service.save(
-            target: LampTransferTarget.equipment,
-            formValues: equipmentForm(ownerName: 'Μαρία Γεωργίου'),
-            selectedCandidateId: equipmentId,
+    test('blocks save when owner changes without conflict decision', () async {
+      await expectLater(
+        service.save(
+          target: LampTransferTarget.equipment,
+          formValues: equipmentForm(ownerName: 'Μαρία Γεωργίου'),
+          selectedCandidateId: equipmentId,
+        ),
+        throwsA(
+          isA<StateError>().having(
+            (e) => e.message.toLowerCase(),
+            'message',
+            contains('απαιτείται επίλυση'),
           ),
-          throwsA(
-            isA<StateError>().having(
-              (e) => e.message.toLowerCase(),
-              'message',
-              contains('απαιτείται επίλυση'),
-            ),
-          ),
-        );
+        ),
+      );
 
-        expect(await ownerIdsForEquipment(equipmentId), {userXId});
-      },
-    );
+      expect(await ownerIdsForEquipment(equipmentId), {userXId});
+    });
 
     test('keepWithoutAssignment preserves current owner', () async {
       await service.save(

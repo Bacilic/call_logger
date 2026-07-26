@@ -79,15 +79,12 @@ void main() {
     );
   });
 
-  test(
-    'end χωρίς begin αφήνει κενή κατάσταση και δεν πετάει εξαίρεση',
-    () {
-      try {
-        ops.end(CriticalOperation.databaseSwitch);
-      } on AssertionError {
-        // Σε debug το assert εμφανίζει την ανισορροπία· στην απελευθέρωση αφαιρείται.
-      }
-      expect(container.read(activeCriticalOperationsProvider), isEmpty);
-    },
-  );
+  test('end χωρίς begin αφήνει κενή κατάσταση και δεν πετάει εξαίρεση', () {
+    try {
+      ops.end(CriticalOperation.databaseSwitch);
+    } on AssertionError {
+      // Σε debug το assert εμφανίζει την ανισορροπία· στην απελευθέρωση αφαιρείται.
+    }
+    expect(container.read(activeCriticalOperationsProvider), isEmpty);
+  });
 }

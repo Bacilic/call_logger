@@ -139,9 +139,7 @@ class AppErrorResult {
     }
     buf
       ..writeln('---')
-      ..writeln(
-        'Χρονική στιγμή: ${timestamp.toIso8601String()}',
-      );
+      ..writeln('Χρονική στιγμή: ${timestamp.toIso8601String()}');
     return buf.toString();
   }
 }

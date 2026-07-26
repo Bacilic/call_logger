@@ -11,8 +11,6 @@ Map<ShortcutActivator, Intent> get quickCallShortcuts =>
     <ShortcutActivator, Intent>{
       SingleActivator(LogicalKeyboardKey.keyN, control: true, shift: true):
           const QuickCaptureIntent(),
-      const CharacterActivator('N', control: true):
-          const QuickCaptureIntent(),
-      const CharacterActivator('Ν', control: true):
-          const QuickCaptureIntent(),
+      const CharacterActivator('N', control: true): const QuickCaptureIntent(),
+      const CharacterActivator('Ν', control: true): const QuickCaptureIntent(),
     };

@@ -9,10 +9,7 @@ import 'lamp_path_management.dart';
 import 'lamp_screen_host.dart';
 
 class LampIntegrityController {
-  LampIntegrityController({
-    required this.host,
-    required this.path,
-  });
+  LampIntegrityController({required this.host, required this.path});
 
   final LampScreenHost host;
   final LampPathController path;
@@ -88,9 +85,7 @@ class LampIntegrityController {
       if (autoPersist) {
         if (newIssues.isEmpty) {
           final suffix = scan.isPartial ? ' (μερικός έλεγχος)' : '';
-          host.showSnack(
-            'Δεν εντοπίστηκαν νέα προβλήματα$suffix.',
-          );
+          host.showSnack('Δεν εντοπίστηκαν νέα προβλήματα$suffix.');
           return;
         }
         final inserted = await host.shared.repository.insertDataIssues(

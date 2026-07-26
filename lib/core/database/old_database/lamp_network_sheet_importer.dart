@@ -186,8 +186,18 @@ int? lampNetworkHostnameCode(String hostname) {
 }
 
 const Map<String, String> _greekAccentMap = <String, String>{
-  'Ά': 'Α', 'Έ': 'Ε', 'Ή': 'Η', 'Ί': 'Ι', 'Ό': 'Ο', 'Ύ': 'Υ', 'Ώ': 'Ω',
-  'Ϊ': 'Ι', 'Ϋ': 'Υ', 'ΐ': 'Ι', 'ΰ': 'Υ', 'ς': 'Σ',
+  'Ά': 'Α',
+  'Έ': 'Ε',
+  'Ή': 'Η',
+  'Ί': 'Ι',
+  'Ό': 'Ο',
+  'Ύ': 'Υ',
+  'Ώ': 'Ω',
+  'Ϊ': 'Ι',
+  'Ϋ': 'Υ',
+  'ΐ': 'Ι',
+  'ΰ': 'Υ',
+  'ς': 'Σ',
 };
 
 String _stripAccentsUpper(String value) {
@@ -429,7 +439,8 @@ LampNetworkEnrichmentPlan planLampNetworkEnrichment({
           'κενή κύρια IP, αλλά υπάρχει IP μέσα στα σχόλια — θέλει επιβεβαίωση';
     } else if (duplicateCount > 1) {
       issueType = kLampNetworkIssueDuplicateHostname;
-      reason = 'το όνομα «$hostname» εμφανίζεται $duplicateCount φορές στην πηγή';
+      reason =
+          'το όνομα «$hostname» εμφανίζεται $duplicateCount φορές στην πηγή';
     } else {
       issueType = kLampNetworkIssueHostnameUnmatched;
       reason = 'όνομα τύπου χρήστη/περιγραφικό χωρίς ασφαλή αντιστοίχιση';

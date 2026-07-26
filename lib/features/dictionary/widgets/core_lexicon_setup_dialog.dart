@@ -1,4 +1,4 @@
-﻿import 'package:file_picker/file_picker.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
@@ -27,7 +27,8 @@ class CoreLexiconSetupDialog extends ConsumerStatefulWidget {
       _CoreLexiconSetupDialogState();
 }
 
-class _CoreLexiconSetupDialogState extends ConsumerState<CoreLexiconSetupDialog> {
+class _CoreLexiconSetupDialogState
+    extends ConsumerState<CoreLexiconSetupDialog> {
   List<String> _bundledAssets = [];
   String? _selectedAsset;
   bool _loading = true;
@@ -57,10 +58,9 @@ class _CoreLexiconSetupDialogState extends ConsumerState<CoreLexiconSetupDialog>
       _busy = true;
       _error = null;
     });
-    final ok =
-        await ref.read(coreLexiconProvider.notifier).installFromBundledAsset(
-              asset,
-            );
+    final ok = await ref
+        .read(coreLexiconProvider.notifier)
+        .installFromBundledAsset(asset);
     if (!mounted) return;
     if (ok) {
       Navigator.of(context).pop(true);
@@ -68,7 +68,8 @@ class _CoreLexiconSetupDialogState extends ConsumerState<CoreLexiconSetupDialog>
     }
     setState(() {
       _busy = false;
-      _error = ref.read(coreLexiconProvider).lastError ??
+      _error =
+          ref.read(coreLexiconProvider).lastError ??
           'Αποτυχία εγκατάστασης λεξικού-πυρήνα.';
     });
   }
@@ -97,7 +98,8 @@ class _CoreLexiconSetupDialogState extends ConsumerState<CoreLexiconSetupDialog>
     }
     setState(() {
       _busy = false;
-      _error = ref.read(coreLexiconProvider).lastError ??
+      _error =
+          ref.read(coreLexiconProvider).lastError ??
           'Αποτυχία εγκατάστασης λεξικού-πυρήνα.';
     });
   }
@@ -141,22 +143,22 @@ class _CoreLexiconSetupDialogState extends ConsumerState<CoreLexiconSetupDialog>
                           groupValue: _selectedAsset,
                           onChanged: (v) => setState(() => _selectedAsset = v),
                           child: Column(
-                          children: [
-                            for (final asset in _bundledAssets)
-                              RadioListTile<String?>(
-                                value: asset,
-                                title: Text(
-                                  p.basename(asset),
-                                  style: theme.textTheme.bodyMedium,
+                            children: [
+                              for (final asset in _bundledAssets)
+                                RadioListTile<String?>(
+                                  value: asset,
+                                  title: Text(
+                                    p.basename(asset),
+                                    style: theme.textTheme.bodyMedium,
+                                  ),
+                                  subtitle: Text(
+                                    asset,
+                                    style: theme.textTheme.bodySmall,
+                                  ),
+                                  contentPadding: EdgeInsets.zero,
                                 ),
-                                subtitle: Text(
-                                  asset,
-                                  style: theme.textTheme.bodySmall,
-                                ),
-                                contentPadding: EdgeInsets.zero,
-                              ),
-                          ],
-                        ),
+                            ],
+                          ),
                         ),
                       ),
                     ] else
@@ -199,9 +201,7 @@ class _CoreLexiconSetupDialogState extends ConsumerState<CoreLexiconSetupDialog>
           onPressed: _busy ? null : _pickExternalFile,
           icon: const Icon(Icons.folder_open_outlined),
           label: Text(
-            _bundledAssets.isEmpty
-                ? 'Επιλογή αρχείου…'
-                : 'Άλλο αρχείο…',
+            _bundledAssets.isEmpty ? 'Επιλογή αρχείου…' : 'Άλλο αρχείο…',
           ),
         ),
       ],

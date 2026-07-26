@@ -26,13 +26,13 @@ class DictionaryLayoutMetrics {
 
   factory DictionaryLayoutMetrics.fromContext(BuildContext context) {
     final theme = Theme.of(context);
-    final headerStyle = theme.textTheme.labelLarge?.copyWith(
-          fontWeight: FontWeight.w600,
-        ) ??
+    final headerStyle =
+        theme.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w600) ??
         const TextStyle(fontWeight: FontWeight.w600, fontSize: 14);
     final wordFieldStyle =
         theme.textTheme.bodyLarge ?? const TextStyle(fontSize: 16);
-    final smallStyle = theme.textTheme.bodySmall ?? const TextStyle(fontSize: 12);
+    final smallStyle =
+        theme.textTheme.bodySmall ?? const TextStyle(fontSize: 12);
     return DictionaryLayoutMetrics(
       headerStyle: headerStyle,
       wordFieldStyle: wordFieldStyle,
@@ -52,11 +52,11 @@ class DictionaryLayoutMetrics {
 
   @override
   int get hashCode => Object.hash(
-        _styleHash(headerStyle),
-        _styleHash(wordFieldStyle),
-        _styleHash(smallStyle),
-        _styleHash(catCellStyle),
-      );
+    _styleHash(headerStyle),
+    _styleHash(wordFieldStyle),
+    _styleHash(smallStyle),
+    _styleHash(catCellStyle),
+  );
 }
 
 bool _styleEqual(TextStyle a, TextStyle b) =>
@@ -150,10 +150,7 @@ DictionaryTableLayout computeDictionaryTableLayout({
   const padSrc = 16.0;
   const padCat = 16.0;
 
-  var wWord = computeLexiconWordColumnWidth(
-    metrics: m,
-    rows: rows,
-  );
+  var wWord = computeLexiconWordColumnWidth(metrics: m, rows: rows);
   var wSrc = dictionaryMeasureTextWidth('Πηγή', m.headerStyle) + padSrc;
   var wCat = dictionaryMeasureTextWidth('Κατηγορία', m.headerStyle) + padCat;
 
@@ -200,10 +197,7 @@ List<DictionaryTableLayout> computeLexiconGroupLayouts({
     );
     final autoWord = groupRows.isEmpty
         ? sharedLayout.wordWidth
-        : computeLexiconWordColumnWidth(
-            metrics: metrics,
-            rows: groupRows,
-          );
+        : computeLexiconWordColumnWidth(metrics: metrics, rows: groupRows);
     final userWord = groupIndex < userWordColumnWidths.length
         ? userWordColumnWidths[groupIndex]
         : null;
@@ -241,7 +235,8 @@ double computeDropdownMenuWidth(
   List<String> labels, {
   double trailingPadding = 36,
 }) {
-  final style = Theme.of(context).textTheme.bodyLarge ?? const TextStyle(fontSize: 16);
+  final style =
+      Theme.of(context).textTheme.bodyLarge ?? const TextStyle(fontSize: 16);
   var m = 0.0;
   for (final s in labels) {
     m = math.max(m, dictionaryMeasureTextWidth(s, style));

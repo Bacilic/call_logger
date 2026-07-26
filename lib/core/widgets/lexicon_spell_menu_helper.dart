@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -11,11 +11,7 @@ import 'spell_check_controller.dart';
 /// Κοινή λογική μενού ορθογραφίας (λεξικό) για πεδία με [SpellCheckController].
 abstract final class LexiconSpellMenuHelper {
   static Uri googleSpellSearchUri(String word) {
-    return Uri.https(
-      'www.google.com',
-      '/search',
-      {'q': 'ορθογραφία "$word"'},
-    );
+    return Uri.https('www.google.com', '/search', {'q': 'ορθογραφία "$word"'});
   }
 
   static Future<void> openGoogleSpellSearch(String word) async {

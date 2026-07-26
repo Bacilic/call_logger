@@ -51,7 +51,8 @@ mixin SettingsServiceWindowUiMixin {
   /// Προεπιλογή: true.
   Future<bool> getNavRailShowLabels() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool(SettingsService._prefKey(_keyNavRailShowLabels)) ?? true;
+    return prefs.getBool(SettingsService._prefKey(_keyNavRailShowLabels)) ??
+        true;
   }
 
   Future<void> setNavRailShowLabels(bool value) async {
@@ -93,10 +94,7 @@ mixin SettingsServiceWindowUiMixin {
     final prefs = await SharedPreferences.getInstance();
     final x = prefs.getDouble(SettingsService._prefKey(_keyWindowPositionX));
     final y = prefs.getDouble(SettingsService._prefKey(_keyWindowPositionY));
-    if (x == null ||
-        y == null ||
-        !x.isFinite ||
-        !y.isFinite) {
+    if (x == null || y == null || !x.isFinite || !y.isFinite) {
       return null;
     }
     return (x: x, y: y);
@@ -126,36 +124,52 @@ mixin SettingsServiceWindowUiMixin {
 
   Future<void> setWindowPlacementMode(WindowPlacementMode mode) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(SettingsService._prefKey(_keyWindowPlacementMode), mode.storageValue);
+    await prefs.setString(
+      SettingsService._prefKey(_keyWindowPlacementMode),
+      mode.storageValue,
+    );
   }
 
   /// Κάρτα «Στατιστικά Βάσης Δεδομένων» στην οθόνη περιήγησης βάσης — ανοιχτή/κλειστή.
   /// Προεπιλογή: false (συμπτυγμένη).
   Future<bool> getDatabaseBrowserStatsCardExpanded() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool(SettingsService._prefKey(_keyDatabaseBrowserStatsCardExpanded)) ?? false;
+    return prefs.getBool(
+          SettingsService._prefKey(_keyDatabaseBrowserStatsCardExpanded),
+        ) ??
+        false;
   }
 
   Future<void> setDatabaseBrowserStatsCardExpanded(bool value) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(SettingsService._prefKey(_keyDatabaseBrowserStatsCardExpanded), value);
+    await prefs.setBool(
+      SettingsService._prefKey(_keyDatabaseBrowserStatsCardExpanded),
+      value,
+    );
   }
 
   /// Εμφάνιση κωδικού κτιρίου `[...]` στη στήλη Τοποθεσία (πίνακας εξοπλισμού). Προεπιλογή: true.
   Future<bool> getEquipmentLocationShowBuilding() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool(SettingsService._prefKey(_keyEquipmentLocationShowBuilding)) ?? true;
+    return prefs.getBool(
+          SettingsService._prefKey(_keyEquipmentLocationShowBuilding),
+        ) ??
+        true;
   }
 
   Future<void> setEquipmentLocationShowBuilding(bool value) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(SettingsService._prefKey(_keyEquipmentLocationShowBuilding), value);
+    await prefs.setBool(
+      SettingsService._prefKey(_keyEquipmentLocationShowBuilding),
+      value,
+    );
   }
 
   /// Ενεργοποίηση ενσωματωμένου ορθογραφικού ελέγχου σημειώσεων (Windows). Προεπιλογή: true.
   Future<bool> getEnableSpellCheck() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool(SettingsService._prefKey(_keyEnableSpellCheck)) ?? true;
+    return prefs.getBool(SettingsService._prefKey(_keyEnableSpellCheck)) ??
+        true;
   }
 
   Future<void> setEnableSpellCheck(bool value) async {
@@ -166,12 +180,18 @@ mixin SettingsServiceWindowUiMixin {
   /// Εμφάνιση κάρτας «Τελευταίες 7 Κλήσεις» στην οθόνη κλήσεων. Προεπιλογή: true.
   Future<bool> getShowGlobalCalls() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool(SettingsService._prefKey(_keyShowGlobalCallsDashboard)) ?? true;
+    return prefs.getBool(
+          SettingsService._prefKey(_keyShowGlobalCallsDashboard),
+        ) ??
+        true;
   }
 
   Future<void> setShowGlobalCalls(bool value) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(SettingsService._prefKey(_keyShowGlobalCallsDashboard), value);
+    await prefs.setBool(
+      SettingsService._prefKey(_keyShowGlobalCallsDashboard),
+      value,
+    );
   }
 
   /// Εμφάνιση στοιχείου πλοήγησης «Βάση Δεδομένων». Προεπιλογή: true.
@@ -199,7 +219,8 @@ mixin SettingsServiceWindowUiMixin {
   /// Εμφάνιση στοιχείου πλοήγησης «Λεξικό». Προεπιλογή: true.
   Future<bool> getShowDictionaryNav() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool(SettingsService._prefKey(_keyShowDictionaryNav)) ?? true;
+    return prefs.getBool(SettingsService._prefKey(_keyShowDictionaryNav)) ??
+        true;
   }
 
   Future<void> setShowDictionaryNav(bool value) async {
@@ -210,7 +231,9 @@ mixin SettingsServiceWindowUiMixin {
   /// Ποια κάρτες εμφανίζονται στην οθόνη κλήσεων. Προεπιλογή: όλες ορατές.
   Future<CallsScreenCardsVisibility> getCallsScreenCardsVisibility() async {
     final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(SettingsService._prefKey(_keyCallsScreenCardsVisibility));
+    final raw = prefs.getString(
+      SettingsService._prefKey(_keyCallsScreenCardsVisibility),
+    );
     return CallsScreenCardsVisibility.fromJsonString(raw);
   }
 
@@ -218,13 +241,17 @@ mixin SettingsServiceWindowUiMixin {
     CallsScreenCardsVisibility value,
   ) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(SettingsService._prefKey(_keyCallsScreenCardsVisibility), value.toJsonString());
+    await prefs.setString(
+      SettingsService._prefKey(_keyCallsScreenCardsVisibility),
+      value.toJsonString(),
+    );
   }
 
   /// Εμφάνιση ιπτάμενου κουμπιού γρήγορης καταγραφής κλήσης. Προεπιλογή: true.
   Future<bool> getShowQuickCallFab() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool(SettingsService._prefKey(_keyShowQuickCallFab)) ?? true;
+    return prefs.getBool(SettingsService._prefKey(_keyShowQuickCallFab)) ??
+        true;
   }
 
   Future<void> setShowQuickCallFab(bool value) async {

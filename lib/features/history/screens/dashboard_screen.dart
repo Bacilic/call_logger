@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui';
 
@@ -202,8 +202,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         .map((dayPoint) {
           if (dayPoint.callCount <= 0) return '';
           final day = DateFormat('dd/MM').format(dayPoint.date);
-          final avgSeconds =
-              dayPoint.totalDurationSeconds / dayPoint.callCount;
+          final avgSeconds = dayPoint.totalDurationSeconds / dayPoint.callCount;
           return '$day: ${formatKpiCallDurationSeconds(avgSeconds)}';
         })
         .toList(growable: false);
@@ -282,8 +281,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final filter = ref.watch(dashboardFilterProvider);
-    final activeDatePreset =
-        ref.read(dashboardFilterProvider.notifier).activeDatePreset;
+    final activeDatePreset = ref
+        .read(dashboardFilterProvider.notifier)
+        .activeDatePreset;
     final statsAsync = ref.watch(dashboardStatsProvider);
     final departmentsAsync = ref.watch(dashboardDepartmentsProvider);
     final colors = DashboardPaletteColors.from(_palette);
@@ -357,9 +357,10 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                                       points: data.sparklineLast7Days
                                           .map((e) => e.callCount.toDouble())
                                           .toList(),
-                                      sparklineTooltips: _callsSparklineTooltips(
-                                        data.sparklineLast7Days,
-                                      ),
+                                      sparklineTooltips:
+                                          _callsSparklineTooltips(
+                                            data.sparklineLast7Days,
+                                          ),
                                       barPoints:
                                           allDatesBars?.callsByMonth ??
                                           const <KpiBarSparklinePoint>[],
@@ -367,8 +368,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                                       colors: colors.kpiBlue,
                                     ),
                                     KpiCardData(
-                                      title:
-                                          'Συνολική Διάρκεια Κλήσεων',
+                                      title: 'Συνολική Διάρκεια Κλήσεων',
                                       value: _formatAggregateDurationSeconds(
                                         data.totalDurationSeconds,
                                       ),
@@ -387,9 +387,10 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                                                 .toDouble(),
                                           )
                                           .toList(),
-                                      sparklineTooltips: _durationSparklineTooltips(
-                                        data.sparklineLast7Days,
-                                      ),
+                                      sparklineTooltips:
+                                          _durationSparklineTooltips(
+                                            data.sparklineLast7Days,
+                                          ),
                                       barPoints:
                                           allDatesBars
                                               ?.durationByWeekdayMonToFri ??
@@ -397,8 +398,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                                       colors: colors.kpiGreen,
                                     ),
                                     KpiCardData(
-                                      title:
-                                          'Μέσος Όρος ανά Κλήση (λεπ:δευτ)',
+                                      title: 'Μέσος Όρος ανά Κλήση (λεπ:δευτ)',
                                       value: _formatCallDurationSeconds(
                                         data.avgDurationSeconds,
                                       ),
@@ -419,9 +419,10 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                                                       e.callCount,
                                           )
                                           .toList(),
-                                      sparklineTooltips: _avgCallSparklineTooltips(
-                                        data.sparklineLast7Days,
-                                      ),
+                                      sparklineTooltips:
+                                          _avgCallSparklineTooltips(
+                                            data.sparklineLast7Days,
+                                          ),
                                       barPoints:
                                           allDatesBars?.durationExtremesSix ??
                                           const <KpiBarSparklinePoint>[],
@@ -443,9 +444,10 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                                       points: data.sparklineLast7Days
                                           .map((e) => e.callCount.toDouble())
                                           .toList(),
-                                      sparklineTooltips: _callsSparklineTooltips(
-                                        data.sparklineLast7Days,
-                                      ),
+                                      sparklineTooltips:
+                                          _callsSparklineTooltips(
+                                            data.sparklineLast7Days,
+                                          ),
                                       barPoints: _runnerUpBarPoints(
                                         allDatesBars,
                                         _topEntityMode,
@@ -621,7 +623,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                       },
                       loading: () => LoadingDashboard(colors: colors),
                       error: (e, _) => ErrorCard(
-                        message: 'Σφάλμα φόρτωσης: ${humanizeUserFacingError(e)}',
+                        message:
+                            'Σφάλμα φόρτωσης: ${humanizeUserFacingError(e)}',
                         colors: colors,
                       ),
                     ),

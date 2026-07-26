@@ -128,7 +128,11 @@ class _RemoteToolFormDialogState extends ConsumerState<RemoteToolFormDialog>
       } catch (e) {
         if (mounted) {
           showDialogSnackBar(
-            SnackBar(content: Text('Αποτυχία αντιγραφής εικονιδίου: ${humanizeUserFacingError(e)}')),
+            SnackBar(
+              content: Text(
+                'Αποτυχία αντιγραφής εικονιδίου: ${humanizeUserFacingError(e)}',
+              ),
+            ),
           );
         }
         _ctrl.iconC.text = picked;
@@ -167,7 +171,6 @@ class _RemoteToolFormDialogState extends ConsumerState<RemoteToolFormDialog>
     );
   }
 
-
   /// Επαναφορά soft-deleted γραμμής με τα περιεχόμενα της φόρμας· σε επεξεργασία
   /// άλλου id, η τρέχουσα εγγραφή διαγράφεται (soft).
   Future<void> _saveRestoringSoftDeleted(
@@ -178,8 +181,8 @@ class _RemoteToolFormDialogState extends ConsumerState<RemoteToolFormDialog>
       toolFromForm: _ctrl.toRemoteTool(id: softDeleted.id),
       editCurrentIdToDelete:
           _ctrl.isEdit && widget.initialTool!.id != softDeleted.id
-              ? widget.initialTool!.id
-              : null,
+          ? widget.initialTool!.id
+          : null,
     );
     _invalidateRemote();
     if (mounted) Navigator.of(context).pop(true);
@@ -378,204 +381,197 @@ class _RemoteToolFormDialogState extends ConsumerState<RemoteToolFormDialog>
     return DialogSnackbarScope(
       messengerKey: dialogMessengerKey,
       child: asyncTools.when(
-      loading: () => Dialog(
-        child: ConstrainedBox(
-          constraints: BoxConstraints(maxWidth: 620, maxHeight: mq.height * 0.85),
-          child: const Padding(
-            padding: EdgeInsets.all(32),
-            child: Center(child: CircularProgressIndicator()),
-          ),
-        ),
-      ),
-      error: (e, _) => Dialog(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Text('Φόρτωση καταλόγου: ${humanizeUserFacingError(e)}'),
-        ),
-      ),
-      data: (allTools) {
-        final nonDeleted = sortedRemoteTools(
-          allTools.where((t) => t.deletedAt == null).toList(),
-        );
-        final nameSuggestions = nonDeleted
-            .map((t) => t.name.trim())
-            .where((s) => s.isNotEmpty)
-            .toSet()
-            .toList()
-          ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
-
-        return Dialog(
+        loading: () => Dialog(
           child: ConstrainedBox(
             constraints: BoxConstraints(
               maxWidth: 620,
-              maxHeight: mq.height * 0.9,
+              maxHeight: mq.height * 0.85,
             ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(24, 20, 24, 8),
-                  child: Text(
-                    _ctrl.isEdit
-                        ? 'Επεξεργασία · ${widget.initialTool!.name}'
-                        : 'Νέο εργαλείο',
-                    style: theme.textTheme.titleLarge,
+            child: const Padding(
+              padding: EdgeInsets.all(32),
+              child: Center(child: CircularProgressIndicator()),
+            ),
+          ),
+        ),
+        error: (e, _) => Dialog(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Text('Φόρτωση καταλόγου: ${humanizeUserFacingError(e)}'),
+          ),
+        ),
+        data: (allTools) {
+          final nonDeleted = sortedRemoteTools(
+            allTools.where((t) => t.deletedAt == null).toList(),
+          );
+          final nameSuggestions =
+              nonDeleted
+                  .map((t) => t.name.trim())
+                  .where((s) => s.isNotEmpty)
+                  .toSet()
+                  .toList()
+                ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+
+          return Dialog(
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                maxWidth: 620,
+                maxHeight: mq.height * 0.9,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(24, 20, 24, 8),
+                    child: Text(
+                      _ctrl.isEdit
+                          ? 'Επεξεργασία · ${widget.initialTool!.name}'
+                          : 'Νέο εργαλείο',
+                      style: theme.textTheme.titleLarge,
+                    ),
                   ),
-                ),
-                const Divider(height: 1),
-                Expanded(
-                  child: Form(
-                    key: _formKey,
-                    child: SingleChildScrollView(
-                      padding: const EdgeInsets.fromLTRB(24, 12, 24, 16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          _sectionTitle(theme, 'Βασικά στοιχεία'),
-                          const Divider(),
-                          NameAutocompleteField(
-                            controller: _ctrl.nameC,
-                            focusNode: _ctrl.nameFocus,
-                            suggestions: nameSuggestions,
-                            excludeId:
-                                _ctrl.isEdit ? widget.initialTool!.id : null,
-                            nonDeleted: nonDeleted,
-                            isCreate: !_ctrl.isEdit,
-                          ),
-                          const SizedBox(height: 8),
-                          SwitchListTile(
-                            contentPadding: EdgeInsets.zero,
-                            title: const Text('Ενεργό εργαλείο'),
-                            subtitle: Text(
-                              'Όταν είναι ανενεργό, δεν εμφανίζεται στις κλήσεις.',
-                              style: theme.textTheme.bodySmall?.copyWith(
-                                color: theme.colorScheme.onSurfaceVariant,
-                              ),
+                  const Divider(height: 1),
+                  Expanded(
+                    child: Form(
+                      key: _formKey,
+                      child: SingleChildScrollView(
+                        padding: const EdgeInsets.fromLTRB(24, 12, 24, 16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            _sectionTitle(theme, 'Βασικά στοιχεία'),
+                            const Divider(),
+                            NameAutocompleteField(
+                              controller: _ctrl.nameC,
+                              focusNode: _ctrl.nameFocus,
+                              suggestions: nameSuggestions,
+                              excludeId: _ctrl.isEdit
+                                  ? widget.initialTool!.id
+                                  : null,
+                              nonDeleted: nonDeleted,
+                              isCreate: !_ctrl.isEdit,
                             ),
-                            value: _ctrl.isActive,
-                            onChanged: _ctrl.saving
-                                ? null
-                                : (v) {
-                                    _ctrl.isActive = v;
-                                    _ctrl.refresh();
-                                  },
-                          ),
-                          const SizedBox(height: 16),
-                          _sectionTitle(theme, 'Εκτέλεση'),
-                          const Divider(),
-                          ExecutablePathField(
-                            controller: _ctrl.pathC,
-                            onPick: _pickExecutable,
-                            enabled: !_ctrl.saving,
-                            isCreate: !_ctrl.isEdit,
-                          ),
-                          const SizedBox(height: 16),
-                          _sectionTitle(theme, 'Εικονίδιο εργαλείου'),
-                          const Divider(),
-                          IconFieldWithPreview(
-                            controller: _ctrl.iconC,
-                            onPick: _pickIcon,
-                            enabled: !_ctrl.saving,
-                          ),
-                          const SizedBox(height: 16),
-                          _sectionTitle(theme, 'Συμπεριφορά και Ρόλος'),
-                          const Divider(),
-                          RoleDropdown(
-                            value: _ctrl.role,
-                            onChanged: _ctrl.saving
-                                ? null
-                                : (v) => _onRoleChanged(v),
-                          ),
-                          const SizedBox(height: 8),
-                          Align(
-                            alignment: Alignment.centerLeft,
-                            child: PopupMenuButton<ToolRole>(
+                            const SizedBox(height: 8),
+                            SwitchListTile(
+                              contentPadding: EdgeInsets.zero,
+                              title: const Text('Ενεργό εργαλείο'),
+                              subtitle: Text(
+                                'Όταν είναι ανενεργό, δεν εμφανίζεται στις κλήσεις.',
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: theme.colorScheme.onSurfaceVariant,
+                                ),
+                              ),
+                              value: _ctrl.isActive,
+                              onChanged: _ctrl.saving
+                                  ? null
+                                  : (v) {
+                                      _ctrl.isActive = v;
+                                      _ctrl.refresh();
+                                    },
+                            ),
+                            const SizedBox(height: 16),
+                            _sectionTitle(theme, 'Εκτέλεση'),
+                            const Divider(),
+                            ExecutablePathField(
+                              controller: _ctrl.pathC,
+                              onPick: _pickExecutable,
                               enabled: !_ctrl.saving,
-                              tooltip: 'Προεπιλογές ρόλου',
-                              onSelected: (r) {
-                                if (!_ctrl.saving) _ctrl.applyRolePreset(r);
-                              },
-                              itemBuilder: (ctx) => [
-                                const PopupMenuItem(
-                                  value: ToolRole.vnc,
-                                  child: Text('VNC: -host=PC{EQUIPMENT_CODE}'),
-                                ),
-                                const PopupMenuItem(
-                                  value: ToolRole.rdp,
-                                  child: Text('RDP: /v:{TARGET}'),
-                                ),
-                                const PopupMenuItem(
-                                  value: ToolRole.anydesk,
-                                  child: Text('AnyDesk: -id {TARGET}'),
-                                ),
-                              ],
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(vertical: 4),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(
-                                      Icons.auto_fix_high_outlined,
-                                      size: 20,
-                                      color: theme.colorScheme.primary,
+                              isCreate: !_ctrl.isEdit,
+                            ),
+                            const SizedBox(height: 16),
+                            _sectionTitle(theme, 'Εικονίδιο εργαλείου'),
+                            const Divider(),
+                            IconFieldWithPreview(
+                              controller: _ctrl.iconC,
+                              onPick: _pickIcon,
+                              enabled: !_ctrl.saving,
+                            ),
+                            const SizedBox(height: 16),
+                            _sectionTitle(theme, 'Συμπεριφορά και Ρόλος'),
+                            const Divider(),
+                            RoleDropdown(
+                              value: _ctrl.role,
+                              onChanged: _ctrl.saving
+                                  ? null
+                                  : (v) => _onRoleChanged(v),
+                            ),
+                            const SizedBox(height: 8),
+                            Align(
+                              alignment: Alignment.centerLeft,
+                              child: PopupMenuButton<ToolRole>(
+                                enabled: !_ctrl.saving,
+                                tooltip: 'Προεπιλογές ρόλου',
+                                onSelected: (r) {
+                                  if (!_ctrl.saving) _ctrl.applyRolePreset(r);
+                                },
+                                itemBuilder: (ctx) => [
+                                  const PopupMenuItem(
+                                    value: ToolRole.vnc,
+                                    child: Text(
+                                      'VNC: -host=PC{EQUIPMENT_CODE}',
                                     ),
-                                    const SizedBox(width: 8),
-                                    Text(
-                                      'Προεπιλογές ρόλου',
-                                      style: theme.textTheme.labelLarge,
-                                    ),
-                                    const Icon(Icons.arrow_drop_down),
-                                  ],
+                                  ),
+                                  const PopupMenuItem(
+                                    value: ToolRole.rdp,
+                                    child: Text('RDP: /v:{TARGET}'),
+                                  ),
+                                  const PopupMenuItem(
+                                    value: ToolRole.anydesk,
+                                    child: Text('AnyDesk: -id {TARGET}'),
+                                  ),
+                                ],
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 4,
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        Icons.auto_fix_high_outlined,
+                                        size: 20,
+                                        color: theme.colorScheme.primary,
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Text(
+                                        'Προεπιλογές ρόλου',
+                                        style: theme.textTheme.labelLarge,
+                                      ),
+                                      const Icon(Icons.arrow_drop_down),
+                                    ],
+                                  ),
                                 ),
                               ),
                             ),
-                          ),
-                          const SizedBox(height: 16),
-                          _sectionTitle(theme, 'Ορίσματα γραμμής εντολών'),
-                          const Divider(),
-                          RemoteToolArgumentsEditor(controller: _ctrl),
-                          const SizedBox(height: 16),
-                          RemoteToolTestPanel(
-                            controller: _ctrl,
-                            onRunTest: _runTest,
-                          ),
-                        ],
+                            const SizedBox(height: 16),
+                            _sectionTitle(theme, 'Ορίσματα γραμμής εντολών'),
+                            const Divider(),
+                            RemoteToolArgumentsEditor(controller: _ctrl),
+                            const SizedBox(height: 16),
+                            RemoteToolTestPanel(
+                              controller: _ctrl,
+                              onRunTest: _runTest,
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ),
-                ),
-                const Divider(height: 1),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: [
-                      TextButton(
-                        onPressed: _ctrl.saving
-                            ? null
-                            : () => Navigator.of(context).pop(false),
-                        child: const Text('Ακύρωση'),
-                      ),
-                      const SizedBox(width: 8),
-                      _ctrl.isEdit
-                          ? FilledButton(
-                              onPressed: _ctrl.canSubmitSave ? _save : null,
-                              child: _ctrl.saving
-                                  ? const SizedBox(
-                                      width: 22,
-                                      height: 22,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                      ),
-                                    )
-                                  : const Text('Αποθήκευση'),
-                            )
-                          : Tooltip(
-                              message: _ctrl.createPrimaryButtonTooltip(),
-                              waitDuration:
-                                  const Duration(milliseconds: 400),
-                              child: FilledButton(
+                  const Divider(height: 1),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        TextButton(
+                          onPressed: _ctrl.saving
+                              ? null
+                              : () => Navigator.of(context).pop(false),
+                          child: const Text('Ακύρωση'),
+                        ),
+                        const SizedBox(width: 8),
+                        _ctrl.isEdit
+                            ? FilledButton(
                                 onPressed: _ctrl.canSubmitSave ? _save : null,
                                 child: _ctrl.saving
                                     ? const SizedBox(
@@ -585,27 +581,40 @@ class _RemoteToolFormDialogState extends ConsumerState<RemoteToolFormDialog>
                                           strokeWidth: 2,
                                         ),
                                       )
-                                    : const Text('Δημιουργία'),
+                                    : const Text('Αποθήκευση'),
+                              )
+                            : Tooltip(
+                                message: _ctrl.createPrimaryButtonTooltip(),
+                                waitDuration: const Duration(milliseconds: 400),
+                                child: FilledButton(
+                                  onPressed: _ctrl.canSubmitSave ? _save : null,
+                                  child: _ctrl.saving
+                                      ? const SizedBox(
+                                          width: 22,
+                                          height: 22,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                          ),
+                                        )
+                                      : const Text('Δημιουργία'),
+                                ),
                               ),
-                            ),
-                    ],
+                      ],
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-        );
-      },
-    ),
+          );
+        },
+      ),
     );
   }
 
   static Widget _sectionTitle(ThemeData theme, String title) {
     return Text(
       title,
-      style: theme.textTheme.titleSmall?.copyWith(
-        fontWeight: FontWeight.w600,
-      ),
+      style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
     );
   }
 }

@@ -102,8 +102,7 @@ Future<void> _pumpUntilDepartmentSaveCompletes(WidgetTester tester) async {
   const maxAttempts = 40;
   for (var i = 0; i < maxAttempts; i++) {
     final formOpen = find.text(_kDepartmentFormTitle).evaluate().isNotEmpty;
-    final conflictOpen =
-        find.text(_kConflictDialogTitle).evaluate().isNotEmpty;
+    final conflictOpen = find.text(_kConflictDialogTitle).evaluate().isNotEmpty;
     if (!formOpen && !conflictOpen) {
       return;
     }
@@ -113,9 +112,7 @@ Future<void> _pumpUntilDepartmentSaveCompletes(WidgetTester tester) async {
     await tester.pump(const Duration(milliseconds: 50));
   }
   fail(
-    greekExpectMsg(
-      'Η φόρμα τμήματος δεν έκλεισε εγκαίρως μετά την αποθήκευση',
-    ),
+    greekExpectMsg('Η φόρμα τμήματος δεν έκλεισε εγκαίρως μετά την αποθήκευση'),
   );
 }
 
@@ -173,10 +170,7 @@ Future<int> _seedFantasmaMixedSharedAssetsScenario() async {
   });
 
   final phoneId = await db.insert('phones', {'number': _kConflictPhone});
-  await db.insert('user_phones', {
-    'user_id': userId,
-    'phone_id': phoneId,
-  });
+  await db.insert('user_phones', {'user_id': userId, 'phone_id': phoneId});
   await db.insert('department_phones', {
     'department_id': deptId,
     'phone_id': phoneId,
@@ -282,9 +276,13 @@ void main() {
             'Το 333 εμφανίζεται ήδη ως κοινόχρηστο τηλέφωνο του τμήματος',
           ),
         );
-        reporter.logStepDone('Διάλογος ανοιχτός — κοινόχρηστο 333 ήδη στη φόρμα');
+        reporter.logStepDone(
+          'Διάλογος ανοιχτός — κοινόχρηστο 333 ήδη στη φόρμα',
+        );
 
-        reporter.logProgress('Προσθήκη μόνο κοινόχρηστου εξοπλισμού 2001, 2002, 2003');
+        reporter.logProgress(
+          'Προσθήκη μόνο κοινόχρηστου εξοπλισμού 2001, 2002, 2003',
+        );
 
         await tester.tap(_sharedEquipmentInputField());
         await pumpUntilSettled(tester);
@@ -306,14 +304,18 @@ void main() {
         }
         reporter.logStepDone('Chips εξοπλισμού 2001, 2002, 2003 στη φόρμα');
 
-        reporter.logProgress('Αποθήκευση — αναμένεται διάλογος σύγκρουσης μόνο για το 333');
+        reporter.logProgress(
+          'Αποθήκευση — αναμένεται διάλογος σύγκρουσης μόνο για το 333',
+        );
 
         final saveButton = find.widgetWithText(FilledButton, 'Αποθήκευση');
         await tester.ensureVisible(saveButton);
         expect(
           tester.widget<FilledButton>(saveButton).onPressed,
           isNotNull,
-          reason: greekExpectMsg('Κουμπί αποθήκευσης ενεργό μετά την προσθήκη εξοπλισμού'),
+          reason: greekExpectMsg(
+            'Κουμπί αποθήκευσης ενεργό μετά την προσθήκη εξοπλισμού',
+          ),
         );
         await tester.tap(saveButton);
         await pumpUntilSettled(tester);
@@ -331,7 +333,9 @@ void main() {
         expect(
           find.textContaining('$_kMariaFirstName $_kMariaLastName'),
           findsWidgets,
-          reason: greekExpectMsg('Εμφάνιση ιδιοκτήτριας Μαρία Άσχημη στον διάλογο σύγκρουσης'),
+          reason: greekExpectMsg(
+            'Εμφάνιση ιδιοκτήτριας Μαρία Άσχημη στον διάλογο σύγκρουσης',
+          ),
         );
         for (final code in _kNewEquipmentCodes) {
           expect(
@@ -342,9 +346,13 @@ void main() {
             ),
           );
         }
-        reporter.logStepDone('Διάλογος σύγκρουσης μόνο για το 333 (Μαρία Άσχημη)');
+        reporter.logStepDone(
+          'Διάλογος σύγκρουσης μόνο για το 333 (Μαρία Άσχημη)',
+        );
 
-        reporter.logProgress('Επιλογή διατήρησης 333 ως κοινόχρηστου τμήματος και επιβεβαίωση');
+        reporter.logProgress(
+          'Επιλογή διατήρησης 333 ως κοινόχρηστου τμήματος και επιβεβαίωση',
+        );
 
         await tester.tap(find.textContaining('Κάνε το κοινόχρηστο').last);
         await pumpUntilSettled(tester);
@@ -377,7 +385,9 @@ void main() {
           'Επιβεβαίωση — διάλογοι έκλεισαν (αποθήκευση ολοκληρώθηκε)',
         );
 
-        reporter.logProgress('Έλεγχος βάσης — κοινόχρηστος εξοπλισμός 2001, 2002, 2003');
+        reporter.logProgress(
+          'Έλεγχος βάσης — κοινόχρηστος εξοπλισμός 2001, 2002, 2003',
+        );
 
         final codes = await _readSharedEquipmentWhenReady(
           tester,
@@ -393,9 +403,7 @@ void main() {
           );
         }
 
-        reporter.logStepDone(
-          'Εξοπλισμός στη βάση: ${codes.join(', ')}',
-        );
+        reporter.logStepDone('Εξοπλισμός στη βάση: ${codes.join(', ')}');
         reporter.recordPass(
           'Μικτή σύγκρουση — κοινόχρηστος εξοπλισμός χωρίς σύγκρουση στη βάση',
         );
@@ -479,122 +487,119 @@ void main() {
       },
     );
 
-    testWidgets(
-      'επεξεργασία με αλλαγή: «Επεξεργασία» επιστρέφει στη φόρμα',
-      (tester) async {
-        tester.view.physicalSize = const Size(1600, 900);
-        tester.view.devicePixelRatio = 1.0;
-        addTearDown(() {
-          tester.view.resetPhysicalSize();
-          tester.view.resetDevicePixelRatio();
-        });
+    testWidgets('επεξεργασία με αλλαγή: «Επεξεργασία» επιστρέφει στη φόρμα', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(1600, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
 
-        final container = ProviderContainer(
-          overrides: callLoggerTestProviderOverrides(),
+      final container = ProviderContainer(
+        overrides: callLoggerTestProviderOverrides(),
+      );
+      addTearDown(container.dispose);
+
+      late DepartmentDirectoryNotifier notifier;
+      await tester.runAsync(() async {
+        await container.read(lookupServiceProvider.future);
+        notifier = container.read(departmentDirectoryProvider.notifier);
+        await notifier.loadDepartments();
+        await _openDepartmentFormInDialog(
+          tester,
+          container,
+          initialDepartment: DepartmentModel(
+            id: deptId,
+            name: _kFantasmaDepartmentName,
+            color: '#33691F',
+          ),
+          notifier: notifier,
         );
-        addTearDown(container.dispose);
+      });
 
-        late DepartmentDirectoryNotifier notifier;
-        await tester.runAsync(() async {
-          await container.read(lookupServiceProvider.future);
-          notifier = container.read(departmentDirectoryProvider.notifier);
-          await notifier.loadDepartments();
-          await _openDepartmentFormInDialog(
-            tester,
-            container,
-            initialDepartment: DepartmentModel(
-              id: deptId,
-              name: _kFantasmaDepartmentName,
-              color: '#33691F',
-            ),
-            notifier: notifier,
-          );
-        });
+      await tester.enterText(_buildingField(), 'Νέο κτίριο');
+      await pumpUntilSettled(tester);
+      await tester.tapAt(const Offset(8, 8));
+      await pumpUntilSettled(tester);
+      await tester.tap(find.widgetWithText(TextButton, 'Επεξεργασία').last);
+      await pumpUntilSettled(tester);
 
-        await tester.enterText(_buildingField(), 'Νέο κτίριο');
-        await pumpUntilSettled(tester);
-        await tester.tapAt(const Offset(8, 8));
-        await pumpUntilSettled(tester);
-        await tester.tap(find.widgetWithText(TextButton, 'Επεξεργασία').last);
-        await pumpUntilSettled(tester);
+      expect(find.text(_kUnsavedChangesPrompt), findsNothing);
+      expect(find.text(_kDepartmentFormTitle), findsOneWidget);
+      expect(find.textContaining('Νέο κτίριο'), findsOneWidget);
+    });
 
-        expect(find.text(_kUnsavedChangesPrompt), findsNothing);
-        expect(find.text(_kDepartmentFormTitle), findsOneWidget);
-        expect(find.textContaining('Νέο κτίριο'), findsOneWidget);
-      },
-    );
+    testWidgets('επεξεργασία με αλλαγή: «Ακύρωση Αλλαγών» κλείνει τη φόρμα', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(1600, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
 
-    testWidgets(
-      'επεξεργασία με αλλαγή: «Ακύρωση Αλλαγών» κλείνει τη φόρμα',
-      (tester) async {
-        tester.view.physicalSize = const Size(1600, 900);
-        tester.view.devicePixelRatio = 1.0;
-        addTearDown(() {
-          tester.view.resetPhysicalSize();
-          tester.view.resetDevicePixelRatio();
-        });
+      final container = ProviderContainer(
+        overrides: callLoggerTestProviderOverrides(),
+      );
+      addTearDown(container.dispose);
 
-        final container = ProviderContainer(
-          overrides: callLoggerTestProviderOverrides(),
+      late DepartmentDirectoryNotifier notifier;
+      await tester.runAsync(() async {
+        await container.read(lookupServiceProvider.future);
+        notifier = container.read(departmentDirectoryProvider.notifier);
+        await notifier.loadDepartments();
+        await _openDepartmentFormInDialog(
+          tester,
+          container,
+          initialDepartment: DepartmentModel(
+            id: deptId,
+            name: _kFantasmaDepartmentName,
+            color: '#33691F',
+          ),
+          notifier: notifier,
         );
-        addTearDown(container.dispose);
+      });
 
-        late DepartmentDirectoryNotifier notifier;
-        await tester.runAsync(() async {
-          await container.read(lookupServiceProvider.future);
-          notifier = container.read(departmentDirectoryProvider.notifier);
-          await notifier.loadDepartments();
-          await _openDepartmentFormInDialog(
-            tester,
-            container,
-            initialDepartment: DepartmentModel(
-              id: deptId,
-              name: _kFantasmaDepartmentName,
-              color: '#33691F',
-            ),
-            notifier: notifier,
-          );
-        });
+      await tester.enterText(_buildingField(), 'Νέο κτίριο');
+      await pumpUntilSettled(tester);
+      await tester.tapAt(const Offset(8, 8));
+      await pumpUntilSettled(tester);
+      await tester.tap(find.widgetWithText(FilledButton, 'Ακύρωση Αλλαγών'));
+      await pumpUntilSettled(tester);
 
-        await tester.enterText(_buildingField(), 'Νέο κτίριο');
-        await pumpUntilSettled(tester);
-        await tester.tapAt(const Offset(8, 8));
-        await pumpUntilSettled(tester);
-        await tester.tap(find.widgetWithText(FilledButton, 'Ακύρωση Αλλαγών'));
-        await pumpUntilSettled(tester);
+      expect(find.text(_kDepartmentFormTitle), findsNothing);
+    });
 
-        expect(find.text(_kDepartmentFormTitle), findsNothing);
-      },
-    );
+    testWidgets('νέο τμήμα χωρίς όνομα: ακύρωση κλείνει χωρίς επιβεβαίωση', (
+      tester,
+    ) async {
+      final container = ProviderContainer(
+        overrides: callLoggerTestProviderOverrides(),
+      );
+      addTearDown(container.dispose);
 
-    testWidgets(
-      'νέο τμήμα χωρίς όνομα: ακύρωση κλείνει χωρίς επιβεβαίωση',
-      (tester) async {
-        final container = ProviderContainer(
-          overrides: callLoggerTestProviderOverrides(),
+      late DepartmentDirectoryNotifier notifier;
+      await tester.runAsync(() async {
+        await container.read(lookupServiceProvider.future);
+        notifier = container.read(departmentDirectoryProvider.notifier);
+        await notifier.loadDepartments();
+        await _openDepartmentFormInDialog(
+          tester,
+          container,
+          notifier: notifier,
         );
-        addTearDown(container.dispose);
+      });
 
-        late DepartmentDirectoryNotifier notifier;
-        await tester.runAsync(() async {
-          await container.read(lookupServiceProvider.future);
-          notifier = container.read(departmentDirectoryProvider.notifier);
-          await notifier.loadDepartments();
-          await _openDepartmentFormInDialog(
-            tester,
-            container,
-            notifier: notifier,
-          );
-        });
+      expect(find.text(_kNewDepartmentFormTitle), findsOneWidget);
+      await tester.tap(find.widgetWithText(TextButton, 'Ακύρωση'));
+      await pumpUntilSettled(tester);
 
-        expect(find.text(_kNewDepartmentFormTitle), findsOneWidget);
-        await tester.tap(find.widgetWithText(TextButton, 'Ακύρωση'));
-        await pumpUntilSettled(tester);
-
-        expect(find.text(_kNewDepartmentFormTitle), findsNothing);
-        expect(find.text(_kUnsavedChangesPrompt), findsNothing);
-      },
-    );
+      expect(find.text(_kNewDepartmentFormTitle), findsNothing);
+      expect(find.text(_kUnsavedChangesPrompt), findsNothing);
+    });
 
     testWidgets(
       'νέο τμήμα με όνομα: κουμπί ακύρωσης κλείνει χωρίς επιβεβαίωση',
@@ -626,46 +631,45 @@ void main() {
       },
     );
 
-    testWidgets(
-      'νέο τμήμα με όνομα: κλικ εκτός εμφανίζει προειδοποίηση',
-      (tester) async {
-        tester.view.physicalSize = const Size(1600, 900);
-        tester.view.devicePixelRatio = 1.0;
-        addTearDown(() {
-          tester.view.resetPhysicalSize();
-          tester.view.resetDevicePixelRatio();
-        });
+    testWidgets('νέο τμήμα με όνομα: κλικ εκτός εμφανίζει προειδοποίηση', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(1600, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
 
-        final container = ProviderContainer(
-          overrides: callLoggerTestProviderOverrides(),
+      final container = ProviderContainer(
+        overrides: callLoggerTestProviderOverrides(),
+      );
+      addTearDown(container.dispose);
+
+      late DepartmentDirectoryNotifier notifier;
+      await tester.runAsync(() async {
+        await container.read(lookupServiceProvider.future);
+        notifier = container.read(departmentDirectoryProvider.notifier);
+        await notifier.loadDepartments();
+        await _openDepartmentFormInDialog(
+          tester,
+          container,
+          notifier: notifier,
         );
-        addTearDown(container.dispose);
+      });
 
-        late DepartmentDirectoryNotifier notifier;
-        await tester.runAsync(() async {
-          await container.read(lookupServiceProvider.future);
-          notifier = container.read(departmentDirectoryProvider.notifier);
-          await notifier.loadDepartments();
-          await _openDepartmentFormInDialog(
-            tester,
-            container,
-            notifier: notifier,
-          );
-        });
+      await tester.enterText(_departmentNameField(), 'Πειραματικό');
+      await pumpUntilSettled(tester);
+      await tester.tapAt(const Offset(8, 8));
+      await pumpUntilSettled(tester);
 
-        await tester.enterText(_departmentNameField(), 'Πειραματικό');
-        await pumpUntilSettled(tester);
-        await tester.tapAt(const Offset(8, 8));
-        await pumpUntilSettled(tester);
-
-        expect(
-          find.textContaining('Το τμήμα δεν έχει αποθηκευτεί.'),
-          findsOneWidget,
-        );
-        expect(find.textContaining(_kUnsavedChangesPrompt), findsOneWidget);
-        expect(find.text(_kNewDepartmentFormTitle), findsOneWidget);
-      },
-    );
+      expect(
+        find.textContaining('Το τμήμα δεν έχει αποθηκευτεί.'),
+        findsOneWidget,
+      );
+      expect(find.textContaining(_kUnsavedChangesPrompt), findsOneWidget);
+      expect(find.text(_kNewDepartmentFormTitle), findsOneWidget);
+    });
 
     testWidgets(
       'επεξεργασία με αλλαγή: κλικ εκτός (barrier) εμφανίζει επιβεβαίωση',
@@ -725,9 +729,7 @@ void main() {
     }
 
     Finder floorDropdown() {
-      return find.byWidgetPredicate(
-        (w) => w is DropdownButtonFormField<int?>,
-      );
+      return find.byWidgetPredicate((w) => w is DropdownButtonFormField<int?>);
     }
 
     testWidgets(
@@ -870,7 +872,9 @@ void main() {
         expect(
           tester.widget<FilledButton>(saveButton).onPressed,
           isNotNull,
-          reason: greekExpectMsg('Το κουμπί αποθήκευσης πρέπει να είναι ενεργό'),
+          reason: greekExpectMsg(
+            'Το κουμπί αποθήκευσης πρέπει να είναι ενεργό',
+          ),
         );
         await tester.tap(saveButton);
         await pumpUntilSettled(tester);

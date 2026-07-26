@@ -13,10 +13,7 @@ import 'lamp_screen_host.dart';
 import 'lamp_search_query_parser.dart';
 
 class LampSearchController {
-  LampSearchController({
-    required this.host,
-    required this.path,
-  });
+  LampSearchController({required this.host, required this.path});
 
   final LampScreenHost host;
   final LampPathController path;
@@ -52,9 +49,7 @@ class LampSearchController {
   static List<EquipmentViewModel> buildResultViewModels(
     List<Map<String, Object?>> rows,
   ) {
-    return rows
-        .map(EquipmentViewModel.fromRow)
-        .toList(growable: false);
+    return rows.map(EquipmentViewModel.fromRow).toList(growable: false);
   }
 
   void _assignResults(List<Map<String, Object?>> rows) {
@@ -163,7 +158,8 @@ class LampSearchController {
     final parsed = LampSearchQueryParser.parse(globalController.text);
     if (parsed.hasScopedTerms) {
       applyMirrorFromParsed(parsed);
-    } else if (globalController.text.trim().isNotEmpty && hasAnyFieldSearchInput) {
+    } else if (globalController.text.trim().isNotEmpty &&
+        hasAnyFieldSearchInput) {
       suppressLiveSearch = true;
       for (final c in fieldSearchControllers) {
         if (c.text.isNotEmpty) c.clear();
@@ -355,25 +351,22 @@ class LampSearchController {
     }
     final parsed = parseGlobalQuery();
     applyMirrorFromParsed(parsed);
-    await runSearch(
-      () {
-        if (!parsed.hasScopedTerms) {
-          return host.shared.repository.globalSearch(
-            path.readDbController.text.trim(),
-            globalController.text,
-            maxDisplay: maxSearchResults,
-          );
-        }
+    await runSearch(() {
+      if (!parsed.hasScopedTerms) {
         return host.shared.repository.globalSearch(
           path.readDbController.text.trim(),
           globalController.text,
           maxDisplay: maxSearchResults,
-          scopedTerms: parsed.scopedTerms,
-          freeText: parsed.freeText,
         );
-      },
-      showProgressSnack: showProgressSnack,
-    );
+      }
+      return host.shared.repository.globalSearch(
+        path.readDbController.text.trim(),
+        globalController.text,
+        maxDisplay: maxSearchResults,
+        scopedTerms: parsed.scopedTerms,
+        freeText: parsed.freeText,
+      );
+    }, showProgressSnack: showProgressSnack);
   }
 
   String? searchOutcomeMessage(int totalCount) {

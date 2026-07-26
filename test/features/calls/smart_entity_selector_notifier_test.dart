@@ -62,7 +62,8 @@ import '../../test_setup.dart';
 class _StubPhoneLookupService extends LookupService {
   _StubPhoneLookupService() : super.forTest();
 
-  final Map<String, List<UserModel>> stubUsersByDigits = <String, List<UserModel>>{};
+  final Map<String, List<UserModel>> stubUsersByDigits =
+      <String, List<UserModel>>{};
 
   static String _digitsOnly(String s) => s.replaceAll(RegExp(r'[^0-9]'), '');
 
@@ -94,10 +95,7 @@ UserModel _u({
   );
 }
 
-EquipmentModel _e({
-  required int id,
-  required String code,
-}) {
+EquipmentModel _e({required int id, required String code}) {
   return EquipmentModel(id: id, code: code, type: 'PC');
 }
 
@@ -126,7 +124,9 @@ Future<ProviderContainer> _containerWithCatalog({
   return container;
 }
 
-Future<ProviderContainer> _containerWithLookupService(LookupService service) async {
+Future<ProviderContainer> _containerWithLookupService(
+  LookupService service,
+) async {
   final container = ProviderContainer(
     overrides: [
       lookupServiceProvider.overrideWith(
@@ -270,8 +270,20 @@ void main() {
         final n = container.read(callSmartEntityProvider.notifier);
         n.performPhoneLookup('23');
         final s = container.read(callSmartEntityProvider);
-        expect(s.isPhoneAmbiguous, isFalse, reason: greekExpectMsg('Δεν πρέπει να εμφανίζεται ασάφεια τηλεφώνου για <3 ψηφία'));
-        expect(s.callerNoMatch, isFalse, reason: greekExpectMsg('Δεν πρέπει σημαία callerNoMatch πριν πλήρες lookup'));
+        expect(
+          s.isPhoneAmbiguous,
+          isFalse,
+          reason: greekExpectMsg(
+            'Δεν πρέπει να εμφανίζεται ασάφεια τηλεφώνου για <3 ψηφία',
+          ),
+        );
+        expect(
+          s.callerNoMatch,
+          isFalse,
+          reason: greekExpectMsg(
+            'Δεν πρέπει σημαία callerNoMatch πριν πλήρες lookup',
+          ),
+        );
       },
     );
 
@@ -288,30 +300,65 @@ void main() {
       n.updatePhone('999');
       n.performPhoneLookup('999');
       final s = container.read(callSmartEntityProvider);
-      expect(s.callerNoMatch, isTrue, reason: greekExpectMsg('Αναμενόταν ένδειξη «Καμία αντιστοιχία» καλούντα'));
-      expect(s.selectedCaller, isNull, reason: greekExpectMsg('Δεν πρέπει να έχει επιλεγεί καλώντας'));
+      expect(
+        s.callerNoMatch,
+        isTrue,
+        reason: greekExpectMsg(
+          'Αναμενόταν ένδειξη «Καμία αντιστοιχία» καλούντα',
+        ),
+      );
+      expect(
+        s.selectedCaller,
+        isNull,
+        reason: greekExpectMsg('Δεν πρέπει να έχει επιλεγεί καλώντας'),
+      );
     });
 
     // Μοναδικός χρήστης: επιλογή caller + τηλεφώνου, χωρίς σφάλμα αντιστοίχισης.
     //   flutter test test/features/calls/smart_entity_selector_notifier_test.dart --plain-name "performPhoneLookup: ένας χρήστης → επιλογή καλούντα και τηλεφώνου"
-    test('performPhoneLookup: ένας χρήστης → επιλογή καλούντα και τηλεφώνου', () async {
-      final container = await _containerWithCatalog(
-        users: [
-          _u(id: 1, first: 'Νίκος', last: 'Δοκιμής', phone: '2345', departmentId: 1),
-        ],
-        equipment: [_e(id: 10, code: 'PC1')],
-        departments: [DepartmentModel(id: 1, name: 'IT')],
-        userToEquipmentIds: {1: [10]},
-      );
-      addTearDown(container.dispose);
-      final n = container.read(callSmartEntityProvider.notifier);
-      n.updatePhone('2345');
-      n.performPhoneLookup('2345');
-      final s = container.read(callSmartEntityProvider);
-      expect(s.selectedCaller?.id, 1, reason: greekExpectMsg('Πρέπει να επιλεγεί ο μοναδικός χρήστης'));
-      expect(s.selectedPhone, contains('2345'), reason: greekExpectMsg('Το τηλέφωνο πρέπει να παραμείνει συσχετισμένο'));
-      expect(s.callerNoMatch, isFalse, reason: greekExpectMsg('Δεν πρέπει σφάλμα αντιστοίχισης'));
-    });
+    test(
+      'performPhoneLookup: ένας χρήστης → επιλογή καλούντα και τηλεφώνου',
+      () async {
+        final container = await _containerWithCatalog(
+          users: [
+            _u(
+              id: 1,
+              first: 'Νίκος',
+              last: 'Δοκιμής',
+              phone: '2345',
+              departmentId: 1,
+            ),
+          ],
+          equipment: [_e(id: 10, code: 'PC1')],
+          departments: [DepartmentModel(id: 1, name: 'IT')],
+          userToEquipmentIds: {
+            1: [10],
+          },
+        );
+        addTearDown(container.dispose);
+        final n = container.read(callSmartEntityProvider.notifier);
+        n.updatePhone('2345');
+        n.performPhoneLookup('2345');
+        final s = container.read(callSmartEntityProvider);
+        expect(
+          s.selectedCaller?.id,
+          1,
+          reason: greekExpectMsg('Πρέπει να επιλεγεί ο μοναδικός χρήστης'),
+        );
+        expect(
+          s.selectedPhone,
+          contains('2345'),
+          reason: greekExpectMsg(
+            'Το τηλέφωνο πρέπει να παραμείνει συσχετισμένο',
+          ),
+        );
+        expect(
+          s.callerNoMatch,
+          isFalse,
+          reason: greekExpectMsg('Δεν πρέπει σφάλμα αντιστοίχισης'),
+        );
+      },
+    );
 
     // Πολλοί χρήστες στο ίδιο τηλέφωνο → isPhoneAmbiguous + λίστα callerCandidates.
     //   flutter test test/features/calls/smart_entity_selector_notifier_test.dart --plain-name "performPhoneLookup: πολλοί χρήστες → ασάφεια τηλεφώνου"
@@ -329,8 +376,18 @@ void main() {
       n.updatePhone('2345');
       n.performPhoneLookup('2345');
       final s = container.read(callSmartEntityProvider);
-      expect(s.isPhoneAmbiguous, isTrue, reason: greekExpectMsg('Αναμενόταν ασάφεια όταν πολλοί χρήστες ταιριάζουν'));
-      expect(s.callerCandidates.length, 2, reason: greekExpectMsg('Λίστα υποψηφίων καλούντων'));
+      expect(
+        s.isPhoneAmbiguous,
+        isTrue,
+        reason: greekExpectMsg(
+          'Αναμενόταν ασάφεια όταν πολλοί χρήστες ταιριάζουν',
+        ),
+      );
+      expect(
+        s.callerCandidates.length,
+        2,
+        reason: greekExpectMsg('Λίστα υποψηφίων καλούντων'),
+      );
     });
 
     // performPhoneLookup (users.isEmpty) — διατήρηση χειροκίνητου εξοπλισμού.
@@ -354,8 +411,16 @@ void main() {
           n.updatePhone('999999');
           n.performPhoneLookup('999999');
           final s = container.read(callSmartEntityProvider);
-          expect(s.selectedEquipment?.id, 946, reason: greekExpectMsg('Διατηρείται το id εξοπλισμού'));
-          expect(s.equipmentText, '946', reason: greekExpectMsg('Διατηρείται το κείμενο εξοπλισμού'));
+          expect(
+            s.selectedEquipment?.id,
+            946,
+            reason: greekExpectMsg('Διατηρείται το id εξοπλισμού'),
+          );
+          expect(
+            s.equipmentText,
+            '946',
+            reason: greekExpectMsg('Διατηρείται το κείμενο εξοπλισμού'),
+          );
         },
       );
 
@@ -373,8 +438,16 @@ void main() {
           n.updatePhone('999999');
           n.performPhoneLookup('999999');
           final s = container.read(callSmartEntityProvider);
-          expect(s.selectedEquipment, isNull, reason: greekExpectMsg('Χωρίς εξοπλισμό — null'));
-          expect(s.callerNoMatch, isTrue, reason: greekExpectMsg('Αναμενόμενο callerNoMatch'));
+          expect(
+            s.selectedEquipment,
+            isNull,
+            reason: greekExpectMsg('Χωρίς εξοπλισμό — null'),
+          );
+          expect(
+            s.callerNoMatch,
+            isTrue,
+            reason: greekExpectMsg('Αναμενόμενο callerNoMatch'),
+          );
         },
       );
 
@@ -400,9 +473,21 @@ void main() {
           n.updatePhone('2345');
           n.performPhoneLookup('2345');
           final s = container.read(callSmartEntityProvider);
-          expect(s.isPhoneAmbiguous, isTrue, reason: greekExpectMsg('Ασάφεια τηλεφώνου'));
-          expect(s.selectedEquipment?.id, 946, reason: greekExpectMsg('Διατηρείται το id εξοπλισμού'));
-          expect(s.equipmentText, '946', reason: greekExpectMsg('Διατηρείται το κείμενο εξοπλισμού'));
+          expect(
+            s.isPhoneAmbiguous,
+            isTrue,
+            reason: greekExpectMsg('Ασάφεια τηλεφώνου'),
+          );
+          expect(
+            s.selectedEquipment?.id,
+            946,
+            reason: greekExpectMsg('Διατηρείται το id εξοπλισμού'),
+          );
+          expect(
+            s.equipmentText,
+            '946',
+            reason: greekExpectMsg('Διατηρείται το κείμενο εξοπλισμού'),
+          );
         },
       );
     });
@@ -425,33 +510,58 @@ void main() {
       n.updateCallerDisplayText('Σταματίνα Γεωργάκη');
       n.updatePhone('2551');
       final s = container.read(callSmartEntityProvider);
-      expect(s.selectedCaller, isNull, reason: greekExpectMsg('Η αλλαγή τηλεφώνου πρέπει να καθαρίζει τον επιλεγμένο καλούντα'));
+      expect(
+        s.selectedCaller,
+        isNull,
+        reason: greekExpectMsg(
+          'Η αλλαγή τηλεφώνου πρέπει να καθαρίζει τον επιλεγμένο καλούντα',
+        ),
+      );
     });
 
     // Επιλογή υποψηφίου αριθμού: διατηρείται ο caller, αδειάζουν phoneCandidates.
     //   flutter test test/features/calls/smart_entity_selector_notifier_test.dart --plain-name "selectPhoneFromCandidates διατηρεί καλούντα όταν υπάρχει λίστα τηλεφώνων"
-    test('selectPhoneFromCandidates διατηρεί καλούντα όταν υπάρχει λίστα τηλεφώνων', () async {
-      final user = _u(
-        id: 10,
-        first: 'Σταματίνα',
-        last: 'Γεωργάκη',
-        phone: '2551 2564',
-      );
-      final container = await _containerWithCatalog(
-        users: [user],
-        equipment: [],
-        departments: [],
-      );
-      addTearDown(container.dispose);
-      final n = container.read(callSmartEntityProvider.notifier);
-      n.updateSelectedCaller(user);
-      n.updateCallerDisplayText('Σταματίνα Γεωργάκη');
-      n.selectPhoneFromCandidates('2551');
-      final s = container.read(callSmartEntityProvider);
-      expect(s.selectedPhone, '2551', reason: greekExpectMsg('Επιλεγμένο τηλέφωνο από λίστα'));
-      expect(s.selectedCaller?.id, 10, reason: greekExpectMsg('Ο καλώντας παραμένει μετά την επιλογή τηλεφώνου'));
-      expect(s.phoneCandidates, isEmpty, reason: greekExpectMsg('Μετά την επιλογή αδειάζουν οι υποψήφιοι αριθμοί'));
-    });
+    test(
+      'selectPhoneFromCandidates διατηρεί καλούντα όταν υπάρχει λίστα τηλεφώνων',
+      () async {
+        final user = _u(
+          id: 10,
+          first: 'Σταματίνα',
+          last: 'Γεωργάκη',
+          phone: '2551 2564',
+        );
+        final container = await _containerWithCatalog(
+          users: [user],
+          equipment: [],
+          departments: [],
+        );
+        addTearDown(container.dispose);
+        final n = container.read(callSmartEntityProvider.notifier);
+        n.updateSelectedCaller(user);
+        n.updateCallerDisplayText('Σταματίνα Γεωργάκη');
+        n.selectPhoneFromCandidates('2551');
+        final s = container.read(callSmartEntityProvider);
+        expect(
+          s.selectedPhone,
+          '2551',
+          reason: greekExpectMsg('Επιλεγμένο τηλέφωνο από λίστα'),
+        );
+        expect(
+          s.selectedCaller?.id,
+          10,
+          reason: greekExpectMsg(
+            'Ο καλώντας παραμένει μετά την επιλογή τηλεφώνου',
+          ),
+        );
+        expect(
+          s.phoneCandidates,
+          isEmpty,
+          reason: greekExpectMsg(
+            'Μετά την επιλογή αδειάζουν οι υποψήφιοι αριθμοί',
+          ),
+        );
+      },
+    );
 
     // Κενό query αναζήτησης καλούντα → δεν σηματοδοτεί callerNoMatch.
     //   flutter test test/features/calls/smart_entity_selector_notifier_test.dart --plain-name "performCallerLookup: κενό query δεν αλλάζει κατάσταση"
@@ -467,7 +577,9 @@ void main() {
       expect(
         container.read(callSmartEntityProvider).callerNoMatch,
         isFalse,
-        reason: greekExpectMsg('Κενό query δεν σημαίνει αποτυχία αντιστοίχισης'),
+        reason: greekExpectMsg(
+          'Κενό query δεν σημαίνει αποτυχία αντιστοίχισης',
+        ),
       );
     });
 
@@ -489,64 +601,104 @@ void main() {
 
     // Άγνωστος κωδικός εξοπλισμού → equipmentNoMatch.
     //   flutter test test/features/calls/smart_entity_selector_notifier_test.dart --plain-name "performEquipmentLookupByCode: χωρίς αποτελέσματα → equipmentNoMatch"
-    test('performEquipmentLookupByCode: χωρίς αποτελέσματα → equipmentNoMatch', () async {
-      final container = await _containerWithCatalog(
-        users: [],
-        equipment: [],
-        departments: [],
-      );
-      addTearDown(container.dispose);
-      final n = container.read(callSmartEntityProvider.notifier);
-      n.performEquipmentLookupByCode('ΧΧΧ');
-      expect(
-        container.read(callSmartEntityProvider).equipmentNoMatch,
-        isTrue,
-        reason: greekExpectMsg('Κωδικός χωρίς αντιστοίχιση'),
-      );
-    });
+    test(
+      'performEquipmentLookupByCode: χωρίς αποτελέσματα → equipmentNoMatch',
+      () async {
+        final container = await _containerWithCatalog(
+          users: [],
+          equipment: [],
+          departments: [],
+        );
+        addTearDown(container.dispose);
+        final n = container.read(callSmartEntityProvider.notifier);
+        n.performEquipmentLookupByCode('ΧΧΧ');
+        expect(
+          container.read(callSmartEntityProvider).equipmentNoMatch,
+          isTrue,
+          reason: greekExpectMsg('Κωδικός χωρίς αντιστοίχιση'),
+        );
+      },
+    );
 
     // Μοναδικός εξοπλισμός: επιλογή equipment + συμπλήρωση καλούντα από κάτοχο.
     //   flutter test test/features/calls/smart_entity_selector_notifier_test.dart --plain-name "performEquipmentLookupByCode: ένας εξοπλισμός → επιλογή + καλώντας"
-    test('performEquipmentLookupByCode: ένας εξοπλισμός → επιλογή + καλώντας', () async {
-      final container = await _containerWithCatalog(
-        users: [
-          _u(id: 5, first: 'Μαρία', last: 'Τέστ', phone: '1000', departmentId: 2),
-        ],
-        equipment: [_e(id: 99, code: 'EQ-1')],
-        departments: [DepartmentModel(id: 2, name: 'Λογιστήριο')],
-        userToEquipmentIds: {5: [99]},
-      );
-      addTearDown(container.dispose);
-      final n = container.read(callSmartEntityProvider.notifier);
-      n.performEquipmentLookupByCode('EQ-1');
-      final s = container.read(callSmartEntityProvider);
-      expect(s.selectedEquipment?.code, 'EQ-1', reason: greekExpectMsg('Επιλογή εξοπλισμού'));
-      expect(s.selectedCaller?.id, 5, reason: greekExpectMsg('Συμπλήρωση καλούντα από κάτοχο'));
-      expect(s.equipmentNoMatch, isFalse, reason: greekExpectMsg('Όχι σφάλμα εξοπλισμού'));
-    });
+    test(
+      'performEquipmentLookupByCode: ένας εξοπλισμός → επιλογή + καλώντας',
+      () async {
+        final container = await _containerWithCatalog(
+          users: [
+            _u(
+              id: 5,
+              first: 'Μαρία',
+              last: 'Τέστ',
+              phone: '1000',
+              departmentId: 2,
+            ),
+          ],
+          equipment: [_e(id: 99, code: 'EQ-1')],
+          departments: [DepartmentModel(id: 2, name: 'Λογιστήριο')],
+          userToEquipmentIds: {
+            5: [99],
+          },
+        );
+        addTearDown(container.dispose);
+        final n = container.read(callSmartEntityProvider.notifier);
+        n.performEquipmentLookupByCode('EQ-1');
+        final s = container.read(callSmartEntityProvider);
+        expect(
+          s.selectedEquipment?.code,
+          'EQ-1',
+          reason: greekExpectMsg('Επιλογή εξοπλισμού'),
+        );
+        expect(
+          s.selectedCaller?.id,
+          5,
+          reason: greekExpectMsg('Συμπλήρωση καλούντα από κάτοχο'),
+        );
+        expect(
+          s.equipmentNoMatch,
+          isFalse,
+          reason: greekExpectMsg('Όχι σφάλμα εξοπλισμού'),
+        );
+      },
+    );
 
     // Prefix που ταιριάζει σε πολλούς εξοπλισμούς → isEquipmentAmbiguous + candidates.
     //   flutter test test/features/calls/smart_entity_selector_notifier_test.dart --plain-name "performEquipmentLookupByCode: πολλαπλά → ασάφεια εξοπλισμού"
-    test('performEquipmentLookupByCode: πολλαπλά → ασάφεια εξοπλισμού', () async {
-      final container = await _containerWithCatalog(
-        users: [
-          _u(id: 1, first: 'Α', last: 'Α', phone: '1'),
-          _u(id: 2, first: 'Β', last: 'Β', phone: '2'),
-        ],
-        equipment: [
-          _e(id: 1, code: 'PC-X'),
-          _e(id: 2, code: 'PC-X2'),
-        ],
-        departments: [],
-        userToEquipmentIds: {1: [1], 2: [2]},
-      );
-      addTearDown(container.dispose);
-      final n = container.read(callSmartEntityProvider.notifier);
-      n.performEquipmentLookupByCode('PC');
-      final s = container.read(callSmartEntityProvider);
-      expect(s.isEquipmentAmbiguous, isTrue, reason: greekExpectMsg('Πολλαπλοί εξοπλισμοί για το ίδιο prefix'));
-      expect(s.equipmentCandidates.length, greaterThan(1), reason: greekExpectMsg('Λίστα υποψηφίων εξοπλισμού'));
-    });
+    test(
+      'performEquipmentLookupByCode: πολλαπλά → ασάφεια εξοπλισμού',
+      () async {
+        final container = await _containerWithCatalog(
+          users: [
+            _u(id: 1, first: 'Α', last: 'Α', phone: '1'),
+            _u(id: 2, first: 'Β', last: 'Β', phone: '2'),
+          ],
+          equipment: [
+            _e(id: 1, code: 'PC-X'),
+            _e(id: 2, code: 'PC-X2'),
+          ],
+          departments: [],
+          userToEquipmentIds: {
+            1: [1],
+            2: [2],
+          },
+        );
+        addTearDown(container.dispose);
+        final n = container.read(callSmartEntityProvider.notifier);
+        n.performEquipmentLookupByCode('PC');
+        final s = container.read(callSmartEntityProvider);
+        expect(
+          s.isEquipmentAmbiguous,
+          isTrue,
+          reason: greekExpectMsg('Πολλαπλοί εξοπλισμοί για το ίδιο prefix'),
+        );
+        expect(
+          s.equipmentCandidates.length,
+          greaterThan(1),
+          reason: greekExpectMsg('Λίστα υποψηφίων εξοπλισμού'),
+        );
+      },
+    );
 
     // canSubmitCall: false με κενή φόρμα· true μόνο για «καθαρό» εσωτερικό (ψηφία· όχι γράμματα).
     //   flutter test test/features/calls/smart_entity_selector_notifier_test.dart --plain-name "canSubmitCall απαιτεί μη κενό τηλέφωνο"
@@ -587,7 +739,13 @@ void main() {
       () async {
         final container = await _containerWithCatalog(
           users: [
-            _u(id: 3, first: 'Μόνος', last: 'ΧωρίςPC', phone: '3000', departmentId: 1),
+            _u(
+              id: 3,
+              first: 'Μόνος',
+              last: 'ΧωρίςPC',
+              phone: '3000',
+              departmentId: 1,
+            ),
           ],
           equipment: [],
           departments: [DepartmentModel(id: 1, name: 'IT')],
@@ -597,9 +755,21 @@ void main() {
         n.updatePhone('3000');
         n.performPhoneLookup('3000');
         final s = container.read(callSmartEntityProvider);
-        expect(s.selectedCaller?.id, 3, reason: greekExpectMsg('Επιλογή καλούντα'));
-        expect(s.equipmentNoMatch, isTrue, reason: greekExpectMsg('Χωρίς εξοπλισμό στον κάτοχο'));
-        expect(s.isEquipmentAmbiguous, isFalse, reason: greekExpectMsg('Όχι ασάφεια εξοπλισμού'));
+        expect(
+          s.selectedCaller?.id,
+          3,
+          reason: greekExpectMsg('Επιλογή καλούντα'),
+        );
+        expect(
+          s.equipmentNoMatch,
+          isTrue,
+          reason: greekExpectMsg('Χωρίς εξοπλισμό στον κάτοχο'),
+        );
+        expect(
+          s.isEquipmentAmbiguous,
+          isFalse,
+          reason: greekExpectMsg('Όχι ασάφεια εξοπλισμού'),
+        );
       },
     );
 
@@ -610,22 +780,38 @@ void main() {
       () async {
         final container = await _containerWithCatalog(
           users: [
-            _u(id: 4, first: 'Διπλός', last: 'Εξοπλισμός', phone: '4000', departmentId: 1),
+            _u(
+              id: 4,
+              first: 'Διπλός',
+              last: 'Εξοπλισμός',
+              phone: '4000',
+              departmentId: 1,
+            ),
           ],
           equipment: [
             _e(id: 401, code: 'PC-A'),
             _e(id: 402, code: 'PC-B'),
           ],
           departments: [DepartmentModel(id: 1, name: 'IT')],
-          userToEquipmentIds: {4: [401, 402]},
+          userToEquipmentIds: {
+            4: [401, 402],
+          },
         );
         addTearDown(container.dispose);
         final n = container.read(callSmartEntityProvider.notifier);
         n.updatePhone('4000');
         n.performPhoneLookup('4000');
         final s = container.read(callSmartEntityProvider);
-        expect(s.isEquipmentAmbiguous, isTrue, reason: greekExpectMsg('Δύο εξοπλισμοί για τον ίδιο χρήστη'));
-        expect(s.equipmentCandidates.length, 2, reason: greekExpectMsg('Δύο υποψήφιοι εξοπλισμοί'));
+        expect(
+          s.isEquipmentAmbiguous,
+          isTrue,
+          reason: greekExpectMsg('Δύο εξοπλισμοί για τον ίδιο χρήστη'),
+        );
+        expect(
+          s.equipmentCandidates.length,
+          2,
+          reason: greekExpectMsg('Δύο υποψήφιοι εξοπλισμοί'),
+        );
       },
     );
 
@@ -636,35 +822,77 @@ void main() {
       () async {
         final container = await _containerWithCatalog(
           users: [
-            _u(id: 8, first: 'Ελένη', last: 'Κλήση', phone: '8000', departmentId: 5),
+            _u(
+              id: 8,
+              first: 'Ελένη',
+              last: 'Κλήση',
+              phone: '8000',
+              departmentId: 5,
+            ),
           ],
           equipment: [_e(id: 80, code: 'PC-ELENI')],
           departments: [DepartmentModel(id: 5, name: 'Υποστήριξη')],
-          userToEquipmentIds: {8: [80]},
+          userToEquipmentIds: {
+            8: [80],
+          },
         );
         addTearDown(container.dispose);
         final n = container.read(callSmartEntityProvider.notifier);
 
         n.performCallerLookup('Ελένη');
         final partial = container.read(callSmartEntityProvider);
-        expect(partial.selectedCaller, isNull, reason: greekExpectMsg('Μερικό όνομα — χωρίς αυτόματη επιλογή'));
-        expect(partial.callerDisplayText, '', reason: greekExpectMsg('Μερικό όνομα — χωρίς αλλαγή κειμένου καλούντα'));
-        expect(partial.departmentText, '', reason: greekExpectMsg('Μερικό όνομα — χωρίς αυτόματο τμήμα'));
-        expect(partial.callerCandidates.length, 1, reason: greekExpectMsg('Ένας υποψήφιος καλώντας'));
+        expect(
+          partial.selectedCaller,
+          isNull,
+          reason: greekExpectMsg('Μερικό όνομα — χωρίς αυτόματη επιλογή'),
+        );
+        expect(
+          partial.callerDisplayText,
+          '',
+          reason: greekExpectMsg(
+            'Μερικό όνομα — χωρίς αλλαγή κειμένου καλούντα',
+          ),
+        );
+        expect(
+          partial.departmentText,
+          '',
+          reason: greekExpectMsg('Μερικό όνομα — χωρίς αυτόματο τμήμα'),
+        );
+        expect(
+          partial.callerCandidates.length,
+          1,
+          reason: greekExpectMsg('Ένας υποψήφιος καλώντας'),
+        );
         expect(partial.callerCandidates.first.id, 8);
-        expect(partial.callerNoMatch, isFalse, reason: greekExpectMsg('Υπάρχει ταίριασμα — όχι no-match'));
+        expect(
+          partial.callerNoMatch,
+          isFalse,
+          reason: greekExpectMsg('Υπάρχει ταίριασμα — όχι no-match'),
+        );
 
         n.clearAll();
         n.performCallerLookup('Ελένη Κλήση');
         final full = container.read(callSmartEntityProvider);
-        expect(full.selectedCaller?.id, 8, reason: greekExpectMsg('Πλήρες όνομα — επιλογή καλούντα'));
+        expect(
+          full.selectedCaller?.id,
+          8,
+          reason: greekExpectMsg('Πλήρες όνομα — επιλογή καλούντα'),
+        );
         expect(
           full.departmentText,
           'Υποστήριξη',
           reason: greekExpectMsg('Πλήρες όνομα — συμπλήρωση τμήματος'),
         );
-        expect(full.selectedEquipment?.code, 'PC-ELENI', reason: greekExpectMsg('Πλήρες όνομα — autofill εξοπλισμού'));
-        expect(full.callerNoMatch, isFalse, reason: greekExpectMsg('Επιτυχής αντιστοίχιση'));
+        expect(
+          full.selectedEquipment?.code,
+          'PC-ELENI',
+          reason: greekExpectMsg('Πλήρες όνομα — autofill εξοπλισμού'),
+        );
+        expect(
+          full.callerNoMatch,
+          isFalse,
+          reason: greekExpectMsg('Επιτυχής αντιστοίχιση'),
+        );
       },
     );
 
@@ -674,7 +902,13 @@ void main() {
       () async {
         final container = await _containerWithCatalog(
           users: [
-            _u(id: 8, first: 'Ελένη', last: 'Κλήση', phone: '8000', departmentId: 5),
+            _u(
+              id: 8,
+              first: 'Ελένη',
+              last: 'Κλήση',
+              phone: '8000',
+              departmentId: 5,
+            ),
           ],
           equipment: [],
           departments: [DepartmentModel(id: 5, name: 'Υποστήριξη')],
@@ -683,11 +917,31 @@ void main() {
         final n = container.read(callSmartEntityProvider.notifier);
         n.performCallerLookup('Ελένη');
         final s = container.read(callSmartEntityProvider);
-        expect(s.selectedCaller, isNull, reason: greekExpectMsg('Δεν επιλέγεται καλώντας'));
-        expect(s.callerDisplayText, '', reason: greekExpectMsg('Δεν αλλάζει το κείμενο καλούντα'));
-        expect(s.departmentText, '', reason: greekExpectMsg('Δεν αλλάζει το τμήμα'));
-        expect(s.callerCandidates.length, 1, reason: greekExpectMsg('Ένας υποψήφιος'));
-        expect(s.callerNoMatch, isFalse, reason: greekExpectMsg('Όχι σημαία no-match'));
+        expect(
+          s.selectedCaller,
+          isNull,
+          reason: greekExpectMsg('Δεν επιλέγεται καλώντας'),
+        );
+        expect(
+          s.callerDisplayText,
+          '',
+          reason: greekExpectMsg('Δεν αλλάζει το κείμενο καλούντα'),
+        );
+        expect(
+          s.departmentText,
+          '',
+          reason: greekExpectMsg('Δεν αλλάζει το τμήμα'),
+        );
+        expect(
+          s.callerCandidates.length,
+          1,
+          reason: greekExpectMsg('Ένας υποψήφιος'),
+        );
+        expect(
+          s.callerNoMatch,
+          isFalse,
+          reason: greekExpectMsg('Όχι σημαία no-match'),
+        );
       },
     );
 
@@ -697,7 +951,13 @@ void main() {
       () async {
         final container = await _containerWithCatalog(
           users: [
-            _u(id: 8, first: 'Ελένη', last: 'Κλήση', phone: '8000', departmentId: 5),
+            _u(
+              id: 8,
+              first: 'Ελένη',
+              last: 'Κλήση',
+              phone: '8000',
+              departmentId: 5,
+            ),
           ],
           equipment: [],
           departments: [DepartmentModel(id: 5, name: 'Υποστήριξη')],
@@ -709,11 +969,31 @@ void main() {
         n.updateCallerDisplayText('Ελένη');
         n.performCallerLookup('Ελένη');
         final s = container.read(callSmartEntityProvider);
-        expect(s.departmentText, 'Δοκιμαστικό', reason: greekExpectMsg('Το τμήμα παραμένει ανέγγιχτο'));
-        expect(s.equipmentText, '1001', reason: greekExpectMsg('Ο εξοπλισμός παραμένει ανέγγιχτος'));
-        expect(s.selectedEquipment, isNull, reason: greekExpectMsg('Δεν επιλέγεται εξοπλισμός'));
-        expect(s.selectedDepartmentId, isNull, reason: greekExpectMsg('Δεν ορίζεται id τμήματος'));
-        expect(s.selectedCaller, isNull, reason: greekExpectMsg('Δεν επιλέγεται καλώντας'));
+        expect(
+          s.departmentText,
+          'Δοκιμαστικό',
+          reason: greekExpectMsg('Το τμήμα παραμένει ανέγγιχτο'),
+        );
+        expect(
+          s.equipmentText,
+          '1001',
+          reason: greekExpectMsg('Ο εξοπλισμός παραμένει ανέγγιχτος'),
+        );
+        expect(
+          s.selectedEquipment,
+          isNull,
+          reason: greekExpectMsg('Δεν επιλέγεται εξοπλισμός'),
+        );
+        expect(
+          s.selectedDepartmentId,
+          isNull,
+          reason: greekExpectMsg('Δεν ορίζεται id τμήματος'),
+        );
+        expect(
+          s.selectedCaller,
+          isNull,
+          reason: greekExpectMsg('Δεν επιλέγεται καλώντας'),
+        );
       },
     );
 
@@ -723,7 +1003,13 @@ void main() {
       () async {
         final container = await _containerWithCatalog(
           users: [
-            _u(id: 8, first: 'Ελένη', last: 'Κλήση', phone: '8000', departmentId: 5),
+            _u(
+              id: 8,
+              first: 'Ελένη',
+              last: 'Κλήση',
+              phone: '8000',
+              departmentId: 5,
+            ),
           ],
           equipment: [],
           departments: [DepartmentModel(id: 5, name: 'Υποστήριξη')],
@@ -734,7 +1020,11 @@ void main() {
         n.updateCallerDisplayText('Ελένη');
         n.performCallerLookup('Ελένη');
         final s = container.read(callSmartEntityProvider);
-        expect(s.needsNewCallerCreation, isTrue, reason: greekExpectMsg('Διαθέσιμη ροή δημιουργίας νέου καλούντα'));
+        expect(
+          s.needsNewCallerCreation,
+          isTrue,
+          reason: greekExpectMsg('Διαθέσιμη ροή δημιουργίας νέου καλούντα'),
+        );
       },
     );
 
@@ -744,19 +1034,39 @@ void main() {
       () async {
         final container = await _containerWithCatalog(
           users: [
-            _u(id: 8, first: 'Ελένη', last: 'Κλήση', phone: '8000', departmentId: 5),
+            _u(
+              id: 8,
+              first: 'Ελένη',
+              last: 'Κλήση',
+              phone: '8000',
+              departmentId: 5,
+            ),
           ],
           equipment: [_e(id: 80, code: 'PC-ELENI')],
           departments: [DepartmentModel(id: 5, name: 'Υποστήριξη')],
-          userToEquipmentIds: {8: [80]},
+          userToEquipmentIds: {
+            8: [80],
+          },
         );
         addTearDown(container.dispose);
         final n = container.read(callSmartEntityProvider.notifier);
         n.performCallerLookup('Ελένη Κλήση');
         final s = container.read(callSmartEntityProvider);
-        expect(s.selectedCaller?.id, 8, reason: greekExpectMsg('Επιλογή καλούντα'));
-        expect(s.departmentText, 'Υποστήριξη', reason: greekExpectMsg('Αυτόματο τμήμα'));
-        expect(s.selectedEquipment?.code, 'PC-ELENI', reason: greekExpectMsg('Autofill εξοπλισμού'));
+        expect(
+          s.selectedCaller?.id,
+          8,
+          reason: greekExpectMsg('Επιλογή καλούντα'),
+        );
+        expect(
+          s.departmentText,
+          'Υποστήριξη',
+          reason: greekExpectMsg('Αυτόματο τμήμα'),
+        );
+        expect(
+          s.selectedEquipment?.code,
+          'PC-ELENI',
+          reason: greekExpectMsg('Autofill εξοπλισμού'),
+        );
       },
     );
 
@@ -777,8 +1087,18 @@ void main() {
         final n = container.read(callSmartEntityProvider.notifier);
         n.performCallerLookup('Γιάννης');
         final s = container.read(callSmartEntityProvider);
-        expect(s.callerCandidates.length, 2, reason: greekExpectMsg('Δύο χρήστες με κοινό όνομα'));
-        expect(s.selectedCaller, isNull, reason: greekExpectMsg('Δεν επιλέγεται αυτόματα όταν υπάρχει ασάφεια'));
+        expect(
+          s.callerCandidates.length,
+          2,
+          reason: greekExpectMsg('Δύο χρήστες με κοινό όνομα'),
+        );
+        expect(
+          s.selectedCaller,
+          isNull,
+          reason: greekExpectMsg(
+            'Δεν επιλέγεται αυτόματα όταν υπάρχει ασάφεια',
+          ),
+        );
       },
     );
 
@@ -789,7 +1109,13 @@ void main() {
       () async {
         final container = await _containerWithCatalog(
           users: [
-            _u(id: 20, first: 'Τηλέφωνο', last: 'Πεδίο', phone: '9090', departmentId: 1),
+            _u(
+              id: 20,
+              first: 'Τηλέφωνο',
+              last: 'Πεδίο',
+              phone: '9090',
+              departmentId: 1,
+            ),
           ],
           equipment: [],
           departments: [DepartmentModel(id: 1, name: 'Α')],
@@ -799,58 +1125,115 @@ void main() {
         n.clearAll();
         n.performCallerLookup('Τηλέφωνο Πεδίο', phoneFieldDigits: '9090');
         final s = container.read(callSmartEntityProvider);
-        expect(s.selectedPhone, '9090', reason: greekExpectMsg('Συγχώνευση ψηφίων από πεδίο τηλεφώνου'));
-        expect(s.selectedCaller?.id, 20, reason: greekExpectMsg('Πλήρες όνομα — επιλογή καλούντα'));
+        expect(
+          s.selectedPhone,
+          '9090',
+          reason: greekExpectMsg('Συγχώνευση ψηφίων από πεδίο τηλεφώνου'),
+        );
+        expect(
+          s.selectedCaller?.id,
+          20,
+          reason: greekExpectMsg('Πλήρες όνομα — επιλογή καλούντα'),
+        );
       },
     );
 
     // clearCaller δεν αδειάζει τμήμα/εξοπλισμό (v2 §Γ.1).
     //   flutter test test/features/calls/smart_entity_selector_notifier_test.dart --plain-name "clearCaller"
-    test(
-      'clearCaller: διατηρεί χειροκίνητο τμήμα και εξοπλισμό',
-      () async {
-        final container = await _containerWithCatalog(
-          users: [],
-          equipment: [],
-          departments: [DepartmentModel(id: 99, name: 'Δοκιμαστικό')],
-        );
-        addTearDown(container.dispose);
-        final n = container.read(callSmartEntityProvider.notifier);
-        n.updateDepartmentText('Δοκιμαστικό');
-        n.checkContent(equipmentText: '1001');
-        n.updateCallerDisplayText('Ελένη');
-        n.clearCaller();
-        final s = container.read(callSmartEntityProvider);
-        expect(s.departmentText, 'Δοκιμαστικό', reason: greekExpectMsg('Το τμήμα παραμένει'));
-        expect(s.equipmentText, '1001', reason: greekExpectMsg('Ο εξοπλισμός παραμένει'));
-        expect(s.selectedDepartmentId, 99, reason: greekExpectMsg('Το id τμήματος δεν μηδενίζεται'));
-        expect(s.selectedCaller, isNull, reason: greekExpectMsg('Ο καλώντας καθαρίστηκε'));
-        expect(s.callerDisplayText, '', reason: greekExpectMsg('Το κείμενο καλούντα καθαρίστηκε'));
-      },
-    );
+    test('clearCaller: διατηρεί χειροκίνητο τμήμα και εξοπλισμό', () async {
+      final container = await _containerWithCatalog(
+        users: [],
+        equipment: [],
+        departments: [DepartmentModel(id: 99, name: 'Δοκιμαστικό')],
+      );
+      addTearDown(container.dispose);
+      final n = container.read(callSmartEntityProvider.notifier);
+      n.updateDepartmentText('Δοκιμαστικό');
+      n.checkContent(equipmentText: '1001');
+      n.updateCallerDisplayText('Ελένη');
+      n.clearCaller();
+      final s = container.read(callSmartEntityProvider);
+      expect(
+        s.departmentText,
+        'Δοκιμαστικό',
+        reason: greekExpectMsg('Το τμήμα παραμένει'),
+      );
+      expect(
+        s.equipmentText,
+        '1001',
+        reason: greekExpectMsg('Ο εξοπλισμός παραμένει'),
+      );
+      expect(
+        s.selectedDepartmentId,
+        99,
+        reason: greekExpectMsg('Το id τμήματος δεν μηδενίζεται'),
+      );
+      expect(
+        s.selectedCaller,
+        isNull,
+        reason: greekExpectMsg('Ο καλώντας καθαρίστηκε'),
+      );
+      expect(
+        s.callerDisplayText,
+        '',
+        reason: greekExpectMsg('Το κείμενο καλούντα καθαρίστηκε'),
+      );
+    });
 
     test(
       'clearCaller: διατηρεί autofill τμήματος και εξοπλισμού μετά πλήρες lookup',
       () async {
         final container = await _containerWithCatalog(
           users: [
-            _u(id: 8, first: 'Ελένη', last: 'Κλήση', phone: '8000', departmentId: 5),
+            _u(
+              id: 8,
+              first: 'Ελένη',
+              last: 'Κλήση',
+              phone: '8000',
+              departmentId: 5,
+            ),
           ],
           equipment: [_e(id: 80, code: 'PC-ELENI')],
           departments: [DepartmentModel(id: 5, name: 'Υποστήριξη')],
-          userToEquipmentIds: {8: [80]},
+          userToEquipmentIds: {
+            8: [80],
+          },
         );
         addTearDown(container.dispose);
         final n = container.read(callSmartEntityProvider.notifier);
         n.performCallerLookup('Ελένη Κλήση');
         n.clearCaller();
         final s = container.read(callSmartEntityProvider);
-        expect(s.selectedCaller, isNull, reason: greekExpectMsg('Ο καλώντας καθαρίστηκε'));
-        expect(s.callerDisplayText, '', reason: greekExpectMsg('Το κείμενο καλούντα καθαρίστηκε'));
-        expect(s.departmentText, 'Υποστήριξη', reason: greekExpectMsg('Το τμήμα παραμένει'));
-        expect(s.selectedDepartmentId, 5, reason: greekExpectMsg('Το id τμήματος παραμένει'));
-        expect(s.equipmentText, 'PC-ELENI', reason: greekExpectMsg('Ο εξοπλισμός παραμένει'));
-        expect(s.selectedEquipment?.code, 'PC-ELENI', reason: greekExpectMsg('Η επιλογή εξοπλισμού παραμένει'));
+        expect(
+          s.selectedCaller,
+          isNull,
+          reason: greekExpectMsg('Ο καλώντας καθαρίστηκε'),
+        );
+        expect(
+          s.callerDisplayText,
+          '',
+          reason: greekExpectMsg('Το κείμενο καλούντα καθαρίστηκε'),
+        );
+        expect(
+          s.departmentText,
+          'Υποστήριξη',
+          reason: greekExpectMsg('Το τμήμα παραμένει'),
+        );
+        expect(
+          s.selectedDepartmentId,
+          5,
+          reason: greekExpectMsg('Το id τμήματος παραμένει'),
+        );
+        expect(
+          s.equipmentText,
+          'PC-ELENI',
+          reason: greekExpectMsg('Ο εξοπλισμός παραμένει'),
+        );
+        expect(
+          s.selectedEquipment?.code,
+          'PC-ELENI',
+          reason: greekExpectMsg('Η επιλογή εξοπλισμού παραμένει'),
+        );
       },
     );
 
@@ -861,16 +1244,16 @@ void main() {
       const nosiliaName = 'Νοσήλια';
 
       UserModel nosiliaUser() => _u(
-            id: 1,
-            first: 'Μαρία',
-            last: 'Νοσοκόμα',
-            phone: '2859',
-            departmentId: nosiliaId,
-          );
+        id: 1,
+        first: 'Μαρία',
+        last: 'Νοσοκόμα',
+        phone: '2859',
+        departmentId: nosiliaId,
+      );
 
       List<DepartmentModel> testDepartments() => [
-            DepartmentModel(id: nosiliaId, name: nosiliaName),
-          ];
+        DepartmentModel(id: nosiliaId, name: nosiliaName),
+      ];
 
       test(
         'ανύπαρκτο τμήμα + καλούντας άλλου τμήματος → mismatch και tooltip Νοσήλια',
@@ -976,17 +1359,17 @@ void main() {
       const surgeryName = 'Χειρουργείο';
 
       UserModel nosiliaUser() => _u(
-            id: 1,
-            first: 'Μαρία',
-            last: 'Νοσοκόμα',
-            phone: '2859',
-            departmentId: nosiliaId,
-          );
+        id: 1,
+        first: 'Μαρία',
+        last: 'Νοσοκόμα',
+        phone: '2859',
+        departmentId: nosiliaId,
+      );
 
       List<DepartmentModel> testDepartments() => [
-            DepartmentModel(id: nosiliaId, name: nosiliaName),
-            DepartmentModel(id: surgeryId, name: surgeryName),
-          ];
+        DepartmentModel(id: nosiliaId, name: nosiliaName),
+        DepartmentModel(id: surgeryId, name: surgeryName),
+      ];
 
       // Τεστ Α: ανύπαρκτο τμήμα στη φόρμα → δεν αντικαθίσταται, εμφανίζεται mismatch (v2 §Α.3).
       test(
@@ -1004,12 +1387,22 @@ void main() {
           final deptIdBefore = before.selectedDepartmentId;
           n.updateSelectedCaller(nosiliaUser());
           final s = container.read(callSmartEntityProvider);
-          expect(s.departmentText, 'Δοκιμαστικό', reason: greekExpectMsg('Το κείμενο τμήματος μένει'));
-          expect(s.selectedDepartmentId, deptIdBefore, reason: greekExpectMsg('Το id τμήματος μένει'));
+          expect(
+            s.departmentText,
+            'Δοκιμαστικό',
+            reason: greekExpectMsg('Το κείμενο τμήματος μένει'),
+          );
+          expect(
+            s.selectedDepartmentId,
+            deptIdBefore,
+            reason: greekExpectMsg('Το id τμήματος μένει'),
+          );
           expect(
             s.conflictSeverityFor(SelectorField.department),
             ConflictSeverity.mismatch,
-            reason: greekExpectMsg('Ανύπαρκτο τμήμα vs καλούντας — δείκτης σύγκρουσης'),
+            reason: greekExpectMsg(
+              'Ανύπαρκτο τμήμα vs καλούντας — δείκτης σύγκρουσης',
+            ),
           );
         },
       );
@@ -1026,12 +1419,26 @@ void main() {
           addTearDown(container.dispose);
           final n = container.read(callSmartEntityProvider.notifier);
           n.updateDepartmentText(surgeryName);
-          final deptIdBefore = container.read(callSmartEntityProvider).selectedDepartmentId;
-          expect(deptIdBefore, surgeryId, reason: greekExpectMsg('Προϋπόθεση: id Χειρουργείου'));
+          final deptIdBefore = container
+              .read(callSmartEntityProvider)
+              .selectedDepartmentId;
+          expect(
+            deptIdBefore,
+            surgeryId,
+            reason: greekExpectMsg('Προϋπόθεση: id Χειρουργείου'),
+          );
           n.updateSelectedCaller(nosiliaUser());
           final s = container.read(callSmartEntityProvider);
-          expect(s.departmentText, surgeryName, reason: greekExpectMsg('Το κείμενο μένει Χειρουργείο'));
-          expect(s.selectedDepartmentId, surgeryId, reason: greekExpectMsg('Το id μένει Χειρουργείο'));
+          expect(
+            s.departmentText,
+            surgeryName,
+            reason: greekExpectMsg('Το κείμενο μένει Χειρουργείο'),
+          );
+          expect(
+            s.selectedDepartmentId,
+            surgeryId,
+            reason: greekExpectMsg('Το id μένει Χειρουργείο'),
+          );
           expect(
             s.conflictSeverityFor(SelectorField.department),
             ConflictSeverity.mismatch,
@@ -1041,23 +1448,28 @@ void main() {
       );
 
       // Τεστ Γ: κενό τμήμα → autofill από καλούντα (ιερό σενάριο).
-      test(
-        'κενό τμήμα + επιλογή καλούντα → autofill Νοσήλια',
-        () async {
-          final container = await _containerWithCatalog(
-            users: [nosiliaUser()],
-            equipment: [],
-            departments: testDepartments(),
-          );
-          addTearDown(container.dispose);
-          final n = container.read(callSmartEntityProvider.notifier);
-          n.clearAll();
-          n.updateSelectedCaller(nosiliaUser());
-          final s = container.read(callSmartEntityProvider);
-          expect(s.departmentText, nosiliaName, reason: greekExpectMsg('Autofill τμήματος καλούντα'));
-          expect(s.selectedDepartmentId, nosiliaId, reason: greekExpectMsg('Autofill id τμήματος'));
-        },
-      );
+      test('κενό τμήμα + επιλογή καλούντα → autofill Νοσήλια', () async {
+        final container = await _containerWithCatalog(
+          users: [nosiliaUser()],
+          equipment: [],
+          departments: testDepartments(),
+        );
+        addTearDown(container.dispose);
+        final n = container.read(callSmartEntityProvider.notifier);
+        n.clearAll();
+        n.updateSelectedCaller(nosiliaUser());
+        final s = container.read(callSmartEntityProvider);
+        expect(
+          s.departmentText,
+          nosiliaName,
+          reason: greekExpectMsg('Autofill τμήματος καλούντα'),
+        );
+        expect(
+          s.selectedDepartmentId,
+          nosiliaId,
+          reason: greekExpectMsg('Autofill id τμήματος'),
+        );
+      });
 
       // Τεστ Δ: καλούντας χωρίς τμήμα + γεμάτο τμήμα φόρμας → το κείμενο δεν σβήνεται.
       test(
@@ -1077,29 +1489,38 @@ void main() {
             _u(id: 2, first: 'Άγνωστος', last: 'Χρήστης', phone: '1111'),
           );
           final s = container.read(callSmartEntityProvider);
-          expect(s.departmentText, 'Δοκιμαστικό', reason: greekExpectMsg('Δεν σβήνεται το χειροκίνητο τμήμα'));
+          expect(
+            s.departmentText,
+            'Δοκιμαστικό',
+            reason: greekExpectMsg('Δεν σβήνεται το χειροκίνητο τμήμα'),
+          );
         },
       );
 
       // Τεστ Ε: αποεπιλογή καλούντα → τμήμα ανέγγιχτο.
-      test(
-        'αποεπιλογή καλούντα με γεμάτο τμήμα → τμήμα ανέγγιχτο',
-        () async {
-          final container = await _containerWithCatalog(
-            users: [nosiliaUser()],
-            equipment: [],
-            departments: testDepartments(),
-          );
-          addTearDown(container.dispose);
-          final n = container.read(callSmartEntityProvider.notifier);
-          n.updateDepartmentText('Δοκιμαστικό');
-          n.updateSelectedCaller(nosiliaUser());
-          n.updateSelectedCaller(null);
-          final s = container.read(callSmartEntityProvider);
-          expect(s.departmentText, 'Δοκιμαστικό', reason: greekExpectMsg('Το κείμενο τμήματος μένει'));
-          expect(s.selectedDepartmentId, isNull, reason: greekExpectMsg('Το id τμήματος μένει null'));
-        },
-      );
+      test('αποεπιλογή καλούντα με γεμάτο τμήμα → τμήμα ανέγγιχτο', () async {
+        final container = await _containerWithCatalog(
+          users: [nosiliaUser()],
+          equipment: [],
+          departments: testDepartments(),
+        );
+        addTearDown(container.dispose);
+        final n = container.read(callSmartEntityProvider.notifier);
+        n.updateDepartmentText('Δοκιμαστικό');
+        n.updateSelectedCaller(nosiliaUser());
+        n.updateSelectedCaller(null);
+        final s = container.read(callSmartEntityProvider);
+        expect(
+          s.departmentText,
+          'Δοκιμαστικό',
+          reason: greekExpectMsg('Το κείμενο τμήματος μένει'),
+        );
+        expect(
+          s.selectedDepartmentId,
+          isNull,
+          reason: greekExpectMsg('Το id τμήματος μένει null'),
+        );
+      });
     });
 
     // needsOrphanDepartmentQuickAddResolved — κουμπί «Προσθήκη» για ορφανά στοιχεία σε τμήμα.
@@ -1109,49 +1530,57 @@ void main() {
       const deptName = 'Νοσήλια';
 
       // Τεστ Α: τηλέφωνο/εξοπλισμός με κάτοχο-υπάλληλο → όχι κουμπί.
-      test(
-        'υπάλληλος-κάτοχος τηλεφώνου και εξοπλισμού → false',
-        () async {
-          final container = await _containerWithCatalog(
-            users: [
-              _u(
-                id: 1,
-                first: 'Μαρία',
-                last: 'Νοσοκόμα',
-                phone: '2859',
-                departmentId: deptId,
-              ),
-            ],
-            equipment: [
-              EquipmentModel(id: 946, code: '946', type: 'PC', departmentId: deptId),
-            ],
-            departments: [DepartmentModel(id: deptId, name: deptName)],
-            userToEquipmentIds: {1: [946]},
-          );
-          addTearDown(container.dispose);
-          final n = container.read(callSmartEntityProvider.notifier);
-          n.updatePhone('2859');
-          n.updateDepartmentText(deptName);
-          n.checkContent(equipmentText: '946');
-          final lookup = container.read(lookupServiceProvider).value!.service;
-          final state = container.read(callSmartEntityProvider);
-          expect(
-            state.needsOrphanDepartmentQuickAdd,
-            isTrue,
-            reason: greekExpectMsg('Βασικός getter — τμήμα + τηλέφωνο + εξοπλισμός χωρίς καλούντα'),
-          );
-          expect(
-            state.needsOrphanDepartmentQuickAddResolved(lookup),
-            isFalse,
-            reason: greekExpectMsg('Στοιχεία με κάτοχο-υπάλληλο — όχι κοινόχρηστη καταχώρηση'),
-          );
-          expect(
-            state.needsAssociation(lookup),
-            isFalse,
-            reason: greekExpectMsg('Χωρίς ανάγκη συσχέτισης — κρυφό κουμπί +'),
-          );
-        },
-      );
+      test('υπάλληλος-κάτοχος τηλεφώνου και εξοπλισμού → false', () async {
+        final container = await _containerWithCatalog(
+          users: [
+            _u(
+              id: 1,
+              first: 'Μαρία',
+              last: 'Νοσοκόμα',
+              phone: '2859',
+              departmentId: deptId,
+            ),
+          ],
+          equipment: [
+            EquipmentModel(
+              id: 946,
+              code: '946',
+              type: 'PC',
+              departmentId: deptId,
+            ),
+          ],
+          departments: [DepartmentModel(id: deptId, name: deptName)],
+          userToEquipmentIds: {
+            1: [946],
+          },
+        );
+        addTearDown(container.dispose);
+        final n = container.read(callSmartEntityProvider.notifier);
+        n.updatePhone('2859');
+        n.updateDepartmentText(deptName);
+        n.checkContent(equipmentText: '946');
+        final lookup = container.read(lookupServiceProvider).value!.service;
+        final state = container.read(callSmartEntityProvider);
+        expect(
+          state.needsOrphanDepartmentQuickAdd,
+          isTrue,
+          reason: greekExpectMsg(
+            'Βασικός getter — τμήμα + τηλέφωνο + εξοπλισμός χωρίς καλούντα',
+          ),
+        );
+        expect(
+          state.needsOrphanDepartmentQuickAddResolved(lookup),
+          isFalse,
+          reason: greekExpectMsg(
+            'Στοιχεία με κάτοχο-υπάλληλο — όχι κοινόχρηστη καταχώρηση',
+          ),
+        );
+        expect(
+          state.needsAssociation(lookup),
+          isFalse,
+          reason: greekExpectMsg('Χωρίς ανάγκη συσχέτισης — κρυφό κουμπί +'),
+        );
+      });
 
       // Τεστ Α (αναπαραγωγή): κάτοχος + τμήμα εκτός γνωστών (νέο όνομα) → true, πορτοκαλί.
       test(
@@ -1168,10 +1597,17 @@ void main() {
               ),
             ],
             equipment: [
-              EquipmentModel(id: 946, code: '946', type: 'PC', departmentId: deptId),
+              EquipmentModel(
+                id: 946,
+                code: '946',
+                type: 'PC',
+                departmentId: deptId,
+              ),
             ],
             departments: [DepartmentModel(id: deptId, name: deptName)],
-            userToEquipmentIds: {1: [946]},
+            userToEquipmentIds: {
+              1: [946],
+            },
           );
           addTearDown(container.dispose);
           final n = container.read(callSmartEntityProvider.notifier);
@@ -1183,7 +1619,9 @@ void main() {
           expect(
             state.needsOrphanDepartmentQuickAddResolved(lookup),
             isTrue,
-            reason: greekExpectMsg('Τμήμα εκτός γνωστών του στοιχείου — προς καταχώρηση'),
+            reason: greekExpectMsg(
+              'Τμήμα εκτός γνωστών του στοιχείου — προς καταχώρηση',
+            ),
           );
           expect(
             state.needsAssociation(lookup),
@@ -1215,13 +1653,20 @@ void main() {
               ),
             ],
             equipment: [
-              EquipmentModel(id: 946, code: '946', type: 'PC', departmentId: deptId),
+              EquipmentModel(
+                id: 946,
+                code: '946',
+                type: 'PC',
+                departmentId: deptId,
+              ),
             ],
             departments: [
               DepartmentModel(id: deptId, name: deptName),
               DepartmentModel(id: surgeryId, name: surgeryName),
             ],
-            userToEquipmentIds: {1: [946]},
+            userToEquipmentIds: {
+              1: [946],
+            },
           );
           addTearDown(container.dispose);
           final n = container.read(callSmartEntityProvider.notifier);
@@ -1233,7 +1678,9 @@ void main() {
           expect(
             state.needsOrphanDepartmentQuickAddResolved(lookup),
             isTrue,
-            reason: greekExpectMsg('Άλλο υπαρκτό τμήμα εκτός γνωστών — προς καταχώρηση'),
+            reason: greekExpectMsg(
+              'Άλλο υπαρκτό τμήμα εκτός γνωστών — προς καταχώρηση',
+            ),
           );
           expect(
             state.associationColor(lookup),
@@ -1244,85 +1691,84 @@ void main() {
       );
 
       // Τεστ Γ (φρουρός πράσινου): άγνωστο στοιχείο + νέο τμήμα → true, πράσινο.
-      test(
-        'άγνωστο τηλέφωνο και νέο τμήμα → true και πράσινο',
-        () async {
-          final container = await _containerWithCatalog(
-            users: [],
-            equipment: [],
-            departments: [DepartmentModel(id: 1, name: 'Τμήμα Δοκιμών')],
-          );
-          addTearDown(container.dispose);
-          final n = container.read(callSmartEntityProvider.notifier);
-          n.updatePhone('7777');
-          n.updateDepartmentText('δοκιμη');
-          final lookup = container.read(lookupServiceProvider).value!.service;
-          final state = container.read(callSmartEntityProvider);
-          expect(
-            state.needsOrphanDepartmentQuickAddResolved(lookup),
-            isTrue,
-            reason: greekExpectMsg('Άγνωστο στοιχείο — προς καταχώρηση'),
-          );
-          expect(
-            state.associationColor(lookup),
-            Colors.green,
-            reason: greekExpectMsg('Χωρίς κάτοχο — πράσινο για νέο τμήμα'),
-          );
-        },
-      );
+      test('άγνωστο τηλέφωνο και νέο τμήμα → true και πράσινο', () async {
+        final container = await _containerWithCatalog(
+          users: [],
+          equipment: [],
+          departments: [DepartmentModel(id: 1, name: 'Τμήμα Δοκιμών')],
+        );
+        addTearDown(container.dispose);
+        final n = container.read(callSmartEntityProvider.notifier);
+        n.updatePhone('7777');
+        n.updateDepartmentText('δοκιμη');
+        final lookup = container.read(lookupServiceProvider).value!.service;
+        final state = container.read(callSmartEntityProvider);
+        expect(
+          state.needsOrphanDepartmentQuickAddResolved(lookup),
+          isTrue,
+          reason: greekExpectMsg('Άγνωστο στοιχείο — προς καταχώρηση'),
+        );
+        expect(
+          state.associationColor(lookup),
+          Colors.green,
+          reason: greekExpectMsg('Χωρίς κάτοχο — πράσινο για νέο τμήμα'),
+        );
+      });
 
       // Τεστ Β: άγνωστο τηλέφωνο + υπαρκτό τμήμα → true.
-      test(
-        'άγνωστο τηλέφωνο και υπαρκτό τμήμα → true',
-        () async {
-          final container = await _containerWithCatalog(
-            users: [],
-            equipment: [],
-            departments: [DepartmentModel(id: 1, name: 'Τμήμα Δοκιμών')],
-          );
-          addTearDown(container.dispose);
-          final n = container.read(callSmartEntityProvider.notifier);
-          n.updatePhone('7777');
-          n.updateDepartmentText('Τμήμα Δοκιμών');
-          final lookup = container.read(lookupServiceProvider).value!.service;
-          expect(
-            container.read(callSmartEntityProvider).needsOrphanDepartmentQuickAddResolved(lookup),
-            isTrue,
-            reason: greekExpectMsg('Νέο τηλέφωνο προς κοινόχρηστη καταχώρηση στο τμήμα'),
-          );
-        },
-      );
+      test('άγνωστο τηλέφωνο και υπαρκτό τμήμα → true', () async {
+        final container = await _containerWithCatalog(
+          users: [],
+          equipment: [],
+          departments: [DepartmentModel(id: 1, name: 'Τμήμα Δοκιμών')],
+        );
+        addTearDown(container.dispose);
+        final n = container.read(callSmartEntityProvider.notifier);
+        n.updatePhone('7777');
+        n.updateDepartmentText('Τμήμα Δοκιμών');
+        final lookup = container.read(lookupServiceProvider).value!.service;
+        expect(
+          container
+              .read(callSmartEntityProvider)
+              .needsOrphanDepartmentQuickAddResolved(lookup),
+          isTrue,
+          reason: greekExpectMsg(
+            'Νέο τηλέφωνο προς κοινόχρηστη καταχώρηση στο τμήμα',
+          ),
+        );
+      });
 
       // Τεστ Δ: τηλέφωνο με κάτοχο + νέος εξοπλισμός → true (μόνο ο εξοπλισμός).
-      test(
-        'τηλέφωνο με κάτοχο και νέος κωδικός εξοπλισμού → true',
-        () async {
-          final container = await _containerWithCatalog(
-            users: [
-              _u(
-                id: 1,
-                first: 'Μαρία',
-                last: 'Νοσοκόμα',
-                phone: '2859',
-                departmentId: deptId,
-              ),
-            ],
-            equipment: [],
-            departments: [DepartmentModel(id: deptId, name: deptName)],
-          );
-          addTearDown(container.dispose);
-          final n = container.read(callSmartEntityProvider.notifier);
-          n.updatePhone('2859');
-          n.updateDepartmentText(deptName);
-          n.checkContent(equipmentText: 'NEW-946');
-          final lookup = container.read(lookupServiceProvider).value!.service;
-          expect(
-            container.read(callSmartEntityProvider).needsOrphanDepartmentQuickAddResolved(lookup),
-            isTrue,
-            reason: greekExpectMsg('Ο νέος εξοπλισμός χρειάζεται κοινόχρηστη καταχώρηση'),
-          );
-        },
-      );
+      test('τηλέφωνο με κάτοχο και νέος κωδικός εξοπλισμού → true', () async {
+        final container = await _containerWithCatalog(
+          users: [
+            _u(
+              id: 1,
+              first: 'Μαρία',
+              last: 'Νοσοκόμα',
+              phone: '2859',
+              departmentId: deptId,
+            ),
+          ],
+          equipment: [],
+          departments: [DepartmentModel(id: deptId, name: deptName)],
+        );
+        addTearDown(container.dispose);
+        final n = container.read(callSmartEntityProvider.notifier);
+        n.updatePhone('2859');
+        n.updateDepartmentText(deptName);
+        n.checkContent(equipmentText: 'NEW-946');
+        final lookup = container.read(lookupServiceProvider).value!.service;
+        expect(
+          container
+              .read(callSmartEntityProvider)
+              .needsOrphanDepartmentQuickAddResolved(lookup),
+          isTrue,
+          reason: greekExpectMsg(
+            'Ο νέος εξοπλισμός χρειάζεται κοινόχρηστη καταχώρηση',
+          ),
+        );
+      });
     });
 
     group('Tooltip «Προσθήκη» — αποκλίσεις vs πραγματική DB ενέργεια (A–ΣΤ)', () {
@@ -1522,40 +1968,49 @@ void main() {
       registerCallLoggerIsolatedDatabaseHooks();
 
       // Τεστ Γ: τηλέφωνο στη βάση χωρίς κάτοχο και χωρίς τμήμα → true.
-      test(
-        'αδέσποτο τηλέφωνο στη βάση και υπαρκτό τμήμα → true',
-        () async {
-          await seedIsolatedTestDatabase();
-          final db = await DatabaseHelper.instance.database;
-          await db.insert('phones', {'number': '3333'});
+      test('αδέσποτο τηλέφωνο στη βάση και υπαρκτό τμήμα → true', () async {
+        await seedIsolatedTestDatabase();
+        final db = await DatabaseHelper.instance.database;
+        await db.insert('phones', {'number': '3333'});
 
-          LookupService.instance.resetForReload();
-          await LookupService.instance.loadFromDatabase();
+        LookupService.instance.resetForReload();
+        await LookupService.instance.loadFromDatabase();
 
-          final container = ProviderContainer(
-            overrides: [
-              lookupServiceProvider.overrideWith(
-                (ref) async => LookupLoadResult(service: LookupService.instance),
-              ),
-            ],
-          );
-          addTearDown(container.dispose);
-          await container.read(lookupServiceProvider.future);
+        final container = ProviderContainer(
+          overrides: [
+            lookupServiceProvider.overrideWith(
+              (ref) async => LookupLoadResult(service: LookupService.instance),
+            ),
+          ],
+        );
+        addTearDown(container.dispose);
+        await container.read(lookupServiceProvider.future);
 
-          final n = container.read(callSmartEntityProvider.notifier);
-          n.updatePhone('3333');
-          n.updateDepartmentText(kTestDepartmentName);
-          final lookup = container.read(lookupServiceProvider).value!.service;
-          final usage = lookup.checkPhoneUsage('3333');
-          expect(usage.hasUserOwners, isFalse, reason: greekExpectMsg('Χωρίς κάτοχο-υπάλληλο'));
-          expect(usage.departmentId, isNull, reason: greekExpectMsg('Χωρίς τοποθεσία τμήματος'));
-          expect(
-            container.read(callSmartEntityProvider).needsOrphanDepartmentQuickAddResolved(lookup),
-            isTrue,
-            reason: greekExpectMsg('Αδέσποτο τηλέφωνο — εμφάνιση κουμπιού Προσθήκη'),
-          );
-        },
-      );
+        final n = container.read(callSmartEntityProvider.notifier);
+        n.updatePhone('3333');
+        n.updateDepartmentText(kTestDepartmentName);
+        final lookup = container.read(lookupServiceProvider).value!.service;
+        final usage = lookup.checkPhoneUsage('3333');
+        expect(
+          usage.hasUserOwners,
+          isFalse,
+          reason: greekExpectMsg('Χωρίς κάτοχο-υπάλληλο'),
+        );
+        expect(
+          usage.departmentId,
+          isNull,
+          reason: greekExpectMsg('Χωρίς τοποθεσία τμήματος'),
+        );
+        expect(
+          container
+              .read(callSmartEntityProvider)
+              .needsOrphanDepartmentQuickAddResolved(lookup),
+          isTrue,
+          reason: greekExpectMsg(
+            'Αδέσποτο τηλέφωνο — εμφάνιση κουμπιού Προσθήκη',
+          ),
+        );
+      });
 
       // Τεστ Δ: τοποθεσία-τμήμα Α + κάτοχος τμήμα Β → false για Α/Β, true για Γ.
       test(
@@ -1607,7 +2062,8 @@ void main() {
           final container = ProviderContainer(
             overrides: [
               lookupServiceProvider.overrideWith(
-                (ref) async => LookupLoadResult(service: LookupService.instance),
+                (ref) async =>
+                    LookupLoadResult(service: LookupService.instance),
               ),
             ],
           );
@@ -1616,7 +2072,11 @@ void main() {
 
           final lookup = container.read(lookupServiceProvider).value!.service;
           final usage = lookup.checkPhoneUsage('4000');
-          expect(usage.departmentId, deptA, reason: greekExpectMsg('Τοποθεσία-τμήμα Α'));
+          expect(
+            usage.departmentId,
+            deptA,
+            reason: greekExpectMsg('Τοποθεσία-τμήμα Α'),
+          );
           expect(usage.ownerDepartmentIds, contains(deptB));
 
           SmartEntitySelectorState stateForDept(String name) {
@@ -1628,17 +2088,23 @@ void main() {
           }
 
           expect(
-            stateForDept('Τμήμα Α').needsOrphanDepartmentQuickAddResolved(lookup),
+            stateForDept(
+              'Τμήμα Α',
+            ).needsOrphanDepartmentQuickAddResolved(lookup),
             isFalse,
             reason: greekExpectMsg('Τμήμα Α — γνωστό'),
           );
           expect(
-            stateForDept('Τμήμα Β').needsOrphanDepartmentQuickAddResolved(lookup),
+            stateForDept(
+              'Τμήμα Β',
+            ).needsOrphanDepartmentQuickAddResolved(lookup),
             isFalse,
             reason: greekExpectMsg('Τμήμα Β — γνωστό (κύριο τμήμα κατόχου)'),
           );
           expect(
-            stateForDept('Τμήμα Γ').needsOrphanDepartmentQuickAddResolved(lookup),
+            stateForDept(
+              'Τμήμα Γ',
+            ).needsOrphanDepartmentQuickAddResolved(lookup),
             isTrue,
             reason: greekExpectMsg('Τμήμα Γ — εκτός γνωστών'),
           );
@@ -1648,26 +2114,31 @@ void main() {
 
     // checkContent με μη κενό equipmentText → hasAnyContent true.
     //   flutter test test/features/calls/smart_entity_selector_notifier_test.dart --plain-name "checkContent: ενημερώνει hasAnyContent για κείμενο εξοπλισμού"
-    test('checkContent: ενημερώνει hasAnyContent για κείμενο εξοπλισμού', () async {
-      final container = await _containerWithCatalog(
-        users: [],
-        equipment: [],
-        departments: [],
-      );
-      addTearDown(container.dispose);
-      final n = container.read(callSmartEntityProvider.notifier);
-      n.checkContent(
-        phoneText: '',
-        callerText: '',
-        equipmentText: 'PC-123',
-        departmentText: '',
-      );
-      expect(
-        container.read(callSmartEntityProvider).hasAnyContent,
-        isTrue,
-        reason: greekExpectMsg('Μη κενός εξοπλισμός σημαίνει περιεχόμενο φόρμας'),
-      );
-    });
+    test(
+      'checkContent: ενημερώνει hasAnyContent για κείμενο εξοπλισμού',
+      () async {
+        final container = await _containerWithCatalog(
+          users: [],
+          equipment: [],
+          departments: [],
+        );
+        addTearDown(container.dispose);
+        final n = container.read(callSmartEntityProvider.notifier);
+        n.checkContent(
+          phoneText: '',
+          callerText: '',
+          equipmentText: 'PC-123',
+          departmentText: '',
+        );
+        expect(
+          container.read(callSmartEntityProvider).hasAnyContent,
+          isTrue,
+          reason: greekExpectMsg(
+            'Μη κενός εξοπλισμός σημαίνει περιεχόμενο φόρμας',
+          ),
+        );
+      },
+    );
 
     // Επιλογή τμήματος χωρίς caller: όλοι οι χρήστες του τμήματος ως callerCandidates.
     //   flutter test test/features/calls/smart_entity_selector_notifier_test.dart --plain-name "selectDepartment: κενός καλώντας → προ-συμπλήρωση λίστας χρηστών τμήματος"
@@ -1687,8 +2158,16 @@ void main() {
         n.clearAll();
         n.selectDepartment(DepartmentModel(id: 9, name: 'Κοινό'));
         final s = container.read(callSmartEntityProvider);
-        expect(s.callerCandidates.length, 2, reason: greekExpectMsg('Όλοι οι χρήστες του τμήματος ως υποψήφιοι'));
-        expect(s.departmentText, 'Κοινό', reason: greekExpectMsg('Κείμενο τμήματος'));
+        expect(
+          s.callerCandidates.length,
+          2,
+          reason: greekExpectMsg('Όλοι οι χρήστες του τμήματος ως υποψήφιοι'),
+        );
+        expect(
+          s.departmentText,
+          'Κοινό',
+          reason: greekExpectMsg('Κείμενο τμήματος'),
+        );
       },
     );
 
@@ -1701,7 +2180,9 @@ void main() {
         stub.injectInMemoryCatalogForTests(
           users: <UserModel>[],
           equipment: <EquipmentModel>[],
-          departmentRows: <DepartmentModel>[DepartmentModel(id: 1, name: 'Ελεγχόμενο Τμήμα')],
+          departmentRows: <DepartmentModel>[
+            DepartmentModel(id: 1, name: 'Ελεγχόμενο Τμήμα'),
+          ],
         );
         stub.stubUsersByDigits['888'] = <UserModel>[
           _u(
@@ -1718,8 +2199,16 @@ void main() {
         n.updatePhone('888');
         n.performPhoneLookup('888');
         final s = container.read(callSmartEntityProvider);
-        expect(s.selectedCaller?.id, 99, reason: greekExpectMsg('Απάντηση από stub, όχι από κενό _users'));
-        expect(s.departmentText, 'Ελεγχόμενο Τμήμα', reason: greekExpectMsg('Τμήμα από departmentIdToName'));
+        expect(
+          s.selectedCaller?.id,
+          99,
+          reason: greekExpectMsg('Απάντηση από stub, όχι από κενό _users'),
+        );
+        expect(
+          s.departmentText,
+          'Ελεγχόμενο Τμήμα',
+          reason: greekExpectMsg('Τμήμα από departmentIdToName'),
+        );
       },
     );
 
@@ -1734,7 +2223,9 @@ void main() {
           ],
           equipment: [_e(id: 1, code: 'X')],
           departments: [DepartmentModel(id: 1, name: 'Τ')],
-          userToEquipmentIds: {1: [1]},
+          userToEquipmentIds: {
+            1: [1],
+          },
         );
         addTearDown(container.dispose);
         final n = container.read(callSmartEntityProvider.notifier);
@@ -1792,7 +2283,10 @@ void main() {
                 DepartmentModel(id: 81, name: 'Τμήμα Ανάπτυξης'),
                 DepartmentModel(id: 82, name: 'Τμήμα Πωλήσεων'),
               ],
-              userToEquipmentIds: {501: [901], 502: [902]},
+              userToEquipmentIds: {
+                501: [901],
+                502: [902],
+              },
             );
             addTearDown(container.dispose);
             final n = container.read(callSmartEntityProvider.notifier);
@@ -1812,17 +2306,23 @@ void main() {
             expect(
               s.selectedCaller?.id,
               501,
-              reason: greekExpectMsg('Μοναδικός χρήστης για το τηλέφωνο — επιλογή καλούντα'),
+              reason: greekExpectMsg(
+                'Μοναδικός χρήστης για το τηλέφωνο — επιλογή καλούντα',
+              ),
             );
             expect(
               s.departmentText,
               'Τμήμα Ανάπτυξης',
-              reason: greekExpectMsg('Αυτόματο τμήμα από departmentId του καλούντα'),
+              reason: greekExpectMsg(
+                'Αυτόματο τμήμα από departmentId του καλούντα',
+              ),
             );
             expect(
               s.selectedEquipment?.code,
               'XF-EQ-501',
-              reason: greekExpectMsg('Ένας εξοπλισμός για τον χρήστη — αυτόματη επιλογή'),
+              reason: greekExpectMsg(
+                'Ένας εξοπλισμός για τον χρήστη — αυτόματη επιλογή',
+              ),
             );
             expect(
               s.callerNoMatch,
@@ -1882,7 +2382,10 @@ void main() {
                 DepartmentModel(id: 91, name: 'Λογιστήριο'),
                 DepartmentModel(id: 92, name: 'Υποστήριξη'),
               ],
-              userToEquipmentIds: {511: [911], 512: [912]},
+              userToEquipmentIds: {
+                511: [911],
+                512: [912],
+              },
             );
             addTearDown(container.dispose);
             final n = container.read(callSmartEntityProvider.notifier);
@@ -1890,35 +2393,56 @@ void main() {
             n.updatePhone('51111');
             n.performPhoneLookup('51111');
             var s = container.read(callSmartEntityProvider);
-            printStateSnapshot('Μετά performPhoneLookup — πλήρης αυτόματη κατάσταση', s);
-            expect(s.selectedCaller?.id, 511, reason: greekExpectMsg('Καλώντας από τηλέφωνο'));
-
-            n.performEquipmentLookupByCode('XF-PC-ALFA');
-            s = container.read(callSmartEntityProvider);
-            printStateSnapshot('Μετά performEquipmentLookupByCode (έγκυρος κωδικός)', s);
-            expect(
-              s.selectedEquipment?.code,
-              'XF-PC-ALFA',
-              reason: greekExpectMsg('Επιβεβαίωση/επιλογή εξοπλισμού από κωδικό'),
+            printStateSnapshot(
+              'Μετά performPhoneLookup — πλήρης αυτόματη κατάσταση',
+              s,
             );
             expect(
               s.selectedCaller?.id,
               511,
-              reason: greekExpectMsg('Ο καλώντας παραμένει συμβατός με τον κάτοχο του εξοπλισμού'),
+              reason: greekExpectMsg('Καλώντας από τηλέφωνο'),
+            );
+
+            n.performEquipmentLookupByCode('XF-PC-ALFA');
+            s = container.read(callSmartEntityProvider);
+            printStateSnapshot(
+              'Μετά performEquipmentLookupByCode (έγκυρος κωδικός)',
+              s,
+            );
+            expect(
+              s.selectedEquipment?.code,
+              'XF-PC-ALFA',
+              reason: greekExpectMsg(
+                'Επιβεβαίωση/επιλογή εξοπλισμού από κωδικό',
+              ),
+            );
+            expect(
+              s.selectedCaller?.id,
+              511,
+              reason: greekExpectMsg(
+                'Ο καλώντας παραμένει συμβατός με τον κάτοχο του εξοπλισμού',
+              ),
             );
 
             n.performEquipmentLookupByCode('ΚΩΔ-ΠΟΥ-ΔΕΝ-ΥΠΑΡΧΕΙ');
             s = container.read(callSmartEntityProvider);
-            printStateSnapshot('Μετά performEquipmentLookupByCode (άγνωστος κωδικός)', s);
+            printStateSnapshot(
+              'Μετά performEquipmentLookupByCode (άγνωστος κωδικός)',
+              s,
+            );
             expect(
               s.selectedEquipment,
               isNull,
-              reason: greekExpectMsg('Άγνωστος κωδικός — καθαρισμός επιλεγμένου εξοπλισμού'),
+              reason: greekExpectMsg(
+                'Άγνωστος κωδικός — καθαρισμός επιλεγμένου εξοπλισμού',
+              ),
             );
             expect(
               s.equipmentNoMatch,
               isTrue,
-              reason: greekExpectMsg('Ένδειξη «κανένα ταίριασμα» για εξοπλισμό'),
+              reason: greekExpectMsg(
+                'Ένδειξη «κανένα ταίριασμα» για εξοπλισμό',
+              ),
             );
 
             _recordCrossFieldScenario(
@@ -1968,7 +2492,10 @@ void main() {
                 DepartmentModel(id: 101, name: 'R&D'),
                 DepartmentModel(id: 102, name: 'Sales'),
               ],
-              userToEquipmentIds: {521: [921], 522: [922]},
+              userToEquipmentIds: {
+                521: [921],
+                522: [922],
+              },
             );
             addTearDown(container.dispose);
             final n = container.read(callSmartEntityProvider.notifier);
@@ -1986,17 +2513,23 @@ void main() {
             expect(
               s.selectedCaller?.id,
               521,
-              reason: greekExpectMsg('v2 §Β: ο συμπληρωμένος καλών δεν αντικαθίσταται'),
+              reason: greekExpectMsg(
+                'v2 §Β: ο συμπληρωμένος καλών δεν αντικαθίσταται',
+              ),
             );
             expect(
               s.departmentText,
               'R&D',
-              reason: greekExpectMsg('v2 §Β: το συμπληρωμένο τμήμα δεν αντικαθίσταται'),
+              reason: greekExpectMsg(
+                'v2 §Β: το συμπληρωμένο τμήμα δεν αντικαθίσταται',
+              ),
             );
             expect(
               s.selectedEquipment?.code,
               'XF-SALES-01',
-              reason: greekExpectMsg('Επιλεγμένος νέος εξοπλισμός (πεδίο-πηγή)'),
+              reason: greekExpectMsg(
+                'Επιλεγμένος νέος εξοπλισμός (πεδίο-πηγή)',
+              ),
             );
             // v2 §Α.3: ο νέος εξοπλισμός διαφωνεί με καλούντα/τμήμα → κόκκινο ✱.
             expect(
@@ -2057,7 +2590,10 @@ void main() {
                 DepartmentModel(id: 111, name: 'Ops'),
                 DepartmentModel(id: 112, name: 'HR'),
               ],
-              userToEquipmentIds: {531: [931], 532: [932]},
+              userToEquipmentIds: {
+                531: [931],
+                532: [932],
+              },
             );
             addTearDown(container.dispose);
             final n = container.read(callSmartEntityProvider.notifier);
@@ -2077,16 +2613,23 @@ void main() {
 
             n.performEquipmentLookupByCode('XF-MAN-A');
             s = container.read(callSmartEntityProvider);
-            printStateSnapshot('Μετά επιλογή εξοπλισμού κάτοχου 531 ενώ caller=532 manual', s);
+            printStateSnapshot(
+              'Μετά επιλογή εξοπλισμού κάτοχου 531 ενώ caller=532 manual',
+              s,
+            );
             expect(
               s.selectedEquipment?.code,
               'XF-MAN-A',
-              reason: greekExpectMsg('Ο εξοπλισμός επιλέγεται πάντα σε μοναδικό ταίριασμα κωδικού'),
+              reason: greekExpectMsg(
+                'Ο εξοπλισμός επιλέγεται πάντα σε μοναδικό ταίριασμα κωδικού',
+              ),
             );
             expect(
               s.selectedCaller?.id,
               532,
-              reason: greekExpectMsg('Χειροκίνητος καλών — δεν αντικαθίσταται από κάτοχο εξοπλισμού'),
+              reason: greekExpectMsg(
+                'Χειροκίνητος καλών — δεν αντικαθίσταται από κάτοχο εξοπλισμού',
+              ),
             );
 
             _recordCrossFieldScenario(
@@ -2136,7 +2679,10 @@ void main() {
                 DepartmentModel(id: 121, name: 'Βόρειο'),
                 DepartmentModel(id: 122, name: 'Νότιο'),
               ],
-              userToEquipmentIds: {541: [941], 542: [942]},
+              userToEquipmentIds: {
+                541: [941],
+                542: [942],
+              },
             );
             addTearDown(container.dispose);
             final n = container.read(callSmartEntityProvider.notifier);
@@ -2145,8 +2691,15 @@ void main() {
             n.performPhoneLookup('54111');
             n.selectDepartment(DepartmentModel(id: 122, name: 'Νότιο'));
             var s = container.read(callSmartEntityProvider);
-            printStateSnapshot('Μετά επιλογή τμήματος ενώ caller παραμένει 541', s);
-            expect(s.selectedDepartmentId, 122, reason: greekExpectMsg('Ρητή επιλογή τμήματος'));
+            printStateSnapshot(
+              'Μετά επιλογή τμήματος ενώ caller παραμένει 541',
+              s,
+            );
+            expect(
+              s.selectedDepartmentId,
+              122,
+              reason: greekExpectMsg('Ρητή επιλογή τμήματος'),
+            );
             expect(s.selectedCaller?.id, 541);
 
             n.performEquipmentLookupByCode('XF-D2');
@@ -2158,7 +2711,9 @@ void main() {
             expect(
               s.selectedCaller?.id,
               541,
-              reason: greekExpectMsg('v2 §Β: ο συμπληρωμένος καλών δεν αντικαθίσταται'),
+              reason: greekExpectMsg(
+                'v2 §Β: ο συμπληρωμένος καλών δεν αντικαθίσταται',
+              ),
             );
             expect(
               s.conflictSeverityFor(SelectorField.caller),
@@ -2206,14 +2761,14 @@ void main() {
             );
             final container = await _containerWithCatalog(
               users: [u1, u2],
-              equipment: [
-                _e(id: 951, code: 'XF-PH-1'),
-              ],
+              equipment: [_e(id: 951, code: 'XF-PH-1')],
               departments: [
                 DepartmentModel(id: 131, name: 'Τμ131'),
                 DepartmentModel(id: 132, name: 'Τμ132'),
               ],
-              userToEquipmentIds: {551: [951]},
+              userToEquipmentIds: {
+                551: [951],
+              },
             );
             addTearDown(container.dispose);
             final n = container.read(callSmartEntityProvider.notifier);
@@ -2227,11 +2782,16 @@ void main() {
 
             n.updatePhone('55222');
             s = container.read(callSmartEntityProvider);
-            printStateSnapshot('Μετά updatePhone σε νέο αριθμό (χωρίς ακόμη lookup)', s);
+            printStateSnapshot(
+              'Μετά updatePhone σε νέο αριθμό (χωρίς ακόμη lookup)',
+              s,
+            );
             expect(
               s.selectedCaller,
               isNull,
-              reason: greekExpectMsg('Νέο τηλέφωνο — εκκαθάριση επιλεγμένου καλούντα'),
+              reason: greekExpectMsg(
+                'Νέο τηλέφωνο — εκκαθάριση επιλεγμένου καλούντα',
+              ),
             );
             expect(
               s.selectedEquipment?.code,
@@ -2281,14 +2841,14 @@ void main() {
             );
             final container = await _containerWithCatalog(
               users: [u1, u2],
-              equipment: [
-                _e(id: 961, code: 'XF-BOOT-EQ'),
-              ],
+              equipment: [_e(id: 961, code: 'XF-BOOT-EQ')],
               departments: [
                 DepartmentModel(id: 141, name: 'Παραγωγή'),
                 DepartmentModel(id: 142, name: 'Διοίκηση'),
               ],
-              userToEquipmentIds: {561: [961]},
+              userToEquipmentIds: {
+                561: [961],
+              },
             );
             addTearDown(container.dispose);
             final n = container.read(callSmartEntityProvider.notifier);
@@ -2299,11 +2859,16 @@ void main() {
 
             n.performEquipmentLookupByCode('XF-BOOT-EQ');
             s = container.read(callSmartEntityProvider);
-            printStateSnapshot('Μετά performEquipmentLookupByCode από κενή κατάσταση', s);
+            printStateSnapshot(
+              'Μετά performEquipmentLookupByCode από κενή κατάσταση',
+              s,
+            );
             expect(
               s.selectedCaller?.id,
               561,
-              reason: greekExpectMsg('Συμπλήρωση καλούντα από κάτοχο εξοπλισμού'),
+              reason: greekExpectMsg(
+                'Συμπλήρωση καλούντα από κάτοχο εξοπλισμού',
+              ),
             );
             expect(
               s.departmentText,
@@ -2318,7 +2883,9 @@ void main() {
             expect(
               s.selectedPhone,
               '56111',
-              reason: greekExpectMsg('Κενό τηλέφωνο — autofill από προφίλ κάτοχη'),
+              reason: greekExpectMsg(
+                'Κενό τηλέφωνο — autofill από προφίλ κάτοχη',
+              ),
             );
 
             _recordCrossFieldScenario(
@@ -2368,7 +2935,10 @@ void main() {
                 DepartmentModel(id: 151, name: 'ST-1'),
                 DepartmentModel(id: 152, name: 'ST-2'),
               ],
-              userToEquipmentIds: {571: [971], 572: [972]},
+              userToEquipmentIds: {
+                571: [971],
+                572: [972],
+              },
             );
             addTearDown(container.dispose);
             final n = container.read(callSmartEntityProvider.notifier);
@@ -2378,23 +2948,39 @@ void main() {
               final phase = i % 4;
               if (phase == 0) {
                 n.updatePhone(i.isEven ? '57111' : '57222');
-                printStateSnapshot('Stress #$i: updatePhone', container.read(callSmartEntityProvider));
+                printStateSnapshot(
+                  'Stress #$i: updatePhone',
+                  container.read(callSmartEntityProvider),
+                );
               } else if (phase == 1) {
                 n.performPhoneLookup(i.isEven ? '57111' : '57222');
-                printStateSnapshot('Stress #$i: performPhoneLookup', container.read(callSmartEntityProvider));
+                printStateSnapshot(
+                  'Stress #$i: performPhoneLookup',
+                  container.read(callSmartEntityProvider),
+                );
               } else if (phase == 2) {
-                n.performEquipmentLookupByCode(i.isEven ? 'XF-ST-A' : 'XF-ST-B');
-                printStateSnapshot('Stress #$i: performEquipmentLookupByCode', container.read(callSmartEntityProvider));
+                n.performEquipmentLookupByCode(
+                  i.isEven ? 'XF-ST-A' : 'XF-ST-B',
+                );
+                printStateSnapshot(
+                  'Stress #$i: performEquipmentLookupByCode',
+                  container.read(callSmartEntityProvider),
+                );
               } else {
                 n.updateCallerDisplayText(i.isEven ? 'Καλών Α' : 'Καλών Β');
                 n.checkContent(equipmentText: i.isEven ? 'XF-ST-A' : 'XF-ST-B');
-                printStateSnapshot('Stress #$i: edit caller/equipment text', container.read(callSmartEntityProvider));
+                printStateSnapshot(
+                  'Stress #$i: edit caller/equipment text',
+                  container.read(callSmartEntityProvider),
+                );
               }
               final st = container.read(callSmartEntityProvider);
               expect(
                 st.phoneCandidates.length,
                 lessThanOrEqualTo(50),
-                reason: greekExpectMsg('Λογικό όριο υποψηφίων τηλεφώνου — όχι διόγκωση λίστας'),
+                reason: greekExpectMsg(
+                  'Λογικό όριο υποψηφίων τηλεφώνου — όχι διόγκωση λίστας',
+                ),
               );
               expect(
                 st.equipmentCandidates.length,
@@ -2406,14 +2992,12 @@ void main() {
             expect(
               sw.elapsedMilliseconds,
               lessThan(5000),
-              reason: greekExpectMsg('30 βήματα χωρίς εμφανή καθυστέρηση (όχι de-facto άπειρος βρόχος)'),
+              reason: greekExpectMsg(
+                '30 βήματα χωρίς εμφανή καθυστέρηση (όχι de-facto άπειρος βρόχος)',
+              ),
             );
 
-            _recordCrossFieldScenario(
-              8,
-              'Stress 30 εναλλαγές',
-              passed: true,
-            );
+            _recordCrossFieldScenario(8, 'Stress 30 εναλλαγές', passed: true);
           } catch (e, st) {
             _recordCrossFieldScenario(
               8,
@@ -2428,233 +3012,240 @@ void main() {
     },
   );
 
-  group('performEquipmentLookupByCode — κοινόχρηστος εξοπλισμός (department_id)', () {
-    registerCallLoggerIsolatedDatabaseHooks();
+  group(
+    'performEquipmentLookupByCode — κοινόχρηστος εξοπλισμός (department_id)',
+    () {
+      registerCallLoggerIsolatedDatabaseHooks();
 
-    //   flutter test test/features/calls/smart_entity_selector_notifier_test.dart --plain-name "χωρίς κάτοχο: συμπληρώνει τμήμα και τηλέφωνα από equipment.department_id"
-    test(
-      'χωρίς κάτοχο: συμπληρώνει τμήμα και τηλέφωνα από equipment.department_id',
-      () async {
-        await seedIsolatedTestDatabase();
-        final db = await DatabaseHelper.instance.database;
-        await db.delete('user_equipment');
-        await db.delete('equipment');
-        await db.delete('department_phones');
-        await db.delete('user_phones');
-        await db.delete('phones');
-        await db.delete('users');
-        await db.delete('departments');
+      //   flutter test test/features/calls/smart_entity_selector_notifier_test.dart --plain-name "χωρίς κάτοχο: συμπληρώνει τμήμα και τηλέφωνα από equipment.department_id"
+      test(
+        'χωρίς κάτοχο: συμπληρώνει τμήμα και τηλέφωνα από equipment.department_id',
+        () async {
+          await seedIsolatedTestDatabase();
+          final db = await DatabaseHelper.instance.database;
+          await db.delete('user_equipment');
+          await db.delete('equipment');
+          await db.delete('department_phones');
+          await db.delete('user_phones');
+          await db.delete('phones');
+          await db.delete('users');
+          await db.delete('departments');
 
-        const deptName = 'Τμήμα Κοινού Εξοπλισμού';
-        final deptId = await db.insert('departments', {
-          'name': deptName,
-          'name_key': 'tmhma koinou',
-          'is_deleted': 0,
-        });
-
-        Future<void> insertDepartmentPhone(String number) async {
-          final phoneId = await db.insert('phones', {'number': number});
-          await db.insert('department_phones', {
-            'department_id': deptId,
-            'phone_id': phoneId,
+          const deptName = 'Τμήμα Κοινού Εξοπλισμού';
+          final deptId = await db.insert('departments', {
+            'name': deptName,
+            'name_key': 'tmhma koinou',
+            'is_deleted': 0,
           });
-        }
 
-        await insertDepartmentPhone('6101');
-        await insertDepartmentPhone('6102');
+          Future<void> insertDepartmentPhone(String number) async {
+            final phoneId = await db.insert('phones', {'number': number});
+            await db.insert('department_phones', {
+              'department_id': deptId,
+              'phone_id': phoneId,
+            });
+          }
 
-        await db.insert('equipment', {
-          'code_equipment': 'EQ-DEPT-1',
-          'type': 'PC',
-          'department_id': deptId,
-          'is_deleted': 0,
-        });
+          await insertDepartmentPhone('6101');
+          await insertDepartmentPhone('6102');
 
-        LookupService.instance.resetForReload();
-        await LookupService.instance.loadFromDatabase();
+          await db.insert('equipment', {
+            'code_equipment': 'EQ-DEPT-1',
+            'type': 'PC',
+            'department_id': deptId,
+            'is_deleted': 0,
+          });
 
-        final container = ProviderContainer(
-          overrides: callLoggerTestProviderOverrides(),
-        );
-        addTearDown(container.dispose);
-        await container.read(lookupServiceProvider.future);
+          LookupService.instance.resetForReload();
+          await LookupService.instance.loadFromDatabase();
 
-        final n = container.read(callSmartEntityProvider.notifier);
-        n.performEquipmentLookupByCode('EQ-DEPT-1');
-        final s = container.read(callSmartEntityProvider);
+          final container = ProviderContainer(
+            overrides: callLoggerTestProviderOverrides(),
+          );
+          addTearDown(container.dispose);
+          await container.read(lookupServiceProvider.future);
 
-        expect(
-          s.selectedEquipment,
-          isNotNull,
-          reason: greekExpectMsg('Ο εξοπλισμός πρέπει να επιλεγεί'),
-        );
-        expect(
-          s.selectedEquipment?.code,
-          'EQ-DEPT-1',
-          reason: greekExpectMsg('Σωστός κωδικός εξοπλισμού'),
-        );
-        expect(
-          s.selectedDepartmentId,
-          deptId,
-          reason: greekExpectMsg('Το τμήμα συμπληρώνεται από equipment.department_id'),
-        );
-        expect(
-          s.departmentText,
-          deptName,
-          reason: greekExpectMsg('Το όνομα τμήματος συμπληρώνεται αυτόματα'),
-        );
-        expect(
-          s.phoneCandidates,
-          isNotEmpty,
-          reason: greekExpectMsg('Τα τηλέφωνα του τμήματος ως candidates'),
-        );
-        expect(
-          s.phoneCandidates,
-          containsAll(['6101', '6102']),
-          reason: greekExpectMsg('Όλα τα τηλέφωνα τμήματος στους υποψήφιους'),
-        );
-      },
-    );
-  });
+          final n = container.read(callSmartEntityProvider.notifier);
+          n.performEquipmentLookupByCode('EQ-DEPT-1');
+          final s = container.read(callSmartEntityProvider);
 
-  group('refreshSelectedEquipmentFromLookup — ανανέωση snapshot μετά αποθήκευση εξοπλισμού', () {
-    registerCallLoggerIsolatedDatabaseHooks();
-
-    Future<int> seededTestEquipmentId() async {
-      final db = await DatabaseHelper.instance.database;
-      final rows = await db.query(
-        'equipment',
-        columns: ['id'],
-        where: 'code_equipment = ?',
-        whereArgs: [kTestEquipmentCode],
-        limit: 1,
+          expect(
+            s.selectedEquipment,
+            isNotNull,
+            reason: greekExpectMsg('Ο εξοπλισμός πρέπει να επιλεγεί'),
+          );
+          expect(
+            s.selectedEquipment?.code,
+            'EQ-DEPT-1',
+            reason: greekExpectMsg('Σωστός κωδικός εξοπλισμού'),
+          );
+          expect(
+            s.selectedDepartmentId,
+            deptId,
+            reason: greekExpectMsg(
+              'Το τμήμα συμπληρώνεται από equipment.department_id',
+            ),
+          );
+          expect(
+            s.departmentText,
+            deptName,
+            reason: greekExpectMsg('Το όνομα τμήματος συμπληρώνεται αυτόματα'),
+          );
+          expect(
+            s.phoneCandidates,
+            isNotEmpty,
+            reason: greekExpectMsg('Τα τηλέφωνα του τμήματος ως candidates'),
+          );
+          expect(
+            s.phoneCandidates,
+            containsAll(['6101', '6102']),
+            reason: greekExpectMsg('Όλα τα τηλέφωνα τμήματος στους υποψήφιους'),
+          );
+        },
       );
-      expect(rows, isNotEmpty);
-      return rows.first['id'] as int;
-    }
+    },
+  );
 
-    Future<void> setEquipmentRemoteParams(
-      int equipmentId,
-      Map<String, String> remoteParams,
-    ) async {
-      final db = await DatabaseHelper.instance.database;
-      await db.update(
-        'equipment',
-        {'remote_params': jsonEncode(remoteParams)},
-        where: 'id = ?',
-        whereArgs: [equipmentId],
+  group(
+    'refreshSelectedEquipmentFromLookup — ανανέωση snapshot μετά αποθήκευση εξοπλισμού',
+    () {
+      registerCallLoggerIsolatedDatabaseHooks();
+
+      Future<int> seededTestEquipmentId() async {
+        final db = await DatabaseHelper.instance.database;
+        final rows = await db.query(
+          'equipment',
+          columns: ['id'],
+          where: 'code_equipment = ?',
+          whereArgs: [kTestEquipmentCode],
+          limit: 1,
+        );
+        expect(rows, isNotEmpty);
+        return rows.first['id'] as int;
+      }
+
+      Future<void> setEquipmentRemoteParams(
+        int equipmentId,
+        Map<String, String> remoteParams,
+      ) async {
+        final db = await DatabaseHelper.instance.database;
+        await db.update(
+          'equipment',
+          {'remote_params': jsonEncode(remoteParams)},
+          where: 'id = ?',
+          whereArgs: [equipmentId],
+        );
+      }
+
+      test(
+        'μετά invalidate lookup ανανεώνει selectedEquipment.remoteParams χωρίς αλλαγή equipmentText',
+        () async {
+          await seedIsolatedTestDatabase();
+          final equipmentId = await seededTestEquipmentId();
+          await setEquipmentRemoteParams(equipmentId, const {'1': '10.0.0.1'});
+
+          final container = ProviderContainer(
+            overrides: callLoggerTestProviderOverrides(),
+          );
+          addTearDown(container.dispose);
+
+          final bundle = await container.read(lookupServiceProvider.future);
+          final loaded = bundle.service
+              .findEquipmentsByCode(kTestEquipmentCode)
+              .first;
+          final notifier = container.read(callSmartEntityProvider.notifier);
+          notifier.setEquipment(loaded);
+          final textBefore = container
+              .read(callSmartEntityProvider)
+              .equipmentText;
+
+          await setEquipmentRemoteParams(equipmentId, const {
+            '1': '10.0.0.1',
+            '3': '192.168.1.5',
+            '__exclusive_tool__': '3',
+          });
+
+          container.invalidate(lookupServiceProvider);
+          await container.read(lookupServiceProvider.future);
+          await notifier.refreshSelectedEquipmentFromLookup();
+
+          final state = container.read(callSmartEntityProvider);
+          expect(
+            state.selectedEquipment?.remoteParams.containsKey('3'),
+            isTrue,
+            reason: greekExpectMsg(
+              'Το ανανεωμένο snapshot πρέπει να περιέχει τη νέα παράμετρο RDP',
+            ),
+          );
+          expect(
+            state.selectedEquipment?.remoteParams['3'],
+            '192.168.1.5',
+            reason: greekExpectMsg('Νέα IP RDP στο selectedEquipment'),
+          );
+          expect(
+            state.selectedEquipment?.remoteParams['__exclusive_tool__'],
+            '3',
+            reason: greekExpectMsg('Αποκλειστικό εργαλείο στο snapshot'),
+          );
+          expect(
+            state.equipmentText,
+            textBefore,
+            reason: greekExpectMsg(
+              'Το equipmentText δεν πρέπει να αλλάξει — μόνο το snapshot',
+            ),
+          );
+        },
       );
-    }
 
-    test(
-      'μετά invalidate lookup ανανεώνει selectedEquipment.remoteParams χωρίς αλλαγή equipmentText',
-      () async {
-        await seedIsolatedTestDatabase();
-        final equipmentId = await seededTestEquipmentId();
-        await setEquipmentRemoteParams(equipmentId, const {'1': '10.0.0.1'});
+      test(
+        'μετά αλλαγή κωδικού εξοπλισμού ανανεώνει και equipmentText όταν ταυτίζεται με τον παλιό κωδικό',
+        () async {
+          await seedIsolatedTestDatabase();
+          const newCode = 'PC-TEST-RENAMED';
 
-        final container = ProviderContainer(
-          overrides: callLoggerTestProviderOverrides(),
-        );
-        addTearDown(container.dispose);
+          final container = ProviderContainer(
+            overrides: callLoggerTestProviderOverrides(),
+          );
+          addTearDown(container.dispose);
 
-        final bundle = await container.read(lookupServiceProvider.future);
-        final loaded = bundle.service
-            .findEquipmentsByCode(kTestEquipmentCode)
-            .first;
-        final notifier = container.read(callSmartEntityProvider.notifier);
-        notifier.setEquipment(loaded);
-        final textBefore = container.read(callSmartEntityProvider).equipmentText;
+          await container.read(lookupServiceProvider.future);
+          final notifier = container.read(callSmartEntityProvider.notifier);
+          notifier.performEquipmentLookupByCode(kTestEquipmentCode);
 
-        await setEquipmentRemoteParams(equipmentId, const {
-          '1': '10.0.0.1',
-          '3': '192.168.1.5',
-          '__exclusive_tool__': '3',
-        });
+          final afterLookup = container.read(callSmartEntityProvider);
+          expect(afterLookup.selectedEquipment?.code, kTestEquipmentCode);
+          expect(afterLookup.equipmentText, kTestEquipmentCode);
 
-        container.invalidate(lookupServiceProvider);
-        await container.read(lookupServiceProvider.future);
-        await notifier.refreshSelectedEquipmentFromLookup();
+          final dirNotifier = container.read(
+            equipmentDirectoryProvider.notifier,
+          );
+          await dirNotifier.load();
+          final equipment = afterLookup.selectedEquipment!;
+          await dirNotifier.updateEquipment(equipment.copyWith(code: newCode));
 
-        final state = container.read(callSmartEntityProvider);
-        expect(
-          state.selectedEquipment?.remoteParams.containsKey('3'),
-          isTrue,
-          reason: greekExpectMsg(
-            'Το ανανεωμένο snapshot πρέπει να περιέχει τη νέα παράμετρο RDP',
-          ),
-        );
-        expect(
-          state.selectedEquipment?.remoteParams['3'],
-          '192.168.1.5',
-          reason: greekExpectMsg('Νέα IP RDP στο selectedEquipment'),
-        );
-        expect(
-          state.selectedEquipment?.remoteParams['__exclusive_tool__'],
-          '3',
-          reason: greekExpectMsg('Αποκλειστικό εργαλείο στο snapshot'),
-        );
-        expect(
-          state.equipmentText,
-          textBefore,
-          reason: greekExpectMsg(
-            'Το equipmentText δεν πρέπει να αλλάξει — μόνο το snapshot',
-          ),
-        );
-      },
-    );
+          container.invalidate(lookupServiceProvider);
+          await container.read(lookupServiceProvider.future);
+          await notifier.refreshSelectedEquipmentFromLookup();
 
-    test(
-      'μετά αλλαγή κωδικού εξοπλισμού ανανεώνει και equipmentText όταν ταυτίζεται με τον παλιό κωδικό',
-      () async {
-        await seedIsolatedTestDatabase();
-        const newCode = 'PC-TEST-RENAMED';
+          final state = container.read(callSmartEntityProvider);
+          expect(
+            state.selectedEquipment?.code,
+            newCode,
+            reason: greekExpectMsg(
+              'Το selectedEquipment.code πρέπει να δείχνει τον νέο κωδικό',
+            ),
+          );
+          expect(
+            state.equipmentText,
+            newCode,
+            reason: greekExpectMsg(
+              'Το equipmentText πρέπει να συγχρονιστεί με τον νέο κωδικό',
+            ),
+          );
+        },
+      );
 
-        final container = ProviderContainer(
-          overrides: callLoggerTestProviderOverrides(),
-        );
-        addTearDown(container.dispose);
-
-        await container.read(lookupServiceProvider.future);
-        final notifier = container.read(callSmartEntityProvider.notifier);
-        notifier.performEquipmentLookupByCode(kTestEquipmentCode);
-
-        final afterLookup = container.read(callSmartEntityProvider);
-        expect(afterLookup.selectedEquipment?.code, kTestEquipmentCode);
-        expect(afterLookup.equipmentText, kTestEquipmentCode);
-
-        final dirNotifier = container.read(equipmentDirectoryProvider.notifier);
-        await dirNotifier.load();
-        final equipment = afterLookup.selectedEquipment!;
-        await dirNotifier.updateEquipment(
-          equipment.copyWith(code: newCode),
-        );
-
-        container.invalidate(lookupServiceProvider);
-        await container.read(lookupServiceProvider.future);
-        await notifier.refreshSelectedEquipmentFromLookup();
-
-        final state = container.read(callSmartEntityProvider);
-        expect(
-          state.selectedEquipment?.code,
-          newCode,
-          reason: greekExpectMsg(
-            'Το selectedEquipment.code πρέπει να δείχνει τον νέο κωδικό',
-          ),
-        );
-        expect(
-          state.equipmentText,
-          newCode,
-          reason: greekExpectMsg(
-            'Το equipmentText πρέπει να συγχρονιστεί με τον νέο κωδικό',
-          ),
-        );
-      },
-    );
-
-    test(
-      'χωρίς επιλεγμένο εξοπλισμό η κλήση δεν αλλάζει state',
-      () async {
+      test('χωρίς επιλεγμένο εξοπλισμό η κλήση δεν αλλάζει state', () async {
         await seedIsolatedTestDatabase();
 
         final container = ProviderContainer(
@@ -2680,7 +3271,7 @@ void main() {
             'Χωρίς selectedEquipment η ανανέωση είναι no-op',
           ),
         );
-      },
-    );
-  });
+      });
+    },
+  );
 }

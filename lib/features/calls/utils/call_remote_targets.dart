@@ -1,4 +1,4 @@
-﻿import '../../../core/models/remote_tool.dart';
+import '../../../core/models/remote_tool.dart';
 import '../../../core/models/remote_tool_role.dart';
 import '../models/equipment_model.dart';
 import '../provider/smart_entity_selector_provider.dart';
@@ -41,8 +41,7 @@ abstract final class CallRemoteTargets {
   static bool canConnectAnyDesk(
     SmartEntitySelectorState s,
     List<RemoteTool> tools,
-  ) =>
-      resolvedAnyDeskTarget(s, tools) != null;
+  ) => resolvedAnyDeskTarget(s, tools) != null;
 
   static String resolvedVncTarget(
     SmartEntitySelectorState s,
@@ -62,8 +61,9 @@ abstract final class CallRemoteTargets {
       final raw = s.selectedEquipment!.vncTargetResolved(tools).trim();
       return raw.isNotEmpty && raw != 'Άγνωστο';
     }
-    final free = VncRemoteTarget.hostForUnknownEquipmentText(s.equipmentText)
-        .trim();
+    final free = VncRemoteTarget.hostForUnknownEquipmentText(
+      s.equipmentText,
+    ).trim();
     return free.isNotEmpty && free != 'Άγνωστο';
   }
 
@@ -97,8 +97,7 @@ abstract final class CallRemoteTargets {
   static bool canConnectRdp(
     SmartEntitySelectorState s,
     List<RemoteTool> tools,
-  ) =>
-      resolvedRdpHost(s, tools) != null;
+  ) => resolvedRdpHost(s, tools) != null;
 
   /// Στόχος εκκίνησης ανά ορισμό εργαλείου (`ToolRole`).
   static String? resolvedLaunchTarget(
@@ -122,15 +121,15 @@ abstract final class CallRemoteTargets {
             break;
           }
         }
-        final useTool =
-            vncDef != null && tool.id == vncDef.id ? vncDef : tool;
+        final useTool = vncDef != null && tool.id == vncDef.id ? vncDef : tool;
         if (s.selectedEquipment != null) {
           final h = s.selectedEquipment!.vncLikeTargetResolved(useTool).trim();
           if (h.isEmpty || h == 'Άγνωστο') return null;
           return h;
         }
-        final free = VncRemoteTarget.hostForUnknownEquipmentText(s.equipmentText)
-            .trim();
+        final free = VncRemoteTarget.hostForUnknownEquipmentText(
+          s.equipmentText,
+        ).trim();
         if (free.isEmpty || free == 'Άγνωστο') return null;
         return free;
       case ToolRole.generic:
@@ -142,8 +141,7 @@ abstract final class CallRemoteTargets {
     SmartEntitySelectorState s,
     RemoteTool tool,
     List<RemoteTool> tools,
-  ) =>
-      resolvedLaunchTarget(s, tool, tools) != null;
+  ) => resolvedLaunchTarget(s, tool, tools) != null;
 
   static String targetSubtitle(
     SmartEntitySelectorState s,
@@ -195,8 +193,9 @@ abstract final class CallRemoteTargets {
         return RemoteTargetRules.parseAnyDeskFromFreeText(s.equipmentText) !=
             null;
       case ToolRole.vnc:
-        final h =
-            VncRemoteTarget.hostForUnknownEquipmentText(s.equipmentText).trim();
+        final h = VncRemoteTarget.hostForUnknownEquipmentText(
+          s.equipmentText,
+        ).trim();
         return h.isNotEmpty && h != 'Άγνωστο';
       case ToolRole.rdp:
         return resolvedRdpHost(s, tools) != null;
@@ -255,8 +254,7 @@ abstract final class CallRemoteTargets {
               s.selectedEquipment!.remoteParams,
             );
       if (exclusiveId != null) {
-        final exclusive =
-            validTools.where((t) => t.id == exclusiveId).toList();
+        final exclusive = validTools.where((t) => t.id == exclusiveId).toList();
         finalTools = exclusive.isEmpty ? validTools : exclusive;
       } else {
         finalTools = validTools;

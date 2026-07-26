@@ -1,4 +1,4 @@
-﻿import 'dart:math' as math;
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
@@ -29,6 +29,7 @@ class BuildingMapSheetPainter extends CustomPainter {
   final int? highlightDepartmentId;
   final int? hoveredDepartmentId;
   final DraftDepartmentShape? draftShape;
+
   /// Όταν γίνεται inline επεξεργασία ονόματος — κρύβει κείμενο/γραμμές ετικέτας (το TextField είναι overlay).
   final int? suppressMapLabelForDepartmentId;
 
@@ -114,7 +115,11 @@ class BuildingMapSheetPainter extends CustomPainter {
     Offset targetPoint,
   ) {
     final center = rect.center;
-    final targetLocal = _rotateAroundCenter(targetPoint, center, -rotationRadians);
+    final targetLocal = _rotateAroundCenter(
+      targetPoint,
+      center,
+      -rotationRadians,
+    );
     final vx = targetLocal.dx - center.dx;
     final vy = targetLocal.dy - center.dy;
     if (vx == 0 && vy == 0) {
@@ -159,15 +164,18 @@ class BuildingMapSheetPainter extends CustomPainter {
     final cx = size.width / 2;
     final cy = size.height / 2;
     final sheetCenter = Offset(cx, cy);
-    final labelsToPaint = <({
-      String text,
-      Offset labelCenter,
-      Offset anchorPoint,
-      double fontScale,
-      double labelWidth,
-      double labelHeight,
-      bool showLabelBoxChrome,
-    })>[];
+    final labelsToPaint =
+        <
+          ({
+            String text,
+            Offset labelCenter,
+            Offset anchorPoint,
+            double fontScale,
+            double labelWidth,
+            double labelHeight,
+            bool showLabelBoxChrome,
+          })
+        >[];
 
     canvas.save();
     canvas.translate(cx, cy);
@@ -218,10 +226,15 @@ class BuildingMapSheetPainter extends CustomPainter {
         nw * size.width,
         nh * size.height,
       );
-      final isHovered = toolMode == MapToolMode.select && hoveredDepartmentId == d.id;
-      final opaqueFill = _parseOpaqueFillColor(d.color, const Color(0xFF1976D2));
-      final fillOpacity =
-          isHovered ? _kMapFillOpacityHovered : _kMapFillOpacity;
+      final isHovered =
+          toolMode == MapToolMode.select && hoveredDepartmentId == d.id;
+      final opaqueFill = _parseOpaqueFillColor(
+        d.color,
+        const Color(0xFF1976D2),
+      );
+      final fillOpacity = isHovered
+          ? _kMapFillOpacityHovered
+          : _kMapFillOpacity;
       final strokeW = highlightDepartmentId == d.id
           ? 3.0
           : (isHovered ? 2.6 : 1.5);
@@ -258,10 +271,12 @@ class BuildingMapSheetPainter extends CustomPainter {
         r.center.dx + ((effectiveLabelOffsetX ?? 0.0) * size.width),
         r.center.dy + ((effectiveLabelOffsetY ?? 0.0) * size.height),
       );
-      final suppressLabel = suppressMapLabelForDepartmentId != null &&
+      final suppressLabel =
+          suppressMapLabelForDepartmentId != null &&
           d.id == suppressMapLabelForDepartmentId;
       if (!suppressLabel) {
-        final override = mapLabelOverrideDepartmentId != null &&
+        final override =
+            mapLabelOverrideDepartmentId != null &&
                 mapLabelOverrideText != null &&
                 d.id == mapLabelOverrideDepartmentId
             ? mapLabelOverrideText!
@@ -277,17 +292,15 @@ class BuildingMapSheetPainter extends CustomPainter {
                 effectiveRotation,
                 labelCenter,
               );
-        labelsToPaint.add(
-          (
-            text: override,
-            labelCenter: labelCenter + hoverOffset,
-            anchorPoint: anchorPoint + hoverOffset,
-            fontScale: effectiveFontScale,
-            labelWidth: effectiveLabelWidth,
-            labelHeight: effectiveLabelHeight,
-            showLabelBoxChrome: isEditingSelectedDraft,
-          ),
-        );
+        labelsToPaint.add((
+          text: override,
+          labelCenter: labelCenter + hoverOffset,
+          anchorPoint: anchorPoint + hoverOffset,
+          fontScale: effectiveFontScale,
+          labelWidth: effectiveLabelWidth,
+          labelHeight: effectiveLabelHeight,
+          showLabelBoxChrome: isEditingSelectedDraft,
+        ));
       }
       canvas.restore();
     }
@@ -310,7 +323,10 @@ class BuildingMapSheetPainter extends CustomPainter {
         width: label.labelWidth,
         height: label.labelHeight,
       );
-      final maxFontSize = computeBuildingMapLabelFontSize(size, label.fontScale);
+      final maxFontSize = computeBuildingMapLabelFontSize(
+        size,
+        label.fontScale,
+      );
       final textLayout = layoutMapLabelTextInBox(
         text: label.text,
         boxWidth: label.labelWidth,
@@ -346,7 +362,10 @@ class BuildingMapSheetPainter extends CustomPainter {
 
       tp.paint(canvas, textTopLeft);
 
-      final underlineStart = Offset(textTopLeft.dx, textTopLeft.dy + tp.height + 2);
+      final underlineStart = Offset(
+        textTopLeft.dx,
+        textTopLeft.dy + tp.height + 2,
+      );
       final underlineEnd = Offset(
         textTopLeft.dx + tp.width,
         textTopLeft.dy + tp.height + 2,
@@ -431,7 +450,8 @@ class BuildingMapSheetPainter extends CustomPainter {
           dr.center.dy + ((draftShape!.labelOffsetY ?? 0.0) * size.height),
         );
         final anchorPoint =
-            draftShape!.anchorOffsetX != null && draftShape!.anchorOffsetY != null
+            draftShape!.anchorOffsetX != null &&
+                draftShape!.anchorOffsetY != null
             ? Offset(
                 dr.center.dx + (draftShape!.anchorOffsetX! * size.width),
                 dr.center.dy + (draftShape!.anchorOffsetY! * size.height),

@@ -39,86 +39,71 @@ const _kRemoteAddressLabel =
 const _kRemoteAnyDeskCodeLabel = 'Κωδικός AnyDesk';
 
 RemoteTool get _kTestVncRemoteTool => RemoteTool(
-      id: 1,
-      name: _kRemoteVncToolName,
-      role: ToolRole.vnc,
-      executablePath: r'C:\vnc\viewer.exe',
-      sortOrder: 1,
-      isActive: true,
-    );
+  id: 1,
+  name: _kRemoteVncToolName,
+  role: ToolRole.vnc,
+  executablePath: r'C:\vnc\viewer.exe',
+  sortOrder: 1,
+  isActive: true,
+);
 
-RemoteToolFormPair get _kTestVncFormPair => (
-      label: _kRemoteVncToolName,
-      key: '1',
-      acceptsFileParam: false,
-    );
+RemoteToolFormPair get _kTestVncFormPair =>
+    (label: _kRemoteVncToolName, key: '1', acceptsFileParam: false);
 
 RemoteTool get _kTestAnyDeskRemoteTool => RemoteTool(
-      id: 2,
-      name: _kRemoteAnyDeskToolName,
-      role: ToolRole.anydesk,
-      executablePath: r'C:\anydesk\ad.exe',
-      sortOrder: 2,
-      isActive: true,
-    );
+  id: 2,
+  name: _kRemoteAnyDeskToolName,
+  role: ToolRole.anydesk,
+  executablePath: r'C:\anydesk\ad.exe',
+  sortOrder: 2,
+  isActive: true,
+);
 
-RemoteToolFormPair get _kTestAnyDeskFormPair => (
-      label: _kRemoteAnyDeskToolName,
-      key: '2',
-      acceptsFileParam: false,
-    );
+RemoteToolFormPair get _kTestAnyDeskFormPair =>
+    (label: _kRemoteAnyDeskToolName, key: '2', acceptsFileParam: false);
 
 const _kRemoteIconToolName = 'VNC με εικονίδιο';
 
 RemoteTool get _kTestRemoteToolWithIcon => RemoteTool(
-      id: 10,
-      name: _kRemoteIconToolName,
-      role: ToolRole.vnc,
-      executablePath: r'C:\vnc\viewer.exe',
-      sortOrder: 1,
-      isActive: true,
-      iconAssetKey: 'assets/vnc_viewer.png',
-    );
+  id: 10,
+  name: _kRemoteIconToolName,
+  role: ToolRole.vnc,
+  executablePath: r'C:\vnc\viewer.exe',
+  sortOrder: 1,
+  isActive: true,
+  iconAssetKey: 'assets/vnc_viewer.png',
+);
 
-RemoteToolFormPair get _kTestRemoteToolWithIconFormPair => (
-      label: _kRemoteIconToolName,
-      key: '10',
-      acceptsFileParam: false,
-    );
+RemoteToolFormPair get _kTestRemoteToolWithIconFormPair =>
+    (label: _kRemoteIconToolName, key: '10', acceptsFileParam: false);
 
 RemoteTool get _kTestRemoteToolWithoutIcon => RemoteTool(
-      id: 11,
-      name: 'Εργαλείο χωρίς εικονίδιο',
-      role: ToolRole.vnc,
-      executablePath: r'C:\vnc\viewer2.exe',
-      sortOrder: 1,
-      isActive: true,
-    );
+  id: 11,
+  name: 'Εργαλείο χωρίς εικονίδιο',
+  role: ToolRole.vnc,
+  executablePath: r'C:\vnc\viewer2.exe',
+  sortOrder: 1,
+  isActive: true,
+);
 
-RemoteToolFormPair get _kTestRemoteToolWithoutIconFormPair => (
-      label: 'Εργαλείο χωρίς εικονίδιο',
-      key: '11',
-      acceptsFileParam: false,
-    );
+RemoteToolFormPair get _kTestRemoteToolWithoutIconFormPair =>
+    (label: 'Εργαλείο χωρίς εικονίδιο', key: '11', acceptsFileParam: false);
 
 const _kRemoteRdpToolName = 'RDP Test Host';
 const _kRemoteRdpAddressLabel =
     '$_kRemoteRdpToolName - Διεύθυνση (IP ή όνομα υπολογιστή)';
 
 RemoteTool get _kTestRdpHostRemoteTool => RemoteTool(
-      id: 3,
-      name: _kRemoteRdpToolName,
-      role: ToolRole.rdp,
-      executablePath: r'C:\Windows\mstsc.exe',
-      sortOrder: 3,
-      isActive: true,
-    );
+  id: 3,
+  name: _kRemoteRdpToolName,
+  role: ToolRole.rdp,
+  executablePath: r'C:\Windows\mstsc.exe',
+  sortOrder: 3,
+  isActive: true,
+);
 
-RemoteToolFormPair get _kTestRdpHostFormPair => (
-      label: _kRemoteRdpToolName,
-      key: '3',
-      acceptsFileParam: false,
-    );
+RemoteToolFormPair get _kTestRdpHostFormPair =>
+    (label: _kRemoteRdpToolName, key: '3', acceptsFileParam: false);
 
 Finder _fieldByLabel(String label) {
   return find.descendant(
@@ -235,7 +220,8 @@ Future<void> _openEquipmentFormInDialog(
 Future<void> _pumpUntilEquipmentSaveCompletes(WidgetTester tester) async {
   const maxAttempts = 40;
   for (var i = 0; i < maxAttempts; i++) {
-    final formOpen = find.text(_kNewEquipmentTitle).evaluate().isNotEmpty ||
+    final formOpen =
+        find.text(_kNewEquipmentTitle).evaluate().isNotEmpty ||
         find.text(_kEditEquipmentTitle).evaluate().isNotEmpty;
     if (!formOpen) return;
     await tester.runAsync(() async {
@@ -244,7 +230,9 @@ Future<void> _pumpUntilEquipmentSaveCompletes(WidgetTester tester) async {
     await tester.pump(const Duration(milliseconds: 50));
   }
   fail(
-    greekExpectMsg('Η φόρμα εξοπλισμού δεν έκλεισε εγκαίρως μετά την αποθήκευση'),
+    greekExpectMsg(
+      'Η φόρμα εξοπλισμού δεν έκλεισε εγκαίρως μετά την αποθήκευση',
+    ),
   );
 }
 
@@ -265,7 +253,11 @@ void main() {
           await container.read(lookupServiceProvider.future);
           notifier = container.read(equipmentDirectoryProvider.notifier);
           await notifier.load();
-          await _openEquipmentFormInDialog(tester, container, notifier: notifier);
+          await _openEquipmentFormInDialog(
+            tester,
+            container,
+            notifier: notifier,
+          );
         });
 
         expect(find.text(_kNewEquipmentTitle), findsOneWidget);
@@ -285,49 +277,50 @@ void main() {
       },
     );
 
-    testWidgets(
-      'δημιουργία: επιτυχής αποθήκευση νέου εξοπλισμού στη βάση',
-      (tester) async {
-        tester.view.physicalSize = const Size(1600, 900);
-        tester.view.devicePixelRatio = 1.0;
-        addTearDown(() {
-          tester.view.resetPhysicalSize();
-          tester.view.resetDevicePixelRatio();
-        });
+    testWidgets('δημιουργία: επιτυχής αποθήκευση νέου εξοπλισμού στη βάση', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(1600, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
 
-        final container = ProviderContainer(
-          overrides: callLoggerTestProviderOverrides(),
-        );
-        addTearDown(container.dispose);
+      final container = ProviderContainer(
+        overrides: callLoggerTestProviderOverrides(),
+      );
+      addTearDown(container.dispose);
 
-        late EquipmentDirectoryNotifier notifier;
-        await tester.runAsync(() async {
-          await container.read(lookupServiceProvider.future);
-          notifier = container.read(equipmentDirectoryProvider.notifier);
-          await notifier.load();
-          await _openEquipmentFormInDialog(tester, container, notifier: notifier);
-        });
+      late EquipmentDirectoryNotifier notifier;
+      await tester.runAsync(() async {
+        await container.read(lookupServiceProvider.future);
+        notifier = container.read(equipmentDirectoryProvider.notifier);
+        await notifier.load();
+        await _openEquipmentFormInDialog(tester, container, notifier: notifier);
+      });
 
-        await tester.enterText(_codeField(), _kNewEquipmentCode);
-        await pumpUntilSettled(tester);
+      await tester.enterText(_codeField(), _kNewEquipmentCode);
+      await pumpUntilSettled(tester);
 
-        final addButton = find.widgetWithText(FilledButton, 'Προσθήκη');
-        expect(
-          tester.widget<FilledButton>(addButton).onPressed,
-          isNotNull,
-          reason: greekExpectMsg('Η προσθήκη ενεργοποιείται με συμπληρωμένο κωδικό'),
-        );
+      final addButton = find.widgetWithText(FilledButton, 'Προσθήκη');
+      expect(
+        tester.widget<FilledButton>(addButton).onPressed,
+        isNotNull,
+        reason: greekExpectMsg(
+          'Η προσθήκη ενεργοποιείται με συμπληρωμένο κωδικό',
+        ),
+      );
 
-        await tester.tap(addButton);
-        await pumpUntilSettled(tester);
-        await _pumpUntilEquipmentSaveCompletes(tester);
+      await tester.tap(addButton);
+      await pumpUntilSettled(tester);
+      await _pumpUntilEquipmentSaveCompletes(tester);
 
-        final exists = await tester.runAsync(
-          () => _equipmentCodeExists(_kNewEquipmentCode),
-        );
-        expect(exists, isTrue);
-      },
-    );
+      final exists = await tester.runAsync(
+        () => _equipmentCodeExists(_kNewEquipmentCode),
+      );
+      expect(exists, isTrue);
+    });
 
     testWidgets(
       'επεξεργασία: αλλαγή εμφανίζει διάλογο με τρεις επιλογές, χωρίς αλλαγές όχι',
@@ -393,7 +386,9 @@ void main() {
         expect(
           tester.widget<FilledButton>(saveButton).onPressed,
           isNotNull,
-          reason: greekExpectMsg('Η αλλαγή τοποθεσίας ενεργοποιεί την αποθήκευση'),
+          reason: greekExpectMsg(
+            'Η αλλαγή τοποθεσίας ενεργοποιεί την αποθήκευση',
+          ),
         );
         await tester.tapAt(const Offset(8, 8));
         await pumpUntilSettled(tester);
@@ -446,10 +441,7 @@ void main() {
 
         expect(find.text(_kEditEquipmentTitle), findsOneWidget);
         expect(
-          find.widgetWithText(
-            TextFormField,
-            _kRemoteAddressLabel,
-          ),
+          find.widgetWithText(TextFormField, _kRemoteAddressLabel),
           findsOneWidget,
           reason: greekExpectMsg(
             'Το πεδίο παραμέτρου του εργαλείου εμφανίζεται πάντα (χωρίς chips)',
@@ -489,25 +481,23 @@ void main() {
           await container.read(lookupServiceProvider.future);
           notifier = container.read(equipmentDirectoryProvider.notifier);
           await notifier.load();
-          await _openEquipmentFormInDialog(tester, container, notifier: notifier);
+          await _openEquipmentFormInDialog(
+            tester,
+            container,
+            notifier: notifier,
+          );
         });
 
         await tester.enterText(_codeField(), code);
         await pumpUntilSettled(tester);
 
         await tester.enterText(
-          find.widgetWithText(
-            TextFormField,
-            _kRemoteAddressLabel,
-          ),
+          find.widgetWithText(TextFormField, _kRemoteAddressLabel),
           '10.0.0.55',
         );
         await pumpUntilSettled(tester);
         await tester.enterText(
-          find.widgetWithText(
-            TextFormField,
-            _kRemoteAnyDeskCodeLabel,
-          ),
+          find.widgetWithText(TextFormField, _kRemoteAnyDeskCodeLabel),
           '123456789',
         );
         await pumpUntilSettled(tester);
@@ -521,7 +511,9 @@ void main() {
         await pumpUntilSettled(tester);
         await _pumpUntilEquipmentSaveCompletes(tester);
 
-        final savedFirst = await tester.runAsync(() => _loadEquipmentByCode(code));
+        final savedFirst = await tester.runAsync(
+          () => _loadEquipmentByCode(code),
+        );
         expect(savedFirst, isNotNull);
         expect(
           savedFirst!.remoteParams[EquipmentRemoteParamKey.exclusiveToolKey],
@@ -551,7 +543,9 @@ void main() {
         await pumpUntilSettled(tester);
         await _pumpUntilEquipmentSaveCompletes(tester);
 
-        final savedAfter = await tester.runAsync(() => _loadEquipmentByCode(code));
+        final savedAfter = await tester.runAsync(
+          () => _loadEquipmentByCode(code),
+        );
         expect(savedAfter, isNotNull);
         expect(
           savedAfter!.remoteParams.containsKey(
@@ -585,7 +579,11 @@ void main() {
           await container.read(lookupServiceProvider.future);
           notifier = container.read(equipmentDirectoryProvider.notifier);
           await notifier.load();
-          await _openEquipmentFormInDialog(tester, container, notifier: notifier);
+          await _openEquipmentFormInDialog(
+            tester,
+            container,
+            notifier: notifier,
+          );
         });
 
         expect(find.text(_kNewEquipmentTitle), findsOneWidget);
@@ -622,7 +620,11 @@ void main() {
           await container.read(lookupServiceProvider.future);
           notifier = container.read(equipmentDirectoryProvider.notifier);
           await notifier.load();
-          await _openEquipmentFormInDialog(tester, container, notifier: notifier);
+          await _openEquipmentFormInDialog(
+            tester,
+            container,
+            notifier: notifier,
+          );
         });
 
         expect(find.text(_kNewEquipmentTitle), findsOneWidget);
@@ -659,7 +661,11 @@ void main() {
           await container.read(lookupServiceProvider.future);
           notifier = container.read(equipmentDirectoryProvider.notifier);
           await notifier.load();
-          await _openEquipmentFormInDialog(tester, container, notifier: notifier);
+          await _openEquipmentFormInDialog(
+            tester,
+            container,
+            notifier: notifier,
+          );
         });
 
         expect(find.text(_kNewEquipmentTitle), findsOneWidget);
@@ -693,7 +699,11 @@ void main() {
           await container.read(lookupServiceProvider.future);
           notifier = container.read(equipmentDirectoryProvider.notifier);
           await notifier.load();
-          await _openEquipmentFormInDialog(tester, container, notifier: notifier);
+          await _openEquipmentFormInDialog(
+            tester,
+            container,
+            notifier: notifier,
+          );
         });
 
         expect(find.text(_kNewEquipmentTitle), findsOneWidget);
@@ -761,10 +771,7 @@ void main() {
         expect(find.text(_kEditEquipmentTitle), findsOneWidget);
 
         await tester.enterText(
-          find.widgetWithText(
-            TextFormField,
-            _kRemoteAddressLabel,
-          ),
+          find.widgetWithText(TextFormField, _kRemoteAddressLabel),
           newIp,
         );
         await pumpUntilSettled(tester);
@@ -807,7 +814,11 @@ void main() {
           await container.read(lookupServiceProvider.future);
           notifier = container.read(equipmentDirectoryProvider.notifier);
           await notifier.load();
-          await _openEquipmentFormInDialog(tester, container, notifier: notifier);
+          await _openEquipmentFormInDialog(
+            tester,
+            container,
+            notifier: notifier,
+          );
         });
 
         expect(find.text(_kNewEquipmentTitle), findsOneWidget);

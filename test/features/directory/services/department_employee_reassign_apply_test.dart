@@ -66,17 +66,11 @@ void main() {
     }
 
     Future<int> insertPhone(String number) async {
-      return db.insert('phones', {
-        'number': number,
-        'is_deleted': 0,
-      });
+      return db.insert('phones', {'number': number, 'is_deleted': 0});
     }
 
     Future<int> insertEquipment(String code) async {
-      return db.insert('equipment', {
-        'code_equipment': code,
-        'is_deleted': 0,
-      });
+      return db.insert('equipment', {'code_equipment': code, 'is_deleted': 0});
     }
 
     test('μεταφορά σε υπάρχον τμήμα αλλάζει department_id', () async {
@@ -91,9 +85,7 @@ void main() {
       await applyDepartmentEmployeeReassignBatch(
         db,
         DepartmentEmployeeReassignBatch(
-          transfers: {
-            userId: SharedAssetTransferTarget.existing(targetId),
-          },
+          transfers: {userId: SharedAssetTransferTarget.existing(targetId)},
         ),
       );
 
@@ -106,40 +98,42 @@ void main() {
       expect(rows.single['department_id'], targetId);
     });
 
-    test('μεταφορά σε νέο τμήμα δημιουργεί τμήμα και θέτει department_id',
-        () async {
-      const newDeptName = 'Νέο Τμήμα Reassign';
-      final sourceId = await insertDepartment('Πηγή Νέου');
-      final userId = await insertUser(
-        firstName: 'Βήτα',
-        lastName: 'Υπάλληλος',
-        departmentId: sourceId,
-      );
+    test(
+      'μεταφορά σε νέο τμήμα δημιουργεί τμήμα και θέτει department_id',
+      () async {
+        const newDeptName = 'Νέο Τμήμα Reassign';
+        final sourceId = await insertDepartment('Πηγή Νέου');
+        final userId = await insertUser(
+          firstName: 'Βήτα',
+          lastName: 'Υπάλληλος',
+          departmentId: sourceId,
+        );
 
-      await applyDepartmentEmployeeReassignBatch(
-        db,
-        DepartmentEmployeeReassignBatch(
-          transfers: {
-            userId: SharedAssetTransferTarget.createNew(newDeptName),
-          },
-        ),
-      );
+        await applyDepartmentEmployeeReassignBatch(
+          db,
+          DepartmentEmployeeReassignBatch(
+            transfers: {
+              userId: SharedAssetTransferTarget.createNew(newDeptName),
+            },
+          ),
+        );
 
-      final deptRows = await db.query(
-        'departments',
-        where: 'name = ?',
-        whereArgs: [newDeptName],
-      );
-      expect(deptRows, hasLength(1));
-      final newDeptId = deptRows.single['id'] as int;
+        final deptRows = await db.query(
+          'departments',
+          where: 'name = ?',
+          whereArgs: [newDeptName],
+        );
+        expect(deptRows, hasLength(1));
+        final newDeptId = deptRows.single['id'] as int;
 
-      final userRows = await db.query(
-        'users',
-        where: 'id = ?',
-        whereArgs: [userId],
-      );
-      expect(userRows.single['department_id'], newDeptId);
-    });
+        final userRows = await db.query(
+          'users',
+          where: 'id = ?',
+          whereArgs: [userId],
+        );
+        expect(userRows.single['department_id'], newDeptId);
+      },
+    );
 
     test('προσωπικά τηλέφωνα και εξοπλισμός ακολουθούν τον υπάλληλο', () async {
       final sourceId = await insertDepartment('Πηγή Assets');
@@ -153,10 +147,7 @@ void main() {
       const equipmentCode = 'PC-REASSIGN-1';
       final phoneId = await insertPhone(phoneNumber);
       final equipmentId = await insertEquipment(equipmentCode);
-      await db.insert('user_phones', {
-        'user_id': userId,
-        'phone_id': phoneId,
-      });
+      await db.insert('user_phones', {'user_id': userId, 'phone_id': phoneId});
       await db.insert('user_equipment', {
         'user_id': userId,
         'equipment_id': equipmentId,
@@ -165,9 +156,7 @@ void main() {
       await applyDepartmentEmployeeReassignBatch(
         db,
         DepartmentEmployeeReassignBatch(
-          transfers: {
-            userId: SharedAssetTransferTarget.existing(targetId),
-          },
+          transfers: {userId: SharedAssetTransferTarget.existing(targetId)},
         ),
       );
 

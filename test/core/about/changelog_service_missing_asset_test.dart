@@ -29,9 +29,7 @@ void main() {
   }
 ]
 ''';
-      final service = ChangelogService(
-        loadAsset: (_) async => json,
-      );
+      final service = ChangelogService(loadAsset: (_) async => json);
 
       final entries = await service.load();
 

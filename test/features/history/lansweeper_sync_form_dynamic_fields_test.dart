@@ -1,4 +1,4 @@
-﻿import 'package:call_logger/core/services/lansweeper_ticket_submit_config.dart';
+import 'package:call_logger/core/services/lansweeper_ticket_submit_config.dart';
 import 'package:call_logger/core/widgets/lexicon_spell_text_form_field.dart';
 import 'package:call_logger/core/widgets/spell_check_controller.dart';
 import 'package:call_logger/features/history/widgets/lansweeper/lansweeper_sync_form.dart';
@@ -101,7 +101,10 @@ void main() {
         );
         expect(categoryField.options, ['Yes', 'No']);
         expect(dropdownByLabel('Κατηγορία αιτήματος'), findsOneWidget);
-        expect(dropdownSelectedText('Κατηγορία αιτήματος', 'Yes'), findsOneWidget);
+        expect(
+          dropdownSelectedText('Κατηγορία αιτήματος', 'Yes'),
+          findsOneWidget,
+        );
       },
     );
 
@@ -132,7 +135,10 @@ void main() {
 
         expect(config.ticketStates, ['Open', 'Closed', 'In Progress']);
         expect(dropdownByLabel('Κατάσταση ticket'), findsOneWidget);
-        expect(dropdownSelectedText('Κατάσταση ticket', 'Closed'), findsOneWidget);
+        expect(
+          dropdownSelectedText('Κατάσταση ticket', 'Closed'),
+          findsOneWidget,
+        );
       },
     );
 

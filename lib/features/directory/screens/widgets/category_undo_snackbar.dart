@@ -22,7 +22,8 @@ class CategoryUndoSnackBarContent extends StatefulWidget {
       _CategoryUndoSnackBarContentState();
 }
 
-class _CategoryUndoSnackBarContentState extends State<CategoryUndoSnackBarContent> {
+class _CategoryUndoSnackBarContentState
+    extends State<CategoryUndoSnackBarContent> {
   late int _secondsLeft;
   Timer? _timer;
 
@@ -67,10 +68,7 @@ class _CategoryUndoSnackBarContentState extends State<CategoryUndoSnackBarConten
           children: [
             Expanded(
               child: widget.tooltipMessage != null
-                  ? Tooltip(
-                      message: widget.tooltipMessage!,
-                      child: textWidget,
-                    )
+                  ? Tooltip(message: widget.tooltipMessage!, child: textWidget)
                   : textWidget,
             ),
             if (widget.showCloseIcon)
@@ -115,10 +113,7 @@ class CategoryUndoSnackBar {
           tooltipMessage: tooltipMessage,
           showCloseIcon: showCloseIcon,
         ),
-        action: SnackBarAction(
-          label: 'Αναίρεση',
-          onPressed: onUndo,
-        ),
+        action: SnackBarAction(label: 'Αναίρεση', onPressed: onUndo),
       ),
     );
   }

@@ -5,11 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 /// Καταγραφή ενός ελέγχου για τελική αναφορά.
 class GreekTestCheckRecord {
-  GreekTestCheckRecord({
-    required this.name,
-    required this.passed,
-    this.hint,
-  });
+  GreekTestCheckRecord({required this.name, required this.passed, this.hint});
 
   final String name;
   final bool passed;
@@ -29,9 +25,7 @@ class GreekTestReportCollector {
   }
 
   void recordFail(String name, {String? hint}) {
-    _records.add(
-      GreekTestCheckRecord(name: name, passed: false, hint: hint),
-    );
+    _records.add(GreekTestCheckRecord(name: name, passed: false, hint: hint));
     // ignore: avoid_print
     print('❌ Απέτυχε: $name${hint != null ? ' — $hint' : ''}');
   }

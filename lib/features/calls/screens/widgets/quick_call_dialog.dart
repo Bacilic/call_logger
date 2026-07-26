@@ -115,14 +115,10 @@ class _QuickCallDialogState extends ConsumerState<QuickCallDialog>
       }
     } on CallSaveException catch (e) {
       if (!context.mounted) return;
-      showDialogSnackBar(
-        SnackBar(content: Text(e.message)),
-      );
+      showDialogSnackBar(SnackBar(content: Text(e.message)));
     } on TaskSaveException catch (e) {
       if (!context.mounted) return;
-      showDialogSnackBar(
-        SnackBar(content: Text(e.message)),
-      );
+      showDialogSnackBar(SnackBar(content: Text(e.message)));
     }
   }
 
@@ -132,7 +128,7 @@ class _QuickCallDialogState extends ConsumerState<QuickCallDialog>
     final tools = ref.watch(remoteToolsCatalogProvider).value ?? <RemoteTool>[];
     final showRemoteButtons =
         header.equipmentText.trim().isNotEmpty ||
-            header.selectedEquipment != null;
+        header.selectedEquipment != null;
     final isSubmitting = ref.watch(
       callEntryProvider.select((s) => s.isSubmitting),
     );
@@ -141,150 +137,159 @@ class _QuickCallDialogState extends ConsumerState<QuickCallDialog>
     return DialogSnackbarScope(
       messengerKey: dialogMessengerKey,
       child: Dialog(
-      key: const ValueKey('quick_call_dialog'),
-      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: _kDialogMaxWidth),
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Row(
-                children: [
-                  Icon(Icons.flash_on, color: theme.colorScheme.primary),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'Γρήγορη καταγραφή κλήσης',
-                      style: theme.textTheme.titleLarge,
+        key: const ValueKey('quick_call_dialog'),
+        insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: _kDialogMaxWidth),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.flash_on, color: theme.colorScheme.primary),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Γρήγορη καταγραφή κλήσης',
+                        style: theme.textTheme.titleLarge,
+                      ),
                     ),
-                  ),
-                  IconButton(
-                    tooltip: 'Κλείσιμο',
-                    onPressed: () => Navigator.of(context).pop(),
-                    icon: const Icon(Icons.close),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              SingleChildScrollView(
-                child: LayoutBuilder(
-                  builder: (context, constraints) {
-                    final widths = _fieldWidths(constraints.maxWidth);
-                    return Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        SingleChildScrollView(
-                          scrollDirection: Axis.horizontal,
-                          child: SmartEntitySelectorWidget(
-                            key: _selectorKey,
-                            provider: callSmartEntityProvider,
-                            w1: widths.w1,
-                            w2: widths.w2,
-                            wDept: widths.wDept,
-                            w3: widths.w3,
-                            callEntryHooks: SmartEntityCallEntryHooks(
-                              syncTimerFromPhoneText: (raw) {
-                                final digits = raw.replaceAll(
-                                  RegExp(r'[^0-9]'),
-                                  '',
-                                );
-                                final n = ref.read(callEntryProvider.notifier);
-                                if (digits.isNotEmpty) {
-                                  n.startTimerOnce();
-                                } else {
-                                  n.resetTimerToStandby();
-                                }
-                              },
-                              startTimerOnceIfNotRunningWhenAutofill: () {
-                                final n = ref.read(callEntryProvider.notifier);
-                                if (!n.isTimerRunning) {
-                                  n.startTimerOnce();
-                                }
-                              },
-                              resetTimerToStandby: () => ref
-                                  .read(callEntryProvider.notifier)
-                                  .resetTimerToStandby(),
-                            ),
-                            trailingRowChildren: const [],
-                          ),
-                        ),
-                        if (showRemoteButtons) ...[
-                          const SizedBox(height: 12),
-                          RemoteConnectionButtons(header: header, tools: tools),
-                        ],
-                        const SizedBox(height: 12),
-                        const NotesStickyField(),
-                        const SizedBox(height: 12),
-                        LayoutBuilder(
-                          builder: (context, rowConstraints) {
-                            final categoryField = CategoryAutocompleteField(
-                              onCategoryChanged: (text, categoryId) {
-                                ref
+                    IconButton(
+                      tooltip: 'Κλείσιμο',
+                      onPressed: () => Navigator.of(context).pop(),
+                      icon: const Icon(Icons.close),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                SingleChildScrollView(
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      final widths = _fieldWidths(constraints.maxWidth);
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          SingleChildScrollView(
+                            scrollDirection: Axis.horizontal,
+                            child: SmartEntitySelectorWidget(
+                              key: _selectorKey,
+                              provider: callSmartEntityProvider,
+                              w1: widths.w1,
+                              w2: widths.w2,
+                              wDept: widths.wDept,
+                              w3: widths.w3,
+                              callEntryHooks: SmartEntityCallEntryHooks(
+                                syncTimerFromPhoneText: (raw) {
+                                  final digits = raw.replaceAll(
+                                    RegExp(r'[^0-9]'),
+                                    '',
+                                  );
+                                  final n = ref.read(
+                                    callEntryProvider.notifier,
+                                  );
+                                  if (digits.isNotEmpty) {
+                                    n.startTimerOnce();
+                                  } else {
+                                    n.resetTimerToStandby();
+                                  }
+                                },
+                                startTimerOnceIfNotRunningWhenAutofill: () {
+                                  final n = ref.read(
+                                    callEntryProvider.notifier,
+                                  );
+                                  if (!n.isTimerRunning) {
+                                    n.startTimerOnce();
+                                  }
+                                },
+                                resetTimerToStandby: () => ref
                                     .read(callEntryProvider.notifier)
-                                    .setCategory(
-                                      text,
-                                      categoryId: categoryId,
-                                    );
-                              },
-                            );
-                            final submitButton = _SubmitButton(
+                                    .resetTimerToStandby(),
+                              ),
+                              trailingRowChildren: const [],
+                            ),
+                          ),
+                          if (showRemoteButtons) ...[
+                            const SizedBox(height: 12),
+                            RemoteConnectionButtons(
                               header: header,
-                              isSubmitting: isSubmitting,
-                              onSubmit: () => _submit(context),
-                            );
-                            if (rowConstraints.maxWidth < 520) {
-                              return Column(
-                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                              tools: tools,
+                            ),
+                          ],
+                          const SizedBox(height: 12),
+                          const NotesStickyField(),
+                          const SizedBox(height: 12),
+                          LayoutBuilder(
+                            builder: (context, rowConstraints) {
+                              final categoryField = CategoryAutocompleteField(
+                                onCategoryChanged: (text, categoryId) {
+                                  ref
+                                      .read(callEntryProvider.notifier)
+                                      .setCategory(
+                                        text,
+                                        categoryId: categoryId,
+                                      );
+                                },
+                              );
+                              final submitButton = _SubmitButton(
+                                header: header,
+                                isSubmitting: isSubmitting,
+                                onSubmit: () => _submit(context),
+                              );
+                              if (rowConstraints.maxWidth < 520) {
+                                return Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.stretch,
+                                  children: [
+                                    // Η Εκκρεμότητα ζει μέσα στο χαρτί σημειώσεων
+                                    // (βλ. NotesStickyField) — εδώ μόνο χρονόμετρο.
+                                    Row(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.center,
+                                      children: [
+                                        Expanded(child: categoryField),
+                                        const SizedBox(width: 8),
+                                        const CallStatusBar(
+                                          axis: CallStatusBarAxis.horizontal,
+                                          showPendingToggle: false,
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Align(
+                                      alignment: Alignment.centerRight,
+                                      child: submitButton,
+                                    ),
+                                  ],
+                                );
+                              }
+                              return Row(
+                                crossAxisAlignment: CrossAxisAlignment.center,
                                 children: [
-                                  // Η Εκκρεμότητα ζει μέσα στο χαρτί σημειώσεων
-                                  // (βλ. NotesStickyField) — εδώ μόνο χρονόμετρο.
-                                  Row(
-                                    crossAxisAlignment: CrossAxisAlignment.center,
-                                    children: [
-                                      Expanded(child: categoryField),
-                                      const SizedBox(width: 8),
-                                      const CallStatusBar(
-                                        axis: CallStatusBarAxis.horizontal,
-                                        showPendingToggle: false,
-                                      ),
-                                    ],
+                                  Expanded(child: categoryField),
+                                  const SizedBox(width: 12),
+                                  const CallStatusBar(
+                                    axis: CallStatusBarAxis.horizontal,
+                                    showPendingToggle: false,
                                   ),
-                                  const SizedBox(height: 8),
-                                  Align(
-                                    alignment: Alignment.centerRight,
-                                    child: submitButton,
-                                  ),
+                                  const SizedBox(width: 8),
+                                  submitButton,
                                 ],
                               );
-                            }
-                            return Row(
-                              crossAxisAlignment: CrossAxisAlignment.center,
-                              children: [
-                                Expanded(child: categoryField),
-                                const SizedBox(width: 12),
-                                const CallStatusBar(
-                                  axis: CallStatusBarAxis.horizontal,
-                                  showPendingToggle: false,
-                                ),
-                                const SizedBox(width: 8),
-                                submitButton,
-                              ],
-                            );
-                          },
-                        ),
-                      ],
-                    );
-                  },
+                            },
+                          ),
+                        ],
+                      );
+                    },
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
-    ),
     );
   }
 }

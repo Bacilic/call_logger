@@ -115,4 +115,3 @@ class HistoryCallActionsService {
     return completer.future;
   }
 }
-

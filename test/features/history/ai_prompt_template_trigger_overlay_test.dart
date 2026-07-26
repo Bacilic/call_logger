@@ -13,9 +13,7 @@ Future<AiPromptTemplateTextEditingController> _pumpField(
   WidgetTester tester, {
   String initialText = '',
 }) async {
-  final controller = AiPromptTemplateTextEditingController(
-    text: initialText,
-  );
+  final controller = AiPromptTemplateTextEditingController(text: initialText);
   addTearDown(controller.dispose);
 
   await tester.pumpWidget(
@@ -34,8 +32,9 @@ Future<AiPromptTemplateTextEditingController> _pumpField(
 
 void main() {
   group('AiPromptTemplateField · trigger overlay', () {
-    testWidgets('το πληκτρολόγημα { ενεργοποιεί το overlay προτάσεων',
-        (tester) async {
+    testWidgets('το πληκτρολόγημα { ενεργοποιεί το overlay προτάσεων', (
+      tester,
+    ) async {
       await _pumpField(tester);
 
       // Πριν την πληκτρολόγηση δεν υπάρχει overlay.
@@ -58,8 +57,9 @@ void main() {
       );
     });
 
-    testWidgets('η λίστα περιλαμβάνει και blocks (φιλτραρισμένα)',
-        (tester) async {
+    testWidgets('η λίστα περιλαμβάνει και blocks (φιλτραρισμένα)', (
+      tester,
+    ) async {
       await _pumpField(tester);
 
       await tester.enterText(find.byType(TextField), 'Κείμενο {Υπ');
@@ -74,8 +74,9 @@ void main() {
       );
     });
 
-    testWidgets('φιλτράρισμα καθώς προστίθενται χαρακτήρες μετά το {',
-        (tester) async {
+    testWidgets('φιλτράρισμα καθώς προστίθενται χαρακτήρες μετά το {', (
+      tester,
+    ) async {
       await _pumpField(tester);
 
       await tester.enterText(find.byType(TextField), 'Κείμενο {Τμ');
@@ -92,8 +93,7 @@ void main() {
       expect(find.text('Block Υπάλληλος'), findsNothing);
     });
 
-    testWidgets('εισαγωγή μεμονωμένου δεσμευτή θέσης με Enter',
-        (tester) async {
+    testWidgets('εισαγωγή μεμονωμένου δεσμευτή θέσης με Enter', (tester) async {
       final controller = await _pumpField(tester);
 
       await tester.enterText(find.byType(TextField), '{Τμ');
@@ -112,8 +112,9 @@ void main() {
       );
     });
 
-    testWidgets('εισαγωγή block με κλικ τοποθετεί τον δρομέα ανάμεσα',
-        (tester) async {
+    testWidgets('εισαγωγή block με κλικ τοποθετεί τον δρομέα ανάμεσα', (
+      tester,
+    ) async {
       final controller = await _pumpField(tester);
 
       await tester.enterText(find.byType(TextField), '{Τμ');
@@ -132,8 +133,7 @@ void main() {
       );
     });
 
-    testWidgets('εισαγωγή μεμονωμένου δεσμευτή θέσης με κλικ',
-        (tester) async {
+    testWidgets('εισαγωγή μεμονωμένου δεσμευτή θέσης με κλικ', (tester) async {
       final controller = await _pumpField(tester);
 
       await tester.enterText(find.byType(TextField), '{Τμ');
@@ -147,8 +147,7 @@ void main() {
       expect(controller.text, '{Τμήμα}');
     });
 
-    testWidgets('πλοήγηση με βέλη και επιβεβαίωση με Enter',
-        (tester) async {
+    testWidgets('πλοήγηση με βέλη και επιβεβαίωση με Enter', (tester) async {
       final controller = await _pumpField(tester);
 
       await tester.enterText(find.byType(TextField), '{');
@@ -182,11 +181,7 @@ void main() {
         findsNothing,
         reason: 'Το Escape κλείνει τη λίστα',
       );
-      expect(
-        controller.text,
-        '{Τμ',
-        reason: 'Το Escape δεν εισάγει token',
-      );
+      expect(controller.text, '{Τμ', reason: 'Το Escape δεν εισάγει token');
     });
 
     testWidgets(
@@ -207,8 +202,9 @@ void main() {
       },
     );
 
-    testWidgets('το κουμπί «JSON απάντησης» παραμένει ανεπηρέαστο',
-        (tester) async {
+    testWidgets('το κουμπί «JSON απάντησης» παραμένει ανεπηρέαστο', (
+      tester,
+    ) async {
       final controller = await _pumpField(tester);
 
       await tester.tap(find.text('JSON απάντησης'));

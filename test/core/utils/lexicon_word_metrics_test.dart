@@ -32,10 +32,7 @@ void main() {
     });
 
     test('empty and trim', () {
-      expect(
-        LexiconWordMetrics.compute('  ').lettersCount,
-        0,
-      );
+      expect(LexiconWordMetrics.compute('  ').lettersCount, 0);
     });
   });
 }

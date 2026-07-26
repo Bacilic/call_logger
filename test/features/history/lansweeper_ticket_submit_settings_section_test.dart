@@ -1,4 +1,4 @@
-﻿// Widget test: ενότητα παραμετροποίησης καταχώρησης Lansweeper.
+// Widget test: ενότητα παραμετροποίησης καταχώρησης Lansweeper.
 //
 //   flutter test test/features/history/lansweeper_ticket_submit_settings_section_test.dart
 
@@ -134,7 +134,9 @@ void main() {
       (tester) async {
         final container = await pumpSection(tester);
 
-        await tester.ensureVisible(_dropdownByLabel('Προεπιλογή προτεραιότητας'));
+        await tester.ensureVisible(
+          _dropdownByLabel('Προεπιλογή προτεραιότητας'),
+        );
         await pumpUntilSettled(tester);
         await tester.tap(_dropdownByLabel('Προεπιλογή προτεραιότητας'));
         await pumpUntilSettled(tester);
@@ -154,13 +156,12 @@ void main() {
 
         final raw = await tester.runAsync(() async {
           final db = await DatabaseHelper.instance.database;
-          return SettingsRepository(db).getSetting(
-            kLansweeperTicketSubmitConfigSettingKey,
-          );
+          return SettingsRepository(
+            db,
+          ).getSetting(kLansweeperTicketSubmitConfigSettingKey);
         });
         expect(raw, isNotNull);
-        final decoded =
-            LansweeperTicketSubmitConfig.decodeFromStorage(raw);
+        final decoded = LansweeperTicketSubmitConfig.decodeFromStorage(raw);
         expect(decoded.priority, 'High');
       },
     );
@@ -195,13 +196,12 @@ void main() {
 
         final raw = await tester.runAsync(() async {
           final db = await DatabaseHelper.instance.database;
-          return SettingsRepository(db).getSetting(
-            kLansweeperTicketSubmitConfigSettingKey,
-          );
+          return SettingsRepository(
+            db,
+          ).getSetting(kLansweeperTicketSubmitConfigSettingKey);
         });
         expect(raw, isNotNull);
-        final decoded =
-            LansweeperTicketSubmitConfig.decodeFromStorage(raw);
+        final decoded = LansweeperTicketSubmitConfig.decodeFromStorage(raw);
         expect(decoded.includeNoteTime, isFalse);
       },
     );

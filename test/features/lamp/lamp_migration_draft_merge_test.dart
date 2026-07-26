@@ -15,7 +15,9 @@ void main() {
     setUpAll(() async {
       initSqfliteFfiForTests();
       final dir = await Directory.systemTemp.createTemp('lamp_draft_merge_');
-      await DatabaseHelper.bindTestDatabaseFile('${dir.path}/lamp_draft_merge.db');
+      await DatabaseHelper.bindTestDatabaseFile(
+        '${dir.path}/lamp_draft_merge.db',
+      );
       await DatabaseHelper.instance.database;
       service = LampMigrationService();
     });
@@ -78,22 +80,27 @@ void main() {
         };
       }
 
-      test('merges destination and Lamp phones when updating existing owner', () async {
-        await seedExistingOwner(phone: '2310501234');
+      test(
+        'merges destination and Lamp phones when updating existing owner',
+        () async {
+          await seedExistingOwner(phone: '2310501234');
 
-        final draft = await service.buildDraft(
-          target: LampTransferTarget.owner,
-          sourceRow: ownerSourceRow(
-            phones: '2310501234, 6971122334',
-            department: '',
-          ),
-        );
+          final draft = await service.buildDraft(
+            target: LampTransferTarget.owner,
+            sourceRow: ownerSourceRow(
+              phones: '2310501234, 6971122334',
+              department: '',
+            ),
+          );
 
-        expect(draft.selectedCandidateId, isNotNull);
-        final seededPhones = PhoneListParser.splitPhones(draft.formValues['phones']);
-        expect(seededPhones, contains('2310501234'));
-        expect(seededPhones, contains('6971122334'));
-      });
+          expect(draft.selectedCandidateId, isNotNull);
+          final seededPhones = PhoneListParser.splitPhones(
+            draft.formValues['phones'],
+          );
+          expect(seededPhones, contains('2310501234'));
+          expect(seededPhones, contains('6971122334'));
+        },
+      );
 
       test('preview marks Lamp-only phones as created after merge', () async {
         await seedExistingOwner(phone: '2310501234');
@@ -111,7 +118,9 @@ void main() {
           currentFormValues: draft.formValues,
           selectedCandidateId: draft.selectedCandidateId,
         );
-        final phonesField = preview.fields.firstWhere((f) => f.formKey == 'phones');
+        final phonesField = preview.fields.firstWhere(
+          (f) => f.formKey == 'phones',
+        );
         final lampOnlyItem = phonesField.items.where(
           (item) => item.value == '6971122334',
         );
@@ -135,10 +144,7 @@ void main() {
       });
 
       test('keeps non-empty destination department over Lamp', () async {
-        await seedExistingOwner(
-          phone: '2100000002',
-          departmentName: 'Τμήμα Α',
-        );
+        await seedExistingOwner(phone: '2100000002', departmentName: 'Τμήμα Α');
 
         final draft = await service.buildDraft(
           target: LampTransferTarget.owner,
@@ -213,10 +219,7 @@ void main() {
 
         final draft = await service.buildDraft(
           target: LampTransferTarget.equipment,
-          sourceRow: {
-            'code': equipmentCode,
-            'description': 'Laptop Dell',
-          },
+          sourceRow: {'code': equipmentCode, 'description': 'Laptop Dell'},
         );
 
         expect(draft.selectedCandidateId, isNotNull);
@@ -264,10 +267,7 @@ void main() {
 
         final draft = await service.buildDraft(
           target: LampTransferTarget.department,
-          sourceRow: {
-            'office_name': departmentName,
-            'building': 'Κτίριο Β',
-          },
+          sourceRow: {'office_name': departmentName, 'building': 'Κτίριο Β'},
         );
 
         expect(draft.selectedCandidateId, isNotNull);

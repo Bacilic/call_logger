@@ -101,14 +101,14 @@ class _NonUserPhonesDataTableState extends State<NonUserPhonesDataTable> {
     final sortDept = widget.sortColumn == 'department';
     const sortIconReserve = 22.0;
 
-    var maxPhone = _textWidth('Τηλέφωνο', headerStyle) +
-        (sortPhone ? sortIconReserve : 0);
+    var maxPhone =
+        _textWidth('Τηλέφωνο', headerStyle) + (sortPhone ? sortIconReserve : 0);
     for (final e in widget.entries) {
       maxPhone = math.max(maxPhone, _textWidth(e.number, bodyPhone));
     }
 
-    var maxDept = _textWidth('Τμήμα', headerStyle) +
-        (sortDept ? sortIconReserve : 0);
+    var maxDept =
+        _textWidth('Τμήμα', headerStyle) + (sortDept ? sortIconReserve : 0);
     for (final e in widget.entries) {
       maxDept = math.max(
         maxDept,
@@ -117,14 +117,8 @@ class _NonUserPhonesDataTableState extends State<NonUserPhonesDataTable> {
     }
 
     final pad = _cellHPadding * 2 + _handleWidth;
-    final phone = math.min(
-      _maxCol,
-      math.max(_minCol, maxPhone + pad),
-    );
-    final dept = math.min(
-      _maxCol,
-      math.max(_minCol, maxDept + pad),
-    );
+    final phone = math.min(_maxCol, math.max(_minCol, maxPhone + pad));
+    final dept = math.min(_maxCol, math.max(_minCol, maxDept + pad));
     return (phone: phone, dept: dept);
   }
 
@@ -274,10 +268,7 @@ class _NonUserPhonesDataTableState extends State<NonUserPhonesDataTable> {
                 scrollDirection: Axis.horizontal,
                 child: fittedTable,
               )
-            : Align(
-                alignment: Alignment.topLeft,
-                child: fittedTable,
-              );
+            : Align(alignment: Alignment.topLeft, child: fittedTable);
 
         return Focus(
           focusNode: _focusNode,
@@ -342,10 +333,7 @@ class _NonUserPhonesDataTableState extends State<NonUserPhonesDataTable> {
         onDoubleTap: onDoubleTap,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-          child: Align(
-            alignment: Alignment.centerLeft,
-            child: child,
-          ),
+          child: Align(alignment: Alignment.centerLeft, child: child),
         ),
       ),
     );

@@ -1,4 +1,4 @@
-﻿import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../services/core_lexicon_service.dart';
 
@@ -43,8 +43,8 @@ class CoreLexiconNotifier extends Notifier<CoreLexiconState> {
 
 final coreLexiconProvider =
     NotifierProvider<CoreLexiconNotifier, CoreLexiconState>(
-  CoreLexiconNotifier.new,
-);
+      CoreLexiconNotifier.new,
+    );
 
 final coreLexiconLoadedProvider = Provider<bool>(
   (ref) => ref.watch(coreLexiconProvider).loaded,

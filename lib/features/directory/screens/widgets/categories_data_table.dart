@@ -53,8 +53,9 @@ class _CategoriesDataTableState extends State<CategoriesDataTable> {
   final FocusNode _tableFocusNode = FocusNode();
   final ScrollController _verticalScrollController = ScrollController();
   final ScrollController _horizontalScrollController = ScrollController();
-  final Map<String, double> _columnWidths =
-      Map<String, double>.from(_defaultWidthsByKey);
+  final Map<String, double> _columnWidths = Map<String, double>.from(
+    _defaultWidthsByKey,
+  );
 
   @override
   void dispose() {
@@ -129,7 +130,8 @@ class _CategoriesDataTableState extends State<CategoriesDataTable> {
       children: [
         TableRow(
           decoration: BoxDecoration(
-            color: headingColor ??
+            color:
+                headingColor ??
                 Theme.of(context).colorScheme.surfaceContainerHighest,
           ),
           children: [
@@ -144,9 +146,9 @@ class _CategoriesDataTableState extends State<CategoriesDataTable> {
                         child: InkWell(
                           onTap: columns[i].onSort != null
                               ? () => columns[i].onSort!(
-                                    0,
-                                    i == sortedIndex ? !asc : true,
-                                  )
+                                  0,
+                                  i == sortedIndex ? !asc : true,
+                                )
                               : null,
                           child: Container(
                             height: headingHeight,
@@ -173,8 +175,9 @@ class _CategoriesDataTableState extends State<CategoriesDataTable> {
                                         ? Icons.arrow_drop_up
                                         : Icons.arrow_drop_down,
                                     size: 18,
-                                    color:
-                                        Theme.of(context).colorScheme.onSurface,
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.onSurface,
                                   ),
                                 ],
                               ],
@@ -205,7 +208,7 @@ class _CategoriesDataTableState extends State<CategoriesDataTable> {
     final dataTableTheme = theme.dataTableTheme;
     final rowColor = dataRow.selected
         ? (dataTableTheme.dataRowColor?.resolve({WidgetState.selected}) ??
-            theme.colorScheme.primaryContainer.withValues(alpha: 0.3))
+              theme.colorScheme.primaryContainer.withValues(alpha: 0.3))
         : dataTableTheme.dataRowColor?.resolve({WidgetState.selected});
     return TableRow(
       decoration: BoxDecoration(color: rowColor),
@@ -250,8 +253,9 @@ class _CategoriesDataTableState extends State<CategoriesDataTable> {
     }
     if (key == LogicalKeyboardKey.arrowUp) {
       if (onSetFocus != null) {
-        final next =
-            current == null ? len - 1 : (current - 1).clamp(0, len - 1);
+        final next = current == null
+            ? len - 1
+            : (current - 1).clamp(0, len - 1);
         onSetFocus(next);
       }
       return KeyEventResult.handled;
@@ -299,9 +303,11 @@ class _CategoriesDataTableState extends State<CategoriesDataTable> {
                   widget.onToggleSelection(id);
                 }
               },
-              allSelected: widget.categories.isNotEmpty &&
-                  widget.categories.every((c) =>
-                      c.id != null && widget.selectedIds.contains(c.id)),
+              allSelected:
+                  widget.categories.isNotEmpty &&
+                  widget.categories.every(
+                    (c) => c.id != null && widget.selectedIds.contains(c.id),
+                  ),
             ),
           ),
         );
@@ -363,8 +369,7 @@ class _CategoriesDataTableState extends State<CategoriesDataTable> {
                 columns,
                 headingHeight,
                 headingColor,
-                dataTableTheme.headingTextStyle ??
-                    theme.textTheme.titleSmall!,
+                dataTableTheme.headingTextStyle ?? theme.textTheme.titleSmall!,
                 columnWidths,
               ),
               Expanded(
@@ -372,11 +377,9 @@ class _CategoriesDataTableState extends State<CategoriesDataTable> {
                   controller: _verticalScrollController,
                   child: Table(
                     columnWidths: columnWidths,
-                    defaultVerticalAlignment:
-                        TableCellVerticalAlignment.middle,
+                    defaultVerticalAlignment: TableCellVerticalAlignment.middle,
                     children: [
-                      for (final row in rows)
-                        _dataRowToTableRow(context, row),
+                      for (final row in rows) _dataRowToTableRow(context, row),
                     ],
                   ),
                 ),
@@ -415,9 +418,12 @@ class _CategoriesDataTableState extends State<CategoriesDataTable> {
         );
         const columnSpacing = 24.0;
         const horizontalMargin = 16.0;
-        final widthSum =
-            visible.fold<double>(0, (a, c) => a + _widthForColumn(c));
-        final tableWidth = widthSum +
+        final widthSum = visible.fold<double>(
+          0,
+          (a, c) => a + _widthForColumn(c),
+        );
+        final tableWidth =
+            widthSum +
             (visible.length - 1) * columnSpacing +
             horizontalMargin * 2;
 
@@ -639,7 +645,8 @@ class _CategoriesTableSource extends DataTableSource {
     ];
     return DataRow(
       selected: selected,
-      onSelectChanged: _selectionVisible && id != null && _onToggleSelection != null
+      onSelectChanged:
+          _selectionVisible && id != null && _onToggleSelection != null
           ? (_) => _onToggleSelection!(id)
           : null,
       color: focused ? WidgetStateProperty.all(_focusHighlightColor) : null,

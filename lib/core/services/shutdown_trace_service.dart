@@ -14,7 +14,7 @@ class ShutdownTraceService {
     required this.retentionCount,
     DateTime Function()? now,
     this._onEventWritten,
-  })  : _now = now ?? DateTime.now;
+  }) : _now = now ?? DateTime.now;
 
   final String logsDirectory;
   final bool enabled;
@@ -73,8 +73,7 @@ class ShutdownTraceService {
       final durationPart = event.durationMs == null
           ? ''
           : ' durationMs=${event.durationMs}';
-      final errorPart =
-          event.error == null ? '' : ' error=${event.error}';
+      final errorPart = event.error == null ? '' : ' error=${event.error}';
       _appendLine(
         'step=${event.stepIndex} "${event.label}" $phaseLabel'
         '$durationPart$errorPart',

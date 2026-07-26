@@ -17,21 +17,24 @@ void main() {
       expect(message, 'Δημιουργήθηκε τμήμα «Πληροφορική»');
     });
 
-    test('επεξεργασία με μία αλλαγή χρώματος τμήματος — ονομαστική ετικέτα', () {
-      final message = buildSaveConfirmationMessage(
-        entityType: 'department',
-        entityLabel: 'Πληροφορική',
-        oldMap: const {'name': 'Πληροφορική', 'color': '#1976D2'},
-        newMap: const {'name': 'Πληροφορική', 'color': '#EF5350'},
-        isNew: false,
-      );
+    test(
+      'επεξεργασία με μία αλλαγή χρώματος τμήματος — ονομαστική ετικέτα',
+      () {
+        final message = buildSaveConfirmationMessage(
+          entityType: 'department',
+          entityLabel: 'Πληροφορική',
+          oldMap: const {'name': 'Πληροφορική', 'color': '#1976D2'},
+          newMap: const {'name': 'Πληροφορική', 'color': '#EF5350'},
+          isNew: false,
+        );
 
-      expect(
-        message,
-        'Αποθηκεύτηκε — τμήμα «Πληροφορική»\n'
-        'χρώμα: Μπλε #1976D2 → Κόκκινο #EF5350',
-      );
-    });
+        expect(
+          message,
+          'Αποθηκεύτηκε — τμήμα «Πληροφορική»\n'
+          'χρώμα: Μπλε #1976D2 → Κόκκινο #EF5350',
+        );
+      },
+    );
 
     test('επεξεργασία με 6 αλλαγές — περικοπή σε 4 + υπόλοιπες', () {
       final message = buildSaveConfirmationMessage(
@@ -90,8 +93,12 @@ void main() {
       final message = buildSaveConfirmationMessage(
         entityType: 'user',
         entityLabel: 'Γιάννης Παπαδόπουλος',
-        oldMap: const {'phones': ['2531', '2839']},
-        newMap: const {'phones': ['2531']},
+        oldMap: const {
+          'phones': ['2531', '2839'],
+        },
+        newMap: const {
+          'phones': ['2531'],
+        },
         isNew: false,
       );
 
@@ -106,14 +113,8 @@ void main() {
       final message = buildSaveConfirmationMessage(
         entityType: 'call',
         entityLabel: '#123',
-        oldMap: const {
-          'issue': 'Παλιό θέμα',
-          'duration': 5,
-        },
-        newMap: const {
-          'issue': 'Νέο θέμα',
-          'duration': 10,
-        },
+        oldMap: const {'issue': 'Παλιό θέμα', 'duration': 5},
+        newMap: const {'issue': 'Νέο θέμα', 'duration': 10},
         isNew: false,
       );
 
@@ -158,9 +159,7 @@ void main() {
         executablePath: r'C:\vnc.exe',
         sortOrder: 1,
         isActive: true,
-        arguments: [
-          RemoteToolArgument(value: '{TARGET}', isActive: true),
-        ],
+        arguments: [RemoteToolArgument(value: '{TARGET}', isActive: true)],
         testTargetIp: '10.0.0.1',
       );
       const newTool = RemoteTool(

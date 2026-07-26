@@ -26,5 +26,5 @@ class LampExcelPathHealthNotifier extends AsyncNotifier<LampExcelCheckResult?> {
 
 final lampExcelPathHealthProvider =
     AsyncNotifierProvider<LampExcelPathHealthNotifier, LampExcelCheckResult?>(
-  LampExcelPathHealthNotifier.new,
-);
+      LampExcelPathHealthNotifier.new,
+    );

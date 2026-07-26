@@ -38,7 +38,8 @@ void main() {
         final bytes = file.readAsBytesSync();
         if (_containsReplacementCharBytes(bytes)) {
           corrupted.add(
-            p.relative(file.path, from: Directory.current.path)
+            p
+                .relative(file.path, from: Directory.current.path)
                 .replaceAll(r'\', '/'),
           );
         }

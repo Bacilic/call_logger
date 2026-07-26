@@ -41,10 +41,7 @@ Task _taskWithTwoSnoozes() {
         'dueAt': '2026-06-02T12:00:00.000',
         'note': 'σημείωση 1',
       },
-      {
-        'snoozedAt': _snooze2AtIso,
-        'dueAt': '2026-06-04T08:00:00.000',
-      },
+      {'snoozedAt': _snooze2AtIso, 'dueAt': '2026-06-04T08:00:00.000'},
     ]),
   );
 }
@@ -58,10 +55,7 @@ Task _taskWithoutSnoozes() {
   );
 }
 
-Future<Task?> _openTaskFormDialog(
-  WidgetTester tester, {
-  Task? task,
-}) async {
+Future<Task?> _openTaskFormDialog(WidgetTester tester, {Task? task}) async {
   Task? result;
 
   await tester.binding.setSurfaceSize(
@@ -109,7 +103,8 @@ Future<Task?> _openTaskFormDialog(
 
 class _TestTaskSettingsConfigNotifier extends TaskSettingsConfigNotifier {
   @override
-  Future<TaskSettingsConfig> build() async => TaskSettingsConfig.defaultConfig();
+  Future<TaskSettingsConfig> build() async =>
+      TaskSettingsConfig.defaultConfig();
 }
 
 void main() {
@@ -150,23 +145,19 @@ void main() {
       },
     );
 
-    testWidgets(
-      'σημείωση αναβολής χρησιμοποιεί LexiconSpellTextFormField',
-      (tester) async {
-        await _openTaskFormDialog(tester, task: _taskWithTwoSnoozes());
+    testWidgets('σημείωση αναβολής χρησιμοποιεί LexiconSpellTextFormField', (
+      tester,
+    ) async {
+      await _openTaskFormDialog(tester, task: _taskWithTwoSnoozes());
 
-        final noteField = find.byKey(const ValueKey('snooze_note_0'));
-        expect(noteField, findsOneWidget);
-        expect(
-          tester.widget(noteField),
-          isA<LexiconSpellTextFormField>(),
-        );
+      final noteField = find.byKey(const ValueKey('snooze_note_0'));
+      expect(noteField, findsOneWidget);
+      expect(tester.widget(noteField), isA<LexiconSpellTextFormField>());
 
-        await tester.tap(find.text('Ακύρωση'));
-        await pumpUntilSettled(tester, steps: 10);
-        await flushCallLoggerSqfliteLockTimers(tester);
-      },
-    );
+      await tester.tap(find.text('Ακύρωση'));
+      await pumpUntilSettled(tester, steps: 10);
+      await flushCallLoggerSqfliteLockTimers(tester);
+    });
 
     testWidgets('χωρίς αναβολές δεν εμφανίζεται η ενότητα Αναβολές', (
       tester,

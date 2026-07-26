@@ -53,13 +53,10 @@ void main() {
       });
     }
 
-    Future<({
-      int deptId,
-      int dept2Id,
-      int userId,
-      int phoneId,
-      int equipmentId,
-    })> seedDepartmentWithSharedAssets() async {
+    Future<
+      ({int deptId, int dept2Id, int userId, int phoneId, int equipmentId})
+    >
+    seedDepartmentWithSharedAssets() async {
       final deptId = await insertDepartment('Τμήμα Δ');
       final dept2Id = await insertDepartment('Τμήμα Δ2');
       final userId = await db.insert('users', {
@@ -168,87 +165,84 @@ void main() {
       },
     );
 
-    test(
-      '(β) πλήρες undo: Δ ενεργό, Υ/P/E πίσω στο Δ',
-      () async {
-        final seed = await seedDepartmentWithSharedAssets();
-        final plan = transferAllPlan(
-          deptId: seed.deptId,
-          dept2Id: seed.dept2Id,
-          userId: seed.userId,
-        );
-        final record = DepartmentDeletionUndoRecord(
-          deletedDepartmentIds: [seed.deptId],
-          reassignedEmployees: [
-            DepartmentDeletionReassignedEmployee(
-              userId: seed.userId,
-              originalDeletedDeptId: seed.deptId,
-            ),
-          ],
-          phoneTransfers: [
-            DepartmentDeletionPhoneTransfer(
-              phoneNumber: '2310333333',
-              fromDeletedDeptId: seed.deptId,
-              toTargetDeptId: seed.dept2Id,
-            ),
-          ],
-          softDeletedPhones: const [],
-          equipmentTransfers: [
-            DepartmentDeletionEquipmentTransfer(
-              code: 'EQ-DEPT-UNDO',
-              deletedDeptId: seed.deptId,
-              toTargetDeptId: seed.dept2Id,
-            ),
-          ],
-          softDeletedEquipment: const [],
-        );
+    test('(β) πλήρες undo: Δ ενεργό, Υ/P/E πίσω στο Δ', () async {
+      final seed = await seedDepartmentWithSharedAssets();
+      final plan = transferAllPlan(
+        deptId: seed.deptId,
+        dept2Id: seed.dept2Id,
+        userId: seed.userId,
+      );
+      final record = DepartmentDeletionUndoRecord(
+        deletedDepartmentIds: [seed.deptId],
+        reassignedEmployees: [
+          DepartmentDeletionReassignedEmployee(
+            userId: seed.userId,
+            originalDeletedDeptId: seed.deptId,
+          ),
+        ],
+        phoneTransfers: [
+          DepartmentDeletionPhoneTransfer(
+            phoneNumber: '2310333333',
+            fromDeletedDeptId: seed.deptId,
+            toTargetDeptId: seed.dept2Id,
+          ),
+        ],
+        softDeletedPhones: const [],
+        equipmentTransfers: [
+          DepartmentDeletionEquipmentTransfer(
+            code: 'EQ-DEPT-UNDO',
+            deletedDeptId: seed.deptId,
+            toTargetDeptId: seed.dept2Id,
+          ),
+        ],
+        softDeletedEquipment: const [],
+      );
 
-        await applyDepartmentDeletionPlansAtomic(db, [plan]);
-        await applyDepartmentDeletionUndo(db, record);
+      await applyDepartmentDeletionPlansAtomic(db, [plan]);
+      await applyDepartmentDeletionUndo(db, record);
 
-        final deptRow = (await db.query(
-          'departments',
-          where: 'id = ?',
-          whereArgs: [seed.deptId],
-        )).single;
-        expect(deptRow['is_deleted'], 0);
+      final deptRow = (await db.query(
+        'departments',
+        where: 'id = ?',
+        whereArgs: [seed.deptId],
+      )).single;
+      expect(deptRow['is_deleted'], 0);
 
-        final userRow = (await db.query(
-          'users',
-          where: 'id = ?',
-          whereArgs: [seed.userId],
-        )).single;
-        expect(userRow['department_id'], seed.deptId);
+      final userRow = (await db.query(
+        'users',
+        where: 'id = ?',
+        whereArgs: [seed.userId],
+      )).single;
+      expect(userRow['department_id'], seed.deptId);
 
-        final phoneOnD = await db.rawQuery(
-          '''
+      final phoneOnD = await db.rawQuery(
+        '''
           SELECT 1 AS ok FROM department_phones
           WHERE department_id = ? AND phone_id = ?
           LIMIT 1
           ''',
-          [seed.deptId, seed.phoneId],
-        );
-        expect(phoneOnD, isNotEmpty);
+        [seed.deptId, seed.phoneId],
+      );
+      expect(phoneOnD, isNotEmpty);
 
-        final phoneOnD2 = await db.rawQuery(
-          '''
+      final phoneOnD2 = await db.rawQuery(
+        '''
           SELECT 1 AS ok FROM department_phones
           WHERE department_id = ? AND phone_id = ?
           LIMIT 1
           ''',
-          [seed.dept2Id, seed.phoneId],
-        );
-        expect(phoneOnD2, isEmpty);
+        [seed.dept2Id, seed.phoneId],
+      );
+      expect(phoneOnD2, isEmpty);
 
-        final eqRow = (await db.query(
-          'equipment',
-          where: 'id = ?',
-          whereArgs: [seed.equipmentId],
-        )).single;
-        expect(eqRow['department_id'], seed.deptId);
-        expect(eqRow['is_deleted'], 0);
-      },
-    );
+      final eqRow = (await db.query(
+        'equipment',
+        where: 'id = ?',
+        whereArgs: [seed.equipmentId],
+      )).single;
+      expect(eqRow['department_id'], seed.deptId);
+      expect(eqRow['is_deleted'], 0);
+    });
 
     test(
       '(γ) διαγραφές P+E: μετά το undo un-soft-deleted και ξανά στο Δ',

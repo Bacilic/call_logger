@@ -52,12 +52,12 @@ class UpdateManifest {
   }
 
   Map<String, dynamic> toJson() => {
-        'version': version,
-        'build': build,
-        'released': released,
-        'zipFile': zipFile,
-        'sha256': sha256,
-      };
+    'version': version,
+    'build': build,
+    'released': released,
+    'zipFile': zipFile,
+    'sha256': sha256,
+  };
 
   /// Αριθμητική σύγκριση `X.Y.Z` + build. Αρνητικό αν A < B, 0 αν ίσα, θετικό αν A > B.
   static int compareVersions({

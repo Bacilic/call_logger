@@ -151,16 +151,13 @@ void main() {
           callCount++;
           if (callCount == 1) {
             expect(_urlTargetsModel(request.url, _kPrimaryModel), isTrue);
-            return http.Response(
-              '''
+            return http.Response('''
 {
   "error": {
     "code": 429,
     "message": "Please retry in 48.04768048s."
   }
-}''',
-              429,
-            );
+}''', 429);
           }
           expect(_urlTargetsModel(request.url, _kFallbackModel), isTrue);
           return http.Response(
@@ -236,11 +233,7 @@ void main() {
           callCount++;
           expect(_urlTargetsModel(request.url, _kFallbackModel), isTrue);
           return http.Response(
-            _geminiApiSuccessBody(
-              title: 'FB',
-              description: 'D',
-              solution: 'S',
-            ),
+            _geminiApiSuccessBody(title: 'FB', description: 'D', solution: 'S'),
             200,
           );
         });
@@ -268,10 +261,9 @@ void main() {
         addTearDown(client.close);
 
         await expectLater(
-          _service(fallbackEnabled: false).suggest(
-            _kTestRequest,
-            client: client,
-          ),
+          _service(
+            fallbackEnabled: false,
+          ).suggest(_kTestRequest, client: client),
           throwsA(
             isA<AiSuggestionException>()
                 .having((e) => e.statusCode, 'statusCode', 503)

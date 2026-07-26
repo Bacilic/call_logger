@@ -11,12 +11,7 @@ import 'crash_log_service.dart';
 import 'desktop_window_service.dart';
 
 /// Φάση γεγονότος ενός βήματος κλεισίματος.
-enum ShutdownStepPhase {
-  started,
-  completed,
-  failed,
-  interrupted,
-}
+enum ShutdownStepPhase { started, completed, failed, interrupted }
 
 /// Γεγονός προόδου από τον [ShutdownCoordinator].
 class ShutdownStepEvent {
@@ -66,16 +61,16 @@ class ShutdownCoordinator {
     this.safetyTimeout = defaultSafetyTimeout,
     DateTime Function()? now,
     Future<void> Function(Duration duration)? delay,
-  })  : _persistWindowBounds =
-            persistWindowBounds ?? _defaultPersistWindowBounds,
-        _walCheckpoint = walCheckpoint ?? _defaultWalCheckpoint,
-        _exitBackup = exitBackup ?? _defaultExitBackup,
-        _closeConnection = closeConnection ?? _defaultCloseConnection,
-        _closeCrashLog = closeCrashLog ?? _defaultCloseCrashLog,
-        _terminate = terminate ?? _defaultTerminate,
-        _now = now ?? DateTime.now,
-        _delay = delay ?? Future<void>.delayed,
-        _useCancellableSafetyTimer = delay == null;
+  }) : _persistWindowBounds =
+           persistWindowBounds ?? _defaultPersistWindowBounds,
+       _walCheckpoint = walCheckpoint ?? _defaultWalCheckpoint,
+       _exitBackup = exitBackup ?? _defaultExitBackup,
+       _closeConnection = closeConnection ?? _defaultCloseConnection,
+       _closeCrashLog = closeCrashLog ?? _defaultCloseCrashLog,
+       _terminate = terminate ?? _defaultTerminate,
+       _now = now ?? DateTime.now,
+       _delay = delay ?? Future<void>.delayed,
+       _useCancellableSafetyTimer = delay == null;
 
   static const Duration defaultSafetyTimeout = Duration(seconds: 20);
 
@@ -117,12 +112,12 @@ class ShutdownCoordinator {
   bool get terminateCalled => _terminateCalled;
 
   List<Future<void> Function()> get _actions => [
-        _persistWindowBounds,
-        _walCheckpoint,
-        _exitBackup,
-        _closeConnection,
-        _closeCrashLog,
-      ];
+    _persistWindowBounds,
+    _walCheckpoint,
+    _exitBackup,
+    _closeConnection,
+    _closeCrashLog,
+  ];
 
   Future<void> run() async {
     _timedOut = false;
@@ -145,12 +140,14 @@ class ShutdownCoordinator {
         }
       });
     } else {
-      unawaited(_delay(safetyTimeout).then((_) {
-        if (!_stepsFinished && !timeoutTrigger.isCompleted) {
-          _timedOut = true;
-          timeoutTrigger.complete();
-        }
-      }));
+      unawaited(
+        _delay(safetyTimeout).then((_) {
+          if (!_stepsFinished && !timeoutTrigger.isCompleted) {
+            _timedOut = true;
+            timeoutTrigger.complete();
+          }
+        }),
+      );
     }
 
     await Future.any([
@@ -288,8 +285,8 @@ class ShutdownCoordinator {
         final kernel32 = DynamicLibrary.open('kernel32.dll');
         final unregister = kernel32
             .lookupFunction<Int32 Function(), int Function()>(
-          'UnregisterApplicationRestart',
-        );
+              'UnregisterApplicationRestart',
+            );
         unregister();
       } catch (_) {}
     }

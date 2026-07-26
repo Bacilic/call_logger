@@ -1,4 +1,4 @@
-﻿import 'dart:io';
+import 'dart:io';
 
 import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
@@ -35,11 +35,10 @@ class CliArgumentsParseResult {
   static CliArgumentsParseResult success({
     String? profile,
     bool restartedAfterCrash = false,
-  }) =>
-      CliArgumentsParseResult._(
-        profile: profile,
-        restartedAfterCrash: restartedAfterCrash,
-      );
+  }) => CliArgumentsParseResult._(
+    profile: profile,
+    restartedAfterCrash: restartedAfterCrash,
+  );
 
   static CliArgumentsParseResult failure(String invalidParameter) =>
       CliArgumentsParseResult._(invalidParameter: invalidParameter);
@@ -236,33 +235,31 @@ class AppConfig {
   static const String portableImagesDirName = 'images';
   static const String portableDictionariesDirName = 'dictionaries';
 
-  static String get portableDataBaseDirectory => path.normalize(
-    path.join(portableDataRoot, portableDataBaseDirName),
-  );
+  static String get portableDataBaseDirectory =>
+      path.normalize(path.join(portableDataRoot, portableDataBaseDirName));
 
-  static String get portableMapsDirectory => path.normalize(
-    path.join(portableDataRoot, portableMapsDirName),
-  );
+  static String get portableMapsDirectory =>
+      path.normalize(path.join(portableDataRoot, portableMapsDirName));
 
-  static String get portableImagesDirectory => path.normalize(
-    path.join(portableDataRoot, portableImagesDirName),
-  );
+  static String get portableImagesDirectory =>
+      path.normalize(path.join(portableDataRoot, portableImagesDirName));
 
-  static String get _portableProductionDefaultDbPath => path.normalize(
-    path.join(portableDataBaseDirectory, 'call_logger.db'),
-  );
+  static String get _portableProductionDefaultDbPath =>
+      path.normalize(path.join(portableDataBaseDirectory, 'call_logger.db'));
 
   /// Τοπική διαδρομή για εργαλεία CLI (`dart run` από τη ρίζα του project).
-  static String get localDevDbPath =>
-      path.join(Directory.current.path, portableDataBaseDirName, 'call_logger.db');
+  static String get localDevDbPath => path.join(
+    Directory.current.path,
+    portableDataBaseDirName,
+    'call_logger.db',
+  );
 
   /// Πρόθεμα assets για προαιρετικά bundled λεξικά (.txt).
   static const String bundledDictionariesAssetPrefix = 'assets/dictionaries/';
 
   /// Portable φάκελος λεξικού-πυρήνα στη ρίζα εφαρμογής.
-  static String get portableDictionariesDirectory => path.normalize(
-    path.join(portableDataRoot, portableDictionariesDirName),
-  );
+  static String get portableDictionariesDirectory =>
+      path.normalize(path.join(portableDataRoot, portableDictionariesDirName));
 
   /// Δημιουργεί φάκελο μόνο όταν κληθεί ρητά (όχι στην εκκίνηση).
   static Future<Directory> ensureDirectoryExists(String dirPath) async {

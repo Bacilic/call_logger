@@ -1,4 +1,4 @@
-﻿import 'dart:convert';
+import 'dart:convert';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -64,6 +64,7 @@ class DepartmentDirectoryState {
   final bool sortAscending;
   final Set<int> selectedIds;
   final List<DepartmentModel>? lastDeleted;
+
   /// Φάκελος πλήρους αναίρεσης διαγραφής τμήματος.
   final DepartmentDeletionUndoRecord? lastDepartmentDeletionUndo;
   final List<DepartmentModel>? lastBulkUpdatedDepartments;
@@ -486,8 +487,10 @@ class DepartmentDirectoryNotifier extends Notifier<DepartmentDirectoryState> {
     }
     final dbUpd = await DatabaseHelper.instance.database;
     final departments = DepartmentRepository(dbUpd);
-    final nameTaken =
-        await departments.departmentNameExistsExcluding(d.name, d.id!);
+    final nameTaken = await departments.departmentNameExistsExcluding(
+      d.name,
+      d.id!,
+    );
     if (nameTaken) {
       throw StateError('Υπάρχει ήδη άλλο τμήμα με αυτό το όνομα.');
     }
@@ -632,9 +635,7 @@ class DepartmentDirectoryNotifier extends Notifier<DepartmentDirectoryState> {
     final toDelete = state.allDepartments
         .where(
           (d) =>
-              d.id != null &&
-              !d.isDeleted &&
-              state.selectedIds.contains(d.id),
+              d.id != null && !d.isDeleted && state.selectedIds.contains(d.id),
         )
         .toList();
     if (toDelete.isEmpty) return;

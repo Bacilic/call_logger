@@ -16,7 +16,9 @@ void main() {
     setUpAll(() async {
       initSqfliteFfiForTests();
       final dir = await Directory.systemTemp.createTemp('lamp_dept_atomicity_');
-      await DatabaseHelper.bindTestDatabaseFile('${dir.path}/lamp_dept_atomicity.db');
+      await DatabaseHelper.bindTestDatabaseFile(
+        '${dir.path}/lamp_dept_atomicity.db',
+      );
       await DatabaseHelper.instance.database;
       service = LampMigrationService();
     });
@@ -64,10 +66,7 @@ void main() {
         const newDept = 'Νέο Τμήμα Μεταφοράς';
         const sharedPhone = '2310501000';
 
-        await insertDepartmentWithPhone(
-          name: existingDept,
-          phone: sharedPhone,
-        );
+        await insertDepartmentWithPhone(name: existingDept, phone: sharedPhone);
 
         await expectLater(
           service.save(

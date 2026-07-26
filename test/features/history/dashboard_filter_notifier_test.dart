@@ -11,9 +11,7 @@ import 'package:flutter_test/flutter_test.dart';
 import '../../test_setup.dart';
 
 ProviderContainer _testContainer() {
-  return ProviderContainer(
-    overrides: callLoggerTestProviderOverrides(),
-  );
+  return ProviderContainer(overrides: callLoggerTestProviderOverrides());
 }
 
 Future<DashboardFilterNotifier> _readyNotifier(

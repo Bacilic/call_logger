@@ -35,7 +35,9 @@ class BackupDestinationLocationWarnings {
   }) {
     if (!Platform.isWindows) return false;
     final a = BackupLocationHints.windowsDriveLetterFromPath(databasePath);
-    final b = BackupLocationHints.windowsDriveLetterFromPath(destinationDirectory);
+    final b = BackupLocationHints.windowsDriveLetterFromPath(
+      destinationDirectory,
+    );
     if (a == null || b == null) return false;
     return a == b;
   }

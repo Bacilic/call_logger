@@ -8,43 +8,45 @@ import 'package:call_logger/features/database/services/backup_zip_inventory.dart
 import 'package:flutter_test/flutter_test.dart';
 
 BackupZipEligibleCandidate _eligible(String name) => BackupZipEligibleCandidate(
-      entryName: name,
-      displayName: name,
-      sizeBytes: 10,
-      profile: const DatabaseFileProfile(kind: DatabaseFileKind.callLogger),
-    );
+  entryName: name,
+  displayName: name,
+  sizeBytes: 10,
+  profile: const DatabaseFileProfile(kind: DatabaseFileKind.callLogger),
+);
 
 void main() {
-  test('κανένας έγκυρος υποψήφιος → αποτυχία με μήνυμα που ονομάζει τι βρέθηκε',
-      () {
-    final decision = decideBackupZipCandidateSelection(
-      BackupZipInventory(
-        eligibleCandidates: const [],
-        rejectedCandidates: [
-          BackupZipRejectedCandidate(
-            entryName: 'lamp.db',
-            displayName: 'lamp.db',
-            sizeBytes: 1,
-            reason: 'βάση Λάμπας',
-          ),
-          BackupZipRejectedCandidate(
-            entryName: 'x.db',
-            displayName: 'x.db',
-            sizeBytes: 1,
-            reason: 'άγνωστο σχήμα',
-          ),
-        ],
-        isFullBackupArchive: false,
-        totalDatabaseEntries: 2,
-      ),
-    );
+  test(
+    'κανένας έγκυρος υποψήφιος → αποτυχία με μήνυμα που ονομάζει τι βρέθηκε',
+    () {
+      final decision = decideBackupZipCandidateSelection(
+        BackupZipInventory(
+          eligibleCandidates: const [],
+          rejectedCandidates: [
+            BackupZipRejectedCandidate(
+              entryName: 'lamp.db',
+              displayName: 'lamp.db',
+              sizeBytes: 1,
+              reason: 'βάση Λάμπας',
+            ),
+            BackupZipRejectedCandidate(
+              entryName: 'x.db',
+              displayName: 'x.db',
+              sizeBytes: 1,
+              reason: 'άγνωστο σχήμα',
+            ),
+          ],
+          isFullBackupArchive: false,
+          totalDatabaseEntries: 2,
+        ),
+      );
 
-    expect(decision.kind, BackupZipCandidateSelectionKind.none);
-    expect(decision.failureMessage, contains('2'));
-    expect(decision.failureMessage, contains('Λάμπας'));
-    expect(decision.selected, isNull);
-    expect(decision.requiresUserChoice, isFalse);
-  });
+      expect(decision.kind, BackupZipCandidateSelectionKind.none);
+      expect(decision.failureMessage, contains('2'));
+      expect(decision.failureMessage, contains('Λάμπας'));
+      expect(decision.selected, isNull);
+      expect(decision.requiresUserChoice, isFalse);
+    },
+  );
 
   test('ακριβώς ένας υποψήφιος → αυτόματη επιλογή χωρίς ερώτηση', () {
     final only = _eligible('call_logger.db');

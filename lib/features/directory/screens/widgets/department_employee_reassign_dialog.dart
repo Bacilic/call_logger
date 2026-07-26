@@ -207,10 +207,7 @@ class _DepartmentEmployeeReassignDialogState
                 ),
               if (_draft.assignedCount > 0) ...[
                 const SizedBox(height: 12),
-                Text(
-                  'Ήδη ανατεθειμένοι',
-                  style: theme.textTheme.titleSmall,
-                ),
+                Text('Ήδη ανατεθειμένοι', style: theme.textTheme.titleSmall),
                 const SizedBox(height: 4),
                 for (final e in widget.employees)
                   if (_draft.assignments.containsKey(e.id))

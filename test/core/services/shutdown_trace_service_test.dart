@@ -116,13 +116,14 @@ void main() {
         await service.endSession();
       }
 
-      final files = logsDir
-          .listSync()
-          .whereType<File>()
-          .where((f) => f.path.contains('shutdown_trace_'))
-          .map((f) => f.uri.pathSegments.last)
-          .toList()
-        ..sort();
+      final files =
+          logsDir
+              .listSync()
+              .whereType<File>()
+              .where((f) => f.path.contains('shutdown_trace_'))
+              .map((f) => f.uri.pathSegments.last)
+              .toList()
+            ..sort();
       expect(
         files.length,
         2,

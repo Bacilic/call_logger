@@ -87,9 +87,7 @@ class BuildingMapStorage {
   /// Μετατρέπει απόλυτη διαδρομή σε `maps_images/<όνομα>` για αποθήκευση στη βάση.
   static Future<String> toStoredRelativePath(String absolutePath) async {
     final norm = p.normalize(p.absolute(absolutePath));
-    return p
-        .join(mapsImagesDirName, p.basename(norm))
-        .replaceAll('\\', '/');
+    return p.join(mapsImagesDirName, p.basename(norm)).replaceAll('\\', '/');
   }
 
   /// Αντιγραφή επιλεγμένης εικόνας στον portable κατάλογο· επιστρέφει σχετική διαδρομή.
@@ -132,7 +130,9 @@ class BuildingMapStorage {
   }) async {
     final src = srcPath.trim();
     if (src.isEmpty) {
-      return const BuildingMapImageIngestResult.failure('Κενή διαδρομή εικόνας.');
+      return const BuildingMapImageIngestResult.failure(
+        'Κενή διαδρομή εικόνας.',
+      );
     }
 
     final outside = await isOutsidePortableStorage(src);
@@ -157,10 +157,7 @@ class BuildingMapStorage {
           'Δεν ορίστηκε όνομα αρχείου για μεταφορά.',
         );
       }
-      final stored = await copyPickedImageToStorage(
-        src,
-        targetFileName: name,
-      );
+      final stored = await copyPickedImageToStorage(src, targetFileName: name);
       return BuildingMapImageIngestResult.success(stored);
     } catch (e) {
       return BuildingMapImageIngestResult.failure(e.toString());
@@ -174,7 +171,10 @@ class BuildingMapStorage {
 
     final out = <File>[];
     try {
-      await for (final entity in root.list(recursive: false, followLinks: false)) {
+      await for (final entity in root.list(
+        recursive: false,
+        followLinks: false,
+      )) {
         if (entity is! File) continue;
         final lower = entity.path.toLowerCase();
         if (lower.endsWith('.png') ||
@@ -194,7 +194,10 @@ class BuildingMapStorage {
   static Future<int> relinkMissingFloorImagesAfterRestore(Database db) async {
     var updated = 0;
     try {
-      final rows = await db.query('building_map_floors', columns: ['id', 'image_path']);
+      final rows = await db.query(
+        'building_map_floors',
+        columns: ['id', 'image_path'],
+      );
       final portableRoot = await getPortableMapsRoot();
       for (final row in rows) {
         final id = row['id'] as int?;
@@ -255,13 +258,13 @@ class BuildingMapImageIngestResult {
   });
 
   const BuildingMapImageIngestResult.success(String relativePath)
-      : this._(ok: true, storedRelativePath: relativePath);
+    : this._(ok: true, storedRelativePath: relativePath);
 
   const BuildingMapImageIngestResult.needsPortableConfirmation()
-      : this._(ok: false, needsPortableConfirmation: true);
+    : this._(ok: false, needsPortableConfirmation: true);
 
   const BuildingMapImageIngestResult.failure(String message)
-      : this._(ok: false, errorMessage: message);
+    : this._(ok: false, errorMessage: message);
 
   final bool ok;
   final String? storedRelativePath;

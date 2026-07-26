@@ -84,10 +84,9 @@ Future<UserDeletionUndoRecord> applyDepartmentDeletionPlansAtomic(
       db,
       allDeletions,
     );
-    await DepartmentRepository(db).softDeleteDepartments(
-      [for (final p in plans) p.departmentId],
-      executor: txn,
-    );
+    await DepartmentRepository(db).softDeleteDepartments([
+      for (final p in plans) p.departmentId,
+    ], executor: txn);
   });
 
   LookupService.instance.resetForReload();

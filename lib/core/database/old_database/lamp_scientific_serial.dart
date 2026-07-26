@@ -2,9 +2,7 @@ final RegExp _scientificSerialPattern = RegExp(
   r'^\s*[+-]?\d+([.,]\d+)?[eE][+-]?\d+\s*$',
 );
 
-final RegExp _scientificSerialExponentPattern = RegExp(
-  r'[eE]([+-]?\d+)\s*$',
-);
+final RegExp _scientificSerialExponentPattern = RegExp(r'[eE]([+-]?\d+)\s*$');
 
 /// Ελέγχει αν η τιμή είναι σειριακός σε επιστημονική μορφή (π.χ. 4,928E+11).
 bool isScientificSerial(String? raw) {
@@ -43,7 +41,9 @@ List<String> scientificSerialLocalWarnings({
   if (trimmed.isEmpty) {
     warnings.add('Ο νέος σειριακός είναι κενός.');
   } else if (trimmed == rawSerial.trim()) {
-    warnings.add('Ο νέος σειριακός είναι ίδιος με τον αρχικό (επιστημονική μορφή).');
+    warnings.add(
+      'Ο νέος σειριακός είναι ίδιος με τον αρχικό (επιστημονική μορφή).',
+    );
   }
 
   if (cleanDigits.isNotEmpty &&

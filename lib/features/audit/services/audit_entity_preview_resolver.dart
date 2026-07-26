@@ -6,10 +6,7 @@ import 'audit_formatter_service.dart';
 
 /// Σύνοψη οντότητας για side panel (κλήση, εκκρεμότητα, χρήστης, εξοπλισμός).
 class AuditEntityPreview {
-  const AuditEntityPreview({
-    required this.title,
-    required this.lines,
-  });
+  const AuditEntityPreview({required this.title, required this.lines});
 
   final String title;
   final List<String> lines;
@@ -98,16 +95,12 @@ class AuditEntityPreviewResolver {
     if (rows.isEmpty) return null;
     final r = rows.first;
     final statusRaw = (r['status'] as String?)?.trim() ?? '';
-    final statusEl =
-        TaskStatusX.fromString(statusRaw).displayLabelEl;
+    final statusEl = TaskStatusX.fromString(statusRaw).displayLabelEl;
     final dueRaw = r['due_date'] as String?;
     final dueFmt = (dueRaw == null || dueRaw.trim().isEmpty)
         ? '—'
         : _fmt.formatAuditTimestamp(dueRaw);
-    final lines = <String>[
-      'Κατάσταση: $statusEl',
-      'Λήξη: $dueFmt',
-    ];
+    final lines = <String>['Κατάσταση: $statusEl', 'Λήξη: $dueFmt'];
     return AuditEntityPreview(title: 'Εκκρεμότητα #$id', lines: lines);
   }
 
@@ -119,10 +112,7 @@ class AuditEntityPreviewResolver {
     final name = '$fn $ln'.trim();
     return AuditEntityPreview(
       title: name.isEmpty ? 'Χρήστης #$id' : name,
-      lines: [
-        'Τμήμα: ${row['dept'] ?? '—'}',
-        'Id: $id',
-      ],
+      lines: ['Τμήμα: ${row['dept'] ?? '—'}', 'Id: $id'],
     );
   }
 
@@ -152,10 +142,7 @@ class AuditEntityPreviewResolver {
     }
     return AuditEntityPreview(
       title: num.isEmpty ? 'Τηλέφωνο #$id' : num,
-      lines: [
-        'Τμήμα (department_id): ${deptLabel ?? '—'}',
-        'Id: $id',
-      ],
+      lines: ['Τμήμα (department_id): ${deptLabel ?? '—'}', 'Id: $id'],
     );
   }
 

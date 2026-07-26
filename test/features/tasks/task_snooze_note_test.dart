@@ -29,31 +29,37 @@ void main() {
       expect(lastMap['note'], 'κάτι');
     });
 
-    test('addSnoozeEntry χωρίς note ή με κενό/whitespace δεν γράφει κλειδί note', () {
-      final due = DateTime(2026, 5, 27, 10, 0);
+    test(
+      'addSnoozeEntry χωρίς note ή με κενό/whitespace δεν γράφει κλειδί note',
+      () {
+        final due = DateTime(2026, 5, 27, 10, 0);
 
-      for (final note in [null, '', '   ', '\t\n']) {
-        final updated = _baseTask().addSnoozeEntry(due, note: note);
-        expect(updated.snoozeEntries.last.note, isNull);
+        for (final note in [null, '', '   ', '\t\n']) {
+          final updated = _baseTask().addSnoozeEntry(due, note: note);
+          expect(updated.snoozeEntries.last.note, isNull);
 
-        final decoded = jsonDecode(updated.snoozeHistoryJson!) as List;
-        final lastMap = decoded.last as Map<String, dynamic>;
-        expect(lastMap.containsKey('note'), isFalse);
-      }
-    });
+          final decoded = jsonDecode(updated.snoozeHistoryJson!) as List;
+          final lastMap = decoded.last as Map<String, dynamic>;
+          expect(lastMap.containsKey('note'), isFalse);
+        }
+      },
+    );
 
-    test('παλιό snoozeHistoryJson (ISO strings ή Maps χωρίς note) — backward compatibility', () {
-      const isoList = '["2026-05-20T12:00:00.000","2026-05-21T15:30:00.000"]';
-      final taskFromIso = _baseTask(snoozeHistoryJson: isoList);
-      expect(taskFromIso.snoozeEntries, hasLength(2));
-      expect(taskFromIso.snoozeEntries.every((e) => e.note == null), isTrue);
+    test(
+      'παλιό snoozeHistoryJson (ISO strings ή Maps χωρίς note) — backward compatibility',
+      () {
+        const isoList = '["2026-05-20T12:00:00.000","2026-05-21T15:30:00.000"]';
+        final taskFromIso = _baseTask(snoozeHistoryJson: isoList);
+        expect(taskFromIso.snoozeEntries, hasLength(2));
+        expect(taskFromIso.snoozeEntries.every((e) => e.note == null), isTrue);
 
-      const mapWithoutNote =
-          '[{"snoozedAt":"2026-05-20T12:00:00.000","dueAt":"2026-05-21T18:00:00.000"}]';
-      final taskFromMap = _baseTask(snoozeHistoryJson: mapWithoutNote);
-      expect(taskFromMap.snoozeEntries, hasLength(1));
-      expect(taskFromMap.snoozeEntries.first.note, isNull);
-    });
+        const mapWithoutNote =
+            '[{"snoozedAt":"2026-05-20T12:00:00.000","dueAt":"2026-05-21T18:00:00.000"}]';
+        final taskFromMap = _baseTask(snoozeHistoryJson: mapWithoutNote);
+        expect(taskFromMap.snoozeEntries, hasLength(1));
+        expect(taskFromMap.snoozeEntries.first.note, isNull);
+      },
+    );
 
     test('combinedSearchText περιλαμβάνει τους λόγους αναβολής', () {
       final due = DateTime(2026, 5, 27, 10, 0);
@@ -62,10 +68,7 @@ void main() {
         note: 'περιμένω απάντηση πελάτη',
       );
 
-      expect(
-        updated.combinedSearchText,
-        contains('περιμένω απάντηση πελάτη'),
-      );
+      expect(updated.combinedSearchText, contains('περιμένω απάντηση πελάτη'));
     });
   });
 }

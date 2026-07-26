@@ -56,11 +56,11 @@ void main() {
     Future<List<Map<String, dynamic>>> allAuditRows() =>
         db.query('audit_log', orderBy: 'id ASC');
 
-    bool hasCallOriginSuffix(String? details, int callId) =>
-        (details ?? '').contains(DirectorySupport.auditOriginSuffixFromCall(callId));
+    bool hasCallOriginSuffix(String? details, int callId) => (details ?? '')
+        .contains(DirectorySupport.auditOriginSuffixFromCall(callId));
 
-    bool hasTaskOriginSuffix(String? details, int taskId) =>
-        (details ?? '').contains(DirectorySupport.auditOriginSuffixFromTask(taskId));
+    bool hasTaskOriginSuffix(String? details, int taskId) => (details ?? '')
+        .contains(DirectorySupport.auditOriginSuffixFromTask(taskId));
 
     test(
       'κλήση με νέο καλούντα + νέο τηλέφωνο: όλες οι παράγωγες έχουν «από κλήση #N»',
@@ -106,7 +106,10 @@ void main() {
           (r) => r['action'] == 'ΔΗΜΙΟΥΡΓΙΑ ΚΛΗΣΗΣ',
         );
         expect(mainCall['entity_type'], AuditEntityTypes.call);
-        expect(hasCallOriginSuffix(mainCall['details'] as String?, callId), isFalse);
+        expect(
+          hasCallOriginSuffix(mainCall['details'] as String?, callId),
+          isFalse,
+        );
 
         final derivatives = rows.where(
           (r) => r['action'] != 'ΔΗΜΙΟΥΡΓΙΑ ΚΛΗΣΗΣ',
@@ -155,14 +158,20 @@ void main() {
         final mainTask = rows.firstWhere(
           (r) => r['action'] == 'ΔΗΜΙΟΥΡΓΙΑ ΕΚΚΡΕΜΟΤΗΤΑΣ',
         );
-        expect(hasTaskOriginSuffix(mainTask['details'] as String?, taskId), isFalse);
+        expect(
+          hasTaskOriginSuffix(mainTask['details'] as String?, taskId),
+          isFalse,
+        );
 
         final derivatives = rows.where(
           (r) => r['action'] != 'ΔΗΜΙΟΥΡΓΙΑ ΕΚΚΡΕΜΟΤΗΤΑΣ',
         );
         expect(derivatives, isNotEmpty);
         for (final row in derivatives) {
-          expect(hasTaskOriginSuffix(row['details'] as String?, taskId), isTrue);
+          expect(
+            hasTaskOriginSuffix(row['details'] as String?, taskId),
+            isTrue,
+          );
         }
       },
     );
@@ -184,13 +193,16 @@ void main() {
         final details = rows.single['details'] as String? ?? '';
         expect(details.contains('από κλήση #'), isFalse);
         expect(details.contains('από εκκρεμότητα #'), isFalse);
-        expect(formatter.originDisplayLine(
-          AuditLogModel(
-            id: 1,
-            action: rows.single['action'] as String?,
-            details: rows.single['details'] as String?,
+        expect(
+          formatter.originDisplayLine(
+            AuditLogModel(
+              id: 1,
+              action: rows.single['action'] as String?,
+              details: rows.single['details'] as String?,
+            ),
           ),
-        ), isNull);
+          isNull,
+        );
       },
     );
 
@@ -220,7 +232,9 @@ void main() {
       expect(allRows.length, greaterThan(1));
 
       final keyword = SearchTextNormalizer.normalizeForSearch('$callId');
-      final ids = await auditService.queryMatchingIds(keywordNormalized: keyword);
+      final ids = await auditService.queryMatchingIds(
+        keywordNormalized: keyword,
+      );
       expect(ids.length, allRows.length);
     });
 
@@ -240,7 +254,10 @@ void main() {
             executor: txn,
             skipPhonePolicyValidation: true,
           );
-          final rowsBeforeCall = await txn.query('audit_log', orderBy: 'id ASC');
+          final rowsBeforeCall = await txn.query(
+            'audit_log',
+            orderBy: 'id ASC',
+          );
           for (final r in rowsBeforeCall) {
             pending.track(r['id'] as int?);
           }
@@ -250,7 +267,10 @@ void main() {
             'EQ-DEF',
             executor: txn,
           );
-          final rowsAfterAssoc = await txn.query('audit_log', orderBy: 'id ASC');
+          final rowsAfterAssoc = await txn.query(
+            'audit_log',
+            orderBy: 'id ASC',
+          );
           for (final r in rowsAfterAssoc) {
             pending.track(r['id'] as int?);
           }
@@ -272,7 +292,10 @@ void main() {
         );
         expect(derivatives, isNotEmpty);
         for (final row in derivatives) {
-          expect(hasCallOriginSuffix(row['details'] as String?, callId), isTrue);
+          expect(
+            hasCallOriginSuffix(row['details'] as String?, callId),
+            isTrue,
+          );
         }
       },
     );

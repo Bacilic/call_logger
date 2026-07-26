@@ -12,10 +12,7 @@ void main() {
 
       registry.markUnavailable('model-a', const Duration(seconds: 10));
       expect(registry.isInCooldown('model-a'), isTrue);
-      expect(
-        registry.availableAt('model-a'),
-        DateTime(2026, 1, 1, 12, 0, 10),
-      );
+      expect(registry.availableAt('model-a'), DateTime(2026, 1, 1, 12, 0, 10));
 
       now = DateTime(2026, 1, 1, 12, 0, 9);
       expect(registry.isInCooldown('model-a'), isTrue);

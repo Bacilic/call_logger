@@ -22,8 +22,9 @@ void main() {
 
     setUpAll(() async {
       initSqfliteFfiForTests();
-      final dir =
-          await Directory.systemTemp.createTemp('user_repository_test_');
+      final dir = await Directory.systemTemp.createTemp(
+        'user_repository_test_',
+      );
       await DatabaseHelper.bindTestDatabaseFile('${dir.path}/user_repo.db');
       db = await DatabaseHelper.instance.database;
     });
@@ -127,12 +128,20 @@ void main() {
           'equipment_id': equipmentId,
         });
 
-        final userRow = await db.query('users', where: 'id = ?', whereArgs: [userId]);
+        final userRow = await db.query(
+          'users',
+          where: 'id = ?',
+          whereArgs: [userId],
+        );
         expect(userRow.single['department_id'], deptId);
         expect(userRow.single['location'], 'Αίθουσα 1');
 
         expect(
-          await db.query('user_phones', where: 'user_id = ?', whereArgs: [userId]),
+          await db.query(
+            'user_phones',
+            where: 'user_id = ?',
+            whereArgs: [userId],
+          ),
           hasLength(1),
         );
         expect(
@@ -190,8 +199,14 @@ void main() {
           throwsA(isA<StateError>()),
         );
 
-        expect(await db.query('departments', where: 'name = ?', whereArgs: ['Τμήμα Rollback']),
-            isEmpty);
+        expect(
+          await db.query(
+            'departments',
+            where: 'name = ?',
+            whereArgs: ['Τμήμα Rollback'],
+          ),
+          isEmpty,
+        );
       },
     );
 
@@ -212,17 +227,17 @@ void main() {
         );
 
         await db.delete('audit_log');
-        await repo.updateUser(
-          userId,
-          {
-            'first_name': 'Νέο',
-            'department_id': newDeptId,
-            'phones': [newPhone],
-          },
-          skipPhonePolicyValidation: true,
-        );
+        await repo.updateUser(userId, {
+          'first_name': 'Νέο',
+          'department_id': newDeptId,
+          'phones': [newPhone],
+        }, skipPhonePolicyValidation: true);
 
-        final userRow = await db.query('users', where: 'id = ?', whereArgs: [userId]);
+        final userRow = await db.query(
+          'users',
+          where: 'id = ?',
+          whereArgs: [userId],
+        );
         expect(userRow.single['first_name'], 'Νέο');
         expect(userRow.single['department_id'], newDeptId);
 
@@ -233,8 +248,12 @@ void main() {
         );
         expect(updateAudit, hasLength(1));
 
-        final oldV = decodeJson(updateAudit.single['old_values_json'] as String?);
-        final newV = decodeJson(updateAudit.single['new_values_json'] as String?);
+        final oldV = decodeJson(
+          updateAudit.single['old_values_json'] as String?,
+        );
+        final newV = decodeJson(
+          updateAudit.single['new_values_json'] as String?,
+        );
         expect(oldV?['department_id'], oldDeptId);
         expect(oldV?['department_text'], 'Παλιό Τμήμα User');
         expect(newV?['department_id'], newDeptId);
@@ -273,63 +292,96 @@ void main() {
       );
       expect(links, hasLength(2));
       expect(
-        await db.query('phones', where: 'number = ?', whereArgs: [existingNumber]),
+        await db.query(
+          'phones',
+          where: 'number = ?',
+          whereArgs: [existingNumber],
+        ),
         hasLength(1),
       );
     });
 
-    test('deleteUsers: soft-delete + αποσύνδεση + audit· restoreUsers', () async {
-      const phoneNumber = '2346111108';
-      const eqCode = 'PC-DELETE-USER';
+    test(
+      'deleteUsers: soft-delete + αποσύνδεση + audit· restoreUsers',
+      () async {
+        const phoneNumber = '2346111108';
+        const eqCode = 'PC-DELETE-USER';
 
-      final equipmentId = await db.insert('equipment', {
-        'code_equipment': eqCode,
-        'is_deleted': 0,
-      });
-      final userId = await repo.insertUser(
-        firstName: 'Διαγραφή',
-        lastName: 'Χρήστη',
-        phones: [phoneNumber],
-        skipPhonePolicyValidation: true,
-      );
-      await db.insert('user_equipment', {
-        'user_id': userId,
-        'equipment_id': equipmentId,
-      });
+        final equipmentId = await db.insert('equipment', {
+          'code_equipment': eqCode,
+          'is_deleted': 0,
+        });
+        final userId = await repo.insertUser(
+          firstName: 'Διαγραφή',
+          lastName: 'Χρήστη',
+          phones: [phoneNumber],
+          skipPhonePolicyValidation: true,
+        );
+        await db.insert('user_equipment', {
+          'user_id': userId,
+          'equipment_id': equipmentId,
+        });
 
-      await db.delete('audit_log');
-      await repo.deleteUsers([userId]);
+        await db.delete('audit_log');
+        await repo.deleteUsers([userId]);
 
-      final userRow = await db.query('users', where: 'id = ?', whereArgs: [userId]);
-      expect(userRow.single['is_deleted'], 1);
-      expect(await db.query('user_phones', where: 'user_id = ?', whereArgs: [userId]),
-          isEmpty);
-      expect(
-        await db.query('user_equipment', where: 'user_id = ?', whereArgs: [userId]),
-        isEmpty,
-      );
+        final userRow = await db.query(
+          'users',
+          where: 'id = ?',
+          whereArgs: [userId],
+        );
+        expect(userRow.single['is_deleted'], 1);
+        expect(
+          await db.query(
+            'user_phones',
+            where: 'user_id = ?',
+            whereArgs: [userId],
+          ),
+          isEmpty,
+        );
+        expect(
+          await db.query(
+            'user_equipment',
+            where: 'user_id = ?',
+            whereArgs: [userId],
+          ),
+          isEmpty,
+        );
 
-      final deleteAudit = await db.query(
-        'audit_log',
-        where: 'action = ? AND entity_type = ? AND entity_id = ?',
-        whereArgs: [DatabaseHelper.auditActionDelete, AuditEntityTypes.user, userId],
-      );
-      expect(deleteAudit, hasLength(1));
+        final deleteAudit = await db.query(
+          'audit_log',
+          where: 'action = ? AND entity_type = ? AND entity_id = ?',
+          whereArgs: [
+            DatabaseHelper.auditActionDelete,
+            AuditEntityTypes.user,
+            userId,
+          ],
+        );
+        expect(deleteAudit, hasLength(1));
 
-      await db.delete('audit_log');
-      await repo.restoreUsers([userId]);
+        await db.delete('audit_log');
+        await repo.restoreUsers([userId]);
 
-      expect(
-        (await db.query('users', where: 'id = ?', whereArgs: [userId])).single['is_deleted'],
-        0,
-      );
-      final restoreAudit = await db.query(
-        'audit_log',
-        where: 'action = ? AND entity_type = ? AND entity_id = ?',
-        whereArgs: [DatabaseHelper.auditActionRestore, AuditEntityTypes.user, userId],
-      );
-      expect(restoreAudit, hasLength(1));
-    });
+        expect(
+          (await db.query(
+            'users',
+            where: 'id = ?',
+            whereArgs: [userId],
+          )).single['is_deleted'],
+          0,
+        );
+        final restoreAudit = await db.query(
+          'audit_log',
+          where: 'action = ? AND entity_type = ? AND entity_id = ?',
+          whereArgs: [
+            DatabaseHelper.auditActionRestore,
+            AuditEntityTypes.user,
+            userId,
+          ],
+        );
+        expect(restoreAudit, hasLength(1));
+      },
+    );
 
     test(
       'phone assignment policy: επιτρέπεται ίδιο τμήμα· απορρίπτεται cross-department',
@@ -407,7 +459,11 @@ void main() {
           throwsA(isA<StateError>()),
         );
 
-        final row = await db.query('users', where: 'id = ?', whereArgs: [userId]);
+        final row = await db.query(
+          'users',
+          where: 'id = ?',
+          whereArgs: [userId],
+        );
         expect(row.single['notes'], isNull);
       },
     );

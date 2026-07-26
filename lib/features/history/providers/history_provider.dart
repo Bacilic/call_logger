@@ -1,4 +1,4 @@
-﻿import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 
 import '../../../core/database/calls_repository.dart';
@@ -73,18 +73,19 @@ final historyFilterProvider =
     );
 
 /// Όνομα αρχείου ενεργής βάσης (για μηνύματα σφάλματος).
-final historyDatabaseDisplayNameProvider =
-    FutureProvider.autoDispose<String>((ref) async {
-      try {
-        final db = await DatabaseHelper.instance.database;
-        return p.basename(db.path);
-      } catch (_) {
-        final path = await SettingsService().getDatabasePath();
-        final trimmed = path.trim();
-        if (trimmed.isEmpty) return '—';
-        return p.basename(trimmed);
-      }
-    });
+final historyDatabaseDisplayNameProvider = FutureProvider.autoDispose<String>((
+  ref,
+) async {
+  try {
+    final db = await DatabaseHelper.instance.database;
+    return p.basename(db.path);
+  } catch (_) {
+    final path = await SettingsService().getDatabasePath();
+    final trimmed = path.trim();
+    if (trimmed.isEmpty) return '—';
+    return p.basename(trimmed);
+  }
+});
 
 /// Συνολικό πλήθος εγγραφών στον πίνακα calls (χωρίς φίλτρα UI).
 final totalCallsCountProvider = FutureProvider.autoDispose<int>((ref) async {

@@ -44,11 +44,14 @@ class DepartmentModel {
   final int? id;
   final String name;
   final String? building;
+
   /// Hex `#RRGGBB` — κατάλογος τμημάτων και γέμισμα περιοχής στον χάρτη κτιρίου.
   final String? color;
   final String? notes;
+
   /// Ομαδοποίηση στο HUD επιλογής τμήματος στον χάρτη (κατηγορία ομάδας).
   final String? groupName;
+
   /// Αναφορά σε `building_map_floors.id` για ομαδοποίηση «ανά όροφο» στο HUD.
   final int? floorId;
   final String? mapFloor;
@@ -62,16 +65,21 @@ class DepartmentModel {
   final double? mapAnchorOffsetX;
   final double? mapAnchorOffsetY;
   final String? mapCustomName;
+
   /// Πολλαπλασιαστής μεγέθους ετικέτας στον χάρτη (`NULL` = 1.0).
   final double? mapLabelFontScale;
+
   /// Πλάτος πλαισίου ετικέτας χάρτη σε px καμβά (`NULL` = 150.0).
   final double? mapLabelWidth;
+
   /// Ύψος πλαισίου ετικέτας χάρτη σε px καμβά (`NULL` = 50.0).
   final double? mapLabelHeight;
+
   /// “Ορφανά” τηλέφωνα που ανήκουν απευθείας στο τμήμα (δεν είναι των χρηστών).
   /// Δεν αποθηκεύονται μέσα στον πίνακα `departments`· φορτώνονται από `department_phones`.
   final List<String>? directPhones;
   final bool isDeleted;
+
   /// Απόκρυψη τμήματος από τον χάρτη κτιρίου (διατηρεί τη γεωμετρία). Per-department
   /// — καθώς κάθε τμήμα χαρτογραφείται σε ένα μόνο φύλλο μέσω `mapFloor`.
   final bool isHiddenOnMap;
@@ -110,7 +118,10 @@ class DepartmentModel {
     List<String>? parseDirectPhones(dynamic v) {
       if (v == null) return null;
       if (v is List) {
-        final list = v.map((e) => e.toString().trim()).where((s) => s.isNotEmpty).toList();
+        final list = v
+            .map((e) => e.toString().trim())
+            .where((s) => s.isNotEmpty)
+            .toList();
         return list.isEmpty ? null : list;
       }
       if (v is String) {
@@ -123,6 +134,7 @@ class DepartmentModel {
       }
       return null;
     }
+
     return DepartmentModel(
       id: map['id'] as int?,
       name: map['name'] as String? ?? '',
@@ -184,14 +196,18 @@ class DepartmentModel {
     return DepartmentModel(
       id: identical(id, _unset) ? this.id : id as int?,
       name: name ?? this.name,
-      building: identical(building, _unset) ? this.building : building as String?,
+      building: identical(building, _unset)
+          ? this.building
+          : building as String?,
       color: identical(color, _unset) ? this.color : color as String?,
       notes: identical(notes, _unset) ? this.notes : notes as String?,
-      groupName:
-          identical(groupName, _unset) ? this.groupName : groupName as String?,
+      groupName: identical(groupName, _unset)
+          ? this.groupName
+          : groupName as String?,
       floorId: identical(floorId, _unset) ? this.floorId : floorId as int?,
-      mapFloor:
-          identical(mapFloor, _unset) ? this.mapFloor : mapFloor as String?,
+      mapFloor: identical(mapFloor, _unset)
+          ? this.mapFloor
+          : mapFloor as String?,
       mapX: identical(mapX, _unset) ? this.mapX : (mapX as num?)?.toDouble(),
       mapY: identical(mapY, _unset) ? this.mapY : (mapY as num?)?.toDouble(),
       mapWidth: identical(mapWidth, _unset)

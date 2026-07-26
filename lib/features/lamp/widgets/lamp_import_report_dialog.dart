@@ -17,10 +17,7 @@ String lampImportFailureHintMessage(String errorMessage) {
   return 'Το αρχείο βάσης μπορεί να είναι ημιτελές ή να μην έχει δημιουργηθεί.';
 }
 
-enum LampImportReportCloseAction {
-  dismiss,
-  runIntegrityCheck,
-}
+enum LampImportReportCloseAction { dismiss, runIntegrityCheck }
 
 /// Αποτέλεσμα κλεισίματος αναφοράς εισαγωγής.
 class LampImportReportOutcome {
@@ -93,9 +90,8 @@ sealed class LampImportReportUiState {
     required LampImportReadPathContext readPathContext,
   }) = LampImportReportSuccessUiState;
 
-  factory LampImportReportUiState.failure({
-    required String errorMessage,
-  }) = LampImportReportFailureUiState;
+  factory LampImportReportUiState.failure({required String errorMessage}) =
+      LampImportReportFailureUiState;
 }
 
 class LampImportReportSuccessUiState extends LampImportReportUiState {
@@ -186,9 +182,10 @@ Future<bool> confirmRecreateExistingOutputDatabase({
   return result == true;
 }
 
-typedef LampImportExecutor = Future<LampImportResult> Function({
-  required void Function(LampImportProgress progress) onProgress,
-});
+typedef LampImportExecutor =
+    Future<LampImportResult> Function({
+      required void Function(LampImportProgress progress) onProgress,
+    });
 
 /// Εμφανίζει διάλογο προόδου/αναφοράς και εκτελεί το import.
 Future<LampImportReportOutcome?> showLampImportReportFlow({
@@ -239,7 +236,8 @@ Future<LampImportReportOutcome?> showLampImportReportFlowWithDuration({
   required BuildContext context,
   required Future<LampImportResult> Function(
     void Function(LampImportProgress progress) onProgress,
-  ) importRunner,
+  )
+  importRunner,
   required Stopwatch stopwatch,
   required LampImportReadPathContext readPathContext,
 }) async {
@@ -340,8 +338,7 @@ class LampImportReportDialog extends StatelessWidget {
                         child: ListView.separated(
                           shrinkWrap: true,
                           itemCount: progress.completedSteps.length,
-                          separatorBuilder: (_, _) =>
-                              const Divider(height: 1),
+                          separatorBuilder: (_, _) => const Divider(height: 1),
                           itemBuilder: (context, index) {
                             final step = progress.completedSteps[index];
                             return ListTile(
@@ -435,8 +432,7 @@ class _LampImportSuccessReportDialogState
                 'Προβλήματα ETL: ${report.issueCount} καταγράφηκαν στη βάση',
                 style: theme.textTheme.bodyMedium?.copyWith(
                   color: issueColor,
-                  fontWeight:
-                      report.issueCount > 0 ? FontWeight.w600 : null,
+                  fontWeight: report.issueCount > 0 ? FontWeight.w600 : null,
                 ),
               ),
               const SizedBox(height: 4),
@@ -526,9 +522,7 @@ class _LampImportFailureReportDialog extends StatelessWidget {
       actions: [
         TextButton.icon(
           onPressed: () async {
-            await Clipboard.setData(
-              ClipboardData(text: report.errorMessage),
-            );
+            await Clipboard.setData(ClipboardData(text: report.errorMessage));
           },
           icon: const Icon(Icons.copy_outlined, size: 18),
           label: const Text('Αντιγραφή σφάλματος'),
@@ -552,7 +546,9 @@ List<Widget> _importedRowsLines(
     final count = importedRows[sheet] ?? 0;
     final label = lampImportSheetLabelsGreek[sheet] ?? sheet;
     final color = count == 0 ? Colors.orange.shade800 : null;
-    final suffix = count == 0 ? ' — 0 — ελέγξτε το φύλλο στο Excel' : ': $count';
+    final suffix = count == 0
+        ? ' — 0 — ελέγξτε το φύλλο στο Excel'
+        : ': $count';
     widgets.add(
       SelectableText(
         '• $label$suffix',

@@ -61,7 +61,10 @@ void main() {
     test('σύμβαση-κατηγορία με παύλα στο κλειδί', () {
       final result = LampSearchQueryParser.parse('σύμβαση-κατηγορία:Υλικό');
 
-      expect(result.scopedTerms.single.columns, contains('contract_category_name'));
+      expect(
+        result.scopedTerms.single.columns,
+        contains('contract_category_name'),
+      );
       expect(result.scopedTerms.single.value, 'Υλικό');
     });
 
@@ -87,10 +90,7 @@ void main() {
     });
 
     test('καθρέφτισμα πεδίων φίλτρων για γνωστά κλειδιά', () {
-      expect(
-        LampSearchQueryParser.mirrorFieldIdForKey('τηλέφωνο'),
-        'phone',
-      );
+      expect(LampSearchQueryParser.mirrorFieldIdForKey('τηλέφωνο'), 'phone');
       expect(LampSearchQueryParser.mirrorFieldIdForKey('κωδικός'), 'code');
       expect(LampSearchQueryParser.mirrorFieldIdForKey('υπάλληλος'), 'owner');
       expect(LampSearchQueryParser.mirrorFieldIdForKey('όνομα'), 'owner');

@@ -1,4 +1,4 @@
-﻿/// Μοντέλο φίλτρων για τον πίνακα ελέγχου στατιστικών κλήσεων (χωρίς εξαρτήσεις από providers/repository).
+/// Μοντέλο φίλτρων για τον πίνακα ελέγχου στατιστικών κλήσεων (χωρίς εξαρτήσεις από providers/repository).
 class DashboardFilterModel {
   const DashboardFilterModel({
     this.keyword = '',
@@ -117,10 +117,7 @@ class DashboardFilterModel {
   }
 
   /// Εύρος χωρίς φίλτρο ημερομηνιών — «Όλες: από – έως» με πραγματικές ημερομηνίες δεδομένων.
-  String allDatesDataRangeTitle({
-    DateTime? dataFrom,
-    DateTime? dataTo,
-  }) {
+  String allDatesDataRangeTitle({DateTime? dataFrom, DateTime? dataTo}) {
     if (dataFrom == null) {
       return String.fromCharCodes(const <int>[
         0x038C,

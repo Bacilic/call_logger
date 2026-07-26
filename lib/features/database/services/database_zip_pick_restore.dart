@@ -8,11 +8,12 @@ import '../../../core/utils/user_facing_error_messages.dart';
 import 'database_backup_service.dart';
 
 /// Εκτελεστής επαναφοράς `.zip` — σημείο εισαγωγής ψεύτικου εκτελεστή στα τεστ.
-typedef ZipRestoreRunner = Future<DatabaseRestoreResult> Function(
-  String zipPath, {
-  required String targetDatabasePath,
-  String? databaseEntryName,
-});
+typedef ZipRestoreRunner =
+    Future<DatabaseRestoreResult> Function(
+      String zipPath, {
+      required String targetDatabasePath,
+      String? databaseEntryName,
+    });
 
 /// Αποτέλεσμα επαναφοράς αντιγράφου `.zip` που δόθηκε ως «διαδρομή βάσης»:
 /// είτε η διαδρομή της επαναφερμένης βάσης, είτε μήνυμα για τον χρήστη.
@@ -22,15 +23,15 @@ class ZipPickRestoreResult {
     this.summaryMessage,
     this.preRestoreBackupPath,
     this.warnings = const <String>[],
-  })  : databasePath = path,
-        errorMessage = null;
+  }) : databasePath = path,
+       errorMessage = null;
 
   const ZipPickRestoreResult.failed(String message)
-      : databasePath = null,
-        errorMessage = message,
-        summaryMessage = null,
-        preRestoreBackupPath = null,
-        warnings = const <String>[];
+    : databasePath = null,
+      errorMessage = message,
+      summaryMessage = null,
+      preRestoreBackupPath = null,
+      warnings = const <String>[];
 
   final String? databasePath;
   final String? errorMessage;
@@ -121,10 +122,10 @@ class DatabaseZipPickRestore {
 
     final restored =
         await (runRestore ?? DatabaseBackupFileOperation.restoreFromZip)(
-      zipPath,
-      targetDatabasePath: targetDatabasePath,
-      databaseEntryName: databaseEntryName,
-    );
+          zipPath,
+          targetDatabasePath: targetDatabasePath,
+          databaseEntryName: databaseEntryName,
+        );
 
     final restoredPath = restored.databasePath;
     if (!restored.success || restoredPath == null) {
@@ -165,8 +166,7 @@ class DatabaseZipPickRestore {
 
   static String _failureMessage(String? serviceMessage, Object? closeFailure) {
     final trimmed = serviceMessage?.trim() ?? '';
-    final base =
-        trimmed.isNotEmpty ? trimmed : 'Αποτυχία επαναφοράς από zip.';
+    final base = trimmed.isNotEmpty ? trimmed : 'Αποτυχία επαναφοράς από zip.';
     if (closeFailure == null) return base;
     return '$base\n\n'
         'Το κλείσιμο της τρέχουσας σύνδεσης απέτυχε: '

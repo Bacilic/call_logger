@@ -12,15 +12,13 @@ class BuildEnvironment {
   ///
   /// Οι παράμετροι είναι injectable για τεστ· στην πράξη χρησιμοποιούνται
   /// [kDebugMode] και [AppConfig.applicationExecutableDirectory].
-  static bool isDevelopmentBuild({
-    String? executablePath,
-    bool? isDebug,
-  }) {
+  static bool isDevelopmentBuild({String? executablePath, bool? isDebug}) {
     if (isDebug ?? kDebugMode) {
       return true;
     }
 
-    final raw = executablePath ??
+    final raw =
+        executablePath ??
         (() {
           try {
             final exe = Platform.resolvedExecutable;

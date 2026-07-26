@@ -1,4 +1,4 @@
-﻿import 'package:call_logger/core/database/remote_tools_repository.dart';
+import 'package:call_logger/core/database/remote_tools_repository.dart';
 import 'package:call_logger/core/models/remote_tool.dart';
 import 'package:call_logger/core/models/remote_tool_role.dart';
 import 'package:call_logger/features/calls/models/equipment_model.dart';
@@ -52,23 +52,29 @@ void main() {
           CallRemoteTargets.resolvedLaunchTarget(s, rdpFileTool, [rdpFileTool]),
           r'C:\templates\pc-1.rdp',
         );
-        expect(CallRemoteTargets.canConnectForTool(s, rdpFileTool, [rdpFileTool]), isTrue);
+        expect(
+          CallRemoteTargets.canConnectForTool(s, rdpFileTool, [rdpFileTool]),
+          isTrue,
+        );
       },
     );
 
-    test('visibleRemoteToolsForCallState: προεπιλεγμένο + παράμετρος tool id', () {
-      final eq = EquipmentModel(
-        code: '12',
-        remoteParams: {'2': '123456789'},
-        defaultRemoteTool: '2',
-      );
-      final s = SmartEntitySelectorState(selectedEquipment: eq);
-      final ad = _tool(id: 2, role: ToolRole.anydesk);
-      final vnc = _tool(id: 3, role: ToolRole.vnc);
-      final tools = [ad, vnc];
-      final vis = CallRemoteTargets.visibleRemoteToolsForCallState(s, tools);
-      expect(vis.map((t) => t.id).toList(), [2]);
-    });
+    test(
+      'visibleRemoteToolsForCallState: προεπιλεγμένο + παράμετρος tool id',
+      () {
+        final eq = EquipmentModel(
+          code: '12',
+          remoteParams: {'2': '123456789'},
+          defaultRemoteTool: '2',
+        );
+        final s = SmartEntitySelectorState(selectedEquipment: eq);
+        final ad = _tool(id: 2, role: ToolRole.anydesk);
+        final vnc = _tool(id: 3, role: ToolRole.vnc);
+        final tools = [ad, vnc];
+        final vis = CallRemoteTargets.visibleRemoteToolsForCallState(s, tools);
+        expect(vis.map((t) => t.id).toList(), [2]);
+      },
+    );
 
     test('visibleRemoteToolsForCallState: ελεύθερο κείμενο AnyDesk', () {
       final s = SmartEntitySelectorState(equipmentText: '123456789');
@@ -77,17 +83,20 @@ void main() {
       expect(vis, [ad]);
     });
 
-    test('visibleRemoteToolsForCallState: strict validation κόβει default χωρίς στόχο', () {
-      final eq = EquipmentModel(
-        code: '',
-        remoteParams: const {},
-        defaultRemoteTool: '1',
-      );
-      final s = SmartEntitySelectorState(selectedEquipment: eq);
-      final vnc = _tool(id: 1, role: ToolRole.vnc);
-      final vis = CallRemoteTargets.visibleRemoteToolsForCallState(s, [vnc]);
-      expect(vis, isEmpty);
-    });
+    test(
+      'visibleRemoteToolsForCallState: strict validation κόβει default χωρίς στόχο',
+      () {
+        final eq = EquipmentModel(
+          code: '',
+          remoteParams: const {},
+          defaultRemoteTool: '1',
+        );
+        final s = SmartEntitySelectorState(selectedEquipment: eq);
+        final vnc = _tool(id: 1, role: ToolRole.vnc);
+        final vis = CallRemoteTargets.visibleRemoteToolsForCallState(s, [vnc]);
+        expect(vis, isEmpty);
+      },
+    );
 
     test(
       'visibleRemoteToolsForCallState: exclusiveToolKey στον εξοπλισμό κρατά μόνο το εργαλείο',
@@ -103,7 +112,10 @@ void main() {
         final s = SmartEntitySelectorState(selectedEquipment: eq);
         final vnc = _tool(id: 1, role: ToolRole.vnc);
         final ad = _tool(id: 2, role: ToolRole.anydesk);
-        final vis = CallRemoteTargets.visibleRemoteToolsForCallState(s, [vnc, ad]);
+        final vis = CallRemoteTargets.visibleRemoteToolsForCallState(s, [
+          vnc,
+          ad,
+        ]);
         expect(vis.map((t) => t.id).toList(), [2]);
       },
     );
@@ -119,7 +131,10 @@ void main() {
         final s = SmartEntitySelectorState(selectedEquipment: eq);
         final vnc = _tool(id: 1, role: ToolRole.vnc, isExclusive: false);
         final ad = _tool(id: 2, role: ToolRole.anydesk, isExclusive: true);
-        final vis = CallRemoteTargets.visibleRemoteToolsForCallState(s, [vnc, ad]);
+        final vis = CallRemoteTargets.visibleRemoteToolsForCallState(s, [
+          vnc,
+          ad,
+        ]);
         expect(vis.map((t) => t.id).toList(), [2, 1]);
       },
     );
@@ -138,7 +153,10 @@ void main() {
         final s = SmartEntitySelectorState(selectedEquipment: eq);
         final vnc = _tool(id: 1, role: ToolRole.vnc);
         final ad = _tool(id: 2, role: ToolRole.anydesk);
-        final vis = CallRemoteTargets.visibleRemoteToolsForCallState(s, [vnc, ad]);
+        final vis = CallRemoteTargets.visibleRemoteToolsForCallState(s, [
+          vnc,
+          ad,
+        ]);
         expect(vis.map((t) => t.id).toList(), [2, 1]);
       },
     );
@@ -164,11 +182,12 @@ void main() {
           catalog,
           applyExclusive: true,
         );
-        final withoutExclusive = CallRemoteTargets.visibleRemoteToolsForCallState(
-          s,
-          catalog,
-          applyExclusive: false,
-        );
+        final withoutExclusive =
+            CallRemoteTargets.visibleRemoteToolsForCallState(
+              s,
+              catalog,
+              applyExclusive: false,
+            );
 
         expect(withExclusive.map((t) => t.id).toList(), [2]);
         expect(withoutExclusive.map((t) => t.id).toList(), [2, 1]);
@@ -194,11 +213,12 @@ void main() {
           catalog,
           applyExclusive: true,
         );
-        final withoutExclusive = CallRemoteTargets.visibleRemoteToolsForCallState(
-          s,
-          catalog,
-          applyExclusive: false,
-        );
+        final withoutExclusive =
+            CallRemoteTargets.visibleRemoteToolsForCallState(
+              s,
+              catalog,
+              applyExclusive: false,
+            );
 
         expect(withExclusive.map((t) => t.id).toList(), [2, 1]);
         expect(withoutExclusive.map((t) => t.id).toList(), [2, 1]);
@@ -212,68 +232,66 @@ void main() {
       expect(RemoteToolsRepository.parseDefaultRemoteToolId('12'), 12);
     });
 
-    test('vncLikeTargetResolved χρησιμοποιεί σταθερό πρόθεμα PC για ψηφιακό κωδικό', () {
-      final eq = EquipmentModel(
-        code: '2850',
-        remoteParams: const {},
-      );
-      final vnc = _tool(
-        id: 1,
-        role: ToolRole.vnc,
-      );
-      expect(eq.vncLikeTargetResolved(vnc), 'PC2850');
-    });
+    test(
+      'vncLikeTargetResolved χρησιμοποιεί σταθερό πρόθεμα PC για ψηφιακό κωδικό',
+      () {
+        final eq = EquipmentModel(code: '2850', remoteParams: const {});
+        final vnc = _tool(id: 1, role: ToolRole.vnc);
+        expect(eq.vncLikeTargetResolved(vnc), 'PC2850');
+      },
+    );
 
-    test('generic με παράμετρο: resolvedLaunchTarget και visibleRemoteTools', () {
-      final eq = EquipmentModel(
-        code: '1137',
-        remoteParams: const {'5': 'MANUAL-TGT'},
-      );
-      final s = SmartEntitySelectorState(selectedEquipment: eq);
-      final gen = _tool(id: 5, role: ToolRole.generic);
-      final catalog = [gen];
+    test(
+      'generic με παράμετρο: resolvedLaunchTarget και visibleRemoteTools',
+      () {
+        final eq = EquipmentModel(
+          code: '1137',
+          remoteParams: const {'5': 'MANUAL-TGT'},
+        );
+        final s = SmartEntitySelectorState(selectedEquipment: eq);
+        final gen = _tool(id: 5, role: ToolRole.generic);
+        final catalog = [gen];
 
-      expect(
-        CallRemoteTargets.resolvedLaunchTarget(s, gen, catalog),
-        'MANUAL-TGT',
-      );
-      expect(CallRemoteTargets.canConnectForTool(s, gen, catalog), isTrue);
-      expect(
-        CallRemoteTargets.visibleRemoteToolsForCallState(s, catalog)
-            .map((t) => t.id)
-            .toList(),
-        [5],
-      );
-    });
+        expect(
+          CallRemoteTargets.resolvedLaunchTarget(s, gen, catalog),
+          'MANUAL-TGT',
+        );
+        expect(CallRemoteTargets.canConnectForTool(s, gen, catalog), isTrue);
+        expect(
+          CallRemoteTargets.visibleRemoteToolsForCallState(
+            s,
+            catalog,
+          ).map((t) => t.id).toList(),
+          [5],
+        );
+      },
+    );
 
     test('generic χωρίς παράμετρο: κρύβεται από visibleRemoteTools', () {
-      final eq = EquipmentModel(
-        code: '1137',
-        remoteParams: const {},
-      );
+      final eq = EquipmentModel(code: '1137', remoteParams: const {});
       final s = SmartEntitySelectorState(selectedEquipment: eq);
       final gen = _tool(id: 5, role: ToolRole.generic);
       final catalog = [gen];
 
-      expect(
-        CallRemoteTargets.resolvedLaunchTarget(s, gen, catalog),
-        isNull,
-      );
+      expect(CallRemoteTargets.resolvedLaunchTarget(s, gen, catalog), isNull);
       expect(
         CallRemoteTargets.visibleRemoteToolsForCallState(s, catalog),
         isEmpty,
       );
     });
 
-    test('generic με ελεύθερο κείμενο: δεν εμφανίζεται χωρίς selectedEquipment', () {
-      final s = SmartEntitySelectorState(equipmentText: 'foo');
-      final gen = _tool(id: 5, role: ToolRole.generic);
-      final catalog = [gen];
+    test(
+      'generic με ελεύθερο κείμενο: δεν εμφανίζεται χωρίς selectedEquipment',
+      () {
+        final s = SmartEntitySelectorState(equipmentText: 'foo');
+        final gen = _tool(id: 5, role: ToolRole.generic);
+        final catalog = [gen];
 
-      expect(
-        CallRemoteTargets.visibleRemoteToolsForCallState(s, catalog),
-        isEmpty,
-      );
-    });
+        expect(
+          CallRemoteTargets.visibleRemoteToolsForCallState(s, catalog),
+          isEmpty,
+        );
+      },
+    );
   });
 }

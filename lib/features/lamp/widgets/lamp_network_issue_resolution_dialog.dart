@@ -17,11 +17,7 @@ const _scanBasedNetworkIssueTypes = <String>{
 };
 
 /// Αποτέλεσμα του διαλόγου επίλυσης δικτύου.
-enum LampNetworkIssueDialogOutcome {
-  completed,
-  cancelled,
-  nothingChanged,
-}
+enum LampNetworkIssueDialogOutcome { completed, cancelled, nothingChanged }
 
 Future<LampNetworkIssueDialogOutcome?> showLampNetworkIssueResolutionDialog({
   required BuildContext context,
@@ -30,7 +26,7 @@ Future<LampNetworkIssueDialogOutcome?> showLampNetworkIssueResolutionDialog({
   required LampNetworkIssueResolutionService service,
   required String databasePath,
   Future<List<LampEntityCodeSuggestion>> Function(String query)?
-      searchEquipmentSuggestions,
+  searchEquipmentSuggestions,
   Future<String?> Function(int code)? equipmentPreview,
 }) {
   return showDialog<LampNetworkIssueDialogOutcome>(
@@ -63,7 +59,7 @@ class LampNetworkIssueResolutionDialog extends StatefulWidget {
   final LampNetworkIssueResolutionService service;
   final String databasePath;
   final Future<List<LampEntityCodeSuggestion>> Function(String query)?
-      searchEquipmentSuggestions;
+  searchEquipmentSuggestions;
   final Future<String?> Function(int code)? equipmentPreview;
 
   @override
@@ -83,23 +79,25 @@ class _LampNetworkIssueResolutionDialogState
   Timer? _previewDebounce;
   String? _previewLabel;
   late final Future<List<LampEntityCodeSuggestion>> Function(String query)
-      _searchEquipmentSuggestions;
+  _searchEquipmentSuggestions;
   late final Future<String?> Function(int code) _equipmentPreview;
 
   @override
   void initState() {
     super.initState();
     _remaining = List<Map<String, Object?>>.from(widget.issues);
-    _searchEquipmentSuggestions = widget.searchEquipmentSuggestions ??
+    _searchEquipmentSuggestions =
+        widget.searchEquipmentSuggestions ??
         (query) => widget.service.searchEquipmentSuggestions(
-              databasePath: widget.databasePath,
-              query: query,
-            );
-    _equipmentPreview = widget.equipmentPreview ??
+          databasePath: widget.databasePath,
+          query: query,
+        );
+    _equipmentPreview =
+        widget.equipmentPreview ??
         (code) => widget.service.equipmentPreview(
-              databasePath: widget.databasePath,
-              code: code,
-            );
+          databasePath: widget.databasePath,
+          code: code,
+        );
     _equipmentCodeController.addListener(_onEquipmentCodeChanged);
     _syncFixValueController();
   }
@@ -154,8 +152,7 @@ class _LampNetworkIssueResolutionDialogState
     return int.tryParse(raw?.toString() ?? '');
   }
 
-  String get _currentRawValue =>
-      _currentIssue['raw_value']?.toString() ?? '';
+  String get _currentRawValue => _currentIssue['raw_value']?.toString() ?? '';
 
   ParsedNetworkIssueRow? get _parsed =>
       widget.service.parseNetworkIssueRawValue(_currentRawValue);
@@ -375,8 +372,7 @@ class _LampNetworkIssueResolutionDialogState
       return;
     }
     setState(
-      () => _statusMessage =
-          'Δεν ενημερώθηκε η εγγραφή στην ουρά προβλημάτων.',
+      () => _statusMessage = 'Δεν ενημερώθηκε η εγγραφή στην ουρά προβλημάτων.',
     );
   }
 
@@ -434,117 +430,119 @@ class _LampNetworkIssueResolutionDialogState
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-            Text(
-              'Εγγραφή $_currentIndex από ${widget.issues.length}',
-              style: Theme.of(context).textTheme.titleSmall,
-            ),
-            const SizedBox(height: 12),
-            if (_isScanBasedIssue) ...[
-              SelectableText(
-                'Κωδικός εξοπλισμού: ${_scanEquipmentCode ?? '—'}',
-              ),
-              if (_scanMessage != null && _scanMessage!.trim().isNotEmpty) ...[
-                const SizedBox(height: 8),
-                SelectableText(_scanMessage!),
-              ],
-              const SizedBox(height: 16),
-              TextField(
-                controller: _fixValueController,
-                autofocus: true,
-                enabled: !_busy,
-                decoration: InputDecoration(
-                  labelText: _scanFixFieldLabel,
-                  border: const OutlineInputBorder(),
-                ),
-              ),
-              const SizedBox(height: 8),
               Text(
-                'Η «Αποδοχή ως έχει» κλείνει το πρόβλημα μόνιμα με αιτιολογία, '
-                'χωρίς αλλαγή δεδομένων· δεν θα ξαναεμφανιστεί στον επόμενο '
-                'έλεγχο (σε αντίθεση με τη διαγραφή από την ουρά).',
-                style: Theme.of(context).textTheme.bodySmall,
+                'Εγγραφή $_currentIndex από ${widget.issues.length}',
+                style: Theme.of(context).textTheme.titleSmall,
               ),
-            ] else ...[
-              if (parsed != null) ...[
-                _infoRow('Κόμβος', parsed.node),
-                if (parsed.equipmentCode != null &&
-                    parsed.equipmentCode!.trim().isNotEmpty)
-                  _infoRow(
-                    'Κωδικός εξοπλισμού (Excel)',
-                    parsed.equipmentCode!,
-                  ),
-                _infoRow('IP', parsed.ip),
-                _infoRow('Hostname', parsed.hostname),
-                _infoRow('MAC', parsed.mac),
-                _infoRow('VLAN', parsed.vlan),
-                _infoRow('Περιγραφή', parsed.description),
-                if (parsed.comments.trim().isNotEmpty)
-                  _infoRow('Σχόλια', parsed.comments),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: TextButton.icon(
-                    onPressed: () => _copyValue(_composeAllCopyText(parsed)),
-                    icon: const Icon(Icons.copy_all_outlined),
-                    label: const Text('Αντιγραφή όλων'),
-                  ),
-                ),
-                if (_candidateEquipmentCodes.isNotEmpty) ...[
-                  const SizedBox(height: 12),
-                  Text(
-                    'Προτεινόμενοι κωδικοί:',
-                    style: Theme.of(context).textTheme.labelLarge,
-                  ),
-                  const SizedBox(height: 4),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 4,
-                    children: [
-                      for (final code in _candidateEquipmentCodes)
-                        ActionChip(
-                          label: Text('Πρόταση: $code'),
-                          onPressed:
-                              _busy ? null : () => _applyCandidate(code),
-                        ),
-                    ],
-                  ),
-                ],
-              ] else
+              const SizedBox(height: 12),
+              if (_isScanBasedIssue) ...[
                 SelectableText(
-                  'raw_value: $_currentRawValue',
-                  style: Theme.of(context).textTheme.bodySmall,
+                  'Κωδικός εξοπλισμού: ${_scanEquipmentCode ?? '—'}',
                 ),
-              const SizedBox(height: 16),
-              IgnorePointer(
-                ignoring: _busy,
-                child: LampEntityCodeAutocomplete(
-                  controller: _equipmentCodeController,
-                  searchSuggestions: _searchEquipmentSuggestions,
-                  onCodeSelected: (_) => _runPreview(),
+                if (_scanMessage != null &&
+                    _scanMessage!.trim().isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  SelectableText(_scanMessage!),
+                ],
+                const SizedBox(height: 16),
+                TextField(
+                  controller: _fixValueController,
                   autofocus: true,
-                  decoration: const InputDecoration(
-                    labelText: 'Κωδικός ή όνομα εξοπλισμού',
-                    border: OutlineInputBorder(),
+                  enabled: !_busy,
+                  decoration: InputDecoration(
+                    labelText: _scanFixFieldLabel,
+                    border: const OutlineInputBorder(),
                   ),
                 ),
-              ),
-              if (_previewLabel != null) ...[
                 const SizedBox(height: 8),
                 Text(
-                  'Θα συνδεθεί με: $_previewLabel',
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: Theme.of(context).colorScheme.primary,
-                      ),
+                  'Η «Αποδοχή ως έχει» κλείνει το πρόβλημα μόνιμα με αιτιολογία, '
+                  'χωρίς αλλαγή δεδομένων· δεν θα ξαναεμφανιστεί στον επόμενο '
+                  'έλεγχο (σε αντίθεση με τη διαγραφή από την ουρά).',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ] else ...[
+                if (parsed != null) ...[
+                  _infoRow('Κόμβος', parsed.node),
+                  if (parsed.equipmentCode != null &&
+                      parsed.equipmentCode!.trim().isNotEmpty)
+                    _infoRow(
+                      'Κωδικός εξοπλισμού (Excel)',
+                      parsed.equipmentCode!,
+                    ),
+                  _infoRow('IP', parsed.ip),
+                  _infoRow('Hostname', parsed.hostname),
+                  _infoRow('MAC', parsed.mac),
+                  _infoRow('VLAN', parsed.vlan),
+                  _infoRow('Περιγραφή', parsed.description),
+                  if (parsed.comments.trim().isNotEmpty)
+                    _infoRow('Σχόλια', parsed.comments),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton.icon(
+                      onPressed: () => _copyValue(_composeAllCopyText(parsed)),
+                      icon: const Icon(Icons.copy_all_outlined),
+                      label: const Text('Αντιγραφή όλων'),
+                    ),
+                  ),
+                  if (_candidateEquipmentCodes.isNotEmpty) ...[
+                    const SizedBox(height: 12),
+                    Text(
+                      'Προτεινόμενοι κωδικοί:',
+                      style: Theme.of(context).textTheme.labelLarge,
+                    ),
+                    const SizedBox(height: 4),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 4,
+                      children: [
+                        for (final code in _candidateEquipmentCodes)
+                          ActionChip(
+                            label: Text('Πρόταση: $code'),
+                            onPressed: _busy
+                                ? null
+                                : () => _applyCandidate(code),
+                          ),
+                      ],
+                    ),
+                  ],
+                ] else
+                  SelectableText(
+                    'raw_value: $_currentRawValue',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                const SizedBox(height: 16),
+                IgnorePointer(
+                  ignoring: _busy,
+                  child: LampEntityCodeAutocomplete(
+                    controller: _equipmentCodeController,
+                    searchSuggestions: _searchEquipmentSuggestions,
+                    onCodeSelected: (_) => _runPreview(),
+                    autofocus: true,
+                    decoration: const InputDecoration(
+                      labelText: 'Κωδικός ή όνομα εξοπλισμού',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                ),
+                if (_previewLabel != null) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    'Θα συνδεθεί με: $_previewLabel',
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
+                  ),
+                ],
+              ],
+              if (_statusMessage != null) ...[
+                const SizedBox(height: 8),
+                Text(
+                  _statusMessage!,
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
                 ),
               ],
             ],
-            if (_statusMessage != null) ...[
-              const SizedBox(height: 8),
-              Text(
-                _statusMessage!,
-                style: TextStyle(color: Theme.of(context).colorScheme.error),
-              ),
-            ],
-          ],
           ),
         ),
       ),
@@ -552,9 +550,9 @@ class _LampNetworkIssueResolutionDialogState
         TextButton(
           onPressed: _busy
               ? null
-              : () => Navigator.of(context).pop(
-                    LampNetworkIssueDialogOutcome.cancelled,
-                  ),
+              : () => Navigator.of(
+                  context,
+                ).pop(LampNetworkIssueDialogOutcome.cancelled),
           child: const Text('Ακύρωση όλων'),
         ),
         TextButton.icon(
@@ -578,8 +576,8 @@ class _LampNetworkIssueResolutionDialogState
           onPressed: _busy
               ? null
               : (_isScanBasedIssue
-                  ? _saveScanFix
-                  : () => _match(overwrite: false)),
+                    ? _saveScanFix
+                    : () => _match(overwrite: false)),
           child: Text(
             _isScanBasedIssue ? 'Αποθήκευση διόρθωσης' : 'Αντιστοίχιση',
           ),
@@ -595,9 +593,7 @@ class _LampNetworkIssueResolutionDialogState
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(
-            child: SelectableText('$label: $value'),
-          ),
+          Expanded(child: SelectableText('$label: $value')),
           IconButton(
             tooltip: 'Αντιγραφή',
             icon: const Icon(Icons.copy_outlined, size: 18),
@@ -679,7 +675,9 @@ class _AcceptReasonDialogState extends State<_AcceptReasonDialog> {
           child: const Text('Άκυρο'),
         ),
         FilledButton(
-          onPressed: trimmed.isEmpty ? null : () => Navigator.of(context).pop(trimmed),
+          onPressed: trimmed.isEmpty
+              ? null
+              : () => Navigator.of(context).pop(trimmed),
           child: const Text('Αποδοχή'),
         ),
       ],

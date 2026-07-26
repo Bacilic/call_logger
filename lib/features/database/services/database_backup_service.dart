@@ -81,32 +81,26 @@ class DatabaseBackupFileOperation {
   static Future<DatabaseBackupResult> run(
     DatabaseBackupSettings settings, {
     BackupAuditTrigger auditTrigger = BackupAuditTrigger.manual,
-  }) =>
-      DatabaseBackupService.runBackup(
-        settings,
-        auditTrigger: auditTrigger,
-      );
+  }) => DatabaseBackupService.runBackup(settings, auditTrigger: auditTrigger);
 
   static Future<DatabaseBackupResult> runCreatingFolderIfNeeded(
     DatabaseBackupSettings settings, {
     BackupAuditTrigger auditTrigger = BackupAuditTrigger.manual,
-  }) =>
-      DatabaseBackupService.runBackupCreatingFolderIfNeeded(
-        settings,
-        auditTrigger: auditTrigger,
-      );
+  }) => DatabaseBackupService.runBackupCreatingFolderIfNeeded(
+    settings,
+    auditTrigger: auditTrigger,
+  );
 
   /// Επαναφορά από zip (βάση + εικόνες χαρτών).
   static Future<DatabaseRestoreResult> restoreFromZip(
     String zipPath, {
     required String targetDatabasePath,
     String? databaseEntryName,
-  }) =>
-      DatabaseBackupService.restoreFromBackupZip(
-        zipPath,
-        targetDatabasePath: targetDatabasePath,
-        databaseEntryName: databaseEntryName,
-      );
+  }) => DatabaseBackupService.restoreFromBackupZip(
+    zipPath,
+    targetDatabasePath: targetDatabasePath,
+    databaseEntryName: databaseEntryName,
+  );
 }
 
 /// Δημιουργία αντιγράφων με `VACUUM INTO` (ατομικό, ενσωματώνει WAL/SHM),
@@ -156,10 +150,11 @@ class DatabaseBackupService {
 
     final db = await DatabaseHelper.instance.database;
     final baseName = p.basenameWithoutExtension(db.path);
-    final content = await BackupDestinationFolderValidator.inspectDestinationContent(
-      destinationDirectory: dest,
-      dbBaseName: baseName,
-    );
+    final content =
+        await BackupDestinationFolderValidator.inspectDestinationContent(
+          destinationDirectory: dest,
+          dbBaseName: baseName,
+        );
     if (content.kind == BackupDestinationContentKind.folderMissing) {
       const message =
           'Ο φάκελος προορισμού δεν υπάρχει. Δημιουργήστε τον ρητά πριν το αντίγραφο.';
@@ -252,8 +247,8 @@ class DatabaseBackupService {
 
     final destDir = Directory(dest);
     final stamp = DateFormat('yyyy-MM-dd_HH-mm').format(DateTime.now());
-    final stem = settings.namingFormat ==
-            DatabaseBackupNamingFormat.dateTimeThenBase
+    final stem =
+        settings.namingFormat == DatabaseBackupNamingFormat.dateTimeThenBase
         ? '${stamp}_$baseName'
         : '${baseName}_$stamp';
     final dbFileName = '$stem.db';
@@ -271,7 +266,9 @@ class DatabaseBackupService {
     }
 
     try {
-      await DatabaseBackupRepository(db).vacuumInto(_sqlitePathLiteral(outDbPath));
+      await DatabaseBackupRepository(
+        db,
+      ).vacuumInto(_sqlitePathLiteral(outDbPath));
     } catch (e) {
       try {
         if (await outDbFile.exists()) await outDbFile.delete();
@@ -284,8 +281,9 @@ class DatabaseBackupService {
     final portableAvailability = await PortableBackupAvailability.load(
       lexiconLoaded: CoreLexiconService.instance.state.loaded,
     );
-    final effectiveBundle =
-        settings.effectiveIncludesPortableBundleInZip(portableAvailability);
+    final effectiveBundle = settings.effectiveIncludesPortableBundleInZip(
+      portableAvailability,
+    );
     final useZipBundle = effectiveBundle || settings.zipOutput;
     var finalPath = outDbPath;
 
@@ -301,9 +299,7 @@ class DatabaseBackupService {
         // Manifest στη ρίζα: παλιότερες εκδόσεις αγνοούν μη-.db εγγραφές
         // κατά την επαναφορά (βλ. επιλογή dbEntry στο restoreFromBackupZip).
         archive.addFile(
-          BackupZipManifest.toArchiveFile(
-            await _buildBackupManifest(db.path),
-          ),
+          BackupZipManifest.toArchiveFile(await _buildBackupManifest(db.path)),
         );
 
         if (settings.effectiveIncludeMapImagesInBackup(portableAvailability)) {
@@ -331,7 +327,8 @@ class DatabaseBackupService {
         }
 
         if (settings.effectiveIncludeLampDb(portableAvailability)) {
-          final lampPath = await PortableLampStorage.portableLampDbPathForBackup();
+          final lampPath =
+              await PortableLampStorage.portableLampDbPathForBackup();
           if (lampPath != null) {
             try {
               final bytes = await File(lampPath).readAsBytes();
@@ -487,7 +484,8 @@ class DatabaseBackupService {
         case BackupZipCandidateSelectionKind.none:
           return DatabaseRestoreResult(
             success: false,
-            message: decision.failureMessage ??
+            message:
+                decision.failureMessage ??
                 'Δεν βρέθηκε έγκυρη βάση μέσα στο zip.',
           );
         case BackupZipCandidateSelectionKind.requiresChoice:
@@ -528,7 +526,8 @@ class DatabaseBackupService {
     if (!replacement.success) {
       return DatabaseRestoreResult(
         success: false,
-        message: replacement.message ?? 'Αποτυχία εγγραφής βάσης στον προορισμό.',
+        message:
+            replacement.message ?? 'Αποτυχία εγγραφής βάσης στον προορισμό.',
       );
     }
 
@@ -571,8 +570,8 @@ class DatabaseBackupService {
       try {
         relinked =
             await BuildingMapStorage.relinkMissingFloorImagesAfterRestore(
-          restoredDb,
-        );
+              restoredDb,
+            );
       } finally {
         await restoredDb.close();
       }
@@ -621,13 +620,15 @@ class DatabaseBackupService {
 
   /// Αντιγραφή φορητών αρχείων από το αρχείο zip (κατόψεις, εικονίδια, λεξικό, Λάμπα).
   static Future<
-      ({
-        int mapImagesCopied,
-        int toolImagesCopied,
-        int dictionaryFilesCopied,
-        String? restoredLampDbPath,
-        List<String> warnings,
-      })> _copyPortableEntriesFromArchive({
+    ({
+      int mapImagesCopied,
+      int toolImagesCopied,
+      int dictionaryFilesCopied,
+      String? restoredLampDbPath,
+      List<String> warnings,
+    })
+  >
+  _copyPortableEntriesFromArchive({
     required Archive archive,
     required String mapsRoot,
     required String imagesRoot,
@@ -661,8 +662,9 @@ class DatabaseBackupService {
           final rel = name.substring(imagesPrefix.length);
           if (rel.isEmpty) continue;
           await AppConfig.ensureDirectoryExists(imagesRoot);
-          final dest =
-              File(p.join(imagesRoot, rel.replaceAll('/', p.separator)));
+          final dest = File(
+            p.join(imagesRoot, rel.replaceAll('/', p.separator)),
+          );
           await dest.parent.create(recursive: true);
           await dest.writeAsBytes(Uint8List.fromList(f.content), flush: true);
           toolImagesCopied++;
@@ -724,15 +726,17 @@ class DatabaseBackupService {
   ///
   /// Χρησιμοποιείται όταν η βάση έχει ήδη τοποθετηθεί από staging/αντικατάσταση.
   static Future<
-      ({
-        String? message,
-        List<String> warnings,
-        int imagesRelinked,
-        int mapImagesCopied,
-        int toolImagesCopied,
-        int dictionaryFilesCopied,
-        bool lampDbRestored,
-      })> restorePortablesFromBackupZip(
+    ({
+      String? message,
+      List<String> warnings,
+      int imagesRelinked,
+      int mapImagesCopied,
+      int toolImagesCopied,
+      int dictionaryFilesCopied,
+      bool lampDbRestored,
+    })
+  >
+  restorePortablesFromBackupZip(
     String zipPath, {
     required String restoredDatabasePath,
   }) async {
@@ -804,8 +808,8 @@ class DatabaseBackupService {
       try {
         relinked =
             await BuildingMapStorage.relinkMissingFloorImagesAfterRestore(
-          restoredDb,
-        );
+              restoredDb,
+            );
       } finally {
         await restoredDb.close();
       }
@@ -852,7 +856,8 @@ class DatabaseBackupService {
     String baseName,
     DatabaseBackupSettings settings,
   ) async {
-    if (!settings.retentionMaxAgeEnabled && !settings.retentionMaxCopiesEnabled) {
+    if (!settings.retentionMaxAgeEnabled &&
+        !settings.retentionMaxCopiesEnabled) {
       return;
     }
 

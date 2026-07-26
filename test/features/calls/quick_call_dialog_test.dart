@@ -18,7 +18,6 @@ import 'package:flutter_test/flutter_test.dart';
 import '../../test_reporter.dart';
 import '../../test_setup.dart';
 
-
 Future<void> _pumpCallLoggerApp(WidgetTester tester) async {
   await tester.runAsync(() async {
     await tester.pumpWidget(
@@ -68,9 +67,7 @@ Future<void> _goToHistory(WidgetTester tester) async {
 
 Future<void> _goToHistoryImmersive(WidgetTester tester) async {
   await _goToHistory(tester);
-  _appContainer(tester)
-      .read(historyAuditImmersiveProvider.notifier)
-      .setTrue();
+  _appContainer(tester).read(historyAuditImmersiveProvider.notifier).setTrue();
   await pumpUntilSettled(tester, steps: 25);
   expect(_quickCallFab(), findsOneWidget);
 }
@@ -215,40 +212,36 @@ void main() {
       semanticsEnabled: false,
     );
 
-    testWidgets(
-      'Ctrl+Alt+L δεν ανοίγει QuickCallDialog',
-      (tester) async {
-        tester.view.physicalSize = const Size(1600, 900);
-        tester.view.devicePixelRatio = 1.0;
-        addTearDown(() {
-          tester.view.resetPhysicalSize();
-          tester.view.resetDevicePixelRatio();
-        });
+    testWidgets('Ctrl+Alt+L δεν ανοίγει QuickCallDialog', (tester) async {
+      tester.view.physicalSize = const Size(1600, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
 
-        await _pumpCallLoggerApp(tester);
-        await _goToHistory(tester);
+      await _pumpCallLoggerApp(tester);
+      await _goToHistory(tester);
 
-        for (final key in [
-          LogicalKeyboardKey.controlLeft,
-          LogicalKeyboardKey.altLeft,
-          LogicalKeyboardKey.keyL,
-        ]) {
-          await tester.sendKeyDownEvent(key);
-        }
-        await tester.pump();
-        for (final key in [
-          LogicalKeyboardKey.keyL,
-          LogicalKeyboardKey.altLeft,
-          LogicalKeyboardKey.controlLeft,
-        ]) {
-          await tester.sendKeyUpEvent(key);
-        }
-        await tester.pump(const Duration(milliseconds: 300));
+      for (final key in [
+        LogicalKeyboardKey.controlLeft,
+        LogicalKeyboardKey.altLeft,
+        LogicalKeyboardKey.keyL,
+      ]) {
+        await tester.sendKeyDownEvent(key);
+      }
+      await tester.pump();
+      for (final key in [
+        LogicalKeyboardKey.keyL,
+        LogicalKeyboardKey.altLeft,
+        LogicalKeyboardKey.controlLeft,
+      ]) {
+        await tester.sendKeyUpEvent(key);
+      }
+      await tester.pump(const Duration(milliseconds: 300));
 
-        expect(_quickCallDialog(), findsNothing);
-        await flushCallLoggerSqfliteLockTimers(tester);
-      },
-      semanticsEnabled: false,
-    );
+      expect(_quickCallDialog(), findsNothing);
+      await flushCallLoggerSqfliteLockTimers(tester);
+    }, semanticsEnabled: false);
   });
 }

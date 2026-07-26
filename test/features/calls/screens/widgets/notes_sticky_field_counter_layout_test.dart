@@ -1,4 +1,4 @@
-﻿// Regression: ο μετρητής χαρακτήρων στις Σημειώσεις δεν πρέπει να επικαλύπτει το κείμενο.
+// Regression: ο μετρητής χαρακτήρων στις Σημειώσεις δεν πρέπει να επικαλύπτει το κείμενο.
 //
 //   flutter test test/features/calls/screens/widgets/notes_sticky_field_counter_layout_test.dart
 
@@ -47,12 +47,7 @@ Future<void> _pumpNotesStickyField(WidgetTester tester) async {
       overrides: callLoggerTestProviderOverrides(),
       child: const MaterialApp(
         home: Scaffold(
-          body: Center(
-            child: SizedBox(
-              width: 280,
-              child: NotesStickyField(),
-            ),
-          ),
+          body: Center(child: SizedBox(width: 280, child: NotesStickyField())),
         ),
       ),
     ),
@@ -64,41 +59,40 @@ void main() {
   registerCallLoggerIsolatedDatabaseHooks();
 
   group('NotesStickyField · μετρητής χαρακτήρων', () {
-    testWidgets(
-      'ο μετρητής δεν επικαλύπτει το κείμενο όταν το πεδίο γεμίζει',
-      (tester) async {
-        await _pumpNotesStickyField(tester);
+    testWidgets('ο μετρητής δεν επικαλύπτει το κείμενο όταν το πεδίο γεμίζει', (
+      tester,
+    ) async {
+      await _pumpNotesStickyField(tester);
 
-        final notesField = _notesTextFieldFinder();
-        expect(
-          notesField,
-          findsOneWidget,
-          reason: greekExpectMsg('Το πεδίο σημειώσεων πρέπει να εμφανίζεται'),
-        );
+      final notesField = _notesTextFieldFinder();
+      expect(
+        notesField,
+        findsOneWidget,
+        reason: greekExpectMsg('Το πεδίο σημειώσεων πρέπει να εμφανίζεται'),
+      );
 
-        await tester.tap(notesField);
-        await tester.pumpAndSettle();
-        await tester.enterText(notesField, _longNotesSample());
-        await tester.pumpAndSettle();
+      await tester.tap(notesField);
+      await tester.pumpAndSettle();
+      await tester.enterText(notesField, _longNotesSample());
+      await tester.pumpAndSettle();
 
-        expect(
-          _characterCounterFinder(),
-          findsOneWidget,
-          reason: greekExpectMsg('Ο μετρητής «N / 500» πρέπει να είναι ορατός'),
-        );
+      expect(
+        _characterCounterFinder(),
+        findsOneWidget,
+        reason: greekExpectMsg('Ο μετρητής «N / 500» πρέπει να είναι ορατός'),
+      );
 
-        final fieldRect = tester.getRect(notesField);
-        final counterRect = tester.getRect(_characterCounterFinder());
+      final fieldRect = tester.getRect(notesField);
+      final counterRect = tester.getRect(_characterCounterFinder());
 
-        expect(
-          counterRect.top,
-          greaterThanOrEqualTo(fieldRect.bottom - 1),
-          reason: greekExpectMsg(
-            'Το πάνω όριο του μετρητή πρέπει να βρίσκεται κάτω από το κάτω '
-            'όριο του πεδίου κειμένου (χωρίς επικάλυψη)',
-          ),
-        );
-      },
-    );
+      expect(
+        counterRect.top,
+        greaterThanOrEqualTo(fieldRect.bottom - 1),
+        reason: greekExpectMsg(
+          'Το πάνω όριο του μετρητή πρέπει να βρίσκεται κάτω από το κάτω '
+          'όριο του πεδίου κειμένου (χωρίς επικάλυψη)',
+        ),
+      );
+    });
   });
 }

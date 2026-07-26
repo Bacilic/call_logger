@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../models/category_directory_column.dart';
@@ -95,8 +95,7 @@ class _CategoriesViewState extends ConsumerState<CategoriesView> {
             visibleColumns: visibleColumns,
             onToggleSelection: notifier.toggleSelection,
             onSetSort: notifier.setSort,
-            onEditCategory: (c, {focusedField}) =>
-                _openForm(context, ref, c),
+            onEditCategory: (c, {focusedField}) => _openForm(context, ref, c),
             focusedRowIndex: state.focusedRowIndex,
             onSetFocusedRowIndex: notifier.setFocusedRowIndex,
             onRequestDelete: () => _confirmAndDeleteSelected(context, ref),
@@ -196,8 +195,9 @@ class _CategoriesViewState extends ConsumerState<CategoriesView> {
       len += add.length;
     }
     final truncated = take < names.length;
-    final displayNames =
-        truncated ? '${names.sublist(0, take).join(', ')}...' : names.join(', ');
+    final displayNames = truncated
+        ? '${names.sublist(0, take).join(', ')}...'
+        : names.join(', ');
     final isOne = deletedCount == 1;
     final label = isOne ? 'κατηγορία' : 'κατηγορίες';
     final message = names.isEmpty
@@ -230,8 +230,7 @@ class _CategoryColumnSelectorOverlay extends ConsumerWidget {
     final order = state.columnOrder;
     final keys = state.visibleColumnKeys;
     final sel = CategoryDirectoryColumn.selection;
-    final orderRest =
-        order.where((c) => c != sel).toList(growable: false);
+    final orderRest = order.where((c) => c != sel).toList(growable: false);
     final selOn = keys.contains(sel.key);
 
     return CatalogColumnSelectorShell(
@@ -277,8 +276,7 @@ class _CategoryColumnSelectorOverlay extends ConsumerWidget {
                   color: Colors.transparent,
                   child: ListTile(
                     contentPadding: const EdgeInsets.symmetric(horizontal: 8),
-                    onTap: () =>
-                        notifier.setCategoryColumnVisible(col, !isOn),
+                    onTap: () => notifier.setCategoryColumnVisible(col, !isOn),
                     leading: Checkbox(
                       value: isOn,
                       onChanged: (v) {

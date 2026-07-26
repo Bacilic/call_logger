@@ -183,8 +183,9 @@ class LampSettingsStore {
 
     String? r = _nonEmpty(prefs.getString(_prefKey(_readPathKey)));
     String? o = _nonEmpty(prefs.getString(_prefKey(_outputPathKey)));
-    final String? legacy =
-        _nonEmpty(prefs.getString(_prefKey(_legacyDatabasePathKey)));
+    final String? legacy = _nonEmpty(
+      prefs.getString(_prefKey(_legacyDatabasePathKey)),
+    );
 
     if (legacy != null) {
       r ??= legacy;

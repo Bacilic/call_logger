@@ -10,8 +10,7 @@ void main() {
 
   const pathA =
       r'F:\flutter_projects\call_logger\Data Base\Δοκιμές\μόνο_κλήσεις.db';
-  const pathB =
-      r'C:\Users\Bacilic\Documents\call_logger\DB\call_logger.db';
+  const pathB = r'C:\Users\Bacilic\Documents\call_logger\DB\call_logger.db';
 
   late SettingsService settings;
 
@@ -65,23 +64,20 @@ void main() {
     expect(await settings.getRecentDatabasePaths(), contains(pathA));
   });
 
-  test(
-    'αποτυχία: δεν καταγράφεται και αφαιρείται αν υπήρχε ήδη',
-    () async {
-      await settings.recordVerifiedDatabasePath(pathA);
-      await settings.recordVerifiedDatabasePath(pathB);
+  test('αποτυχία: δεν καταγράφεται και αφαιρείται αν υπήρχε ήδη', () async {
+    await settings.recordVerifiedDatabasePath(pathA);
+    await settings.recordVerifiedDatabasePath(pathB);
 
-      final outcome = await setAndVerifyDatabasePath(
-        pathA,
-        runInitChecks: failureChecks,
-      );
+    final outcome = await setAndVerifyDatabasePath(
+      pathA,
+      runInitChecks: failureChecks,
+    );
 
-      expect(outcome.ok, isFalse);
-      final recent = await settings.getRecentDatabasePaths();
-      expect(recent, isNot(contains(pathA)));
-      expect(recent, contains(pathB));
-    },
-  );
+    expect(outcome.ok, isFalse);
+    final recent = await settings.getRecentDatabasePaths();
+    expect(recent, isNot(contains(pathA)));
+    expect(recent, contains(pathB));
+  });
 
   test(
     'αποτυχία συναίνεσης αναβάθμισης σχήματος: δεν αφαιρείται από τα πρόσφατα',

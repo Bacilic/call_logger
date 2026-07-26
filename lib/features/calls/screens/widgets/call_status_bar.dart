@@ -64,91 +64,91 @@ class CallStatusBar extends ConsumerWidget {
         : null;
 
     final timerRow = showTimerAsync.when(
-          data: (showActiveTimer) {
-            Widget timerContent;
-            if (showActiveTimer) {
-              timerContent = Tooltip(
-                message:
-                    'Διπλό κλικ για προσαρμοσμένο χρόνο. Σταματήστε το χρονόμετρο',
-                child: GestureDetector(
-                  onDoubleTap: () {
-                    if (!isTimerRunning && durationSeconds > 0) {
-                      _showManualDurationDialog(context, ref);
-                    }
-                  },
-                  child: Text(
-                    _formatDuration(durationSeconds),
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      color: _durationColor(durationSeconds),
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
+      data: (showActiveTimer) {
+        Widget timerContent;
+        if (showActiveTimer) {
+          timerContent = Tooltip(
+            message:
+                'Διπλό κλικ για προσαρμοσμένο χρόνο. Σταματήστε το χρονόμετρο',
+            child: GestureDetector(
+              onDoubleTap: () {
+                if (!isTimerRunning && durationSeconds > 0) {
+                  _showManualDurationDialog(context, ref);
+                }
+              },
+              child: Text(
+                _formatDuration(durationSeconds),
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  color: _durationColor(durationSeconds),
+                  fontWeight: FontWeight.w600,
                 ),
-              );
-            } else {
-              timerContent = Tooltip(
-                message:
-                    'Διπλό κλικ για προσαρμοσμένο χρόνο. Σταματήστε το χρονόμετρο',
-                child: GestureDetector(
-                  onDoubleTap: () {
-                    if (!isTimerRunning && durationSeconds > 0) {
-                      _showManualDurationDialog(context, ref);
-                    }
-                  },
-                  child: Icon(
-                    Icons.timer_outlined,
-                    size: 28,
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
-                ),
-              );
-            }
-            return Row(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                timerContent,
-                const SizedBox(width: 8),
-                // Δεσμεύει χώρο ώστε να μη μετακινείται η διάταξη όταν εμφανίζεται το Play/Pause.
-                Visibility(
-                  visible: showPlayPause,
-                  maintainSize: true,
-                  maintainAnimation: true,
-                  maintainState: true,
-                  child: IconButton(
-                    icon: Icon(
-                      isTimerRunning ? Icons.pause : Icons.play_arrow,
-                      size: 24,
-                    ),
-                    onPressed: () {
-                      final n = ref.read(callEntryProvider.notifier);
-                      if (n.isTimerRunning) {
-                        n.stopTimer();
-                      } else {
-                        n.startTimerOnce();
-                      }
-                    },
-                    tooltip: isTimerRunning
-                        ? 'Παύση χρονομέτρου'
-                        : 'Συνέχιση χρονομέτρου',
-                  ),
-                ),
-              ],
-            );
-          },
-          loading: () => const SizedBox(
-            width: 60,
-            height: 32,
-            child: Center(
-              child: SizedBox(
-                width: 20,
-                height: 20,
-                child: CircularProgressIndicator(strokeWidth: 2),
               ),
             ),
-          ),
-          error: (e, s) => const SizedBox.shrink(),
+          );
+        } else {
+          timerContent = Tooltip(
+            message:
+                'Διπλό κλικ για προσαρμοσμένο χρόνο. Σταματήστε το χρονόμετρο',
+            child: GestureDetector(
+              onDoubleTap: () {
+                if (!isTimerRunning && durationSeconds > 0) {
+                  _showManualDurationDialog(context, ref);
+                }
+              },
+              child: Icon(
+                Icons.timer_outlined,
+                size: 28,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+          );
+        }
+        return Row(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            timerContent,
+            const SizedBox(width: 8),
+            // Δεσμεύει χώρο ώστε να μη μετακινείται η διάταξη όταν εμφανίζεται το Play/Pause.
+            Visibility(
+              visible: showPlayPause,
+              maintainSize: true,
+              maintainAnimation: true,
+              maintainState: true,
+              child: IconButton(
+                icon: Icon(
+                  isTimerRunning ? Icons.pause : Icons.play_arrow,
+                  size: 24,
+                ),
+                onPressed: () {
+                  final n = ref.read(callEntryProvider.notifier);
+                  if (n.isTimerRunning) {
+                    n.stopTimer();
+                  } else {
+                    n.startTimerOnce();
+                  }
+                },
+                tooltip: isTimerRunning
+                    ? 'Παύση χρονομέτρου'
+                    : 'Συνέχιση χρονομέτρου',
+              ),
+            ),
+          ],
         );
+      },
+      loading: () => const SizedBox(
+        width: 60,
+        height: 32,
+        child: Center(
+          child: SizedBox(
+            width: 20,
+            height: 20,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+        ),
+      ),
+      error: (e, s) => const SizedBox.shrink(),
+    );
 
     if (axis == CallStatusBarAxis.horizontal) {
       return Row(
@@ -165,10 +165,7 @@ class CallStatusBar extends ConsumerWidget {
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        ?pendingRow,
-        timerRow,
-      ],
+      children: [?pendingRow, timerRow],
     );
   }
 
@@ -323,9 +320,7 @@ class _PendingCheckboxRow extends StatelessWidget {
       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
         color: notesNonEmpty
             ? null
-            : Theme.of(
-                context,
-              ).colorScheme.onSurface.withValues(alpha: 0.38),
+            : Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.38),
       ),
       softWrap: !compact,
     );
@@ -337,7 +332,9 @@ class _PendingCheckboxRow extends StatelessWidget {
           value: isPending,
           onChanged: notesNonEmpty ? (_) => onTogglePending() : null,
           tristate: false,
-          visualDensity: compact ? VisualDensity.compact : VisualDensity.standard,
+          visualDensity: compact
+              ? VisualDensity.compact
+              : VisualDensity.standard,
           materialTapTargetSize: compact
               ? MaterialTapTargetSize.shrinkWrap
               : MaterialTapTargetSize.padded,

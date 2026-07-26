@@ -9,7 +9,8 @@ final mainShellEffectiveDestinationProvider =
       MainShellEffectiveDestinationNotifier.new,
     );
 
-class MainShellEffectiveDestinationNotifier extends Notifier<MainNavDestination> {
+class MainShellEffectiveDestinationNotifier
+    extends Notifier<MainNavDestination> {
   @override
   MainNavDestination build() => MainNavDestination.calls;
 

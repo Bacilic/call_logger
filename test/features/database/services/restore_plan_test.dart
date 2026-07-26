@@ -57,49 +57,51 @@ void main() {
     );
   });
 
-  test('αρχική διαδρομή διαθέσιμη μόνο με manifest, διαφορετική και εγγράψιμη',
-      () {
-    expect(
-      availableRestoreDestinations(
-        currentDatabasePath: current,
-        zipPath: zipPath,
-        manifest: knownManifest,
-        originalDirectoryWritable: true,
-      ),
-      contains(RestoreDestinationChoice.originalPathFromManifest),
-    );
+  test(
+    'αρχική διαδρομή διαθέσιμη μόνο με manifest, διαφορετική και εγγράψιμη',
+    () {
+      expect(
+        availableRestoreDestinations(
+          currentDatabasePath: current,
+          zipPath: zipPath,
+          manifest: knownManifest,
+          originalDirectoryWritable: true,
+        ),
+        contains(RestoreDestinationChoice.originalPathFromManifest),
+      );
 
-    expect(
-      availableRestoreDestinations(
-        currentDatabasePath: current,
-        zipPath: zipPath,
-        manifest: BackupZipManifest.unknown(),
-        originalDirectoryWritable: true,
-      ),
-      isNot(contains(RestoreDestinationChoice.originalPathFromManifest)),
-    );
+      expect(
+        availableRestoreDestinations(
+          currentDatabasePath: current,
+          zipPath: zipPath,
+          manifest: BackupZipManifest.unknown(),
+          originalDirectoryWritable: true,
+        ),
+        isNot(contains(RestoreDestinationChoice.originalPathFromManifest)),
+      );
 
-    expect(
-      availableRestoreDestinations(
-        currentDatabasePath: original,
-        zipPath: zipPath,
-        manifest: knownManifest,
-        originalDirectoryWritable: true,
-      ),
-      isNot(contains(RestoreDestinationChoice.originalPathFromManifest)),
-      reason: 'ίδια με την τρέχουσα → δεν έχει νόημα ως ξεχωριστή επιλογή',
-    );
+      expect(
+        availableRestoreDestinations(
+          currentDatabasePath: original,
+          zipPath: zipPath,
+          manifest: knownManifest,
+          originalDirectoryWritable: true,
+        ),
+        isNot(contains(RestoreDestinationChoice.originalPathFromManifest)),
+        reason: 'ίδια με την τρέχουσα → δεν έχει νόημα ως ξεχωριστή επιλογή',
+      );
 
-    expect(
-      availableRestoreDestinations(
-        currentDatabasePath: current,
-        zipPath: zipPath,
-        manifest: knownManifest,
-        originalDirectoryWritable: false,
-      ),
-      isNot(contains(RestoreDestinationChoice.originalPathFromManifest)),
-    );
-  });
+      expect(
+        availableRestoreDestinations(
+          currentDatabasePath: current,
+          zipPath: zipPath,
+          manifest: knownManifest,
+          originalDirectoryWritable: false,
+        ),
+        isNot(contains(RestoreDestinationChoice.originalPathFromManifest)),
+      );
+    },
+  );
 
   test('τρέχουσα και δίπλα στο zip είναι πάντα διαθέσιμες', () {
     final choices = availableRestoreDestinations(

@@ -1,4 +1,4 @@
-﻿import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../features/calls/models/user_model.dart';
 
@@ -19,5 +19,5 @@ class UserFormEditIntentNotifier extends Notifier<UserModel?> {
 
 final userFormEditIntentProvider =
     NotifierProvider<UserFormEditIntentNotifier, UserModel?>(
-  UserFormEditIntentNotifier.new,
-);
+      UserFormEditIntentNotifier.new,
+    );

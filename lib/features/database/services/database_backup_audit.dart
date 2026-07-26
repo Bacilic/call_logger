@@ -11,12 +11,7 @@ enum BackupAuditTrigger {
 }
 
 /// Αποτέλεσμα προσπάθειας αντιγράφου (για audit).
-enum BackupAuditOutcome {
-  success,
-  failed,
-  skipped,
-  missed,
-}
+enum BackupAuditOutcome { success, failed, skipped, missed }
 
 /// Κωδικοί παράλειψης προγραμματισμένου αντιγράφου.
 abstract final class BackupAuditSkipReason {
@@ -34,35 +29,35 @@ class DatabaseBackupAudit {
   DatabaseBackupAudit._();
 
   static String triggerLabelEl(BackupAuditTrigger trigger) => switch (trigger) {
-        BackupAuditTrigger.manual => 'χειροκίνητο',
-        BackupAuditTrigger.scheduled => 'προγραμματισμένο',
-        BackupAuditTrigger.onExit => 'κατά το κλείσιμο',
-        BackupAuditTrigger.maintenance => 'πριν από συντήρηση',
-        BackupAuditTrigger.scheduledRetry => 'επανάληψη προγράμματος',
-      };
+    BackupAuditTrigger.manual => 'χειροκίνητο',
+    BackupAuditTrigger.scheduled => 'προγραμματισμένο',
+    BackupAuditTrigger.onExit => 'κατά το κλείσιμο',
+    BackupAuditTrigger.maintenance => 'πριν από συντήρηση',
+    BackupAuditTrigger.scheduledRetry => 'επανάληψη προγράμματος',
+  };
 
   static String skipReasonMessageEl(String reason) => switch (reason) {
-        BackupAuditSkipReason.alreadyRanToday =>
-          'Παραλείφθηκε προγραμματισμένο αντίγραφο: είχε ήδη εκτελεστεί αυτόματο αντίγραφο σήμερα.',
-        BackupAuditSkipReason.noDestination =>
-          'Παραλείφθηκε προγραμματισμένο αντίγραφο: δεν έχει οριστεί φάκελος προορισμού.',
-        BackupAuditSkipReason.backupDisabled =>
-          'Παραλείφθηκε προγραμματισμένο αντίγραφο: τα αυτόματα αντίγραφα είναι απενεργοποιημένα.',
-        BackupAuditSkipReason.noSchedule =>
-          'Παραλείφθηκε προγραμματισμένο αντίγραφο: δεν έχει οριστεί πρόγραμμα ημερών και ώρας.',
-        BackupAuditSkipReason.jobRunning =>
-          'Παραλείφθηκε προγραμματισμένο αντίγραφο: άλλη εργασία αντιγράφου σε εξέλιξη.',
-        BackupAuditSkipReason.appNotRunning =>
-          'Χάθηκε προγραμματισμένο αντίγραφο: η εφαρμογή δεν ήταν ανοιχτή στη σχετική ημέρα και ώρα ή δεν ολοκληρώθηκε εγκαίρως.',
-        _ => 'Παραλείφθηκε προγραμματισμένο αντίγραφο.',
-      };
+    BackupAuditSkipReason.alreadyRanToday =>
+      'Παραλείφθηκε προγραμματισμένο αντίγραφο: είχε ήδη εκτελεστεί αυτόματο αντίγραφο σήμερα.',
+    BackupAuditSkipReason.noDestination =>
+      'Παραλείφθηκε προγραμματισμένο αντίγραφο: δεν έχει οριστεί φάκελος προορισμού.',
+    BackupAuditSkipReason.backupDisabled =>
+      'Παραλείφθηκε προγραμματισμένο αντίγραφο: τα αυτόματα αντίγραφα είναι απενεργοποιημένα.',
+    BackupAuditSkipReason.noSchedule =>
+      'Παραλείφθηκε προγραμματισμένο αντίγραφο: δεν έχει οριστεί πρόγραμμα ημερών και ώρας.',
+    BackupAuditSkipReason.jobRunning =>
+      'Παραλείφθηκε προγραμματισμένο αντίγραφο: άλλη εργασία αντιγράφου σε εξέλιξη.',
+    BackupAuditSkipReason.appNotRunning =>
+      'Χάθηκε προγραμματισμένο αντίγραφο: η εφαρμογή δεν ήταν ανοιχτή στη σχετική ημέρα και ώρα ή δεν ολοκληρώθηκε εγκαίρως.',
+    _ => 'Παραλείφθηκε προγραμματισμένο αντίγραφο.',
+  };
 
   static String _actionFor(BackupAuditOutcome outcome) => switch (outcome) {
-        BackupAuditOutcome.success => 'ΑΝΤΙΓΡΑΦΟ ΑΣΦΑΛΕΙΑΣ ΕΠΙΤΥΧΙΑ',
-        BackupAuditOutcome.failed => 'ΑΝΤΙΓΡΑΦΟ ΑΣΦΑΛΕΙΑΣ ΑΠΟΤΥΧΙΑ',
-        BackupAuditOutcome.skipped => 'ΑΝΤΙΓΡΑΦΟ ΑΣΦΑΛΕΙΑΣ ΠΑΡΑΛΕΙΦΘΗΚΕ',
-        BackupAuditOutcome.missed => 'ΑΝΤΙΓΡΑΦΟ ΑΣΦΑΛΕΙΑΣ ΧΑΘΗΚΕ',
-      };
+    BackupAuditOutcome.success => 'ΑΝΤΙΓΡΑΦΟ ΑΣΦΑΛΕΙΑΣ ΕΠΙΤΥΧΙΑ',
+    BackupAuditOutcome.failed => 'ΑΝΤΙΓΡΑΦΟ ΑΣΦΑΛΕΙΑΣ ΑΠΟΤΥΧΙΑ',
+    BackupAuditOutcome.skipped => 'ΑΝΤΙΓΡΑΦΟ ΑΣΦΑΛΕΙΑΣ ΠΑΡΑΛΕΙΦΘΗΚΕ',
+    BackupAuditOutcome.missed => 'ΑΝΤΙΓΡΑΦΟ ΑΣΦΑΛΕΙΑΣ ΧΑΘΗΚΕ',
+  };
 
   static Future<void> log({
     required BackupAuditTrigger trigger,
@@ -78,9 +73,7 @@ class DatabaseBackupAudit {
       final user = await AuditService.performingUser(db);
       final resolvedDetails = details?.trim().isNotEmpty == true
           ? details!.trim()
-          : (skipReason != null
-              ? skipReasonMessageEl(skipReason)
-              : null);
+          : (skipReason != null ? skipReasonMessageEl(skipReason) : null);
       final newValues = <String, dynamic>{
         'trigger': trigger.name,
         'trigger_el': triggerLabelEl(trigger),
@@ -110,47 +103,44 @@ class DatabaseBackupAudit {
     String? message,
     String? destination,
     String? outputPath,
-  }) =>
-      log(
-        trigger: trigger,
-        outcome: success ? BackupAuditOutcome.success : BackupAuditOutcome.failed,
-        details: message,
-        destination: destination,
-        outputPath: outputPath,
-      );
+  }) => log(
+    trigger: trigger,
+    outcome: success ? BackupAuditOutcome.success : BackupAuditOutcome.failed,
+    details: message,
+    destination: destination,
+    outputPath: outputPath,
+  );
 
   static Future<void> logScheduledSkip({
     required String skipReason,
     String? destination,
     String? scheduledTime,
     Map<String, dynamic>? extra,
-  }) =>
-      log(
-        trigger: BackupAuditTrigger.scheduled,
-        outcome: BackupAuditOutcome.skipped,
-        skipReason: skipReason,
-        destination: destination,
-        extra: {
-          if (scheduledTime != null && scheduledTime.trim().isNotEmpty)
-            'scheduled_time': scheduledTime.trim(),
-          ...?extra,
-        },
-      );
+  }) => log(
+    trigger: BackupAuditTrigger.scheduled,
+    outcome: BackupAuditOutcome.skipped,
+    skipReason: skipReason,
+    destination: destination,
+    extra: {
+      if (scheduledTime != null && scheduledTime.trim().isNotEmpty)
+        'scheduled_time': scheduledTime.trim(),
+      ...?extra,
+    },
+  );
 
   static Future<void> logScheduledMissed({
     required DateTime missedDeadline,
     String? destination,
     String? scheduledTime,
-  }) =>
-      log(
-        trigger: BackupAuditTrigger.scheduled,
-        outcome: BackupAuditOutcome.missed,
-        skipReason: BackupAuditSkipReason.appNotRunning,
-        destination: destination,
-        extra: {
-          'missed_deadline': missedDeadline.toIso8601String(),
-          if (scheduledTime != null && scheduledTime.trim().isNotEmpty)
-            'scheduled_time': scheduledTime.trim(),
-        },
-      );
+  }) => log(
+    trigger: BackupAuditTrigger.scheduled,
+    outcome: BackupAuditOutcome.missed,
+    skipReason: BackupAuditSkipReason.appNotRunning,
+    destination: destination,
+    extra: {
+      'missed_deadline': missedDeadline.toIso8601String(),
+      if (scheduledTime != null && scheduledTime.trim().isNotEmpty)
+        'scheduled_time': scheduledTime.trim(),
+    },
+  );
 }

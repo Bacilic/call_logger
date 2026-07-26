@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 import 'dart:io';
 
 import 'package:call_logger/core/services/gemini_ticket_service.dart';
@@ -69,7 +69,9 @@ void main() {
 
     test('model για TimeoutException και κενή/άκυρη απάντηση', () {
       expect(
-        GeminiException.classifyFailureScope(error: TimeoutException('timeout')),
+        GeminiException.classifyFailureScope(
+          error: TimeoutException('timeout'),
+        ),
         GeminiFailureScope.model,
       );
       expect(

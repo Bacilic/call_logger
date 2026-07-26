@@ -16,7 +16,9 @@ void main() {
     setUpAll(() async {
       initSqfliteFfiForTests();
       final dir = await Directory.systemTemp.createTemp('equip_executor_test_');
-      await DatabaseHelper.bindTestDatabaseFile('${dir.path}/equip_executor.db');
+      await DatabaseHelper.bindTestDatabaseFile(
+        '${dir.path}/equip_executor.db',
+      );
       db = await DatabaseHelper.instance.database;
     });
 
@@ -38,9 +40,9 @@ void main() {
     });
 
     Map<String, dynamic> equipmentRow(String code) => {
-          'code_equipment': code,
-          'is_deleted': 0,
-        };
+      'code_equipment': code,
+      'is_deleted': 0,
+    };
 
     test(
       'atomicity: failure μέσα σε εξωτερική transaction κάνει rollback insertEquipmentFromMap',
@@ -80,11 +82,7 @@ void main() {
               equipmentRow(code),
               executor: txn,
             );
-            await repo.replaceEquipmentUsers(
-              id,
-              [userId],
-              executor: txn,
-            );
+            await repo.replaceEquipmentUsers(id, [userId], executor: txn);
             throw StateError(
               'προσομοίωση σφάλματος μετά το replaceEquipmentUsers',
             );
@@ -114,16 +112,10 @@ void main() {
             equipmentRow(code),
             executor: txn,
           );
-          await repo.replaceEquipmentUsers(
-            id,
-            [userId],
-            executor: txn,
-          );
-          await repo.updateEquipment(
-            id,
-            {'notes': 'ενημέρωση εντός txn'},
-            executor: txn,
-          );
+          await repo.replaceEquipmentUsers(id, [userId], executor: txn);
+          await repo.updateEquipment(id, {
+            'notes': 'ενημέρωση εντός txn',
+          }, executor: txn);
         });
 
         final equipRows = await db.query(
@@ -152,10 +144,7 @@ void main() {
         );
         expect(id, greaterThan(0));
 
-        final updated = await repo.updateEquipment(
-          id,
-          {'notes': 'σημείωση'},
-        );
+        final updated = await repo.updateEquipment(id, {'notes': 'σημείωση'});
         expect(updated, 1);
 
         final row = await db.query(
@@ -167,40 +156,37 @@ void main() {
       },
     );
 
-    test(
-      'regression: replace/link/unlink χωρίς executor',
-      () async {
-        final id = await repo.insertEquipmentFromMap(equipmentRow('PC-LINKS'));
-        await repo.replaceEquipmentUsers(id, [userId]);
-        expect(
-          await db.query(
-            'user_equipment',
-            where: 'equipment_id = ?',
-            whereArgs: [id],
-          ),
-          hasLength(1),
-        );
+    test('regression: replace/link/unlink χωρίς executor', () async {
+      final id = await repo.insertEquipmentFromMap(equipmentRow('PC-LINKS'));
+      await repo.replaceEquipmentUsers(id, [userId]);
+      expect(
+        await db.query(
+          'user_equipment',
+          where: 'equipment_id = ?',
+          whereArgs: [id],
+        ),
+        hasLength(1),
+      );
 
-        await repo.unlinkUserFromEquipment(userId, id);
-        expect(
-          await db.query(
-            'user_equipment',
-            where: 'equipment_id = ?',
-            whereArgs: [id],
-          ),
-          isEmpty,
-        );
+      await repo.unlinkUserFromEquipment(userId, id);
+      expect(
+        await db.query(
+          'user_equipment',
+          where: 'equipment_id = ?',
+          whereArgs: [id],
+        ),
+        isEmpty,
+      );
 
-        await repo.linkUserToEquipment(userId, id);
-        expect(
-          await db.query(
-            'user_equipment',
-            where: 'equipment_id = ?',
-            whereArgs: [id],
-          ),
-          hasLength(1),
-        );
-      },
-    );
+      await repo.linkUserToEquipment(userId, id);
+      expect(
+        await db.query(
+          'user_equipment',
+          where: 'equipment_id = ?',
+          whereArgs: [id],
+        ),
+        hasLength(1),
+      );
+    });
   });
 }

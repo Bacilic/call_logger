@@ -63,12 +63,9 @@ class DepartmentPaletteStore extends ChangeNotifier {
 
   Future<void> _persist() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setStringList(
-      _prefKey(_prefsKeySlots),
-      [
-        for (final c in _slots) c == null ? '' : colorToDepartmentHex(c),
-      ],
-    );
+    await prefs.setStringList(_prefKey(_prefsKeySlots), [
+      for (final c in _slots) c == null ? '' : colorToDepartmentHex(c),
+    ]);
   }
 
   /// Πρώτη κενή θέση (0–7) ή null αν η παλέτα είναι πλήρη.

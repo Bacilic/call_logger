@@ -150,7 +150,9 @@ void main() {
   });
 
   group('showLansweeperDuplicateTicketDialog', () {
-    testWidgets('count=1: «άλλη κλήση» και «Πρόσθεση» -> proceed', (tester) async {
+    testWidgets('count=1: «άλλη κλήση» και «Πρόσθεση» -> proceed', (
+      tester,
+    ) async {
       DuplicateTicketAction? result;
 
       await _pumpDialogHost(
@@ -175,7 +177,9 @@ void main() {
       expect(result, DuplicateTicketAction.proceed);
     });
 
-    testWidgets('count=3: «άλλες κλήσεις» και «Αλλαγή id» -> changeId', (tester) async {
+    testWidgets('count=3: «άλλες κλήσεις» και «Αλλαγή id» -> changeId', (
+      tester,
+    ) async {
       DuplicateTicketAction? result;
 
       await _pumpDialogHost(
@@ -288,7 +292,9 @@ void main() {
   });
 
   group('showLansweeperManualMarkDialog', () {
-    testWidgets('«Αποθήκευση» δίνει trimmed ticketId και raw comment', (tester) async {
+    testWidgets('«Αποθήκευση» δίνει trimmed ticketId και raw comment', (
+      tester,
+    ) async {
       ({String ticketId, String comment})? result;
 
       await _pumpDialogHost(
@@ -335,34 +341,40 @@ void main() {
   });
 
   group('showLansweeperFailureReportDialog', () {
-    testWidgets('εμφανίζει reportText και «Αντιγραφή αναφοράς» καλεί onCopied', (tester) async {
-      var copied = false;
-      var completed = false;
+    testWidgets(
+      'εμφανίζει reportText και «Αντιγραφή αναφοράς» καλεί onCopied',
+      (tester) async {
+        var copied = false;
+        var completed = false;
 
-      await _pumpDialogHost(
-        tester,
-        onOpen: (context) async {
-          await showLansweeperFailureReportDialog(
-            context,
-            reportText: 'Αναλυτική αναφορά σφάλματος',
-            onCopied: () => copied = true,
-          );
-          completed = true;
-        },
-      );
-      await _openDialog(tester);
+        await _pumpDialogHost(
+          tester,
+          onOpen: (context) async {
+            await showLansweeperFailureReportDialog(
+              context,
+              reportText: 'Αναλυτική αναφορά σφάλματος',
+              onCopied: () => copied = true,
+            );
+            completed = true;
+          },
+        );
+        await _openDialog(tester);
 
-      expect(find.textContaining('Αναλυτική αναφορά σφάλματος'), findsOneWidget);
+        expect(
+          find.textContaining('Αναλυτική αναφορά σφάλματος'),
+          findsOneWidget,
+        );
 
-      await tester.runAsync(() async {
-        await tester.tap(_dialogButton('Αντιγραφή αναφοράς'));
-        await Future<void>.delayed(const Duration(milliseconds: 200));
-      });
-      await tester.pump();
+        await tester.runAsync(() async {
+          await tester.tap(_dialogButton('Αντιγραφή αναφοράς'));
+          await Future<void>.delayed(const Duration(milliseconds: 200));
+        });
+        await tester.pump();
 
-      expect(copied, isTrue);
-      expect(completed, isFalse);
-    });
+        expect(copied, isTrue);
+        expect(completed, isFalse);
+      },
+    );
 
     testWidgets('«Κλείσιμο» ολοκληρώνει το Future', (tester) async {
       var completed = false;

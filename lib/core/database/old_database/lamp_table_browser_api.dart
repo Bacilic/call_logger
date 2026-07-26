@@ -14,10 +14,7 @@ class LampTableBrowserApi {
   final LampDatabaseProvider _provider = LampDatabaseProvider.instance;
 
   Future<List<String>> getTableNames(String path) async {
-    final db = await _provider.open(
-      path.trim(),
-      mode: LampDatabaseMode.read,
-    );
+    final db = await _provider.open(path.trim(), mode: LampDatabaseMode.read);
     final r = await db.rawQuery(
       "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name",
     );
@@ -25,10 +22,7 @@ class LampTableBrowserApi {
   }
 
   Future<int> getTableRowCount(String path, String tableName) async {
-    final db = await _provider.open(
-      path.trim(),
-      mode: LampDatabaseMode.read,
-    );
+    final db = await _provider.open(path.trim(), mode: LampDatabaseMode.read);
     final q = await db.rawQuery(
       'SELECT COUNT(*) AS c FROM ${lampSqliteQuoteIdentifier(tableName)}',
     );
@@ -66,10 +60,7 @@ class LampTableBrowserApi {
     String tableName, {
     int rowLimit = 200,
   }) async {
-    final db = await _provider.open(
-      path.trim(),
-      mode: LampDatabaseMode.read,
-    );
+    final db = await _provider.open(path.trim(), mode: LampDatabaseMode.read);
     final quoted = lampSqliteQuoteIdentifier(tableName);
     final info = await db.rawQuery('PRAGMA table_info($quoted)');
     final columns = (info
@@ -79,9 +70,7 @@ class LampTableBrowserApi {
     if (columns.isEmpty) {
       return const TablePreviewResult(columns: [], rows: []);
     }
-    final rows = await db.rawQuery(
-      'SELECT * FROM $quoted LIMIT $rowLimit',
-    );
+    final rows = await db.rawQuery('SELECT * FROM $quoted LIMIT $rowLimit');
     return TablePreviewResult(columns: columns, rows: rows);
   }
 }

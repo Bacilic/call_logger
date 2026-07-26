@@ -1,4 +1,4 @@
-﻿import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../database/old_database/lamp_old_db_validator.dart';
 import '../database/old_database/lamp_settings_store.dart';
@@ -35,8 +35,7 @@ class LampReadPathHealthNotifier extends AsyncNotifier<LampOldDbCheckResult?> {
     state = const AsyncLoading();
     state = await AsyncValue.guard(() async {
       final readPath = pathOverride ?? await _settings.getReadPath();
-      final outputPath =
-          outputPathOverride ?? await _settings.getOutputPath();
+      final outputPath = outputPathOverride ?? await _settings.getOutputPath();
       final excelPath = excelPathOverride ?? await _settings.getExcelPath();
       return _validator.validateReadPath(
         readPath,
@@ -49,11 +48,12 @@ class LampReadPathHealthNotifier extends AsyncNotifier<LampOldDbCheckResult?> {
 
 final lampReadPathHealthProvider =
     AsyncNotifierProvider<LampReadPathHealthNotifier, LampOldDbCheckResult?>(
-  LampReadPathHealthNotifier.new,
-);
+      LampReadPathHealthNotifier.new,
+    );
 
 /// Έλεγχος διαδρομής .db εξόδου (import Excel) — ίδιο μοτίβο με ανάγνωση.
-class LampOutputPathHealthNotifier extends AsyncNotifier<LampOldDbCheckResult?> {
+class LampOutputPathHealthNotifier
+    extends AsyncNotifier<LampOldDbCheckResult?> {
   static final LampSettingsStore _settings = LampSettingsStore();
   static final LampOldDbValidator _validator = LampOldDbValidator();
 
@@ -74,8 +74,8 @@ class LampOutputPathHealthNotifier extends AsyncNotifier<LampOldDbCheckResult?> 
 
 final lampOutputPathHealthProvider =
     AsyncNotifierProvider<LampOutputPathHealthNotifier, LampOldDbCheckResult?>(
-  LampOutputPathHealthNotifier.new,
-);
+      LampOutputPathHealthNotifier.new,
+    );
 
 final lampShowNavWarningProvider = Provider<bool>((ref) {
   final async = ref.watch(lampReadPathHealthProvider);

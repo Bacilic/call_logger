@@ -7,8 +7,7 @@ void main() {
 
   const pathA =
       r'F:\flutter_projects\call_logger\Data Base\Δοκιμές\μόνο_κλήσεις.db';
-  const pathB =
-      r'C:\Users\Bacilic\Documents\call_logger\DB\call_logger.db';
+  const pathB = r'C:\Users\Bacilic\Documents\call_logger\DB\call_logger.db';
   const pathC = r'E:\call logger\data\call_logger.db';
   const pathD = r'\\server\share\call_logger.db';
 
@@ -59,7 +58,10 @@ void main() {
 
       final recent = await settings.getRecentDatabasePaths();
       expect(recent.first, lower);
-      expect(recent.where((p) => p.toLowerCase() == pathA.toLowerCase()).length, 1);
+      expect(
+        recent.where((p) => p.toLowerCase() == pathA.toLowerCase()).length,
+        1,
+      );
       expect(recent, contains(pathB));
     },
   );

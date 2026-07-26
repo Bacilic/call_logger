@@ -46,7 +46,9 @@ class VersionChip extends ConsumerWidget {
               color: Colors.transparent,
               child: InkWell(
                 onTap: () {
-                  ref.read(mainNavRequestProvider.notifier).request(
+                  ref
+                      .read(mainNavRequestProvider.notifier)
+                      .request(
                         const MainNavRequest(
                           destination: MainNavDestination.debugScenarios,
                         ),
@@ -54,8 +56,10 @@ class VersionChip extends ConsumerWidget {
                 },
                 borderRadius: BorderRadius.circular(8),
                 child: Padding(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
                   child: Icon(
                     Icons.bug_report_outlined,
                     size: 20,
@@ -89,8 +93,7 @@ class VersionChip extends ConsumerWidget {
             return Tooltip(
               message: versionChipTooltip(
                 version,
-                availableUpdateVersion:
-                    updateAvailable ? latestVersion : null,
+                availableUpdateVersion: updateAvailable ? latestVersion : null,
               ),
               child: Material(
                 color: Colors.transparent,
@@ -112,16 +115,15 @@ class VersionChip extends ConsumerWidget {
                       children: [
                         Text(
                           label,
-                          style: Theme.of(context)
-                              .textTheme
-                              .labelMedium
+                          style: Theme.of(context).textTheme.labelMedium
                               ?.copyWith(
-                            color: scheme.primary,
-                            fontWeight: FontWeight.w600,
-                            decoration: TextDecoration.underline,
-                            decorationColor:
-                                scheme.primary.withValues(alpha: 0.5),
-                          ),
+                                color: scheme.primary,
+                                fontWeight: FontWeight.w600,
+                                decoration: TextDecoration.underline,
+                                decorationColor: scheme.primary.withValues(
+                                  alpha: 0.5,
+                                ),
+                              ),
                           textAlign: TextAlign.center,
                         ),
                         if (showBadge)

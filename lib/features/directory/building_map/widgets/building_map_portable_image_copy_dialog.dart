@@ -15,11 +15,11 @@ class PortableImageCopyDialogResult {
 
   /// Αντιγραφή στο `maps_images/` με το [fileName].
   const PortableImageCopyDialogResult.transfer({required String fileName})
-      : this._(copyToPortable: true, fileName: fileName);
+    : this._(copyToPortable: true, fileName: fileName);
 
   /// Χρήση της εξωτερικής διαδρομής χωρίς αντιγραφή.
   const PortableImageCopyDialogResult.useExternalPath()
-      : this._(copyToPortable: false);
+    : this._(copyToPortable: false);
 
   final bool copyToPortable;
   final String? fileName;
@@ -31,9 +31,8 @@ Future<PortableImageCopyDialogResult?> showBuildingMapPortableImageCopyDialog(
 }) {
   return showDialog<PortableImageCopyDialogResult>(
     context: context,
-    builder: (ctx) => _BuildingMapPortableImageCopyDialog(
-      sourceImagePath: sourceImagePath,
-    ),
+    builder: (ctx) =>
+        _BuildingMapPortableImageCopyDialog(sourceImagePath: sourceImagePath),
   );
 }
 
@@ -120,7 +119,8 @@ class _BuildingMapPortableImageCopyDialogState
     if (await File(destPath).exists()) {
       setState(() {
         _submitting = false;
-        _validationError = 'Υπάρχει ήδη αρχείο με το όνομα «$fileName» στο maps_images.';
+        _validationError =
+            'Υπάρχει ήδη αρχείο με το όνομα «$fileName» στο maps_images.';
       });
       return;
     }
@@ -134,12 +134,16 @@ class _BuildingMapPortableImageCopyDialogState
 
   void _useExternalPath() {
     if (_submitting) return;
-    Navigator.pop(context, const PortableImageCopyDialogResult.useExternalPath());
+    Navigator.pop(
+      context,
+      const PortableImageCopyDialogResult.useExternalPath(),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final renameHint = _originalExtension == '.png' || _originalExtension == '.jpg'
+    final renameHint =
+        _originalExtension == '.png' || _originalExtension == '.jpg'
         ? 'π.χ. ${p.basenameWithoutExtension(_originalFileName)}'
         : 'π.χ. plan_${p.basenameWithoutExtension(_originalFileName)}';
 
@@ -160,7 +164,9 @@ class _BuildingMapPortableImageCopyDialogState
               contentPadding: EdgeInsets.zero,
               controlAffinity: ListTileControlAffinity.leading,
               value: _keepOriginalName,
-              onChanged: _submitting ? null : (v) => _setKeepOriginalName(v ?? false),
+              onChanged: _submitting
+                  ? null
+                  : (v) => _setKeepOriginalName(v ?? false),
               title: Text('Διατήρηση ονόματος «$_originalFileName»'),
             ),
             CheckboxListTile(

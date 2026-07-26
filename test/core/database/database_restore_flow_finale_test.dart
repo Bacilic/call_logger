@@ -33,7 +33,9 @@ class _FakeHooks implements DatabasePathSwitchHooks {
   }
 
   @override
-  Future<void> reportVerificationFailure(DatabaseInitRunnerResult runner) async {
+  Future<void> reportVerificationFailure(
+    DatabaseInitRunnerResult runner,
+  ) async {
     calls.add('reportVerificationFailure');
     reportCallCount++;
     reportedRunner = runner;
@@ -67,75 +69,73 @@ void main() {
 
   Future<void> closeOk() async {}
 
-  test(
-    'επιτυχής επαναφορά: applySwitchToSession καλείται ακριβώς μία φορά '
-    'με τη διαδρομή της επαναφερμένης βάσης',
-    () async {
-      final hooks = _FakeHooks();
-      final runner = DatabaseInitRunnerResult(
-        result: DatabaseInitResult.success(restoredPath),
-        isLocalDevMode: false,
-      );
+  test('επιτυχής επαναφορά: applySwitchToSession καλείται ακριβώς μία φορά '
+      'με τη διαδρομή της επαναφερμένης βάσης', () async {
+    final hooks = _FakeHooks();
+    final runner = DatabaseInitRunnerResult(
+      result: DatabaseInitResult.success(restoredPath),
+      isLocalDevMode: false,
+    );
 
-      final ok = await _orchestrateRestoreFinale(
-        restore: () => DatabaseZipPickRestore.restoreToTarget(
-          zipPath,
-          targetDatabasePath: targetPath,
-          closeConnection: closeOk,
-          runRestore: (path, {
-            required String targetDatabasePath,
-            String? databaseEntryName,
-          }) async {
-            expect(targetDatabasePath, targetPath);
-            return const DatabaseRestoreResult(
-              success: true,
-              databasePath: restoredPath,
-            );
-          },
-        ),
-        hooks: hooks,
-        verify: (_) async => (ok: true, runner: runner),
-      );
+    final ok = await _orchestrateRestoreFinale(
+      restore: () => DatabaseZipPickRestore.restoreToTarget(
+        zipPath,
+        targetDatabasePath: targetPath,
+        closeConnection: closeOk,
+        runRestore:
+            (
+              path, {
+              required String targetDatabasePath,
+              String? databaseEntryName,
+            }) async {
+              expect(targetDatabasePath, targetPath);
+              return const DatabaseRestoreResult(
+                success: true,
+                databasePath: restoredPath,
+              );
+            },
+      ),
+      hooks: hooks,
+      verify: (_) async => (ok: true, runner: runner),
+    );
 
-      expect(ok, isTrue);
-      expect(hooks.applyCallCount, 1);
-      expect(hooks.appliedPath, restoredPath);
-      expect(hooks.reportCallCount, 0);
-    },
-  );
+    expect(ok, isTrue);
+    expect(hooks.applyCallCount, 1);
+    expect(hooks.appliedPath, restoredPath);
+    expect(hooks.reportCallCount, 0);
+  });
 
-  test(
-    'αποτυχία επαναφοράς: applySwitchToSession δεν καλείται ποτέ',
-    () async {
-      final hooks = _FakeHooks();
-      final runner = DatabaseInitRunnerResult(
-        result: DatabaseInitResult.success(restoredPath),
-        isLocalDevMode: false,
-      );
+  test('αποτυχία επαναφοράς: applySwitchToSession δεν καλείται ποτέ', () async {
+    final hooks = _FakeHooks();
+    final runner = DatabaseInitRunnerResult(
+      result: DatabaseInitResult.success(restoredPath),
+      isLocalDevMode: false,
+    );
 
-      final ok = await _orchestrateRestoreFinale(
-        restore: () => DatabaseZipPickRestore.restoreToTarget(
-          zipPath,
-          targetDatabasePath: targetPath,
-          closeConnection: closeOk,
-          runRestore: (path, {
-            required String targetDatabasePath,
-            String? databaseEntryName,
-          }) async {
-            return const DatabaseRestoreResult(
-              success: false,
-              message: 'Αποτυχία επαναφοράς από zip.',
-            );
-          },
-        ),
-        hooks: hooks,
-        verify: (_) async => (ok: true, runner: runner),
-      );
+    final ok = await _orchestrateRestoreFinale(
+      restore: () => DatabaseZipPickRestore.restoreToTarget(
+        zipPath,
+        targetDatabasePath: targetPath,
+        closeConnection: closeOk,
+        runRestore:
+            (
+              path, {
+              required String targetDatabasePath,
+              String? databaseEntryName,
+            }) async {
+              return const DatabaseRestoreResult(
+                success: false,
+                message: 'Αποτυχία επαναφοράς από zip.',
+              );
+            },
+      ),
+      hooks: hooks,
+      verify: (_) async => (ok: true, runner: runner),
+    );
 
-      expect(ok, isFalse);
-      expect(hooks.applyCallCount, 0);
-      expect(hooks.reportCallCount, 0);
-      expect(hooks.calls, isEmpty);
-    },
-  );
+    expect(ok, isFalse);
+    expect(hooks.applyCallCount, 0);
+    expect(hooks.reportCallCount, 0);
+    expect(hooks.calls, isEmpty);
+  });
 }

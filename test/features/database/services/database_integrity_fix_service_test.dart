@@ -44,10 +44,15 @@ void main() {
         'last_name': 'Y',
         'is_deleted': 1,
       });
-      final phoneId = await db.insert('phones', {'number': '1111', 'is_deleted': 0});
+      final phoneId = await db.insert('phones', {
+        'number': '1111',
+        'is_deleted': 0,
+      });
       await db.insert('user_phones', {'user_id': userId, 'phone_id': phoneId});
 
-      final before = await checkService.runCheck(IntegrityCheckType.orphanUserPhones);
+      final before = await checkService.runCheck(
+        IntegrityCheckType.orphanUserPhones,
+      );
       expect(before, hasLength(1));
 
       final result = await fixService.applyFix(
@@ -56,7 +61,9 @@ void main() {
       );
       expect(result.success, isTrue);
 
-      final after = await checkService.runCheck(IntegrityCheckType.orphanUserPhones);
+      final after = await checkService.runCheck(
+        IntegrityCheckType.orphanUserPhones,
+      );
       expect(after, isEmpty);
 
       final junction = await db.query(
@@ -173,7 +180,11 @@ void main() {
       );
       expect(result.success, isTrue);
 
-      final row = await db.query('departments', where: 'id = ?', whereArgs: [deptId]);
+      final row = await db.query(
+        'departments',
+        where: 'id = ?',
+        whereArgs: [deptId],
+      );
       expect(row.first['name_key'], mine.first.context['expectedNameKey']);
     });
 
@@ -202,7 +213,11 @@ void main() {
       );
       expect(result.success, isTrue);
 
-      final row = await db.query('audit_log', where: 'id = ?', whereArgs: [auditId]);
+      final row = await db.query(
+        'audit_log',
+        where: 'id = ?',
+        whereArgs: [auditId],
+      );
       final st = row.first['search_text'] as String?;
       expect(st, isNotNull);
       expect(st!.trim(), isNotEmpty);
@@ -286,8 +301,14 @@ void main() {
         'last_name': 'Two',
         'is_deleted': 1,
       });
-      final phone1 = await db.insert('phones', {'number': '9001', 'is_deleted': 0});
-      final phone2 = await db.insert('phones', {'number': '9002', 'is_deleted': 0});
+      final phone1 = await db.insert('phones', {
+        'number': '9001',
+        'is_deleted': 0,
+      });
+      final phone2 = await db.insert('phones', {
+        'number': '9002',
+        'is_deleted': 0,
+      });
       await db.insert('user_phones', {'user_id': userId1, 'phone_id': phone1});
       await db.insert('user_phones', {'user_id': userId2, 'phone_id': phone2});
 
@@ -424,7 +445,11 @@ void main() {
       );
       expect(result.success, isTrue);
 
-      final row = await db.query('phones', where: 'id = ?', whereArgs: [phoneId]);
+      final row = await db.query(
+        'phones',
+        where: 'id = ?',
+        whereArgs: [phoneId],
+      );
       expect(row.first['department_id'], isNull);
 
       final after = await checkService.runCheck(
@@ -508,7 +533,11 @@ void main() {
       );
       expect(result.success, isTrue);
 
-      final row = await db.query('departments', where: 'id = ?', whereArgs: [deptId]);
+      final row = await db.query(
+        'departments',
+        where: 'id = ?',
+        whereArgs: [deptId],
+      );
       expect(row.first['floor_id'], isNull);
       expect(row.first['map_floor'], isNull);
       expect(row.first['map_x'], 0.0);

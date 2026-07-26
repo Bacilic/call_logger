@@ -26,10 +26,7 @@ abstract final class VncRemoteTarget {
   /// - 3..6 ψηφία -> `prefix + code`
   /// - host που ξεκινά με γράμμα -> 그대로 (χωρίς prefix)
   /// αλλιώς null.
-  static String? resolveValidVncHost(
-    String raw, {
-    String prefix = 'PC',
-  }) {
+  static String? resolveValidVncHost(String raw, {String prefix = 'PC'}) {
     final t = raw.trim();
     if (t.isEmpty) return null;
     final ip = tryParseIpv4Host(t);

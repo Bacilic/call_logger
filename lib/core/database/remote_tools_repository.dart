@@ -247,10 +247,7 @@ class RemoteToolsRepository {
   }
 
   Future<void> _compactSortOrderNonDeletedInTransaction(Transaction txn) async {
-    final rows = await txn.query(
-      'remote_tools',
-      where: 'deleted_at IS NULL',
-    );
+    final rows = await txn.query('remote_tools', where: 'deleted_at IS NULL');
     if (rows.isEmpty) return;
     final tools = rows.map(RemoteTool.fromMap).toList()
       ..sort(_compareSortOrder);

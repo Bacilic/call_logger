@@ -90,8 +90,9 @@ class DatabaseStatsService {
     DateTime? lastBackup;
 
     try {
-      final raw = await SettingsRepository(db)
-          .getSetting(DatabaseBackupSettings.appSettingsKey);
+      final raw = await SettingsRepository(
+        db,
+      ).getSetting(DatabaseBackupSettings.appSettingsKey);
       final settings = DatabaseBackupSettings.fromJsonString(raw);
       lastBackup = await latestBackupFileModified(
         destinationDirectory: settings.destinationDirectory,

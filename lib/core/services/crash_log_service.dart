@@ -10,7 +10,7 @@ class CrashLogService {
     DateTime Function()? now,
     this._maxDetailedRepeats = 20,
     this._repeatSummaryInterval = 100,
-  })  : _now = now ?? DateTime.now;
+  }) : _now = now ?? DateTime.now;
 
   static const String sessionLockFileName = 'session.lock';
   static const String abnormalTerminationMessage =
@@ -83,11 +83,7 @@ class CrashLogService {
     } catch (_) {}
   }
 
-  void logError(
-    Object error,
-    StackTrace stack, {
-    required bool fatal,
-  }) {
+  void logError(Object error, StackTrace stack, {required bool fatal}) {
     try {
       _logErrorInternal(error, stack, fatal: fatal);
     } catch (_) {}
@@ -158,7 +154,8 @@ class CrashLogService {
 
   String _formatHeader({required bool fatal}) {
     final now = _now();
-    final stamp = '${now.year.toString().padLeft(4, '0')}-'
+    final stamp =
+        '${now.year.toString().padLeft(4, '0')}-'
         '${now.month.toString().padLeft(2, '0')}-'
         '${now.day.toString().padLeft(2, '0')} '
         '${now.hour.toString().padLeft(2, '0')}:'
@@ -169,9 +166,7 @@ class CrashLogService {
   }
 
   void _appendToDailyLog(String chunk) {
-    final file = File(
-      p.join(logsDirectory, dailyLogFileName(_now())),
-    );
+    final file = File(p.join(logsDirectory, dailyLogFileName(_now())));
     file.writeAsStringSync(chunk, mode: FileMode.append, flush: true);
   }
 
@@ -181,10 +176,12 @@ class CrashLogService {
 
     final files = await dir
         .list()
-        .where((entity) =>
-            entity is File &&
-            p.basename(entity.path).startsWith('errors_') &&
-            p.basename(entity.path).endsWith('.log'))
+        .where(
+          (entity) =>
+              entity is File &&
+              p.basename(entity.path).startsWith('errors_') &&
+              p.basename(entity.path).endsWith('.log'),
+        )
         .cast<File>()
         .toList();
     if (files.length <= retentionCount) return;

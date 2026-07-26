@@ -1,13 +1,18 @@
-﻿import 'package:call_logger/core/utils/linkable_text_parser.dart';
+import 'package:call_logger/core/utils/linkable_text_parser.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   group('LinkableTextParser', () {
     test('parses plain text only', () {
-      final segments = LinkableTextParser.parse('Απλό κείμενο χωρίς συνδέσμους.');
+      final segments = LinkableTextParser.parse(
+        'Απλό κείμενο χωρίς συνδέσμους.',
+      );
       expect(segments, hasLength(1));
       expect(segments.single, isA<PlainLinkableTextSegment>());
-      expect((segments.single as PlainLinkableTextSegment).text, 'Απλό κείμενο χωρίς συνδέσμους.');
+      expect(
+        (segments.single as PlainLinkableTextSegment).text,
+        'Απλό κείμενο χωρίς συνδέσμους.',
+      );
     });
 
     test('parses https URL', () {
@@ -31,7 +36,9 @@ void main() {
     });
 
     test('parses UNC path', () {
-      final segments = LinkableTextParser.parse(r'Φάκελος: \\gnk.local\Departments');
+      final segments = LinkableTextParser.parse(
+        r'Φάκελος: \\gnk.local\Departments',
+      );
       final link = segments.whereType<LinkLinkableTextSegment>().single;
       expect(link.kind, LinkableTextKind.uncPath);
       expect(link.text, r'\\gnk.local\Departments');
@@ -45,7 +52,9 @@ void main() {
     });
 
     test('does not include trailing prose in local path', () {
-      final segments = LinkableTextParser.parse(r'Άνοιξε E:\Winget Update και δες');
+      final segments = LinkableTextParser.parse(
+        r'Άνοιξε E:\Winget Update και δες',
+      );
       final link = segments.whereType<LinkLinkableTextSegment>().single;
       expect(link.text, r'E:\Winget Update');
       expect(segments.last, isA<PlainLinkableTextSegment>());

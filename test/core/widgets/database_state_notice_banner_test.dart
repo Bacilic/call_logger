@@ -102,7 +102,9 @@ void main() {
       findsOneWidget,
     );
 
-    await tester.tap(find.byKey(const ValueKey('database_state_notice_dismiss')));
+    await tester.tap(
+      find.byKey(const ValueKey('database_state_notice_dismiss')),
+    );
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
 
@@ -113,31 +115,30 @@ void main() {
     await _flushPendingTimers(tester);
   });
 
-  testWidgets(
-    'δεν εμφανίζεται όταν η αποθηκευμένη ταυτότητα ταιριάζει',
-    (tester) async {
-      final path = (await DatabaseHelper.instance.database).path;
-      final profile = _oldProfile();
-      final modifiedMs = File(path).lastModifiedSync().millisecondsSinceEpoch;
-      final identity = databaseContentIdentity(
-        dbPath: path,
-        latestCallDate: profile.latestCallDate,
-        callCount: profile.callCount,
-        userCount: profile.userCount,
-        phoneCount: profile.phoneCount,
-        equipmentCount: profile.equipmentCount,
-        departmentCount: profile.departmentCount,
-        fileModifiedMs: modifiedMs,
-      );
-      await SettingsService().setAcknowledgedDatabaseNoticeIdentity(identity);
+  testWidgets('δεν εμφανίζεται όταν η αποθηκευμένη ταυτότητα ταιριάζει', (
+    tester,
+  ) async {
+    final path = (await DatabaseHelper.instance.database).path;
+    final profile = _oldProfile();
+    final modifiedMs = File(path).lastModifiedSync().millisecondsSinceEpoch;
+    final identity = databaseContentIdentity(
+      dbPath: path,
+      latestCallDate: profile.latestCallDate,
+      callCount: profile.callCount,
+      userCount: profile.userCount,
+      phoneCount: profile.phoneCount,
+      equipmentCount: profile.equipmentCount,
+      departmentCount: profile.departmentCount,
+      fileModifiedMs: modifiedMs,
+    );
+    await SettingsService().setAcknowledgedDatabaseNoticeIdentity(identity);
 
-      await _pumpShell(tester, profile: profile, path: path);
+    await _pumpShell(tester, profile: profile, path: path);
 
-      expect(
-        find.byKey(const ValueKey('database_state_notice_banner')),
-        findsNothing,
-      );
-      await _flushPendingTimers(tester);
-    },
-  );
+    expect(
+      find.byKey(const ValueKey('database_state_notice_banner')),
+      findsNothing,
+    );
+    await _flushPendingTimers(tester);
+  });
 }

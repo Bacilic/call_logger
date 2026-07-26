@@ -24,8 +24,8 @@ String colorToDepartmentHex(Color c) {
   final g = (c.g * 255.0).round().clamp(0, 255);
   final b = (c.b * 255.0).round().clamp(0, 255);
   return '#${r.toRadixString(16).padLeft(2, '0')}'
-      '${g.toRadixString(16).padLeft(2, '0')}'
-      '${b.toRadixString(16).padLeft(2, '0')}'
+          '${g.toRadixString(16).padLeft(2, '0')}'
+          '${b.toRadixString(16).padLeft(2, '0')}'
       .toUpperCase();
 }
 
@@ -165,7 +165,8 @@ class DepartmentColorPalette extends StatelessWidget {
                 iconSize: iconSize,
                 selectedBorderWidth: selectedBorder,
                 slotColor: customSlots[i],
-                selected: customSlots[i] != null &&
+                selected:
+                    customSlots[i] != null &&
                     sameDepartmentRgb(customSlots[i]!, selected),
                 outline: outline,
                 primary: theme.colorScheme.primary,
@@ -183,10 +184,7 @@ class DepartmentColorPalette extends StatelessWidget {
     );
 
     if (focusNode != null) {
-      return Focus(
-        focusNode: focusNode,
-        child: body,
-      );
+      return Focus(focusNode: focusNode, child: body);
     }
     return body;
   }
@@ -296,14 +294,12 @@ class _SquareCustomSlot extends StatelessWidget {
       color: Colors.transparent,
       child: InkWell(
         onTap: filled ? () => onTapFilled(color!) : onTapEmpty,
-        onLongPress: filled
-            ? () => _showDeleteColorMenu(context)
-            : null,
+        onLongPress: filled ? () => _showDeleteColorMenu(context) : null,
         borderRadius: BorderRadius.circular(4),
         child: Tooltip(
           message: filled
               ? '${colorToDepartmentHex(color!)}\n'
-                  'Κλικ: επιλογή · Παρατεταμένο: διαγραφή'
+                    'Κλικ: επιλογή · Παρατεταμένο: διαγραφή'
               : 'Κενή θέση · Κλικ για επιλογή χρώματος',
           child: Container(
             width: size,

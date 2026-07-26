@@ -1,4 +1,4 @@
-﻿// Έλεγχοι μοντέλου παραμετροποίησης πολυβηματικής καταχώρησης Lansweeper.
+// Έλεγχοι μοντέλου παραμετροποίησης πολυβηματικής καταχώρησης Lansweeper.
 //
 //   flutter test test/core/services/lansweeper_ticket_submit_config_test.dart
 
@@ -43,43 +43,44 @@ void main() {
   group('LansweeperTicketSubmitConfig', () {
     test('encode → decode round-trip διατηρεί όλα τα πεδία', () {
       final original = LansweeperTicketSubmitConfig.defaults();
-      final encoded =
-          LansweeperTicketSubmitConfig.encodeForStorage(original);
-      final decoded =
-          LansweeperTicketSubmitConfig.decodeFromStorage(encoded);
+      final encoded = LansweeperTicketSubmitConfig.encodeForStorage(original);
+      final decoded = LansweeperTicketSubmitConfig.decodeFromStorage(encoded);
       _expectConfigEquals(decoded, original);
     });
 
-    test('decodeFromStorage σε null, σε \'\' και σε άκυρο JSON επιστρέφει τα defaults χωρίς exception', () {
-      final defaults = LansweeperTicketSubmitConfig.defaults();
+    test(
+      'decodeFromStorage σε null, σε \'\' και σε άκυρο JSON επιστρέφει τα defaults χωρίς exception',
+      () {
+        final defaults = LansweeperTicketSubmitConfig.defaults();
 
-      expect(
-        () => LansweeperTicketSubmitConfig.decodeFromStorage(null),
-        returnsNormally,
-      );
-      _expectConfigEquals(
-        LansweeperTicketSubmitConfig.decodeFromStorage(null),
-        defaults,
-      );
+        expect(
+          () => LansweeperTicketSubmitConfig.decodeFromStorage(null),
+          returnsNormally,
+        );
+        _expectConfigEquals(
+          LansweeperTicketSubmitConfig.decodeFromStorage(null),
+          defaults,
+        );
 
-      expect(
-        () => LansweeperTicketSubmitConfig.decodeFromStorage(''),
-        returnsNormally,
-      );
-      _expectConfigEquals(
-        LansweeperTicketSubmitConfig.decodeFromStorage(''),
-        defaults,
-      );
+        expect(
+          () => LansweeperTicketSubmitConfig.decodeFromStorage(''),
+          returnsNormally,
+        );
+        _expectConfigEquals(
+          LansweeperTicketSubmitConfig.decodeFromStorage(''),
+          defaults,
+        );
 
-      expect(
-        () => LansweeperTicketSubmitConfig.decodeFromStorage('{invalid'),
-        returnsNormally,
-      );
-      _expectConfigEquals(
-        LansweeperTicketSubmitConfig.decodeFromStorage('{invalid'),
-        defaults,
-      );
-    });
+        expect(
+          () => LansweeperTicketSubmitConfig.decodeFromStorage('{invalid'),
+          returnsNormally,
+        );
+        _expectConfigEquals(
+          LansweeperTicketSubmitConfig.decodeFromStorage('{invalid'),
+          defaults,
+        );
+      },
+    );
 
     test(
       'τα defaults έχουν ticketStates [Open, Closed, In Progress], defaultTicketState Closed, noteType Internal, ticketType/priority/team = IT Support/Low/IT Support',
@@ -135,8 +136,9 @@ void main() {
           () => LansweeperTicketSubmitConfig.decodeFromStorage(legacyJson),
           returnsNormally,
         );
-        final migrated =
-            LansweeperTicketSubmitConfig.decodeFromStorage(legacyJson);
+        final migrated = LansweeperTicketSubmitConfig.decodeFromStorage(
+          legacyJson,
+        );
         expect(migrated.priorities, ['Low', 'Medium', 'High']);
         expect(migrated.priority, 'Low');
         expect(migrated.ticketTypes, ['IT Support']);
@@ -171,10 +173,7 @@ void main() {
         expect(incident.formLabel, 'Τί αφορά;');
         expect(incident.widgetType, LansweeperFieldWidgetType.dropdown);
         expect(incident.options, hasLength(7));
-        expect(
-          incident.defaultValue,
-          'Software γενικού σκοπού στα Endpoints',
-        );
+        expect(incident.defaultValue, 'Software γενικού σκοπού στα Endpoints');
         expect(incident.required, isTrue);
         expect(incident.visible, isTrue);
         expect(incident.showInForm, isTrue);
@@ -248,8 +247,9 @@ void main() {
   "enable_state_update_step": true,
   "remember_form_selections": true
 }''';
-      final decoded =
-          LansweeperTicketSubmitConfig.decodeFromStorage(legacyJson);
+      final decoded = LansweeperTicketSubmitConfig.decodeFromStorage(
+        legacyJson,
+      );
       expect(decoded.includeNoteTime, isTrue);
     });
 
@@ -291,8 +291,9 @@ void main() {
           () => LansweeperTicketSubmitConfig.decodeFromStorage(jsonWithoutKey),
           returnsNormally,
         );
-        final decoded =
-            LansweeperTicketSubmitConfig.decodeFromStorage(jsonWithoutKey);
+        final decoded = LansweeperTicketSubmitConfig.decodeFromStorage(
+          jsonWithoutKey,
+        );
         expect(decoded.includeNoteTime, isTrue);
         expect(decoded.schemaVersion, 2);
         expect(decoded.enableAddNoteStep, isTrue);
@@ -315,10 +316,7 @@ void main() {
 
     test('toStorage/fromStorage round-trip', () {
       for (final type in LansweeperFieldWidgetType.values) {
-        expect(
-          LansweeperFieldWidgetType.fromStorage(type.toStorage()),
-          type,
-        );
+        expect(LansweeperFieldWidgetType.fromStorage(type.toStorage()), type);
       }
     });
   });

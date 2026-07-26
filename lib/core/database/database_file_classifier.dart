@@ -84,7 +84,7 @@ Future<DatabaseFileKind> classifyDatabaseFile(String dbPath) async {
 /// Όπως [classifyDatabaseFile], με προαιρετικό λόγο αποτυχίας όταν η
 /// ταξινόμηση δεν ολοκληρώθηκε.
 Future<({DatabaseFileKind kind, String? failureReason})>
-    classifyDatabaseFileWithReason(String dbPath) async {
+classifyDatabaseFileWithReason(String dbPath) async {
   final profile = await profileDatabaseFile(dbPath);
   return (kind: profile.kind, failureReason: profile.failureReason);
 }
@@ -93,11 +93,7 @@ Future<({DatabaseFileKind kind, String? failureReason})>
 Future<DatabaseFileProfile> profileDatabaseFile(String dbPath) async {
   Database? db;
   try {
-    db = await openDatabase(
-      dbPath,
-      readOnly: true,
-      singleInstance: false,
-    );
+    db = await openDatabase(dbPath, readOnly: true, singleInstance: false);
 
     final tableRows = await db.rawQuery(
       "SELECT name FROM sqlite_master "
@@ -115,8 +111,9 @@ Future<DatabaseFileProfile> profileDatabaseFile(String dbPath) async {
         : versionRows.first['user_version'] as int?;
 
     final hasCalls = tables.contains('calls');
-    final lampTableHits =
-        kLampSignatureTables.where((name) => tables.contains(name)).length;
+    final lampTableHits = kLampSignatureTables
+        .where((name) => tables.contains(name))
+        .length;
     // Η Λάμπα μπορεί να αναγνωριστεί ΚΑΙ από μόνο τον `equipment`: το δικό της
     // έχει κλειδί `code`, ενώ ο ομώνυμος πίνακας της Καταγραφής έχει πάντα
     // `code_equipment`. Χωρίς αυτόν τον έλεγχο ένα απόσπασμα της Λάμπας με

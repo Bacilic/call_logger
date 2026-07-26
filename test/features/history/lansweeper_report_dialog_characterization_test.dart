@@ -1,4 +1,4 @@
-﻿// Widget test: διάλογος αναφοράς Lansweeper — χαρακτηρισμός split.
+// Widget test: διάλογος αναφοράς Lansweeper — χαρακτηρισμός split.
 //
 // Ολόκληρο αρχείο:
 //   flutter test test/features/history/lansweeper_report_dialog_characterization_test.dart
@@ -173,15 +173,15 @@ Future<void> _pumpLansweeperReportDialog(
   await tester.pumpWidget(
     UncontrolledProviderScope(
       container: container,
-      child: const MaterialApp(
-        home: Scaffold(
-          body: LansweeperReportDialog(),
-        ),
-      ),
+      child: const MaterialApp(home: Scaffold(body: LansweeperReportDialog())),
     ),
   );
   await tester.pump();
-  await pumpUntilSettled(tester, steps: 45, step: const Duration(milliseconds: 60));
+  await pumpUntilSettled(
+    tester,
+    steps: 45,
+    step: const Duration(milliseconds: 60),
+  );
 }
 
 Finder _immediateSubmitButton() {
@@ -202,37 +202,36 @@ void main() {
       await _deleteCharacterizationCalls();
     });
 
-    testWidgets(
-      'απόδοση: εμφανίζει κλήσεις από τη βάση στη λίστα',
-      (tester) async {
-        tester.view.physicalSize = const Size(1600, 900);
-        tester.view.devicePixelRatio = 1.0;
-        addTearDown(() {
-          tester.view.resetPhysicalSize();
-          tester.view.resetDevicePixelRatio();
-        });
+    testWidgets('απόδοση: εμφανίζει κλήσεις από τη βάση στη λίστα', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(1600, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
 
-        final reportCalls = await tester.runAsync(_seedRenderCalls) ?? <CallModel>[];
-        expect(reportCalls, hasLength(2));
+      final reportCalls =
+          await tester.runAsync(_seedRenderCalls) ?? <CallModel>[];
+      expect(reportCalls, hasLength(2));
 
-        final container = ProviderContainer(
-          overrides: _lansweeperCharacterizationOverrides(
-            reportCalls: reportCalls,
-          ),
-        );
-        addTearDown(container.dispose);
+      final container = ProviderContainer(
+        overrides: _lansweeperCharacterizationOverrides(
+          reportCalls: reportCalls,
+        ),
+      );
+      addTearDown(container.dispose);
 
-        await _pumpLansweeperReportDialog(tester, container);
+      await _pumpLansweeperReportDialog(tester, container);
 
-        expect(find.textContaining('Αναφορά Lansweeper'), findsOneWidget);
-        expect(find.textContaining('Ακαταχώρητες (2)'), findsOneWidget);
-        expect(find.textContaining('Όλες (2)'), findsOneWidget);
-        expect(find.textContaining(_kCharRenderMarkerA), findsOneWidget);
-        expect(find.textContaining(_kCharRenderMarkerB), findsOneWidget);
-        await tester.pump(const Duration(seconds: 11));
-      },
-      semanticsEnabled: false,
-    );
+      expect(find.textContaining('Αναφορά Lansweeper'), findsOneWidget);
+      expect(find.textContaining('Ακαταχώρητες (2)'), findsOneWidget);
+      expect(find.textContaining('Όλες (2)'), findsOneWidget);
+      expect(find.textContaining(_kCharRenderMarkerA), findsOneWidget);
+      expect(find.textContaining(_kCharRenderMarkerB), findsOneWidget);
+      await tester.pump(const Duration(seconds: 11));
+    }, semanticsEnabled: false);
 
     testWidgets(
       'επιλογή: η αλλαγή επιλογής ενεργοποιεί την Άμεση Καταχώρηση',
@@ -244,7 +243,8 @@ void main() {
           tester.view.resetDevicePixelRatio();
         });
 
-        final reportCalls = await tester.runAsync(_seedSelectCall) ?? <CallModel>[];
+        final reportCalls =
+            await tester.runAsync(_seedSelectCall) ?? <CallModel>[];
         expect(reportCalls, hasLength(1));
 
         final container = ProviderContainer(
@@ -284,47 +284,46 @@ void main() {
       semanticsEnabled: false,
     );
 
-    testWidgets(
-      'φίλτρα: τα chips κατάστασης φιλτράρουν τη λίστα',
-      (tester) async {
-        tester.view.physicalSize = const Size(1600, 900);
-        tester.view.devicePixelRatio = 1.0;
-        addTearDown(() {
-          tester.view.resetPhysicalSize();
-          tester.view.resetDevicePixelRatio();
-        });
+    testWidgets('φίλτρα: τα chips κατάστασης φιλτράρουν τη λίστα', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(1600, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
 
-        final reportCalls = await tester.runAsync(_seedFilterCalls) ?? <CallModel>[];
-        expect(reportCalls, hasLength(2));
+      final reportCalls =
+          await tester.runAsync(_seedFilterCalls) ?? <CallModel>[];
+      expect(reportCalls, hasLength(2));
 
-        final container = ProviderContainer(
-          overrides: _lansweeperCharacterizationOverrides(
-            reportCalls: reportCalls,
-          ),
-        );
-        addTearDown(container.dispose);
+      final container = ProviderContainer(
+        overrides: _lansweeperCharacterizationOverrides(
+          reportCalls: reportCalls,
+        ),
+      );
+      addTearDown(container.dispose);
 
-        await _pumpLansweeperReportDialog(tester, container);
+      await _pumpLansweeperReportDialog(tester, container);
 
-        expect(find.textContaining('Ακαταχώρητες (1)'), findsOneWidget);
-        expect(find.textContaining('Όλες (2)'), findsOneWidget);
-        expect(find.textContaining(_kCharFilterUnsent), findsOneWidget);
-        expect(find.textContaining(_kCharFilterSent), findsNothing);
+      expect(find.textContaining('Ακαταχώρητες (1)'), findsOneWidget);
+      expect(find.textContaining('Όλες (2)'), findsOneWidget);
+      expect(find.textContaining(_kCharFilterUnsent), findsOneWidget);
+      expect(find.textContaining(_kCharFilterSent), findsNothing);
 
-        await tester.tap(find.textContaining('Καταχωρημένες'));
-        await pumpUntilSettled(tester);
+      await tester.tap(find.textContaining('Καταχωρημένες'));
+      await pumpUntilSettled(tester);
 
-        expect(find.textContaining(_kCharFilterUnsent), findsNothing);
-        expect(find.textContaining(_kCharFilterSent), findsOneWidget);
+      expect(find.textContaining(_kCharFilterUnsent), findsNothing);
+      expect(find.textContaining(_kCharFilterSent), findsOneWidget);
 
-        await tester.tap(find.textContaining('Όλες ('));
-        await pumpUntilSettled(tester);
+      await tester.tap(find.textContaining('Όλες ('));
+      await pumpUntilSettled(tester);
 
-        expect(find.textContaining(_kCharFilterUnsent), findsOneWidget);
-        expect(find.textContaining(_kCharFilterSent), findsOneWidget);
-        await tester.pump(const Duration(seconds: 11));
-      },
-      semanticsEnabled: false,
-    );
+      expect(find.textContaining(_kCharFilterUnsent), findsOneWidget);
+      expect(find.textContaining(_kCharFilterSent), findsOneWidget);
+      await tester.pump(const Duration(seconds: 11));
+    }, semanticsEnabled: false);
   });
 }

@@ -10,5 +10,6 @@ class LexiconFullModeNotifier extends Notifier<bool> {
   void setFalse() => state = false;
 }
 
-final lexiconFullModeProvider =
-    NotifierProvider<LexiconFullModeNotifier, bool>(LexiconFullModeNotifier.new);
+final lexiconFullModeProvider = NotifierProvider<LexiconFullModeNotifier, bool>(
+  LexiconFullModeNotifier.new,
+);

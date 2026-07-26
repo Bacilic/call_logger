@@ -1,4 +1,4 @@
-﻿// ignore_for_file: deprecated_member_use
+// ignore_for_file: deprecated_member_use
 
 import 'dart:io';
 import 'dart:math' as math;
@@ -41,6 +41,7 @@ class MiniMapCard extends ConsumerStatefulWidget {
   final String phoneText;
   final UserModel? user;
   final String callerDisplayText;
+
   /// Selected department from header (priority source for map).
   final int? departmentId;
 
@@ -85,8 +86,7 @@ class _MiniMapCardState extends ConsumerState<MiniMapCard> {
   Future<List<int>> _departmentIdsForPhone(
     DepartmentRepository departments,
     String phone,
-  ) =>
-      departments.resolveActiveDepartmentIdsForPhone(phone);
+  ) => departments.resolveActiveDepartmentIdsForPhone(phone);
 
   Future<List<int>> _departmentIdsForEquipment(
     DepartmentRepository departments,
@@ -122,8 +122,10 @@ class _MiniMapCardState extends ConsumerState<MiniMapCard> {
     final db = await DatabaseHelper.instance.database;
     final departmentsRepo = DepartmentRepository(db);
     final equipmentRepo = EquipmentRepository(db);
-    final floors =
-        await BuildingMapRepository(db, DirectorySupport(db)).listBuildingMapFloors();
+    final floors = await BuildingMapRepository(
+      db,
+      DirectorySupport(db),
+    ).listBuildingMapFloors();
     final departmentRows = await departmentsRepo.getActiveDepartments();
     final departments = departmentRows
         .map(DepartmentModel.fromMap)
@@ -150,7 +152,9 @@ class _MiniMapCardState extends ConsumerState<MiniMapCard> {
     final userDeptIds = userDeptId == null ? const <int>[] : <int>[userDeptId];
 
     final headerDeptId = widget.departmentId;
-    final equipmentDeptId = equipmentDeptIds.isNotEmpty ? equipmentDeptIds.first : null;
+    final equipmentDeptId = equipmentDeptIds.isNotEmpty
+        ? equipmentDeptIds.first
+        : null;
     final phoneDeptId = phoneDeptIds.isNotEmpty ? phoneDeptIds.first : null;
     final userDeptFallback = userDeptIds.isNotEmpty ? userDeptIds.first : null;
 
@@ -172,8 +176,10 @@ class _MiniMapCardState extends ConsumerState<MiniMapCard> {
         phoneDeptId != null &&
         equipmentDeptId != phoneDeptId;
     final selectedDeptId = switch (mode) {
-      _MiniMapMode.department => headerDeptId ?? equipmentDeptId ?? userDeptFallback ?? phoneDeptId,
-      _MiniMapMode.equipment => equipmentDeptId ?? phoneDeptId ?? userDeptFallback,
+      _MiniMapMode.department =>
+        headerDeptId ?? equipmentDeptId ?? userDeptFallback ?? phoneDeptId,
+      _MiniMapMode.equipment =>
+        equipmentDeptId ?? phoneDeptId ?? userDeptFallback,
       _MiniMapMode.phone => phoneDeptId ?? equipmentDeptId ?? userDeptFallback,
       _MiniMapMode.user => userDeptFallback ?? equipmentDeptId ?? phoneDeptId,
     };
@@ -200,10 +206,7 @@ class _MiniMapCardState extends ConsumerState<MiniMapCard> {
     return data.departmentsById[deptId];
   }
 
-  String? _floorDisplayName(
-    _MiniMapCardData data,
-    DepartmentModel? dept,
-  ) {
+  String? _floorDisplayName(_MiniMapCardData data, DepartmentModel? dept) {
     if (dept == null) return null;
     final floorById = {for (final f in data.floors) f.id: f};
     return dept.floorDisplayWithCatalog(floorById);
@@ -269,10 +272,7 @@ class _MiniMapCardState extends ConsumerState<MiniMapCard> {
     return 'Προβολή θέσης εξοπλισμού';
   }
 
-  _MiniMapTarget _targetForMode(
-    _MiniMapCardData data,
-    _MiniMapMode mode,
-  ) {
+  _MiniMapTarget _targetForMode(_MiniMapCardData data, _MiniMapMode mode) {
     final fallback = data.selectedDepartmentId;
     if (mode == _MiniMapMode.department) {
       return _MiniMapTarget(
@@ -285,7 +285,9 @@ class _MiniMapCardState extends ConsumerState<MiniMapCard> {
       return _MiniMapTarget(
         label: 'Θέση τηλεφώνου',
         departmentId: data.phoneDepartmentId ?? fallback,
-        pendingEntity: widget.phoneText.trim().isEmpty ? null : widget.phoneText.trim(),
+        pendingEntity: widget.phoneText.trim().isEmpty
+            ? null
+            : widget.phoneText.trim(),
       );
     }
     if (mode == _MiniMapMode.user) {
@@ -315,13 +317,15 @@ class _MiniMapCardState extends ConsumerState<MiniMapCard> {
     if (!dept.isMapped) {
       return _departmentNotOnMap(context);
     }
-    final floorId = dept.mapFloor == null ? null : int.tryParse(dept.mapFloor!.trim());
+    final floorId = dept.mapFloor == null
+        ? null
+        : int.tryParse(dept.mapFloor!.trim());
     final floor = floorId == null
         ? data.floors.firstOrNull
         : data.floors.cast<BuildingMapFloor?>().firstWhere(
-              (f) => f?.id == floorId,
-              orElse: () => data.floors.firstOrNull,
-            );
+            (f) => f?.id == floorId,
+            orElse: () => data.floors.firstOrNull,
+          );
     if (floor == null) {
       return _placeholder(context, 'Δεν υπάρχει διαθέσιμο φύλλο χάρτη.');
     }
@@ -730,43 +734,43 @@ class _MiniMapFloorPreviewState extends State<MiniMapFloorPreview> {
             onPointerUp: _onPointerUp,
             onPointerSignal: _onPointerSignal,
             child: InteractiveViewer(
-                key: const Key('mini_map_interactive_viewer'),
-                transformationController: _transformationController,
-                minScale: MiniMapFloorPreview.kMinInteractiveScale,
-                maxScale: MiniMapFloorPreview.kMaxInteractiveScale,
-                constrained: false,
-                clipBehavior: Clip.hardEdge,
-                panEnabled: true,
-                scaleEnabled: false,
-                boundaryMargin: EdgeInsets.zero,
-                child: SizedBox(
-                  width: _layout.scaledWidth,
-                  height: _layout.scaledHeight,
-                  child: Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      Image.file(
-                        File(widget.imagePath),
-                        fit: BoxFit.fill,
-                        filterQuality: FilterQuality.medium,
-                        cacheWidth: cacheWidth,
+              key: const Key('mini_map_interactive_viewer'),
+              transformationController: _transformationController,
+              minScale: MiniMapFloorPreview.kMinInteractiveScale,
+              maxScale: MiniMapFloorPreview.kMaxInteractiveScale,
+              constrained: false,
+              clipBehavior: Clip.hardEdge,
+              panEnabled: true,
+              scaleEnabled: false,
+              boundaryMargin: EdgeInsets.zero,
+              child: SizedBox(
+                width: _layout.scaledWidth,
+                height: _layout.scaledHeight,
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    Image.file(
+                      File(widget.imagePath),
+                      fit: BoxFit.fill,
+                      filterQuality: FilterQuality.medium,
+                      cacheWidth: cacheWidth,
+                    ),
+                    Positioned(
+                      left: _layout.highlightLeft,
+                      top: _layout.highlightTop,
+                      width: _layout.highlightWidth,
+                      height: _layout.highlightHeight,
+                      child: IgnorePointer(
+                        child: _departmentHighlight(context),
                       ),
-                      Positioned(
-                        left: _layout.highlightLeft,
-                        top: _layout.highlightTop,
-                        width: _layout.highlightWidth,
-                        height: _layout.highlightHeight,
-                        child: IgnorePointer(
-                          child: _departmentHighlight(context),
-                        ),
-                      ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
               ),
             ),
           ),
         ),
+      ),
     );
   }
 }

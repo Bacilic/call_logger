@@ -170,9 +170,7 @@ class _MapRotationPodState extends State<MapRotationPod> {
               Listener(
                 onPointerSignal: _handlePointerSignal,
                 child: SliderTheme(
-                  data: SliderTheme.of(context).copyWith(
-                    trackHeight: 3,
-                  ),
+                  data: SliderTheme.of(context).copyWith(trackHeight: 3),
                   child: Slider(
                     min: 0,
                     max: 360,
@@ -203,7 +201,9 @@ class _MapRotationPodState extends State<MapRotationPod> {
                 children: [
                   IconButton(
                     tooltip: 'Επαναφορά 0°',
-                    onPressed: widget.enabled ? () => _fireDirectCommit(0) : null,
+                    onPressed: widget.enabled
+                        ? () => _fireDirectCommit(0)
+                        : null,
                     icon: const Icon(Icons.restart_alt_rounded, size: 20),
                     visualDensity: VisualDensity.compact,
                   ),

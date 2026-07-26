@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/database/database_helper.dart';
@@ -368,8 +368,10 @@ class _UserFormDialogState extends ConsumerState<UserFormDialog>
         .where((n) => n.isNotEmpty)
         .toList();
     String? dept;
-    final ownerDeptIds =
-        owners.map((u) => u.departmentId).whereType<int>().toSet();
+    final ownerDeptIds = owners
+        .map((u) => u.departmentId)
+        .whereType<int>()
+        .toSet();
     if (ownerDeptIds.length == 1) {
       dept = lookup.departmentIdToName[ownerDeptIds.single]?.trim();
     } else if (owners.length == 1) {
@@ -453,227 +455,239 @@ class _UserFormDialogState extends ConsumerState<UserFormDialog>
       child: DraggableDialogShell(
         title: Text(_title),
         builder: (titleHandle) => AlertDialog(
-      title: titleHandle,
-      content: Form(
-        key: _formKey,
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              RawAutocomplete<String>(
-                textEditingController: _lastNameController,
-                focusNode: _lastNameFocusNode,
-                optionsBuilder: (textEditingValue) {
-                  final q = SearchTextNormalizer.normalizeForSearch(
-                    textEditingValue.text,
-                  );
-                  if (q.isEmpty) return lastNameOptions;
-                  return lastNameOptions.where(
-                    (name) =>
-                        SearchTextNormalizer.matchesNormalizedQuery(name, q),
-                  );
-                },
-                displayStringForOption: (option) => option,
-                onSelected: (selection) {
-                  _lastNameController.text = selection;
-                  _onFieldChanged();
-                },
-                fieldViewBuilder: (context, controller, focusNode, _) {
-                  return UserFormSmartTextField(
-                    controller: controller,
-                    focusNode: focusNode,
-                    decoration: const InputDecoration(
-                      labelText: 'Επώνυμο',
-                      border: OutlineInputBorder(),
-                    ),
-                    validator: _requiredValidator,
-                    textCapitalization: TextCapitalization.words,
-                  );
-                },
-                optionsViewBuilder: (context, onSelected, options) {
-                  return _nameAutocompleteOptionsView(
-                    context,
-                    onSelected,
-                    options,
-                  );
-                },
-              ),
-              const SizedBox(height: 12),
-              RawAutocomplete<String>(
-                textEditingController: _firstNameController,
-                focusNode: _firstNameFocusNode,
-                optionsBuilder: (textEditingValue) {
-                  if (firstNameOptions.isEmpty) {
-                    return const Iterable<String>.empty();
-                  }
-                  final q = SearchTextNormalizer.normalizeForSearch(
-                    textEditingValue.text,
-                  );
-                  if (q.isEmpty) return firstNameOptions;
-                  return firstNameOptions.where(
-                    (name) =>
-                        SearchTextNormalizer.matchesNormalizedQuery(name, q),
-                  );
-                },
-                displayStringForOption: (option) => option,
-                onSelected: (selection) {
-                  _firstNameController.text = selection;
-                  _onFieldChanged();
-                },
-                fieldViewBuilder: (context, controller, focusNode, _) {
-                  return UserFormSmartTextField(
-                    controller: controller,
-                    focusNode: focusNode,
-                    decoration: const InputDecoration(
-                      labelText: 'Όνομα',
-                      border: OutlineInputBorder(),
-                    ),
-                    validator: _requiredValidator,
-                    textCapitalization: TextCapitalization.words,
-                    lexiconSpellAssist: true,
-                    onChanged: (_) => _onFieldChanged(),
-                  );
-                },
-                optionsViewBuilder: (context, onSelected, options) {
-                  return _nameAutocompleteOptionsView(
-                    context,
-                    onSelected,
-                    options,
-                  );
-                },
-              ),
-              const SizedBox(height: 12),
-              RawAutocomplete<String>(
-                textEditingController: _phoneController,
-                focusNode: _phoneFocusNode,
-                optionsBuilder: _phoneAutocompleteOptions,
-                displayStringForOption: _phoneDisplayStringForAutocompleteOption,
-                onSelected: (option) {
-                  final offset = _phoneController.selection.isValid
-                      ? _phoneController.selection.extentOffset
-                      : _phoneController.text.length;
-                  final updated = PhoneListParser.replaceActiveSegment(
-                    text: _phoneController.text,
-                    cursor: offset,
-                    replacement: option,
-                  );
-                  final cursorPos = updated.cursor;
-                  WidgetsBinding.instance.addPostFrameCallback((_) {
-                    if (!mounted) return;
-                    _phoneController.selection = TextSelection.collapsed(
-                      offset: cursorPos.clamp(0, _phoneController.text.length),
-                    );
-                  });
-                  _onFieldChanged();
-                },
-                fieldViewBuilder: (context, controller, focusNode, _) {
-                  return UserFormSmartTextField(
-                    controller: controller,
-                    focusNode: focusNode,
-                    decoration: const InputDecoration(
-                      labelText: 'Τηλέφωνο',
-                      border: OutlineInputBorder(),
-                      hintText: 'Πολλαπλά τηλέφωνα χωρισμένα με κόμμα',
-                    ),
-                    keyboardType: TextInputType.phone,
-                    onChanged: (_) => _onFieldChanged(),
-                  );
-                },
-                optionsViewBuilder: (context, onSelected, options) {
-                  return Align(
-                    alignment: Alignment.topLeft,
-                    child: Material(
-                      elevation: 4,
-                      child: ConstrainedBox(
-                        constraints: const BoxConstraints(
-                          maxWidth: 420,
-                          maxHeight: 220,
+          title: titleHandle,
+          content: Form(
+            key: _formKey,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  RawAutocomplete<String>(
+                    textEditingController: _lastNameController,
+                    focusNode: _lastNameFocusNode,
+                    optionsBuilder: (textEditingValue) {
+                      final q = SearchTextNormalizer.normalizeForSearch(
+                        textEditingValue.text,
+                      );
+                      if (q.isEmpty) return lastNameOptions;
+                      return lastNameOptions.where(
+                        (name) => SearchTextNormalizer.matchesNormalizedQuery(
+                          name,
+                          q,
                         ),
-                        child: ListView.builder(
-                          padding: EdgeInsets.zero,
-                          shrinkWrap: true,
-                          itemCount: options.length,
-                          itemBuilder: (context, index) {
-                            final option = options.elementAt(index);
-                            return ListTile(
-                              dense: true,
-                              title: Text(_phoneAutocompleteListLabel(option)),
-                              onTap: () => onSelected(option),
-                            );
-                          },
+                      );
+                    },
+                    displayStringForOption: (option) => option,
+                    onSelected: (selection) {
+                      _lastNameController.text = selection;
+                      _onFieldChanged();
+                    },
+                    fieldViewBuilder: (context, controller, focusNode, _) {
+                      return UserFormSmartTextField(
+                        controller: controller,
+                        focusNode: focusNode,
+                        decoration: const InputDecoration(
+                          labelText: 'Επώνυμο',
+                          border: OutlineInputBorder(),
                         ),
-                      ),
-                    ),
-                  );
-                },
-              ),
-              const SizedBox(height: 12),
-              RawAutocomplete<String>(
-                textEditingController: _departmentController,
-                focusNode: _departmentFocusNode,
-                optionsBuilder: (textEditingValue) {
-                  final q = SearchTextNormalizer.normalizeForSearch(
-                    textEditingValue.text,
-                  );
-                  if (q.isEmpty) return departmentNames;
-                  return departmentNames.where(
-                    (name) =>
-                        SearchTextNormalizer.matchesNormalizedQuery(name, q),
-                  );
-                },
-                displayStringForOption: (option) => option,
-                onSelected: (selection) {
-                  _departmentController.text = selection;
-                  _onFieldChanged();
-                },
-                fieldViewBuilder: (context, controller, focusNode, _) {
-                  return UserFormSmartTextField(
-                    controller: controller,
-                    focusNode: focusNode,
+                        validator: _requiredValidator,
+                        textCapitalization: TextCapitalization.words,
+                      );
+                    },
+                    optionsViewBuilder: (context, onSelected, options) {
+                      return _nameAutocompleteOptionsView(
+                        context,
+                        onSelected,
+                        options,
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  RawAutocomplete<String>(
+                    textEditingController: _firstNameController,
+                    focusNode: _firstNameFocusNode,
+                    optionsBuilder: (textEditingValue) {
+                      if (firstNameOptions.isEmpty) {
+                        return const Iterable<String>.empty();
+                      }
+                      final q = SearchTextNormalizer.normalizeForSearch(
+                        textEditingValue.text,
+                      );
+                      if (q.isEmpty) return firstNameOptions;
+                      return firstNameOptions.where(
+                        (name) => SearchTextNormalizer.matchesNormalizedQuery(
+                          name,
+                          q,
+                        ),
+                      );
+                    },
+                    displayStringForOption: (option) => option,
+                    onSelected: (selection) {
+                      _firstNameController.text = selection;
+                      _onFieldChanged();
+                    },
+                    fieldViewBuilder: (context, controller, focusNode, _) {
+                      return UserFormSmartTextField(
+                        controller: controller,
+                        focusNode: focusNode,
+                        decoration: const InputDecoration(
+                          labelText: 'Όνομα',
+                          border: OutlineInputBorder(),
+                        ),
+                        validator: _requiredValidator,
+                        textCapitalization: TextCapitalization.words,
+                        lexiconSpellAssist: true,
+                        onChanged: (_) => _onFieldChanged(),
+                      );
+                    },
+                    optionsViewBuilder: (context, onSelected, options) {
+                      return _nameAutocompleteOptionsView(
+                        context,
+                        onSelected,
+                        options,
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  RawAutocomplete<String>(
+                    textEditingController: _phoneController,
+                    focusNode: _phoneFocusNode,
+                    optionsBuilder: _phoneAutocompleteOptions,
+                    displayStringForOption:
+                        _phoneDisplayStringForAutocompleteOption,
+                    onSelected: (option) {
+                      final offset = _phoneController.selection.isValid
+                          ? _phoneController.selection.extentOffset
+                          : _phoneController.text.length;
+                      final updated = PhoneListParser.replaceActiveSegment(
+                        text: _phoneController.text,
+                        cursor: offset,
+                        replacement: option,
+                      );
+                      final cursorPos = updated.cursor;
+                      WidgetsBinding.instance.addPostFrameCallback((_) {
+                        if (!mounted) return;
+                        _phoneController.selection = TextSelection.collapsed(
+                          offset: cursorPos.clamp(
+                            0,
+                            _phoneController.text.length,
+                          ),
+                        );
+                      });
+                      _onFieldChanged();
+                    },
+                    fieldViewBuilder: (context, controller, focusNode, _) {
+                      return UserFormSmartTextField(
+                        controller: controller,
+                        focusNode: focusNode,
+                        decoration: const InputDecoration(
+                          labelText: 'Τηλέφωνο',
+                          border: OutlineInputBorder(),
+                          hintText: 'Πολλαπλά τηλέφωνα χωρισμένα με κόμμα',
+                        ),
+                        keyboardType: TextInputType.phone,
+                        onChanged: (_) => _onFieldChanged(),
+                      );
+                    },
+                    optionsViewBuilder: (context, onSelected, options) {
+                      return Align(
+                        alignment: Alignment.topLeft,
+                        child: Material(
+                          elevation: 4,
+                          child: ConstrainedBox(
+                            constraints: const BoxConstraints(
+                              maxWidth: 420,
+                              maxHeight: 220,
+                            ),
+                            child: ListView.builder(
+                              padding: EdgeInsets.zero,
+                              shrinkWrap: true,
+                              itemCount: options.length,
+                              itemBuilder: (context, index) {
+                                final option = options.elementAt(index);
+                                return ListTile(
+                                  dense: true,
+                                  title: Text(
+                                    _phoneAutocompleteListLabel(option),
+                                  ),
+                                  onTap: () => onSelected(option),
+                                );
+                              },
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  RawAutocomplete<String>(
+                    textEditingController: _departmentController,
+                    focusNode: _departmentFocusNode,
+                    optionsBuilder: (textEditingValue) {
+                      final q = SearchTextNormalizer.normalizeForSearch(
+                        textEditingValue.text,
+                      );
+                      if (q.isEmpty) return departmentNames;
+                      return departmentNames.where(
+                        (name) => SearchTextNormalizer.matchesNormalizedQuery(
+                          name,
+                          q,
+                        ),
+                      );
+                    },
+                    displayStringForOption: (option) => option,
+                    onSelected: (selection) {
+                      _departmentController.text = selection;
+                      _onFieldChanged();
+                    },
+                    fieldViewBuilder: (context, controller, focusNode, _) {
+                      return UserFormSmartTextField(
+                        controller: controller,
+                        focusNode: focusNode,
+                        decoration: const InputDecoration(
+                          labelText: 'Τμήμα',
+                          border: OutlineInputBorder(),
+                        ),
+                        textCapitalization: TextCapitalization.none,
+                        lexiconSpellAssist: true,
+                        onChanged: (_) => _onFieldChanged(),
+                      );
+                    },
+                    optionsViewBuilder: (context, onSelected, options) {
+                      return _nameAutocompleteOptionsView(
+                        context,
+                        onSelected,
+                        options,
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  LexiconSpellTextFormField(
+                    controller: _notesController,
+                    focusNode: _notesFocusNode,
                     decoration: const InputDecoration(
-                      labelText: 'Τμήμα',
+                      labelText: 'Σημειώσεις',
                       border: OutlineInputBorder(),
+                      alignLabelWithHint: true,
                     ),
-                    textCapitalization: TextCapitalization.none,
-                    lexiconSpellAssist: true,
+                    maxLines: 3,
                     onChanged: (_) => _onFieldChanged(),
-                  );
-                },
-                optionsViewBuilder: (context, onSelected, options) {
-                  return _nameAutocompleteOptionsView(
-                    context,
-                    onSelected,
-                    options,
-                  );
-                },
+                  ),
+                ],
               ),
-              const SizedBox(height: 12),
-              LexiconSpellTextFormField(
-                controller: _notesController,
-                focusNode: _notesFocusNode,
-                decoration: const InputDecoration(
-                  labelText: 'Σημειώσεις',
-                  border: OutlineInputBorder(),
-                  alignLabelWithHint: true,
-                ),
-                maxLines: 3,
-                onChanged: (_) => _onFieldChanged(),
-              ),
-            ],
+            ),
           ),
+          actions: [
+            TextButton(
+              onPressed: _cancelAndClose,
+              child: const Text('Ακύρωση'),
+            ),
+            FilledButton(
+              onPressed: _isDirty ? _save : null,
+              child: Text(_isEdit ? 'Αποθήκευση' : 'Προσθήκη'),
+            ),
+          ],
         ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: _cancelAndClose,
-          child: const Text('Ακύρωση'),
-        ),
-        FilledButton(
-          onPressed: _isDirty ? _save : null,
-          child: Text(_isEdit ? 'Αποθήκευση' : 'Προσθήκη'),
-        ),
-      ],
-    ),
       ),
     );
   }

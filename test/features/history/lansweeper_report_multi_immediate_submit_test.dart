@@ -1,4 +1,4 @@
-﻿// Widget test: Άμεση Καταχώρηση Lansweeper με >1 επιλεγμένες κλήσεις.
+// Widget test: Άμεση Καταχώρηση Lansweeper με >1 επιλεγμένες κλήσεις.
 //
 // Ολόκληρο αρχείο:
 //   flutter test test/features/history/lansweeper_report_multi_immediate_submit_test.dart
@@ -233,9 +233,7 @@ void main() {
           UncontrolledProviderScope(
             container: container,
             child: const MaterialApp(
-              home: Scaffold(
-                body: LansweeperReportDialog(),
-              ),
+              home: Scaffold(body: LansweeperReportDialog()),
             ),
           ),
         );
@@ -306,9 +304,7 @@ void main() {
         expect(
           syncNotifier.submitFinished,
           isTrue,
-          reason: greekExpectMsg(
-            'Η Άμεση Καταχώρηση Lansweeper ολοκληρώθηκε',
-          ),
+          reason: greekExpectMsg('Η Άμεση Καταχώρηση Lansweeper ολοκληρώθηκε'),
         );
         await pumpUntilSettled(tester);
 

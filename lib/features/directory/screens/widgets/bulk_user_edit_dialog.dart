@@ -145,10 +145,7 @@ class _BulkUserEditDialogState extends State<BulkUserEditDialog>
   }
 
   Future<void> _save() async {
-    final ids = widget.selectedUsers
-        .map((u) => u.id)
-        .whereType<int>()
-        .toList();
+    final ids = widget.selectedUsers.map((u) => u.id).whereType<int>().toList();
     if (ids.isEmpty) {
       if (mounted) Navigator.of(context).pop();
       return;
@@ -228,59 +225,59 @@ class _BulkUserEditDialogState extends State<BulkUserEditDialog>
       messengerKey: dialogMessengerKey,
       child: Center(
         child: AlertDialog(
-      title: Text(
-        widget.selectedUsers.length == 1
-            ? 'Μαζική επεξεργασία (1 υπάλληλος)'
-            : 'Μαζική επεξεργασία (${widget.selectedUsers.length} υπάλληλοι)',
-      ),
-      content: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            for (var i = 0; i < _fieldKeys.length; i++) ...[
-              Row(
-                children: [
-                  SizedBox(
-                    width: 200,
-                    child: CheckboxListTile(
-                      value: _applyField[_fieldKeys[i]]!,
-                      onChanged: (v) => setState(() => _applyField[_fieldKeys[i]] = v ?? false),
-                      title: Text(labels[_fieldKeys[i]]!),
-                      controlAffinity: ListTileControlAffinity.leading,
-                      contentPadding: EdgeInsets.zero,
-                    ),
-                  ),
-                  Expanded(
-                    child: TextFormField(
-                      controller: _controllers[_fieldKeys[i]],
-                      decoration: InputDecoration(
-                        hintText: _hasDifferentValues(_fieldKeys[i])
-                            ? '(Διαφορετικές τιμές)'
-                            : null,
-                        border: const OutlineInputBorder(),
+          title: Text(
+            widget.selectedUsers.length == 1
+                ? 'Μαζική επεξεργασία (1 υπάλληλος)'
+                : 'Μαζική επεξεργασία (${widget.selectedUsers.length} υπάλληλοι)',
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                for (var i = 0; i < _fieldKeys.length; i++) ...[
+                  Row(
+                    children: [
+                      SizedBox(
+                        width: 200,
+                        child: CheckboxListTile(
+                          value: _applyField[_fieldKeys[i]]!,
+                          onChanged: (v) => setState(
+                            () => _applyField[_fieldKeys[i]] = v ?? false,
+                          ),
+                          title: Text(labels[_fieldKeys[i]]!),
+                          controlAffinity: ListTileControlAffinity.leading,
+                          contentPadding: EdgeInsets.zero,
+                        ),
                       ),
-                      spellCheckConfiguration: platformSpellCheckConfiguration,
-                      onChanged: (_) => setState(() {}),
-                    ),
+                      Expanded(
+                        child: TextFormField(
+                          controller: _controllers[_fieldKeys[i]],
+                          decoration: InputDecoration(
+                            hintText: _hasDifferentValues(_fieldKeys[i])
+                                ? '(Διαφορετικές τιμές)'
+                                : null,
+                            border: const OutlineInputBorder(),
+                          ),
+                          spellCheckConfiguration:
+                              platformSpellCheckConfiguration,
+                          onChanged: (_) => setState(() {}),
+                        ),
+                      ),
+                    ],
                   ),
+                  const SizedBox(height: 8),
                 ],
-              ),
-              const SizedBox(height: 8),
-            ],
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Ακύρωση'),
+            ),
+            FilledButton(onPressed: _save, child: const Text('Αποθήκευση')),
           ],
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Ακύρωση'),
-        ),
-        FilledButton(
-          onPressed: _save,
-          child: const Text('Αποθήκευση'),
-        ),
-      ],
         ),
       ),
     );

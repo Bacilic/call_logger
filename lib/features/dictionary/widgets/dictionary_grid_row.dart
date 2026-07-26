@@ -60,12 +60,16 @@ class DictionaryLexiconHeaderRow extends StatelessWidget {
   final double wordWidth;
   final double sourceWidth;
   final double categoryWidth;
+
   /// Έναρξη σύρσιμου λαβής (αποθήκευση βάσης πλάτους).
   final VoidCallback? onWordColumnResizeStart;
+
   /// Συσσωρευμένη μεταβολή πλάτους κατά το σύρσιμο (throttled).
   final ValueChanged<double>? onWordColumnResizeUpdate;
+
   /// Οριστική μεταβολή στο τέλος του σύρσιμου.
   final ValueChanged<double>? onWordColumnResizeEnd;
+
   /// Ακύρωση σύρσιμου — επαναφορά χωρίς αποθήκευση.
   final VoidCallback? onWordColumnResizeCancel;
 
@@ -128,7 +132,11 @@ class DictionaryLexiconHeaderRow extends StatelessWidget {
               width: kDictionaryGridActionsWidth,
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 8),
-                child: Text('Ενέργειες', style: style, textAlign: TextAlign.end),
+                child: Text(
+                  'Ενέργειες',
+                  style: style,
+                  textAlign: TextAlign.end,
+                ),
               ),
             ),
           ],
@@ -156,7 +164,8 @@ class _LexiconWordColumnResizeHandle extends StatefulWidget {
       _LexiconWordColumnResizeHandleState();
 }
 
-class _LexiconWordColumnResizeHandleState extends State<_LexiconWordColumnResizeHandle> {
+class _LexiconWordColumnResizeHandleState
+    extends State<_LexiconWordColumnResizeHandle> {
   static const _previewThrottle = Duration(milliseconds: 16);
 
   bool _isHovered = false;
@@ -273,13 +282,15 @@ class _LexiconWordColumnResizeHandleState extends State<_LexiconWordColumnResize
                 color: _isDragging
                     ? theme.colorScheme.primary
                     : showActive
-                        ? theme.colorScheme.primary.withValues(alpha: 0.85)
-                        : theme.colorScheme.outlineVariant,
+                    ? theme.colorScheme.primary.withValues(alpha: 0.85)
+                    : theme.colorScheme.outlineVariant,
                 borderRadius: BorderRadius.circular(2),
                 boxShadow: _isDragging
                     ? [
                         BoxShadow(
-                          color: theme.colorScheme.primary.withValues(alpha: 0.45),
+                          color: theme.colorScheme.primary.withValues(
+                            alpha: 0.45,
+                          ),
                           blurRadius: 6,
                           spreadRadius: 1,
                         ),
@@ -308,10 +319,12 @@ class DictionaryGridRow extends StatefulWidget {
 
   final Map<String, dynamic> row;
   final DictionaryTableLayout layout;
+
   /// Επιλογές dropdown (από ρυθμίσεις λεξικού).
   final List<String> categoryOptions;
   final Future<void> Function(String displayWord, String category) onUpdate;
   final Future<void> Function() onDelete;
+
   /// Ενημέρωση πάνελ ορθογραφίας όταν αλλάζει εστίαση ή κείμενο στο πεδίο λέξης.
   final void Function(String word)? onSpellingContextChanged;
 
@@ -339,7 +352,9 @@ class _DictionaryGridRowState extends State<DictionaryGridRow> {
         .toList();
   }
 
-  List<DropdownMenuItem<String>> _buildCategoryDropdownItems(BuildContext context) {
+  List<DropdownMenuItem<String>> _buildCategoryDropdownItems(
+    BuildContext context,
+  ) {
     final selectable = _selectableCategoryOptions;
     final itemStyle = Theme.of(context).textTheme.bodySmall;
     if (_categoryValue == AppConfig.lexiconCategoryUnspecified) {
@@ -582,8 +597,10 @@ class _DictionaryGridRowState extends State<DictionaryGridRow> {
                   ),
                 ),
                 child: Padding(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 10,
+                  ),
                   child: Text(
                     srcLabel,
                     maxLines: 1,
@@ -634,10 +651,7 @@ class _DictionaryGridRowState extends State<DictionaryGridRow> {
 
 /// Περιεχόμενο tooltip στήλης «Πηγή»: σημαία· για mix και «Μικτή γραφή»· προαιρετικά «Διπλές».
 class _LexiconSourceTooltipRich extends StatelessWidget {
-  const _LexiconSourceTooltipRich({
-    required this.lang,
-    required this.pending,
-  });
+  const _LexiconSourceTooltipRich({required this.lang, required this.pending});
 
   final String lang;
   final bool pending;
@@ -646,7 +660,8 @@ class _LexiconSourceTooltipRich extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
-    final style = theme.textTheme.bodySmall?.copyWith(color: cs.onInverseSurface) ??
+    final style =
+        theme.textTheme.bodySmall?.copyWith(color: cs.onInverseSurface) ??
         TextStyle(fontSize: 12, color: cs.onInverseSurface);
     final asset = _lexiconLangTooltipAsset(lang);
     final label = _lexiconLangTooltipLabel(lang);
@@ -661,11 +676,8 @@ class _LexiconSourceTooltipRich extends StatelessWidget {
             asset,
             height: 22,
             fit: BoxFit.contain,
-            errorBuilder: (_, _, _) => Icon(
-              Icons.flag_outlined,
-              size: 20,
-              color: cs.onInverseSurface,
-            ),
+            errorBuilder: (_, _, _) =>
+                Icon(Icons.flag_outlined, size: 20, color: cs.onInverseSurface),
           ),
           if (hasLabel) ...[
             const SizedBox(width: 8),

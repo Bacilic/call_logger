@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/providers/quick_call_providers.dart';
@@ -107,7 +107,9 @@ class BuildingMapDialog extends ConsumerWidget {
       ),
       floatingActionButton: editMode
           ? null
-          : const QuickCallFloatingButton(scope: QuickCallFabScope.overlayRoute),
+          : const QuickCallFloatingButton(
+              scope: QuickCallFabScope.overlayRoute,
+            ),
       body: floorsAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('Σφάλμα: $e')),

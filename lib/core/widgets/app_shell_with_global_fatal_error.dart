@@ -46,8 +46,9 @@ class AppShellWithGlobalFatalError extends ConsumerWidget {
           return;
         }
         if (st == BackupScheduleStatus.folderMissing) {
-          final dest =
-              ref.read(databaseBackupSettingsProvider).destinationDirectory;
+          final dest = ref
+              .read(databaseBackupSettingsProvider)
+              .destinationDirectory;
           unawaited(
             showBackupFolderMissingDialog(
               context: context,
@@ -63,17 +64,18 @@ class AppShellWithGlobalFatalError extends ConsumerWidget {
           builder: (ctx) {
             final settings = ref.read(databaseBackupSettingsProvider);
             final manual = settings.lastManualBackupAttempt;
-            final manualToday = manual != null &&
+            final manualToday =
+                manual != null &&
                 BackupScheduleStatusFormatter.hasManualBackupToday(
                   settings,
                   DateTime.now(),
                 );
             final missedMessage = manualToday
                 ? 'Παραλήφθηκε προγραμματισμένο αντίγραφο ασφαλείας, '
-                    'άλλα έχει γίνει αντίγραφο από τον χρήστη στις '
-                    '${BackupScheduleStatusFormatter.formatLocalTimeHm(manual)}.'
+                      'άλλα έχει γίνει αντίγραφο από τον χρήστη στις '
+                      '${BackupScheduleStatusFormatter.formatLocalTimeHm(manual)}.'
                 : 'Παραλήφθηκε προγραμματισμένο αντίγραφο ασφαλείας (η εφαρμογή '
-                    'δεν ήταν ανοιχτή στη σχετική ημέρα και ώρα ή δεν ολοκληρώθηκε εγκαίρως).';
+                      'δεν ήταν ανοιχτή στη σχετική ημέρα και ώρα ή δεν ολοκληρώθηκε εγκαίρως).';
 
             return AlertDialog(
               title: const Text('Αυτόματο αντίγραφο ασφαλείας'),
@@ -81,7 +83,7 @@ class AppShellWithGlobalFatalError extends ConsumerWidget {
                 st == BackupScheduleStatus.missed
                     ? missedMessage
                     : 'Το προγραμματισμένο αντίγραφο ασφαλείας απέτυχε. Ελέγξτε το φάκελο '
-                        'προορισμού και τα δικαιώματα πρόσβασης.',
+                          'προορισμού και τα δικαιώματα πρόσβασης.',
               ),
               actions: [
                 TextButton(
@@ -101,8 +103,9 @@ class AppShellWithGlobalFatalError extends ConsumerWidget {
                       settings,
                       auditTrigger: BackupAuditTrigger.scheduledRetry,
                     );
-                    final notifier =
-                        ref.read(databaseBackupSettingsProvider.notifier);
+                    final notifier = ref.read(
+                      databaseBackupSettingsProvider.notifier,
+                    );
                     await notifier.setLastBackupAttempt(DateTime.now());
                     await notifier.setLastBackupStatus(
                       result.success
@@ -115,10 +118,10 @@ class AppShellWithGlobalFatalError extends ConsumerWidget {
                           content: Text(
                             result.success
                                 ? (result.outputPath != null
-                                    ? 'Αντίγραφο: ${result.outputPath}'
-                                    : 'Το αντίγραφο ολοκληρώθηκε.')
+                                      ? 'Αντίγραφο: ${result.outputPath}'
+                                      : 'Το αντίγραφο ολοκληρώθηκε.')
                                 : (result.message ??
-                                    'Η δημιουργία αντιγράφου απέτυχε.'),
+                                      'Η δημιουργία αντιγράφου απέτυχε.'),
                           ),
                         ),
                       );

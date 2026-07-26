@@ -1,4 +1,4 @@
-﻿import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/database/database_helper.dart';
 import '../../../core/database/remote_tools_repository.dart';
@@ -19,7 +19,9 @@ final remoteToolsRepositoryProvider = Provider<RemoteToolsRepository>((ref) {
 });
 
 /// Ενεργά εργαλεία (για κλήσεις, dropdowns).
-final remoteToolsCatalogProvider = FutureProvider<List<RemoteTool>>((ref) async {
+final remoteToolsCatalogProvider = FutureProvider<List<RemoteTool>>((
+  ref,
+) async {
   final repo = ref.read(remoteToolsRepositoryProvider);
   try {
     final list = await repo.getActiveTools();
@@ -29,7 +31,9 @@ final remoteToolsCatalogProvider = FutureProvider<List<RemoteTool>>((ref) async 
 });
 
 /// Όλα τα εργαλεία (CRUD / ρυθμίσεις).
-final remoteToolsAllCatalogProvider = FutureProvider<List<RemoteTool>>((ref) async {
+final remoteToolsAllCatalogProvider = FutureProvider<List<RemoteTool>>((
+  ref,
+) async {
   final repo = ref.read(remoteToolsRepositoryProvider);
   return repo.getAllTools();
 });
@@ -41,8 +45,9 @@ typedef RemoteToolFormPair = ({
   bool acceptsFileParam,
 });
 
-final remoteToolFormPairsProvider =
-    FutureProvider<List<RemoteToolFormPair>>((ref) async {
+final remoteToolFormPairsProvider = FutureProvider<List<RemoteToolFormPair>>((
+  ref,
+) async {
   final repo = ref.read(remoteToolsRepositoryProvider);
   try {
     final tools = await repo.getActiveTools();
@@ -67,8 +72,9 @@ final remotePathsProvider = FutureProvider<List<String>>((ref) async {
 });
 
 /// Έγκυρες διαδρομές ανά id εργαλείου (μόνο ενεργά εργαλεία όταν η λίστα δεν είναι κενή).
-final validRemoteToolPathsByIdProvider =
-    FutureProvider<Map<int, String?>>((ref) async {
+final validRemoteToolPathsByIdProvider = FutureProvider<Map<int, String?>>((
+  ref,
+) async {
   final repo = ref.read(remoteToolsRepositoryProvider);
   final conn = ref.read(remoteConnectionServiceProvider);
   try {
@@ -88,43 +94,43 @@ typedef LauncherStatus = ({String? path, String? errorReason});
 /// Κατάσταση launcher ανά id εργαλείου.
 final remoteLauncherStatusesByIdProvider =
     FutureProvider<Map<int, LauncherStatus>>((ref) async {
-  final launcher = ref.read(remoteLauncherServiceProvider);
-  final repo = ref.read(remoteToolsRepositoryProvider);
-  try {
-    final tools = await repo.getActiveTools();
-    final map = <int, LauncherStatus>{};
-    for (final t in tools) {
-      map[t.id] = await launcher.getStatusForTool(t);
-    }
-    return map;
-  } catch (_) {
-    return {};
-  }
-});
+      final launcher = ref.read(remoteLauncherServiceProvider);
+      final repo = ref.read(remoteToolsRepositoryProvider);
+      try {
+        final tools = await repo.getActiveTools();
+        final map = <int, LauncherStatus>{};
+        for (final t in tools) {
+          map[t.id] = await launcher.getStatusForTool(t);
+        }
+        return map;
+      } catch (_) {
+        return {};
+      }
+    });
 
-final remoteConnectionServiceProvider = Provider<RemoteConnectionService>((ref) {
-  return RemoteConnectionService(
-    ref.read(remoteToolsRepositoryProvider),
-  );
+final remoteConnectionServiceProvider = Provider<RemoteConnectionService>((
+  ref,
+) {
+  return RemoteConnectionService(ref.read(remoteToolsRepositoryProvider));
 });
 
 final remoteLauncherServiceProvider = Provider<RemoteLauncherService>((ref) {
-  return RemoteLauncherService(
-    ref.read(remoteToolsRepositoryProvider),
-  );
+  return RemoteLauncherService(ref.read(remoteToolsRepositoryProvider));
 });
 
 /// Ρυθμίσεις UI κλήσεων (κύριο εργαλείο + overflow + κενές εκκινήσεις).
-final callsRemoteUiConfigProvider = FutureProvider<
-    ({
-      int? primaryToolId,
-      bool showSecondaryInOverflow,
-      bool showEmptyRemoteLaunchers,
-    })>((ref) async {
-  final s = SettingsService();
-  return (
-    primaryToolId: await s.getCallsPrimaryToolId(),
-    showSecondaryInOverflow: await s.getCallsShowSecondaryRemoteActions(),
-    showEmptyRemoteLaunchers: await s.getCallsShowEmptyRemoteLaunchers(),
-  );
-});
+final callsRemoteUiConfigProvider =
+    FutureProvider<
+      ({
+        int? primaryToolId,
+        bool showSecondaryInOverflow,
+        bool showEmptyRemoteLaunchers,
+      })
+    >((ref) async {
+      final s = SettingsService();
+      return (
+        primaryToolId: await s.getCallsPrimaryToolId(),
+        showSecondaryInOverflow: await s.getCallsShowSecondaryRemoteActions(),
+        showEmptyRemoteLaunchers: await s.getCallsShowEmptyRemoteLaunchers(),
+      );
+    });

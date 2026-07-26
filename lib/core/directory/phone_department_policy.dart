@@ -105,7 +105,8 @@ class PhoneDepartmentPolicy {
 
       final hasDeptConflict =
           usage.departmentId != null &&
-          (targetDepartmentId == null || usage.departmentId != targetDepartmentId);
+          (targetDepartmentId == null ||
+              usage.departmentId != targetDepartmentId);
       final hasOtherOwners = otherOwners.isNotEmpty;
 
       if (!hasDeptConflict && !hasOtherOwners) continue;
@@ -124,7 +125,9 @@ class PhoneDepartmentPolicy {
     return conflicts;
   }
 
-  static void assertNoUnresolvedConflicts(List<PhoneDepartmentConflict> conflicts) {
+  static void assertNoUnresolvedConflicts(
+    List<PhoneDepartmentConflict> conflicts,
+  ) {
     if (conflicts.isNotEmpty) {
       throw PhoneDepartmentPolicyException(conflicts);
     }

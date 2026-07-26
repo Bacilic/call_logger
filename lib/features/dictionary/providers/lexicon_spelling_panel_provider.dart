@@ -1,4 +1,4 @@
-﻿import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/services/spelling_lookup_gemini_service.dart';
 
@@ -50,8 +50,9 @@ class LexiconSpellingPanelState {
       target: clearTarget ? null : (target ?? this.target),
       geminiLoading: geminiLoading ?? this.geminiLoading,
       geminiError: clearGeminiError ? null : (geminiError ?? this.geminiError),
-      geminiResult:
-          clearGeminiResult ? null : (geminiResult ?? this.geminiResult),
+      geminiResult: clearGeminiResult
+          ? null
+          : (geminiResult ?? this.geminiResult),
     );
   }
 }
@@ -91,10 +92,7 @@ class LexiconSpellingPanelNotifier extends Notifier<LexiconSpellingPanelState> {
   }
 
   void setGeminiLoading() {
-    state = state.copyWith(
-      geminiLoading: true,
-      clearGeminiError: true,
-    );
+    state = state.copyWith(geminiLoading: true, clearGeminiError: true);
   }
 
   void setGeminiSuccess(SpellingLookupGeminiResult result) {
@@ -106,14 +104,11 @@ class LexiconSpellingPanelNotifier extends Notifier<LexiconSpellingPanelState> {
   }
 
   void setGeminiError(String message) {
-    state = state.copyWith(
-      geminiLoading: false,
-      geminiError: message,
-    );
+    state = state.copyWith(geminiLoading: false, geminiError: message);
   }
 }
 
 final lexiconSpellingPanelProvider =
     NotifierProvider<LexiconSpellingPanelNotifier, LexiconSpellingPanelState>(
-  LexiconSpellingPanelNotifier.new,
-);
+      LexiconSpellingPanelNotifier.new,
+    );

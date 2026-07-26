@@ -25,29 +25,29 @@ class _RecordingLauncher {
 }
 
 LansweeperBrowserLauncher _launcher(_RecordingLauncher recorder) {
-  return LansweeperBrowserLauncher(
-    launch: recorder.call,
-    sleep: (_) async {},
-  );
+  return LansweeperBrowserLauncher(launch: recorder.call, sleep: (_) async {});
 }
 
 void main() {
   group('LansweeperBrowserLauncher.launchWithOptionalLogin', () {
-    test('μη-launchable target -> notLaunchable και ο launcher ΔΕΝ κλήθηκε', () async {
-      final recorder = _RecordingLauncher();
-      final launcher = _launcher(recorder);
+    test(
+      'μη-launchable target -> notLaunchable και ο launcher ΔΕΝ κλήθηκε',
+      () async {
+        final recorder = _RecordingLauncher();
+        final launcher = _launcher(recorder);
 
-      final result = await launcher.launchWithOptionalLogin(
-        targetUrl: 'not-a-url',
-        autoLogin: true,
-        loginUrl: _validLogin,
-      );
+        final result = await launcher.launchWithOptionalLogin(
+          targetUrl: 'not-a-url',
+          autoLogin: true,
+          loginUrl: _validLogin,
+        );
 
-      expect(result.outcome, LansweeperBrowserLaunchOutcome.notLaunchable);
-      expect(result.opened, isFalse);
-      expect(result.openedLoginTab, isFalse);
-      expect(recorder.launched, isEmpty);
-    });
+        expect(result.outcome, LansweeperBrowserLaunchOutcome.notLaunchable);
+        expect(result.opened, isFalse);
+        expect(result.openedLoginTab, isFalse);
+        expect(recorder.launched, isEmpty);
+      },
+    );
 
     test(
       'autoLogin=true με έγκυρο loginUrl -> login ΠΡΩΤΑ, μετά target, σωστή σειρά',
@@ -109,7 +109,10 @@ void main() {
         outcome: LansweeperBrowserLaunchOutcome.invalidTarget,
       );
 
-      expect(invalidTargetResult.outcome, LansweeperBrowserLaunchOutcome.invalidTarget);
+      expect(
+        invalidTargetResult.outcome,
+        LansweeperBrowserLaunchOutcome.invalidTarget,
+      );
       expect(invalidTargetResult.opened, isFalse);
       expect(invalidTargetResult.openedLoginTab, isTrue);
     });

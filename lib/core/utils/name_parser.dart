@@ -19,10 +19,7 @@ class NameParserUtility {
   /// - 1 λέξη → `(λέξη, '')`
   /// - 2+ λέξεις → πρώτη λέξη = [firstName], όλες οι υπόλοιπες ενωμένες με κενό = [lastName]
   static ({String firstName, String lastName}) parse(String fullName) {
-    final normalized = fullName
-        .trim()
-        .replaceAll(RegExp(r'\s+'), ' ')
-        .trim();
+    final normalized = fullName.trim().replaceAll(RegExp(r'\s+'), ' ').trim();
     if (normalized.isEmpty) {
       return (firstName: '', lastName: '');
     }
@@ -30,10 +27,7 @@ class NameParserUtility {
     if (parts.length == 1) {
       return (firstName: parts.single, lastName: '');
     }
-    return (
-      firstName: parts.first,
-      lastName: parts.sublist(1).join(' '),
-    );
+    return (firstName: parts.first, lastName: parts.sublist(1).join(' '));
   }
 
   /// Επιστρέφει όλες τις εύλογες ερμηνείες διάταξης ονόματος/επωνύμου.
@@ -43,10 +37,9 @@ class NameParserUtility {
   static List<({String firstName, String lastName})> parseBothOrders(
     String fullName,
   ) {
-    final normalized = stripParentheticalSuffix(fullName)
-        .trim()
-        .replaceAll(RegExp(r'\s+'), ' ')
-        .trim();
+    final normalized = stripParentheticalSuffix(
+      fullName,
+    ).trim().replaceAll(RegExp(r'\s+'), ' ').trim();
     if (normalized.isEmpty) return const [];
 
     final commaIndex = normalized.indexOf(',');
@@ -61,10 +54,7 @@ class NameParserUtility {
     final parts = normalized.split(' ');
     if (parts.length == 1) {
       final word = parts.single;
-      return [
-        (firstName: word, lastName: ''),
-        (firstName: '', lastName: word),
-      ];
+      return [(firstName: word, lastName: ''), (firstName: '', lastName: word)];
     }
 
     final interpretations = <({String firstName, String lastName})>{

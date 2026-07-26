@@ -17,10 +17,7 @@ void main() {
       expect(draft.assignedCount, 0);
       expect(draft.isComplete, isFalse);
 
-      draft.assign(
-        {1, 2},
-        const SharedAssetTransferTarget.existing(10),
-      );
+      draft.assign({1, 2}, const SharedAssetTransferTarget.existing(10));
 
       expect(draft.remainingCount, 1);
       expect(draft.assignedCount, 2);
@@ -31,10 +28,7 @@ void main() {
     test('δεύτερη ανάθεση υπολοίπων → isComplete true', () {
       final draft = EmployeeReassignmentDraft(candidates);
       draft.assign({1}, const SharedAssetTransferTarget.existing(10));
-      draft.assign(
-        {2, 3},
-        const SharedAssetTransferTarget.createNew('Νέο'),
-      );
+      draft.assign({2, 3}, const SharedAssetTransferTarget.createNew('Νέο'));
 
       expect(draft.remainingCount, 0);
       expect(draft.assignedCount, 3);

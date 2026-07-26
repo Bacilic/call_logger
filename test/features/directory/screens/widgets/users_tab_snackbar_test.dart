@@ -80,11 +80,7 @@ void main() {
       });
 
       const userId = 9001;
-      final user = UserModel(
-        id: userId,
-        firstName: 'Snack',
-        lastName: 'User',
-      );
+      final user = UserModel(id: userId, firstName: 'Snack', lastName: 'User');
       final initial = DirectoryState(
         allUsers: [user],
         filteredUsers: [user],
@@ -95,8 +91,12 @@ void main() {
         ProviderScope(
           overrides: [
             ...callLoggerTestProviderOverrides(),
-            directoryProvider.overrideWith(() => _FakeDirectoryNotifier(initial)),
-            catalogUsersContinuousScrollProvider.overrideWith((ref) async => true),
+            directoryProvider.overrideWith(
+              () => _FakeDirectoryNotifier(initial),
+            ),
+            catalogUsersContinuousScrollProvider.overrideWith(
+              (ref) async => true,
+            ),
           ],
           child: const MaterialApp(home: _UsersTabHost()),
         ),
@@ -113,9 +113,7 @@ void main() {
           matching: find.widgetWithText(FilledButton, 'Διαγραφή'),
         ),
       );
-      for (var i = 0;
-          i < 60 && find.byType(SnackBar).evaluate().isEmpty;
-          i++) {
+      for (var i = 0; i < 60 && find.byType(SnackBar).evaluate().isEmpty; i++) {
         await tester.runAsync(
           () => Future<void>.delayed(const Duration(milliseconds: 50)),
         );
@@ -134,7 +132,8 @@ void main() {
         findsOneWidget,
       );
 
-      final hostState = tester.state(find.byType(_UsersTabHost)) as _UsersTabHostState;
+      final hostState =
+          tester.state(find.byType(_UsersTabHost)) as _UsersTabHostState;
       hostState.removeTab();
       await tester.pump();
 

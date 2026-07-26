@@ -64,7 +64,9 @@ abstract final class LansweeperReportItemMapper {
     for (final item in selected) {
       final issue = (item.call.issue ?? '').trim();
       if (issue.isEmpty) continue;
-      final date = DateFormat('dd/MM/yyyy HH:mm').format(_callDateTime(item.call));
+      final date = DateFormat(
+        'dd/MM/yyyy HH:mm',
+      ).format(_callDateTime(item.call));
       parts.add('[$date] ${item.caller}: $issue');
     }
     return parts.join('\n');

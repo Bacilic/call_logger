@@ -8,20 +8,34 @@ class DepartmentDirectoryColumn {
   final String label;
   final String? sortKey;
 
-  static const selection =
-      DepartmentDirectoryColumn._('selection', 'Επιλογή', null);
+  static const selection = DepartmentDirectoryColumn._(
+    'selection',
+    'Επιλογή',
+    null,
+  );
   static const id = DepartmentDirectoryColumn._('id', 'ID', 'id');
   static const name = DepartmentDirectoryColumn._('name', 'Όνομα', 'name');
-  static const building =
-      DepartmentDirectoryColumn._('building', 'Κτίριο', 'building');
-  static const color =
-      DepartmentDirectoryColumn._('color', 'Χρώμα', 'color');
-  static const phones =
-      DepartmentDirectoryColumn._('phones', 'Τηλέφωνα', 'phones');
-  static const equipment =
-      DepartmentDirectoryColumn._('equipment', 'Εξοπλισμός', 'equipment');
-  static const notes =
-      DepartmentDirectoryColumn._('notes', 'Σημειώσεις', 'notes');
+  static const building = DepartmentDirectoryColumn._(
+    'building',
+    'Κτίριο',
+    'building',
+  );
+  static const color = DepartmentDirectoryColumn._('color', 'Χρώμα', 'color');
+  static const phones = DepartmentDirectoryColumn._(
+    'phones',
+    'Τηλέφωνα',
+    'phones',
+  );
+  static const equipment = DepartmentDirectoryColumn._(
+    'equipment',
+    'Εξοπλισμός',
+    'equipment',
+  );
+  static const notes = DepartmentDirectoryColumn._(
+    'notes',
+    'Σημειώσεις',
+    'notes',
+  );
 
   static const List<DepartmentDirectoryColumn> all = [
     selection,
@@ -47,10 +61,7 @@ class DepartmentDirectoryColumn {
     if (!order.contains(selection)) {
       return List<DepartmentDirectoryColumn>.from(order);
     }
-    return [
-      selection,
-      ...order.where((c) => c != selection),
-    ];
+    return [selection, ...order.where((c) => c != selection)];
   }
 
   String get editFocusField {

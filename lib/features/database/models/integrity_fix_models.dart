@@ -31,14 +31,14 @@ enum IntegrityFixUiMode {
 
 extension IntegrityCheckTypeFixUi on IntegrityCheckType {
   IntegrityFixUiMode get fixUiMode => switch (this) {
-        IntegrityCheckType.pragmaQuickCheck => IntegrityFixUiMode.blockout,
-        IntegrityCheckType.orphanPhone => IntegrityFixUiMode.choiceRequired,
-        IntegrityCheckType.usersWithoutDepartment =>
-          IntegrityFixUiMode.choiceRequired,
-        IntegrityCheckType.usersInvalidDepartment =>
-          IntegrityFixUiMode.choiceRequired,
-        _ => IntegrityFixUiMode.confirmOnly,
-      };
+    IntegrityCheckType.pragmaQuickCheck => IntegrityFixUiMode.blockout,
+    IntegrityCheckType.orphanPhone => IntegrityFixUiMode.choiceRequired,
+    IntegrityCheckType.usersWithoutDepartment =>
+      IntegrityFixUiMode.choiceRequired,
+    IntegrityCheckType.usersInvalidDepartment =>
+      IntegrityFixUiMode.choiceRequired,
+    _ => IntegrityFixUiMode.confirmOnly,
+  };
 
   bool get allowsBulkFix => fixUiMode == IntegrityFixUiMode.confirmOnly;
 
@@ -68,10 +68,10 @@ extension IntegrityCheckTypeFixUi on IntegrityCheckType {
         'Θέλετε να γίνει εκκαθάριση της κλήσης για τις $count εκκρεμότητες με άκυρη αναφορά;',
       IntegrityCheckType.callsDeletedLinkedEntities =>
         'Θέλετε να γίνει εκκαθάριση των $count ανύπαρκτων αναφορών στις κλήσεις; '
-        'Το αποθηκευμένο κείμενο κάθε κλήσης διατηρείται.',
+            'Το αποθηκευμένο κείμενο κάθε κλήσης διατηρείται.',
       IntegrityCheckType.tasksDeletedLinkedEntities =>
         'Θέλετε να γίνει εκκαθάριση των $count ανύπαρκτων αναφορών στις εκκρεμότητες; '
-        'Το αποθηκευμένο κείμενο κάθε εκκρεμότητας διατηρείται.',
+            'Το αποθηκευμένο κείμενο κάθε εκκρεμότητας διατηρείται.',
       IntegrityCheckType.phoneInvalidDepartment =>
         'Θέλετε να αποσυνδεθούν τα $count τηλέφωνα από ανύπαρκτα τμήματα;',
       IntegrityCheckType.equipmentInvalidDepartment =>
@@ -108,7 +108,7 @@ extension IntegrityCheckTypeFixUi on IntegrityCheckType {
       IntegrityCheckType.callsDeletedLinkedEntities ||
       IntegrityCheckType.tasksDeletedLinkedEntities =>
         '${finding.description} Θα γίνει εκκαθάριση της αναφοράς· '
-        'το αποθηκευμένο κείμενο (snapshot) διατηρείται.',
+            'το αποθηκευμένο κείμενο (snapshot) διατηρείται.',
       IntegrityCheckType.phoneInvalidDepartment =>
         '${finding.description} Θα γίνει αποσύνδεση από το ανύπαρκτο τμήμα.',
       IntegrityCheckType.equipmentInvalidDepartment =>
@@ -196,10 +196,7 @@ final class IntegrityFixLockFailure extends IntegrityFixResult {
 /// Αποτέλεσμα μαζικής επιδιόρθωσης.
 @immutable
 class IntegrityBulkFixResult {
-  const IntegrityBulkFixResult({
-    required this.results,
-    required this.findings,
-  });
+  const IntegrityBulkFixResult({required this.results, required this.findings});
 
   final List<IntegrityFixResult> results;
   final List<DatabaseIntegrityFinding> findings;
@@ -208,7 +205,8 @@ class IntegrityBulkFixResult {
 
   int get failureCount => results.whereType<IntegrityFixFailure>().length;
 
-  int get lockFailureCount => results.whereType<IntegrityFixLockFailure>().length;
+  int get lockFailureCount =>
+      results.whereType<IntegrityFixLockFailure>().length;
 
   bool get anySuccess => successCount > 0;
 

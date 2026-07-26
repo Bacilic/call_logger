@@ -13,10 +13,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 class _StubPath extends LampPathController {
-  _StubPath()
-      : super(
-          host: _ThrowingHost(),
-        );
+  _StubPath() : super(host: _ThrowingHost());
 
   @override
   String? outputPathFormatWarning() => null;
@@ -32,20 +29,17 @@ class _ThrowingHost implements LampScreenHost {
 
 class _StubSearch extends LampSearchController {
   _StubSearch(LampPathController path)
-      : super(
-          host: _ThrowingHost(),
-          path: path,
-        );
+    : super(host: _ThrowingHost(), path: path);
 }
 
 class _StubImport extends LampImportController {
   _StubImport(LampPathController path)
-      : super(host: _ThrowingHost(), path: path);
+    : super(host: _ThrowingHost(), path: path);
 }
 
 class _StubIntegrity extends LampIntegrityController {
   _StubIntegrity(LampPathController path)
-      : super(host: _ThrowingHost(), path: path);
+    : super(host: _ThrowingHost(), path: path);
 }
 
 // Ο διάλογος είναι `ConsumerStatefulWidget`: παρακολουθεί δύο providers και
@@ -124,9 +118,8 @@ void main() {
         importController: _StubImport(path),
         integrityController: _StubIntegrity(path),
         getReadPathCheck: () => null,
-        getOutputPathCheck: () => const LampOldDbCheckResult(
-          LampOldDbStatus.outputPendingCreation,
-        ),
+        getOutputPathCheck: () =>
+            const LampOldDbCheckResult(LampOldDbStatus.outputPendingCreation),
         getDialogFeedback: () => null,
         getDialogFeedbackIsError: () => false,
         onClearDialogFeedback: () {},
@@ -161,7 +154,10 @@ void main() {
         findsOneWidget,
       );
       expect(find.byIcon(Icons.info_outline), findsWidgets);
-      expect(find.byIcon(Icons.info_outline).evaluate().length, greaterThanOrEqualTo(3));
+      expect(
+        find.byIcon(Icons.info_outline).evaluate().length,
+        greaterThanOrEqualTo(3),
+      );
     });
 
     testWidgets('removed legacy action buttons are absent', (tester) async {
@@ -171,7 +167,9 @@ void main() {
       expect(find.text('Έλεγχος & αποθήκευση διαδρομών'), findsNothing);
     });
 
-    testWidgets('arrow button reflects disabled state with tooltip', (tester) async {
+    testWidgets('arrow button reflects disabled state with tooltip', (
+      tester,
+    ) async {
       path.outputDbController.text = '';
       path.readDbController.text = r'C:\read.db';
 
@@ -192,8 +190,7 @@ void main() {
         matching: find.byWidgetPredicate(
           (widget) =>
               widget is Tooltip &&
-              widget.message ==
-                  'Η διαδρομή της βάσης εξόδου είναι κενή',
+              widget.message == 'Η διαδρομή της βάσης εξόδου είναι κενή',
         ),
       );
       expect(tooltipFinder, findsOneWidget);
@@ -216,17 +213,17 @@ void main() {
       expect(readLabel.dy, greaterThan(importButton.dy));
     });
 
-    testWidgets('pending read check message mentions automatic validation',
-        (tester) async {
+    testWidgets('pending read check message mentions automatic validation', (
+      tester,
+    ) async {
       await _openLampSettingsDialog(tester, controller);
 
-      expect(
-        find.textContaining('γίνεται αυτόματα'),
-        findsWidgets,
-      );
+      expect(find.textContaining('γίνεται αυτόματα'), findsWidgets);
     });
 
-    testWidgets('output db tooltip describes recreate not update', (tester) async {
+    testWidgets('output db tooltip describes recreate not update', (
+      tester,
+    ) async {
       await _openLampSettingsDialog(tester, controller);
 
       final outputTooltip = find.byWidgetPredicate(
@@ -245,17 +242,17 @@ void main() {
       expect(updateTooltip, findsNothing);
     });
 
-    testWidgets('output path check shows recreate message when db is valid',
-        (tester) async {
+    testWidgets('output path check shows recreate message when db is valid', (
+      tester,
+    ) async {
       final outputCheckController = LampSettingsDialogController(
         path: path,
         search: search,
         importController: _StubImport(path),
         integrityController: _StubIntegrity(path),
         getReadPathCheck: () => null,
-        getOutputPathCheck: () => const LampOldDbCheckResult(
-          LampOldDbStatus.outputWillUpdate,
-        ),
+        getOutputPathCheck: () =>
+            const LampOldDbCheckResult(LampOldDbStatus.outputWillUpdate),
         getDialogFeedback: () => null,
         getDialogFeedbackIsError: () => false,
         onClearDialogFeedback: () {},

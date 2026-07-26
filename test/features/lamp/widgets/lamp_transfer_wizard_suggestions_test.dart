@@ -70,5 +70,6 @@ void main() {
       ),
     );
     expect(radioGroup.groupValue, isNull);
-    expect(tester.widget<RadioListTile<int?>>(newEntryFinder).value, isNull);  });
+    expect(tester.widget<RadioListTile<int?>>(newEntryFinder).value, isNull);
+  });
 }

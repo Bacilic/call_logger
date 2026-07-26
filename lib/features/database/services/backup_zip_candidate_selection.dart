@@ -21,20 +21,20 @@ class BackupZipCandidateSelection {
   });
 
   const BackupZipCandidateSelection.none(String failureMessage)
-      : this._(
-          kind: BackupZipCandidateSelectionKind.none,
-          failureMessage: failureMessage,
-        );
+    : this._(
+        kind: BackupZipCandidateSelectionKind.none,
+        failureMessage: failureMessage,
+      );
 
   const BackupZipCandidateSelection.automatic(
     BackupZipEligibleCandidate selected,
   ) : this._(
-          kind: BackupZipCandidateSelectionKind.automatic,
-          selected: selected,
-        );
+        kind: BackupZipCandidateSelectionKind.automatic,
+        selected: selected,
+      );
 
   const BackupZipCandidateSelection.requiresChoice()
-      : this._(kind: BackupZipCandidateSelectionKind.requiresChoice);
+    : this._(kind: BackupZipCandidateSelectionKind.requiresChoice);
 
   final BackupZipCandidateSelectionKind kind;
   final BackupZipEligibleCandidate? selected;
@@ -50,9 +50,7 @@ BackupZipCandidateSelection decideBackupZipCandidateSelection(
 ) {
   final eligible = inventory.eligibleCandidates;
   if (eligible.isEmpty) {
-    return BackupZipCandidateSelection.none(
-      _noneFailureMessage(inventory),
-    );
+    return BackupZipCandidateSelection.none(_noneFailureMessage(inventory));
   }
   if (eligible.length == 1) {
     return BackupZipCandidateSelection.automatic(eligible.single);

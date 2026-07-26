@@ -1,4 +1,4 @@
-﻿import 'dart:math' as math;
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -155,8 +155,9 @@ class RecentCallsList extends ConsumerWidget {
                                       ),
                                     );
                                     if (context.mounted) {
-                                      ScaffoldMessenger.of(context)
-                                          .showSnackBar(
+                                      ScaffoldMessenger.of(
+                                        context,
+                                      ).showSnackBar(
                                         const SnackBar(
                                           content: Text(
                                             'Το κείμενο αντιγράφηκε στο πρόχειρο.',
@@ -173,9 +174,7 @@ class RecentCallsList extends ConsumerWidget {
                                           ),
                                         );
                                     ref
-                                        .read(
-                                          mainNavRequestProvider.notifier,
-                                        )
+                                        .read(mainNavRequestProvider.notifier)
                                         .request(
                                           const MainNavRequest(
                                             destination:

@@ -105,7 +105,11 @@ void main() {
           1,
           reason: greekExpectMsg('Άμεσο lookup — ένας υποψήφιος καλώντας'),
         );
-        expect(header.selectedCaller, isNull, reason: greekExpectMsg('Μερικό όνομα — χωρίς επιλογή'));
+        expect(
+          header.selectedCaller,
+          isNull,
+          reason: greekExpectMsg('Μερικό όνομα — χωρίς επιλογή'),
+        );
 
         await flushCallLoggerSqfliteLockTimers(tester);
       },
@@ -127,7 +131,11 @@ void main() {
         await tester.pump();
 
         var header = await _readHeader(tester);
-        expect(header.selectedCaller, isNotNull, reason: greekExpectMsg('Πλήρες όνομα — επιλογή καλούντα'));
+        expect(
+          header.selectedCaller,
+          isNotNull,
+          reason: greekExpectMsg('Πλήρες όνομα — επιλογή καλούντα'),
+        );
         expect(
           header.equipmentText,
           kTestEquipmentCode,
@@ -143,7 +151,11 @@ void main() {
         await tester.pump();
 
         header = await _readHeader(tester);
-        expect(header.equipmentText, '', reason: greekExpectMsg('Ο εξοπλισμός καθαρίστηκε'));
+        expect(
+          header.equipmentText,
+          '',
+          reason: greekExpectMsg('Ο εξοπλισμός καθαρίστηκε'),
+        );
         expect(header.selectedEquipment, isNull);
 
         await tester.tap(_callerTextField(), warnIfMissed: false);
@@ -185,7 +197,11 @@ void main() {
           1,
           reason: greekExpectMsg('Άμεσο lookup με Enter'),
         );
-        expect(header.selectedCaller, isNull, reason: greekExpectMsg('Μερικό όνομα — υποψήφιος'));
+        expect(
+          header.selectedCaller,
+          isNull,
+          reason: greekExpectMsg('Μερικό όνομα — υποψήφιος'),
+        );
 
         await flushCallLoggerSqfliteLockTimers(tester);
       },

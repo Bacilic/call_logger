@@ -54,8 +54,9 @@ void main() {
       () async {
         final deptId = await db.insert('departments', {
           'name': 'Τμήμα Τηλεφώνου',
-          'name_key':
-              SearchTextNormalizer.normalizeForSearch('Τμήμα Τηλεφώνου'),
+          'name_key': SearchTextNormalizer.normalizeForSearch(
+            'Τμήμα Τηλεφώνου',
+          ),
           'is_deleted': 0,
         });
 
@@ -120,15 +121,20 @@ void main() {
           id: 1,
           action: AuditActions.modifyUser,
           entityType: AuditEntityTypes.user,
-          oldValuesJson: (await db.query('audit_log')).single['old_values_json']
-              as String?,
-          newValuesJson: (await db.query('audit_log')).single['new_values_json']
-              as String?,
+          oldValuesJson:
+              (await db.query('audit_log')).single['old_values_json']
+                  as String?,
+          newValuesJson:
+              (await db.query('audit_log')).single['new_values_json']
+                  as String?,
         );
 
         final lines = formatter.describeChanges(row);
         expect(lines.any((l) => l.contains('is_deleted')), isFalse);
-        expect(lines.any((l) => l.toLowerCase().contains('διαγραμμέ')), isFalse);
+        expect(
+          lines.any((l) => l.toLowerCase().contains('διαγραμμέ')),
+          isFalse,
+        );
 
         final searchText =
             (await db.query('audit_log')).single['search_text'] as String?;
@@ -168,28 +174,27 @@ void main() {
         expect(lines.single, contains('Αλλαγή'));
         expect(lines.single.toLowerCase(), contains('παραμέτρ'));
         expect(
-          lines.where((l) => l.startsWith('Αφαίρεση') || l.startsWith('Προσθήκη')),
+          lines.where(
+            (l) => l.startsWith('Αφαίρεση') || l.startsWith('Προσθήκη'),
+          ),
           isEmpty,
         );
       },
     );
 
-    test(
-      'ετικέτα map_label_offset_x — όχι γυμνό όνομα πεδίου',
-      () async {
-        final row = AuditLogModel(
-          id: 1,
-          action: AuditActions.modifyDepartment,
-          entityType: AuditEntityTypes.department,
-          oldValuesJson: '{"map_label_offset_x":0.0}',
-          newValuesJson: '{"map_label_offset_x":12.5}',
-        );
-        final lines = formatter.describeChanges(row);
-        expect(lines, hasLength(1));
-        expect(lines.single, isNot(contains('map_label_offset_x')));
-        expect(lines.single.toLowerCase(), contains('μετατόπιση'));
-      },
-    );
+    test('ετικέτα map_label_offset_x — όχι γυμνό όνομα πεδίου', () async {
+      final row = AuditLogModel(
+        id: 1,
+        action: AuditActions.modifyDepartment,
+        entityType: AuditEntityTypes.department,
+        oldValuesJson: '{"map_label_offset_x":0.0}',
+        newValuesJson: '{"map_label_offset_x":12.5}',
+      );
+      final lines = formatter.describeChanges(row);
+      expect(lines, hasLength(1));
+      expect(lines.single, isNot(contains('map_label_offset_x')));
+      expect(lines.single.toLowerCase(), contains('μετατόπιση'));
+    });
 
     test(
       'δίδυμο όροφος map_floor + floor_id: μία γραμμή στο «Τι άλλαξε»',
@@ -208,18 +213,15 @@ void main() {
       },
     );
 
-    test(
-      'ΕΠΙΔΙΟΡΘΩΣΗ ΑΚΕΡΑΙΟΤΗΤΑΣ: χωρίς γραμμή integrity_fix',
-      () async {
-        final row = AuditLogModel(
-          id: 3,
-          action: DatabaseHelper.auditActionIntegrityFix,
-          entityType: AuditEntityTypes.maintenance,
-          newValuesJson: '{"integrity_fix":true}',
-        );
-        final lines = formatter.describeChanges(row);
-        expect(lines, isEmpty);
-      },
-    );
+    test('ΕΠΙΔΙΟΡΘΩΣΗ ΑΚΕΡΑΙΟΤΗΤΑΣ: χωρίς γραμμή integrity_fix', () async {
+      final row = AuditLogModel(
+        id: 3,
+        action: DatabaseHelper.auditActionIntegrityFix,
+        entityType: AuditEntityTypes.maintenance,
+        newValuesJson: '{"integrity_fix":true}',
+      );
+      final lines = formatter.describeChanges(row);
+      expect(lines, isEmpty);
+    });
   });
 }

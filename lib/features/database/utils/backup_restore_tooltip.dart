@@ -18,8 +18,10 @@ final backupRestoreTooltipProvider = FutureProvider<String>((ref) async {
   try {
     final db = await DatabaseHelper.instance.database;
     final baseName = p.basenameWithoutExtension(db.path);
-    final dest =
-        ref.read(databaseBackupSettingsProvider).destinationDirectory.trim();
+    final dest = ref
+        .read(databaseBackupSettingsProvider)
+        .destinationDirectory
+        .trim();
     return BackupRestoreTooltipBuilder.build(
       destinationDirectory: dest,
       dbBaseName: baseName,
@@ -95,7 +97,8 @@ class BackupRestoreTooltipBuilder {
         if (name.startsWith(imagesPrefix)) hasToolImages = true;
         if (name.startsWith(dictPrefix)) hasLexicon = true;
         if (name.startsWith(lampPrefix)) hasLampDb = true;
-        if (name.toLowerCase().endsWith('.db') && !name.startsWith(lampPrefix)) {
+        if (name.toLowerCase().endsWith('.db') &&
+            !name.startsWith(lampPrefix)) {
           hasAppDb = true;
         }
       }

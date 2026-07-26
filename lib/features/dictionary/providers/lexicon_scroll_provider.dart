@@ -6,9 +6,13 @@ import '../../../core/database/settings_repository.dart';
 /// Ρύθμιση «συνεχής κύλιση + φόρτωση ακόμα γραμμών» για τον πίνακα λεξικού.
 /// Δεν συνδέεται με τους πίνακες Καταλόγου (ξεχωριστά κλειδιά ανά καρτέλα).
 /// Default: true (όπως ο Κατάλογος).
-final lexiconContinuousScrollProvider = FutureProvider.autoDispose<bool>((ref) async {
+final lexiconContinuousScrollProvider = FutureProvider.autoDispose<bool>((
+  ref,
+) async {
   final db = await DatabaseHelper.instance.database;
-  final value = await SettingsRepository(db).getSetting('lexicon_continuous_scroll');
+  final value = await SettingsRepository(
+    db,
+  ).getSetting('lexicon_continuous_scroll');
   return value == null || value == 'true';
 });
 

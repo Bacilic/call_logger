@@ -1,4 +1,4 @@
-﻿// Προσωρινή χρήση DataTable – σε επόμενη φάση εξέτασε custom Table για sticky headers & row selection.
+// Προσωρινή χρήση DataTable – σε επόμενη φάση εξέτασε custom Table για sticky headers & row selection.
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -72,8 +72,9 @@ class _EquipmentTabState extends ConsumerState<EquipmentTab>
     final state = ref.watch(equipmentDirectoryProvider);
     final notifier = ref.read(equipmentDirectoryProvider.notifier);
     final visibleColumns = state.orderedVisibleColumns;
-    final continuousScrollAsync =
-        ref.watch(catalogEquipmentContinuousScrollProvider);
+    final continuousScrollAsync = ref.watch(
+      catalogEquipmentContinuousScrollProvider,
+    );
     final continuousScroll = continuousScrollAsync.value ?? true;
     final allToolsCatalog =
         ref.watch(remoteToolsAllCatalogProvider).value ?? const <RemoteTool>[];
@@ -239,8 +240,9 @@ class _EquipmentTabState extends ConsumerState<EquipmentTab>
             onRequestBulkEdit: () => _openBulkEdit(context, ref),
             continuousScroll: continuousScroll,
             defaultRemoteDisplay: (row) {
-              final primaryId =
-                  row.$1.displayPrimaryRemoteToolId(allToolsCatalog);
+              final primaryId = row.$1.displayPrimaryRemoteToolId(
+                allToolsCatalog,
+              );
               return DefaultRemoteToolDisplay.resolve(
                 primaryId?.toString(),
                 allToolsCatalog,
@@ -301,8 +303,7 @@ class _EquipmentTabState extends ConsumerState<EquipmentTab>
   Future<void> _openBulkEdit(BuildContext context, WidgetRef ref) async {
     final state = ref.read(equipmentDirectoryProvider);
     final selectedRows = state.allItems
-        .where((r) =>
-            r.$1.id != null && state.selectedIds.contains(r.$1.id))
+        .where((r) => r.$1.id != null && state.selectedIds.contains(r.$1.id))
         .toList();
     if (selectedRows.isEmpty) return;
     await showDialog<void>(
@@ -352,15 +353,16 @@ class _EquipmentTabState extends ConsumerState<EquipmentTab>
   }
 
   Future<void> _confirmAndDeleteSelected(
-      BuildContext context, WidgetRef ref) async {
+    BuildContext context,
+    WidgetRef ref,
+  ) async {
     final state = ref.read(equipmentDirectoryProvider);
     if (state.selectedIds.isEmpty) return;
     final count = state.selectedIds.length;
     final String contentText;
     if (count <= 5) {
       final db = await DatabaseHelper.instance.database;
-      final summaries =
-          await deletionSummaries(db, state.selectedIds.toList());
+      final summaries = await deletionSummaries(db, state.selectedIds.toList());
       final lines = formatEquipmentDeletionLines(summaries);
       contentText = ['Διαγραφή εξοπλισμού;', ...lines].join('\n');
     } else {
@@ -421,7 +423,9 @@ class _EquipmentTabState extends ConsumerState<EquipmentTab>
           onConfirm: () => messenger.hideCurrentSnackBar(),
           onUndo: () async {
             messenger.hideCurrentSnackBar();
-            await ref.read(equipmentDirectoryProvider.notifier).undoLastDelete();
+            await ref
+                .read(equipmentDirectoryProvider.notifier)
+                .undoLastDelete();
           },
         ),
       ),
@@ -439,8 +443,9 @@ class _EquipmentColumnSelectorOverlay extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(equipmentDirectoryProvider);
     final notifier = ref.read(equipmentDirectoryProvider.notifier);
-    final continuousScrollAsync =
-        ref.watch(catalogEquipmentContinuousScrollProvider);
+    final continuousScrollAsync = ref.watch(
+      catalogEquipmentContinuousScrollProvider,
+    );
     final continuousScroll = continuousScrollAsync.value ?? true;
     final order = state.columnOrder;
     final keys = state.visibleColumnKeys;

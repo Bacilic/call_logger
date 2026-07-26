@@ -54,6 +54,7 @@ class _LampDbTablesTabState extends State<LampDbTablesTab> {
   TablePreviewResult? _preview;
   double _tablesPaneWidth = _kDefaultTablesPaneWidth;
   CustomMouseCursor? _splitterCursor;
+
   /// `'data_issues'` ή `'search_index'` όταν τρέχει η αντίστοιχη ενέργεια.
   String? _tableMaintenanceBusy;
 
@@ -235,7 +236,9 @@ class _LampDbTablesTabState extends State<LampDbTablesTab> {
       await widget.onAfterDataIssuesPurge?.call();
       if (!mounted) return;
       final deletedLabel = DatabaseStatsService.formatIntegerEl(deleted);
-      _showSnack('Διαγράφηκαν $deletedLabel εγγραφές από τον πίνακα data_issues.');
+      _showSnack(
+        'Διαγράφηκαν $deletedLabel εγγραφές από τον πίνακα data_issues.',
+      );
       await _load();
       if (_selected == 'data_issues') {
         await _onSelectTable('data_issues');
@@ -297,11 +300,11 @@ class _LampDbTablesTabState extends State<LampDbTablesTab> {
     try {
       final r = await widget.repository.rebuildLampSearchIndex(path);
       if (!mounted) return;
-      final prevLabel = DatabaseStatsService.formatIntegerEl(r.previousRowCount);
-      final newLabel = DatabaseStatsService.formatIntegerEl(r.newRowCount);
-      _showSnack(
-        'Αναδόμηση search_index: $prevLabel → $newLabel εγγραφές.',
+      final prevLabel = DatabaseStatsService.formatIntegerEl(
+        r.previousRowCount,
       );
+      final newLabel = DatabaseStatsService.formatIntegerEl(r.newRowCount);
+      _showSnack('Αναδόμηση search_index: $prevLabel → $newLabel εγγραφές.');
       await _load();
       if (_selected == 'search_index') {
         await _onSelectTable('search_index');
@@ -366,9 +369,10 @@ class _LampDbTablesTabState extends State<LampDbTablesTab> {
   }
 
   double _clampTablesPaneWidth(double requested, double maxTotalWidth) {
-    final maxByPreview = (maxTotalWidth - _kSplitterWidth - _kMinPreviewPaneWidth)
-        .clamp(_kMinTablesPaneWidth, maxTotalWidth)
-        .toDouble();
+    final maxByPreview =
+        (maxTotalWidth - _kSplitterWidth - _kMinPreviewPaneWidth)
+            .clamp(_kMinTablesPaneWidth, maxTotalWidth)
+            .toDouble();
     return requested.clamp(_kMinTablesPaneWidth, maxByPreview).toDouble();
   }
 
@@ -463,7 +467,8 @@ class _LampDbTablesTabState extends State<LampDbTablesTab> {
                             itemCount: _summary!.tableNamesOrdered.length,
                             itemBuilder: (context, index) {
                               final name = _summary!.tableNamesOrdered[index];
-                              final count = _summary!.rowCountByTable[name] ?? 0;
+                              final count =
+                                  _summary!.rowCountByTable[name] ?? 0;
                               final friendly = lampTableDisplayGreek(name);
                               final titleText = friendly == name
                                   ? name
@@ -483,12 +488,16 @@ class _LampDbTablesTabState extends State<LampDbTablesTab> {
                               );
                               if (trailing != null) {
                                 return Padding(
-                                  padding:
-                                      const EdgeInsets.only(bottom: 4, top: 2),
+                                  padding: const EdgeInsets.only(
+                                    bottom: 4,
+                                    top: 2,
+                                  ),
                                   child: Card(
                                     margin: EdgeInsets.zero,
                                     elevation: 0,
-                                    color: theme.colorScheme.surfaceContainerHighest
+                                    color: theme
+                                        .colorScheme
+                                        .surfaceContainerHighest
                                         .withValues(alpha: 0.65),
                                     clipBehavior: Clip.antiAlias,
                                     child: tile,
@@ -500,9 +509,7 @@ class _LampDbTablesTabState extends State<LampDbTablesTab> {
                           ),
                   ),
                   _buildSplitter(theme: theme, maxTotalWidth: maxTotal),
-                  Expanded(
-                    child: _buildPreviewPanel(theme),
-                  ),
+                  Expanded(child: _buildPreviewPanel(theme)),
                 ],
               );
             },
@@ -545,9 +552,7 @@ class _LampDbTablesTabState extends State<LampDbTablesTab> {
         child: Text('Δεν υπάρχουν στήλες ή σειρές προς εμφάνιση.'),
       );
     }
-    return LampSimpleDataPreview(
-      result: pre,
-    );
+    return LampSimpleDataPreview(result: pre);
   }
 }
 
@@ -624,11 +629,7 @@ class _LampFileStatsCardState extends State<_LampFileStatsCard> {
               children: [
                 const SizedBox(height: 2),
                 _row(t, 'Διαδρομή (πλήρης):', widget.fullPath),
-                _row(
-                  t,
-                  'Μέγεθος αρχείου:',
-                  _elSize(widget.sizeBytes),
-                ),
+                _row(t, 'Μέγεθος αρχείου:', _elSize(widget.sizeBytes)),
                 _row(
                   t,
                   'Χρόνος αλλαγής αρχείου (τελευταίο modified):',
@@ -677,12 +678,7 @@ class _LampFileStatsCardState extends State<_LampFileStatsCard> {
               ),
             ),
           ),
-          Expanded(
-            child: SelectableText(
-              value,
-              style: t.textTheme.bodySmall,
-            ),
-          ),
+          Expanded(child: SelectableText(value, style: t.textTheme.bodySmall)),
         ],
       ),
     );
@@ -733,9 +729,7 @@ class _LampSimpleDataPreviewState extends State<LampSimpleDataPreview> {
                 primary: false,
                 scrollDirection: Axis.horizontal,
                 child: ConstrainedBox(
-                  constraints: BoxConstraints(
-                    minWidth: constraints.maxWidth,
-                  ),
+                  constraints: BoxConstraints(minWidth: constraints.maxWidth),
                   child: DataTable(
                     showCheckboxColumn: false,
                     columnSpacing: 8,

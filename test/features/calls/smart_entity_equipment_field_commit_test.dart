@@ -143,8 +143,16 @@ void main() {
         await tester.pump();
 
         final header = await _readHeader(tester);
-        expect(header.equipmentNoMatch, isTrue, reason: greekExpectMsg('Άμεσο lookup — no-match'));
-        expect(header.selectedEquipment, isNull, reason: greekExpectMsg('Χωρίς επιλογή'));
+        expect(
+          header.equipmentNoMatch,
+          isTrue,
+          reason: greekExpectMsg('Άμεσο lookup — no-match'),
+        );
+        expect(
+          header.selectedEquipment,
+          isNull,
+          reason: greekExpectMsg('Χωρίς επιλογή'),
+        );
 
         await flushCallLoggerSqfliteLockTimers(tester);
       },
@@ -166,8 +174,16 @@ void main() {
         await tester.pump(const Duration(milliseconds: 260));
 
         var header = await _readHeader(tester);
-        expect(header.selectedEquipment, isNotNull, reason: greekExpectMsg('Προϋπόθεση: επιλεγμένος εξοπλισμός'));
-        expect(header.selectedCaller, isNotNull, reason: greekExpectMsg('Προϋπόθεση: autofill καλούντα'));
+        expect(
+          header.selectedEquipment,
+          isNotNull,
+          reason: greekExpectMsg('Προϋπόθεση: επιλεγμένος εξοπλισμός'),
+        );
+        expect(
+          header.selectedCaller,
+          isNotNull,
+          reason: greekExpectMsg('Προϋπόθεση: autofill καλούντα'),
+        );
 
         await tester.runAsync(() async {
           final container = ProviderScope.containerOf(
@@ -178,8 +194,16 @@ void main() {
         await tester.pump();
 
         header = await _readHeader(tester);
-        expect(header.selectedCaller, isNull, reason: greekExpectMsg('Ο καλών καθαρίστηκε'));
-        expect(header.equipmentText, kTestEquipmentCode, reason: greekExpectMsg('Ο εξοπλισμός μένει'));
+        expect(
+          header.selectedCaller,
+          isNull,
+          reason: greekExpectMsg('Ο καλών καθαρίστηκε'),
+        );
+        expect(
+          header.equipmentText,
+          kTestEquipmentCode,
+          reason: greekExpectMsg('Ο εξοπλισμός μένει'),
+        );
 
         await tester.tap(_equipmentTextField(), warnIfMissed: false);
         await pumpUntilSettled(tester);
@@ -187,8 +211,16 @@ void main() {
         await tester.pump();
 
         header = await _readHeader(tester);
-        expect(header.selectedCaller, isNull, reason: greekExpectMsg('Blur δεν ξαναγεμίζει καλούντα'));
-        expect(header.equipmentText, kTestEquipmentCode, reason: greekExpectMsg('Ο εξοπλισμός μένει'));
+        expect(
+          header.selectedCaller,
+          isNull,
+          reason: greekExpectMsg('Blur δεν ξαναγεμίζει καλούντα'),
+        );
+        expect(
+          header.equipmentText,
+          kTestEquipmentCode,
+          reason: greekExpectMsg('Ο εξοπλισμός μένει'),
+        );
 
         await flushCallLoggerSqfliteLockTimers(tester);
       },
@@ -209,7 +241,11 @@ void main() {
         await tester.pump();
 
         final suggestionTile = find.text(kTestEquipmentCode);
-        expect(suggestionTile, findsWidgets, reason: greekExpectMsg('Εμφανής πρόταση εξοπλισμού'));
+        expect(
+          suggestionTile,
+          findsWidgets,
+          reason: greekExpectMsg('Εμφανής πρόταση εξοπλισμού'),
+        );
         await tester.tap(suggestionTile.first);
         await pumpUntilSettled(tester);
 

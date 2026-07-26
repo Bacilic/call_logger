@@ -9,7 +9,7 @@ import 'settings_service.dart';
 /// Εφαρμογή και αποθήκευση θέσης/μεγέθους κύριου παραθύρου (Windows).
 class DesktopWindowService {
   DesktopWindowService([SettingsService? settings])
-      : _settings = settings ?? SettingsService();
+    : _settings = settings ?? SettingsService();
 
   final SettingsService _settings;
 
@@ -68,10 +68,7 @@ class DesktopWindowService {
     );
     final mode = await _settings.getWindowPlacementMode();
     if (mode == WindowPlacementMode.lastPosition) {
-      await _settings.setSavedWindowPosition(
-        x: bounds.left,
-        y: bounds.top,
-      );
+      await _settings.setSavedWindowPosition(x: bounds.left, y: bounds.top);
     }
   }
 
@@ -85,9 +82,6 @@ class DesktopWindowService {
   }) {
     final maxX = math.max(0.0, screenWidth - width);
     final maxY = math.max(0.0, screenHeight - height);
-    return (
-      x: x.clamp(0.0, maxX),
-      y: y.clamp(0.0, maxY),
-    );
+    return (x: x.clamp(0.0, maxX), y: y.clamp(0.0, maxY));
   }
 }

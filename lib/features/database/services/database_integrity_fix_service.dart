@@ -16,10 +16,10 @@ class DatabaseIntegrityFixService {
     CallsRepository Function(Database db)? callsFactory,
     TaskService Function()? taskServiceFactory,
     IntegrityAuditDetailsBuilder? auditBuilder,
-  })  : _integrityFactory = integrityFactory ?? ((db) => IntegrityService(db)),
-        _callsFactory = callsFactory ?? ((db) => CallsRepository(db)),
-        _taskServiceFactory = taskServiceFactory ?? TaskService.new,
-        _audit = auditBuilder ?? const IntegrityAuditDetailsBuilder();
+  }) : _integrityFactory = integrityFactory ?? ((db) => IntegrityService(db)),
+       _callsFactory = callsFactory ?? ((db) => CallsRepository(db)),
+       _taskServiceFactory = taskServiceFactory ?? TaskService.new,
+       _audit = auditBuilder ?? const IntegrityAuditDetailsBuilder();
 
   final IntegrityService Function(Database db) _integrityFactory;
   final CallsRepository Function(Database db) _callsFactory;
@@ -154,10 +154,7 @@ class DatabaseIntegrityFixService {
           departmentId: departmentId,
           details: auditPack.details,
           oldValues: auditPack.oldValues,
-          newValues: {
-            ...auditPack.newValues,
-            'department_id': departmentId,
-          },
+          newValues: {...auditPack.newValues, 'department_id': departmentId},
         );
       case IntegrityFixLinkPhoneToUser(:final userId):
         await dir.linkOrphanPhoneToUserForIntegrity(
@@ -165,10 +162,7 @@ class DatabaseIntegrityFixService {
           userId: userId,
           details: auditPack.details,
           oldValues: auditPack.oldValues,
-          newValues: {
-            ...auditPack.newValues,
-            'user_id': userId,
-          },
+          newValues: {...auditPack.newValues, 'user_id': userId},
         );
       default:
         throw ArgumentError('Απαιτείται επιλογή για ορφανό τηλέφωνο.');
@@ -256,10 +250,7 @@ class DatabaseIntegrityFixService {
       departmentId: departmentId,
       details: pack.details,
       oldValues: pack.oldValues,
-      newValues: {
-        ...pack.newValues,
-        'building_map_placement_cleared': true,
-      },
+      newValues: {...pack.newValues, 'building_map_placement_cleared': true},
     );
   }
 
@@ -365,8 +356,7 @@ class DatabaseIntegrityFixService {
           newValues: pack.newValues,
         );
       case IntegrityFixAssignDepartment(:final departmentId):
-        final deptLabel =
-            await dir.integrityDepartmentLabel(db, departmentId);
+        final deptLabel = await dir.integrityDepartmentLabel(db, departmentId);
         final pack = _audit.userDepartmentChange(
           userLabel: userLabel,
           oldDepartmentLabel: '—',
@@ -382,7 +372,9 @@ class DatabaseIntegrityFixService {
           newValues: pack.newValues,
         );
       default:
-        throw ArgumentError('Απαιτείται μεταφορά σε τμήμα ή διαγραφή υπαλλήλου.');
+        throw ArgumentError(
+          'Απαιτείται μεταφορά σε τμήμα ή διαγραφή υπαλλήλου.',
+        );
     }
   }
 
@@ -476,8 +468,7 @@ class DatabaseIntegrityFixService {
 
     final current = finding.context['currentNameKey'] as String? ?? '';
     final pack = _audit.simpleAction(
-      details:
-          'Διόρθωση name_key τμήματος ID $departmentId σε «$expected»',
+      details: 'Διόρθωση name_key τμήματος ID $departmentId σε «$expected»',
       oldValues: {'name_key': current.isEmpty ? null : current},
       newValues: {'name_key': expected},
     );
@@ -498,7 +489,8 @@ class DatabaseIntegrityFixService {
     if (linkId == null) return;
     final callId = finding.context['call_id'];
     final pack = _audit.simpleAction(
-      details: 'Διαγραφή ορφανού call_external_link ID $linkId (call_id=$callId)',
+      details:
+          'Διαγραφή ορφανού call_external_link ID $linkId (call_id=$callId)',
       oldValues: {'link_id': linkId, 'call_id': callId},
       newValues: const {'removed': true},
     );
@@ -673,14 +665,8 @@ class DatabaseIntegrityFixService {
       final pack = _audit.simpleAction(
         details:
             'Συγχρονισμός updated_at = created_at για εκκρεμότητα ID $taskId',
-        oldValues: {
-          'created_at': created,
-          'updated_at': oldRow['updated_at'],
-        },
-        newValues: {
-          'created_at': created,
-          'updated_at': created,
-        },
+        oldValues: {'created_at': created, 'updated_at': oldRow['updated_at']},
+        newValues: {'created_at': created, 'updated_at': created},
       );
       await AuditService.log(
         txn,

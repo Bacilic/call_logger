@@ -35,8 +35,7 @@ void main() {
           'is_deleted': 0,
         });
 
-        final notifier =
-            container.read(equipmentDirectoryProvider.notifier);
+        final notifier = container.read(equipmentDirectoryProvider.notifier);
         await notifier.load();
         notifier.toggleSelection(eqId);
 

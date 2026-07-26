@@ -107,10 +107,7 @@ class _DraggableDialogShellState extends State<DraggableDialogShell> {
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onPanUpdate: _onPanUpdate,
-        child: KeyedSubtree(
-          key: _titleKey,
-          child: widget.title,
-        ),
+        child: KeyedSubtree(key: _titleKey, child: widget.title),
       ),
     );
   }

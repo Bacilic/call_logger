@@ -54,6 +54,7 @@ class EquipmentDataTable extends StatefulWidget {
   final void Function(int id) onToggleSelection;
   final void Function(EquipmentColumn? column, bool ascending) onSetSort;
   final void Function(EquipmentRow row, {String? focusedField}) onEditEquipment;
+
   /// Συμβατό με [EquipmentDirectoryState.showBuildingInLocationColumn].
   final bool showBuildingInLocationColumn;
   final int? focusedRowIndex;
@@ -61,8 +62,10 @@ class EquipmentDataTable extends StatefulWidget {
   final VoidCallback? onRequestDelete;
   final VoidCallback? onRequestBulkEdit;
   final bool continuousScroll;
+
   /// Όταν δίνεται, επίλυση id → όνομα και στυλ για ανενεργά/διαγραμμένα εργαλεία.
-  final DefaultRemoteToolDisplay Function(EquipmentRow row)? defaultRemoteDisplay;
+  final DefaultRemoteToolDisplay Function(EquipmentRow row)?
+  defaultRemoteDisplay;
 
   @override
   State<EquipmentDataTable> createState() => _EquipmentDataTableState();
@@ -129,9 +132,9 @@ class _EquipmentDataTableState extends State<EquipmentDataTable> {
       widget.showBuildingInLocationColumn,
       widget.defaultRemoteDisplay,
       Theme.of(context).textTheme.bodyMedium?.copyWith(
-            fontStyle: FontStyle.italic,
-            color: Theme.of(context).colorScheme.onSurfaceVariant,
-          ),
+        fontStyle: FontStyle.italic,
+        color: Theme.of(context).colorScheme.onSurfaceVariant,
+      ),
     );
     if (!widget.continuousScroll) {
       final newFocus = widget.focusedRowIndex;
@@ -190,7 +193,9 @@ class _EquipmentDataTableState extends State<EquipmentDataTable> {
     }
     if (key == LogicalKeyboardKey.arrowUp) {
       if (onSetFocus != null) {
-        final next = current == null ? len - 1 : (current - 1).clamp(0, len - 1);
+        final next = current == null
+            ? len - 1
+            : (current - 1).clamp(0, len - 1);
         onSetFocus(next);
       }
       return KeyEventResult.handled;
@@ -206,7 +211,8 @@ class _EquipmentDataTableState extends State<EquipmentDataTable> {
       }
       return KeyEventResult.handled;
     }
-    if (key == LogicalKeyboardKey.delete || key == LogicalKeyboardKey.backspace) {
+    if (key == LogicalKeyboardKey.delete ||
+        key == LogicalKeyboardKey.backspace) {
       if (widget.selectedIds.isNotEmpty) {
         widget.onRequestDelete?.call();
       }
@@ -231,7 +237,8 @@ class _EquipmentDataTableState extends State<EquipmentDataTable> {
       children: [
         TableRow(
           decoration: BoxDecoration(
-            color: headingColor ??
+            color:
+                headingColor ??
                 Theme.of(context).colorScheme.surfaceContainerHighest,
           ),
           children: [
@@ -271,9 +278,13 @@ class _EquipmentDataTableState extends State<EquipmentDataTable> {
                                 if (i == sortedIndex) ...[
                                   const SizedBox(width: 4),
                                   Icon(
-                                    asc ? Icons.arrow_drop_up : Icons.arrow_drop_down,
+                                    asc
+                                        ? Icons.arrow_drop_up
+                                        : Icons.arrow_drop_down,
                                     size: 18,
-                                    color: Theme.of(context).colorScheme.onSurface,
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.onSurface,
                                   ),
                                 ],
                               ],
@@ -299,15 +310,12 @@ class _EquipmentDataTableState extends State<EquipmentDataTable> {
     );
   }
 
-  TableRow _dataRowToTableRow(
-    BuildContext context,
-    DataRow dataRow,
-  ) {
+  TableRow _dataRowToTableRow(BuildContext context, DataRow dataRow) {
     final theme = Theme.of(context);
     final dataTableTheme = theme.dataTableTheme;
     final rowColor = dataRow.selected
         ? (dataTableTheme.dataRowColor?.resolve({WidgetState.selected}) ??
-            theme.colorScheme.primaryContainer.withValues(alpha: 0.3))
+              theme.colorScheme.primaryContainer.withValues(alpha: 0.3))
         : dataTableTheme.dataRowColor?.resolve({WidgetState.selected});
     return TableRow(
       decoration: BoxDecoration(color: rowColor),
@@ -380,11 +388,9 @@ class _EquipmentDataTableState extends State<EquipmentDataTable> {
                   controller: _verticalScrollController,
                   child: Table(
                     columnWidths: columnWidths,
-                    defaultVerticalAlignment:
-                        TableCellVerticalAlignment.middle,
+                    defaultVerticalAlignment: TableCellVerticalAlignment.middle,
                     children: [
-                      for (final row in rows)
-                        _dataRowToTableRow(context, row),
+                      for (final row in rows) _dataRowToTableRow(context, row),
                     ],
                   ),
                 ),
@@ -421,13 +427,13 @@ class _EquipmentDataTableState extends State<EquipmentDataTable> {
 
     void goFirst() => setState(() => _pagedFirstRowIndex = 0);
     void goPrev() => setState(
-          () => _pagedFirstRowIndex =
-              (start - _rowsPerPage).clamp(0, lastPageStart),
-        );
+      () =>
+          _pagedFirstRowIndex = (start - _rowsPerPage).clamp(0, lastPageStart),
+    );
     void goNext() => setState(() {
-          final next = start + _rowsPerPage;
-          if (next < n) _pagedFirstRowIndex = next;
-        });
+      final next = start + _rowsPerPage;
+      if (next < n) _pagedFirstRowIndex = next;
+    });
     void goLast() => setState(() => _pagedFirstRowIndex = lastPageStart);
 
     return Theme(
@@ -443,8 +449,9 @@ class _EquipmentDataTableState extends State<EquipmentDataTable> {
         ),
       ),
       child: Material(
-        color:
-            theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.65),
+        color: theme.colorScheme.surfaceContainerHighest.withValues(
+          alpha: 0.65,
+        ),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
           child: Row(
@@ -511,10 +518,12 @@ class _EquipmentDataTableState extends State<EquipmentDataTable> {
                   widget.onToggleSelection(id);
                 }
               },
-              allSelected: widget.items.isNotEmpty &&
-                  widget.items.every((r) =>
-                      r.$1.id != null &&
-                      widget.selectedIds.contains(r.$1.id)),
+              allSelected:
+                  widget.items.isNotEmpty &&
+                  widget.items.every(
+                    (r) =>
+                        r.$1.id != null && widget.selectedIds.contains(r.$1.id),
+                  ),
             ),
           )
         else
@@ -568,10 +577,11 @@ class _EquipmentDataTableState extends State<EquipmentDataTable> {
     );
     const columnSpacing = 24.0;
     const horizontalMargin = 16.0;
-    final tableWidth = List.generate(
-            columns.length,
-            (i) => _widthForColumn(widget.visibleColumns[i]))
-        .fold<double>(0, (a, b) => a + b) +
+    final tableWidth =
+        List.generate(
+          columns.length,
+          (i) => _widthForColumn(widget.visibleColumns[i]),
+        ).fold<double>(0, (a, b) => a + b) +
         (columns.length - 1) * columnSpacing +
         horizontalMargin * 2;
 
@@ -816,7 +826,8 @@ class _EquipmentTableSource extends DataTableSource {
                 showBuilding: _showBuildingInLocationColumn,
               )
             : col.displayValue(row);
-        final isEmptyOwnerPlaceholder = col.key == EquipmentColumn.owner.key &&
+        final isEmptyOwnerPlaceholder =
+            col.key == EquipmentColumn.owner.key &&
             cellText == EquipmentColumn.emptyOwnerDisplayLabel;
         return DataCell(
           Text(
@@ -846,12 +857,11 @@ class _EquipmentTableSource extends DataTableSource {
     ];
     return DataRow(
       selected: selected,
-      onSelectChanged: _selectionVisible && id != null && _onToggleSelection != null
+      onSelectChanged:
+          _selectionVisible && id != null && _onToggleSelection != null
           ? (_) => _onToggleSelection!(id)
           : null,
-      color: focused
-          ? WidgetStateProperty.all(_focusHighlightColor)
-          : null,
+      color: focused ? WidgetStateProperty.all(_focusHighlightColor) : null,
       cells: cells,
     );
   }

@@ -1,4 +1,4 @@
-﻿import 'dart:convert';
+import 'dart:convert';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -65,17 +65,16 @@ class DirectoryState {
     this.focusedRowIndex,
     List<UserDirectoryColumn>? columnOrder,
     Set<String>? visibleColumnKeys,
-  })  : columnOrder = UserDirectoryColumn.pinSelectionFirst(
-          List<UserDirectoryColumn>.from(
-            columnOrder ?? UserDirectoryColumn.all,
-          ),
-        ),
-        visibleColumnKeys = visibleColumnKeys != null
-            ? Set<String>.from(visibleColumnKeys)
-            : {for (final c in UserDirectoryColumn.all) c.key};
+  }) : columnOrder = UserDirectoryColumn.pinSelectionFirst(
+         List<UserDirectoryColumn>.from(columnOrder ?? UserDirectoryColumn.all),
+       ),
+       visibleColumnKeys = visibleColumnKeys != null
+           ? Set<String>.from(visibleColumnKeys)
+           : {for (final c in UserDirectoryColumn.all) c.key};
 
   final List<UserModel> allUsers;
   final List<UserModel> filteredUsers;
+
   /// Τηλέφωνα στη βάση χωρίς `user_phones` (λειτουργία «Κοινόχρηστα»).
   final List<NonUserPhoneEntry> allNonUserPhones;
   final List<NonUserPhoneEntry> filteredNonUserPhones;
@@ -85,14 +84,19 @@ class DirectoryState {
   final bool sortAscending;
   final Set<int> selectedIds;
   final List<UserModel>? lastDeleted;
+
   /// Φάκελος πλήρους αναίρεσης διαγραφής υπαλλήλου (τηλέφωνα/εξοπλισμός).
   final UserDeletionUndoRecord? lastUserDeletionUndo;
+
   /// Πριν την τελευταία μαζική επεξεργασία (για undo).
   final List<UserModel>? lastBulkUpdatedUsers;
+
   /// Ευρετήριο στη [filteredUsers] για keyboard navigation (πάνω/κάτω, Enter).
   final int? focusedRowIndex;
+
   /// Πλήρης σειρά όλων των στηλών (κρυφές παραμένουν στη λίστα).
   final List<UserDirectoryColumn> columnOrder;
+
   /// Ποια στήλες εμφανίζονται στον πίνακα.
   final Set<String> visibleColumnKeys;
 
@@ -100,7 +104,7 @@ class DirectoryState {
   List<UserDirectoryColumn> get orderedVisibleColumns {
     return [
       for (final c in columnOrder)
-        if (visibleColumnKeys.contains(c.key)) c
+        if (visibleColumnKeys.contains(c.key)) c,
     ];
   }
 
@@ -134,7 +138,8 @@ class DirectoryState {
       allUsers: allUsers ?? this.allUsers,
       filteredUsers: filteredUsers ?? this.filteredUsers,
       allNonUserPhones: allNonUserPhones ?? this.allNonUserPhones,
-      filteredNonUserPhones: filteredNonUserPhones ?? this.filteredNonUserPhones,
+      filteredNonUserPhones:
+          filteredNonUserPhones ?? this.filteredNonUserPhones,
       catalogMode: catalogMode ?? this.catalogMode,
       searchQuery: searchQuery ?? this.searchQuery,
       sortColumn: sortColumn ?? this.sortColumn,
@@ -234,8 +239,9 @@ class DirectoryNotifier extends Notifier<DirectoryState> {
 
   Future<_UserColumnLayout?> _readColumnLayoutFromSettings() async {
     final dbRead = await DatabaseHelper.instance.database;
-    final raw =
-        await SettingsRepository(dbRead).getSetting(_catalogUsersVisibleColumnsKey);
+    final raw = await SettingsRepository(
+      dbRead,
+    ).getSetting(_catalogUsersVisibleColumnsKey);
     if (raw == null || raw.trim().isEmpty) return null;
     return _parseColumnLayoutFromJson(raw);
   }
@@ -247,14 +253,13 @@ class DirectoryNotifier extends Notifier<DirectoryState> {
       'order': order.map((c) => c.key).toList(),
       'visible': [
         for (final c in order)
-          if (vis.contains(c.key)) c.key
+          if (vis.contains(c.key)) c.key,
       ],
     });
     final dbPersist = await DatabaseHelper.instance.database;
-    await SettingsRepository(dbPersist).saveSetting(
-      _catalogUsersVisibleColumnsKey,
-      payload,
-    );
+    await SettingsRepository(
+      dbPersist,
+    ).saveSetting(_catalogUsersVisibleColumnsKey, payload);
   }
 
   /// Φόρτωση χρηστών από τη βάση και εφαρμογή filter/sort.
@@ -267,7 +272,9 @@ class DirectoryNotifier extends Notifier<DirectoryState> {
     final dbUsers = await DatabaseHelper.instance.database;
     final repo = UserRepository(dbUsers);
     final rows = await repo.getAllUsers();
-    final nonUserRows = await PhoneRepository(dbUsers).getNonUserPhonesCatalogRows();
+    final nonUserRows = await PhoneRepository(
+      dbUsers,
+    ).getNonUserPhonesCatalogRows();
     if (!ref.mounted) return;
     final list = rows.map((m) => UserModel.fromMap(m)).toList();
     final nonUserList = <NonUserPhoneEntry>[];
@@ -282,7 +289,9 @@ class DirectoryNotifier extends Notifier<DirectoryState> {
           phoneId: pid,
           number: rawNum,
           departmentNamesDisplay:
-              deptNames != null && deptNames.trim().isNotEmpty ? deptNames : null,
+              deptNames != null && deptNames.trim().isNotEmpty
+              ? deptNames
+              : null,
           primaryDepartmentId: primary is int ? primary : null,
         ),
       );
@@ -320,7 +329,9 @@ class DirectoryNotifier extends Notifier<DirectoryState> {
         ? shared.length
         : users.length;
     final idx = state.focusedRowIndex;
-    final clamped = idx != null && idx >= len ? (len > 0 ? len - 1 : null) : idx;
+    final clamped = idx != null && idx >= len
+        ? (len > 0 ? len - 1 : null)
+        : idx;
     state = state.copyWith(
       filteredUsers: users,
       filteredNonUserPhones: shared,
@@ -399,8 +410,8 @@ class DirectoryNotifier extends Notifier<DirectoryState> {
             break;
           case 'department':
             cmp = a.departmentLabel.toLowerCase().compareTo(
-                  b.departmentLabel.toLowerCase(),
-                );
+              b.departmentLabel.toLowerCase(),
+            );
             break;
           default:
             cmp = a.number.toLowerCase().compareTo(b.number.toLowerCase());
@@ -433,9 +444,7 @@ class DirectoryNotifier extends Notifier<DirectoryState> {
     final len = state.catalogMode == UserCatalogMode.shared
         ? state.filteredNonUserPhones.length
         : state.filteredUsers.length;
-    final clamped = index == null || len == 0
-        ? null
-        : index.clamp(0, len - 1);
+    final clamped = index == null || len == 0 ? null : index.clamp(0, len - 1);
     state = state.copyWith(focusedRowIndex: clamped);
   }
 
@@ -482,7 +491,10 @@ class DirectoryNotifier extends Notifier<DirectoryState> {
   }
 
   /// Ορατότητα στήλης χωρίς αλλαγή θέσης στη [columnOrder].
-  Future<void> setUserColumnVisible(UserDirectoryColumn col, bool visible) async {
+  Future<void> setUserColumnVisible(
+    UserDirectoryColumn col,
+    bool visible,
+  ) async {
     var keys = Set<String>.from(state.visibleColumnKeys);
     if (visible) {
       keys.add(col.key);
@@ -515,11 +527,9 @@ class DirectoryNotifier extends Notifier<DirectoryState> {
   /// [mirrorEquipmentFromUserId]: για χρήστη χωρίς `id` που μετά την αποθήκευση
   /// θα έχει τις ίδιες συνδέσεις με αυτόν το id (π.χ. ροή «νέος υπάλληλος»).
   static String _phonesComparable(UserModel u) {
-    final list = u.phones
-        .map((p) => p.trim())
-        .where((p) => p.isNotEmpty)
-        .toList()
-      ..sort();
+    final list =
+        u.phones.map((p) => p.trim()).where((p) => p.isNotEmpty).toList()
+          ..sort();
     return PhoneListParser.joinPhones(list);
   }
 
@@ -575,8 +585,7 @@ class DirectoryNotifier extends Notifier<DirectoryState> {
     int? userId,
     int? mirrorEquipmentFromUserId,
   }) {
-    final int? sourceId =
-        mirrorEquipmentFromUserId ?? userId;
+    final int? sourceId = mirrorEquipmentFromUserId ?? userId;
     if (sourceId == null) return {};
     final list = LookupService.instance.findEquipmentsForUser(sourceId);
     return {for (final e in list) _equipmentCodeKey(e)};
@@ -612,7 +621,9 @@ class DirectoryNotifier extends Notifier<DirectoryState> {
     final dbClone = await DatabaseHelper.instance.database;
     final users = UserRepository(dbClone);
     final newId = await users.insertUserFromMap(u.toMap());
-    await EquipmentRepository(dbClone).copyUserEquipmentLinks(sourceUserId, newId);
+    await EquipmentRepository(
+      dbClone,
+    ).copyUserEquipmentLinks(sourceUserId, newId);
     await _refreshLookupCache();
     await loadUsers();
     await refreshDirectoryCaches(ref, equipment: true);
@@ -665,10 +676,7 @@ class DirectoryNotifier extends Notifier<DirectoryState> {
     }
     await _refreshLookupCache();
     if (!ref.mounted) return;
-    state = state.copyWith(
-      lastDeleted: null,
-      lastUserDeletionUndo: null,
-    );
+    state = state.copyWith(lastDeleted: null, lastUserDeletionUndo: null);
     await loadUsers();
     await refreshDirectoryCaches(ref, equipment: true);
   }
@@ -679,17 +687,19 @@ class DirectoryNotifier extends Notifier<DirectoryState> {
     Map<String, dynamic> changes, {
     UserPhoneConflictBatchResult? phoneConflictResolutions,
   }) async {
-    final hasPhoneResolutions = phoneConflictResolutions != null &&
-        !phoneConflictResolutions.isEmpty;
+    final hasPhoneResolutions =
+        phoneConflictResolutions != null && !phoneConflictResolutions.isEmpty;
     if (ids.isEmpty || (changes.isEmpty && !hasPhoneResolutions)) return;
     final toUpdate = state.allUsers
         .where((u) => u.id != null && ids.contains(u.id))
         .toList();
     if (toUpdate.isEmpty) return;
 
-    if (phoneConflictResolutions != null &&
-        !phoneConflictResolutions.isEmpty) {
-      final deptIds = toUpdate.map((u) => u.departmentId).whereType<int>().toSet();
+    if (phoneConflictResolutions != null && !phoneConflictResolutions.isEmpty) {
+      final deptIds = toUpdate
+          .map((u) => u.departmentId)
+          .whereType<int>()
+          .toSet();
       final targetDepartmentId = deptIds.length == 1 ? deptIds.first : null;
       final db = await DatabaseHelper.instance.database;
       await PhoneDepartmentPolicy.applyUserPhoneConflictResolutions(
@@ -722,11 +732,7 @@ class DirectoryNotifier extends Notifier<DirectoryState> {
     try {
       for (final u in list) {
         if (u.id != null) {
-          await users.updateUser(
-            u.id!,
-            u.toMap(),
-            recordAudit: false,
-          );
+          await users.updateUser(u.id!, u.toMap(), recordAudit: false);
           if (!ref.mounted) break;
         }
       }
@@ -748,9 +754,11 @@ final directoryProvider = NotifierProvider<DirectoryNotifier, DirectoryState>(
 /// Παλαιό global κλειδί· αν λείπει το per-tab, διαβάζεται για συμβατότητα.
 const kCatalogContinuousScrollLegacyKey = 'catalog_continuous_scroll';
 
-const kCatalogContinuousScrollEquipmentKey = 'catalog_continuous_scroll_equipment';
+const kCatalogContinuousScrollEquipmentKey =
+    'catalog_continuous_scroll_equipment';
 const kCatalogContinuousScrollUsersKey = 'catalog_continuous_scroll_users';
-const kCatalogContinuousScrollDepartmentsKey = 'catalog_continuous_scroll_departments';
+const kCatalogContinuousScrollDepartmentsKey =
+    'catalog_continuous_scroll_departments';
 
 Future<bool> _readCatalogContinuousScrollPerTable(
   SettingsRepository settings,
@@ -766,16 +774,17 @@ Future<bool> _readCatalogContinuousScrollPerTable(
 /// Συνεχής κύλιση πίνακα εξοπλισμού (ανά καρτέλα). Default: true.
 final catalogEquipmentContinuousScrollProvider =
     FutureProvider.autoDispose<bool>((ref) async {
-  final db = await DatabaseHelper.instance.database;
-  return _readCatalogContinuousScrollPerTable(
-    SettingsRepository(db),
-    kCatalogContinuousScrollEquipmentKey,
-  );
-});
+      final db = await DatabaseHelper.instance.database;
+      return _readCatalogContinuousScrollPerTable(
+        SettingsRepository(db),
+        kCatalogContinuousScrollEquipmentKey,
+      );
+    });
 
 /// Συνεχής κύλιση πινάκων χρηστών (προσωπικά / κοινόχρηστα). Default: true.
-final catalogUsersContinuousScrollProvider =
-    FutureProvider.autoDispose<bool>((ref) async {
+final catalogUsersContinuousScrollProvider = FutureProvider.autoDispose<bool>((
+  ref,
+) async {
   final db = await DatabaseHelper.instance.database;
   return _readCatalogContinuousScrollPerTable(
     SettingsRepository(db),
@@ -786,9 +795,9 @@ final catalogUsersContinuousScrollProvider =
 /// Συνεχής κύλιση πίνακα τμημάτων. Default: true.
 final catalogDepartmentsContinuousScrollProvider =
     FutureProvider.autoDispose<bool>((ref) async {
-  final db = await DatabaseHelper.instance.database;
-  return _readCatalogContinuousScrollPerTable(
-    SettingsRepository(db),
-    kCatalogContinuousScrollDepartmentsKey,
-  );
-});
+      final db = await DatabaseHelper.instance.database;
+      return _readCatalogContinuousScrollPerTable(
+        SettingsRepository(db),
+        kCatalogContinuousScrollDepartmentsKey,
+      );
+    });

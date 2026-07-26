@@ -39,10 +39,7 @@ enum TaskAnalyticsDatePreset {
         if (customFrom == null || customTo == null) {
           return creationSpan;
         }
-        return (
-          start: dayOnly(customFrom),
-          end: dayOnly(customTo),
-        );
+        return (start: dayOnly(customFrom), end: dayOnly(customTo));
       case TaskAnalyticsDatePreset.today:
       case TaskAnalyticsDatePreset.last7:
       case TaskAnalyticsDatePreset.last30:
@@ -84,9 +81,9 @@ enum TaskAnalyticsDatePreset {
   }
 
   int? get presetDayCount => switch (this) {
-        TaskAnalyticsDatePreset.today => 1,
-        TaskAnalyticsDatePreset.last7 => 7,
-        TaskAnalyticsDatePreset.last30 => 30,
-        _ => null,
-      };
+    TaskAnalyticsDatePreset.today => 1,
+    TaskAnalyticsDatePreset.last7 => 7,
+    TaskAnalyticsDatePreset.last30 => 30,
+    _ => null,
+  };
 }

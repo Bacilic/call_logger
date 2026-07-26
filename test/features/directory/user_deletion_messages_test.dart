@@ -30,11 +30,7 @@ void main() {
     });
 
     test('(α) 2–5 υπάλληλοι με λίστα', () {
-      final msg = userDeletionConfirmMessage([
-        'Α (Τ1)',
-        'Β (Τ2)',
-        'Γ',
-      ]);
+      final msg = userDeletionConfirmMessage(['Α (Τ1)', 'Β (Τ2)', 'Γ']);
       expect(msg.startsWith('Διαγραφή 3 υπαλλήλων:'), isTrue);
       expect(msg, contains('• Α (Τ1)'));
       expect(msg, contains('• Β (Τ2)'));
@@ -44,10 +40,7 @@ void main() {
 
     test('(α) >5 → μόνο πλήθος', () {
       final labels = List.generate(6, (i) => 'Υ$i (Τ)');
-      expect(
-        userDeletionConfirmMessage(labels),
-        'Διαγραφή 6 υπαλλήλων;',
-      );
+      expect(userDeletionConfirmMessage(labels), 'Διαγραφή 6 υπαλλήλων;');
     });
   });
 

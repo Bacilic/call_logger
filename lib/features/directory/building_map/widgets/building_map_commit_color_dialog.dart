@@ -27,7 +27,10 @@ Future<bool?> showBuildingMapCommitColorDialog(
                 style: Theme.of(ctx).textTheme.bodyMedium,
               ),
               const SizedBox(height: 10),
-              _ColorRow(color: currentColor, hexLabel: colorToDepartmentHex(currentColor)),
+              _ColorRow(
+                color: currentColor,
+                hexLabel: colorToDepartmentHex(currentColor),
+              ),
               const SizedBox(height: 18),
               Text(
                 'Θέλετε να αλλάξει σε (για διαφοροποίηση από τα άλλα);',
@@ -80,10 +83,7 @@ class _ColorRow extends StatelessWidget {
         ),
         const SizedBox(width: 12),
         Expanded(
-          child: Text(
-            hexLabel,
-            style: Theme.of(context).textTheme.titleSmall,
-          ),
+          child: Text(hexLabel, style: Theme.of(context).textTheme.titleSmall),
         ),
       ],
     );

@@ -1,4 +1,4 @@
-﻿import 'dart:math' as math;
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
@@ -25,11 +25,11 @@ const double kBuildingMapLabelBoxPadding = 4.0;
 const double kBuildingMapLabelMinFontSize = 6.0;
 
 TextStyle _mapLabelTextStyle(double fontSize) => TextStyle(
-      color: Colors.black87,
-      fontSize: fontSize,
-      fontWeight: FontWeight.w500,
-      height: 1.15,
-    );
+  color: Colors.black87,
+  fontSize: fontSize,
+  fontWeight: FontWeight.w500,
+  height: 1.15,
+);
 
 double _measureMapLabelLineWidth(String text, TextStyle style) {
   if (text.isEmpty) return 0;
@@ -222,7 +222,8 @@ MapLabelTextLayout layoutMapLabelTextInBox({
       maxLines: maxLines,
       innerW: innerW,
     );
-    final fits = !tp.didExceedMaxLines &&
+    final fits =
+        !tp.didExceedMaxLines &&
         tp.height <= innerH + 0.5 &&
         tp.width <= innerW + 0.5;
     if (fits) {
@@ -306,11 +307,11 @@ class MapLabelLayout {
 
   /// Γωνίες πλαισίου ετικέτας (TL, TR, BL, BR) για resize handles.
   List<Offset> get labelBoxCorners => [
-        labelBoxRect.topLeft,
-        labelBoxRect.topRight,
-        labelBoxRect.bottomLeft,
-        labelBoxRect.bottomRight,
-      ];
+    labelBoxRect.topLeft,
+    labelBoxRect.topRight,
+    labelBoxRect.bottomLeft,
+    labelBoxRect.bottomRight,
+  ];
 }
 
 Offset _rotateAroundCenter(Offset p, Offset center, double radians) {
@@ -333,6 +334,7 @@ MapLabelLayout? computeMapLabelLayout({
   required int? highlightDepartmentId,
   required Size canvasSize,
   required double sheetRotationRadians,
+
   /// Κείμενο ετικέτας (π.χ. τοπικό draft πριν την αποθήκευση στο ✓).
   String? labelTextOverride,
 }) {
@@ -352,10 +354,12 @@ MapLabelLayout? computeMapLabelLayout({
   if (nx == null || ny == null || nw == null || nh == null) return null;
   if (nw <= 0 || nh <= 0) return null;
 
-  final effectiveLabelOffsetX =
-      isEditingSelectedDraft ? draft.labelOffsetX : dep.mapLabelOffsetX;
-  final effectiveLabelOffsetY =
-      isEditingSelectedDraft ? draft.labelOffsetY : dep.mapLabelOffsetY;
+  final effectiveLabelOffsetX = isEditingSelectedDraft
+      ? draft.labelOffsetX
+      : dep.mapLabelOffsetX;
+  final effectiveLabelOffsetY = isEditingSelectedDraft
+      ? draft.labelOffsetY
+      : dep.mapLabelOffsetY;
 
   final effectiveLabelWidth = isEditingSelectedDraft
       ? draft.labelWidth

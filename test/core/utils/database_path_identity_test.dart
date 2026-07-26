@@ -17,20 +17,20 @@ void main() {
     );
   });
 
-  test('ίδια διαδρομή με περιττά στοιχεία μονοπατιού που κανονικοποιούνται', () {
-    expect(
-      databasePathsReferToSameFile(
-        callLogger,
-        r'C:\Users\Bacilic\Documents\call_logger\DB\.\call_logger.db',
-      ),
-      isTrue,
-    );
-  });
+  test(
+    'ίδια διαδρομή με περιττά στοιχεία μονοπατιού που κανονικοποιούνται',
+    () {
+      expect(
+        databasePathsReferToSameFile(
+          callLogger,
+          r'C:\Users\Bacilic\Documents\call_logger\DB\.\call_logger.db',
+        ),
+        isTrue,
+      );
+    },
+  );
 
   test('δύο πραγματικά διαφορετικές διαδρομές', () {
-    expect(
-      databasePathsReferToSameFile(callsOnly, callLogger),
-      isFalse,
-    );
+    expect(databasePathsReferToSameFile(callsOnly, callLogger), isFalse);
   });
 }

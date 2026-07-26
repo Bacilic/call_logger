@@ -43,10 +43,7 @@ Future<bool> _tableExists(DatabaseExecutor db, String name) async {
 
 Future<List<String>> _columnNames(DatabaseExecutor db, String table) async {
   final info = await db.rawQuery('PRAGMA table_info($table)');
-  return info
-      .map((e) => e['name'] as String?)
-      .whereType<String>()
-      .toList();
+  return info.map((e) => e['name'] as String?).whereType<String>().toList();
 }
 
 Future<void> main(List<String> args) async {
@@ -56,13 +53,13 @@ Future<void> main(List<String> args) async {
   final root = Directory.current.path;
   final oldPath = args.isNotEmpty
       ? p.isAbsolute(args[0])
-          ? args[0]
-          : p.join(root, args[0])
+            ? args[0]
+            : p.join(root, args[0])
       : p.join(root, 'Data Base', 'call_logger v17.db');
   final newPath = args.length > 1
       ? p.isAbsolute(args[1])
-          ? args[1]
-          : p.join(root, args[1])
+            ? args[1]
+            : p.join(root, args[1])
       : p.join(root, 'Data Base', 'call_logger.db');
 
   final oldFile = File(oldPath);
@@ -122,7 +119,9 @@ Future<void> main(List<String> args) async {
         continue;
       }
       if (!await _tableExists(newDb, table)) {
-        stderr.writeln('Προειδοποίηση: λείπει `$table` από τη νέα βάση — παράλειψη.');
+        stderr.writeln(
+          'Προειδοποίηση: λείπει `$table` από τη νέα βάση — παράλειψη.',
+        );
         continue;
       }
 

@@ -89,14 +89,8 @@ void main() {
 
     test('effective read path falls back to output when read is empty', () {
       final output = r'C:\out\lamp_out.db';
-      expect(
-        LampOldDbValidator.pathsReferToSameFile('', output),
-        isFalse,
-      );
-      expect(
-        LampOldDbValidator.pathsReferToSameFile(output, output),
-        isTrue,
-      );
+      expect(LampOldDbValidator.pathsReferToSameFile('', output), isFalse);
+      expect(LampOldDbValidator.pathsReferToSameFile(output, output), isTrue);
     });
 
     test(

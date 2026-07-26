@@ -18,10 +18,7 @@ class AiPromptTemplateTextEditingController extends TextEditingController {
   }
 
   static TextSpan highlightedTextSpan(String text, TextStyle? style) {
-    return TextSpan(
-      style: style,
-      children: highlightedChildren(text, style),
-    );
+    return TextSpan(style: style, children: highlightedChildren(text, style));
   }
 
   @override
@@ -42,9 +39,7 @@ class AiPromptTemplateTextEditingController extends TextEditingController {
     }
 
     final composingStyle =
-        style?.merge(
-          const TextStyle(decoration: TextDecoration.underline),
-        ) ??
+        style?.merge(const TextStyle(decoration: TextDecoration.underline)) ??
         const TextStyle(decoration: TextDecoration.underline);
 
     final range = val.composing;

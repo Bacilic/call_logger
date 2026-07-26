@@ -23,10 +23,9 @@ RemoteTool _tool({
 void main() {
   group('DefaultRemoteToolDisplay.resolve', () {
     test('μη-αριθμητική legacy τιμή → (άκυρο) με πλάγια γράμματα', () {
-      final result = DefaultRemoteToolDisplay.resolve(
-        'AnyDesk',
-        [_tool(id: 1, name: 'TightVNC')],
-      );
+      final result = DefaultRemoteToolDisplay.resolve('AnyDesk', [
+        _tool(id: 1, name: 'TightVNC'),
+      ]);
 
       expect(result.label, '(άκυρο)');
       expect(result.useMutedItalic, isTrue);
@@ -34,10 +33,9 @@ void main() {
 
     test('κενή ή null τιμή → εμβλημα – χωρίς πλάγια', () {
       for (final stored in <String?>[null, '', '   ']) {
-        final result = DefaultRemoteToolDisplay.resolve(
-          stored,
-          [_tool(id: 1, name: 'TightVNC')],
-        );
+        final result = DefaultRemoteToolDisplay.resolve(stored, [
+          _tool(id: 1, name: 'TightVNC'),
+        ]);
 
         expect(result.label, '–', reason: 'stored=$stored');
         expect(result.useMutedItalic, isFalse, reason: 'stored=$stored');
@@ -45,46 +43,39 @@ void main() {
     });
 
     test('έγκυρο αριθμητικό id ενεργού εργαλείου → όνομα εργαλείου', () {
-      final result = DefaultRemoteToolDisplay.resolve(
-        '2',
-        [_tool(id: 2, name: 'AnyDesk Viewer')],
-      );
+      final result = DefaultRemoteToolDisplay.resolve('2', [
+        _tool(id: 2, name: 'AnyDesk Viewer'),
+      ]);
 
       expect(result.label, 'AnyDesk Viewer');
       expect(result.useMutedItalic, isFalse);
     });
 
-    test('αριθμητικό id που δεν βρίσκεται στη λίστα → ανενεργό/διαγραμμένο', () {
-      final result = DefaultRemoteToolDisplay.resolve(
-        '99',
-        [_tool(id: 1, name: 'TightVNC')],
-      );
+    test(
+      'αριθμητικό id που δεν βρίσκεται στη λίστα → ανενεργό/διαγραμμένο',
+      () {
+        final result = DefaultRemoteToolDisplay.resolve('99', [
+          _tool(id: 1, name: 'TightVNC'),
+        ]);
 
-      expect(result.label, startsWith('(ανενεργό / διαγραμμένο)'));
-      expect(result.useMutedItalic, isTrue);
-    });
+        expect(result.label, startsWith('(ανενεργό / διαγραμμένο)'));
+        expect(result.useMutedItalic, isTrue);
+      },
+    );
 
     test('id διαγραμμένου εργαλείου → πλάγια γράμματα', () {
-      final result = DefaultRemoteToolDisplay.resolve(
-        '3',
-        [
-          _tool(
-            id: 3,
-            name: 'Παλιό VNC',
-            deletedAt: DateTime(2024, 1, 1),
-          ),
-        ],
-      );
+      final result = DefaultRemoteToolDisplay.resolve('3', [
+        _tool(id: 3, name: 'Παλιό VNC', deletedAt: DateTime(2024, 1, 1)),
+      ]);
 
       expect(result.label, '(ανενεργό / διαγραμμένο) Παλιό VNC');
       expect(result.useMutedItalic, isTrue);
     });
 
     test('id ανενεργού εργαλείου → πλάγια γράμματα', () {
-      final result = DefaultRemoteToolDisplay.resolve(
-        '4',
-        [_tool(id: 4, name: 'Ανενεργό RDP', isActive: false)],
-      );
+      final result = DefaultRemoteToolDisplay.resolve('4', [
+        _tool(id: 4, name: 'Ανενεργό RDP', isActive: false),
+      ]);
 
       expect(result.label, '(ανενεργό) Ανενεργό RDP');
       expect(result.useMutedItalic, isTrue);

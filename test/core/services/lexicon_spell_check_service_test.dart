@@ -1,4 +1,4 @@
-﻿import 'dart:io';
+import 'dart:io';
 
 import 'package:call_logger/core/services/dictionary_service.dart';
 import 'package:call_logger/core/services/spell_check_service.dart';
@@ -29,12 +29,19 @@ void main() {
       expect(spell.isCorrect('γωγω'), isFalse);
     });
 
-    test('accepts unaccented input when lexicon has only unaccented forms', () async {
-      final plain = LexiconSpellCheckService();
-      await plain.init(lexiconVariants: {'γωγω': {'γωγω'}});
-      expect(plain.isCorrect('γωγω'), isTrue);
-      expect(plain.isCorrect('ΓΩΓΩ'), isTrue);
-    });
+    test(
+      'accepts unaccented input when lexicon has only unaccented forms',
+      () async {
+        final plain = LexiconSpellCheckService();
+        await plain.init(
+          lexiconVariants: {
+            'γωγω': {'γωγω'},
+          },
+        );
+        expect(plain.isCorrect('γωγω'), isTrue);
+        expect(plain.isCorrect('ΓΩΓΩ'), isTrue);
+      },
+    );
 
     test('rejects wrong tonos placement', () {
       expect(spell.isCorrect('αιτήμα'), isFalse);
@@ -45,10 +52,10 @@ void main() {
       expect(sug, isNotEmpty);
       expect(
         sug.first,
-        DictionaryService.primaryDisplayForVariants(
-          'αιτημα',
-          {'αίτημα', 'αίτημά'},
-        ),
+        DictionaryService.primaryDisplayForVariants('αιτημα', {
+          'αίτημα',
+          'αίτημά',
+        }),
       );
     });
   });

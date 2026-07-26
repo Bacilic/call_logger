@@ -24,7 +24,7 @@ class DepartmentNameKeyBackfillResult {
 /// Persistence τμημάτων (`departments`).
 class DepartmentRepository {
   DepartmentRepository(this.db, {DirectorySupport? support})
-      : _support = support ?? DirectorySupport(db);
+    : _support = support ?? DirectorySupport(db);
 
   final Database db;
   final DirectorySupport _support;
@@ -313,7 +313,8 @@ class DepartmentRepository {
 
   /// Επαναϋπολογίζει `name_key` για όλα τα τμήματα (ενεργά και soft-deleted)
   /// ως [SearchTextNormalizer.normalizeForSearch] του `name`.
-  Future<DepartmentNameKeyBackfillResult> backfillAllDepartmentNameKeys() async {
+  Future<DepartmentNameKeyBackfillResult>
+  backfillAllDepartmentNameKeys() async {
     final rows = await db.query(
       'departments',
       columns: ['id', 'name', 'name_key'],
@@ -387,7 +388,7 @@ class DepartmentRepository {
   }
 
   static ({Map<String, dynamic> oldDiff, Map<String, dynamic> newDiff})
-      _departmentAuditDiff(
+  _departmentAuditDiff(
     Map<String, dynamic> oldRow,
     Map<String, dynamic> updates,
   ) {
@@ -546,7 +547,8 @@ class DepartmentRepository {
     final rows = await db.query(
       'departments',
       columns: ['id'],
-      where: '${DirectorySupport.notDeletedClause} AND id != ? AND name_key = ?',
+      where:
+          '${DirectorySupport.notDeletedClause} AND id != ? AND name_key = ?',
       whereArgs: [excludeId, key],
       limit: 1,
     );

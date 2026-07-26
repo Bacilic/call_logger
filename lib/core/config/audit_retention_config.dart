@@ -10,8 +10,10 @@ class AuditRetentionConfig {
   });
 
   final bool enabled;
+
   /// Διαγραφή εγγραφών παλαιότερων των N ημερών (null = χωρίς όριο ηλικίας).
   final int? maxAgeDays;
+
   /// Μέγιστο πλήθος γραμμών audit (null = χωρίς όριο πλήθους).
   final int? maxRows;
   final bool purgeOnAppStart;
@@ -26,19 +28,18 @@ class AuditRetentionConfig {
   }) {
     return AuditRetentionConfig(
       enabled: enabled ?? this.enabled,
-      maxAgeDays:
-          clearMaxAgeDays ? null : (maxAgeDays ?? this.maxAgeDays),
+      maxAgeDays: clearMaxAgeDays ? null : (maxAgeDays ?? this.maxAgeDays),
       maxRows: clearMaxRows ? null : (maxRows ?? this.maxRows),
       purgeOnAppStart: purgeOnAppStart ?? this.purgeOnAppStart,
     );
   }
 
   Map<String, dynamic> toJson() => {
-        'enabled': enabled,
-        'max_age_days': maxAgeDays,
-        'max_rows': maxRows,
-        'purge_on_app_start': purgeOnAppStart,
-      };
+    'enabled': enabled,
+    'max_age_days': maxAgeDays,
+    'max_rows': maxRows,
+    'purge_on_app_start': purgeOnAppStart,
+  };
 
   factory AuditRetentionConfig.fromJson(Map<String, dynamic> m) {
     return AuditRetentionConfig(

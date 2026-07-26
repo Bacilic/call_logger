@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
@@ -105,9 +105,7 @@ Widget _lexiconColumnGroupShell({
   final color = Theme.of(context).colorScheme.outline;
   return Container(
     decoration: BoxDecoration(
-      border: Border(
-        left: BorderSide(color: color, width: 3),
-      ),
+      border: Border(left: BorderSide(color: color, width: 3)),
     ),
     child: child,
   );
@@ -165,8 +163,9 @@ class _AddCustomWordsDialogState extends State<_AddCustomWordsDialog> {
                   constraints: const BoxConstraints(maxHeight: 200),
                   child: DecoratedBox(
                     decoration: BoxDecoration(
-                      color: theme.colorScheme.errorContainer
-                          .withValues(alpha: 0.35),
+                      color: theme.colorScheme.errorContainer.withValues(
+                        alpha: 0.35,
+                      ),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: SingleChildScrollView(
@@ -251,8 +250,7 @@ class _AddCustomWordsDialogState extends State<_AddCustomWordsDialog> {
                     Navigator.of(context).pop(true);
                   } catch (e) {
                     setState(
-                      () => _dialogError =
-                          widget.addCustomWordErrorMessage(e),
+                      () => _dialogError = widget.addCustomWordErrorMessage(e),
                     );
                   }
                 }
@@ -266,10 +264,7 @@ class _AddCustomWordsDialogState extends State<_AddCustomWordsDialog> {
 
 /// Διαχείριση master λεξικού (`full_dictionary` + `user_dictionary`).
 class DictionaryManagerScreen extends ConsumerStatefulWidget {
-  const DictionaryManagerScreen({
-    super.key,
-    required this.databaseResult,
-  });
+  const DictionaryManagerScreen({super.key, required this.databaseResult});
 
   final DatabaseInitResult databaseResult;
 
@@ -278,7 +273,8 @@ class DictionaryManagerScreen extends ConsumerStatefulWidget {
       _DictionaryManagerScreenState();
 }
 
-class _DictionaryManagerScreenState extends ConsumerState<DictionaryManagerScreen> {
+class _DictionaryManagerScreenState
+    extends ConsumerState<DictionaryManagerScreen> {
   /// Γιατί η λίστα μπορεί να έχει λίγες γραμμές ενώ η ορθογραφία «ξέρει» πολλές λέξεις.
   String _lexiconScopeInfoTooltip(CoreLexiconState core) {
     final coreSummary = core.loaded && (core.path?.trim().isNotEmpty ?? false)
@@ -302,16 +298,23 @@ class _DictionaryManagerScreenState extends ConsumerState<DictionaryManagerScree
   bool _loading = true;
   bool _loadingMore = false;
   String? _loadError;
+
   /// null = αυτόματο πλάτος από περιεχόμενο ομάδας· αλλιώς πλάτος από λαβή resize.
-  List<double?> _lexiconWordColumnWidthUser =
-      List<double?>.filled(kLexiconMaxColumnGroups, null);
-  /// Ζωντανό πλάτος κατά το σύρσιμο λαβής (χωρίς rebuild ολόκληρης οθόνης).
-  final List<ValueNotifier<double?>> _lexiconWordWidthDuringDrag = List.generate(
+  List<double?> _lexiconWordColumnWidthUser = List<double?>.filled(
     kLexiconMaxColumnGroups,
-    (_) => ValueNotifier<double?>(null),
+    null,
   );
-  final List<double?> _lexiconResizeDragBaseWidth =
-      List<double?>.filled(kLexiconMaxColumnGroups, null);
+
+  /// Ζωντανό πλάτος κατά το σύρσιμο λαβής (χωρίς rebuild ολόκληρης οθόνης).
+  final List<ValueNotifier<double?>> _lexiconWordWidthDuringDrag =
+      List.generate(
+        kLexiconMaxColumnGroups,
+        (_) => ValueNotifier<double?>(null),
+      );
+  final List<double?> _lexiconResizeDragBaseWidth = List<double?>.filled(
+    kLexiconMaxColumnGroups,
+    null,
+  );
 
   final _lettersCountField = TextEditingController();
   Timer? _lettersFilterDebounce;
@@ -328,7 +331,9 @@ class _DictionaryManagerScreenState extends ConsumerState<DictionaryManagerScree
     required int? columnGroups,
   }) {
     if (_tableViewportWidth <= 0 || _tableViewportHeight <= 0) return;
-    ref.read(dictionaryLayoutProvider.notifier).calculateLayout(
+    ref
+        .read(dictionaryLayoutProvider.notifier)
+        .calculateLayout(
           rows: _loading ? const [] : _rows,
           viewportWidth: _tableViewportWidth,
           viewportHeight: _tableViewportHeight,
@@ -410,7 +415,8 @@ class _DictionaryManagerScreenState extends ConsumerState<DictionaryManagerScree
   void _scheduleContinuousViewportFillAfterLoad() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      final continuous = ref.read(lexiconContinuousScrollProvider).value ?? true;
+      final continuous =
+          ref.read(lexiconContinuousScrollProvider).value ?? true;
       if (continuous && _rows.length < _totalCount) {
         _scheduleContinuousViewportFill();
       }
@@ -463,9 +469,9 @@ class _DictionaryManagerScreenState extends ConsumerState<DictionaryManagerScree
         kLexiconWordColumnMax,
       );
       setState(() {
-        _lexiconWordColumnWidthUser =
-            List<double?>.from(_lexiconWordColumnWidthUser)
-              ..[groupIndex] = w;
+        _lexiconWordColumnWidthUser = List<double?>.from(
+          _lexiconWordColumnWidthUser,
+        )..[groupIndex] = w;
         _lexiconResizeDragBaseWidth[groupIndex] = null;
       });
     }
@@ -519,7 +525,8 @@ class _DictionaryManagerScreenState extends ConsumerState<DictionaryManagerScree
           category: filters.categoryFilter,
           normalizedSearch: search.isEmpty ? null : search,
           pendingOnly:
-              filters.sourceFilter == DictionaryRepository.kLexiconPendingFilter,
+              filters.sourceFilter ==
+              DictionaryRepository.kLexiconPendingFilter,
           lettersCountOp: lettersOp,
           lettersCountValue: lettersVal,
           diacriticMarksFilter: filters.diacriticMarksFilter,
@@ -544,7 +551,8 @@ class _DictionaryManagerScreenState extends ConsumerState<DictionaryManagerScree
           category: filters.categoryFilter,
           normalizedSearch: search.isEmpty ? null : search,
           pendingOnly:
-              filters.sourceFilter == DictionaryRepository.kLexiconPendingFilter,
+              filters.sourceFilter ==
+              DictionaryRepository.kLexiconPendingFilter,
           lettersCountOp: lettersOp,
           lettersCountValue: lettersVal,
           diacriticMarksFilter: filters.diacriticMarksFilter,
@@ -554,7 +562,9 @@ class _DictionaryManagerScreenState extends ConsumerState<DictionaryManagerScree
           final maxPage = count == 0 ? 0 : ((count - 1) ~/ pageSize);
           if (page > maxPage) {
             page = maxPage;
-            await ref.read(lexiconListFiltersProvider.notifier).setPage(maxPage);
+            await ref
+                .read(lexiconListFiltersProvider.notifier)
+                .setPage(maxPage);
           }
         }
         final offset = continuous ? 0 : page * pageSize;
@@ -564,7 +574,8 @@ class _DictionaryManagerScreenState extends ConsumerState<DictionaryManagerScree
           category: filters.categoryFilter,
           normalizedSearch: search.isEmpty ? null : search,
           pendingOnly:
-              filters.sourceFilter == DictionaryRepository.kLexiconPendingFilter,
+              filters.sourceFilter ==
+              DictionaryRepository.kLexiconPendingFilter,
           lettersCountOp: lettersOp,
           lettersCountValue: lettersVal,
           diacriticMarksFilter: filters.diacriticMarksFilter,
@@ -676,9 +687,9 @@ class _DictionaryManagerScreenState extends ConsumerState<DictionaryManagerScree
     );
     if (mode == null || !mounted) return;
     if (mode == DictionaryImportMode.replace) {
-      final existing =
-          await DictionaryRepository(await DatabaseHelper.instance.database)
-              .countFullDictionaryTotal();
+      final existing = await DictionaryRepository(
+        await DatabaseHelper.instance.database,
+      ).countFullDictionaryTotal();
       final lines = await File(path).readAsLines();
       var newCount = 0;
       for (final line in lines) {
@@ -751,7 +762,9 @@ class _DictionaryManagerScreenState extends ConsumerState<DictionaryManagerScree
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Σφάλμα Compile: ${humanizeUserFacingError(e)}')),
+          SnackBar(
+            content: Text('Σφάλμα Compile: ${humanizeUserFacingError(e)}'),
+          ),
         );
       }
     }
@@ -764,10 +777,7 @@ class _DictionaryManagerScreenState extends ConsumerState<DictionaryManagerScree
     return 'lex_d_$normKey';
   }
 
-  int _indexOfLexiconRow({
-    required int? entryId,
-    required String normKey,
-  }) {
+  int _indexOfLexiconRow({required int? entryId, required String normKey}) {
     return _rows.indexWhere((r) {
       final id = r['entry_id'] as int?;
       if (entryId != null && id == entryId) return true;
@@ -913,7 +923,8 @@ class _DictionaryManagerScreenState extends ConsumerState<DictionaryManagerScree
     final normKey = row['norm_key'] as String? ?? '';
     final display = row['display_word'] as String? ?? '';
     final src = row['src'] as String? ?? '';
-    final isDraft = entryId == null || src == DictionaryRepository.kLexiconSourceDraft;
+    final isDraft =
+        entryId == null || src == DictionaryRepository.kLexiconSourceDraft;
     final lang = row['lang'] as String? ?? 'el';
     final prevCat = row['cat'] as String? ?? 'Γενική';
 
@@ -929,8 +940,9 @@ class _DictionaryManagerScreenState extends ConsumerState<DictionaryManagerScree
         );
       } else {
         final newWord = displayWord;
-        final dictUp =
-            DictionaryRepository(await DatabaseHelper.instance.database);
+        final dictUp = DictionaryRepository(
+          await DatabaseHelper.instance.database,
+        );
         await dictUp.upsertFullDictionaryCategory(
           id: entryId,
           category: category,
@@ -987,11 +999,11 @@ class _DictionaryManagerScreenState extends ConsumerState<DictionaryManagerScree
         final msg = raw.startsWith(exPrefix)
             ? raw.substring(exPrefix.length)
             : raw.startsWith(statePrefix)
-                ? raw.substring(statePrefix.length)
-                : raw;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(msg)),
-        );
+            ? raw.substring(statePrefix.length)
+            : raw;
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(msg)));
       }
       // Propagate so [DictionaryGridRow] can revert the word field and category UI.
       rethrow;
@@ -1014,7 +1026,9 @@ class _DictionaryManagerScreenState extends ConsumerState<DictionaryManagerScree
   }
 
   void _onSpellingContextFromRow(Map<String, dynamic> row, String word) {
-    ref.read(lexiconSpellingPanelProvider.notifier).updateFromRow(
+    ref
+        .read(lexiconSpellingPanelProvider.notifier)
+        .updateFromRow(
           word: word,
           normKey: row['norm_key'] as String? ?? '',
           entryId: row['entry_id'] as int?,
@@ -1025,7 +1039,8 @@ class _DictionaryManagerScreenState extends ConsumerState<DictionaryManagerScree
     final entryId = row['entry_id'] as int?;
     final normKey = row['norm_key'] as String? ?? '';
     final src = row['src'] as String? ?? '';
-    final isDraft = entryId == null || src == DictionaryRepository.kLexiconSourceDraft;
+    final isDraft =
+        entryId == null || src == DictionaryRepository.kLexiconSourceDraft;
 
     final ok = await showDialog<bool>(
       context: context,
@@ -1047,8 +1062,9 @@ class _DictionaryManagerScreenState extends ConsumerState<DictionaryManagerScree
     if (ok != true) return;
 
     try {
-      final dictDel =
-          DictionaryRepository(await DatabaseHelper.instance.database);
+      final dictDel = DictionaryRepository(
+        await DatabaseHelper.instance.database,
+      );
       if (isDraft) {
         await dictDel.deleteUserDictionaryWord(normKey);
       } else {
@@ -1083,21 +1099,15 @@ class _DictionaryManagerScreenState extends ConsumerState<DictionaryManagerScree
 
   /// Μενού πλοήγησης (ίδια βήματα με το NavigationRail, χωρίς Λεξικό).
   Widget _immersiveNavigationMenuButton() {
-    final showDb = ref.watch(showDatabaseNavProvider).maybeWhen(
-          data: (v) => v,
-          orElse: () => true,
-        );
+    final showDb = ref
+        .watch(showDatabaseNavProvider)
+        .maybeWhen(data: (v) => v, orElse: () => true);
     return PopupMenuButton<MainNavDestination>(
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       tooltip: 'Μετάβαση σε άλλη οθόνη',
       icon: const Icon(Icons.menu),
       padding: EdgeInsets.zero,
-      constraints: const BoxConstraints(
-        minWidth: 40,
-        minHeight: 40,
-      ),
+      constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
       onSelected: _navigateFromImmersiveLexicon,
       itemBuilder: (context) {
         return <PopupMenuEntry<MainNavDestination>>[
@@ -1164,7 +1174,8 @@ class _DictionaryManagerScreenState extends ConsumerState<DictionaryManagerScree
         : const EdgeInsets.all(16);
 
     if (!widget.databaseResult.isSuccess) {
-      final msg = widget.databaseResult.message ??
+      final msg =
+          widget.databaseResult.message ??
           'Η βάση δεδομένων δεν είναι διαθέσιμη.';
       if (immersive) {
         return Column(
@@ -1202,8 +1213,9 @@ class _DictionaryManagerScreenState extends ConsumerState<DictionaryManagerScree
     final lexiconContinuousScroll = lexiconContinuousAsync.value ?? true;
     final lexiconPageSizeAsync = ref.watch(lexiconPageSizeProvider);
     final lexiconPageSize = lexiconPageSizeAsync.value ?? 40;
-    final maxPage =
-        _totalCount == 0 ? 0 : ((_totalCount - 1) ~/ lexiconPageSize);
+    final maxPage = _totalCount == 0
+        ? 0
+        : ((_totalCount - 1) ~/ lexiconPageSize);
     final listPage = listFilters.page;
     final titleStyle = theme.textTheme.titleMedium?.copyWith(
       fontSize: 15,
@@ -1211,37 +1223,28 @@ class _DictionaryManagerScreenState extends ConsumerState<DictionaryManagerScree
     );
 
     const langDdWidth = _kLexiconLangDdWidth;
-    final sourceDdWidth = computeDropdownMenuWidth(
-      context,
-      const [
-        'Πηγή: Όλες',
-        'Πηγή: Εισαγωγή',
-        'Πηγή: Χρήστης',
-        'Πηγή: Πρόχειρο',
-        'Πηγή: Διπλές',
-      ],
-    );
-    final columnGroupsDdWidth = computeDropdownMenuWidth(
-      context,
-      const [
-        'Αυτόματα',
-        '1',
-        '2',
-        '3',
-        '4',
-      ],
-    );
-    final diacriticFilterDdWidth = computeDropdownMenuWidth(
-      context,
-      const [
-        'Όλα',
-        'Κανένα',
-        '1',
-        '2',
-        '3',
-        'Περισσότερα (>3)',
-      ],
-    );
+    final sourceDdWidth = computeDropdownMenuWidth(context, const [
+      'Πηγή: Όλες',
+      'Πηγή: Εισαγωγή',
+      'Πηγή: Χρήστης',
+      'Πηγή: Πρόχειρο',
+      'Πηγή: Διπλές',
+    ]);
+    final columnGroupsDdWidth = computeDropdownMenuWidth(context, const [
+      'Αυτόματα',
+      '1',
+      '2',
+      '3',
+      '4',
+    ]);
+    final diacriticFilterDdWidth = computeDropdownMenuWidth(context, const [
+      'Όλα',
+      'Κανένα',
+      '1',
+      '2',
+      '3',
+      'Περισσότερα (>3)',
+    ]);
     return Padding(
       padding: outerPadding,
       child: Column(
@@ -1326,17 +1329,18 @@ class _DictionaryManagerScreenState extends ConsumerState<DictionaryManagerScree
                 categoryDdLabels,
               ).clamp(140.0, 240.0);
               const gaps = 12.0 + 8.0 + 8.0;
-              final tailFixed = gaps +
-                  langDdWidth +
-                  sourceDdWidth +
-                  categoryFilterWidth;
+              final tailFixed =
+                  gaps + langDdWidth + sourceDdWidth + categoryFilterWidth;
+
               /// Runtime evidence:
               /// H8 measured `searchWidth` ~385.48px στο πρώτο layout,
               /// άρα το 200px υποεκτιμούσε έντονα το πραγματικό απαιτούμενο πλάτος.
               const minSearchWhenScroll = 400.0;
+
               /// Μικρό περιθώριο ώστε να μην «σπάει» το Row στα όρια (padding Theme).
               const layoutSafetyPx = 24.0;
-              final useHorizontalScroll = constraints.maxWidth <
+              final useHorizontalScroll =
+                  constraints.maxWidth <
                   tailFixed + minSearchWhenScroll + layoutSafetyPx;
 
               final searchField = TextField(
@@ -1361,7 +1365,10 @@ class _DictionaryManagerScreenState extends ConsumerState<DictionaryManagerScree
                   decoration: const InputDecoration(
                     border: OutlineInputBorder(),
                     isDense: true,
-                    contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    contentPadding: EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
                   ),
                   child: DropdownButtonHideUnderline(
                     child: DropdownButton<String?>(
@@ -1369,64 +1376,71 @@ class _DictionaryManagerScreenState extends ConsumerState<DictionaryManagerScree
                       isDense: true,
                       value: listFilters.langFilter,
                       isExpanded: true,
-                  hint: const Text('Γλώσσα'),
-                  selectedItemBuilder: (context) {
-                    return List<Widget>.generate(4, (i) {
-                      return Align(
-                        alignment: AlignmentDirectional.centerStart,
-                        child: _lexiconLangFilterSelectedIcon(i),
-                      );
-                    });
-                  },
-                  items: [
-                    DropdownMenuItem<String?>(
-                      value: null,
-                      child: _lexiconLangFilterMenuItem(
-                        tooltip: 'Όλες οι γλώσσες',
-                        icon: Image.asset(
-                          _kLexiconLangAssetAll,
-                          height: 30,
-                          fit: BoxFit.contain,
-                          errorBuilder: (_, _, _) =>
-                              const Icon(Icons.translate, size: 28),
+                      hint: const Text('Γλώσσα'),
+                      selectedItemBuilder: (context) {
+                        return List<Widget>.generate(4, (i) {
+                          return Align(
+                            alignment: AlignmentDirectional.centerStart,
+                            child: _lexiconLangFilterSelectedIcon(i),
+                          );
+                        });
+                      },
+                      items: [
+                        DropdownMenuItem<String?>(
+                          value: null,
+                          child: _lexiconLangFilterMenuItem(
+                            tooltip: 'Όλες οι γλώσσες',
+                            icon: Image.asset(
+                              _kLexiconLangAssetAll,
+                              height: 30,
+                              fit: BoxFit.contain,
+                              errorBuilder: (_, _, _) =>
+                                  const Icon(Icons.translate, size: 28),
+                            ),
+                          ),
                         ),
-                      ),
-                    ),
-                    DropdownMenuItem<String?>(
-                      value: 'el',
-                      child: _lexiconLangFilterMenuItem(
-                        tooltip: 'Ελληνικά',
-                        icon: _lexiconLangFlagImage(_kLexiconLangAssetEl, height: 30),
-                      ),
-                    ),
-                    DropdownMenuItem<String?>(
-                      value: 'en',
-                      child: _lexiconLangFilterMenuItem(
-                        tooltip: 'English',
-                        icon: _lexiconLangFlagImage(_kLexiconLangAssetEn, height: 30),
-                      ),
-                    ),
-                    DropdownMenuItem<String?>(
-                      value: DictionaryRepository.kLexiconMixedScriptsFilter,
-                      child: _lexiconLangFilterMenuItem(
-                        tooltip: 'Λέξεις με ελληνικά και λατινικά γράμματα',
-                        icon: Image.asset(
-                          _kLexiconLangAssetMix,
-                          height: 30,
-                          fit: BoxFit.contain,
-                          errorBuilder: (_, _, _) =>
-                              const Icon(Icons.text_fields, size: 28),
+                        DropdownMenuItem<String?>(
+                          value: 'el',
+                          child: _lexiconLangFilterMenuItem(
+                            tooltip: 'Ελληνικά',
+                            icon: _lexiconLangFlagImage(
+                              _kLexiconLangAssetEl,
+                              height: 30,
+                            ),
+                          ),
                         ),
-                      ),
-                    ),
-                  ],
-                  onChanged: (v) async {
-                    await ref
-                        .read(lexiconListFiltersProvider.notifier)
-                        .setLangFilter(v);
-                    if (!mounted) return;
-                    _refreshList();
-                  },
+                        DropdownMenuItem<String?>(
+                          value: 'en',
+                          child: _lexiconLangFilterMenuItem(
+                            tooltip: 'English',
+                            icon: _lexiconLangFlagImage(
+                              _kLexiconLangAssetEn,
+                              height: 30,
+                            ),
+                          ),
+                        ),
+                        DropdownMenuItem<String?>(
+                          value:
+                              DictionaryRepository.kLexiconMixedScriptsFilter,
+                          child: _lexiconLangFilterMenuItem(
+                            tooltip: 'Λέξεις με ελληνικά και λατινικά γράμματα',
+                            icon: Image.asset(
+                              _kLexiconLangAssetMix,
+                              height: 30,
+                              fit: BoxFit.contain,
+                              errorBuilder: (_, _, _) =>
+                                  const Icon(Icons.text_fields, size: 28),
+                            ),
+                          ),
+                        ),
+                      ],
+                      onChanged: (v) async {
+                        await ref
+                            .read(lexiconListFiltersProvider.notifier)
+                            .setLangFilter(v);
+                        if (!mounted) return;
+                        _refreshList();
+                      },
                     ),
                   ),
                 ),
@@ -1439,7 +1453,10 @@ class _DictionaryManagerScreenState extends ConsumerState<DictionaryManagerScree
                   decoration: const InputDecoration(
                     border: OutlineInputBorder(),
                     isDense: true,
-                    contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                    contentPadding: EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 4,
+                    ),
                   ),
                   child: DropdownButtonHideUnderline(
                     child: DropdownButton<String?>(
@@ -1447,45 +1464,61 @@ class _DictionaryManagerScreenState extends ConsumerState<DictionaryManagerScree
                       isDense: true,
                       value: listFilters.sourceFilter,
                       isExpanded: true,
-                  hint: const Text('Πηγή'),
-                  selectedItemBuilder: (context) {
-                    return const [
-                      Text('Πηγή: Όλες', overflow: TextOverflow.ellipsis),
-                      Text('Πηγή: Εισαγωγή', overflow: TextOverflow.ellipsis),
-                      Text('Πηγή: Χρήστης', overflow: TextOverflow.ellipsis),
-                      Text('Πηγή: Πρόχειρο', overflow: TextOverflow.ellipsis),
-                      Text('Πηγή: Διπλές', overflow: TextOverflow.ellipsis),
-                    ];
-                  },
-                  items: const [
-                    DropdownMenuItem(value: null, child: Text('Όλες')),
-                    DropdownMenuItem(value: 'imported', child: Text('Εισαγωγή')),
-                    DropdownMenuItem(value: 'user', child: Text('Χρήστης')),
-                    DropdownMenuItem(
-                      value: DictionaryRepository.kLexiconSourceDraft,
-                      child: Text('Πρόχειρο'),
-                    ),
-                    DropdownMenuItem(
-                      value: DictionaryRepository.kLexiconPendingFilter,
-                      child: Text('Διπλές'),
-                    ),
-                  ],
-                  onChanged: (v) async {
-                    await ref
-                        .read(lexiconListFiltersProvider.notifier)
-                        .setSourceFilter(v);
-                    if (!mounted) return;
-                    _refreshList();
-                  },
+                      hint: const Text('Πηγή'),
+                      selectedItemBuilder: (context) {
+                        return const [
+                          Text('Πηγή: Όλες', overflow: TextOverflow.ellipsis),
+                          Text(
+                            'Πηγή: Εισαγωγή',
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          Text(
+                            'Πηγή: Χρήστης',
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          Text(
+                            'Πηγή: Πρόχειρο',
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          Text('Πηγή: Διπλές', overflow: TextOverflow.ellipsis),
+                        ];
+                      },
+                      items: const [
+                        DropdownMenuItem(value: null, child: Text('Όλες')),
+                        DropdownMenuItem(
+                          value: 'imported',
+                          child: Text('Εισαγωγή'),
+                        ),
+                        DropdownMenuItem(value: 'user', child: Text('Χρήστης')),
+                        DropdownMenuItem(
+                          value: DictionaryRepository.kLexiconSourceDraft,
+                          child: Text('Πρόχειρο'),
+                        ),
+                        DropdownMenuItem(
+                          value: DictionaryRepository.kLexiconPendingFilter,
+                          child: Text('Διπλές'),
+                        ),
+                      ],
+                      onChanged: (v) async {
+                        await ref
+                            .read(lexiconListFiltersProvider.notifier)
+                            .setSourceFilter(v);
+                        if (!mounted) return;
+                        _refreshList();
+                      },
                     ),
                   ),
                 ),
               );
 
-              final orphanCategory = listFilters.categoryFilter != null &&
+              final orphanCategory =
+                  listFilters.categoryFilter != null &&
                   listFilters.categoryFilter!.isNotEmpty &&
-                  !lexiconCategoryOptions.contains(listFilters.categoryFilter) &&
-                  listFilters.categoryFilter != AppConfig.lexiconCategoryUnspecified;
+                  !lexiconCategoryOptions.contains(
+                    listFilters.categoryFilter,
+                  ) &&
+                  listFilters.categoryFilter !=
+                      AppConfig.lexiconCategoryUnspecified;
               final categoryDropdown = SizedBox(
                 width: categoryFilterWidth,
                 height: 40,
@@ -1493,7 +1526,10 @@ class _DictionaryManagerScreenState extends ConsumerState<DictionaryManagerScree
                   decoration: const InputDecoration(
                     border: OutlineInputBorder(),
                     isDense: true,
-                    contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                    contentPadding: EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 4,
+                    ),
                   ),
                   child: DropdownButtonHideUnderline(
                     child: DropdownButton<String?>(
@@ -1501,68 +1537,70 @@ class _DictionaryManagerScreenState extends ConsumerState<DictionaryManagerScree
                       isDense: true,
                       value: listFilters.categoryFilter,
                       isExpanded: true,
-                  hint: const Text('Κατηγορία'),
-                  selectedItemBuilder: (context) {
-                    return [
-                      const Text('Κατηγορία: Όλες',
-                          overflow: TextOverflow.ellipsis),
-                      ...lexiconCategoryOptions.map(
-                        (c) => Text(
-                          'Κατηγορία: $c',
-                          overflow: TextOverflow.ellipsis,
+                      hint: const Text('Κατηγορία'),
+                      selectedItemBuilder: (context) {
+                        return [
+                          const Text(
+                            'Κατηγορία: Όλες',
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          ...lexiconCategoryOptions.map(
+                            (c) => Text(
+                              'Κατηγορία: $c',
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          Text(
+                            'Κατηγορία: ${AppConfig.lexiconCategoryUnspecified}',
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          if (orphanCategory)
+                            Text(
+                              'Κατηγορία: ${listFilters.categoryFilter}',
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                        ];
+                      },
+                      items: [
+                        const DropdownMenuItem<String?>(
+                          value: null,
+                          child: Text('Όλες'),
                         ),
-                      ),
-                      Text(
-                        'Κατηγορία: ${AppConfig.lexiconCategoryUnspecified}',
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      if (orphanCategory)
-                        Text(
-                          'Κατηγορία: ${listFilters.categoryFilter}',
-                          overflow: TextOverflow.ellipsis,
+                        ...lexiconCategoryOptions.map(
+                          (c) => DropdownMenuItem<String?>(
+                            value: c,
+                            child: Text(
+                              c,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
                         ),
-                    ];
-                  },
-                  items: [
-                    const DropdownMenuItem<String?>(
-                      value: null,
-                      child: Text('Όλες'),
-                    ),
-                    ...lexiconCategoryOptions.map(
-                      (c) => DropdownMenuItem<String?>(
-                        value: c,
-                        child: Text(
-                          c,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+                        DropdownMenuItem<String?>(
+                          value: AppConfig.lexiconCategoryUnspecified,
+                          child: Text(
+                            AppConfig.lexiconCategoryUnspecified,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
-                      ),
-                    ),
-                    DropdownMenuItem<String?>(
-                      value: AppConfig.lexiconCategoryUnspecified,
-                      child: Text(
-                        AppConfig.lexiconCategoryUnspecified,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    if (orphanCategory)
-                      DropdownMenuItem<String?>(
-                        value: listFilters.categoryFilter,
-                        child: Text(
-                          listFilters.categoryFilter!,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                  ],
-                  onChanged: (v) async {
-                    await ref
-                        .read(lexiconListFiltersProvider.notifier)
-                        .setCategoryFilter(v);
-                    if (!mounted) return;
-                    _refreshList();
-                  },
+                        if (orphanCategory)
+                          DropdownMenuItem<String?>(
+                            value: listFilters.categoryFilter,
+                            child: Text(
+                              listFilters.categoryFilter!,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                      ],
+                      onChanged: (v) async {
+                        await ref
+                            .read(lexiconListFiltersProvider.notifier)
+                            .setCategoryFilter(v);
+                        if (!mounted) return;
+                        _refreshList();
+                      },
                     ),
                   ),
                 ),
@@ -1570,14 +1608,9 @@ class _DictionaryManagerScreenState extends ConsumerState<DictionaryManagerScree
 
               final rowChildren = <Widget>[
                 if (useHorizontalScroll)
-                  SizedBox(
-                    width: minSearchWhenScroll,
-                    child: searchField,
-                  )
+                  SizedBox(width: minSearchWhenScroll, child: searchField)
                 else
-                  Expanded(
-                    child: searchField,
-                  ),
+                  Expanded(child: searchField),
                 const SizedBox(width: 12),
                 langDropdown,
                 const SizedBox(width: 8),
@@ -1614,9 +1647,7 @@ class _DictionaryManagerScreenState extends ConsumerState<DictionaryManagerScree
                   children: [
                     SizedBox(
                       height: filterBarStripHeight,
-                      child: Center(
-                        child: Text('Σύνολο: $_totalCount'),
-                      ),
+                      child: Center(child: Text('Σύνολο: $_totalCount')),
                     ),
                     const SizedBox(width: 12),
                     SizedBox(
@@ -1625,78 +1656,95 @@ class _DictionaryManagerScreenState extends ConsumerState<DictionaryManagerScree
                         mainAxisSize: MainAxisSize.min,
                         crossAxisAlignment: CrossAxisAlignment.center,
                         children: [
-                        Tooltip(
-                          message: 'Ομάδα στηλών',
-                          child: Image.asset(
-                            _kNumberOfColumnsIcon,
-                            height: 22,
-                            fit: BoxFit.contain,
-                            errorBuilder: (_, _, _) => const Icon(
-                              Icons.view_column_outlined,
-                              size: 22,
+                          Tooltip(
+                            message: 'Ομάδα στηλών',
+                            child: Image.asset(
+                              _kNumberOfColumnsIcon,
+                              height: 22,
+                              fit: BoxFit.contain,
+                              errorBuilder: (_, _, _) => const Icon(
+                                Icons.view_column_outlined,
+                                size: 22,
+                              ),
                             ),
                           ),
-                        ),
-                        const SizedBox(width: 6),
-                        SizedBox(
-                          width: columnGroupsDdWidth,
-                          height: filterBarStripHeight,
-                          child: InputDecorator(
-                            decoration: const InputDecoration(
-                              border: OutlineInputBorder(),
-                              isDense: true,
-                              contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                            ),
-                            child: DropdownButtonHideUnderline(
-                              child: DropdownButton<int?>(
-                                borderRadius: BorderRadius.circular(12),
+                          const SizedBox(width: 6),
+                          SizedBox(
+                            width: columnGroupsDdWidth,
+                            height: filterBarStripHeight,
+                            child: InputDecorator(
+                              decoration: const InputDecoration(
+                                border: OutlineInputBorder(),
                                 isDense: true,
-                                value: listFilters.columnGroups,
-                                isExpanded: true,
-                            selectedItemBuilder: (context) {
-                              return const [
-                                Text(
-                                  'Αυτόματα',
-                                  overflow: TextOverflow.ellipsis,
+                                contentPadding: EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 4,
                                 ),
-                                Text(
-                                  '1',
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                                Text(
-                                  '2',
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                                Text(
-                                  '3',
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                                Text(
-                                  '4',
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ];
-                            },
-                            items: const [
-                              DropdownMenuItem(
-                                value: null,
-                                child: Text('Αυτόματα'),
                               ),
-                              DropdownMenuItem(value: 1, child: Text('1')),
-                              DropdownMenuItem(value: 2, child: Text('2')),
-                              DropdownMenuItem(value: 3, child: Text('3')),
-                              DropdownMenuItem(value: 4, child: Text('4')),
-                            ],
-                            onChanged: (v) async {
-                              await ref
-                                  .read(lexiconListFiltersProvider.notifier)
-                                  .setColumnGroups(v);
-                              _scheduleContinuousViewportFillAfterLoad();
-                            },
+                              child: DropdownButtonHideUnderline(
+                                child: DropdownButton<int?>(
+                                  borderRadius: BorderRadius.circular(12),
+                                  isDense: true,
+                                  value: listFilters.columnGroups,
+                                  isExpanded: true,
+                                  selectedItemBuilder: (context) {
+                                    return const [
+                                      Text(
+                                        'Αυτόματα',
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                      Text(
+                                        '1',
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                      Text(
+                                        '2',
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                      Text(
+                                        '3',
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                      Text(
+                                        '4',
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ];
+                                  },
+                                  items: const [
+                                    DropdownMenuItem(
+                                      value: null,
+                                      child: Text('Αυτόματα'),
+                                    ),
+                                    DropdownMenuItem(
+                                      value: 1,
+                                      child: Text('1'),
+                                    ),
+                                    DropdownMenuItem(
+                                      value: 2,
+                                      child: Text('2'),
+                                    ),
+                                    DropdownMenuItem(
+                                      value: 3,
+                                      child: Text('3'),
+                                    ),
+                                    DropdownMenuItem(
+                                      value: 4,
+                                      child: Text('4'),
+                                    ),
+                                  ],
+                                  onChanged: (v) async {
+                                    await ref
+                                        .read(
+                                          lexiconListFiltersProvider.notifier,
+                                        )
+                                        .setColumnGroups(v);
+                                    _scheduleContinuousViewportFillAfterLoad();
+                                  },
+                                ),
                               ),
                             ),
                           ),
-                        ),
                         ],
                       ),
                     ),
@@ -1712,205 +1760,230 @@ class _DictionaryManagerScreenState extends ConsumerState<DictionaryManagerScree
                               mainAxisSize: MainAxisSize.min,
                               crossAxisAlignment: CrossAxisAlignment.center,
                               children: [
-                            Text(
-                              'Γράμματα',
-                              style: theme.textTheme.labelLarge,
-                            ),
-                            const SizedBox(width: 8),
-                            SizedBox(
-                              width: 64,
-                              height: filterBarStripHeight,
-                              child: InputDecorator(
-                                decoration: const InputDecoration(
-                                  border: OutlineInputBorder(),
-                                  isDense: true,
-                                  contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                Text(
+                                  'Γράμματα',
+                                  style: theme.textTheme.labelLarge,
                                 ),
-                                child: DropdownButtonHideUnderline(
-                                  child: DropdownButton<String>(
-                                    borderRadius: BorderRadius.circular(12),
-                                    isDense: true,
-                                    value: listFilters.lettersCompareOp,
-                                    isExpanded: true,
-                                selectedItemBuilder: (context) => const [
-                                  Text('≥'),
-                                  Text('≤'),
-                                  Text('='),
-                                ],
-                                items: const [
-                                  DropdownMenuItem(
-                                    value: '>=',
-                                    child: Text('≥'),
-                                  ),
-                                  DropdownMenuItem(
-                                    value: '<=',
-                                    child: Text('≤'),
-                                  ),
-                                  DropdownMenuItem(
-                                    value: '=',
-                                    child: Text('='),
-                                  ),
-                                ],
-                                onChanged: (v) async {
-                                  if (v == null) return;
-                                  await ref
-                                      .read(lexiconListFiltersProvider.notifier)
-                                      .setLettersCompareOp(v);
-                                  if (!mounted) return;
-                                  _refreshList();
-                                },
-                                  ),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            SizedBox(
-                              width: 92,
-                              height: filterBarStripHeight,
-                              child: TextField(
-                                controller: _lettersCountField,
-                                keyboardType: TextInputType.number,
-                                inputFormatters: [
-                                  FilteringTextInputFormatter.digitsOnly,
-                                ],
-                                maxLength: 3,
-                                style: theme.textTheme.bodyMedium,
-                                decoration: const InputDecoration(
-                                  labelText: 'Αριθμός',
-                                  floatingLabelBehavior:
-                                      FloatingLabelBehavior.never,
-                                  border: OutlineInputBorder(),
-                                  isDense: true,
-                                  contentPadding: EdgeInsets.symmetric(
-                                    horizontal: 10,
-                                    vertical: 10,
-                                  ),
-                                  counterText: '',
-                                ),
-                                onChanged: (_) {
-                                  _lettersFilterDebounce?.cancel();
-                                  _lettersFilterDebounce = Timer(
-                                    const Duration(milliseconds: 350),
-                                    () async {
-                                      if (!mounted) return;
-                                      await ref
-                                          .read(lexiconListFiltersProvider.notifier)
-                                          .setLettersCount(
-                                            _lettersCountField.text,
-                                          );
-                                      if (!mounted) return;
-                                      _refreshList();
-                                    },
-                                  );
-                                },
-                              ),
-                            ),
-                            const SizedBox(width: 16),
-                            Row(
-                              mainAxisSize: MainAxisSize.min,
-                              crossAxisAlignment: CrossAxisAlignment.center,
-                              children: [
-                                Tooltip(
-                                  message: 'Σημεία Στήξης',
-                                  child: Image.asset(
-                                    _kPunctuationMarksIcon,
-                                    height: 22,
-                                    fit: BoxFit.contain,
-                                    errorBuilder: (_, _, _) => const Icon(
-                                      Icons.format_overline,
-                                      size: 22,
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 6),
+                                const SizedBox(width: 8),
                                 SizedBox(
-                                  width: diacriticFilterDdWidth,
+                                  width: 64,
                                   height: filterBarStripHeight,
                                   child: InputDecorator(
                                     decoration: const InputDecoration(
                                       border: OutlineInputBorder(),
                                       isDense: true,
-                                      contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                                      contentPadding: EdgeInsets.symmetric(
+                                        horizontal: 8,
+                                        vertical: 4,
+                                      ),
                                     ),
                                     child: DropdownButtonHideUnderline(
-                                      child: DropdownButton<String?>(
+                                      child: DropdownButton<String>(
                                         borderRadius: BorderRadius.circular(12),
                                         isDense: true,
-                                        value: listFilters.diacriticMarksFilter,
+                                        value: listFilters.lettersCompareOp,
                                         isExpanded: true,
-                                    selectedItemBuilder: (context) {
-                                      return const [
-                                        Text(
-                                          'Όλα',
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                        Text(
-                                          'Κανένα',
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                        Text(
-                                          '1',
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                        Text(
-                                          '2',
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                        Text(
-                                          '3',
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                        Text(
-                                          'Περισσότερα (>3)',
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                      ];
-                                    },
-                                    items: const [
-                                      DropdownMenuItem<String?>(
-                                        value: null,
-                                        child: Text('Όλα'),
-                                      ),
-                                      DropdownMenuItem<String?>(
-                                        value: 'none',
-                                        child: Text('Κανένα'),
-                                      ),
-                                      DropdownMenuItem<String?>(
-                                        value: '1',
-                                        child: Text('1'),
-                                      ),
-                                      DropdownMenuItem<String?>(
-                                        value: '2',
-                                        child: Text('2'),
-                                      ),
-                                      DropdownMenuItem<String?>(
-                                        value: '3',
-                                        child: Text('3'),
-                                      ),
-                                      DropdownMenuItem<String?>(
-                                        value: 'gt3',
-                                        child: Text('Περισσότερα (>3)'),
-                                      ),
-                                    ],
-                                    onChanged: (v) async {
-                                      await ref
-                                          .read(lexiconListFiltersProvider.notifier)
-                                          .setDiacriticMarksFilter(v);
-                                      if (!mounted) return;
-                                      _refreshList();
-                                    },
+                                        selectedItemBuilder: (context) =>
+                                            const [
+                                              Text('≥'),
+                                              Text('≤'),
+                                              Text('='),
+                                            ],
+                                        items: const [
+                                          DropdownMenuItem(
+                                            value: '>=',
+                                            child: Text('≥'),
+                                          ),
+                                          DropdownMenuItem(
+                                            value: '<=',
+                                            child: Text('≤'),
+                                          ),
+                                          DropdownMenuItem(
+                                            value: '=',
+                                            child: Text('='),
+                                          ),
+                                        ],
+                                        onChanged: (v) async {
+                                          if (v == null) return;
+                                          await ref
+                                              .read(
+                                                lexiconListFiltersProvider
+                                                    .notifier,
+                                              )
+                                              .setLettersCompareOp(v);
+                                          if (!mounted) return;
+                                          _refreshList();
+                                        },
                                       ),
                                     ),
                                   ),
                                 ),
+                                const SizedBox(width: 8),
+                                SizedBox(
+                                  width: 92,
+                                  height: filterBarStripHeight,
+                                  child: TextField(
+                                    controller: _lettersCountField,
+                                    keyboardType: TextInputType.number,
+                                    inputFormatters: [
+                                      FilteringTextInputFormatter.digitsOnly,
+                                    ],
+                                    maxLength: 3,
+                                    style: theme.textTheme.bodyMedium,
+                                    decoration: const InputDecoration(
+                                      labelText: 'Αριθμός',
+                                      floatingLabelBehavior:
+                                          FloatingLabelBehavior.never,
+                                      border: OutlineInputBorder(),
+                                      isDense: true,
+                                      contentPadding: EdgeInsets.symmetric(
+                                        horizontal: 10,
+                                        vertical: 10,
+                                      ),
+                                      counterText: '',
+                                    ),
+                                    onChanged: (_) {
+                                      _lettersFilterDebounce?.cancel();
+                                      _lettersFilterDebounce = Timer(
+                                        const Duration(milliseconds: 350),
+                                        () async {
+                                          if (!mounted) return;
+                                          await ref
+                                              .read(
+                                                lexiconListFiltersProvider
+                                                    .notifier,
+                                              )
+                                              .setLettersCount(
+                                                _lettersCountField.text,
+                                              );
+                                          if (!mounted) return;
+                                          _refreshList();
+                                        },
+                                      );
+                                    },
+                                  ),
+                                ),
+                                const SizedBox(width: 16),
+                                Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  crossAxisAlignment: CrossAxisAlignment.center,
+                                  children: [
+                                    Tooltip(
+                                      message: 'Σημεία Στήξης',
+                                      child: Image.asset(
+                                        _kPunctuationMarksIcon,
+                                        height: 22,
+                                        fit: BoxFit.contain,
+                                        errorBuilder: (_, _, _) => const Icon(
+                                          Icons.format_overline,
+                                          size: 22,
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 6),
+                                    SizedBox(
+                                      width: diacriticFilterDdWidth,
+                                      height: filterBarStripHeight,
+                                      child: InputDecorator(
+                                        decoration: const InputDecoration(
+                                          border: OutlineInputBorder(),
+                                          isDense: true,
+                                          contentPadding: EdgeInsets.symmetric(
+                                            horizontal: 12,
+                                            vertical: 4,
+                                          ),
+                                        ),
+                                        child: DropdownButtonHideUnderline(
+                                          child: DropdownButton<String?>(
+                                            borderRadius: BorderRadius.circular(
+                                              12,
+                                            ),
+                                            isDense: true,
+                                            value: listFilters
+                                                .diacriticMarksFilter,
+                                            isExpanded: true,
+                                            selectedItemBuilder: (context) {
+                                              return const [
+                                                Text(
+                                                  'Όλα',
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                ),
+                                                Text(
+                                                  'Κανένα',
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                ),
+                                                Text(
+                                                  '1',
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                ),
+                                                Text(
+                                                  '2',
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                ),
+                                                Text(
+                                                  '3',
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                ),
+                                                Text(
+                                                  'Περισσότερα (>3)',
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                ),
+                                              ];
+                                            },
+                                            items: const [
+                                              DropdownMenuItem<String?>(
+                                                value: null,
+                                                child: Text('Όλα'),
+                                              ),
+                                              DropdownMenuItem<String?>(
+                                                value: 'none',
+                                                child: Text('Κανένα'),
+                                              ),
+                                              DropdownMenuItem<String?>(
+                                                value: '1',
+                                                child: Text('1'),
+                                              ),
+                                              DropdownMenuItem<String?>(
+                                                value: '2',
+                                                child: Text('2'),
+                                              ),
+                                              DropdownMenuItem<String?>(
+                                                value: '3',
+                                                child: Text('3'),
+                                              ),
+                                              DropdownMenuItem<String?>(
+                                                value: 'gt3',
+                                                child: Text('Περισσότερα (>3)'),
+                                              ),
+                                            ],
+                                            onChanged: (v) async {
+                                              await ref
+                                                  .read(
+                                                    lexiconListFiltersProvider
+                                                        .notifier,
+                                                  )
+                                                  .setDiacriticMarksFilter(v);
+                                              if (!mounted) return;
+                                              _refreshList();
+                                            },
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ],
                             ),
-                          ],
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                ),
                     Flexible(
                       child: Align(
                         alignment: Alignment.centerRight,
@@ -1922,154 +1995,207 @@ class _DictionaryManagerScreenState extends ConsumerState<DictionaryManagerScree
                               mainAxisSize: MainAxisSize.min,
                               crossAxisAlignment: CrossAxisAlignment.center,
                               children: [
-                            IconButton(
-                              tooltip: lexiconContinuousScroll
-                                  ? 'Συνεχής κύλιση — πάτημα για σελίδες'
-                                  : 'Σελίδες — πάτημα για συνεχή κύλιση',
-                              style: IconButton.styleFrom(
-                                minimumSize:
-                                    const Size(filterBarStripHeight, filterBarStripHeight),
-                                padding: EdgeInsets.zero,
-                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                visualDensity: VisualDensity.compact,
-                              ),
-                              icon: Icon(
-                                lexiconContinuousScroll
-                                    ? Icons.swap_vert
-                                    : Icons.view_agenda,
-                              ),
-                              onPressed: () async {
-                                final cur = ref
-                                        .read(lexiconContinuousScrollProvider)
-                                        .value ??
-                                    true;
-                                final newVal = !cur;
-                                final dbSet = await DatabaseHelper.instance.database;
-                                await SettingsRepository(dbSet).saveSetting(
-                                  'lexicon_continuous_scroll',
-                                  newVal.toString(),
-                                );
-                                ref.invalidate(lexiconContinuousScrollProvider);
-                                await ref.read(
-                                    lexiconContinuousScrollProvider.future);
-                                if (!mounted) return;
-                                await ref
-                                    .read(lexiconListFiltersProvider.notifier)
-                                    .resetPage();
-                                if (_verticalTableScroll.hasClients) {
-                                  _verticalTableScroll.jumpTo(0);
-                                }
-                                await _refreshList();
-                              },
-                            ),
-                            if (!lexiconContinuousScroll) ...[
-                              IconButton(
-                                tooltip: 'Προηγούμενη',
-                                style: IconButton.styleFrom(
-                                  minimumSize: const Size(
-                                      filterBarStripHeight, filterBarStripHeight),
-                                  padding: EdgeInsets.zero,
-                                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                  visualDensity: VisualDensity.compact,
-                                ),
-                                onPressed: listPage > 0
-                                    ? () async {
-                                        await ref
-                                            .read(lexiconListFiltersProvider.notifier)
-                                            .setPage(listPage - 1);
-                                        if (!mounted) return;
-                                        _refreshList();
-                                      }
-                                    : null,
-                                icon: const Icon(Icons.chevron_left),
-                              ),
-                              Tooltip(
-                                message:
-                                    'Αλλαγή σελίδας κάθε $lexiconPageSize λέξεις',
-                                child: SizedBox(
-                                  height: filterBarStripHeight,
-                                  child: Center(
-                                    child: Text('${listPage + 1} / ${maxPage + 1}'),
+                                IconButton(
+                                  tooltip: lexiconContinuousScroll
+                                      ? 'Συνεχής κύλιση — πάτημα για σελίδες'
+                                      : 'Σελίδες — πάτημα για συνεχή κύλιση',
+                                  style: IconButton.styleFrom(
+                                    minimumSize: const Size(
+                                      filterBarStripHeight,
+                                      filterBarStripHeight,
+                                    ),
+                                    padding: EdgeInsets.zero,
+                                    tapTargetSize:
+                                        MaterialTapTargetSize.shrinkWrap,
+                                    visualDensity: VisualDensity.compact,
                                   ),
+                                  icon: Icon(
+                                    lexiconContinuousScroll
+                                        ? Icons.swap_vert
+                                        : Icons.view_agenda,
+                                  ),
+                                  onPressed: () async {
+                                    final cur =
+                                        ref
+                                            .read(
+                                              lexiconContinuousScrollProvider,
+                                            )
+                                            .value ??
+                                        true;
+                                    final newVal = !cur;
+                                    final dbSet =
+                                        await DatabaseHelper.instance.database;
+                                    await SettingsRepository(dbSet).saveSetting(
+                                      'lexicon_continuous_scroll',
+                                      newVal.toString(),
+                                    );
+                                    ref.invalidate(
+                                      lexiconContinuousScrollProvider,
+                                    );
+                                    await ref.read(
+                                      lexiconContinuousScrollProvider.future,
+                                    );
+                                    if (!mounted) return;
+                                    await ref
+                                        .read(
+                                          lexiconListFiltersProvider.notifier,
+                                        )
+                                        .resetPage();
+                                    if (_verticalTableScroll.hasClients) {
+                                      _verticalTableScroll.jumpTo(0);
+                                    }
+                                    await _refreshList();
+                                  },
                                 ),
-                              ),
-                              IconButton(
-                                tooltip: 'Επόμενη',
-                                style: IconButton.styleFrom(
-                                  minimumSize: const Size(
-                                      filterBarStripHeight, filterBarStripHeight),
-                                  padding: EdgeInsets.zero,
-                                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                  visualDensity: VisualDensity.compact,
-                                ),
-                                onPressed: listPage < maxPage
-                                    ? () async {
-                                        await ref
-                                            .read(lexiconListFiltersProvider.notifier)
-                                            .setPage(listPage + 1);
+                                if (!lexiconContinuousScroll) ...[
+                                  IconButton(
+                                    tooltip: 'Προηγούμενη',
+                                    style: IconButton.styleFrom(
+                                      minimumSize: const Size(
+                                        filterBarStripHeight,
+                                        filterBarStripHeight,
+                                      ),
+                                      padding: EdgeInsets.zero,
+                                      tapTargetSize:
+                                          MaterialTapTargetSize.shrinkWrap,
+                                      visualDensity: VisualDensity.compact,
+                                    ),
+                                    onPressed: listPage > 0
+                                        ? () async {
+                                            await ref
+                                                .read(
+                                                  lexiconListFiltersProvider
+                                                      .notifier,
+                                                )
+                                                .setPage(listPage - 1);
+                                            if (!mounted) return;
+                                            _refreshList();
+                                          }
+                                        : null,
+                                    icon: const Icon(Icons.chevron_left),
+                                  ),
+                                  Tooltip(
+                                    message:
+                                        'Αλλαγή σελίδας κάθε $lexiconPageSize λέξεις',
+                                    child: SizedBox(
+                                      height: filterBarStripHeight,
+                                      child: Center(
+                                        child: Text(
+                                          '${listPage + 1} / ${maxPage + 1}',
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  IconButton(
+                                    tooltip: 'Επόμενη',
+                                    style: IconButton.styleFrom(
+                                      minimumSize: const Size(
+                                        filterBarStripHeight,
+                                        filterBarStripHeight,
+                                      ),
+                                      padding: EdgeInsets.zero,
+                                      tapTargetSize:
+                                          MaterialTapTargetSize.shrinkWrap,
+                                      visualDensity: VisualDensity.compact,
+                                    ),
+                                    onPressed: listPage < maxPage
+                                        ? () async {
+                                            await ref
+                                                .read(
+                                                  lexiconListFiltersProvider
+                                                      .notifier,
+                                                )
+                                                .setPage(listPage + 1);
+                                            if (!mounted) return;
+                                            _refreshList();
+                                          }
+                                        : null,
+                                    icon: const Icon(Icons.chevron_right),
+                                  ),
+                                  SizedBox(
+                                    width: filterBarStripHeight,
+                                    height: filterBarStripHeight,
+                                    child: PopupMenuButton<int>(
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                      style: IconButton.styleFrom(
+                                        minimumSize: Size.square(
+                                          filterBarStripHeight,
+                                        ),
+                                        padding: EdgeInsets.zero,
+                                        tapTargetSize:
+                                            MaterialTapTargetSize.shrinkWrap,
+                                        visualDensity: VisualDensity.compact,
+                                      ),
+                                      tooltip: 'Λέξεις ανά σελίδα',
+                                      icon: const Icon(Icons.numbers),
+                                      onSelected: (v) async {
+                                        final dbPs = await DatabaseHelper
+                                            .instance
+                                            .database;
+                                        await SettingsRepository(
+                                          dbPs,
+                                        ).saveSetting(
+                                          'lexicon_page_size',
+                                          '$v',
+                                        );
+                                        ref.invalidate(lexiconPageSizeProvider);
+                                        await ref.read(
+                                          lexiconPageSizeProvider.future,
+                                        );
                                         if (!mounted) return;
-                                        _refreshList();
-                                      }
-                                    : null,
-                                icon: const Icon(Icons.chevron_right),
-                              ),
-                              SizedBox(
-                                width: filterBarStripHeight,
-                                height: filterBarStripHeight,
-                                child: PopupMenuButton<int>(
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                style: IconButton.styleFrom(
-                                  minimumSize: Size.square(filterBarStripHeight),
-                                  padding: EdgeInsets.zero,
-                                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                  visualDensity: VisualDensity.compact,
-                                ),
-                                tooltip: 'Λέξεις ανά σελίδα',
-                                icon: const Icon(Icons.numbers),
-                                onSelected: (v) async {
-                                  final dbPs =
-                                      await DatabaseHelper.instance.database;
-                                  await SettingsRepository(dbPs).saveSetting(
-                                    'lexicon_page_size',
-                                    '$v',
-                                  );
-                                  ref.invalidate(lexiconPageSizeProvider);
-                                  await ref.read(lexiconPageSizeProvider.future);
-                                  if (!mounted) return;
-                                  await ref
-                                      .read(lexiconListFiltersProvider.notifier)
-                                      .resetPage();
-                                  await _refreshList();
-                                },
-                                itemBuilder: (context) => const [
-                                  PopupMenuItem(
-                                      value: 20, child: Text('20 λέξεις')),
-                                  PopupMenuItem(
-                                      value: 30, child: Text('30 λέξεις')),
-                                  PopupMenuItem(
-                                      value: 40, child: Text('40 λέξεις')),
-                                  PopupMenuItem(
-                                      value: 50, child: Text('50 λέξεις')),
-                                  PopupMenuItem(
-                                      value: 75, child: Text('75 λέξεις')),
-                                  PopupMenuItem(
-                                      value: 100, child: Text('100 λέξεις')),
-                                  PopupMenuItem(
-                                      value: 150, child: Text('150 λέξεις')),
-                                  PopupMenuItem(
-                                      value: 200, child: Text('200 λέξεις')),
+                                        await ref
+                                            .read(
+                                              lexiconListFiltersProvider
+                                                  .notifier,
+                                            )
+                                            .resetPage();
+                                        await _refreshList();
+                                      },
+                                      itemBuilder: (context) => const [
+                                        PopupMenuItem(
+                                          value: 20,
+                                          child: Text('20 λέξεις'),
+                                        ),
+                                        PopupMenuItem(
+                                          value: 30,
+                                          child: Text('30 λέξεις'),
+                                        ),
+                                        PopupMenuItem(
+                                          value: 40,
+                                          child: Text('40 λέξεις'),
+                                        ),
+                                        PopupMenuItem(
+                                          value: 50,
+                                          child: Text('50 λέξεις'),
+                                        ),
+                                        PopupMenuItem(
+                                          value: 75,
+                                          child: Text('75 λέξεις'),
+                                        ),
+                                        PopupMenuItem(
+                                          value: 100,
+                                          child: Text('100 λέξεις'),
+                                        ),
+                                        PopupMenuItem(
+                                          value: 150,
+                                          child: Text('150 λέξεις'),
+                                        ),
+                                        PopupMenuItem(
+                                          value: 200,
+                                          child: Text('200 λέξεις'),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
                                 ],
-                                ),
-                              ),
-                            ],
-                          ],
+                              ],
+                            ),
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                ),
                   ],
                 );
               },
@@ -2091,20 +2217,24 @@ class _DictionaryManagerScreenState extends ConsumerState<DictionaryManagerScree
                       final tableLayout = ref.watch(dictionaryLayoutProvider);
                       final columnsCount = tableLayout.columnsCount;
                       final gridRowCount = tableLayout.gridRowCount;
-                      final footerRows =
-                          lexiconContinuousScroll && _loadingMore ? 1 : 0;
+                      final footerRows = lexiconContinuousScroll && _loadingMore
+                          ? 1
+                          : 0;
                       final listItemCount = gridRowCount + footerRows;
 
                       return AnimatedBuilder(
-                        animation: Listenable.merge(_lexiconWordWidthDuringDrag),
+                        animation: Listenable.merge(
+                          _lexiconWordWidthDuringDrag,
+                        ),
                         builder: (context, _) {
                           final liveDragWidths = _lexiconWordWidthDuringDrag
                               .map((n) => n.value)
                               .toList(growable: false);
-                          final groupLayouts =
-                              tableLayout.groupLayoutsWithLiveDrag(liveDragWidths);
-                          final scrollW =
-                              tableLayout.effectiveScrollWidth(groupLayouts);
+                          final groupLayouts = tableLayout
+                              .groupLayoutsWithLiveDrag(liveDragWidths);
+                          final scrollW = tableLayout.effectiveScrollWidth(
+                            groupLayouts,
+                          );
 
                           return Scrollbar(
                             controller: _horizontalTableScroll,
@@ -2121,46 +2251,45 @@ class _DictionaryManagerScreenState extends ConsumerState<DictionaryManagerScree
                                   children: [
                                     Row(
                                       mainAxisSize: MainAxisSize.min,
-                                      children: List.generate(
-                                        columnsCount,
-                                        (groupIndex) {
-                                          final groupLayout =
-                                              groupLayouts[groupIndex];
-                                          return _lexiconColumnGroupShell(
-                                            context: context,
-                                            groupIndex: groupIndex,
-                                            child: SizedBox(
-                                              width: groupLayout.baseTotal,
-                                              child: DictionaryLexiconHeaderRow(
-                                                wordWidth: groupLayout.wordWidth,
-                                                sourceWidth:
-                                                    groupLayout.sourceWidth,
-                                                categoryWidth:
-                                                    groupLayout.categoryWidth,
-                                                onWordColumnResizeStart: () =>
-                                                    _onLexiconWordColumnResizeStart(
-                                                  groupIndex,
-                                                  groupLayout.wordWidth,
-                                                ),
-                                                onWordColumnResizeUpdate: (delta) =>
-                                                    _onLexiconWordColumnResizeUpdate(
-                                                  groupIndex,
-                                                  delta,
-                                                ),
-                                                onWordColumnResizeEnd: (delta) =>
-                                                    _onLexiconWordColumnResizeEnd(
-                                                  groupIndex,
-                                                  delta,
-                                                ),
-                                                onWordColumnResizeCancel: () =>
-                                                    _onLexiconWordColumnResizeCancel(
-                                                  groupIndex,
-                                                ),
-                                              ),
+                                      children: List.generate(columnsCount, (
+                                        groupIndex,
+                                      ) {
+                                        final groupLayout =
+                                            groupLayouts[groupIndex];
+                                        return _lexiconColumnGroupShell(
+                                          context: context,
+                                          groupIndex: groupIndex,
+                                          child: SizedBox(
+                                            width: groupLayout.baseTotal,
+                                            child: DictionaryLexiconHeaderRow(
+                                              wordWidth: groupLayout.wordWidth,
+                                              sourceWidth:
+                                                  groupLayout.sourceWidth,
+                                              categoryWidth:
+                                                  groupLayout.categoryWidth,
+                                              onWordColumnResizeStart: () =>
+                                                  _onLexiconWordColumnResizeStart(
+                                                    groupIndex,
+                                                    groupLayout.wordWidth,
+                                                  ),
+                                              onWordColumnResizeUpdate: (delta) =>
+                                                  _onLexiconWordColumnResizeUpdate(
+                                                    groupIndex,
+                                                    delta,
+                                                  ),
+                                              onWordColumnResizeEnd: (delta) =>
+                                                  _onLexiconWordColumnResizeEnd(
+                                                    groupIndex,
+                                                    delta,
+                                                  ),
+                                              onWordColumnResizeCancel: () =>
+                                                  _onLexiconWordColumnResizeCancel(
+                                                    groupIndex,
+                                                  ),
                                             ),
-                                          );
-                                        },
-                                      ),
+                                          ),
+                                        );
+                                      }),
                                     ),
                                     Expanded(
                                       child: _loading
@@ -2175,10 +2304,12 @@ class _DictionaryManagerScreenState extends ConsumerState<DictionaryManagerScree
                                               controller: _verticalTableScroll,
                                               thumbVisibility: true,
                                               child: ListView.builder(
-                                                controller: _verticalTableScroll,
+                                                controller:
+                                                    _verticalTableScroll,
                                                 primary: false,
                                                 padding: EdgeInsets.zero,
-                                                itemExtent: kDictionaryGridRowExtent,
+                                                itemExtent:
+                                                    kDictionaryGridRowExtent,
                                                 itemCount: listItemCount,
                                                 itemBuilder: (context, i) {
                                                   if (i >= gridRowCount) {
@@ -2190,24 +2321,28 @@ class _DictionaryManagerScreenState extends ConsumerState<DictionaryManagerScree
                                                           height: 28,
                                                           child:
                                                               CircularProgressIndicator(
-                                                            strokeWidth: 2,
-                                                          ),
+                                                                strokeWidth: 2,
+                                                              ),
                                                         ),
                                                       ),
                                                     );
                                                   }
                                                   return Row(
-                                                    mainAxisSize: MainAxisSize.min,
+                                                    mainAxisSize:
+                                                        MainAxisSize.min,
                                                     crossAxisAlignment:
-                                                        CrossAxisAlignment.start,
-                                                    children: List.generate(
-                                                        columnsCount, (colIndex) {
+                                                        CrossAxisAlignment
+                                                            .start,
+                                                    children: List.generate(columnsCount, (
+                                                      colIndex,
+                                                    ) {
                                                       final groupLayout =
                                                           groupLayouts[colIndex];
                                                       final rowIndex =
                                                           i * columnsCount +
-                                                              colIndex;
-                                                      if (rowIndex >= _rows.length) {
+                                                          colIndex;
+                                                      if (rowIndex >=
+                                                          _rows.length) {
                                                         return _lexiconColumnGroupShell(
                                                           context: context,
                                                           groupIndex: colIndex,
@@ -2222,34 +2357,40 @@ class _DictionaryManagerScreenState extends ConsumerState<DictionaryManagerScree
                                                         context: context,
                                                         groupIndex: colIndex,
                                                         child: SizedBox(
-                                                          width:
-                                                              groupLayout.baseTotal,
+                                                          width: groupLayout
+                                                              .baseTotal,
                                                           child: RepaintBoundary(
                                                             child: DictionaryGridRow(
                                                               key: ValueKey(
                                                                 _lexiconRowWidgetKey(
-                                                                    r),
+                                                                  r,
+                                                                ),
                                                               ),
                                                               row: r,
-                                                              layout: groupLayout,
+                                                              layout:
+                                                                  groupLayout,
                                                               categoryOptions:
                                                                   lexiconCategoryOptions,
-                                                              onUpdate: (word, cat) =>
-                                                                  _updateLexiconRow(
+                                                              onUpdate:
+                                                                  (
+                                                                    word,
+                                                                    cat,
+                                                                  ) => _updateLexiconRow(
                                                                     _rows[rowIndex],
                                                                     word,
                                                                     cat,
                                                                   ),
                                                               onDelete: () =>
                                                                   _deleteRow(
-                                                                      _rows[rowIndex]),
+                                                                    _rows[rowIndex],
+                                                                  ),
                                                               onSpellingContextChanged:
-                                                                  (word) =>
-                                                                      _onSpellingContextFromRow(
-                                                                        _rows[
-                                                                            rowIndex],
-                                                                        word,
-                                                                      ),
+                                                                  (
+                                                                    word,
+                                                                  ) => _onSpellingContextFromRow(
+                                                                    _rows[rowIndex],
+                                                                    word,
+                                                                  ),
                                                             ),
                                                           ),
                                                         ),

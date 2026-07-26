@@ -16,8 +16,7 @@ import '../../test_setup.dart';
 Finder _catalogUserSearchField() {
   return find.byWidgetPredicate(
     (w) =>
-        w is TextField &&
-        (w.decoration?.hintText?.contains('Όνομα') ?? false),
+        w is TextField && (w.decoration?.hintText?.contains('Όνομα') ?? false),
   );
 }
 
@@ -44,44 +43,44 @@ void main() {
 
     // Καρτέλα Κατάλογος → Υπάλληλοι, αναζήτηση με kTestUserFirstName, εμφάνιση στον πίνακα.
     //   flutter test test/features/directory/directory_user_search_test.dart --plain-name "Κατάλογος: αναζήτηση χρήστη με το όνομα του seed"
-    testWidgets(
-      'Κατάλογος: αναζήτηση χρήστη με το όνομα του seed',
-      (tester) async {
-        tester.view.physicalSize = const Size(1600, 900);
-        tester.view.devicePixelRatio = 1.0;
-        addTearDown(() {
-          tester.view.resetPhysicalSize();
-          tester.view.resetDevicePixelRatio();
-        });
+    testWidgets('Κατάλογος: αναζήτηση χρήστη με το όνομα του seed', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(1600, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
 
-        final reporter = GreekTestReportCollector();
-        reporter.logStep('Φόρτωση εφαρμογής για αναζήτηση στον Κατάλογο');
+      final reporter = GreekTestReportCollector();
+      reporter.logStep('Φόρτωση εφαρμογής για αναζήτηση στον Κατάλογο');
 
-        await _openDirectoryUsersTab(tester);
+      await _openDirectoryUsersTab(tester);
 
-        reporter.logStep('Μετάβαση στον Κατάλογο (Υπάλληλοι)');
-        final userSearch = _catalogUserSearchField();
-        expect(
-          userSearch,
-          findsOneWidget,
-          reason: greekExpectMsg('Πεδίο αναζήτησης καρτέλας Υπάλληλοι'),
-        );
-        reporter.logStep('Αναζήτηση με το όνομα χρήστη του seed');
-        await tester.tap(userSearch);
-        await pumpUntilSettled(tester);
-        await tester.enterText(userSearch, kTestUserFirstName);
-        await pumpUntilSettled(tester);
+      reporter.logStep('Μετάβαση στον Κατάλογο (Υπάλληλοι)');
+      final userSearch = _catalogUserSearchField();
+      expect(
+        userSearch,
+        findsOneWidget,
+        reason: greekExpectMsg('Πεδίο αναζήτησης καρτέλας Υπάλληλοι'),
+      );
+      reporter.logStep('Αναζήτηση με το όνομα χρήστη του seed');
+      await tester.tap(userSearch);
+      await pumpUntilSettled(tester);
+      await tester.enterText(userSearch, kTestUserFirstName);
+      await pumpUntilSettled(tester);
 
-        expect(
-          find.textContaining(kTestUserFirstName),
-          findsWidgets,
-          reason: greekExpectMsg('Ο πίνακας πρέπει να εμφανίζει το όνομα χρήστη από το seed'),
-        );
-        reporter.recordPass('Αναζήτηση στον Κατάλογο (Υπάλληλοι)');
-        await tester.pump(const Duration(seconds: 11));
-      },
-      semanticsEnabled: false,
-    );
+      expect(
+        find.textContaining(kTestUserFirstName),
+        findsWidgets,
+        reason: greekExpectMsg(
+          'Ο πίνακας πρέπει να εμφανίζει το όνομα χρήστη από το seed',
+        ),
+      );
+      reporter.recordPass('Αναζήτηση στον Κατάλογο (Υπάλληλοι)');
+      await tester.pump(const Duration(seconds: 11));
+    }, semanticsEnabled: false);
 
     //   flutter test test/features/directory/directory_user_search_test.dart --plain-name "hover πίνακα"
     testWidgets(

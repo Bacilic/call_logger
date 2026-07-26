@@ -266,7 +266,9 @@ class _DatabaseErrorScreenState extends ConsumerState<DatabaseErrorScreen> {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
-        content: Text('Η νέα βάση δημιουργήθηκε και η εφαρμογή επανασυνδέθηκε.'),
+        content: Text(
+          'Η νέα βάση δημιουργήθηκε και η εφαρμογή επανασυνδέθηκε.',
+        ),
         behavior: SnackBarBehavior.floating,
       ),
     );
@@ -347,9 +349,7 @@ class _DatabaseErrorScreenState extends ConsumerState<DatabaseErrorScreen> {
       builder: (ctx) => AlertDialog(
         title: const Text('Η βάση δεν είναι έγκυρη'),
         content: SingleChildScrollView(
-          child: Text(
-            det != null && det.isNotEmpty ? '$msg\n\n$det' : msg,
-          ),
+          child: Text(det != null && det.isNotEmpty ? '$msg\n\n$det' : msg),
         ),
         actions: [
           TextButton(
@@ -374,8 +374,9 @@ class _DatabaseErrorScreenState extends ConsumerState<DatabaseErrorScreen> {
     final result = await runRestoreFromBackupZipFlow(
       context: context,
       backupFolderHint: backupFolder,
-      currentDatabasePath:
-          (target != null && target.isNotEmpty) ? target : AppConfig.defaultDbPath,
+      currentDatabasePath: (target != null && target.isNotEmpty)
+          ? target
+          : AppConfig.defaultDbPath,
     );
     if (!mounted || result.cancelled) return;
     if (result.failed) return;
@@ -418,17 +419,13 @@ class _DatabaseErrorScreenState extends ConsumerState<DatabaseErrorScreen> {
       TextSpan(
         style: baseStyle,
         children: [
-          const TextSpan(
-            text: 'Η βάση έχει αλλάξει τοποθεσία. Μπορείτε να ',
-          ),
+          const TextSpan(text: 'Η βάση έχει αλλάξει τοποθεσία. Μπορείτε να '),
           TextSpan(text: 'αναζητήσετε τη βάση', style: bluePhrase),
           const TextSpan(text: ' σας με το κουμπί '),
           TextSpan(text: 'Επιλογή αρχείου βάσης', style: boldLabel),
           const TextSpan(text: ' ή να '),
           TextSpan(text: 'δημιουργήσετε μία νέα βάση', style: bluePhrase),
-          const TextSpan(
-            text: ', ΧΩΡΙΣ δεδομένα με το κουμπί ',
-          ),
+          const TextSpan(text: ', ΧΩΡΙΣ δεδομένα με το κουμπί '),
           TextSpan(text: 'Δημιουργία νέας βάσης', style: boldLabel),
           const TextSpan(text: '.'),
         ],
@@ -458,7 +455,9 @@ class _DatabaseErrorScreenState extends ConsumerState<DatabaseErrorScreen> {
   }
 
   Future<void> _copyFullReport(BuildContext context) async {
-    final text = widget.result.buildClipboardReport(dbPathFallback: widget.dbPath);
+    final text = widget.result.buildClipboardReport(
+      dbPathFallback: widget.dbPath,
+    );
     await Clipboard.setData(ClipboardData(text: text));
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
@@ -822,13 +821,13 @@ class _DatabaseErrorScreenState extends ConsumerState<DatabaseErrorScreen> {
               Tooltip(
                 message: _shouldOfferRestart
                     ? 'Κλείνει την εφαρμογή και την ανοίγει ξανά από την αρχή.\n\n'
-                        'Χρησιμοποιήστε το όταν η βάση δεν απάντησε εγκαίρως '
-                        '(timeout) και μια απλή επαναδοκιμή δεν αρκεί.'
+                          'Χρησιμοποιήστε το όταν η βάση δεν απάντησε εγκαίρως '
+                          '(timeout) και μια απλή επαναδοκιμή δεν αρκεί.'
                     : 'Ξαναδοκιμάζει το άνοιγμα της τρέχουσας βάσης χωρίς '
-                        'να αλλάξει διαδρομή.\n\n'
-                        'Χρήσιμο αν το πρόβλημα ήταν προσωρινό (δίκτυο, '
-                        'κλείδωμα που λύθηκε). Αν το αρχείο είναι λάθος, '
-                        'επιλέξτε άλλο αρχείο ή πρόσφατη βάση.',
+                          'να αλλάξει διαδρομή.\n\n'
+                          'Χρήσιμο αν το πρόβλημα ήταν προσωρινό (δίκτυο, '
+                          'κλείδωμα που λύθηκε). Αν το αρχείο είναι λάθος, '
+                          'επιλέξτε άλλο αρχείο ή πρόσφατη βάση.',
                 waitDuration: const Duration(milliseconds: 350),
                 child: OutlinedButton.icon(
                   onPressed: () async {

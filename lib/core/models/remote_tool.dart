@@ -1,4 +1,4 @@
-﻿import 'dart:convert';
+import 'dart:convert';
 
 import 'remote_tool_role.dart';
 
@@ -16,10 +16,10 @@ class RemoteToolArgument {
   final bool isActive;
 
   Map<String, dynamic> toJson() => {
-        'value': value,
-        'description': description,
-        'is_active': isActive,
-      };
+    'value': value,
+    'description': description,
+    'is_active': isActive,
+  };
 
   factory RemoteToolArgument.fromJson(Map<String, dynamic> json) {
     final v = json['value'] ?? json['arg_flag'];
@@ -61,6 +61,7 @@ class RemoteTool {
   final String executablePath;
   final int sortOrder;
   final bool isActive;
+
   /// Soft delete: όταν μη null, το εργαλείο δεν εμφανίζεται στα ενεργά chips· παραμένει για επιλύσεις id.
   final DateTime? deletedAt;
   final String? suggestedValuesJson;
@@ -301,8 +302,9 @@ class RemoteTool {
       suggestedValuesJson: suggestedValuesJson ?? this.suggestedValuesJson,
       iconAssetKey: iconAssetKey ?? this.iconAssetKey,
       arguments: arguments ?? this.arguments,
-      testTargetIp:
-          clearTestTargetIp ? null : (testTargetIp ?? this.testTargetIp),
+      testTargetIp: clearTestTargetIp
+          ? null
+          : (testTargetIp ?? this.testTargetIp),
       isExclusive: isExclusive ?? this.isExclusive,
     );
   }
@@ -344,21 +346,19 @@ class RemoteTool {
 
   @override
   int get hashCode => Object.hash(
-        id,
-        name,
-        role,
-        executablePath,
-        sortOrder,
-        isActive,
-        deletedAt,
-        suggestedValuesJson,
-        iconAssetKey,
-        testTargetIp,
-        isExclusive,
-        Object.hashAll(
-          arguments.map(
-            (a) => Object.hash(a.value, a.description, a.isActive),
-          ),
-        ),
-      );
+    id,
+    name,
+    role,
+    executablePath,
+    sortOrder,
+    isActive,
+    deletedAt,
+    suggestedValuesJson,
+    iconAssetKey,
+    testTargetIp,
+    isExclusive,
+    Object.hashAll(
+      arguments.map((a) => Object.hash(a.value, a.description, a.isActive)),
+    ),
+  );
 }

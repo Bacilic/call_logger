@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../provider/call_entry_provider.dart';
@@ -24,9 +24,7 @@ const double _kHeaderClearAllButtonWidth = 48.0;
 
 /// Χώρος εκτός πεδίων στην ίδια Row: 3 κενά, trailing gap, κουμπί ×.
 const double _kHeaderGapsAndIcons =
-    _kHeaderFieldGap * 3 +
-    _kHeaderTrailingGap +
-    _kHeaderClearAllButtonWidth;
+    _kHeaderFieldGap * 3 + _kHeaderTrailingGap + _kHeaderClearAllButtonWidth;
 
 /// Αναλογίες πλάτους πεδίων (άθροισμα 96· κανονικοποιούνται στο 1.0).
 const double _kHeaderWidthRatioPhone = 0.18;
@@ -161,29 +159,29 @@ class _CallHeaderFormState extends ConsumerState<CallHeaderForm> {
         if (oldDeptText.isEmpty) {
           updatePrimaryDepartment = true;
         } else {
-        final askUpdate = await showDialog<bool>(
-          context: context,
-          builder: (dialogContext) {
-            return AlertDialog(
-              title: const Text('Αλλαγή κύριου τμήματος'),
-              content: Text(
-                'Ο χρήστης έχει κύριο τμήμα "${caller!.departmentName ?? 'Χωρίς τμήμα'}". '
-                'Να γίνει νέο κύριο τμήμα του χρήστη το "${selectedDepartment?.name ?? departmentText}";',
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(dialogContext).pop(false),
-                  child: const Text('Όχι'),
+          final askUpdate = await showDialog<bool>(
+            context: context,
+            builder: (dialogContext) {
+              return AlertDialog(
+                title: const Text('Αλλαγή κύριου τμήματος'),
+                content: Text(
+                  'Ο χρήστης έχει κύριο τμήμα "${caller!.departmentName ?? 'Χωρίς τμήμα'}". '
+                  'Να γίνει νέο κύριο τμήμα του χρήστη το "${selectedDepartment?.name ?? departmentText}";',
                 ),
-                FilledButton(
-                  onPressed: () => Navigator.of(dialogContext).pop(true),
-                  child: const Text('Ναι'),
-                ),
-              ],
-            );
-          },
-        );
-        updatePrimaryDepartment = askUpdate ?? false;
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.of(dialogContext).pop(false),
+                    child: const Text('Όχι'),
+                  ),
+                  FilledButton(
+                    onPressed: () => Navigator.of(dialogContext).pop(true),
+                    child: const Text('Ναι'),
+                  ),
+                ],
+              );
+            },
+          );
+          updatePrimaryDepartment = askUpdate ?? false;
         }
       }
 
@@ -231,11 +229,15 @@ class _CallHeaderFormState extends ConsumerState<CallHeaderForm> {
             : MediaQuery.sizeOf(context).width;
 
         // Διαθέσιμο πλάτος μείον κενά και κουμπί × — το άθροισμα πεδίων + _kHeaderGapsAndIcons ≤ mw.
-        final available = (mw - _kHeaderGapsAndIcons).clamp(0.0, double.infinity);
+        final available = (mw - _kHeaderGapsAndIcons).clamp(
+          0.0,
+          double.infinity,
+        );
         var w1 = available * _kHeaderWidthRatioPhone / _kHeaderWidthRatioSum;
         var w2 = available * _kHeaderWidthRatioCaller / _kHeaderWidthRatioSum;
         var wDept = available * _kHeaderWidthRatioDept / _kHeaderWidthRatioSum;
-        var w3 = available * _kHeaderWidthRatioEquipment / _kHeaderWidthRatioSum;
+        var w3 =
+            available * _kHeaderWidthRatioEquipment / _kHeaderWidthRatioSum;
         // Ασφάλεια αριθμητικής ακρίβειας: ποτέ overflow στη Row (υπολογισμός υπολοίπου στο τελευταίο πεδίο).
         final fieldsSum = w1 + w2 + wDept + w3;
         if (fieldsSum > available && fieldsSum > 0) {
@@ -247,7 +249,12 @@ class _CallHeaderFormState extends ConsumerState<CallHeaderForm> {
         }
         w3 = (available - w1 - w2 - wDept).clamp(0.0, double.infinity);
         final equipmentColumnOffset =
-            w1 + _kHeaderFieldGap + w2 + _kHeaderFieldGap + wDept + _kHeaderFieldGap;
+            w1 +
+            _kHeaderFieldGap +
+            w2 +
+            _kHeaderFieldGap +
+            wDept +
+            _kHeaderFieldGap;
         final titleText = CallsScreenTitleResolver.resolve(header);
         final showTitleRow = !widget.compactFieldCentering;
 
@@ -396,64 +403,61 @@ class _CallHeaderFormState extends ConsumerState<CallHeaderForm> {
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
-                    // Αόρατος placeholder ίδιου ύψους με τη γραμμή ετικέτας (label)
-                    // των πεδίων, ώστε το κόκκινο × να κατέβει στο κέντρο του
-                    // TextField και να ευθυγραμμιστεί με τα × των πεδίων.
-                    // Κείμενο = ένα κενό: κρατά το ύψος γραμμής χωρίς να αυξάνει
-                    // το πλάτος (αλλιώς προκαλείται overflow στη Row).
-                    Opacity(
-                      opacity: 0,
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          const Icon(Icons.circle, size: 16),
-                          Text(' ', style: theme.textTheme.labelMedium),
-                        ],
+                      // Αόρατος placeholder ίδιου ύψους με τη γραμμή ετικέτας (label)
+                      // των πεδίων, ώστε το κόκκινο × να κατέβει στο κέντρο του
+                      // TextField και να ευθυγραμμιστεί με τα × των πεδίων.
+                      // Κείμενο = ένα κενό: κρατά το ύψος γραμμής χωρίς να αυξάνει
+                      // το πλάτος (αλλιώς προκαλείται overflow στη Row).
+                      Opacity(
+                        opacity: 0,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            const Icon(Icons.circle, size: 16),
+                            Text(' ', style: theme.textTheme.labelMedium),
+                          ],
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 4),
-                    IgnorePointer(
-                      ignoring: !hasAnyContent,
-                      child: AnimatedOpacity(
-                        opacity: hasAnyContent ? 1.0 : 0.0,
-                        duration: const Duration(milliseconds: 180),
-                        child: AnimatedScale(
-                          scale: hasAnyContent ? 1.0 : 0.0,
+                      const SizedBox(height: 4),
+                      IgnorePointer(
+                        ignoring: !hasAnyContent,
+                        child: AnimatedOpacity(
+                          opacity: hasAnyContent ? 1.0 : 0.0,
                           duration: const Duration(milliseconds: 180),
-                          child: IconButton(
-                            icon: Icon(
-                              Icons.clear,
-                              color: theme.colorScheme.error,
+                          child: AnimatedScale(
+                            scale: hasAnyContent ? 1.0 : 0.0,
+                            duration: const Duration(milliseconds: 180),
+                            child: IconButton(
+                              icon: Icon(
+                                Icons.clear,
+                                color: theme.colorScheme.error,
+                              ),
+                              tooltip: 'Καθαρισμός όλων των πεδίων',
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(
+                                minWidth: 40,
+                                minHeight: 40,
+                              ),
+                              onPressed: () => _selectorKey.currentState
+                                  ?.performClearAllFields(),
                             ),
-                            tooltip: 'Καθαρισμός όλων των πεδίων',
-                            padding: EdgeInsets.zero,
-                            constraints: const BoxConstraints(
-                              minWidth: 40,
-                              minHeight: 40,
-                            ),
-                            onPressed: () => _selectorKey.currentState
-                                ?.performClearAllFields(),
                           ),
                         ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
               ],
             ),
           ],
         );
 
-        if (widget.compactFieldCentering && !widget.compactExternalVerticalCentering) {
+        if (widget.compactFieldCentering &&
+            !widget.compactExternalVerticalCentering) {
           return Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const Spacer(),
-              formCore,
-              const Spacer(),
-            ],
+            children: [const Spacer(), formCore, const Spacer()],
           );
         }
 

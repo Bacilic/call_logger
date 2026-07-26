@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../provider/lookup_provider.dart';
@@ -138,8 +138,7 @@ class SmartEntitySelectorWidgetState
   }
 
   void _confirmPhoneOnCommit() {
-    final phoneDigits =
-        _phoneController.text.replaceAll(RegExp(r'[^0-9]'), '');
+    final phoneDigits = _phoneController.text.replaceAll(RegExp(r'[^0-9]'), '');
     if (phoneDigits.length >= 2) {
       ref.read(callsFieldConfirmationsProvider.notifier).confirmPhone();
     }
@@ -153,7 +152,9 @@ class SmartEntitySelectorWidgetState
     if (header.selectedCaller?.id != null) conf.confirmCaller();
   }
 
-  static String _equipmentControllerTextFromState(SmartEntitySelectorState state) {
+  static String _equipmentControllerTextFromState(
+    SmartEntitySelectorState state,
+  ) {
     if (state.equipmentText.trim().isNotEmpty) return state.equipmentText;
     final equipment = state.selectedEquipment;
     if (equipment == null) return '';
@@ -219,10 +220,14 @@ class SmartEntitySelectorWidgetState
           next.selectedEquipment?.id != previous?.selectedEquipment?.id) {
         ref.read(callsFieldConfirmationsProvider.notifier).confirmEquipment();
       }
-      final prevPhoneDigits =
-          (previous?.selectedPhone ?? '').replaceAll(RegExp(r'[^0-9]'), '');
-      final nextPhoneDigits =
-          (next.selectedPhone ?? '').replaceAll(RegExp(r'[^0-9]'), '');
+      final prevPhoneDigits = (previous?.selectedPhone ?? '').replaceAll(
+        RegExp(r'[^0-9]'),
+        '',
+      );
+      final nextPhoneDigits = (next.selectedPhone ?? '').replaceAll(
+        RegExp(r'[^0-9]'),
+        '',
+      );
       // Επιβεβαίωση τηλεφώνου μόνο εκτός εστίασης πεδίου (autofill / επιλογή λίστας).
       // Κατά την πληκτρολόγηση η επιβεβαίωση γίνεται σε submit ή blur — όπως στο Εξοπλισμό.
       if (nextPhoneDigits.length >= 2 &&
@@ -253,7 +258,8 @@ class SmartEntitySelectorWidgetState
       if (next.equipmentText != _equipmentController.text) {
         final selectedCode = next.selectedEquipment?.code?.trim() ?? '';
         final controllerText = _equipmentController.text.trim();
-        final skipEquipmentSync = _equipmentFocusNode.hasFocus &&
+        final skipEquipmentSync =
+            _equipmentFocusNode.hasFocus &&
             controllerText.isNotEmpty &&
             next.equipmentText.trim() != controllerText;
         if (skipEquipmentSync) {

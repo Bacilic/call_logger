@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 
 import '../database/database_init_result.dart';
 
@@ -10,8 +10,8 @@ void showDatabasePersistenceErrorSnackBar(
 ) {
   final result = DatabaseInitResult.fromException(error, null, stackTrace);
   final scheme = Theme.of(context).colorScheme;
-  final summary =
-      (result.message ?? 'Αποτυχία εγγραφής στη βάση δεδομένων.').trim();
+  final summary = (result.message ?? 'Αποτυχία εγγραφής στη βάση δεδομένων.')
+      .trim();
   final details = result.details?.trim();
   ScaffoldMessenger.of(context).showSnackBar(
     SnackBar(

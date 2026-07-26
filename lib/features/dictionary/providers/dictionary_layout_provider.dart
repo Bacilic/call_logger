@@ -44,7 +44,10 @@ class DictionaryLayoutState {
           ? liveDragWidths[groupIndex]
           : null;
       if (live == null) return groupLayouts[groupIndex];
-      final wordWidth = live.clamp(kLexiconWordColumnMin, kLexiconWordColumnMax);
+      final wordWidth = live.clamp(
+        kLexiconWordColumnMin,
+        kLexiconWordColumnMax,
+      );
       final base = groupLayouts[groupIndex];
       return DictionaryTableLayout(
         wordWidth: wordWidth,
@@ -97,10 +100,7 @@ class DictionaryLayoutNotifier extends Notifier<DictionaryLayoutState> {
     _userWordWidths = userWordColumnWidths;
     _metrics = metrics;
 
-    final tableLayout = _computeTableLayout(
-      metrics: metrics,
-      rows: rows,
-    );
+    final tableLayout = _computeTableLayout(metrics: metrics, rows: rows);
     final autoColumns = math.max(
       1,
       (viewportWidth + kLexiconGroupSeparatorWidth) ~/
@@ -116,10 +116,14 @@ class DictionaryLayoutNotifier extends Notifier<DictionaryLayoutState> {
       columnsCount: columnsCount,
       userWordColumnWidths: userWordColumnWidths,
     );
-    final totalWidthNeeded = lexiconGroupsTotalWidth(groupLayouts, columnsCount);
+    final totalWidthNeeded = lexiconGroupsTotalWidth(
+      groupLayouts,
+      columnsCount,
+    );
     final scrollWidth = math.max(viewportWidth, totalWidthNeeded);
-    final gridRowCount =
-        columnsCount == 0 ? 0 : (rows.length / columnsCount).ceil();
+    final gridRowCount = columnsCount == 0
+        ? 0
+        : (rows.length / columnsCount).ceil();
 
     state = DictionaryLayoutState(
       tableLayout: tableLayout,
@@ -140,10 +144,7 @@ class DictionaryLayoutNotifier extends Notifier<DictionaryLayoutState> {
     const padSrc = 16.0;
     const padCat = 16.0;
 
-    var wWord = computeLexiconWordColumnWidth(
-      metrics: metrics,
-      rows: rows,
-    );
+    var wWord = computeLexiconWordColumnWidth(metrics: metrics, rows: rows);
     var wSrc = dictionaryMeasureTextWidth('Πηγή', metrics.headerStyle) + padSrc;
     var wCat =
         dictionaryMeasureTextWidth('Κατηγορία', metrics.headerStyle) + padCat;
@@ -179,5 +180,5 @@ class DictionaryLayoutNotifier extends Notifier<DictionaryLayoutState> {
 /// Provider layout λεξικού — cached, χωρίς επανυπολογισμό κατά την κύλιση.
 final dictionaryLayoutProvider =
     NotifierProvider<DictionaryLayoutNotifier, DictionaryLayoutState>(
-  DictionaryLayoutNotifier.new,
-);
+      DictionaryLayoutNotifier.new,
+    );

@@ -1,4 +1,4 @@
-﻿import 'dart:convert';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/services.dart';
@@ -46,10 +46,7 @@ class CoreLexiconService {
     return loadFromDiskPath(saved.trim(), persistPath: false);
   }
 
-  Future<bool> loadFromDiskPath(
-    String path, {
-    bool persistPath = true,
-  }) async {
+  Future<bool> loadFromDiskPath(String path, {bool persistPath = true}) async {
     final error = await validateCoreDictionaryFile(path);
     if (error != null) {
       _clearMemory();

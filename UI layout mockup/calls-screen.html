@@ -1,0 +1,1249 @@
+<!DOCTYPE html>
+<html lang="el">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Mockup — Οθόνη κλήσεων (calls-screen)</title>
+  <style>
+    :root {
+      --bg: #eef0f4;
+      --panel: #ffffff;
+      --sidebar: #f5f6f8;
+      --border: #e2e5ea;
+      --muted: #6b7280;
+      --title: #1f2937;
+      --primary: #5c4db1;
+      --primary-soft: #ede9fe;
+      --primary-dark: #4a3d96;
+      --danger: #e53935;
+      --timer: #5b6fe8;
+      --remote: #1e3a5f;
+      --remote-2: #243b55;
+      --good: #22c55e;
+      --field: #f8f9fb;
+      --shadow: 0 1px 3px rgba(16, 24, 40, .06), 0 1px 2px rgba(16, 24, 40, .04);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", Roboto, system-ui, sans-serif;
+      background: #dfe3ea;
+      color: var(--title);
+      font-size: 13.5px;
+    }
+    .page {
+      max-width: 1380px;
+      margin: 0 auto;
+      padding: 16px 18px 40px;
+    }
+    .doc-title {
+      font-size: 1.2rem;
+      font-weight: 650;
+      margin: 0 0 4px;
+    }
+    .doc-intro {
+      color: var(--muted);
+      margin: 0 0 14px;
+      line-height: 1.45;
+      max-width: 920px;
+    }
+    .preset-bar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+      margin-bottom: 14px;
+      padding: 10px 12px;
+      background: #fffbeb;
+      border: 1px solid #fcd34d;
+      border-radius: 10px;
+    }
+    .preset-bar strong { font-size: .86rem; margin-right: 4px; }
+    .preset-btn {
+      border: 1px solid var(--primary);
+      background: #fff;
+      color: var(--primary);
+      border-radius: 8px;
+      padding: 7px 12px;
+      cursor: pointer;
+      font-weight: 600;
+      font-size: .82rem;
+    }
+    .preset-btn:hover, .preset-btn.active {
+      background: var(--primary);
+      color: #fff;
+    }
+    .preset-btn.clear {
+      border-color: #9ca3af;
+      color: #4b5563;
+    }
+    .preset-btn.clear:hover {
+      background: #4b5563;
+      color: #fff;
+    }
+
+    /* ===== App window ===== */
+    .app {
+      background: var(--bg);
+      border-radius: 10px;
+      overflow: hidden;
+      box-shadow: 0 10px 30px rgba(0,0,0,.12);
+      border: 1px solid #cfd4dc;
+      display: flex;
+      flex-direction: column;
+      min-height: 820px;
+    }
+    .titlebar {
+      height: 36px;
+      background: #fafafa;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 12px;
+      font-size: 12.5px;
+      color: #374151;
+      user-select: none;
+    }
+    .titlebar-left { font-weight: 500; }
+    .win-controls { display: flex; gap: 10px; color: #6b7280; font-size: 11px; }
+    .win-controls span {
+      width: 12px; height: 12px; display: inline-flex;
+      align-items: center; justify-content: center;
+    }
+
+    .shell {
+      display: grid;
+      grid-template-columns: 56px 1fr;
+      flex: 1;
+      min-height: 0;
+    }
+
+    /* Sidebar */
+    .sidebar {
+      background: var(--sidebar);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 10px 0 12px;
+      gap: 4px;
+    }
+    .nav-btn {
+      width: 38px;
+      height: 38px;
+      border: none;
+      background: transparent;
+      border-radius: 10px;
+      color: var(--primary);
+      cursor: pointer;
+      display: grid;
+      place-items: center;
+      position: relative;
+    }
+    .nav-btn.active {
+      background: var(--primary-soft);
+    }
+    .nav-btn svg { width: 20px; height: 20px; fill: currentColor; }
+    .nav-btn .badge {
+      position: absolute;
+      top: 2px; right: 2px;
+      min-width: 14px; height: 14px;
+      border-radius: 999px;
+      background: #ef4444;
+      color: #fff;
+      font-size: 9px;
+      font-weight: 700;
+      display: grid;
+      place-items: center;
+      padding: 0 3px;
+      line-height: 1;
+    }
+    .nav-btn .badge.amber { background: #f59e0b; }
+    .sidebar-spacer { flex: 1; }
+    .nav-btn.plus {
+      border: 1.5px solid #9ca3af;
+      border-radius: 50%;
+      color: #6b7280;
+      width: 32px; height: 32px;
+      margin-top: 4px;
+    }
+    .nav-btn.close-x { color: #9ca3af; }
+
+    /* Main */
+    .main {
+      padding: 14px 16px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      min-width: 0;
+      background: var(--bg);
+    }
+
+    /* New call form */
+    .new-call {
+      background: var(--panel);
+      border-radius: 12px;
+      box-shadow: var(--shadow);
+      border: 1px solid #eceef2;
+      padding: 12px 14px 14px;
+    }
+    .new-call-head {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 10px;
+      color: var(--primary);
+      font-weight: 650;
+      font-size: .95rem;
+    }
+    .new-call-head svg { width: 18px; height: 18px; fill: currentColor; }
+    .form-row {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr) 40px;
+      gap: 10px;
+      align-items: end;
+    }
+    .field {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      min-width: 0;
+    }
+    .field label {
+      font-size: 11.5px;
+      color: var(--muted);
+      font-weight: 500;
+      padding-left: 2px;
+    }
+    .field-box {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: var(--field);
+      border: 1px solid #d8dce3;
+      border-radius: 8px;
+      padding: 0 8px;
+      height: 38px;
+    }
+    .field-box:focus-within {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 2px rgba(92, 77, 177, .15);
+    }
+    .field-box .ico {
+      color: var(--primary);
+      display: grid;
+      place-items: center;
+      flex-shrink: 0;
+    }
+    .field-box .ico svg { width: 16px; height: 16px; fill: currentColor; }
+    .field-box input {
+      border: none;
+      background: transparent;
+      outline: none;
+      flex: 1;
+      min-width: 0;
+      font: inherit;
+      color: var(--title);
+      height: 100%;
+    }
+    .field-box .clear {
+      border: none;
+      background: transparent;
+      color: #9ca3af;
+      cursor: pointer;
+      padding: 2px;
+      display: none;
+      border-radius: 4px;
+    }
+    .field-box.has-value .clear { display: grid; place-items: center; }
+    .field-box .clear:hover { color: var(--danger); background: #fee2e2; }
+    .field-box .clear svg { width: 14px; height: 14px; fill: currentColor; }
+    .abort-btn {
+      height: 38px;
+      width: 38px;
+      border: none;
+      background: transparent;
+      color: var(--danger);
+      cursor: pointer;
+      border-radius: 8px;
+      display: grid;
+      place-items: center;
+      margin-bottom: 1px;
+    }
+    .abort-btn:hover { background: #fee2e2; }
+    .abort-btn svg { width: 22px; height: 22px; fill: currentColor; }
+
+    .notes-wrap {
+      margin-top: 10px;
+      position: relative;
+    }
+    .notes-wrap textarea {
+      width: 100%;
+      min-height: 72px;
+      resize: vertical;
+      border: 1px solid #d8dce3;
+      border-radius: 8px;
+      background: var(--field);
+      padding: 10px 12px 22px;
+      font: inherit;
+      outline: none;
+      color: var(--title);
+    }
+    .notes-wrap textarea:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 2px rgba(92, 77, 177, .15);
+    }
+    .notes-wrap textarea::placeholder { color: #9ca3af; }
+    .char-count {
+      position: absolute;
+      right: 10px;
+      bottom: 6px;
+      font-size: 11px;
+      color: var(--muted);
+      pointer-events: none;
+    }
+
+    /* Cards grid */
+    .grid-mid, .grid-bot {
+      display: grid;
+      grid-template-columns: 1fr 1.15fr 1fr;
+      gap: 12px;
+      align-items: stretch;
+    }
+    .card {
+      background: var(--panel);
+      border-radius: 12px;
+      box-shadow: var(--shadow);
+      border: 1px solid #eceef2;
+      padding: 12px 14px;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+    }
+    .card-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 10px;
+      gap: 8px;
+    }
+    .card-title {
+      font-weight: 650;
+      font-size: .92rem;
+      display: flex;
+      align-items: center;
+      gap: 7px;
+    }
+    .card-title .dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--good);
+      box-shadow: 0 0 0 3px rgba(34,197,94,.2);
+    }
+    .icon-btn {
+      border: none;
+      background: transparent;
+      color: #9ca3af;
+      cursor: pointer;
+      padding: 4px;
+      border-radius: 6px;
+      display: grid;
+      place-items: center;
+    }
+    .icon-btn:hover { background: #f3f4f6; color: var(--title); }
+    .icon-btn svg { width: 16px; height: 16px; fill: currentColor; }
+
+    .info-rows { display: flex; flex-direction: column; gap: 10px; }
+    .info-row {
+      display: grid;
+      grid-template-columns: 78px 1fr;
+      gap: 8px;
+      align-items: baseline;
+    }
+    .info-row .k { color: var(--muted); font-size: 12px; }
+    .info-row .v { font-weight: 600; color: var(--title); min-height: 1.2em; }
+    .info-row .v.empty { color: #c4c9d1; font-weight: 500; }
+
+    /* Active call */
+    .active-call { text-align: center; }
+    .timer {
+      font-size: 2.6rem;
+      font-weight: 700;
+      color: var(--timer);
+      letter-spacing: .04em;
+      line-height: 1;
+      margin: 4px 0 2px;
+      font-variant-numeric: tabular-nums;
+      cursor: pointer;
+      user-select: none;
+      border-radius: 8px;
+      display: inline-block;
+      padding: 4px 12px;
+    }
+    .timer:hover { background: #eef2ff; }
+    .timer.running { color: var(--primary); }
+    .timer-sub {
+      color: var(--muted);
+      font-size: 12px;
+      margin-bottom: 12px;
+    }
+    .timer-hint {
+      font-size: 10.5px;
+      color: #9ca3af;
+      margin-top: -8px;
+      margin-bottom: 10px;
+    }
+    .btn-row {
+      display: flex;
+      gap: 8px;
+      justify-content: center;
+      margin-bottom: 12px;
+    }
+    .outline-btn {
+      border: 1.5px solid var(--primary);
+      background: #fff;
+      color: var(--primary);
+      border-radius: 8px;
+      padding: 8px 12px;
+      font-weight: 600;
+      cursor: pointer;
+      font-size: .82rem;
+    }
+    .outline-btn:hover { background: var(--primary-soft); }
+    .cat-row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 10px;
+      align-items: end;
+      text-align: left;
+      margin-bottom: 12px;
+    }
+    .cat-field label {
+      display: block;
+      font-size: 11.5px;
+      color: var(--muted);
+      margin-bottom: 4px;
+    }
+    .cat-field select {
+      width: 100%;
+      height: 36px;
+      border: 1px solid #d8dce3;
+      border-radius: 8px;
+      background: var(--field);
+      padding: 0 10px;
+      font: inherit;
+      color: var(--title);
+    }
+    .pend {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12.5px;
+      padding-bottom: 6px;
+      white-space: nowrap;
+    }
+    .remote-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-top: auto;
+    }
+    .remote-btn {
+      background: var(--remote);
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      padding: 10px 10px;
+      text-align: left;
+      cursor: pointer;
+      min-height: 64px;
+    }
+    .remote-btn:nth-child(2) { background: var(--remote-2); }
+    .remote-btn .t1 {
+      font-size: 11.5px;
+      font-weight: 650;
+      margin-bottom: 4px;
+      line-height: 1.25;
+    }
+    .remote-btn .t2 {
+      font-size: 11px;
+      opacity: .92;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+    .remote-btn .status {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: var(--good);
+      display: inline-block;
+    }
+    .remote-btn.disabled {
+      opacity: .55;
+      cursor: default;
+    }
+
+    /* Lists */
+    .hist-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      flex: 1;
+    }
+    .hist-item {
+      display: grid;
+      grid-template-columns: 18px 1fr;
+      gap: 8px;
+      align-items: start;
+      padding: 6px 4px;
+      border-radius: 6px;
+    }
+    .hist-item:hover { background: #f8f9fb; }
+    .hist-item .hi { color: var(--primary); margin-top: 1px; }
+    .hist-item .hi svg { width: 15px; height: 15px; fill: currentColor; }
+    .hist-meta {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      font-size: 12px;
+    }
+    .hist-date { color: var(--muted); font-variant-numeric: tabular-nums; }
+    .hist-tag { font-weight: 600; color: var(--title); }
+    .hist-note {
+      margin-top: 2px;
+      color: #4b5563;
+      font-size: 12px;
+      line-height: 1.35;
+    }
+    .empty-state {
+      color: #9ca3af;
+      font-size: 12.5px;
+      padding: 18px 6px;
+      text-align: center;
+      flex: 1;
+      display: grid;
+      place-items: center;
+    }
+    .card-foot {
+      margin-top: auto;
+      padding-top: 10px;
+    }
+    .link-more {
+      color: var(--primary);
+      text-decoration: none;
+      font-weight: 600;
+      font-size: 12.5px;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .link-more:hover { text-decoration: underline; }
+
+    /* Map */
+    .map-body {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      min-height: 160px;
+    }
+    .map-art {
+      width: 140px;
+      height: 110px;
+      position: relative;
+    }
+    .map-art svg { width: 100%; height: 100%; }
+    .map-msg {
+      color: var(--muted);
+      font-size: 12.5px;
+      text-align: center;
+      min-height: 1.2em;
+    }
+    .map-msg.on-map {
+      color: var(--primary-dark);
+      font-weight: 600;
+    }
+
+    /* Table */
+    .calls-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+    }
+    .calls-table th {
+      text-align: left;
+      color: var(--muted);
+      font-weight: 600;
+      padding: 4px 6px 8px;
+      border-bottom: 1px solid var(--border);
+      font-size: 11.5px;
+    }
+    .calls-table td {
+      padding: 7px 6px;
+      border-bottom: 1px solid #f1f3f6;
+      vertical-align: top;
+    }
+    .calls-table tr:last-child td { border-bottom: none; }
+    .toggle {
+      width: 34px; height: 18px;
+      border-radius: 999px;
+      background: #d1d5db;
+      border: none;
+      position: relative;
+      cursor: pointer;
+      padding: 0;
+    }
+    .toggle.on { background: var(--primary); }
+    .toggle::after {
+      content: "";
+      position: absolute;
+      top: 2px; left: 2px;
+      width: 14px; height: 14px;
+      border-radius: 50%;
+      background: #fff;
+      transition: left .15s;
+    }
+    .toggle.on::after { left: 18px; }
+
+    .phone-suggest {
+      position: absolute;
+      z-index: 20;
+      left: 0; right: 0; top: calc(100% + 2px);
+      background: #fff;
+      border: 1px solid #d8dce3;
+      border-radius: 8px;
+      box-shadow: 0 8px 20px rgba(0,0,0,.12);
+      display: none;
+      overflow: hidden;
+    }
+    .phone-suggest.open { display: block; }
+    .phone-suggest button {
+      display: block;
+      width: 100%;
+      text-align: left;
+      border: none;
+      background: #fff;
+      padding: 8px 10px;
+      cursor: pointer;
+      font: inherit;
+    }
+    .phone-suggest button:hover { background: var(--primary-soft); }
+    .phone-suggest .sub {
+      display: block;
+      font-size: 11px;
+      color: var(--muted);
+      margin-top: 1px;
+    }
+    .field { position: relative; }
+
+    @media (max-width: 1100px) {
+      .grid-mid, .grid-bot, .form-row {
+        grid-template-columns: 1fr;
+      }
+      .form-row { grid-template-columns: 1fr 1fr; }
+      .abort-btn { grid-column: 1 / -1; justify-self: end; }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <h1 class="doc-title">Mockup — Οθόνη κλήσεων</h1>
+    <p class="doc-intro">
+      Πιστό αντίγραφο του <code>Διεπαφή κλήσεων.png</code> για σχεδίαση της οθόνης κλήσεων.
+      Τα πεδία της φόρμας ξεκινούν άδεια· επίλεξε τηλέφωνο από τη λίστα (ή τα κουμπιά προπαραδειγμάτων)
+      για να δεις ζωντανά πώς ενημερώνονται οι κάρτες. Δεδομένα εμπνευσμένα από τη βάση
+      <code>call_logger_home.db</code>. Χρονομέτρης: κλικ για έναρξη/παύση.
+    </p>
+
+    <div class="preset-bar">
+      <strong>Προπαραδείγματα:</strong>
+      <button type="button" class="preset-btn" data-preset="p1">2883 · Κοτρότσος · Άδειες</button>
+      <button type="button" class="preset-btn" data-preset="p2">2853 · Δρόσος · Πληροφορική</button>
+      <button type="button" class="preset-btn" data-preset="p3">2910 · Αθανασιάδου · Εφημερείο ΤΕΠ</button>
+      <button type="button" class="preset-btn clear" data-preset="clear">Καθαρισμός</button>
+    </div>
+
+    <div class="app" role="application" aria-label="Καταγραφή Κλήσεων">
+      <div class="titlebar">
+        <div class="titlebar-left">Καταγραφή Κλήσεων v0.21.3</div>
+        <div class="win-controls" aria-hidden="true">
+          <span>─</span><span>☐</span><span>×</span>
+        </div>
+      </div>
+
+      <div class="shell">
+        <aside class="sidebar" aria-label="Πλοήγηση">
+          <button class="nav-btn" title="Σύμπτυξη" type="button" aria-label="Σύμπτυξη">
+            <svg viewBox="0 0 24 24"><path d="M15.41 7.41 14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
+          </button>
+          <button class="nav-btn active" title="Κλήσεις" type="button" aria-label="Κλήσεις">
+            <svg viewBox="0 0 24 24"><path d="M6.62 10.79a15.05 15.05 0 0 0 6.59 6.59l2.2-2.2a1 1 0 0 1 1.01-.24c1.12.37 2.33.57 3.58.57a1 1 0 0 1 1 1V20a1 1 0 0 1-1 1C10.4 21 3 13.6 3 4a1 1 0 0 1 1-1h3.5a1 1 0 0 1 1 1c0 1.25.2 2.45.57 3.57a1 1 0 0 1-.25 1.02l-2.2 2.2z"/></svg>
+          </button>
+          <button class="nav-btn" title="Εκκρεμότητες" type="button" aria-label="Εκκρεμότητες">
+            <svg viewBox="0 0 24 24"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-9 14-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
+            <span class="badge">8</span>
+          </button>
+          <button class="nav-btn" title="Κατάλογος" type="button" aria-label="Κατάλογος">
+            <svg viewBox="0 0 24 24"><path d="M12 12c2.7 0 4.8-2.1 4.8-4.8S14.7 2.4 12 2.4 7.2 4.5 7.2 7.2 9.3 12 12 12zm0 2.4c-3.2 0-9.6 1.6-9.6 4.8V22h19.2v-2.8c0-3.2-6.4-4.8-9.6-4.8z"/></svg>
+          </button>
+          <button class="nav-btn" title="Ιστορικό" type="button" aria-label="Ιστορικό">
+            <svg viewBox="0 0 24 24"><path d="M13 3a9 9 0 1 0 8.94 10h-2.02A7 7 0 1 1 13 5V1l4 4-4 4V5zm-1 5v5l4.28 2.54.72-1.21-3.5-2.08V8H12z"/></svg>
+          </button>
+          <button class="nav-btn" title="Γνώση" type="button" aria-label="Γνώση">
+            <svg viewBox="0 0 24 24"><path d="M9 21c0 .55.45 1 1 1h4c.55 0 1-.45 1-1v-1H9v1zm3-19C8.14 2 5 5.14 5 9c0 2.38 1.19 4.47 3 5.74V17c0 .55.45 1 1 1h6c.55 0 1-.45 1-1v-2.26c1.81-1.27 3-3.36 3-5.74 0-3.86-3.14-7-7-7z"/></svg>
+            <span class="badge amber">1</span>
+          </button>
+          <button class="nav-btn" title="Λίστες" type="button" aria-label="Λίστες">
+            <svg viewBox="0 0 24 24"><path d="M3 13h2v-2H3v2zm0 4h2v-2H3v2zm0-8h2V7H3v2zm4 4h14v-2H7v2zm0 4h14v-2H7v2zM7 7v2h14V7H7z"/></svg>
+          </button>
+          <button class="nav-btn" title="Έγγραφα" type="button" aria-label="Έγγραφα">
+            <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zm4 18H6V4h7v5h5v11z"/></svg>
+            <span class="badge amber">1</span>
+          </button>
+          <button class="nav-btn" title="Ρυθμίσεις" type="button" aria-label="Ρυθμίσεις">
+            <svg viewBox="0 0 24 24"><path d="M19.14 12.94c.04-.31.06-.63.06-.94s-.02-.63-.06-.94l2.03-1.58a.5.5 0 0 0 .12-.64l-1.92-3.32a.5.5 0 0 0-.6-.22l-2.39.96a7.03 7.03 0 0 0-1.63-.94l-.36-2.54A.5.5 0 0 0 13.9 2h-3.8a.5.5 0 0 0-.5.42l-.36 2.54c-.59.24-1.13.55-1.63.94l-2.39-.96a.5.5 0 0 0-.6.22L2.7 8.48a.5.5 0 0 0 .12.64l2.03 1.58c-.04.31-.06.63-.06.94s.02.63.06.94L2.82 14.58a.5.5 0 0 0-.12.64l1.92 3.32c.14.24.43.34.68.24l2.39-.96c.5.39 1.04.7 1.63.94l.36 2.54c.05.24.25.42.5.42h3.8c.24 0 .45-.18.5-.42l.36-2.54c.59-.24 1.13-.55 1.63-.94l2.39.96c.25.1.54 0 .68-.24l1.92-3.32a.5.5 0 0 0-.12-.64l-2.03-1.58zM12 15.5A3.5 3.5 0 1 1 12 8.5a3.5 3.5 0 0 1 0 7z"/></svg>
+          </button>
+          <div class="sidebar-spacer"></div>
+          <button class="nav-btn plus" title="Νέα" type="button" aria-label="Νέα">
+            <svg viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+          </button>
+          <button class="nav-btn close-x" title="Κλείσιμο" type="button" aria-label="Κλείσιμο">
+            <svg viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+          </button>
+        </aside>
+
+        <main class="main">
+          <!-- Νέα Κλήση -->
+          <section class="new-call" aria-label="Νέα Κλήση">
+            <div class="new-call-head">
+              <svg viewBox="0 0 24 24"><path d="M19 3H5c-1.1 0-2 .9-2 2v14l4-4h12c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 12H8.83L7 16.83V5h12v10z"/></svg>
+              Νέα Κλήση
+            </div>
+            <div class="form-row">
+              <div class="field">
+                <label for="phone">Τηλέφωνο</label>
+                <div class="field-box" id="phoneBox">
+                  <span class="ico" aria-hidden="true">
+                    <svg viewBox="0 0 24 24"><path d="M6.62 10.79a15.05 15.05 0 0 0 6.59 6.59l2.2-2.2a1 1 0 0 1 1.01-.24c1.12.37 2.33.57 3.58.57a1 1 0 0 1 1 1V20a1 1 0 0 1-1 1C10.4 21 3 13.6 3 4a1 1 0 0 1 1-1h3.5a1 1 0 0 1 1 1c0 1.25.2 2.45.57 3.57a1 1 0 0 1-.25 1.02l-2.2 2.2z"/></svg>
+                  </span>
+                  <input id="phone" type="text" autocomplete="off" aria-autocomplete="list" aria-controls="phoneSuggest" />
+                  <button type="button" class="clear" data-clear="phone" aria-label="Καθαρισμός τηλεφώνου">
+                    <svg viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+                  </button>
+                </div>
+                <div class="phone-suggest" id="phoneSuggest" role="listbox"></div>
+              </div>
+              <div class="field">
+                <label for="caller">Καλών</label>
+                <div class="field-box" id="callerBox">
+                  <span class="ico" aria-hidden="true">
+                    <svg viewBox="0 0 24 24"><path d="M12 12c2.7 0 4.8-2.1 4.8-4.8S14.7 2.4 12 2.4 7.2 4.5 7.2 7.2 9.3 12 12 12zm0 2.4c-3.2 0-9.6 1.6-9.6 4.8V22h19.2v-2.8c0-3.2-6.4-4.8-9.6-4.8z"/></svg>
+                  </span>
+                  <input id="caller" type="text" autocomplete="off" />
+                  <button type="button" class="clear" data-clear="caller" aria-label="Καθαρισμός καλούντα">
+                    <svg viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+                  </button>
+                </div>
+              </div>
+              <div class="field">
+                <label for="department">Τμήμα</label>
+                <div class="field-box" id="departmentBox">
+                  <span class="ico" aria-hidden="true">
+                    <svg viewBox="0 0 24 24"><path d="M12 7V3H2v18h20V7H12zM6 19H4v-2h2v2zm0-4H4v-2h2v2zm0-4H4V9h2v2zm0-4H4V5h2v2zm4 12H8v-2h2v2zm0-4H8v-2h2v2zm0-4H8V9h2v2zm0-4H8V5h2v2zm10 12h-8v-2h2v-2h-2v-2h2v-2h-2V9h8v10zm-2-8h-2v2h2v-2zm0 4h-2v2h2v-2z"/></svg>
+                  </span>
+                  <input id="department" type="text" autocomplete="off" />
+                  <button type="button" class="clear" data-clear="department" aria-label="Καθαρισμός τμήματος">
+                    <svg viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+                  </button>
+                </div>
+              </div>
+              <div class="field">
+                <label for="equipment">Κωδικός Εξοπλισμού</label>
+                <div class="field-box" id="equipmentBox">
+                  <span class="ico" aria-hidden="true">
+                    <svg viewBox="0 0 24 24"><path d="M21 2H3c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h7v2H8v2h8v-2h-2v-2h7c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H3V4h18v12z"/></svg>
+                  </span>
+                  <input id="equipment" type="text" autocomplete="off" />
+                  <button type="button" class="clear" data-clear="equipment" aria-label="Καθαρισμός εξοπλισμού">
+                    <svg viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+                  </button>
+                </div>
+              </div>
+              <button type="button" class="abort-btn" id="abortCall" title="Ακύρωση κλήσης" aria-label="Ακύρωση κλήσης">
+                <svg viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+              </button>
+            </div>
+            <div class="notes-wrap">
+              <textarea id="notes" maxlength="500" placeholder="Σημειώσεις..."></textarea>
+              <div class="char-count"><span id="notesCount">0</span> / 500</div>
+            </div>
+          </section>
+
+          <!-- Middle cards -->
+          <div class="grid-mid">
+            <section class="card" aria-label="Πληροφορίες Κλήσης">
+              <div class="card-head">
+                <div class="card-title">Πληροφορίες Κλήσης</div>
+                <button class="icon-btn" type="button" aria-label="Μενού">
+                  <svg viewBox="0 0 24 24"><path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/></svg>
+                </button>
+              </div>
+              <div class="info-rows">
+                <div class="info-row"><span class="k">Καλών</span><span class="v empty" id="infoCaller">—</span></div>
+                <div class="info-row"><span class="k">Τμήμα</span><span class="v empty" id="infoDept">—</span></div>
+                <div class="info-row"><span class="k">Τηλέφωνο</span><span class="v empty" id="infoPhone">—</span></div>
+              </div>
+            </section>
+
+            <section class="card active-call" aria-label="Ενεργή Κλήση">
+              <div class="card-head" style="justify-content:center;">
+                <div class="card-title"><span class="dot" aria-hidden="true"></span>Ενεργή Κλήση</div>
+              </div>
+              <div class="timer" id="timer" title="Κλικ για έναρξη / παύση" role="button" tabindex="0">00:00</div>
+              <div class="timer-sub">Διάρκεια κλήσης</div>
+              <div class="timer-hint" id="timerHint">Κλικ στο χρονόμετρο για έναρξη</div>
+              <div class="btn-row">
+                <button type="button" class="outline-btn">Καταγραφή (Ιστορικό)</button>
+                <button type="button" class="outline-btn">Νέα Κλήση</button>
+              </div>
+              <div class="cat-row">
+                <div class="cat-field">
+                  <label for="category">Κατηγορία προβλήματος</label>
+                  <select id="category">
+                    <option value="">Επιλέξτε κατηγορία...</option>
+                    <option>Medico</option>
+                    <option>Αλλαγή Κωδικού</option>
+                    <option>Word</option>
+                    <option>Excel</option>
+                  </select>
+                </div>
+                <label class="pend"><input type="checkbox" id="pending" /> Εκκρεμότητα</label>
+              </div>
+              <div class="remote-row">
+                <button type="button" class="remote-btn disabled" id="vncBtn">
+                  <div class="t1">VNC: Σύνδεση στον υπολογιστή του καλούντα</div>
+                  <div class="t2"><span class="status" id="vncStatus" hidden></span><span id="vncTarget">—</span></div>
+                </button>
+                <button type="button" class="remote-btn">
+                  <div class="t1">Απομακρυσμένη Επιφάνεια</div>
+                  <div class="t2">Σύνδεση στον διακομιστή (mstsc.exe)</div>
+                </button>
+              </div>
+            </section>
+
+            <section class="card" aria-label="Ιστορικό Εξοπλισμού">
+              <div class="card-head">
+                <div class="card-title">Ιστορικό Εξοπλισμού</div>
+                <button class="icon-btn" type="button" aria-label="Μενού">
+                  <svg viewBox="0 0 24 24"><path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/></svg>
+                </button>
+              </div>
+              <div class="hist-list" id="eqHist"></div>
+              <div class="card-foot">
+                <a class="link-more" href="#">Προβολή πλήρους ιστορικού →</a>
+              </div>
+            </section>
+          </div>
+
+          <!-- Bottom cards -->
+          <div class="grid-bot">
+            <section class="card" aria-label="Πρόσφατο ιστορικό υπαλλήλου">
+              <div class="card-head">
+                <div class="card-title">Πρόσφατο ιστορικό υπαλλήλου</div>
+                <button class="icon-btn" type="button" aria-label="Μενού">
+                  <svg viewBox="0 0 24 24"><path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/></svg>
+                </button>
+              </div>
+              <div class="hist-list" id="callerHist"></div>
+              <div class="card-foot">
+                <a class="link-more" href="#">Προβολή πλήρους ιστορικού →</a>
+              </div>
+            </section>
+
+            <section class="card" aria-label="Θέση εξοπλισμού">
+              <div class="card-head">
+                <div class="card-title">
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="#5c4db1"><path d="M18 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zM6 4h5v8l-2.5-1.5L6 12V4z"/></svg>
+                  Θέση εξοπλισμού
+                </div>
+                <button class="icon-btn" type="button" aria-label="Επεξεργασία">
+                  <svg viewBox="0 0 24 24"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
+                </button>
+              </div>
+              <div class="map-body">
+                <div class="map-art" aria-hidden="true">
+                  <svg viewBox="0 0 140 110">
+                    <defs>
+                      <linearGradient id="mapGrad" x1="0" y1="0" x2="1" y2="1">
+                        <stop offset="0%" stop-color="#e8edf5"/>
+                        <stop offset="100%" stop-color="#d5dde8"/>
+                      </linearGradient>
+                    </defs>
+                    <path d="M18 28 L72 12 L128 30 L118 92 L62 104 L22 86 Z" fill="url(#mapGrad)" stroke="#b7c0ce" stroke-width="1.5"/>
+                    <path d="M40 40 L70 28 L100 42 L92 78 L58 88 L34 72 Z" fill="#f4f7fb" stroke="#c5ced9" stroke-width="1" opacity=".9"/>
+                    <path d="M55 22 L78 18 L86 48 L60 54 Z" fill="#dde5ef" stroke="#b7c0ce" stroke-width="1"/>
+                    <g id="mapPin">
+                      <path d="M70 48c-7.2 0-13 5.4-13 12.1 0 9.1 13 21.9 13 21.9s13-12.8 13-21.9C83 53.4 77.2 48 70 48z" fill="#e53935"/>
+                      <circle cx="70" cy="60" r="4.2" fill="#fff"/>
+                    </g>
+                  </svg>
+                </div>
+                <div class="map-msg" id="mapMsg">Επιλέξτε κλήση για θέση τμήματος</div>
+              </div>
+            </section>
+
+            <section class="card" aria-label="Τελευταίες 7 κλήσεις">
+              <div class="card-head">
+                <div class="card-title">Τελευταίες 7 κλήσεις</div>
+                <button type="button" class="toggle on" id="last7Toggle" aria-label="Εναλλαγή προβολής" aria-pressed="true"></button>
+              </div>
+              <div style="overflow:auto;">
+                <table class="calls-table">
+                  <thead>
+                    <tr>
+                      <th>Ώρα</th>
+                      <th>Τηλέφωνο</th>
+                      <th>Καλών</th>
+                      <th>Τμήμα</th>
+                    </tr>
+                  </thead>
+                  <tbody id="last7Body"></tbody>
+                </table>
+              </div>
+              <div class="card-foot">
+                <a class="link-more" href="#">Προβολή πλήρους λίστας →</a>
+              </div>
+            </section>
+          </div>
+        </main>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const PRESETS = {
+      p1: {
+        phone: "2883",
+        caller: "Νικόλαος Κοτρότσος",
+        department: "Άδειες",
+        equipment: "5666",
+        vncHost: "PC5666",
+        vncIp: "10.10.12.66",
+        onMap: true,
+        mapLabel: "Άδειες · όροφος 3",
+        callerHist: [
+          { date: "26-03-26", time: "18:14", note: "Κλήση χωρίς σημειώσεις", tag: "—" },
+          { date: "17-03-26", time: "20:51", note: "Κλήση χωρίς σημειώσεις", tag: "—" },
+          { date: "09-03-26", time: "16:36", note: "Κλήση χωρίς σημειώσεις", tag: "—" },
+          { date: "09-03-26", time: "15:16", note: "ξηθ", tag: "—" }
+        ],
+        eqHist: [
+          { date: "26-03-26", time: "18:14", tag: "Άδειες" }
+        ]
+      },
+      p2: {
+        phone: "2853",
+        caller: "Βασίλης Δρόσος",
+        department: "Πληροφορική",
+        equipment: "2654",
+        vncHost: "PC2654",
+        vncIp: "10.10.23.85",
+        onMap: true,
+        mapLabel: "Πληροφορική · όροφος 2",
+        callerHist: [
+          { date: "13-04-26", time: "15:24", note: "Πάμε για καταγραφή", tag: "Medico" },
+          { date: "21-03-26", time: "09:38", note: "Τώρα;", tag: "—" },
+          { date: "21-03-26", time: "09:38", note: "Άλλη μία δοκιμή", tag: "—" },
+          { date: "21-03-26", time: "09:15", note: "Πόσα τηλέφωνα θα περάσει;", tag: "Medico" }
+        ],
+        eqHist: [
+          { date: "21-03-26", time: "09:15", tag: "Medico" },
+          { date: "19-03-26", time: "20:11", tag: "Excel" },
+          { date: "19-03-26", time: "20:01", tag: "Αλλαγή Κωδικού" },
+          { date: "18-03-26", time: "10:30", tag: "—" }
+        ]
+      },
+      p3: {
+        phone: "2910",
+        caller: "Γεωργία Αθανασιάδου",
+        department: "Εφημερείο ΤΕΠ",
+        equipment: "349",
+        vncHost: "PC349",
+        vncIp: "10.10.45.19",
+        onMap: false,
+        mapLabel: "Δεν υπάρχει το τμήμα στο χάρτη",
+        callerHist: [],
+        eqHist: []
+      }
+    };
+
+    const LAST7 = [
+      { time: "19:39", phone: "2566", caller: "Μαργαρίτα Ελένη", department: "Άδειες" },
+      { time: "19:58", phone: "2263", caller: "Όλγα Γκιώνη", department: "ACS" },
+      { time: "16:12", phone: "8989", caller: "βίκυ", department: "Τσα" },
+      { time: "15:50", phone: "697845", caller: "Μιχάλης", department: "—" },
+      { time: "15:37", phone: "9879", caller: "Μαρία Άγνωστη", department: "Κουζίνα" },
+      { time: "15:24", phone: "2853", caller: "Βασίλης Δρόσος", department: "Πληροφορική" },
+      { time: "10:59", phone: "1111", caller: "Άγνωστος", department: "Κυλικείο" }
+    ];
+
+    const phoneInput = document.getElementById("phone");
+    const callerInput = document.getElementById("caller");
+    const deptInput = document.getElementById("department");
+    const eqInput = document.getElementById("equipment");
+    const notesInput = document.getElementById("notes");
+    const suggest = document.getElementById("phoneSuggest");
+
+    const clockIco = `<svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 .01 20.01A10 10 0 0 0 12 2zm1 11H7v-2h4V6h2v7z"/></svg>`;
+    const docIco = `<svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zm4 18H6V4h7v5h5v11z"/></svg>`;
+
+    function setFieldValue(input, boxId, value) {
+      input.value = value || "";
+      document.getElementById(boxId).classList.toggle("has-value", !!input.value);
+    }
+
+    function setInfo(el, value) {
+      if (value) {
+        el.textContent = value;
+        el.classList.remove("empty");
+      } else {
+        el.textContent = "—";
+        el.classList.add("empty");
+      }
+    }
+
+    function renderHist(container, items, mode) {
+      if (!items || !items.length) {
+        container.innerHTML = `<div class="empty-state">Δεν υπάρχουν εγγραφές</div>`;
+        return;
+      }
+      container.innerHTML = items.map((it) => {
+        if (mode === "eq") {
+          return `<div class="hist-item">
+            <span class="hi">${clockIco}</span>
+            <div>
+              <div class="hist-meta">
+                <span class="hist-date">${it.date} ${it.time}</span>
+                <span class="hist-tag">${it.tag || "—"}</span>
+              </div>
+            </div>
+          </div>`;
+        }
+        return `<div class="hist-item">
+          <span class="hi">${docIco}</span>
+          <div>
+            <div class="hist-meta">
+              <span class="hist-date">${it.date} ${it.time}</span>
+              <span class="hist-tag">${it.tag || "—"}</span>
+            </div>
+            <div class="hist-note">${it.note || ""}</div>
+          </div>
+        </div>`;
+      }).join("");
+    }
+
+    function applyPreset(key) {
+      document.querySelectorAll(".preset-btn[data-preset]").forEach((b) => {
+        b.classList.toggle("active", b.dataset.preset === key);
+      });
+
+      if (key === "clear" || !PRESETS[key]) {
+        setFieldValue(phoneInput, "phoneBox", "");
+        setFieldValue(callerInput, "callerBox", "");
+        setFieldValue(deptInput, "departmentBox", "");
+        setFieldValue(eqInput, "equipmentBox", "");
+        setInfo(document.getElementById("infoCaller"), "");
+        setInfo(document.getElementById("infoDept"), "");
+        setInfo(document.getElementById("infoPhone"), "");
+        renderHist(document.getElementById("eqHist"), [], "eq");
+        renderHist(document.getElementById("callerHist"), [], "caller");
+        const mapMsg = document.getElementById("mapMsg");
+        mapMsg.textContent = "Επιλέξτε κλήση για θέση τμήματος";
+        mapMsg.classList.remove("on-map");
+        document.getElementById("mapPin").style.opacity = "0.35";
+        const vncBtn = document.getElementById("vncBtn");
+        vncBtn.classList.add("disabled");
+        document.getElementById("vncStatus").hidden = true;
+        document.getElementById("vncTarget").textContent = "—";
+        suggest.classList.remove("open");
+        return;
+      }
+
+      const p = PRESETS[key];
+      setFieldValue(phoneInput, "phoneBox", p.phone);
+      setFieldValue(callerInput, "callerBox", p.caller);
+      setFieldValue(deptInput, "departmentBox", p.department);
+      setFieldValue(eqInput, "equipmentBox", p.equipment);
+
+      setInfo(document.getElementById("infoCaller"), p.caller);
+      setInfo(document.getElementById("infoDept"), p.department);
+      setInfo(document.getElementById("infoPhone"), p.phone);
+
+      renderHist(document.getElementById("eqHist"), p.eqHist, "eq");
+      renderHist(document.getElementById("callerHist"), p.callerHist, "caller");
+
+      const mapMsg = document.getElementById("mapMsg");
+      mapMsg.textContent = p.mapLabel;
+      mapMsg.classList.toggle("on-map", p.onMap);
+      document.getElementById("mapPin").style.opacity = p.onMap ? "1" : "0.25";
+
+      const vncBtn = document.getElementById("vncBtn");
+      vncBtn.classList.remove("disabled");
+      document.getElementById("vncStatus").hidden = false;
+      document.getElementById("vncTarget").textContent = `${p.vncHost} · ${p.vncIp}`;
+      suggest.classList.remove("open");
+    }
+
+    function findPresetByPhone(value) {
+      const v = (value || "").trim();
+      return Object.keys(PRESETS).find((k) => PRESETS[k].phone === v) || null;
+    }
+
+    function openSuggest() {
+      const q = phoneInput.value.trim().toLowerCase();
+      const entries = Object.entries(PRESETS).filter(([, p]) =>
+        !q || p.phone.includes(q) || p.caller.toLowerCase().includes(q)
+      );
+      if (!entries.length) {
+        suggest.classList.remove("open");
+        return;
+      }
+      suggest.innerHTML = entries.map(([key, p]) =>
+        `<button type="button" role="option" data-preset="${key}">
+          <strong>${p.phone}</strong> — ${p.caller}
+          <span class="sub">${p.department} · εξοπλισμός ${p.equipment}</span>
+        </button>`
+      ).join("");
+      suggest.classList.add("open");
+    }
+
+    // Wire presets
+    document.querySelectorAll(".preset-btn").forEach((btn) => {
+      btn.addEventListener("click", () => applyPreset(btn.dataset.preset));
+    });
+
+    suggest.addEventListener("click", (e) => {
+      const btn = e.target.closest("button[data-preset]");
+      if (btn) applyPreset(btn.dataset.preset);
+    });
+
+    phoneInput.addEventListener("focus", openSuggest);
+    phoneInput.addEventListener("input", () => {
+      document.getElementById("phoneBox").classList.toggle("has-value", !!phoneInput.value);
+      openSuggest();
+      const key = findPresetByPhone(phoneInput.value);
+      if (key) applyPreset(key);
+      else {
+        setInfo(document.getElementById("infoPhone"), phoneInput.value);
+      }
+    });
+    document.addEventListener("click", (e) => {
+      if (!e.target.closest("#phone") && !e.target.closest("#phoneSuggest")) {
+        suggest.classList.remove("open");
+      }
+    });
+
+    ["caller", "department", "equipment"].forEach((id) => {
+      const input = document.getElementById(id);
+      input.addEventListener("input", () => {
+        document.getElementById(id + "Box").classList.toggle("has-value", !!input.value);
+        if (id === "caller") setInfo(document.getElementById("infoCaller"), input.value);
+        if (id === "department") setInfo(document.getElementById("infoDept"), input.value);
+      });
+    });
+
+    document.querySelectorAll("[data-clear]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const id = btn.dataset.clear;
+        const input = document.getElementById(id);
+        input.value = "";
+        document.getElementById(id + "Box").classList.remove("has-value");
+        if (id === "phone") applyPreset("clear");
+        if (id === "caller") setInfo(document.getElementById("infoCaller"), "");
+        if (id === "department") setInfo(document.getElementById("infoDept"), "");
+        input.focus();
+      });
+    });
+
+    document.getElementById("abortCall").addEventListener("click", () => {
+      applyPreset("clear");
+      notesInput.value = "";
+      document.getElementById("notesCount").textContent = "0";
+      document.getElementById("category").value = "";
+      document.getElementById("pending").checked = false;
+      resetTimer();
+    });
+
+    notesInput.addEventListener("input", () => {
+      document.getElementById("notesCount").textContent = String(notesInput.value.length);
+    });
+
+    // Last 7
+    document.getElementById("last7Body").innerHTML = LAST7.map((r) =>
+      `<tr>
+        <td>${r.time}</td>
+        <td>${r.phone || "—"}</td>
+        <td>${r.caller || "—"}</td>
+        <td>${r.department || "—"}</td>
+      </tr>`
+    ).join("");
+
+    document.getElementById("last7Toggle").addEventListener("click", function () {
+      this.classList.toggle("on");
+      this.setAttribute("aria-pressed", this.classList.contains("on") ? "true" : "false");
+    });
+
+    // Timer
+    let timerSec = 0;
+    let timerId = null;
+    const timerEl = document.getElementById("timer");
+    const timerHint = document.getElementById("timerHint");
+
+    function fmt(sec) {
+      const m = String(Math.floor(sec / 60)).padStart(2, "0");
+      const s = String(sec % 60).padStart(2, "0");
+      return `${m}:${s}`;
+    }
+
+    function resetTimer() {
+      if (timerId) clearInterval(timerId);
+      timerId = null;
+      timerSec = 0;
+      timerEl.textContent = "00:00";
+      timerEl.classList.remove("running");
+      timerHint.textContent = "Κλικ στο χρονόμετρο για έναρξη";
+    }
+
+    function toggleTimer() {
+      if (timerId) {
+        clearInterval(timerId);
+        timerId = null;
+        timerEl.classList.remove("running");
+        timerHint.textContent = "Σε παύση — κλικ για συνέχεια";
+        return;
+      }
+      timerEl.classList.add("running");
+      timerHint.textContent = "Τρέχει — κλικ για παύση";
+      timerId = setInterval(() => {
+        timerSec += 1;
+        timerEl.textContent = fmt(timerSec);
+      }, 1000);
+    }
+
+    timerEl.addEventListener("click", toggleTimer);
+    timerEl.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        toggleTimer();
+      }
+    });
+
+    // Initial empty state
+    applyPreset("clear");
+  </script>
+</body>
+</html>

@@ -25,8 +25,9 @@ class LexiconListFiltersNotifier extends Notifier<LexiconListFiltersModel> {
     try {
       final db = await DatabaseHelper.instance.database;
       if (!ref.mounted) return;
-      final raw = await SettingsRepository(db)
-          .getSetting(kLexiconListFiltersSettingKey);
+      final raw = await SettingsRepository(
+        db,
+      ).getSetting(kLexiconListFiltersSettingKey);
       if (!ref.mounted) return;
       state = LexiconListFiltersModel.decodeFromStorage(raw);
     } finally {
@@ -39,13 +40,15 @@ class LexiconListFiltersNotifier extends Notifier<LexiconListFiltersModel> {
   Future<void> _persist() async {
     final db = await DatabaseHelper.instance.database;
     if (!ref.mounted) return;
-    await SettingsRepository(db).saveSetting(
-      kLexiconListFiltersSettingKey,
-      state.encodeForStorage(),
-    );
+    await SettingsRepository(
+      db,
+    ).saveSetting(kLexiconListFiltersSettingKey, state.encodeForStorage());
   }
 
-  Future<void> replace(LexiconListFiltersModel next, {bool persist = true}) async {
+  Future<void> replace(
+    LexiconListFiltersModel next, {
+    bool persist = true,
+  }) async {
     state = next;
     if (persist) await _persist();
   }
@@ -103,6 +106,7 @@ class LexiconListFiltersNotifier extends Notifier<LexiconListFiltersModel> {
 }
 
 final lexiconListFiltersProvider =
-    NotifierProvider.autoDispose<LexiconListFiltersNotifier, LexiconListFiltersModel>(
-  LexiconListFiltersNotifier.new,
-);
+    NotifierProvider.autoDispose<
+      LexiconListFiltersNotifier,
+      LexiconListFiltersModel
+    >(LexiconListFiltersNotifier.new);

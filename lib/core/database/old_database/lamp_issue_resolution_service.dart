@@ -1,4 +1,4 @@
-﻿import '../../utils/search_text_normalizer.dart';
+import '../../utils/search_text_normalizer.dart';
 import 'lamp_database_provider.dart';
 import 'lamp_issue_decision_applier.dart';
 import 'lamp_issue_duplicate_analyzers.dart';
@@ -158,7 +158,10 @@ class LampIssueResolutionService {
       if (compactQuery.isNotEmpty && code.toString().contains(compactQuery)) {
         return true;
       }
-      return SearchTextNormalizer.matchesNormalizedQuery(label, normalizedQuery);
+      return SearchTextNormalizer.matchesNormalizedQuery(
+        label,
+        normalizedQuery,
+      );
     }
 
     void addIfMatch(int? code, String label) {
@@ -178,10 +181,7 @@ class LampIssueResolutionService {
           if (matches.length >= limit) break;
         }
       case 'office':
-        final rows = await db.query(
-          'offices',
-          orderBy: 'office_name ASC',
-        );
+        final rows = await db.query('offices', orderBy: 'office_name ASC');
         for (final row in rows) {
           final officeName = _support.text(row['office_name']) ?? '';
           final departmentName = _support.text(row['department_name']) ?? '';
@@ -192,10 +192,7 @@ class LampIssueResolutionService {
           if (matches.length >= limit) break;
         }
       case 'model':
-        final rows = await db.query(
-          'model',
-          orderBy: 'model_name ASC',
-        );
+        final rows = await db.query('model', orderBy: 'model_name ASC');
         for (final row in rows) {
           addIfMatch(
             _support.toInt(row['model']),
@@ -204,10 +201,7 @@ class LampIssueResolutionService {
           if (matches.length >= limit) break;
         }
       case 'contract':
-        final rows = await db.query(
-          'contracts',
-          orderBy: 'contract_name ASC',
-        );
+        final rows = await db.query('contracts', orderBy: 'contract_name ASC');
         for (final row in rows) {
           addIfMatch(
             _support.toInt(row['contract']),
