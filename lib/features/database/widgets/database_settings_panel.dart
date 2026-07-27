@@ -17,9 +17,7 @@ import '../../../core/database/database_init_result.dart';
 import '../../../core/database/database_init_runner.dart';
 import '../../../core/database/database_path_pick_flow.dart';
 import '../../../core/database/database_restore_flow.dart';
-import '../../../core/database/database_switch_success_notice.dart';
-import '../../../core/init/app_init_provider.dart';
-import '../../../core/init/database_reopen_cache_reset.dart';
+import '../../../core/init/database_switch_completion.dart';
 import '../../../core/init/database_switch_guard.dart';
 import '../../../core/providers/active_critical_operations_provider.dart';
 import '../../../core/services/settings_service.dart';
@@ -225,8 +223,12 @@ class _DatabaseSettingsPanelState extends ConsumerState<DatabaseSettingsPanel>
 
     final picked = await pickDatabasePathWithSystemPicker();
     if (FilePickerSession.takeLastRefocusedExisting()) return;
-    if (picked != null && picked.isNotEmpty) {
-      await _switchToPickedDatabasePath(picked);
+    if (picked != null && picked.path.isNotEmpty) {
+      if (picked.isBackupArchive) {
+        await _restoreFromBackupZip(preselectedZipPath: picked.path);
+      } else {
+        await _switchToPickedDatabasePath(picked.path);
+      }
     } else {
       if (mounted) {
         setState(
@@ -236,43 +238,12 @@ class _DatabaseSettingsPanelState extends ConsumerState<DatabaseSettingsPanel>
     }
   }
 
-  /// Αλλαγή στη διαδρομή που επέλεξε ο χρήστης (επιλογέας αρχείου ή πρόσφατη).
-  ///
-  /// Αν η επιλογή είναι αντίγραφο `.zip`, ακολουθείται η κοινή ροή επαναφοράς
-  /// με προεπιλογή «νέο αρχείο δίπλα στο αντίγραφο» (μη καταστροφική).
+  /// Αλλαγή στη διαδρομή βάσης που επέλεξε ο χρήστης (επιλογέας ή πρόσφατη).
   Future<void> _switchToPickedDatabasePath(String newPath) async {
     final trimmed = newPath.trim();
     if (trimmed.isEmpty || !mounted) return;
     if (!await ensureDatabaseSwitchAllowed(context, ref)) return;
     if (!mounted) return;
-
-    if (trimmed.toLowerCase().endsWith('.zip')) {
-      await runGuardedDatabaseSwitch(context, ref, () async {
-        if (!mounted) return;
-        final current = _currentDbPath.trim().isNotEmpty
-            ? _currentDbPath
-            : AppConfig.defaultDbPath;
-        final result = await runRestoreFromBackupZipFlow(
-          context: context,
-          currentDatabasePath: current,
-          preselectedZipPath: trimmed,
-          initialDestination: RestoreDestinationChoice.besideZip,
-        );
-        if (!mounted || !result.isSuccess) return;
-        final toOpen = result.pathToOpen?.trim();
-        if (toOpen != null && toOpen.isNotEmpty) {
-          await runDatabasePathSwitch(path: toOpen, hooks: this);
-        } else if (result.restoredPath != null) {
-          if (!mounted) return;
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Η βάση επαναφέρθηκε στο:\n${result.restoredPath}'),
-            ),
-          );
-        }
-      });
-      return;
-    }
 
     await runDatabasePathSwitch(path: trimmed, hooks: this);
   }
@@ -358,18 +329,23 @@ class _DatabaseSettingsPanelState extends ConsumerState<DatabaseSettingsPanel>
   @override
   Future<void> applySwitchToSession(String path) async {
     if (!mounted) return;
-    setState(() {
-      _currentDbPath = path;
-      _dbPathErrorMessage = null;
-    });
-    await _loadDatabasePathSection();
-
-    if (!mounted) return;
-    ref.read(databaseSwitchSuccessNoticeProvider.notifier).show(path);
-    await widget.onDatabaseLifecycleChanged?.call();
-    if (!mounted) return;
-    invalidateDatabaseScopedCaches(ref);
-    ref.invalidate(appInitProvider);
+    await completeDatabaseSwitch(
+      ref: ref,
+      path: path,
+      hooks: DatabaseSwitchCompletionHooks(
+        onSessionStateUpdated: (switchedPath) async {
+          if (!mounted) return;
+          setState(() {
+            _currentDbPath = switchedPath;
+            _dbPathErrorMessage = null;
+          });
+          await _loadDatabasePathSection();
+        },
+        onLifecycleChanged: () async {
+          await widget.onDatabaseLifecycleChanged?.call();
+        },
+      ),
+    );
   }
 
   @override
@@ -926,7 +902,7 @@ class _DatabaseSettingsPanelState extends ConsumerState<DatabaseSettingsPanel>
     }
   }
 
-  Future<void> _restoreFromBackupZip() async {
+  Future<void> _restoreFromBackupZip({String? preselectedZipPath}) async {
     await runGuardedDatabaseSwitch(context, ref, () async {
       if (!mounted) return;
       final backupFolder = _destinationController.text.trim().isNotEmpty
@@ -942,6 +918,7 @@ class _DatabaseSettingsPanelState extends ConsumerState<DatabaseSettingsPanel>
         context: context,
         backupFolderHint: backupFolder.isNotEmpty ? backupFolder : null,
         currentDatabasePath: defaultTarget,
+        preselectedZipPath: preselectedZipPath,
         initialDestination: RestoreDestinationChoice.currentDatabase,
       );
       if (!mounted || !result.isSuccess) return;
@@ -1022,6 +999,8 @@ class _DatabaseSettingsPanelState extends ConsumerState<DatabaseSettingsPanel>
                 ),
                 const SizedBox(height: 8),
                 ..._buildDatabaseFilePathSection(theme),
+                const SizedBox(height: 12),
+                _RestoreFromBackupZipButton(onPressed: _restoreFromBackupZip),
                 const SizedBox(height: 12),
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.center,
@@ -1344,7 +1323,7 @@ class _DatabaseSettingsPanelState extends ConsumerState<DatabaseSettingsPanel>
                             contentPadding: EdgeInsets.zero,
                             title: const Text('Αποθήκευση σε μορφή .zip'),
                             subtitle: const Text(
-                              'Συμπίεση μετά το VACUUM INTO',
+                              'Αναδιοργάνωση και εκκαθάριση κενών χώρων της βάσης και εξαγωγή σε νέο αρχείο (VACUUM INTO). Έπιτα συμπίεση σε αρχείο .zip.',
                             ),
                             value: settings.zipOutput,
                             onChanged: bundleLocksZip
@@ -1641,8 +1620,6 @@ class _DatabaseSettingsPanelState extends ConsumerState<DatabaseSettingsPanel>
                     icon: const Icon(Icons.save_alt_outlined),
                     label: const Text('Δημιουργία αντιγράφου τώρα'),
                   ),
-                  const SizedBox(height: 8),
-                  _RestoreFromBackupZipButton(onPressed: _restoreFromBackupZip),
                 ],
                 const Divider(height: 24),
                 Text(

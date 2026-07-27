@@ -1,3 +1,4 @@
+import 'package:call_logger/core/database/old_database/lamp_data_issue_type_labels.dart';
 import 'package:call_logger/features/lamp/controllers/lamp_issue_resolution_controller.dart';
 import 'package:call_logger/features/lamp/widgets/lamp_issue_widgets.dart';
 import 'package:flutter/material.dart';
@@ -279,6 +280,49 @@ void main() {
         LampIssueHelpers.resolveNetworkIssueIcon('network_κατι_αλλο'),
         Icons.hub_outlined,
       );
+    });
+  });
+
+  group('isUnknownIssueType', () {
+    test('άγνωστος τύπος → true', () {
+      expect(
+        LampIssueResolutionController.isUnknownIssueType('unmatched_office'),
+        isTrue,
+      );
+      expect(
+        LampIssueResolutionController.isUnknownIssueType('totally_weird_type'),
+        isTrue,
+      );
+    });
+
+    test('πληροφοριακός τύπος → false', () {
+      expect(
+        LampIssueResolutionController.isUnknownIssueType('missing_sheet'),
+        isFalse,
+      );
+    });
+
+    test('τύπος δικτύου → false', () {
+      expect(
+        LampIssueResolutionController.isUnknownIssueType('network_invalid_ip'),
+        isFalse,
+      );
+    });
+
+    test('τύπος με οδηγό επίλυσης → false', () {
+      expect(
+        LampIssueResolutionController.isUnknownIssueType('non_numeric_fk'),
+        isFalse,
+      );
+    });
+  });
+
+  group('lampDataIssueTypeDisplayLabel · άγνωστος τύπος', () {
+    test('περιέχει «Άγνωστος» και το αρχικό κλειδί', () {
+      const raw = 'unmatched_office';
+      final label = lampDataIssueTypeDisplayLabel(raw);
+      expect(label, contains('Άγνωστος'));
+      expect(label, contains(raw));
     });
   });
 }

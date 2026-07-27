@@ -8,8 +8,7 @@ import 'package:path/path.dart' as path;
 
 import '../../../core/config/app_config.dart';
 import '../../../core/database/database_helper.dart';
-import '../../../core/init/app_init_provider.dart';
-import '../../../core/init/database_reopen_cache_reset.dart';
+import '../../../core/init/database_switch_completion.dart';
 import '../../../core/utils/file_picker_initial_directory.dart';
 import '../../../core/utils/file_picker_session.dart';
 import '../../../core/utils/new_database_suggested_file_name.dart';
@@ -129,10 +128,6 @@ Future<void> showNewDatabasePathValidationDialog(
 /// επανασύνδεση μέσω [onDatabaseReopened]. **Δεν** διαγράφεται η παλιά βάση.
 class CreateNewDatabaseFlow {
   CreateNewDatabaseFlow._();
-
-  static void _invalidateCaches(WidgetRef ref) {
-    invalidateDatabaseScopedCaches(ref);
-  }
 
   /// [onDatabaseReopened]: π.χ. `MainShell` / `AppShortcuts` → [runDatabaseInitChecks].
   /// [onReloadSettingsState]: μόνο από Ρυθμίσεις (ανανέωση τοπικού state διαδρομής).
@@ -270,11 +265,19 @@ class CreateNewDatabaseFlow {
 
     if (!context.mounted) return;
 
+    final switchHooks = DatabaseSwitchCompletionHooks(
+      onSessionStateUpdated: (_) async {
+        await onReloadSettingsState?.call();
+      },
+      onLifecycleChanged: onDatabaseReopened,
+    );
+
     if (result.success) {
-      _invalidateCaches(ref);
-      await onDatabaseReopened?.call();
-      ref.invalidate(appInitProvider);
-      await onReloadSettingsState?.call();
+      await completeDatabaseSwitch(
+        ref: ref,
+        path: norm,
+        hooks: switchHooks,
+      );
       onFlowSuccessCloseParent?.call();
       if (showSuccessSnackBar && context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -290,10 +293,12 @@ class CreateNewDatabaseFlow {
 
     if (result.renameFailedFilePath != null) {
       await showDatabaseRenameFailureDialog(context, result);
-      _invalidateCaches(ref);
-      await onDatabaseReopened?.call();
-      ref.invalidate(appInitProvider);
-      await onReloadSettingsState?.call();
+      await completeDatabaseSwitch(
+        ref: ref,
+        path: norm,
+        hooks: switchHooks,
+        showSuccessNotice: false,
+      );
       return;
     }
 
@@ -305,9 +310,11 @@ class CreateNewDatabaseFlow {
         ),
       );
     }
-    _invalidateCaches(ref);
-    await onDatabaseReopened?.call();
-    ref.invalidate(appInitProvider);
-    await onReloadSettingsState?.call();
+    await completeDatabaseSwitch(
+      ref: ref,
+      path: norm,
+      hooks: switchHooks,
+      showSuccessNotice: false,
+    );
   }
 }

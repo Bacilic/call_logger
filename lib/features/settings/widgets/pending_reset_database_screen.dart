@@ -52,11 +52,31 @@ class _PendingResetDatabaseScreenState
     if (_busy) return;
     final picked = await pickDatabasePathWithSystemPicker();
     if (!mounted) return;
-    if (picked == null || picked.trim().isEmpty) return;
+    if (picked == null || picked.path.trim().isEmpty) return;
+
+    if (picked.isBackupArchive) {
+      await showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Επιλέχθηκε αντίγραφο ασφαλείας'),
+          content: const Text(
+            'Το αρχείο που επιλέξατε είναι αντίγραφο ασφαλείας (.zip), '
+            'όχι αρχείο βάσης. Η επαναφορά γίνεται από τη Διαχείριση Βάσης.',
+          ),
+          actions: [
+            FilledButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('Εντάξει'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
 
     setState(() => _busy = true);
     try {
-      final outcome = await setAndVerifyDatabasePath(picked.trim());
+      final outcome = await setAndVerifyDatabasePath(picked.path.trim());
       if (!mounted) return;
       if (!outcome.ok) {
         await _showDbError(outcome.runner.result);

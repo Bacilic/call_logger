@@ -103,6 +103,6 @@ String lampDataIssueTypeDisplayLabel(String issueType) {
     case 'network_name_code_mismatch':
       return 'Δίκτυο · Όνομα που δεν ταιριάζει με τον κωδικό';
     default:
-      return issueType;
+      return 'Άγνωστος τύπος προβλήματος ($issueType)';
   }
 }

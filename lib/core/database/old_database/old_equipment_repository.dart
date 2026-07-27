@@ -9,6 +9,7 @@ import 'lamp_database_provider.dart';
 import 'lamp_data_issue_type_labels.dart';
 import 'lamp_db_comparison.dart';
 import 'lamp_excel_parse_int.dart';
+import 'lamp_legacy_issue_type_normalizer.dart';
 import 'lamp_scientific_serial.dart';
 import 'lamp_network_sheet_importer.dart';
 import 'old_database_schema.dart';
@@ -537,6 +538,35 @@ class OldEquipmentRepository {
     final db = await _databaseProvider.open(path);
     final rows = await db.rawQuery('SELECT COUNT(*) AS count FROM data_issues');
     return (rows.first['count'] as int?) ?? 0;
+  }
+
+  /// Διαγνωστικό: πλήθος εγγραφών `data_issues` ανά `issue_type`.
+  Future<Map<String, int>> countDataIssuesByType(String dbPath) async {
+    final path = dbPath.trim();
+    await _ensureDataIssueSchemaOnPath(path);
+    final db = await _databaseProvider.open(path);
+    final rows = await db.rawQuery(
+      'SELECT issue_type, COUNT(*) AS c FROM data_issues GROUP BY issue_type',
+    );
+    final result = <String, int>{};
+    for (final row in rows) {
+      final type = row['issue_type']?.toString() ?? '';
+      final count = (row['c'] as int?) ?? 0;
+      result[type] = count;
+    }
+    return result;
+  }
+
+  /// Κανονικοποιεί παλαιούς τύπους `data_issues` στη βάση· επιστρέφει πλήθος αλλαγών.
+  Future<int> normalizeLegacyDataIssueTypesOnPath(String databasePath) async {
+    final path = databasePath.trim();
+    if (path.isEmpty) return 0;
+    await _ensureDataIssueSchemaOnPath(path);
+    final db = await _databaseProvider.open(
+      path,
+      mode: LampDatabaseMode.write,
+    );
+    return normalizeLegacyDataIssueTypes(db);
   }
 
   Future<void> _ensureDataIssueSchemaOnPath(String databasePath) async {

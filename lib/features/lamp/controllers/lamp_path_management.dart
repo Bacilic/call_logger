@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 
+import '../../../core/config/app_config.dart';
 import '../../../core/database/old_database/lamp_database_provider.dart';
 import '../../../core/database/old_database/lamp_excel_validator.dart';
 import '../../../core/database/old_database/lamp_old_db_validator.dart';
@@ -15,7 +16,9 @@ import '../../../core/providers/lamp_open_settings_intent_provider.dart';
 import '../../../core/providers/lamp_read_path_health_provider.dart';
 import '../../../core/services/portable_lamp_storage.dart';
 import '../../../core/utils/file_picker_session.dart';
+import '../../../core/utils/user_facing_error_messages.dart';
 import '../../settings/widgets/create_new_database_dialog.dart';
+import '../services/lamp_db_adoption_guard.dart';
 import 'lamp_screen_host.dart';
 
 /// Κατάσταση κουμπιού «ίδια διαδρομή εξόδου» (βελάκι) στον διάλογο ρυθμίσεων.
@@ -268,6 +271,80 @@ class LampPathController {
     }
   }
 
+  /// Κοινή ακολουθία: απόφαση υιοθέτησης → (επιβεβαίωση) → αντιγραφή στον φορητό φάκελο.
+  /// Επιστρέφει τη διαδρομή προορισμού ή `null` αν ακυρώθηκε/απορρίφθηκε/απέτυχε.
+  Future<String?> _adoptPickedLampDbIntoPortable(String pickedPath) async {
+    final destinationPath = p.normalize(
+      p.join(
+        AppConfig.portableDataBaseDirectory,
+        p.basename(pickedPath.trim()),
+      ),
+    );
+    final decision = await decideLampDbAdoption(
+      pickedPath: pickedPath,
+      destinationPath: destinationPath,
+    );
+    if (!decision.allowed) {
+      if (host.mounted) {
+        host.showSnack(
+          decision.rejectionMessage ??
+              'Το επιλεγμένο αρχείο δεν μπορεί να χρησιμοποιηθεί στη Λάμπα.',
+          isError: true,
+        );
+      }
+      return null;
+    }
+
+    var allowOverwrite = false;
+    if (decision.requiresOverwriteConfirmation) {
+      final dialogContext = host.context;
+      if (!dialogContext.mounted) return null;
+      final confirmed = await showDialog<bool>(
+        context: dialogContext,
+        builder: (ctx) {
+          final fileName = p.basename(destinationPath);
+          final folder = AppConfig.portableDataBaseDirectory;
+          return AlertDialog(
+            title: const Text('Αντικατάσταση υπάρχοντος αρχείου'),
+            content: Text(
+              'Στον φάκελο της Λάμπας υπάρχει ήδη το αρχείο «$fileName» '
+              '($folder).\n\n'
+              'Θέλετε να αντικατασταθεί από το αρχείο που επιλέξατε;',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(false),
+                child: const Text('Ακύρωση'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(ctx).pop(true),
+                child: const Text('Αντικατάσταση'),
+              ),
+            ],
+          );
+        },
+      );
+      if (confirmed != true) return null;
+      allowOverwrite = true;
+    }
+
+    try {
+      return await PortableLampStorage.tryCopyLampDbToPortableDataBase(
+        pickedPath,
+        allowOverwrite: allowOverwrite,
+      );
+    } catch (e) {
+      if (host.mounted) {
+        host.showSnack(
+          'Η αντιγραφή στον φάκελο της Λάμπας απέτυχε: '
+          '${humanizeUserFacingError(e)}',
+          isError: true,
+        );
+      }
+      return null;
+    }
+  }
+
   Future<void> pickReadDatabase({
     required Future<void> Function({required String source}) onPathChanged,
   }) async {
@@ -287,8 +364,8 @@ class LampPathController {
       }
       return;
     }
-    final portablePath =
-        await PortableLampStorage.tryCopyLampDbToPortableDataBase(path);
+    final portablePath = await _adoptPickedLampDbIntoPortable(path);
+    if (portablePath == null) return;
     readDbController.text = portablePath;
     await host.shared.settings.setReadPath(portablePath);
     if (!host.mounted) return;
@@ -320,8 +397,8 @@ class LampPathController {
       }
       return;
     }
-    final portablePath =
-        await PortableLampStorage.tryCopyLampDbToPortableDataBase(path);
+    final portablePath = await _adoptPickedLampDbIntoPortable(path);
+    if (portablePath == null) return;
     outputDbController.text = portablePath;
     await host.shared.settings.setOutputPath(portablePath);
     final readT = readDbController.text.trim();

@@ -42,12 +42,20 @@ class LampIssuesController {
       return;
     }
     try {
+      final normalizedCount = await host.shared.repository
+          .normalizeLegacyDataIssueTypesOnPath(dbPath);
       final loaded = await host.shared.repository.dataIssues(dbPath);
       final deferred = await host.shared.repository.deferredDataIssues(dbPath);
       if (!host.mounted) return;
       issues = loaded;
       deferredIssues = deferred;
       host.notifyState();
+      if (normalizedCount > 0) {
+        host.showSnack(
+          'Ενημερώθηκαν $normalizedCount παλαιές εγγραφές προβλημάτων '
+          'σε αναγνωρίσιμο τύπο.',
+        );
+      }
     } catch (e) {
       if (!host.mounted) return;
       issues = const <Map<String, Object?>>[];
@@ -821,6 +829,9 @@ class _LampIssuesTabState extends State<LampIssuesTab> {
             LampIssueResolutionController.isInformationalIssueType(
               rawIssueType,
             );
+        final isUnknown = LampIssueResolutionController.isUnknownIssueType(
+          rawIssueType,
+        );
         // Οι πληροφοριακοί τύποι υπερισχύουν: το network_sheet_invalid δεν
         // πρέπει να πάρει κουμπί επίλυσης δικτύου (δεν έχει τίποτα να επιλύσει).
         final isNetworkCategory =
@@ -873,7 +884,7 @@ class _LampIssuesTabState extends State<LampIssuesTab> {
                     });
                   }
                 : null,
-            onClearGroup: isInformational
+            onClearGroup: (isInformational || isUnknown)
                 ? () => widget.resolutionController
                       .clearInformationalIssueGroup(rawIssueType)
                 : null,

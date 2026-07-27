@@ -78,7 +78,19 @@ class LampIssueResolutionController {
     return informationalIssueTypes.contains(rawIssueType.trim());
   }
 
-  /// Εκκαθάριση ολόκληρης πληροφοριακής ομάδας από την ουρά, με επιβεβαίωση.
+  /// Τύπος χωρίς οδηγό επίλυσης, χωρίς πληροφοριακή/δικτυακή κατηγορία.
+  static bool isUnknownIssueType(String rawIssueType) {
+    final raw = rawIssueType.trim();
+    if (raw.isEmpty) return true;
+    if (isInformationalIssueType(raw)) return false;
+    if (isNetworkIssueType(raw)) return false;
+    for (final typed in LampIssueType.values) {
+      if (typed.issueType == raw) return false;
+    }
+    return true;
+  }
+
+  /// Εκκαθάριση ολόκληρης πληροφοριακής ή άγνωστης ομάδας από την ουρά, με επιβεβαίωση.
   Future<void> clearInformationalIssueGroup(String rawIssueType) async {
     if (resolvingNetworkIssueType != null || resolvingIssueType != null) {
       return;
@@ -90,14 +102,21 @@ class LampIssueResolutionController {
     }
     final count = issueCountForNetwork(rawIssueType);
     final label = lampDataIssueTypeDisplayLabel(rawIssueType);
+    final unknown = isUnknownIssueType(rawIssueType);
     final confirmed = await showDialog<bool>(
       context: host.context,
       builder: (ctx) => AlertDialog(
         title: const Text('Εκκαθάριση ομάδας;'),
         content: Text(
-          'Θα διαγραφούν οριστικά $count πληροφοριακές εγγραφές «$label» '
-          'από την ουρά προβλημάτων, χωρίς δυνατότητα αναίρεσης. '
-          'Δεν αλλάζουν δεδομένα εξοπλισμού.',
+          unknown
+              ? 'Θα διαγραφούν οριστικά $count εγγραφές «$label» '
+                    'από την ουρά προβλημάτων, χωρίς δυνατότητα αναίρεσης. '
+                    'Ο τύπος δεν αναγνωρίζεται από την εφαρμογή· '
+                    'η διαγραφή αφορά μόνο την ουρά προβλημάτων, '
+                    'χωρίς καμία αλλαγή σε δεδομένα εξοπλισμού.'
+              : 'Θα διαγραφούν οριστικά $count πληροφοριακές εγγραφές «$label» '
+                    'από την ουρά προβλημάτων, χωρίς δυνατότητα αναίρεσης. '
+                    'Δεν αλλάζουν δεδομένα εξοπλισμού.',
         ),
         actions: [
           TextButton(

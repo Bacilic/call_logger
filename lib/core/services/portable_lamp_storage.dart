@@ -11,26 +11,28 @@ class PortableLampStorage {
 
   static const String backupZipLampDbFolderName = 'lamp_db';
 
-  /// Αντιγραφή επιλεγμένου `.db` στο portable `Data Base/`· σε αποτυχία επιστρέφει την αρχική διαδρομή.
+  /// Αντιγραφή επιλεγμένου `.db` στο portable `Data Base/`.
+  ///
+  /// Αν υπάρχει ήδη αρχείο στον προορισμό και [allowOverwrite] είναι false,
+  /// επιστρέφει την αρχική διαδρομή χωρίς εγγραφή. Σε αποτυχία αντιγραφής
+  /// προωθεί το πραγματικό σφάλμα στον καλούντα (δεν το καταπίνει).
   static Future<String> tryCopyLampDbToPortableDataBase(
-    String pickedPath,
-  ) async {
+    String pickedPath, {
+    bool allowOverwrite = false,
+  }) async {
     final src = p.normalize(p.absolute(pickedPath.trim()));
     if (!await File(src).exists()) return pickedPath;
 
-    try {
-      await AppConfig.ensureDirectoryExists(
-        AppConfig.portableDataBaseDirectory,
-      );
-      final dest = p.normalize(
-        p.join(AppConfig.portableDataBaseDirectory, p.basename(src)),
-      );
-      if (src == dest) return dest;
-      await File(src).copy(dest);
-      return dest;
-    } catch (_) {
+    await AppConfig.ensureDirectoryExists(AppConfig.portableDataBaseDirectory);
+    final dest = p.normalize(
+      p.join(AppConfig.portableDataBaseDirectory, p.basename(src)),
+    );
+    if (src == dest) return dest;
+    if (await File(dest).exists() && !allowOverwrite) {
       return pickedPath;
     }
+    await File(src).copy(dest);
+    return dest;
   }
 
   /// True αν η αποθηκευμένη διαδρομή ανάγνωσης αντιστοιχεί σε αρχείο στο portable `Data Base/`.

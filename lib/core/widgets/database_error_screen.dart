@@ -279,7 +279,7 @@ class _DatabaseErrorScreenState extends ConsumerState<DatabaseErrorScreen> {
   Future<void> _findDatabaseViaPicker() async {
     final picked = await pickDatabasePathWithSystemPicker();
     if (!mounted) return;
-    if (picked == null || picked.isEmpty) {
+    if (picked == null || picked.path.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Δεν επιλέχθηκε αρχείο ή φάκελος.'),
@@ -288,7 +288,11 @@ class _DatabaseErrorScreenState extends ConsumerState<DatabaseErrorScreen> {
       );
       return;
     }
-    await _verifyPathAndRetry(picked);
+    if (picked.isBackupArchive) {
+      await _restoreFromBackup(preselectedZipPath: picked.path);
+      return;
+    }
+    await _verifyPathAndRetry(picked.path);
   }
 
   Future<void> _applyRecentDatabasePath(String path) async {
@@ -361,7 +365,7 @@ class _DatabaseErrorScreenState extends ConsumerState<DatabaseErrorScreen> {
     );
   }
 
-  Future<void> _restoreFromBackup() async {
+  Future<void> _restoreFromBackup({String? preselectedZipPath}) async {
     final target = _databaseFilePath;
     final backupFolder = await resolveValidBackupDestinationHint(
       container: ProviderScope.containerOf(context),
@@ -377,6 +381,7 @@ class _DatabaseErrorScreenState extends ConsumerState<DatabaseErrorScreen> {
       currentDatabasePath: (target != null && target.isNotEmpty)
           ? target
           : AppConfig.defaultDbPath,
+      preselectedZipPath: preselectedZipPath,
     );
     if (!mounted || result.cancelled) return;
     if (result.failed) return;

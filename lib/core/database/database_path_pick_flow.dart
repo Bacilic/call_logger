@@ -9,9 +9,29 @@ import 'database_init_progress_provider.dart';
 import 'database_init_result.dart';
 import 'database_init_runner.dart';
 
+/// Τι διάλεξε ο χρήστης στον επιλογέα διαδρομής βάσης.
+enum DatabasePickKind { databaseFile, backupArchive }
+
+/// Αποτέλεσμα επιλογής αρχείου/φακέλου βάσης (όχι γυμνή διαδρομή).
+class DatabasePickSelection {
+  const DatabasePickSelection({required this.kind, required this.path});
+
+  final DatabasePickKind kind;
+  final String path;
+
+  bool get isBackupArchive => kind == DatabasePickKind.backupArchive;
+}
+
+/// Κατάταξη επιλεγμένης διαδρομής από την κατάληξη μόνο — χωρίς δίσκο/UI.
+DatabasePickKind classifyPickedDatabasePath(String path) {
+  final ext = p.extension(path.trim()).toLowerCase();
+  if (ext == '.zip') return DatabasePickKind.backupArchive;
+  return DatabasePickKind.databaseFile;
+}
+
 /// Επιλογή αρχείου `.db` (προτίμηση) ή φακέλου → `call_logger.db` μέσα.
 /// Επιστρέφει `null` αν ακυρώθηκε η επιλογή ή έγινε refocus σε ανοιχτό picker.
-Future<String?> pickDatabasePathWithSystemPicker() async {
+Future<DatabasePickSelection?> pickDatabasePathWithSystemPicker() async {
   final session = await FilePickerSession.run(
     _pickDatabasePathWithSystemPickerImpl,
   );
@@ -19,7 +39,7 @@ Future<String?> pickDatabasePathWithSystemPicker() async {
   return session.value;
 }
 
-Future<String?> _pickDatabasePathWithSystemPickerImpl() async {
+Future<DatabasePickSelection?> _pickDatabasePathWithSystemPickerImpl() async {
   final fileResult = await FilePicker.pickFiles(
     type: FileType.custom,
     allowedExtensions: ['db', 'zip'],
@@ -31,7 +51,12 @@ Future<String?> _pickDatabasePathWithSystemPickerImpl() async {
   }
 
   if (fileResult.files.isNotEmpty && fileResult.files.single.path != null) {
-    return fileResult.files.single.path!.trim();
+    final path = fileResult.files.single.path!.trim();
+    if (path.isEmpty) return null;
+    return DatabasePickSelection(
+      kind: classifyPickedDatabasePath(path),
+      path: path,
+    );
   }
 
   final dirPath = await FilePicker.getDirectoryPath(
@@ -39,7 +64,10 @@ Future<String?> _pickDatabasePathWithSystemPickerImpl() async {
   );
 
   if (dirPath != null && dirPath.trim().isNotEmpty) {
-    return p.join(dirPath, 'call_logger.db');
+    return DatabasePickSelection(
+      kind: DatabasePickKind.databaseFile,
+      path: p.join(dirPath, 'call_logger.db'),
+    );
   }
 
   return null;

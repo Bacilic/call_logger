@@ -97,7 +97,7 @@ Future<DatabaseFileProfile> profileDatabaseFile(String dbPath) async {
 
     final tableRows = await db.rawQuery(
       "SELECT name FROM sqlite_master "
-      "WHERE type = 'table' AND name NOT LIKE 'sqlite_%'",
+      "WHERE type IN ('table', 'view') AND name NOT LIKE 'sqlite_%'",
     );
     final tables = <String>{
       for (final row in tableRows)
