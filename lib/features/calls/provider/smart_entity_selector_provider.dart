@@ -795,6 +795,11 @@ final historyEditSmartEntityProvider =
 /// Ανανεώνει το `selectedEquipment` σε όλους τους ενεργούς επιλογείς (κλήση,
 /// εκκρεμότητα, επεξεργασία ιστορικού) μετά από invalidate του lookup.
 Future<void> refreshSelectedEquipmentInAllSelectors(WidgetRef ref) async {
+  // Οι καλούντες μόλις έχουν κάνει invalidate το lookup. Τα επιμέρους refresh
+  // επιστρέφουν νωρίς όταν δεν υπάρχει επιλεγμένος εξοπλισμός, οπότε το
+  // ξέπλυμα πρέπει να γίνει εδώ — αλλιώς το lookup μένει «βρόμικο» και
+  // ξεπλένεται σύγχρονα μέσα στο επόμενο build της οθόνης κλήσεων.
+  await ref.read(lookupServiceProvider.future);
   await ref
       .read(callSmartEntityProvider.notifier)
       .refreshSelectedEquipmentFromLookup();

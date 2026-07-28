@@ -197,6 +197,10 @@ class _VersionExpansionTile extends StatelessWidget {
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
       child: ExpansionTile(
+        // Το ListView ανακυκλώνει στοιχεία εκτός οθόνης: χωρίς αποθηκευμένη
+        // κατάσταση ανά έκδοση, έκδοση που έκλεισε ο χρήστης ξαναεμφανίζεται
+        // ανοιχτή (επανεφαρμογή της προεπιλογής) όταν επιστρέψει στην οθόνη.
+        key: PageStorageKey<String>('changelog_${entry.version}_${entry.date}'),
         initiallyExpanded: initiallyExpanded,
         title: Text(header, style: Theme.of(context).textTheme.titleSmall),
         childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),

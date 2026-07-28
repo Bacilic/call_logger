@@ -29,15 +29,14 @@ class ShutdownTraceService {
     return CrashLogService.logsDirectoryForDatabasePath(databasePath);
   }
 
+  /// Ένα αρχείο ανά ημερομηνία (όπως τα αρχεία καταρρεύσεων) — τα διαδοχικά
+  /// κλεισίματα της ίδιας ημέρας προσαρτώνται, ώστε ο φάκελος να μην
+  /// πλημμυρίζει με ένα αρχείο ανά κλείσιμο.
   static String traceFileName(DateTime dateTime) {
     final y = dateTime.year.toString().padLeft(4, '0');
     final m = dateTime.month.toString().padLeft(2, '0');
     final d = dateTime.day.toString().padLeft(2, '0');
-    final h = dateTime.hour.toString().padLeft(2, '0');
-    final min = dateTime.minute.toString().padLeft(2, '0');
-    final s = dateTime.second.toString().padLeft(2, '0');
-    return 'shutdown_trace_$y-$m-$d'
-        '_$h-$min-$s.log';
+    return 'shutdown_trace_$y-$m-$d.log';
   }
 
   File? get currentFile => _file;

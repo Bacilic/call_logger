@@ -47,18 +47,6 @@ Finder _quickCallFab() => find.byKey(QuickCallTrigger.triggerKey);
 
 Finder _quickCallDialog() => find.byKey(const ValueKey('quick_call_dialog'));
 
-bool _isQuickCallDialogFlashActive(WidgetTester tester) {
-  // Flash στο backdrop του DialogOutsideTapHintScope (όχι μέσα στο TapRegion του dialog).
-  final backdropFinder = find.byKey(const ValueKey('dialog_flash_backdrop'));
-  if (backdropFinder.evaluate().isEmpty) return false;
-  final container = tester.widget<AnimatedContainer>(backdropFinder);
-  final fg = container.foregroundDecoration;
-  if (fg is! BoxDecoration) return false;
-  final border = fg.border;
-  if (border is! Border) return false;
-  return border.top.color != Colors.transparent;
-}
-
 Future<void> _goToHistory(WidgetTester tester) async {
   await tester.tap(find.byKey(const ValueKey('nav_rail_history')));
   await pumpUntilSettled(tester);
@@ -162,7 +150,7 @@ void main() {
     );
 
     testWidgets(
-      'δεύτερο άνοιγμα (FAB + συντόμευση) δεν στοιβάζει διάλογο — flash στον υπάρχοντα',
+      'δεύτερο άνοιγμα (FAB + συντόμευση) δεν στοιβάζει δεύτερο διάλογο',
       (tester) async {
         tester.view.physicalSize = const Size(1600, 900);
         tester.view.devicePixelRatio = 1.0;
@@ -190,14 +178,6 @@ void main() {
             'Δεύτερο άνοιγμα δεν πρέπει να ανοίξει δεύτερο QuickCallDialog',
           ),
         );
-        expect(
-          _isQuickCallDialogFlashActive(tester),
-          isTrue,
-          reason: greekExpectMsg(
-            'Δεύτερο άνοιγμα πρέπει να αναβοσβήνει τον ήδη ανοιχτό διάλογο',
-          ),
-        );
-
         await _invokeQuickCaptureIntent(tester);
         expect(
           _quickCallDialog(),

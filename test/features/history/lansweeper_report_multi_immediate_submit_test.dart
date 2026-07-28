@@ -319,6 +319,23 @@ void main() {
           'Mock API κλήθηκε μία φορά (ticket $_kFakeLansweeperTicketId)',
         );
 
+        reporter.logStep('Οι καταχωρημένες κλήσεις αποεπιλέγονται');
+        expect(
+          find.textContaining('Επιλεγμένες: 2'),
+          findsNothing,
+          reason: greekExpectMsg(
+            'Μετά την Άμεση Καταχώρηση οι κλήσεις δεν επιτρέπεται να μένουν επιλεγμένες',
+          ),
+        );
+        expect(
+          find.textContaining('Επιλεγμένες: 0'),
+          findsOneWidget,
+          reason: greekExpectMsg(
+            'Ο μετρητής επιλογής μηδενίζει μετά την Άμεση Καταχώρηση',
+          ),
+        );
+        reporter.logStepDone('Η επιλογή καθαρίστηκε μετά την καταχώρηση');
+
         reporter.logStep('Έλεγχος κατάστασης και ticket_id στη βάση');
 
         final loadedCalls = await tester.runAsync(() async {

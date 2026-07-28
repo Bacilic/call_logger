@@ -794,9 +794,12 @@ class DatabaseHelper with DatabaseTableInspectionMixin {
         return const ConnectionCheckResult(success: false, isLocalDev: false);
       }
 
+      // Χωρίς `version:` — το sqflite δεν παρακάμπτει τον χειρισμό έκδοσης σε
+      // readOnly σύνδεση: σε αρχείο με διαφορετικό user_version επιχειρεί
+      // `PRAGMA user_version = N` → SQLITE_READONLY → ψευδής «αποτυχία
+      // σύνδεσης» για απολύτως προσβάσιμη βάση. Το probe δεν μεταναστεύει σχήμα.
       final db = await openDatabase(
         dbPath,
-        version: kDatabaseSchemaVersion,
         readOnly: true,
         singleInstance: false,
       );

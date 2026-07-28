@@ -89,6 +89,13 @@ mixin LansweeperReportRegistrationMixin on LansweeperReportDialogStateHost {
     if (result.success) {
       await _persistTicketSubmitFormPrefs();
       if (!mounted) return;
+      // Οι κλήσεις πέρασαν στις Καταχωρημένες — παραμένοντας επιλεγμένες εκεί
+      // δεν εξυπηρετούν τίποτα και μπερδεύουν την επόμενη ενέργεια.
+      setState(() {
+        for (final entry in selected) {
+          _selectedKeys.remove(entry.key);
+        }
+      });
       final ticketId = (result.ticketId ?? '').trim();
       final totalMarked = 1 + companionCallIds.length;
       final baseMessage = totalMarked == 1

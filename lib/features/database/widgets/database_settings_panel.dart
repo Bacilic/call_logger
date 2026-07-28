@@ -734,6 +734,9 @@ class _DatabaseSettingsPanelState extends ConsumerState<DatabaseSettingsPanel>
     final status = BackupScheduleStatusFormatter.build(
       settings: settings,
       backupJobRunning: jobRunning,
+      dbBaseName: _currentDbPath.trim().isEmpty
+          ? null
+          : p.basenameWithoutExtension(_currentDbPath),
     );
 
     Color? severityColor({required bool warning, required bool caution}) {

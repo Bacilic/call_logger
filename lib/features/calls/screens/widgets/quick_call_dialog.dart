@@ -18,24 +18,16 @@ import 'notes_sticky_field.dart';
 import 'remote_connection_buttons.dart';
 import 'smart_entity_selector_widget.dart';
 
-DialogOutsideTapHintController? _openQuickCallController;
+/// Πλήθος ζωντανών QuickCallDialog — δεμένο με τον κύκλο ζωής του State ώστε
+/// να αυτοθεραπεύεται ακόμη κι αν η διαδρομή δεν κλείσει ποτέ κανονικά.
+int _openQuickCallDialogCount = 0;
 
 /// Εμφανίζει modal διάλογο γρήγορης καταγραφής με ανεξάρτητο provider scope.
+/// Δεύτερη κλήση όσο ο διάλογος είναι ανοιχτός δεν στοιβάζει δεύτερο.
 Future<void> showQuickCallDialog(BuildContext context) {
-  final existing = _openQuickCallController;
-  if (existing != null) {
-    if (existing.isAttached) {
-      existing.flash();
-      return Future<void>.value();
-    }
-    _openQuickCallController = null;
-  }
-
-  final controller = DialogOutsideTapHintController();
-  _openQuickCallController = controller;
+  if (_openQuickCallDialogCount > 0) return Future<void>.value();
   return showDialogWithOutsideTapHint<void>(
     context: context,
-    controller: controller,
     builder: (dialogContext) => ProviderScope(
       overrides: [
         callSmartEntityProvider.overrideWith(SmartEntitySelectorNotifier.new),
@@ -49,11 +41,7 @@ Future<void> showQuickCallDialog(BuildContext context) {
       ],
       child: const QuickCallDialog(),
     ),
-  ).whenComplete(() {
-    if (identical(_openQuickCallController, controller)) {
-      _openQuickCallController = null;
-    }
-  });
+  );
 }
 
 /// Modal γρήγορης καταγραφής — ξεχωριστό scope, χωρίς επαφή με την κύρια φόρμα.
@@ -81,9 +69,16 @@ class _QuickCallDialogState extends ConsumerState<QuickCallDialog>
   @override
   void initState() {
     super.initState();
+    _openQuickCallDialogCount++;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _selectorKey.currentState?.requestPhoneFocus();
     });
+  }
+
+  @override
+  void dispose() {
+    _openQuickCallDialogCount--;
+    super.dispose();
   }
 
   ({double w1, double w2, double wDept, double w3}) _fieldWidths(double total) {

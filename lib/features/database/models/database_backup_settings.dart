@@ -31,6 +31,7 @@ class DatabaseBackupSettings {
     required this.backupTime,
     this.lastBackupAttempt,
     this.lastManualBackupAttempt,
+    this.scheduleAnchorAt,
     required this.lastBackupStatus,
     required this.retentionMaxCopiesEnabled,
     required this.retentionMaxCopies,
@@ -70,6 +71,12 @@ class DatabaseBackupSettings {
 
   /// Τελευταίο επιτυχές χειροκίνητο αντίγραφο (για ένδειξη/διάλογο).
   final DateTime? lastManualBackupAttempt;
+
+  /// Στιγμή που ορίστηκε/άλλαξε το πρόγραμμα ή έγινε ρητή παράβλεψη χαμένου
+  /// αντιγράφου. Slots παλαιότερα από αυτήν δεν λογίζονται «χαμένα» — αλλιώς
+  /// φρέσκια ρύθμιση (π.χ. Δευτέρα ορίζω αντίγραφο Σαββάτου) θα «χρωστούσε»
+  /// το περασμένο Σάββατο. `null` σε παλιές ρυθμίσεις = χωρίς περιορισμό.
+  final DateTime? scheduleAnchorAt;
 
   /// `success` | `failed` | `missed` | `none` — βλ. [BackupScheduleStatus].
   final String lastBackupStatus;
@@ -160,6 +167,7 @@ class DatabaseBackupSettings {
     bool clearLastBackupAttempt = false,
     DateTime? lastManualBackupAttempt,
     bool clearLastManualBackupAttempt = false,
+    DateTime? scheduleAnchorAt,
     String? lastBackupStatus,
     bool? retentionMaxCopiesEnabled,
     int? retentionMaxCopies,
@@ -185,6 +193,7 @@ class DatabaseBackupSettings {
       lastManualBackupAttempt: clearLastManualBackupAttempt
           ? null
           : (lastManualBackupAttempt ?? this.lastManualBackupAttempt),
+      scheduleAnchorAt: scheduleAnchorAt ?? this.scheduleAnchorAt,
       lastBackupStatus: lastBackupStatus ?? this.lastBackupStatus,
       retentionMaxCopiesEnabled:
           retentionMaxCopiesEnabled ?? this.retentionMaxCopiesEnabled,
@@ -209,6 +218,7 @@ class DatabaseBackupSettings {
     'backupTime': backupTime,
     'lastBackupAttempt': lastBackupAttempt?.toIso8601String(),
     'lastManualBackupAttempt': lastManualBackupAttempt?.toIso8601String(),
+    'scheduleAnchorAt': scheduleAnchorAt?.toIso8601String(),
     'lastBackupStatus': lastBackupStatus,
     'retentionMaxCopiesEnabled': retentionMaxCopiesEnabled,
     'retentionMaxCopies': retentionMaxCopies,
@@ -279,6 +289,12 @@ class DatabaseBackupSettings {
         if (v is String) return DateTime.tryParse(v);
         return null;
       }(),
+      scheduleAnchorAt: () {
+        final v = json['scheduleAnchorAt'];
+        if (v == null) return null;
+        if (v is String) return DateTime.tryParse(v);
+        return null;
+      }(),
       lastBackupStatus: BackupScheduleStatus.normalize(
         s('lastBackupStatus', 'none'),
       ),
@@ -319,6 +335,7 @@ class DatabaseBackupSettings {
         o.backupTime != backupTime ||
         o.lastBackupAttempt != lastBackupAttempt ||
         o.lastManualBackupAttempt != lastManualBackupAttempt ||
+        o.scheduleAnchorAt != scheduleAnchorAt ||
         o.lastBackupStatus != lastBackupStatus ||
         o.retentionMaxCopiesEnabled != retentionMaxCopiesEnabled ||
         o.retentionMaxCopies != retentionMaxCopies ||
@@ -348,6 +365,7 @@ class DatabaseBackupSettings {
     backupTime,
     lastBackupAttempt,
     lastManualBackupAttempt,
+    scheduleAnchorAt,
     lastBackupStatus,
     retentionMaxCopiesEnabled,
     retentionMaxCopies,

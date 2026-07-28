@@ -14,11 +14,16 @@ class BackupDestinationContentResult {
     required this.kind,
     this.matchingBackupFileCount = 0,
     this.latestBackupModified,
+    this.dbBaseName = '',
   });
 
   final BackupDestinationContentKind kind;
   final int matchingBackupFileCount;
   final DateTime? latestBackupModified;
+
+  /// Το όνομα βάσης με το οποίο ταιριάστηκαν τα αρχεία — τα μηνύματα προς τον
+  /// χρήστη το αναφέρουν ώστε να είναι σαφές ποια βάση αφορά ο έλεγχος.
+  final String dbBaseName;
 }
 
 /// Αποτέλεσμα ελέγχου διαδρομής φακέλου αντιγράφων ασφαλείας.
@@ -167,8 +172,9 @@ class BackupDestinationFolderValidator {
 
     final dir = Directory(dest);
     if (!await dir.exists()) {
-      return const BackupDestinationContentResult(
+      return BackupDestinationContentResult(
         kind: BackupDestinationContentKind.folderMissing,
+        dbBaseName: dbBaseName,
       );
     }
 
@@ -188,14 +194,16 @@ class BackupDestinationFolderValidator {
     }
 
     if (count == 0) {
-      return const BackupDestinationContentResult(
+      return BackupDestinationContentResult(
         kind: BackupDestinationContentKind.folderEmptyNoFiles,
+        dbBaseName: dbBaseName,
       );
     }
     return BackupDestinationContentResult(
       kind: BackupDestinationContentKind.folderOk,
       matchingBackupFileCount: count,
       latestBackupModified: newest,
+      dbBaseName: dbBaseName,
     );
   }
 

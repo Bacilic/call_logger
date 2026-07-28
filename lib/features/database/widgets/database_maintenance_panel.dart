@@ -271,6 +271,9 @@ class _DatabaseMaintenancePanelState
     ref.invalidate(totalTasksCountProvider);
     ref.invalidate(orphanCallsProvider);
     ref.read(taskServiceProvider).resetSnoozeHistoryColumnCache();
+    // Άμεσο flush ώστε το lookup να μη μείνει «βρόμικο» και ξεπλυθεί σύγχρονα
+    // μέσα στο επόμενο build της οθόνης κλήσεων (setState during build).
+    ref.read(lookupServiceProvider);
   }
 
   Future<void> _onVacuum(BuildContext context) async {

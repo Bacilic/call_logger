@@ -99,11 +99,6 @@ class _LampIssueManualReviewDialogState
                   context,
                 ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
               ),
-              const SizedBox(height: 8),
-              Text(
-                'Γραμμές: ${widget.proposals.map((p) => p.row ?? '-').join(', ')}',
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
               const SizedBox(height: 12),
             ],
             Text(

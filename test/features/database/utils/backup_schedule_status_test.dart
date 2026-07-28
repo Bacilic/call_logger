@@ -8,6 +8,8 @@ DatabaseBackupSettings _settings({
   List<int> days = const [6],
   String time = '18:42',
   DateTime? lastAttempt,
+  DateTime? lastManual,
+  DateTime? anchor,
   String lastStatus = BackupScheduleStatus.none,
 }) => DatabaseBackupSettings(
   destinationDirectory: r'C:\Backups',
@@ -22,7 +24,8 @@ DatabaseBackupSettings _settings({
   backupDays: days,
   backupTime: time,
   lastBackupAttempt: lastAttempt,
-  lastManualBackupAttempt: null,
+  lastManualBackupAttempt: lastManual,
+  scheduleAnchorAt: anchor,
   lastBackupStatus: lastStatus,
   retentionMaxCopiesEnabled: false,
   retentionMaxCopies: 30,
@@ -84,21 +87,25 @@ void main() {
     },
   );
 
-  test('shouldMarkScheduleMissed false σε μη προγραμματισμένη ημέρα', () {
-    // 2026-06-07 = Κυριακή (7), πρόγραμμα μόνο Σάββατο (6)
-    expect(
-      BackupScheduleStatusFormatter.shouldMarkScheduleMissed(
-        _settings(
-          days: const [6],
-          time: '18:42',
-          lastAttempt: DateTime(2026, 6, 6, 18, 15),
-          lastStatus: BackupScheduleStatus.none,
+  test(
+    'shouldMarkScheduleMissed false σε μη προγραμματισμένη ημέρα με καλυμμένο slot',
+    () {
+      // 2026-06-07 = Κυριακή (7), πρόγραμμα μόνο Σάββατο (6)·
+      // το slot του Σαββάτου καλύφθηκε (προσπάθεια μετά τις 18:42).
+      expect(
+        BackupScheduleStatusFormatter.shouldMarkScheduleMissed(
+          _settings(
+            days: const [6],
+            time: '18:42',
+            lastAttempt: DateTime(2026, 6, 6, 18, 45),
+            lastStatus: BackupScheduleStatus.none,
+          ),
+          DateTime(2026, 6, 7, 10, 0),
         ),
-        DateTime(2026, 6, 7, 10, 0),
-      ),
-      isFalse,
-    );
-  });
+        isFalse,
+      );
+    },
+  );
 
   test('shouldMarkScheduleMissed false Κυριακή με χειροκίνητο Σάββατο', () {
     final settings = DatabaseBackupSettings(
@@ -273,6 +280,118 @@ void main() {
         ),
       );
       expect(label, 'Βρέθηκε 1 αρχείο');
+    });
+
+    test('τα μηνύματα δηλώνουν ποια βάση αφορά ο έλεγχος', () {
+      final empty = BackupScheduleStatusFormatter.destinationContentLabelEl(
+        const BackupDestinationContentResult(
+          kind: BackupDestinationContentKind.folderEmptyNoFiles,
+          dbBaseName: 'hosp',
+        ),
+      );
+      expect(empty, contains('για τη βάση «hosp»'));
+
+      final ok = BackupScheduleStatusFormatter.destinationContentLabelEl(
+        const BackupDestinationContentResult(
+          kind: BackupDestinationContentKind.folderOk,
+          matchingBackupFileCount: 3,
+          dbBaseName: 'hosp',
+        ),
+      );
+      expect(ok, contains('για τη βάση «hosp»'));
+    });
+  });
+
+  group('χαμένο slot προηγούμενης ημέρας (εφαρμογή κλειστή τη σχετική ώρα)', () {
+    // Πρόγραμμα: Σάββατο 18:42. Το Σάββατο 2026-06-06 η εφαρμογή έμεινε
+    // κλειστή· το τελευταίο αντίγραφο είναι από το προηγούμενο Σάββατο.
+    test('αναφέρεται ως χαμένο στην εκκίνηση της Δευτέρας', () {
+      expect(
+        BackupScheduleStatusFormatter.shouldMarkScheduleMissed(
+          _settings(
+            days: const [6],
+            time: '18:42',
+            lastAttempt: DateTime(2026, 5, 30, 18, 45),
+            lastStatus: BackupScheduleStatus.success,
+          ),
+          DateTime(2026, 6, 8, 9, 0),
+        ),
+        isTrue,
+      );
+    });
+
+    test('δεν αναφέρεται όταν έγινε χειροκίνητο την ημέρα του slot', () {
+      expect(
+        BackupScheduleStatusFormatter.shouldMarkScheduleMissed(
+          _settings(
+            days: const [6],
+            time: '18:42',
+            lastAttempt: DateTime(2026, 5, 30, 18, 45),
+            lastManual: DateTime(2026, 6, 6, 10, 0),
+            lastStatus: BackupScheduleStatus.success,
+          ),
+          DateTime(2026, 6, 8, 9, 0),
+        ),
+        isFalse,
+      );
+    });
+
+    test('δεν αναφέρεται όταν υπάρχει προσπάθεια μετά το slot', () {
+      expect(
+        BackupScheduleStatusFormatter.shouldMarkScheduleMissed(
+          _settings(
+            days: const [6],
+            time: '18:42',
+            lastAttempt: DateTime(2026, 6, 7, 11, 0),
+            lastStatus: BackupScheduleStatus.success,
+          ),
+          DateTime(2026, 6, 8, 9, 0),
+        ),
+        isFalse,
+      );
+    });
+
+    test('slot πριν από την αγκύρωση προγράμματος δεν λογίζεται χαμένο', () {
+      // Δευτέρα 2026-06-08 09:00 ορίστηκε πρόγραμμα Σαββάτου: το περασμένο
+      // Σάββατο 06-06 δεν «χρωστιέται».
+      expect(
+        BackupScheduleStatusFormatter.shouldMarkScheduleMissed(
+          _settings(
+            days: const [6],
+            time: '18:42',
+            anchor: DateTime(2026, 6, 8, 9, 0),
+          ),
+          DateTime(2026, 6, 8, 10, 0),
+        ),
+        isFalse,
+      );
+    });
+
+    test('φρέσκια ρύθμιση χωρίς κανένα ιστορικό δεν χρωστά περασμένο slot', () {
+      // Παλιές ρυθμίσεις χωρίς αγκύρωση και χωρίς καμία προσπάθεια: σιωπή
+      // (δεν ξεχωρίζει από πρόγραμμα που μόλις ορίστηκε).
+      expect(
+        BackupScheduleStatusFormatter.shouldMarkScheduleMissed(
+          _settings(days: const [6], time: '18:42'),
+          DateTime(2026, 6, 7, 10, 0),
+        ),
+        isFalse,
+      );
+    });
+
+    test('η αγκύρωση δεν κρύβει slot μεταγενέστερό της', () {
+      // Αγκύρωση την Παρασκευή, slot το Σάββατο, εκκίνηση τη Δευτέρα → χαμένο.
+      expect(
+        BackupScheduleStatusFormatter.shouldMarkScheduleMissed(
+          _settings(
+            days: const [6],
+            time: '18:42',
+            anchor: DateTime(2026, 6, 5, 12, 0),
+          ),
+          DateTime(2026, 6, 8, 9, 0),
+        ),
+        isTrue,
+      );
     });
   });
 

@@ -58,10 +58,9 @@ void main() {
 
       final file = service.currentFile;
       expect(file, isNotNull);
-      expect(
-        file!.uri.pathSegments.last,
-        'shutdown_trace_2026-07-19_09-56-00.log',
-      );
+      // Ανά ημερομηνία (όπως τα αρχεία καταρρεύσεων) — όχι ένα αρχείο ανά
+      // κλείσιμο, αλλιώς ο φάκελος πλημμυρίζει.
+      expect(file!.uri.pathSegments.last, 'shutdown_trace_2026-07-19.log');
       final content = await file.readAsString();
       expect(content, contains('[2026-07-19 09:56:00]'));
       expect(content, contains('Αποθήκευση θέσης παραθύρου'));
@@ -130,9 +129,55 @@ void main() {
         reason: greekExpectMsg('Πρέπει να μείνουν μόνο 2 αρχεία ιχνηλάτησης'),
       );
       expect(files, [
-        'shutdown_trace_2026-07-03_10-00-00.log',
-        'shutdown_trace_2026-07-04_10-00-00.log',
+        'shutdown_trace_2026-07-03.log',
+        'shutdown_trace_2026-07-04.log',
       ]);
+    });
+
+    test('δύο κλεισίματα την ίδια ημέρα γράφουν στο ΙΔΙΟ αρχείο', () async {
+      for (final stamp in [
+        DateTime(2026, 7, 19, 9, 0, 0),
+        DateTime(2026, 7, 19, 17, 30, 0),
+      ]) {
+        final service = ShutdownTraceService(
+          logsDirectory: logsDir.path,
+          enabled: true,
+          retentionCount: 5,
+          now: () => stamp,
+        );
+        await service.beginSession();
+        service.recordEvent(
+          const ShutdownStepEvent(
+            stepIndex: 0,
+            label: 'Αποθήκευση θέσης παραθύρου',
+            phase: ShutdownStepPhase.started,
+          ),
+        );
+        await service.endSession();
+      }
+
+      final files = logsDir
+          .listSync()
+          .whereType<File>()
+          .where((f) => f.path.contains('shutdown_trace_'))
+          .toList();
+      expect(
+        files,
+        hasLength(1),
+        reason: greekExpectMsg(
+          'Ίδια ημέρα = ένα αρχείο ιχνηλάτησης, όχι ένα ανά κλείσιμο',
+        ),
+      );
+      final content = await files.single.readAsString();
+      expect(content, contains('[2026-07-19 09:00:00]'));
+      expect(content, contains('[2026-07-19 17:30:00]'));
+      expect(
+        RegExp('=== shutdown trace start ===').allMatches(content),
+        hasLength(2),
+        reason: greekExpectMsg(
+          'Κάθε κλείσιμο προσθέτει τη δική του ενότητα στο ημερήσιο αρχείο',
+        ),
+      );
     });
   });
 

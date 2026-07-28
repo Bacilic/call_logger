@@ -121,7 +121,16 @@ abstract final class BackupScheduleStatusFormatter {
     return true;
   }
 
-  /// True μόνο σε προγραμματισμένη ημέρα, μετά την ώρα, όταν λείπει αντίγραφο σήμερα.
+  /// True όταν το τελευταίο περασμένο slot του προγράμματος (έως 14 ημέρες
+  /// πίσω) έμεινε χωρίς αντίγραφο — ανεξαρτήτως του αν σήμερα είναι
+  /// προγραμματισμένη ημέρα, ώστε χαμένο Σάββατο να αναφέρεται και τη Δευτέρα.
+  ///
+  /// Ένα slot λογίζεται καλυμμένο όταν υπάρχει προσπάθεια (προγραμματισμένη ή
+  /// χειροκίνητη) στο slot ή μετά, χειροκίνητο αντίγραφο την ίδια ημέρα με το
+  /// slot, ή επιτυχής προγραμματισμένη προσπάθεια την ίδια ημέρα. Slots πριν
+  /// από το [DatabaseBackupSettings.scheduleAnchorAt] δεν λογίζονται. Χωρίς
+  /// κανένα ιστορικό (ούτε προσπάθεια, ούτε αγκύρωση) περασμένο slot άλλης
+  /// ημέρας δεν αναφέρεται — δεν ξεχωρίζει από φρέσκια ρύθμιση προγράμματος.
   static bool shouldMarkScheduleMissed(
     DatabaseBackupSettings settings,
     DateTime now,
@@ -130,15 +139,36 @@ abstract final class BackupScheduleStatusFormatter {
     if (settings.destinationDirectory.trim().isEmpty) return false;
 
     final local = now.toLocal();
-    if (!BackupScheduleUtils.isScheduledWeekday(local, settings.backupDays)) {
-      return false;
-    }
-    if (!BackupScheduleUtils.hasReachedTimeToday(local, settings.backupTime)) {
-      return false;
-    }
+    final slot = BackupScheduleUtils.lastPassedScheduleInstant(
+      local,
+      settings.backupDays,
+      settings.backupTime,
+    );
+    if (slot == null) return false;
+
+    final anchor = settings.scheduleAnchorAt?.toLocal();
+    if (anchor != null && slot.isBefore(anchor)) return false;
+
     if (isScheduleSatisfiedForToday(settings, local)) return false;
-    if (BackupScheduleStatus.normalize(settings.lastBackupStatus) ==
-        BackupScheduleStatus.failed) {
+    final status = BackupScheduleStatus.normalize(settings.lastBackupStatus);
+    if (status == BackupScheduleStatus.failed) return false;
+
+    final attempt = settings.lastBackupAttempt?.toLocal();
+    final manual = settings.lastManualBackupAttempt?.toLocal();
+
+    final slotIsToday = BackupScheduleUtils.isSameLocalDate(slot, local);
+    if (!slotIsToday && attempt == null && manual == null && anchor == null) {
+      return false;
+    }
+
+    if (attempt != null && !attempt.isBefore(slot)) return false;
+    if (manual != null && !manual.isBefore(slot)) return false;
+    if (manual != null && BackupScheduleUtils.isSameLocalDate(manual, slot)) {
+      return false;
+    }
+    if (attempt != null &&
+        BackupScheduleUtils.isSameLocalDate(attempt, slot) &&
+        status == BackupScheduleStatus.success) {
       return false;
     }
     return true;
@@ -161,15 +191,21 @@ abstract final class BackupScheduleStatusFormatter {
   }
 
   static String _formatLastRecordedAttemptLine(
-    DatabaseBackupSettings settings,
-  ) {
+    DatabaseBackupSettings settings, {
+    String? dbBaseName,
+  }) {
+    // Οι ρυθμίσεις (και το ιστορικό προσπαθειών) ζουν ΜΕΣΑ σε κάθε βάση, οπότε
+    // η γραμμή δηλώνει ρητά ποια βάση αφορά — μετά από αλλαγή βάσης το «καμία
+    // καταγραφή» αλλιώς μοιάζει με χαμένο ιστορικό.
+    final base = dbBaseName?.trim() ?? '';
+    final scope = base.isEmpty ? '' : ' (βάση «$base»)';
     final last = settings.lastBackupAttempt;
     if (last == null) {
-      return 'Τελευταία καταγεγραμμένη προσπάθεια: καμία καταγραφή.';
+      return 'Τελευταία καταγεγραμμένη προσπάθεια$scope: καμία καταγραφή.';
     }
 
     final datePart = formatLocalDateTime(last.toLocal());
-    const prefix = 'Τελευταία καταγεγραμμένη προσπάθεια:';
+    final prefix = 'Τελευταία καταγεγραμμένη προσπάθεια$scope:';
 
     switch (BackupScheduleStatus.normalize(settings.lastBackupStatus)) {
       case BackupScheduleStatus.success:
@@ -196,15 +232,20 @@ abstract final class BackupScheduleStatusFormatter {
   static String destinationContentLabelEl(
     BackupDestinationContentResult content,
   ) {
+    // Τα αρχεία αντιγράφου ταιριάζονται με το όνομα της τρέχουσας βάσης, οπότε
+    // το μήνυμα πρέπει να λέει ΠΟΙΑ βάση αφορά: μετά από αλλαγή βάσης ο ίδιος
+    // φάκελος μπορεί να είναι γεμάτος αντίγραφα άλλης βάσης.
+    final base = content.dbBaseName.trim();
+    final forBase = base.isEmpty ? '' : ' για τη βάση «$base»';
     switch (content.kind) {
       case BackupDestinationContentKind.folderMissing:
         return 'ο φάκελος προορισμού δεν υπάρχει';
       case BackupDestinationContentKind.folderEmptyNoFiles:
-        return 'ο φάκελος υπάρχει αλλά δεν βρέθηκαν αρχεία αντιγράφου';
+        return 'ο φάκελος υπάρχει αλλά δεν βρέθηκαν αρχεία αντιγράφου$forBase';
       case BackupDestinationContentKind.folderOk:
         final n = content.matchingBackupFileCount;
         final latest = content.latestBackupModified;
-        final countPart = n == 1 ? '1 αρχείο' : '$n αρχεία';
+        final countPart = n == 1 ? '1 αρχείο$forBase' : '$n αρχεία$forBase';
         if (latest == null) {
           return n == 1 ? 'Βρέθηκε $countPart' : 'Βρέθηκαν $countPart';
         }
@@ -267,6 +308,7 @@ abstract final class BackupScheduleStatusFormatter {
     required DatabaseBackupSettings settings,
     DateTime? now,
     bool backupJobRunning = false,
+    String? dbBaseName,
   }) {
     final current = (now ?? DateTime.now()).toLocal();
 
@@ -357,12 +399,17 @@ abstract final class BackupScheduleStatusFormatter {
       }
     }
 
-    var lastText = _formatLastRecordedAttemptLine(settings);
+    var lastText = _formatLastRecordedAttemptLine(
+      settings,
+      dbBaseName: dbBaseName,
+    );
 
     final manual = settings.lastManualBackupAttempt;
     if (manual != null) {
+      final base = dbBaseName?.trim() ?? '';
+      final scope = base.isEmpty ? '' : ' (βάση «$base»)';
       lastText =
-          '$lastText\nΤελευταίο χειροκίνητο αντίγραφο: ${formatLocalDateTime(manual.toLocal())}';
+          '$lastText\nΤελευταίο χειροκίνητο αντίγραφο$scope: ${formatLocalDateTime(manual.toLocal())}';
     }
 
     return BackupScheduleStatusInfo(

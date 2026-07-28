@@ -35,7 +35,14 @@ class DatabaseBackupSettingsNotifier extends Notifier<DatabaseBackupSettings> {
   }
 
   Future<void> setDestinationDirectory(String value) async {
-    state = state.copyWith(destinationDirectory: value);
+    // Μετάβαση από «χωρίς φάκελο» σε ορισμένο φάκελο = ενεργοποίηση του
+    // προγράμματος: αγκυρώνουμε ώστε περασμένα slots να μη λογιστούν «χαμένα».
+    final activatesSchedule =
+        state.destinationDirectory.trim().isEmpty && value.trim().isNotEmpty;
+    state = state.copyWith(
+      destinationDirectory: value,
+      scheduleAnchorAt: activatesSchedule ? DateTime.now() : null,
+    );
     await _persist();
   }
 
@@ -82,7 +89,11 @@ class DatabaseBackupSettingsNotifier extends Notifier<DatabaseBackupSettings> {
   }
 
   Future<void> setBackupOnExit(bool value) async {
-    state = state.copyWith(backupOnExit: value);
+    final turningOn = value && !state.backupOnExit;
+    state = state.copyWith(
+      backupOnExit: value,
+      scheduleAnchorAt: turningOn ? DateTime.now() : null,
+    );
     await _persist();
   }
 
@@ -98,12 +109,16 @@ class DatabaseBackupSettingsNotifier extends Notifier<DatabaseBackupSettings> {
       interval: normalized.isNotEmpty
           ? DatabaseBackupInterval.never
           : state.interval,
+      scheduleAnchorAt: DateTime.now(),
     );
     await _persist();
   }
 
   Future<void> setBackupTime(String value) async {
-    state = state.copyWith(backupTime: value.trim());
+    state = state.copyWith(
+      backupTime: value.trim(),
+      scheduleAnchorAt: DateTime.now(),
+    );
     await _persist();
   }
 
@@ -128,6 +143,17 @@ class DatabaseBackupSettingsNotifier extends Notifier<DatabaseBackupSettings> {
 
   Future<void> setLastManualBackupAttempt(DateTime value) async {
     state = state.copyWith(lastManualBackupAttempt: value);
+    await _persist();
+  }
+
+  /// Ρητή παράβλεψη χαμένου αντιγράφου από τον χρήστη: καθαρίζει την ένδειξη
+  /// ΚΑΙ αγκυρώνει το πρόγραμμα στο τώρα, ώστε το ίδιο περασμένο slot να μην
+  /// ξανα-αναφερθεί «χαμένο» σε κάθε επόμενη εκκίνηση.
+  Future<void> acknowledgeMissedBackup() async {
+    state = state.copyWith(
+      lastBackupStatus: BackupScheduleStatus.none,
+      scheduleAnchorAt: DateTime.now(),
+    );
     await _persist();
   }
 
