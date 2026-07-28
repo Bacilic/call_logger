@@ -1,4 +1,3 @@
-import '../../../core/services/lookup_service.dart';
 import '../../../core/utils/phone_list_parser.dart';
 
 /// Μοντέλο χρήστη (πίνακας users + M2M `user_phones` / `phones`).
@@ -10,6 +9,7 @@ class UserModel {
     this.lastName,
     this.phones = const [],
     this.departmentId,
+    this.departmentName,
     this.location,
     this.notes,
     this.isDeleted = false,
@@ -22,6 +22,14 @@ class UserModel {
   /// Κανονικοποιημένα τηλέφωνα (από `phones` / `user_phones`).
   final List<String> phones;
   final int? departmentId;
+
+  /// Όνομα τμήματος για εμφάνιση — ΚΑΝΟΝΙΚΟ πεδίο, όχι κρυφή αναζήτηση.
+  ///
+  /// Το γεμίζει το [UserRepository.getAllUsers] (join με departments) και το
+  /// [LookupService] στα injected καταλόγους των τεστ. Σημασιολογία ίδια με τον
+  /// παλιό getter: `null` = χωρίς τμήμα, `''` = τμήμα-id χωρίς ενεργή εγγραφή.
+  /// ΔΕΝ αποθηκεύεται στη βάση (δεν υπάρχει στήλη — βλ. [toMap]).
+  final String? departmentName;
 
   /// Φυσική τοποθεσία / γραφείο χρήστη (στήλη `users.location`).
   final String? location;
@@ -40,9 +48,6 @@ class UserModel {
     if (f.isEmpty && l.isEmpty) return null;
     return '$f $l'.trim();
   }
-
-  String? get departmentName =>
-      LookupService.instance.getDepartmentName(departmentId);
 
   /// Για εμφάνιση σε λίστες (όνομα + τμήμα).
   String get fullNameWithDepartment {
@@ -72,6 +77,7 @@ class UserModel {
       lastName: map['last_name'] as String?,
       phones: _phonesFromMap(map),
       departmentId: map['department_id'] as int?,
+      departmentName: map['department_name'] as String?,
       location: map['location'] as String?,
       notes: map['notes'] as String?,
       isDeleted: (map['is_deleted'] as int?) == 1,
@@ -79,6 +85,9 @@ class UserModel {
   }
 
   /// Για επίπεδο SQLite `users` + ξεχωριστή ενημέρωση `user_phones` μέσω [DatabaseHelper.replaceUserPhones].
+  ///
+  /// Το [departmentName] παραλείπεται σκόπιμα: είναι παράγωγο εμφάνισης
+  /// (από join), όχι στήλη του πίνακα `users`.
   Map<String, dynamic> toMap() {
     return {
       if (id != null) 'id': id,
@@ -98,6 +107,7 @@ class UserModel {
     String? lastName,
     List<String>? phones,
     int? departmentId,
+    String? departmentName,
     String? location,
     String? notes,
     bool? isDeleted,
@@ -108,6 +118,7 @@ class UserModel {
       lastName: lastName ?? this.lastName,
       phones: phones ?? this.phones,
       departmentId: departmentId ?? this.departmentId,
+      departmentName: departmentName ?? this.departmentName,
       location: location ?? this.location,
       notes: notes ?? this.notes,
       isDeleted: isDeleted ?? this.isDeleted,

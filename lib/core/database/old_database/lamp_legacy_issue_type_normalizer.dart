@@ -34,11 +34,7 @@ Future<int> normalizeLegacyDataIssueTypes(Database db) async {
     final changed = await db.rawUpdate(
       'UPDATE data_issues SET issue_type = ?, column_name = ? '
       'WHERE issue_type = ?',
-      <Object?>[
-        entry.value.newIssueType,
-        entry.value.newColumnName,
-        entry.key,
-      ],
+      <Object?>[entry.value.newIssueType, entry.value.newColumnName, entry.key],
     );
     totalChanged += changed;
   }

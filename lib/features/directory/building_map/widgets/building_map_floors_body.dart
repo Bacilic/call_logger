@@ -8,6 +8,7 @@ import '../../../../core/models/building_map_floor.dart';
 import '../../../../core/services/building_map_storage.dart';
 import '../../providers/department_directory_provider.dart';
 import '../controllers/building_map_controller.dart';
+import '../models/building_map_jump_target.dart';
 import '../providers/building_map_providers.dart';
 import 'building_map_empty_canvas_message.dart';
 import 'building_map_floor_menu_button.dart';
@@ -179,11 +180,13 @@ class _BuildingMapFloorsBodyState extends ConsumerState<BuildingMapFloorsBody> {
 
         final globalSearchField = BuildingMapOmnisearchField(
           enabled: floors.isNotEmpty,
-          repo: widget.repo,
+          search: widget.repo.search.searchBuildingMapOmnisearch,
           controller: _globalSearchController,
           focusNode: _globalSearchFocusNode,
-          onResolveEntity: (entity) =>
-              controller.resolveAndJumpToEntity(context, entity),
+          onResolveEntity: (hit) => controller.resolveAndJumpToEntity(
+            context,
+            BuildingMapJumpTarget.searchHit(hit),
+          ),
         );
 
         void onFloorsMutated() {

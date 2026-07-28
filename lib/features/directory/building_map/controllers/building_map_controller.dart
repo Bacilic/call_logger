@@ -20,6 +20,7 @@ import '../../../../core/widgets/spell_check_controller.dart';
 import '../../../floor_map/services/floor_color_assignment_service.dart';
 import '../../models/department_model.dart';
 import '../../providers/department_directory_provider.dart';
+import '../models/building_map_jump_target.dart';
 import '../../screens/widgets/department_color_palette.dart';
 import '../building_map_label_layout.dart';
 import '../providers/building_map_providers.dart';
@@ -1307,9 +1308,62 @@ class BuildingMapController {
         );
   }
 
+  /// Υποψήφια τμήματα ανά είδος στόχου.
+  ///
+  /// Εξαντλητικό switch σε sealed τύπο: νέο είδος στόχου δεν μεταγλωττίζεται
+  /// μέχρι να αποκτήσει χειρισμό εδώ. Κενή λίστα σε αδιέξοδο — ο καλών
+  /// δείχνει το ενιαίο «Δεν βρέθηκε τμήμα».
+  Future<List<int>> _candidateDepartmentIdsFor(
+    BuildContext context,
+    BuildingMapJumpTarget target,
+  ) {
+    switch (target) {
+      case BuildingMapDepartmentJump(:final departmentId):
+        return Future.value([departmentId]);
+      case BuildingMapPhoneJump(:final phoneNumber):
+        return _departmentIdsForPhone(phoneNumber);
+      case BuildingMapUserJump(:final user):
+        final userId = user.id;
+        return userId == null
+            ? Future.value(const [])
+            : _departmentIdsForUserId(userId);
+      case BuildingMapEquipmentJump(:final equipment):
+        return _resolveDepartmentIdsFromEquipment(context, equipment);
+      case BuildingMapSearchHitJump(:final hit):
+        return _departmentIdsForSearchHit(context, hit);
+    }
+  }
+
+  /// Υποψήφια τμήματα για αποτέλεσμα της έξυπνης αναζήτησης.
+  Future<List<int>> _departmentIdsForSearchHit(
+    BuildContext context,
+    BuildingMapOmnisearchHit hit,
+  ) async {
+    switch (hit.kind) {
+      case BuildingMapOmnisearchEntityKind.department:
+        return [hit.entityId];
+      case BuildingMapOmnisearchEntityKind.user:
+        return hit.departmentIds.isNotEmpty
+            ? hit.departmentIds
+            : _departmentIdsForUserId(hit.entityId);
+      case BuildingMapOmnisearchEntityKind.equipment:
+        if (hit.departmentIds.isNotEmpty) return hit.departmentIds;
+        final lookup = LookupService.instance;
+        await lookup.loadFromDatabase(forceRefresh: true);
+        if (!context.mounted) return const [];
+        final equipment = lookup
+            .findEquipmentsByCode(hit.title)
+            .firstWhere(
+              (eq) => eq.id == hit.entityId,
+              orElse: () => EquipmentModel(id: hit.entityId),
+            );
+        return _resolveDepartmentIdsFromEquipment(context, equipment);
+    }
+  }
+
   Future<void> resolveAndJumpToEntity(
     BuildContext context,
-    dynamic entity,
+    BuildingMapJumpTarget target,
   ) async {
     final repos = _ref.read(buildingMapReposProvider).asData?.value;
     if (repos == null) {
@@ -1331,67 +1385,10 @@ class BuildingMapController {
         .where((d) => !d.isDeleted)
         .toList(growable: false);
 
-    List<int> candidateDepartmentIds = const [];
-    if (entity is BuildingMapOmnisearchHit) {
-      switch (entity.kind) {
-        case BuildingMapOmnisearchEntityKind.department:
-          candidateDepartmentIds = [entity.entityId];
-          break;
-        case BuildingMapOmnisearchEntityKind.user:
-          candidateDepartmentIds = entity.departmentIds.isNotEmpty
-              ? entity.departmentIds
-              : await _departmentIdsForUserId(entity.entityId);
-          break;
-        case BuildingMapOmnisearchEntityKind.equipment:
-          if (entity.departmentIds.isNotEmpty) {
-            candidateDepartmentIds = entity.departmentIds;
-          } else {
-            final lookup = LookupService.instance;
-            await lookup.loadFromDatabase(forceRefresh: true);
-            if (!context.mounted) return;
-            final equipment = lookup
-                .findEquipmentsByCode(entity.title)
-                .firstWhere(
-                  (eq) => eq.id == entity.entityId,
-                  orElse: () => EquipmentModel(id: entity.entityId),
-                );
-            candidateDepartmentIds = await _resolveDepartmentIdsFromEquipment(
-              context,
-              equipment,
-            );
-          }
-          break;
-      }
-    } else if (entity is DepartmentModel) {
-      if (entity.id != null) candidateDepartmentIds = [entity.id!];
-    } else if (entity is UserModel) {
-      final userId = entity.id;
-      if (userId != null) {
-        candidateDepartmentIds = await _departmentIdsForUserId(userId);
-      }
-    } else if (entity is EquipmentModel) {
-      if (!context.mounted) return;
-      candidateDepartmentIds = await _resolveDepartmentIdsFromEquipment(
-        context,
-        entity,
-      );
-    } else if (entity is int) {
-      candidateDepartmentIds = [entity];
-    } else if (entity is String) {
-      candidateDepartmentIds = await _departmentIdsForPhone(entity);
-    } else if (entity is Map<String, dynamic>) {
-      final kind = (entity['kind'] as String?)?.trim().toLowerCase();
-      final id = entity['id'];
-      if (kind == 'department' && id is int) {
-        candidateDepartmentIds = [id];
-      } else if (kind == 'user' && id is int) {
-        candidateDepartmentIds = await _departmentIdsForUserId(id);
-      } else if (kind == 'phone' && entity['phone'] is String) {
-        candidateDepartmentIds = await _departmentIdsForPhone(
-          entity['phone'] as String,
-        );
-      }
-    }
+    final candidateDepartmentIds = await _candidateDepartmentIdsFor(
+      context,
+      target,
+    );
 
     if (!context.mounted) return;
     final selectedDepartmentId = await _pickDepartmentIdIfNeeded(

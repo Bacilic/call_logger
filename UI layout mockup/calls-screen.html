@@ -1016,31 +1016,45 @@
       }
     }
 
+    /** Escape untrusted text before interpolating into HTML strings (XSS-safe). */
+    function escapeHtml(value) {
+      return String(value ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+    }
+
     function renderHist(container, items, mode) {
       if (!items || !items.length) {
         container.innerHTML = `<div class="empty-state">Δεν υπάρχουν εγγραφές</div>`;
         return;
       }
       container.innerHTML = items.map((it) => {
+        const date = escapeHtml(it.date);
+        const time = escapeHtml(it.time);
+        const tag = escapeHtml(it.tag || "—");
         if (mode === "eq") {
           return `<div class="hist-item">
             <span class="hi">${clockIco}</span>
             <div>
               <div class="hist-meta">
-                <span class="hist-date">${it.date} ${it.time}</span>
-                <span class="hist-tag">${it.tag || "—"}</span>
+                <span class="hist-date">${date} ${time}</span>
+                <span class="hist-tag">${tag}</span>
               </div>
             </div>
           </div>`;
         }
+        const note = escapeHtml(it.note || "");
         return `<div class="hist-item">
           <span class="hi">${docIco}</span>
           <div>
             <div class="hist-meta">
-              <span class="hist-date">${it.date} ${it.time}</span>
-              <span class="hist-tag">${it.tag || "—"}</span>
+              <span class="hist-date">${date} ${time}</span>
+              <span class="hist-tag">${tag}</span>
             </div>
-            <div class="hist-note">${it.note || ""}</div>
+            <div class="hist-note">${note}</div>
           </div>
         </div>`;
       }).join("");
@@ -1113,9 +1127,9 @@
         return;
       }
       suggest.innerHTML = entries.map(([key, p]) =>
-        `<button type="button" role="option" data-preset="${key}">
-          <strong>${p.phone}</strong> — ${p.caller}
-          <span class="sub">${p.department} · εξοπλισμός ${p.equipment}</span>
+        `<button type="button" role="option" data-preset="${escapeHtml(key)}">
+          <strong>${escapeHtml(p.phone)}</strong> — ${escapeHtml(p.caller)}
+          <span class="sub">${escapeHtml(p.department)} · εξοπλισμός ${escapeHtml(p.equipment)}</span>
         </button>`
       ).join("");
       suggest.classList.add("open");
@@ -1185,10 +1199,10 @@
     // Last 7
     document.getElementById("last7Body").innerHTML = LAST7.map((r) =>
       `<tr>
-        <td>${r.time}</td>
-        <td>${r.phone || "—"}</td>
-        <td>${r.caller || "—"}</td>
-        <td>${r.department || "—"}</td>
+        <td>${escapeHtml(r.time)}</td>
+        <td>${escapeHtml(r.phone || "—")}</td>
+        <td>${escapeHtml(r.caller || "—")}</td>
+        <td>${escapeHtml(r.department || "—")}</td>
       </tr>`
     ).join("");
 

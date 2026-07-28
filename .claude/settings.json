@@ -1,0 +1,25 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(flutter test *)",
+      "PowerShell(flutter analyze *)",
+      "PowerShell(dart analyze *)",
+      "PowerShell(dart format *)",
+      "PowerShell(Select-String *)",
+      "PowerShell(Get-Content *)",
+      "PowerShell(Get-ChildItem *)",
+      "PowerShell(Get-Process *)",
+      "PowerShell(Get-Item *)",
+      "PowerShell(Test-Path *)",
+      "PowerShell(git status *)",
+      "PowerShell(git diff *)",
+      "PowerShell(git log *)",
+      "PowerShell(git show *)",
+      "PowerShell(git branch *)",
+      "Bash(flutter test *)",
+      "Bash(flutter analyze *)",
+      "Bash(dart analyze *)",
+      "Bash(dart format *)"
+    ]
+  }
+}

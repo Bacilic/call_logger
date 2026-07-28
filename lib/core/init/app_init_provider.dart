@@ -5,6 +5,7 @@ import '../database/department_floor_migration.dart';
 import '../database/department_name_key_migration.dart';
 import '../services/audit_retention_runner.dart';
 import 'app_initializer.dart';
+import 'startup_notices.dart';
 
 /// Provider αρχικοποίησης εφαρμογής. Τρέχει μία φορά στην εκκίνηση.
 /// Με `--profile` η προεπιλεγμένη βάση είναι ήδη στο [AppConfig.defaultDbPath].
@@ -21,18 +22,21 @@ final appInitProvider = FutureProvider<AppInitResult>((ref) async {
     await AppInitializer.activateBackupSchedulingAfterDatabaseReady(ref);
     try {
       await AuditRetentionRunner.applyIfConfiguredOnStartup();
-    } catch (_) {
+    } catch (e, st) {
       // Soft-fail: η εκκίνηση δεν μπλοκάρεται από retention.
+      recordStartupNotice('Εκκαθάριση ιστορικού ελέγχου', e, st);
     }
     try {
       await DepartmentFloorMigrationRunner.runIfNeeded();
-    } catch (_) {
+    } catch (e, st) {
       // Soft-fail: συμπλήρωση floor_id δεν πρέπει να μπλοκάρει την εκκίνηση.
+      recordStartupNotice('Μεταφορά ορόφων τμημάτων', e, st);
     }
     try {
       await DepartmentNameKeyMigrationRunner.runIfNeeded();
-    } catch (_) {
+    } catch (e, st) {
       // Soft-fail: επαναϋπολογισμός name_key δεν πρέπει να μπλοκάρει την εκκίνηση.
+      recordStartupNotice('Επαναϋπολογισμός name_key', e, st);
     }
   }
   return result;

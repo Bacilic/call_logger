@@ -1,4 +1,4 @@
-import '../../utils/search_text_normalizer.dart';
+import '../../utils/text_similarity.dart';
 
 class LampIssueMatchingEngine {
   /// Confidence για ταύτιση «το ένα περιέχει το άλλο» (substring containment).
@@ -11,37 +11,14 @@ class LampIssueMatchingEngine {
     String? sourceDepartment,
     String? candidateDepartment,
   }) {
-    final a = normalizeReferenceText(source);
-    final b = normalizeReferenceText(candidate);
-    if (a.isEmpty || b.isEmpty) return 0;
-    if (a == b) return 100;
-    if (a.contains(b) || b.contains(a)) {
-      return substringContainmentScore(
+    return TextSimilarity.score(
+      source,
+      candidate,
+      containmentScore: substringContainmentScore(
         sourceDepartment: sourceDepartment,
         candidateDepartment: candidateDepartment,
-      );
-    }
-    final maxLen = a.length > b.length ? a.length : b.length;
-    final distance1 = levenshtein(a, b);
-    final s1 = 1 - distance1 / maxLen;
-
-    final aSorted = _sortedTokensNormalized(a);
-    final bSorted = _sortedTokensNormalized(b);
-    final sortedMaxLen = aSorted.length > bSorted.length
-        ? aSorted.length
-        : bSorted.length;
-    final distance2 = levenshtein(aSorted, bSorted);
-    final s2 = sortedMaxLen == 0 ? 0.0 : 1 - distance2 / sortedMaxLen;
-
-    final best = s1 > s2 ? s1 : s2;
-    return (best * 100).round().clamp(0, 95);
-  }
-
-  String _sortedTokensNormalized(String normalized) {
-    final tokens =
-        normalized.split(' ').where((token) => token.isNotEmpty).toList()
-          ..sort();
-    return tokens.join(' ');
+      ),
+    );
   }
 
   int substringContainmentScore({
@@ -60,32 +37,11 @@ class LampIssueMatchingEngine {
   }
 
   String normalizeReferenceText(String value) {
-    return SearchTextNormalizer.normalizeForSearch(
-      value.replaceAll(RegExp(r'[-/()\\]+'), ' '),
-    );
+    return TextSimilarity.normalize(value);
   }
 
   int levenshtein(String a, String b) {
-    if (a == b) return 0;
-    if (a.length < b.length) {
-      final tmp = a;
-      a = b;
-      b = tmp;
-    }
-    var previous = List<int>.generate(b.length + 1, (i) => i);
-    for (var i = 0; i < a.length; i++) {
-      final current = <int>[i + 1];
-      for (var j = 0; j < b.length; j++) {
-        final insert = current[j] + 1;
-        final delete = previous[j + 1] + 1;
-        final substitute = previous[j] + (a[i] == b[j] ? 0 : 1);
-        current.add(
-          [insert, delete, substitute].reduce((x, y) => x < y ? x : y),
-        );
-      }
-      previous = current;
-    }
-    return previous.last;
+    return TextSimilarity.levenshtein(a, b);
   }
 }
 

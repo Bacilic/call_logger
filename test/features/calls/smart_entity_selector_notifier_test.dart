@@ -1138,7 +1138,7 @@ void main() {
       },
     );
 
-    // clearCaller δεν αδειάζει τμήμα/εξοπλισμό (v2 §Γ.1).
+    // ClearCaller δεν αδειάζει τμήμα/εξοπλισμό.
     //   flutter test test/features/calls/smart_entity_selector_notifier_test.dart --plain-name "clearCaller"
     test('clearCaller: διατηρεί χειροκίνητο τμήμα και εξοπλισμό', () async {
       final container = await _containerWithCatalog(
@@ -1237,9 +1237,9 @@ void main() {
       },
     );
 
-    // department conflict — ανύπαρκτο κείμενο τμήματος (v2 §Α.3).
+    // Department conflict — ανύπαρκτο κείμενο τμήματος.
     //   flutter test test/features/calls/smart_entity_selector_notifier_test.dart --plain-name "department conflict — ανύπαρκτο κείμενο"
-    group('department conflict — ανύπαρκτο κείμενο (v2 §Α.3)', () {
+    group('department conflict — ανύπαρκτο κείμενο', () {
       const nosiliaId = 7;
       const nosiliaName = 'Νοσήλια';
 
@@ -1256,7 +1256,7 @@ void main() {
       ];
 
       test(
-        'ανύπαρκτο τμήμα + καλούντας άλλου τμήματος → mismatch και tooltip Νοσήλια',
+        'ανύπαρκτο τμήμα + καλούντας άλλου τμήματος → mismatch και tooltip με τον καλούντα',
         () async {
           final container = await _containerWithCatalog(
             users: [nosiliaUser()],
@@ -1273,10 +1273,12 @@ void main() {
             ConflictSeverity.mismatch,
             reason: greekExpectMsg('Δείκτης σύγκρουσης στο ανύπαρκτο τμήμα'),
           );
+          // Το μήνυμα ονομάζει το άλλο μέλος του ζεύγους και τη σχέση
+          // που λείπει — όχι πού ανήκει πραγματικά η κάθε οντότητα.
           expect(
             s.conflictTooltipFor(SelectorField.department),
-            contains(nosiliaName),
-            reason: greekExpectMsg('Tooltip με τμήμα καλούντα'),
+            contains('Μαρία Νοσοκόμα'),
+            reason: greekExpectMsg('Tooltip ονομάζει τον καλούντα'),
           );
         },
       );
@@ -1350,9 +1352,9 @@ void main() {
       );
     });
 
-    // setCaller — διατήρηση γεμάτου τμήματος (v2 §Α.2 / §Δ.2).
+    // SetCaller — διατήρηση γεμάτου τμήματος.
     //   flutter test test/features/calls/smart_entity_selector_notifier_test.dart --plain-name "setCaller — διατήρηση γεμάτου τμήματος"
-    group('setCaller — διατήρηση γεμάτου τμήματος (v2 §Α.2/§Δ.2)', () {
+    group('setCaller — διατήρηση γεμάτου τμήματος', () {
       const nosiliaId = 7;
       const nosiliaName = 'Νοσήλια';
       const surgeryId = 8;
@@ -1371,7 +1373,7 @@ void main() {
         DepartmentModel(id: surgeryId, name: surgeryName),
       ];
 
-      // Τεστ Α: ανύπαρκτο τμήμα στη φόρμα → δεν αντικαθίσταται, εμφανίζεται mismatch (v2 §Α.3).
+      // Τεστ Α: ανύπαρκτο τμήμα στη φόρμα → δεν αντικαθίσταται, εμφανίζεται mismatch.
       test(
         'γεμάτο ανύπαρκτο τμήμα + επιλογή καλούντα → διατήρηση κειμένου και mismatch',
         () async {
@@ -2509,19 +2511,19 @@ void main() {
             n.performEquipmentLookupByCode('XF-SALES-01');
             s = container.read(callSmartEntityProvider);
             printStateSnapshot('Μετά αλλαγή εξοπλισμού σε κάτοχο 522', s);
-            // v2 §Β: τα συμπληρωμένα πεδία καλούντα/τμήμα ΔΕΝ αντικαθίστανται.
+            // Τα συμπληρωμένα πεδία καλούντα/τμήμα ΔΕΝ αντικαθίστανται.
             expect(
               s.selectedCaller?.id,
               521,
               reason: greekExpectMsg(
-                'v2 §Β: ο συμπληρωμένος καλών δεν αντικαθίσταται',
+                'ο συμπληρωμένος καλών δεν αντικαθίσταται',
               ),
             );
             expect(
               s.departmentText,
               'R&D',
               reason: greekExpectMsg(
-                'v2 §Β: το συμπληρωμένο τμήμα δεν αντικαθίσταται',
+                'το συμπληρωμένο τμήμα δεν αντικαθίσταται',
               ),
             );
             expect(
@@ -2531,7 +2533,7 @@ void main() {
                 'Επιλεγμένος νέος εξοπλισμός (πεδίο-πηγή)',
               ),
             );
-            // v2 §Α.3: ο νέος εξοπλισμός διαφωνεί με καλούντα/τμήμα → κόκκινο ✱.
+            // Ο νέος εξοπλισμός διαφωνεί με καλούντα/τμήμα → κόκκινο ✱.
             expect(
               s.conflictSeverityFor(SelectorField.caller),
               ConflictSeverity.mismatch,
@@ -2603,7 +2605,7 @@ void main() {
             var s = container.read(callSmartEntityProvider);
             printStateSnapshot('Πριν χειροκίνητη αλλαγή καλούντα', s);
 
-            // v2 §Β: ένας συμπληρωμένος (isFilled) καλών προστατεύεται από
+            // Ένας συμπληρωμένος (isFilled) καλών προστατεύεται από
             // αντικατάσταση· δεν χρειάζεται πλέον σήμα χειροκίνητου.
             n.updateSelectedCaller(u2);
             n.updateCallerDisplayText(u2.name ?? 'Ιωάννα Δύο');
@@ -2706,13 +2708,13 @@ void main() {
             s = container.read(callSmartEntityProvider);
             printStateSnapshot('Μετά εξοπλισμό κάτοχου τμήματος Νότιο', s);
             expect(s.selectedEquipment?.code, 'XF-D2');
-            // v2 §Β: ο συμπληρωμένος καλών (541) δεν αντικαθίσταται από τον κάτοχο
+            // Ο συμπληρωμένος καλών (541) δεν αντικαθίσταται από τον κάτοχο
             // του εξοπλισμού (542)· αντί αυτού εμφανίζεται δείκτης σύγκρουσης.
             expect(
               s.selectedCaller?.id,
               541,
               reason: greekExpectMsg(
-                'v2 §Β: ο συμπληρωμένος καλών δεν αντικαθίσταται',
+                'ο συμπληρωμένος καλών δεν αντικαθίσταται',
               ),
             );
             expect(
@@ -2739,7 +2741,7 @@ void main() {
       );
 
       // Cross-field 6: νέο τηλέφωνο (χωρίς ακόμη lookup) → καθαρισμός caller· εξοπλισμός
-      // διατηρείται όταν equipmentText είναι γεμάτο (v2 §Ζ.3 preserveEquipment).
+      // διατηρείται όταν equipmentText είναι γεμάτο (preserveEquipment).
       //   flutter test test/features/calls/smart_entity_selector_notifier_test.dart --plain-name "Σενάριο 6: όλα γεμάτα → αλλαγή τηλεφώνου καθαρίζει καλούντα, διατηρεί εξοπλισμό"
       test(
         'Σενάριο 6: όλα γεμάτα → αλλαγή τηλεφώνου καθαρίζει καλούντα, διατηρεί εξοπλισμό',

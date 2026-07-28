@@ -319,7 +319,7 @@ class DirectoryNotifier extends Notifier<DirectoryState> {
   }
 
   /// Φιλτράρισμα in-memory σε ενιαίο κείμενο ανά χρήστη: όνομα, επώνυμο, τηλέφωνο,
-  /// σημειώσεις, τμήμα ([LookupService] μέσω [UserModel.departmentName]).
+  /// σημειώσεις, τμήμα (πεδίο [UserModel.departmentName], γεμισμένο στη φόρτωση).
   /// Όλα τα tokens του query πρέπει να περιέχονται στο κανονικοποιημένο blob
   /// ([SearchTextNormalizer.containsAllTokens]).
   void filterAndSort() {

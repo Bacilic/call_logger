@@ -37,15 +37,14 @@ class _AppInitWrapperState extends ConsumerState<AppInitWrapper> {
     try {
       path = await SettingsService().getDatabasePath();
     } catch (e) {
-      final base =
-          'Αποτυχία επαναδοκιμής: ${humanizeUserFacingError(e)}';
+      final base = 'Αποτυχία επαναδοκιμής: ${humanizeUserFacingError(e)}';
       final message = closeFailure == null
           ? base
           : '$base\n\n'
-              'Το κλείσιμο της τρέχουσας σύνδεσης απέτυχε: '
-              '${humanizeUserFacingError(closeFailure)}\n'
-              'Αν το αρχείο είναι κλειδωμένο, κλείστε τυχόν άλλο ανοιχτό αντίγραφο '
-              'της εφαρμογής και δοκιμάστε ξανά.';
+                'Το κλείσιμο της τρέχουσας σύνδεσης απέτυχε: '
+                '${humanizeUserFacingError(closeFailure)}\n'
+                'Αν το αρχείο είναι κλειδωμένο, κλείστε τυχόν άλλο ανοιχτό αντίγραφο '
+                'της εφαρμογής και δοκιμάστε ξανά.';
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -66,10 +65,10 @@ class _AppInitWrapperState extends ConsumerState<AppInitWrapper> {
       final message = closeFailure == null
           ? base
           : '$base\n\n'
-              'Το κλείσιμο της τρέχουσας σύνδεσης απέτυχε: '
-              '${humanizeUserFacingError(closeFailure)}\n'
-              'Αν το αρχείο είναι κλειδωμένο, κλείστε τυχόν άλλο ανοιχτό αντίγραφο '
-              'της εφαρμογής και δοκιμάστε ξανά.';
+                'Το κλείσιμο της τρέχουσας σύνδεσης απέτυχε: '
+                '${humanizeUserFacingError(closeFailure)}\n'
+                'Αν το αρχείο είναι κλειδωμένο, κλείστε τυχόν άλλο ανοιχτό αντίγραφο '
+                'της εφαρμογής και δοκιμάστε ξανά.';
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(

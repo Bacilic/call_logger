@@ -356,6 +356,14 @@ mixin SmartEntitySelectorAssociationMixin
                 ? lookupNow.findDepartmentByName(s.departmentText)?.id
                 : null);
         final equipTrim = s.equipmentText.trim();
+        // Όνομα τμήματος: από το lookup αν το ξέρει ήδη, αλλιώς από το πεδίο —
+        // το νεοδημιουργημένο τμήμα δεν έχει προλάβει να μπει στο cache.
+        final departmentNameNow = departmentIdNow == null
+            ? null
+            : (lookupNow?.departmentIdToName[departmentIdNow] ??
+                  (s.departmentText.trim().isNotEmpty
+                      ? s.departmentText.trim()
+                      : ''));
         state = state.copyWith(
           selectedCaller: UserModel(
             id: userId,
@@ -363,6 +371,7 @@ mixin SmartEntitySelectorAssociationMixin
             lastName: parsed.lastName,
             phones: parsedPhones,
             departmentId: departmentIdNow,
+            departmentName: departmentNameNow,
           ),
           selectedDepartmentId: departmentIdNow,
           selectedEquipment: equipTrim.isNotEmpty
@@ -581,6 +590,16 @@ mixin SmartEntitySelectorAssociationMixin
           lastName: s.selectedCaller?.lastName,
           phones: updatedPhones,
           departmentId: updatedDepartmentId,
+          // Αλλαγή κύριου τμήματος: νέο όνομα από lookup ή από το πεδίο
+          // (το φρεσκοδημιουργημένο τμήμα λείπει ακόμα από το cache).
+          departmentName: !primaryDepartmentChanged
+              ? s.selectedCaller?.departmentName
+              : (updatedDepartmentId == null
+                    ? null
+                    : (lookup?.departmentIdToName[updatedDepartmentId] ??
+                          (s.departmentText.trim().isNotEmpty
+                              ? s.departmentText.trim()
+                              : ''))),
           notes: s.selectedCaller?.notes,
         ),
         selectedDepartmentId: primaryDepartmentChanged

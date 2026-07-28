@@ -1,4 +1,4 @@
-// Widget tests: άμεσο entity lookup στο commit πεδίου Εξοπλισμού (v2 §Ζ.5).
+// Widget tests: άμεσο entity lookup στο commit πεδίου Εξοπλισμού.
 //
 // Ολόκληρο αρχείο:
 //   flutter test test/features/calls/smart_entity_equipment_field_commit_test.dart

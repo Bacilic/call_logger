@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import '../init/startup_engine_failure.dart';
 import '../services/settings_service.dart';
 import 'database_file_classifier.dart';
 import 'database_helper.dart';
@@ -69,6 +70,22 @@ Future<DatabaseInitRunnerResult> _runDatabaseInitChecksUnlocked({
   final configured = await SettingsService().getDatabasePath();
   final resolved = await resolveEffectiveDatabasePath(configured);
   String dbPath = resolved.path;
+
+  // Αν η μηχανή SQLite δεν φορτώθηκε στην εκκίνηση (π.χ. λείπει το sqlite3.dll),
+  // κανένας έλεγχος βάσης δεν έχει νόημα: τα file probes πετυχαίνουν και κρύβουν
+  // την πραγματική αιτία πίσω από «databaseFactory not initialized».
+  final engineFailure = startupEngineFailureResultOrNull(pathHint: dbPath);
+  if (engineFailure != null) {
+    progressNotifier?.setStep(
+      'Αποτυχία αρχικοποίησης',
+      clearSecondsRemaining: true,
+      diagnosticInfo: engineFailure.details,
+    );
+    return DatabaseInitRunnerResult(
+      result: engineFailure,
+      isLocalDevMode: false,
+    );
+  }
 
   DatabaseInitResult? result;
   bool isLocalDevMode = false;

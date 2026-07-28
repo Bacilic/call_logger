@@ -58,7 +58,9 @@ class EquipmentUsageCheck {
 }
 
 /// Υπηρεσία in-memory lookup: φορτώνει Users/Equipment μία φορά, search στη μνήμη.
-/// Singleton ώστε UserModel.departmentName να χρησιμοποιεί το ίδιο φορτωμένο cache.
+/// Singleton ώστε όλες οι οθόνες να μοιράζονται το ίδιο φορτωμένο cache.
+/// (Το `UserModel.departmentName` είναι πλέον κανονικό πεδίο που γεμίζει το
+/// repository στη φόρτωση — δεν διαβάζει από εδώ.)
 class LookupService {
   LookupService._() : _loaded = false;
 
@@ -717,6 +719,9 @@ class LookupService {
 
     /// userId → λίστα equipment ids (M2M). Αν null/κενό, χωρίς συσχετίσεις.
     Map<int, List<int>>? userToEquipmentIds,
+
+    /// departmentId → κοινόχρηστα τηλέφωνα τμήματος (χωρίς προσωπικό κάτοχο).
+    Map<int, List<String>>? departmentDirectPhones,
   }) {
     _loaded = true;
     _loadedDepartments = true;
@@ -742,6 +747,14 @@ class LookupService {
         _userIdsByEquipmentId.putIfAbsent(eid, () => []).add(uid);
       }
     }
+    _departmentDirectPhones = {
+      for (final e
+          in (departmentDirectPhones ?? const <int, List<String>>{}).entries)
+        e.key: List<String>.from(e.value),
+    };
+    _phoneDepartmentByNumber
+      ..clear()
+      ..addAll(_buildPhoneDepartmentIndex(_departmentDirectPhones));
     departments
       ..clear()
       ..addAll(departmentRows);
@@ -752,6 +765,16 @@ class LookupService {
             ? '${d.name}$kDepartmentDeletedDisplaySuffix'
             : d.name;
       }
+    }
+    // Ίδια δουλειά με το repository στην παραγωγή: οι χρήστες του καταλόγου
+    // κουβαλούν το όνομα τμήματος ως κανονικό πεδίο. Χρήστες που ήρθαν ήδη
+    // με συμπληρωμένο όνομα μένουν ως έχουν.
+    for (var i = 0; i < _users.length; i++) {
+      final u = _users[i];
+      if (u.departmentName != null || u.departmentId == null) continue;
+      _users[i] = u.copyWith(
+        departmentName: departmentIdToName[u.departmentId] ?? '',
+      );
     }
   }
 }

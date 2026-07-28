@@ -8,20 +8,35 @@ import '../models/user_model.dart';
 import '../utils/remote_target_rules.dart';
 import '../utils/vnc_remote_target.dart';
 
-/// Τα τέσσερα πεδία του έξυπνου επιλογέα (v2 §Α).
+/// Τα τέσσερα πεδία του έξυπνου επιλογέα.
 enum SelectorField { phone, caller, department, equipment }
 
-/// Σοβαρότητα δείκτη σύγκρουσης (v2 §Α.3 / §Α.6 / §Α.7).
+/// Σοβαρότητα δείκτη σύγκρουσης.
 /// - [mismatch] = κόκκινο: η βάση γνωρίζει διαφορετική τιμή.
 /// - [unknown]  = κίτρινο: το πεδίο δεν αντιστοιχεί σε γνωστή οντότητα.
 enum ConflictSeverity { mismatch, unknown }
 
-/// Μία καταχώρηση σύγκρουσης πάνω σε ένα πεδίο (v2 §Α.7).
+/// Μία καταχώρηση σύγκρουσης πάνω σε ένα πεδίο.
+///
+/// Το [counterpart] είναι το **άλλο μέλος του ζεύγους** που γέννησε τη
+/// σύγκρουση — καθορίζει τη σειρά των λόγων στο tooltip (§Α.7: πρώτος έρχεται
+/// ο λόγος που αφορά την άγκυρα). Είναι `null` για δείκτες που δεν προκύπτουν
+/// από ζεύγος (π.χ. το κίτρινο «άγνωστος καλούντας», §Α.6).
 class FieldConflict {
-  const FieldConflict({required this.severity, required this.message});
+  const FieldConflict({
+    required this.severity,
+    required this.message,
+    this.counterpart,
+    this.isTrailing = false,
+  });
 
   final ConflictSeverity severity;
   final String message;
+  final SelectorField? counterpart;
+
+  /// True για τη μονομερή γραμμή «Δεν είναι καταχωρημένο στη βάση», που μπαίνει
+  /// **πάντα τελευταία** στο tooltip.
+  final bool isTrailing;
 }
 
 /// Κατάσταση έξυπνου επιλογέα οντοτήτων (τηλέφωνο, καλών, εξοπλισμός, τμήμα).
@@ -46,11 +61,13 @@ class SmartEntitySelectorState {
     this.departmentText = '',
     this.selectedDepartmentId,
     Map<SelectorField, List<FieldConflict>>? conflicts,
+    List<SelectorField>? identificationOrder,
   }) : recentPhones = recentPhones ?? [],
        phoneCandidates = phoneCandidates ?? [],
        callerCandidates = callerCandidates ?? [],
        equipmentCandidates = equipmentCandidates ?? [],
-       conflicts = conflicts ?? const {};
+       conflicts = conflicts ?? const {},
+       identificationOrder = identificationOrder ?? const [];
 
   final String? selectedPhone;
 
@@ -88,16 +105,36 @@ class SmartEntitySelectorState {
   /// Επιλεγμένο τμήμα (department_id) όταν υπάρχει σαφής αντιστοίχιση.
   final int? selectedDepartmentId;
 
-  /// Ενεργές συγκρούσεις ανά πεδίο (v2 §Α.7). Επανυπολογίζεται εξ αρχής σε κάθε
-  /// ολοκληρωμένο lookup (§Α.4, stateless). Το πεδίο-πηγή δεν περιέχεται ποτέ.
+  /// Ενεργές συγκρούσεις ανά πεδίο. Επανυπολογίζονται εξ αρχής σε κάθε
+  /// ολοκληρωμένο lookup (§Α.4, stateless) και είναι **συμμετρικές**: κάθε ζεύγος
+  /// που διαφωνεί βάζει δείκτη και στα δύο μέλη του, χωρίς εξαίρεση (§Α.3).
   final Map<SelectorField, List<FieldConflict>> conflicts;
+
+  /// Σειρά με την οποία **επικύρωσε** ο χρήστης τα πεδία. Πρώτο
+  /// στοιχείο = η άγκυρα.
+  ///
+  /// Δεν απαιτείται το πεδίο να υπάρχει στη βάση — ένα ολοκαίνουργιο τηλέφωνο
+  /// είναι εξίσου έγκυρη αφετηρία. Πεδία που γέμισαν με autofill, και φόρμες
+  /// που φορτώθηκαν έτοιμες (Ιστορικό/Εκκρεμότητες), δεν καταχωρούνται εδώ.
+  final List<SelectorField> identificationOrder;
+
+  /// Το πεδίο-αφετηρία της αναζήτησης — «εδώ ξεκίνησες».
+  SelectorField? get anchorField => identificationOrder.firstOrNull;
+
+  /// True όταν υπάρχει έστω ένας δείκτης οπουδήποτε στη φόρμα.
+  bool get hasAnyConflict => conflicts.values.any((v) => v.isNotEmpty);
+
+  /// Το πράσινο πλαίσιο της άγκυρας εμφανίζεται **μόνο** όταν υπάρχει δείκτης
+  /// — και ανεξάρτητα από το αν η ίδια η άγκυρα έχει δείκτη.
+  bool isAnchorHighlighted(SelectorField field) =>
+      hasAnyConflict && anchorField == field;
 
   /// Λίστα συγκρούσεων για ένα πεδίο (κενή αν δεν υπάρχουν).
   List<FieldConflict> conflictsFor(SelectorField field) =>
       conflicts[field] ?? const [];
 
   /// Σοβαρότητα προς εμφάνιση: κόκκινο αν υπάρχει έστω μία [ConflictSeverity.mismatch],
-  /// αλλιώς κίτρινο αν όλες είναι [ConflictSeverity.unknown] (v2 §Α.7).
+  /// αλλιώς κίτρινο αν όλες είναι [ConflictSeverity.unknown].
   ConflictSeverity? conflictSeverityFor(SelectorField field) {
     final list = conflictsFor(field);
     if (list.isEmpty) return null;
@@ -106,11 +143,27 @@ class SmartEntitySelectorState {
         : ConflictSeverity.unknown;
   }
 
-  /// Tooltip με όλες τις γραμμές σύγκρουσης για ένα πεδίο (v2 §Α.7).
+  /// Tooltip με όλες τις γραμμές σχέσεων για ένα πεδίο.
+  ///
+  /// Σειρά: (1) η σχέση με την **άγκυρα**, ώστε η αφήγηση να δένει με το
+  /// πράσινα πλαισιωμένο πεδίο· (2) οι υπόλοιπες με σταθερή σειρά πεδίων·
+  /// (3) η μονομερής «Δεν είναι καταχωρημένο στη βάση», πάντα τελευταία.
   String? conflictTooltipFor(SelectorField field) {
     final list = conflictsFor(field);
     if (list.isEmpty) return null;
-    return list.map((c) => c.message).join('\n');
+    final anchor = anchorField;
+    final ordered = [
+      ...list,
+    ]..sort((a, b) => _reasonRank(a, anchor).compareTo(_reasonRank(b, anchor)));
+    return ordered.map((c) => c.message).join('\n');
+  }
+
+  static int _reasonRank(FieldConflict conflict, SelectorField? anchor) {
+    if (conflict.isTrailing) return SelectorField.values.length + 1;
+    final counterpart = conflict.counterpart;
+    if (counterpart == null) return SelectorField.values.length;
+    if (anchor != null && counterpart == anchor) return -1;
+    return counterpart.index;
   }
 
   String get normalizedCallerDisplayText => callerDisplayText.trim();
@@ -338,7 +391,7 @@ class SmartEntitySelectorState {
     final equipmentFilled = hasEquipmentInput;
 
     if (needsNewCallerCreation) {
-      // Για νέο καλούντα συσχετίζεται ό,τι υπάρχει στη φόρμα (v2 §Γ: η τιμή
+      // Για νέο καλούντα συσχετίζεται ό,τι υπάρχει στη φόρμα (η τιμή
       // του πεδίου είναι η αλήθεια, ανεξάρτητα από το πώς αποκτήθηκε).
       final parts = <String>[];
       if (phoneFilled) parts.add('τηλέφωνο: ${selectedPhone!.trim()}');
@@ -443,6 +496,8 @@ class SmartEntitySelectorState {
     bool clearSelectedDepartmentId = false,
     Map<SelectorField, List<FieldConflict>>? conflicts,
     bool clearConflicts = false,
+    List<SelectorField>? identificationOrder,
+    bool clearIdentificationOrder = false,
   }) {
     return SmartEntitySelectorState(
       selectedPhone: clearSelectedPhone
@@ -477,6 +532,9 @@ class SmartEntitySelectorState {
           ? null
           : (selectedDepartmentId ?? this.selectedDepartmentId),
       conflicts: clearConflicts ? const {} : (conflicts ?? this.conflicts),
+      identificationOrder: clearIdentificationOrder
+          ? const []
+          : (identificationOrder ?? this.identificationOrder),
     );
   }
 
@@ -499,6 +557,7 @@ class SmartEntitySelectorState {
       departmentText: '',
       clearSelectedDepartmentId: true,
       clearConflicts: true,
+      clearIdentificationOrder: true,
     );
   }
 }

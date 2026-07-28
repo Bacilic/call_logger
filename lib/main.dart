@@ -15,8 +15,11 @@ import 'package:window_manager/window_manager.dart';
 
 import 'core/about/version_display.dart';
 import 'core/config/app_config.dart';
+import 'core/init/startup_engine_failure.dart';
+import 'core/init/startup_notices.dart';
 import 'core/updates/update_providers.dart';
 import 'core/utils/windows_cli_error_dialog.dart';
+import 'core/services/app_close_controller.dart';
 import 'core/services/crash_log_service.dart';
 import 'core/services/desktop_window_service.dart';
 import 'core/services/settings_service.dart';
@@ -179,9 +182,17 @@ Future<void> _bootstrapAndRunApp() async {
     try {
       sqfliteFfiInit();
       databaseFactory = databaseFactoryFfi;
+    } catch (e, st) {
+      recordStartupEngineFailure(e, st);
+    }
 
+    try {
       final wm = WindowManager.instance;
       await wm.ensureInitialized();
+      // Η ευθύνη κλεισίματος ανήκει στη διεργασία, όχι σε widget: εγκαθίσταται
+      // μία φορά εδώ ώστε το X/Alt+F4 να λειτουργεί σε ΟΠΟΙΑΔΗΠΟΤΕ οθόνη —
+      // και στις οθόνες σφάλματος που αντικαθιστούν το κύριο κέλυφος.
+      await appCloseController.install();
       try {
         if (AppConfig.hasActiveProfile) {
           await wm.setTitle(
@@ -192,7 +203,9 @@ Future<void> _bootstrapAndRunApp() async {
           appVersion = pkg.version;
           await wm.setTitle(windowTitleWithVersionLabel(pkg.version));
         }
-      } catch (_) {}
+      } catch (e, st) {
+        recordStartupNotice('Τίτλος παραθύρου / έκδοση', e, st);
+      }
       final display = await ScreenRetriever.instance.getPrimaryDisplay();
       final screenWidth = display.size.width;
       final screenHeight = display.size.height;
@@ -228,7 +241,11 @@ Future<void> _bootstrapAndRunApp() async {
       appVersion: appVersion,
       retentionCount: await settings.getCrashLogRetentionCount(),
     );
-  } catch (_) {}
+  } catch (e, st) {
+    recordStartupNotice('Ημερολόγιο καταρρεύσεων', e, st);
+  }
+
+  flushStartupNoticesToCrashLog();
 
   runApp(const ProviderScope(child: MyApp()));
 }

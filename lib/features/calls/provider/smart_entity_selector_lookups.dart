@@ -24,14 +24,28 @@ mixin SmartEntitySelectorLookupsMixin on Notifier<SmartEntitySelectorState> {
     _host.markPhoneUsed(trimmed);
   }
 
-  void _setPhoneCandidatesFromLookup(List<String> phones) {
-    if (phones.isEmpty) return;
-    final sorted = List<String>.from(phones);
-    sorted.sort((a, b) => a.compareTo(b));
+  /// **Μοναδικό** σημείο επιβολής του συμβολαίου των υποψήφιων τηλεφώνων:
+  /// ακριβώς ένας αριθμός = απόφαση (μπαίνει στο πεδίο, χωρίς λίστα), δύο και
+  /// πάνω = λίστα υποψηφίων, κανένας = καμία λίστα.
+  ///
+  /// Κάθε ροή που παράγει υποψήφια τηλέφωνα περνά από εδώ — έτσι καμία δεν
+  /// μπορεί να ξεχάσει ότι το μοναδικό/ακριβές ταίριασμα κερδίζει.
+  /// Προϋπόθεση κάθε καλούντος: το πεδίο τηλεφώνου είναι **κενό**.
+  void _applyPhoneCandidatesFromLookup(List<String> phones) {
+    final sorted =
+        phones
+            .map((phone) => phone.trim())
+            .where((phone) => phone.isNotEmpty)
+            .toList()
+          ..sort((a, b) => a.compareTo(b));
+    if (sorted.length == 1) {
+      _setPhoneValueFromLookup(sorted.first);
+      return;
+    }
     state = state.copyWith(
       phoneCandidates: sorted,
       clearSelectedPhone: true,
-      isPhoneAmbiguous: true,
+      isPhoneAmbiguous: sorted.length > 1,
       clearPhoneError: true,
     );
   }
@@ -72,35 +86,139 @@ mixin SmartEntitySelectorLookupsMixin on Notifier<SmartEntitySelectorState> {
     if (previous.isNotEmpty) {
       return;
     }
-    _setPhoneCandidatesFromLookup(phones);
+    _applyPhoneCandidatesFromLookup(phones);
+  }
+
+  /// **Μοναδικό** σημείο επιβολής του συμβολαίου για τον καλούντα:
+  /// ακριβώς ένας υπάλληλος = απόφαση, δύο και πάνω = λίστα, κανένας = καθαρό
+  /// πεδίο. Προϋπόθεση κάθε καλούντος: το πεδίο καλούντα είναι **κενό**.
+  void _applyCallerCandidatesFromLookup(List<UserModel> users) {
+    if (users.length == 1) {
+      final user = users.first;
+      state = state.copyWith(
+        selectedCaller: user,
+        callerCandidates: [],
+        callerNoMatch: false,
+        callerDisplayText: user.name ?? user.fullNameWithDepartment,
+      );
+      return;
+    }
+    state = state.copyWith(
+      callerCandidates: users,
+      clearSelectedCaller: true,
+      callerDisplayText: '',
+      callerNoMatch: false,
+    );
+  }
+
+  /// **Μοναδικό** σημείο επιβολής του συμβολαίου για τον εξοπλισμό:
+  /// ακριβώς ένας = απόφαση, δύο και πάνω = λίστα, κανένας = καθαρό πεδίο.
+  /// Προϋπόθεση κάθε καλούντος: το πεδίο εξοπλισμού είναι **κενό**.
+  ///
+  /// Το `equipmentCandidates` σημαίνει **μόνο** «δεν αποφασίστηκε ακόμα»: όταν
+  /// υπάρχει απόφαση, αδειάζει. Οι προτάσεις του overlay για ένα επιλεγμένο
+  /// τμήμα χτίζονται χωριστά, στο `departmentEquipmentsForSuggestions`.
+  void _applyEquipmentCandidatesFromLookup(List<EquipmentModel> equipment) {
+    if (equipment.length == 1) {
+      final only = equipment.first;
+      final text = _equipmentAutofillText(only);
+      state = state.copyWith(
+        selectedEquipment: only,
+        equipmentText: text,
+        equipmentCandidates: [],
+        isEquipmentAmbiguous: false,
+        equipmentNoMatch: false,
+        hasAnyContent: _host._computeHasAnyContent(equipmentText: text),
+      );
+      return;
+    }
+    state = state.copyWith(
+      equipmentCandidates: equipment,
+      clearSelectedEquipment: true,
+      isEquipmentAmbiguous: equipment.length > 1,
+      equipmentNoMatch: false,
+    );
   }
 
   bool _canAutofillPhone() {
-    // v2 §Β.1: autofill μόνο σε κενό πεδίο (isFilled = false), ανεξάρτητα
+    // Autofill μόνο σε κενό πεδίο (isFilled = false), ανεξάρτητα
     // από το πώς αποκτήθηκε η τρέχουσα τιμή.
     return state.selectedPhone?.trim().isEmpty ?? true;
   }
 
-  /// Autofill τηλεφώνου από τον κάτοχο του εξοπλισμού μόνο όταν δεν υπάρχει ήδη
-  /// επιλεγμένος αριθμός — αλλιώς (π.χ. lookup γραμμής) δεν καλούμε
-  /// `_setPhoneCandidatesFromLookup` (αποφυγή `clearSelectedPhone`).
-  bool _shouldApplyEquipmentOwnerPhoneAutofill() {
-    if (!_canAutofillPhone()) return false;
-    return state.selectedPhone?.trim().isEmpty ?? true;
-  }
-
-  /// Μετά επιλογή εξοπλισμού, διατηρεί τους υποψήφιους αριθμούς του επιλεγμένου τμήματος.
+  /// Επαναφέρει τους **υποψήφιους** αριθμούς του τμήματος σε άδειο πεδίο.
+  ///
+  /// **Ποτέ δεν γράφει τιμή** — ούτε όταν ο υποψήφιος είναι ένας. Καλείται αφού
+  /// ο χρήστης **άδειασε** το πεδίο (σβήσιμο τηλεφώνου, καθαρισμό εξοπλισμού),
+  /// και το άδειασμα είναι ρητή του πρόθεση: η αυτόματη συμπλήρωση είναι
+  /// υπόδειξη, όχι κλείδωμα. Αν ξαναγράφαμε την τιμή, ο χρήστης δεν θα μπορούσε
+  /// ποτέ να καταγράψει κλήση με τηλέφωνο άλλου τμήματος.
+  ///
+  /// Η στενότερη πηγή κερδίζει: οι αριθμοί του κατόχου/καλούντα δεν
+  /// αντικαθίστανται από τους αριθμούς ολόκληρου του τμήματος, γιατί η ευρύτερη
+  /// λίστα περιέχει αριθμούς άλλων ανθρώπων και οδηγεί σε λάθος επιλογή.
   void _restoreDepartmentPhoneCandidatesIfNeeded(LookupService? lookup) {
     final deptId = state.selectedDepartmentId;
     if (lookup == null || deptId == null) return;
     if (state.selectedPhone?.trim().isNotEmpty == true) return;
+    if (state.phoneCandidates.isNotEmpty) return;
     final phones = lookup.getPhonesByDepartment(deptId);
     if (phones.isEmpty) return;
+    final sorted = List<String>.from(phones)..sort((a, b) => a.compareTo(b));
     state = state.copyWith(
-      phoneCandidates: phones,
+      phoneCandidates: sorted,
       clearSelectedPhone: true,
-      isPhoneAmbiguous: phones.length > 1,
+      isPhoneAmbiguous: sorted.length > 1,
       clearPhoneError: true,
+    );
+  }
+
+  /// Υπόδειξη τηλεφώνου από το τμήμα μετά από **επικύρωση οντότητας** από τον
+  /// χρήστη (π.χ. κατοχύρωση κωδικού εξοπλισμού χωρίς κάτοχο).
+  ///
+  /// Σε αντίθεση με την επαναφορά υποψηφίων, εδώ ο χρήστης μόλις **πρόσθεσε**
+  /// πληροφορία, οπότε ο μοναδικός αριθμός του τμήματος είναι απόφαση.
+  void _autofillDepartmentPhoneIfEmpty(LookupService lookup, int departmentId) {
+    if (state.selectedPhone?.trim().isNotEmpty == true) return;
+    final phones = lookup.getPhonesByDepartment(departmentId);
+    if (phones.isEmpty) return;
+    _applyPhoneCandidatesFromLookup(phones);
+  }
+
+  /// Υπόδειξη τηλεφώνου για **επικυρωμένο υπάλληλο**: πρώτα τα δικά του νούμερα.
+  ///
+  /// Όταν δεν έχει κανένα, αναλαμβάνουν τα τηλέφωνα του τμήματός του — η
+  /// στενότερη πηγή υπερισχύει, αλλά όταν είναι ΚΕΝΗ ισχύει η επόμενη: ο
+  /// υπάλληλος χωρίς προσωπικό αριθμό καλεί από το κοινόχρηστο του τμήματος.
+  void _autofillPhoneForCommittedUser(UserModel user, LookupService lookup) {
+    if (user.phones.isNotEmpty) {
+      _autofillPhoneFromUserProfile(user);
+      return;
+    }
+    final departmentId = state.selectedDepartmentId ?? user.departmentId;
+    if (departmentId == null) return;
+    _autofillDepartmentPhoneIfEmpty(lookup, departmentId);
+  }
+
+  /// Επαναφέρει τους **υποψήφιους** υπαλλήλους του τμήματος σε άδειο πεδίο
+  /// καλούντα — συμμετρικά με τηλέφωνο και εξοπλισμό.
+  ///
+  /// **Ποτέ δεν γράφει όνομα**, ούτε όταν ο υπάλληλος είναι ένας: το άδειασμα
+  /// είναι ρητή πρόθεση του χρήστη. Αν συμπληρωνόταν, σε μονοπρόσωπο τμήμα ο
+  /// καλών θα ήταν αδύνατο να σβηστεί — η ίδια παγίδα με το τηλέφωνο.
+  ///
+  /// Κενό ορατό πεδίο σημαίνει «κανένας καλών», οπότε λύνεται και η τυχόν
+  /// ταυτοποίηση που είχε μείνει από προηγούμενη επιλογή.
+  void _restoreDepartmentCallerCandidatesIfNeeded(LookupService? lookup) {
+    final deptId = state.selectedDepartmentId;
+    if (lookup == null || deptId == null) return;
+    if (state.callerDisplayText.trim().isNotEmpty) return;
+    final users = lookup.getUsersByDepartment(deptId);
+    if (users.isEmpty) return;
+    state = state.copyWith(
+      callerCandidates: users,
+      clearSelectedCaller: true,
+      callerNoMatch: false,
     );
   }
 
@@ -120,14 +238,19 @@ mixin SmartEntitySelectorLookupsMixin on Notifier<SmartEntitySelectorState> {
   }
 
   bool _canAutofillDepartmentForUser(UserModel user) {
-    // v2 §Β.1: το τμήμα συμπληρώνεται αυτόματα μόνο όταν το πεδίο είναι κενό.
+    // Το τμήμα συμπληρώνεται αυτόματα μόνο όταν το πεδίο είναι κενό.
     // Συμπληρωμένο τμήμα (isFilled) δεν αντικαθίσταται — η τυχόν σύγκρουση
     // εκτίθεται μέσω δείκτη (Φάση 2).
     return state.departmentText.trim().isEmpty;
   }
 
-  /// Ακριβές ταίριασμα πλήρους ονόματος (όνομα επώνυμο ή επώνυμο όνομα) μετά από
-  /// αφαίρεση παρενθετικού τμήματος — διαχωρίζει μερικό από πλήρες query.
+  /// Ακριβές ταίριασμα πλήρους ονόματος με τη ΓΡΑΦΗ ΤΟΥ ΚΑΤΑΛΟΓΟΥ (όνομα επώνυμο),
+  /// μετά από αφαίρεση παρενθετικού τμήματος — διαχωρίζει μερικό από πλήρες query.
+  ///
+  /// Η ανάστροφη σειρά («επώνυμο όνομα») ΔΕΝ μετράει εδώ: το ταίριασμα ξαναγράφει
+  /// το πεδίο με το αποθηκευμένο όνομα, οπότε θα άλλαζε σιωπηλά ό,τι πληκτρολόγησε
+  /// ο χρήστης. Ο υπάλληλος παραμένει ορατός ως υποψήφιος στη λίστα του πεδίου και
+  /// η ταυτοποίηση προτείνεται κατά την καταγραφή της κλήσης.
   bool _isExactCallerNameMatch(String query, UserModel user) {
     final normalizedQuery = SearchTextNormalizer.normalizeForSearch(query);
     if (normalizedQuery.isEmpty) return false;
@@ -137,17 +260,8 @@ mixin SmartEntitySelectorLookupsMixin on Notifier<SmartEntitySelectorState> {
         NameParserUtility.stripParentheticalSuffix(user.fullNameWithDepartment);
     final strippedName = NameParserUtility.stripParentheticalSuffix(rawName);
 
-    final firstLast = SearchTextNormalizer.normalizeForSearch(strippedName);
-    if (normalizedQuery == firstLast) return true;
-
-    final first = user.firstName?.trim() ?? '';
-    final last = user.lastName?.trim() ?? '';
-    if (first.isNotEmpty && last.isNotEmpty) {
-      final lastFirst = SearchTextNormalizer.normalizeForSearch('$last $first');
-      if (normalizedQuery == lastFirst) return true;
-    }
-
-    return false;
+    return normalizedQuery ==
+        SearchTextNormalizer.normalizeForSearch(strippedName);
   }
 
   String _departmentTextForUser(UserModel user) {
@@ -164,8 +278,9 @@ mixin SmartEntitySelectorLookupsMixin on Notifier<SmartEntitySelectorState> {
     final digits = phone.replaceAll(RegExp(r'[^0-9]'), '');
     final generation = ++_host._phoneLookupGeneration;
     if (digits.length < 3) {
-      _host._isFillingFromLookup = true;
-      try {
+      // Κάτω από 3 ψηφία το τηλέφωνο αγνοείται σαν κενό — οι σχέσεις
+      // των υπόλοιπων πεδίων ξαναχτίζονται κανονικά χωρίς αυτό.
+      _host.runExclusiveLookup(null, () {
         state = state.copyWith(
           clearPhoneCandidates: true,
           clearCallerCandidates: true,
@@ -176,11 +291,8 @@ mixin SmartEntitySelectorLookupsMixin on Notifier<SmartEntitySelectorState> {
           isEquipmentAmbiguous: false,
           callerNoMatch: false,
           equipmentNoMatch: false,
-          clearConflicts: true,
         );
-      } finally {
-        _host._isFillingFromLookup = false;
-      }
+      });
       return;
     }
 
@@ -215,9 +327,7 @@ mixin SmartEntitySelectorLookupsMixin on Notifier<SmartEntitySelectorState> {
   }
 
   void _applyPhoneLookupWithCatalog(String digits, LookupService lookup) {
-    if (_host._isFillingFromLookup) return;
-    _host._isFillingFromLookup = true;
-    try {
+    _host.runExclusiveLookup(SelectorField.phone, () {
       final users = lookup.findUsersByPhone(digits);
       if (users.isEmpty) {
         final orphanDept = lookup.getDepartmentByPhone(digits);
@@ -242,7 +352,8 @@ mixin SmartEntitySelectorLookupsMixin on Notifier<SmartEntitySelectorState> {
               : state.selectedDepartmentId,
         );
         if (orphanDept?.id != null) {
-          _applyDepartmentEquipmentLookup(lookup, orphanDept!.id!);
+          _applyDepartmentCallerLookup(lookup, orphanDept!.id!);
+          _applyDepartmentEquipmentLookup(lookup, orphanDept.id!);
         }
         return;
       }
@@ -347,21 +458,14 @@ mixin SmartEntitySelectorLookupsMixin on Notifier<SmartEntitySelectorState> {
             ? sharedDeptId
             : state.selectedDepartmentId,
       );
-    } finally {
-      _host._recomputeConflicts(SelectorField.phone, lookup);
-      _host._isFillingFromLookup = false;
-    }
+    });
   }
 
   /// Lookup εξοπλισμού για userId: 0 → no match hint, 1 → setEquipment, >1 → dropdown candidates.
   void performEquipmentLookup(int userId) {
-    if (_host._isFillingFromLookup) return;
-    _host._isFillingFromLookup = true;
-    try {
+    _host.runExclusiveLookup(null, () {
       _performEquipmentLookupForUser(userId);
-    } finally {
-      _host._isFillingFromLookup = false;
-    }
+    });
   }
 
   String _equipmentAutofillText(EquipmentModel equipment) {
@@ -376,6 +480,15 @@ mixin SmartEntitySelectorLookupsMixin on Notifier<SmartEntitySelectorState> {
     if (lookup == null) return;
     final list = lookup.findEquipmentsForUser(userId);
     if (list.isEmpty) {
+      // Χωρίς δικά του μηχανήματα, αναλαμβάνουν τα κοινόχρηστα του τμήματος —
+      // αλλιώς το «Καμία αντιστοιχία» θα διαφωνούσε με το overlay, που τα
+      // δείχνει ήδη. (Ο βοηθός βάζει ο ίδιος «Καμία αντιστοιχία» αν ούτε το
+      // τμήμα έχει μηχανήματα.)
+      final departmentId = state.selectedDepartmentId;
+      if (departmentId != null && state.equipmentText.trim().isEmpty) {
+        _applyDepartmentEquipmentLookup(lookup, departmentId);
+        return;
+      }
       state = state.copyWith(
         equipmentCandidates: [],
         clearSelectedEquipment: !_hasManualEquipmentSelection,
@@ -414,7 +527,24 @@ mixin SmartEntitySelectorLookupsMixin on Notifier<SmartEntitySelectorState> {
     );
   }
 
+  /// Καλών τμήματος μετά από lookup κοινόχρηστου τηλεφώνου (χωρίς προσωπικό κάτοχο).
+  ///
+  /// Ίδιο συμβόλαιο με τα υπόλοιπα πεδία: **ένας** μη διαγραμμένος υπάλληλος στο
+  /// τμήμα είναι απόφαση και συμπληρώνεται. Με δύο και πάνω δεν μαντεύουμε — το
+  /// κοινόχρηστο τηλέφωνο δεν λέει ποιος από αυτούς καλεί.
+  void _applyDepartmentCallerLookup(LookupService lookup, int departmentId) {
+    if (state.callerDisplayText.trim().isNotEmpty) return;
+    if (state.selectedCaller != null) return;
+    final users = lookup.getUsersByDepartment(departmentId);
+    if (users.length != 1) return;
+    _applyCallerCandidatesFromLookup(users);
+  }
+
   /// Εξοπλισμός τμήματος μετά από lookup ορφανού τηλεφώνου (χωρίς καλούντα).
+  ///
+  /// Η απόφαση «ένας ή πολλοί» ανήκει στο κοινό σημείο επιβολής· εδώ μένει μόνο
+  /// ό,τι είναι ειδικό αυτής της ροής: το τμήμα χωρίς κανένα μηχάνημα σημαίνει
+  /// «καμία αντιστοιχία» για το πεδίο.
   void _applyDepartmentEquipmentLookup(LookupService lookup, int departmentId) {
     if (state.equipmentText.trim().isNotEmpty) return;
     final list = lookup.getAllEquipmentByDepartment(departmentId);
@@ -427,31 +557,11 @@ mixin SmartEntitySelectorLookupsMixin on Notifier<SmartEntitySelectorState> {
       );
       return;
     }
-    if (list.length == 1) {
-      final equipment = list.first;
-      final text = _equipmentAutofillText(equipment);
-      state = state.copyWith(
-        selectedEquipment: equipment,
-        equipmentText: text,
-        equipmentCandidates: list,
-        isEquipmentAmbiguous: false,
-        equipmentNoMatch: false,
-        hasAnyContent: _host._computeHasAnyContent(equipmentText: text),
-      );
-      return;
-    }
-    state = state.copyWith(
-      equipmentCandidates: list,
-      clearSelectedEquipment: !_hasManualEquipmentSelection,
-      isEquipmentAmbiguous: true,
-      equipmentNoMatch: false,
-    );
+    _applyEquipmentCandidatesFromLookup(list);
   }
 
   void performCallerLookup(String nameOrQuery, {String? phoneFieldDigits}) {
-    if (_host._isFillingFromLookup) return;
-    _host._isFillingFromLookup = true;
-    try {
+    _host.runExclusiveLookup(SelectorField.caller, () {
       final query = nameOrQuery.trim();
       if (query.isEmpty || query == 'Άγνωστος') return;
       final asyncLookup = ref.read(lookupServiceProvider);
@@ -519,152 +629,154 @@ mixin SmartEntitySelectorLookupsMixin on Notifier<SmartEntitySelectorState> {
           clearPhoneError: true,
         );
       }
-      _autofillPhoneFromUserProfile(user);
+      _autofillPhoneForCommittedUser(user, lookup);
 
       final canAutofillEquipment = state.equipmentText.trim().isEmpty;
       if (user.id != null && canAutofillEquipment) {
         _performEquipmentLookupForUser(user.id!);
       }
-    } finally {
-      _host._recomputeConflicts(
-        SelectorField.caller,
-        ref.read(lookupServiceProvider).value?.service,
-      );
-      _host._isFillingFromLookup = false;
-    }
+    });
   }
 
   void performEquipmentLookupByCode(String code) {
-    if (_host._isFillingFromLookup) return;
-    _host._isFillingFromLookup = true;
-    try {
-      final query = code.trim();
-      if (query.isEmpty) return;
-      final asyncLookup = ref.read(lookupServiceProvider);
-      final lookup = asyncLookup.value?.service;
-      if (lookup == null) return;
-      final list = lookup.findEquipmentsByCode(query);
-      if (list.isEmpty) {
-        // Το ίδιο το πεδίο εξοπλισμού δεν ταιριάζει σε καμία οντότητα: η τυχόν
-        // προηγούμενη επιλογή είναι άκυρη και καθαρίζεται.
+    _host.runExclusiveLookup(
+      SelectorField.equipment,
+      () {
+        final query = code.trim();
+        if (query.isEmpty) return;
+        final asyncLookup = ref.read(lookupServiceProvider);
+        final lookup = asyncLookup.value?.service;
+        if (lookup == null) return;
+        final list = lookup.findEquipmentsByCode(query);
+        if (list.isEmpty) {
+          // Το ίδιο το πεδίο εξοπλισμού δεν ταιριάζει σε καμία οντότητα: η τυχόν
+          // προηγούμενη επιλογή είναι άκυρη και καθαρίζεται.
+          state = state.copyWith(
+            equipmentCandidates: [],
+            clearSelectedEquipment: true,
+            isEquipmentAmbiguous: false,
+            equipmentNoMatch: true,
+          );
+          return;
+        }
+
+        // Ακριβής κωδικός (π.χ. «506») υπερισχύει των μερικών ταιριασμάτων
+        // (5067, 5068, …) κατά την κατοχύρωση — όχι κατά τις προτάσεις πληκτρολόγησης.
+        final queryNorm = SearchTextNormalizer.normalizeForSearch(query);
+        final exactMatches = list
+            .where(
+              (e) =>
+                  SearchTextNormalizer.normalizeForSearch(e.code ?? '') ==
+                  queryNorm,
+            )
+            .toList();
+        final resolved = exactMatches.length == 1 ? exactMatches : list;
+
+        if (resolved.length > 1) {
+          state = state.copyWith(
+            equipmentCandidates: resolved,
+            clearSelectedEquipment: true,
+            isEquipmentAmbiguous: true,
+            equipmentNoMatch: false,
+          );
+          return;
+        }
+
+        final equipment = resolved.first;
+        final resolvedText = equipment.code?.trim().isNotEmpty == true
+            ? equipment.code!.trim()
+            : query;
         state = state.copyWith(
+          selectedEquipment: equipment,
+          equipmentText: resolvedText,
           equipmentCandidates: [],
-          clearSelectedEquipment: true,
           isEquipmentAmbiguous: false,
-          equipmentNoMatch: true,
-        );
-        return;
-      }
-
-      // Ακριβής κωδικός (π.χ. «506») υπερισχύει των μερικών ταιριασμάτων
-      // (5067, 5068, …) κατά την κατοχύρωση — όχι κατά τις προτάσεις πληκτρολόγησης.
-      final queryNorm = SearchTextNormalizer.normalizeForSearch(query);
-      final exactMatches = list
-          .where(
-            (e) =>
-                SearchTextNormalizer.normalizeForSearch(e.code ?? '') ==
-                queryNorm,
-          )
-          .toList();
-      final resolved = exactMatches.length == 1 ? exactMatches : list;
-
-      if (resolved.length > 1) {
-        state = state.copyWith(
-          equipmentCandidates: resolved,
-          clearSelectedEquipment: true,
-          isEquipmentAmbiguous: true,
           equipmentNoMatch: false,
         );
-        return;
-      }
 
-      final equipment = resolved.first;
-      final resolvedText = equipment.code?.trim().isNotEmpty == true
-          ? equipment.code!.trim()
-          : query;
-      state = state.copyWith(
-        selectedEquipment: equipment,
-        equipmentText: resolvedText,
-        equipmentCandidates: [],
-        isEquipmentAmbiguous: false,
-        equipmentNoMatch: false,
-      );
+        final owners = equipment.id != null
+            ? lookup.findUsersForEquipment(equipment.id!)
+            : <UserModel>[];
 
-      final owners = equipment.id != null
-          ? lookup.findUsersForEquipment(equipment.id!)
-          : <UserModel>[];
+        // Πολλαπλοί κάτοχοι → λίστα candidates, ποτέ αυτόματη επιλογή
+        // του πρώτου. Δεν αλλάζουμε καλούντα/τμήμα/τηλέφωνο αυτόματα όταν η
+        // αντιστοίχιση κατόχου είναι ασαφής.
+        if (owners.length > 1) {
+          if (state.callerDisplayText.trim().isEmpty) {
+            state = state.copyWith(
+              callerCandidates: owners,
+              clearSelectedCaller: true,
+              callerNoMatch: false,
+              isPhoneAmbiguous: false,
+            );
+          }
+          return;
+        }
 
-      // v2 §Δ.3: πολλαπλοί κάτοχοι → λίστα candidates, ποτέ αυτόματη επιλογή
-      // του πρώτου. Δεν αλλάζουμε καλούντα/τμήμα/τηλέφωνο αυτόματα όταν η
-      // αντιστοίχιση κατόχου είναι ασαφής.
-      if (owners.length > 1) {
-        if (state.callerDisplayText.trim().isEmpty) {
+        final user = owners.isNotEmpty ? owners.first : null;
+        if (user == null) {
+          if (equipment.departmentId != null &&
+              state.departmentText.trim().isEmpty &&
+              state.selectedDepartmentId == null) {
+            state = state.copyWith(
+              departmentText:
+                  lookup.departmentIdToName[equipment.departmentId] ?? '',
+              selectedDepartmentId: equipment.departmentId,
+            );
+          }
+          // Εξοπλισμός χωρίς κάτοχο: η υπόδειξη τηλεφώνου έρχεται από το τμήμα.
+          // Γίνεται εδώ, όπου ο χρήστης μόλις κατοχύρωσε κωδικό — όχι στην
+          // επαναφορά υποψηφίων, που δεν έχει δικαίωμα να γράψει τιμή.
+          final departmentId = state.selectedDepartmentId;
+          if (departmentId != null) {
+            _autofillDepartmentPhoneIfEmpty(lookup, departmentId);
+          }
+          return;
+        }
+
+        final shouldAutofillDepartment = _canAutofillDepartmentForUser(user);
+        final canAutofillCaller = state.callerDisplayText.trim().isEmpty;
+        // «κλειδωμένο» τμήμα = συμπληρωμένο πεδίο (isFilled) με ταυτοποιημένο id.
+        final hasLockedDepartmentSelection = state.selectedDepartmentId != null;
+        final isCallerOutsideSelectedDepartment =
+            hasLockedDepartmentSelection &&
+            user.departmentId != state.selectedDepartmentId;
+        if (canAutofillCaller && !isCallerOutsideSelectedDepartment) {
           state = state.copyWith(
-            callerCandidates: owners,
-            clearSelectedCaller: true,
-            callerNoMatch: false,
+            selectedCaller: user,
+            callerCandidates: [],
             isPhoneAmbiguous: false,
+            callerNoMatch: false,
+            callerDisplayText: user.name ?? user.fullNameWithDepartment,
+            departmentText: shouldAutofillDepartment
+                ? _departmentTextForUser(user)
+                : state.departmentText,
+            selectedDepartmentId: shouldAutofillDepartment
+                ? user.departmentId
+                : state.selectedDepartmentId,
           );
-        }
-        return;
-      }
-
-      final user = owners.isNotEmpty ? owners.first : null;
-      if (user == null) {
-        if (equipment.departmentId != null &&
-            state.departmentText.trim().isEmpty &&
-            state.selectedDepartmentId == null) {
+        } else if (shouldAutofillDepartment) {
           state = state.copyWith(
-            departmentText:
-                lookup.departmentIdToName[equipment.departmentId] ?? '',
-            selectedDepartmentId: equipment.departmentId,
+            departmentText: _departmentTextForUser(user),
+            selectedDepartmentId: user.departmentId,
           );
         }
-        return;
-      }
 
-      final shouldAutofillDepartment = _canAutofillDepartmentForUser(user);
-      final canAutofillCaller = state.callerDisplayText.trim().isEmpty;
-      // v2 §Β: «κλειδωμένο» τμήμα = συμπληρωμένο πεδίο (isFilled) με ταυτοποιημένο id.
-      final hasLockedDepartmentSelection = state.selectedDepartmentId != null;
-      final isCallerOutsideSelectedDepartment =
-          hasLockedDepartmentSelection &&
-          user.departmentId != state.selectedDepartmentId;
-      if (canAutofillCaller && !isCallerOutsideSelectedDepartment) {
-        state = state.copyWith(
-          selectedCaller: user,
-          callerCandidates: [],
-          isPhoneAmbiguous: false,
-          callerNoMatch: false,
-          callerDisplayText: user.name ?? user.fullNameWithDepartment,
-          departmentText: shouldAutofillDepartment
-              ? _departmentTextForUser(user)
-              : state.departmentText,
-          selectedDepartmentId: shouldAutofillDepartment
-              ? user.departmentId
-              : state.selectedDepartmentId,
-        );
-      } else if (shouldAutofillDepartment) {
-        state = state.copyWith(
-          departmentText: _departmentTextForUser(user),
-          selectedDepartmentId: user.departmentId,
-        );
-      }
-
-      if (_shouldApplyEquipmentOwnerPhoneAutofill() &&
-          !hasLockedDepartmentSelection) {
-        _autofillPhoneFromUserProfile(user);
-      }
-    } finally {
-      final lookupForRestore = ref.read(lookupServiceProvider).value?.service;
-      if (state.selectedDepartmentId != null) {
-        _restoreDepartmentPhoneCandidatesIfNeeded(lookupForRestore);
-      }
-      _host._recomputeConflicts(
-        SelectorField.equipment,
-        ref.read(lookupServiceProvider).value?.service,
-      );
-      _host._isFillingFromLookup = false;
-    }
+        // Ο φραγμός του κλειδωμένου τμήματος κρίνει τη **σχέση** (είναι ο
+        // κάτοχος εκτός του κλειδωμένου τμήματος;) και όχι την ύπαρξη
+        // κλειδώματος: κάτοχος που ανήκει στο ήδη επιλεγμένο τμήμα δίνει
+        // απολύτως έγκυρο τηλέφωνο — το ίδιο κριτήριο με τη συμπλήρωση του
+        // καλούντα παραπάνω.
+        if (!isCallerOutsideSelectedDepartment) {
+          _autofillPhoneForCommittedUser(user, lookup);
+        }
+      },
+      onBeforeRecompute: () {
+        final lookupForRestore = ref.read(lookupServiceProvider).value?.service;
+        if (state.selectedDepartmentId != null) {
+          _restoreDepartmentPhoneCandidatesIfNeeded(lookupForRestore);
+        }
+      },
+    );
   }
 }

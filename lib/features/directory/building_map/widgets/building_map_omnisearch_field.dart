@@ -2,24 +2,29 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/database/omnisearch_service.dart';
-import '../../../../core/utils/search_debouncer.dart';
+import '../controllers/building_map_omnisearch_controller.dart';
 import '../providers/building_map_providers.dart';
 
 class BuildingMapOmnisearchField extends ConsumerStatefulWidget {
   const BuildingMapOmnisearchField({
     super.key,
     required this.enabled,
-    required this.repo,
+    required this.search,
     required this.controller,
     required this.focusNode,
     required this.onResolveEntity,
   });
 
   final bool enabled;
-  final BuildingMapRepos repo;
+
+  /// Μόνο η αναζήτηση — το πεδίο δεν χρειάζεται τα υπόλοιπα repositories.
+  final BuildingMapOmnisearch search;
+
   final TextEditingController controller;
   final FocusNode focusNode;
-  final Future<void> Function(dynamic entity) onResolveEntity;
+
+  /// Ρητός τύπος: το πεδίο παραδίδει ΜΟΝΟ αποτελέσματα αναζήτησης.
+  final Future<void> Function(BuildingMapOmnisearchHit hit) onResolveEntity;
 
   @override
   ConsumerState<BuildingMapOmnisearchField> createState() =>
@@ -28,9 +33,8 @@ class BuildingMapOmnisearchField extends ConsumerStatefulWidget {
 
 class _BuildingMapOmnisearchFieldState
     extends ConsumerState<BuildingMapOmnisearchField> {
-  final SearchDebouncer _debouncer = SearchDebouncer();
-  bool _loading = false;
-  List<BuildingMapOmnisearchHit> _hits = const [];
+  late final BuildingMapOmnisearchController _omnisearch =
+      BuildingMapOmnisearchController(search: widget.search);
 
   @override
   void initState() {
@@ -45,58 +49,49 @@ class _BuildingMapOmnisearchFieldState
       oldWidget.controller.removeListener(_onTextChanged);
       widget.controller.addListener(_onTextChanged);
     }
+    if (oldWidget.search != widget.search) {
+      _omnisearch.search = widget.search;
+    }
   }
 
   @override
   void dispose() {
-    _debouncer.dispose();
+    _omnisearch.dispose();
     widget.controller.removeListener(_onTextChanged);
     super.dispose();
   }
 
+  /// Μόνο καθαρισμός της επισήμανσης στον χάρτη· η αναζήτηση ζει στο
+  /// [RawAutocomplete.optionsBuilder] ώστε το αποτέλεσμα να αντιστοιχεί πάντα
+  /// στο κείμενο που ρωτήθηκε.
   void _onTextChanged() {
-    _debouncer.run(widget.controller.text, (q, isCurrent) async {
-      await _performSearch(q, isCurrent);
-    });
+    if (widget.controller.text.trim().isNotEmpty) return;
+    ref.read(buildingMapSearchRevealedDepartmentIdProvider.notifier).clear();
+    ref.read(buildingMapSearchUnresolvedNoticeProvider.notifier).clear();
   }
 
-  Future<void> _performSearch(
+  Future<Iterable<BuildingMapOmnisearchHit>> _optionsFor(String text) async {
+    if (!widget.enabled) return const [];
+    final hits = await _omnisearch.query(text);
+    // Null = το αίτημα ξεπεράστηκε· το RawAutocomplete απορρίπτει ούτως ή άλλως
+    // τα αποτελέσματα παλιότερης πληκτρολόγησης.
+    return hits ?? const [];
+  }
+
+  /// Enter ή κουμπί αναζήτησης: χωρίς αναμονή, και με ένα μόνο αποτέλεσμα
+  /// πηγαίνει κατευθείαν στην οντότητα.
+  Future<void> _searchImmediate(
     String query,
-    bool Function() isCurrent, {
-    bool directFocusWhenSingle = false,
-  }) async {
-    final trimmed = query.trim();
+    VoidCallback onNoDirectJump,
+  ) async {
     if (!widget.enabled) return;
-    if (trimmed.isEmpty) {
-      if (!mounted) return;
-      ref.read(buildingMapSearchRevealedDepartmentIdProvider.notifier).clear();
-      ref.read(buildingMapSearchUnresolvedNoticeProvider.notifier).clear();
-      setState(() {
-        _hits = const [];
-        _loading = false;
-      });
+    final hits = await _omnisearch.queryImmediate(query);
+    if (!mounted || hits == null) return;
+    if (hits.length == 1) {
+      await widget.onResolveEntity(hits.single);
       return;
     }
-
-    if (mounted && !_loading) {
-      setState(() => _loading = true);
-    }
-    final hits = await widget.repo.search.searchBuildingMapOmnisearch(trimmed);
-    if (!mounted || !isCurrent()) return;
-
-    setState(() {
-      _hits = hits;
-      _loading = false;
-    });
-    if (directFocusWhenSingle && hits.length == 1) {
-      await widget.onResolveEntity(hits.first);
-    }
-  }
-
-  Future<void> _searchImmediate(String query) async {
-    await _debouncer.runImmediate(query, (q, isCurrent) async {
-      await _performSearch(q, isCurrent, directFocusWhenSingle: true);
-    });
+    onNoDirectJump();
   }
 
   IconData _iconForHit(BuildingMapOmnisearchHit hit) {
@@ -126,11 +121,7 @@ class _BuildingMapOmnisearchFieldState
     return RawAutocomplete<BuildingMapOmnisearchHit>(
       textEditingController: widget.controller,
       focusNode: widget.focusNode,
-      optionsBuilder: (value) {
-        final q = value.text.trim();
-        if (!widget.enabled || q.isEmpty) return const Iterable.empty();
-        return _hits;
-      },
+      optionsBuilder: (value) => _optionsFor(value.text),
       displayStringForOption: (hit) => hit.title,
       onSelected: (hit) async {
         await widget.onResolveEntity(hit);
@@ -140,32 +131,33 @@ class _BuildingMapOmnisearchFieldState
           controller: controller,
           focusNode: focusNode,
           enabled: widget.enabled,
-          onSubmitted: (value) async {
-            await _searchImmediate(value);
-            onSubmit();
-          },
+          onSubmitted: (value) => _searchImmediate(value, onSubmit),
           decoration: InputDecoration(
             labelText: 'Έξυπνη αναζήτηση (Τμήμα/Υπάλληλος/Εξοπλισμός)',
             border: const OutlineInputBorder(),
             prefixIcon: const Icon(Icons.travel_explore),
-            suffixIcon: _loading
-                ? const Padding(
+            suffixIcon: ValueListenableBuilder<bool>(
+              valueListenable: _omnisearch.isSearching,
+              builder: (context, searching, _) {
+                if (searching) {
+                  return const Padding(
                     padding: EdgeInsets.all(12),
                     child: SizedBox(
                       width: 16,
                       height: 16,
                       child: CircularProgressIndicator(strokeWidth: 2),
                     ),
-                  )
-                : IconButton(
-                    tooltip: 'Αναζήτηση',
-                    onPressed: widget.enabled
-                        ? () async {
-                            await _searchImmediate(controller.text);
-                          }
-                        : null,
-                    icon: const Icon(Icons.search),
-                  ),
+                  );
+                }
+                return IconButton(
+                  tooltip: 'Αναζήτηση',
+                  onPressed: widget.enabled
+                      ? () => _searchImmediate(controller.text, () {})
+                      : null,
+                  icon: const Icon(Icons.search),
+                );
+              },
+            ),
           ),
         );
       },

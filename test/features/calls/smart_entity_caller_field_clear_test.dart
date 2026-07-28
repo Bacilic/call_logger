@@ -1,4 +1,4 @@
-// Widget tests: καθαρισμός πεδίου Καλούντα δεν αδειάζει Τμήμα/Εξοπλισμό (v2 §Γ.1).
+// Widget tests: καθαρισμός πεδίου Καλούντα δεν αδειάζει Τμήμα/Εξοπλισμό.
 //
 // Ολόκληρο αρχείο:
 //   flutter test test/features/calls/smart_entity_caller_field_clear_test.dart

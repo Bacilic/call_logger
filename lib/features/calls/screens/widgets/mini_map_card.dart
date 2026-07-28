@@ -17,6 +17,7 @@ import '../../../../core/models/building_map_floor.dart';
 import '../../../../core/services/building_map_storage.dart';
 import '../../../../core/services/lookup_service.dart';
 import '../../../../core/widgets/app_asset_image.dart';
+import '../../../directory/building_map/models/building_map_jump_target.dart';
 import '../../../directory/building_map/screens/building_map_dialog.dart';
 import '../../../directory/models/department_floor_display_extension.dart';
 import '../../../directory/models/department_model.dart';
@@ -237,7 +238,7 @@ class _MiniMapCardState extends ConsumerState<MiniMapCard> {
   String _exploreTooltip(
     _MiniMapCardData data,
     _MiniMapTarget target,
-    dynamic pendingEntity,
+    BuildingMapJumpTarget? pendingEntity,
   ) {
     if (pendingEntity == null) {
       return 'Δεν υπάρχει επιλογή για άνοιγμα χάρτη.\n'
@@ -275,32 +276,40 @@ class _MiniMapCardState extends ConsumerState<MiniMapCard> {
   _MiniMapTarget _targetForMode(_MiniMapCardData data, _MiniMapMode mode) {
     final fallback = data.selectedDepartmentId;
     if (mode == _MiniMapMode.department) {
+      final deptId = widget.departmentId;
       return _MiniMapTarget(
         label: 'Θέση τμήματος',
-        departmentId: widget.departmentId ?? fallback,
-        pendingEntity: widget.departmentId,
+        departmentId: deptId ?? fallback,
+        pendingEntity: deptId == null
+            ? null
+            : BuildingMapJumpTarget.department(deptId),
       );
     }
     if (mode == _MiniMapMode.phone) {
+      final phone = widget.phoneText.trim();
       return _MiniMapTarget(
         label: 'Θέση τηλεφώνου',
         departmentId: data.phoneDepartmentId ?? fallback,
-        pendingEntity: widget.phoneText.trim().isEmpty
+        pendingEntity: phone.isEmpty
             ? null
-            : widget.phoneText.trim(),
+            : BuildingMapJumpTarget.phone(phone),
       );
     }
     if (mode == _MiniMapMode.user) {
+      final user = widget.user;
       return _MiniMapTarget(
         label: 'Θέση υπαλλήλου',
         departmentId: data.userDepartmentId ?? fallback,
-        pendingEntity: widget.user,
+        pendingEntity: user == null ? null : BuildingMapJumpTarget.user(user),
       );
     }
+    final equipment = data.equipmentEntity;
     return _MiniMapTarget(
       label: 'Θέση εξοπλισμού',
       departmentId: data.equipmentDepartmentId ?? fallback,
-      pendingEntity: data.equipmentEntity,
+      pendingEntity: equipment == null
+          ? null
+          : BuildingMapJumpTarget.equipment(equipment),
     );
   }
 
@@ -448,7 +457,11 @@ class _MiniMapCardState extends ConsumerState<MiniMapCard> {
                   ? _mode
                   : data.initialMode;
               final target = _targetForMode(data, activeMode);
-              final mapJumpEntity = target.departmentId ?? target.pendingEntity;
+              // Προτεραιότητα στο γνωστό τμήμα· αλλιώς η οντότητα της κάρτας.
+              final targetDeptId = target.departmentId;
+              final mapJumpEntity = targetDeptId != null
+                  ? BuildingMapJumpTarget.department(targetDeptId)
+                  : target.pendingEntity;
 
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -534,7 +547,9 @@ class _MiniMapTarget {
 
   final String label;
   final int? departmentId;
-  final dynamic pendingEntity;
+
+  /// Στόχος για το άνοιγμα του πλήρους χάρτη· null = τίποτα προς εστίαση.
+  final BuildingMapJumpTarget? pendingEntity;
 }
 
 class _MiniMapCardData {

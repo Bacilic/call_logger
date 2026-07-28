@@ -8,20 +8,15 @@ import 'package:flutter_test/flutter_test.dart';
 
 import '../../test_reporter.dart';
 
-/// Τεκμηριώνει την παλιά ροή (destroy) έναντι της νέας (injectable terminate).
+/// Ελέγχει ότι η ροή κλεισίματος εκτελεί τα βήματα με τη σωστή σειρά.
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('ροή κλεισίματος AppShortcuts', () {
     test(
-      'παλιά ροή κατέληγε σε windowManager.destroy — νέα ροή καλεί terminate',
+      'η ροή κλεισίματος εκτελεί τα βήματα με τη σωστή σειρά και τερματίζει τελευταία',
       () async {
-        // Χαρακτηρισμός παλιάς συμπεριφοράς (τεκμηρίωση, όχι εκτέλεση destroy):
-        const oldFlowEndedWith = 'windowManager.destroy';
-        expect(oldFlowEndedWith, 'windowManager.destroy');
-
         final order = <String>[];
-        var destroyCalled = false;
         var terminateCalled = false;
 
         final coordinator = ShutdownCoordinator(
@@ -38,16 +33,12 @@ void main() {
 
         await coordinator.run();
 
-        // Η νέα ροή δεν εκθέτει καν destroy — προσομοίωση ότι δεν κλήθηκε.
-        expect(destroyCalled, isFalse);
         expect(terminateCalled, isTrue);
-        expect(order.last, 'terminate');
-        expect(order[order.length - 2], 'crashLog');
         expect(
           order,
-          isNot(contains('destroy')),
+          ['persist', 'wal', 'backup', 'closeDb', 'crashLog', 'terminate'],
           reason: greekExpectMsg(
-            'Η νέα ροή κλεισίματος δεν καλεί windowManager.destroy()',
+            'Η σειρά των βημάτων τερματισμού είναι δεσμευτική',
           ),
         );
       },

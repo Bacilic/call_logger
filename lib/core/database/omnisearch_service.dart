@@ -27,6 +27,19 @@ class BuildingMapOmnisearchHit {
   final List<int> departmentIds;
 }
 
+/// Κάτοχος εξοπλισμού για τη γραμμή αποτελέσματος («ποιος και πού»).
+class _OmnisearchEquipmentOwner {
+  const _OmnisearchEquipmentOwner({
+    required this.name,
+    required this.departmentId,
+    required this.departmentName,
+  });
+
+  final String name;
+  final int? departmentId;
+  final String departmentName;
+}
+
 /// Read-only αναζήτηση καταλόγου για τον χάρτη κτιρίου (τμήματα, χρήστες, εξοπλισμός).
 class OmnisearchService {
   OmnisearchService(this.db, [DirectorySupport? support])
@@ -204,12 +217,47 @@ class OmnisearchService {
       ORDER BY e.code_equipment COLLATE NOCASE ASC, e.type COLLATE NOCASE ASC
     ''');
 
+    // Κάτοχοι εξοπλισμού (M2M) με το τμήμα τους: «ποιος και πού» για τον χάρτη,
+    // αφού ο εξοπλισμός συνήθως δένεται με τμήμα μέσω του κατόχου του.
+    final equipmentOwnerRows = await db.rawQuery('''
+      SELECT
+        ue.equipment_id AS equipment_id,
+        u.first_name AS first_name,
+        u.last_name AS last_name,
+        u.department_id AS department_id,
+        d.name AS department_name
+      FROM user_equipment ue
+      JOIN users u ON u.id = ue.user_id AND COALESCE(u.is_deleted, 0) = 0
+      LEFT JOIN departments d
+        ON d.id = u.department_id AND COALESCE(d.is_deleted, 0) = 0
+      ORDER BY u.last_name COLLATE NOCASE ASC, u.first_name COLLATE NOCASE ASC
+    ''');
+
     final userPhoneDepartmentIds = <int, Set<int>>{};
     for (final row in userPhoneDeptRows) {
       final uid = row['user_id'] as int?;
       final did = row['department_id'] as int?;
       if (uid == null || did == null) continue;
       userPhoneDepartmentIds.putIfAbsent(uid, () => <int>{}).add(did);
+    }
+
+    final ownersByEquipmentId = <int, List<_OmnisearchEquipmentOwner>>{};
+    for (final row in equipmentOwnerRows) {
+      final eid = row['equipment_id'] as int?;
+      if (eid == null) continue;
+      final name =
+          '${(row['first_name'] as String?)?.trim() ?? ''} '
+                  '${(row['last_name'] as String?)?.trim() ?? ''}'
+              .trim();
+      ownersByEquipmentId
+          .putIfAbsent(eid, () => [])
+          .add(
+            _OmnisearchEquipmentOwner(
+              name: name,
+              departmentId: row['department_id'] as int?,
+              departmentName: (row['department_name'] as String?)?.trim() ?? '',
+            ),
+          );
     }
 
     final hits =
@@ -322,11 +370,29 @@ class OmnisearchService {
       final title = code.isNotEmpty
           ? code
           : (type.isNotEmpty ? type : '(Χωρίς κωδικό)');
+      final owners = ownersByEquipmentId[id] ?? const [];
+      final ownerNames = [
+        for (final o in owners)
+          if (o.name.isNotEmpty) o.name,
+      ];
+      // «Ποιος και πού»: κάτοχος + τμήμα. Χωρίς απευθείας τμήμα, το τμήμα
+      // (και η μετάβαση στον χάρτη) προκύπτει από τους κατόχους.
+      final ownerDeptNames = <String>{
+        for (final o in owners)
+          if (o.departmentName.isNotEmpty) o.departmentName,
+      };
+      final deptDisplay = deptName.isNotEmpty
+          ? deptName
+          : ownerDeptNames.join(' / ');
       final subtitleParts = <String>[];
       if (type.isNotEmpty && type != title) subtitleParts.add(type);
-      if (deptName.isNotEmpty) subtitleParts.add(deptName);
+      if (ownerNames.isNotEmpty) subtitleParts.add(ownerNames.join(', '));
+      if (deptDisplay.isNotEmpty) subtitleParts.add(deptDisplay);
       final equipmentDepartmentId = row['department_id'] as int?;
-      final departmentIds = <int>[?equipmentDepartmentId];
+      final departmentIds = <int>{
+        ?equipmentDepartmentId,
+        for (final o in owners) ?o.departmentId,
+      }.toList()..sort();
       if (departmentIds.length == 1 && departmentIds.first > 0) {
         final hint = _omnisearchUnmappedHintForDepartmentId(
           departmentIds.first,

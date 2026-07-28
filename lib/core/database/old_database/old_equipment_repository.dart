@@ -562,10 +562,7 @@ class OldEquipmentRepository {
     final path = databasePath.trim();
     if (path.isEmpty) return 0;
     await _ensureDataIssueSchemaOnPath(path);
-    final db = await _databaseProvider.open(
-      path,
-      mode: LampDatabaseMode.write,
-    );
+    final db = await _databaseProvider.open(path, mode: LampDatabaseMode.write);
     return normalizeLegacyDataIssueTypes(db);
   }
 

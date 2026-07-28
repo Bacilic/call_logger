@@ -67,12 +67,25 @@ class UserRepository {
       if (uid == null || num == null) continue;
       byUser.putIfAbsent(uid, () => []).add(num);
     }
+    // Όνομα τμήματος ως κανονικό πεδίο του row (`department_name`) ώστε το
+    // [UserModel] να μη χρειάζεται lookup σε καθολική κατάσταση. Σημασιολογία
+    // ταυτόσημη με το παλιό cache: null = χωρίς τμήμα, '' = id χωρίς ενεργή εγγραφή.
+    final deptNameById = <int, String>{};
+    for (final d in await _departments.getActiveDepartments()) {
+      final did = d['id'] as int?;
+      final name = d['name'] as String?;
+      if (did != null && name != null) deptNameById[did] = name;
+    }
     return users.map((m) {
       final copy = Map<String, dynamic>.from(m);
       final id = m['id'] as int?;
       copy['phones'] = id != null
           ? List<String>.from(byUser[id] ?? const [])
           : <String>[];
+      final deptId = m['department_id'] as int?;
+      copy['department_name'] = deptId == null
+          ? null
+          : (deptNameById[deptId] ?? '');
       return copy;
     }).toList();
   }

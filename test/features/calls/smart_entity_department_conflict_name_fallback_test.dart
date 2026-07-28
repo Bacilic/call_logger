@@ -132,11 +132,13 @@ void main() {
           ConflictSeverity.mismatch,
           reason: 'Πραγματικά διαφορετικό τμήμα — ασυμφωνία',
         );
+        // Το μήνυμα ονομάζει το άλλο μέλος του ζεύγους και τη σχέση
+        // που λείπει — όχι πού ανήκει πραγματικά η κάθε οντότητα.
         expect(
           container
               .read(callSmartEntityProvider)
               .conflictTooltipFor(SelectorField.department),
-          contains(_kTeiName),
+          contains('Άγνωστο Τμήμα'),
         );
       },
     );

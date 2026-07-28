@@ -10,6 +10,7 @@ import '../../../../core/utils/name_parser.dart';
 import '../../../../core/utils/search_text_normalizer.dart';
 import '../../models/user_model.dart';
 import '../../provider/smart_entity_selector_provider.dart';
+import 'smart_entity_selector_anchor_frame.dart';
 import 'smart_entity_selector_caller_presentational.dart' as caller_ui;
 import 'smart_entity_selector_conflict_badge.dart';
 import 'smart_entity_selector_overlay_utils.dart';
@@ -164,7 +165,7 @@ class SmartEntityCallerFieldState extends State<SmartEntityCallerField> {
           setState(() => _showSuggestionList = false);
         }
       });
-      // v2 §Ζ: entity lookup σε focus-out (commit). Μόνο για ελεύθερο κείμενο
+      // Entity lookup σε focus-out (commit). Μόνο για ελεύθερο κείμενο
       // που δεν έχει ήδη επιλεγμένο καλούντα — ώστε να μη χαλάει ρητή επιλογή.
       if (widget.controller.text.trim().isNotEmpty &&
           widget.header.selectedCaller == null) {
@@ -354,401 +355,331 @@ class SmartEntityCallerFieldState extends State<SmartEntityCallerField> {
     return SizedBox(
       width: width,
       child: MergeSemantics(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Icon(
-                  Icons.person_outline,
-                  size: 16,
-                  color: theme.colorScheme.primary,
-                ),
-                const SizedBox(width: 4),
-                Expanded(
-                  child: Text(
-                    'Καλούντας',
-                    style: theme.textTheme.labelMedium,
-                    softWrap: true,
+        child: AnchorFrame(
+          isAnchor: widget.header.isAnchorHighlighted(SelectorField.caller),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    Icons.person_outline,
+                    size: 16,
+                    color: theme.colorScheme.primary,
                   ),
-                ),
-                ConflictBadge(
-                  severity: widget.header.conflictSeverityFor(
-                    SelectorField.caller,
-                  ),
-                  message: widget.header.conflictTooltipFor(
-                    SelectorField.caller,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 4),
-            OverlayPortal(
-              controller: _suggestionOverlayController,
-              overlayChildBuilder: (BuildContext overlayContext) {
-                return Align(
-                  alignment: Alignment.topLeft,
-                  child: CompositedTransformFollower(
-                    link: _callerLayerLink,
-                    showWhenUnlinked: false,
-                    targetAnchor: Alignment.bottomLeft,
-                    followerAnchor: Alignment.topLeft,
-                    child: SizedBox(
-                      width: width,
-                      child: SmartEntityCallerSuggestionList(
-                        header: header,
-                        notifier: notifier,
-                        controller: controller,
-                        theme: theme,
-                        showUnknownOption: controller.text.trim().isEmpty,
-                        getPhoneFieldDigits: widget.getPhoneFieldDigits,
-                        highlightedIndex: _keyboardOptionIndex,
-                        onSelectionCommitted: _onSuggestionSelected,
-                      ),
+                  const SizedBox(width: 4),
+                  Expanded(
+                    child: Text(
+                      'Καλούντας',
+                      style: theme.textTheme.labelMedium,
+                      softWrap: true,
                     ),
                   ),
-                );
-              },
-              child: CompositedTransformTarget(
-                link: _callerLayerLink,
-                child: Autocomplete<String>(
-                  displayStringForOption: (String option) => option,
-                  focusNode: focusNode,
-                  textEditingController: controller,
-                  optionsBuilder: (TextEditingValue textEditingValue) {
-                    final effectiveText = _isKeyboardPreview
-                        ? _typedQuery
-                        : textEditingValue.text;
-                    final q = SearchTextNormalizer.normalizeForSearch(
-                      effectiveText,
-                    );
-                    final options = <String>[];
-                    if (header.callerCandidates.isNotEmpty) {
-                      // Σε κατάσταση πολλαπλών candidate από lookup (κενό query),
-                      // χρησιμοποιούμε μόνο την inline λίστα για αποφυγή διπλού μηχανισμού λίστας.
-                      if (q.isEmpty) {
-                        return const <String>[];
-                      }
-                      for (final u in header.callerCandidates) {
-                        if (SearchTextNormalizer.matchesNormalizedQuery(
-                          u.fullNameWithDepartment,
-                          q,
-                        )) {
+                  ConflictBadge(
+                    severity: widget.header.conflictSeverityFor(
+                      SelectorField.caller,
+                    ),
+                    message: widget.header.conflictTooltipFor(
+                      SelectorField.caller,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 4),
+              OverlayPortal(
+                controller: _suggestionOverlayController,
+                overlayChildBuilder: (BuildContext overlayContext) {
+                  return Align(
+                    alignment: Alignment.topLeft,
+                    child: CompositedTransformFollower(
+                      link: _callerLayerLink,
+                      showWhenUnlinked: false,
+                      targetAnchor: Alignment.bottomLeft,
+                      followerAnchor: Alignment.topLeft,
+                      child: SizedBox(
+                        width: width,
+                        child: SmartEntityCallerSuggestionList(
+                          header: header,
+                          notifier: notifier,
+                          controller: controller,
+                          theme: theme,
+                          showUnknownOption: controller.text.trim().isEmpty,
+                          getPhoneFieldDigits: widget.getPhoneFieldDigits,
+                          highlightedIndex: _keyboardOptionIndex,
+                          onSelectionCommitted: _onSuggestionSelected,
+                        ),
+                      ),
+                    ),
+                  );
+                },
+                child: CompositedTransformTarget(
+                  link: _callerLayerLink,
+                  child: Autocomplete<String>(
+                    displayStringForOption: (String option) => option,
+                    focusNode: focusNode,
+                    textEditingController: controller,
+                    optionsBuilder: (TextEditingValue textEditingValue) {
+                      final effectiveText = _isKeyboardPreview
+                          ? _typedQuery
+                          : textEditingValue.text;
+                      final q = SearchTextNormalizer.normalizeForSearch(
+                        effectiveText,
+                      );
+                      final options = <String>[];
+                      if (header.callerCandidates.isNotEmpty) {
+                        // Σε κατάσταση πολλαπλών candidate από lookup (κενό query),
+                        // χρησιμοποιούμε μόνο την inline λίστα για αποφυγή διπλού μηχανισμού λίστας.
+                        if (q.isEmpty) {
+                          return const <String>[];
+                        }
+                        for (final u in header.callerCandidates) {
+                          if (SearchTextNormalizer.matchesNormalizedQuery(
+                            u.fullNameWithDepartment,
+                            q,
+                          )) {
+                            options.add(u.fullNameWithDepartment);
+                          }
+                        }
+                      } else {
+                        final users = q.isEmpty
+                            ? <UserModel>[]
+                            : (lookupService?.searchUsersByQuery(
+                                    effectiveText.trim(),
+                                  ) ??
+                                  []);
+                        for (final u in users) {
                           options.add(u.fullNameWithDepartment);
                         }
                       }
-                    } else {
-                      final users = q.isEmpty
-                          ? <UserModel>[]
-                          : (lookupService?.searchUsersByQuery(
-                                  effectiveText.trim(),
-                                ) ??
-                                []);
-                      for (final u in users) {
-                        options.add(u.fullNameWithDepartment);
-                      }
-                    }
-                    return options
-                        .where(
-                          (option) =>
-                              SearchTextNormalizer.matchesNormalizedQuery(
-                                option,
-                                q,
-                              ),
-                        )
-                        .toList();
-                  },
-                  optionsViewBuilder: (context, onSelected, options) {
-                    final optionsList = options.toList();
-                    final theme = Theme.of(context);
-                    return Align(
-                      alignment: Alignment.topLeft,
-                      child: Material(
-                        elevation: 4,
-                        color: theme.colorScheme.surface,
-                        child: ConstrainedBox(
-                          constraints: const BoxConstraints(
-                            maxHeight: 260,
-                            minWidth: 220,
-                          ),
-                          child: ListView.builder(
-                            controller: _optionsScrollController,
-                            padding: EdgeInsets.zero,
-                            shrinkWrap: true,
-                            itemCount: optionsList.length,
-                            itemBuilder: (context, index) {
-                              final frameworkHighlighted =
-                                  AutocompleteHighlightedOption.of(context) ==
-                                  index;
-                              final keyboardHighlighted =
-                                  _keyboardOptionIndex >= 0 &&
-                                  _keyboardOptionIndex == index;
-                              final isHighlighted = _isKeyboardPreview
-                                  ? keyboardHighlighted
-                                  : frameworkHighlighted;
-                              if (isHighlighted && _isKeyboardPreview) {
-                                if (_lastAutoScrollIndex != index) {
-                                  _lastAutoScrollIndex = index;
-                                  syncAutocompleteHighlightedListScroll(
-                                    controller: _optionsScrollController,
-                                    highlightedIndex: index,
-                                    itemExtent: 48,
-                                    viewportExtent: 260,
-                                  );
-                                }
-                              }
-                              return ListTile(
-                                dense: true,
-                                selected: isHighlighted,
-                                selectedTileColor: theme.colorScheme.primary
-                                    .withValues(alpha: 0.12),
-                                title: Text(optionsList[index]),
-                                onTap: () => onSelected(optionsList[index]),
-                              );
-                            },
-                          ),
-                        ),
-                      ),
-                    );
-                  },
-                  onSelected: (String selection) {
-                    _commitCallerSelection(
-                      selection: selection,
-                      controller: controller,
-                      nextFocusNode: nextFocusNode,
-                      header: header,
-                      lookupService: lookupService,
-                      notifier: notifier,
-                      getPhoneFieldDigits: widget.getPhoneFieldDigits,
-                    );
-                  },
-                  fieldViewBuilder:
-                      (
-                        context,
-                        textController,
-                        focusNodeParam,
-                        onFieldSubmitted,
-                      ) {
-                        final style =
-                            theme.textTheme.bodyLarge ?? const TextStyle();
-                        final showTooltip =
-                            !focusNodeParam.hasFocus &&
-                            textOverflowsSingleLine(
-                              text: textController.text,
-                              style: style,
-                              maxWidth: width - 88,
-                              textDirection: textDirection,
-                            );
-                        final field = Focus(
-                          onKeyEvent: (node, event) {
-                            if (event is! KeyDownEvent) {
-                              return KeyEventResult.ignored;
-                            }
-                            final showUnknownOption = controller.text
-                                .trim()
-                                .isEmpty;
-                            final callerOverlayVisible =
-                                header.callerCandidates.isNotEmpty &&
-                                _showSuggestionList &&
-                                (controller.text.trim().isEmpty ||
-                                    _isKeyboardPreview);
-                            if (callerOverlayVisible) {
-                              final overlayOptions =
-                                  _callerOverlayKeyboardOptions(
-                                    header,
-                                    showUnknownOption: showUnknownOption,
-                                  );
-                              if (event.logicalKey ==
-                                  LogicalKeyboardKey.arrowDown) {
-                                if (overlayOptions.isEmpty) {
-                                  return KeyEventResult.ignored;
-                                }
-                                setState(() {
-                                  _keyboardOptionIndex =
-                                      (_keyboardOptionIndex + 1).clamp(
-                                        0,
-                                        overlayOptions.length - 1,
-                                      );
-                                });
-                                _isKeyboardPreview = true;
-                                _setControllerText(
-                                  textController,
-                                  _callerPreviewTextForSelection(
-                                    overlayOptions[_keyboardOptionIndex],
-                                    header,
-                                    lookupService,
-                                  ),
-                                );
-                                return KeyEventResult.handled;
-                              }
-                              if (event.logicalKey ==
-                                  LogicalKeyboardKey.arrowUp) {
-                                if (overlayOptions.isEmpty) {
-                                  return KeyEventResult.ignored;
-                                }
-                                setState(() {
-                                  _keyboardOptionIndex =
-                                      _keyboardOptionIndex <= 0
-                                      ? 0
-                                      : _keyboardOptionIndex - 1;
-                                });
-                                _isKeyboardPreview = true;
-                                _setControllerText(
-                                  textController,
-                                  _callerPreviewTextForSelection(
-                                    overlayOptions[_keyboardOptionIndex],
-                                    header,
-                                    lookupService,
-                                  ),
-                                );
-                                return KeyEventResult.handled;
-                              }
-                              if (event.logicalKey ==
-                                      LogicalKeyboardKey.enter &&
-                                  overlayOptions.isNotEmpty &&
-                                  _keyboardOptionIndex >= 0 &&
-                                  _keyboardOptionIndex <
-                                      overlayOptions.length) {
-                                _commitCallerSelection(
-                                  selection:
-                                      overlayOptions[_keyboardOptionIndex],
-                                  controller: textController,
-                                  nextFocusNode: nextFocusNode,
-                                  header: header,
-                                  lookupService: lookupService,
-                                  notifier: notifier,
-                                  getPhoneFieldDigits:
-                                      widget.getPhoneFieldDigits,
-                                );
-                                return KeyEventResult.handled;
-                              }
-                              return KeyEventResult.ignored;
-                            }
-                            final options = _callerAutocompleteOptions(
-                              _typedQuery,
-                              header,
-                              lookupService,
-                            );
-                            final shouldHideInlineSuggestions =
-                                event.logicalKey ==
-                                    LogicalKeyboardKey.arrowDown ||
-                                event.logicalKey ==
-                                    LogicalKeyboardKey.arrowUp ||
-                                event.logicalKey == LogicalKeyboardKey.enter;
-                            if (_showSuggestionList &&
-                                shouldHideInlineSuggestions &&
-                                options.isNotEmpty) {
-                              setState(() => _showSuggestionList = false);
-                            }
-                            if (event.logicalKey ==
-                                LogicalKeyboardKey.arrowDown) {
-                              if (options.isEmpty) {
-                                return KeyEventResult.ignored;
-                              }
-                              _keyboardOptionIndex = (_keyboardOptionIndex + 1)
-                                  .clamp(0, options.length - 1);
-                              _isKeyboardPreview = true;
-                              _setControllerText(
-                                textController,
-                                options[_keyboardOptionIndex],
-                              );
-                              return KeyEventResult.handled;
-                            }
-                            if (event.logicalKey ==
-                                LogicalKeyboardKey.arrowUp) {
-                              if (options.isEmpty) {
-                                return KeyEventResult.ignored;
-                              }
-                              _keyboardOptionIndex = _keyboardOptionIndex <= 0
-                                  ? 0
-                                  : _keyboardOptionIndex - 1;
-                              _isKeyboardPreview = true;
-                              _setControllerText(
-                                textController,
-                                options[_keyboardOptionIndex],
-                              );
-                              return KeyEventResult.handled;
-                            }
-                            if (event.logicalKey == LogicalKeyboardKey.enter &&
-                                options.isNotEmpty &&
-                                _keyboardOptionIndex >= 0 &&
-                                _keyboardOptionIndex < options.length) {
-                              _commitCallerSelection(
-                                selection: options[_keyboardOptionIndex],
-                                controller: textController,
-                                nextFocusNode: nextFocusNode,
-                                header: header,
-                                lookupService: lookupService,
-                                notifier: notifier,
-                                getPhoneFieldDigits: widget.getPhoneFieldDigits,
-                              );
-                              return KeyEventResult.handled;
-                            }
-                            return KeyEventResult.ignored;
-                          },
-                          child: TextField(
-                            controller: textController,
-                            focusNode: focusNodeParam,
-                            spellCheckConfiguration:
-                                platformSpellCheckConfiguration,
-                            decoration: InputDecoration(
-                              hintText: hintText,
-                              hintStyle: theme.textTheme.bodyMedium?.copyWith(
-                                color: theme.colorScheme.onSurfaceVariant
-                                    .withValues(alpha: 0.7),
-                              ),
-                              border: const OutlineInputBorder(),
-                              isDense: true,
-                              suffixIcon:
-                                  showInlineFieldClearButton(
-                                    textController.text,
-                                  )
-                                  ? Semantics(
-                                      label: 'Καθαρισμός Καλούντα',
-                                      child: IconButton(
-                                        icon: const Icon(Icons.close, size: 20),
-                                        onPressed: () {
-                                          textController.clear();
-                                          _typedQuery = '';
-                                          _keyboardOptionIndex = -1;
-                                          notifier.clearCaller();
-                                        },
-                                        tooltip: 'Καθαρισμός Καλούντα',
-                                      ),
-                                    )
-                                  : null,
+                      return options
+                          .where(
+                            (option) =>
+                                SearchTextNormalizer.matchesNormalizedQuery(
+                                  option,
+                                  q,
+                                ),
+                          )
+                          .toList();
+                    },
+                    optionsViewBuilder: (context, onSelected, options) {
+                      final optionsList = options.toList();
+                      final theme = Theme.of(context);
+                      return Align(
+                        alignment: Alignment.topLeft,
+                        child: Material(
+                          elevation: 4,
+                          color: theme.colorScheme.surface,
+                          child: ConstrainedBox(
+                            constraints: const BoxConstraints(
+                              maxHeight: 260,
+                              minWidth: 220,
                             ),
-                            onChanged: (value) {
-                              if (_isKeyboardPreview) {
-                                _isKeyboardPreview = false;
-                                return;
-                              }
-                              _typedQuery = value;
-                              _keyboardOptionIndex = -1;
-                              if (value.trim().isEmpty) {
-                                notifier.clearCaller();
-                              } else {
-                                notifier.updateCallerDisplayText(value);
-                                if (header.selectedCaller != null) {
-                                  final n = header.selectedCaller!.name;
-                                  final f = header
-                                      .selectedCaller!
-                                      .fullNameWithDepartment;
-                                  if (value.trim() != n && value.trim() != f) {
-                                    notifier.updateSelectedCaller(null);
+                            child: ListView.builder(
+                              controller: _optionsScrollController,
+                              padding: EdgeInsets.zero,
+                              shrinkWrap: true,
+                              itemCount: optionsList.length,
+                              itemBuilder: (context, index) {
+                                final frameworkHighlighted =
+                                    AutocompleteHighlightedOption.of(context) ==
+                                    index;
+                                final keyboardHighlighted =
+                                    _keyboardOptionIndex >= 0 &&
+                                    _keyboardOptionIndex == index;
+                                final isHighlighted = _isKeyboardPreview
+                                    ? keyboardHighlighted
+                                    : frameworkHighlighted;
+                                if (isHighlighted && _isKeyboardPreview) {
+                                  if (_lastAutoScrollIndex != index) {
+                                    _lastAutoScrollIndex = index;
+                                    syncAutocompleteHighlightedListScroll(
+                                      controller: _optionsScrollController,
+                                      highlightedIndex: index,
+                                      itemExtent: 48,
+                                      viewportExtent: 260,
+                                    );
                                   }
                                 }
+                                return ListTile(
+                                  dense: true,
+                                  selected: isHighlighted,
+                                  selectedTileColor: theme.colorScheme.primary
+                                      .withValues(alpha: 0.12),
+                                  title: Text(optionsList[index]),
+                                  onTap: () => onSelected(optionsList[index]),
+                                );
+                              },
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                    onSelected: (String selection) {
+                      _commitCallerSelection(
+                        selection: selection,
+                        controller: controller,
+                        nextFocusNode: nextFocusNode,
+                        header: header,
+                        lookupService: lookupService,
+                        notifier: notifier,
+                        getPhoneFieldDigits: widget.getPhoneFieldDigits,
+                      );
+                    },
+                    fieldViewBuilder:
+                        (
+                          context,
+                          textController,
+                          focusNodeParam,
+                          onFieldSubmitted,
+                        ) {
+                          final style =
+                              theme.textTheme.bodyLarge ?? const TextStyle();
+                          final showTooltip =
+                              !focusNodeParam.hasFocus &&
+                              textOverflowsSingleLine(
+                                text: textController.text,
+                                style: style,
+                                maxWidth: width - 88,
+                                textDirection: textDirection,
+                              );
+                          final field = Focus(
+                            onKeyEvent: (node, event) {
+                              if (event is! KeyDownEvent) {
+                                return KeyEventResult.ignored;
                               }
-                            },
-                            onSubmitted: (_) {
+                              final showUnknownOption = controller.text
+                                  .trim()
+                                  .isEmpty;
+                              final callerOverlayVisible =
+                                  header.callerCandidates.isNotEmpty &&
+                                  _showSuggestionList &&
+                                  (controller.text.trim().isEmpty ||
+                                      _isKeyboardPreview);
+                              if (callerOverlayVisible) {
+                                final overlayOptions =
+                                    _callerOverlayKeyboardOptions(
+                                      header,
+                                      showUnknownOption: showUnknownOption,
+                                    );
+                                if (event.logicalKey ==
+                                    LogicalKeyboardKey.arrowDown) {
+                                  if (overlayOptions.isEmpty) {
+                                    return KeyEventResult.ignored;
+                                  }
+                                  setState(() {
+                                    _keyboardOptionIndex =
+                                        (_keyboardOptionIndex + 1).clamp(
+                                          0,
+                                          overlayOptions.length - 1,
+                                        );
+                                  });
+                                  _isKeyboardPreview = true;
+                                  _setControllerText(
+                                    textController,
+                                    _callerPreviewTextForSelection(
+                                      overlayOptions[_keyboardOptionIndex],
+                                      header,
+                                      lookupService,
+                                    ),
+                                  );
+                                  return KeyEventResult.handled;
+                                }
+                                if (event.logicalKey ==
+                                    LogicalKeyboardKey.arrowUp) {
+                                  if (overlayOptions.isEmpty) {
+                                    return KeyEventResult.ignored;
+                                  }
+                                  setState(() {
+                                    _keyboardOptionIndex =
+                                        _keyboardOptionIndex <= 0
+                                        ? 0
+                                        : _keyboardOptionIndex - 1;
+                                  });
+                                  _isKeyboardPreview = true;
+                                  _setControllerText(
+                                    textController,
+                                    _callerPreviewTextForSelection(
+                                      overlayOptions[_keyboardOptionIndex],
+                                      header,
+                                      lookupService,
+                                    ),
+                                  );
+                                  return KeyEventResult.handled;
+                                }
+                                if (event.logicalKey ==
+                                        LogicalKeyboardKey.enter &&
+                                    overlayOptions.isNotEmpty &&
+                                    _keyboardOptionIndex >= 0 &&
+                                    _keyboardOptionIndex <
+                                        overlayOptions.length) {
+                                  _commitCallerSelection(
+                                    selection:
+                                        overlayOptions[_keyboardOptionIndex],
+                                    controller: textController,
+                                    nextFocusNode: nextFocusNode,
+                                    header: header,
+                                    lookupService: lookupService,
+                                    notifier: notifier,
+                                    getPhoneFieldDigits:
+                                        widget.getPhoneFieldDigits,
+                                  );
+                                  return KeyEventResult.handled;
+                                }
+                                return KeyEventResult.ignored;
+                              }
                               final options = _callerAutocompleteOptions(
                                 _typedQuery,
                                 header,
                                 lookupService,
                               );
-                              if (options.isNotEmpty &&
+                              final shouldHideInlineSuggestions =
+                                  event.logicalKey ==
+                                      LogicalKeyboardKey.arrowDown ||
+                                  event.logicalKey ==
+                                      LogicalKeyboardKey.arrowUp ||
+                                  event.logicalKey == LogicalKeyboardKey.enter;
+                              if (_showSuggestionList &&
+                                  shouldHideInlineSuggestions &&
+                                  options.isNotEmpty) {
+                                setState(() => _showSuggestionList = false);
+                              }
+                              if (event.logicalKey ==
+                                  LogicalKeyboardKey.arrowDown) {
+                                if (options.isEmpty) {
+                                  return KeyEventResult.ignored;
+                                }
+                                _keyboardOptionIndex =
+                                    (_keyboardOptionIndex + 1).clamp(
+                                      0,
+                                      options.length - 1,
+                                    );
+                                _isKeyboardPreview = true;
+                                _setControllerText(
+                                  textController,
+                                  options[_keyboardOptionIndex],
+                                );
+                                return KeyEventResult.handled;
+                              }
+                              if (event.logicalKey ==
+                                  LogicalKeyboardKey.arrowUp) {
+                                if (options.isEmpty) {
+                                  return KeyEventResult.ignored;
+                                }
+                                _keyboardOptionIndex = _keyboardOptionIndex <= 0
+                                    ? 0
+                                    : _keyboardOptionIndex - 1;
+                                _isKeyboardPreview = true;
+                                _setControllerText(
+                                  textController,
+                                  options[_keyboardOptionIndex],
+                                );
+                                return KeyEventResult.handled;
+                              }
+                              if (event.logicalKey ==
+                                      LogicalKeyboardKey.enter &&
+                                  options.isNotEmpty &&
                                   _keyboardOptionIndex >= 0 &&
                                   _keyboardOptionIndex < options.length) {
                                 _commitCallerSelection(
@@ -761,35 +692,117 @@ class SmartEntityCallerFieldState extends State<SmartEntityCallerField> {
                                   getPhoneFieldDigits:
                                       widget.getPhoneFieldDigits,
                                 );
-                                return;
+                                return KeyEventResult.handled;
                               }
-                              widget.onContentChecked();
-                              nextFocusNode.requestFocus();
-                              if (widget.controller.text.trim().isNotEmpty &&
-                                  header.selectedCaller == null) {
-                                _performLookup();
-                              }
+                              return KeyEventResult.ignored;
                             },
-                          ),
-                        );
-                        return Semantics(
-                          label: 'Όνομα καλούντος',
-                          child: SizedBox(
-                            width: width,
-                            child: showTooltip
-                                ? Tooltip(
-                                    message: textController.text,
-                                    child: field,
-                                  )
-                                : field,
-                          ),
-                        );
-                      },
+                            child: TextField(
+                              controller: textController,
+                              focusNode: focusNodeParam,
+                              spellCheckConfiguration:
+                                  platformSpellCheckConfiguration,
+                              decoration: InputDecoration(
+                                hintText: hintText,
+                                hintStyle: theme.textTheme.bodyMedium?.copyWith(
+                                  color: theme.colorScheme.onSurfaceVariant
+                                      .withValues(alpha: 0.7),
+                                ),
+                                border: const OutlineInputBorder(),
+                                isDense: true,
+                                suffixIcon:
+                                    showInlineFieldClearButton(
+                                      textController.text,
+                                    )
+                                    ? Semantics(
+                                        label: 'Καθαρισμός Καλούντα',
+                                        child: IconButton(
+                                          icon: const Icon(
+                                            Icons.close,
+                                            size: 20,
+                                          ),
+                                          onPressed: () {
+                                            textController.clear();
+                                            _typedQuery = '';
+                                            _keyboardOptionIndex = -1;
+                                            notifier.clearCaller();
+                                          },
+                                          tooltip: 'Καθαρισμός Καλούντα',
+                                        ),
+                                      )
+                                    : null,
+                              ),
+                              onChanged: (value) {
+                                if (_isKeyboardPreview) {
+                                  _isKeyboardPreview = false;
+                                  return;
+                                }
+                                _typedQuery = value;
+                                _keyboardOptionIndex = -1;
+                                if (value.trim().isEmpty) {
+                                  notifier.clearCaller();
+                                } else {
+                                  notifier.updateCallerDisplayText(value);
+                                  if (header.selectedCaller != null) {
+                                    final n = header.selectedCaller!.name;
+                                    final f = header
+                                        .selectedCaller!
+                                        .fullNameWithDepartment;
+                                    if (value.trim() != n &&
+                                        value.trim() != f) {
+                                      notifier.updateSelectedCaller(null);
+                                    }
+                                  }
+                                }
+                              },
+                              onSubmitted: (_) {
+                                final options = _callerAutocompleteOptions(
+                                  _typedQuery,
+                                  header,
+                                  lookupService,
+                                );
+                                if (options.isNotEmpty &&
+                                    _keyboardOptionIndex >= 0 &&
+                                    _keyboardOptionIndex < options.length) {
+                                  _commitCallerSelection(
+                                    selection: options[_keyboardOptionIndex],
+                                    controller: textController,
+                                    nextFocusNode: nextFocusNode,
+                                    header: header,
+                                    lookupService: lookupService,
+                                    notifier: notifier,
+                                    getPhoneFieldDigits:
+                                        widget.getPhoneFieldDigits,
+                                  );
+                                  return;
+                                }
+                                widget.onContentChecked();
+                                nextFocusNode.requestFocus();
+                                if (widget.controller.text.trim().isNotEmpty &&
+                                    header.selectedCaller == null) {
+                                  _performLookup();
+                                }
+                              },
+                            ),
+                          );
+                          return Semantics(
+                            label: 'Όνομα καλούντος',
+                            child: SizedBox(
+                              width: width,
+                              child: showTooltip
+                                  ? Tooltip(
+                                      message: textController.text,
+                                      child: field,
+                                    )
+                                  : field,
+                            ),
+                          );
+                        },
+                  ),
                 ),
               ),
-            ),
-            caller_ui.CallerNameParseHint(header: header, theme: theme),
-          ],
+              caller_ui.CallerNameParseHint(header: header, theme: theme),
+            ],
+          ),
         ),
       ),
     );

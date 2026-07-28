@@ -7,11 +7,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/models/calls_screen_cards_visibility.dart';
 import '../../../core/models/remote_tool.dart';
 import '../../../core/providers/settings_provider.dart';
+import '../controllers/call_submit_controller.dart';
 import '../provider/call_entry_provider.dart';
 import '../provider/call_header_provider.dart';
 import '../provider/calls_dashboard_providers.dart';
+import '../provider/lookup_provider.dart';
 import '../provider/remote_paths_provider.dart';
 import '../screens/widgets/call_header_form.dart';
+import '../screens/widgets/call_submit_bindings.dart';
 import '../screens/widgets/call_status_bar.dart';
 import '../screens/widgets/recent_calls_list.dart';
 import '../screens/widgets/mini_map_card.dart';
@@ -797,7 +800,6 @@ class _CategoryTimerSubmitRow extends ConsumerWidget {
   }
 
   Widget _buildSubmitButton(BuildContext context, WidgetRef ref) {
-    final notifier = ref.read(callEntryProvider.notifier);
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final submitPadding = const EdgeInsets.symmetric(
@@ -808,12 +810,19 @@ class _CategoryTimerSubmitRow extends ConsumerWidget {
       onPressed: header.canSubmitCall
           ? () async {
               try {
-                final ok = await notifier.submitCall();
+                final messenger = ScaffoldMessenger.of(context);
+                final outcome = await buildCallSubmitController(
+                  ref: ref,
+                  context: context,
+                ).run(ref.read(lookupServiceProvider).value?.service);
+                if (outcome == CallSubmitOutcome.cancelled) return;
                 if (!context.mounted) return;
-                ScaffoldMessenger.of(context).showSnackBar(
+                messenger.showSnackBar(
                   SnackBar(
                     content: Text(
-                      ok ? 'Κλήση αποθηκεύτηκε' : 'Αποτυχία αποθήκευσης',
+                      outcome == CallSubmitOutcome.saved
+                          ? 'Κλήση αποθηκεύτηκε'
+                          : 'Αποτυχία αποθήκευσης',
                     ),
                   ),
                 );

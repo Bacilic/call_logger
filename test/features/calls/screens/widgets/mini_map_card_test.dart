@@ -113,7 +113,7 @@ void main() {
     imagePath = await _createTempFloorImage();
   });
 
-  group('Δ6 — περιστροφή επισήμανσης τμήματος', () {
+  group('περιστροφή επισήμανσης τμήματος', () {
     testWidgets(
       'τμήμα με mapRotation ≠ 0 φέρει Transform.rotate γύρω από το κέντρο',
       (tester) async {
@@ -169,7 +169,7 @@ void main() {
     );
   });
 
-  group('Π2 — διαδραστικό zoom/pan (λογική controller)', () {
+  group('διαδραστικό zoom/pan (λογική controller)', () {
     // Η οπτική ομαλότητα (χωρίς κολλήματα) επιβεβαιώνεται χειροκίνητα στα Windows·
     // το τεστ αποδεικνύει μόνο τη λογική του TransformationController.
 

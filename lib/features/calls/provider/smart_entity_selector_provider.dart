@@ -17,6 +17,7 @@ import '../../../core/utils/name_parser.dart';
 import '../../../core/utils/phone_list_parser.dart';
 import '../../../core/utils/search_text_normalizer.dart';
 import '../../../core/utils/user_facing_error_messages.dart';
+import 'conflict_engine.dart';
 import 'lookup_provider.dart';
 import '../models/equipment_model.dart';
 import '../models/user_model.dart';
@@ -42,12 +43,50 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState>
         SmartEntitySelectorLookupsMixin,
         SmartEntitySelectorConflictsMixin,
         SmartEntitySelectorAssociationMixin {
+  /// Φρουρός επανεισόδου για τα entity lookups. **Ποτέ δεν τίθεται χειροκίνητα**
+  /// — μόνο μέσα από την [runExclusiveLookup], που κρατά η ίδια το ζευγάρωμα.
   bool _isFillingFromLookup = false;
+
+  /// Εκτελεί ένα entity lookup ως **αποκλειστική** ενέργεια και εγγυάται τον
+  /// επανυπολογισμό των δεικτών στο τέλος — ακόμη και σε σφάλμα.
+  ///
+  /// Αντικαθιστά το χειροκίνητο μοτίβο «σήκωσε σημαία → try → finally κατέβασε
+  /// σημαία → ξαναϋπολόγισε», όπου ο καλούντας μπορούσε να ξεχάσει το μισό.
+  /// Όσο τρέχει ένα lookup, κάθε **φωλιασμένη** κλήση επιστρέφει αμέσως `false`
+  /// χωρίς να μπει καν στο `try` — οπότε κανένα εσωτερικό `finally` δεν μπορεί
+  /// να κατεβάσει πρόωρα τη σημαία του εξωτερικού.
+  ///
+  /// [anchorCandidate] = το πεδίο που επικύρωσε ο χρήστης, ως υποψήφια άγκυρα
+  /// (§Α.6)· `null` όταν το lookup δεν προέρχεται από ενέργεια χρήστη.
+  ///
+  /// [onBeforeRecompute] = τακτοποίηση καταστάσεων (π.χ. αποκατάσταση λιστών
+  /// υποψηφίων) που πρέπει να έχει ολοκληρωθεί **πριν** διαβαστεί η κατάσταση
+  /// για τον υπολογισμό των δεικτών.
+  bool runExclusiveLookup(
+    SelectorField? anchorCandidate,
+    void Function() body, {
+    void Function()? onBeforeRecompute,
+  }) {
+    if (_isFillingFromLookup) return false;
+    _isFillingFromLookup = true;
+    try {
+      body();
+    } finally {
+      onBeforeRecompute?.call();
+      _recomputeConflicts(
+        anchorCandidate,
+        ref.read(lookupServiceProvider).value?.service,
+      );
+      _isFillingFromLookup = false;
+    }
+    return true;
+  }
+
   int _phoneLookupGeneration = 0;
   static const int _criticalTaskPriority = 2;
   static const int _maxRecentPhones = 20;
 
-  /// v2 §Β: ένα συμπληρωμένο πεδίο εξοπλισμού (isFilled) προστατεύεται και δεν
+  /// Ένα συμπληρωμένο πεδίο εξοπλισμού (isFilled) προστατεύεται και δεν
 
   /// Έως ένα quick task ανά κύκλο φόρμας· set μόνο μετά επιτυχή insert.
   int? _associationQuickTaskId;
@@ -165,9 +204,6 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState>
       departmentText,
       state.departmentText,
     );
-    // v2 §Ζ.3: αν αλλάζει το πεδίο εξοπλισμού κατά την πληκτρολόγηση, καθαρίζουμε
-    // τους ✱ μέχρι το επόμενο commit/lookup.
-    final clearConflictsOnEdit = equipmentText != null;
     state = state.copyWith(
       hasAnyContent: _computeHasAnyContent(
         phoneText: phoneText,
@@ -179,8 +215,11 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState>
       // Στο departmentText κρατάμε το ακριβές input του χρήστη (με κενά),
       // ώστε να μην αφαιρούνται αυτόματα τα διαστήματα πληκτρολόγησης.
       departmentText: mergedDepartment,
-      clearConflicts: clearConflictsOnEdit,
     );
+    // Αυτή η μέθοδος είναι **καθαρός συγχρονισμός κειμένου** και
+    // καλείται και κατά την πληκτρολόγηση. Δεν αγγίζει ΠΟΤΕ τους δείκτες —
+    // ούτε τους σβήνει (θα ήταν το Δ10) ούτε τους ξαναϋπολογίζει (θα εμφάνιζε
+    // ✱ πριν την επικύρωση). Μόνο τα lookups του §Ζ.2 τα ξαναχτίζουν.
   }
 
   @override
@@ -231,7 +270,12 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState>
       isEquipmentAmbiguous: false,
       callerNoMatch: false,
       equipmentNoMatch: false,
+      clearIdentificationOrder: true,
     );
+    // Κανένα πεδίο δεν επικυρώθηκε από τον χρήστη → καμία άγκυρα.
+    // Οι δείκτες όμως υπολογίζονται: «ο υπάλληλος άλλαξε έκτοτε τμήμα» είναι
+    // αληθινή και χρήσιμη πληροφορία.
+    _refreshConflictsWithoutAnchor();
   }
 
   /// Φόρτωση πεδίων επιλογέα από υπάρχουσα `CallModel` (λειτουργία επεξεργασίας ιστορικού).
@@ -289,7 +333,10 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState>
       isEquipmentAmbiguous: false,
       callerNoMatch: false,
       equipmentNoMatch: false,
+      clearIdentificationOrder: true,
     );
+    // Φορτωμένη φόρμα → δείκτες ναι, άγκυρα όχι.
+    _refreshConflictsWithoutAnchor();
   }
 
   void updatePhone(String? value) {
@@ -318,7 +365,6 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState>
         clearPhoneError: true,
         clearPhoneCandidates: true,
         isPhoneAmbiguous: false,
-        clearConflicts: true,
       );
       _callerAwaitingPhoneAssociation = false;
       return;
@@ -330,37 +376,29 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState>
       clearPhoneError: true,
       clearPhoneCandidates: true,
     );
-    // v2 §Ζ.3: κατά την πληκτρολόγηση τηλεφώνου καθαρίζονται οι ✱ μέχρι το
-    // επόμενο commit/lookup.
+    // Η πληκτρολόγηση δεν αγγίζει δείκτες. Το **άδειασμα** όμως είναι
+    // οριστική μεταβολή τιμής, οπότε οι σχέσεις ξαναχτίζονται χωρίς το πεδίο.
+    state = state.copyWith(
+      clearCallerCandidates: true,
+      clearSelectedCaller: true,
+      clearEquipmentCandidates: true,
+      clearSelectedEquipment: !preserveEquipment,
+      isPhoneAmbiguous: false,
+      isEquipmentAmbiguous: false,
+      callerNoMatch: false,
+      equipmentNoMatch: false,
+    );
     if (value == null || value.trim().isEmpty) {
-      state = state.copyWith(
-        clearCallerCandidates: true,
-        clearSelectedCaller: true,
-        clearEquipmentCandidates: true,
-        clearSelectedEquipment: !preserveEquipment,
-        isPhoneAmbiguous: false,
-        isEquipmentAmbiguous: false,
-        callerNoMatch: false,
-        equipmentNoMatch: false,
-        clearConflicts: true,
-      );
+      // Όσο το τμήμα μένει συμπληρωμένο, κάθε άδειο πεδίο ξαναδείχνει τους
+      // υποψήφιους του τμήματος — και ο καλών, του οποίου η λίστα μόλις
+      // καθαρίστηκε παραπάνω.
       final lookupForRestore = ref.read(lookupServiceProvider).value?.service;
       _restoreDepartmentPhoneCandidatesIfNeeded(lookupForRestore);
+      _restoreDepartmentCallerCandidatesIfNeeded(lookupForRestore);
       if (!preserveEquipment) {
         _restoreDepartmentEquipmentCandidatesIfNeeded(lookupForRestore);
       }
-    } else {
-      state = state.copyWith(
-        clearCallerCandidates: true,
-        clearSelectedCaller: true,
-        clearEquipmentCandidates: true,
-        clearSelectedEquipment: !preserveEquipment,
-        isPhoneAmbiguous: false,
-        isEquipmentAmbiguous: false,
-        callerNoMatch: false,
-        equipmentNoMatch: false,
-        clearConflicts: true,
-      );
+      _refreshConflictsWithoutAnchor();
     }
   }
 
@@ -481,21 +519,41 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState>
           _splitPhones(sp).length > 1) {
         state = state.copyWith(clearSelectedPhone: true, clearPhoneError: true);
       }
-      _recomputeConflicts(
-        SelectorField.caller,
-        ref.read(lookupServiceProvider).value?.service,
-      );
     }
+    // Επανυπολογισμός και στην αφαίρεση καλούντα — αλλιώς μένουν
+    // μπαγιάτικοι δείκτες για οντότητα που δεν υπάρχει πια στη φόρμα.
+    _recomputeConflicts(
+      value != null ? SelectorField.caller : null,
+      ref.read(lookupServiceProvider).value?.service,
+    );
   }
 
   void updateSelectedCaller(UserModel? value) {
     setCaller(value);
   }
 
+  /// Ταυτοποίηση υπάρχοντος καλούντα τη στιγμή της καταγραφής της κλήσης.
+  ///
+  /// Σε αντίθεση με το [setCaller] ΔΕΝ αγγίζει τηλέφωνο, τμήμα ή υποψηφίους:
+  /// τα πεδία έχουν ήδη τη μορφή που θέλει ο χρήστης και ο καθαρισμός τους θα
+  /// μπορούσε να ακυρώσει την ίδια την υποβολή (`canSubmitCall`).
+  void attachExistingCallerForSubmit(UserModel user) {
+    state = state.copyWith(
+      selectedCaller: user,
+      callerDisplayText: user.name ?? user.fullNameWithDepartment,
+    );
+  }
+
   void updateCallerDisplayText(String text) {
-    // v2 §Ζ.3: κατά την πληκτρολόγηση δεν εμφανίζονται ✱· καθαρίζονται μέχρι
-    // το επόμενο commit/lookup.
-    state = state.copyWith(callerDisplayText: text, clearConflicts: true);
+    // Η πληκτρολόγηση δεν αγγίζει δείκτες — μόνο η επικύρωση.
+    state = state.copyWith(callerDisplayText: text);
+    if (text.trim().isEmpty) {
+      // Άδειασμα με backspace: ίδια συμπεριφορά με το κουμπί «×».
+      _restoreDepartmentCallerCandidatesIfNeeded(
+        ref.read(lookupServiceProvider).value?.service,
+      );
+      _refreshConflictsWithoutAnchor();
+    }
   }
 
   void clearCaller() {
@@ -505,8 +563,15 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState>
       clearCallerCandidates: true,
       isPhoneAmbiguous: false,
       callerDisplayText: '',
-      clearConflicts: true,
     );
+    // Με συμπληρωμένο τμήμα, το άδειο πεδίο ξαναδείχνει τους υπαλλήλους του —
+    // όπως ήδη κάνουν το τηλέφωνο και ο εξοπλισμός στον δικό τους καθαρισμό.
+    // Επαναφέρεται και η λίστα τηλεφώνων που καθαρίστηκε παραπάνω (ο βοηθός
+    // δεν αγγίζει συμπληρωμένο τηλέφωνο).
+    final lookupForRestore = ref.read(lookupServiceProvider).value?.service;
+    _restoreDepartmentCallerCandidatesIfNeeded(lookupForRestore);
+    _restoreDepartmentPhoneCandidatesIfNeeded(lookupForRestore);
+    _refreshConflictsWithoutAnchor();
   }
 
   void updateDepartmentText(String text) {
@@ -541,7 +606,6 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState>
       departmentText: text,
       selectedDepartmentId: matchedDepartmentId,
       clearSelectedDepartmentId: clearDeptId,
-      clearConflicts: true,
       clearPhoneCandidates: clearDeptId && !hasPhoneInput,
       clearEquipmentCandidates: clearDeptId && !hasEquipmentInput,
       clearCallerCandidates: clearDeptId && !hasCallerInput,
@@ -553,6 +617,8 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState>
           : state.isEquipmentAmbiguous,
       hasAnyContent: _computeHasAnyContent(departmentText: text),
     );
+    // Η πληκτρολόγηση δεν αγγίζει δείκτες· το άδειασμα ναι.
+    if (trimmed.isEmpty) _refreshConflictsWithoutAnchor();
   }
 
   void selectDepartment(DepartmentModel dept) {
@@ -591,16 +657,26 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState>
       selectedDepartmentId: departmentId,
       clearSelectedCaller: !keepCallerUntouched,
       callerDisplayText: keepCallerUntouched ? state.callerDisplayText : '',
-      callerCandidates: keepCallerUntouched
-          ? state.callerCandidates
-          : (callerCandidates ?? state.callerCandidates),
-      equipmentCandidates: equipmentCandidates ?? state.equipmentCandidates,
-      phoneCandidates: phoneCandidates ?? state.phoneCandidates,
       callerNoMatch: false,
       equipmentNoMatch: false,
       isPhoneAmbiguous: false,
       isEquipmentAmbiguous: false,
     );
+    // Και τα τρία πεδία περνούν από το ίδιο συμβόλαιο: μοναδική αντιστοίχιση
+    // στο τμήμα = αυτόματη συμπλήρωση, πολλαπλή = λίστα υποψηφίων. Οι πηγές
+    // ενώνουν ήδη προσωπικά και κοινόχρηστα στοιχεία, οπότε ένα μονοπρόσωπο
+    // τμήμα με κοινόχρηστο τηλέφωνο/εξοπλισμό συμπληρώνεται το ίδιο σωστά.
+    // Πεδίο που ο χρήστης έχει ήδη γεμίσει μένει ανέγγιχτο (η αντίστοιχη
+    // μεταβλητή είναι `null`).
+    if (callerCandidates != null) {
+      _applyCallerCandidatesFromLookup(callerCandidates);
+    }
+    if (equipmentCandidates != null) {
+      _applyEquipmentCandidatesFromLookup(equipmentCandidates);
+    }
+    if (phoneCandidates != null) {
+      _applyPhoneCandidatesFromLookup(phoneCandidates);
+    }
     _recomputeConflicts(SelectorField.department, lookup);
   }
 
@@ -628,13 +704,13 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState>
       equipmentNoMatch: false,
       equipmentText: '',
       hasAnyContent: _computeHasAnyContent(equipmentText: ''),
-      clearConflicts: true,
     );
     final lookupForRestore = ref.read(lookupServiceProvider).value?.service;
     _restoreDepartmentEquipmentCandidatesIfNeeded(lookupForRestore);
     if (state.selectedPhone?.trim().isEmpty ?? true) {
       _restoreDepartmentPhoneCandidatesIfNeeded(lookupForRestore);
     }
+    _refreshConflictsWithoutAnchor();
   }
 
   void setPhoneError(String? message) {

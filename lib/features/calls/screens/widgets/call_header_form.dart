@@ -6,9 +6,7 @@ import '../../layout/calls_field_groups.dart';
 import '../../provider/call_header_provider.dart';
 import '../../provider/lookup_provider.dart';
 import '../../../../core/providers/call_department_prefill_intent_provider.dart';
-import '../../../../core/utils/search_text_normalizer.dart';
-import '../../../../core/utils/user_homonym_finder.dart';
-import '../../../directory/screens/widgets/homonym_warning_dialog.dart';
+import 'caller_quick_add_bindings.dart';
 import 'smart_entity_selector_widget.dart';
 
 /// Ελάχιστο πλάτος γραμμής πεδίων ώστε να χωράει Τηλ. + Καλών. + Τμήμα + Εξοπλισμός + κενά + ×.
@@ -89,137 +87,12 @@ class _CallHeaderFormState extends ConsumerState<CallHeaderForm> {
     );
     final theme = Theme.of(context);
 
-    Future<void> onAddAssociationPressed() async {
-      final messenger = ScaffoldMessenger.of(context);
-      final currentHeader = ref.read(callHeaderProvider);
-      final notifier = ref.read(callHeaderProvider.notifier);
-      if (currentHeader.needsOrphanDepartmentQuickAddResolved(lookupService)) {
-        final preview = await notifier.quickAddOrphanToDepartment();
-        if (preview == null) return;
-        if (preview.requiresConfirmation) {
-          if (!context.mounted) return;
-          final approve = await showDialog<bool>(
-            context: context,
-            builder: (dialogContext) {
-              return AlertDialog(
-                title: const Text('Σύγκρουση δεδομένων'),
-                content: Text(preview.message),
-                actions: [
-                  TextButton(
-                    onPressed: () => Navigator.of(dialogContext).pop(false),
-                    child: const Text('Ακύρωση'),
-                  ),
-                  FilledButton(
-                    onPressed: () => Navigator.of(dialogContext).pop(true),
-                    child: const Text('Ναι, Προσθήκη'),
-                  ),
-                ],
-              );
-            },
-          );
-          if (approve != true) return;
-          final applied = await notifier.quickAddOrphanToDepartment(
-            forceSharedOnConflict: true,
-          );
-          if (context.mounted && applied?.successMessage != null) {
-            messenger.showSnackBar(
-              SnackBar(content: Text(applied!.successMessage!)),
-            );
-          }
-          return;
-        }
-        if (context.mounted && preview.successMessage != null) {
-          messenger.showSnackBar(
-            SnackBar(content: Text(preview.successMessage!)),
-          );
-        }
-        return;
-      }
-
-      final caller = currentHeader.selectedCaller;
-      final departmentText = currentHeader.departmentText.trim();
-      final selectedDepartment = departmentText.isNotEmpty
-          ? lookupService?.findDepartmentByName(departmentText)
-          : null;
-      var updatePrimaryDepartment = false;
-
-      final oldDeptText = (caller?.departmentName ?? '').trim();
-      final nextDeptNorm = SearchTextNormalizer.normalizeForSearch(
-        departmentText,
-      );
-      final oldDeptNorm = SearchTextNormalizer.normalizeForSearch(oldDeptText);
-      final wantsDeptChange =
-          caller?.id != null &&
-          departmentText.isNotEmpty &&
-          (nextDeptNorm.isNotEmpty && nextDeptNorm != oldDeptNorm) &&
-          (selectedDepartment?.id != caller?.departmentId ||
-              (caller?.departmentId == null && selectedDepartment == null));
-
-      if (wantsDeptChange) {
-        if (oldDeptText.isEmpty) {
-          updatePrimaryDepartment = true;
-        } else {
-          final askUpdate = await showDialog<bool>(
-            context: context,
-            builder: (dialogContext) {
-              return AlertDialog(
-                title: const Text('Αλλαγή κύριου τμήματος'),
-                content: Text(
-                  'Ο χρήστης έχει κύριο τμήμα "${caller!.departmentName ?? 'Χωρίς τμήμα'}". '
-                  'Να γίνει νέο κύριο τμήμα του χρήστη το "${selectedDepartment?.name ?? departmentText}";',
-                ),
-                actions: [
-                  TextButton(
-                    onPressed: () => Navigator.of(dialogContext).pop(false),
-                    child: const Text('Όχι'),
-                  ),
-                  FilledButton(
-                    onPressed: () => Navigator.of(dialogContext).pop(true),
-                    child: const Text('Ναι'),
-                  ),
-                ],
-              );
-            },
-          );
-          updatePrimaryDepartment = askUpdate ?? false;
-        }
-      }
-
-      if (currentHeader.needsNewCallerCreation && lookupService != null) {
-        final homonym = UserHomonymFinder.findHomonymFromCallerText(
-          users: lookupService.users,
-          callerDisplayText: currentHeader.normalizedCallerDisplayText,
-        );
-        if (homonym != null) {
-          if (!context.mounted) return;
-          final parsed = UserHomonymFinder.parseCallerText(
-            currentHeader.normalizedCallerDisplayText,
-          );
-          final displayName = UserHomonymFinder.displayNameFor(
-            parsed.firstName,
-            parsed.lastName,
-          );
-          final choice = await showDialog<bool>(
-            context: context,
-            barrierDismissible: true,
-            builder: (dialogContext) => HomonymWarningDialog(
-              userDisplayName: displayName,
-              existingRecordDepartmentName:
-                  homonym.departmentName?.trim() ?? '',
-            ),
-          );
-          if (choice != true) return;
-        }
-      }
-
-      if (!context.mounted) return;
-      final msg = await notifier.associateCurrentIfNeeded(
-        updatePrimaryDepartment: updatePrimaryDepartment,
+    Future<void> onAddAssociationPressed() {
+      return buildCallerQuickAddController(
+        ref: ref,
         context: context,
-      );
-      if (context.mounted && msg != null) {
-        messenger.showSnackBar(SnackBar(content: Text(msg)));
-      }
+        messenger: ScaffoldMessenger.of(context),
+      ).run(lookupService);
     }
 
     return LayoutBuilder(

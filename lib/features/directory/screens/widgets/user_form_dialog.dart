@@ -10,7 +10,7 @@ import '../../../../core/widgets/draggable_dialog_shell.dart';
 import '../../../../core/providers/settings_provider.dart';
 import '../../../../core/providers/spell_check_provider.dart';
 import '../../../../core/utils/search_text_normalizer.dart';
-import '../../../../core/utils/user_homonym_finder.dart';
+import '../../../../core/utils/user_similarity_finder.dart';
 import '../../../../core/utils/user_identity_normalizer.dart';
 import '../../../../core/utils/phone_list_parser.dart';
 import '../../../../core/widgets/lexicon_spell_text_form_field.dart';
@@ -24,7 +24,8 @@ import '../../../calls/provider/lookup_provider.dart';
 import '../../providers/directory_provider.dart';
 import '../../services/shared_asset_disconnect_apply.dart';
 import 'department_transfer_confirm_dialog.dart';
-import 'homonym_warning_dialog.dart';
+import 'similar_department_suggestion_dialog.dart';
+import 'similar_users_dialog.dart';
 import 'shared_asset_disconnect_dialog.dart';
 import 'user_name_change_confirm_dialog.dart';
 import 'user_phone_department_conflict_dialog.dart';
@@ -83,7 +84,7 @@ mixin UserFormDialogStateHost on ConsumerState<UserFormDialog> {
   String _buildUserDisplayName();
   String _snapDisplayName();
   bool _nameIdentityChanged();
-  UserModel? _findSoftHomonymUser();
+  List<UserSimilarityMatch> _findSimilarUsers();
 
   Future<void> _save();
 
@@ -256,14 +257,15 @@ class _UserFormDialogState extends ConsumerState<UserFormDialog>
         );
   }
 
-  /// Χρήστης με συνωνυμία (όνομα / επώνυμο / και τα δύο), εκτός τρέχουσας/πηγής αντίγραφου.
+  /// Υπάρχουσες εγγραφές καταλόγου με ίδιο ή παρόμοιο ονοματεπώνυμο,
+  /// εκτός τρέχουσας/πηγής αντίγραφου.
   @override
-  UserModel? _findSoftHomonymUser() {
+  List<UserSimilarityMatch> _findSimilarUsers() {
     final int? excludeId =
         widget.initialUser != null && (_isEdit || widget.isClone)
         ? widget.initialUser!.id
         : null;
-    return UserHomonymFinder.findHomonymUser(
+    return UserSimilarityFinder.findSimilarUsers(
       users: widget.notifier.allUsersForUi,
       firstName: _firstNameController.text,
       lastName: _lastNameController.text,

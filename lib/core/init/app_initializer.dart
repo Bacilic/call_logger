@@ -12,6 +12,21 @@ import '../database/database_path_resolution.dart';
 import '../database/lock_diagnostic_service.dart';
 import '../services/core_lexicon_service.dart';
 import '../services/settings_service.dart';
+import 'startup_engine_failure.dart';
+import 'startup_notices.dart';
+
+DatabaseInitResult _appendStartupNoticesToFailureDetails(
+  DatabaseInitResult base,
+) {
+  if (base.isSuccess) return base;
+  final report = startupNoticesReport();
+  if (report == null) return base;
+  final existing = base.details?.trim();
+  final merged = (existing == null || existing.isEmpty)
+      ? report
+      : '$existing\n\n$report';
+  return base.copyWith(details: merged);
+}
 
 /// Αποτέλεσμα αρχικοποίησης εφαρμογής (βάση δεδομένων + τρόπος λειτουργίας).
 class AppInitResult {
@@ -70,13 +85,16 @@ class AppInitializer {
         clearSecondsRemaining: true,
       );
       return AppInitResult(
-        result: runnerResult.result,
+        result: _appendStartupNoticesToFailureDetails(runnerResult.result),
         isLocalDevMode: runnerResult.isLocalDevMode,
         spellCheckReady: spellCheckReady,
         databaseProfile: runnerResult.databaseProfile,
       );
     } catch (e, st) {
-      var result = DatabaseInitResult.fromException(e, null, st);
+      var result = resolveStartupFailureResult(
+        fallbackError: e,
+        fallbackStack: st,
+      );
       if (e is TimeoutException || e is DatabaseInitException) {
         try {
           progressNotifier?.setStep('Εντοπισμός διεργασίας');
@@ -95,7 +113,7 @@ class AppInitializer {
         } catch (_) {}
       }
       return AppInitResult(
-        result: result,
+        result: _appendStartupNoticesToFailureDetails(result),
         isLocalDevMode: false,
         spellCheckReady: false,
         databaseProfile: null,

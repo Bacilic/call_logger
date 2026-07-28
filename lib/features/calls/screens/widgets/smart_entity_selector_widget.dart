@@ -63,14 +63,22 @@ class SmartEntitySelectorWidgetState
   late final SmartEntitySelectorNotifier _notifier;
   bool _isSelectingFromList = false;
 
-  void _onFocusOut() {
-    if (_isSelectingFromList) return;
+  /// Περνά στο provider τα τρέχοντα κείμενα και των τεσσάρων πεδίων.
+  ///
+  /// Ένα μόνο αντίγραφο: τρία σημεία το καλούσαν αυτούσιο, οπότε κάθε αλλαγή
+  /// έπρεπε να θυμηθεί κανείς να τη γράψει τρεις φορές.
+  void _syncFieldTextsToProvider() {
     _notifier.checkContent(
       phoneText: _phoneController.text,
       callerText: _callerController.text,
       departmentText: _departmentController.text,
       equipmentText: _equipmentController.text,
     );
+  }
+
+  void _onFocusOut() {
+    if (_isSelectingFromList) return;
+    _syncFieldTextsToProvider();
     _syncNonPhoneFieldConfirmations();
   }
 
@@ -80,12 +88,7 @@ class SmartEntitySelectorWidgetState
       return;
     }
     if (_isSelectingFromList) return;
-    _notifier.checkContent(
-      phoneText: _phoneController.text,
-      callerText: _callerController.text,
-      departmentText: _departmentController.text,
-      equipmentText: _equipmentController.text,
-    );
+    _syncFieldTextsToProvider();
     widget.callEntryHooks.syncTimerFromPhoneText?.call(_phoneController.text);
     _confirmPhoneOnCommit();
     _syncNonPhoneFieldConfirmations();
@@ -285,12 +288,7 @@ class SmartEntitySelectorWidgetState
     final w3 = widget.w3;
 
     void contentChecked() {
-      _notifier.checkContent(
-        phoneText: _phoneController.text,
-        callerText: _callerController.text,
-        departmentText: _departmentController.text,
-        equipmentText: _equipmentController.text,
-      );
+      _syncFieldTextsToProvider();
       _syncNonPhoneFieldConfirmations();
     }
 

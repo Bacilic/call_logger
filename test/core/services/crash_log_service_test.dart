@@ -179,7 +179,7 @@ void main() {
         () => broken.logError(sampleError(), sampleStack(), fatal: true),
         returnsNormally,
       );
-      expect(() => broken.onStartup(retentionCount: 14), returnsNormally);
+      expect(() => broken.onStartup(retentionCount: 14), throwsA(anything));
       expect(broken.onShutdown, returnsNormally);
     });
   });

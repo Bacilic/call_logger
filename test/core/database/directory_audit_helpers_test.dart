@@ -7,7 +7,7 @@ void main() {
   sqfliteFfiInit();
   databaseFactory = databaseFactoryFfi;
 
-  group('buildAuditCallAssociationEntry (Δ4)', () {
+  group('buildAuditCallAssociationEntry', () {
     test('ενέργεια σκέτη «συσχέτιση από κλήση», μέρη στις λεπτομέρειες', () {
       final entry = buildAuditCallAssociationEntry(
         userPart: 'Γιάννης Παπαδόπουλος',

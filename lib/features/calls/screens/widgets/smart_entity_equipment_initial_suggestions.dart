@@ -52,11 +52,31 @@ List<EquipmentModel> callerEquipmentsForSuggestions(
   if (callerId == null) {
     return dedupeEquipments(header.equipmentCandidates);
   }
-  final direct = lookupService.findEquipmentsForUser(callerId);
-  if (direct.isNotEmpty) {
-    return dedupeEquipments(direct);
+  // Ο εξοπλισμός του καλούντα προηγείται, αλλά ΔΕΝ κρύβει τους υποψήφιους που
+  // ήδη υπάρχουν στη φόρμα.
+  return dedupeEquipments([
+    ...lookupService.findEquipmentsForUser(callerId),
+    ...header.equipmentCandidates,
+  ]);
+}
+
+/// Εξοπλισμός του επιλεγμένου τμήματος — **ανεξάρτητη** πηγή προτάσεων.
+///
+/// Διαβάζεται κατευθείαν από τον κατάλογο και όχι από το
+/// `equipmentCandidates`, που σημαίνει αποκλειστικά «δεν αποφασίστηκε ακόμα».
+/// Έτσι το overlay εξακολουθεί να δείχνει τα μηχανήματα του τμήματος ακόμη κι
+/// όταν ένα από αυτά έχει ήδη συμπληρωθεί αυτόματα.
+List<EquipmentModel> departmentEquipmentsForSuggestions(
+  SmartEntitySelectorState header,
+  LookupService? lookupService,
+) {
+  final departmentId = header.selectedDepartmentId;
+  if (departmentId == null || lookupService == null) {
+    return const [];
   }
-  return dedupeEquipments(header.equipmentCandidates);
+  return dedupeEquipments(
+    lookupService.getAllEquipmentByDepartment(departmentId),
+  );
 }
 
 /// Ετικέτα πηγής για εξοπλισμό που προέρχεται από καλούντα / υποψήφιους (όχι τηλέφωνο).
@@ -134,6 +154,23 @@ List<SmartEntityEquipmentSuggestion> buildInitialEquipmentSuggestions(
         SmartEntityEquipmentSuggestion(
           equipment: equipment,
           sourceLabel: sourceLabel,
+        ),
+      );
+    }
+  }
+
+  // Ό,τι δεν ήρθε από τηλέφωνο ή καλούντα αλλά ανήκει στο επιλεγμένο τμήμα.
+  for (final equipment in departmentEquipmentsForSuggestions(
+    header,
+    lookupService,
+  )) {
+    if (seen.add(equipmentDedupeKey(equipment))) {
+      combined.add(
+        SmartEntityEquipmentSuggestion(
+          equipment: equipment,
+          sourceLabel: lookupService != null
+              ? callerEquipmentSourceLabel(equipment, lookupService)
+              : 'Τμήμα',
         ),
       );
     }

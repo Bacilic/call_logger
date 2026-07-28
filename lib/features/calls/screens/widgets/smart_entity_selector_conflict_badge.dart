@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../provider/smart_entity_selector_provider.dart';
 
-/// Δείκτης σύγκρουσης (v2 §Α): κόκκινος όταν η βάση γνωρίζει διαφορετική τιμή
+/// Δείκτης σύγκρουσης: κόκκινος όταν η βάση γνωρίζει διαφορετική τιμή
 /// ([ConflictSeverity.mismatch]), κίτρινος όταν το πεδίο δεν αντιστοιχεί σε
 /// γνωστή οντότητα ([ConflictSeverity.unknown]). Το tooltip παραθέτει όλους
 /// τους λόγους σύγκρουσης.

@@ -52,26 +52,26 @@ class CrashLogService {
     required String appVersion,
     required int retentionCount,
   }) async {
-    try {
-      final logsDir = logsDirectoryForDatabasePath(databasePath);
-      final service = CrashLogService(
-        logsDirectory: logsDir,
-        appVersion: appVersion,
-      );
-      _instance = service;
-      await service.onStartup(retentionCount: retentionCount);
-    } catch (_) {}
+    // Δεν καταπίνουμε αποτυχίες του initialize: ο καλών πρέπει να δει την
+    // πρωτογενή αιτία (π.χ. logs φάκελος/δικαιώματα).
+    final logsDir = logsDirectoryForDatabasePath(databasePath);
+    final service = CrashLogService(
+      logsDirectory: logsDir,
+      appVersion: appVersion,
+    );
+    _instance = service;
+    await service.onStartup(retentionCount: retentionCount);
   }
 
   Future<void> onStartup({required int retentionCount}) async {
-    try {
-      await Directory(logsDirectory).create(recursive: true);
-      await _purgeOldLogFiles(retentionCount);
-      if (await _sessionLockFile().exists()) {
-        _logPlainMessage(abnormalTerminationMessage, fatal: true);
-      }
-      await _sessionLockFile().writeAsString('1', flush: true);
-    } catch (_) {}
+    // Δεν καταπίνουμε αποτυχίες του onStartup: αν δεν δημιουργηθεί το
+    // ημερολόγιο, οι σημειώσεις εκκίνησης πρέπει να μείνουν διαθέσιμες.
+    await Directory(logsDirectory).create(recursive: true);
+    await _purgeOldLogFiles(retentionCount);
+    if (await _sessionLockFile().exists()) {
+      _logPlainMessage(abnormalTerminationMessage, fatal: true);
+    }
+    await _sessionLockFile().writeAsString('1', flush: true);
   }
 
   Future<void> onShutdown() async {

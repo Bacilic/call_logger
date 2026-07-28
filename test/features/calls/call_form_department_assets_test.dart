@@ -872,12 +872,14 @@ void main() {
             'Φιλτραρισμένοι υποψήφιοι εξοπλισμού τμήματος',
           ),
         );
+        // Το «Φάντασμα» έχει μοναδικό υπάλληλο: μοναδική αντιστοίχιση =
+        // αυτόματη συμπλήρωση, όχι λίστα ενός στοιχείου.
         expect(
-          headerWithDept.callerCandidates
-              .map((u) => u.name ?? u.fullNameWithDepartment)
-              .toList(),
-          contains(expectedCallerName),
-          reason: greekExpectMsg('Φιλτραρισμένοι υποψήφιοι καλούντα τμήματος'),
+          headerWithDept.callerDisplayText,
+          expectedCallerName,
+          reason: greekExpectMsg(
+            'Ο μοναδικός υπάλληλος του τμήματος συμπληρώνεται αυτόματα',
+          ),
         );
         await _expectClearAllButtonVisible(
           tester,
@@ -904,12 +906,25 @@ void main() {
         );
         reporter.logStepDone('Τμήμα καθαρίστηκε');
 
-        reporter.logProgress(
-          'Έλεγχος: χωρίς φιλτραρισμένες λίστες και κρυφό κόκκινο Χ',
+        // Το «Φάντασμα» είναι μονοπρόσωπο, οπότε η επικύρωση του τμήματος
+        // συμπλήρωσε **τιμές** (καλών/τηλέφωνο/εξοπλισμό), όχι μόνο λίστες. Οι
+        // τιμές επιβιώνουν σκόπιμα του καθαρισμού τμήματος — άρα το κόκκινο Χ
+        // παραμένει ορατό μέχρι να καθαριστούν όλα τα πεδία.
+        await _expectClearAllButtonVisible(
+          tester,
+          visible: true,
+          failContext: 'μετά καθαρισμό τμήματος με συμπληρωμένα πεδία',
         );
+
+        reporter.logProgress(
+          'Καθαρισμός όλων των πεδίων — έλεγχος ξεφιλτραρίσματος',
+        );
+        await tester.tap(_clearAllFieldsButton());
+        await pumpUntilSettled(tester);
+
         await _expectNoDepartmentScopedOverlays(
           tester,
-          failContext: 'μετά καθαρισμό τμήματος',
+          failContext: 'μετά καθαρισμό όλων των πεδίων',
           departmentCallerName: expectedCallerName,
           departmentPhones: [_kSharedPhone, _kUserOnlyPhone],
           departmentEquipmentCodes: [
@@ -920,7 +935,7 @@ void main() {
         await _expectClearAllButtonVisible(
           tester,
           visible: false,
-          failContext: 'μετά καθαρισμό τμήματος',
+          failContext: 'μετά καθαρισμό όλων των πεδίων',
         );
         reporter.logStepDone('Λίστες ξεφιλτράρονται — κόκκινο Χ κρυφό');
 
@@ -984,18 +999,28 @@ void main() {
           deptId,
           reason: greekExpectMsg('Επιλεγμένο id τμήματος'),
         );
+        // Το τμήμα δοκιμών έχει ΕΝΑΝ εξοπλισμό και ΕΝΑΝ αριθμό: μοναδική
+        // αντιστοίχιση = αυτόματη συμπλήρωση, όχι λίστα ενός στοιχείου.
         expect(
-          headerAfterDept.equipmentCandidates
-              .map((EquipmentModel e) => e.code?.trim())
-              .whereType<String>()
-              .toSet(),
-          {kTestEquipmentCode},
-          reason: greekExpectMsg('Υποψήφιος εξοπλισμός τμήματος στο state'),
+          headerAfterDept.selectedEquipment?.code?.trim(),
+          kTestEquipmentCode,
+          reason: greekExpectMsg(
+            'Ο μοναδικός εξοπλισμός του τμήματος προσυμπληρώνεται',
+          ),
         );
         expect(
-          headerAfterDept.phoneCandidates.toSet(),
-          {kTestPhoneDigits},
-          reason: greekExpectMsg('Υποψήφιοι αριθμοί τμήματος στο state'),
+          headerAfterDept.selectedPhone,
+          kTestPhoneDigits,
+          reason: greekExpectMsg(
+            'Ο μοναδικός αριθμός του τμήματος προσυμπληρώνεται',
+          ),
+        );
+        expect(
+          headerAfterDept.phoneCandidates,
+          isEmpty,
+          reason: greekExpectMsg(
+            'Χωρίς λίστα υποψηφίων όταν ο αριθμός αποφασίστηκε',
+          ),
         );
         reporter.logStepDone('Τμήμα «$kTestDepartmentName» επιλέχθηκε');
 
@@ -1031,50 +1056,30 @@ void main() {
           ),
         );
         expect(
-          headerAfterEquipment.phoneCandidates,
-          isNotEmpty,
+          headerAfterEquipment.selectedPhone,
+          kTestPhoneDigits,
           reason: greekExpectMsg(
-            'Μετά εξοπλισμό, οι υποψήφιοι τηλεφώνων του τμήματος δεν πρέπει να '
-            'καθαρίζονται',
+            'Μετά την επιλογή εξοπλισμού ο αριθμός του τμήματος δεν χάνεται',
           ),
         );
         reporter.logStepDone('Εξοπλισμός $kTestEquipmentCode επιλέχθηκε');
 
-        // —— Βήμα 4: κλικ τηλέφωνο (μετά την επιλογή εξοπλισμού) ——
+        // —— Βήμα 4: το πεδίο τηλεφώνου δείχνει τον συμπληρωμένο αριθμό ——
         reporter.logProgress(
-          'Κλικ στο πεδίο τηλεφώνου — overlay λίστας τμήματος',
-        );
-        await tester.tap(callLoggerPhoneTextField());
-        await pumpUntilSettled(tester);
-
-        final departmentPhoneOverlay = find.byType(
-          SmartEntityPhoneSuggestionList,
-        );
-        await _pumpUntilFinderVisible(
-          tester,
-          departmentPhoneOverlay,
-          failDescription:
-              'Η overlay λίστα τηλεφώνων τμήματος (SmartEntityPhoneSuggestionList) '
-              'δεν εμφανίστηκε μετά επιλογή εξοπλισμού',
-        );
-        expect(
-          departmentPhoneOverlay,
-          findsOneWidget,
-          reason: greekExpectMsg(
-            'Overlay λίστας τηλεφώνων τμήματος — όχι autocomplete prefix',
-          ),
+          'Έλεγχος πεδίου τηλεφώνου — προσυμπληρωμένος αριθμός',
         );
         expect(
           find.descendant(
-            of: departmentPhoneOverlay,
+            of: callLoggerPhoneTextField(),
             matching: find.text(kTestPhoneDigits),
           ),
           findsOneWidget,
           reason: greekExpectMsg(
-            'Στην overlay λίστα τμήματος εμφανίζεται ο $kTestPhoneDigits',
+            'Ο μοναδικός αριθμός του τμήματος εμφανίζεται μέσα στο πεδίο, '
+            'χωρίς δεύτερο κλικ σε λίστα',
           ),
         );
-        reporter.logStepDone('Overlay λίστα τηλεφώνων: $kTestPhoneDigits');
+        reporter.logStepDone('Πεδίο τηλεφώνου: $kTestPhoneDigits');
 
         await _finishCallFormWidgetTest(tester);
 
@@ -1317,14 +1322,14 @@ void main() {
             'επιλέγει τον κωδικό $_kOrphanDepartmentEquipment',
           ),
         );
+        // Το `equipmentCandidates` σημαίνει «δεν αποφασίστηκε ακόμα»: αφού ο
+        // μοναδικός εξοπλισμός επιλέχθηκε, αδειάζει. Η λίστα του overlay
+        // χτίζεται χωριστά από τον κατάλογο — ελέγχεται παρακάτω με κλικ.
         expect(
-          headerAfterLookup.equipmentCandidates
-              .map((EquipmentModel e) => e.code?.trim())
-              .whereType<String>()
-              .toSet(),
-          {_kOrphanDepartmentEquipment},
+          headerAfterLookup.equipmentCandidates,
+          isEmpty,
           reason: greekExpectMsg(
-            'Ο εξοπλισμός τμήματος είναι διαθέσιμος στους υποψήφιους μετά το lookup',
+            'Χωρίς υποψήφιους όταν ο εξοπλισμός έχει ήδη αποφασιστεί',
           ),
         );
         await tester.pump();

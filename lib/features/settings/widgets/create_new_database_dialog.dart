@@ -273,11 +273,7 @@ class CreateNewDatabaseFlow {
     );
 
     if (result.success) {
-      await completeDatabaseSwitch(
-        ref: ref,
-        path: norm,
-        hooks: switchHooks,
-      );
+      await completeDatabaseSwitch(ref: ref, path: norm, hooks: switchHooks);
       onFlowSuccessCloseParent?.call();
       if (showSuccessSnackBar && context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

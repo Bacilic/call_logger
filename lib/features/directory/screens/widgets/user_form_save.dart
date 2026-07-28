@@ -42,20 +42,17 @@ mixin UserFormSaveMixin on UserFormDialogStateHost {
     if (!(_formKey.currentState?.validate() ?? false)) return;
     if (!_isDirty) return;
 
-    final homonym = _findSoftHomonymUser();
-    if (homonym != null) {
+    final similar = _findSimilarUsers();
+    if (similar.isNotEmpty) {
       if (!mounted) return;
-      final existingDept = homonym.departmentName?.trim() ?? '';
-      final choice = await showDialog<bool>(
+      final result = await showDialog<SimilarUsersDialogResult>(
         context: context,
         barrierDismissible: true,
-        builder: (ctx) => HomonymWarningDialog(
-          userDisplayName: _buildUserDisplayName(),
-          existingRecordDepartmentName: existingDept,
-        ),
+        builder: (ctx) =>
+            SimilarUsersDialog(matches: similar, allowPickExisting: false),
       );
       if (!mounted) return;
-      if (choice != true) return;
+      if (result == null || !result.continuedAsNew) return;
     }
 
     var cloneAsNewEmployee = false;
@@ -82,12 +79,33 @@ mixin UserFormSaveMixin on UserFormDialogStateHost {
         _departmentController.text,
       );
       if (initialDeptNorm != currentDeptNorm) {
-        final existsInOrg = currentDeptNorm.isEmpty
+        var existsInOrg = currentDeptNorm.isEmpty
             ? true
             : await DepartmentRepository(
                 await DatabaseHelper.instance.database,
               ).departmentNameExists(_departmentController.text);
         if (!mounted) return;
+
+        if (!existsInOrg) {
+          final suggestion = await showSimilarDepartmentSuggestionIfNeeded(
+            context: context,
+            departments: LookupService.instance.departments,
+            typedName: _departmentController.text,
+          );
+          if (!mounted) return;
+          if (suggestion != null) {
+            if (suggestion.isCancelled) {
+              _departmentController.text = _initialDepartmentText;
+              return;
+            }
+            final picked = suggestion.selectedDepartment;
+            if (picked != null) {
+              _departmentController.text = picked.name;
+              existsInOrg = true;
+            }
+          }
+        }
+
         final useAddToDepartmentMessage =
             !_isEdit || widget.isClone || _initialDepartmentText.trim().isEmpty;
         final result = await showDepartmentTransferConfirmDialog(

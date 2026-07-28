@@ -6,6 +6,7 @@ import '../../../../core/utils/autocomplete_highlight_scroll.dart';
 import '../../../../core/utils/spell_check.dart';
 import '../../../../features/directory/models/department_model.dart';
 import '../../provider/smart_entity_selector_provider.dart';
+import 'smart_entity_selector_anchor_frame.dart';
 import 'smart_entity_selector_conflict_badge.dart';
 import 'text_layout_utils.dart';
 
@@ -111,224 +112,233 @@ class SmartEntityDepartmentFieldState
     return SizedBox(
       width: widget.width,
       child: MergeSemantics(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Icon(
-                  Icons.business_outlined,
-                  size: 16,
-                  color: theme.colorScheme.primary,
-                ),
-                const SizedBox(width: 4),
-                Expanded(
-                  child: Text(
-                    'Τμήμα',
-                    style: theme.textTheme.labelMedium,
-                    softWrap: true,
+        child: AnchorFrame(
+          isAnchor: widget.header.isAnchorHighlighted(SelectorField.department),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    Icons.business_outlined,
+                    size: 16,
+                    color: theme.colorScheme.primary,
                   ),
-                ),
-                ConflictBadge(
-                  severity: widget.header.conflictSeverityFor(
-                    SelectorField.department,
-                  ),
-                  message: widget.header.conflictTooltipFor(
-                    SelectorField.department,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 4),
-            Autocomplete<DepartmentModel>(
-              displayStringForOption: (DepartmentModel d) => d.name,
-              focusNode: focusNode,
-              textEditingController: controller,
-              optionsBuilder: (TextEditingValue value) {
-                final effectiveText = _isKeyboardPreview
-                    ? _typedQuery
-                    : value.text;
-                final query = effectiveText.trim();
-                if (lookupService == null) return const [];
-                return lookupService.searchDepartments(query);
-              },
-              optionsViewBuilder: (context, onSelected, options) {
-                final optionsList = options.toList();
-                final theme = Theme.of(context);
-                return Align(
-                  alignment: Alignment.topLeft,
-                  child: Material(
-                    elevation: 4,
-                    color: theme.colorScheme.surface,
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(
-                        maxHeight: 240,
-                        minWidth: 180,
-                      ),
-                      child: ListView.builder(
-                        controller: _optionsScrollController,
-                        padding: EdgeInsets.zero,
-                        shrinkWrap: true,
-                        itemCount: optionsList.length,
-                        itemBuilder: (context, index) {
-                          final frameworkHighlighted =
-                              AutocompleteHighlightedOption.of(context) ==
-                              index;
-                          final keyboardHighlighted =
-                              _keyboardOptionIndex >= 0 &&
-                              _keyboardOptionIndex == index;
-                          final isHighlighted = _isKeyboardPreview
-                              ? keyboardHighlighted
-                              : frameworkHighlighted;
-                          if (isHighlighted && _isKeyboardPreview) {
-                            if (_lastAutoScrollIndex != index) {
-                              _lastAutoScrollIndex = index;
-                              syncAutocompleteHighlightedListScroll(
-                                controller: _optionsScrollController,
-                                highlightedIndex: index,
-                                itemExtent: 48,
-                                viewportExtent: 240,
-                              );
-                            }
-                          }
-                          return ListTile(
-                            dense: true,
-                            selected: isHighlighted,
-                            selectedTileColor: theme.colorScheme.primary
-                                .withValues(alpha: 0.12),
-                            title: Text(optionsList[index].name),
-                            onTap: () => onSelected(optionsList[index]),
-                          );
-                        },
-                      ),
+                  const SizedBox(width: 4),
+                  Expanded(
+                    child: Text(
+                      'Τμήμα',
+                      style: theme.textTheme.labelMedium,
+                      softWrap: true,
                     ),
                   ),
-                );
-              },
-              onSelected: (DepartmentModel selection) {
-                _commitDepartmentSelection(selection);
-              },
-              fieldViewBuilder:
-                  (context, textController, focusNodeParam, onFieldSubmitted) {
-                    final style =
-                        theme.textTheme.bodyLarge ?? const TextStyle();
-                    final showTooltip =
-                        !focusNodeParam.hasFocus &&
-                        textOverflowsSingleLine(
-                          text: textController.text,
-                          style: style,
-                          maxWidth: width - 88,
-                          textDirection: textDirection,
-                        );
-                    final field = Focus(
-                      onKeyEvent: (node, event) {
-                        if (event is! KeyDownEvent) {
-                          return KeyEventResult.ignored;
-                        }
-                        final options = _departmentOptions(_typedQuery);
-                        if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
-                          if (options.isEmpty) return KeyEventResult.ignored;
-                          _keyboardOptionIndex = (_keyboardOptionIndex + 1)
-                              .clamp(0, options.length - 1);
-                          _isKeyboardPreview = true;
-                          _setControllerText(
-                            textController,
-                            options[_keyboardOptionIndex].name,
-                          );
-                          return KeyEventResult.handled;
-                        }
-                        if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
-                          if (options.isEmpty) return KeyEventResult.ignored;
-                          _keyboardOptionIndex = _keyboardOptionIndex <= 0
-                              ? 0
-                              : _keyboardOptionIndex - 1;
-                          _isKeyboardPreview = true;
-                          _setControllerText(
-                            textController,
-                            options[_keyboardOptionIndex].name,
-                          );
-                          return KeyEventResult.handled;
-                        }
-                        if (event.logicalKey == LogicalKeyboardKey.enter &&
-                            options.isNotEmpty &&
-                            _keyboardOptionIndex >= 0 &&
-                            _keyboardOptionIndex < options.length) {
-                          _commitDepartmentSelection(
-                            options[_keyboardOptionIndex],
-                          );
-                          return KeyEventResult.handled;
-                        }
-                        return KeyEventResult.ignored;
-                      },
-                      child: TextField(
-                        controller: textController,
-                        focusNode: focusNodeParam,
-                        spellCheckConfiguration:
-                            platformSpellCheckConfiguration,
-                        decoration: InputDecoration(
-                          border: const OutlineInputBorder(),
-                          isDense: true,
-                          suffixIcon:
-                              showInlineFieldClearButton(textController.text)
-                              ? Semantics(
-                                  label: 'Καθαρισμός Τμήματος',
-                                  child: IconButton(
-                                    icon: const Icon(Icons.close, size: 20),
-                                    onPressed: () {
-                                      textController.clear();
-                                      _typedQuery = '';
-                                      _keyboardOptionIndex = -1;
-                                      notifier.updateDepartmentText('');
-                                      onContentChecked();
-                                    },
-                                    tooltip: 'Καθαρισμός Τμήματος',
-                                  ),
-                                )
-                              : null,
+                  ConflictBadge(
+                    severity: widget.header.conflictSeverityFor(
+                      SelectorField.department,
+                    ),
+                    message: widget.header.conflictTooltipFor(
+                      SelectorField.department,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 4),
+              Autocomplete<DepartmentModel>(
+                displayStringForOption: (DepartmentModel d) => d.name,
+                focusNode: focusNode,
+                textEditingController: controller,
+                optionsBuilder: (TextEditingValue value) {
+                  final effectiveText = _isKeyboardPreview
+                      ? _typedQuery
+                      : value.text;
+                  final query = effectiveText.trim();
+                  if (lookupService == null) return const [];
+                  return lookupService.searchDepartments(query);
+                },
+                optionsViewBuilder: (context, onSelected, options) {
+                  final optionsList = options.toList();
+                  final theme = Theme.of(context);
+                  return Align(
+                    alignment: Alignment.topLeft,
+                    child: Material(
+                      elevation: 4,
+                      color: theme.colorScheme.surface,
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(
+                          maxHeight: 240,
+                          minWidth: 180,
                         ),
-                        onChanged: (value) {
-                          if (_isKeyboardPreview) {
-                            _isKeyboardPreview = false;
-                            return;
+                        child: ListView.builder(
+                          controller: _optionsScrollController,
+                          padding: EdgeInsets.zero,
+                          shrinkWrap: true,
+                          itemCount: optionsList.length,
+                          itemBuilder: (context, index) {
+                            final frameworkHighlighted =
+                                AutocompleteHighlightedOption.of(context) ==
+                                index;
+                            final keyboardHighlighted =
+                                _keyboardOptionIndex >= 0 &&
+                                _keyboardOptionIndex == index;
+                            final isHighlighted = _isKeyboardPreview
+                                ? keyboardHighlighted
+                                : frameworkHighlighted;
+                            if (isHighlighted && _isKeyboardPreview) {
+                              if (_lastAutoScrollIndex != index) {
+                                _lastAutoScrollIndex = index;
+                                syncAutocompleteHighlightedListScroll(
+                                  controller: _optionsScrollController,
+                                  highlightedIndex: index,
+                                  itemExtent: 48,
+                                  viewportExtent: 240,
+                                );
+                              }
+                            }
+                            return ListTile(
+                              dense: true,
+                              selected: isHighlighted,
+                              selectedTileColor: theme.colorScheme.primary
+                                  .withValues(alpha: 0.12),
+                              title: Text(optionsList[index].name),
+                              onTap: () => onSelected(optionsList[index]),
+                            );
+                          },
+                        ),
+                      ),
+                    ),
+                  );
+                },
+                onSelected: (DepartmentModel selection) {
+                  _commitDepartmentSelection(selection);
+                },
+                fieldViewBuilder:
+                    (
+                      context,
+                      textController,
+                      focusNodeParam,
+                      onFieldSubmitted,
+                    ) {
+                      final style =
+                          theme.textTheme.bodyLarge ?? const TextStyle();
+                      final showTooltip =
+                          !focusNodeParam.hasFocus &&
+                          textOverflowsSingleLine(
+                            text: textController.text,
+                            style: style,
+                            maxWidth: width - 88,
+                            textDirection: textDirection,
+                          );
+                      final field = Focus(
+                        onKeyEvent: (node, event) {
+                          if (event is! KeyDownEvent) {
+                            return KeyEventResult.ignored;
                           }
-                          _typedQuery = value;
-                          _keyboardOptionIndex = -1;
-                          _lastAutoScrollIndex = -1;
-                          notifier.updateDepartmentText(value);
-                          onContentChecked();
-                        },
-                        onSubmitted: (_) {
                           final options = _departmentOptions(_typedQuery);
-                          if (options.isNotEmpty &&
+                          if (event.logicalKey ==
+                              LogicalKeyboardKey.arrowDown) {
+                            if (options.isEmpty) return KeyEventResult.ignored;
+                            _keyboardOptionIndex = (_keyboardOptionIndex + 1)
+                                .clamp(0, options.length - 1);
+                            _isKeyboardPreview = true;
+                            _setControllerText(
+                              textController,
+                              options[_keyboardOptionIndex].name,
+                            );
+                            return KeyEventResult.handled;
+                          }
+                          if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+                            if (options.isEmpty) return KeyEventResult.ignored;
+                            _keyboardOptionIndex = _keyboardOptionIndex <= 0
+                                ? 0
+                                : _keyboardOptionIndex - 1;
+                            _isKeyboardPreview = true;
+                            _setControllerText(
+                              textController,
+                              options[_keyboardOptionIndex].name,
+                            );
+                            return KeyEventResult.handled;
+                          }
+                          if (event.logicalKey == LogicalKeyboardKey.enter &&
+                              options.isNotEmpty &&
                               _keyboardOptionIndex >= 0 &&
                               _keyboardOptionIndex < options.length) {
                             _commitDepartmentSelection(
                               options[_keyboardOptionIndex],
                             );
-                            return;
+                            return KeyEventResult.handled;
                           }
-                          onContentChecked();
-                          nextFocusNode.requestFocus();
+                          return KeyEventResult.ignored;
                         },
-                      ),
-                    );
-                    return Semantics(
-                      label: 'Τμήμα',
-                      child: SizedBox(
-                        width: width,
-                        child: showTooltip
-                            ? Tooltip(
-                                message: textController.text,
-                                child: field,
-                              )
-                            : field,
-                      ),
-                    );
-                  },
-            ),
-          ],
+                        child: TextField(
+                          controller: textController,
+                          focusNode: focusNodeParam,
+                          spellCheckConfiguration:
+                              platformSpellCheckConfiguration,
+                          decoration: InputDecoration(
+                            border: const OutlineInputBorder(),
+                            isDense: true,
+                            suffixIcon:
+                                showInlineFieldClearButton(textController.text)
+                                ? Semantics(
+                                    label: 'Καθαρισμός Τμήματος',
+                                    child: IconButton(
+                                      icon: const Icon(Icons.close, size: 20),
+                                      onPressed: () {
+                                        textController.clear();
+                                        _typedQuery = '';
+                                        _keyboardOptionIndex = -1;
+                                        notifier.updateDepartmentText('');
+                                        onContentChecked();
+                                      },
+                                      tooltip: 'Καθαρισμός Τμήματος',
+                                    ),
+                                  )
+                                : null,
+                          ),
+                          onChanged: (value) {
+                            if (_isKeyboardPreview) {
+                              _isKeyboardPreview = false;
+                              return;
+                            }
+                            _typedQuery = value;
+                            _keyboardOptionIndex = -1;
+                            _lastAutoScrollIndex = -1;
+                            notifier.updateDepartmentText(value);
+                            onContentChecked();
+                          },
+                          onSubmitted: (_) {
+                            final options = _departmentOptions(_typedQuery);
+                            if (options.isNotEmpty &&
+                                _keyboardOptionIndex >= 0 &&
+                                _keyboardOptionIndex < options.length) {
+                              _commitDepartmentSelection(
+                                options[_keyboardOptionIndex],
+                              );
+                              return;
+                            }
+                            onContentChecked();
+                            nextFocusNode.requestFocus();
+                          },
+                        ),
+                      );
+                      return Semantics(
+                        label: 'Τμήμα',
+                        child: SizedBox(
+                          width: width,
+                          child: showTooltip
+                              ? Tooltip(
+                                  message: textController.text,
+                                  child: field,
+                                )
+                              : field,
+                        ),
+                      );
+                    },
+              ),
+            ],
+          ),
         ),
       ),
     );

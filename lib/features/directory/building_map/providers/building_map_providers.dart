@@ -10,6 +10,7 @@ import '../../../../core/database/department_repository.dart';
 import '../../../../core/database/omnisearch_service.dart';
 import '../../../../core/models/building_map_floor.dart';
 import '../building_map_label_layout.dart';
+import '../models/building_map_jump_target.dart';
 
 /// Undo ενός βήματος: στιγμιότυπο γεωμετρίας τμήματος πριν την τελευταία εγγραφή.
 @immutable
@@ -467,7 +468,7 @@ class BuildingMapSearchUnresolvedNoticeNotifier
 class BuildingMapPendingJumpPayload {
   const BuildingMapPendingJumpPayload({required this.entity});
 
-  final dynamic entity;
+  final BuildingMapJumpTarget entity;
 }
 
 final buildingMapPendingJumpProvider =
@@ -481,7 +482,7 @@ class BuildingMapPendingJumpNotifier
   @override
   BuildingMapPendingJumpPayload? build() => null;
 
-  void setEntity(dynamic entity) {
+  void setEntity(BuildingMapJumpTarget entity) {
     state = BuildingMapPendingJumpPayload(entity: entity);
   }
 

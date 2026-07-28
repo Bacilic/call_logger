@@ -24,6 +24,7 @@ final updateServiceProvider = Provider<UpdateService>((ref) {
   return UpdateService(
     resolveUpdateFolder: config.resolveUpdateFolderPath,
     readFileAsString: (path) => File(path).readAsString(),
+    pathExists: (path) => File(path).exists(),
     getCurrentVersion: () async {
       final info = await PackageInfo.fromPlatform();
       final build = int.tryParse(info.buildNumber.trim()) ?? 0;
@@ -32,6 +33,20 @@ final updateServiceProvider = Provider<UpdateService>((ref) {
     isDevelopmentBuild: () => BuildEnvironment.isDevelopmentBuild(),
   );
 });
+
+/// Προετοιμασία + άμεση εκκίνηση εγκαταστάτη (επιδιόρθωση εγκατάστασης).
+Future<UpdateInstallResult> repairInstallationFromPackage(
+  UpdateInstallerService installer, {
+  required UpdateManifest manifest,
+  void Function(String message)? onProgress,
+}) async {
+  final prepared = await installer.prepareUpdate(
+    manifest,
+    onProgressOverride: onProgress,
+  );
+  if (!prepared.success) return prepared;
+  return installer.launchPendingUpdate();
+}
 
 /// Έλεγχος μία φορά στο παρασκήνιο μετά την εκκίνηση.
 /// Ανανέωση μόνο με ρητή `ref.invalidate(updateCheckProvider)`.

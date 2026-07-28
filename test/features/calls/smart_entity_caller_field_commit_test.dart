@@ -1,4 +1,4 @@
-// Widget tests: άμεσο entity lookup στο commit πεδίου Καλούντα (v2 §Ζ.5).
+// Widget tests: άμεσο entity lookup στο commit πεδίου Καλούντα.
 //
 // Ολόκληρο αρχείο:
 //   flutter test test/features/calls/smart_entity_caller_field_commit_test.dart

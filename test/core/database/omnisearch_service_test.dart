@@ -31,6 +31,7 @@ void main() {
       await db.delete('department_phones');
       await db.delete('user_phones');
       await db.delete('phones');
+      await db.delete('user_equipment');
       await db.delete('equipment');
       await db.delete('users');
       await db.delete('departments');
@@ -182,6 +183,95 @@ void main() {
       expect(hit.departmentIds, [deptId]);
       expect(hit.subtitle, contains('Desktop'));
       expect(hit.subtitle, contains('Τμήμα Εξοπλισμού'));
+    });
+
+    // Πραγματικό σενάριο 27/07: ο 3668 χωρίς απευθείας τμήμα έδειχνε σκέτο
+    // «Εξοπλισμός» — το «ποιος και πού» έρχεται από την κάτοχο μέσω M2M.
+    test('equipment χωρίς άμεσο τμήμα: κάτοχος + τμήμα κατόχου', () async {
+      final deptId = await insertDepartment(name: 'Εφημερείο ΤΕΠ');
+      final userId = await db.insert('users', {
+        'first_name': 'Σοφία',
+        'last_name': 'Κανέλου',
+        'department_id': deptId,
+        'is_deleted': 0,
+      });
+      final eqId = await db.insert('equipment', {
+        'code_equipment': '3668',
+        'is_deleted': 0,
+      });
+      await db.insert('user_equipment', {
+        'user_id': userId,
+        'equipment_id': eqId,
+      });
+
+      final hits = await repo.searchBuildingMapOmnisearch('3668');
+      final hit = hits.singleWhere(
+        (h) => h.kind == BuildingMapOmnisearchEntityKind.equipment,
+      );
+      expect(hit.subtitle, contains('Σοφία Κανέλου'));
+      expect(hit.subtitle, contains('Εφημερείο ΤΕΠ'));
+      expect(
+        hit.departmentIds,
+        [deptId],
+        reason: 'Η μετάβαση στον χάρτη κληρονομεί το τμήμα της κατόχου',
+      );
+    });
+
+    test('equipment με άμεσο τμήμα: εμφανίζεται και ο κάτοχος', () async {
+      final directDeptId = await insertDepartment(name: 'Αποθήκη Υλικού');
+      final ownerDeptId = await insertDepartment(name: 'Πληροφορική');
+      final userId = await db.insert('users', {
+        'first_name': 'Βασίλης',
+        'last_name': 'Δρόσος',
+        'department_id': ownerDeptId,
+        'is_deleted': 0,
+      });
+      final eqId = await db.insert('equipment', {
+        'code_equipment': 'PC-5006',
+        'department_id': directDeptId,
+        'is_deleted': 0,
+      });
+      await db.insert('user_equipment', {
+        'user_id': userId,
+        'equipment_id': eqId,
+      });
+
+      final hits = await repo.searchBuildingMapOmnisearch('pc-5006');
+      final hit = hits.single;
+      expect(hit.subtitle, contains('Βασίλης Δρόσος'));
+      expect(
+        hit.subtitle,
+        contains('Αποθήκη Υλικού'),
+        reason: 'Το άμεσο τμήμα κερδίζει στην εμφάνιση',
+      );
+      expect(
+        hit.departmentIds,
+        containsAll([directDeptId, ownerDeptId]),
+        reason: 'Η μετάβαση προσφέρει και τις δύο τοποθεσίες',
+      );
+    });
+
+    test('equipment: διαγραμμένος κάτοχος δεν εμφανίζεται', () async {
+      final deptId = await insertDepartment(name: 'Γραμματεία');
+      final userId = await db.insert('users', {
+        'first_name': 'Παλιός',
+        'last_name': 'Κάτοχος',
+        'department_id': deptId,
+        'is_deleted': 1,
+      });
+      final eqId = await db.insert('equipment', {
+        'code_equipment': 'EQ-ORPHAN',
+        'is_deleted': 0,
+      });
+      await db.insert('user_equipment', {
+        'user_id': userId,
+        'equipment_id': eqId,
+      });
+
+      final hits = await repo.searchBuildingMapOmnisearch('eq-orphan');
+      final hit = hits.single;
+      expect(hit.subtitle ?? '', isNot(contains('Παλιός')));
+      expect(hit.departmentIds, isEmpty);
     });
 
     test('equipment: διαγραμμένος εξοπλισμός δεν εμφανίζεται', () async {

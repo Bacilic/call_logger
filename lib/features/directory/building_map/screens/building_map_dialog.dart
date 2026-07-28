@@ -5,13 +5,14 @@ import '../../../../core/providers/quick_call_providers.dart';
 import '../../../../core/widgets/quick_call_fab.dart';
 import '../../../../core/models/building_map_floor.dart';
 import '../controllers/building_map_controller.dart';
+import '../models/building_map_jump_target.dart';
 import '../providers/building_map_providers.dart';
 import '../widgets/building_map_floors_body.dart';
 
 Future<void> showBuildingMapDialog(
   BuildContext context,
   WidgetRef ref, {
-  dynamic pendingEntity,
+  BuildingMapJumpTarget? pendingEntity,
 }) async {
   ref.read(buildingMapSelectedDepartmentIdToMapProvider.notifier).setDept(null);
   ref.read(buildingMapToolProvider.notifier).setMode(MapToolMode.select);
