@@ -38,10 +38,15 @@ Future<Map<String, int>> _resolvePhoneTransferTargets(
 }
 
 /// Μετά από αποσύνδεση προσωπικού τηλεφώνου χρήστη (φόρμα ή διαγραφή χρήστη).
+///
+/// Αν δοθεί [executor] (π.χ. μέσα σε εξωτερικό transaction), οι αλλαγές
+/// γράφονται εκεί χωρίς nested transactions και **χωρίς**
+/// [reloadLookupAfterNewDepartments] — ευθύνη του caller μετά το commit.
 Future<void> applyPersonalPhoneDisconnectBatch(
   Database db,
   SharedAssetDisconnectBatchResult batch, {
   required int? sourceDepartmentId,
+  DatabaseExecutor? executor,
 }) async {
   if (batch.phonesToKeep.isEmpty &&
       batch.phoneTransfers.isEmpty &&
@@ -50,32 +55,43 @@ Future<void> applyPersonalPhoneDisconnectBatch(
     return;
   }
 
-  await reloadLookupAfterNewDepartments(batch);
+  if (executor == null) {
+    await reloadLookupAfterNewDepartments(batch);
+  }
 
   final phones = PhoneRepository(db);
   final phoneTransfers = await _resolvePhoneTransferTargets(
     db,
     batch.phoneTransfers,
+    executor: executor,
   );
 
   if (sourceDepartmentId != null) {
     for (final phone in batch.phonesToKeep) {
-      await phones.addDepartmentDirectPhone(sourceDepartmentId, phone);
+      await phones.addDepartmentDirectPhone(
+        sourceDepartmentId,
+        phone,
+        executor: executor,
+      );
     }
   }
 
   for (final entry in phoneTransfers.entries) {
-    await phones.addDepartmentDirectPhone(entry.value, entry.key);
+    await phones.addDepartmentDirectPhone(
+      entry.value,
+      entry.key,
+      executor: executor,
+    );
   }
 
   if (batch.phonesToDelete.isNotEmpty) {
     final phoneIds = <int>[];
     for (final p in batch.phonesToDelete) {
-      final id = await phones.getPhoneIdByNumber(p);
+      final id = await phones.getPhoneIdByNumber(p, executor: executor);
       if (id != null) phoneIds.add(id);
     }
     if (phoneIds.isNotEmpty) {
-      await phones.softDeletePhones(phoneIds);
+      await phones.softDeletePhones(phoneIds, executor: executor);
     }
   }
 }
@@ -84,10 +100,15 @@ Future<void> applyPersonalPhoneDisconnectBatch(
 ///
 /// Ο εξοπλισμός έχει πάντα τμήμα: η «κράτηση» γράφει το τμήμα του (πρώην)
 /// κατόχου· χωρίς [sourceDepartmentId] δεν γίνεται κράτηση.
+///
+/// Αν δοθεί [executor] (π.χ. μέσα σε εξωτερικό transaction), οι αλλαγές
+/// γράφονται εκεί χωρίς nested transactions και **χωρίς**
+/// [reloadLookupAfterNewDepartments] — ευθύνη του caller μετά το commit.
 Future<void> applyPersonalEquipmentDisconnectBatch(
   Database db,
   SharedAssetDisconnectBatchResult batch, {
   required int? sourceDepartmentId,
+  DatabaseExecutor? executor,
 }) async {
   if (batch.equipmentToKeep.isEmpty &&
       batch.equipmentTransfers.isEmpty &&
@@ -101,32 +122,43 @@ Future<void> applyPersonalEquipmentDisconnectBatch(
     'equipmentToKeep απαιτεί sourceDepartmentId (κανόνας: εξοπλισμός πάντα με τμήμα)',
   );
 
-  await reloadLookupAfterNewDepartments(batch);
+  if (executor == null) {
+    await reloadLookupAfterNewDepartments(batch);
+  }
 
   final equipment = EquipmentRepository(db);
   final equipmentTransfers = await _resolvePhoneTransferTargets(
     db,
     batch.equipmentTransfers,
+    executor: executor,
   );
 
   if (sourceDepartmentId != null) {
     for (final code in batch.equipmentToKeep) {
-      await equipment.updateEquipmentDepartment(code, sourceDepartmentId);
+      await equipment.updateEquipmentDepartment(
+        code,
+        sourceDepartmentId,
+        executor: executor,
+      );
     }
   }
 
   for (final entry in equipmentTransfers.entries) {
-    await equipment.updateEquipmentDepartment(entry.key, entry.value);
+    await equipment.updateEquipmentDepartment(
+      entry.key,
+      entry.value,
+      executor: executor,
+    );
   }
 
   if (batch.equipmentToDelete.isNotEmpty) {
     final equipmentIds = <int>[];
     for (final code in batch.equipmentToDelete) {
-      final id = await equipment.getEquipmentIdByCode(code);
+      final id = await equipment.getEquipmentIdByCode(code, executor: executor);
       if (id != null) equipmentIds.add(id);
     }
     if (equipmentIds.isNotEmpty) {
-      await equipment.deleteEquipments(equipmentIds);
+      await equipment.deleteEquipments(equipmentIds, executor: executor);
     }
   }
 }

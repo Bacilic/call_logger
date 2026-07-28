@@ -657,6 +657,22 @@ class DirectoryNotifier extends Notifier<DirectoryState> {
     await refreshDirectoryCaches(ref, equipment: true);
   }
 
+  /// Μετά από ατομική soft-delete εκτός notifier (μία συναλλαγή με τις
+  /// διαθέσεις τηλεφώνων/εξοπλισμού): ενημερώνει μόνο UI/cache, χωρίς νέο
+  /// γράψιμο στη βάση.
+  Future<void> finalizeExternalDeletion(List<UserModel> toDelete) async {
+    if (toDelete.isEmpty) return;
+    await _refreshLookupCache();
+    if (!ref.mounted) return;
+    state = state.copyWith(
+      selectedIds: {},
+      lastDeleted: toDelete,
+      lastUserDeletionUndo: null,
+    );
+    await loadUsers();
+    await refreshDirectoryCaches(ref, equipment: true);
+  }
+
   /// Αποθηκεύει τον φάκελο πλήρους αναίρεσης μετά την εφαρμογή διαθέσεων.
   void rememberUserDeletionUndo(UserDeletionUndoRecord record) {
     state = state.copyWith(lastUserDeletionUndo: record);

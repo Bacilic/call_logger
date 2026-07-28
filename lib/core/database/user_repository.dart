@@ -631,86 +631,96 @@ class UserRepository {
     );
   }
 
-  Future<void> deleteUsers(List<int> ids) async {
+  /// Soft-delete υπαλλήλων με πλήρες audit συνδέσεων.
+  ///
+  /// Με [executor] (εξωτερικό transaction) γράφει εκεί, ώστε διαγραφή και
+  /// συνοδευτικές διαθέσεις τηλεφώνων/εξοπλισμού να είναι ΜΙΑ συναλλαγή.
+  Future<void> deleteUsers(List<int> ids, {DatabaseExecutor? executor}) async {
     if (ids.isEmpty) return;
-    final user = await _support.auditPerformingUser();
+    if (executor != null) {
+      await _deleteUsersOn(executor, ids);
+      return;
+    }
+    await db.transaction((txn) => _deleteUsersOn(txn, ids));
+  }
+
+  Future<void> _deleteUsersOn(DatabaseExecutor txn, List<int> ids) async {
+    final user = await _support.auditPerformingUser(executor: txn);
     final phoneIdsByUser = <int, Set<int>>{};
     final equipmentIdsByUser = <int, Set<int>>{};
     for (final uid in ids) {
-      phoneIdsByUser[uid] = await _support.userPhoneIds(db, uid);
-      equipmentIdsByUser[uid] = await _equipmentIdsForUser(db, uid);
+      phoneIdsByUser[uid] = await _support.userPhoneIds(txn, uid);
+      equipmentIdsByUser[uid] = await _equipmentIdsForUser(txn, uid);
     }
 
-    await db.transaction((txn) async {
-      for (final id in ids) {
-        final nameRows = await txn.query(
-          'users',
-          columns: ['first_name', 'last_name'],
-          where: 'id = ?',
+    for (final id in ids) {
+      final nameRows = await txn.query(
+        'users',
+        columns: ['first_name', 'last_name'],
+        where: 'id = ?',
+        whereArgs: [id],
+        limit: 1,
+      );
+      final fn = nameRows.isEmpty
+          ? ''
+          : (nameRows.first['first_name'] as String?)?.trim() ?? '';
+      final ln = nameRows.isEmpty
+          ? ''
+          : (nameRows.first['last_name'] as String?)?.trim() ?? '';
+      final displayName = '$fn $ln'.trim();
+      final linkedPhoneIds = phoneIdsByUser[id] ?? {};
+      final beforePhoneIds = await _support.userPhoneIds(txn, id);
+
+      for (final phoneId in linkedPhoneIds) {
+        await _unlinkUserFromPhoneInTxn(txn, id, phoneId);
+      }
+
+      final afterPhoneIds = await _support.userPhoneIds(txn, id);
+      final linkedEquipmentIds = equipmentIdsByUser[id] ?? {};
+      if (linkedEquipmentIds.isNotEmpty) {
+        await txn.delete(
+          'user_equipment',
+          where: 'user_id = ?',
           whereArgs: [id],
-          limit: 1,
-        );
-        final fn = nameRows.isEmpty
-            ? ''
-            : (nameRows.first['first_name'] as String?)?.trim() ?? '';
-        final ln = nameRows.isEmpty
-            ? ''
-            : (nameRows.first['last_name'] as String?)?.trim() ?? '';
-        final displayName = '$fn $ln'.trim();
-        final linkedPhoneIds = phoneIdsByUser[id] ?? {};
-        final beforePhoneIds = await _support.userPhoneIds(txn, id);
-
-        for (final phoneId in linkedPhoneIds) {
-          await _unlinkUserFromPhoneInTxn(txn, id, phoneId);
-        }
-
-        final afterPhoneIds = await _support.userPhoneIds(txn, id);
-        final linkedEquipmentIds = equipmentIdsByUser[id] ?? {};
-        if (linkedEquipmentIds.isNotEmpty) {
-          await txn.delete(
-            'user_equipment',
-            where: 'user_id = ?',
-            whereArgs: [id],
-          );
-        }
-
-        final linkDetails = <String>[
-          ...await _support.auditPhoneUserLinkDeltaInTxn(
-            txn,
-            user,
-            id,
-            beforePhoneIds,
-            afterPhoneIds,
-          ),
-          ...await _support.auditEquipmentUserLinkDeltaInTxn(
-            txn,
-            user,
-            id,
-            linkedEquipmentIds,
-            const {},
-          ),
-        ];
-
-        await txn.update(
-          'users',
-          {'is_deleted': 1},
-          where: 'id = ?',
-          whereArgs: [id],
-        );
-        await AuditService.log(
-          txn,
-          action: DatabaseHelper.auditActionDelete,
-          userPerforming: user,
-          details: DirectorySupport.mergeAuditDetailLines(
-            'users id=$id',
-            linkDetails,
-          ),
-          entityType: AuditEntityTypes.user,
-          entityId: id,
-          entityName: displayName.isEmpty ? null : displayName,
         );
       }
-    });
+
+      final linkDetails = <String>[
+        ...await _support.auditPhoneUserLinkDeltaInTxn(
+          txn,
+          user,
+          id,
+          beforePhoneIds,
+          afterPhoneIds,
+        ),
+        ...await _support.auditEquipmentUserLinkDeltaInTxn(
+          txn,
+          user,
+          id,
+          linkedEquipmentIds,
+          const {},
+        ),
+      ];
+
+      await txn.update(
+        'users',
+        {'is_deleted': 1},
+        where: 'id = ?',
+        whereArgs: [id],
+      );
+      await AuditService.log(
+        txn,
+        action: DatabaseHelper.auditActionDelete,
+        userPerforming: user,
+        details: DirectorySupport.mergeAuditDetailLines(
+          'users id=$id',
+          linkDetails,
+        ),
+        entityType: AuditEntityTypes.user,
+        entityId: id,
+        entityName: displayName.isEmpty ? null : displayName,
+      );
+    }
   }
 
   /// Διαγράφει (soft) υπαλλήλους ΜΕΣΑ σε δοσμένο [txn] και επιστρέφει, ανά

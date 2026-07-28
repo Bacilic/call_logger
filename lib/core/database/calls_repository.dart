@@ -93,11 +93,11 @@ class CallsRepository
     return oldRow;
   }
 
-  Map<String, dynamic> _callInsertMap(CallModel call) {
-    final now = DateTime.now();
+  /// Κοινός χάρτης πεδίων εγγραφής κλήσης με ενιαίες προεπιλογές — insert
+  /// και update δεν επιτρέπεται να διαφωνούν (ελλιπές μοντέλο δεν σκάει σε
+  /// NOT NULL constraint). Τα date/time/is_deleted τα ορίζει η κάθε ροή.
+  Map<String, dynamic> _callWriteMap(CallModel call) {
     return <String, dynamic>{
-      'date': call.date ?? DateFormat('yyyy-MM-dd').format(now),
-      'time': call.time ?? DateFormat('HH:mm').format(now),
       'caller_id': call.callerId,
       'equipment_id': call.equipmentId,
       'caller_text': call.callerText,
@@ -113,6 +113,15 @@ class CallsRepository
       'lansweeper_state': call.lansweeperState ?? 'unsent',
       'lansweeper_main_ticket_id': call.lansweeperMainTicketId,
       'lansweeper_last_sync_at': call.lansweeperLastSyncAt,
+    };
+  }
+
+  Map<String, dynamic> _callInsertMap(CallModel call) {
+    final now = DateTime.now();
+    return <String, dynamic>{
+      ..._callWriteMap(call),
+      'date': call.date ?? DateFormat('yyyy-MM-dd').format(now),
+      'time': call.time ?? DateFormat('HH:mm').format(now),
       'is_deleted': 0,
     };
   }
@@ -181,38 +190,25 @@ class CallsRepository
     if (id == null) {
       throw ArgumentError('CallModel.id is required for updateCall');
     }
-    final oldRows = await db.query(
-      'calls',
-      where: 'id = ?',
-      whereArgs: [id],
-      limit: 1,
-    );
-    final oldRow = oldRows.isEmpty
-        ? null
-        : Map<String, dynamic>.from(oldRows.first);
-
     final map = <String, dynamic>{
+      ..._callWriteMap(call),
       'date': call.date,
       'time': call.time,
-      'caller_id': call.callerId,
-      'equipment_id': call.equipmentId,
-      'caller_text': call.callerText,
-      'phone_text': call.phoneText,
-      'department_text': call.departmentText,
-      'equipment_text': call.equipmentText,
-      'issue': call.issue,
-      'category_text': call.category,
-      'category_id': call.categoryId,
-      'status': call.status,
-      'duration': call.duration,
-      'is_priority': call.isPriority ?? 0,
-      'lansweeper_state': call.lansweeperState,
-      'lansweeper_main_ticket_id': call.lansweeperMainTicketId,
-      'lansweeper_last_sync_at': call.lansweeperLastSyncAt,
       'is_deleted': call.isDeleted ? 1 : 0,
     };
     try {
       return await db.transaction((txn) async {
+        // Το «πριν» του audit διαβάζεται ΜΕΣΑ στη συναλλαγή, ώστε σε
+        // κοινόχρηστη βάση να μην παρεμβληθεί ξένη εγγραφή ανάμεσα.
+        final oldRows = await txn.query(
+          'calls',
+          where: 'id = ?',
+          whereArgs: [id],
+          limit: 1,
+        );
+        final oldRow = oldRows.isEmpty
+            ? null
+            : Map<String, dynamic>.from(oldRows.first);
         map['search_index'] = await _buildCallSearchIndex(txn, map);
         final n = await txn.update(
           'calls',

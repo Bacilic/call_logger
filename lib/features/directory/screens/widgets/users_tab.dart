@@ -377,22 +377,29 @@ class _UsersTabState extends ConsumerState<UsersTab>
     }
 
     final notifier = ref.read(directoryProvider.notifier);
-    await notifier.deleteSelected();
-
-    for (final pending in pendingPhoneBatches) {
-      await applyPersonalPhoneDisconnectBatch(
-        db,
-        pending.batch,
-        sourceDepartmentId: pending.sourceDepartmentId,
-      );
-    }
-    for (final pending in pendingEquipmentBatches) {
-      await applyPersonalEquipmentDisconnectBatch(
-        db,
-        pending.batch,
-        sourceDepartmentId: pending.sourceDepartmentId,
-      );
-    }
+    // Διαγραφή υπαλλήλων + διαθέσεις τηλεφώνων/εξοπλισμού σε ΜΙΑ συναλλαγή:
+    // διακοπή στη μέση δεν αφήνει διαγραμμένους υπαλλήλους με τα τηλέφωνά
+    // τους σε ενδιάμεση κατάσταση.
+    await db.transaction((txn) async {
+      await userRepo.deleteUsers(ids, executor: txn);
+      for (final pending in pendingPhoneBatches) {
+        await applyPersonalPhoneDisconnectBatch(
+          db,
+          pending.batch,
+          sourceDepartmentId: pending.sourceDepartmentId,
+          executor: txn,
+        );
+      }
+      for (final pending in pendingEquipmentBatches) {
+        await applyPersonalEquipmentDisconnectBatch(
+          db,
+          pending.batch,
+          sourceDepartmentId: pending.sourceDepartmentId,
+          executor: txn,
+        );
+      }
+    });
+    await notifier.finalizeExternalDeletion(usersToDelete);
 
     final phoneDeptAdds = <PhoneDeptAdd>[];
     final equipmentDeptSets = <EquipmentDeptSet>[];

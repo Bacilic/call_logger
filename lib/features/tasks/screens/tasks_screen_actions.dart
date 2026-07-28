@@ -446,11 +446,16 @@ Future<void> _onComplete(BuildContext context, WidgetRef ref, Task task) async {
   );
   if (!context.mounted || solutionNotes == null) return;
   if (task.id == null) return;
-  await ref.read(tasksProvider.notifier).closeTask(task.id!, solutionNotes);
-  if (!context.mounted) return;
-  ScaffoldMessenger.of(
-    context,
-  ).showSnackBar(const SnackBar(content: Text('Εκκρεμότητα ολοκληρώθηκε.')));
+  try {
+    await ref.read(tasksProvider.notifier).closeTask(task.id!, solutionNotes);
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Εκκρεμότητα ολοκληρώθηκε.')));
+  } on TaskSaveException catch (e) {
+    if (!context.mounted) return;
+    _showTaskSaveError(context, e);
+  }
 }
 
 Future<bool> _onEditCaller(

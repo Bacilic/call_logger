@@ -540,15 +540,6 @@ class DepartmentDirectoryNotifier extends Notifier<DepartmentDirectoryState> {
     final dbShared = await DatabaseHelper.instance.database;
     final phones = PhoneRepository(dbShared);
     final equipment = EquipmentRepository(dbShared);
-    for (final p in nextPhones.difference(existingPhones)) {
-      if (phonesToMoveFromUsers.contains(p)) {
-        await phones.removePhoneFromAllUsers(p);
-      }
-      await phones.addDepartmentDirectPhone(departmentId, p);
-    }
-    for (final p in existingPhones.difference(nextPhones)) {
-      await phones.removeDepartmentDirectPhone(departmentId, p);
-    }
 
     final existingEq = lookup
         .getSharedEquipmentCodesByDepartment(departmentId)
@@ -559,13 +550,6 @@ class DepartmentDirectoryNotifier extends Notifier<DepartmentDirectoryState> {
         .map((v) => v.trim())
         .where((v) => v.isNotEmpty)
         .toSet();
-
-    for (final code in nextEq.difference(existingEq)) {
-      if (equipmentToMoveFromUsers.contains(code)) {
-        await equipment.removeEquipmentFromAllUsers(code);
-      }
-      await equipment.updateEquipmentDepartment(code, departmentId);
-    }
     final transferCodes = equipmentTransfers.keys
         .map((c) => c.trim())
         .where((c) => c.isNotEmpty)
@@ -574,56 +558,97 @@ class DepartmentDirectoryNotifier extends Notifier<DepartmentDirectoryState> {
         .map((c) => c.trim())
         .where((c) => c.isNotEmpty)
         .toSet();
-    for (final code in existingEq.difference(nextEq)) {
-      final hasOwner = lookup.checkEquipmentUsage(code).hasUserOwners;
-      final hasDisposition =
-          transferCodes.contains(code) || deleteCodes.contains(code);
-      if (!hasOwner && !hasDisposition) {
-        throw StateError(
-          'Αφαίρεση κοινόχρηστου εξοπλισμού «$code» χωρίς κάτοχο '
-          'απαιτεί μεταφορά σε άλλο τμήμα ή διαγραφή.',
+
+    // Όλα τα βήματα σε ΜΙΑ συναλλαγή: διακοπή (δίκτυο, σφάλμα ελέγχου)
+    // αναιρεί τα πάντα αντί να αφήσει μισοτελειωμένη κατάσταση.
+    await dbShared.transaction((txn) async {
+      for (final p in nextPhones.difference(existingPhones)) {
+        if (phonesToMoveFromUsers.contains(p)) {
+          await phones.removePhoneFromAllUsers(p, executor: txn);
+        }
+        await phones.addDepartmentDirectPhone(departmentId, p, executor: txn);
+      }
+      for (final p in existingPhones.difference(nextPhones)) {
+        await phones.removeDepartmentDirectPhone(
+          departmentId,
+          p,
+          executor: txn,
         );
       }
-      if (hasOwner || hasDisposition) {
-        await equipment.clearEquipmentSharedDepartment(code, departmentId);
-      }
-    }
 
-    for (final entry in phoneTransfers.entries) {
-      final phone = entry.key.trim();
-      final targetId = entry.value;
-      if (phone.isEmpty) continue;
-      await phones.removeDepartmentDirectPhone(departmentId, phone);
-      await phones.addDepartmentDirectPhone(targetId, phone);
-    }
-    for (final entry in equipmentTransfers.entries) {
-      final code = entry.key.trim();
-      final targetId = entry.value;
-      if (code.isEmpty) continue;
-      await equipment.clearEquipmentSharedDepartment(code, departmentId);
-      await equipment.updateEquipmentDepartment(code, targetId);
-    }
+      for (final code in nextEq.difference(existingEq)) {
+        if (equipmentToMoveFromUsers.contains(code)) {
+          await equipment.removeEquipmentFromAllUsers(code, executor: txn);
+        }
+        await equipment.updateEquipmentDepartment(
+          code,
+          departmentId,
+          executor: txn,
+        );
+      }
+      for (final code in existingEq.difference(nextEq)) {
+        final hasOwner = lookup.checkEquipmentUsage(code).hasUserOwners;
+        final hasDisposition =
+            transferCodes.contains(code) || deleteCodes.contains(code);
+        if (!hasOwner && !hasDisposition) {
+          throw StateError(
+            'Αφαίρεση κοινόχρηστου εξοπλισμού «$code» χωρίς κάτοχο '
+            'απαιτεί μεταφορά σε άλλο τμήμα ή διαγραφή.',
+          );
+        }
+        if (hasOwner || hasDisposition) {
+          await equipment.clearEquipmentSharedDepartment(
+            code,
+            departmentId,
+            executor: txn,
+          );
+        }
+      }
 
-    if (phonesToSoftDelete.isNotEmpty) {
-      final phoneIds = <int>[];
-      for (final p in phonesToSoftDelete) {
-        final id = await phones.getPhoneIdByNumber(p);
-        if (id != null) phoneIds.add(id);
+      for (final entry in phoneTransfers.entries) {
+        final phone = entry.key.trim();
+        final targetId = entry.value;
+        if (phone.isEmpty) continue;
+        await phones.removeDepartmentDirectPhone(
+          departmentId,
+          phone,
+          executor: txn,
+        );
+        await phones.addDepartmentDirectPhone(targetId, phone, executor: txn);
       }
-      if (phoneIds.isNotEmpty) {
-        await phones.softDeletePhones(phoneIds);
+      for (final entry in equipmentTransfers.entries) {
+        final code = entry.key.trim();
+        final targetId = entry.value;
+        if (code.isEmpty) continue;
+        await equipment.clearEquipmentSharedDepartment(
+          code,
+          departmentId,
+          executor: txn,
+        );
+        await equipment.updateEquipmentDepartment(code, targetId, executor: txn);
       }
-    }
-    if (equipmentToSoftDelete.isNotEmpty) {
-      final equipmentIds = <int>[];
-      for (final code in equipmentToSoftDelete) {
-        final id = await equipment.getEquipmentIdByCode(code);
-        if (id != null) equipmentIds.add(id);
+
+      if (phonesToSoftDelete.isNotEmpty) {
+        final phoneIds = <int>[];
+        for (final p in phonesToSoftDelete) {
+          final id = await phones.getPhoneIdByNumber(p, executor: txn);
+          if (id != null) phoneIds.add(id);
+        }
+        if (phoneIds.isNotEmpty) {
+          await phones.softDeletePhones(phoneIds, executor: txn);
+        }
       }
-      if (equipmentIds.isNotEmpty) {
-        await equipment.deleteEquipments(equipmentIds);
+      if (equipmentToSoftDelete.isNotEmpty) {
+        final equipmentIds = <int>[];
+        for (final code in equipmentToSoftDelete) {
+          final id = await equipment.getEquipmentIdByCode(code, executor: txn);
+          if (id != null) equipmentIds.add(id);
+        }
+        if (equipmentIds.isNotEmpty) {
+          await equipment.deleteEquipments(equipmentIds, executor: txn);
+        }
       }
-    }
+    });
 
     await _refreshLookupCache();
     await loadDepartments();

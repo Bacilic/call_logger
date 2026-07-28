@@ -1105,15 +1105,6 @@ class TasksRepository {
     if (task.id == null) return;
     final db = await _db;
     final tid = task.id!;
-    final oldRows = await db.query(
-      'tasks',
-      where: 'id = ?',
-      whereArgs: [tid],
-      limit: 1,
-    );
-    final oldRow = oldRows.isEmpty
-        ? null
-        : Map<String, dynamic>.from(oldRows.first);
 
     final map = task.toMap();
     map.remove('id');
@@ -1127,6 +1118,17 @@ class TasksRepository {
     );
     try {
       await db.transaction((txn) async {
+        // Το «πριν» του audit διαβάζεται ΜΕΣΑ στη συναλλαγή, ώστε σε
+        // κοινόχρηστη βάση να μην παρεμβληθεί ξένη εγγραφή ανάμεσα.
+        final oldRows = await txn.query(
+          'tasks',
+          where: 'id = ?',
+          whereArgs: [tid],
+          limit: 1,
+        );
+        final oldRow = oldRows.isEmpty
+            ? null
+            : Map<String, dynamic>.from(oldRows.first);
         final n = await txn.update(
           'tasks',
           map,
@@ -1196,37 +1198,50 @@ class TasksRepository {
   }
 
   /// Ορίζει status = closed, solution_notes και updated_at.
+  ///
+  /// Ενημέρωση και audit σε ΜΙΑ συναλλαγή: αποτυχία audit = καμία αλλαγή,
+  /// με ειλικρινές σφάλμα αντί για σιωπηλό κλείσιμο χωρίς ίχνος.
   Future<void> closeTask(int id, String solutionNotes) async {
     final db = await _db;
-    final oldRows = await db.query(
-      'tasks',
-      where: 'id = ?',
-      whereArgs: [id],
-      limit: 1,
-    );
-    final oldStatus = oldRows.isEmpty
-        ? null
-        : oldRows.first['status'] as String?;
     final now = DateTime.now().toIso8601String();
-    await db.update(
-      'tasks',
-      {'status': 'closed', 'solution_notes': solutionNotes, 'updated_at': now},
-      where: 'id = ?',
-      whereArgs: [id],
-    );
     try {
-      final user = await AuditService.performingUser(db);
-      await AuditService.log(
-        db,
-        action: 'ΚΛΕΙΣΙΜΟ ΕΚΚΡΕΜΟΤΗΤΑΣ',
-        userPerforming: user,
-        details: 'tasks id=$id',
-        entityType: AuditEntityTypes.task,
-        entityId: id,
-        oldValues: oldStatus != null ? {'status': oldStatus} : null,
-        newValues: {'status': 'closed', 'solution_notes': solutionNotes},
-      );
-    } catch (_) {}
+      await db.transaction((txn) async {
+        final oldRows = await txn.query(
+          'tasks',
+          where: 'id = ?',
+          whereArgs: [id],
+          limit: 1,
+        );
+        final oldStatus = oldRows.isEmpty
+            ? null
+            : oldRows.first['status'] as String?;
+        final n = await txn.update(
+          'tasks',
+          {
+            'status': 'closed',
+            'solution_notes': solutionNotes,
+            'updated_at': now,
+          },
+          where: 'id = ?',
+          whereArgs: [id],
+        );
+        if (n == 0) return;
+        final user = await AuditService.performingUser(txn);
+        await AuditService.log(
+          txn,
+          action: 'ΚΛΕΙΣΙΜΟ ΕΚΚΡΕΜΟΤΗΤΑΣ',
+          userPerforming: user,
+          details: 'tasks id=$id',
+          entityType: AuditEntityTypes.task,
+          entityId: id,
+          oldValues: oldStatus != null ? {'status': oldStatus} : null,
+          newValues: {'status': 'closed', 'solution_notes': solutionNotes},
+        );
+      });
+    } catch (e) {
+      if (e is TaskSaveException) rethrow;
+      throw TaskSaveException('Η εκκρεμότητα δεν έκλεισε. Δοκιμάστε ξανά.');
+    }
   }
 
   /// Κλήσεις με status pending που δεν έχουν αντίστοιχο task.
