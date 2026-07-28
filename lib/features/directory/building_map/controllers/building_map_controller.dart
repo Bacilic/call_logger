@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 import 'dart:ui' as ui;
 
 import 'package:file_picker/file_picker.dart';
@@ -16,8 +15,6 @@ import '../../../../core/services/lookup_service.dart';
 import '../../../calls/models/equipment_model.dart';
 import '../../../calls/models/user_model.dart';
 import '../../../../core/services/building_map_storage.dart';
-import '../../../../core/widgets/lexicon_spell_text_form_field.dart';
-import '../../../../core/widgets/spell_check_controller.dart';
 import '../../../floor_map/services/floor_color_assignment_service.dart';
 import '../../models/department_model.dart';
 import '../../providers/department_directory_provider.dart';
@@ -26,8 +23,12 @@ import '../../screens/widgets/department_color_palette.dart';
 import '../building_map_label_layout.dart';
 import '../providers/building_map_providers.dart';
 import '../widgets/building_map_commit_color_dialog.dart';
-import '../widgets/building_map_floor_edit_preview.dart';
+import '../widgets/building_map_confirm_dialogs.dart';
+import '../widgets/building_map_floor_delete_dialog.dart';
 import '../widgets/building_map_floor_menu_button.dart';
+import '../widgets/building_map_floor_sheet_add_dialog.dart';
+import '../widgets/building_map_floor_sheet_edit_dialog.dart';
+import '../widgets/building_map_jump_pick_dialogs.dart';
 import '../widgets/building_map_portable_image_copy_dialog.dart';
 
 final buildingMapControllerProvider = Provider<BuildingMapController>(
@@ -35,12 +36,6 @@ final buildingMapControllerProvider = Provider<BuildingMapController>(
 );
 
 /// Επιλογή διαγραφής εικόνας από το διάλογο διαγραφής φύλλου.
-class BuildingMapFloorDeleteChoice {
-  const BuildingMapFloorDeleteChoice({required this.deleteImageFile});
-
-  final bool deleteImageFile;
-}
-
 /// Συντονισμός βάσης, αποθήκευσης εικόνων και καταστάσεων Riverpod για τον χάρτη κτιρίου.
 class BuildingMapController {
   BuildingMapController(this._ref);
@@ -145,26 +140,7 @@ class BuildingMapController {
     int deptId,
   ) async {
     if (!draftOverlapsOthers(draft, sheetStr, deptId)) return true;
-    final go = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Επικάλυψη'),
-        content: const Text(
-          'Το ορθογώνιο επικαλύπτει άλλο τμήμα σε αυτό το φύλλο. Να συνεχιστεί;',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Άκυρο'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Συνέχεια'),
-          ),
-        ],
-      ),
-    );
-    return go ?? false;
+    return showBuildingMapOverlapConfirmDialog(context);
   }
 
   List<Color> _distinctMapFillColorsOnSheet(
@@ -458,26 +434,11 @@ class BuildingMapController {
         (dept.mapHeight ?? 0) > 0;
     if (!mappedHere) return;
 
-    final go = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Αφαίρεση από τον χάρτη'),
-        content: Text(
-          'Να αφαιρεθεί το τμήμα «${dept.name}» από αυτό το φύλλο κατόψης;',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Άκυρο'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Αφαίρεση'),
-          ),
-        ],
-      ),
+    final go = await showBuildingMapRemoveDepartmentConfirmDialog(
+      context,
+      departmentName: dept.name,
     );
-    if (go != true || !context.mounted) return;
+    if (!go || !context.mounted) return;
 
     _ref
         .read(buildingMapUndoProvider.notifier)
@@ -692,252 +653,91 @@ class BuildingMapController {
   }
 
   Future<void> addFloorSheet(BuildContext context) async {
-    final labelCtrl = SpellCheckController();
-    final groupCtrl = SpellCheckController();
-    final labelFocus = FocusNode();
-    try {
-      final srcPath = await _pickFloorSheetImagePath();
-      if (srcPath == null) return;
-      if (!context.mounted) return;
+    final srcPath = await _pickFloorSheetImagePath();
+    if (srcPath == null || !context.mounted) return;
 
-      final ok = await showDialog<bool>(
-        context: context,
-        builder: (ctx) => Consumer(
-          builder: (context, ref, _) => AlertDialog(
-            title: const Text('Νέο φύλλο κατόψης'),
-            content: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Focus(
-                    autofocus: true,
-                    child: LexiconSpellTextFormField(
-                      controller: labelCtrl,
-                      focusNode: labelFocus,
-                      decoration: const InputDecoration(
-                        labelText: 'Ετικέτα',
-                        hintText: 'π.χ. 1ος — Γραφεία',
-                      ),
-                    ),
-                  ),
-                  LexiconSpellTextFormField(
-                    controller: groupCtrl,
-                    decoration: const InputDecoration(
-                      labelText: 'Ομάδα ορόφου (προαιρετικό)',
-                      hintText: 'π.χ. L1',
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx, false),
-                child: const Text('Άκυρο'),
-              ),
-              FilledButton(
-                onPressed: () => Navigator.pop(ctx, true),
-                child: const Text('Προσθήκη'),
-              ),
-            ],
-          ),
-        ),
-      );
-      if (ok != true || !context.mounted) return;
-      final label = labelCtrl.text.trim();
-      if (label.isEmpty) return;
+    final result = await showBuildingMapFloorSheetAddDialog(context);
+    if (result == null || !context.mounted) return;
 
-      final copied = await _ingestPickedImagePath(
-        context,
-        srcPath,
-        floorLabel: label,
-      );
-      if (copied == null || !context.mounted) return;
+    final copied = await _ingestPickedImagePath(
+      context,
+      srcPath,
+      floorLabel: result.label,
+    );
+    if (copied == null || !context.mounted) return;
 
-      final db = await DatabaseHelper.instance.database;
-      final maps = BuildingMapRepository(db);
-      final id = await maps.insertBuildingMapFloor(
-        label: label,
-        floorGroup: groupCtrl.text.trim().isEmpty
-            ? null
-            : groupCtrl.text.trim(),
-        copiedImagePath: copied,
-        rotationDegrees: 0,
-      );
-      _ref.read(buildingMapSelectedSheetIdProvider.notifier).setSheet(id);
-      final floors = await maps.listBuildingMapFloors();
-      if (!context.mounted) return;
-      await syncSheetSelection(floors);
-      appliedInitialFloorSync = false;
-      _ref.read(buildingMapFloorReloadSeqProvider.notifier).bump();
-    } finally {
-      labelCtrl.dispose();
-      groupCtrl.dispose();
-      labelFocus.dispose();
-    }
+    final db = await DatabaseHelper.instance.database;
+    final maps = BuildingMapRepository(db);
+    final id = await maps.insertBuildingMapFloor(
+      label: result.label,
+      floorGroup: result.floorGroup,
+      copiedImagePath: copied,
+      rotationDegrees: 0,
+    );
+    _ref.read(buildingMapSelectedSheetIdProvider.notifier).setSheet(id);
+    final floors = await maps.listBuildingMapFloors();
+    if (!context.mounted) return;
+    await syncSheetSelection(floors);
+    appliedInitialFloorSync = false;
+    _ref.read(buildingMapFloorReloadSeqProvider.notifier).bump();
   }
 
   Future<void> editFloorSheet(
     BuildContext context,
     BuildingMapFloor floor,
   ) async {
-    final labelCtrl = SpellCheckController()..text = floor.label;
-    final groupCtrl = SpellCheckController()..text = floor.floorGroup ?? '';
-    final labelFocus = FocusNode();
-    final originalLabel = floor.label.trim();
-    final originalGroup = (floor.floorGroup ?? '').trim();
-    try {
-      String? pickedSrcPath;
-      var previewImageAvailable = false;
-      if (floor.imagePath.trim().isNotEmpty) {
-        final initialImage = await BuildingMapStorage.fileForStoredPath(
-          floor.imagePath,
-        );
-        previewImageAvailable = await initialImage.exists();
-      }
-      var showDepartmentsOnPreview = previewImageAvailable;
-      if (!context.mounted) return;
-      final previewDepartments = _ref
-          .read(departmentDirectoryProvider)
-          .allDepartments
-          .where((d) => !d.isDeleted)
-          .toList();
-
-      bool hasSaveableChanges() {
-        final label = labelCtrl.text.trim();
-        if (label.isEmpty) return false;
-        final group = groupCtrl.text.trim();
-        return label != originalLabel ||
-            group != originalGroup ||
-            pickedSrcPath != null;
-      }
-
-      final ok = await showDialog<bool>(
-        context: context,
-        builder: (ctx) => Consumer(
-          builder: (context, ref, _) => StatefulBuilder(
-            builder: (ctx, setDlg) => AlertDialog(
-              title: const Text('Επεξεργασία κατόψης'),
-              content: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Focus(
-                      autofocus: true,
-                      child: LexiconSpellTextFormField(
-                        controller: labelCtrl,
-                        focusNode: labelFocus,
-                        decoration: const InputDecoration(
-                          labelText: 'Όνομα ορόφου',
-                        ),
-                        onChanged: (_) => setDlg(() {}),
-                      ),
-                    ),
-                    LexiconSpellTextFormField(
-                      controller: groupCtrl,
-                      decoration: const InputDecoration(
-                        labelText: 'Περιοχή ορόφου (προαιρετικό)',
-                      ),
-                      onChanged: (_) => setDlg(() {}),
-                    ),
-                    const SizedBox(height: 12),
-                    OutlinedButton.icon(
-                      onPressed: () async {
-                        final srcPath = await _pickFloorSheetImagePath();
-                        if (srcPath == null) return;
-                        pickedSrcPath = srcPath;
-                        previewImageAvailable = await File(srcPath).exists();
-                        if (previewImageAvailable) {
-                          showDepartmentsOnPreview = true;
-                        }
-                        setDlg(() {});
-                      },
-                      icon: const Icon(Icons.image_outlined),
-                      label: Text(
-                        pickedSrcPath != null
-                            ? 'Επιλέχθηκε νέα κατόψη'
-                            : 'Αλλαγή κατόψης',
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    BuildingMapFloorEditPreview(
-                      imagePath: pickedSrcPath ?? floor.imagePath,
-                      floorId: floor.id,
-                      rotationDegrees: floor.rotationDegrees,
-                      showDepartments: showDepartmentsOnPreview,
-                      departments: previewDepartments,
-                    ),
-                    Tooltip(
-                      message:
-                          'Η προβολή τμημάτων είναι μόνο για την εκκαθάριση της '
-                          'μικρογραφίας. ΔΕΝ επιρεάζει τη βασική σχεδίαση του ορόφου.',
-                      child: SwitchListTile(
-                        contentPadding: EdgeInsets.zero,
-                        title: const Text('Προβολή τμημάτων'),
-                        value: showDepartmentsOnPreview,
-                        onChanged: previewImageAvailable
-                            ? (v) => setDlg(() => showDepartmentsOnPreview = v)
-                            : null,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(ctx, false),
-                  child: const Text('Άκυρο'),
-                ),
-                FilledButton(
-                  onPressed: hasSaveableChanges()
-                      ? () => Navigator.pop(ctx, true)
-                      : null,
-                  child: const Text('Αποθήκευση'),
-                ),
-              ],
-            ),
-          ),
-        ),
+    var previewImageAvailable = false;
+    if (floor.imagePath.trim().isNotEmpty) {
+      final initialImage = await BuildingMapStorage.fileForStoredPath(
+        floor.imagePath,
       );
-      if (ok != true || !context.mounted) return;
-      final label = labelCtrl.text.trim();
-      if (label.isEmpty) return;
-
-      var imagePathUpdate = floor.imagePath;
-      final previousPath = floor.imagePath;
-      if (pickedSrcPath != null) {
-        final ingested = await _ingestPickedImagePath(
-          context,
-          pickedSrcPath!,
-          floorLabel: label,
-        );
-        if (ingested == null) return;
-        imagePathUpdate = ingested;
-      }
-
-      final db = await DatabaseHelper.instance.database;
-      await BuildingMapRepository(db).updateBuildingMapFloor(
-        floor.id,
-        rotationDegrees: floor.rotationDegrees,
-        label: label,
-        floorGroup: groupCtrl.text,
-        imagePath: pickedSrcPath != null ? imagePathUpdate : null,
-      );
-      if (pickedSrcPath != null && previousPath != imagePathUpdate) {
-        await BuildingMapStorage.deleteStoredImageBestEffort(previousPath);
-      }
-
-      final sel = _ref.read(buildingMapSelectedSheetIdProvider);
-      if (sel == floor.id) {
-        await decodeImageForPath(imagePathUpdate);
-      }
-      _ref.read(buildingMapFloorReloadSeqProvider.notifier).bump();
-    } finally {
-      labelCtrl.dispose();
-      groupCtrl.dispose();
-      labelFocus.dispose();
+      previewImageAvailable = await initialImage.exists();
     }
+    if (!context.mounted) return;
+    final previewDepartments = _ref
+        .read(departmentDirectoryProvider)
+        .allDepartments
+        .where((d) => !d.isDeleted)
+        .toList();
+
+    final result = await showBuildingMapFloorSheetEditDialog(
+      context,
+      floor: floor,
+      previewDepartments: previewDepartments,
+      initialPreviewImageAvailable: previewImageAvailable,
+      pickImagePath: _pickFloorSheetImagePath,
+    );
+    if (result == null || !context.mounted) return;
+
+    var imagePathUpdate = floor.imagePath;
+    final previousPath = floor.imagePath;
+    if (result.pickedSrcPath != null) {
+      final ingested = await _ingestPickedImagePath(
+        context,
+        result.pickedSrcPath!,
+        floorLabel: result.label,
+      );
+      if (ingested == null) return;
+      imagePathUpdate = ingested;
+    }
+
+    final db = await DatabaseHelper.instance.database;
+    await BuildingMapRepository(db).updateBuildingMapFloor(
+      floor.id,
+      rotationDegrees: floor.rotationDegrees,
+      label: result.label,
+      floorGroup: result.floorGroupRaw,
+      imagePath: result.pickedSrcPath != null ? imagePathUpdate : null,
+    );
+    if (result.pickedSrcPath != null && previousPath != imagePathUpdate) {
+      await BuildingMapStorage.deleteStoredImageBestEffort(previousPath);
+    }
+
+    final sel = _ref.read(buildingMapSelectedSheetIdProvider);
+    if (sel == floor.id) {
+      await decodeImageForPath(imagePathUpdate);
+    }
+    _ref.read(buildingMapFloorReloadSeqProvider.notifier).bump();
   }
 
   Future<void> deleteFloorSheet(
@@ -954,84 +754,12 @@ class BuildingMapController {
       imageFileExists = await imageFile.exists();
     }
 
-    var deleteImageFile = false;
     if (!context.mounted) return;
-    final displayImagePath = resolvedImagePath;
-    final choice = await showDialog<BuildingMapFloorDeleteChoice?>(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (context, setDialogLocal) {
-          final errorColor = Theme.of(context).colorScheme.error;
-          return AlertDialog(
-            title: const Text('Διαγραφή ορόφου'),
-            content: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  const Text(
-                    'Να διαγραφεί το φύλλο κατόψης;\n\n'
-                    'Ο σχεδιασμός στο χάρτη για τα τμήματα που δένονται σε αυτό το φύλλο '
-                    'θα χαθεί: η θέση και η περιοχή στο χάρτη θα μηδενιστούν.',
-                  ),
-                  SwitchListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: const Text('Διαγραφή αρχείου εικόνας από το δίσκο'),
-                    subtitle: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        if (deleteImageFile)
-                          Text(
-                            'Η εικόνα του χάρτη θα διαγραφεί οριστικά από το δίσκο.',
-                            style: TextStyle(color: errorColor),
-                          )
-                        else
-                          const Text(
-                            'Από προεπιλογή η εικόνα διατηρείται στον φάκελο της εφαρμογής.',
-                          ),
-                        if (displayImagePath != null &&
-                            displayImagePath.isNotEmpty) ...[
-                          const SizedBox(height: 8),
-                          Text(
-                            displayImagePath,
-                            style: Theme.of(context).textTheme.bodySmall,
-                          ),
-                        ] else if (!imageFileExists &&
-                            trimmedPath.isNotEmpty) ...[
-                          const SizedBox(height: 8),
-                          Text(
-                            'Το αρχείο εικόνας δεν βρέθηκε στο δίσκο.',
-                            style: Theme.of(context).textTheme.bodySmall,
-                          ),
-                        ],
-                      ],
-                    ),
-                    value: deleteImageFile,
-                    onChanged: imageFileExists
-                        ? (v) => setDialogLocal(() => deleteImageFile = v)
-                        : null,
-                  ),
-                ],
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: const Text('Άκυρο'),
-              ),
-              FilledButton(
-                onPressed: () => Navigator.pop(
-                  ctx,
-                  BuildingMapFloorDeleteChoice(
-                    deleteImageFile: deleteImageFile,
-                  ),
-                ),
-                child: const Text('Διαγραφή'),
-              ),
-            ],
-          );
-        },
-      ),
+    final choice = await showBuildingMapFloorDeleteDialog(
+      context,
+      displayImagePath: resolvedImagePath,
+      imageFileExists: imageFileExists,
+      showMissingImageNote: !imageFileExists && trimmedPath.isNotEmpty,
     );
     if (choice == null || !context.mounted) return;
     try {
@@ -1131,54 +859,7 @@ class BuildingMapController {
   ) async {
     if (users.isEmpty) return null;
     if (users.length == 1) return users.first;
-    final selected = await showDialog<UserModel>(
-      context: context,
-      builder: (ctx) {
-        return SimpleDialog(
-          title: const Text('Επιλογή υπαλλήλου'),
-          children: [
-            for (final user in users)
-              SimpleDialogOption(
-                onPressed: () => Navigator.of(ctx).pop(user),
-                child: Text(
-                  user.name?.trim().isNotEmpty == true
-                      ? user.name!
-                      : 'Χωρίς όνομα',
-                ),
-              ),
-          ],
-        );
-      },
-    );
-    return selected;
-  }
-
-  Future<bool> _confirmJumpToUser(
-    BuildContext context,
-    String userDisplayName,
-  ) async {
-    final approved = await showDialog<bool>(
-      context: context,
-      builder: (ctx) {
-        return AlertDialog(
-          title: const Text('Εντοπισμός μέσω υπαλλήλου'),
-          content: Text(
-            'Δεν έχει οριστεί τμήμα για τον εξοπλισμό. Επιθυμείτε εντοπισμό του υπαλλήλου $userDisplayName;',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(false),
-              child: const Text('Άκυρο'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.of(ctx).pop(true),
-              child: const Text('Συνέχεια'),
-            ),
-          ],
-        );
-      },
-    );
-    return approved ?? false;
+    return showBuildingMapUserPickDialog(context, users: users);
   }
 
   Future<int?> _pickDepartmentIdIfNeeded(
@@ -1193,22 +874,13 @@ class BuildingMapController {
       for (final d in departments)
         if (d.id != null) d.id!: d,
     };
-    final selected = await showDialog<int>(
-      context: context,
-      builder: (ctx) {
-        return SimpleDialog(
-          title: const Text('Επιλογή τμήματος'),
-          children: [
-            for (final deptId in unique)
-              SimpleDialogOption(
-                onPressed: () => Navigator.of(ctx).pop(deptId),
-                child: Text(byId[deptId]?.name ?? 'Τμήμα #$deptId'),
-              ),
-          ],
-        );
-      },
+    return showBuildingMapDepartmentPickDialog(
+      context,
+      options: [
+        for (final deptId in unique)
+          (id: deptId, label: byId[deptId]?.name ?? 'Τμήμα #$deptId'),
+      ],
     );
-    return selected;
   }
 
   Future<List<int>> _resolveDepartmentIdsFromEquipment(
@@ -1229,7 +901,10 @@ class BuildingMapController {
     if (!context.mounted) return const [];
     final name = (chosenUser.name ?? '').trim();
     final userDisplayName = name.isEmpty ? 'χωρίς όνομα' : name;
-    final shouldContinue = await _confirmJumpToUser(context, userDisplayName);
+    final shouldContinue = await showBuildingMapJumpToUserConfirmDialog(
+      context,
+      userDisplayName: userDisplayName,
+    );
     if (!shouldContinue) return const [];
     final userId = chosenUser.id;
     if (userId == null) return const [];
