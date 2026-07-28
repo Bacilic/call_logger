@@ -223,18 +223,13 @@ class _DatabaseSettingsPanelState extends ConsumerState<DatabaseSettingsPanel>
 
     final picked = await pickDatabasePathWithSystemPicker();
     if (FilePickerSession.takeLastRefocusedExisting()) return;
-    if (picked != null && picked.path.isNotEmpty) {
-      if (picked.isBackupArchive) {
-        await _restoreFromBackupZip(preselectedZipPath: picked.path);
-      } else {
-        await _switchToPickedDatabasePath(picked.path);
-      }
+    // Ακύρωση επιλογέα = έγκυρη πράξη· κανένα μήνυμα (η κενή διαδρομή
+    // αποκλείεται πλέον κεντρικά στο SettingsService.setDatabasePath).
+    if (picked == null || picked.path.isEmpty) return;
+    if (picked.isBackupArchive) {
+      await _restoreFromBackupZip(preselectedZipPath: picked.path);
     } else {
-      if (mounted) {
-        setState(
-          () => _dbPathErrorMessage = 'Δεν επιλέχθηκε αρχείο ή φάκελος.',
-        );
-      }
+      await _switchToPickedDatabasePath(picked.path);
     }
   }
 

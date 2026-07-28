@@ -221,8 +221,16 @@ class SettingsService
   /// Δεν αγγίζει τη λίστα πρόσφατων — αυτή ενημερώνεται μόνο μετά από επιτυχή
   /// επαλήθευση μέσω [recordVerifiedDatabasePath].
   Future<void> setDatabasePath(String path) async {
-    final prefs = await SharedPreferences.getInstance();
     final trimmed = path.trim();
+    if (trimmed.isEmpty) {
+      throw ArgumentError.value(
+        path,
+        'path',
+        'Η διαδρομή βάσης δεν επιτρέπεται να είναι κενή — για αφαίρεση '
+            'διαδρομής χρησιμοποιήστε markDatabaseUnconfigured().',
+      );
+    }
+    final prefs = await SharedPreferences.getInstance();
     await markDatabaseConfigured();
     await prefs.setString(_prefKey(_keyDatabasePath), trimmed);
   }

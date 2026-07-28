@@ -311,15 +311,8 @@ class _DatabaseErrorScreenState extends ConsumerState<DatabaseErrorScreen> {
   Future<void> _findDatabaseViaPicker() async {
     final picked = await pickDatabasePathWithSystemPicker();
     if (!mounted) return;
-    if (picked == null || picked.path.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Δεν επιλέχθηκε αρχείο ή φάκελος.'),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-      return;
-    }
+    // Ακύρωση επιλογέα = έγκυρη πράξη· κανένα μήνυμα.
+    if (picked == null || picked.path.isEmpty) return;
     if (picked.isBackupArchive) {
       await _restoreFromBackup(preselectedZipPath: picked.path);
       return;

@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 
 import '../../../core/config/app_config.dart';
+import '../../../core/utils/picker_location_memory.dart';
 import '../../../core/database/old_database/lamp_database_provider.dart';
 import '../../../core/database/old_database/lamp_excel_validator.dart';
 import '../../../core/database/old_database/lamp_old_db_validator.dart';
@@ -244,22 +245,24 @@ class LampPathController {
   }
 
   Future<void> pickExcel() async {
+    const memory = PickerLocationMemory('lamp_excel');
     final session = await FilePickerSession.run(() async {
       final result = await FilePicker.pickFiles(
         type: FileType.custom,
         allowedExtensions: const <String>['xlsx', 'xls'],
+        initialDirectory: await memory.initialDirectory(
+          pathHint: excelController.text,
+        ),
       );
       if (result == null || result.files.isEmpty) return null;
-      return result.files.first.path;
+      final picked = result.files.first.path;
+      if (picked != null) await memory.remember(picked);
+      return picked;
     });
     if (session.refocusedExisting) return;
     final path = session.value;
-    if (path == null) {
-      if (host.mounted) {
-        host.showSnack('Η επιλογή αρχείου Excel ακυρώθηκε.');
-      }
-      return;
-    }
+    // Ακύρωση επιλογέα = έγκυρη πράξη· κανένα μήνυμα.
+    if (path == null) return;
     excelController.text = path;
     await host.shared.settings.setExcelPath(path);
     await host.ref
@@ -348,22 +351,22 @@ class LampPathController {
   Future<void> pickReadDatabase({
     required Future<void> Function({required String source}) onPathChanged,
   }) async {
+    const memory = PickerLocationMemory('lamp_read_db');
     final session = await FilePickerSession.run(() async {
       final result = await FilePicker.pickFiles(
         type: FileType.custom,
         allowedExtensions: const <String>['db'],
+        initialDirectory: await memory.initialDirectory(),
       );
       if (result == null || result.files.isEmpty) return null;
-      return result.files.first.path;
+      final picked = result.files.first.path;
+      if (picked != null) await memory.remember(picked);
+      return picked;
     });
     if (session.refocusedExisting) return;
     final path = session.value;
-    if (path == null) {
-      if (host.mounted) {
-        host.showSnack('Η επιλογή αρχείου .db (ανάγνωση) ακυρώθηκε.');
-      }
-      return;
-    }
+    // Ακύρωση επιλογέα = έγκυρη πράξη· κανένα μήνυμα.
+    if (path == null) return;
     final portablePath = await _adoptPickedLampDbIntoPortable(path);
     if (portablePath == null) return;
     readDbController.text = portablePath;
@@ -384,12 +387,8 @@ class LampPathController {
       defaultSuggestedFileName: 'old_equipment.db',
     );
     if (FilePickerSession.takeLastRefocusedExisting()) return;
-    if (path == null) {
-      if (host.mounted) {
-        host.showSnack('Η αποθήκευση/προορισμός αρχείου εξόδου ακυρώθηκε.');
-      }
-      return;
-    }
+    // Ακύρωση επιλογέα = έγκυρη πράξη· κανένα μήνυμα.
+    if (path == null) return;
     final validationError = validateNewDatabaseSavePath(path);
     if (validationError != null) {
       if (host.mounted) {

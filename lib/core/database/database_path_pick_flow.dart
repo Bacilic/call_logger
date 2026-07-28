@@ -2,6 +2,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:path/path.dart' as p;
 
 import '../utils/file_picker_session.dart';
+import '../utils/picker_location_memory.dart';
 import '../services/application_reset_service.dart';
 import '../services/settings_service.dart';
 import 'database_helper.dart';
@@ -40,10 +41,17 @@ Future<DatabasePickSelection?> pickDatabasePathWithSystemPicker() async {
 }
 
 Future<DatabasePickSelection?> _pickDatabasePathWithSystemPickerImpl() async {
+  // Στοχευμένο αρχικό άνοιγμα: ο φάκελος της τρέχουσας βάσης, όχι η καθολική
+  // «τελευταία θέση» των Windows που μολύνεται από άσχετους επιλογείς.
+  final initialDirectory = await const PickerLocationMemory(
+    'database_file',
+  ).initialDirectory(pathHint: await SettingsService().getDatabasePath());
+
   final fileResult = await FilePicker.pickFiles(
     type: FileType.custom,
     allowedExtensions: ['db', 'zip'],
     dialogTitle: 'Επιλογή αρχείου βάσης (.db) ή αντιγράφου (.zip)',
+    initialDirectory: initialDirectory,
   );
 
   if (fileResult == null) {
@@ -61,6 +69,7 @@ Future<DatabasePickSelection?> _pickDatabasePathWithSystemPickerImpl() async {
 
   final dirPath = await FilePicker.getDirectoryPath(
     dialogTitle: 'Επιλογή φακέλου βάσης δεδομένων',
+    initialDirectory: initialDirectory,
   );
 
   if (dirPath != null && dirPath.trim().isNotEmpty) {

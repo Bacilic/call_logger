@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/database/database_helper.dart';
+import '../../../../core/utils/picker_location_memory.dart';
 import '../../../../core/database/building_map_repository.dart';
 import '../../../../core/database/department_repository.dart';
 import '../../../../core/database/omnisearch_service.dart';
@@ -630,13 +631,27 @@ class BuildingMapController {
     await replaceFloorSheetImage(context, floor);
   }
 
+  /// Κοινός επιλογέας εικόνας κατόψης: ανοίγει στον τελευταίο φάκελο εικόνων
+  /// του χάρτη (όχι στην καθολική «τελευταία θέση» των Windows) και τον
+  /// θυμάται μετά από επιτυχή επιλογή. null σε ακύρωση.
+  Future<String?> _pickFloorSheetImagePath() async {
+    const memory = PickerLocationMemory('building_map_image');
+    final picked = await FilePicker.pickFiles(
+      type: FileType.image,
+      initialDirectory: await memory.initialDirectory(),
+    );
+    if (picked == null || picked.files.isEmpty) return null;
+    final srcPath = picked.files.single.path;
+    if (srcPath == null) return null;
+    await memory.remember(srcPath);
+    return srcPath;
+  }
+
   Future<void> replaceFloorSheetImage(
     BuildContext context,
     BuildingMapFloor floor,
   ) async {
-    final picked = await FilePicker.pickFiles(type: FileType.image);
-    if (picked == null || picked.files.isEmpty) return;
-    final srcPath = picked.files.single.path;
+    final srcPath = await _pickFloorSheetImagePath();
     if (srcPath == null || !context.mounted) return;
 
     final stored = await _ingestPickedImagePath(
@@ -681,9 +696,7 @@ class BuildingMapController {
     final groupCtrl = SpellCheckController();
     final labelFocus = FocusNode();
     try {
-      final picked = await FilePicker.pickFiles(type: FileType.image);
-      if (picked == null || picked.files.isEmpty) return;
-      final srcPath = picked.files.single.path;
+      final srcPath = await _pickFloorSheetImagePath();
       if (srcPath == null) return;
       if (!context.mounted) return;
 
@@ -831,11 +844,7 @@ class BuildingMapController {
                     const SizedBox(height: 12),
                     OutlinedButton.icon(
                       onPressed: () async {
-                        final picked = await FilePicker.pickFiles(
-                          type: FileType.image,
-                        );
-                        if (picked == null || picked.files.isEmpty) return;
-                        final srcPath = picked.files.single.path;
+                        final srcPath = await _pickFloorSheetImagePath();
                         if (srcPath == null) return;
                         pickedSrcPath = srcPath;
                         previewImageAvailable = await File(srcPath).exists();

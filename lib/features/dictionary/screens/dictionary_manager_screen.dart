@@ -27,6 +27,7 @@ import '../../../core/services/core_lexicon_service.dart';
 import '../../../core/services/dictionary_service.dart';
 import '../../../core/services/master_dictionary_service.dart';
 import '../../../core/utils/lexicon_word_metrics.dart';
+import '../../../core/utils/picker_location_memory.dart';
 import '../../../core/utils/user_facing_error_messages.dart';
 import '../dictionary_table_layout.dart';
 import '../providers/dictionary_layout_provider.dart';
@@ -661,13 +662,16 @@ class _DictionaryManagerScreenState
   }
 
   Future<void> _importTxtFile() async {
+    const memory = PickerLocationMemory('lexicon_txt');
     final r = await FilePicker.pickFiles(
       type: FileType.custom,
       allowedExtensions: const ['txt'],
+      initialDirectory: await memory.initialDirectory(),
     );
     if (r == null || r.files.isEmpty) return;
     final path = r.files.single.path;
     if (path == null) return;
+    await memory.remember(path);
     if (!mounted) return;
     final mode = await showDialog<DictionaryImportMode>(
       context: context,

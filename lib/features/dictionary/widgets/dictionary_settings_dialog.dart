@@ -16,6 +16,7 @@ import '../../../core/services/core_lexicon_service.dart';
 import '../../../core/services/core_lexicon_validation.dart';
 import '../../../core/services/settings_service.dart';
 import '../../../core/utils/file_picker_initial_directory.dart';
+import '../../../core/utils/picker_location_memory.dart';
 
 /// Tooltip για το κουμπί «Επανέλεγχος Γλωσσών».
 const _languageRecalcInfoTooltip =
@@ -221,14 +222,19 @@ class _DictionarySettingsDialogState
   }
 
   Future<void> _pickSaveSourcePath() async {
+    const memory = PickerLocationMemory('lexicon_txt');
     final r = await FilePicker.pickFiles(
       dialogTitle: 'Αρχείο λεξικού-πυρήνα (TXT)',
       type: FileType.custom,
       allowedExtensions: const ['txt'],
+      initialDirectory: await memory.initialDirectory(
+        pathHint: _sourcePathCtrl.text,
+      ),
     );
     if (r == null || r.files.isEmpty) return;
     final p = r.files.single.path;
     if (p == null) return;
+    await memory.remember(p);
 
     setState(() => _compileBusy = true);
     try {
